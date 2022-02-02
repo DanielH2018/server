@@ -1,17 +1,17 @@
 - name: Creates directories
   file:
-    path: "/home/{{ env.SYS_USER }}/watchtower"
+    path: "/home/{{ env.SYS_USER }}/server/watchtower"
     state: directory
     mode: 0755
 
 - name: Create docker-compose from template
   template:
     src: docker-compose.yml.j2
-    dest: "/home/{{ env.SYS_USER }}/watchtower/docker-compose.yml"
+    dest: "/home/{{ env.SYS_USER }}/server/watchtower/docker-compose.yml"
     
 - name: Deploy Watchtower
   shell: docker-compose up -d --force-recreate
   args:
-    chdir: "/home/{{ env.SYS_USER }}/watchtower/"
+    chdir: "/home/{{ env.SYS_USER }}/server/watchtower/"
   become: yes
   become_method: sudo

@@ -1,13 +1,13 @@
 - name: Creates directories
   file:
-    path: "/home/{{ env.SYS_USER }}/pihole/data"
+    path: "/home/{{ env.SYS_USER }}/server/pihole/data"
     state: directory
     mode: 0755
 
 - name: Create docker-compose.yml from template
   template:
     src: docker-compose.yml.j2
-    dest: "/home/{{ env.SYS_USER }}/pihole/docker-compose.yml"
+    dest: "/home/{{ env.SYS_USER }}/server/pihole/docker-compose.yml"
 
 - name: Pull Pihole Image
   shell: docker pull pihole/pihole:latest
@@ -27,7 +27,7 @@
 - name: Deploy Pihole
   shell: docker-compose up -d --force-recreate
   args:
-    chdir: "/home/{{ env.SYS_USER }}/pihole/"
+    chdir: "/home/{{ env.SYS_USER }}/server/pihole/"
   become: yes
   become_method: sudo
 
@@ -35,7 +35,7 @@
   lineinfile:
     path: /etc/hosts
     insertbefore: BOF
-    line: '127.0.0.1 {{ env.SYS_USER }}'
+    line: '127.0.0.1 {{ env.SYS_USER }}/server'
   become: yes
   become_method: sudo
 

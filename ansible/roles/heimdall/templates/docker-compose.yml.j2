@@ -9,7 +9,7 @@ services:
       - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
     volumes:
-      - /home/{{ env.SYS_USER }}/heimdall/config:/config
+      - /home/{{ env.SYS_USER }}/server/heimdall/config:/config
     ports:
       - 8057:80
       - 8058:443

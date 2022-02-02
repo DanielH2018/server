@@ -16,8 +16,8 @@ services:
       WEBPASSWORD: [REMOVED_KEY]
       ServerIP: 192.168.50.96
     volumes:
-       - '/home/{{ env.SYS_USER }}/pihole/data/etc-pihole/:/etc/pihole/'
-       - '/home/{{ env.SYS_USER }}/pihole/data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
+       - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-pihole/:/etc/pihole/'
+       - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
     cap_add:
       - NET_ADMIN
     labels:

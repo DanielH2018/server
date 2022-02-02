@@ -9,9 +9,9 @@ services:
       - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
     volumes:
-      /home/{{ env.SYS_USER }}/syncthing/config:/config
-      /home/{{ env.SYS_USER }}/syncthing/data1:/data1
-      - /home/{{ env.SYS_USER }}/syncthing/data2:/data2
+      /home/{{ env.SYS_USER }}/server/syncthing/config:/config
+      /home/{{ env.SYS_USER }}/server/syncthing/data1:/data1
+      - /home/{{ env.SYS_USER }}/server/syncthing/data2:/data2
     ports:
       - 8384:8384
       - 22000:22000/tcp
