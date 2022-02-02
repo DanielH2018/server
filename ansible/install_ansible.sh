@@ -16,6 +16,7 @@ sudo sed -i '/PasswordAuthentication /c\PasswordAuthentication no' /etc/ssh/sshd
 sudo sed -i '/PermitEmptyPasswords /c\PermitEmptyPasswords no' /etc/ssh/sshd_config
 sudo sed -i '/PermitRootLogin /c\PermitRootLogin no' /etc/ssh/sshd_config
 sudo sed -i '/IgnoreRhosts /c\IgnoreRhosts yes' /etc/ssh/sshd_config
+sudo sed -i '/ChallengeResponseAuthentication  /c\ChallengeResponseAuthentication no' /etc/ssh/sshd_config
 
 # Allow SSH through firewall
 sudo ufw allow ssh
