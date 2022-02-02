@@ -28,6 +28,6 @@
     - role: pihole
       tags: pihole
     - role: syncthing
-    - tags: syncthing
+      tags: syncthing
     - role: watchtower
       tags: watchtower
