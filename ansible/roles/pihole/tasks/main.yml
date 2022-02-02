@@ -35,7 +35,7 @@
   lineinfile:
     path: /etc/hosts
     insertbefore: BOF
-    line: '127.0.0.1 {{ env.SYS_USER }}/server'
+    line: '127.0.0.1 {{ env.SYS_USER }}'
   become: yes
   become_method: sudo
 
@@ -43,14 +43,14 @@
   lineinfile:
     path: /etc/resolv.conf
     regexp: '127.0.0.53'
-    line: nameserver 127.0.0.5353
+    line: nameserver 127.0.0.1
   become: yes
   become_method: sudo
 
 - name: Add Cloudflare to /etc/resolv.conf
   lineinfile:
     path: /etc/resolv.conf
-    insertafter: 'nameserver 127.0.0.5353'
+    insertafter: 'nameserver 127.0.0.1'
     line: 'nameserver 1.1.1.1'
   become: yes
   become_method: sudo

@@ -1,6 +1,3 @@
 TODO:
-	- Implement auto-sync for docker compose files
 	- Watch Ansible Video
 		- https://www.youtube.com/watch?v=w9eCU4bGgjQ
-	- Implement Syncthing
-		- https://docs.linuxserver.io/images/docker-syncthing
