@@ -1,0 +1,23 @@
+- name: Creates directories
+  file:
+    path: "/home/{{ env.SYS_USER }}/server/filebrowser/data"
+    state: directory
+    mode: 0755
+
+- name: Create filebrowser.db
+  file:
+    path: "/home/{{ env.SYS_USER }}/server/filebrowser/data/filebrowser.db"
+    state: touch
+    mode: 0600
+
+- name: Create docker-compose from template
+  template:
+    src: docker-compose.yml.j2
+    dest: "/home/{{ env.SYS_USER }}/server/filebrowser/docker-compose.yml"
+    
+- name: Deploy File browser
+  shell: docker-compose up -d --force-recreate
+  args:
+    chdir: "/home/{{ env.SYS_USER }}/server/filebrowser/"
+  become: yes
+  become_method: sudo

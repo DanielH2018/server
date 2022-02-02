@@ -1,0 +1,35 @@
+---
+version: '3'
+services:
+  file-browser:
+    image: filebrowser/filebrowser
+    container_name: file-browser
+    user: {{ env.PUID }}:{{ env.PGID }}
+    ports:
+      - 8081:80
+    volumes:
+      - /home/{{ env.SYS_USER }}/server/filebrowser/data:/srv
+      - /home/{{ env.SYS_USER }}/server/filebrowser/data/filebrowser.db:/database.db
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - {{ env.DOCKER_NETWORK}}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.filebrowser.entrypoints=http"
+      - "traefik.http.routers.filebrowser.rule=Host(`filebrowser.{{ env.DOMAIN }}`)"
+      - "traefik.http.middlewares.filebrowser-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.filebrowser.middlewares=filebrowser-https-redirect"
+      - "traefik.http.routers.filebrowser-secure.entrypoints=https"
+      - "traefik.http.routers.filebrowser-secure.rule=Host(`filebrowser.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.filebrowser-secure.tls=true"
+      - "traefik.http.routers.filebrowser-secure.service=filebrowser"
+      - "traefik.http.services.filebrowser.loadbalancer.server.port=8081"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - 'traefik.http.routers.filebrowser-secure.middlewares=authelia@docker'
+
+networks:
+  {{ env.DOCKER_NETWORK}}:
+    external: true
+    
