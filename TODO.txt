@@ -1,6 +1,5 @@
 TODO:
 	- Implement auto-sync for docker compose files
-	- Implement version control
 	- Go through Linux setup tutorial
 		- https://docs.technotim.live/posts/fist-13-things-linux/
 	- Watch Ansible Video

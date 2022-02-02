@@ -1,0 +1,39 @@
+---
+version: "2.1"
+services:
+  syncthing:
+    image: lscr.io/linuxserver/syncthing
+    container_name: syncthing
+    environment:
+      - PUID={{ env.PUID }}
+      - PGID={{ env.PGID }}
+      - TZ={{ env.TZ }}
+    volumes:
+      /home/{{ env.SYS_USER }}/syncthing/config:/config
+      /home/{{ env.SYS_USER }}/syncthing/data1:/data1
+      - /home/{{ env.SYS_USER }}/syncthing/data2:/data2
+    ports:
+      - 8384:8384
+      - 22000:22000/tcp
+      - 22000:22000/udp
+      - 21027:21027/udp
+    restart: unless-stopped
+    networks:
+      - {{ env.DOCKER_NETWORK}}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.syncthing.entrypoints=http"
+      - "traefik.http.routers.syncthing.rule=Host(`syncthing.{{ env.DOMAIN }}`)"
+      - "traefik.http.middlewares.syncthing-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.syncthing.middlewares=syncthing-https-redirect"
+      - "traefik.http.routers.syncthing-secure.entrypoints=https"
+      - "traefik.http.routers.syncthing-secure.rule=Host(`syncthing.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.syncthing-secure.tls=true"
+      - "traefik.http.routers.syncthing-secure.service=syncthing"
+      - "traefik.http.services.syncthing.loadbalancer.server.port=8384"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - 'traefik.http.routers.syncthing-secure.middlewares=authelia@docker'
+
+networks:
+  {{ env.DOCKER_NETWORK}}:
+    external: true
