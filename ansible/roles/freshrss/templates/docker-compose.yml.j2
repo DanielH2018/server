@@ -5,8 +5,8 @@ services:
     image: lscr.io/linuxserver/freshrss
     container_name: freshrss
     environment:
-      - PUID=1000
-      - PGID=1000
+      - PUID={{ env.PUID }}
+      - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
     volumes:
       - /home/{{ env.SYS_USER }}/freshrss/config:/config

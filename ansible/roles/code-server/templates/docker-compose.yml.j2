@@ -5,8 +5,8 @@ services:
     image: lscr.io/linuxserver/code-server
     container_name: code-server
     environment:
-      - PUID=1000
-      - PGID=1000
+      - PUID={{ env.PUID }}
+      - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
       - PASSWORD={{ env.CODE_SERVER_PASSWORD }}
       - SUDO_PASSWORD={{ env.CODE_SERVER_SUDO_PASSWORD }}

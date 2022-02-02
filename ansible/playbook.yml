@@ -27,3 +27,5 @@
       tags: uptime-kuma
     - role: pihole
       tags: pihole
+    - role: watchtower
+      tags: watchtower

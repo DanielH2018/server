@@ -5,8 +5,8 @@ services:
     image: lscr.io/linuxserver/librespeed
     container_name: librespeed
     environment:
-      - PUID=1000
-      - PGID=1000
+      - PUID={{ env.PUID }}
+      - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
       - PASSWORD={{ env.LIBRESPEED_PASSWORD }}
       - DB_TYPE=sqlite 
