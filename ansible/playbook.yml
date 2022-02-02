@@ -1,0 +1,29 @@
+---
+- name: Setup Server
+  hosts: localhost
+  gather_facts: no
+  roles:
+    - role: env
+      tags: env
+    - role: docker
+      tags: docker
+    - role: traefik
+      tags: traefik
+    - role: portainer
+      tags: portainer
+    - role: authelia
+      tags: authelia
+    - role: cloudflare-ddns
+      tags: cloudflare-ddns
+    - role: code-server
+      tags: code-server
+    - role: freshrss
+      tags: freshrss
+    - role: librespeed
+      tags: librespeed
+    - role: heimdall
+      tags: heimdall
+    - role: uptime-kuma
+      tags: uptime-kuma
+    - role: pihole
+      tags: pihole

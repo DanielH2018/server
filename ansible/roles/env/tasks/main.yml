@@ -1,0 +1,4 @@
+- name: Setup Host Variables
+  include_vars:
+    file: ~/.env
+    name: env

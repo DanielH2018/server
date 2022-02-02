@@ -1,0 +1,8 @@
+version: '2'
+services:
+  cloudflare-ddns:
+    image: oznu/cloudflare-ddns:latest
+    restart: always
+    environment:
+      - API_KEY={{ env.CLOUDFLARE_DNS_TOKEN }}
+      - ZONE={{ env.DOMAIN }}

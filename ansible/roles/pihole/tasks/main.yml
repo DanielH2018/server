@@ -1,0 +1,56 @@
+- name: Creates directories
+  file:
+    path: "/home/{{ env.SYS_USER }}/pihole/data"
+    state: directory
+    mode: 0755
+
+- name: Create docker-compose.yml from template
+  template:
+    src: docker-compose.yml.j2
+    dest: "/home/{{ env.SYS_USER }}/pihole/docker-compose.yml"
+
+- name: Pull Pihole Image
+  shell: docker pull pihole/pihole:latest
+  become: yes
+  become_method: sudo
+
+- name: Stop systemd-resolved.service
+  shell: systemctl stop systemd-resolved.service
+  become: yes
+  become_method: sudo
+
+- name: Disable systemd-resolved.service
+  shell: systemctl disable systemd-resolved.service
+  become: yes
+  become_method: sudo
+
+- name: Deploy Pihole
+  shell: docker-compose up -d --force-recreate
+  args:
+    chdir: "/home/{{ env.SYS_USER }}/pihole/"
+  become: yes
+  become_method: sudo
+
+- name: Update /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    insertbefore: BOF
+    line: '127.0.0.1 {{ env.SYS_USER }}'
+  become: yes
+  become_method: sudo
+
+- name: Replace nameserver in /etc/resolv.conf
+  lineinfile:
+    path: /etc/resolv.conf
+    regexp: '127.0.0.53'
+    line: nameserver 127.0.0.5353
+  become: yes
+  become_method: sudo
+
+- name: Add Cloudflare to /etc/resolv.conf
+  lineinfile:
+    path: /etc/resolv.conf
+    insertafter: 'nameserver 127.0.0.5353'
+    line: 'nameserver 1.1.1.1'
+  become: yes
+  become_method: sudo

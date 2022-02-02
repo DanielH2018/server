@@ -1,0 +1,39 @@
+- name: Creates directories
+  file:
+    path: "/home/{{ env.SYS_USER }}/authelia/config"
+    state: directory
+    mode: 0755
+ 
+- name: Hash password
+  shell: "docker run authelia/authelia:latest authelia hash-password '{{ env.AUTHELIA_PASSWORD }}'"
+  register: authelia_hash
+  become: yes
+  become_method: sudo
+ 
+- name: Create configuration.yml from template
+  template:
+    src: configuration.yml.j2
+    dest: "/home/{{ env.SYS_USER }}/authelia/config/configuration.yml"
+  become: yes
+  become_method: sudo
+    
+- name: Create users_database.yml from template
+  template:
+    src: users_database.yml.j2
+    dest: "/home/{{ env.SYS_USER }}/authelia/config/users_database.yml"
+  become: yes
+  become_method: sudo
+
+- name: Create docker-compose.yml from template
+  template:
+    src: docker-compose.yml.j2
+    dest: "/home/{{ env.SYS_USER }}/authelia/docker-compose.yml"
+  become: yes
+  become_method: sudo
+
+- name: Deploy Authelia
+  shell: docker-compose up -d --force-recreate
+  args:
+    chdir: "/home/{{ env.SYS_USER }}/authelia/"
+  become: yes
+  become_method: sudo

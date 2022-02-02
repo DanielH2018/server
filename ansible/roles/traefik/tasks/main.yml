@@ -1,0 +1,42 @@
+- name: Creates directories
+  file:
+    path: "/home/{{ env.SYS_USER }}/traefik/data"
+    state: directory
+    mode: 0755
+
+- name: Create acme.json
+  file:
+    path: "/home/{{ env.SYS_USER }}/traefik/data/acme.json"
+    state: touch
+    mode: 0600
+
+- name: Create config.yml
+  file:
+    path: "/home/{{ env.SYS_USER }}/traefik/data/config.yml"
+    state: touch
+
+- name: Create traefik.yml from template
+  template:
+    src: traefik.yml.j2
+    dest: "/home/{{ env.SYS_USER }}/traefik/data/traefik.yml"
+
+- name: Hash password
+  shell: "echo $(htpasswd -nb {{ env.TRAEFIK_USER }} {{ env.TRAEFIK_PASSWORD }})"
+  register: traefik_hash
+
+- name: Create docker-compose.yml from template
+  template:
+    src: docker-compose.yml.j2
+    dest: "/home/{{ env.SYS_USER }}/traefik/docker-compose.yml"
+
+- name: Create docker network
+  shell: "docker network create {{ env.DOCKER_NETWORK }} || true"
+  become: yes
+  become_method: sudo
+
+- name: Deploy Traefik
+  shell: docker-compose up -d --force-recreate
+  args:
+    chdir: "/home/{{ env.SYS_USER }}/traefik/"
+  become: yes
+  become_method: sudo

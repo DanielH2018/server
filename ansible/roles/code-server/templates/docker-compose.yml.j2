@@ -1,0 +1,36 @@
+---
+version: "2.1"
+services:
+  code-server:
+    image: lscr.io/linuxserver/code-server
+    container_name: code-server
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ={{ env.TZ }}
+      - PASSWORD={{ env.CODE_SERVER_PASSWORD }}
+      - SUDO_PASSWORD={{ env.CODE_SERVER_SUDO_PASSWORD }}
+    volumes:
+      - /home/{{ env.SYS_USER }}/code-server/config:/config
+    ports:
+      - 8443:8443
+    restart: unless-stopped
+    networks:
+      - {{ env.DOCKER_NETWORK}}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.code-server.entrypoints=http"
+      - "traefik.http.routers.code-server.rule=Host(`code-server.{{ env.DOMAIN }}`)"
+      - "traefik.http.middlewares.code-server-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.code-server.middlewares=code-server-https-redirect"
+      - "traefik.http.routers.code-server-secure.entrypoints=https"
+      - "traefik.http.routers.code-server-secure.rule=Host(`code-server.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.code-server-secure.tls=true"
+      - "traefik.http.routers.code-server-secure.service=code-server"
+      - "traefik.http.services.code-server.loadbalancer.server.port=8443"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - 'traefik.http.routers.code-server-secure.middlewares=authelia@docker'
+
+networks:
+  {{ env.DOCKER_NETWORK}}:
+    external: true

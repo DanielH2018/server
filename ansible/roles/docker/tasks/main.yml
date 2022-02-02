@@ -1,0 +1,59 @@
+- name: Add packages
+  apt:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+  become: yes
+  become_method: sudo
+      
+- name: Add GPG Key
+  shell: "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg"
+
+- name: Add packages to manager
+  shell: |
+    echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+    $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+- name: Update apt-get repo and cache
+  apt:
+    upgrade: yes
+    update_cache: yes
+    force_apt_get: yes
+  become: yes
+  become_method: sudo
+
+- name: Install Docker
+  apt:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+  become: yes
+  become_method: sudo
+      
+- name: Install Docker Compose
+  shell: "curl -L \"https://github.com/docker/compose/releases/download/v2.2.3/docker-compose-$(uname -s)-$(uname -m)\" -o /usr/local/bin/docker-compose"
+  become: yes
+  become_method: sudo
+
+- name: chmod Docker Compose
+  file:
+    dest: /usr/local/bin/docker-compose
+    mode: +x
+  become: yes
+  become_method: sudo
+
+- name: Add sudo to user
+  shell: "usermod -aG docker {{ env.SYS_USER }}"
+  become: yes
+  become_method: sudo

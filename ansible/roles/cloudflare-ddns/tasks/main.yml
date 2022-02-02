@@ -1,0 +1,17 @@
+- name: Creates directories
+  file:
+    path: "/home/{{ env.SYS_USER }}/cloudflare-ddns/"
+    state: directory
+    mode: 0755
+
+- name: Create docker-compose.yml from template
+  template:
+    src: docker-compose.yml.j2
+    dest: "/home/{{ env.SYS_USER }}/cloudflare-ddns/docker-compose.yml"
+
+- name: Deploy Cloudflare DDNS
+  shell: docker-compose up -d --force-recreate
+  args:
+    chdir: "/home/{{ env.SYS_USER }}/cloudflare-ddns/"
+  become: yes
+  become_method: sudo

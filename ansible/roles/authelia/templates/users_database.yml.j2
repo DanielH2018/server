@@ -1,0 +1,9 @@
+# List of users
+users:
+  {{ env.AUTHELIA_USER }}:
+    displayname: "{{ env.AUTHELIA_USER }}"
+    password: "{{ authelia_hash.stdout[15:] }}"
+    email: {{ env.EMAIL }}
+    groups:
+      - admins
+      - dev

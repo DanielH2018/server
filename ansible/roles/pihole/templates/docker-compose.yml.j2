@@ -1,0 +1,41 @@
+services:
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    restart: unless-stopped
+    networks:
+      - {{ env.DOCKER_NETWORK}}
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "67:67/udp"
+      - "8053:80/tcp"
+      - "8054:443/tcp"
+    environment:
+      TZ: America/New_York
+      WEBPASSWORD: [REMOVED_KEY]
+      ServerIP: 192.168.50.96
+    volumes:
+       - '/home/{{ env.SYS_USER }}/pihole/data/etc-pihole/:/etc/pihole/'
+       - '/home/{{ env.SYS_USER }}/pihole/data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
+    cap_add:
+      - NET_ADMIN
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pihole.entrypoints=http"
+      - "traefik.http.routers.pihole.rule=Host(`pihole.{{ env.DOMAIN }}`)"
+      - "traefik.http.middlewares.pihole-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.pihole.middlewares=pihole-https-redirect"
+      - "traefik.http.routers.pihole-secure.entrypoints=https"
+      - "traefik.http.routers.pihole-secure.rule=Host(`pihole.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.pihole-secure.tls=true"
+      - "traefik.http.routers.pihole-secure.service=pihole"
+      - "traefik.http.services.pihole.loadbalancer.server.port=80"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK}}"
+      - 'traefik.http.routers.pihole-secure.middlewares=authelia@docker'
+      - "traefik.http.routers.pihole-secure.middlewares=add-admin"
+      - "traefik.http.middlewares.add-admin.addprefix.prefix=/admin"
+
+networks:
+  {{ env.DOCKER_NETWORK}}:
+    external: true

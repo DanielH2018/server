@@ -1,0 +1,36 @@
+---
+version: "2.1"
+services:
+  librespeed:
+    image: lscr.io/linuxserver/librespeed
+    container_name: librespeed
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ={{ env.TZ }}
+      - PASSWORD={{ env.LIBRESPEED_PASSWORD }}
+      - DB_TYPE=sqlite 
+    volumes:
+      - /home/{{ env.SYS_USER }}/librespeed/config:/config
+    ports:
+      - 8056:80
+    restart: unless-stopped
+    networks:
+      - {{ env.DOCKER_NETWORK}}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.librespeed.entrypoints=http"
+      - "traefik.http.routers.librespeed.rule=Host(`librespeed.{{ env.DOMAIN }}`)"
+      - "traefik.http.middlewares.librespeed-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.librespeed.middlewares=librespeed-https-redirect"
+      - "traefik.http.routers.librespeed-secure.entrypoints=https"
+      - "traefik.http.routers.librespeed-secure.rule=Host(`librespeed.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.librespeed-secure.tls=true"
+      - "traefik.http.routers.librespeed-secure.service=librespeed"
+      - "traefik.http.services.librespeed.loadbalancer.server.port=80"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - 'traefik.http.routers.librespeed-secure.middlewares=authelia@docker'
+
+networks:
+  {{ env.DOCKER_NETWORK}}:
+    external: true
