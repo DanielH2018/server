@@ -23,6 +23,6 @@
 - name: Deploy Monitoring Stack
   shell: docker-compose up -d --force-recreate
   args:
-    chdir: "/home/{{ env.SYS_USER }}/server/prometheus/"
+    chdir: "/home/{{ env.SYS_USER }}/server/monitoring/"
   become: yes
   become_method: sudo 
