@@ -1,0 +1,17 @@
+- name: Creates directories
+  file:
+    path: "/home/{{ env.SYS_USER }}/server/guacamole/config"
+    state: directory
+    mode: 0755
+
+- name: Create docker-compose from template
+  template:
+    src: docker-compose.yml.j2
+    dest: "/home/{{ env.SYS_USER }}/server/guacamole/docker-compose.yml"
+    
+- name: Deploy Guacamole
+  shell: docker-compose up -d --force-recreate
+  args:
+    chdir: "/home/{{ env.SYS_USER }}/server/guacamole/"
+  become: yes
+  become_method: sudo
