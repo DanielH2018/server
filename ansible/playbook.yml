@@ -33,5 +33,7 @@
       tags: filebrowser
     - role: guacamole
       tags: guacamole
+    - role: monitoring
+      tags: monitoring
     - role: watchtower
       tags: watchtower

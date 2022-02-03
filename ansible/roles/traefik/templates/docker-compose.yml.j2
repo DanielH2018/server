@@ -51,6 +51,7 @@ services:
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=syncthing.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=filebrowser.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=guacamole.{{ env.DOMAIN }}"
+      - "traefik.http.routers.traefik-secure.tls.domains[0].main=prometheus.{{ env.DOMAIN }}"
 
 networks:
   {{ env.DOCKER_NETWORK}}:
