@@ -31,5 +31,7 @@
       tags: syncthing
     - role: filebrowser
       tags: filebrowser
+    - role: guacamole
+      tags: guacamole
     - role: watchtower
       tags: watchtower
