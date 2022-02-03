@@ -49,6 +49,7 @@ services:
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=uptime-kuma.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=pihole.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=syncthing.{{ env.DOMAIN }}"
+      - "traefik.http.routers.traefik-secure.tls.domains[0].main=filebrowser.{{ env.DOMAIN }}"
 
 networks:
   {{ env.DOCKER_NETWORK}}:

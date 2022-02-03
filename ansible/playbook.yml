@@ -29,5 +29,7 @@
       tags: pihole
     - role: syncthing
       tags: syncthing
+    - role: filebrowser
+      tags: filebrowser
     - role: watchtower
       tags: watchtower
