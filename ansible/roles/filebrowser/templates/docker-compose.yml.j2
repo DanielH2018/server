@@ -25,7 +25,7 @@ services:
       - "traefik.http.routers.filebrowser-secure.rule=Host(`filebrowser.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.filebrowser-secure.tls=true"
       - "traefik.http.routers.filebrowser-secure.service=filebrowser"
-      - "traefik.http.services.filebrowser.loadbalancer.server.port=9000"
+      - "traefik.http.services.filebrowser.loadbalancer.server.port=8081"
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
       - 'traefik.http.routers.filebrowser-secure.middlewares=authelia@docker'
 
