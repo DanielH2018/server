@@ -44,8 +44,6 @@ services:
       - SYS_PTRACE
     security_opt:
       - apparmor:unconfined
-    networks:
-      - {{ env.DOCKER_NETWORK}}
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
