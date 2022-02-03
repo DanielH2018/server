@@ -24,7 +24,7 @@ services:
       - 'traefik.http.routers.prometheus-secure.middlewares=authelia@docker'
   grafana:
     image: grafana/grafana
-    user: {{ env.PUID }}
+    user: "{{ env.PUID }}"
     restart: always
     volumes:
       - /home/{{ env.SYS_USER }}/server/monitoring/grafana:/var/lib/grafana
