@@ -29,7 +29,5 @@
       tags: pihole
     - role: syncthing
       tags: syncthing
-    - role: guacamole
-      tags: guacamole
     - role: watchtower
       tags: watchtower
