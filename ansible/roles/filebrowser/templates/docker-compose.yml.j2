@@ -3,12 +3,12 @@ version: '3'
 services:
   file-browser:
     image: filebrowser/filebrowser
-    container_name: file-browser
+    container_name: filebrowser
     user: {{ env.PUID }}:{{ env.PGID }}
     ports:
       - 8081:80
     volumes:
-      - /home/{{ env.SYS_USER }}/server/filebrowser/data:/srv
+      - /home/{{ env.SYS_USER }}/server/:/srv
       - /home/{{ env.SYS_USER }}/server/filebrowser/data/filebrowser.db:/database.db
     restart: unless-stopped
     security_opt:
