@@ -1,0 +1,44 @@
+---
+version: "2.1"
+services:
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin
+    container_name: jellyfin
+    environment:
+      - PUID={{ env.PUID }}
+      - PGID={{ env.PGID }}
+      - TZ={{ env.TZ }}
+#      - JELLYFIN_PublishedServerUrl=192.168.0.5 #optional
+    volumes:
+      - /home/{{ env.SYS_USER }}/server/jellyfin/library:/config
+      - /home/{{ env.SYS_USER }}/server/jellyfin/library/tvseries:/data/tvshows
+      - /home/{{ env.SYS_USER }}/server/jellyfin/library/movies:/data/movies
+      - /opt/vc/lib:/opt/vc/lib
+    ports:
+      - 8096:8096
+      - 8920:8920 #optional
+      - 7359:7359/udp #optional
+      - 1900:1900/udp #optional
+    restart: unless-stopped
+    devices:
+      - /dev/vchiq:/dev/vchiq
+      - /dev/vcsm:/dev/vcsm
+    networks:
+      - {{ env.DOCKER_NETWORK}}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jellyfin.entrypoints=http"
+      - "traefik.http.routers.jellyfin.rule=Host(`jellyfin.{{ env.DOMAIN }}`)"
+      - "traefik.http.middlewares.jellyfin-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.jellyfin.middlewares=jellyfin-https-redirect"
+      - "traefik.http.routers.jellyfin-secure.entrypoints=https"
+      - "traefik.http.routers.jellyfin-secure.rule=Host(`jellyfin.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.jellyfin-secure.tls=true"
+      - "traefik.http.routers.jellyfin-secure.service=jellyfin"
+      - "traefik.http.services.jellyfin.loadbalancer.server.port=8920"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - 'traefik.http.routers.jellyfin-secure.middlewares=authelia@docker'
+
+networks:
+  {{ env.DOCKER_NETWORK}}:
+    external: true
