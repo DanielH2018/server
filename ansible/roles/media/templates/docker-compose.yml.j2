@@ -13,14 +13,17 @@ services:
       - WHITELIST=showrss.info,rarbg.to,yts.mx
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
+    ports:
+      - 8080:8080
+      - 9696:9696
+      - 8989:8989
+      - 7878:7878
+    networks:
+      - {{ env.DOCKER_NETWORK}}
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent
     container_name: qbittorrent
-    ports:
-      - 8080:8080
-    networks:
-      - {{ env.DOCKER_NETWORK}}
     network_mode: service:nordvpn
     depends_on:
       - nordvpn
@@ -60,10 +63,6 @@ services:
     volumes:
       - /home/{{ env.SYS_USER }}/prowlarr/config:/config
     restart: unless-stopped
-    ports:
-      - 9696:9696
-    networks:
-      - {{ env.DOCKER_NETWORK}}
     network_mode: service:nordvpn
     depends_on:
       - nordvpn
@@ -95,10 +94,6 @@ services:
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
       - /home/{{ env.SYS_USER }}/server/library/tvseries:/tv
     restart: unless-stopped
-    ports:
-      - 8989:8989
-    networks:
-      - {{ env.DOCKER_NETWORK}}
     network_mode: service:nordvpn
     depends_on:
       - prowlarr
@@ -130,10 +125,6 @@ services:
       - /home/{{ env.SYS_USER }}/server/library/movies:/movies
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
     restart: unless-stopped
-    ports:
-      - 7878:7878
-    networks:
-      - {{ env.DOCKER_NETWORK}}
     network_mode: service:nordvpn
     depends_on:
       - prowlarr
