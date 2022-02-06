@@ -17,17 +17,8 @@ services:
     volumes:
       - /home/{{ env.SYS_USER }}/server/minecraft/data:/data
     restart: unless-stopped
-    networks:
-      - {{ env.DOCKER_NETWORK}}
     labels:
       - "traefik.enable=true"
       - "traefik.tcp.routers.minecraft.entrypoints=tcp"
-#      - "traefik.tcp.routers.minecraft.tls=true"
-      - "traefik.tcp.routers.minecraft.tls.passthrough=true"
       - "traefik.tcp.routers.minecraft.rule=HostSNI(`*`)"
       - "traefik.tcp.services.minecraft.loadbalancer.server.port=25565"
-      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
-
-networks:
-  {{ env.DOCKER_NETWORK}}:
-    external: true
