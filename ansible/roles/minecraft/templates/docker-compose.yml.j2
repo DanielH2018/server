@@ -13,7 +13,7 @@ services:
       ENABLE_AUTOPAUSE: "TRUE"
       TZ: {{ env.TZ }}
     ports:
-      - 25565:25565
+      - 25566:25565
     volumes:
       - /home/{{ env.SYS_USER }}/server/minecraft/data:/data
     restart: unless-stopped
