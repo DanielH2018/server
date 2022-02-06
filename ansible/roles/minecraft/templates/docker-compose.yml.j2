@@ -11,7 +11,7 @@ services:
       MEMORY: 750m
       CONSOLE: "false"
       ENABLE_AUTOPAUSE: "TRUE"
-      TZ:{{ env.TZ }}
+      TZ: {{ env.TZ }}
     ports:
       - 25565:25565
     volumes:
