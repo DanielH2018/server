@@ -55,7 +55,6 @@ services:
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=prometheus.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=grafana.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=jellyfin.{{ env.DOMAIN }}"
-      - "traefik.tcp.routers.traefik-secure.tls.domains[0].main=minecraft.{{ env.DOMAIN }}"
 
 networks:
   {{ env.DOCKER_NETWORK}}:
