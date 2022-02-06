@@ -24,7 +24,7 @@ services:
       - "traefik.tcp.routers.minecraft.entrypoints=tcp"
 #      - "traefik.tcp.routers.minecraft.tls=true"
       - "traefik.tcp.routers.minecraft.tls.passthrough=true"
-      - "traefik.tcp.routers.minecraft.rule=HostSNI(`minecraft.{{ env.DOMAIN }}`)"
+      - "traefik.tcp.routers.minecraft.rule=HostSNI(`*`)"
       - "traefik.tcp.services.minecraft.loadbalancer.server.port=25565"
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
 
