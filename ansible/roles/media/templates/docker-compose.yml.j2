@@ -25,7 +25,7 @@ services:
       - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
       - UMASK_SET=022
-      - WEBUI_PORT=8090
+      - WEBUI_PORT=8080
     volumes:
       - /home/{{ env.SYS_USER }}/qbittorrent/config:/config
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
@@ -42,7 +42,7 @@ services:
       - "traefik.http.routers.qbittorrent-secure.rule=Host(`qbittorrent.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.qbittorrent-secure.tls=true"
       - "traefik.http.routers.qbittorrent-secure.service=qbittorrent"
-      - "traefik.http.services.qbittorrent.loadbalancer.server.port=8090"
+      - "traefik.http.services.qbittorrent.loadbalancer.server.port=8080"
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
       - 'traefik.http.routers.qbittorrent-secure.middlewares=authelia@docker'
 
