@@ -26,10 +26,6 @@ services:
       - TZ={{ env.TZ }}
       - UMASK_SET=022
       - WEBUI_PORT=8090
-    ports:
-      - 6881:6881
-      - 6881:6881/udp
-      - 8090:8080
     volumes:
       - /home/{{ env.SYS_USER }}/qbittorrent/config:/config
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
