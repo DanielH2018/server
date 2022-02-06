@@ -1,20 +1,25 @@
 version: "2"
 services:
-  nordlynx:
-    image: ghcr.io/bubuntux/nordlynx
+  nordvpn:
+    image: ghcr.io/bubuntux/nordvpn
+    container_name: nordvpn
     cap_add:
-      - NET_ADMIN #required
-    environment:
-      - PRIVATE_KEY={{ env.NORDVPN_KEY }} #required
+      - NET_ADMIN
+    environment:                # Review https://github.com/bubuntux/nordvpn#environment-variables
+      - USER={{ env.NORDVPN_USER }}
+      - "PASS={{ env.NORDVPN_PASSWORD }}"
+      - CONNECT=United_States
+      - TECHNOLOGY=NordLynx
+      - WHITELIST=showrss.info,rarbg.to,yts.mx
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent
     container_name: qbittorrent
-    network_mode: service:nordlynx
+    network_mode: service:nordvpn
     depends_on:
-      - nordlynx
+      - nordvpn
     environment:
       - PUID={{ env.PUID }}
       - PGID={{ env.PGID }}
@@ -51,9 +56,9 @@ services:
     volumes:
       - /home/{{ env.SYS_USER }}/prowlarr/config:/config
     restart: unless-stopped
-    network_mode: service:nordlynx
+    network_mode: service:nordvpn
     depends_on:
-      - nordlynx
+      - nordvpn
       - qbittorrent
     labels:
       - "traefik.enable=true"
@@ -82,7 +87,7 @@ services:
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
       - /home/{{ env.SYS_USER }}/server/library/tvseries:/tv
     restart: unless-stopped
-    network_mode: service:nordlynx
+    network_mode: service:nordvpn
     depends_on:
       - prowlarr
       - qbittorrent
@@ -113,7 +118,7 @@ services:
       - /home/{{ env.SYS_USER }}/server/library/movies:/movies
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
     restart: unless-stopped
-    network_mode: service:nordlynx
+    network_mode: service:nordvpn
     depends_on:
       - prowlarr
       - qbittorrent
