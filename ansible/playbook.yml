@@ -35,8 +35,6 @@
       tags: guacamole
     - role: jellyfin
       tags: jellyfin
-    - role: minecraft
-      tags: minecraft
     - role: monitoring
       tags: monitoring
     - role: watchtower
