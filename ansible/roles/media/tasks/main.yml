@@ -1,0 +1,53 @@
+- name: Create qbitorrent directories
+  file:
+    path: "/home/{{ env.SYS_USER }}/server/qbittorrent/config"
+    state: directory
+    mode: 0755
+
+- name: Create prowlarr directories
+  file:
+    path: "/home/{{ env.SYS_USER }}/server/prowlarr/config"
+    state: directory
+    mode: 0755
+
+- name: Create sonarr directories
+  file:
+    path: "/home/{{ env.SYS_USER }}/server/sonarr/config"
+    state: directory
+    mode: 0755
+
+- name: Create radarr directories
+  file:
+    path: "/home/{{ env.SYS_USER }}/server/radarr/config"
+    state: directory
+    mode: 0755
+
+- name: Create download directories
+  file:
+    path: "/home/{{ env.SYS_USER }}/server/library/downloads"
+    state: directory
+    mode: 0755
+
+- name: Create tv directories
+  file:
+    path: "/home/{{ env.SYS_USER }}/server/library/tvseries"
+    state: directory
+    mode: 0755
+
+- name: Create movie directories
+  file:
+    path: "/home/{{ env.SYS_USER }}/server/library/movies"
+    state: directory
+    mode: 0755
+
+- name: Create docker-compose from template
+  template:
+    src: docker-compose.yml.j2
+    dest: "/home/{{ env.SYS_USER }}/server/library/docker-compose.yml"
+    
+- name: Deploy Media
+  shell: docker-compose up -d --force-recreate
+  args:
+    chdir: "/home/{{ env.SYS_USER }}/server/library/"
+  become: yes
+  become_method: sudo

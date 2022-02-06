@@ -10,9 +10,9 @@ services:
       - TZ={{ env.TZ }}
       - JELLYFIN_PublishedServerUrl={{ env.SERVER_IP }} #optional
     volumes:
-      - /home/{{ env.SYS_USER }}/server/jellyfin/library:/config
-      - /home/{{ env.SYS_USER }}/server/jellyfin/library/tvseries:/data/tvshows
-      - /home/{{ env.SYS_USER }}/server/jellyfin/library/movies:/data/movies
+      - /home/{{ env.SYS_USER }}/server/jellyfin/config:/config
+      - /home/{{ env.SYS_USER }}/server/library/tvseries:/data/tvshows
+      - /home/{{ env.SYS_USER }}/server/library/movies:/data/movies
       - /opt/vc/lib:/opt/vc/lib
     ports:
       - 8096:8096

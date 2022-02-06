@@ -33,6 +33,8 @@
       tags: filebrowser
     - role: guacamole
       tags: guacamole
+    - role: media
+      tags: media
     - role: jellyfin
       tags: jellyfin
     - role: monitoring
