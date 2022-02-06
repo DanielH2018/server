@@ -22,7 +22,7 @@ services:
     restart: unless-stopped
     devices:
       - /dev/vchiq:/dev/vchiq
-      - /dev/vcsm:/dev/vcsm
+      - /dev/vcsm-cma:/dev/vcsm
     networks:
       - {{ env.DOCKER_NETWORK}}
     labels:
