@@ -17,6 +17,8 @@ services:
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent
     container_name: qbittorrent
+    networks:
+      - {{ env.DOCKER_NETWORK}}
     network_mode: service:nordvpn
     depends_on:
       - nordvpn
@@ -56,6 +58,8 @@ services:
     volumes:
       - /home/{{ env.SYS_USER }}/prowlarr/config:/config
     restart: unless-stopped
+    networks:
+      - {{ env.DOCKER_NETWORK}}
     network_mode: service:nordvpn
     depends_on:
       - nordvpn
@@ -87,6 +91,8 @@ services:
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
       - /home/{{ env.SYS_USER }}/server/library/tvseries:/tv
     restart: unless-stopped
+    networks:
+      - {{ env.DOCKER_NETWORK}}
     network_mode: service:nordvpn
     depends_on:
       - prowlarr
@@ -118,6 +124,8 @@ services:
       - /home/{{ env.SYS_USER }}/server/library/movies:/movies
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
     restart: unless-stopped
+    networks:
+      - {{ env.DOCKER_NETWORK}}
     network_mode: service:nordvpn
     depends_on:
       - prowlarr
@@ -135,3 +143,7 @@ services:
       - "traefik.http.services.radarr.loadbalancer.server.port=7878"
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
       - 'traefik.http.routers.radarr-secure.middlewares=authelia@docker'
+
+networks:
+  {{ env.DOCKER_NETWORK}}:
+    external: true
