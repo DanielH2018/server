@@ -53,8 +53,6 @@ services:
       - PUID={{ env.PUID }}
       - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
-    ports:
-      - 9696:9696
     volumes:
       - /home/{{ env.SYS_USER }}/prowlarr/config:/config
     restart: unless-stopped
@@ -83,8 +81,6 @@ services:
       - PUID={{ env.PUID }}
       - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
-    ports:
-      - 8989:8989
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /home/{{ env.SYS_USER }}/sonarr/config:/config
@@ -116,8 +112,6 @@ services:
       - PUID={{ env.PUID }}
       - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
-    ports:
-      - 7878:7878
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /home/{{ env.SYS_USER }}/radarr/config:/config
