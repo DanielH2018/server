@@ -82,7 +82,7 @@ services:
       - "traefik.http.routers.prowlarr-secure.rule=Host(`prowlarr.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.prowlarr-secure.tls=true"
       - "traefik.http.routers.prowlarr-secure.service=prowlarr"
-      - "traefik.http.services.prowlarr.loadbalancer.server.port=8090"
+      - "traefik.http.services.prowlarr.loadbalancer.server.port=9696"
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
       - 'traefik.http.routers.prowlarr-secure.middlewares=authelia@docker'
             
@@ -117,7 +117,7 @@ services:
       - "traefik.http.routers.sonarr-secure.rule=Host(`sonarr.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.sonarr-secure.tls=true"
       - "traefik.http.routers.sonarr-secure.service=sonarr"
-      - "traefik.http.services.sonarr.loadbalancer.server.port=8090"
+      - "traefik.http.services.sonarr.loadbalancer.server.port=8989"
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
       - 'traefik.http.routers.sonarr-secure.middlewares=authelia@docker'
 
@@ -152,7 +152,7 @@ services:
       - "traefik.http.routers.radarr-secure.rule=Host(`radarr.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.radarr-secure.tls=true"
       - "traefik.http.routers.radarr-secure.service=radarr"
-      - "traefik.http.services.radarr.loadbalancer.server.port=8090"
+      - "traefik.http.services.radarr.loadbalancer.server.port=7878"
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
       - 'traefik.http.routers.radarr-secure.middlewares=authelia@docker'
 
