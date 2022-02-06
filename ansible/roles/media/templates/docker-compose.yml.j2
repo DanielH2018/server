@@ -55,7 +55,7 @@ services:
       - 'traefik.http.routers.qbittorrent-secure.middlewares=authelia@docker'
 
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr
+    image: linuxserver/prowlarr:develop
     container_name: prowlarr
     environment:
       - PUID={{ env.PUID }}
