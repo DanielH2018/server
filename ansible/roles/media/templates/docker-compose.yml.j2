@@ -17,6 +17,8 @@ services:
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent
     container_name: qbittorrent
+    ports:
+      - 8080:8080
     networks:
       - {{ env.DOCKER_NETWORK}}
     network_mode: service:nordvpn
@@ -58,6 +60,8 @@ services:
     volumes:
       - /home/{{ env.SYS_USER }}/prowlarr/config:/config
     restart: unless-stopped
+    ports:
+      - 9696:9696
     networks:
       - {{ env.DOCKER_NETWORK}}
     network_mode: service:nordvpn
@@ -91,6 +95,8 @@ services:
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
       - /home/{{ env.SYS_USER }}/server/library/tvseries:/tv
     restart: unless-stopped
+    ports:
+      - 8989:8989
     networks:
       - {{ env.DOCKER_NETWORK}}
     network_mode: service:nordvpn
@@ -124,6 +130,8 @@ services:
       - /home/{{ env.SYS_USER }}/server/library/movies:/movies
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
     restart: unless-stopped
+    ports:
+      - 7878:7878
     networks:
       - {{ env.DOCKER_NETWORK}}
     network_mode: service:nordvpn
