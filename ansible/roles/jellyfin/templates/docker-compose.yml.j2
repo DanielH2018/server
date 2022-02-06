@@ -35,7 +35,7 @@ services:
       - "traefik.http.routers.jellyfin-secure.rule=Host(`jellyfin.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.jellyfin-secure.tls=true"
       - "traefik.http.routers.jellyfin-secure.service=jellyfin"
-      - "traefik.http.services.jellyfin.loadbalancer.server.port=8920"
+      - "traefik.http.services.jellyfin.loadbalancer.server.port=8096"
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
       - 'traefik.http.routers.jellyfin-secure.middlewares=authelia@docker'
 
