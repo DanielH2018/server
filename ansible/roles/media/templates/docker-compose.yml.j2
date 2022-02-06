@@ -17,7 +17,7 @@ services:
       - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
 
   qbittorrent:
-    image: ghcr.io/linuxserver/qbittorrent
+    image: lscr.io/linuxserver/qbittorrent
     container_name: qbittorrent
     networks:
       - {{ env.DOCKER_NETWORK}}
@@ -30,6 +30,10 @@ services:
       - TZ={{ env.TZ }}
       - UMASK_SET=022
       - WEBUI_PORT=8090
+    ports:
+      - 6881:6881
+      - 6881:6881/udp
+      - 8090:8080
     volumes:
       - /home/{{ env.SYS_USER }}/qbittorrent/config:/config
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
@@ -51,7 +55,7 @@ services:
       - 'traefik.http.routers.qbittorrent-secure.middlewares=authelia@docker'
 
   prowlarr:
-    image: linuxserver/prowlarr
+    image: lscr.io/linuxserver/prowlarr
     container_name: prowlarr
     environment:
       - PUID={{ env.PUID }}
@@ -83,7 +87,7 @@ services:
       - 'traefik.http.routers.prowlarr-secure.middlewares=authelia@docker'
             
   sonarr:
-    image: linuxserver/sonarr
+    image: lscr.io/linuxserver/sonarr
     container_name: sonarr
     environment:
       - PUID={{ env.PUID }}
@@ -118,7 +122,7 @@ services:
       - 'traefik.http.routers.sonarr-secure.middlewares=authelia@docker'
 
   radarr:
-    image: linuxserver/radarr
+    image: lscr.io/linuxserver/radarr
     container_name: radarr
     environment:
       - PUID={{ env.PUID }}
