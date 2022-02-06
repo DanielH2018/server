@@ -54,6 +54,10 @@ services:
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=guacamole.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=prometheus.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=grafana.{{ env.DOMAIN }}"
+      - "traefik.http.routers.traefik-secure.tls.domains[0].main=qbittorrent.{{ env.DOMAIN }}"
+      - "traefik.http.routers.traefik-secure.tls.domains[0].main=prowlarr.{{ env.DOMAIN }}"
+      - "traefik.http.routers.traefik-secure.tls.domains[0].main=sonarr.{{ env.DOMAIN }}"
+      - "traefik.http.routers.traefik-secure.tls.domains[0].main=radarr.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=jellyfin.{{ env.DOMAIN }}"
 
 networks:
