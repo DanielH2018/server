@@ -1,13 +1,11 @@
 version: "2"
 services:
-  nordvpn:
-    image: ghcr.io/bubuntux/nordvpn
-    container_name: nordvpn
+  nordlynx:
+    image: ghcr.io/bubuntux/nordlynx
     cap_add:
-      - NET_ADMIN
-    environment:                # Review https://github.com/bubuntux/nordvpn#environment-variables
-      - USER={{ env.NORDVPN_USER }}
-      - "PASS={{ env.NORDVPN_PASSWORD }}"
+      - NET_ADMIN #required
+    environment:
+      - PRIVATE_KEY={{ env.NORDVPN_KEY }}
       - CONNECT=United_States
       - TECHNOLOGY=NordLynx
       - WHITELIST=showrss.info,rarbg.to,yts.mx
