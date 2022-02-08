@@ -4,6 +4,7 @@ services:
   syncthing:
     image: lscr.io/linuxserver/syncthing
     container_name: syncthing
+    hostname: ubuntu
     environment:
       - PUID={{ env.PUID }}
       - PGID={{ env.PGID }}
