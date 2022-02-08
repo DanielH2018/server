@@ -37,8 +37,8 @@
       tags: media
     - role: jellyfin
       tags: jellyfin
-    - role: minecraft
-      tags: minecraft
+#    - role: minecraft
+#      tags: minecraft
     - role: monitoring
       tags: monitoring
     - role: watchtower
