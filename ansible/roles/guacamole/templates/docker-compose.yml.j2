@@ -1,7 +1,7 @@
 version: "2"
 services:
   guacamole:
-    image: oznu/guacamole:armhf
+    image: oznu/guacamole
     container_name: guacamole
     volumes:
       - /home/{{ env.SYS_USER }}/server/guacamole/config/postgres:/config
