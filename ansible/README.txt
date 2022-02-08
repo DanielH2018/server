@@ -1,7 +1,8 @@
 ---Instructions to setup server environment---
 1. Run `sudo chmod +x /home/ubuntu/server/ansible/install_ansible.sh`.
 2. Run `sudo /home/ubuntu/server/ansible/install_ansible.sh`.
-3. Run `ansible-playbook /home/ubuntu/server/ansible/ansible/playbook.yml`.
+    1. If using Intel XE graphics, ensure `/dev/dri/` exists, otherwise run `sudo apt install linux-oem-20.04` and reboot.
+3. Run `ansible-playbook playbook.yml`.
 
 ---Instructions to update server environment---
 1. Perform update to Container.

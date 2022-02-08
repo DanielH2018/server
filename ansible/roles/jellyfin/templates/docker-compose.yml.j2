@@ -21,8 +21,7 @@ services:
       - 1900:1900/udp #optional
     restart: unless-stopped
     devices:
-      - /dev/vchiq:/dev/vchiq
-      - /dev/vcsm-cma:/dev/vcsm
+      - /dev/dri:/dev/dri
     networks:
       - {{ env.DOCKER_NETWORK}}
     labels:
