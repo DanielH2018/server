@@ -6,13 +6,13 @@
 
 - name: Create data1 directory
   file:
-    path: "/home/{{ env.SYS_USER }}/server/syncthing/config"
+    path: "/home/{{ env.SYS_USER }}/server/syncthing/data1"
     state: directory
     mode: 0755
 
 - name: Create data2 directory
   file:
-    path: "/home/{{ env.SYS_USER }}/server/syncthing/config"
+    path: "/home/{{ env.SYS_USER }}/server/syncthing/data2"
     state: directory
     mode: 0755
   
