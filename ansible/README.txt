@@ -18,3 +18,7 @@
 5. Add traefik labels and cloudflare CNAME as needed.
 6. Run `ansible-playbook playbook.yml --tags "<NAME>".
 7. If successful, check into version control.
+
+---Instructions to setup minecraft environment---
+1. Create A name record in cloudflare to source ip
+2. Create port forward to server
