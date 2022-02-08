@@ -29,7 +29,7 @@ services:
       - UMASK_SET=022
       - WEBUI_PORT=8080
     volumes:
-      - /home/{{ env.SYS_USER }}/qbittorrent/config:/config
+      - /home/{{ env.SYS_USER }}/server/qbittorrent/config:/config
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
       - /home/{{ env.SYS_USER }}/server/library/tvseries:/data/tvshows
       - /home/{{ env.SYS_USER }}/server/library/movies:/data/movies
@@ -56,7 +56,7 @@ services:
       - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
     volumes:
-      - /home/{{ env.SYS_USER }}/prowlarr/config:/config
+      - /home/{{ env.SYS_USER }}/server/prowlarr/config:/config
     restart: unless-stopped
     network_mode: service:nordlynx
     depends_on:
@@ -85,7 +85,7 @@ services:
       - TZ={{ env.TZ }}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - /home/{{ env.SYS_USER }}/sonarr/config:/config
+      - /home/{{ env.SYS_USER }}/server/sonarr/config:/config
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
       - /home/{{ env.SYS_USER }}/server/library/tvseries:/tv
     restart: unless-stopped
@@ -116,7 +116,7 @@ services:
       - TZ={{ env.TZ }}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - /home/{{ env.SYS_USER }}/radarr/config:/config
+      - /home/{{ env.SYS_USER }}/server/radarr/config:/config
       - /home/{{ env.SYS_USER }}/server/library/movies:/movies
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
     restart: unless-stopped
