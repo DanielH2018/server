@@ -3,6 +3,7 @@
 2. Run `sudo /home/ubuntu/server/ansible/install_ansible.sh`.
     1. If using Intel XE graphics, ensure `/dev/dri/` exists, otherwise run `sudo apt install linux-oem-20.04` and reboot.
 3. Run `ansible-playbook playbook.yml`.
+    1. If you receive an error for sudo requiring a password, add `--ask-become-pass`.
 
 ---Instructions to update server environment---
 1. Perform update to Container.
