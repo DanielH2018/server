@@ -53,7 +53,7 @@
       tags: [ grafana, monitoring ]
     - role: netdata
       tags: [ netdata, monitoring ] 
-    - role: homeassistant
-      tags: homeassistant
+    - role: home-assistant
+      tags: home-assistant
     - role: watchtower
       tags: watchtower
