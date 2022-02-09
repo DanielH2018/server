@@ -13,7 +13,7 @@ services:
       - /home/{{ env.SYS_USER }}/server/library/movies:/movies
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
     restart: unless-stopped
-    network_mode: service:nordlynx
+    network_mode: container:nordlynx
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.radarr.entrypoints=http"

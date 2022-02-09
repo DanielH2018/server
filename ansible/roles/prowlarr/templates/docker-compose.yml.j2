@@ -10,7 +10,7 @@ services:
     volumes:
       - /home/{{ env.SYS_USER }}/server/prowlarr/config:/config
     restart: unless-stopped
-    network_mode: service:nordlynx
+    network_mode: container:nordlynx
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.prowlarr.entrypoints=http"

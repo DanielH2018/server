@@ -3,7 +3,7 @@ services:
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent
     container_name: qbittorrent
-    network_mode: service:nordlynx
+    network_mode: container:nordlynx
     environment:
       - PUID={{ env.PUID }}
       - PGID={{ env.PGID }}
