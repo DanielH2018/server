@@ -2,6 +2,7 @@ version: "2"
 services:
   nordlynx:
     image: ghcr.io/bubuntux/nordlynx
+    container_name: nordlynx
     cap_add:
       - NET_ADMIN #required
     environment:
