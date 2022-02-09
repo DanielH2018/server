@@ -39,7 +39,11 @@
       tags: jellyfin
     - role: minecraft
       tags: minecraft
-    - role: monitoring
-      tags: monitoring
+    - role: prometheus
+      tags: [ prometheus, monitoring ]
+    - role: grafana
+      tags: [ grafana, monitoring ]
+    - role: netdata
+      tags: [ netdata, monitoring ] 
     - role: watchtower
       tags: watchtower
