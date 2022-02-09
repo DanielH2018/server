@@ -5,10 +5,10 @@ services:
     container_name: minecraft
     environment:
       EULA: "true"
-      ENABLE_RCON: "true"
+      ENABLE_RCON: "false"
       TYPE: PAPER
-      VIEW_DISTANCE: 10
-      MEMORY: 3G
+      VIEW_DISTANCE: 15
+      MEMORY: 6G
       CONSOLE: "false"
       ENABLE_AUTOPAUSE: "TRUE"
       TZ: {{ env.TZ }}
