@@ -1,0 +1,30 @@
+version: "2"
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent
+    container_name: qbittorrent
+    network_mode: service:nordlynx
+    environment:
+      - PUID={{ env.PUID }}
+      - PGID={{ env.PGID }}
+      - TZ={{ env.TZ }}
+      - UMASK_SET=022
+      - WEBUI_PORT=8080
+    volumes:
+      - /home/{{ env.SYS_USER }}/server/qbittorrent/config:/config
+      - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
+      - /home/{{ env.SYS_USER }}/server/library/tvseries:/data/tvshows
+      - /home/{{ env.SYS_USER }}/server/library/movies:/data/movies
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.qbittorrent.entrypoints=http"
+      - "traefik.http.routers.qbittorrent.rule=Host(`qbittorrent.{{ env.DOMAIN }}`)"
+      - "traefik.http.middlewares.qbittorrent-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.qbittorrent.middlewares=qbittorrent-https-redirect"
+      - "traefik.http.routers.qbittorrent-secure.entrypoints=https"
+      - "traefik.http.routers.qbittorrent-secure.rule=Host(`qbittorrent.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.qbittorrent-secure.tls=true"
+      - "traefik.http.routers.qbittorrent-secure.service=qbittorrent"
+      - "traefik.http.services.qbittorrent.loadbalancer.server.port=8080"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - 'traefik.http.routers.qbittorrent-secure.middlewares=authelia@docker'

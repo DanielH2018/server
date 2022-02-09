@@ -1,0 +1,27 @@
+version: "2"            
+  sonarr:
+    image: lscr.io/linuxserver/sonarr
+    container_name: sonarr
+    environment:
+      - PUID={{ env.PUID }}
+      - PGID={{ env.PGID }}
+      - TZ={{ env.TZ }}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /home/{{ env.SYS_USER }}/server/sonarr/config:/config
+      - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
+      - /home/{{ env.SYS_USER }}/server/library/tvseries:/tv
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sonarr.entrypoints=http"
+      - "traefik.http.routers.sonarr.rule=Host(`sonarr.{{ env.DOMAIN }}`)"
+      - "traefik.http.middlewares.sonarr-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.sonarr.middlewares=sonarr-https-redirect"
+      - "traefik.http.routers.sonarr-secure.entrypoints=https"
+      - "traefik.http.routers.sonarr-secure.rule=Host(`sonarr.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.sonarr-secure.tls=true"
+      - "traefik.http.routers.sonarr-secure.service=sonarr"
+      - "traefik.http.services.sonarr.loadbalancer.server.port=8989"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - 'traefik.http.routers.sonarr-secure.middlewares=authelia@docker'

@@ -1,0 +1,21 @@
+version: "2"
+services:
+  nordlynx:
+    image: ghcr.io/bubuntux/nordlynx
+    cap_add:
+      - NET_ADMIN #required
+    environment:
+      - PRIVATE_KEY={{ env.NORDVPN_KEY }}
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
+    ports:
+      - 8080:8080
+      - 9696:9696
+      - 8989:8989
+      - 7878:7878
+    networks:
+      - {{ env.DOCKER_NETWORK}}
+
+networks:
+  {{ env.DOCKER_NETWORK}}:
+    external: true
