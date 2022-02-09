@@ -4,6 +4,11 @@
     state: directory
     mode: 0755
 
+- name: Create configuation.yaml from template
+  template:
+    src: configuation.yaml.j2
+    dest: "/home/{{ env.SYS_USER }}/server/homeassistant/config/configuation.yaml"
+
 - name: Create docker-compose from template
   template:
     src: docker-compose.yml.j2
