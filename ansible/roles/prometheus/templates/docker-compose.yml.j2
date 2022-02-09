@@ -1,0 +1,28 @@
+version: "3"
+services:
+  prometheus:
+    image: prom/prometheus
+    restart: always
+    volumes:
+     - /home/{{ env.SYS_USER }}/server/monitoring/prometheus/:/etc/prometheus/
+    ports:
+     - 9090:9090
+    networks:
+      - {{ env.DOCKER_NETWORK}}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.entrypoints=http"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.{{ env.DOMAIN }}`)"
+      - "traefik.http.middlewares.prometheus-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.prometheus.middlewares=prometheus-https-redirect"
+      - "traefik.http.routers.prometheus-secure.entrypoints=https"
+      - "traefik.http.routers.prometheus-secure.rule=Host(`prometheus.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.prometheus-secure.tls=true"
+      - "traefik.http.routers.prometheus-secure.service=prometheus"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - 'traefik.http.routers.prometheus-secure.middlewares=authelia@docker'
+
+networks:
+  {{ env.DOCKER_NETWORK}}:
+    external: true

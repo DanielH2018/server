@@ -1,0 +1,29 @@
+version: "3"
+services:
+  grafana:
+    image: grafana/grafana
+    user: "{{ env.PUID }}"
+    restart: always
+    volumes:
+      - /home/{{ env.SYS_USER }}/server/monitoring/grafana:/var/lib/grafana
+    ports:
+     - "3000:3000"
+    networks:
+      - {{ env.DOCKER_NETWORK}}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.entrypoints=http"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.{{ env.DOMAIN }}`)"
+      - "traefik.http.middlewares.grafana-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.grafana.middlewares=grafana-https-redirect"
+      - "traefik.http.routers.grafana-secure.entrypoints=https"
+      - "traefik.http.routers.grafana-secure.rule=Host(`grafana.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.grafana-secure.tls=true"
+      - "traefik.http.routers.grafana-secure.service=grafana"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - 'traefik.http.routers.grafana-secure.middlewares=authelia@docker'
+
+networks:
+  {{ env.DOCKER_NETWORK}}:
+    external: true
