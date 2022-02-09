@@ -5,7 +5,7 @@ services:
     user: "{{ env.PUID }}"
     restart: always
     volumes:
-      - /home/{{ env.SYS_USER }}/server/monitoring/grafana:/var/lib/grafana
+      - /home/{{ env.SYS_USER }}/server/grafana:/var/lib/grafana
     ports:
      - "3000:3000"
     networks:

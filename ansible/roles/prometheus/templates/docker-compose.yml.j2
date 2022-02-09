@@ -4,7 +4,7 @@ services:
     image: prom/prometheus
     restart: always
     volumes:
-     - /home/{{ env.SYS_USER }}/server/monitoring/prometheus/:/etc/prometheus/
+     - /home/{{ env.SYS_USER }}/server/prometheus/:/etc/prometheus/
     ports:
      - 9090:9090
     networks:
