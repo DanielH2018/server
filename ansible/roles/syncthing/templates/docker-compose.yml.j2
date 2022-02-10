@@ -34,6 +34,8 @@ services:
       - "traefik.http.services.syncthing.loadbalancer.server.port=8384"
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
       - 'traefik.http.routers.syncthing-secure.middlewares=authelia@docker'
+      - "traefik.http.routers.pihole-secure.middlewares=stripprefix"
+      - "traefik.http.middlewares.stripprefix.stripprefix.prefixes=/syncthing"
 
 networks:
   {{ env.DOCKER_NETWORK}}:
