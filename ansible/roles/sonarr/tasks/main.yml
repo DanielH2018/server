@@ -20,11 +20,13 @@
   template:
     src: sonarr-episode-trimmer.py.j2
     dest: "/home/{{ env.SYS_USER }}/server/sonarr/config/sonarr-episode-trimmer.py"
+    mode: 0755
 
 - name: Create cleaner config from template
   template:
     src: sonarr-episode-trimmer-config.j2
     dest: "/home/{{ env.SYS_USER }}/server/sonarr/config/sonarr-episode-trimmer-config"
+    mode: 0755
 
 - name: Create docker-compose from template
   template:

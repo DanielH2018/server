@@ -1,12 +1,12 @@
 #!/usr/bin/python
 from operator import itemgetter
-import urllib.request, urllib.parse, urllib.error
-import http.client
+import urllib
+import httplib
 import json
 import logging
 import logging.handlers
 import os
-import configparser
+import ConfigParser
 import argparse
 import sys
 
@@ -32,9 +32,9 @@ def api_request(action, params=None, method='GET', body=None):
     params['apikey'] = CONFIG.get('API', 'key')
 
     url_base = CONFIG.get('API', 'url_base') if CONFIG.has_option('API', 'url_base') else ''
-    url = "%s/api/%s?%s" % (url_base, action, urllib.parse.urlencode(params))
+    url = "%s/api/%s?%s" % (url_base, action, urllib.urlencode(params))
 
-    conn = http.client.HTTPConnection(CONFIG.get('API', 'url'))
+    conn = httplib.HTTPConnection(CONFIG.get('API', 'url'))
     conn.request(method, url, body)
     resp = conn.getresponse()
 
@@ -125,11 +125,13 @@ if __name__ == '__main__':
         logging.getLogger().setLevel(logging.DEBUG)
 
     # load config file
-    CONFIG = configparser.ConfigParser()
+    CONFIG = ConfigParser.SafeConfigParser()
     if args.config is not None:
         CONFIG.read(args.config)
-    else: 
-        CONFIG.read("/home/{{ env.SYS_USER }}/server/sonarr/config/sonarr-episode-trimmer-config")
+    else:
+        args.custom_script = True
+        config_path = "/config/sonarr-episode-trimmer-config"
+        CONFIG.read(config_path)
 
     # get all the series in the library
     series = api_request('series')
@@ -138,7 +140,7 @@ if __name__ == '__main__':
     if args.list_series:
         series = sorted(series, key=itemgetter('title'))
         for s in series:
-            print("%s: %s" % (s['title'], s['cleanTitle']))
+            print "%s: %s" % (s['title'], s['cleanTitle'])
     # cleanup series
     else:
         cleanup_series = []
