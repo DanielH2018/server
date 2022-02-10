@@ -125,7 +125,7 @@ if __name__ == '__main__':
         logging.getLogger().setLevel(logging.DEBUG)
 
     # load config file
-    CONFIG = configparser.SafeConfigParser()
+    CONFIG = configparser.ConfigParser()
     if args.config is not None:
         CONFIG.read(args.config)
     else: 
