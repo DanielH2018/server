@@ -110,7 +110,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action='store_true', help='Run the script in debug mode. No modifications to '
                                                              'the sonarr library or filesystem will be made.')
-    parser.add_argument("--config", type=str, required=True, help='Path to the configuration file.')
+    parser.add_argument("--config", type=str, help='Path to the configuration file.')
     parser.add_argument("--list-series", action='store_true', help="Get a list of shows with their 'cleanTitle' for use"
                                                                    " in the configuration file")
     parser.add_argument("--custom-script", action='store_true', help="Run in 'Custom Script' mode. This mode is meant "
@@ -126,7 +126,10 @@ if __name__ == '__main__':
 
     # load config file
     CONFIG = configparser.SafeConfigParser()
-    CONFIG.read(args.config)
+    if args.config is not None:
+        CONFIG.read(args.config)
+    else: 
+        CONFIG.read("/home/{{ env.SYS_USER }}/server/sonarr/config/sonarr-episode-trimmer-config")
 
     # get all the series in the library
     series = api_request('series')
