@@ -28,8 +28,8 @@ services:
       - "traefik.http.routers.syncthing-secure.tls=true"
       - "traefik.http.routers.syncthing-secure.service=syncthing"
       - "traefik.http.services.syncthing.loadbalancer.server.port=8384"
-      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
-      - 'traefik.http.routers.syncthing-secure.middlewares=authelia@docker'
+#      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+#      - 'traefik.http.routers.syncthing-secure.middlewares=authelia@docker'
 
 networks:
   {{ env.DOCKER_NETWORK}}:
