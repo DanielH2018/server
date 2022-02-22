@@ -15,6 +15,8 @@
       tags: authelia
     - role: cloudflare-ddns
       tags: cloudflare-ddns
+    - role: crowdsec
+      tags: crowdsec
     - role: code-server
       tags: code-server
     - role: freshrss
