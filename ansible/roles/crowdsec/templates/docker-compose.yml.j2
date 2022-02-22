@@ -15,6 +15,17 @@ services:
       - proxy
     restart: unless-stopped
 
+  bouncer-traefik:
+    image: docker.io/fbonalair/traefik-crowdsec-bouncer:latest
+    container_name: bouncer-traefik
+    environment:
+      CROWDSEC_BOUNCER_API_KEY: {{ env.CROWDSEC_BOUNCER_API_KEY }}
+      CROWDSEC_AGENT_HOST: crowdsec:8080
+    networks:
+      - proxy
+    depends_on:
+      - crowdsec
+    restart: unless-stopped
 networks:
   proxy:
     external: true
