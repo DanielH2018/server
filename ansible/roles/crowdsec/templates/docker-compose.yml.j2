@@ -20,7 +20,7 @@ services:
     container_name: bouncer-traefik
     environment:
       CROWDSEC_BOUNCER_API_KEY: {{ env.CROWDSEC_BOUNCER_API_KEY }}
-      CROWDSEC_AGENT_HOST: crowdsec:8082
+      CROWDSEC_AGENT_HOST: crowdsec:8080
     networks:
       - proxy
     depends_on:
