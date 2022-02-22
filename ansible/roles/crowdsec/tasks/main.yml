@@ -4,10 +4,10 @@
     state: directory
     mode: 0755
 
-- name: Create acquis.yml from template
+- name: Create acquis.yaml from template
   template:
-    src: acquis.yml.j2
-    dest: "/home/{{ env.SYS_USER }}/server/crowdsec/config/acquis.yml"
+    src: acquis.yaml.j2
+    dest: "/home/{{ env.SYS_USER }}/server/crowdsec/config/acquis.yaml"
 
 - name: Create docker-compose.yml from template
   template:
