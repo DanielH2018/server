@@ -14,7 +14,7 @@ services:
       - /home/{{ env.SYS_USER }}/server/emulatorjs/config/:/config
     ports:
       - 3002:3000
-      - 80:80
+      - 81:80
       - 4001:4001 #optional
     restart: unless-stopped
     networks:
