@@ -33,6 +33,8 @@
       tags: syncthing
     - role: filebrowser
       tags: filebrowser
+    - role: scrutiny
+      tags: scrutiny
     - role: guacamole
       tags: guacamole
     - role: nordlynx
