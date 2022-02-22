@@ -1,6 +1,34 @@
 http:
+ #region routers 
+  routers:
+
+
+#endregion
+#region services
+  services:
+
+
+#endregion
   middlewares:
+    https-redirect:
+      redirectScheme:
+        scheme: https
+
     crowdsec-bouncer:
       forwardauth:
-        address: http://bouncer-traefik:8080/api/v1/forwardAuth
+        address: http://bouncer-traefik:8082/api/v1/forwardAuth
         trustForwardHeader: true
+
+    default-headers:
+      headers:
+        frameDeny: true
+        sslRedirect: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        forceSTSHeader: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 15552000
+        customFrameOptionsValue: SAMEORIGIN
+        customRequestHeaders:
+          X-Forwarded-Proto: https
