@@ -17,7 +17,7 @@ services:
       - 80:80
       - 4001:4001 #optional
     restart: unless-stopped
-        networks:
+    networks:
       - {{ env.DOCKER_NETWORK}}
     labels:
       - "traefik.enable=true"
