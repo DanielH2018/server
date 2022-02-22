@@ -7,14 +7,13 @@ services:
       GID: "${GID-{{ env.PGID}}}"
       COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik"
     volumes:
-      - ./config/acquis.yaml:/etc/crowdsec/acquis.yaml
+      - /home/{{ env.SYS_USER }}/server/crowdsec/config/acquis.yaml:/etc/crowdsec/acquis.yaml
       - crowdsec-db:/var/lib/crowdsec/data/
       - crowdsec-config:/etc/crowdsec/
       - traefik_traefik-logs:/var/log/traefik/:ro
     networks:
       - proxy
     restart: unless-stopped
-
 
 networks:
   proxy:
