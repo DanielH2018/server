@@ -35,8 +35,3 @@
   shell: docker exec crowdsec cscli hub upgrade
   become: yes
   become_method: sudo
-
-- name: Add bouncer
-  shell: docker exec crowdsec cscli bouncers add bouncer-traefik
-  become: yes
-  become_method: sudo
