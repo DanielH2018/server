@@ -10,8 +10,6 @@ services:
       - TZ={{ env.TZ }}
     volumes:
       - /home/{{ env.SYS_USER }}/server/overseerr/config:/config
-    ports:
-      - 5055:5055
     restart: unless-stopped
     network_mode: container:nordlynx
     labels:
