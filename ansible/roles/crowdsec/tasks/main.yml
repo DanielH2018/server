@@ -22,6 +22,6 @@
 - name: Deploy Crowdsec
   shell: docker-compose up -d --force-recreate
   args:
-    chdir: "/home/{{ env.SYS_USER }}/server/traefik/"
+    chdir: "/home/{{ env.SYS_USER }}/server/crowdsec/"
   become: yes
   become_method: sudo
