@@ -1,12 +1,23 @@
 http:
  #region routers 
   routers:
-
+    syncthing:
+      entryPoints:
+        - "https"
+      rule: "Host(`syncthing.[REMOVED_KEY]`)"
+      middlewares:
+        - default-headers
+      tls: {}
+      service: syncthing
 
 #endregion
 #region services
   services:
-
+    syncthing:
+      loadBalancer:
+        servers:
+          - url: "https://192.168.50.24:8384"
+        passHostHeader: true
 
 #endregion
   middlewares:
