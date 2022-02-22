@@ -61,6 +61,7 @@ services:
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=radarr.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=jellyfin.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=homeassistant.{{ env.DOMAIN }}"
+      - "traefik.http.routers.traefik-secure.tls.domains[0].main=scrutiny.{{ env.DOMAIN }}"
 
 networks:
   {{ env.DOCKER_NETWORK}}:

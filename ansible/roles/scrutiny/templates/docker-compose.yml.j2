@@ -23,4 +23,23 @@ services:
       - /dev/sda:/dev/sda
       - /dev/sdb:/dev/sdb
       - /dev/nvme1n1:/dev/nvme1n1
+    networks:
+      - {{ env.DOCKER_NETWORK}}
     restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.scrutiny.entrypoints=http"
+      - "traefik.http.routers.scrutiny.rule=Host(`scrutiny.{{ env.DOMAIN }}`)"
+      - "traefik.http.middlewares.scrutiny-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.scrutiny.middlewares=scrutiny-https-redirect"
+      - "traefik.http.routers.scrutiny-secure.entrypoints=https"
+      - "traefik.http.routers.scrutiny-secure.rule=Host(`scrutiny.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.scrutiny-secure.tls=true"
+      - "traefik.http.routers.scrutiny-secure.service=scrutiny"
+      - "traefik.http.services.scrutiny.loadbalancer.server.port=8080"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - 'traefik.http.routers.scrutiny-secure.middlewares=authelia@docker'
+
+networks:
+  {{ env.DOCKER_NETWORK}}:
+    external: true
