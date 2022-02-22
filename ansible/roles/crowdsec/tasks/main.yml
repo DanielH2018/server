@@ -14,11 +14,6 @@
     src: docker-compose.yml.j2
     dest: "/home/{{ env.SYS_USER }}/server/crowdsec/docker-compose.yml"
 
-- name: Create docker network
-  shell: "docker network create {{ env.DOCKER_NETWORK }} || true"
-  become: yes
-  become_method: sudo
-
 - name: Deploy Crowdsec
   shell: docker-compose up -d --force-recreate
   args:
