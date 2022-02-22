@@ -59,7 +59,6 @@ services:
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=prowlarr.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=sonarr.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=radarr.{{ env.DOMAIN }}"
-      - "traefik.http.routers.traefik-secure.tls.domains[0].main=overseerr.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=jellyfin.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=homeassistant.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=scrutiny.{{ env.DOMAIN }}"

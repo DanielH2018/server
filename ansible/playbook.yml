@@ -47,8 +47,6 @@
       tags: [ sonarr, media ]
     - role: radarr
       tags: [ radarr, media ]
-    - role: overseerr
-      tags: [ overseerr, media ]
     - role: jellyfin
       tags: [ jellyfin, media ]
     - role: minecraft
