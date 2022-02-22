@@ -20,3 +20,23 @@
     chdir: "/home/{{ env.SYS_USER }}/server/crowdsec/"
   become: yes
   become_method: sudo
+
+- name: Add Traefik collection
+  shell: docker exec crowdsec cscli collections install crowdsecurity/traefik
+  become: yes
+  become_method: sudo
+
+- name: Update hubs
+  shell: docker exec crowdsec cscli hub update
+  become: yes
+  become_method: sudo
+
+- name: Upgrade hubs
+  shell: docker exec crowdsec cscli hub upgrade
+  become: yes
+  become_method: sudo
+
+- name: Add bouncer
+  shell: docker exec crowdsec cscli bouncers add bouncer-traefik
+  become: yes
+  become_method: sudo
