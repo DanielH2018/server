@@ -2,7 +2,7 @@ version: "3"
 services:
   netdata:
     image: netdata/netdata
-    restart: always
+    restart: unless-stopped
     hostname: {{ env.SYS_USER }}
     ports:
       - 19999:19999

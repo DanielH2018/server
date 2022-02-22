@@ -3,7 +3,7 @@ services:
   grafana:
     image: grafana/grafana
     user: "{{ env.PUID }}"
-    restart: always
+    restart: unless-stopped
     volumes:
       - /home/{{ env.SYS_USER }}/server/grafana:/var/lib/grafana
     ports:
