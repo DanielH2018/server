@@ -26,6 +26,36 @@ services:
     depends_on:
       - crowdsec
     restart: unless-stopped
+
+  dashboard:
+    #we're using a custom Dockerfile so that metabase pops with pre-configured dashboards
+    build: ./dashboard
+    restart: always
+    ports:
+      - 3003:3000
+    environment:
+      MB_DB_FILE: /data/metabase.db
+      MGID: "${GID-{{ env.PGID}}}"
+    depends_on:
+      - 'crowdsec'
+    volumes:
+      - crowdsec-db:/metabase-data/
+    networks:
+      - {{ env.DOCKER_NETWORK}}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.entrypoints=http"
+      - "traefik.http.routers.dashboard.rule=Host(`dashboard.{{ env.DOMAIN }}`)"
+      - "traefik.http.middlewares.dashboard-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.dashboard.middlewares=dashboard-https-redirect"
+      - "traefik.http.routers.dashboard-secure.entrypoints=https"
+      - "traefik.http.routers.dashboard-secure.rule=Host(`dashboard.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.dashboard-secure.tls=true"
+      - "traefik.http.routers.dashboard-secure.service=dashboard"
+      - "traefik.http.services.dashboard.loadbalancer.server.port=3000"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - 'traefik.http.routers.dashboard-secure.middlewares=authelia@docker'
+
 networks:
   proxy:
     external: true
