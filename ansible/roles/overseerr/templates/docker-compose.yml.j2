@@ -1,0 +1,29 @@
+---
+version: "2.1"
+services:
+  overseerr:
+    image: lscr.io/linuxserver/overseerr
+    container_name: overseerr
+    environment:
+      - PUID={{ env.PUID }}
+      - PGID={{ env.PGID }}
+      - TZ={{ env.TZ }}
+    volumes:
+      - /home/{{ env.SYS_USER }}/server/overseerr/config:/config
+    ports:
+      - 5055:5055
+    restart: unless-stopped
+    network_mode: container:nordlynx
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.overseerr.entrypoints=http"
+      - "traefik.http.routers.overseerr.rule=Host(`overseerr.{{ env.DOMAIN }}`)"
+      - "traefik.http.middlewares.overseerr-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.overseerr.middlewares=overseerr-https-redirect"
+      - "traefik.http.routers.overseerr-secure.entrypoints=https"
+      - "traefik.http.routers.overseerr-secure.rule=Host(`overseerr.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.overseerr-secure.tls=true"
+      - "traefik.http.routers.overseerr-secure.service=overseerr"
+      - "traefik.http.services.overseerr.loadbalancer.server.port=5055"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - 'traefik.http.routers.overseerr-secure.middlewares=authelia@docker'
