@@ -21,6 +21,7 @@ services:
       - /home/{{ env.SYS_USER }}/server/traefik/data/traefik.yml:/traefik.yml:ro
       - /home/{{ env.SYS_USER }}/server/traefik/data/acme.json:/acme.json
       - /home/{{ env.SYS_USER }}/server/traefik/data/config.yml:/config.yml:ro
+      - traefik-logs:/var/log/traefik
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.traefik.entrypoints=http"
@@ -64,3 +65,5 @@ services:
 networks:
   {{ env.DOCKER_NETWORK}}:
     external: true
+volumes:
+  traefik-logs:

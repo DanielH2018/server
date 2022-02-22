@@ -10,10 +10,10 @@
     state: touch
     mode: 0600
 
-- name: Create config.yml
-  file:
-    path: "/home/{{ env.SYS_USER }}/server/traefik/data/config.yml"
-    state: touch
+- name: Create config.yml from template
+  template:
+    src: traefik.yml.j2
+    dest: "/home/{{ env.SYS_USER }}/server/traefik/data/config.yml"
 
 - name: Create traefik.yml from template
   template:
