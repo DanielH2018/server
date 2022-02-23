@@ -45,11 +45,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dashboard.entrypoints=http"
-      - "traefik.http.routers.dashboard.rule=Host(`dashboard.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.dashboard.rule=Host(`crowdsec.{{ env.DOMAIN }}`)"
       - "traefik.http.middlewares.dashboard-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.dashboard.middlewares=dashboard-https-redirect"
       - "traefik.http.routers.dashboard-secure.entrypoints=https"
-      - "traefik.http.routers.dashboard-secure.rule=Host(`dashboard.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.dashboard-secure.rule=Host(`crowdsec.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.dashboard-secure.tls=true"
       - "traefik.http.routers.dashboard-secure.service=dashboard"
       - "traefik.http.services.dashboard.loadbalancer.server.port=3000"
@@ -62,5 +62,5 @@ networks:
 volumes:
   crowdsec-db:
   crowdsec-config:
-  traefik_traefik-logs: # this will be the name of the volume from trarfic logs
+  traefik_traefik-logs: # this will be the name of the volume from traefic logs
     external: true # remove if traefik is running on same stack
