@@ -9,6 +9,11 @@
     src: acquis.yaml.j2
     dest: "/home/{{ env.SYS_USER }}/server/crowdsec/config/acquis.yaml"
 
+- name: Create Dockerfile from template
+  template:
+    src: Dockerfile.j2
+    dest: "/home/{{ env.SYS_USER }}/server/crowdsec/Dockerfile"
+
 - name: Create docker-compose.yml from template
   template:
     src: docker-compose.yml.j2
