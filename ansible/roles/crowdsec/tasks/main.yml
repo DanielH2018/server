@@ -47,5 +47,3 @@
   shell: ./crowdsecUpdate.sh
   args:
     chdir: "/home/{{ env.SYS_USER }}/server/ansible/roles/crowdsec/scripts/"
-  become: yes
-  become_method: sudo
