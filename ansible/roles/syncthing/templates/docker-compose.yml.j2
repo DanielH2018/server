@@ -23,19 +23,12 @@ services:
       - {{ env.DOCKER_NETWORK}}
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.syncthing.entrypoints=http"
-      - "traefik.http.routers.syncthing.rule=Host(`syncthing.{{ env.DOMAIN }}`)"
-      - "traefik.http.middlewares.syncthing-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.syncthing.middlewares=syncthing-https-redirect"
-      - "traefik.http.routers.syncthing-secure.entrypoints=https"
-      - "traefik.http.routers.syncthing-secure.rule=Host(`syncthing.{{ env.DOMAIN }}`)"
-      - "traefik.http.routers.syncthing-secure.tls=true"
-      - "traefik.http.middlewares.syncthing-secure.headers.sslredirect=true"
-      - "traefik.http.middlewares.syncthing-secure.headers.sslproxyheaders.X-Forwarded-Proto=https"
-      - "traefik.http.routers.syncthing-secure.service=syncthing"
-      - "traefik.http.services.syncthing.loadbalancer.server.port=8384"
-      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
-      - 'traefik.http.routers.syncthing-secure.middlewares=authelia@docker'
+      ## HTTP Routers
+      - "traefik.http.routers.syncthing.entrypoints=https"
+      - "traefik.http.routers.syncthing.rule=Host(`syncthing.$DOMAINNAME`)"
+      - "traefik.http.routers.syncthing.tls=true"
+      - "traefik.http.routers.syncthing.service=syncthing-svc"
+      - "traefik.http.services.syncthing-svc.loadbalancer.server.port=8384"
 
 networks:
   {{ env.DOCKER_NETWORK}}:
