@@ -24,7 +24,7 @@
 	2. Run `git config --global user.email "your_email_address@example.com"`.
 	3. Run `git config --global credential.helper store`
 	4. Run `git clone https://github.com/DanielH2018/server.git`.
-		4. For password, provide a personal token generated from github.
+		1. For password, provide a personal token generated from github.
 7. Copy env from local to remote:
 	1. Run `scp -r <env file path> ubuntu@<server ip>:~/server/ansible/`
 		1. When prompted, enter the password for the remote user

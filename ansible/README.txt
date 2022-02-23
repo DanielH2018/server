@@ -6,9 +6,9 @@
     1. If you receive an error for sudo requiring a password, add `--ask-become-pass`.
 
 ---Instructions to update server environment---
-1. Perform update to Container.
-2. Run `ansible-playbook playbook.yml --tags "<NAME>".
-3. If successful, check into version control.
+1. Perform update to container.
+2. Pull changes from git.
+3. Run `ansible-playbook playbook.yml --tags "env,<NAME>".
 
 ---Instructions to add container to server environment---
 1. Create role and tags.
@@ -17,7 +17,6 @@
 4. Add environment variables to .env and update the docker compose.
 5. Add traefik labels and cloudflare CNAME as needed.
 6. Run `ansible-playbook playbook.yml --tags "<NAME>".
-7. If successful, check into version control.
 
 ---Instructions to setup minecraft environment---
 1. Create A name record in cloudflare to source ip
