@@ -4,7 +4,7 @@ services:
     image: oznu/guacamole
     container_name: guacamole
     volumes:
-      - /home/{{ env.SYS_USER }}/server/guacamole/config/postgres:/config
+      - postgres:/config
     ports:
       - 9600:8080
     networks:
