@@ -31,12 +31,21 @@
   become: yes
   become_method: sudo
 
-- name: Update hubs
-  shell: docker exec crowdsec cscli hub update
+- name: Update & Upgrade hubs
+  shell: docker exec crowdsec cscli hub update && docker exec crowdsec cscli hub upgrade
   become: yes
   become_method: sudo
 
-- name: Upgrade hubs
-  shell: docker exec crowdsec cscli hub upgrade
+- name: Make sure script has correct permissions
+  shell: chmod +x crowdsecUpdate.sh
+  args:
+    chdir: "/home/{{ env.SYS_USER }}/server/crowdsec/scripts/"
+  become: yes
+  become_method: sudo
+
+- name: Add update & upgrade cronjob
+  shell: crowdsecUpdate.sh
+  args:
+    chdir: "/home/{{ env.SYS_USER }}/server/crowdsec/scripts/"
   become: yes
   become_method: sudo
