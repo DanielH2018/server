@@ -21,10 +21,10 @@ sudo sed -i '/ChallengeResponseAuthentication  /c\ChallengeResponseAuthenticatio
 # Copy current crontab
 crontab -l > crontab_new
 
-# Add update and upgrade crontab
+# Add update and upgrade crontab at 7am UTC(2am EST)
 echo "0 7 * * * sudo apt update && sudo apt upgrade" >> crontab_new
 
-# Schedule restart
+# Schedule restart at 7:30am UTC(2:30am EST)
 echo "30 7 * * * sudo reboot" >> crontab_new
 
 # Commit and Cleanup
