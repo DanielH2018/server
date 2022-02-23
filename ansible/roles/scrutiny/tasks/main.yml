@@ -15,3 +15,8 @@
     chdir: "/home/{{ env.SYS_USER }}/server/scrutiny/"
   become: yes
   become_method: sudo
+
+- name: Run metrics collector
+  shell: docker exec scrutiny scrutiny-collector-metrics run
+  become: yes
+  become_method: sudo
