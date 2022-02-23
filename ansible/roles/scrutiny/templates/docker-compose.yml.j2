@@ -11,7 +11,7 @@ services:
       - PUID={{ env.PUID }}
       - PGID={{ env.PUID }}
       - TZ={{ env.TZ }}
-      - SCRUTINY_API_ENDPOINT=http://{{ env.SERVER_IP }}:8082
+      - SCRUTINY_API_ENDPOINT=http://scrutiny.{{ env.DOMAIN }}:8082
       - SCRUTINY_WEB=true
       - SCRUTINY_COLLECTOR=true
     volumes:
