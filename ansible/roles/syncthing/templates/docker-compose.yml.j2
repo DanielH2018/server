@@ -30,6 +30,8 @@ services:
       - "traefik.http.routers.syncthing-secure.entrypoints=https"
       - "traefik.http.routers.syncthing-secure.rule=Host(`syncthing.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.syncthing-secure.tls=true"
+      - "traefik.http.middlewares.syncthing-secure.headers.sslredirect=true"
+      - "traefik.http.middlewares.syncthing-secure.headers.sslproxyheaders.X-Forwarded-Proto=https"
       - "traefik.http.routers.syncthing-secure.service=syncthing"
       - "traefik.http.services.syncthing.loadbalancer.server.port=8384"
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
