@@ -25,7 +25,7 @@ services:
       - "traefik.enable=true"
       ## HTTP Routers
       - "traefik.http.routers.syncthing.entrypoints=https"
-      - "traefik.http.routers.syncthing.rule=Host(`syncthing.$DOMAINNAME`)"
+      - "traefik.http.routers.syncthing.rule=Host(`syncthing.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.syncthing.tls=true"
       - "traefik.http.routers.syncthing.service=syncthing-svc"
       - "traefik.http.services.syncthing-svc.loadbalancer.server.port=8384"
