@@ -30,7 +30,7 @@ services:
   dashboard:
     #we're using a custom Dockerfile so that metabase pops with pre-configured dashboards
     build: ./dashboard
-    restart: always
+    restart: unless-stopped
     ports:
       - 3003:3000
     environment:
