@@ -39,13 +39,13 @@
 - name: Make sure script has correct permissions
   shell: chmod +x crowdsecUpdate.sh
   args:
-    chdir: "/home/{{ env.SYS_USER }}/server/crowdsec/scripts/"
+    chdir: "/home/{{ env.SYS_USER }}/server/ansible/roles/crowdsec/scripts/"
   become: yes
   become_method: sudo
 
 - name: Add update & upgrade cronjob
   shell: crowdsecUpdate.sh
   args:
-    chdir: "/home/{{ env.SYS_USER }}/server/crowdsec/scripts/"
+    chdir: "/home/{{ env.SYS_USER }}/server/ansible/roles/crowdsec/scripts/"
   become: yes
   become_method: sudo
