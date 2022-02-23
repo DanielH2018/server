@@ -21,18 +21,26 @@ services:
     cap_add:
       - NET_ADMIN
     labels:
+      # Enable traefik for container
       - "traefik.enable=true"
+      # Setup HTTP entrypoint
       - "traefik.http.routers.pihole.entrypoints=http"
       - "traefik.http.routers.pihole.rule=Host(`pihole.{{ env.DOMAIN }}`)"
+      # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.pihole-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.pihole.middlewares=pihole-https-redirect"
+      # Setup HTTPS entrypoint
       - "traefik.http.routers.pihole-secure.entrypoints=https"
       - "traefik.http.routers.pihole-secure.rule=Host(`pihole.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.pihole-secure.tls=true"
+      # Setup port forwarding to internal port
       - "traefik.http.routers.pihole-secure.service=pihole"
       - "traefik.http.services.pihole.loadbalancer.server.port=80"
+      # Use traefik network
       - "traefik.docker.network={{ env.DOCKER_NETWORK}}"
+      # Add authelia
       - 'traefik.http.routers.pihole-secure.middlewares=authelia@docker'
+      # Add admin prefix to url
       - "traefik.http.routers.pihole-secure.middlewares=add-admin"
       - "traefik.http.middlewares.add-admin.addprefix.prefix=/admin"
 

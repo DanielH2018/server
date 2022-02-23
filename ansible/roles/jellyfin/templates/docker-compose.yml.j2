@@ -25,17 +25,24 @@ services:
     networks:
       - {{ env.DOCKER_NETWORK}}
     labels:
+      # Enable traefik for container
       - "traefik.enable=true"
+      # Setup HTTP entrypoint
       - "traefik.http.routers.jellyfin.entrypoints=http"
       - "traefik.http.routers.jellyfin.rule=Host(`jellyfin.{{ env.DOMAIN }}`)"
+      # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.jellyfin-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.jellyfin.middlewares=jellyfin-https-redirect"
+      # Setup HTTPS entrypoint
       - "traefik.http.routers.jellyfin-secure.entrypoints=https"
       - "traefik.http.routers.jellyfin-secure.rule=Host(`jellyfin.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.jellyfin-secure.tls=true"
+      # Setup port forwarding to internal port
       - "traefik.http.routers.jellyfin-secure.service=jellyfin"
       - "traefik.http.services.jellyfin.loadbalancer.server.port=8096"
+      # Use traefik network
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      # Add authelia
       - 'traefik.http.routers.jellyfin-secure.middlewares=authelia@docker'
 
 networks:

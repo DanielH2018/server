@@ -10,17 +10,24 @@ services:
     networks:
       - {{ env.DOCKER_NETWORK}}
     labels:
+      # Enable traefik for container
       - "traefik.enable=true"
+      # Setup HTTP entrypoint
       - "traefik.http.routers.prometheus.entrypoints=http"
       - "traefik.http.routers.prometheus.rule=Host(`prometheus.{{ env.DOMAIN }}`)"
+      # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.prometheus-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.prometheus.middlewares=prometheus-https-redirect"
+      # Setup HTTPS entrypoint
       - "traefik.http.routers.prometheus-secure.entrypoints=https"
       - "traefik.http.routers.prometheus-secure.rule=Host(`prometheus.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.prometheus-secure.tls=true"
+      # Setup port forwarding to internal port
       - "traefik.http.routers.prometheus-secure.service=prometheus"
       - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+      # Use traefik network
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      # Add authelia
       - 'traefik.http.routers.prometheus-secure.middlewares=authelia@docker'
 
 networks:

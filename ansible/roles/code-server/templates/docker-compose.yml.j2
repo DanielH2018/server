@@ -18,17 +18,24 @@ services:
     networks:
       - {{ env.DOCKER_NETWORK}}
     labels:
+      # Enable traefik for container
       - "traefik.enable=true"
+      # Setup HTTP entrypoint
       - "traefik.http.routers.code-server.entrypoints=http"
       - "traefik.http.routers.code-server.rule=Host(`code-server.{{ env.DOMAIN }}`)"
+      # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.code-server-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.code-server.middlewares=code-server-https-redirect"
+      # Setup HTTPS entrypoint
       - "traefik.http.routers.code-server-secure.entrypoints=https"
       - "traefik.http.routers.code-server-secure.rule=Host(`code-server.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.code-server-secure.tls=true"
+      # Setup port forwarding to internal port
       - "traefik.http.routers.code-server-secure.service=code-server"
       - "traefik.http.services.code-server.loadbalancer.server.port=8443"
+      # Use traefik network
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      # Add authelia
       - 'traefik.http.routers.code-server-secure.middlewares=authelia@docker'
 
 networks:

@@ -12,17 +12,24 @@ services:
     restart: unless-stopped
     network_mode: container:nordlynx
     labels:
+      # Enable traefik for container
       - "traefik.enable=true"
+      # Setup HTTP entrypoint
       - "traefik.http.routers.prowlarr.entrypoints=http"
       - "traefik.http.routers.prowlarr.rule=Host(`prowlarr.{{ env.DOMAIN }}`)"
+      # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.prowlarr-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.prowlarr.middlewares=prowlarr-https-redirect"
+      # Setup HTTPS entrypoint
       - "traefik.http.routers.prowlarr-secure.entrypoints=https"
       - "traefik.http.routers.prowlarr-secure.rule=Host(`prowlarr.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.prowlarr-secure.tls=true"
+      # Setup port forwarding to internal port
       - "traefik.http.routers.prowlarr-secure.service=prowlarr"
       - "traefik.http.services.prowlarr.loadbalancer.server.port=9696"
+      # Use traefik network
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      # Add authelia
       - 'traefik.http.routers.prowlarr-secure.middlewares=authelia@docker'
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on: nordlynx, qbittorrent"

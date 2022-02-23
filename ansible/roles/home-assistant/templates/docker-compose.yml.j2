@@ -16,17 +16,24 @@ services:
     networks:
       - {{ env.DOCKER_NETWORK}}
     labels:
+      # Enable traefik for container
       - "traefik.enable=true"
+      # Setup HTTP entrypoint
       - "traefik.http.routers.homeassistant.entrypoints=http"
       - "traefik.http.routers.homeassistant.rule=Host(`homeassistant.{{ env.DOMAIN }}`)"
+      # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.homeassistant-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.homeassistant.middlewares=homeassistant-https-redirect"
+      # Setup HTTPS entrypoint
       - "traefik.http.routers.homeassistant-secure.entrypoints=https"
       - "traefik.http.routers.homeassistant-secure.rule=Host(`homeassistant.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.homeassistant-secure.tls=true"
+      # Setup port forwarding to internal port
       - "traefik.http.routers.homeassistant-secure.service=homeassistant"
       - "traefik.http.services.homeassistant.loadbalancer.server.port=8123"
+      # Use traefik network
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      # Add authelia
       - 'traefik.http.routers.homeassistant-secure.middlewares=authelia@docker'
 
 networks:

@@ -14,17 +14,24 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /home/{{ env.SYS_USER }}/server/portainer/data:/data
     labels:
+      # Enable traefik for container
       - "traefik.enable=true"
+      # Setup HTTP entrypoint
       - "traefik.http.routers.portainer.entrypoints=http"
       - "traefik.http.routers.portainer.rule=Host(`portainer.{{ env.DOMAIN }}`)"
+      # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.portainer-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.portainer.middlewares=portainer-https-redirect"
+      # Setup HTTPS entrypoint
       - "traefik.http.routers.portainer-secure.entrypoints=https"
       - "traefik.http.routers.portainer-secure.rule=Host(`portainer.{{ env.DOMAIN }}`)"
       - "traefik.http.routers.portainer-secure.tls=true"
+      # Setup port forwarding to internal port
       - "traefik.http.routers.portainer-secure.service=portainer"
       - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+      # Use traefik network
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      # Add authelia
       - 'traefik.http.routers.portainer-secure.middlewares=authelia@docker'
 
 networks:
