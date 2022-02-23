@@ -6,7 +6,7 @@ services:
     container_name: scrutiny
     cap_add:
       - SYS_RAWIO
-      - SYS_ADMIN #optional
+      - SYS_ADMIN
     environment:
       - PUID={{ env.PUID }}
       - PGID={{ env.PUID }}
@@ -20,7 +20,7 @@ services:
     ports:
       - 8082:8080
     devices:
-      - /dev/nvme0:/dev/nvme0
+      - /dev/nvme0n1:/dev/nvme0n1
     networks:
       - {{ env.DOCKER_NETWORK}}
     restart: unless-stopped
