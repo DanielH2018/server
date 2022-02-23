@@ -18,6 +18,19 @@ sudo sed -i '/PermitRootLogin /c\PermitRootLogin no' /etc/ssh/sshd_config
 sudo sed -i '/IgnoreRhosts /c\IgnoreRhosts yes' /etc/ssh/sshd_config
 sudo sed -i '/ChallengeResponseAuthentication  /c\ChallengeResponseAuthentication no' /etc/ssh/sshd_config
 
+# Copy current crontab
+crontab -l > crontab_new
+
+# Add update and upgrade crontab
+echo "0 7 * * * sudo apt update && sudo apt upgrade" >> crontab_new
+
+# Schedule restart
+echo "30 7 * * * sudo reboot" >> crontab_new
+
+# Commit and Cleanup
+crontab crontab_new
+rm crontab_new
+
 # Allow SSH through firewall
 sudo ufw allow ssh
 
