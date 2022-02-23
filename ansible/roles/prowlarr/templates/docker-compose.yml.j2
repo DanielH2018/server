@@ -24,3 +24,5 @@ services:
       - "traefik.http.services.prowlarr.loadbalancer.server.port=9696"
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
       - 'traefik.http.routers.prowlarr-secure.middlewares=authelia@docker'
+      # Watchtower
+      - "com.centurylinklabs.watchtower.depends-on: nordlynx, qbittorrent"
