@@ -29,8 +29,6 @@
       tags: uptime-kuma
     - role: pihole
       tags: pihole
-    - role: syncthing
-      tags: syncthing
     - role: filebrowser
       tags: filebrowser
     - role: scrutiny
