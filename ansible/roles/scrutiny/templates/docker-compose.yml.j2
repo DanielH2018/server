@@ -20,7 +20,7 @@ services:
     ports:
       - 8082:8080
     devices:
-      - /dev:/dev
+      - /dev/nvme0:/dev/nvme0
     networks:
       - {{ env.DOCKER_NETWORK}}
     restart: unless-stopped
