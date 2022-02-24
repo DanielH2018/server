@@ -33,8 +33,6 @@
       tags: filebrowser
     - role: scrutiny
       tags: scrutiny
-    - role: emulatorjs
-      tags: emulatorjs
     - role: guacamole
       tags: guacamole
     - role: nordlynx
