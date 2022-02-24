@@ -8,7 +8,7 @@ services:
       - PUID={{ env.PUID }}
       - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
-      - SUBFOLDER=/home/{{ env.SYS_USER }}/server/emulatorjs/ #optional
+      - SUBFOLDER=/ #optional
     volumes:
       - /home/{{ env.SYS_USER }}/server/emulatorjs/data/:/data
       - /home/{{ env.SYS_USER }}/server/emulatorjs/config/:/config
