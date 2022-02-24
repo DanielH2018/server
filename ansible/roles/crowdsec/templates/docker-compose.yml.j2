@@ -62,6 +62,8 @@ services:
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.dashboard-secure.middlewares=authelia@docker'
+      # Disable watchtower update
+      - "com.centurylinklabs.watchtower.enable=false"
 
 networks:
   proxy:
