@@ -14,7 +14,7 @@ services:
     environment:
       TZ: America/New_York
       WEBPASSWORD: [REMOVED_KEY]
-      ServerIP: 192.168.50.96
+      ServerIP: {{ env.SERVER_IP}}
     volumes:
        - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-pihole/:/etc/pihole/'
        - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-dnsmasq.d/:/etc/dnsmasq.d/'

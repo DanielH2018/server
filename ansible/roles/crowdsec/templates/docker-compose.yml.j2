@@ -12,7 +12,7 @@ services:
       - crowdsec-config:/etc/crowdsec/
       - traefik_traefik-logs:/var/log/traefik/:ro
     networks:
-      - proxy
+      - {{ env.DOCKER_NETWORK }}
     restart: unless-stopped
 
   bouncer-traefik:
@@ -22,7 +22,7 @@ services:
       CROWDSEC_BOUNCER_API_KEY: {{ env.CROWDSEC_BOUNCER_API_KEY }}
       CROWDSEC_AGENT_HOST: crowdsec:8080
     networks:
-      - proxy
+      - {{ env.DOCKER_NETWORK }}
     depends_on:
       - crowdsec
     restart: unless-stopped
@@ -66,7 +66,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=false"
 
 networks:
-  proxy:
+  {{ env.DOCKER_NETWORK }}:
     external: true
 volumes:
   crowdsec-db:
