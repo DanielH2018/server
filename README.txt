@@ -28,6 +28,11 @@
 7. Copy env from local to remote:
 	1. Run `scp -r <env file path> ubuntu@<server ip>:~/server/ansible/`
 		1. When prompted, enter the password for the remote user
+8. Fix lvm:
+	1. Run `sudo lvm`
+	2. Run `lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv`
+	3. Run `exit`
+	4. Run `sudo resize2fs /dev/ubuntu-vg/ubuntu-lv`
 
 For more instructions, look at the README in the setup/ folder.
 
