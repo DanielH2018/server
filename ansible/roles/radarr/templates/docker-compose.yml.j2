@@ -35,4 +35,4 @@ services:
       # Add authelia
       - 'traefik.http.routers.radarr-secure.middlewares=authelia@docker'
       # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on: nordlynx, qbittorrent, prowlarr"
+      - "com.centurylinklabs.watchtower.depends-on: nordlynx"
