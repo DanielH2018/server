@@ -3,6 +3,7 @@ services:
   nordlynx:
     image: ghcr.io/bubuntux/nordlynx
     container_name: nordlynx
+    restart: unless-stopped
     cap_add:
       - NET_ADMIN #required
     environment:
