@@ -22,10 +22,10 @@ sudo sed -i '/ChallengeResponseAuthentication  /c\ChallengeResponseAuthenticatio
 crontab -l > crontab_new
 
 # Add update and upgrade crontab at 7am UTC(2am EST)
-echo "0 7 * * * sudo apt update && sudo apt upgrade" >> crontab_new
+echo "0 7 * * * root apt-get update" >> crontab_new
 
 # Schedule restart at 7:30am UTC(2:30am EST)
-echo "30 7 * * * sudo reboot" >> crontab_new
+echo "30 7 * * * /sbin/shutdown -r now" >> crontab_new
 
 # Commit and Cleanup
 crontab crontab_new
@@ -39,3 +39,6 @@ service ssh restart
 
 # Enable firewall
 sudo ufw enable
+
+# Ensure automatic security updates
+sudo apt install unattended-upgrades
