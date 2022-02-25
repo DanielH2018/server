@@ -19,4 +19,4 @@
   args:
     chdir: "/home/{{ env.SYS_USER }}/server/prometheus/"
   become: yes
-  become_method: sudo 
+  become_method: sudo
