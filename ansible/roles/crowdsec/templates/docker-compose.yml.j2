@@ -30,6 +30,7 @@ services:
   dashboard:
     #we're using a custom Dockerfile so that metabase pops with pre-configured dashboards
     build: .
+    container_name: crowdsec-dashboard
     restart: unless-stopped
     ports:
       - 3003:3000

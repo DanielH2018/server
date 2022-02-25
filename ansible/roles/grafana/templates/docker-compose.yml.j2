@@ -2,6 +2,7 @@ version: "3"
 services:
   grafana:
     image: grafana/grafana
+    container_name: grafana
     user: "{{ env.PUID }}"
     restart: unless-stopped
     volumes:

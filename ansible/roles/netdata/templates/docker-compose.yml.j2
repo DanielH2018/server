@@ -2,6 +2,7 @@ version: "3"
 services:
   netdata:
     image: netdata/netdata
+    container_name: netdata
     restart: unless-stopped
     hostname: {{ env.SYS_USER }}
     ports:

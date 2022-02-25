@@ -2,6 +2,7 @@ version: '2'
 services:
   cloudflare-ddns:
     image: oznu/cloudflare-ddns:latest
+    container_name: cloudflare-ddns
     restart: unless-stopped
     environment:
       - API_KEY={{ env.CLOUDFLARE_DNS_TOKEN }}
