@@ -6,12 +6,12 @@
 
 - name: Create Dockerfile from template
   template:
-    src: Dockerfile.j2
+    src: /project_tracker_server/Dockerfile.j2
     dest: "/home/{{ env.SYS_USER }}/server/mobile-app-db/Dockerfile"
 
 - name: Create docker-compose.yml from template
   template:
-    src: docker-compose.yml.j2
+    src: /project_tracker_server/docker-compose.yml.j2
     dest: "/home/{{ env.SYS_USER }}/server/mobile-app-db/docker-compose.yml"
 
 - name: Deploy mobile-app-db
