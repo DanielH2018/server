@@ -11,6 +11,8 @@
   vars:
     packages:
       - unzip
+  become: yes
+  become_method: sudo
 
 - name: Unzip archive
   unarchive:
