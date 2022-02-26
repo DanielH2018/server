@@ -5,16 +5,9 @@
     mode: 0755
 
 - name: Copy zip
-  template:
+  unarchive:
     src: project_tracker_server.zip
-    dest: "/home/{{ env.SYS_USER }}/server/mobile-app-db/project_tracker_server.zip"
-
-- name: Unzip file
-  shell: unzip project_tracker_server.zip
-  args:
-    chdir: "/home/{{ env.SYS_USER }}/server/mobile-app-db/"
-  become: yes
-  become_method: sudo
+    dest: "/home/{{ env.SYS_USER }}/server/mobile-app-db"
 
 - name: Deploy mobile-app-db
   shell: docker-compose up -d --force-recreate
