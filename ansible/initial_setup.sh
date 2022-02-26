@@ -24,8 +24,8 @@ crontab -l > crontab_new
 # Add update and upgrade crontab at 7am UTC(2am EST)
 echo "0 7 * * * root apt-get update" >> crontab_new
 
-# Schedule restart at 7:30am UTC(2:30am EST)
-echo "30 7 * * * /sbin/shutdown -r now" >> crontab_new
+# Schedule restart at 7:30am UTC(2:30am EST) on Sunday
+echo "30 7 * * 0 /sbin/shutdown -r now" >> crontab_new
 
 # Commit and Cleanup
 crontab crontab_new
