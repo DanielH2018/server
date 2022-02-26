@@ -4,7 +4,7 @@
     state: directory
     mode: 0755
 
-- name: Copy zip
+- name: Unzip archive
   unarchive:
     src: project_tracker_server.zip
     dest: "/home/{{ env.SYS_USER }}/server/mobile-app-db"
