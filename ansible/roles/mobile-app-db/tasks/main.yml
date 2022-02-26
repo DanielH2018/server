@@ -1,22 +1,24 @@
 - name: Creates directories
   file:
-    path: "/home/{{ env.SYS_USER }}/server/mobile-app-db/config"
+    path: "/home/{{ env.SYS_USER }}/server/mobile-app-db"
     state: directory
     mode: 0755
 
-- name: Create Dockerfile from template
+- name: Copy zip
   template:
-    src: /project_tracker_server/Dockerfile.j2
-    dest: "/home/{{ env.SYS_USER }}/server/mobile-app-db/Dockerfile"
+    src: project_tracker_server.zip
+    dest: "/home/{{ env.SYS_USER }}/server/mobile-app-db/project_tracker_server.zip"
 
-- name: Create docker-compose.yml from template
-  template:
-    src: /project_tracker_server/docker-compose.yml.j2
-    dest: "/home/{{ env.SYS_USER }}/server/mobile-app-db/docker-compose.yml"
+- name: Unzip file
+  shell: unzip project_tracker_server.zip
+  args:
+    chdir: "/home/{{ env.SYS_USER }}/server/mobile-app-db/"
+  become: yes
+  become_method: sudo
 
 - name: Deploy mobile-app-db
   shell: docker-compose up -d --force-recreate
   args:
-    chdir: "/home/{{ env.SYS_USER }}/server/mobile-app-db/"
+    chdir: "/home/{{ env.SYS_USER }}/server/mobile-app-db/project_tracker_server"
   become: yes
   become_method: sudo
