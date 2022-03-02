@@ -1,8 +1,14 @@
 - name: Creates directories
   file:
-    path: "/home/{{ env.SYS_USER }}/server/code-server/config"
+    path: "/home/{{ env.SYS_USER }}/server/code-server/config/workspace"
     state: directory
     mode: 0755
+
+- name: Create Server Symlink
+  file:
+    src: /home/{{ env.SYS_USER }}/server/
+    dest: /home/{{ env.SYS_USER }}/server/code-server/config/workspace/server
+    state: link
 
 - name: Create docker-compose from template
   template:
