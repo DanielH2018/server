@@ -34,5 +34,3 @@ services:
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.sonarr-secure.middlewares=authelia@docker'
-      # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on: prowlarr, qbittorrent"
