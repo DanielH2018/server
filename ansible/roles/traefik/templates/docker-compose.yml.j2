@@ -68,6 +68,7 @@ services:
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=homeassistant.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=scrutiny.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=crowdsec.{{ env.DOMAIN }}"
+      - "traefik.http.routers.traefik-secure.tls.domains[0].main=smokeping.{{ env.DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=mobile-app-db.{{ env.DOMAIN }}"
 
 networks:

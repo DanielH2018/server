@@ -29,6 +29,8 @@
       tags: uptime-kuma
     - role: pihole
       tags: pihole
+    - role: smokeping
+      tags: smokeping
     - role: filebrowser
       tags: filebrowser
     - role: scrutiny
