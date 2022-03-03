@@ -15,7 +15,7 @@ services:
       - 8058:443
     restart: unless-stopped
     networks:
-      - {{ env.DOCKER_NETWORK}}
+      - {{ env.DOCKER_NETWORK }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
@@ -38,5 +38,5 @@ services:
       - 'traefik.http.routers.heimdall-secure.middlewares=authelia@docker'
 
 networks:
-  {{ env.DOCKER_NETWORK}}:
+  {{ env.DOCKER_NETWORK }}:
     external: true

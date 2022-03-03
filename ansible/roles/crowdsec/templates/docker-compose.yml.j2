@@ -42,7 +42,7 @@ services:
     volumes:
       - crowdsec-db:/metabase-data/
     networks:
-      - {{ env.DOCKER_NETWORK}}
+      - {{ env.DOCKER_NETWORK }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"

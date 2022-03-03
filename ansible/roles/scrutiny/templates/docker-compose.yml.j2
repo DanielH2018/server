@@ -21,7 +21,7 @@ services:
     devices:
       - /dev/nvme0:/dev/nvme0
     networks:
-      - {{ env.DOCKER_NETWORK}}
+      - {{ env.DOCKER_NETWORK }}
     restart: unless-stopped
     labels:
       # Enable traefik for container
@@ -45,5 +45,5 @@ services:
       - 'traefik.http.routers.scrutiny-secure.middlewares=authelia@docker'
 
 networks:
-  {{ env.DOCKER_NETWORK}}:
+  {{ env.DOCKER_NETWORK }}:
     external: true

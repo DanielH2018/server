@@ -10,7 +10,7 @@ services:
     ports:
      - "3000:3000"
     networks:
-      - {{ env.DOCKER_NETWORK}}
+      - {{ env.DOCKER_NETWORK }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
@@ -35,5 +35,5 @@ services:
       - "com.centurylinklabs.watchtower.depends-on: prometheus"
 
 networks:
-  {{ env.DOCKER_NETWORK}}:
+  {{ env.DOCKER_NETWORK }}:
     external: true

@@ -13,7 +13,7 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - {{ env.DOCKER_NETWORK}}
+      - {{ env.DOCKER_NETWORK }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
@@ -36,5 +36,5 @@ services:
       - 'traefik.http.routers.uptime-kuma-secure.middlewares=authelia@docker'
 
 networks:
-  {{ env.DOCKER_NETWORK}}:
+  {{ env.DOCKER_NETWORK }}:
     external: true

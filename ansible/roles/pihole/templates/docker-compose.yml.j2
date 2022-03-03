@@ -4,7 +4,7 @@ services:
     image: pihole/pihole:latest
     restart: unless-stopped
     networks:
-      - {{ env.DOCKER_NETWORK}}
+      - {{ env.DOCKER_NETWORK }}
     ports:
       - "53:53/tcp"
       - "53:53/udp"
@@ -37,7 +37,7 @@ services:
       - "traefik.http.routers.pihole-secure.service=pihole"
       - "traefik.http.services.pihole.loadbalancer.server.port=80"
       # Use traefik network
-      - "traefik.docker.network={{ env.DOCKER_NETWORK}}"
+      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.pihole-secure.middlewares=authelia@docker'
       # Add admin prefix to url
@@ -45,5 +45,5 @@ services:
       - "traefik.http.middlewares.add-admin.addprefix.prefix=/admin"
 
 networks:
-  {{ env.DOCKER_NETWORK}}:
+  {{ env.DOCKER_NETWORK }}:
     external: true

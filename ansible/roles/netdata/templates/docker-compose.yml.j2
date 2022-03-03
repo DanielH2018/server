@@ -12,7 +12,7 @@ services:
     security_opt:
       - apparmor:unconfined
     networks:
-      - {{ env.DOCKER_NETWORK}}
+      - {{ env.DOCKER_NETWORK }}
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -39,5 +39,5 @@ services:
       - 'traefik.http.routers.netdata-secure.middlewares=authelia@docker'
 
 networks:
-  {{ env.DOCKER_NETWORK}}:
+  {{ env.DOCKER_NETWORK }}:
     external: true
