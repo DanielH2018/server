@@ -28,6 +28,9 @@ authentication_backend:
 access_control:
   default_policy: deny
   rules:
+    # Mobile App DB
+    - domain: "mobile-app-db.{{ env.DOMAIN }}"
+      policy: bypass
     # Rules applied to everyone
     - domain: "*.{{ env.DOMAIN }}"
       policy: two_factor
