@@ -14,9 +14,9 @@ services:
       - "8053:80/tcp"
       - "8054:443/tcp"
     environment:
-      - TZ: {{ env.TZ }}
-      - WEBPASSWORD: {{ env.PIHOLE_PASSWORD }}
-      - ServerIP: {{ env.SERVER_IP }}
+      TZ: {{ env.TZ }}
+      WEBPASSWORD: {{ env.PIHOLE_PASSWORD }}
+      ServerIP: {{ env.SERVER_IP }}
     volumes:
        - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-pihole/:/etc/pihole/'
        - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
