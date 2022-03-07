@@ -27,7 +27,6 @@ services:
       - "8053:80/tcp"
       - "8054:443/tcp"
     environment:
-      PIHOLE_DNS_: 172.168.0.26#5353;1.1.1.1
       TZ: {{ env.TZ }}
       WEBPASSWORD: {{ env.PIHOLE_PASSWORD }}
       ServerIP: {{ env.SERVER_IP}}
