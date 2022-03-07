@@ -8,8 +8,6 @@ services:
     ports:
       - 5353:53/tcp
       - 5353:53/udp
-    volumes:
-      - '/home/{{ env.SYS_USER }}/server/unbound:/opt/unbound/etc/unbound'
     networks:
       {{ env.DOCKER_NETWORK }}:
         ipv4_address: 172.18.0.26
