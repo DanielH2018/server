@@ -1,19 +1,6 @@
 version: "3"
 
 services:
-  unbound:
-    image: mvance/unbound:latest
-    container_name: unbound
-    restart: unless-stopped
-    ports:
-      - 5353:53/tcp
-      - 5353:53/udp
-    volumes:
-      - '/home/{{ env.SYS_USER }}/server/unbound:/opt/unbound/etc/unbound
-    networks:
-      {{ env.DOCKER_NETWORK }}:
-        ipv4_address: 172.168.0.26
-
   pihole:
     container_name: pihole
     image: pihole/pihole:latest
@@ -30,7 +17,6 @@ services:
       - TZ: {{ env.TZ }}
       - WEBPASSWORD: {{ env.PIHOLE_PASSWORD }}
       - ServerIP: {{ env.SERVER_IP }}
-      - PIHOLE_DNS_: 172.168.0.26#5353;1.1.1.1
     volumes:
        - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-pihole/:/etc/pihole/'
        - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
