@@ -11,8 +11,8 @@ services:
     volumes:
       - '/home/{{ env.SYS_USER }}/server/unbound:/opt/unbound/etc/unbound'
     networks:
-      - {{ env.DOCKER_NETWORK }}:
-        ipv4_address: '172.168.0.26'
+      {{ env.DOCKER_NETWORK }}:
+        ipv4_address: 172.168.0.26
 
   pihole:
     container_name: pihole
@@ -60,5 +60,8 @@ services:
       - "traefik.http.middlewares.add-admin.addprefix.prefix=/admin"
 
 networks:
+  default:
+    external:
+      name: {{ env.DOCKER_NETWORK }}
   {{ env.DOCKER_NETWORK }}:
     external: true
