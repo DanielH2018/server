@@ -11,8 +11,7 @@ services:
     volumes:
       - '/home/{{ env.SYS_USER }}/server/unbound:/opt/unbound/etc/unbound
     networks:
-      {{ env.DOCKER_NETWORK }}:
-        ipv4_address: '172.168.0.26'
+      - {{ env.DOCKER_NETWORK }}:
 
   pihole:
     container_name: pihole
@@ -30,6 +29,7 @@ services:
       TZ: {{ env.TZ }}
       WEBPASSWORD: {{ env.PIHOLE_PASSWORD }}
       ServerIP: {{ env.SERVER_IP }}
+      PIHOLE_DNS_: unbound#5353;1.1.1.1
     volumes:
        - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-pihole/:/etc/pihole/'
        - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
