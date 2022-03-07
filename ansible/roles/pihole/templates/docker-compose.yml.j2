@@ -25,10 +25,10 @@ services:
       - "8053:80/tcp"
       - "8054:443/tcp"
     environment:
-      TZ: America/New_York
+      PIHOLE_DNS_: 172.168.0.26#5353;1.1.1.1
+      TZ: {{ env.TZ }}
       WEBPASSWORD: {{ env.PIHOLE_PASSWORD }}
       ServerIP: {{ env.SERVER_IP}}
-      PIHOLE_DNS_: '172.168.0.26#5353;1.1.1.1'
     volumes:
        - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-pihole/:/etc/pihole/'
        - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
