@@ -12,7 +12,7 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /home/{{ env.SYS_USER }}/server/portainer/data:/data
+      - ./data:/data
     labels:
       # Enable traefik for container
       - "traefik.enable=true"

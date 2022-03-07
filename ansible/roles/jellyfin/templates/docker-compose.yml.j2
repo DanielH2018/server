@@ -10,7 +10,7 @@ services:
       - TZ={{ env.TZ }}
       - JELLYFIN_PublishedServerUrl={{ env.SERVER_IP }} #optional
     volumes:
-      - /home/{{ env.SYS_USER }}/server/jellyfin/config:/config
+      - ./config:/config
       - /home/{{ env.SYS_USER }}/server/library/tvseries:/data/tvshows
       - /home/{{ env.SYS_USER }}/server/library/movies:/data/movies
       - /opt/vc/lib:/opt/vc/lib

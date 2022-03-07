@@ -8,7 +8,7 @@ services:
       - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
     volumes:
-      - /home/{{ env.SYS_USER }}/server/prowlarr/config:/config
+      - ./config:/config
     restart: unless-stopped
     network_mode: container:nordlynx
     labels:

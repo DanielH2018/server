@@ -9,7 +9,7 @@ services:
       - TZ={{ env.TZ }}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - /home/{{ env.SYS_USER }}/server/sonarr/config:/config
+      - ./config:/config
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
       - /home/{{ env.SYS_USER }}/server/library/tvseries:/tv
     restart: unless-stopped

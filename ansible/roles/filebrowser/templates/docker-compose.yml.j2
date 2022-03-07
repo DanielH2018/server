@@ -9,7 +9,7 @@ services:
       - 8081:80
     volumes:
       - /home/{{ env.SYS_USER }}/server/:/srv
-      - /home/{{ env.SYS_USER }}/server/filebrowser/data/filebrowser.db:/database.db
+      - ./data/filebrowser.db:/database.db
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

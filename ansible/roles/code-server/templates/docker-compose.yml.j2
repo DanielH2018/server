@@ -11,7 +11,7 @@ services:
       - PASSWORD={{ env.CODE_SERVER_PASSWORD }}
       - SUDO_PASSWORD={{ env.CODE_SERVER_SUDO_PASSWORD }}
     volumes:
-      - /home/{{ env.SYS_USER }}/server/code-server/config:/config
+      - ./config:/config
     ports:
       - 8443:8443
     restart: unless-stopped

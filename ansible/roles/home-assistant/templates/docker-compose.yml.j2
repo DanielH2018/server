@@ -9,7 +9,7 @@ services:
       - PGID={{ env.PUID }}
       - TZ={{ env.TZ }}
     volumes:
-      - /home/{{ env.SYS_USER }}/server/homeassistant/config:/config
+      - ./config:/config
     ports:
       - 8123:8123
     restart: unless-stopped

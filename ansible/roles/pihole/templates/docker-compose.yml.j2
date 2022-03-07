@@ -30,8 +30,8 @@ services:
       ServerIP: {{ env.SERVER_IP }}
       PIHOLE_DNS_: 172.18.0.26#5353
     volumes:
-       - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-pihole/:/etc/pihole/'
-       - '/home/{{ env.SYS_USER }}/server/pihole/data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
+       - './data/etc-pihole/:/etc/pihole/'
+       - './data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
     cap_add:
       - NET_ADMIN
     labels:

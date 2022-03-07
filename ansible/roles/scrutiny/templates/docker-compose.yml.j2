@@ -14,7 +14,7 @@ services:
       - SCRUTINY_WEB=true
       - SCRUTINY_COLLECTOR=true
     volumes:
-      - /home/{{ env.SYS_USER }}/server/scrutiny/config:/config
+      - ./config:/config
       - /run/udev:/run/udev:ro
     ports:
       - 8082:8080

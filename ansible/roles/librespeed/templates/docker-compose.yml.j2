@@ -11,7 +11,7 @@ services:
       - PASSWORD={{ env.LIBRESPEED_PASSWORD }}
       - DB_TYPE=sqlite 
     volumes:
-      - /home/{{ env.SYS_USER }}/server/librespeed/config:/config
+      - ./config:/config
     ports:
       - 8056:80
     restart: unless-stopped

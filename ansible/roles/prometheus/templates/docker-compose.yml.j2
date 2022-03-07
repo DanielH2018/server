@@ -5,7 +5,7 @@ services:
     container_name: prometheus
     restart: unless-stopped
     volumes:
-     - /home/{{ env.SYS_USER }}/server/prometheus/:/etc/prometheus/
+     - ./:/etc/prometheus/
     ports:
      - 9090:9090
     networks:

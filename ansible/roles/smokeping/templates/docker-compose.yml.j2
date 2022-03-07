@@ -9,8 +9,8 @@ services:
       - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
     volumes:
-      - /home/{{ env.SYS_USER }}/server/smokeping/config:/config
-      - /home/{{ env.SYS_USER }}/server/smokeping/data:/data
+      - ./config:/config
+      - ./data:/data
     ports:
       - 81:80
     restart: unless-stopped

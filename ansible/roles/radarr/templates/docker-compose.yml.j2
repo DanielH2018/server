@@ -9,7 +9,7 @@ services:
       - TZ={{ env.TZ }}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - /home/{{ env.SYS_USER }}/server/radarr/config:/config
+      - ./config:/config
       - /home/{{ env.SYS_USER }}/server/library/movies:/movies
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
     restart: unless-stopped

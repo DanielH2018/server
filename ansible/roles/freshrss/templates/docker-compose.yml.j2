@@ -9,7 +9,7 @@ services:
       - PGID={{ env.PGID }}
       - TZ={{ env.TZ }}
     volumes:
-      - /home/{{ env.SYS_USER }}/server/freshrss/config:/config
+      - ./config:/config
     ports:
       - 8055:80
     restart: unless-stopped
