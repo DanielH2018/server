@@ -11,7 +11,8 @@ services:
     volumes:
       - '/home/{{ env.SYS_USER }}/server/unbound:/opt/unbound/etc/unbound'
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ env.DOCKER_NETWORK }}:
+        ipv4_address: 172.168.0.26
 
   pihole:
     container_name: pihole
