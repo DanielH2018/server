@@ -36,3 +36,5 @@ services:
       - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.qbittorrent-secure.middlewares=authelia@docker'
+      # Watchtower
+      - "com.centurylinklabs.watchtower.depends-on: nordlynx"
