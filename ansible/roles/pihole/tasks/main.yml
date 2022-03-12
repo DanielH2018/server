@@ -46,7 +46,7 @@
   become_method: sudo
 
 - name: Replace nameserver in /etc/resolv.conf
- lineinfile:
+  lineinfile:
    path: /etc/resolv.conf
    regexp: '127.0.0.53'
    line: nameserver 172.18.0.26
