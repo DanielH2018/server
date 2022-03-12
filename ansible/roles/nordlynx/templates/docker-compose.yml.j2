@@ -11,10 +11,10 @@ services:
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
     ports:
-      - 8080:8080
-      - 9696:9696
-      - 8989:8989
-      - 7878:7878
+      - 8080:8080 # qBittorrent
+      - 9696:9696 # Prowlarr
+      - 8989:8989 # Sonarr
+      - 7878:7878 # Radarr
     networks:
       - {{ env.DOCKER_NETWORK }}
 

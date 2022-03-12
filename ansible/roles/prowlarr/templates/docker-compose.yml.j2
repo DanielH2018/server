@@ -10,7 +10,7 @@ services:
     volumes:
       - ./config:/config
     restart: unless-stopped
-    network_mode: container:nordlynx
+    network_mode: container:nordlynx # Port 9696
     labels:
       # Enable traefik for container
       - "traefik.enable=true"

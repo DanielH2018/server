@@ -3,7 +3,7 @@ services:
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent
     container_name: qbittorrent
-    network_mode: container:nordlynx
+    network_mode: container:nordlynx # Port 8080
     environment:
       - PUID={{ env.PUID }}
       - PGID={{ env.PGID }}

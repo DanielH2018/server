@@ -13,7 +13,7 @@ services:
       - /home/{{ env.SYS_USER }}/server/library/movies:/movies
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
     restart: unless-stopped
-    network_mode: container:nordlynx
+    network_mode: container:nordlynx # Port 7878
     labels:
       # Enable traefik for container
       - "traefik.enable=true"

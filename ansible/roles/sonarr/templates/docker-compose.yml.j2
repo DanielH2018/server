@@ -13,7 +13,7 @@ services:
       - /home/{{ env.SYS_USER }}/server/library/downloads:/downloads
       - /home/{{ env.SYS_USER }}/server/library/tvseries:/tv
     restart: unless-stopped
-    network_mode: container:nordlynx
+    network_mode: container:nordlynx # Port 8989
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
