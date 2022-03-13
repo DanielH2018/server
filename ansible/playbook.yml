@@ -3,7 +3,7 @@
   hosts: localhost
   gather_facts: no
   vars_files:
-    - ~/server/ansible/.env
+    - .env
   roles:
     - role: docker
       tags: docker
