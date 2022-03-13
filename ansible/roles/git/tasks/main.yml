@@ -2,6 +2,8 @@
   shell: git pull --all
   register: git
   
--  debug: msg="{{ git.stdout_lines }}"
--  debug: msg="{{ git.stdout }}"
+- name: Loop over stdout_lines
+  debug:
+    msg: "{{ item }}"
+  loop: "{{ git.stdout_lines }}"
 
