@@ -2,4 +2,4 @@
   shell: git pull --all
   register: git
   
--  debug: git.stdout_lines
+-  debug: msg="{{ git.stdout_lines }}"
