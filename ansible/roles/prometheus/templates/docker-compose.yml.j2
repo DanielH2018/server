@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     volumes:
      - ./:/etc/prometheus/
+     - prometheus_data:/prometheus
     ports:
      - 9090:9090
     networks:
@@ -34,3 +35,5 @@ services:
 networks:
   {{ DOCKER_NETWORK }}:
     external: true
+volumes:
+    prometheus_data:
