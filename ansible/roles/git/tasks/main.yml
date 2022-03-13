@@ -42,14 +42,15 @@
   loop: "{{ playbook_roles }}"
   when: item in git.stdout
 
-- name: Setup Command
+- name: Setup Playbook Command
   set_fact:
     playbook_command: "{{ 'ansible-playbook playbook.yml --tags \"' + playbook_command + '\"'}}"
+  when: playbook_command != ''
 
 - debug:
     msg: "{{ playbook_command }}"
 
 - name: Deploy updated containers
   shell: "{{ playbook_command }}"
-  when: playbook_command == 'test'
+  when: playbook_command != ''
   
