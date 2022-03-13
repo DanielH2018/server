@@ -1,7 +1,14 @@
 - name: Git Pull
   shell: git pull --all
   register: git
-  
+
+- name: Set Ansible command
+  set_fact: 
+    ansible_command: ansible-playbook playbook.yml --tags "
+
+- debug:
+    msg: "{{ ansible_command }}"
+
 - name: Loop over stdout_lines
   debug:
     msg: "{{ item }}"
