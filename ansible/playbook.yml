@@ -1,6 +1,6 @@
 ---
 - name: Setup Server
-  hosts: localhost
+  hosts: all
   gather_facts: no
   vars_files:
     - ~/server/ansible/.env
