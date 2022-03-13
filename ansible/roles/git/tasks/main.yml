@@ -45,19 +45,9 @@
   set_fact:
     playbook_command: "{{ 'ansible-playbook playbook.yml --tags \"' + playbook_command + '\"'}}"
   when: playbook_command != ''
-
-- debug:
-    msg: "{{ playbook_command }}"
  
 - name: Deploy updated containers
   shell: "{{ playbook_command }}"
-  args:
-    chdir: "/home/{{ SYS_USER }}/server/ansible/"
   when: playbook_command != ''
-  register: ps
   become: yes
   become_method: sudo
-
-- debug:
-    msg: "{{ ps.stdout }}"
-  

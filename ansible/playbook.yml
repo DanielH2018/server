@@ -63,5 +63,3 @@
       tags: watchtower
     - role: mobile-app-db
       tags: mobile-app-db
-    - role: git
-      tags: git
