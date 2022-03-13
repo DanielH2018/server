@@ -34,7 +34,6 @@
       - 'netdata'
       - 'home-assistant'
       - 'watchtower'
-      - 'git'
 
 - name: Loop over stdout_lines
   set_fact:
