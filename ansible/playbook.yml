@@ -5,8 +5,6 @@
   vars_files:
     - ~/server/ansible/.env
   roles:
-    - role: env
-      tags: env
     - role: docker
       tags: docker
     - role: traefik
