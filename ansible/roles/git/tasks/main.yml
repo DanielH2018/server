@@ -41,6 +41,6 @@
     msg: "{{ item }}"
   loop: "{{ playbook_roles }}"
   when: item in git.stdout
- 
+
 - debug:
     msg: "{{ playbook_command }}"
