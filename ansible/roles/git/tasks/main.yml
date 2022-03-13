@@ -44,7 +44,7 @@
 
 - name: Setup Command
   set_fact:
-    playbook_command: "{{  ansible-playbook playbook.yml --tags ' + playbook_command + ' }}"
+    playbook_command: "{{ ansible-playbook playbook.yml --tags + playbook_command }}"
 
 - debug:
     msg: "{{ playbook_command }}"
