@@ -51,6 +51,8 @@
  
 - name: Deploy updated containers
   shell: "{{ playbook_command }}"
+  args:
+    chdir: "/home/{{ SYS_USER }}/server/ansible/"
   when: playbook_command != ''
   register: ps
   become: yes
