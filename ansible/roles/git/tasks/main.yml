@@ -51,3 +51,7 @@
 
 - name: Deploy updated containers
   shell: echo pwd
+  register: test
+
+- debug:
+    msg: test.stdout
