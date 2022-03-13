@@ -50,7 +50,7 @@
     msg: "{{ playbook_command }}"
 
 - name: Deploy updated containers
-  shell: echo pwd
+  shell: pwd
   register: test
 
 - debug:
