@@ -2,11 +2,8 @@
 - name: Setup Server
   hosts: localhost
   gather_facts: no
-  pre_tasks:
-    - name: Setup Host Variables
-      include_vars:
-        file: ~/server/ansible/.env
-        name: env
+  vars_files:
+    - ~/server/ansible/.env
   roles:
     - role: env
       tags: env
