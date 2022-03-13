@@ -23,7 +23,7 @@ providers:
 certificatesResolvers:
   cloudflare:
     acme:
-      email: {{ env.EMAIL }}
+      email: {{ EMAIL }}
       storage: acme.json
       dnsChallenge:
         provider: cloudflare

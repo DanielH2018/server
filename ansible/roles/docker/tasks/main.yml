@@ -54,6 +54,6 @@
   become_method: sudo
 
 - name: Add sudo to user
-  shell: "usermod -aG docker {{ env.SYS_USER }}"
+  shell: "usermod -aG docker {{ SYS_USER }}"
   become: yes
   become_method: sudo

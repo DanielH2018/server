@@ -1,17 +1,17 @@
 - name: Creates directories
   file:
-    path: "/home/{{ env.SYS_USER }}/server/heimdall/config"
+    path: "/home/{{ SYS_USER }}/server/heimdall/config"
     state: directory
     mode: 0755
 
 - name: Create docker-compose from template
   template:
     src: docker-compose.yml.j2
-    dest: "/home/{{ env.SYS_USER }}/server/heimdall/docker-compose.yml"
+    dest: "/home/{{ SYS_USER }}/server/heimdall/docker-compose.yml"
     
 - name: Deploy Heimdall
   shell: docker-compose up -d --force-recreate
   args:
-    chdir: "/home/{{ env.SYS_USER }}/server/heimdall/"
+    chdir: "/home/{{ SYS_USER }}/server/heimdall/"
   become: yes
   become_method: sudo

@@ -1,29 +1,29 @@
 - name: Create radarr directories
   file:
-    path: "/home/{{ env.SYS_USER }}/server/radarr/config"
+    path: "/home/{{ SYS_USER }}/server/radarr/config"
     state: directory
     mode: 0755
 
 - name: Create download directories
   file:
-    path: "/home/{{ env.SYS_USER }}/server/library/downloads"
+    path: "/home/{{ SYS_USER }}/server/library/downloads"
     state: directory
     mode: 0755
 
 - name: Create movie directories
   file:
-    path: "/home/{{ env.SYS_USER }}/server/library/movies"
+    path: "/home/{{ SYS_USER }}/server/library/movies"
     state: directory
     mode: 0755
 
 - name: Create docker-compose from template
   template:
     src: docker-compose.yml.j2
-    dest: "/home/{{ env.SYS_USER }}/server/radarr/docker-compose.yml"
+    dest: "/home/{{ SYS_USER }}/server/radarr/docker-compose.yml"
     
 - name: Deploy Radarr
   shell: docker-compose up -d --force-recreate
   args:
-    chdir: "/home/{{ env.SYS_USER }}/server/radarr/"
+    chdir: "/home/{{ SYS_USER }}/server/radarr/"
   become: yes
   become_method: sudo

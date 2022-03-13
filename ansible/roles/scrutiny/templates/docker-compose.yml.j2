@@ -8,9 +8,9 @@ services:
       - SYS_RAWIO
       - SYS_ADMIN
     environment:
-      - PUID={{ env.PUID }}
-      - PGID={{ env.PUID }}
-      - TZ={{ env.TZ }}
+      - PUID={{ PUID }}
+      - PGID={{ PUID }}
+      - TZ={{ TZ }}
       - SCRUTINY_WEB=true
       - SCRUTINY_COLLECTOR=true
     volumes:
@@ -21,29 +21,29 @@ services:
     devices:
       - /dev/nvme0:/dev/nvme0
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
     restart: unless-stopped
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Setup HTTP entrypoint
       - "traefik.http.routers.scrutiny.entrypoints=http"
-      - "traefik.http.routers.scrutiny.rule=Host(`scrutiny.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.scrutiny.rule=Host(`scrutiny.{{ DOMAIN }}`)"
       # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.scrutiny-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.scrutiny.middlewares=scrutiny-https-redirect"
       # Setup HTTPS entrypoint
       - "traefik.http.routers.scrutiny-secure.entrypoints=https"
-      - "traefik.http.routers.scrutiny-secure.rule=Host(`scrutiny.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.scrutiny-secure.rule=Host(`scrutiny.{{ DOMAIN }}`)"
       - "traefik.http.routers.scrutiny-secure.tls=true"
       # Setup port forwarding to internal port
       - "traefik.http.routers.scrutiny-secure.service=scrutiny"
       - "traefik.http.services.scrutiny.loadbalancer.server.port=8080"
       # Use traefik network
-      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.scrutiny-secure.middlewares=authelia@docker'
 
 networks:
-  {{ env.DOCKER_NETWORK }}:
+  {{ DOCKER_NETWORK }}:
     external: true

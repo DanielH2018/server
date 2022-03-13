@@ -4,7 +4,7 @@ services:
     image: crowdsecurity/crowdsec:latest
     container_name: crowdsec
     environment:
-      GID: "${GID-{{ env.PGID}}}"
+      GID: "${GID-{{ PGID}}}"
       COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik"
     volumes:
       - ./config/acquis.yaml:/etc/crowdsec/acquis.yaml
@@ -12,17 +12,17 @@ services:
       - crowdsec-config:/etc/crowdsec/
       - traefik_traefik-logs:/var/log/traefik/:ro
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
     restart: unless-stopped
 
   bouncer-traefik:
     image: docker.io/fbonalair/traefik-crowdsec-bouncer:latest
     container_name: bouncer-traefik
     environment:
-      CROWDSEC_BOUNCER_API_KEY: {{ env.CROWDSEC_BOUNCER_API_KEY }}
+      CROWDSEC_BOUNCER_API_KEY: {{ CROWDSEC_BOUNCER_API_KEY }}
       CROWDSEC_AGENT_HOST: crowdsec:8080
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
     depends_on:
       - crowdsec
     restart: unless-stopped
@@ -36,38 +36,38 @@ services:
       - 3003:3000
     environment:
       MB_DB_FILE: /data/metabase.db
-      MGID: "${GID-{{ env.PGID}}}"
+      MGID: "${GID-{{ PGID}}}"
     depends_on:
       - 'crowdsec'
     volumes:
       - crowdsec-db:/metabase-data/
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Setup HTTP entrypoint
       - "traefik.http.routers.dashboard.entrypoints=http"
-      - "traefik.http.routers.dashboard.rule=Host(`crowdsec.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.dashboard.rule=Host(`crowdsec.{{ DOMAIN }}`)"
       # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.dashboard-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.dashboard.middlewares=dashboard-https-redirect"
       # Setup HTTPS entrypoint
       - "traefik.http.routers.dashboard-secure.entrypoints=https"
-      - "traefik.http.routers.dashboard-secure.rule=Host(`crowdsec.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.dashboard-secure.rule=Host(`crowdsec.{{ DOMAIN }}`)"
       - "traefik.http.routers.dashboard-secure.tls=true"
       # Setup port forwarding to internal port
       - "traefik.http.routers.dashboard-secure.service=dashboard"
       - "traefik.http.services.dashboard.loadbalancer.server.port=3000"
       # Use traefik network
-      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.dashboard-secure.middlewares=authelia@docker'
       # Disable watchtower update
       - "com.centurylinklabs.watchtower.enable=false"
 
 networks:
-  {{ env.DOCKER_NETWORK }}:
+  {{ DOCKER_NETWORK }}:
     external: true
 volumes:
   crowdsec-db:

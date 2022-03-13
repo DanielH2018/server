@@ -9,30 +9,30 @@ services:
     ports:
       - 9600:8080
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Setup HTTP entrypoint
       - "traefik.http.routers.guacamole.entrypoints=http"
-      - "traefik.http.routers.guacamole.rule=Host(`guacamole.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.guacamole.rule=Host(`guacamole.{{ DOMAIN }}`)"
       # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.guacamole-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.guacamole.middlewares=guacamole-https-redirect"
       # Setup HTTPS entrypoint
       - "traefik.http.routers.guacamole-secure.entrypoints=https"
-      - "traefik.http.routers.guacamole-secure.rule=Host(`guacamole.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.guacamole-secure.rule=Host(`guacamole.{{ DOMAIN }}`)"
       - "traefik.http.routers.guacamole-secure.tls=true"
       # Setup port forwarding to internal port
       - "traefik.http.routers.guacamole-secure.service=guacamole"
       - "traefik.http.services.guacamole.loadbalancer.server.port=8080"
       # Use traefik network
-      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.guacamole-secure.middlewares=authelia@docker'
 
 networks:
-  {{ env.DOCKER_NETWORK }}:
+  {{ DOCKER_NETWORK }}:
     external: true
 
 volumes:

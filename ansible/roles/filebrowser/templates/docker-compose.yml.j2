@@ -4,38 +4,38 @@ services:
   filebrowser:
     image: filebrowser/filebrowser
     container_name: filebrowser
-    user: {{ env.PUID }}:{{ env.PGID }}
+    user: {{ PUID }}:{{ PGID }}
     ports:
       - 8081:80
     volumes:
-      - /home/{{ env.SYS_USER }}/server/:/srv
+      - /home/{{ SYS_USER }}/server/:/srv
       - ./data/filebrowser.db:/database.db
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Setup HTTP entrypoint
       - "traefik.http.routers.filebrowser.entrypoints=http"
-      - "traefik.http.routers.filebrowser.rule=Host(`filebrowser.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.filebrowser.rule=Host(`filebrowser.{{ DOMAIN }}`)"
       # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.filebrowser-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.filebrowser.middlewares=filebrowser-https-redirect"
       # Setup HTTPS entrypoint
       - "traefik.http.routers.filebrowser-secure.entrypoints=https"
-      - "traefik.http.routers.filebrowser-secure.rule=Host(`filebrowser.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.filebrowser-secure.rule=Host(`filebrowser.{{ DOMAIN }}`)"
       - "traefik.http.routers.filebrowser-secure.tls=true"
       # Setup port forwarding to internal port
       - "traefik.http.routers.filebrowser-secure.service=filebrowser"
       - "traefik.http.services.filebrowser.loadbalancer.server.port=80"
       # Use traefik network
-      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.filebrowser-secure.middlewares=authelia@docker'
 
 networks:
-  {{ env.DOCKER_NETWORK }}:
+  {{ DOCKER_NETWORK }}:
     external: true

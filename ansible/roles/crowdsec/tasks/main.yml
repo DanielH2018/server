@@ -1,28 +1,28 @@
 - name: Creates directories
   file:
-    path: "/home/{{ env.SYS_USER }}/server/crowdsec/config"
+    path: "/home/{{ SYS_USER }}/server/crowdsec/config"
     state: directory
     mode: 0755
 
 - name: Create acquis.yaml from template
   template:
     src: acquis.yaml.j2
-    dest: "/home/{{ env.SYS_USER }}/server/crowdsec/config/acquis.yaml"
+    dest: "/home/{{ SYS_USER }}/server/crowdsec/config/acquis.yaml"
 
 - name: Create Dockerfile from template
   template:
     src: Dockerfile.j2
-    dest: "/home/{{ env.SYS_USER }}/server/crowdsec/Dockerfile"
+    dest: "/home/{{ SYS_USER }}/server/crowdsec/Dockerfile"
 
 - name: Create docker-compose.yml from template
   template:
     src: docker-compose.yml.j2
-    dest: "/home/{{ env.SYS_USER }}/server/crowdsec/docker-compose.yml"
+    dest: "/home/{{ SYS_USER }}/server/crowdsec/docker-compose.yml"
 
 - name: Deploy Crowdsec
   shell: docker-compose up -d --force-recreate
   args:
-    chdir: "/home/{{ env.SYS_USER }}/server/crowdsec/"
+    chdir: "/home/{{ SYS_USER }}/server/crowdsec/"
   become: yes
   become_method: sudo
 
@@ -39,11 +39,11 @@
 - name: Make sure script has correct permissions
   shell: chmod +x crowdsecUpdate.sh
   args:
-    chdir: "/home/{{ env.SYS_USER }}/server/ansible/roles/crowdsec/scripts/"
+    chdir: "/home/{{ SYS_USER }}/server/ansible/roles/crowdsec/scripts/"
   become: yes
   become_method: sudo
 
 - name: Add update & upgrade cronjob
   shell: ./crowdsecUpdate.sh
   args:
-    chdir: "/home/{{ env.SYS_USER }}/server/ansible/roles/crowdsec/scripts/"
+    chdir: "/home/{{ SYS_USER }}/server/ansible/roles/crowdsec/scripts/"

@@ -7,25 +7,25 @@ services:
     volumes:
       - ./config:/config
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
     labels:
     # Enable traefik for container
       - 'traefik.enable=true'
       # Setup HTTPS entrypoint
-      - 'traefik.http.routers.authelia.rule=Host(`auth.{{ env.DOMAIN }}`)'
+      - 'traefik.http.routers.authelia.rule=Host(`auth.{{ DOMAIN }}`)'
       - 'traefik.http.routers.authelia.entrypoints=https'
       - 'traefik.http.routers.authelia.tls=true'
       # Setup auth forwarding
-      - 'traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://auth.{{ env.DOMAIN }}'
+      - 'traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://auth.{{ DOMAIN }}'
       - 'traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true'
       - 'traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'
     expose:
       - 9091
     restart: unless-stopped
     environment:
-      - TZ={{ env.TZ }}
+      - TZ={{ TZ }}
     healthcheck:
       disable: true
 networks:
-  {{ env.DOCKER_NETWORK }}:
+  {{ DOCKER_NETWORK }}:
     external: true

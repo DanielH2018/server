@@ -5,9 +5,9 @@ services:
     image: lscr.io/linuxserver/heimdall
     container_name: heimdall
     environment:
-      - PUID={{ env.PUID }}
-      - PGID={{ env.PGID }}
-      - TZ={{ env.TZ }}
+      - PUID={{ PUID }}
+      - PGID={{ PGID }}
+      - TZ={{ TZ }}
     volumes:
       - ./config:/config
     ports:
@@ -15,28 +15,28 @@ services:
       - 8058:443
     restart: unless-stopped
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Setup HTTP entrypoint
       - "traefik.http.routers.heimdall.entrypoints=http"
-      - "traefik.http.routers.heimdall.rule=Host(`heimdall.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.heimdall.rule=Host(`heimdall.{{ DOMAIN }}`)"
       # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.heimdall-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.heimdall.middlewares=heimdall-https-redirect"
       # Setup HTTPS entrypoint
       - "traefik.http.routers.heimdall-secure.entrypoints=https"
-      - "traefik.http.routers.heimdall-secure.rule=Host(`heimdall.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.heimdall-secure.rule=Host(`heimdall.{{ DOMAIN }}`)"
       - "traefik.http.routers.heimdall-secure.tls=true"
       # Setup port forwarding to internal port
       - "traefik.http.routers.heimdall-secure.service=heimdall"
       - "traefik.http.services.heimdall.loadbalancer.server.port=80"
       # Use traefik network
-      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.heimdall-secure.middlewares=authelia@docker'
 
 networks:
-  {{ env.DOCKER_NETWORK }}:
+  {{ DOCKER_NETWORK }}:
     external: true

@@ -9,7 +9,7 @@ services:
       - 5353:53/tcp
       - 5353:53/udp
     networks:
-      {{ env.DOCKER_NETWORK }}:
+      {{ DOCKER_NETWORK }}:
         ipv4_address: 172.18.0.26
 
   pihole:
@@ -17,7 +17,7 @@ services:
     image: pihole/pihole:latest
     restart: unless-stopped
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
     ports:
       - "53:53/tcp"
       - "53:53/udp"
@@ -25,9 +25,9 @@ services:
       - "8053:80/tcp"
       - "8054:443/tcp"
     environment:
-      TZ: {{ env.TZ }}
-      WEBPASSWORD: {{ env.PIHOLE_PASSWORD }}
-      ServerIP: {{ env.SERVER_IP }}
+      TZ: {{ TZ }}
+      WEBPASSWORD: {{ PIHOLE_PASSWORD }}
+      ServerIP: {{ SERVER_IP }}
       PIHOLE_DNS_: 172.18.0.26#5353
     volumes:
        - './data/etc-pihole/:/etc/pihole/'
@@ -39,19 +39,19 @@ services:
       - "traefik.enable=true"
       # Setup HTTP entrypoint
       - "traefik.http.routers.pihole.entrypoints=http"
-      - "traefik.http.routers.pihole.rule=Host(`pihole.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.pihole.rule=Host(`pihole.{{ DOMAIN }}`)"
       # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.pihole-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.pihole.middlewares=pihole-https-redirect"
       # Setup HTTPS entrypoint
       - "traefik.http.routers.pihole-secure.entrypoints=https"
-      - "traefik.http.routers.pihole-secure.rule=Host(`pihole.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.pihole-secure.rule=Host(`pihole.{{ DOMAIN }}`)"
       - "traefik.http.routers.pihole-secure.tls=true"
       # Setup port forwarding to internal port
       - "traefik.http.routers.pihole-secure.service=pihole"
       - "traefik.http.services.pihole.loadbalancer.server.port=80"
       # Use traefik network
-      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.pihole-secure.middlewares=authelia@docker'
       # Add admin prefix to url
@@ -61,6 +61,6 @@ services:
 networks:
   default:
     external:
-      name: {{ env.DOCKER_NETWORK }}
-  {{ env.DOCKER_NETWORK }}:
+      name: {{ DOCKER_NETWORK }}
+  {{ DOCKER_NETWORK }}:
     external: true

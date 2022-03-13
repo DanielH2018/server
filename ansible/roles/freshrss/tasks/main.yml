@@ -1,17 +1,17 @@
 - name: Creates directories
   file:
-    path: "/home/{{ env.SYS_USER }}/server/freshrss/config"
+    path: "/home/{{ SYS_USER }}/server/freshrss/config"
     state: directory
     mode: 0755
 
 - name: Create docker-compose from template
   template:
     src: docker-compose.yml.j2
-    dest: "/home/{{ env.SYS_USER }}/server/freshrss/docker-compose.yml"
+    dest: "/home/{{ SYS_USER }}/server/freshrss/docker-compose.yml"
     
 - name: Deploy Freshrss
   shell: docker-compose up -d --force-recreate
   args:
-    chdir: "/home/{{ env.SYS_USER }}/server/freshrss/"
+    chdir: "/home/{{ SYS_USER }}/server/freshrss/"
   become: yes
   become_method: sudo

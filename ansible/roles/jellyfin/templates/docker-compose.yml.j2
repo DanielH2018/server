@@ -5,14 +5,14 @@ services:
     image: lscr.io/linuxserver/jellyfin
     container_name: jellyfin
     environment:
-      - PUID={{ env.PUID }}
-      - PGID={{ env.PGID }}
-      - TZ={{ env.TZ }}
-      - JELLYFIN_PublishedServerUrl={{ env.SERVER_IP }} #optional
+      - PUID={{ PUID }}
+      - PGID={{ PGID }}
+      - TZ={{ TZ }}
+      - JELLYFIN_PublishedServerUrl={{ SERVER_IP }} #optional
     volumes:
       - ./config:/config
-      - /home/{{ env.SYS_USER }}/server/library/tvseries:/data/tvshows
-      - /home/{{ env.SYS_USER }}/server/library/movies:/data/movies
+      - /home/{{ SYS_USER }}/server/library/tvseries:/data/tvshows
+      - /home/{{ SYS_USER }}/server/library/movies:/data/movies
       - /opt/vc/lib:/opt/vc/lib
     ports:
       - 8096:8096
@@ -23,28 +23,28 @@ services:
     devices:
       - /dev/dri:/dev/dri
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Setup HTTP entrypoint
       - "traefik.http.routers.jellyfin.entrypoints=http"
-      - "traefik.http.routers.jellyfin.rule=Host(`jellyfin.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.jellyfin.rule=Host(`jellyfin.{{ DOMAIN }}`)"
       # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.jellyfin-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.jellyfin.middlewares=jellyfin-https-redirect"
       # Setup HTTPS entrypoint
       - "traefik.http.routers.jellyfin-secure.entrypoints=https"
-      - "traefik.http.routers.jellyfin-secure.rule=Host(`jellyfin.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.jellyfin-secure.rule=Host(`jellyfin.{{ DOMAIN }}`)"
       - "traefik.http.routers.jellyfin-secure.tls=true"
       # Setup port forwarding to internal port
       - "traefik.http.routers.jellyfin-secure.service=jellyfin"
       - "traefik.http.services.jellyfin.loadbalancer.server.port=8096"
       # Use traefik network
-      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.jellyfin-secure.middlewares=authelia@docker'
 
 networks:
-  {{ env.DOCKER_NETWORK }}:
+  {{ DOCKER_NETWORK }}:
     external: true

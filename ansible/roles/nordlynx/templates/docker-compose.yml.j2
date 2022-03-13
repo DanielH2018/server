@@ -7,7 +7,7 @@ services:
     cap_add:
       - NET_ADMIN #required
     environment:
-      - PRIVATE_KEY={{ env.NORDVPN_KEY }}
+      - PRIVATE_KEY={{ NORDVPN_KEY }}
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
     ports:
@@ -16,8 +16,8 @@ services:
       - 8989:8989 # Sonarr
       - 7878:7878 # Radarr
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
 
 networks:
-  {{ env.DOCKER_NETWORK }}:
+  {{ DOCKER_NETWORK }}:
     external: true

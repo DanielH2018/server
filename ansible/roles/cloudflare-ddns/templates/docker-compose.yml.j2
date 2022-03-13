@@ -5,11 +5,11 @@ services:
     container_name: cloudflare-ddns
     restart: unless-stopped
     environment:
-      - API_KEY={{ env.CLOUDFLARE_DNS_TOKEN }}
-      - ZONE={{ env.DOMAIN }}
+      - API_KEY={{ CLOUDFLARE_DNS_TOKEN }}
+      - ZONE={{ DOMAIN }}
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
 
 networks:
-  {{ env.DOCKER_NETWORK }}:
+  {{ DOCKER_NETWORK }}:
     external: true

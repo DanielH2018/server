@@ -3,37 +3,37 @@ services:
   grafana:
     image: grafana/grafana
     container_name: grafana
-    user: "{{ env.PUID }}"
+    user: "{{ PUID }}"
     restart: unless-stopped
     volumes:
       - ./:/var/lib/grafana
     ports:
      - "3000:3000"
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Setup HTTP entrypoint
       - "traefik.http.routers.grafana.entrypoints=http"
-      - "traefik.http.routers.grafana.rule=Host(`grafana.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.{{ DOMAIN }}`)"
       # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.grafana-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.grafana.middlewares=grafana-https-redirect"
       # Setup HTTPS entrypoint
       - "traefik.http.routers.grafana-secure.entrypoints=https"
-      - "traefik.http.routers.grafana-secure.rule=Host(`grafana.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.grafana-secure.rule=Host(`grafana.{{ DOMAIN }}`)"
       - "traefik.http.routers.grafana-secure.tls=true"
       # Setup port forwarding to internal port
       - "traefik.http.routers.grafana-secure.service=grafana"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
       # Use traefik network
-      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.grafana-secure.middlewares=authelia@docker'
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on: prometheus"
 
 networks:
-  {{ env.DOCKER_NETWORK }}:
+  {{ DOCKER_NETWORK }}:
     external: true

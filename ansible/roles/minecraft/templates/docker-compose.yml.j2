@@ -11,9 +11,9 @@ services:
       MEMORY: 6G
       CONSOLE: "false"
       ENABLE_AUTOPAUSE: "TRUE"
-      TZ: {{ env.TZ }}
+      TZ: {{ TZ }}
     ports:
       - 25565:25565
     volumes:
-      - /home/{{ env.SYS_USER }}/server/minecraft/data:/data
+      - /home/{{ SYS_USER }}/server/minecraft/data:/data
     restart: unless-stopped

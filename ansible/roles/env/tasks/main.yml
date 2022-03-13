@@ -1,4 +1,0 @@
-- name: Setup Host Variables
-  include_vars:
-    file: ~/server/ansible/.env
-    name: env

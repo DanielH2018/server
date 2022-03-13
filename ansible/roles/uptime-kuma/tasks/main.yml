@@ -1,17 +1,17 @@
 - name: Creates directories
   file:
-    path: "/home/{{ env.SYS_USER }}/server/uptime-kuma/data"
+    path: "/home/{{ SYS_USER }}/server/uptime-kuma/data"
     state: directory
     mode: 0755
 
 - name: Create docker-compose from template
   template:
     src: docker-compose.yml.j2
-    dest: "/home/{{ env.SYS_USER }}/server/uptime-kuma/docker-compose.yml"
+    dest: "/home/{{ SYS_USER }}/server/uptime-kuma/docker-compose.yml"
     
 - name: Deploy Uptime Kuma
   shell: docker-compose up -d --force-recreate
   args:
-    chdir: "/home/{{ env.SYS_USER }}/server/uptime-kuma/"
+    chdir: "/home/{{ SYS_USER }}/server/uptime-kuma/"
   become: yes
   become_method: sudo

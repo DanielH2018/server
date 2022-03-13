@@ -5,39 +5,39 @@ services:
     image: lscr.io/linuxserver/code-server
     container_name: code-server
     environment:
-      - PUID={{ env.PUID }}
-      - PGID={{ env.PGID }}
-      - TZ={{ env.TZ }}
-      - PASSWORD={{ env.CODE_SERVER_PASSWORD }}
-      - SUDO_PASSWORD={{ env.CODE_SERVER_SUDO_PASSWORD }}
+      - PUID={{ PUID }}
+      - PGID={{ PGID }}
+      - TZ={{ TZ }}
+      - PASSWORD={{ CODE_SERVER_PASSWORD }}
+      - SUDO_PASSWORD={{ CODE_SERVER_SUDO_PASSWORD }}
     volumes:
       - ./config:/config
     ports:
       - 8443:8443
     restart: unless-stopped
     networks:
-      - {{ env.DOCKER_NETWORK }}
+      - {{ DOCKER_NETWORK }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Setup HTTP entrypoint
       - "traefik.http.routers.code-server.entrypoints=http"
-      - "traefik.http.routers.code-server.rule=Host(`code-server.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.code-server.rule=Host(`code-server.{{ DOMAIN }}`)"
       # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.code-server-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.code-server.middlewares=code-server-https-redirect"
       # Setup HTTPS entrypoint
       - "traefik.http.routers.code-server-secure.entrypoints=https"
-      - "traefik.http.routers.code-server-secure.rule=Host(`code-server.{{ env.DOMAIN }}`)"
+      - "traefik.http.routers.code-server-secure.rule=Host(`code-server.{{ DOMAIN }}`)"
       - "traefik.http.routers.code-server-secure.tls=true"
       # Setup port forwarding to internal port
       - "traefik.http.routers.code-server-secure.service=code-server"
       - "traefik.http.services.code-server.loadbalancer.server.port=8443"
       # Use traefik network
-      - "traefik.docker.network={{ env.DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.code-server-secure.middlewares=authelia@docker'
 
 networks:
-  {{ env.DOCKER_NETWORK }}:
+  {{ DOCKER_NETWORK }}:
     external: true
