@@ -4,7 +4,7 @@
 
 - name: Set Ansible command
   set_fact: 
-    playbook_command: 'ansible-playbook playbook.yml --tags "'
+    playbook_command: ''
     playbook_roles:
       - 'docker'
       - 'traefik'
@@ -38,7 +38,7 @@
 
 - name: Loop over stdout_lines
   set_fact:
-    playbook_command: "{{ playbook_command + item }}"
+    playbook_command: "{{ ansible-playbook playbook.yml --tags "+ playbook_command + " }}"
   loop: "{{ playbook_roles }}"
   when: item in git.stdout
 
