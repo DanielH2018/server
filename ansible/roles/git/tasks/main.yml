@@ -2,7 +2,7 @@
   shell: git pull --all
   register: git
 
-- name: Set Ansible command
+- name: Set Vars(Facts)
   set_fact: 
     playbook_command: ''
     playbook_roles:
@@ -35,7 +35,7 @@
       - 'home-assistant'
       - 'watchtower'
 
-- name: Loop over stdout_lines
+- name: Search git output for container names
   set_fact:
     playbook_command: "{{ playbook_command + item }}"
   loop: "{{ playbook_roles }}"
@@ -46,7 +46,7 @@
     playbook_command: "{{ 'ansible-playbook playbook.yml --tags \"' + playbook_command + '\"'}}"
   when: playbook_command != ''
  
-- name: Deploy updated containers
+- name: Deploy updated containers, if any
   shell: "{{ playbook_command }}"
   when: playbook_command != ''
   become: yes
