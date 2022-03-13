@@ -21,6 +21,9 @@ sudo sed -i '/ChallengeResponseAuthentication  /c\ChallengeResponseAuthenticatio
 # Copy current crontab
 crontab -l > crontab_new
 
+# Clean dangling Docker images
+echo "30 6 * * * /usr/bin/docker image prune -f" >> crontab_new
+
 # Add update and upgrade crontab at 7am UTC(2am EST)
 echo "0 7 * * * root apt-get update" >> crontab_new
 
