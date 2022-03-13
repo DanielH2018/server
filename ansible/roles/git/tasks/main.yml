@@ -42,5 +42,9 @@
   loop: "{{ playbook_roles }}"
   when: item in git.stdout
 
+- name: Test Concatenation
+  set_fact:
+    playbook_command: {{ playbook_command }} + test
+
 - debug:
     msg: "{{ playbook_command }}"
