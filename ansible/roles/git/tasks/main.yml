@@ -54,6 +54,8 @@
   shell: "{{ playbook_command }}"
   when: playbook_command != ''
   register: ps
+  become: yes
+  become_method: sudo
 
 - debug:
     msg: ps.stdout
