@@ -4,13 +4,43 @@
 
 - name: Set Ansible command
   set_fact: 
-    ansible_command: ansible-playbook playbook.yml --tags "
-
-- debug:
-    msg: "{{ ansible_command }}"
+    playbook_command: ansible-playbook playbook.yml --tags "
+    playbook_roles:
+      - 'docker'
+      - 'traefik'
+      - 'portainer'
+      - 'authelia'
+      - 'cloudflare-ddns'
+      - 'crowdsec'
+      - 'code-server'
+      - 'freshrss'
+      - 'librespeed'
+      - 'heimdall'
+      - 'uptime-kuma'
+      - 'pihole'
+      - 'smokeping'
+      - 'filebrowser'
+      - 'scrutiny'
+      - 'guacamole'
+      - 'nordlynx'
+      - 'qbittorrent'
+      - 'prowlarr'
+      - 'sonarr'
+      - 'radarr'
+      - 'jellyfin'
+      - 'minecraft'
+      - 'prometheus'
+      - 'grafana'
+      - 'netdata'
+      - 'home-assistant'
+      - 'watchtower'
+      - 'git'
 
 - name: Loop over stdout_lines
   debug:
     msg: "{{ item }}"
-  loop: "{{ git.stdout_lines }}"
+  loop: "{{ playbook_roles }}"
+  when: item not in git.stdout_lines
 
+- debug:
+    msg: "{{ playbook_command }}"
