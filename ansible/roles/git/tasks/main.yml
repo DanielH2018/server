@@ -54,4 +54,4 @@
   register: test
 
 - debug:
-    msg: test.stdout
+    msg: {{ test.stdout }}
