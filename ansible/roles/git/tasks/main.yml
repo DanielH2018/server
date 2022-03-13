@@ -1,4 +1,5 @@
-- name: Hash password
+- name: Git Pull
   shell: git pull --all
   register: git
-  debug: git.stdout_lines
+  
+-  debug: git.stdout_lines
