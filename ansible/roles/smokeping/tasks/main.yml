@@ -21,3 +21,4 @@
     chdir: "/home/{{ SYS_USER }}/server/smokeping/"
   become: yes
   become_method: sudo
+ 
