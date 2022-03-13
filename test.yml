@@ -1,0 +1,9 @@
+---
+- name: Git
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - ~/server/ansible/.env
+  roles:
+    - role: git
+      tags: git
