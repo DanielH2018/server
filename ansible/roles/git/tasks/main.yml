@@ -4,7 +4,7 @@
 
 - name: Set Ansible command
   set_fact: 
-    playbook_command: 'ansible-playbook playbook.yml --tags "'
+    playbook_command: ''
     playbook_roles:
       - 'docker'
       - 'traefik'
