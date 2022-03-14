@@ -4,7 +4,7 @@
 
 - name: Set Vars(Facts)
   set_fact: 
-    git_roles:
+    git_roles: ''
     playbook_roles: []
     playbook_debug: []
 
