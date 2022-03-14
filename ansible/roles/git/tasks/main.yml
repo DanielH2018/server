@@ -2,16 +2,16 @@
   shell: git pull --all
   register: git
 
-- name: Set Vars(Facts)
+- name: Set Facts
   set_fact: 
     git_roles: ''
     playbook_roles: []
     playbook_debug: []
 
-- name: Get containers from playbook.yml
+- name: Get container lines from deploy.yml
   set_fact: 
     playbook_debug: "{{ playbook_debug + [item] }}"
-  with_lines: cat "playbook.yml"
+  with_lines: cat "deploy.yml"
   when: '"- role:" in item'
 
 - name: Get container name from line
@@ -27,7 +27,7 @@
 
 - name: Setup playbook command
   set_fact:
-    playbook_command: "{{ 'ansible-playbook playbook.yml --tags \"' + playbook_roles + '\"'}}"
+    playbook_command: "{{ 'ansible-playbook deploy.yml --tags \"' + playbook_roles + '\"'}}"
   when: git_roles != ''
  
 - name: Deploy updated containers, if any
