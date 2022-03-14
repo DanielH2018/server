@@ -4,8 +4,10 @@
 
 - name: Set Vars(Facts)
   set_fact: 
+    git_roles:
+    playbook_roles: []
     playbook_debug: []
-    playbook_command: []
+    
 
 - name: Get containers from playbook.yml
   set_fact: 
@@ -18,21 +20,21 @@
 
 - name: Get container name from line
   set_fact:
-    playbook_command: "{{ playbook_command + [item.split(' ')[-1]] }}"
+    playbook_roles: "{{ playbook_roles + [item.split(' ')[-1]] }}"
   loop: "{{ playbook_debug }}"
 
 - debug:
-    msg: "{{ playbook_command }}"
+    msg: "{{ playbook_roles }}"
 
 - name: Search git output for container names
   set_fact:
-    playbook_command: "{{ playbook_command + item }}"
+    git_roles: "{{ git_roles + item }}"
   loop: "{{ playbook_roles }}"
   when: item in git.stdout
 
 - name: Setup playbook command
   set_fact:
-    playbook_command: "{{ 'ansible-playbook playbook.yml --tags \"' + playbook_command + '\"'}}"
+    playbook_command: "{{ 'ansible-playbook playbook.yml --tags \"' + playbook_roles + '\"'}}"
   when: playbook_command != ''
  
 - name: Deploy updated containers, if any
