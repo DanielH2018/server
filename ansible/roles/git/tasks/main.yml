@@ -7,6 +7,7 @@
     git_roles:
     playbook_roles: []
     playbook_debug: []
+
     
 
 - name: Get containers from playbook.yml
@@ -35,7 +36,7 @@
 - name: Setup playbook command
   set_fact:
     playbook_command: "{{ 'ansible-playbook playbook.yml --tags \"' + playbook_roles + '\"'}}"
-  when: playbook_command != ''
+  when: git_roles != ''
  
 - name: Deploy updated containers, if any
   shell: "{{ playbook_command }}"
