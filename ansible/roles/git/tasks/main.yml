@@ -8,24 +8,16 @@
     playbook_roles: []
     playbook_debug: []
 
-    
-
 - name: Get containers from playbook.yml
   set_fact: 
     playbook_debug: "{{ playbook_debug + [item] }}"
   with_lines: cat "playbook.yml"
   when: '"- role:" in item'
-    
-- debug:
-    msg: "{{ playbook_debug }}"
 
 - name: Get container name from line
   set_fact:
     playbook_roles: "{{ playbook_roles + [item.split(' ')[-1]] }}"
   loop: "{{ playbook_debug }}"
-
-- debug:
-    msg: "{{ playbook_roles }}"
 
 - name: Search git output for container names
   set_fact:
