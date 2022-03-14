@@ -18,7 +18,7 @@
 
 - name: Get container name from line
   set_fact:
-    playbook_command: "{{ playbook_command.split(' ')[-1] + [item] }}"
+    playbook_command: "{{ playbook_command + [item.split(' ')[-1]] }}"
   loop: "{{ playbook_debug }}"
 
 - debug:
