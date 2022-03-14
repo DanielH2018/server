@@ -4,7 +4,7 @@
 
 - name: Set Vars(Facts)
   set_fact: 
-    playbook_debug: "[]"
+    playbook_debug: []
 
 - name: Get containers from playbook.yml
   set_fact: 
