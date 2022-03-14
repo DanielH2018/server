@@ -13,7 +13,7 @@
   when: '"- role:" in item'
     
 - debug:
-  msg: "{{ playbook_debug }}"
+    msg: "{{ playbook_debug }}"
 
 - name: Set Vars(Facts)
   set_fact: 
