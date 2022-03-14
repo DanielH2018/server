@@ -7,8 +7,7 @@
 
 ---Instructions to update server environment---
 1. Perform update to container.
-2. Pull changes from git.
-3. Run `ansible-playbook deploy.yml --tags "<NAME>".
+2. Run `ansible-playbook git.yml`.
 
 ---Instructions to add container to server environment---
 1. Create role and tags.
