@@ -5,6 +5,7 @@
 - name: Set Vars(Facts)
   set_fact: 
     playbook_debug: []
+    playbook_command: []
 
 - name: Get containers from playbook.yml
   set_fact: 
@@ -15,38 +16,13 @@
 - debug:
     msg: "{{ playbook_debug }}"
 
-- name: Set Vars(Facts)
-  set_fact: 
-    playbook_command: ''
-    playbook_roles:
-      - 'docker'
-      - 'traefik'
-      - 'portainer'
-      - 'authelia'
-      - 'cloudflare-ddns'
-      - 'crowdsec'
-      - 'code-server'
-      - 'freshrss'
-      - 'librespeed'
-      - 'heimdall'
-      - 'uptime-kuma'
-      - 'pihole'
-      - 'smokeping'
-      - 'filebrowser'
-      - 'scrutiny'
-      - 'guacamole'
-      - 'nordlynx'
-      - 'qbittorrent'
-      - 'prowlarr'
-      - 'sonarr'
-      - 'radarr'
-      - 'jellyfin'
-      - 'minecraft'
-      - 'prometheus'
-      - 'grafana'
-      - 'netdata'
-      - 'home-assistant'
-      - 'watchtower'
+- name: Get container name from line
+  set_fact:
+    playbook_command: "{{ playbook_command.split(' ')[-1] + [item] }}"
+  loop: "{{ playbook_debug }}"
+
+- debug:
+    msg: "{{ playbook_command }}"
 
 - name: Search git output for container names
   set_fact:
@@ -54,7 +30,7 @@
   loop: "{{ playbook_roles }}"
   when: item in git.stdout
 
-- name: Setup Playbook Command
+- name: Setup playbook command
   set_fact:
     playbook_command: "{{ 'ansible-playbook playbook.yml --tags \"' + playbook_command + '\"'}}"
   when: playbook_command != ''
