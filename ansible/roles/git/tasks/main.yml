@@ -9,7 +9,7 @@
 - name: Get containers from playbook.yml
   set_fact: 
     playbook_debug: "{{ playbook_debug }} + ['item']"
-  with_lines: cat "playbook.yml"
+  with_lines: cat playbook.yml
   when: '"- role:" in item'
     
 - debug:
