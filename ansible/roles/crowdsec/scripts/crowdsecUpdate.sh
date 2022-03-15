@@ -10,5 +10,5 @@ echo "$CRONJOB" >> crontab_new
 fi
 
 # Commit and Cleanup
-crontab crontab_new
+sudo crontab crontab_new
 rm crontab_new

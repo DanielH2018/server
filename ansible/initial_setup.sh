@@ -31,7 +31,7 @@ echo "0 7 * * * root apt-get update" >> crontab_new
 echo "30 7 * * 0 /sbin/shutdown -r now" >> crontab_new
 
 # Commit and Cleanup
-crontab crontab_new
+sudo crontab crontab_new
 rm crontab_new
 
 # Allow SSH through firewall
