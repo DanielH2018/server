@@ -27,6 +27,10 @@ echo "30 6 * * * /usr/bin/docker image prune -f" >> crontab_new
 # Add update and upgrade crontab at 7am UTC(2am EST)
 echo "0 7 * * * root apt-get update" >> crontab_new
 
+echo "5 7 * * * root apt-get upgrade" >> crontab_new
+
+echo "10 7 * * * root apt-get autoremove" >> crontab_new
+
 # Schedule restart at 7:30am UTC(2:30am EST) on Sunday
 echo "30 7 * * 0 /sbin/shutdown -r now" >> crontab_new
 
