@@ -1,5 +1,5 @@
 ---
-- name: Git
+- name: Pull and deploy changes from git
   hosts: localhost
   gather_facts: no
   vars_files:
