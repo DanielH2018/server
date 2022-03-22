@@ -45,18 +45,18 @@
   become: yes
   become_method: sudo
 
-- name: Add Unbound to /etc/resolv.conf
-  lineinfile:
-    path: /etc/resolv.conf
-    regexp: '127.0.0.53'
-    line: nameserver 172.18.0.26
-  become: yes
-  become_method: sudo
+# - name: Add Unbound to /etc/resolv.conf
+#   lineinfile:
+#     path: /etc/resolv.conf
+#     regexp: '127.0.0.53'
+#     line: nameserver 172.18.0.26
+#   become: yes
+#   become_method: sudo
 
-- name: Add Cloudflare to /etc/resolv.conf
- lineinfile:
-   path: /etc/resolv.conf
-   insertafter: 'nameserver 127.0.0.53'
-   line: 'nameserver 1.1.1.1'
- become: yes
- become_method: sudo
+# - name: Add Cloudflare to /etc/resolv.conf
+#   lineinfile:
+#    path: /etc/resolv.conf
+#    insertafter: 'nameserver 127.0.0.53'
+#    line: 'nameserver 1.1.1.1'
+#  become: yes
+#  become_method: sudo
