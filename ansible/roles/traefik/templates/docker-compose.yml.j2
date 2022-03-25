@@ -68,8 +68,9 @@ services:
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=homeassistant.{{ DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=scrutiny.{{ DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=crowdsec.{{ DOMAIN }}"
-      - "traefik.http.routers.traefik-secure.tls.domains[0].main=smokeping.{{ DOMAIN }}"
+#      - "traefik.http.routers.traefik-secure.tls.domains[0].main=smokeping.{{ DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=mobile-app-db.{{ DOMAIN }}"
+      - "traefik.http.routers.traefik-secure.tls.domains[0].sans=*.{{ DOMAIN }}"
 
 networks:
   {{ DOCKER_NETWORK }}:
