@@ -46,7 +46,7 @@ services:
       # Certificates
       - "traefik.http.routers.traefik-secure.tls.certresolver=cloudflare"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main={{ DOMAIN }}"
-      - "traefik.http.routers.traefik-secure.tls.domains[0].sans=*.{{ DOMAIN }}"
+      - "traefik.http.routers.traefik-secure.tls.domains[0].sans=*.{{ DOMAIN }}" # Cloudflare only allows for wildcard certificates 1 level deep for free, so add expicit records for sub-subdomains.
 
 networks:
   {{ DOCKER_NETWORK }}:
