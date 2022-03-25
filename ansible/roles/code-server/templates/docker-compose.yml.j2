@@ -11,7 +11,7 @@ services:
       - PASSWORD={{ CODE_SERVER_PASSWORD }}
       - SUDO_PASSWORD={{ CODE_SERVER_SUDO_PASSWORD }}
       # Pre-install Git and Python 3 with linuxserver docker mods
-      - DOCKER_MODS=linuxserver/mods:universal-git|code-server-python3
+      - DOCKER_MODS=linuxserver/mods:universal-git|linuxserver/mods:code-server-python3
     volumes:
       - ./config:/config
     ports:
