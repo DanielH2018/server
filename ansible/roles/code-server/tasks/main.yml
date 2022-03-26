@@ -6,7 +6,7 @@
 
 - name: Check if github key exists
   stat:
-    path: github
+    path: /templates/github
   register: github_data
 
 - name: Copy github key
