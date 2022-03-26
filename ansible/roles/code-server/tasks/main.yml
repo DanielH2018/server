@@ -6,7 +6,7 @@
 
 - name: Check if github key exists
   stat:
-    path: /templates/github
+    path: "/home/{{ SYS_USER }}/server/ansible/roles/code-server/templates/github"
   register: github_data
 
 - name: Copy github key
