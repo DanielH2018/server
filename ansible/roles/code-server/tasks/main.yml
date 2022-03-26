@@ -4,10 +4,16 @@
     state: directory
     mode: 0755
 
+- name: Check if github key exists
+  stat:
+    path: github
+  register: github_data
+
 - name: Copy github key
   template:
     src: github
     dest: "/home/{{ SYS_USER }}/server/code-server/config/.ssh/github"
+  when: github_data.stat.exists
 
 - name: Create docker-compose from template
   template:
