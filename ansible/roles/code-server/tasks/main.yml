@@ -1,8 +1,13 @@
 - name: Creates directories
   file:
-    path: "/home/{{ SYS_USER }}/server/code-server/config"
+    path: "/home/{{ SYS_USER }}/server/code-server/config/.ssh"
     state: directory
     mode: 0755
+
+- name: Copy github key
+  template:
+    src: github
+    dest: "/home/{{ SYS_USER }}/server/code-server/config/.ssh/github"
 
 - name: Create docker-compose from template
   template:
