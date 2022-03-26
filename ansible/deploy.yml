@@ -21,8 +21,9 @@
       tags: code-server
     - role: freshrss
       tags: freshrss
-    - role: librespeed
-      tags: librespeed
+    # - role: librespeed
+    #   tags: librespeed
+    - { role: librespeed,     tags: [ 'librespeed' ]}
     - role: heimdall
       tags: heimdall
     - role: uptime-kuma
