@@ -28,7 +28,6 @@
 - name: Setup playbook command
   set_fact:
     playbook_command: "{{ 'ansible-playbook deploy.yml --tags \"' + git_changed_containers + '\"'}}"
-  when: git_changed_containers != ''
  
 - debug:
     msg: "{{ playbook_command }}"
