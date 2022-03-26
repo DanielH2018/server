@@ -26,7 +26,10 @@
   set_fact:
     git_changed_containers: "{{ git_changed_containers + item }}"
   loop: "{{ container_names }}"
-  when: item in git.stdout
+  when: item +'/' in git.stdout
+
+- debug:
+    msg: "{{ git_changed_containers }}"
 
 - name: Setup playbook command
   set_fact:
