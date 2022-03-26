@@ -6,7 +6,7 @@
     - .env
   roles:
     - { role: docker,           tags: [ 'docker' ]}
-    - { role: trafik,           tags: [ 'traefik ' ]}
+    - { role: traefik,           tags: [ 'traefik ' ]}
     - { role: portainer,        tags: [ 'portainer' ]}
     - { role: authelia,         tags: [ 'authelia' ]}
     - { role: cloudflare-ddns,  tags: [ 'cloudflare-ddns' ]}
