@@ -29,9 +29,10 @@
   loop: "{{ container_names }}"
   when: item + '/' in git.stdout
 
-- name: Remove hanging comma
+- name: Remove hanging comma and reset string
   set_fact:
     git_changed_containers_list: "{{ git_changed_containers_string.split(',')[:-1] }}"
+    git_changed_containers_string: ''
 
 - name: Put list back into string
   set_fact:
@@ -50,6 +51,6 @@
 
 - name: Deploy updated containers, if any
   shell: "{{ playbook_command }}"
-  when: git_changed_containers != ''
+  when: git_changed_containers_string != ''
   become: yes
   become_method: sudo
