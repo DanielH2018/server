@@ -30,6 +30,9 @@
     playbook_command: "{{ 'ansible-playbook deploy.yml --tags \"' + git_changed_containers + '\"'}}"
   when: git_changed_containers != ''
  
+- debug:
+    var: playbook_command
+
 - name: Deploy updated containers, if any
   shell: "{{ playbook_command }}"
   when: git_changed_containers != ''
