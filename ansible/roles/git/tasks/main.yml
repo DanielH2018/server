@@ -24,9 +24,13 @@
 
 - name: Search git output for container names
   set_fact:
-    git_changed_containers: "{{ git_changed_containers + item }}"
+    git_changed_containers: "{{ git_changed_containers + item + ',' }}"
   loop: "{{ container_names }}"
-  when: item +'/' in git.stdout
+  when: item + '/' in git.stdout
+
+- name: Remove hanging comma
+  set_fact:
+    git_changed_containers: "{{ git_changed_containers.split(',')[:-1] }}"
 
 - debug:
     msg: "{{ git_changed_containers }}"
