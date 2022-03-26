@@ -6,7 +6,7 @@
   set_fact:
     container_names: []
     container_lines: []
-    git_changed_containers_string: ''
+    git_changed_containers: ''
 
 - name: Get container lines from deploy.yml
   set_fact: 
@@ -19,31 +19,22 @@
     container_names: "{{ container_names + [item.split(' ')[-1]] }}"
   loop: "{{ container_lines }}"
 
-- debug:
-    var: git.stdout
-
 - name: Search git output for container names
   set_fact:
-    git_changed_containers_string: "{{ git_changed_containers_string + item + ',' }}"
+    git_changed_containers: "{{ git_changed_containers + item + ',' }}"
   loop: "{{ container_names }}"
   when: item + '/' in git.stdout
 
 - name: Remove hanging comma
   set_fact:
-    git_changed_containers_string: "{{ git_changed_containers_string[:-1] }}"
-
-- debug:
-    msg: "{{ git_changed_containers_string }}"
+    git_changed_containers: "{{ git_changed_containers[:-1] }}"
 
 - name: Setup playbook command
   set_fact:
-    playbook_command: "{{ 'ansible-playbook deploy.yml --tags \"' + git_changed_containers_string + '\"'}}"
- 
-- debug:
-    msg: "{{ playbook_command }}"
+    playbook_command: "{{ 'ansible-playbook deploy.yml --tags \"' + git_changed_containers + '\"'}}"
 
 - name: Deploy updated containers, if any
   shell: "{{ playbook_command }}"
-  when: git_changed_containers_string != ''
+  when: git_changed_containers != ''
   become: yes
   become_method: sudo
