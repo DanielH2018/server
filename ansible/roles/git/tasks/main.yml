@@ -6,7 +6,6 @@
   set_fact:
     container_names: []
     container_lines: []
-    git_changed_containers_list: []
     git_changed_containers_string: ''
 
 - name: Get container lines from deploy.yml
@@ -29,15 +28,9 @@
   loop: "{{ container_names }}"
   when: item + '/' in git.stdout
 
-- name: Remove hanging comma and reset string
+- name: Remove hanging comma
   set_fact:
-    git_changed_containers_list: "{{ git_changed_containers_string.split(',')[:-1] }}"
-    git_changed_containers_string: ''
-
-- name: Put list back into string
-  set_fact:
-    git_changed_containers_string: "{{ git_changed_containers_string + item }}"
-  loop: "{{ git_changed_containers_list }}"
+    git_changed_containers_string: "{{ git_changed_containers_string[:-1] }}"
 
 - debug:
     msg: "{{ git_changed_containers_string }}"
