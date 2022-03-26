@@ -5,5 +5,4 @@
   vars_files:
     - .env
   roles:
-    - role: git
-      tags: git
+    - { role: git,           tags: [ 'git' ]}
