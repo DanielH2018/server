@@ -31,7 +31,7 @@
   when: git_changed_containers != ''
  
 - debug:
-    var: playbook_command
+    msg: "{{ playbook_command }}"
 
 - name: Deploy updated containers, if any
   shell: "{{ playbook_command }}"
