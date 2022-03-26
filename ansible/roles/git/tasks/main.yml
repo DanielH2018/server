@@ -19,6 +19,9 @@
     container_names: "{{ container_names + [item.split(' ')[-1]] }}"
   loop: "{{ container_lines }}"
 
+- debug:
+    var: git.stdout
+
 - name: Search git output for container names
   set_fact:
     git_changed_containers: "{{ git_changed_containers + item }}"
