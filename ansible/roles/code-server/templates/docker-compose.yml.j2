@@ -4,6 +4,7 @@ services:
   code-server:
     image: lscr.io/linuxserver/code-server
     container_name: code-server
+    privileged: true
     environment:
       - PUID={{ PUID }}
       - PGID={{ PGID }}
