@@ -17,6 +17,9 @@
   with_lines: cat "deploy.yml"
   when: '"role:" in item'
 
+  - debug:
+    msg: "{{ container_lines }}"
+
 - name: Get container name from line
   set_fact:
     container_names: "{{ container_names + [item.split(' ')[-1]] }}"
