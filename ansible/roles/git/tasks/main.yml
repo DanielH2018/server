@@ -17,7 +17,7 @@
   with_lines: cat "deploy.yml"
   when: '"role:" in item'
 
-  - debug:
+- debug:
     msg: "{{ container_lines }}"
 
 - name: Get container name from line
