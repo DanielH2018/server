@@ -22,7 +22,7 @@
 
 - name: Get container name from line
   set_fact:
-    container_names: "{{ container_names + [item.split(' ')[-1]] }}"
+    container_names: "{{ container_names + [item.split(' ')] }}"
   loop: "{{ container_lines }}"
 
 - debug:
