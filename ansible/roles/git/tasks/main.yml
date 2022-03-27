@@ -22,7 +22,7 @@
 
 - name: Get container name from line
   set_fact:
-    container_names: "{{ container_names + [item.split(' ')] }}"
+    container_names: "{{ container_names + [item.split(' ')[7]] }}"
   loop: "{{ container_lines }}"
 
 - debug:
@@ -30,7 +30,7 @@
 
 - name: Search git output for container names
   set_fact:
-    git_changed_containers: "{{ git_changed_containers + item + ',' }}"
+    git_changed_containers: "{{ git_changed_containers + item }}"
   loop: "{{ container_names }}"
   when: item + '/' in git.stdout
 
