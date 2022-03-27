@@ -14,7 +14,7 @@ services:
       - DOCKER_MODS=linuxserver/mods:universal-git|linuxserver/mods:code-server-python3|linuxserver/mods:code-server-docker|linuxserver/mods:code-server-extension-arguments
       - VSCODE_EXTENSION_IDS=ms-azuretools.vscode-docker
     volumes:
-      - /home/{{ SYS_USER }}/server/code-server/config:/config
+      - ./config:/config
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - 8443:8443
