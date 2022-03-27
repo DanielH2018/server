@@ -32,7 +32,7 @@
   set_fact:
     git_changed_containers: "{{ git_changed_containers + item }}"
   loop: "{{ container_names }}"
-  when: item + '/' in git.stdout
+  when: item[:-1] + '/' in git.stdout
 
 - name: Remove hanging comma
   set_fact:
