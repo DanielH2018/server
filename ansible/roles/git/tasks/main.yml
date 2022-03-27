@@ -2,6 +2,9 @@
   shell: git pull --all
   register: git
 
+- debug:
+    var: git.stdout_lines
+
 - name: Set Facts
   set_fact:
     container_names: []
@@ -19,6 +22,9 @@
     container_names: "{{ container_names + [item.split(' ')[-1]] }}"
   loop: "{{ container_lines }}"
 
+- debug:
+    msg: "{{ container_names }}"
+
 - name: Search git output for container names
   set_fact:
     git_changed_containers: "{{ git_changed_containers + item + ',' }}"
@@ -29,9 +35,15 @@
   set_fact:
     git_changed_containers: "{{ git_changed_containers[:-1] }}"
 
+- debug:
+    msg: "{{ git_changed_containers }}"
+
 - name: Setup playbook command
   set_fact:
     playbook_command: "{{ 'ansible-playbook deploy.yml --tags \"' + git_changed_containers + '\"'}}"
+
+- debug:
+    msg: "{{ playbook_command }}"
 
 - name: Deploy updated containers, if any
   shell: "{{ playbook_command }}"
