@@ -17,16 +17,10 @@
   with_lines: cat "deploy.yml"
   when: '"role:" in item'
 
-- debug:
-    msg: "{{ container_lines }}"
-
 - name: Get container name from line
   set_fact:
     container_names: "{{ container_names + [item.split(' ')[7]] }}"
   loop: "{{ container_lines }}"
-
-- debug:
-    msg: "{{ container_names }}"
 
 - name: Search git output for container names
   set_fact:
@@ -37,9 +31,6 @@
 - name: Remove hanging comma
   set_fact:
     git_changed_containers: "{{ git_changed_containers[:-1] }}"
-
-- debug:
-    msg: "{{ git_changed_containers }}"
 
 - name: Setup playbook command
   set_fact:
