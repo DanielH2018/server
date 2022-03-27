@@ -15,7 +15,6 @@ services:
       #- VSCODE_EXTENSION_IDS=ms-azuretools.vscode-docker
     volumes:
       - ./config:/config
-      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - 8443:8443
     restart: unless-stopped
