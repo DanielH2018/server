@@ -15,7 +15,7 @@
   set_fact: 
     container_lines: "{{ container_lines + [item] }}"
   with_lines: cat "deploy.yml"
-  when: '"- role:" in item'
+  when: '"role:" in item'
 
 - name: Get container name from line
   set_fact:
