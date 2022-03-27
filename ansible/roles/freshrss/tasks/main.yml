@@ -1,8 +1,13 @@
 - name: Creates directories
   file:
-    path: "/home/{{ SYS_USER }}/server/freshrss/config"
+    path: "/home/{{ SYS_USER }}/server/freshrss/config/www/freshrss/extensions"
     state: directory
     mode: 0755
+
+- name: Unzip sidebar toggle extension
+  unarchive:
+    src: xExtension-ToggleSidebar.zip
+    dest: "/home/{{ SYS_USER }}/server/freshrss/config/www/freshrss/extensions"
 
 - name: Create docker-compose from template
   template:
