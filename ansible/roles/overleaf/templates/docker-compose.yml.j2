@@ -37,22 +37,22 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Setup HTTP entrypoint
-      - "traefik.http.routers.overleaf.entrypoints=http"
-      - "traefik.http.routers.overleaf.rule=Host(`overleaf.{{ DOMAIN }}`)"
+      - "traefik.http.routers.sharelatex.entrypoints=http"
+      - "traefik.http.routers.sharelatex.rule=Host(`sharelatex.{{ DOMAIN }}`)"
       # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.overleaf-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.overleaf.middlewares=overleaf-https-redirect"
+      - "traefik.http.middlewares.sharelatex-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.sharelatex.middlewares=sharelatex-https-redirect"
       # Setup HTTPS entrypoint
-      - "traefik.http.routers.overleaf-secure.entrypoints=https"
-      - "traefik.http.routers.overleaf-secure.rule=Host(`overleaf.{{ DOMAIN }}`)"
-      - "traefik.http.routers.overleaf-secure.tls=true"
+      - "traefik.http.routers.sharelatex-secure.entrypoints=https"
+      - "traefik.http.routers.sharelatex-secure.rule=Host(`sharelatex.{{ DOMAIN }}`)"
+      - "traefik.http.routers.sharelatex-secure.tls=true"
       # Setup port forwarding to internal port
-      - "traefik.http.routers.overleaf-secure.service=overleaf"
-      - "traefik.http.services.overleaf.loadbalancer.server.port=80"
+      - "traefik.http.routers.sharelatex-secure.service=sharelatex"
+      - "traefik.http.services.sharelatex.loadbalancer.server.port=80"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
       # Add authelia
-      - 'traefik.http.routers.overleaf-secure.middlewares=authelia@docker'
+      - 'traefik.http.routers.sharelatex-secure.middlewares=authelia@docker'
 
   mongo:
     restart: unless-stopped
