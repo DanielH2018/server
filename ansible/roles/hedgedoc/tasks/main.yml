@@ -1,0 +1,23 @@
+- name: Creates directories
+  file:
+    path: "/home/{{ SYS_USER }}/server/hedgedoc/config"
+    state: directory
+    mode: 0755
+
+- name: Creates directories
+  file:
+    path: "/home/{{ SYS_USER }}/server/hedgedoc/data"
+    state: directory
+    mode: 0755
+
+- name: Create docker-compose from template
+  template:
+    src: docker-compose.yml.j2
+    dest: "/home/{{ SYS_USER }}/server/hedgedoc/docker-compose.yml"
+
+- name: Deploy Hedgedoc
+  shell: docker-compose up -d --force-recreate
+  args:
+    chdir: "/home/{{ SYS_USER }}/server/hedgedoc/"
+  become: yes
+  become_method: sudo

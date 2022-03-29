@@ -1,0 +1,66 @@
+version: "3"
+services:
+  mariadb:
+    image: lscr.io/linuxserver/mariadb:latest
+    container_name: hedgedoc_mariadb
+    restart: unless_stopped
+    volumes:
+      - ./data:/config
+    environment:
+      - MYSQL_ROOT_PASSWORD={{ HEDGEDOC_MYSQL_ROOT_PASSWORD }}
+      - MYSQL_DATABASE=hedgedoc
+      - MYSQL_USER=hedgedoc
+      - MYSQL_PASSWORD={{ HEDGEDOC_MYSQL_PASSWORD }}
+      - PGID={{ PGID }}
+      - PUID={{ PUID }}
+      - TZ={{ TZ }}
+  hedgedoc:
+    image: lscr.io/linuxserver/hedgedoc:latest
+    container_name: hedgedoc
+    restart: unless_stopped
+    depends_on:
+      - mariadb
+    volumes:
+      - ./config:/config
+    environment:
+      - DB_HOST=mariadb
+      - DB_USER=hedgedoc
+      - DB_PASS={{ HEDGEDOC_MYSQL_PASSWORD }}
+      - DB_NAME=hedgedoc
+      - DB_PORT=3306
+      - PGID={{ PGID }}
+      - PUID={{ PUID }}
+      - TZ={{ TZ }}
+      - CMD_DOMAIN=localhost
+      - CMD_URL_ADDPORT=true #optional
+      - CMD_PROTOCOL_USESSL=false #optional
+      - CMD_PORT=3000 #optional
+    ports:
+      - 3004:3000
+    networks:
+      - {{ DOCKER_NETWORK }}
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Setup HTTP entrypoint
+      - "traefik.http.routers.hedgedoc.entrypoints=http"
+      - "traefik.http.routers.hedgedoc.rule=Host(`hedgedoc.{{ DOMAIN }}`)"
+      # Redirect HTTP to HTTPS
+      - "traefik.http.middlewares.hedgedoc-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.hedgedoc.middlewares=hedgedoc-https-redirect"
+      # Setup HTTPS entrypoint
+      - "traefik.http.routers.hedgedoc-secure.entrypoints=https"
+      - "traefik.http.routers.hedgedoc-secure.rule=Host(`hedgedoc.{{ DOMAIN }}`)"
+      - "traefik.http.routers.hedgedoc-secure.tls=true"
+      # Setup port forwarding to internal port
+      - "traefik.http.routers.hedgedoc-secure.service=hedgedoc"
+      - "traefik.http.services.hedgedoc.loadbalancer.server.port=3000"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      # Add authelia
+      - 'traefik.http.routers.hedgedoc-secure.middlewares=authelia@docker'
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true
+
