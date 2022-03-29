@@ -58,6 +58,8 @@ services:
     restart: unless-stopped
     image: mongo:4.0
     container_name: mongo
+    networks:
+      - {{ DOCKER_NETWORK }}
     expose:
       - 27017
     volumes:
@@ -72,6 +74,8 @@ services:
     restart: unless-stopped
     image: redis:5
     container_name: redis
+    networks:
+      - {{ DOCKER_NETWORK }}
     expose:
       - 6379
     volumes:
