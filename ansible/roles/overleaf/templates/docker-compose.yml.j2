@@ -60,8 +60,8 @@ services:
     container_name: mongo
     networks:
       - {{ DOCKER_NETWORK }}
-    expose:
-      - 27017
+    ports:
+      - 27017:27017
     volumes:
       - ~/mongo_data:/data/db
     healthcheck:
@@ -76,8 +76,8 @@ services:
     container_name: redis
     networks:
       - {{ DOCKER_NETWORK }}
-    expose:
-      - 6379
+    ports:
+      - 6379:6369
     volumes:
       - ~/redis_data:/data
 
