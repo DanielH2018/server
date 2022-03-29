@@ -25,7 +25,6 @@ services:
       # Same property, unfortunately with different names in
       # different locations
       - SHARELATEX_REDIS_HOST= redis
-      - SHARELATEX_REDIS_PASS= ''
       - REDIS_HOST= redis
       - ENABLED_LINKED_FILE_TYPES= 'project_file,project_output_file'
       # Enables Thumbnail generation using ImageMagick
@@ -74,7 +73,7 @@ services:
 
   redis:
     restart: unless-stopped
-    image: redis:5
+    image: redis
     container_name: redis
     networks:
       - {{ DOCKER_NETWORK }}
