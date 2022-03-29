@@ -14,6 +14,7 @@
     - { role: code-server,      tags: [ 'code-server' ]}
     - { role: hoppscotch,       tags: [ 'hoppscotch' ]}
     - { role: freshrss,         tags: [ 'freshrss' ]}
+    - { role: overleaf,         tags: [ 'overleaf' ]}
     - { role: librespeed,       tags: [ 'librespeed' ]}
     - { role: heimdall,         tags: [ 'heimdall' ]}
     - { role: uptime-kuma,      tags: [ 'uptime-kuma' ]}
