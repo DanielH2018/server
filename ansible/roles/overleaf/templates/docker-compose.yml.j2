@@ -6,11 +6,12 @@ services:
     container_name: sharelatex
     networks:
       - {{ DOCKER_NETWORK }}
-#    depends_on:
-#      mongo:
-#        condition: service_healthy
-#      redis:
-#        condition: service_started
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    privileged: true
     ports:
       - 8083:80
     links:
