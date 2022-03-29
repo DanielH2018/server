@@ -3,7 +3,7 @@ services:
   mariadb:
     image: lscr.io/linuxserver/mariadb:latest
     container_name: hedgedoc_mariadb
-    restart: unless_stopped
+    restart: unless-stopped
     volumes:
       - ./data:/config
     environment:
@@ -17,7 +17,7 @@ services:
   hedgedoc:
     image: lscr.io/linuxserver/hedgedoc:latest
     container_name: hedgedoc
-    restart: unless_stopped
+    restart: unless-stopped
     depends_on:
       - mariadb
     volumes:
