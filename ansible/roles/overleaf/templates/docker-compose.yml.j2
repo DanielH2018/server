@@ -6,11 +6,11 @@ services:
     container_name: sharelatex
     networks:
       - {{ DOCKER_NETWORK }}
-    depends_on:
-      mongo:
-        condition: service_healthy
-      redis:
-        condition: service_started
+#    depends_on:
+#      mongo:
+#        condition: service_healthy
+#      redis:
+#        condition: service_started
     ports:
       - 8083:80
     links:
@@ -23,7 +23,7 @@ services:
       - SHARELATEX_MONGO_URL= mongodb://mongo/sharelatex
       # Same property, unfortunately with different names in
       # different locations
-      - SHARELATEX_REDIS_HOST= redis:6379
+      - SHARELATEX_REDIS_HOST= redis
       - REDIS_HOST= redis
       - ENABLED_LINKED_FILE_TYPES= 'project_file,project_output_file'
       # Enables Thumbnail generation using ImageMagick
