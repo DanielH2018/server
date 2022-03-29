@@ -34,8 +34,8 @@ services:
       - PUID={{ PUID }}
       - TZ={{ TZ }}
       - CMD_DOMAIN=hedgedoc.{{ DOMAIN }}
-      - CMD_URL_ADDPORT=true #optional
-      - CMD_PROTOCOL_USESSL=false #optional
+      - CMD_URL_ADDPORT=false #optional
+      - CMD_PROTOCOL_USESSL=true #optional
       - CMD_PORT=3000 #optional
     ports:
       - 3004:3000
