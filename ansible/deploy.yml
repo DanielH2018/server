@@ -6,7 +6,7 @@
     - .env
   roles:
     - { role: docker,           tags: [ 'docker' ]}
-    - { role: traefik,           tags: [ 'traefik ' ]}
+    - { role: traefik,          tags: [ 'traefik' ]}
     - { role: portainer,        tags: [ 'portainer' ]}
     - { role: authelia,         tags: [ 'authelia' ]}
     - { role: cloudflare-ddns,  tags: [ 'cloudflare-ddns' ]}
@@ -20,7 +20,7 @@
     - { role: uptime-kuma,      tags: [ 'uptime-kuma' ]}
     - { role: pihole,           tags: [ 'pihole' ]}
     - { role: smokeping,        tags: [ 'smokeping' ]}
-    - { role: file-browser,      tags: [ 'file-browser' ]}
+    - { role: file-browser,     tags: [ 'file-browser' ]}
     - { role: scrutiny,         tags: [ 'scrutiny' ]}
     - { role: guacamole,        tags: [ 'guacamole' ]}
     - { role: nordlynx,         tags: [ 'nordlynx', 'media' ]}
