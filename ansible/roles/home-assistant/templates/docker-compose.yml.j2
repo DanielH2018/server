@@ -1,9 +1,9 @@
 ---
 version: "3.8"
 services:
-  homeassistant:
+  home-assistant:
     image: lscr.io/linuxserver/homeassistant
-    container_name: homeassistant
+    container_name: home-assistant
     environment:
       - PUID={{ PUID }}
       - PGID={{ PUID }}
@@ -15,26 +15,31 @@ services:
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: curl --fail -s http://localhost:8123/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Setup HTTP entrypoint
-      - "traefik.http.routers.homeassistant.entrypoints=http"
-      - "traefik.http.routers.homeassistant.rule=Host(`homeassistant.{{ DOMAIN }}`)"
+      - "traefik.http.routers.home-assistant.entrypoints=http"
+      - "traefik.http.routers.home-assistant.rule=Host(`home-assistant.{{ DOMAIN }}`)"
       # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.homeassistant-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.homeassistant.middlewares=homeassistant-https-redirect"
+      - "traefik.http.middlewares.home-assistant-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.home-assistant.middlewares=home-assistant-https-redirect"
       # Setup HTTPS entrypoint
-      - "traefik.http.routers.homeassistant-secure.entrypoints=https"
-      - "traefik.http.routers.homeassistant-secure.rule=Host(`homeassistant.{{ DOMAIN }}`)"
-      - "traefik.http.routers.homeassistant-secure.tls=true"
+      - "traefik.http.routers.home-assistant-secure.entrypoints=https"
+      - "traefik.http.routers.home-assistant-secure.rule=Host(`home-assistant.{{ DOMAIN }}`)"
+      - "traefik.http.routers.home-assistant-secure.tls=true"
       # Setup port forwarding to internal port
-      - "traefik.http.routers.homeassistant-secure.service=homeassistant"
-      - "traefik.http.services.homeassistant.loadbalancer.server.port=8123"
+      - "traefik.http.routers.home-assistant-secure.service=home-assistant"
+      - "traefik.http.services.home-assistant.loadbalancer.server.port=8123"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
       # Add authelia
-      - 'traefik.http.routers.homeassistant-secure.middlewares=authelia@docker'
+      - 'traefik.http.routers.home-assistant-secure.middlewares=authelia@docker'
 
 networks:
   {{ DOCKER_NETWORK }}:

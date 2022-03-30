@@ -1,22 +1,22 @@
 - name: Creates directories
   file:
-    path: "/home/{{ SYS_USER }}/server/homeassistant/config"
+    path: "/home/{{ SYS_USER }}/server/home-assistant/config"
     state: directory
     mode: 0755
 
 - name: Create configuration.yaml from template
   template:
     src: configuration.yaml.j2
-    dest: "/home/{{ SYS_USER }}/server/homeassistant/config/configuration.yaml"
+    dest: "/home/{{ SYS_USER }}/server/home-assistant/config/configuration.yaml"
 
 - name: Create docker-compose from template
   template:
     src: docker-compose.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/homeassistant/docker-compose.yml"
+    dest: "/home/{{ SYS_USER }}/server/home-assistant/docker-compose.yml"
     
 - name: Deploy Home Assistant
   shell: docker-compose up -d --force-recreate
   args:
-    chdir: "/home/{{ SYS_USER }}/server/homeassistant/"
+    chdir: "/home/{{ SYS_USER }}/server/home-assistant/"
   become: yes
   become_method: sudo
