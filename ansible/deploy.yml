@@ -15,6 +15,7 @@
     - { role: hoppscotch,       tags: [ 'hoppscotch' ]}
     - { role: freshrss,         tags: [ 'freshrss' ]}
     - { role: hedgedoc,         tags: [ 'hedgedoc' ]}
+    - { role: sharelatex,       tags: [ 'sharelatex' ]}
     - { role: librespeed,       tags: [ 'librespeed' ]}
     - { role: heimdall,         tags: [ 'heimdall' ]}
     - { role: uptime-kuma,      tags: [ 'uptime-kuma' ]}
