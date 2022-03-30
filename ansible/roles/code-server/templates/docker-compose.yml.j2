@@ -41,11 +41,6 @@ services:
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
       # Add authelia
       - 'traefik.http.routers.code-server-secure.middlewares=authelia@docker'
-    healthcheck:
-      test: ping localhost:8443 || exit 1
-      interval: 1m
-      timeout: 5s
-      retries: 2
 
 networks:
   {{ DOCKER_NETWORK }}:
