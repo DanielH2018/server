@@ -11,6 +11,11 @@ services:
       - ./config:/config
     restart: unless-stopped
     network_mode: container:nordlynx # Port 9696
+    healthcheck:
+      test: curl --fail -s http://localhost:9696/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
