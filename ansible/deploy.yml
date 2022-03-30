@@ -20,7 +20,7 @@
     - { role: uptime-kuma,      tags: [ 'uptime-kuma' ]}
     - { role: pihole,           tags: [ 'pihole' ]}
     - { role: smokeping,        tags: [ 'smokeping' ]}
-    - { role: filebrowser,      tags: [ 'filebrowser' ]}
+    - { role: file-browser,      tags: [ 'file-browser' ]}
     - { role: scrutiny,         tags: [ 'scrutiny' ]}
     - { role: guacamole,        tags: [ 'guacamole' ]}
     - { role: nordlynx,         tags: [ 'nordlynx', 'media' ]}
