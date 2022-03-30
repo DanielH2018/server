@@ -20,3 +20,9 @@
 ---Instructions to setup minecraft environment---
 1. Create A name record in cloudflare to source ip
 2. Create port forward to server
+
+---Instructions to setup LaTeX editor---
+1. Clone Resume repository in server
+2. Copy .devcontainer from https://github.com/James-Yu/LaTeX-Workshop/tree/master/samples/docker
+3. Install VS Code Remote - Containers, and SSH
+4. Reopen the Resume directory with the container
