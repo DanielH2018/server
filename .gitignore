@@ -1,3 +1,7 @@
+# Ignore Everything
+*
+# Except
+!ansible/*
 ansible/.env
 .aws/*
 ansible/roles/code-server/templates/github
