@@ -2,6 +2,7 @@
 *
 # Except
 !ansible/*
+# Make sure these are ignored
 ansible/.env
 .aws/*
 ansible/roles/code-server/templates/github
