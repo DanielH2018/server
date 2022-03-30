@@ -1,5 +1,5 @@
 ---
-version: "2.1"
+version: "3.8"
 services:
   librespeed:
     image: lscr.io/linuxserver/librespeed
@@ -17,12 +17,6 @@ services:
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
-    healthcheck:
-      test: curl --fail http://librespeed || exit 1
-      interval: 1m
-      timeout: 5s
-      start_period: 20s
-      retries: 2
     labels:
       # Enable traefik for container
       - "traefik.enable=true"

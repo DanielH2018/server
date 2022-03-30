@@ -1,11 +1,11 @@
-version: "3.7"
+version: "3.8"
 
 services:
   hoppscotch:
     image: hoppscotch/hoppscotch:latest
     container_name: hoppscotch
     ports:
-      - "3002:3000"
+      - 3002:3000
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}

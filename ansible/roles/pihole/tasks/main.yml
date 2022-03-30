@@ -45,7 +45,7 @@
   become: yes
   become_method: sudo
 
-- name: Remove /etc/resolv.conf symlink
+- name: Remove /etc/resolv.conf symlink # TODO Add check for if already done
   file:
     path: /etc/resolv.conf
     state: absent
