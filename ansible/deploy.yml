@@ -21,7 +21,7 @@
     - { role: pihole,           tags: [ 'pihole' ]}
     - { role: smokeping,        tags: [ 'smokeping' ]}
     - { role: file-browser,     tags: [ 'file-browser' ]}
-    - { role: scrutiny,         tags: [ 'scrutiny' ]}
+    #- { role: scrutiny,         tags: [ 'scrutiny' ]}
     - { role: guacamole,        tags: [ 'guacamole' ]}
     - { role: nordlynx,         tags: [ 'nordlynx', 'media' ]}
     - { role: qbittorrent,      tags: [ 'qbittorrent', 'media' ]}
