@@ -25,7 +25,7 @@ services:
     environment:
       - TZ={{ TZ }}
     healthcheck:
-      disable: true
+      disable: false
 networks:
   {{ DOCKER_NETWORK }}:
     external: true
