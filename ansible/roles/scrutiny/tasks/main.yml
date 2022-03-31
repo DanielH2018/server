@@ -16,9 +16,9 @@
   become: yes
   become_method: sudo
 
-# Pause for 30 seconds to let docker build
+# Pause for 5 seconds to let docker build
 - pause:
-    seconds: 30
+    seconds: 5
 
 - name: Run metrics collector
   shell: docker exec scrutiny scrutiny-collector-metrics run
