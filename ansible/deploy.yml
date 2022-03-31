@@ -23,11 +23,7 @@
     - { role: file-browser,     tags: [ 'file-browser' ]}
     #- { role: scrutiny,         tags: [ 'scrutiny' ]}
     - { role: guacamole,        tags: [ 'guacamole' ]}
-    - { role: nordlynx,         tags: [ 'nordlynx', 'media' ]}
-    - { role: qbittorrent,      tags: [ 'qbittorrent', 'media' ]}
-    - { role: prowlarr,         tags: [ 'prowlarr', 'media' ]}
-    - { role: sonarr,           tags: [ 'sonarr', 'media' ]}
-    - { role: radarr,           tags: [ 'radarr', 'media' ]}
+    - { role: media,            tags: [ 'media' ]}
     - { role: jellyfin,         tags: [ 'jellyfin', 'media' ]}
     - { role: prometheus,       tags: [ 'prometheus', 'monitoring' ]}
     - { role: grafana,          tags: [ 'grafana', 'monitoring' ]}
