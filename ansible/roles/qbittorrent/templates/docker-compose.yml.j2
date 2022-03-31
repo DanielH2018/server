@@ -16,6 +16,11 @@ services:
       - /home/{{ SYS_USER }}/server/library/tvseries:/data/tvshows
       - /home/{{ SYS_USER }}/server/library/movies:/data/movies
     restart: unless-stopped
+    healthcheck:
+      test: curl --fail -s http://localhost:8080/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
