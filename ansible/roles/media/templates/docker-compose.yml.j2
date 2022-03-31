@@ -28,10 +28,10 @@ services:
       - UMASK_SET=022
       - WEBUI_PORT=8080
     volumes:
-      - ./config:/config
-      - /home/{{ SYS_USER }}/server/library/downloads:/downloads
-      - /home/{{ SYS_USER }}/server/library/tvseries:/data/tvshows
-      - /home/{{ SYS_USER }}/server/library/movies:/data/movies
+      - ./qbittorrent/config:/config
+      - /home/{{ SYS_USER }}/server/media/library/downloads:/downloads
+      - /home/{{ SYS_USER }}/server/media/library/tvseries:/data/tvshows
+      - /home/{{ SYS_USER }}/server/media/library/movies:/data/movies
     restart: unless-stopped
     healthcheck:
       test: curl --fail -s http://localhost:8080/ || exit 1
@@ -66,7 +66,7 @@ services:
       - PGID={{ PGID }}
       - TZ={{ TZ }}
     volumes:
-      - ./config:/config
+      - ./prowlarr/config:/config
     restart: unless-stopped
     network_mode: service:nordlynx # Port 9696
     healthcheck:
@@ -106,9 +106,9 @@ services:
       - TZ={{ TZ }}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ./config:/config
-      - /home/{{ SYS_USER }}/server/library/downloads:/downloads
-      - /home/{{ SYS_USER }}/server/library/tvseries:/tv
+      - ./sonarr/config:/config
+      - /home/{{ SYS_USER }}/server/media/library/downloads:/downloads
+      - /home/{{ SYS_USER }}/server/media/library/tvseries:/tv
     restart: unless-stopped
     network_mode: service:nordlynx # Port 8989
     healthcheck:
@@ -148,9 +148,9 @@ services:
       - TZ={{ TZ }}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ./config:/config
-      - /home/{{ SYS_USER }}/server/library/movies:/movies
-      - /home/{{ SYS_USER }}/server/library/downloads:/downloads
+      - ./radarr/config:/config
+      - /home/{{ SYS_USER }}/server/media/library/movies:/movies
+      - /home/{{ SYS_USER }}/server/media/library/downloads:/downloads
     restart: unless-stopped
     network_mode: service:nordlynx # Port 7878
     healthcheck:
