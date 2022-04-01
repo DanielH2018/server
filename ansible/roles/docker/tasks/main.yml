@@ -42,7 +42,7 @@
   become_method: sudo
       
 - name: Install Docker Compose
-  shell: "curl -L \"https://github.com/docker/compose/releases/download/v2.2.3/docker-compose-$(uname -s)-$(uname -m)\" -o /usr/local/bin/docker-compose"
+  shell: "curl -L --fail https://raw.githubusercontent.com/linuxserver/docker-docker-compose/master/run.sh -o /usr/local/bin/docker-compose"
   become: yes
   become_method: sudo
 
