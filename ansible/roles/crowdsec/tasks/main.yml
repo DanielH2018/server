@@ -26,6 +26,10 @@
   become: yes
   become_method: sudo
 
+# Pause for 5 seconds to let docker build
+- pause:
+    seconds: 5
+
 - name: Add Traefik collection
   shell: docker exec crowdsec cscli collections install crowdsecurity/traefik
   become: yes
