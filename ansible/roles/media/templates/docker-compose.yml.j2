@@ -34,7 +34,7 @@ services:
       - /home/{{ SYS_USER }}/server/media/library/movies:/data/movies
     restart: unless-stopped
     healthcheck:
-      test: curl --fail -s http://localhost:8080/ || exit 1
+      test: curl --fail -s http://localhost:8080/ || exit 1 && curl --fail -s http://google.com/ || exit 1
       interval: 30s
       timeout: 10s
       retries: 3
@@ -70,7 +70,7 @@ services:
     restart: unless-stopped
     network_mode: service:nordlynx # Port 9696
     healthcheck:
-      test: curl --fail -s http://localhost:9696/ || exit 1
+      test: curl --fail -s http://localhost:9696/ || exit 1 && curl --fail -s http://google.com/ || exit 1
       interval: 30s
       timeout: 10s
       retries: 3
@@ -112,7 +112,7 @@ services:
     restart: unless-stopped
     network_mode: service:nordlynx # Port 8989
     healthcheck:
-      test: curl --fail -s http://localhost:8989/ || exit 1
+      test: curl --fail -s http://localhost:8989/ || exit 1 && curl --fail -s http://google.com/ || exit 1
       interval: 30s
       timeout: 10s
       retries: 3
@@ -154,7 +154,7 @@ services:
     restart: unless-stopped
     network_mode: service:nordlynx # Port 7878
     healthcheck:
-      test: curl --fail -s http://localhost:7878/ || exit 1
+      test: curl --fail -s http://localhost:7878/ || exit 1 && curl --fail -s http://google.com/ || exit 1
       interval: 30s
       timeout: 10s
       retries: 3

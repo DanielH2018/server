@@ -9,6 +9,7 @@
     - { role: traefik,          tags: [ 'traefik' ]}
     - { role: portainer,        tags: [ 'portainer' ]}
     - { role: authelia,         tags: [ 'authelia' ]}
+    - { role: autoheal,         tags: [ 'autoheal' ]}
     - { role: cloudflare-ddns,  tags: [ 'cloudflare-ddns' ]}
     - { role: crowdsec,         tags: [ 'crowdsec' ]}
     - { role: code-server,      tags: [ 'code-server' ]}
