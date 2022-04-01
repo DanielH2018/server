@@ -1,9 +1,5 @@
 #!/bin/sh
 
-# First ensure linux up-to-date
-sudo apt update -y
-sudo apt upgrade -y
-
 # Install ansible
 sudo apt install ansible -y
 

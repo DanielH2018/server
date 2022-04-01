@@ -1,9 +1,10 @@
 ---Instructions to setup server environment---
-1. Run `sudo chmod +x /home/ubuntu/server/ansible/intial_setup.sh`.
-2. Run `sudo /home/ubuntu/server/ansible/intial_setup.sh`.
+1. Run `sudo apt-get update -y`
+2. Run `sudo apt-get upgrade -y`
+3. Run `sudo chmod +x /home/ubuntu/server/ansible/initial_setup.sh`.
+4. Run `sudo /home/ubuntu/server/ansible/intial_setup.sh`.
     1. If using Intel XE graphics, ensure `/dev/dri/` exists, otherwise run `sudo apt install linux-oem-20.04` and reboot.
-3. Run `ansible-playbook deploy.yml`.
-    1. If you receive an error for sudo requiring a password, add `--ask-become-pass`.
+5. Run `ansible-playbook deploy.yml --ask-become-pass`.
 
 ---Instructions to update server environment---
 1. Perform update to container.
