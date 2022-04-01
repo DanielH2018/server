@@ -24,6 +24,11 @@ services:
       - /dev/dri:/dev/dri
     networks:
       - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: curl --fail -s http://localhost:8096/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
