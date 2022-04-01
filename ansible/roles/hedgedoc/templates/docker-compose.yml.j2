@@ -16,6 +16,11 @@ services:
       - TZ={{ TZ }}
     networks:
       - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: mysqladmin -p{{HEDGEDOC_MYSQL_ROOT_PASSWORD}} ping -h localhost
+      interval: 30s
+      timeout: 10s
+      retries: 3
   hedgedoc:
     image: lscr.io/linuxserver/hedgedoc:latest
     container_name: hedgedoc
