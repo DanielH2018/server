@@ -22,19 +22,24 @@ services:
       - ./data/acme.json:/acme.json
       - ./data/config.yml:/config.yml:ro
       - traefik-logs:/var/log/traefik
+    healthcheck:
+      test: traefik healthcheck
+      interval: 30s
+      timeout: 10s
+      retries: 3
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Setup HTTP entrypoint
       - "traefik.http.routers.traefik.entrypoints=http"
-      - "traefik.http.routers.traefik.rule=Host(`traefik-dashboard.{{ DOMAIN }}`)"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.{{ DOMAIN }}`)"
       # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.traefik-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.middlewares.sslheader.headers.customrequestheaders.X-Forwarded-Proto=https"
       - "traefik.http.routers.traefik.middlewares=traefik-https-redirect"
       # Setup HTTPS entrypoint
       - "traefik.http.routers.traefik-secure.entrypoints=https"
-      - "traefik.http.routers.traefik-secure.rule=Host(`traefik-dashboard.{{ DOMAIN }}`)"
+      - "traefik.http.routers.traefik-secure.rule=Host(`traefik.{{ DOMAIN }}`)"
       - "traefik.http.routers.traefik-secure.tls=true"
       - "traefik.http.routers.traefik-secure.service=api@internal"
       # Setup Basic Auth(not hit with authelia 2fa)
@@ -47,7 +52,6 @@ services:
       - "traefik.http.routers.traefik-secure.tls.certresolver=cloudflare"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main={{ DOMAIN }}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].sans=*.{{ DOMAIN }}" # Cloudflare only allows for wildcard certificates 1 level deep for free, so add expicit records for sub-subdomains.
-
 networks:
   {{ DOCKER_NETWORK }}:
     external: true
