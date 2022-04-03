@@ -1,16 +1,25 @@
 version: "3.8"
 
 services:
+  stubby:
+    image: mvance/stubby:latest
+    container_name: stubby
+    restart: unless-stopped
+    networks:
+      - {{ DOCKER_NETWORK }}
+
   unbound:
-    image: mvance/unbound:latest
+    image: mvance/unbound:1.14.0-stubby
     container_name: unbound
     restart: unless-stopped
     ports:
       - 5353:53/tcp
       - 5353:53/udp
+    depends_on:
+      - stubby   
     networks:
       {{ DOCKER_NETWORK }}:
-        ipv4_address: 172.18.0.26
+        ipv4_address: 172.18.1.1
 
   pihole:
     container_name: pihole
@@ -28,7 +37,7 @@ services:
       TZ: {{ TZ }}
       WEBPASSWORD: {{ PIHOLE_PASSWORD }}
       ServerIP: {{ SERVER_IP }}
-      PIHOLE_DNS_: 172.18.0.26#5353
+      PIHOLE_DNS_: 172.18.1.1#5353
     volumes:
        - './data/etc-pihole/:/etc/pihole/'
        - './data/etc-dnsmasq.d/:/etc/dnsmasq.d/'

@@ -49,8 +49,12 @@
   file:
     path: /etc/resolv.conf
     state: absent
+  become: yes
+  become_method: sudo
 
 - name: Create /etc/resolv.conf from template
   template:
     src: resolv.conf.j2
     dest: "/etc/resolv.conf"
+  become: yes
+  become_method: sudo
