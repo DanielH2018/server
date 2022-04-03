@@ -4,7 +4,13 @@ services:
     restart: unless-stopped
     image: willfarrell/autoheal
     container_name: autoheal
+    networks:
+      - {{ DOCKER_NETWORK }}
     environment:
       - AUTOHEAL_CONTAINER_LABEL=all
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true
