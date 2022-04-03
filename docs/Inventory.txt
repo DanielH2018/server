@@ -27,10 +27,7 @@ Media:
 Monitoring:
 - Grafana
 - Netdata
-- Scrutiny(broken)
-- Smokeping
 - Prometheus
-- Librespeed
 - Uptime Kuma
 
 Maintenence:
