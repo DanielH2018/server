@@ -9,7 +9,7 @@ services:
       - {{ DOCKER_NETWORK }}
 
   unbound:
-    image: mvance/unbound:1.14.0-stubby
+    image: mvance/unbound:1.13.1-stubby
     container_name: unbound
     restart: unless-stopped
     ports:
