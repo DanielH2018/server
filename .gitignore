@@ -1,6 +1,7 @@
-# Ignore everything except ansible
+# Ignore everything except ansible and docs
 /*
 !/ansible
+!/docs
 # Make sure these are ignored
 ansible/.env
 ansible/roles/code-server/templates/github

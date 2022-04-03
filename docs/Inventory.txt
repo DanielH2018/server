@@ -1,0 +1,63 @@
+Initial Setup:
+- SSH
+- WiFi(if needed)
+- Docker & Docker Compose
+
+Networking/Security:
+- Pi-hole
+- Traefik
+- Authelia
+- Crowdsec
+- Cloudflare DDNS
+- Unbound & Stubby
+
+Organization:
+- Portainer
+- Heimdall
+- FreshRSS
+
+Media:
+- Sonarr
+- Radarr
+- Jellyfin
+- Prowlarr
+- NordLynx
+- qBittorrent
+
+Monitoring:
+- Grafana
+- Netdata
+- Scrutiny(broken)
+- Smokeping
+- Prometheus
+- Librespeed
+- Uptime Kuma
+
+Maintenence:
+- Autoheal
+- Watchtower
+
+Development:
+- Hoppscotch
+- Code Server
+
+Miscellaneous:
+- Guacamole
+- File Browser
+- LaTex Workshop
+- Home Assistant(off)
+- Minecraft Server(off)
+- Project Tracker DB(school)
+
+Cronjobs:
+- Docker image prune
+- System restart cronjob
+- System update & upgrade
+- Crowdsec update & upgrade
+
+Backlog:
+
+Possible Additions:
+- Mycroft
+- Matrix/Element
+
