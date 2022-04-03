@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   netdata:
-    image: netdata/netdata
+    image: netdata/netdata:latest
     container_name: netdata
     restart: unless-stopped
     hostname: {{ SYS_USER }}

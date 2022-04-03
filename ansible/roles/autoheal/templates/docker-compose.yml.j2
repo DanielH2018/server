@@ -2,7 +2,7 @@ version: '3.8'
 services:
   autoheal:
     restart: unless-stopped
-    image: willfarrell/autoheal
+    image: willfarrell/autoheal:latest
     container_name: autoheal
     networks:
       - {{ DOCKER_NETWORK }}
