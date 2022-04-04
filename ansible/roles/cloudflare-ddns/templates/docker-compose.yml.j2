@@ -9,6 +9,11 @@ services:
       - ZONE={{ DOMAIN }}
     networks:
       - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: curl --fail -s http://google.com/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   {{ DOCKER_NETWORK }}:
