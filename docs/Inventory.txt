@@ -60,5 +60,3 @@ Possible Additions:
 - Mycroft
 - Matrix/Element
 - Static Site(Hugo?)
-- Switch to Plex?
-
