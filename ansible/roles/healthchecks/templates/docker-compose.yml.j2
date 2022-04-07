@@ -1,0 +1,50 @@
+---
+version: "3.8"
+services:
+  healthchecks:
+    image: lscr.io/linuxserver/healthchecks
+    container_name: healthchecks
+    environment:
+      - PUID={{ PUID }}
+      - PGID={{ PGID }}
+      - SITE_ROOT=https://healthchecks.{{ DOMAIN }}
+      - SITE_NAME=Home Server healthchecks
+      - DEFAULT_FROM_EMAIL={{ EMAIL }}
+      - EMAIL_HOST=smtp.gmail.com
+      - EMAIL_PORT=587
+      - EMAIL_HOST_USER={{ HEALTHCHECKS_SMTP_USER }}
+      - EMAIL_HOST_PASSWORD={{ HEALTHCHECKS_SMTP_PASSWORD }}
+      - EMAIL_USE_TLS=True
+      - SUPERUSER_EMAIL={{ EMAIL }}
+      - SUPERUSER_PASSWORD={{ HEALTHCHECKS_PASSWORD }}
+    volumes:
+      - ./config:/config
+    ports:
+      - 8001:8000
+    networks:
+      - {{ DOCKER_NETWORK }}
+    restart: unless-stopped
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Setup HTTP entrypoint
+      - "traefik.http.routers.healthchecks.entrypoints=http"
+      - "traefik.http.routers.healthchecks.rule=Host(`healthchecks.{{ DOMAIN }}`)"
+      # Redirect HTTP to HTTPS
+      - "traefik.http.middlewares.healthchecks-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.healthchecks.middlewares=healthchecks-https-redirect"
+      # Setup HTTPS entrypoint
+      - "traefik.http.routers.healthchecks-secure.entrypoints=https"
+      - "traefik.http.routers.healthchecks-secure.rule=Host(`healthchecks.{{ DOMAIN }}`)"
+      - "traefik.http.routers.healthchecks-secure.tls=true"
+      # Setup port forwarding to internal port
+      - "traefik.http.routers.healthchecks-secure.service=healthchecks"
+      - "traefik.http.services.healthchecks.loadbalancer.server.port=8000"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      # Add authelia
+      - 'traefik.http.routers.healthchecks-secure.middlewares=authelia@docker'
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true

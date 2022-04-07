@@ -29,6 +29,7 @@ Monitoring:
 - Netdata
 - Prometheus
 - Uptime Kuma
+- Healthchecks
 
 Maintenence:
 - Autoheal
@@ -54,8 +55,6 @@ Cronjobs:
 - Crowdsec update & upgrade
 
 Backlog:
-- Healthchecks
-- Docker Secrets
 
 Possible Additions:
 - Mycroft

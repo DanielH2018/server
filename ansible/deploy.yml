@@ -29,4 +29,5 @@
     - { role: home-assistant,   tags: [ 'home-assistant' ]}
     - { role: watchtower,       tags: [ 'watchtower' ]}
     - { role: reactive-resume,  tags: [ 'reactive-resume' ]}
+    - { role: healthchecks,     tags: [ 'healthchecks' ]}
     - { role: mobile-app-db,    tags: [ 'mobile-app-db' ]}
