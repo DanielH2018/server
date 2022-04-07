@@ -1,0 +1,112 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres:14.2-alpine
+    container_name: reactive-resume-postgres
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER="postgres"
+      - POSTGRES_PASSWORD="postgres"
+      - POSTGRES_DB="postgres"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 30s
+      timeout: 30s
+      start_period: 15s
+      retries: 3
+    restart: unless-stopped
+
+  server:
+    image: amruthpillai/reactive-resume:server-latest
+    container_name: reactive-resume-server
+    environment:
+      - TZ={{ TZ }}
+      - SECRET_KEY=ASDKLJASHDAKJLSDLASDASDKJ
+      - PUBLIC_URL=http://reactive-resume.{{ DOMAIN }}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DATABASE=postgres
+      - JWT_SECRET=ASDKJGSDASKDBASKLJDHASKLDJAHSDALKJDH
+      - JWT_EXPIRY_TIME=604800
+      - ***REMOVED***
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - 3100:3100
+    networks:
+      - {{ DOCKER_NETWORK }}
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Setup HTTP entrypoint
+      - "traefik.http.routers.reactive-resume-server.entrypoints=http"
+      - "traefik.http.routers.reactive-resume-server.rule=Host(`reactive-resume.{{ DOMAIN }}`) && PathPrefix(`/api/`)"
+      # Redirect HTTP to HTTPS
+      - "traefik.http.middlewares.reactive-resume-server-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.reactive-resume-server.middlewares=reactive-resume-server-https-redirect"
+      # Setup HTTPS entrypoint
+      - "traefik.http.routers.reactive-resume-server-secure.entrypoints=https"
+      - "traefik.http.routers.reactive-resume-server-secure.rule=Host(`reactive-resume.{{ DOMAIN }}`) && PathPrefix(`/api/`)"
+      - "traefik.http.routers.reactive-resume-server-secure.tls=true"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      # Add Middleware
+      - 'traefik.http.routers.reactive-resume-server-secure.middlewares=authelia@docker, reactive-resume-server-stripprefix'
+      # Setup port forwarding to internal port
+      - "traefik.http.routers.reactive-resume-server-secure.service=reactive-resume-server"
+      - "traefik.http.services.reactive-resume-server.loadbalancer.server.port=3100"
+      # API Prefix
+      - traefik.http.middlewares.reactive-resume-server-stripprefix.stripprefix.prefixes=/api
+      - traefik.http.middlewares.reactive-resume-server-stripprefix.stripprefix.forceslash=true
+    restart: unless-stopped
+
+  client:
+    image: amruthpillai/reactive-resume:client-latest
+    container_name: reactive-resume-client
+    environment:
+      - TZ={{ TZ }}
+      - PUBLIC_URL=http://reactive-resume.{{ DOMAIN }}
+      - PUBLIC_SERVER_URL=http://reactive-resume.{{ DOMAIN }}/api
+    depends_on:
+      - reactive-resume-server
+    ports:
+      - 3005:3000
+    networks:
+      - {{ DOCKER_NETWORK }}
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Setup HTTP entrypoint
+      - "traefik.http.routers.reactive-resume-client.entrypoints=http"
+      - "traefik.http.routers.reactive-resume-client.rule=Host(`reactive-resume.{{ DOMAIN }}`)"
+      # Redirect HTTP to HTTPS
+      - "traefik.http.middlewares.reactive-resume-client-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.reactive-resume-client.middlewares=reactive-resume-client-https-redirect"
+      # Setup HTTPS entrypoint
+      - "traefik.http.routers.reactive-resume-client-secure.entrypoints=https"
+      - "traefik.http.routers.reactive-resume-client-secure.rule=Host(`reactive-resume.{{ DOMAIN }}`)"
+      - "traefik.http.routers.reactive-resume-client-secure.tls=true"
+      # Setup port forwarding to internal port
+      - "traefik.http.routers.reactive-resume-client-secure.service=reactive-resume-client"
+      - "traefik.http.services.reactive-resume-client.loadbalancer.server.port=3000"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      # Add authelia
+      - 'traefik.http.routers.reactive-resume-client-secure.middlewares=authelia@docker'
+    restart: unless-stopped
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true
+
+volumes:
+  pgdata:

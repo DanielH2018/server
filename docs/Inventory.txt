@@ -42,6 +42,7 @@ Miscellaneous:
 - Guacamole
 - File Browser
 - LaTex Workshop
+- Reactive Resume
 - Home Assistant(off)
 - Minecraft Server(off)
 - Project Tracker DB(school)
@@ -53,8 +54,12 @@ Cronjobs:
 - Crowdsec update & upgrade
 
 Backlog:
+- Healthchecks
+- Docker Secrets
 
 Possible Additions:
 - Mycroft
 - Matrix/Element
+- Static Site(Hugo?)
+- Switch to Plex?
 
