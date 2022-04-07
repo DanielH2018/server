@@ -27,16 +27,16 @@ services:
     container_name: reactive-resume-server
     environment:
       - TZ={{ TZ }}
-      - SECRET_KEY=ASDKLJASHDAKJLSDLASDASDKJ
+      - SECRET_KEY={{ REACTIVE_RESUME_SECRET_KEY }}
       - PUBLIC_URL=http://reactive-resume.{{ DOMAIN }}
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DATABASE=postgres
-      - JWT_SECRET=ASDKJGSDASKDBASKLJDHASKLDJAHSDALKJDH
+      - JWT_SECRET={{ REACTIVE_RESUME_JWT_SECRET }}
       - JWT_EXPIRY_TIME=604800
-      - ***REMOVED***
+      - GOOGLE_API_KEY={{ REACTIVE_RESUME_GOOGLE_API_KEY }}
     depends_on:
       postgres:
         condition: service_healthy
