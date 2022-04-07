@@ -60,3 +60,4 @@ Possible Additions:
 - Mycroft
 - Matrix/Element
 - Static Site(Hugo?)
+- LanguageTool
