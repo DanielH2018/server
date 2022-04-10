@@ -55,6 +55,8 @@ Cronjobs:
 - Crowdsec update & upgrade
 
 Backlog:
+- Static Site(Hugo?)
+- FoundryVTT
 - Docker Compose env
 
 Possible Additions:
