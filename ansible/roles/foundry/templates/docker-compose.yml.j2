@@ -1,0 +1,43 @@
+---
+version: "3.8"
+
+services:
+  foundry:
+    image: felddy/foundryvtt:release
+    container_name: foundry
+    init: true
+    volumes:
+      - ./data:/data
+    environment:
+      - FOUNDRY_PASSWORD={{ FOUNDRY_PASSWORD }}
+      - FOUNDRY_USERNAME={{ FOUNDRY_USERNAME }}
+      - FOUNDRY_ADMIN_KEY={{ FOUNDRY_ADMIN_KEY }}
+    ports:
+      - 30000:30000/tcp
+    restart: unless-stopped
+    networks:
+      - {{ DOCKER_NETWORK }}
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Setup HTTP entrypoint
+      - "traefik.http.routers.foundry.entrypoints=http"
+      - "traefik.http.routers.foundry.rule=Host(`foundry.{{ DOMAIN }}`)"
+      # Redirect HTTP to HTTPS
+      - "traefik.http.middlewares.foundry-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.foundry.middlewares=foundry-https-redirect"
+      # Setup HTTPS entrypoint
+      - "traefik.http.routers.foundry-secure.entrypoints=https"
+      - "traefik.http.routers.foundry-secure.rule=Host(`foundry.{{ DOMAIN }}`)"
+      - "traefik.http.routers.foundry-secure.tls=true"
+      # Setup port forwarding to internal port
+      - "traefik.http.routers.foundry-secure.service=foundry"
+      - "traefik.http.services.foundry.loadbalancer.server.port=30000"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      # Add authelia
+      - 'traefik.http.routers.foundry-secure.middlewares=authelia@docker'
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true

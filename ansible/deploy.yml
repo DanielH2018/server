@@ -30,4 +30,5 @@
     - { role: watchtower,       tags: [ 'watchtower' ]}
     - { role: reactive-resume,  tags: [ 'reactive-resume' ]}
     - { role: healthchecks,     tags: [ 'healthchecks' ]}
+    - { role: foundry,          tags: [ 'foundry' ]}
     - { role: mobile-app-db,    tags: [ 'mobile-app-db' ]}
