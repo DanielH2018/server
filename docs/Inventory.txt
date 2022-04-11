@@ -41,6 +41,7 @@ Development:
 
 Miscellaneous:
 - Guacamole
+- FoundryVTT
 - File Browser
 - LaTex Workshop
 - Reactive Resume
@@ -56,7 +57,6 @@ Cronjobs:
 
 Backlog:
 - Static Site(Hugo?)
-- FoundryVTT
 - Docker Compose env
 
 Possible Additions:

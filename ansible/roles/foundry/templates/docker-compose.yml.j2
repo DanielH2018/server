@@ -36,7 +36,7 @@ services:
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
       # Add authelia
-      - 'traefik.http.routers.foundry-secure.middlewares=authelia@docker'
+      #- 'traefik.http.routers.foundry-secure.middlewares=authelia@docker'
 
 networks:
   {{ DOCKER_NETWORK }}:
