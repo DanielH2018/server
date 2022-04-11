@@ -31,6 +31,9 @@ access_control:
     # Mobile App DB
     - domain: "mobile-app-db.{{ DOMAIN }}"
       policy: bypass
+    # Foundry VTT
+    - domain: "foundry.{{ DOMAIN }}"
+      policy: bypass
     # Rules applied to everyone
     - domain: "*.{{ DOMAIN }}"
       policy: two_factor
