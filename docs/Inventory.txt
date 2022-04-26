@@ -41,13 +41,11 @@ Development:
 
 Miscellaneous:
 - Guacamole
-- FoundryVTT
 - File Browser
 - LaTex Workshop
 - Reactive Resume
 - Home Assistant(off)
-- Minecraft Server(off)
-- Project Tracker DB(school)
+- Minecraft Server
 
 Cronjobs:
 - Docker image prune
@@ -56,6 +54,7 @@ Cronjobs:
 - Crowdsec update & upgrade
 
 Backlog:
+- FoundryVTT
 - Static Site(Hugo?)
 - Docker Compose env
 
