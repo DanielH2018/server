@@ -9,6 +9,13 @@
     src: configuration.yaml.j2
     dest: "/home/{{ SYS_USER }}/server/home-assistant/config/configuration.yaml"
 
+- name: Run HACS download script
+  shell: wget -O - https://raw.githubusercontent.com/hacs/get/main/get | bash -
+  args:
+    chdir: "/home/{{ SYS_USER }}/server/home-assistant/config"
+  become: yes
+  become_method: sudo
+
 - name: Create docker-compose from template
   template:
     src: docker-compose.yml.j2
