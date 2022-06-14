@@ -42,9 +42,9 @@ Development:
 Miscellaneous:
 - Guacamole
 - File Browser
+- Home Assistant
 - LaTex Workshop
 - Reactive Resume
-- Home Assistant(off)
 - Minecraft Server
 
 Cronjobs:
@@ -55,9 +55,8 @@ Cronjobs:
 
 Backlog:
 - FoundryVTT
-- Static Site(Hugo?)
-- Docker Compose env
+- Static Site(Hugo/Jekyll)
+- Rancher/k3s
 
 Possible Additions:
-- Mycroft
 - Matrix/Element
