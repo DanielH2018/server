@@ -15,7 +15,7 @@ sudo sed -i '/IgnoreRhosts /c\IgnoreRhosts yes' /etc/ssh/sshd_config
 sudo sed -i '/ChallengeResponseAuthentication  /c\ChallengeResponseAuthentication no' /etc/ssh/sshd_config
 
 # Copy current crontab
-crontab -l > crontab_new
+sudo crontab -l > crontab_new
 
 # Clean dangling Docker images
 echo "30 6 * * * /usr/bin/docker image prune -f" >> crontab_new
@@ -28,7 +28,7 @@ echo "5 7 * * * root apt-get upgrade" >> crontab_new
 echo "10 7 * * * root apt-get autoremove" >> crontab_new
 
 # Schedule restart at 7:30am UTC(2:30am EST) on Sunday
-echo "30 7 * * 0 /sbin/shutdown -r now" >> crontab_new
+echo "30 7 * * 0 /sbin/shutdown -r +5" >> crontab_new
 
 # Commit and Cleanup
 sudo crontab crontab_new
