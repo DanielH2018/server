@@ -3,17 +3,13 @@ version: "3.8"
 
 services:
   foundry:
-    image: felddy/foundryvtt:release
+    image: direckthit/fvtt-docker:latest
     container_name: foundry
-    init: true
     volumes:
-      - ./data:/data
-    environment:
-      - FOUNDRY_PASSWORD={{ FOUNDRY_PASSWORD }}
-      - FOUNDRY_USERNAME={{ FOUNDRY_USERNAME }}
-      - FOUNDRY_ADMIN_KEY={{ FOUNDRY_ADMIN_KEY }}
+      - ./data:/data/foundryvtt
+      - ./foundrydl:/host
     ports:
-      - 30000:30000/tcp
+      - 30000:30000
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
@@ -35,8 +31,6 @@ services:
       - "traefik.http.services.foundry.loadbalancer.server.port=30000"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
-      # Add authelia
-      #- 'traefik.http.routers.foundry-secure.middlewares=authelia@docker'
 
 networks:
   {{ DOCKER_NETWORK }}:

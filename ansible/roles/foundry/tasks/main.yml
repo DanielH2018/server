@@ -4,6 +4,17 @@
     state: directory
     mode: 0755
 
+- name: Creates directories
+  file:
+    path: "/home/{{ SYS_USER }}/server/foundry/foundrydl"
+    state: directory
+    mode: 0755
+
+- name: Copy zip
+  copy:
+    src: FoundryVTT-9.269.zip
+    dest: "/home/{{ SYS_USER }}/server/foundry/foundrydl/FoundryVTT.zip"
+
 - name: Create docker-compose from template
   template:
     src: docker-compose.yml.j2
