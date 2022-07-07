@@ -68,7 +68,7 @@ services:
       - ./prowlarr/config:/config
     restart: unless-stopped
     networks:
-      - proxy
+      - {{ DOCKER_NETWORK }}
     healthcheck:
       test: curl --fail -s http://localhost:9696/ || exit 1 && curl -fIsS http://wikipedia.org/ || exit 1
       interval: 30s
@@ -111,7 +111,7 @@ services:
       - /home/{{ SYS_USER }}/server/media/library/tvseries:/tv
     restart: unless-stopped
     networks:
-      - proxy
+      - {{ DOCKER_NETWORK }}
     healthcheck:
       test: curl --fail -s http://localhost:8989/ || exit 1 && curl -fIsS http://wikipedia.org/ || exit 1
       interval: 30s
@@ -154,7 +154,7 @@ services:
       - /home/{{ SYS_USER }}/server/media/library/downloads:/downloads
     restart: unless-stopped
     networks:
-      - proxy
+      - {{ DOCKER_NETWORK }}
     healthcheck:
       test: curl --fail -s http://localhost:7878/ || exit 1 && curl -fIsS http://wikipedia.org/ || exit 1
       interval: 30s
