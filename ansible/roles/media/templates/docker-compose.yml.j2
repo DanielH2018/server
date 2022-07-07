@@ -69,6 +69,8 @@ services:
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
+    ports:
+      - 9696:9696
     healthcheck:
       test: curl --fail -s http://localhost:9696/ || exit 1 && curl -fIsS http://wikipedia.org/ || exit 1
       interval: 30s
@@ -112,6 +114,8 @@ services:
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
+    ports:
+      - 8989:8989
     healthcheck:
       test: curl --fail -s http://localhost:8989/ || exit 1 && curl -fIsS http://wikipedia.org/ || exit 1
       interval: 30s
@@ -155,6 +159,8 @@ services:
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
+    ports:
+      - 7878:7878
     healthcheck:
       test: curl --fail -s http://localhost:7878/ || exit 1 && curl -fIsS http://wikipedia.org/ || exit 1
       interval: 30s
