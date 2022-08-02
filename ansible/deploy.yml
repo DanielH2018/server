@@ -20,7 +20,11 @@
     - { role: pihole,           tags: [ 'pihole' ]}
     - { role: file-browser,     tags: [ 'file-browser' ]}
     - { role: guacamole,        tags: [ 'guacamole' ]}
-    - { role: media,            tags: [ 'media' ]}
+    - { role: nordlynx,         tags: [ 'nordlynx', 'media' ]}
+    - { role: qbittorrent,      tags: [ 'qbittorrent', 'nordlynx', 'media' ]}
+    - { role: prowlarr,         tags: [ 'prowlarr', 'media' ]}
+    - { role: sonarr,           tags: [ 'sonarr', 'media' ]}
+    - { role: radarr,           tags: [ 'radarr', 'media' ]}
     - { role: jellyfin,         tags: [ 'jellyfin', 'media' ]}
     - { role: prometheus,       tags: [ 'prometheus', 'monitoring' ]}
     - { role: grafana,          tags: [ 'grafana', 'monitoring' ]}

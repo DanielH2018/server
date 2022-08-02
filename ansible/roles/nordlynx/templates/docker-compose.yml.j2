@@ -1,0 +1,20 @@
+version: "3.8"
+services:
+  nordlynx:
+    image: ghcr.io/bubuntux/nordlynx:latest
+    container_name: nordlynx
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN #required
+    environment:
+      - PRIVATE_KEY={{ NORDVPN_KEY }}
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
+    ports:
+      - 8080:8080 # qBittorrent
+    networks:
+      - {{ DOCKER_NETWORK }}
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true

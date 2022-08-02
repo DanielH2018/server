@@ -6,13 +6,13 @@
 
 - name: Create movie directories
   file:
-    path: "/home/{{ SYS_USER }}/server/media/library/movies"
+    path: "/home/{{ SYS_USER }}/server/media/movies"
     state: directory
     mode: 0755
 
 - name: Create tv directories
   file:
-    path: "/home/{{ SYS_USER }}/server/media/library/tvseries"
+    path: "/home/{{ SYS_USER }}/server/media/tvseries"
     state: directory
     mode: 0755
 
