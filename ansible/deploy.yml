@@ -32,6 +32,5 @@
     - { role: minecraft,        tags: [ 'minecraft' ]}
     - { role: home-assistant,   tags: [ 'home-assistant' ]}
     - { role: watchtower,       tags: [ 'watchtower' ]}
-    - { role: reactive-resume,  tags: [ 'reactive-resume' ]}
     - { role: healthchecks,     tags: [ 'healthchecks' ]}
     - { role: foundry,          tags: [ 'foundry' ]}

@@ -44,7 +44,6 @@ Miscellaneous:
 - File Browser
 - Home Assistant
 - LaTex Workshop
-- Reactive Resume
 - Minecraft Server
 
 Cronjobs:
@@ -55,8 +54,9 @@ Cronjobs:
 
 Backlog:
 - FoundryVTT
-- Static Site(Hugo/Jekyll)
-- Rancher/k3s
 
 Possible Additions:
+- Flemmarr
+- Static Site(Hugo/Jekyll)
 - Matrix/Element
+- Rancher/k3s
