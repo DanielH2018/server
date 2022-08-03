@@ -41,6 +41,7 @@ Development:
 
 Miscellaneous:
 - Guacamole
+- FoundryVTT
 - File Browser
 - Home Assistant
 - LaTex Workshop
@@ -53,10 +54,16 @@ Cronjobs:
 - Crowdsec update & upgrade
 
 Backlog:
-- FoundryVTT
+- Whoogle
+- Flemmarr
+
 
 Possible Additions:
-- Flemmarr
-- Static Site(Hugo/Jekyll)
-- Matrix/Element
+- Dashy
+- Navidrome
+- Jellyseerr
+- Vaultwarden
 - Rancher/k3s
+- Blog(Ghost)
+- Matrix/Element
+- Yaade(Replace Hoppscotch)
