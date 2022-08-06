@@ -46,6 +46,7 @@ Miscellaneous:
 - Home Assistant
 - LaTex Workshop
 - Minecraft Server
+- Auto-add Cloudflare CNAME
 
 Cronjobs:
 - Docker image prune
@@ -56,14 +57,14 @@ Cronjobs:
 Backlog:
 - Whoogle
 - Flemmarr
+- Jellyseerr
+- Yaade(Replace Hoppscotch)
 
 
 Possible Additions:
 - Dashy
 - Navidrome
-- Jellyseerr
 - Vaultwarden
 - Rancher/k3s
 - Blog(Ghost)
 - Matrix/Element
-- Yaade(Replace Hoppscotch)
