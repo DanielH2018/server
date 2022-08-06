@@ -19,7 +19,7 @@ services:
     networks:
       - {{ DOCKER_NETWORK }}
     healthcheck:
-      test: curl --fail -s http://localhost:80/ || exit 1
+      test: curl --fail -s http://localhost:5000/ || exit 1
       interval: 30s
       timeout: 10s
       retries: 3
