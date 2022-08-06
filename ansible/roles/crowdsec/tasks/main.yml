@@ -1,8 +1,6 @@
-- name: Creates directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/crowdsec/config"
-    state: directory
-    mode: 0755
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/config"
 
 - name: Create acquis.yaml from template
   template:
@@ -14,17 +12,13 @@
     src: Dockerfile.j2
     dest: "/home/{{ SYS_USER }}/server/crowdsec/Dockerfile"
 
-- name: Create docker-compose.yml from template
-  template:
-    src: docker-compose.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/crowdsec/docker-compose.yml"
+- include_tasks: dns.yml
+  with_items:
+    - "{{ role_name }}"
 
-- name: Deploy Crowdsec
-  shell: docker-compose up -d --force-recreate
-  args:
-    chdir: "/home/{{ SYS_USER }}/server/crowdsec/"
-  become: yes
-  become_method: sudo
+- include_tasks: docker.yml
+  with_items:
+    - "{{ role_name }}"
 
 # Pause for 5 seconds to let docker build
 - pause:

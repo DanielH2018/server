@@ -1,20 +1,8 @@
-- name: Create sonarr directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/sonarr/config"
-    state: directory
-    mode: 0755
-
-- name: Create download directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/media/downloads"
-    state: directory
-    mode: 0755
-
-- name: Create tv directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/media/tvseries"
-    state: directory
-    mode: 0755
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/config"
+    - "media/downloads"
+    - "media/tvseries"
 
 - name: Create cleaner from template
   template:
@@ -28,14 +16,10 @@
     dest: "/home/{{ SYS_USER }}/server/sonarr/config/sonarr-episode-trimmer-config"
     mode: 0755
 
-- name: Create docker-compose from template
-  template:
-    src: docker-compose.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/sonarr/docker-compose.yml"
-    
-- name: Deploy Sonarr
-  shell: docker-compose up -d --force-recreate
-  args:
-    chdir: "/home/{{ SYS_USER }}/server/sonarr/"
-  become: yes
-  become_method: sudo
+- include_tasks: dns.yml
+  with_items:
+    - "{{ role_name }}"
+
+- include_tasks: docker.yml
+  with_items:
+    - "{{ role_name }}"

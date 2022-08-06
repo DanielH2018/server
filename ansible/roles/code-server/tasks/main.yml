@@ -1,8 +1,6 @@
-- name: Creates directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/code-server/config/.ssh"
-    state: directory
-    mode: 0755
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/config/.ssh"
 
 - name: Check if github key exists
   stat:
@@ -15,14 +13,10 @@
     dest: "/home/{{ SYS_USER }}/server/code-server/config/.ssh/github"
   when: github_data.stat.exists
 
-- name: Create docker-compose from template
-  template:
-    src: docker-compose.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/code-server/docker-compose.yml"
-    
-- name: Deploy Code Server
-  shell: docker-compose up -d --force-recreate
-  args:
-    chdir: "/home/{{ SYS_USER }}/server/code-server/"
-  become: yes
-  become_method: sudo
+- include_tasks: dns.yml
+  with_items:
+    - "{{ role_name }}"
+
+- include_tasks: docker.yml
+  with_items:
+    - "{{ role_name }}"

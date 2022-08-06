@@ -1,28 +1,17 @@
-- name: Creates directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/foundry/data"
-    state: directory
-    mode: 0755
-
-- name: Creates directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/foundry/foundrydl"
-    state: directory
-    mode: 0755
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/data"
+    - "{{ role_name }}/foundrydl"
 
 - name: Copy zip
   copy:
     src: FoundryVTT-9.269.zip
     dest: "/home/{{ SYS_USER }}/server/foundry/foundrydl/FoundryVTT.zip"
 
-- name: Create docker-compose from template
-  template:
-    src: docker-compose.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/foundry/docker-compose.yml"
-    
-- name: Deploy FoundryVTT
-  shell: docker-compose up -d --force-recreate
-  args:
-    chdir: "/home/{{ SYS_USER }}/server/foundry/"
-  become: yes
-  become_method: sudo
+- include_tasks: dns.yml
+  with_items:
+    - "{{ role_name }}"
+
+- include_tasks: docker.yml
+  with_items:
+    - "{{ role_name }}"

@@ -1,17 +1,7 @@
-- name: Creates directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/autoheal/"
-    state: directory
-    mode: 0755
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}"
 
-- name: Create docker-compose.yml from template
-  template:
-    src: docker-compose.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/autoheal/docker-compose.yml"
-
-- name: Deploy Autoheal
-  shell: docker-compose up -d --force-recreate
-  args:
-    chdir: "/home/{{ SYS_USER }}/server/autoheal/"
-  become: yes
-  become_method: sudo
+- include_tasks: docker.yml
+  with_items:
+    - "{{ role_name }}"

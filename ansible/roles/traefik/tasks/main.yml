@@ -1,8 +1,6 @@
-- name: Creates directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/traefik/data"
-    state: directory
-    mode: 0755
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/data"
 
 - name: Create acme.json
   file:
@@ -24,19 +22,15 @@
   shell: "echo $(htpasswd -nb {{ TRAEFIK_USER }} {{ TRAEFIK_PASSWORD }})"
   register: traefik_hash
 
-- name: Create docker-compose.yml from template
-  template:
-    src: docker-compose.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/traefik/docker-compose.yml"
-
 - name: Create docker network
   shell: "docker network create {{ DOCKER_NETWORK }} || true"
   become: yes
   become_method: sudo
 
-- name: Deploy Traefik
-  shell: docker-compose up -d --force-recreate
-  args:
-    chdir: "/home/{{ SYS_USER }}/server/traefik/"
-  become: yes
-  become_method: sudo
+- include_tasks: dns.yml
+  with_items:
+    - "{{ role_name }}"
+
+- include_tasks: docker.yml
+  with_items:
+    - "{{ role_name }}"

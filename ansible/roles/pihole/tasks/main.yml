@@ -1,8 +1,6 @@
-- name: Creates directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/pihole/data"
-    state: directory
-    mode: 0755
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/data"
 
 - name: Create docker-compose.yml from template
   template:

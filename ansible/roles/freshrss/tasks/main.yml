@@ -1,6 +1,6 @@
 - include_tasks: directory.yml
   with_items:
-    - "freshrss/config/www/freshrss/extensions"
+    - "{{ role_name }}/config/www/freshrss/extensions"
 
 - name: Unzip sidebar toggle extension
   unarchive:
@@ -9,8 +9,8 @@
 
 - include_tasks: dns.yml
   with_items:
-    - freshrss
+    - "{{ role_name }}"
 
 - include_tasks: docker.yml
   with_items:
-    - freshrss
+    - "{{ role_name }}"

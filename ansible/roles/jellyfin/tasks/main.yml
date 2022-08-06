@@ -1,29 +1,13 @@
-- name: Create jellyfin directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/jellyfin/config"
-    state: directory
-    mode: 0755
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/config"
+    - "media/movies"
+    - "media/tvseries"
 
-- name: Create movie directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/media/movies"
-    state: directory
-    mode: 0755
+- include_tasks: dns.yml
+  with_items:
+    - "{{ role_name }}"
 
-- name: Create tv directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/media/tvseries"
-    state: directory
-    mode: 0755
-
-- name: Create docker-compose from template
-  template:
-    src: docker-compose.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/jellyfin/docker-compose.yml"
-    
-- name: Deploy Jellyfin
-  shell: docker-compose up -d --force-recreate
-  args:
-    chdir: "/home/{{ SYS_USER }}/server/jellyfin/"
-  become: yes
-  become_method: sudo
+- include_tasks: docker.yml
+  with_items:
+    - "{{ role_name }}"

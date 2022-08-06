@@ -1,17 +1,9 @@
-- name: Creates directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/minecraft/data"
-    state: directory
-    mode: 0755
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/data"
 
-- name: Create docker-compose from template
-  template:
-    src: docker-compose.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/minecraft/docker-compose.yml"
+# TODO Auto Create Minecraft DNS
 
-- name: Deploy Minecraft
-  shell: docker-compose up -d --force-recreate
-  args:
-    chdir: "/home/{{ SYS_USER }}/server/minecraft/"
-  become: yes
-  become_method: sudo
+- include_tasks: docker.yml
+  with_items:
+    - "{{ role_name }}"
