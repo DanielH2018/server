@@ -12,9 +12,10 @@ Networking/Security:
 - Unbound & Stubby
 
 Organization:
-- Portainer
 - Heimdall
 - FreshRSS
+- Portainer
+- File Browser
 
 Media:
 - Sonarr
@@ -43,7 +44,6 @@ Miscellaneous:
 - Whoogle
 - Guacamole
 - FoundryVTT
-- File Browser
 - Home Assistant
 - LaTex Workshop
 - Minecraft Server
@@ -56,14 +56,8 @@ Cronjobs:
 - Crowdsec update & upgrade
 
 Backlog:
-
+- Blog(Ghost)
 
 Possible Additions:
 - Dashy
 - Flemmarr
-- Navidrome
-- Jellyseerr
-- Vaultwarden
-- Rancher/k3s
-- Blog(Ghost)
-- Matrix/Element
