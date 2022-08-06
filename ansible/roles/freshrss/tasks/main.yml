@@ -1,22 +1,16 @@
-- name: Creates directories
-  file:
-    path: "/home/{{ SYS_USER }}/server/freshrss/config/www/freshrss/extensions"
-    state: directory
-    mode: 0755
+- include_tasks: directory.yml
+  with_items:
+    - "freshrss/config/www/freshrss/extensions"
 
 - name: Unzip sidebar toggle extension
   unarchive:
     src: xExtension-ToggleSidebar.zip
     dest: "/home/{{ SYS_USER }}/server/freshrss/config/www/freshrss/extensions"
 
-- name: Create docker-compose from template
-  template:
-    src: docker-compose.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/freshrss/docker-compose.yml"
-    
-- name: Deploy Freshrss
-  shell: docker-compose up -d --force-recreate
-  args:
-    chdir: "/home/{{ SYS_USER }}/server/freshrss/"
-  become: yes
-  become_method: sudo
+- include_tasks: dns.yml
+  with_items:
+    - freshrss
+
+- include_tasks: docker.yml
+  with_items:
+    - freshrss
