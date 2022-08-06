@@ -57,13 +57,12 @@ Cronjobs:
 
 Backlog:
 
-- Flemmarr
-- Jellyseerr
-- Yaade(Replace Hoppscotch)
 
 Possible Additions:
 - Dashy
+- Flemmarr
 - Navidrome
+- Jellyseerr
 - Vaultwarden
 - Rancher/k3s
 - Blog(Ghost)
