@@ -34,3 +34,4 @@
     - { role: watchtower,       tags: [ 'watchtower' ]}
     - { role: healthchecks,     tags: [ 'healthchecks' ]}
     - { role: foundry,          tags: [ 'foundry' ]}
+    - { role: whoogle,          tags: [ 'whoogle' ]}

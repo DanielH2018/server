@@ -40,6 +40,7 @@ Development:
 - Code Server
 
 Miscellaneous:
+- Whoogle
 - Guacamole
 - FoundryVTT
 - File Browser
@@ -55,11 +56,10 @@ Cronjobs:
 - Crowdsec update & upgrade
 
 Backlog:
-- Whoogle
+
 - Flemmarr
 - Jellyseerr
 - Yaade(Replace Hoppscotch)
-
 
 Possible Additions:
 - Dashy
