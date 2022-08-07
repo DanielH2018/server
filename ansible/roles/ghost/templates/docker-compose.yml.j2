@@ -1,0 +1,35 @@
+version: '3.1'
+
+services:
+  ghost:
+    image: ghost:alpine
+    restart: unless-stopped
+    container_name: ghost
+    ports:
+      - 2368:2368
+    environment:
+      - url:"https://{{ DOMAIN }}"
+    networks:
+      - {{ DOCKER_NETWORK }}
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Setup HTTP entrypoint
+      - "traefik.http.routers.ghost.entrypoints=http"
+      - "traefik.http.routers.ghost.rule=Host(`blog.{{ DOMAIN }}`)"
+      # Redirect HTTP to HTTPS
+      - "traefik.http.middlewares.ghost-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.ghost.middlewares=ghost-https-redirect"
+      # Setup HTTPS entrypoint
+      - "traefik.http.routers.ghost-secure.entrypoints=https"
+      - "traefik.http.routers.ghost-secure.rule=Host(`blog.{{ DOMAIN }}`)"
+      - "traefik.http.routers.ghost-secure.tls=true"
+      # Setup port forwarding to internal port
+      - "traefik.http.routers.ghost-secure.service=ghost"
+      - "traefik.http.services.ghost.loadbalancer.server.port=2368"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true
