@@ -40,6 +40,10 @@ Development:
 - Hoppscotch
 - Code Server
 
+Personal Content:
+- Blog(Ghost)
+- Homepage(littlelink-server)
+
 Miscellaneous:
 - Whoogle
 - Guacamole
@@ -47,7 +51,6 @@ Miscellaneous:
 - Home Assistant
 - LaTex Workshop
 - Minecraft Server
-- Auto-add Cloudflare CNAME
 
 Cronjobs:
 - Docker image prune
@@ -56,8 +59,7 @@ Cronjobs:
 - Crowdsec update & upgrade
 
 Backlog:
-- Blog(Ghost)
+
 
 Possible Additions:
-- Dashy
 - Flemmarr

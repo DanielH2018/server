@@ -1,0 +1,11 @@
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}"
+
+- include_tasks: dns.yml
+  with_items:
+    - "www"
+
+- include_tasks: docker.yml
+  with_items:
+    - "{{ role_name }}"

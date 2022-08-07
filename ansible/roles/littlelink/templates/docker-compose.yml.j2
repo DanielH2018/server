@@ -1,0 +1,59 @@
+version: "3.0"
+services:
+  littlelink:
+    image: ghcr.io/techno-tim/littlelink-server:latest
+    container_name: littlelink
+    environment:
+      - META_TITLE=Daniel Hunter
+      - META_DESCRIPTION=Software Engineer
+      - META_AUTHOR=Daniel Hunter
+      - META_KEYWORDS=Engineering
+      - LANG=en
+      - META_INDEX_STATUS=all
+      - OG_SITE_NAME=Daniel Hunter
+      - OG_TITLE=Daniel Hunter
+      - OG_DESCRIPTION=The home of Daniel Hunter
+      - OG_URL=https://www.[REMOVED_KEY]
+      - OG_IMAGE=https://media-exp1.licdn.com/dms/image/C4E03AQE1RAdnHr2FHQ/profile-displayphoto-shrink_200_200/0/1646779805962?e=1665619200&v=beta&t=oBCsNn2uuqjPdf0kp2ON5O-wEmezwFZAGIk-ntlxNHk
+      - OG_IMAGE_WIDTH=400
+      - OG_IMAGE_HEIGHT=400
+      - THEME=Dark
+      - FAVICON_URL=https://media-exp1.licdn.com/dms/image/C4E03AQE1RAdnHr2FHQ/profile-displayphoto-shrink_200_200/0/1646779805962?e=1665619200&v=beta&t=oBCsNn2uuqjPdf0kp2ON5O-wEmezwFZAGIk-ntlxNHk
+      - AVATAR_URL=https://media-exp1.licdn.com/dms/image/C4E03AQE1RAdnHr2FHQ/profile-displayphoto-shrink_200_200/0/1646779805962?e=1665619200&v=beta&t=oBCsNn2uuqjPdf0kp2ON5O-wEmezwFZAGIk-ntlxNHk
+      - AVATAR_2X_URL=https://media-exp1.licdn.com/dms/image/C4E03AQE1RAdnHr2FHQ/profile-displayphoto-shrink_200_200/0/1646779805962?e=1665619200&v=beta&t=oBCsNn2uuqjPdf0kp2ON5O-wEmezwFZAGIk-ntlxNHk
+      - AVATAR_ALT=Daniel Hunter Profile Pic
+      - NAME=Daniel Hunter
+      - BIO=Software Engineer @ Publicis Sapient
+      # use ENV variable names for order, listed buttons will be boosted to the top
+      - BUTTON_ORDER=GITHUB,LINKED_IN
+      - GITHUB=https://github.com/DanielH2018
+      - LINKED_IN=https://www.linkedin.com/in/daniel-hunter-110952160/
+    ports:
+      - 3004:3000
+    networks:
+      - {{ DOCKER_NETWORK }}
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Setup HTTP entrypoint
+      - "traefik.http.routers.littlelink.entrypoints=http"
+      - "traefik.http.routers.littlelink.rule=Host(`www.{{ DOMAIN }}`)"
+      # Redirect HTTP to HTTPS
+      - "traefik.http.middlewares.littlelink-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.littlelink.middlewares=littlelink-https-redirect"
+      # Setup HTTPS entrypoint
+      - "traefik.http.routers.littlelink-secure.entrypoints=https"
+      - "traefik.http.routers.littlelink-secure.rule=Host(`www.{{ DOMAIN }}`)"
+      - "traefik.http.routers.littlelink-secure.tls=true"
+      # Setup port forwarding to internal port
+      - "traefik.http.routers.littlelink-secure.service=littlelink"
+      - "traefik.http.services.littlelink.loadbalancer.server.port=3000"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true

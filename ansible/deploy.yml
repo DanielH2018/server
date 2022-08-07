@@ -36,3 +36,4 @@
     - { role: foundry,          tags: [ 'foundry' ]}
     - { role: whoogle,          tags: [ 'whoogle' ]}
     - { role: ghost,            tags: [ 'ghost']}
+    - { role: littlelink,       tags: [ 'littlelink']}
