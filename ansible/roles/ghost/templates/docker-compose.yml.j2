@@ -11,6 +11,11 @@ services:
       - url:"https://{{ DOMAIN }}"
     networks:
       - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:2368/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
