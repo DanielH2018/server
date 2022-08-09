@@ -5,35 +5,36 @@
   vars_files:
     - .env
   roles:
-    - { role: docker,           tags: [ 'docker' ]}
-    - { role: traefik,          tags: [ 'traefik' ]}
-    - { role: portainer,        tags: [ 'portainer' ]}
-    - { role: authelia,         tags: [ 'authelia' ]}
-    - { role: autoheal,         tags: [ 'autoheal' ]}
-    - { role: cloudflare-ddns,  tags: [ 'cloudflare-ddns' ]}
-    - { role: crowdsec,         tags: [ 'crowdsec' ]}
-    - { role: code-server,      tags: [ 'code-server' ]}
-    - { role: hoppscotch,       tags: [ 'hoppscotch' ]}
-    - { role: freshrss,         tags: [ 'freshrss' ]}
-    - { role: heimdall,         tags: [ 'heimdall' ]}
-    - { role: uptime-kuma,      tags: [ 'uptime-kuma' ]}
-    - { role: pihole,           tags: [ 'pihole' ]}
-    - { role: file-browser,     tags: [ 'file-browser' ]}
-    - { role: guacamole,        tags: [ 'guacamole' ]}
-    - { role: nordlynx,         tags: [ 'nordlynx', 'media' ]}
-    - { role: qbittorrent,      tags: [ 'qbittorrent', 'nordlynx', 'media' ]}
-    - { role: prowlarr,         tags: [ 'prowlarr', 'media' ]}
-    - { role: sonarr,           tags: [ 'sonarr', 'media' ]}
-    - { role: radarr,           tags: [ 'radarr', 'media' ]}
-    - { role: jellyfin,         tags: [ 'jellyfin', 'media' ]}
-    - { role: prometheus,       tags: [ 'prometheus', 'monitoring' ]}
-    - { role: grafana,          tags: [ 'grafana', 'monitoring' ]}
-    - { role: netdata,          tags: [ 'netdata', 'monitoring' ]}
-    - { role: minecraft,        tags: [ 'minecraft' ]}
-    - { role: home-assistant,   tags: [ 'home-assistant' ]}
-    - { role: watchtower,       tags: [ 'watchtower' ]}
-    - { role: healthchecks,     tags: [ 'healthchecks' ]}
-    - { role: foundry,          tags: [ 'foundry' ]}
-    - { role: whoogle,          tags: [ 'whoogle' ]}
-    - { role: ghost,            tags: [ 'ghost']}
-    - { role: littlelink,       tags: [ 'littlelink']}
+    - { role: docker,             tags: [ 'docker' ]}
+    - { role: traefik,            tags: [ 'traefik' ]}
+    - { role: portainer,          tags: [ 'portainer' ]}
+    - { role: authelia,           tags: [ 'authelia' ]}
+    - { role: autoheal,           tags: [ 'autoheal' ]}
+    - { role: cloudflare-ddns,    tags: [ 'cloudflare-ddns' ]}
+    - { role: crowdsec,           tags: [ 'crowdsec' ]}
+    - { role: code-server,        tags: [ 'code-server' ]}
+    - { role: hoppscotch,         tags: [ 'hoppscotch' ]}
+    - { role: freshrss,           tags: [ 'freshrss' ]}
+    - { role: heimdall,           tags: [ 'heimdall' ]}
+    - { role: uptime-kuma,        tags: [ 'uptime-kuma' ]}
+    - { role: pihole,             tags: [ 'pihole' ]}
+    - { role: file-browser,       tags: [ 'file-browser' ]}
+    - { role: guacamole,          tags: [ 'guacamole' ]}
+    - { role: nordlynx,           tags: [ 'nordlynx', 'media' ]}
+    - { role: qbittorrent,        tags: [ 'qbittorrent', 'nordlynx', 'media' ]}
+    - { role: prowlarr,           tags: [ 'prowlarr', 'media' ]}
+    - { role: sonarr,             tags: [ 'sonarr', 'media' ]}
+    - { role: radarr,             tags: [ 'radarr', 'media' ]}
+    - { role: jellyfin,           tags: [ 'jellyfin', 'media' ]}
+    - { role: prometheus,         tags: [ 'prometheus', 'monitoring' ]}
+    - { role: grafana,            tags: [ 'grafana', 'monitoring' ]}
+    - { role: netdata,            tags: [ 'netdata', 'monitoring' ]}
+    - { role: minecraft,          tags: [ 'minecraft' ]}
+    - { role: cloudflare-ddns-mc, tags: [ 'cloudflare-ddns-mc' ]}
+    - { role: home-assistant,     tags: [ 'home-assistant' ]}
+    - { role: watchtower,         tags: [ 'watchtower' ]}
+    - { role: healthchecks,       tags: [ 'healthchecks' ]}
+    - { role: foundry,            tags: [ 'foundry' ]}
+    - { role: whoogle,            tags: [ 'whoogle' ]}
+    - { role: ghost,              tags: [ 'ghost']}
+    - { role: littlelink,         tags: [ 'littlelink']}
