@@ -5,6 +5,7 @@ services:
   foundry:
     image: direckthit/fvtt-docker:latest
     container_name: foundry
+    user: root # Workaround for permission errors
     volumes:
       - ./data:/data/foundryvtt
       - ./foundrydl:/host
