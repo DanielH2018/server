@@ -41,8 +41,8 @@ Development:
 - Code Server
 
 Personal Content:
-- Blog(Ghost)
-- Homepage(littlelink-server)
+- Ghost
+- Littlelink-server
 
 Miscellaneous:
 - Whoogle
