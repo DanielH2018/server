@@ -38,3 +38,4 @@ sudo ufw enable
 
 # Ensure automatic security updates
 sudo apt install unattended-upgrades
+sudo apt install update-notifier-common
