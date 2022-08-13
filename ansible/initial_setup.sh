@@ -18,14 +18,7 @@ sudo sed -i '/ChallengeResponseAuthentication  /c\ChallengeResponseAuthenticatio
 sudo crontab -l > crontab_new
 
 # Clean dangling Docker images
-echo "30 6 * * * /usr/bin/docker image prune -f" >> crontab_new
-
-# Add update and upgrade crontab at 7am UTC(2am EST)
-echo "0 7 * * * root apt-get -y update" >> crontab_new
-
-echo "5 7 * * * root apt-get -y upgrade" >> crontab_new
-
-echo "10 7 * * * root apt-get -y autoremove" >> crontab_new
+echo "30 6 * * * /usr/bin/docker image prune -a -f" >> crontab_new
 
 # Schedule restart at 7:30am UTC(2:30am EST) on Sunday
 echo "30 7 * * 0 /sbin/shutdown -r +5" >> crontab_new
