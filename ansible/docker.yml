@@ -1,10 +1,10 @@
-- set_fact:
-    container: "{{ item }}"
-
 - name: Create docker-compose from template
   template:
     src: docker-compose.yml.j2
     dest: "/home/{{ SYS_USER }}/server/{{ container }}/docker-compose.yml"
+  vars:
+    container: "{{ container }}"
+    port: "{{ port }}"
     
 - name: Deploy {{ container }}
   shell: docker-compose up -d --force-recreate

@@ -1,3 +1,4 @@
+{% from 'traefik.yml.j2' import labels with context %}
 ---
 version: '3.8'
 services:
@@ -16,25 +17,7 @@ services:
     networks:
       - {{ DOCKER_NETWORK }}
     labels:
-      # Enable traefik for container
-      - "traefik.enable=true"
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.file-browser.entrypoints=http"
-      - "traefik.http.routers.file-browser.rule=Host(`file-browser.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.file-browser-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.file-browser.middlewares=file-browser-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.file-browser-secure.entrypoints=https"
-      - "traefik.http.routers.file-browser-secure.rule=Host(`file-browser.{{ DOMAIN }}`)"
-      - "traefik.http.routers.file-browser-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.file-browser-secure.service=file-browser"
-      - "traefik.http.services.file-browser.loadbalancer.server.port=80"
-      # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
-      # Add authelia
-      - 'traefik.http.routers.file-browser-secure.middlewares=authelia@docker'
+      {{ labels(container, '80', 'y') }}
 
 networks:
   {{ DOCKER_NETWORK }}:
