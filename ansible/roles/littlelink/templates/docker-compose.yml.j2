@@ -1,3 +1,5 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
 version: "3.0"
 services:
   littlelink:
@@ -43,21 +45,11 @@ services:
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.littlelink.entrypoints=http"
-      - "traefik.http.routers.littlelink.rule=Host(`www.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.littlelink-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.littlelink.middlewares=littlelink-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.littlelink-secure.entrypoints=https"
-      - "traefik.http.routers.littlelink-secure.rule=Host(`www.{{ DOMAIN }}`)"
-      - "traefik.http.routers.littlelink-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.littlelink-secure.service=littlelink"
-      - "traefik.http.services.littlelink.loadbalancer.server.port=3000"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '3000', 'n') }}
 
 networks:
   {{ DOCKER_NETWORK }}:

@@ -4,7 +4,6 @@
     dest: "/home/{{ SYS_USER }}/server/{{ container }}/docker-compose.yml"
   vars:
     container: "{{ container }}"
-    port: "{{ port }}"
     
 - name: Deploy {{ container }}
   shell: docker-compose up -d --force-recreate

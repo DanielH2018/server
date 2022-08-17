@@ -1,6 +1,6 @@
+{% from 'traefik.yml.j2' import labels with context %}
 ---
 version: "3.8"
-
 services:
   foundry:
     image: direckthit/fvtt-docker:latest
@@ -22,21 +22,11 @@ services:
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.foundry.entrypoints=http"
-      - "traefik.http.routers.foundry.rule=Host(`foundry.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.foundry-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.foundry.middlewares=foundry-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.foundry-secure.entrypoints=https"
-      - "traefik.http.routers.foundry-secure.rule=Host(`foundry.{{ DOMAIN }}`)"
-      - "traefik.http.routers.foundry-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.foundry-secure.service=foundry"
-      - "traefik.http.services.foundry.loadbalancer.server.port=30000"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '30000', 'n') }}
 
 networks:
   {{ DOCKER_NETWORK }}:

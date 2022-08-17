@@ -14,4 +14,3 @@
 - include_tasks: docker.yml
   vars:
     container: "{{ role_name }}"
-    port: 80

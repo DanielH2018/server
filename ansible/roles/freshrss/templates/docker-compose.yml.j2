@@ -1,3 +1,4 @@
+{% from 'traefik.yml.j2' import labels with context %}
 ---
 version: "3.8"
 services:
@@ -23,23 +24,11 @@ services:
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.freshrss.entrypoints=http"
-      - "traefik.http.routers.freshrss.rule=Host(`freshrss.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.freshrss-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.freshrss.middlewares=freshrss-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.freshrss-secure.entrypoints=https"
-      - "traefik.http.routers.freshrss-secure.rule=Host(`freshrss.{{ DOMAIN }}`)"
-      - "traefik.http.routers.freshrss-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.freshrss-secure.service=freshrss"
-      - "traefik.http.services.freshrss.loadbalancer.server.port=80"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
-      # Add authelia
-      - 'traefik.http.routers.freshrss-secure.middlewares=authelia@docker'
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '80', 'y') }}
 
 networks:
   {{ DOCKER_NETWORK }}:

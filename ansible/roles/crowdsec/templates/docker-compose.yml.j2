@@ -1,3 +1,5 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
 version: '3.8'
 services:
   crowdsec:
@@ -56,23 +58,12 @@ services:
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.dashboard.entrypoints=http"
-      - "traefik.http.routers.dashboard.rule=Host(`crowdsec.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.dashboard-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.dashboard.middlewares=dashboard-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.dashboard-secure.entrypoints=https"
-      - "traefik.http.routers.dashboard-secure.rule=Host(`crowdsec.{{ DOMAIN }}`)"
-      - "traefik.http.routers.dashboard-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.dashboard-secure.service=dashboard"
-      - "traefik.http.services.dashboard.loadbalancer.server.port=3000"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
-      # Add authelia
-      - 'traefik.http.routers.dashboard-secure.middlewares=authelia@docker'
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '3000', 'y') }}
+      
       # Disable watchtower update
       - "com.centurylinklabs.watchtower.enable=false"
 

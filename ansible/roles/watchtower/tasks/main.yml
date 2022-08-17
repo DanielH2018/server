@@ -3,5 +3,5 @@
     - "{{ role_name }}"
 
 - include_tasks: docker.yml
-  with_items:
-    - "{{ role_name }}"
+  vars:
+    container: "{{ role_name }}"

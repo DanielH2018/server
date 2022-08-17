@@ -5,5 +5,5 @@
 # TODO Auto Create Minecraft DNS
 
 - include_tasks: docker.yml
-  with_items:
-    - "{{ role_name }}"
+  vars:
+    container: "{{ role_name }}"

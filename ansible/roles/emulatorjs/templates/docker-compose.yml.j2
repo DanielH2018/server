@@ -1,3 +1,4 @@
+{% from 'traefik.yml.j2' import labels with context %}
 ---
 version: "2.1"
 services:
@@ -21,45 +22,14 @@ services:
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
-
-
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.emulatorjs-backend.entrypoints=http"
-      - "traefik.http.routers.emulatorjs-backend.rule=Host(`emulatorjs-backend.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.emulatorjs-backend-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.emulatorjs-backend.middlewares=emulatorjs-backend-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.emulatorjs-backend-secure.entrypoints=https"
-      - "traefik.http.routers.emulatorjs-backend-secure.rule=Host(`emulatorjs-backend.{{ DOMAIN }}`)"
-      - "traefik.http.routers.emulatorjs-backend-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.emulatorjs-backend-secure.service=emulatorjs-backend"
-      - "traefik.http.services.emulatorjs-backend.loadbalancer.server.port=3000"
-      # Add authelia
-      - 'traefik.http.routers.emulatorjs-backend-secure.middlewares=authelia@docker'
-
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.emulatorjs-frontend.entrypoints=http"
-      - "traefik.http.routers.emulatorjs-frontend.rule=Host(`emulatorjs.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.emulatorjs-frontend-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.emulatorjs-frontend.middlewares=emulatorjs-frontend-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.emulatorjs-frontend-secure.entrypoints=https"
-      - "traefik.http.routers.emulatorjs-frontend-secure.rule=Host(`emulatorjs.{{ DOMAIN }}`)"
-      - "traefik.http.routers.emulatorjs-frontend-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.emulatorjs-frontend-secure.service=emulatorjs-frontend"
-      - "traefik.http.services.emulatorjs-frontend.loadbalancer.server.port=80"
-      # Add authelia
-      - 'traefik.http.routers.emulatorjs-frontend-secure.middlewares=authelia@docker'
-
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '80', 'y') }}
+
+      {{ labels(container ~ '-backend', '3000', 'y') }}
       
-
-
 networks:
   {{ DOCKER_NETWORK }}:
     external: true

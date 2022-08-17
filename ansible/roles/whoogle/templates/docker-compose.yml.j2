@@ -1,7 +1,8 @@
 # can't use mem_limit in a 3.x docker-compose file in non swarm mode
 # see https://github.com/docker/compose/issues/4513
+{% from 'traefik.yml.j2' import labels with context %}
+---
 version: "2.4"
-
 services:
   whoogle:
     image: benbusby/whoogle-search
@@ -32,23 +33,11 @@ services:
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.whoogle.entrypoints=http"
-      - "traefik.http.routers.whoogle.rule=Host(`whoogle.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.whoogle-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.whoogle.middlewares=whoogle-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.whoogle-secure.entrypoints=https"
-      - "traefik.http.routers.whoogle-secure.rule=Host(`whoogle.{{ DOMAIN }}`)"
-      - "traefik.http.routers.whoogle-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.whoogle-secure.service=whoogle"
-      - "traefik.http.services.whoogle.loadbalancer.server.port=5000"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
-      # Add authelia
-      #- 'traefik.http.routers.whoogle-secure.middlewares=authelia@docker'
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '5000', 'n') }}
 
 networks:
   {{ DOCKER_NETWORK }}:

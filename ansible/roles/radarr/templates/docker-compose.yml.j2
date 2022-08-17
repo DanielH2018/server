@@ -1,3 +1,5 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
 version: "3.8"
 services:
   radarr:
@@ -25,23 +27,11 @@ services:
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.radarr.entrypoints=http"
-      - "traefik.http.routers.radarr.rule=Host(`radarr.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.radarr-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.radarr.middlewares=radarr-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.radarr-secure.entrypoints=https"
-      - "traefik.http.routers.radarr-secure.rule=Host(`radarr.{{ DOMAIN }}`)"
-      - "traefik.http.routers.radarr-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.radarr-secure.service=radarr"
-      - "traefik.http.services.radarr.loadbalancer.server.port=7878"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
-      # Add authelia
-      - 'traefik.http.routers.radarr-secure.middlewares=authelia@docker'
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '7878', 'y') }}
     depends_on:
       - prowlarr
       - qbittorrent

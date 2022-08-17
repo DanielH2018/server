@@ -1,6 +1,6 @@
+{% from 'traefik.yml.j2' import labels with context %}
 ---
 version: "3.8"
-
 services:
   uptime-kuma:
     image: louislam/uptime-kuma:latest
@@ -17,23 +17,12 @@ services:
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.uptime-kuma.entrypoints=http"
-      - "traefik.http.routers.uptime-kuma.rule=Host(`uptime-kuma.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.uptime-kuma-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.uptime-kuma.middlewares=uptime-kuma-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.uptime-kuma-secure.entrypoints=https"
-      - "traefik.http.routers.uptime-kuma-secure.rule=Host(`uptime-kuma.{{ DOMAIN }}`)"
-      - "traefik.http.routers.uptime-kuma-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.uptime-kuma-secure.service=uptime-kuma"
-      - "traefik.http.services.uptime-kuma.loadbalancer.server.port=3001"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
-      # Add authelia
-      - 'traefik.http.routers.uptime-kuma-secure.middlewares=authelia@docker'
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '3001', 'y') }}
+
 
 networks:
   {{ DOCKER_NETWORK }}:

@@ -17,8 +17,8 @@
     - "{{ role_name }}"
 
 - include_tasks: docker.yml
-  with_items:
-    - "{{ role_name }}"
+  vars:
+    container: "{{ role_name }}"
 
 # Pause for 5 seconds to let docker build
 - pause:

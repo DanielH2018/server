@@ -1,3 +1,5 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
 version: "3.8"
 services:
   netdata:
@@ -20,23 +22,11 @@ services:
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.netdata.entrypoints=http"
-      - "traefik.http.routers.netdata.rule=Host(`netdata.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.netdata-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.netdata.middlewares=netdata-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.netdata-secure.entrypoints=https"
-      - "traefik.http.routers.netdata-secure.rule=Host(`netdata.{{ DOMAIN }}`)"
-      - "traefik.http.routers.netdata-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.netdata-secure.service=netdata"
-      - "traefik.http.services.netdata.loadbalancer.server.port=19999"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
-      # Add authelia
-      - 'traefik.http.routers.netdata-secure.middlewares=authelia@docker'
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '19999', 'y') }}
 
 networks:
   {{ DOCKER_NETWORK }}:

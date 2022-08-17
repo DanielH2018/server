@@ -1,5 +1,6 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
 version: "3.8"
-
 services:
   hoppscotch:
     image: hoppscotch/hoppscotch:latest
@@ -17,23 +18,11 @@ services:
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.hoppscotch.entrypoints=http"
-      - "traefik.http.routers.hoppscotch.rule=Host(`hoppscotch.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.hoppscotch-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.hoppscotch.middlewares=hoppscotch-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.hoppscotch-secure.entrypoints=https"
-      - "traefik.http.routers.hoppscotch-secure.rule=Host(`hoppscotch.{{ DOMAIN }}`)"
-      - "traefik.http.routers.hoppscotch-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.hoppscotch-secure.service=hoppscotch"
-      - "traefik.http.services.hoppscotch.loadbalancer.server.port=3000"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
-      # Add authelia
-      - 'traefik.http.routers.hoppscotch-secure.middlewares=authelia@docker'
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '3000', 'y') }}
 
 networks:
   {{ DOCKER_NETWORK }}:

@@ -1,3 +1,5 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
 version: "3.8"
 services:
   qbittorrent:
@@ -22,22 +24,10 @@ services:
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.qbittorrent.entrypoints=http"
-      - "traefik.http.routers.qbittorrent.rule=Host(`qbittorrent.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.qbittorrent-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.qbittorrent.middlewares=qbittorrent-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.qbittorrent-secure.entrypoints=https"
-      - "traefik.http.routers.qbittorrent-secure.rule=Host(`qbittorrent.{{ DOMAIN }}`)"
-      - "traefik.http.routers.qbittorrent-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.qbittorrent-secure.service=qbittorrent"
-      - "traefik.http.services.qbittorrent.loadbalancer.server.port=8080"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
-      # Add authelia
-      - 'traefik.http.routers.qbittorrent-secure.middlewares=authelia@docker'
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '8080', 'y') }}
     depends_on:
       - nordlynx
