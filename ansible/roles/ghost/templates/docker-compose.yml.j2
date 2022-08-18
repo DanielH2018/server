@@ -6,6 +6,8 @@ services:
     image: mysql:8.0
     restart: unless-stopped
     container_name: ghost_db
+    volumes:
+      - ghost_db_data:/var/lib/mysql
     environment:
       MYSQL_ROOT_PASSWORD: {{ GHOST_DB_ROOT_PASSWORD }}
       MYSQL_USER: {{ GHOST_DB_USER }}
@@ -18,6 +20,8 @@ services:
     image: ghost:alpine
     restart: unless-stopped
     container_name: ghost
+    volumes:
+      - ghost_data:/var/lib/ghost/content
     ports:
       - 2368:2368
     environment:
@@ -43,3 +47,6 @@ services:
 networks:
   {{ DOCKER_NETWORK }}:
     external: true
+volumes:
+  ghost_db_data:
+  ghost_data:

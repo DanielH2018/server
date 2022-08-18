@@ -9,6 +9,7 @@ services:
     volumes:
       - ./data:/data/foundryvtt
       - ./foundrydl:/host
+      - foundry_data:/opt/foundryvtt/resources/app
     ports:
       - 30000:30000
     restart: unless-stopped
@@ -31,3 +32,5 @@ services:
 networks:
   {{ DOCKER_NETWORK }}:
     external: true
+volumes:
+  foundry_data:
