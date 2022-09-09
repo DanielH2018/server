@@ -3,7 +3,7 @@
 2. Run `sudo apt-get upgrade -y`
 3. Run `sudo chmod +x /home/ubuntu/server/ansible/initial_setup.sh`.
 4. Run `sudo /home/ubuntu/server/ansible/intial_setup.sh`.
-    1. If using Intel XE graphics, ensure `/dev/dri/` exists, otherwise run `sudo apt install linux-oem-20.04` and reboot.
+    1. If using Intel XE graphics, ensure `/dev/dri/` exists, otherwise run `sudo apt install linux-oem-22.04` and reboot.
 5. Run `ansible-playbook deploy.yml --ask-become-pass`.
 
 ---Instructions to update server environment---
@@ -27,3 +27,10 @@
 2. Copy .devcontainer from https://github.com/James-Yu/LaTeX-Workshop/tree/master/samples/docker
 3. Install VS Code Remote - Containers, and SSH
 4. Reopen the Resume directory with the container
+
+
+---Instructions to setup Intel QSV---
+1. echo "options i915 enable_guc=3" >> /etc/modprobe.d/i915.conf
+2. sudo update-initramfs -u
+3. sudo update-grub
+4. sudo reboot
