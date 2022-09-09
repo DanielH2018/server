@@ -6,7 +6,7 @@
     1. If using Intel XE graphics, ensure `/dev/dri/` exists, otherwise run `sudo apt install linux-oem-22.04` and reboot.
 5. Run `ansible-playbook deploy.yml --ask-become-pass`.
 
----Instructions to update server environment---
+---Instructions to update server environment from git remote---
 1. Perform update to container.
 2. Run `ansible-playbook git.yml`.
 
@@ -18,16 +18,11 @@
 5. Add traefik labels and cloudflare CNAME as needed.
 6. Run `ansible-playbook deploy.yml --tags "<NAME>".
 
----Instructions to setup minecraft environment---
-1. Create A name record in cloudflare to source ip
-2. Create port forward to server
-
 ---Instructions to setup LaTeX editor---
 1. Clone Resume repository in server
 2. Copy .devcontainer from https://github.com/James-Yu/LaTeX-Workshop/tree/master/samples/docker
 3. Install VS Code Remote - Containers, and SSH
 4. Reopen the Resume directory with the container
-
 
 ---Instructions to setup Intel QSV---
 1. echo "options i915 enable_guc=3" >> /etc/modprobe.d/i915.conf
