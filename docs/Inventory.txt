@@ -53,13 +53,11 @@ Miscellaneous:
 - Minecraft Server
 
 Cronjobs:
+- System restart
 - Docker image prune
-- System restart cronjob
-- System update & upgrade
 - Crowdsec update & upgrade
 
 Backlog:
-
 
 Possible Additions:
 - Flemmarr
