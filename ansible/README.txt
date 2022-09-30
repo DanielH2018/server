@@ -29,3 +29,6 @@
 2. sudo update-initramfs -u
 3. sudo update-grub
 4. sudo reboot
+
+---Instructions to setup PiVPN---
+1. curl -L https://install.pivpn.io | bash
