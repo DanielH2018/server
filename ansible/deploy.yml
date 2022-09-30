@@ -19,7 +19,6 @@
     - { role: uptime-kuma,        tags: [ 'uptime-kuma' ]}
     - { role: pihole,             tags: [ 'pihole' ]}
     - { role: file-browser,       tags: [ 'file-browser' ]}
-    - { role: guacamole,          tags: [ 'guacamole' ]}
     - { role: nordlynx,           tags: [ 'nordlynx', 'media' ]}
     - { role: qbittorrent,        tags: [ 'qbittorrent', 'nordlynx', 'media' ]}
     - { role: prowlarr,           tags: [ 'prowlarr', 'media' ]}

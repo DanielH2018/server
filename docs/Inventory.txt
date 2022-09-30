@@ -46,7 +46,6 @@ Personal Content:
 
 Miscellaneous:
 - Whoogle
-- Guacamole
 - FoundryVTT
 - Home Assistant
 - LaTex Workshop
