@@ -22,9 +22,9 @@
   become: yes
   become_method: sudo
 
-- include_tasks: dns.yml
-  with_items:
-    - auth
+# - include_tasks: dns.yml
+#   with_items:
+#     - auth
 
 - include_tasks: docker.yml
   vars:

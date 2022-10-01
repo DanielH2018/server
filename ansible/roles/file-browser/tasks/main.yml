@@ -7,9 +7,9 @@
     path: "/home/{{ SYS_USER }}/server/file-browser/data/file-browser.db"
     state: touch
 
-- include_tasks: dns.yml
-  with_items:
-    - "{{ role_name }}"
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
 
 - include_tasks: docker.yml
   vars:

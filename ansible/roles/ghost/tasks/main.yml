@@ -2,9 +2,9 @@
   with_items:
     - "{{ role_name }}"
 
-- include_tasks: dns.yml
-  with_items:
-    - "blog"
+# - include_tasks: dns.yml
+#   with_items:
+#     - "blog"
 
 - include_tasks: docker.yml
   vars:

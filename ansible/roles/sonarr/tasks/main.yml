@@ -16,9 +16,9 @@
     dest: "/home/{{ SYS_USER }}/server/sonarr/config/sonarr-episode-trimmer-config"
     mode: 0755
 
-- include_tasks: dns.yml
-  with_items:
-    - "{{ role_name }}"
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
 
 - include_tasks: docker.yml
   vars:

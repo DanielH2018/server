@@ -3,10 +3,10 @@
     - "{{ role_name }}/config/"
     - "{{ role_name }}/data/"
 
-- include_tasks: dns.yml
-  with_items:
-    - "{{ role_name }}"
-    - "{{ role_name }}-backend"
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
+#     - "{{ role_name }}-backend"
 
 - include_tasks: docker.yml
   vars:

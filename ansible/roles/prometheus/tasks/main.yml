@@ -8,9 +8,9 @@
     src: prometheus.yml.j2
     dest: "/home/{{ SYS_USER }}/server/prometheus/prometheus.yml"
 
-- include_tasks: dns.yml
-  with_items:
-    - "{{ role_name }}"
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
 
 - include_tasks: docker.yml
   vars:
