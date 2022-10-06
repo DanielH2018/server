@@ -16,6 +16,9 @@ services:
       - 6881:6881/udp
     networks:
       - {{ DOCKER_NETWORK }}
+    labels:
+      # Watchtower
+      - "com.centurylinklabs.watchtower.depends-on: qbittorrent"
 
 networks:
   {{ DOCKER_NETWORK }}:
