@@ -9,7 +9,7 @@ services:
       - {{ DOCKER_NETWORK }}
 
   unbound:
-    image: mvance/unbound:1.13.1-stubby
+    image: mvance/unbound:1.16.1-stubby
     container_name: unbound
     restart: unless-stopped
     ports:
@@ -46,23 +46,12 @@ services:
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
-      # Setup HTTP entrypoint
-      - "traefik.http.routers.pihole.entrypoints=http"
-      - "traefik.http.routers.pihole.rule=Host(`pihole.{{ DOMAIN }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.pihole-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.pihole.middlewares=pihole-https-redirect"
-      # Setup HTTPS entrypoint
-      - "traefik.http.routers.pihole-secure.entrypoints=https"
-      - "traefik.http.routers.pihole-secure.rule=Host(`pihole.{{ DOMAIN }}`)"
-      - "traefik.http.routers.pihole-secure.tls=true"
-      # Setup port forwarding to internal port
-      - "traefik.http.routers.pihole-secure.service=pihole"
-      - "traefik.http.services.pihole.loadbalancer.server.port=80"
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
-      # Add authelia
-      - 'traefik.http.routers.pihole-secure.middlewares=authelia@docker'
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '80', 'y') }}
+      
       # Add admin prefix to url
       - "traefik.http.routers.pihole-secure.middlewares=add-admin"
       - "traefik.http.middlewares.add-admin.addprefix.prefix=/admin"
