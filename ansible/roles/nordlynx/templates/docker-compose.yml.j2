@@ -18,7 +18,7 @@ services:
       - {{ DOCKER_NETWORK }}
     labels:
       # Disable Watchtower
-      - "com.centurylinklabs.watchtower.enable="false"
+      - "com.centurylinklabs.watchtower.enable=false"
 
 networks:
   {{ DOCKER_NETWORK }}:
