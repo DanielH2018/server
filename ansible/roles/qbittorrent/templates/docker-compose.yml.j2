@@ -29,5 +29,8 @@ services:
 
       {# Generate labels(container_name, port, use_authelia) -#}
       {{ labels(container, '8080', 'y') }}
+
+      # Disable Watchtower
+      - "com.centurylinklabs.watchtower.enable="false"
     depends_on:
       - nordlynx

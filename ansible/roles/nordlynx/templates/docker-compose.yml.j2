@@ -17,8 +17,8 @@ services:
     networks:
       - {{ DOCKER_NETWORK }}
     labels:
-      # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on: qbittorrent"
+      # Disable Watchtower
+      - "com.centurylinklabs.watchtower.enable="false"
 
 networks:
   {{ DOCKER_NETWORK }}:
