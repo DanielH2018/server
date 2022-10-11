@@ -5,7 +5,7 @@
 
 - name: Copy zip
   copy:
-    src: FoundryVTT-10.287.zip
+    src: FoundryVTT-10.288.zip
     dest: "/home/{{ SYS_USER }}/server/foundry/foundrydl/FoundryVTT.zip"
 
 # - include_tasks: dns.yml
