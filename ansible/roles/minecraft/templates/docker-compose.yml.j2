@@ -11,8 +11,12 @@ services:
       CONSOLE: "false"
       #ENABLE_AUTOPAUSE: "TRUE"
       TZ: {{ TZ }}
+      VERSION: 1.16.5
+      ENABLE_COMMAND_BLOCK: "true"
+      SPAWN_PROTECTION: 0
+      ALLOW_FLIGHT: "TRUE"
     ports:
       - 25565:25565
     volumes:
-      - /home/{{ SYS_USER }}/server/minecraft/data:/data
+      - ./data:/data
     restart: unless-stopped
