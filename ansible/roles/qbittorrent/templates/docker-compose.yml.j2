@@ -17,7 +17,7 @@ services:
       - /home/{{ SYS_USER }}/server/media/downloads:/downloads
     restart: unless-stopped
     healthcheck:
-      test: curl --fail -s http://localhost:8080/ || exit 1 && curl -fIsS http://wikipedia.org/|| exit 1
+      test: curl --fail -s http://localhost:8080/ || exit 1 && curl -fIsS http://wikipedia.org/ || exit 1
       interval: 30s
       timeout: 10s
       retries: 3
