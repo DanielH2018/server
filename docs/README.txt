@@ -36,4 +36,4 @@
 
 For more instructions, look at the README in the setup/ folder.
 
-Not covered in these docs is port forwarding, and Cloudflare dns setup.
+Not covered in these docs is port forwarding, and Cloudflare DNS setup.
