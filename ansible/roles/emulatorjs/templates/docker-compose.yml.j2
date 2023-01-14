@@ -28,7 +28,10 @@ services:
       {# Generate labels(container_name, port, use_authelia) -#}
       {{ labels(container, '80', 'y') }}
 
+      - "traefik.http.routers.emulatorjs.service=emulatorjs"
+
       {{ labels(container ~ '-backend', '3000', 'y') }}
+      - "traefik.http.routers.{{container}}-backend.service={{container}}-backend"
       
 networks:
   {{ DOCKER_NETWORK }}:
