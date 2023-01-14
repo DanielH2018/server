@@ -2,7 +2,7 @@
 users:
   {{ AUTHELIA_USER }}:
     displayname: "{{ AUTHELIA_USER }}"
-    password: "{{ authelia_hash.stdout[15:] }}"
+    password: "{{ authelia_hash.stdout[8:] }}"
     email: {{ EMAIL }}
     groups:
       - admins
