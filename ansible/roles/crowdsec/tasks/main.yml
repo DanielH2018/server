@@ -20,9 +20,9 @@
   vars:
     container: "{{ role_name }}"
 
-# Pause for 5 seconds to let docker build
+# Pause for 30 seconds to let docker build
 - pause:
-    seconds: 5
+    seconds: 30
 
 - name: Add Traefik collection
   shell: docker exec crowdsec cscli collections install crowdsecurity/traefik
