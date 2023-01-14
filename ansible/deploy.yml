@@ -5,11 +5,11 @@
   vars_files:
     - .env
   roles:
-    - { role: docker,             tags: [ 'docker' ]}
     - { role: traefik,            tags: [ 'traefik' ]}
     - { role: portainer,          tags: [ 'portainer' ]}
     - { role: authelia,           tags: [ 'authelia' ]}
     - { role: autoheal,           tags: [ 'autoheal' ]}
+    - { role: nordlynx,           tags: [ 'nordlynx', 'media' ]}
     - { role: cloudflare-ddns,    tags: [ 'cloudflare-ddns' ]}
     - { role: crowdsec,           tags: [ 'crowdsec' ]}
     - { role: code-server,        tags: [ 'code-server' ]}
@@ -17,9 +17,7 @@
     - { role: freshrss,           tags: [ 'freshrss' ]}
     - { role: heimdall,           tags: [ 'heimdall' ]}
     - { role: uptime-kuma,        tags: [ 'uptime-kuma' ]}
-    - { role: pihole,             tags: [ 'pihole' ]}
     - { role: file-browser,       tags: [ 'file-browser' ]}
-    - { role: nordlynx,           tags: [ 'nordlynx', 'media' ]}
     - { role: qbittorrent,        tags: [ 'qbittorrent', 'nordlynx', 'media' ]}
     - { role: prowlarr,           tags: [ 'prowlarr', 'media' ]}
     - { role: sonarr,             tags: [ 'sonarr', 'media' ]}
@@ -38,3 +36,4 @@
     - { role: ghost,              tags: [ 'ghost']}
     - { role: littlelink,         tags: [ 'littlelink']}
     - { role: emulatorjs,         tags: [ 'emulatorjs']}
+    - { role: pihole,             tags: [ 'pihole' ]}
