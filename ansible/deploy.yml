@@ -5,13 +5,13 @@
   vars_files:
     - .env
   roles:
+    - { role: crowdsec,           tags: [ 'crowdsec' ]}
     - { role: traefik,            tags: [ 'traefik' ]}
     - { role: portainer,          tags: [ 'portainer' ]}
     - { role: authelia,           tags: [ 'authelia' ]}
     - { role: autoheal,           tags: [ 'autoheal' ]}
     - { role: nordlynx,           tags: [ 'nordlynx', 'media' ]}
     - { role: cloudflare-ddns,    tags: [ 'cloudflare-ddns' ]}
-    - { role: crowdsec,           tags: [ 'crowdsec' ]}
     - { role: code-server,        tags: [ 'code-server' ]}
     - { role: hoppscotch,         tags: [ 'hoppscotch' ]}
     - { role: freshrss,           tags: [ 'freshrss' ]}
