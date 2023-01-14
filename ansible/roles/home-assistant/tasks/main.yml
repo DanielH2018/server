@@ -7,13 +7,6 @@
     src: configuration.yaml.j2
     dest: "/home/{{ SYS_USER }}/server/home-assistant/config/configuration.yaml"
 
-- name: Run HACS download script
-  shell: wget -O - https://raw.githubusercontent.com/hacs/get/main/get | bash -
-  args:
-    chdir: "/home/{{ SYS_USER }}/server/home-assistant/config"
-  become: yes
-  become_method: sudo
-
 # - include_tasks: dns.yml
 #   with_items:
 #     - "{{ role_name }}"
@@ -21,3 +14,10 @@
 - include_tasks: docker.yml
   vars:
     container: "{{ role_name }}"
+
+- name: Run HACS download script
+  shell: wget -O - https://raw.githubusercontent.com/hacs/get/main/get | bash -
+  args:
+    chdir: "/home/{{ SYS_USER }}/server/home-assistant/config"
+  become: yes
+  become_method: sudo
