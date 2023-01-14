@@ -6,9 +6,21 @@
   template:
     src: docker-compose.yml.j2
     dest: "/home/{{ SYS_USER }}/server/pihole/docker-compose.yml"
+  vars:
+    container: "{{ role_name }}"
 
 - name: Pull Pihole Image
   shell: docker pull pihole/pihole:latest
+  become: yes
+  become_method: sudo
+
+- name: Pull Unbound Image
+  shell: docker pull mvance/unbound:1.16.1-stubby
+  become: yes
+  become_method: sudo
+
+- name: Pull Stubby Image
+  shell: docker pull mvance/stubby:latest
   become: yes
   become_method: sudo
 
