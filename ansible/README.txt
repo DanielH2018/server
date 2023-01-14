@@ -4,7 +4,9 @@
 3. Run `sudo chmod +x /home/ubuntu/server/ansible/initial_setup.sh`.
 4. Run `sudo /home/ubuntu/server/ansible/intial_setup.sh`.
     1. If using Intel XE graphics, ensure `/dev/dri/` exists, otherwise run `sudo apt install linux-oem-22.04` and reboot.
-5. Run `ansible-playbook deploy.yml --ask-become-pass`.
+5. Run `ansible-playbook setup-docker.yml --ask-become-pass`.
+6. Reboot
+7. Run `ansible-playbook deploy.yml --ask-become-pass
 
 ---Instructions to update server environment from git remote---
 1. Perform update to container.

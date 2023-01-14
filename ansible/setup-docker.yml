@@ -1,0 +1,8 @@
+---
+- name: Setup Server
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - .env
+  roles:
+    - { role: docker,             tags: [ 'docker' ]}
