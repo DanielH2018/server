@@ -29,9 +29,6 @@ services:
 
       {# Generate labels(container_name, port, use_authelia) -#}
       {{ labels(container, '9696', 'y') }}
-    depends_on:
-      - nordlynx
-      - qbittorrent
 
 networks:
   {{ DOCKER_NETWORK }}:

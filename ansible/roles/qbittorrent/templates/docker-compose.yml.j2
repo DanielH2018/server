@@ -29,5 +29,3 @@ services:
 
       {# Generate labels(container_name, port, use_authelia) -#}
       {{ labels(container, '8080', 'y') }}
-    depends_on:
-      - nordlynx

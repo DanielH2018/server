@@ -32,9 +32,6 @@ services:
 
       {# Generate labels(container_name, port, use_authelia) -#}
       {{ labels(container, '8989', 'y') }}
-    depends_on:
-      - prowlarr
-      - qbittorrent
 
 networks:
   {{ DOCKER_NETWORK }}:
