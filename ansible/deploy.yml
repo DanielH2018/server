@@ -10,7 +10,6 @@
     - { role: portainer,          tags: [ 'portainer' ]}
     - { role: authelia,           tags: [ 'authelia' ]}
     - { role: autoheal,           tags: [ 'autoheal' ]}
-    - { role: nordlynx,           tags: [ 'nordlynx', 'media' ]}
     - { role: cloudflare-ddns,    tags: [ 'cloudflare-ddns' ]}
     - { role: code-server,        tags: [ 'code-server' ]}
     - { role: hoppscotch,         tags: [ 'hoppscotch' ]}
@@ -18,7 +17,7 @@
     - { role: heimdall,           tags: [ 'heimdall' ]}
     - { role: uptime-kuma,        tags: [ 'uptime-kuma' ]}
     - { role: file-browser,       tags: [ 'file-browser' ]}
-    - { role: qbittorrent,        tags: [ 'qbittorrent', 'nordlynx', 'media' ]}
+    - { role: qbittorrent,        tags: [ 'qbittorrent', 'media' ]}
     - { role: prowlarr,           tags: [ 'prowlarr', 'media' ]}
     - { role: sonarr,             tags: [ 'sonarr', 'media' ]}
     - { role: radarr,             tags: [ 'radarr', 'media' ]}

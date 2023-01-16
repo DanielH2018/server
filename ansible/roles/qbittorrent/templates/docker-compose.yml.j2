@@ -2,10 +2,32 @@
 ---
 version: "3.8"
 services:
+  nordlynx:
+    image: ghcr.io/bubuntux/nordlynx:latest
+    container_name: nordlynx
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN #required
+    environment:
+      - PRIVATE_KEY={{ NORDVPN_KEY }}
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
+    ports:
+      - 8080:8080 # qBittorrent
+      - 6881:6881
+      - 6881:6881/udp
+    networks:
+      - {{ DOCKER_NETWORK }}
+    labels:
+      # Disable Watchtower
+      - "com.centurylinklabs.watchtower.enable=false"
+
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
-    network_mode: container:nordlynx # port 8080
+    network_mode: service:nordlynx # port 8080
+    depends_on:
+      - nordlynx
     environment:
       - PUID={{ PUID }}
       - PGID={{ PGID }}
@@ -29,3 +51,7 @@ services:
 
       {# Generate labels(container_name, port, use_authelia) -#}
       {{ labels(container, '8080', 'y') }}
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true
