@@ -25,7 +25,10 @@ services:
     environment:
       - TZ={{ TZ }}
     healthcheck:
-      disable: false
+      test: wget --quiet --tries=1 --spider http://localhost:9091/api/state || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   {{ DOCKER_NETWORK }}:
