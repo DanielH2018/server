@@ -32,7 +32,8 @@
     - { role: healthchecks,       tags: [ 'healthchecks' ]}
     - { role: foundry,            tags: [ 'foundry' ]}
     - { role: whoogle,            tags: [ 'whoogle' ]}
-    - { role: ghost,              tags: [ 'ghost']}
-    - { role: littlelink,         tags: [ 'littlelink']}
-    - { role: emulatorjs,         tags: [ 'emulatorjs']}
+    - { role: ghost,              tags: [ 'ghost' ]}
+    - { role: littlelink,         tags: [ 'littlelink' ]}
+    - { role: emulatorjs,         tags: [ 'emulatorjs' ]}
+    - { role: scrutiny,           tags: [ 'scrutiny' ]}
     - { role: pihole,             tags: [ 'pihole' ]}

@@ -1,0 +1,12 @@
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/config"
+    - "{{ role_name }}/influxdb"
+
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
+
+- include_tasks: docker.yml
+  vars:
+    container: "{{ role_name }}"
