@@ -9,6 +9,7 @@ services:
       - PUID={{ PUID }}
       - PGID={{ PUID }}
       - TZ={{ TZ }}
+      - DOCKER_MODS=linuxserver/mods:homeassistant-hacs
     volumes:
       - ./config:/config
     ports:
