@@ -24,6 +24,11 @@ services:
       - 8001:8000
     networks:
       - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: curl --fail -s http://localhost:8000/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: unless-stopped
     labels:
       # Enable traefik for container
