@@ -19,6 +19,14 @@ services:
     networks:
       - {{ DOCKER_NETWORK }}
     labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '8080', 'y') }}
+
       # Disable Watchtower
       - "com.centurylinklabs.watchtower.enable=false"
 
@@ -43,14 +51,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    labels:
-      # Enable traefik for container
-      - "traefik.enable=true"
-      # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
-
-      {# Generate labels(container_name, port, use_authelia) -#}
-      {{ labels(container, '8080', 'y') }}
 
 networks:
   {{ DOCKER_NETWORK }}:
