@@ -1,7 +1,7 @@
 - include_tasks: directory.yml
   with_items:
     - "{{ role_name }}/config"
-    - "data/media/tv"
+    - "data/media/tv"                                                                                                                                                                                                                                                  
 
 - name: Create cleaner from template
   template:
