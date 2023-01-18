@@ -13,8 +13,7 @@ services:
       - DOCKER_MODS=linuxserver/mods:jellyfin-opencl-intel
     volumes:
       - ./config:/config
-      - /home/{{ SYS_USER }}/server/media/tvseries:/data/tvshows
-      - /home/{{ SYS_USER }}/server/media/movies:/data/movies
+      - /home/{{ SYS_USER }}/server/data/media:/data
     ports:
       - 8096:8096
       - 8920:8920 #optional

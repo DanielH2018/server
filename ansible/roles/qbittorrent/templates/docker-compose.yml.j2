@@ -44,7 +44,7 @@ services:
       - WEBUI_PORT=8080
     volumes:
       - ./config:/config
-      - /home/{{ SYS_USER }}/server/media/downloads:/downloads
+      - /home/{{ SYS_USER }}/server/data/torrents:/data/torrents
     restart: unless-stopped
     healthcheck:
       test: curl --fail -s http://localhost:8080/ || exit 1 && curl -fIsS http://wikipedia.org/ || exit 1

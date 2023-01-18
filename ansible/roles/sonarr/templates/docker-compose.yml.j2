@@ -12,8 +12,7 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config:/config
-      - /home/{{ SYS_USER }}/server/media/downloads:/downloads
-      - /home/{{ SYS_USER }}/server/media/tvseries:/tv
+      - /home/{{ SYS_USER }}/server/data:/data
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
