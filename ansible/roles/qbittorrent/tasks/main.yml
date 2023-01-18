@@ -1,7 +1,9 @@
 - include_tasks: directory.yml
   with_items:
     - "{{ role_name }}/config"
-    - "media/downloads"
+    - "data/torrents/movies"
+    - "data/torrents/tv"
+
 
 # - include_tasks: dns.yml
 #   with_items:
