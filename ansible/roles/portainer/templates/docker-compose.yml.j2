@@ -8,6 +8,8 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    ports:
+      - 9000:9000
     networks:
       - {{ DOCKER_NETWORK }}
     volumes:
