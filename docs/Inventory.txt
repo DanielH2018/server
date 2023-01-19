@@ -47,6 +47,7 @@ Personal Content:
 
 Miscellaneous:
 - Whoogle
+- Duplicati
 - FoundryVTT
 - Home Assistant
 - LaTex Workshop
@@ -60,3 +61,4 @@ Cronjobs:
 Backlog:
 
 Possible Additions:
+- Calibre + Calibre Web

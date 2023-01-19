@@ -36,4 +36,5 @@
     - { role: littlelink,         tags: [ 'littlelink' ]}
     - { role: emulatorjs,         tags: [ 'emulatorjs' ]}
     - { role: scrutiny,           tags: [ 'scrutiny' ]}
+    - { role: duplicati,          tags: [ 'duplicati' ]}
     - { role: pihole,             tags: [ 'pihole' ]}
