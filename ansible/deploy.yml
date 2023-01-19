@@ -37,4 +37,5 @@
     - { role: emulatorjs,         tags: [ 'emulatorjs' ]}
     - { role: scrutiny,           tags: [ 'scrutiny' ]}
     - { role: duplicati,          tags: [ 'duplicati' ]}
+    - { role: dashy,              tags: [ 'dashy' ]}
     - { role: pihole,             tags: [ 'pihole' ]}
