@@ -7,7 +7,7 @@ services:
     container_name: crowdsec
     environment:
       GID: "${GID-{{ PGID}}}"
-      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik"
+      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/whitelist-good-actors"
     volumes:
       - ./config/acquis.yaml:/etc/crowdsec/acquis.yaml
       - crowdsec-db:/var/lib/crowdsec/data/
