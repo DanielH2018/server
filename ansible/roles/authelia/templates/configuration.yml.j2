@@ -7,7 +7,10 @@ server:
   host: 0.0.0.0
   port: 9091
 log:
-  level: debug
+  level: info
+  format: json
+  file_path: "/var/log/authelia/authelia.log"
+  keep_stdout: true
 theme: dark
 # This secret can also be set using the env variables AUTHELIA_JWT_SECRET_FILE
 jwt_secret: {{ AUTHELIA_JWT }}

@@ -1,11 +1,21 @@
 - include_tasks: directory.yml
   with_items:
-    - "{{ role_name }}/config"
+    - "{{ role_name }}/config/notifications"
 
 - name: Create acquis.yaml from template
   template:
     src: acquis.yaml.j2
     dest: "/home/{{ SYS_USER }}/server/crowdsec/config/acquis.yaml"
+
+- name: Copy profiles.yaml
+  copy:
+    src: profiles.yaml
+    dest: "/home/{{ SYS_USER }}/server/crowdsec/config/profiles.yaml"
+
+- name: Copy discord.yaml
+  copy:
+    src: discord.yaml
+    dest: "/home/{{ SYS_USER }}/server/crowdsec/config/notifications/discord.yaml"
 
 - name: Create Dockerfile from template
   template:

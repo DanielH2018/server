@@ -6,6 +6,7 @@ services:
     container_name: authelia
     volumes:
       - ./config:/config
+      - authelia-logs:/var/log/authelia
     networks:
       - {{ DOCKER_NETWORK }}
     labels:
@@ -33,3 +34,5 @@ services:
 networks:
   {{ DOCKER_NETWORK }}:
     external: true
+volumes:
+  authelia-logs:

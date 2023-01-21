@@ -7,12 +7,13 @@ services:
     container_name: crowdsec
     environment:
       GID: "${GID-{{ PGID}}}"
-      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/whitelist-good-actors"
+      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/whitelist-good-actors LePresidente/authelia"
     volumes:
-      - ./config/acquis.yaml:/etc/crowdsec/acquis.yaml
+      - ./config:/etc/crowdsec:rw
       - crowdsec-db:/var/lib/crowdsec/data/
-      - crowdsec-config:/etc/crowdsec/
       - traefik_traefik-logs:/var/log/traefik/:ro
+      - /var/log/auth.log:/var/log/auth.log:ro
+      - authelia_authelia-logs:/var/log/authelia/:ro
     networks:
       - {{ DOCKER_NETWORK }}
     healthcheck:
@@ -72,6 +73,7 @@ networks:
     external: true
 volumes:
   crowdsec-db:
-  crowdsec-config:
-  traefik_traefik-logs: # this will be the name of the volume from traefic logs
+  traefik_traefik-logs: # this will be the name of the volume from traefik logs
     external: true # remove if traefik is running on same stack
+  authelia_authelia-logs: # this will be the name of the volume from authelia logs
+    external: true # remove if authelia is running on same stack
