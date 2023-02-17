@@ -18,6 +18,11 @@ services:
       - 6881:6881/udp
     networks:
       - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: ping -c 1 www.wikipedia.com || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
