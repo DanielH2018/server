@@ -14,13 +14,8 @@
   become: yes
   become_method: sudo
 
-- name: Pull Unbound Image
-  shell: docker pull mvance/unbound:1.16.1-stubby
-  become: yes
-  become_method: sudo
-
-- name: Pull Stubby Image
-  shell: docker pull mvance/stubby:latest
+- name: Pull DNSCrypt Image
+  shell: docker pull klutchell/dnscrypt-proxy:latest
   become: yes
   become_method: sudo
 

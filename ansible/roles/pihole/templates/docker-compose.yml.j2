@@ -3,32 +3,33 @@
 version: "3.8"
 
 services:
-  stubby:
-    image: mvance/stubby:latest
-    container_name: stubby
+  dnscrypt:
+    image: klutchell/dnscrypt-proxy:latest
+    container_name: dnscrypt-proxy
     restart: unless-stopped
-    networks:
-      - {{ DOCKER_NETWORK }}
-
-  unbound:
-    image: mvance/unbound:1.16.1-stubby
-    container_name: unbound
-    restart: unless-stopped
-    ports:
-      - 5353:53/tcp
-      - 5353:53/udp
-    depends_on:
-      - stubby   
     networks:
       {{ DOCKER_NETWORK }}:
-        ipv4_address: 172.19.1.1
+        ipv4_address: 172.19.0.42
+    expose:
+      - "5300/udp"
+      - "5300/tcp"
+    environment:
+      TZ: {{ TZ }}
+    dns:
+      - 1.1.1.1
+    volumes:
+      - './etc-dnscrypt-proxy:/config'
 
   pihole:
     container_name: pihole
     image: pihole/pihole:latest
     restart: unless-stopped
+    depends_on:
+      - dnscrypt
     networks:
       - {{ DOCKER_NETWORK }}
+    dns:
+      - 1.1.1.1
     ports:
       - "53:53/tcp"
       - "53:53/udp"
@@ -39,7 +40,7 @@ services:
       TZ: {{ TZ }}
       WEBPASSWORD: {{ PIHOLE_PASSWORD }}
       ServerIP: {{ SERVER_IP }}
-      PIHOLE_DNS_: 172.19.1.1#5353
+      PIHOLE_DNS_: 172.19.0.42#5300
     volumes:
        - './data/etc-pihole/:/etc/pihole/'
        - './data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
