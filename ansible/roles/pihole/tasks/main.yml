@@ -1,6 +1,13 @@
 - include_tasks: directory.yml
   with_items:
-    - "{{ role_name }}/data"
+    - "{{ role_name }}/data/etc-dnscrypt-proxy"
+
+- name: Create dnscrypt-proxy.toml from template
+  template:
+    src: dnscrypt-proxy.toml.j2
+    dest: "/home/{{ SYS_USER }}/server/pihole/data/etc-dnscrypt-proxy/dnscrypt-proxy.toml"
+  vars:
+    container: "{{ role_name }}"
 
 - name: Create docker-compose.yml from template
   template:

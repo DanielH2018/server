@@ -18,7 +18,7 @@ services:
     dns:
       - 1.1.1.1
     volumes:
-      - './etc-dnscrypt-proxy:/config'
+      - './data/etc-dnscrypt-proxy:/config'
 
   pihole:
     container_name: pihole
