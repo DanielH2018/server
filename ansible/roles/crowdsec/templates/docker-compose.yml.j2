@@ -16,12 +16,6 @@ services:
       - authelia_authelia-logs:/var/log/authelia/:ro
     networks:
       - {{ DOCKER_NETWORK }}
-    healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:8080/health/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    restart: unless-stopped
 
   bouncer-traefik:
     image: docker.io/fbonalair/traefik-crowdsec-bouncer:latest
