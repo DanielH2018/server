@@ -10,6 +10,7 @@ services:
       - NET_ADMIN #required
     environment:
       - PRIVATE_KEY={{ NORDVPN_KEY }}
+      - ALLOW_LIST=nyaa.iss.ink
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
     ports:
@@ -18,11 +19,6 @@ services:
       - 6881:6881/udp
     networks:
       - {{ DOCKER_NETWORK }}
-    healthcheck:
-      test: ping -c 1 www.google.com || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
@@ -52,8 +48,8 @@ services:
       - /home/{{ SYS_USER }}/server/data/torrents:/data/torrents
     restart: unless-stopped
     healthcheck:
-      test: curl --fail -s http://localhost:8080/ || exit 1 && ping -c 1 www.google.com || exit 1
-      interval: 30s
+      test: cd /config/`curl http://localhost:8080/api/v2/transfer/info | jq -r .connection_status` || exit 1
+      interval: 1m30s
       timeout: 10s
       retries: 3
 
