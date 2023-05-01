@@ -1,11 +1,18 @@
 - include_tasks: directory.yml
   with_items:
-    - "{{ role_name }}/data"
+    - "{{ role_name }}/data/stubby/"
 
 - name: Create docker-compose.yml from template
   template:
     src: docker-compose.yml.j2
     dest: "/home/{{ SYS_USER }}/server/pihole/docker-compose.yml"
+  vars:
+    container: "{{ role_name }}"
+
+- name: Create stubby.yml from template
+  template:
+    src: stubby.yml.j2
+    dest: "/home/{{ SYS_USER }}/server/pihole/data/stubby/stubby.yml"
   vars:
     container: "{{ role_name }}"
 

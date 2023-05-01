@@ -7,6 +7,8 @@ services:
     image: mvance/stubby:latest
     container_name: stubby
     restart: unless-stopped
+    volumes:
+      - './data/stubby/:/opt/stubby/etc/stubby/'
     networks:
       - {{ DOCKER_NETWORK }}
 
@@ -17,6 +19,8 @@ services:
     ports:
       - 5353:53/tcp
       - 5353:53/udp
+    volumes:
+      - './data/unbound/:/opt/unbound/etc/unbound/'
     depends_on:
       - stubby   
     networks:
