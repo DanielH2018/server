@@ -19,31 +19,31 @@ services:
     ports:
       - 5353:53/tcp
       - 5353:53/udp
-    volumes:
-      - './data/unbound/:/opt/unbound/etc/unbound/'
     depends_on:
       - stubby   
     networks:
       {{ DOCKER_NETWORK }}:
-        ipv4_address: 172.19.1.1
+        ipv4_address: 172.19.0.255
 
   pihole:
     container_name: pihole
     image: pihole/pihole:latest
     restart: unless-stopped
+    depends_on:
+      - unbound
     networks:
       - {{ DOCKER_NETWORK }}
     ports:
       - "53:53/tcp"
       - "53:53/udp"
       - "67:67/udp"
-      - "8053:80/tcp"
+      - "8052:80/tcp"
       - "8054:443/tcp"
     environment:
       TZ: {{ TZ }}
       WEBPASSWORD: {{ PIHOLE_PASSWORD }}
       ServerIP: {{ SERVER_IP }}
-      PIHOLE_DNS_: 172.19.1.1#5353
+      PIHOLE_DNS_: 172.19.0.255#5353
     volumes:
        - './data/etc-pihole/:/etc/pihole/'
        - './data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
