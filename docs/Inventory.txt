@@ -20,10 +20,12 @@ Organization:
 Media:
 - Sonarr
 - Radarr
+- Bazarr
 - Jellyfin
 - Prowlarr
 - NordLynx
 - qBittorrent
+- Flaresolverr
 
 Monitoring:
 - Grafana
@@ -32,6 +34,7 @@ Monitoring:
 - Uptime Kuma
 - Healthchecks
 - Node Exporter
+- Change Detection
 
 Maintenence:
 - Autoheal
