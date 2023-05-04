@@ -3,6 +3,7 @@ services:
   autoheal:
     restart: unless-stopped
     image: willfarrell/autoheal:latest
+    tty: true
     container_name: autoheal
     networks:
       - {{ DOCKER_NETWORK }}
