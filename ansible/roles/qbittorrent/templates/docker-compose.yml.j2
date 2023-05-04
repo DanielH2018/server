@@ -9,16 +9,27 @@ services:
     cap_add:
       - NET_ADMIN #required
     environment:
+      - ALLOWED_IPS=0.0.0.0/0 # So this docker network can access it
+      - NET_LOCAL=172.19.0.0/16 # So it can be accessed within the local network
       - PRIVATE_KEY={{ NORDVPN_KEY }}
-      - ALLOW_LIST=nyaa.iss.ink
+      - TZ={{ TZ }}
+    volumes:
+      - ./scripts:/scripts
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
+      - net.ipv4.conf.all.rp_filter=2
     ports:
-      - 8080:8080 # qBittorrent
-      - 6881:6881
-      - 6881:6881/udp
+      - 8080:8080 # qBittorrent WebUI
+      - 6881:6881 # qBittorrent
+      - 6881:6881/udp # qBittorrent udp
     networks:
       - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: bash ./scripts/vpn-health-check # health check script confirms protected vpn connection and a connected qbittorrent
+      interval: 10s
+      retries: 3
+      timeout: 5s
+      start_period: 30s
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
@@ -30,13 +41,16 @@ services:
 
       # Disable Watchtower
       - "com.centurylinklabs.watchtower.enable=false"
+      # Enable Autoheal
+      - "autoheal=true"
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
-    network_mode: service:nordlynx # port 8080
+    network_mode: service:nordlynx
     depends_on:
-      - nordlynx
+      nordlynx:
+        condition: service_healthy
     environment:
       - PUID={{ PUID }}
       - PGID={{ PGID }}
@@ -44,14 +58,19 @@ services:
       - UMASK_SET=022
       - WEBUI_PORT=8080
     volumes:
+      - ./scripts:/scripts
       - ./config:/config
       - /home/{{ SYS_USER }}/server/data/torrents:/data/torrents
     restart: unless-stopped
     healthcheck:
-      test: cd /config/`curl http://localhost:8080/api/v2/transfer/info | jq -r .connection_status` || exit 1
-      interval: 1m30s
-      timeout: 10s
-      retries: 3
+      test: bash ./scripts/qbittorrent-health-check # health check script confirms protected vpn connection and a connected qbittorrent
+      interval: 10s
+      retries: 0
+      timeout: 5s
+      start_period: 30s
+    labels:
+      # Enable Autoheal
+      - "autoheal=true"
 
 networks:
   {{ DOCKER_NETWORK }}:

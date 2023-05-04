@@ -1,0 +1,45 @@
+#!/bin/bash
+TIMESTAMP=$(date)
+
+$LOCK=$(find /scripts -iname "torrent-health-check.lock" -mmin +10 | wc -l)
+
+echo "$TIMESTAMP" > /scripts/torrent-health-check.log
+
+if [[ "$LOCK" != "0" ]]; then
+    echo ">> LOCK DETECTED. SKIPPING HEALTHCHECK >>" >> /scripts/torrent-health-check.log
+    exit 0;
+fi
+
+## URL TO THE VPN STATUS CHECK TO CONFIRM THIS CONTAINER IS GOING OUT TO THE INTERNET PROTECTED
+VPN_STATUS_URL="https://nordvpn.com/wp-admin/admin-ajax.php?action=get_user_info_data"
+
+## URL TO THE QBITTORRENT STATUS CHECK TO CONFIRM WE ARE CONNECTED, NOT FIREWALLED OR SOMETHING ELSE
+TORRENT_STATUS_URL="http://localhost:8080/api/v2/transfer/info"
+
+## CAPTURE STATUSES
+VPN_STATUS=$(curl "$VPN_STATUS_URL");
+TORRENT_STATUS=$(curl "$TORRENT_STATUS_URL")
+
+echo "VPN STATUS" >> /scripts/torrent-health-check.log
+echo "$VPN_STATUS" | jq . >> /scripts/torrent-health-check.log
+
+echo "TORRENT STATUS" >> /scripts/torrent-health-check.log
+echo "$TORRENT_STATUS" | jq . >> /scripts/torrent-health-check.log
+
+VPN_STATUS=$(echo "$VPN_STATUS" | jq .status)
+TORRENT_STATUS=$(echo "$TORRENT_STATUS" | jq .connection_status)
+
+## IF WE'RE NOT VPN PROTECTED, FAIL
+if [[ "$VPN_STATUS" == "false" ]]; then
+    echo "Not connected to NordLynx. Marking unhealthy" >> /scripts/torrent-health-check.log
+    exit 1;
+
+## IF QBITTORRENT ISN'T SEEING ITSELF AS CONNECTED, FAIL
+elif [[ "$TORRENT_STATUS" != '"connected"' ]]; then
+    echo "qBittorrent not open to internet. Current Status: $TORRENT_STATUS. Marking unhealthy" >> /scripts/torrent-health-check.log
+    exit 1;
+else
+    echo "All systems go" >> /scripts/torrent-health-check.log
+    touch "/scripts/torrent-health-check.lock"
+    exit 0;
+fi

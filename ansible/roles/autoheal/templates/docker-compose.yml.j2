@@ -6,9 +6,6 @@ services:
     container_name: autoheal
     networks:
       - {{ DOCKER_NETWORK }}
-    environment:
-      - AUTOHEAL_CONTAINER_LABEL=all
-      - AUTOHEAL_DEFAULT_STOP_TIMEOUT=30
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 

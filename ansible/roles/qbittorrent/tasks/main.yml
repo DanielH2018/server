@@ -1,8 +1,18 @@
 - include_tasks: directory.yml
   with_items:
     - "{{ role_name }}/config"
+    - "{{ role_name }}/scripts"
     - "data/torrents"
 
+- name: Create vpn-health-check from template
+  template:
+    src: vpn-health-check.j2
+    dest: "/home/{{ SYS_USER }}/server/qbittorrent/scripts/vpn-health-check"
+
+- name: Create qbittorrent-health-check from template
+  template:
+    src: qbittorrent-health-check.j2
+    dest: "/home/{{ SYS_USER }}/server/qbittorrent/scripts/qbittorrent-health-check"
 
 # - include_tasks: dns.yml
 #   with_items:
