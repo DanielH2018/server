@@ -78,7 +78,7 @@ services:
       context: ./transcode
     environment:
       - TZ={{ TZ }}
-      - TRANSCODE_PATHS=/data/torrents, /data/media/movies, /data/media/tv
+      - TRANSCODE_PATHS=data/torrents, /data/media/movies, /data/media/tv
     volumes:
       - /home/{{ SYS_USER }}/server/data/torrents:/data/torrents
       - /home/{{ SYS_USER }}/server/data/torrents:/data/media/movies
