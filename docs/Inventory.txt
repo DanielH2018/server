@@ -25,6 +25,7 @@ Media:
 - Prowlarr
 - NordLynx
 - qBittorrent
+- Transcode
 - Flaresolverr
 
 Monitoring:
