@@ -16,6 +16,7 @@ services:
       - authelia_authelia-logs:/var/log/authelia/:ro
     networks:
       - {{ DOCKER_NETWORK }}
+    command: docker exec crowdsec cscli hub update && docker exec crowdsec cscli hub upgrade
 
   bouncer-traefik:
     image: docker.io/fbonalair/traefik-crowdsec-bouncer:latest
@@ -40,7 +41,7 @@ services:
       MB_DB_FILE: /data/metabase.db
       MGID: "${GID-{{ PGID}}}"
     depends_on:
-      - 'crowdsec'
+      - crowdsec
     volumes:
       - crowdsec-db:/metabase-data/
     networks:

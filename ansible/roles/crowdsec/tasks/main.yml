@@ -30,15 +30,6 @@
   vars:
     container: "{{ role_name }}"
 
-# Pause for 30 seconds to let docker build
-- pause:
-    seconds: 30
-
-- name: Update & Upgrade hubs
-  shell: docker exec crowdsec cscli hub update && docker exec crowdsec cscli hub upgrade
-  become: yes
-  become_method: sudo
-
 - name: Make sure script has correct permissions
   shell: chmod +x crowdsecUpdate.sh
   args:
