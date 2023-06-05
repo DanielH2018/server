@@ -84,7 +84,7 @@ services:
       - /home/{{ SYS_USER }}/server/data/torrents:/data/media/movies
       - /home/{{ SYS_USER }}/server/data/torrents:/data/media/tv
       - ./transcode:/usr/app
-      - /usr/app/node_modules
+      - transcode-data:/usr/app/node_modules
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
@@ -92,3 +92,5 @@ services:
 networks:
   {{ DOCKER_NETWORK }}:
     external: true
+volumes:
+  transcode-data:
