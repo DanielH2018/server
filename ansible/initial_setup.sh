@@ -27,8 +27,11 @@ rm crontab_new
 # Copy current crontab
 crontab -l > crontab_new
 
-# Clean dangling Docker images
+# Clean unused Docker images
 echo "30 6 * * * /usr/bin/docker image prune -a -f" >> crontab_new
+
+# Repull docker-compose
+echo "35 6 * * * /usr/bin/docker image pull ghcr.io/linuxserver/docker-compose:latest" >> crontab_new
 
 # Commit and Cleanup
 crontab crontab_new
