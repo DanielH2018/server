@@ -7,7 +7,7 @@ services:
       EULA: "true"
       ENABLE_RCON: "false"
       VIEW_DISTANCE: 15
-      MEMORY: 8G
+      MEMORY: 6G
       CONSOLE: "false"
       #ENABLE_AUTOPAUSE: "TRUE"
       TZ: {{ TZ }}
@@ -15,9 +15,6 @@ services:
       ENABLE_COMMAND_BLOCK: "true"
       SPAWN_PROTECTION: 0
       ALLOW_FLIGHT: "TRUE"
-      CF_API_KEY: "{{ CURSE_API_KEY }}"
-      CF_FORCE_SYNCHRONIZE: "true"
-      CF_PAGE_URL: https://www.curseforge.com/minecraft/modpacks/valhelsia-6/files/4759091
     ports:
       - 25565:25565
     volumes:
