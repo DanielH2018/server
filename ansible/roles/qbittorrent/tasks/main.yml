@@ -8,11 +8,13 @@
   template:
     src: vpn-health-check.j2
     dest: "/home/{{ SYS_USER }}/server/qbittorrent/scripts/vpn-health-check"
+    mode: a+x
 
 - name: Create qbittorrent-health-check from template
   template:
     src: qbittorrent-health-check.j2
     dest: "/home/{{ SYS_USER }}/server/qbittorrent/scripts/qbittorrent-health-check"
+    mode: a+x
 
 - name: Extract transcode.zip into /var/lib/foo
   unarchive:

@@ -1,7 +1,7 @@
 #!/bin/bash
 TIMESTAMP=$(date)
 
-$LOCK=$(find /scripts -iname "torrent-health-check.lock" -mmin +10 | wc -l)
+LOCK=$(find /scripts -iname "torrent-health-check.lock" -mmin +10 | wc -l)
 
 echo "$TIMESTAMP" > /scripts/torrent-health-check.log
 
@@ -13,12 +13,21 @@ fi
 ## URL TO THE VPN STATUS CHECK TO CONFIRM THIS CONTAINER IS GOING OUT TO THE INTERNET PROTECTED
 VPN_STATUS_URL="https://nordvpn.com/wp-admin/admin-ajax.php?action=get_user_info_data"
 
-## URL TO THE QBITTORRENT STATUS CHECK TO CONFIRM WE ARE CONNECTED, NOT FIREWALLED OR SOMETHING ELSE
-TORRENT_STATUS_URL="http://localhost:8080/api/v2/transfer/info"
+## Torrent Login Auth
+TORRENT_LOGIN_URL="http://localhost:8080/api/v2/auth/login"
+TORRENT_LOGIN_HEADER="Referer: http://localhost:8080"
+TORRENT_LOGIN_DATA="username={{ TORRENT_USERNAME }}&password={{ TORRENT_PASSWORD }}"
 
 ## CAPTURE STATUSES
 VPN_STATUS=$(curl "$VPN_STATUS_URL");
-TORRENT_STATUS=$(curl "$TORRENT_STATUS_URL")
+
+TORRENT_LOGIN=$(curl -i --header "$TORRENT_LOGIN_HEADER" --data "$TORRENT_LOGIN_DATA" "$TORRENT_LOGIN_URL");
+COOKIE=$(echo "$TORRENT_LOGIN" | awk '/set-cookie/{print $2}');
+
+## URL TO THE QBITTORRENT STATUS CHECK TO CONFIRM WE ARE CONNECTED, NOT FIREWALLED OR SOMETHING ELSE
+TORRENT_STATUS_URL="http://localhost:8080/api/v2/transfer/info"
+
+TORRENT_STATUS=$(curl "$TORRENT_STATUS_URL" --cookie "$COOKIE");
 
 echo "VPN STATUS" >> /scripts/torrent-health-check.log
 echo "$VPN_STATUS" | jq . >> /scripts/torrent-health-check.log
@@ -33,7 +42,10 @@ TORRENT_STATUS=$(echo "$TORRENT_STATUS" | jq .connection_status)
 if [[ "$VPN_STATUS" == "false" ]]; then
     echo "Not connected to NordLynx. Marking unhealthy" >> /scripts/torrent-health-check.log
     exit 1;
-
+## IF QBITTORRENT ISN'T SEEING ITSELF AS CONNECTED, FAIL
+elif [[ "$TORRENT_STATUS" == '"firewalled"' ]]; then
+    echo "qBittorrent not actively connected to internet. Current Status: $TORRENT_STATUS. Marking healthy" >> /scripts/torrent-health-check.log
+    exit 0;
 ## IF QBITTORRENT ISN'T SEEING ITSELF AS CONNECTED, FAIL
 elif [[ "$TORRENT_STATUS" != '"connected"' ]]; then
     echo "qBittorrent not open to internet. Current Status: $TORRENT_STATUS. Marking unhealthy" >> /scripts/torrent-health-check.log
