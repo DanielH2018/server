@@ -13,13 +13,14 @@ services:
       - NET_LOCAL=172.19.0.0/16 # So it can be accessed within the local network
       - PRIVATE_KEY={{ NORDVPN_KEY }}
       - TZ={{ TZ }}
+      - QUERY="filters\[servers_groups\]\[identifier\]=legacy_p2p&filters\[country_id\]=228" # narrow the list of servers to US-based P2P servers
     volumes:
       - ./scripts:/scripts
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
       - net.ipv4.conf.all.rp_filter=2
     ports:
-      - 8080:8080 # qBittorrent WebUI
+      - 8088:8088 # qBittorrent WebUI
       - 6881:6881 # qBittorrent
       - 6881:6881/udp # qBittorrent udp
     networks:
@@ -37,7 +38,7 @@ services:
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
 
       {# Generate labels(container_name, port, use_authelia) -#}
-      {{ labels(container, '8080', 'y') }}
+      {{ labels(container, '8088', 'y') }}
 
       # Disable Watchtower
       - "com.centurylinklabs.watchtower.enable=false"
@@ -56,7 +57,7 @@ services:
       - PGID={{ PGID }}
       - TZ={{ TZ }}
       - UMASK_SET=022
-      - WEBUI_PORT=8080
+      - WEBUI_PORT=8088
     volumes:
       - ./scripts:/scripts
       - ./config:/config
@@ -67,7 +68,7 @@ services:
       interval: 10s
       retries: 0
       timeout: 5s
-      start_period: 1m
+      start_period: 30s
     labels:
       # Enable Autoheal
       - "autoheal=true"
