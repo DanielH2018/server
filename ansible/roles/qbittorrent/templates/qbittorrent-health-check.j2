@@ -14,8 +14,8 @@ fi
 VPN_STATUS_URL="https://nordvpn.com/wp-admin/admin-ajax.php?action=get_user_info_data"
 
 ## Torrent Login Auth
-TORRENT_LOGIN_URL="http://localhost:8088/api/v2/auth/login"
-TORRENT_LOGIN_HEADER="Referer: http://localhost:8088"
+TORRENT_LOGIN_URL="http://localhost:8080/api/v2/auth/login"
+TORRENT_LOGIN_HEADER="Referer: http://localhost:8080"
 TORRENT_LOGIN_DATA="username={{ TORRENT_USERNAME }}&password={{ TORRENT_PASSWORD }}"
 
 ## CAPTURE STATUSES
@@ -25,7 +25,7 @@ TORRENT_LOGIN=$(curl -i --header "$TORRENT_LOGIN_HEADER" --data "$TORRENT_LOGIN_
 COOKIE=$(echo "$TORRENT_LOGIN" | awk '/set-cookie/{print $2}');
 
 ## URL TO THE QBITTORRENT STATUS CHECK TO CONFIRM WE ARE CONNECTED, NOT FIREWALLED OR SOMETHING ELSE
-TORRENT_STATUS_URL="http://localhost:8088/api/v2/transfer/info"
+TORRENT_STATUS_URL="http://localhost:8080/api/v2/transfer/info"
 
 TORRENT_STATUS=$(curl "$TORRENT_STATUS_URL" --cookie "$COOKIE");
 
@@ -45,6 +45,7 @@ if [[ "$VPN_STATUS" == "false" ]]; then
 ## IF QBITTORRENT ISN'T SEEING ITSELF AS CONNECTED, FAIL
 elif [[ "$TORRENT_STATUS" == '"firewalled"' ]]; then
     echo "qBittorrent not actively connected to internet. Current Status: $TORRENT_STATUS. Marking healthy" >> /scripts/torrent-health-check.log
+    touch "/scripts/torrent-health-check.lock"
     exit 0;
 ## IF QBITTORRENT ISN'T SEEING ITSELF AS CONNECTED, FAIL
 elif [[ "$TORRENT_STATUS" != '"connected"' ]]; then
