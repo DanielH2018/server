@@ -51,6 +51,7 @@ Personal Content:
 
 Miscellaneous:
 - Whoogle
+- Guacamole
 - Duplicati
 - FoundryVTT
 - Home Assistant

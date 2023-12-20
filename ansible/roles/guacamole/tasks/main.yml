@@ -1,0 +1,26 @@
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/init"
+    - "{{ role_name }}/data"
+    - "{{ role_name }}/drive"
+    - "{{ role_name }}/record"
+
+#- include_tasks: dns.yml
+#  with_items:
+#    - "{{ role_name }}"
+
+- name: Setup Init script Permissions
+  shell: chmod -R +x /home/{{ SYS_USER }}/server/{{ role_name }}/init
+  become: yes
+  become_method: sudo
+
+- name: Add DB Init Script
+  shell: docker run --rm guacamole/guacamole /opt/guacamole/bin/initdb.sh --postgresql > initdb.sql
+  args:
+    chdir: "/home/{{ SYS_USER }}/server/{{ role_name }}/init"
+  become: yes
+  become_method: sudo
+
+- include_tasks: docker.yml
+  vars:
+    container: "{{ role_name }}"
