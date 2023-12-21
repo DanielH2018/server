@@ -1,0 +1,18 @@
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}"
+
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
+
+- name: Create Virtual Disk
+  shell: qemu-img create -f qcow2 maindisk.qcow2 128G
+  args:
+    chdir: "/home/{{ SYS_USER }}/server/{{ role_name }}"
+  become: yes
+  become_method: sudo
+
+- include_tasks: docker.yml
+  vars:
+    container: "{{ role_name }}"
