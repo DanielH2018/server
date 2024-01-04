@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   cloudflare-ddns:
-    image: oznu/cloudflare-ddns:latest
+    image: local/cloudflare-ddns:latest # Have to build submodule image first
     container_name: cloudflare-ddns
     restart: unless-stopped
     environment:
