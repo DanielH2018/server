@@ -1,0 +1,3 @@
+[submodule "docker-cloudflare-ddns"]
+	path = docker-cloudflare-ddns
+	url = https://github.com/DanielH2018/docker-cloudflare-ddns
