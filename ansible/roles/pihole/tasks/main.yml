@@ -41,6 +41,16 @@
   become: yes
   become_method: sudo
 
+- name: Stop dnsmasq
+  shell: systemctl stop dnsmasq
+  become: yes
+  become_method: sudo
+
+- name: Disable dnsmasq
+  shell: systemctl disable dnsmasq
+  become: yes
+  become_method: sudo
+
 - name: Deploy Pihole
   shell: docker-compose up -d --force-recreate
   args:
