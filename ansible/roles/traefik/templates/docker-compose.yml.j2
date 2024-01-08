@@ -42,8 +42,8 @@ services:
       - "traefik.http.routers.traefik-secure.tls=true"
       - "traefik.http.routers.traefik-secure.service=api@internal"
       # Setup Basic Auth(not hit with authelia 2fa)
-      - "traefik.http.middlewares.traefik-auth.basicauth.users={{ traefik_hash.stdout | replace("$","$$")}}"
-      - "traefik.http.routers.traefik-secure.middlewares=traefik-auth"
+      #- "traefik.http.middlewares.traefik-auth.basicauth.users={{ traefik_hash.stdout | replace("$","$$")}}"
+      #- "traefik.http.routers.traefik-secure.middlewares=traefik-auth"
       # Add authelia
       - 'traefik.http.routers.traefik-secure.middlewares=authelia@docker'
 

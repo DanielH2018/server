@@ -57,10 +57,6 @@ services:
 
       {# Generate labels(container_name, port, use_authelia) -#}
       {{ labels(container, '80', 'y') }}
-      
-      # Add admin prefix to url
-      - "traefik.http.routers.pihole-secure.middlewares=add-admin"
-      - "traefik.http.middlewares.add-admin.addprefix.prefix=/admin"
 
 networks:
   default:
