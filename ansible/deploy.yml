@@ -41,4 +41,4 @@
     - { role: scrutiny,           tags: [ 'scrutiny' ]}
     - { role: duplicati,          tags: [ 'duplicati' ]}
     - { role: pihole,             tags: [ 'pihole' ]}
-    - { role: blue-bubbles,       tags: [ 'blue-bubbles' ]}
+    - { role: homepage,           tags: [ 'homepage' ]}

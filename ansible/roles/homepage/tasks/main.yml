@@ -1,0 +1,22 @@
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/config"
+
+- name: Copy Config files
+  copy:
+    src: "{{ item }}"
+    dest: "/home/{{ SYS_USER }}/server/{{ role_name }}/config/"
+  with_items:
+    - settings.yaml
+    - bookmarks.yaml
+    - services.yaml
+    - widgets.yaml
+    - docker.yaml
+
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
+
+- include_tasks: docker.yml
+  vars:
+    container: "{{ role_name }}"
