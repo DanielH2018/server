@@ -8,7 +8,7 @@
         widget:
           type: jellyfin
           url: http://jellyfin:8096
-          ***REMOVED***
+          key: {{ JELLYFIN_API_KEY }}
     - Sonarr:
         icon: sonarr.png
         href: https://sonarr.[REMOVED_KEY]/
@@ -19,7 +19,7 @@
             type: sonarr
             fields: ["wanted", "queued"]
             url: http://sonarr:8989
-            ***REMOVED***
+            key: {{ SONARR_API_KEY }}
     - Radarr:
         icon: radarr.png
         href: https://radarr.[REMOVED_KEY]/
@@ -30,7 +30,7 @@
           type: radarr
           fields: ["wanted", "queued"]
           url: http://radarr:7878
-          ***REMOVED***
+          key: {{ RADARR_API_KEY }}
     - qBittorrent:
         icon: qbittorrent.png
         href: https://qBittorrent.[REMOVED_KEY]
@@ -40,8 +40,8 @@
         widget:
             type: qbittorrent
             url: http://nordlynx:8080
-            username: ubuntu
-            ***REMOVED***
+            username: {{ QBITTORRENT_USERNAME }}
+            password: {{ QBITTORRENT_PASSWORD }}
 
 - Services:
     - Portainer:
@@ -54,7 +54,7 @@
           type: portainer
           url: http://portainer:9000
           env: 2
-          ***REMOVED***
+          key: {{ PORTAINER_API_KEY }}
     - Pihole:
         icon: pi-hole.png
         href: https://pihole.[REMOVED_KEY]/admin
@@ -64,7 +64,7 @@
         widget:
           type: pihole
           url: http://pihole:80
-          ***REMOVED***
+          key: {{ PIHOLE_API_KEY }}
     - FreshRSS:
         icon: freshrss.png
         href: https://freshrss.[REMOVED_KEY]/
@@ -74,8 +74,8 @@
         widget:
             type: freshrss
             url: http://freshrss:80
-            username: ubuntu
-            ***REMOVED***
+            username: {{ FRESHRSS_USERNAME }}
+            password: {{ FRESHRSS_PASSWORD }}
     - Uptime-Kuma:
         icon: uptime-kuma.png
         href: https://uptime-kuma.[REMOVED_KEY]/
@@ -104,8 +104,8 @@
         widget:
             type: grafana
             url: http://grafana:3000
-            username: admin
-            ***REMOVED***
+            username: {{ GRAFANA_USERNAME }}
+            password: {{ GRAFANA_PASSWORD }}
     - Scrutiny:
         icon: scrutiny.png
         href: http://scrutiny.[REMOVED_KEY]/
