@@ -32,6 +32,7 @@ services:
       - {{ DOCKER_NETWORK }}
     volumes:
       - ./config:/app/config
+      - ./icons:/app/public/icons
     labels:
       # Enable traefik for container
       - "traefik.enable=true"

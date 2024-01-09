@@ -1,6 +1,15 @@
 - include_tasks: directory.yml
   with_items:
     - "{{ role_name }}/config"
+    - "{{ role_name }}/icons"
+
+- name: Copy Icons
+  copy:
+    src: "{{ item }}"
+    dest: "/home/{{ SYS_USER }}/server/{{ role_name }}/icons/{{ item }}"
+  with_items:
+    - opgg.png
+    - tacticstools.png
 
 - name: Copy Config files
   template:
