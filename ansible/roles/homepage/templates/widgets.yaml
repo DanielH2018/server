@@ -1,0 +1,20 @@
+---
+# For configuration options and examples, please see:
+# https://gethomepage.dev/latest/configs/service-widgets
+
+- resources:
+    cpu: true
+    memory: true
+    disk: /
+
+- search:
+    provider: google
+    target: _blank
+
+- openmeteo:
+    label: Current
+    latitude: 38.89
+    longitude: -77.08
+    timezone: America/New_York
+    units: imperial
+    cache: 5

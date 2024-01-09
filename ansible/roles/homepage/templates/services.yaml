@@ -1,0 +1,126 @@
+- Media:
+    - Jellyfin:
+        href: https://jellyfin.[REMOVED_KEY]
+        icon: jellyfin.png
+        description: Mediaserver
+        server: my-docker
+        container: jellyfin
+        widget:
+          type: jellyfin
+          url: http://jellyfin:8096
+          ***REMOVED***
+    - Sonarr:
+        icon: sonarr.png
+        href: https://sonarr.[REMOVED_KEY]/
+        description: Series management
+        server: my-docker
+        container: sonarr
+        widget:
+            type: sonarr
+            fields: ["wanted", "queued"]
+            url: http://sonarr:8989
+            ***REMOVED***
+    - Radarr:
+        icon: radarr.png
+        href: https://radarr.[REMOVED_KEY]/
+        description: Movie management
+        server: my-docker
+        container: radarr
+        widget:
+          type: radarr
+          fields: ["wanted", "queued"]
+          url: http://radarr:7878
+          ***REMOVED***
+    - qBittorrent:
+        icon: qbittorrent.png
+        href: https://qBittorrent.[REMOVED_KEY]
+        description: Download management
+        server: my-docker
+        container: qbittorrent
+        widget:
+            type: qbittorrent
+            url: http://nordlynx:8080
+            username: ubuntu
+            ***REMOVED***
+
+- Services:
+    - Portainer:
+        icon: portainer.png
+        href: https://portainer.[REMOVED_KEY]
+        description: Container management
+        server: my-docker
+        container: portainer
+        widget:
+          type: portainer
+          url: http://portainer:9000
+          env: 2
+          ***REMOVED***
+    - Pihole:
+        icon: pi-hole.png
+        href: https://pihole.[REMOVED_KEY]/admin
+        description: DNS Ad Blocker
+        server: my-docker
+        container: pihole
+        widget:
+          type: pihole
+          url: http://pihole:80
+          ***REMOVED***
+    - FreshRSS:
+        icon: freshrss.png
+        href: https://freshrss.[REMOVED_KEY]/
+        description: RSS Link Aggregator
+        server: my-docker
+        container: freshrss
+        widget:
+            type: freshrss
+            url: http://freshrss:80
+            username: ubuntu
+            ***REMOVED***
+    - Uptime-Kuma:
+        icon: uptime-kuma.png
+        href: https://uptime-kuma.[REMOVED_KEY]/
+        description: Container Monitoring
+        server: my-docker
+        container: uptime-kuma
+        widget:
+            type: uptimekuma
+            url: http://uptime-kuma:3001
+            slug: containers
+    - Prometheus:
+        icon: prometheus.png
+        href: https://prometheus.[REMOVED_KEY]/
+        description: Stat Collection
+        server: my-docker
+        container: prometheus
+        widget:
+            type: prometheus
+            url: http://prometheus:9090
+    - Grafana: 
+        icon: grafana.png
+        href: https://grafana.[REMOVED_KEY]/
+        description: Dashboards
+        server: my-docker
+        container: grafana
+        widget:
+            type: grafana
+            url: http://grafana:3000
+            username: admin
+            ***REMOVED***
+    - Scrutiny:
+        icon: scrutiny.png
+        href: http://scrutiny.[REMOVED_KEY]/
+        description: Drive Monitoring
+        server: my-docker
+        container: grafana
+        widget:
+            type: scrutiny
+            url: http://scrutiny:8080
+    - Speedtest:
+        icon: speedtest-tracker.png
+        href: https://speedtest.[REMOVED_KEY]/
+        description: Internet tracking
+        server: my-docker
+        container: speedtest
+        widget:
+            type: speedtest
+            url: http://speedtest:80

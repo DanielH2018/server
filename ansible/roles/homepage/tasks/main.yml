@@ -5,7 +5,7 @@
 - name: Copy Config files
   copy:
     src: "{{ item }}"
-    dest: "/home/{{ SYS_USER }}/server/{{ role_name }}/config/"
+    dest: "/home/{{ SYS_USER }}/server/{{ role_name }}/config/{{ item }}"
   with_items:
     - settings.yaml
     - bookmarks.yaml

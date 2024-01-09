@@ -1,6 +1,19 @@
+---
 title: My Awesome Homepage
-theme: light
-
+theme: dark
+color: slate
+headerStyle: clean
+showStats: false
+target: _blank # Possible options include _blank, _self, and _top
+layout:
+  Media:
+    style: row
+    columns: 4
+  Services:
+    style: row
+    columns: 4
+  Bookmarks:
+    style: row
+    columns: 5
 providers:
-  openweathermap: openweathermapapikey
-  weatherapi: weatherapiapikey
+  ***REMOVED***

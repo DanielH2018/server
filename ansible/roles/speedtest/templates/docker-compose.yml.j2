@@ -2,26 +2,26 @@
 ---
 version: "3.8"
 services:
-  heimdall:
-    image: lscr.io/linuxserver/heimdall:latest
-    container_name: heimdall
-    environment:
-      - PUID={{ PUID }}
-      - PGID={{ PGID }}
-      - TZ={{ TZ }}
-    volumes:
-      - ./config:/config
+  speedtest:
+    container_name: speedtest
+    image: henrywhitaker3/speedtest-tracker
     ports:
-      - 8057:80
-      - 8058:443
-    restart: unless-stopped
+      - 8765:80
     networks:
       - {{ DOCKER_NETWORK }}
-    healthcheck:
-      test: curl --fail -s http://localhost:80/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    volumes:
+      - ./config:/config
+    environment:
+      - TZ=
+      - PUID={{ PUID }}
+      - PGID={{ PGID }}
+      - OOKLA_EULA_GDPR=true
+    logging:
+        driver: "json-file"
+        options:
+            max-file: "10"
+            max-size: "200k"
+    restart: unless-stopped
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
@@ -29,7 +29,7 @@ services:
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
 
       {# Generate labels(container_name, port, use_authelia) -#}
-      {{ labels(container, '80', 'y') }}
+      {{ labels(container, '80', 'n') }}
 
 networks:
   {{ DOCKER_NETWORK }}:

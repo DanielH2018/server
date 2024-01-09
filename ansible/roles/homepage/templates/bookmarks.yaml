@@ -2,22 +2,22 @@
 # For configuration options and examples, please see:
 # https://gethomepage.dev/latest/configs/bookmarks
 
-- Developer:
-    - Github:
-        - abbr: GH
-          href: https://github.com/
-
-- Social:
-    - Reddit:
-        - abbr: RE
-          href: https://reddit.com/
-
-- Entertainment:
-    - YouTube:
-        - abbr: YT
-          href: https://youtube.com/
-
-- Communication:
-  - GMail:
-    - abbr: GM
+- Bookmarks:
+  - Google Calendar:
+    - icon: google-calendar.png
+      href: https://calendar.google.com
+  - Gmail:
+    - icon: gmail.png
       href: https://mail.google.com/mail/u/0/#inbox
+  - YouTube:  
+    - icon: youtube.png
+      href: https://www.youtube.com
+  - Reddit:
+    - icon: reddit.png
+      href: https://reddit.com/
+  - OP.GG:
+    - abbr: OP
+      href: https://www.op.gg/
+  - Tactics.Tools:
+    - abbr: TT
+      href: https://tactics.tools/

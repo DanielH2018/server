@@ -15,7 +15,6 @@
     - { role: change-detection,   tags: [ 'change-detection' ]}
     - { role: hoppscotch,         tags: [ 'hoppscotch' ]}
     - { role: freshrss,           tags: [ 'freshrss' ]}
-    - { role: heimdall,           tags: [ 'heimdall' ]}
     - { role: uptime-kuma,        tags: [ 'uptime-kuma' ]}
     - { role: file-browser,       tags: [ 'file-browser' ]}
     - { role: guacamole,          tags: [ 'guacamole' ]}
@@ -42,3 +41,4 @@
     - { role: duplicati,          tags: [ 'duplicati' ]}
     - { role: pihole,             tags: [ 'pihole' ]}
     - { role: homepage,           tags: [ 'homepage' ]}
+    - { role: speedtest,          tags: [ 'speedtest' ]}
