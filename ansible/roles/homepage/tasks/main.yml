@@ -3,7 +3,7 @@
     - "{{ role_name }}/config"
 
 - name: Copy Config files
-  copy:
+  template:
     src: "{{ item }}.j2"
     dest: "/home/{{ SYS_USER }}/server/{{ role_name }}/config/{{ item }}"
   with_items:
