@@ -38,14 +38,3 @@
 
 ---Instructions for Duplicati---
 1. For backing up to Google Drive, to store not in the root directory, you need a full access token which can be attained here: https://duplicati-oauth-handler.appspot.com/
-
----Setup instructions for BlueBubbles---
-1. Install dependencies
-    - sudo apt install qemu qemu-kvm libvirt-clients libvirt-daemon-system bridge-utils virt-manager libguestfs-tools
-2. Enable libvirt and load the KVM kernel module
-    - sudo systemctl enable --now libvirtd
-    - sudo systemctl enable --now virtlogd
-    - echo 1 | sudo tee /sys/module/kvm/parameters/ignore_msrs
-    - sudo modprobe kvm
-3. Follow guide
-    - https://docs.bluebubbles.app/server/advanced/macos-virtualization/running-bluebubbles-in-docker-osx
