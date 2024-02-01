@@ -23,7 +23,7 @@ Media:
 - Bazarr
 - Jellyfin
 - Prowlarr
-- NordLynx
+- Wireguard
 - qBittorrent
 - Transcode
 - Flaresolverr

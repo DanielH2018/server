@@ -2,35 +2,36 @@
 ---
 version: "3.8"
 services:
-  nordlynx:
-    image: ghcr.io/bubuntux/nordlynx:latest
-    container_name: nordlynx
-    restart: unless-stopped
+  wireguard:
+    image: lscr.io/linuxserver/wireguard:latest
+    container_name: wireguard
     cap_add:
-      - NET_ADMIN #required
+      - NET_ADMIN
+      - SYS_MODULE
     environment:
-      - ALLOWED_IPS=0.0.0.0/0 # So this docker network can access it
-      - NET_LOCAL=172.19.0.0/16 # So it can be accessed within the local network
-      - PRIVATE_KEY={{ NORDVPN_KEY }}
+      - PUID={{ PUID }}
+      - PGID={{ PGID }}
       - TZ={{ TZ }}
-      - QUERY="filters\[servers_groups\]\[identifier\]=legacy_p2p&filters\[country_id\]=228" # narrow the list of servers to US-based P2P servers
     volumes:
+      - ./config:/config
+      - /lib/modules:/lib/modules #optional
       - ./scripts:/scripts
-    sysctls:
-      - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
-      - net.ipv4.conf.all.rp_filter=2
     ports:
       - 8080:8080 # qBittorrent WebUI
       - 6881:6881 # qBittorrent
       - 6881:6881/udp # qBittorrent udp
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
+    restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
-    healthcheck:
-      test: bash ./scripts/vpn-health-check # health check script confirms protected vpn connection and a connected qbittorrent
-      interval: 10s
-      retries: 3
-      timeout: 5s
-      start_period: 30s
+    #healthcheck:
+    #  test: bash ./scripts/vpn-health-check # health check script confirms protected vpn connection and a connected qbittorrent
+    #  interval: 10s
+    #  retries: 3
+    #  timeout: 5s
+    #  start_period: 2m
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
@@ -48,10 +49,10 @@ services:
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
-    network_mode: service:nordlynx
-    depends_on:
-      nordlynx:
-        condition: service_healthy
+    network_mode: service:wireguard
+    #depends_on:
+    #  wireguard:
+    #    condition: service_healthy
     environment:
       - PUID={{ PUID }}
       - PGID={{ PGID }}
@@ -63,12 +64,12 @@ services:
       - ./config:/config
       - /home/{{ SYS_USER }}/server/data/torrents:/data/torrents
     restart: unless-stopped
-    healthcheck:
-      test: bash ./scripts/qbittorrent-health-check # health check script confirms protected vpn connection and a connected qbittorrent
-      interval: 10s
-      retries: 0
-      timeout: 5s
-      start_period: 30s
+    #healthcheck:
+    #  test: bash ./scripts/qbittorrent-health-check # health check script confirms protected vpn connection and a connected qbittorrent
+    #  interval: 10s
+    #  retries: 0
+    #  timeout: 5s
+    #  start_period: 2m
     labels:
       # Enable Autoheal
       - "autoheal=true"
