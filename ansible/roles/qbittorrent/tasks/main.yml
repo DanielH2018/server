@@ -4,28 +4,6 @@
     - "{{ role_name }}/scripts"
     - "data/torrents"
 
-- name: Remove file vpn-health-check.lock
-  file:
-    path: "/home/{{ SYS_USER }}/server/qbittorrent/scripts/vpn-health-check.lock"
-    state: absent
-
-- name: Remove file torrent-health-check.lock
-  file:
-    path: "/home/{{ SYS_USER }}/server/qbittorrent/scripts/torrent-health-check.lock"
-    state: absent
-
-- name: Create vpn-health-check from template
-  template:
-    src: vpn-health-check.j2
-    dest: "/home/{{ SYS_USER }}/server/qbittorrent/scripts/vpn-health-check"
-    mode: a+x
-
-- name: Create qbittorrent-health-check from template
-  template:
-    src: qbittorrent-health-check.j2
-    dest: "/home/{{ SYS_USER }}/server/qbittorrent/scripts/qbittorrent-health-check"
-    mode: a+x
-
 - name: Extract transcode.zip into /var/lib/foo
   unarchive:
     src: transcode.zip

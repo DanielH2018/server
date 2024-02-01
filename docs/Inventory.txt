@@ -42,7 +42,6 @@ Maintenence:
 - Watchtower
 
 Development:
-- Hoppscotch
 - Code Server
 
 Personal Content:
@@ -50,7 +49,6 @@ Personal Content:
 - Littlelink-server
 
 Miscellaneous:
-- Whoogle
 - Speedtest
 - Guacamole
 - Duplicati
@@ -67,4 +65,3 @@ Cronjobs:
 Backlog:
 
 Possible Additions:
-- Calibre + Calibre Web
