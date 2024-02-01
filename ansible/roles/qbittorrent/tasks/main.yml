@@ -1,7 +1,6 @@
 - include_tasks: directory.yml
   with_items:
     - "{{ role_name }}/config"
-    - "{{ role_name }}/scripts"
     - "data/torrents"
 
 - name: Extract transcode.zip into /var/lib/foo
@@ -16,3 +15,10 @@
 - include_tasks: docker.yml
   vars:
     container: "{{ role_name }}"
+
+- name: Connect network
+  shell: docker exec --privileged qbittorrent ip route del default && docker exec --privileged qbittorrent ip route add default via 172.19.0.50
+  args:
+    chdir: "/home/{{ SYS_USER }}/server/{{ role_name }}/"
+  become: yes
+  become_method: sudo

@@ -2,36 +2,23 @@
 ---
 version: "3.8"
 services:
-  wireguard:
-    image: lscr.io/linuxserver/wireguard:latest
-    container_name: wireguard
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
     environment:
       - PUID={{ PUID }}
       - PGID={{ PGID }}
       - TZ={{ TZ }}
+      - UMASK_SET=022
+      - WEBUI_PORT=8080
+    ports:
+      - 8080:8080
     volumes:
       - ./config:/config
-      - /lib/modules:/lib/modules #optional
-      - ./scripts:/scripts
-    ports:
-      - 8080:8080 # qBittorrent WebUI
-      - 6881:6881 # qBittorrent
-      - 6881:6881/udp # qBittorrent udp
-    sysctls:
-      - net.ipv4.conf.all.src_valid_mark=1
-      - net.ipv6.conf.all.disable_ipv6=1  # Recomended if using ipv4 only
+      - /home/{{ SYS_USER }}/server/data/torrents:/data/torrents
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
-    #healthcheck:
-    #  test: bash ./scripts/vpn-health-check # health check script confirms protected vpn connection and a connected qbittorrent
-    #  interval: 10s
-    #  retries: 3
-    #  timeout: 5s
-    #  start_period: 2m
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
@@ -45,35 +32,6 @@ services:
       - "com.centurylinklabs.watchtower.enable=false"
       # Enable Autoheal
       - "autoheal=true"
-
-  qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:latest
-    container_name: qbittorrent
-    network_mode: service:wireguard
-    #depends_on:
-    #  wireguard:
-    #    condition: service_healthy
-    environment:
-      - PUID={{ PUID }}
-      - PGID={{ PGID }}
-      - TZ={{ TZ }}
-      - UMASK_SET=022
-      - WEBUI_PORT=8080
-    volumes:
-      - ./scripts:/scripts
-      - ./config:/config
-      - /home/{{ SYS_USER }}/server/data/torrents:/data/torrents
-    restart: unless-stopped
-    #healthcheck:
-    #  test: bash ./scripts/qbittorrent-health-check # health check script confirms protected vpn connection and a connected qbittorrent
-    #  interval: 10s
-    #  retries: 0
-    #  timeout: 5s
-    #  start_period: 2m
-    labels:
-      # Enable Autoheal
-      - "autoheal=true"
-
   transcode:
     container_name: transcode
     build:

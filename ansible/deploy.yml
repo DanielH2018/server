@@ -18,6 +18,7 @@
     - { role: file-browser,       tags: [ 'file-browser' ]}
     - { role: guacamole,          tags: [ 'guacamole' ]}
     - { role: flaresolverr,       tags: [ 'flaresolverr', 'media' ]}
+    - { role: wireguard,          tags: [ 'wireguard' ]}
     - { role: qbittorrent,        tags: [ 'qbittorrent', 'media' ]}
     - { role: prowlarr,           tags: [ 'prowlarr', 'media' ]}
     - { role: sonarr,             tags: [ 'sonarr', 'media' ]}

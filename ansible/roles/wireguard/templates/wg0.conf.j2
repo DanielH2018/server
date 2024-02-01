@@ -1,0 +1,12 @@
+[Interface]
+# Device: Major Eagle
+PrivateKey = uMM4rmIuQZTbmpS8miCLwII8H5vC+ETFT68GHNA64Uo=
+Address = 10.69.53.173/32
+DNS = 10.64.0.1
+PostUp = iptables -t nat -A POSTROUTING -o wg+ -j MASQUERADE
+PreDown = iptables -t nat -D POSTROUTING -o wg+ -j MASQUERADE
+
+[Peer]
+PublicKey = UKNLCimke54RqRdj6UFyIuBO6nv2VVpDT3vM9N25VyI=
+AllowedIPs = 0.0.0.0/0
+Endpoint = 198.54.135.34:51820
