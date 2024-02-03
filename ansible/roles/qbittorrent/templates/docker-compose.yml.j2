@@ -2,23 +2,42 @@
 ---
 version: "3.8"
 services:
+  wireguard:
+    image: lscr.io/linuxserver/wireguard:latest
+    container_name: wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID={{ PUID }}
+      - PGID={{ PGID }}
+      - TZ={{ TZ }}
+    ports:
+      - 8080:8080
+    volumes:
+      - ./config:/config
+      - /lib/modules:/lib/modules
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    restart: unless-stopped
+    networks:
+      - {{ DOCKER_NETWORK }}
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
+    network_mode: service:wireguard
+    depends_on:
+      - wireguard
     environment:
       - PUID={{ PUID }}
       - PGID={{ PGID }}
       - TZ={{ TZ }}
       - UMASK_SET=022
       - WEBUI_PORT=8080
-    ports:
-      - 8080:8080
     volumes:
       - ./config:/config
       - /home/{{ SYS_USER }}/server/data/torrents:/data/torrents
     restart: unless-stopped
-    networks:
-      - {{ DOCKER_NETWORK }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
