@@ -41,3 +41,4 @@
     - { role: pihole,             tags: [ 'pihole' ]}
     - { role: homepage,           tags: [ 'homepage' ]}
     - { role: speedtest,          tags: [ 'speedtest' ]}
+    - { role: wg-easy,            tags: [ 'wg-easy' ]}

@@ -32,7 +32,8 @@ services:
     depends_on:
       - unbound
     networks:
-      - {{ DOCKER_NETWORK }}
+      {{ DOCKER_NETWORK }}:
+        ipv4_address: 172.19.0.33
     ports:
       - "53:53/tcp"
       - "53:53/udp"
