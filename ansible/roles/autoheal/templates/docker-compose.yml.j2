@@ -6,7 +6,7 @@ services:
     tty: true
     container_name: autoheal
     environment:
-      - AUTOHEAL_CONTAINER_LABEL=all
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
     networks:
       - {{ DOCKER_NETWORK }}
     volumes:
