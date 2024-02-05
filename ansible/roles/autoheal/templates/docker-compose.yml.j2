@@ -5,6 +5,8 @@ services:
     image: willfarrell/autoheal:latest
     tty: true
     container_name: autoheal
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=all
     networks:
       - {{ DOCKER_NETWORK }}
     volumes:

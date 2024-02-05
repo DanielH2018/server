@@ -5,6 +5,7 @@ services:
   wireguard:
     image: lscr.io/linuxserver/wireguard:latest
     container_name: wireguard
+    hostname: wireguard
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
@@ -38,6 +39,11 @@ services:
       - ./config:/config
       - /home/{{ SYS_USER }}/server/data/torrents:/data/torrents
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"] 
+      interval: 1m30s
+      timeout: 2s
+      retries: 1
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
