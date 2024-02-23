@@ -23,6 +23,9 @@ services:
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
+    labels:
+    # Disable Watchtower
+      - "com.centurylinklabs.watchtower.enable=false"
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
