@@ -11,7 +11,7 @@ services:
     networks:
       - {{ DOCKER_NETWORK }}
     healthcheck:
-      test: ping -c 1 www.google.com || exit 1
+      test: ping -c 1 1.1.1.1 || exit 1
       interval: 30s
       timeout: 10s
       retries: 3
