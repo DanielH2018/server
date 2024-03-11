@@ -57,3 +57,8 @@
   shell: "usermod -aG docker {{ SYS_USER }}"
   become: yes
   become_method: sudo
+
+- name: Create Network
+  shell: "docker network create {{ DOCKER_NETWORK }} --subnet=172.18.0.0/16 || true"
+  become: yes
+  become_method: sudo

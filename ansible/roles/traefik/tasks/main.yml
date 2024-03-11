@@ -22,11 +22,6 @@
   shell: "echo $(htpasswd -nb {{ TRAEFIK_USER }} {{ TRAEFIK_PASSWORD }})"
   register: traefik_hash
 
-- name: Create docker network
-  shell: "docker network create {{ DOCKER_NETWORK }} --subnet=172.18.0.0/16 || true"
-  become: yes
-  become_method: sudo
-
 # - include_tasks: dns.yml
 #   with_items:
 #     - "{{ role_name }}"
