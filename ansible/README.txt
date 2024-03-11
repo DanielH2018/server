@@ -5,9 +5,10 @@
 4. Run `sudo /home/ubuntu/server/ansible/intial_setup.sh`.
     1. If using Intel XE graphics, ensure `/dev/dri/` exists, otherwise run `sudo apt install linux-oem-22.04` and reboot.
 5. Run `ansible-playbook setup-docker.yml --ask-become-pass`.
-6. Run `docker exec crowdsec cscli bouncers add bouncer-traefik` and save api key to .env
-6. Reboot
-7. Run `ansible-playbook deploy.yml --ask-become-pass
+6. Run `sudo usermod -aG docker $USER`
+7. Reboot
+8. Run `ansible-playbook deploy.yml --ask-become-pass
+9. Run `docker exec crowdsec cscli bouncers add bouncer-traefik` and save api key to .env
 
 ---Instructions to update server environment from git remote---
 1. Perform update to container.

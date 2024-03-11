@@ -23,7 +23,7 @@ services:
       - stubby   
     networks:
       {{ DOCKER_NETWORK }}:
-        ipv4_address: 172.19.0.255
+        ipv4_address: 172.18.0.255
 
   pihole:
     container_name: pihole
@@ -43,7 +43,7 @@ services:
       TZ: {{ TZ }}
       WEBPASSWORD: {{ PIHOLE_PASSWORD }}
       ServerIP: {{ SERVER_IP }}
-      PIHOLE_DNS_: 172.19.0.255#5353
+      PIHOLE_DNS_: 172.18.0.255#5353
     volumes:
        - './data/etc-pihole/:/etc/pihole/'
        - './data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
