@@ -33,8 +33,10 @@
 3. sudo update-grub
 4. sudo reboot
 
----Instructions to setup PiVPN---
-1. curl -L https://install.pivpn.io | bash
-
 ---Instructions for Duplicati---
 1. For backing up to Google Drive, to store not in the root directory, you need a full access token which can be attained here: https://duplicati-oauth-handler.appspot.com/
+
+---Instructions for journald logs---
+1. sudo nano /etc/systemd/journald.conf
+2. Find, uncomment and change the parameters: MaxLevelStore=notice MaxLevelSyslog=notice
+3. sudo systemctl restart systemd-journald
