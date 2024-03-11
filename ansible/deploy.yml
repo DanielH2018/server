@@ -5,10 +5,10 @@
   vars_files:
     - .env
   roles:
-    - { role: crowdsec,           tags: [ 'crowdsec' ]}
-    - { role: traefik,            tags: [ 'traefik' ]}
-    - { role: portainer,          tags: [ 'portainer' ]}
+    - { role: traefik,            tags: [ 'traefik' ]} # Creates Docker Network
     - { role: authelia,           tags: [ 'authelia' ]}
+    - { role: crowdsec,           tags: [ 'crowdsec' ]} # Depends on Traefik & Authelia Volumes
+    - { role: portainer,          tags: [ 'portainer' ]}
     - { role: autoheal,           tags: [ 'autoheal' ]}
     - { role: cloudflare-ddns,    tags: [ 'cloudflare-ddns' ]}
     - { role: code-server,        tags: [ 'code-server' ]}
@@ -32,8 +32,8 @@
     - { role: home-assistant,     tags: [ 'home-assistant' ]}
     - { role: watchtower,         tags: [ 'watchtower' ]}
     - { role: healthchecks,       tags: [ 'healthchecks' ]}
-    - { role: foundry,            tags: [ 'foundry' ]}
-    - { role: ghost,              tags: [ 'ghost' ]}
+#    - { role: foundry,            tags: [ 'foundry' ]}
+#    - { role: ghost,              tags: [ 'ghost' ]}
     - { role: littlelink,         tags: [ 'littlelink' ]}
     - { role: emulatorjs,         tags: [ 'emulatorjs' ]}
     - { role: scrutiny,           tags: [ 'scrutiny' ]}
