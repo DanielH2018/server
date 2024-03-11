@@ -1,6 +1,6 @@
 - include_tasks: directory.yml
   with_items:
-    - "{{ role_name }}/config"
+    - "{{ role_name }}/config/wg_confs"
     - "data/torrents"
 
 - name: Copy wg0.conf
