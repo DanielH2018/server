@@ -1,11 +1,3 @@
-- name: Add packages
-  apt:
-    name: "{{ packages }}"
-    state: present
-  vars:
-    packages:
-      - unzip
-
 - include_tasks: directory.yml
   with_items:
     - "{{ role_name }}/config/www/freshrss/extensions"

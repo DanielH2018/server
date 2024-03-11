@@ -2,6 +2,7 @@
 
 # Install ansible
 sudo apt install ansible -y
+sudo apt install unzip -y
 
 # Ensure correct SSH permissions
 sudo chmod -R go= ~/.ssh
