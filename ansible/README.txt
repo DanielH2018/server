@@ -28,10 +28,10 @@
 4. Reopen the Resume directory with the container
 
 ---Instructions to setup Intel QSV---
-1. echo "options i915 enable_guc=3" >> /etc/modprobe.d/i915.conf
-2. sudo update-initramfs -u
-3. sudo update-grub
-4. sudo reboot
+1. sudo mkdir -p /etc/modprobe.d
+2. sudo sh -c "echo 'options i915 enable_guc=2' >> /etc/modprobe.d/i915.conf"
+3. sudo update-initramfs -u && sudo update-grub
+5. sudo reboot
 
 ---Instructions for Duplicati---
 1. For backing up to Google Drive, to store not in the root directory, you need a full access token which can be attained here: https://duplicati-oauth-handler.appspot.com/
