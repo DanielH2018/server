@@ -37,7 +37,7 @@ services:
       - WEBUI_PORT=8080
     volumes:
       - ./config:/config
-      - /home/{{ SYS_USER }}/server/data/torrents:/downloads
+      - /home/{{ SYS_USER }}/server/data/downloads:/downloads
     restart: always
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"] 
@@ -61,11 +61,11 @@ services:
       context: ./transcode
     environment:
       - TZ={{ TZ }}
-      - TRANSCODE_PATHS=data/torrents, /data/media/movies, /data/media/tv
+      - TRANSCODE_PATHS=data/downloads, /data/media/movies, /data/media/tv
     volumes:
-      - /home/{{ SYS_USER }}/server/data/torrents:/data/torrents
-      - /home/{{ SYS_USER }}/server/data/torrents:/data/media/movies
-      - /home/{{ SYS_USER }}/server/data/torrents:/data/media/tv
+      - /home/{{ SYS_USER }}/server/data/downloads:/data/downloads
+      - /home/{{ SYS_USER }}/server/data/downloads:/data/media/movies
+      - /home/{{ SYS_USER }}/server/data/downloads:/data/media/tv
       - ./transcode:/usr/app
       - transcode-data:/usr/app/node_modules
     restart: unless-stopped
