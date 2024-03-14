@@ -7,8 +7,6 @@
 
 - name: Pull docker-compose
   shell: docker pull ghcr.io/linuxserver/docker-compose:latest
-  become: yes
-  become_method: sudo 
 
 - name: Deploy {{ container }}
   shell: docker-compose up -d --force-recreate
