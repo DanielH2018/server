@@ -12,5 +12,3 @@
   shell: docker-compose up -d --force-recreate
   args:
     chdir: "/home/{{ SYS_USER }}/server/{{ container }}/"
-  become: yes
-  become_method: sudo
