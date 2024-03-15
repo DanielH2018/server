@@ -30,6 +30,24 @@ services:
       {# Generate labels(container_name, port, use_authelia) -#}
       {{ labels(container, '9696', 'y') }}
 
+  flaresolverr:
+    # DockerHub mirror flaresolverr/flaresolverr:latest
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=info
+      - TZ={{ TZ }}
+    ports:
+      - 8191:8191
+    restart: unless-stopped
+    networks:
+      - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: curl --fail -s http://localhost:8191/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 networks:
   {{ DOCKER_NETWORK }}:
     external: true
