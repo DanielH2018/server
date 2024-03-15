@@ -12,7 +12,9 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config:/config
-      - /home/{{ SYS_USER }}/server/data:/data
+      - /home/{{ SYS_USER }}/server/data/media/tv:/tv
+      - /home/{{ SYS_USER }}/server/data/media/movies:/movies
+      - /home/{{ SYS_USER }}/server/data/downloads:/downloads
     ports:
       - 6767:6767
     restart: unless-stopped
