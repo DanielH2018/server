@@ -12,7 +12,6 @@
     - { role: autoheal,           tags: [ 'autoheal' ]}
     - { role: cloudflare-ddns,    tags: [ 'cloudflare-ddns' ]}
     - { role: code-server,        tags: [ 'code-server' ]}
-    - { role: change-detection,   tags: [ 'change-detection' ]}
     - { role: freshrss,           tags: [ 'freshrss' ]}
     - { role: uptime-kuma,        tags: [ 'uptime-kuma' ]}
     - { role: file-browser,       tags: [ 'file-browser' ]}
@@ -33,9 +32,7 @@
     - { role: watchtower,         tags: [ 'watchtower' ]}
     - { role: healthchecks,       tags: [ 'healthchecks' ]}
 #    - { role: foundry,            tags: [ 'foundry' ]}
-#    - { role: ghost,              tags: [ 'ghost' ]}
     - { role: littlelink,         tags: [ 'littlelink' ]}
-    - { role: emulatorjs,         tags: [ 'emulatorjs' ]}
     - { role: scrutiny,           tags: [ 'scrutiny' ]}
     - { role: duplicati,          tags: [ 'duplicati' ]}
     - { role: pihole,             tags: [ 'pihole' ]}
