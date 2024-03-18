@@ -5,7 +5,7 @@
   vars_files:
     - .env
   roles:
-    - { role: traefik,            tags: [ 'traefik' ]} # Creates Docker Network
+    - { role: traefik,            tags: [ 'traefik' ]}
     - { role: authelia,           tags: [ 'authelia' ]}
     - { role: crowdsec,           tags: [ 'crowdsec' ]} # Depends on Traefik & Authelia Volumes
     - { role: portainer,          tags: [ 'portainer' ]}
@@ -15,7 +15,6 @@
     - { role: freshrss,           tags: [ 'freshrss' ]}
     - { role: uptime-kuma,        tags: [ 'uptime-kuma' ]}
     - { role: file-browser,       tags: [ 'file-browser' ]}
-    - { role: guacamole,          tags: [ 'guacamole' ]}
     - { role: qbittorrent,        tags: [ 'qbittorrent', 'media' ]}
     - { role: prowlarr,           tags: [ 'prowlarr', 'media' ]}
     - { role: sonarr,             tags: [ 'sonarr', 'media' ]}
@@ -37,4 +36,3 @@
     - { role: pihole,             tags: [ 'pihole' ]}
     - { role: homepage,           tags: [ 'homepage' ]}
     - { role: speedtest,          tags: [ 'speedtest' ]}
-    - { role: wg-easy,            tags: [ 'wg-easy' ]}

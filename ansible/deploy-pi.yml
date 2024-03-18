@@ -1,0 +1,16 @@
+---
+- name: Setup Server
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - .env
+  roles:
+    - { role: traefik,            tags: [ 'traefik' ]}
+    - { role: authelia,           tags: [ 'authelia' ]}
+    - { role: portainer,          tags: [ 'portainer' ]}
+    - { role: guacamole,          tags: [ 'guacamole' ]}
+    - { role: cloudflare-ddns,    tags: [ 'cloudflare-ddns' ]}
+    - { role: duplicati,          tags: [ 'duplicati' ]}
+    - { role: wg-easy,            tags: [ 'wg-easy' ]}
+    - { role: autoheal,           tags: [ 'autoheal' ]}
+    - { role: watchtower,         tags: [ 'watchtower' ]}
