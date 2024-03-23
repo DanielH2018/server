@@ -4,7 +4,7 @@
     - "data/downloads"
 
 - name: Copy wg0.conf
-  copy:
+  template:
     src: wg0.conf.j2
     dest: "/home/{{ SYS_USER }}/server/{{ role_name }}/config/wg_confs/wg0.conf"
 
