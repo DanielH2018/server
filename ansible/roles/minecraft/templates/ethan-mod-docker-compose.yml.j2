@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+  minecraft:
+    image: itzg/minecraft-server:latest
+    container_name: minecraft
+    environment:
+      EULA: "true"
+      ENABLE_RCON: "false"
+      VIEW_DISTANCE: 15
+      MEMORY: 16G
+      CONSOLE: "false"
+      #ENABLE_AUTOPAUSE: "TRUE"
+      TZ: {{ TZ }}
+      VERSION: "1.20.1"
+      ENABLE_COMMAND_BLOCK: "true"
+      SPAWN_PROTECTION: 0
+      ALLOW_FLIGHT: "TRUE"
+      TYPE: FORGE
+      FORGE_VERSION: "47.2.0"
+      GENERIC_PACK: /modpacks/modpack.zip
+      tty: "true"
+      LEVEL_TYPE: "biomesoplenty"
+    ports:
+      - 25565:25565
+    volumes:
+      - ./data:/data
+      - ./modpacks:/modpacks:ro
+    restart: unless-stopped

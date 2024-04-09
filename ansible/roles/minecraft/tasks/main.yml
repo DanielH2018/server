@@ -1,8 +1,7 @@
 - include_tasks: directory.yml
   with_items:
-    - "{{ role_name }}/data"
-
-# TODO Auto Create Minecraft DNS
+    - "{{ role_name }}/data/mods"
+    - "{{ role_name }}/modpacks"
 
 - include_tasks: docker.yml
   vars:
