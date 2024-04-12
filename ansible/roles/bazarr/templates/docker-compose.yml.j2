@@ -33,6 +33,22 @@ services:
 
       {# Generate labels(container_name, port, use_authelia) -#}
       {{ labels(container, '6767', 'y') }}
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: whisper
+    environment:
+      - PUID={{ PUID }}
+      - PGID={{ PGID }}
+      - TZ={{ TZ }}
+      - ASR_MODEL=small
+      - ASR_ENGINE=faster_whisper
+    volumes:
+      - ./whisper_config:/config
+    ports:
+      - 9001:9000
+    networks:
+      - {{ DOCKER_NETWORK }}
+    restart: unless-stopped
 
 networks:
   {{ DOCKER_NETWORK }}:
