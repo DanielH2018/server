@@ -16,6 +16,11 @@ services:
       - no-new-privileges:true
     networks:
       - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
