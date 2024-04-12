@@ -17,7 +17,7 @@ services:
       - 'traefik.http.routers.authelia.entrypoints=https'
       - 'traefik.http.routers.authelia.tls=true'
       # Setup auth forwarding
-      - 'traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://auth.{{ DOMAIN }}'
+      - 'traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/authz/forward-auth'
       - 'traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true'
       - 'traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'
     expose:
@@ -26,10 +26,7 @@ services:
     environment:
       - TZ={{ TZ }}
     healthcheck:
-      test: wget --quiet --tries=1 --spider http://localhost:9091/api/state || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      disable: false
 
 networks:
   {{ DOCKER_NETWORK }}:

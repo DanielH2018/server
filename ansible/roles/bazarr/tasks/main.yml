@@ -1,6 +1,7 @@
 - include_tasks: directory.yml
   with_items:
     - "{{ role_name }}/config"
+    - "{{ role_name }}/whisper_config"
 
 # - include_tasks: dns.yml
 #   with_items:
