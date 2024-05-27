@@ -15,6 +15,8 @@ services:
       - TZ={{ TZ }}
     ports:
       - 8080:8080
+      - 6881:6881
+      - 6881:6881/udp
     volumes:
       - ./config:/config
       - /lib/modules:/lib/modules
@@ -35,6 +37,7 @@ services:
       - TZ={{ TZ }}
       - UMASK_SET=022
       - WEBUI_PORT=8080
+      - TORRENTING_PORT=6881
     volumes:
       - ./config:/config
       - /home/{{ SYS_USER }}/server/data/downloads:/downloads
