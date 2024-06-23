@@ -106,10 +106,10 @@ upstream_recursive_servers:
 
 ####### IPv4 addresses ######
 ## Cloudflare 1.1.1.1 and 1.0.0.1
-  - address_data: 1.1.1.1
-    tls_auth_name: "cloudflare-dns.com"
-  - address_data: 1.0.0.1
-    tls_auth_name: "cloudflare-dns.com"
+#  - address_data: 1.1.1.1
+#    tls_auth_name: "cloudflare-dns.com"
+#  - address_data: 1.0.0.1
+#    tls_auth_name: "cloudflare-dns.com"
 
 ## Google
 #  - address_data: 8.8.8.8
@@ -128,10 +128,10 @@ upstream_recursive_servers:
 #    tls_auth_name: "dnsovertls1.sinodun.com"
 
 ## Quad 9 'secure' service - Filters, does DNSSEC, doesn't send ECS
-#  - address_data: 9.9.9.9
-#    tls_auth_name: "dns.quad9.net"
-#  - address_data: 149.112.112.112
-#    tls_auth_name: "dns.quad9.net"
+  - address_data: 9.9.9.9
+    tls_auth_name: "dns.quad9.net"
+  - address_data: 149.112.112.112
+    tls_auth_name: "dns.quad9.net"
 
 ## CleanBrowsing Security Filter
 #  - address_data: 185.228.168.168
