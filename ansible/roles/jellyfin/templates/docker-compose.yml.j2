@@ -3,7 +3,7 @@
 version: "3.8"
 services:
   jellyfin:
-    image: lscr.io/linuxserver/jellyfin:10.8.13 
+    image: lscr.io/linuxserver/jellyfin:latest
     container_name: jellyfin
     environment:
       - PUID={{ PUID }}
@@ -36,7 +36,7 @@ services:
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
 
       {# Generate labels(container_name, port, use_authelia) -#}
-      {{ labels(container, '8096', 'y') }}
+      {{ labels(container, '8096', 'n') }}
 
 networks:
   {{ DOCKER_NETWORK }}:
