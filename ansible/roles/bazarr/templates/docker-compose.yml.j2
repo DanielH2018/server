@@ -45,7 +45,7 @@ services:
     volumes:
       - ./whisper_config:/config
     ports:
-      - 9001:9000
+      - 9002:9000
     networks:
       - {{ DOCKER_NETWORK }}
     restart: unless-stopped

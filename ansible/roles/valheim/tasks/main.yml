@@ -1,0 +1,8 @@
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/config"
+    - "{{ role_name }}/data"
+
+- include_tasks: docker.yml
+  vars:
+    container: "{{ role_name }}"

@@ -24,8 +24,10 @@
     - { role: prometheus,         tags: [ 'prometheus', 'monitoring' ]}
     - { role: grafana,            tags: [ 'grafana', 'monitoring' ]}
     - { role: netdata,            tags: [ 'netdata', 'monitoring' ]}
-    - { role: minecraft,          tags: [ 'minecraft' ]}
+#    - { role: minecraft,          tags: [ 'minecraft' ]}
     - { role: cloudflare-ddns-mc, tags: [ 'cloudflare-ddns-mc' ]}
+    - { role: valheim,            tags: [ 'valheim' ]}
+    - { role: cloudflare-ddns-valheim, tags: [ 'cloudflare-ddns-valheim' ]}
     - { role: home-assistant,     tags: [ 'home-assistant' ]}
     - { role: watchtower,         tags: [ 'watchtower' ]}
     - { role: healthchecks,       tags: [ 'healthchecks' ]}

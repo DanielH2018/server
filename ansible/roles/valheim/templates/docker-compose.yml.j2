@@ -1,0 +1,20 @@
+version: '3.8'
+services:
+  valheim:
+    image: ghcr.io/lloesche/valheim-server
+    container_name: valheim
+    cap_add:
+      - sys_nice
+    volumes:
+      - ./valheim/config:/config
+      - ./valheim/data:/opt/valheim
+    ports:
+      - 2456-2458:2456-2458/udp
+      - 9001:9001/tcp
+    environment:
+      SERVER_NAME: "DBoy's Server"
+      WORLD_NAME: Dedicated
+      SERVER_PASS: ThisPasswordIsAwesome
+      SERVER_PUBLIC: "true"
+    restart: always
+    stop_grace_period: 2m

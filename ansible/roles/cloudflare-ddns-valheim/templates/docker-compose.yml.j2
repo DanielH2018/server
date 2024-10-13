@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  cloudflare-ddns-valheim:
+    image: oznu/cloudflare-ddns:latest
+    container_name: cloudflare-ddns-valheim
+    restart: unless-stopped
+    environment:
+      - API_KEY={{ CLOUDFLARE_DNS_TOKEN }}
+      - ZONE={{ DOMAIN }}
+      - SUBDOMAIN=valheim
+    networks:
+      - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: curl -fIsS 1.1.1.1 || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true
