@@ -25,7 +25,7 @@ services:
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
-     labels:
+    labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
