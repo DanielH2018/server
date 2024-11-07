@@ -22,6 +22,8 @@
     - { role: bazarr,             tags: [ 'bazarr', 'media' ]}
     - { role: readarr,            tags: [ 'readarr', 'media' ]}
     - { role: jellyfin,           tags: [ 'jellyfin', 'media' ]}
+    - { role: calibre,            tags: [ 'calibre', 'media' ]}
+    - { role: calibre-web,        tags: [ 'calibre-web', 'media' ]}
     - { role: prometheus,         tags: [ 'prometheus', 'monitoring' ]}
     - { role: grafana,            tags: [ 'grafana', 'monitoring' ]}
     - { role: netdata,            tags: [ 'netdata', 'monitoring' ]}
