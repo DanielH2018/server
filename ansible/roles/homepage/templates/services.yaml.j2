@@ -124,3 +124,12 @@
         widget:
             type: speedtest
             url: http://speedtest:80
+
+- Tracking:
+    - Crypto:
+        widget:
+            type: coinmarketcap
+            currency: USD # Optional
+            symbols: [BTC, ETH, DOGE]
+            key: {{ COINMARKET_API_KEY }}
+            defaultinterval: 7d # Optional
