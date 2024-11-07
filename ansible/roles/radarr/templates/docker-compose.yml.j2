@@ -9,6 +9,7 @@ services:
       - PUID={{ PUID }}
       - PGID={{ PGID }}
       - TZ={{ TZ }}
+      - DOCKER_MODS=linuxserver/mods:radarr-striptracks
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config:/config
