@@ -37,6 +37,7 @@
 #    - { role: foundry,            tags: [ 'foundry' ]}
     - { role: littlelink,         tags: [ 'littlelink' ]}
     - { role: scrutiny,           tags: [ 'scrutiny' ]}
+    - { role: stirling-pdf,       tags: [ 'stirling-pdf' ]}
     - { role: duplicati,          tags: [ 'duplicati' ]}
     - { role: pihole,             tags: [ 'pihole' ]}
     - { role: homepage,           tags: [ 'homepage' ]}
