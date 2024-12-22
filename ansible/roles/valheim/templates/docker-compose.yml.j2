@@ -16,5 +16,5 @@ services:
       WORLD_NAME: Dedicated
       SERVER_PASS: ThisPasswordIsAwesome
       SERVER_PUBLIC: "true"
-    restart: always
+    restart: unless-stopped
     stop_grace_period: 2m
