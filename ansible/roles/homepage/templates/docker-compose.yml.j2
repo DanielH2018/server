@@ -13,7 +13,8 @@ services:
     ports:
       - 127.0.0.1:2375:2375
     networks:
-      - {{ DOCKER_NETWORK }}
+      {{ DOCKER_NETWORK }}:
+        ipv4_address: 172.18.0.35
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro # Mounted as read-only
     restart: unless-stopped

@@ -1,0 +1,41 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
+version: "3.8"
+services:
+  beszel:
+    image: henrygd/beszel:latest
+    container_name: beszel
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    restart: unless-stopped
+    networks:
+      - {{ DOCKER_NETWORK }}
+    ports:
+      - 8090:8090
+    volumes:
+      - ./beszel_data:/beszel_data
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '8090', 'n') }}
+
+  beszel-agent:
+    image: henrygd/beszel-agent:latest
+    container_name: beszel-agent
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      PORT: 45876
+      # Do not remove quotes around the key
+      KEY: "{{ BESZEL_AGENT_KEY }}"
+      DOCKER_HOST: tcp://172.18.0.35:2375
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true
