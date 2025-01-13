@@ -86,26 +86,19 @@
             type: uptimekuma
             url: http://uptime-kuma:3001
             slug: containers
-    - Prometheus:
-        icon: prometheus.png
-        href: https://prometheus.[REMOVED_KEY]/
-        description: Stat Collection
+    - Beszel:
+        icon: beszel.png
+        href: http://beszel.[REMOVED_KEY]/
+        description: Container Monitoring
         server: my-docker
-        container: prometheus
+        container: beszel
         widget:
-            type: prometheus
-            url: http://prometheus:9090
-    - Grafana: 
-        icon: grafana.png
-        href: https://grafana.[REMOVED_KEY]/
-        description: Dashboards
-        server: my-docker
-        container: grafana
-        widget:
-            type: grafana
-            url: http://grafana:3000
-            username: {{ GRAFANA_USERNAME }}
-            password: {{ GRAFANA_PASSWORD }}
+            type: beszel
+            url: http://beszel:8090
+            username: {{ EMAIL }} # email
+            password: {{ BESZEL_PASSWORD }}
+            systemId: {{ BESZEL_SYSTEM }} # optional
+            version: 2 
     - Scrutiny:
         icon: scrutiny.png
         href: http://scrutiny.[REMOVED_KEY]/
