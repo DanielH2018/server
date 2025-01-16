@@ -3,10 +3,18 @@
     - "{{ role_name }}/config"
  
 - name: Hash password
-  shell: "docker run authelia/authelia:latest authelia hash-password '{{ AUTHELIA_PASSWORD }}'"
-  register: authelia_hash
+  shell: "docker run authelia/authelia:latest authelia crypto hash generate argon2 --password '{{ AUTHELIA_PASSWORD }}'"
+  register: authelia_hash_output
   become: yes
   become_method: sudo
+
+- name: Remove prefix from hash
+  set_fact:
+    authelia_password_hash: "{{ authelia_hash_output.stdout | regex_replace('^Digest: ', '') }}"
+
+- name: Debug the cleaned hash
+  debug:
+    msg: "{{ authelia_password_hash }}"
  
 - name: Create configuration.yml from template
   template:

@@ -1,8 +1,9 @@
 # List of users
 users:
   {{ AUTHELIA_USER }}:
+    disabled: false
     displayname: "{{ AUTHELIA_USER }}"
-    password: "{{ authelia_hash.stdout[8:] }}"
+    password: "{{ authelia_password_hash }}"
     email: {{ EMAIL }}
     groups:
       - admins
