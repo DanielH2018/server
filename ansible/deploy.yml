@@ -12,6 +12,7 @@
     - { role: autoheal,           tags: [ 'autoheal' ]}
     - { role: cloudflare-ddns,    tags: [ 'cloudflare-ddns' ]}
     - { role: code-server,        tags: [ 'code-server' ]}
+    - { role: change-detection,   tags: [ 'change-detection' ]}
     - { role: freshrss,           tags: [ 'freshrss' ]}
     - { role: uptime-kuma,        tags: [ 'uptime-kuma' ]}
     - { role: file-browser,       tags: [ 'file-browser' ]}
