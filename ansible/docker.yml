@@ -9,6 +9,6 @@
   shell: docker pull ghcr.io/linuxserver/docker-compose:latest
 
 - name: Deploy {{ container }}
-  shell: docker-compose up -d --force-recreate
+  shell: docker compose up -d --force-recreate
   args:
     chdir: "/home/{{ SYS_USER }}/server/{{ container }}/"
