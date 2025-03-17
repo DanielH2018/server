@@ -20,15 +20,11 @@
   template:
     src: configuration.yml.j2
     dest: "/home/{{ SYS_USER }}/server/authelia/config/configuration.yml"
-  become: yes
-  become_method: sudo
     
 - name: Create users_database.yml from template
   template:
     src: users_database.yml.j2
     dest: "/home/{{ SYS_USER }}/server/authelia/config/users_database.yml"
-  become: yes
-  become_method: sudo
 
 # - include_tasks: dns.yml
 #   with_items:
