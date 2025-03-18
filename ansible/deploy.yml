@@ -22,6 +22,7 @@
     - { role: radarr,             tags: [ 'radarr', 'media' ]}
     - { role: bazarr,             tags: [ 'bazarr', 'media' ]}
     - { role: readarr,            tags: [ 'readarr', 'media' ]}
+    - { role: profilarr,          tags: [ 'profilarr', 'media' ]}
     - { role: jellyfin,           tags: [ 'jellyfin', 'media' ]}
     - { role: calibre,            tags: [ 'calibre', 'media' ]}
     - { role: calibre-web,        tags: [ 'calibre-web', 'media' ]}
