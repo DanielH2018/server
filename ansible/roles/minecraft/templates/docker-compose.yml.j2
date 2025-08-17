@@ -5,6 +5,7 @@ services:
     container_name: minecraft
     environment:
       EULA: "true"
+      TYPE: FABRIC
       ENABLE_RCON: "false"
       VIEW_DISTANCE: 15
       MEMORY: 16G
@@ -15,6 +16,18 @@ services:
       ENABLE_COMMAND_BLOCK: "true"
       SPAWN_PROTECTION: 0
       ALLOW_FLIGHT: "TRUE"
+      WHITELIST: |
+        DBoy13
+        hannahcevs
+        CryingPie
+        Hei_Jman
+        PoutyPicklez # Anna
+        handel6619 # Nick
+        LordAlpaca57 # Marco
+        V1RuSWasNotTaken
+        Haovk 
+        DittoHippo11 # Sophie
+        CurrentlyBroke # IDK
     ports:
       - 25565:25565
     volumes:
