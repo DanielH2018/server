@@ -9,8 +9,10 @@ services:
     ports:
       - 8081:80
     volumes:
-      - /home/{{ SYS_USER }}/server/:/srv
-      - ./data/file-browser.db:/database.db
+      - filebrowser_files:/srv
+      - filebrowser_db:/database
+      - filebrowser_config:/config
+      - filebrowser_db_file:/data/filebrowser.db
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -33,3 +35,9 @@ services:
 networks:
   {{ DOCKER_NETWORK }}:
     external: true
+
+volumes:
+  filebrowser_files:
+  filebrowser_db:
+  filebrowser_config:
+  filebrowser_db_file:
