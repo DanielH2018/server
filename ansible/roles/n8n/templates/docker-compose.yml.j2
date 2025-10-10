@@ -1,0 +1,41 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
+version: '3.8'
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    restart: always
+    ports:
+      - 5678:5678
+    environment:
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - N8N_HOST=n8n.{{ DOMAIN }}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - N8N_RUNNERS_ENABLED=true
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://n8n.{{ DOMAIN }}/
+      - GENERIC_TIMEZONE={{ TZ }}
+      - TZ={{ TZ }}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./local-files:/files
+    networks:
+      - {{ DOCKER_NETWORK }}
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '5678', 'y') }}
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true
+
+volumes:
+  n8n_data:
+  traefik_data:

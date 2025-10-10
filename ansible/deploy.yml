@@ -38,6 +38,7 @@
     - { role: watchtower,         tags: [ 'watchtower' ]}
     - { role: healthchecks,       tags: [ 'healthchecks' ]}
 #    - { role: foundry,            tags: [ 'foundry' ]}
+    - { role: n8n,               tags: [ 'n8n' ]}
     - { role: littlelink,         tags: [ 'littlelink' ]}
     - { role: scrutiny,           tags: [ 'scrutiny' ]}
     - { role: stirling-pdf,       tags: [ 'stirling-pdf' ]}
