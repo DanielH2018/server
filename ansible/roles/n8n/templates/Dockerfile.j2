@@ -1,0 +1,13 @@
+# Use the official n8n image as the base
+FROM n8nio/n8n:latest
+
+# Switch to the root user to install packages
+USER root
+
+# Add your npm packages here.
+# Use 'RUN npm install -g ...'
+# Example:
+RUN npm install -g fuzzball
+
+# Switch back to the non-privileged 'node' user
+USER node

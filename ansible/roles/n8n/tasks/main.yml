@@ -6,6 +6,11 @@
 #   with_items:
 #     - "{{ role_name }}"
 
+- name: Create Dockerfile from template
+  template:
+    src: Dockerfile.j2
+    dest: "/home/{{ SYS_USER }}/server/{{ role_name }}/Dockerfile"
+
 - include_tasks: docker.yml
   vars:
     container: "{{ role_name }}"

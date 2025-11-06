@@ -3,7 +3,7 @@
 version: '3.8'
 services:
   n8n:
-    image: docker.n8n.io/n8nio/n8n
+    build: .
     container_name: n8n
     restart: always
     ports:
@@ -16,6 +16,7 @@ services:
       - N8N_RUNNERS_ENABLED=true
       - N8N_PROXY_HOPS=1
       - NODE_ENV=production
+      - NODE_FUNCTION_ALLOW_EXTERNAL=fuzzball
       - WEBHOOK_URL=https://n8n.{{ DOMAIN }}/
       - GENERIC_TIMEZONE={{ TZ }}
       - TZ={{ TZ }}
@@ -31,7 +32,7 @@ services:
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
 
       {# Generate labels(container_name, port, use_authelia) -#}
-      {{ labels(container, '5678', 'y') }}
+      {{ labels(container, '5678', 'n') }}
 
 networks:
   {{ DOCKER_NETWORK }}:
