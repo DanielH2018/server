@@ -119,6 +119,69 @@
             type: speedtest
             url: http://speedtest:80
 
+- Monitoring:
+    - CPU Usage:
+        href: http://glances.[REMOVED_KEY]/
+        description: CPU Monitoring
+        server: my-docker
+        container: glances
+        widget:
+            type: glances
+            url: http://glances:61208
+            version: 4
+            metric: cpu
+    - Memory Usage:
+        href: http://glances.[REMOVED_KEY]/
+        description: Memory Monitoring
+        server: my-docker
+        container: glances
+        widget:
+            type: glances
+            url: http://glances:61208
+            version: 4
+            metric: memory
+            diskUnits: bytes
+    - Network Usage:
+        href: http://glances.[REMOVED_KEY]/
+        description: Network Monitoring
+        server: my-docker
+        container: glances
+        widget:
+            type: glances
+            url: http://glances:61208
+            version: 4
+            metric: network:eth0
+    - Top Processes:
+        href: http://glances.[REMOVED_KEY]/
+        description: Process Monitoring
+        server: my-docker
+        container: glances
+        widget:
+            type: glances
+            url: http://glances:61208
+            version: 4
+            metric: process
+    - CPU Temp:
+        href: http://glances.[REMOVED_KEY]/
+        description: CPU Temperature Monitoring
+        server: my-docker
+        container: glances
+        widget:
+            type: glances
+            url: http://glances:61208
+            version: 4
+            metric: sensor:Package id 0
+    - Disk I/O:
+        href: http://glances.[REMOVED_KEY]/
+        description: Disk I/O Monitoring
+        server: my-docker
+        container: glances
+        widget:
+            type: glances
+            url: http://glances:61208
+            version: 4
+            metric: disk:nvme0n1
+            
 - Tracking:
     - Crypto:
         widget:

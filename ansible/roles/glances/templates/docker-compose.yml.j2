@@ -1,0 +1,31 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
+version: "3.8"
+services:
+  glances:
+    container_name: glances
+    image: nicolargo/glances:latest
+    restart: unless-stopped
+    networks:
+      - {{ DOCKER_NETWORK }}
+    ports:
+      - 61208:61208
+    pid: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/os-release:/etc/os-release:ro
+    environment:
+      - "GLANCES_OPT=-w"
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '61208', 'n') }}
+      - "traefik.frontend.rule=Host:glances.docker.localhost"
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true
