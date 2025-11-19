@@ -66,17 +66,15 @@
           url: http://pihole:80
           version: 6
           key: {{ PIHOLE_API_KEY }}
-    - FreshRSS:
-        icon: freshrss.png
-        href: https://freshrss.[REMOVED_KEY]/
-        description: RSS Link Aggregator
+    - Traefik:
+        icon: traefik.png
+        href: https://traefik.[REMOVED_KEY]/dashboard/
+        description: Reverse Proxy
         server: my-docker
-        container: freshrss
+        container: traefik
         widget:
-            type: freshrss
-            url: http://freshrss:80
-            username: {{ FRESHRSS_USERNAME }}
-            password: {{ FRESHRSS_PASSWORD }}
+            type: traefik
+            url: http://traefik:8080
     - Uptime-Kuma:
         icon: uptime-kuma.png
         href: https://uptime-kuma.[REMOVED_KEY]/
@@ -99,7 +97,7 @@
             username: {{ EMAIL }} # email
             password: {{ BESZEL_PASSWORD }}
             systemId: {{ BESZEL_SYSTEM }} # optional
-            version: 2 
+            version: 2
     - Scrutiny:
         icon: scrutiny.png
         href: http://scrutiny.[REMOVED_KEY]/
@@ -109,6 +107,17 @@
         widget:
             type: scrutiny
             url: http://scrutiny:8080
+    - FreshRSS:
+        icon: freshrss.png
+        href: https://freshrss.[REMOVED_KEY]/
+        description: RSS Link Aggregator
+        server: my-docker
+        container: freshrss
+        widget:
+            type: freshrss
+            url: http://freshrss:80
+            username: {{ FRESHRSS_USERNAME }}
+            password: {{ FRESHRSS_PASSWORD }}
     - Speedtest:
         icon: speedtest-tracker.png
         href: https://speedtest.[REMOVED_KEY]/
