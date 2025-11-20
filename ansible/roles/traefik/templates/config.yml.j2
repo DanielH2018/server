@@ -1,6 +1,11 @@
 http:
  #region routers 
   routers:
+    dashboard:
+      entryPoints:
+        - http
+      rule: Host(`traefik`)
+      service: api@internal
 
 #endregion
 #region services
