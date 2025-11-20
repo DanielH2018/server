@@ -42,9 +42,9 @@ services:
       - ./data:/data
     labels:
       - "traefik.enable=true"
-      - "traefik.tcp.routers.survival.entrypoints=mc-survival"
-      - "traefik.tcp.routers.survival.rule=HostSNI(`*`)"
-      - "traefik.tcp.services.survival.loadbalancer.server.port=25565"
+      - "traefik.tcp.routers.minecraft.entrypoints=minecraft"
+      - "traefik.tcp.routers.minecraft.rule=HostSNI(`*`)"
+      - "traefik.tcp.services.minecraft.loadbalancer.server.port=25565"
     restart: unless-stopped
 
 networks:
