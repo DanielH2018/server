@@ -19,6 +19,8 @@ http:
 
     default-headers:
       headers:
+        customResponseHeaders:
+          Permissions-Policy: "geolocation=(self), microphone=(), camera=(), fullscreen=*, usb=()"
         frameDeny: true
         browserXssFilter: true
         contentTypeNosniff: true
