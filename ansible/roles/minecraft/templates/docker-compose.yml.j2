@@ -3,6 +3,8 @@ services:
   minecraft:
     image: itzg/minecraft-server:latest
     container_name: minecraft
+    networks:
+      - {{ DOCKER_NETWORK }}
     environment:
       EULA: "true"
       TYPE: FABRIC
@@ -12,25 +14,39 @@ services:
       CONSOLE: "false"
       #ENABLE_AUTOPAUSE: "TRUE"
       TZ: {{ TZ }}
-      VERSION: "1.21.8"
+      VERSION: "1.21.10"
       ENABLE_COMMAND_BLOCK: "true"
       SPAWN_PROTECTION: 0
       ALLOW_FLIGHT: "TRUE"
+      # DittoHippo11 # Sophie
+      # CurrentlyBroke # IDK
+      # PoutyPicklez # Anna
+      # handel6619 # Nick
+      # LordAlpaca57 # Marco
       WHITELIST: |
         DBoy13
         hannahcevs
         CryingPie
         Hei_Jman
-        PoutyPicklez # Anna
-        handel6619 # Nick
-        LordAlpaca57 # Marco
+        PoutyPicklez
+        handel6619
+        LordAlpaca57
         V1RuSWasNotTaken
-        Haovk 
-        DittoHippo11 # Sophie
-        CurrentlyBroke # IDK
-	      deathknightmm
+        Haovk
+        DittoHippo11
+        CurrentlyBroke
+        deathknightmm
     ports:
       - 25565:25565
     volumes:
       - ./data:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.survival.entrypoints=mc-survival"
+      - "traefik.tcp.routers.survival.rule=HostSNI(`*`)"
+      - "traefik.tcp.services.survival.loadbalancer.server.port=25565"
     restart: unless-stopped
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true
