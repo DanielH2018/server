@@ -27,9 +27,9 @@
     - { role: calibre,            tags: [ 'calibre', 'media' ]}
     - { role: calibre-web,        tags: [ 'calibre-web', 'media' ]}
     - { role: beszel,             tags: [ 'beszel', 'monitoring' ]}
-    #- { role: prometheus,         tags: [ 'prometheus', 'monitoring' ]}
-    #- { role: grafana,            tags: [ 'grafana', 'monitoring' ]}
-    #- { role: netdata,            tags: [ 'netdata', 'monitoring' ]}
+    - { role: prometheus,         tags: [ 'prometheus', 'monitoring' ]}
+    - { role: grafana,            tags: [ 'grafana', 'monitoring' ]}
+    - { role: netdata,            tags: [ 'netdata', 'monitoring' ]}
     - { role: minecraft,          tags: [ 'minecraft' ]}
     - { role: valheim,            tags: [ 'valheim' ]}
     #- { role: cloudflare-ddns-valheim, tags: [ 'cloudflare-ddns-valheim' ]}

@@ -28,7 +28,36 @@ services:
       {{ labels(container, '3000', 'y') }}
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on: prometheus"
+  loki:
+    image: grafana/loki
+    container_name: loki
+    restart: unless-stopped
+    environment:
+      - TZ={{ TZ }}
+    expose:
+      - 3100
+    volumes:
+      - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki:/tmp
+    command: -config.file=/etc/loki/loki-config.yaml
+    networks:
+      - {{ DOCKER_NETWORK }}
+  promtail:
+    image: grafana/promtail
+    container_name: promtail
+    restart: unless-stopped
+    environment:
+      - TZ={{ TZ }}
+    volumes:
+      - ./promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/log/:/logs
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    networks:
+      - {{ DOCKER_NETWORK }}
 
 networks:
   {{ DOCKER_NETWORK }}:
     external: true
+
+volumes:
+    loki:

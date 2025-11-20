@@ -19,6 +19,12 @@ entryPoints:
   ping:
     address: ":8082"
 
+metrics: 
+  prometheus:
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
+
 serversTransport:
   insecureSkipVerify: true
 providers:
@@ -37,8 +43,14 @@ certificatesResolvers:
         resolvers:
           - "9.9.9.9:53"
           - "149.112.112.112:53"
+
 log:
-  level: "INFO"
   filePath: "/var/log/traefik/traefik.log"
+  format: json
 accessLog:
   filePath: "/var/log/traefik/access.log"
+  format: json
+  fields:
+    defaultMode: keep
+    names:
+      StartUTC: drop

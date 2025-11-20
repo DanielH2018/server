@@ -1,0 +1,40 @@
+auth_enabled: false
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /tmp/loki
+  storage:
+    filesystem:
+      chunks_directory: /tmp/loki/chunks
+      rules_directory: /tmp/loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+querier:
+  max_concurrent: 500
+query_scheduler:
+  max_outstanding_requests_per_tenant: 1000
+frontend:
+  max_outstanding_per_tenant: 2000
+limits_config:
+  max_global_streams_per_user: 5000
+  ingestion_rate_mb: 50
+  per_stream_rate_limit: 50MB
