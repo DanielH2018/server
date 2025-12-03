@@ -20,11 +20,17 @@
   template:
     src: configuration.yml.j2
     dest: "/home/{{ SYS_USER }}/server/authelia/config/configuration.yml"
+
+- name: Check if users_database.yml exists
+  stat:
+    path: "/home/{{ SYS_USER }}/server/authelia/config/users_database.yml"
+  register: users_db_stat
     
 - name: Create users_database.yml from template
   template:
     src: users_database.yml.j2
     dest: "/home/{{ SYS_USER }}/server/authelia/config/users_database.yml"
+  when: not users_db_stat.stat.exists
 
 # - include_tasks: dns.yml
 #   with_items:

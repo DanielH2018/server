@@ -10,7 +10,7 @@ services:
     networks:
       - {{ DOCKER_NETWORK }}
     labels:
-    # Enable traefik for container
+      # Enable traefik for container
       - 'traefik.enable=true'
       # Setup HTTPS entrypoint
       - 'traefik.http.routers.authelia.rule=Host(`auth.{{ DOMAIN }}`)'
