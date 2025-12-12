@@ -11,6 +11,11 @@
     src: Dockerfile.j2
     dest: "/home/{{ SYS_USER }}/server/{{ role_name }}/Dockerfile"
 
+- name: Build Docker compose
+  shell: docker compose build
+  args:
+    chdir: "/home/{{ SYS_USER }}/server/{{ role_name }}/"
+
 - include_tasks: docker.yml
   vars:
     container: "{{ role_name }}"
