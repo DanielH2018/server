@@ -9,7 +9,7 @@
       - curl
       - gnupg
       - lsb-release
-  become: yes
+  become: true
   become_method: sudo
       
 - name: Add GPG Key
@@ -26,7 +26,7 @@
     upgrade: yes
     update_cache: yes
     force_apt_get: yes
-  become: yes
+  become: true
   become_method: sudo
 
 - name: Install Docker
@@ -38,27 +38,27 @@
       - docker-ce
       - docker-ce-cli
       - containerd.io
-  become: yes
+  become: true
   become_method: sudo
       
 - name: Install Docker Compose
   shell: "curl -L --fail https://raw.githubusercontent.com/linuxserver/docker-docker-compose/master/run.sh -o /usr/local/bin/docker-compose"
-  become: yes
+  become: true
   become_method: sudo
 
 - name: chmod Docker Compose
   file:
     dest: /usr/local/bin/docker-compose
     mode: +x
-  become: yes
+  become: true
   become_method: sudo
 
 - name: Add sudo to user
   shell: "usermod -aG docker {{ SYS_USER }}"
-  become: yes
+  become: true
   become_method: sudo
 
 - name: Create Network
   shell: "docker network create {{ DOCKER_NETWORK }} --subnet=172.18.0.0/16 || true"
-  become: yes
+  become: true
   become_method: sudo
