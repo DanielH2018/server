@@ -19,7 +19,7 @@
 
 - name: Create dnsmasq.conf from template
   template:
-    src: dnsmasq.conf.j2
+    src: dnsmasq.yml.j2
     dest: "/home/{{ SYS_USER }}/server/pihole/data/etc-dnsmasq.d/02-wildcard.conf"
   vars:
     container: "{{ role_name }}"

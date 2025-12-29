@@ -9,8 +9,6 @@ services:
     restart: unless-stopped
     volumes:
       - ./:/var/lib/grafana
-    ports:
-     - 3000:3000
     networks:
       - {{ DOCKER_NETWORK }}
     healthcheck:

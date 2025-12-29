@@ -9,8 +9,6 @@ services:
       pull: true
     container_name: n8n
     restart: always
-    ports:
-      - 5678:5678
     environment:
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
       - N8N_HOST=n8n.{{ DOMAIN }}

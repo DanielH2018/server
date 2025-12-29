@@ -15,8 +15,6 @@ services:
       - /home/{{ SYS_USER }}/server/data/media/tv:/tv
       - /home/{{ SYS_USER }}/server/data/media/movies:/movies
       - /home/{{ SYS_USER }}/server/data/downloads:/downloads
-    ports:
-      - 6767:6767
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
@@ -44,8 +42,6 @@ services:
       - ASR_ENGINE=faster_whisper
     volumes:
       - ./whisper_config:/config
-    ports:
-      - 9002:9000
     networks:
       - {{ DOCKER_NETWORK }}
     restart: unless-stopped

@@ -17,8 +17,6 @@ services:
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
-    ports:
-      - 8787:8787
     healthcheck:
       test: curl --fail -s http://localhost:8787/ || exit 1
       interval: 30s

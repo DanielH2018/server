@@ -33,8 +33,6 @@ services:
       - /var/run:/var/run:rw
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
-    ports:
-      - 8088:8080
     networks:
       - {{ DOCKER_NETWORK }}
     restart: unless-stopped
@@ -46,8 +44,6 @@ services:
     volumes:
      - ./:/etc/prometheus/
      - prometheus_data:/prometheus
-    ports:
-     - 9090:9090
     networks:
       - {{ DOCKER_NETWORK }}
     healthcheck:

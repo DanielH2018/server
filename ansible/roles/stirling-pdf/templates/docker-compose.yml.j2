@@ -12,8 +12,6 @@ services:
     volumes:
       - ./trainingData:/usr/share/tessdata # Required for extra OCR languages
       - ./configs:/configs
-    ports:
-      - 8085:8080
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}

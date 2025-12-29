@@ -16,9 +16,6 @@ services:
     image: mvance/unbound:1.16.1-stubby
     container_name: unbound
     restart: unless-stopped
-    ports:
-      - 5353:53/tcp
-      - 5353:53/udp
     depends_on:
       - stubby   
     networks:
@@ -33,12 +30,6 @@ services:
       - unbound
     networks:
       - {{ DOCKER_NETWORK }}
-    ports:
-      - "53:53/tcp"
-      - "53:53/udp"
-      - "67:67/udp"
-      - "8052:80/tcp"
-      - "8054:443/tcp"
     environment:
       TZ: {{ TZ }}
       WEBPASSWORD: {{ PIHOLE_PASSWORD }}

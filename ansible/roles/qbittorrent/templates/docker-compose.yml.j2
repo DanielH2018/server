@@ -13,10 +13,6 @@ services:
       - PUID={{ PUID }}
       - PGID={{ PGID }}
       - TZ={{ TZ }}
-    ports:
-      - 8080:8080
-      - 6881:6881
-      - 6881:6881/udp
     volumes:
       - ./config:/config
       - /lib/modules:/lib/modules

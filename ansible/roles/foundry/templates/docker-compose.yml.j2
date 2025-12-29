@@ -10,8 +10,6 @@ services:
       - ./data:/data/foundryvtt
       - ./foundrydl:/host
       - foundry_data:/opt/foundryvtt/resources/app
-    ports:
-      - 30000:30000
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}

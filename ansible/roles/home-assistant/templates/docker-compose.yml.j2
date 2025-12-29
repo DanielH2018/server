@@ -12,8 +12,6 @@ services:
       - DOCKER_MODS=linuxserver/mods:homeassistant-hacs
     volumes:
       - ./config:/config
-    ports:
-      - 8123:8123
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}

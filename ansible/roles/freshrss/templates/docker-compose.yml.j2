@@ -11,8 +11,6 @@ services:
       - TZ={{ TZ }}
     volumes:
       - ./config:/config
-    ports:
-      - 8055:80
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}

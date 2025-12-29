@@ -10,8 +10,6 @@ services:
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
-    ports:
-      - 8090:8090
     volumes:
       - ./beszel_data:/beszel_data
       - ./beszel_socket:/beszel_socket

@@ -30,8 +30,6 @@ services:
       - BUTTON_ORDER=GITHUB,LINKED_IN
       - GITHUB=https://github.com/DanielH2018
       - LINKED_IN=https://www.linkedin.com/in/danielrhunter/
-    ports:
-      - 3004:3000
     networks:
       - {{ DOCKER_NETWORK }}
     healthcheck:

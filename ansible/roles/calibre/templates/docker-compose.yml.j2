@@ -16,10 +16,6 @@ services:
     volumes:
       - ./config:/config
       - /home/{{ SYS_USER }}/server/data/media/books:/books
-    ports:
-      - 8182:8080
-      - 8181:8181
-      - 8183:8081
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}

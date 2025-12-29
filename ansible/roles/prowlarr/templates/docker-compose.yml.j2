@@ -14,8 +14,6 @@ services:
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
-    ports:
-      - 9696:9696
     healthcheck:
       test: curl --fail -s http://localhost:9696/ || exit 1
       interval: 30s
@@ -37,8 +35,6 @@ services:
     environment:
       - LOG_LEVEL=info
       - TZ={{ TZ }}
-    ports:
-      - 8191:8191
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}

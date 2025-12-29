@@ -5,8 +5,6 @@ services:
   speedtest:
     container_name: speedtest
     image: henrywhitaker3/speedtest-tracker
-    ports:
-      - 8765:80
     networks:
       - {{ DOCKER_NETWORK }}
     volumes:

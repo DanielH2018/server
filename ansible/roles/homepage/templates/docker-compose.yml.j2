@@ -27,8 +27,6 @@ services:
       - PGID={{ PGID }}
       - TZ={{ TZ }}
       - HOMEPAGE_ALLOWED_HOSTS=homepage.{{ DOMAIN }}
-    ports:
-      - 3006:3000
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}

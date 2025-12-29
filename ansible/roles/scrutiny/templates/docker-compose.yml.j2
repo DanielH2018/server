@@ -9,9 +9,6 @@ services:
     cap_add:
       - SYS_RAWIO
       - SYS_ADMIN
-    ports:
-      - "8083:8080" # webapp
-      - "8086:8086" # influxDB admin
     volumes:
       - /run/udev:/run/udev:ro
       - ./config:/opt/scrutiny/config

@@ -6,8 +6,6 @@ services:
     image: filebrowser/filebrowser:latest
     container_name: file-browser
     user: {{ PUID }}:{{ PGID }}
-    ports:
-      - 8081:80
     volumes:
       - /home/{{ SYS_USER }}/server:/srv
       - filebrowser_db:/database

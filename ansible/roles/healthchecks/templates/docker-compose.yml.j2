@@ -21,8 +21,6 @@ services:
       - SUPERUSER_PASSWORD={{ HEALTHCHECKS_PASSWORD }}
     volumes:
       - ./config:/config
-    ports:
-      - 8001:8000
     networks:
       - {{ DOCKER_NETWORK }}
     healthcheck:
