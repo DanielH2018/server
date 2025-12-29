@@ -9,7 +9,7 @@ services:
     ports:
       - 8081:80
     volumes:
-      - filebrowser_files:/srv
+      - /home/{{ SYS_USER }}/server:/srv
       - filebrowser_db:/database
       - filebrowser_config:/config
       - filebrowser_db_file:/data/filebrowser.db
@@ -32,7 +32,6 @@ networks:
     external: true
 
 volumes:
-  filebrowser_files:
   filebrowser_db:
   filebrowser_config:
   filebrowser_db_file:
