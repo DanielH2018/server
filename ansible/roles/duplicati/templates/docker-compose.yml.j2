@@ -14,8 +14,6 @@ services:
       - ./config:/config
       - ./backups:/backups
       - ../:/source
-    ports:
-      - 8200:8200
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
