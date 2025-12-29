@@ -1,6 +1,7 @@
 - include_tasks: directory.yml
   with_items:
     - "{{ role_name }}/data/stubby/"
+    - "{{ role_name }}/data/etc-dnsmasq.d/"
 
 - name: Create docker-compose.yml from template
   template:
@@ -16,36 +17,43 @@
   vars:
     container: "{{ role_name }}"
 
+- name: Create dnsmasq.conf from template
+  template:
+    src: dnsmasq.conf.j2
+    dest: "/home/{{ SYS_USER }}/server/pihole/data/etc-dnsmasq.d/02-wildcard.conf"
+  vars:
+    container: "{{ role_name }}"
+
 - name: Pull Pihole Image
   shell: docker pull pihole/pihole:latest
-  become: yes
+  become: true
   become_method: sudo
 
 - name: Pull Unbound Image
   shell: docker pull mvance/unbound:1.16.1-stubby
-  become: yes
+  become: true
   become_method: sudo
 
 - name: Pull Stubby Image
   shell: docker pull mvance/stubby:latest
-  become: yes
+  become: true
   become_method: sudo
 
 - name: Stop systemd-resolved.service
   shell: systemctl stop systemd-resolved.service
-  become: yes
+  become: true
   become_method: sudo
 
 - name: Disable systemd-resolved.service
   shell: systemctl disable systemd-resolved.service
-  become: yes
+  become: true
   become_method: sudo
 
 - name: Deploy Pihole
   shell: docker-compose up -d --force-recreate
   args:
     chdir: "/home/{{ SYS_USER }}/server/pihole/"
-  become: yes
+  become: true
   become_method: sudo
 
 - name: Update /etc/hosts
@@ -53,19 +61,19 @@
     path: /etc/hosts
     insertbefore: BOF
     line: '127.0.0.1 {{ SYS_USER }}'
-  become: yes
+  become: true
   become_method: sudo
 
 - name: Remove /etc/resolv.conf symlink # TODO Add check for if already done
   file:
     path: /etc/resolv.conf
     state: absent
-  become: yes
+  become: true
   become_method: sudo
 
 - name: Create /etc/resolv.conf from template
   template:
     src: resolv.conf.j2
     dest: "/etc/resolv.conf"
-  become: yes
+  become: true
   become_method: sudo

@@ -1,13 +1,15 @@
 {% macro labels(container, port, authelia) -%}
       # Setup HTTP entrypoint
       - "traefik.http.routers.{{ container }}.entrypoints=http"
-      - "traefik.http.routers.{{ container }}.rule=Host(`{{ container }}.{{ DOMAIN }}`)"
+      # Update: Listen for both Public AND Local domains
+      - "traefik.http.routers.{{ container }}.rule=Host(`{{ container }}.{{ DOMAIN }}`) || Host(`{{ container }}.local.{{ DOMAIN }}`)"
       # Redirect HTTP to HTTPS
       - "traefik.http.middlewares.{{ container }}-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.{{ container }}.middlewares={{ container }}-https-redirect"
       # Setup HTTPS entrypoint
       - "traefik.http.routers.{{ container }}-secure.entrypoints=https"
-      - "traefik.http.routers.{{ container }}-secure.rule=Host(`{{ container }}.{{ DOMAIN }}`)"
+      # Update: Listen for both Public AND Local domains (HTTPS)
+      - "traefik.http.routers.{{ container }}-secure.rule=Host(`{{ container }}.{{ DOMAIN }}`) || Host(`{{ container }}.local.{{ DOMAIN }}`)"
       - "traefik.http.routers.{{ container }}-secure.tls=true"
       # Setup port forwarding to internal port
       - "traefik.http.routers.{{ container }}-secure.service={{ container }}"

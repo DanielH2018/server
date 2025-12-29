@@ -33,6 +33,10 @@ authentication_backend:
 access_control:
   default_policy: deny
   rules:
+    # Rules applied to local network
+    - domain: "*.local.{{ DOMAIN }}"
+      policy: bypass
+
     # Rules applied to everyone
     - domain: "*.{{ DOMAIN }}"
       policy: two_factor
