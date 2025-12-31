@@ -3,7 +3,7 @@
   hosts: localhost
   connection: local
   vars:
-    config_source_dir: "{{ playbook_dir }}/files/"
+    config_source_dir: "{{ playbook_dir }}/files"
   
   tasks:
     - name: Copy .gitconfig to home directory
