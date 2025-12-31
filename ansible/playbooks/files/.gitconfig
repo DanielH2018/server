@@ -1,0 +1,54 @@
+[pull]
+        rebase = true
+[init]
+        defaultBranch = main
+[branch]
+        sort = -committerdate
+[commit]
+        verbose = true
+[tag]
+        sort = version:refname
+[push]
+        default = simple
+        autoSetupRemote = true
+        followTags = true
+[fetch]
+        prune = true
+        pruneTags = true
+        all = true
+[diff]
+        algorithm = histogram
+        colorMoved = plain
+        mnemonicPrefix = true
+        renames = true
+        submodule = log
+[merge]
+        conflictStyle = diff3
+[rebase]
+        autoSquash = true
+        autoStash = true
+        updateRefs = true
+[column]
+        ui = auto
+[status]
+        submoduleSummary = true
+[submodule]
+        recurse = true
+[log]
+        decorate = true
+        abbrevCommit = true
+[help]
+        autocorrect = prompt
+[rerere]
+        enabled = true
+        autoupdate = true
+[core]
+        pager = less
+        excludesfile = ~/.gitignore
+[alias]
+        lg = log --online --graph --decorate --all
+        lga = log --online --graph --decorate --all --date=relative
+        lgb = log --online --graph --decorate --all --date=relative --branches
+        lgc = log --online --graph --decorate --all --date=relative --branches --tags
+[color]
+        ui = auto
