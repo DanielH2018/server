@@ -3,7 +3,7 @@
   hosts: localhost
   become: yes
   vars:
-    ssh_config_path: /etc/ssh/sshd_config
+    ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 
   tasks:
     - name: Update and upgrade system packages
