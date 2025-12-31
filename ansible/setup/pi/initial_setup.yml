@@ -6,14 +6,25 @@
     ssh_config_path: /etc/ssh/sshd_config
 
   tasks:
+    - name: Update and upgrade system packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Reinstall network-manager
+      apt:
+        name: network-manager
+        state: reinstalled
+
     - name: Install required packages
       apt:
         name:
+          - linux-modules-extra-raspi
           - unzip
           - unattended-upgrades
           - update-notifier-common
+          - openvswitch-switch-dpdk
         state: present
-        update_cache: yes
 
     - name: Set SSH directory permissions
       file:
