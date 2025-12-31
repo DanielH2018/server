@@ -7,6 +7,6 @@ sudo apt install ansible -y
 # Run initial setup playbook
 ansible-playbook ${ANSIBLE_PLAYBOOK_DIR}/setup/pi/initial_setup.yml -K
 # Run Docker Setup playbook
-ansible-playbook ${ANSIBLE_PLAYBOOK_DIR}/setup-docker.yml -K
+ansible-playbook ${ANSIBLE_PLAYBOOK_DIR}/setup/docker_install.yml -K
 # Run Raspberry Pi optimization playbook
 ansible-playbook ${ANSIBLE_PLAYBOOK_DIR}/setup/pi/optimize_pi.yml -K
