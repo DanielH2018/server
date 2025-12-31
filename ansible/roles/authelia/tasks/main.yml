@@ -5,7 +5,7 @@
 - name: Hash password
   shell: "docker run authelia/authelia:latest authelia crypto hash generate argon2 --password '{{ AUTHELIA_PASSWORD }}'"
   register: authelia_hash_output
-  become: yes
+  become: true
   become_method: sudo
 
 - name: Remove prefix from hash
