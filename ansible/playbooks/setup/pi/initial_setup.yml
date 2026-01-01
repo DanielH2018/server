@@ -12,10 +12,16 @@
         upgrade: dist
       become: true
 
+    - name: Install Raspberry Pi Extras
+      apt:
+        name: linux-modules-extra-raspi
+        state: present
+        force_apt_get: true
+      become: true
+
     - name: Install required packages
       apt:
         name:
-          - linux-modules-extra-raspi
           - unzip
           - unattended-upgrades
           - update-notifier-common
