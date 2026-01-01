@@ -12,11 +12,6 @@
         upgrade: dist
       become: true
 
-    - name: Reinstall network-manager
-      apt:
-        name: network-manager
-        state: reinstalled
-
     - name: Install required packages
       apt:
         name:
