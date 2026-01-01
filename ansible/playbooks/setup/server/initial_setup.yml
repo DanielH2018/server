@@ -44,6 +44,7 @@
         weekday: "0"
         job: "/sbin/shutdown -r +5"
         user: root
+      become: true
 
     - name: Schedule Docker image cleanup
       cron:
@@ -52,6 +53,7 @@
         hour: "6"
         job: "/usr/bin/docker image prune -a -f"
         user: "{{ ansible_user_id }}"
+      become: true
 
     - name: Schedule Docker Compose image pull
       cron:
@@ -60,6 +62,7 @@
         hour: "6"
         job: "/usr/bin/docker image pull ghcr.io/linuxserver/docker-compose:latest"
         user: "{{ ansible_user_id }}"
+      become: true
 
     - name: Configure UFW firewall
       ufw:
