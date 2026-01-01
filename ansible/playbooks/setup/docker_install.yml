@@ -3,6 +3,6 @@
   hosts: localhost
   gather_facts: true
   vars_files:
-    - .env
+    - ../../.env
   roles:
     - { role: docker,             tags: [ 'docker' ]}
