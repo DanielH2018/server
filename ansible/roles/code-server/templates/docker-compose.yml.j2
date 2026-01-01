@@ -15,7 +15,7 @@ services:
       DOCKER_MODS: linuxserver/mods:universal-package-install|linuxserver/mods:universal-git|linuxserver/mods:code-server-python3|linuxserver/mods:code-server-docker|linuxserver/mods:code-server-extension-arguments
       EXTENSIONS_GALLERY: '{"serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery", "itemUrl": "https://marketplace.visualstudio.com/items"}'
       VSCODE_EXTENSION_IDS: ms-azuretools.vscode-docker|ms-python.python|ms-python.vscode-pylance|charliermarsh.ruff|GitHub.copilot|GitHub.copilot-chat|astral-sh.ty
-      INSTALL_PIP_PACKAGES: uv|pandas|requests|ruff|google-genai|ty
+      INSTALL_PIP_PACKAGES: uv|pandas|requests|ruff|google-genai|ty|structlog
     volumes:
       - ./config:/config
       - /var/run/docker.sock:/var/run/docker.sock

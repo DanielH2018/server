@@ -7,3 +7,4 @@
 ansible/.env
 ansible/roles/code-server/templates/github
 ansible/roles/foundry/files/*.zip
+ansible/ansible.log
