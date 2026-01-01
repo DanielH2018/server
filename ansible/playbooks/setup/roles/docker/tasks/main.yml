@@ -49,7 +49,7 @@
   become: true
 
 - name: Add sudo to user
-  shell: "usermod -aG docker {{ SYS_USER }}"
+  shell: "usermod -aG docker {{ ansible_env.USER }}"
   become: true
 
 - name: Create Network
