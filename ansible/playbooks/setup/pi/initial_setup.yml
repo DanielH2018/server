@@ -14,7 +14,9 @@
 
     - name: Install Raspberry Pi Extras
       apt:
-        name: linux-modules-extra-raspi
+        name: 
+          - linux-modules-extra-raspi
+          - openvswitch-switch-dpdk
         state: present
         force_apt_get: true
       become: true
