@@ -23,5 +23,3 @@
 - include_role:
     name: common
     tasks_from: docker_deploy.yml
-  vars:
-    container: "{{ container_item.name }}"
