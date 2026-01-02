@@ -10,7 +10,7 @@
       when: inventory_hostname != lookup('pipe', 'hostname')
 
     - name: Now safe to gather facts
-      setup: Gather facts now that we know we are on the right host
+      setup: # Gather facts now that we know we are on the right host
   roles:
     - { role: config_files,             tags: [ 'config_files' ]}
     - { role: initial_setup,            tags: [ 'initial_setup' ]}
