@@ -2,33 +2,33 @@ SERVER_IP: 192.168.50.48
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 DOMAIN: daniel-pi.com
 containers_list:
-  - name: traefik
-    use_authelia: true
-    tags:
-      - traefik
-  - name: authelia
-    use_authelia: false
-    tags:
-      - authelia
+  # - name: traefik
+  #   use_authelia: true
+  #   tags:
+  #     - traefik
+  # - name: authelia
+  #   use_authelia: false
+  #   tags:
+  #     - authelia
   - name: portainer
     port: 9000
     use_authelia: true
     tags:
       - portainer
-  - name: cloudflare-ddns
-    use_authelia: false
-    tags:
-      - cloudflare-ddns
-  - name: wg-easy
-    port: 51822
-    use_authelia: true
-    tags:
-      - wg-easy
-  - name: autoheal
-    use_authelia: false
-    tags:
-      - autoheal
-  - name: watchtower
-    use_authelia: false
-    tags:
-      - watchtower
+  # - name: cloudflare-ddns
+  #   use_authelia: false
+  #   tags:
+  #     - cloudflare-ddns
+  # - name: wg-easy
+  #   port: 51822
+  #   use_authelia: true
+  #   tags:
+  #     - wg-easy
+  # - name: autoheal
+  #   use_authelia: false
+  #   tags:
+  #     - autoheal
+  # - name: watchtower
+  #   use_authelia: false
+  #   tags:
+  #     - watchtower
