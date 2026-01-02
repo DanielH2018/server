@@ -1,0 +1,37 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
+version: "3.8"
+services:
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID={{ PUID }}
+      - PGID={{ PGID }}
+      - TZ={{ TZ }}
+      - DOCKER_MODS=linuxserver/mods:radarr-striptracks
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./config:/config
+      - /home/{{ SYS_USER }}/server/containers/data/media/tv:/tv
+      - /home/{{ SYS_USER }}/server/containers/data/downloads:/downloads
+    restart: unless-stopped
+    networks:
+      - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: curl --fail -s http://localhost:8989/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '8989', 'y') }}
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true

@@ -1,0 +1,79 @@
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/data/stubby/"
+    - "{{ role_name }}/data/etc-dnsmasq.d/"
+
+- name: Create docker-compose.yml from template
+  template:
+    src: docker-compose.yml.j2
+    dest: "/home/{{ SYS_USER }}/server/containers/pihole/docker-compose.yml"
+  vars:
+    container: "{{ role_name }}"
+
+- name: Create stubby.yml from template
+  template:
+    src: stubby.yml.j2
+    dest: "/home/{{ SYS_USER }}/server/containers/pihole/data/stubby/stubby.yml"
+  vars:
+    container: "{{ role_name }}"
+
+- name: Create dnsmasq.conf from template
+  template:
+    src: dnsmasq.yml.j2
+    dest: "/home/{{ SYS_USER }}/server/containers/pihole/data/etc-dnsmasq.d/02-wildcard.conf"
+  vars:
+    container: "{{ role_name }}"
+
+- name: Pull Pihole Image
+  shell: docker pull pihole/pihole:latest
+  become: true
+  become_method: sudo
+
+- name: Pull Unbound Image
+  shell: docker pull mvance/unbound:1.16.1-stubby
+  become: true
+  become_method: sudo
+
+- name: Pull Stubby Image
+  shell: docker pull mvance/stubby:latest
+  become: true
+  become_method: sudo
+
+- name: Stop systemd-resolved.service
+  shell: systemctl stop systemd-resolved.service
+  become: true
+  become_method: sudo
+
+- name: Disable systemd-resolved.service
+  shell: systemctl disable systemd-resolved.service
+  become: true
+  become_method: sudo
+
+- name: Deploy Pihole
+  shell: docker-compose up -d --force-recreate
+  args:
+    chdir: "/home/{{ SYS_USER }}/server/containers/pihole/"
+  become: true
+  become_method: sudo
+
+- name: Update /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    insertbefore: BOF
+    line: '127.0.0.1 {{ SYS_USER }}'
+  become: true
+  become_method: sudo
+
+- name: Remove /etc/resolv.conf symlink # TODO Add check for if already done
+  file:
+    path: /etc/resolv.conf
+    state: absent
+  become: true
+  become_method: sudo
+
+- name: Create /etc/resolv.conf from template
+  template:
+    src: resolv.conf.j2
+    dest: "/etc/resolv.conf"
+  become: true
+  become_method: sudo

@@ -1,8 +1,0 @@
-- set_fact:
-    path: "{{ item }}"
-
-- name: Create directory
-  file:
-    path: "/home/{{ SYS_USER }}/server/{{ path }}"
-    state: directory
-    mode: 0755

@@ -1,0 +1,81 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
+version: "3.8"
+services:
+  wireguard:
+    image: lscr.io/linuxserver/wireguard:latest
+    container_name: wireguard
+    hostname: wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID={{ PUID }}
+      - PGID={{ PGID }}
+      - TZ={{ TZ }}
+    volumes:
+      - ./config:/config
+      - /lib/modules:/lib/modules
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    restart: unless-stopped
+    networks:
+      - {{ DOCKER_NETWORK }}
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+
+      {# Generate labels(container_name, port, use_authelia) -#}
+      {{ labels(container, '8080', 'y') }}
+
+      # Disable Watchtower
+      - "com.centurylinklabs.watchtower.enable=false"
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: service:wireguard
+    depends_on:
+      - wireguard
+    environment:
+      - PUID={{ PUID }}
+      - PGID={{ PGID }}
+      - TZ={{ TZ }}
+      - UMASK_SET=022
+      - WEBUI_PORT=8080
+      - TORRENTING_PORT=6881
+    volumes:
+      - ./config:/config
+      - /home/{{ SYS_USER }}/server/containers/data/downloads:/downloads
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"] 
+      interval: 1m30s
+      timeout: 2s
+      retries: 1
+  transcode:
+    container_name: transcode
+    build:
+      context: ./transcode
+    environment:
+      - TZ={{ TZ }}
+      - TRANSCODE_PATHS=data/downloads, /data/media/movies, /data/media/tv
+    volumes:
+      - /home/{{ SYS_USER }}/server/containers/data/downloads:/data/downloads
+      - /home/{{ SYS_USER }}/server/containers/data/downloads:/data/media/movies
+      - /home/{{ SYS_USER }}/server/containers/data/downloads:/data/media/tv
+      - ./transcode:/usr/app
+      - transcode-data:/usr/app/node_modules
+    restart: unless-stopped
+    networks:
+      - {{ DOCKER_NETWORK }}
+    labels:
+    # Disable Watchtower
+      - "com.centurylinklabs.watchtower.enable=false"
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true
+volumes:
+  transcode-data:

@@ -1,0 +1,18 @@
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/data"
+
+- name: Add apache2-utils
+  apt:
+    name: apache2-utils
+    state: present
+  become: true
+  become_method: sudo
+  
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
+
+- include_tasks: docker.yml
+  vars:
+    container: "{{ role_name }}"

@@ -1,0 +1,22 @@
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/config/wg_confs"
+    - "data/downloads"
+
+- name: Copy wg0.conf
+  template:
+    src: wg0.conf.j2
+    dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/config/wg_confs/wg0.conf"
+
+- name: Extract transcode.zip into /var/lib/foo
+  unarchive:
+    src: transcode.zip
+    dest: "/home/{{ SYS_USER }}/server/containers/qbittorrent/"
+
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
+
+- include_tasks: docker.yml
+  vars:
+    container: "{{ role_name }}"

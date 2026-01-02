@@ -1,0 +1,15 @@
+---
+- name: Deploy Containers
+  hosts: homeservers
+  vars_files:
+    - .env
+  tasks:
+    - name: Run roles respecting tags
+      include_role:
+        name: "{{ container_item.name }}"
+      loop: "{{ containers_list }}"
+      loop_control:
+        loop_var: container_item
+      when:
+        - "'all' in ansible_run_tags or (container_item.tags | intersect(ansible_run_tags) | length > 0)"
+      tags: always

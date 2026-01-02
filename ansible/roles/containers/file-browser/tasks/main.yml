@@ -1,0 +1,16 @@
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/data"
+
+- name: Create file-browser.db
+  file:
+    path: "/home/{{ SYS_USER }}/server/containers/file-browser/data/file-browser.db"
+    state: touch
+
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
+
+- include_tasks: docker.yml
+  vars:
+    container: "{{ role_name }}"

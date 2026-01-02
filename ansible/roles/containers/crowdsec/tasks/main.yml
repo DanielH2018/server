@@ -1,0 +1,43 @@
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}/config/notifications"
+
+- name: Create acquis.yaml from template
+  template:
+    src: acquis.yaml.j2
+    dest: "/home/{{ SYS_USER }}/server/containers/crowdsec/config/acquis.yaml"
+
+- name: Copy profiles.yaml
+  copy:
+    src: profiles.yaml
+    dest: "/home/{{ SYS_USER }}/server/containers/crowdsec/config/profiles.yaml"
+
+- name: Copy discord.yaml
+  copy:
+    src: discord.yaml
+    dest: "/home/{{ SYS_USER }}/server/containers/crowdsec/config/notifications/discord.yaml"
+
+- name: Create Dockerfile from template
+  template:
+    src: Dockerfile.j2
+    dest: "/home/{{ SYS_USER }}/server/containers/crowdsec/Dockerfile"
+
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
+
+- include_tasks: docker.yml
+  vars:
+    container: "{{ role_name }}"
+
+- name: Make sure script has correct permissions
+  shell: chmod +x crowdsecUpdate.sh
+  args:
+    chdir: "/home/{{ SYS_USER }}/server/containers/ansible/roles/crowdsec/scripts/"
+  become: true
+  become_method: sudo
+
+- name: Add update & upgrade cronjob
+  shell: ./crowdsecUpdate.sh
+  args:
+    chdir: "/home/{{ SYS_USER }}/server/containers/ansible/roles/crowdsec/scripts/"

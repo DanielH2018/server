@@ -1,0 +1,17 @@
+- include_tasks: directory.yml
+  with_items:
+    - "{{ role_name }}"
+
+
+- name: Create prometheus.yml from template
+  template:
+    src: prometheus.yml.j2
+    dest: "/home/{{ SYS_USER }}/server/containers/prometheus/prometheus.yml"
+
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
+
+- include_tasks: docker.yml
+  vars:
+    container: "{{ role_name }}"

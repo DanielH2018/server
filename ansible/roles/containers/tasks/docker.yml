@@ -1,0 +1,14 @@
+- name: Create docker-compose from template
+  template:
+    src: docker-compose.yml.j2
+    dest: "/home/{{ SYS_USER }}/server/containers/{{ container }}/docker-compose.yml"
+  vars:
+    container: "{{ container }}"
+
+- name: Pull docker-compose
+  shell: docker pull ghcr.io/linuxserver/docker-compose:latest
+
+- name: Deploy {{ container }}
+  shell: docker compose up -d --force-recreate
+  args:
+    chdir: "/home/{{ SYS_USER }}/server/containers/{{ container }}/"
