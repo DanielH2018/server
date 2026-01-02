@@ -1,6 +1,9 @@
-- include_tasks: directory.yml
-  with_items:
-    - "{{ role_name }}/config/wg_confs"
+- include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    dirs_to_create:
+    - "{{ container_item.name }}/config/wg_confs"
     - "data/downloads"
 
 - name: Copy wg0.conf
@@ -8,7 +11,7 @@
     src: wg0.conf.j2
     dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/config/wg_confs/wg0.conf"
 
-- name: Extract transcode.zip into /var/lib/foo
+- name: Extract transcode.zip
   unarchive:
     src: transcode.zip
     dest: "/home/{{ SYS_USER }}/server/containers/qbittorrent/"
@@ -17,6 +20,8 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_tasks: docker.yml
+- include_role:
+    name: common
+    tasks_from: docker_deploy.yml
   vars:
-    container: "{{ role_name }}"
+    container: "{{ container_item.name }}"

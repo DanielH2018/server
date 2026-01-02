@@ -15,6 +15,8 @@
     - name: Run roles respecting tags
       include_role:
         name: "{{ container_item.name }}"
+        apply:
+          tags: "{{ container_item.tags }}"
       loop: "{{ containers_list }}"
       loop_control:
         loop_var: container_item
