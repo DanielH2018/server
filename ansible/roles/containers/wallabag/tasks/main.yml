@@ -1,0 +1,15 @@
+- include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    dirs_to_create:
+    - "{{ container_item.name }}/images"
+    - "{{ container_item.name }}/data"
+
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
+
+- include_role:
+    name: common
+    tasks_from: docker_deploy.yml

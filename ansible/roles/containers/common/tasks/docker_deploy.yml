@@ -1,7 +1,3 @@
-- name: Debug container item
-  debug:
-    var: container_item
-
 - name: Create docker-compose from template
   template:
     src: docker-compose.yml.j2

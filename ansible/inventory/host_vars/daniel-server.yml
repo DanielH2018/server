@@ -75,6 +75,11 @@ containers_list:
     use_authelia: true
     tags:
       - freshrss
+  - name: wallabag
+    port: 80
+    use_authelia: true
+    tags:
+      - wallabag
   - name: qbittorrent
     port: 8080
     use_authelia: true

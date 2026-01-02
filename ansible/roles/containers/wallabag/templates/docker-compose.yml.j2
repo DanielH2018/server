@@ -1,0 +1,67 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
+services:
+  wallabag:
+    container_name: wallabag
+    image: wallabag/wallabag
+    restart: unless-stopped
+    networks:
+      - {{ DOCKER_NETWORK }}
+    environment:
+      - MYSQL_ROOT_PASSWORD=wallaroot
+      - SYMFONY__ENV__DATABASE_DRIVER=pdo_mysql
+      - SYMFONY__ENV__DATABASE_HOST=db
+      - SYMFONY__ENV__DATABASE_PORT=3306
+      - SYMFONY__ENV__DATABASE_NAME=wallabag
+      - SYMFONY__ENV__DATABASE_USER=wallabag
+      - SYMFONY__ENV__DATABASE_PASSWORD=wallapass
+      - SYMFONY__ENV__DATABASE_CHARSET=utf8mb4
+      - SYMFONY__ENV__DATABASE_TABLE_PREFIX="wallabag_"
+      - SYMFONY__ENV__MAILER_DSN=smtp://127.0.0.1
+      - SYMFONY__ENV__FROM_EMAIL=wallabag@example.com
+      - SYMFONY__ENV__DOMAIN_NAME=https://your-wallabag-instance.wallabag.org
+      - SYMFONY__ENV__SERVER_NAME="Your wallabag instance"
+    volumes:
+      - ./images:/var/www/wallabag/web/assets/images
+    depends_on:
+      - db
+      - redis
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Use traefik network
+      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+
+      {# Generate labels(container, port, use_authelia) -#}
+      {{ labels(
+          container_item.hostname | default(container_item.name),
+          container_item.port | string,
+          container_item.use_authelia
+        )
+      }}
+  db:
+    image: mariadb
+    restart: unless-stopped
+    networks:
+      - {{ DOCKER_NETWORK }}
+    environment:
+      - MYSQL_ROOT_PASSWORD=wallaroot
+    volumes:
+      - ./data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh", "--innodb_initialized"]
+      interval: 20s
+      timeout: 3s
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    networks:
+      - {{ DOCKER_NETWORK }}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 20s
+      timeout: 3s
+
+networks:
+  {{ DOCKER_NETWORK }}:
+    external: true
