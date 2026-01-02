@@ -1,8 +1,16 @@
 ---
 - name: Deploy Containers
   hosts: homeservers
+  gather_facts: false
   vars_files:
     - .env
+  pre_tasks:
+    - name:  Only run on the machine executing this command
+      meta: end_host
+      when: inventory_hostname != lookup('pipe', 'hostname')
+
+    - name: Now safe to gather facts
+      setup: Gather facts now that we know we are on the right host
   tasks:
     - name: Run roles respecting tags
       include_role:
