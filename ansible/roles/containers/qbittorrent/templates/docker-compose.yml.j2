@@ -45,6 +45,10 @@ services:
       - UMASK_SET=022
       - WEBUI_PORT=8080
       - TORRENTING_PORT=6881
+    ports:
+      - 8080:8080
+      - 6881:6881
+      - 6881:6881/udp
     volumes:
       - ./config:/config
       - /home/{{ SYS_USER }}/server/containers/data/downloads:/downloads
