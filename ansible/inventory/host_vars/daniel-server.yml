@@ -5,125 +5,210 @@ containers_list:
   # Organization: Core Services
   - name: traefik
     use_authelia: true
+    tags:
+      - traefik
   - name: authelia
     use_authelia: false
+    tags:
+      - authelia
   - name: crowdsec
     port: 3000
     use_authelia: true
+    tags:
+      - crowdsec
   - name: portainer
     port: 9000
     use_authelia: true
+    tags:
+      - portainer
   - name: cloudflare-ddns
     use_authelia: false
+    tags:
+      - cloudflare-ddns
   - name: pihole
     port: 80
     use_authelia: true
+    tags:
+      - pihole
   - name: homepage
     port: 3000
     use_authelia: true 
+    tags:
+      - homepage
   - name: autoheal
     use_authelia: false
+    tags:
+      - autoheal
   - name: watchtower
     use_authelia: false
+    tags:
+      - watchtower
   - name: duplicati
     port: 8200
     use_authelia: true
+    tags:
+      - duplicati
   - name: wg-easy
     port: 51821
     use_authelia: true
+    tags:
+      - wg-easy
   # Organization: Development
   - name: code-server
     port: 8443
     use_authelia: true
+    tags:
+      - code-server
   - name: n8n
     port: 5678
     use_authelia: true
+    tags:
+      - n8n
   - name: home-assistant
     port: 8123
     use_authelia: true
+    tags:
+      - home-assistant
   # Organization: Media
   - name: freshrss
     port: 80
     use_authelia: true
+    tags:
+      - freshrss
   - name: qbittorrent
     port: 8080
     use_authelia: true
+    tags:
+      - qbittorrent
   - name: sonarr
     port: 8989
     use_authelia: true
+    tags:
+      - sonarr
   - name: radarr
     port: 7878
     use_authelia: true
+    tags:
+      - radarr
   - name: jellyfin
     port: 8096
     use_authelia: true
+    tags:
+      - jellyfin
   - name: prowlarr
     port: 9696
     use_authelia: true
+    tags:
+      - prowlarr
   - name: readarr
     port: 8787
     use_authelia: true
+    tags:
+      - readarr
   - name: bazarr
     port: 6767
     use_authelia: true
+    tags:
+      - bazarr
   - name: profilarr
     port: 6868
     use_authelia: true
+    tags:
+      - profilarr
   - name: calibre-web
     port: 8083
     use_authelia: true
+    tags:
+      - calibre-web
   - name: calibre
     port: 8080
-    use_authelia: true 
+    use_authelia: true
+    tags:
+      - calibre
   # Organization: Monitoring
   - name: prometheus
     port: 9090
     use_authelia: true
+    tags:
+      - prometheus
   - name: grafana
     port: 3000
     use_authelia: true
+    tags:
+      - grafana
   - name: netdata
     port: 19999
     use_authelia: true
+    tags:
+      - netdata
   - name: glances
     port: 61208
     use_authelia: false
+    tags:
+      - glances
   - name: beszel
     port: 8090
     use_authelia: true
+    tags:
+      - beszel
   - name: uptime-kuma
     port: 3001
     use_authelia: true
+    tags:
+      - uptime-kuma
   - name: scrutiny
     port: 8080
     use_authelia: true
+    tags:
+      - scrutiny
   # Organization: Gaming
   - name: minecraft
     use_authelia: false
+    tags:
+      - minecraft
   - name: valheim
     use_authelia: false
+    tags:
+      - valheim
 #  - name: cloudflare-ddns-valheim
+#    port: 30000
 #    use_authelia: false
+#    tags:
+#      - cloudflare-ddns-valheim
 #  - name: foundry
 #    use_authelia: false
+#    tags:
+#      - foundry
   # Organization: Miscellaneous
   - name: file-browser
     port: 80
     use_authelia: true
+    tags:
+      - file-browser
   - name: change-detection
     port: 5000
     use_authelia: true
+    tags:
+      - change-detection
   - name: healthchecks
     port: 8000
     use_authelia: true
+    tags:
+      - healthchecks
   - name: stirling-pdf
     port: 8080
     use_authelia: true
+    tags:
+      - stirling-pdf
   - name: littlelink
     port: 3000
     hostname: www
     use_authelia: true
+    tags:
+      - littlelink
   - name: speedtest
     port: 80
     use_authelia: true
+    tags:
+      - speedtest
   
