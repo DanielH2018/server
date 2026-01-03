@@ -3,8 +3,7 @@
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/images"
-    - "{{ container_item.name }}/data"
+    - "{{ container_item.name }}"
 
 # - include_tasks: dns.yml
 #   with_items:

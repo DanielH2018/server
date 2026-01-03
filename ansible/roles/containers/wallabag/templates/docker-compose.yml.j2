@@ -23,6 +23,7 @@ services:
       - SYMFONY__ENV__SERVER_NAME="Your wallabag instance"
     volumes:
       - wallabag-images:/var/www/wallabag/web/assets/images
+      - wallabag_data:/var/www/wallabag/data
     depends_on:
       - db
       - redis
@@ -70,4 +71,5 @@ networks:
 
 volumes:
   wallabag-images:
+  wallabag_data:
   wallabag-db:
