@@ -19,10 +19,10 @@ services:
       - SYMFONY__ENV__DATABASE_TABLE_PREFIX="wallabag_"
       - SYMFONY__ENV__MAILER_DSN=smtp://127.0.0.1
       - SYMFONY__ENV__FROM_EMAIL=wallabag@example.com
-      - SYMFONY__ENV__DOMAIN_NAME=https://your-wallabag-instance.wallabag.org
+      - SYMFONY__ENV__DOMAIN_NAME=https://{{ container_item.hostname | default(container_item.name) }}.{{ DOMAIN }}
       - SYMFONY__ENV__SERVER_NAME="Your wallabag instance"
     volumes:
-      - ./images:/var/www/wallabag/web/assets/images
+      - wallabag-images:/var/www/wallabag/web/assets/images
     depends_on:
       - db
       - redis
@@ -41,19 +41,21 @@ services:
       }}
   db:
     image: mariadb
+    container_name: wallabag-db
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
     environment:
       - MYSQL_ROOT_PASSWORD=wallaroot
     volumes:
-      - ./data:/var/lib/mysql
+      - wallabag-db:/var/lib/mysql
     healthcheck:
       test: ["CMD", "/usr/local/bin/healthcheck.sh", "--innodb_initialized"]
       interval: 20s
       timeout: 3s
   redis:
     image: redis:alpine
+    container_name: wallabag-redis
     restart: unless-stopped
     networks:
       - {{ DOCKER_NETWORK }}
@@ -65,3 +67,7 @@ services:
 networks:
   {{ DOCKER_NETWORK }}:
     external: true
+
+volumes:
+  wallabag-images:
+  wallabag-db:
