@@ -1,7 +1,10 @@
-- include_tasks: directory.yml
-  with_items:
-    - "{{ role_name }}/config"
-    - "{{ role_name }}/icons"
+- include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    dirs_to_create:
+    - "{{ container_item.name }}/config"
+    - "{{ container_item.name }}/icons"
 
 - name: Copy Icons
   copy:
@@ -26,6 +29,6 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_tasks: docker.yml
-  vars:
-    container: "{{ role_name }}"
+- include_role:
+    name: common
+    tasks_from: docker_deploy.yml
