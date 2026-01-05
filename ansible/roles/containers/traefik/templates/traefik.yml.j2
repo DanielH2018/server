@@ -45,10 +45,11 @@ certificatesResolvers:
           - "149.112.112.112:53"
 
 log:
-  filePath: "/var/log/traefik/traefik.log"
+  filePath: "/log/traefik.log"
   format: json
+  level: DEBUG
 accessLog:
-  filePath: "/var/log/traefik/access.log"
+  filePath: "/log/access.log"
   format: json
   fields:
     defaultMode: keep
