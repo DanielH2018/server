@@ -12,24 +12,12 @@ services:
     volumes:
       - ./config:/etc/crowdsec:rw
       - crowdsec-db:/var/lib/crowdsec/data/
-      - traefik_traefik-logs:/var/log/traefik/:ro
+      - /var/log/traefik:/var/log/traefik/:ro
       - /var/log/auth.log:/var/log/auth.log:ro
-      - authelia_authelia-logs:/var/log/authelia/:ro
+      - /var/log/authelia:/var/log/authelia/:ro
     networks:
       - {{ DOCKER_NETWORK }}
     command: docker exec crowdsec cscli hub update && docker exec crowdsec cscli hub upgrade
-
-  bouncer-traefik:
-    image: docker.io/fbonalair/traefik-crowdsec-bouncer:latest
-    container_name: bouncer-traefik
-    environment:
-      CROWDSEC_BOUNCER_API_KEY: {{ CROWDSEC_BOUNCER_API_KEY }}
-      CROWDSEC_AGENT_HOST: crowdsec:8080
-    networks:
-      - {{ DOCKER_NETWORK }}
-    depends_on:
-      - crowdsec
-    restart: unless-stopped
 
   dashboard:
     #we're using a custom Dockerfile so that metabase pops with pre-configured dashboards
@@ -56,8 +44,13 @@ services:
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
 
-      {# Generate labels(container_name, port, use_authelia) -#}
-      {{ labels(container, '3000', 'y') }}
+      {# Generate labels(container, port, use_authelia) -#}
+      {{ labels(
+          container_item.hostname | default(container_item.name),
+          container_item.port | string,
+          container_item.use_authelia
+        )
+      }}
       
       # Disable watchtower update
       - "com.centurylinklabs.watchtower.enable=false"
@@ -67,7 +60,3 @@ networks:
     external: true
 volumes:
   crowdsec-db:
-  traefik_traefik-logs: # this will be the name of the volume from traefik logs
-    external: true # remove if traefik is running on same stack
-  authelia_authelia-logs: # this will be the name of the volume from authelia logs
-    external: true # remove if authelia is running on same stack

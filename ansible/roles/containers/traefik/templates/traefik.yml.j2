@@ -8,12 +8,12 @@ entryPoints:
     address: ":80"
     http:
       middlewares:
-        - crowdsec-bouncer@file
+        - crowdsec@file
   https:
     address: ":443"
     http:
       middlewares:
-        - crowdsec-bouncer@file
+        - crowdsec@file
   minecraft:
     address: ":25565"
   ping:
@@ -45,11 +45,11 @@ certificatesResolvers:
           - "149.112.112.112:53"
 
 log:
-  filePath: "/log/traefik.log"
+  filePath: "/var/log/traefik/traefik.log"
   format: json
-  level: DEBUG
+  level: INFO
 accessLog:
-  filePath: "/log/access.log"
+  filePath: "/var/log/traefik/access.log"
   format: json
   fields:
     defaultMode: keep
@@ -67,3 +67,9 @@ tls:
         - 'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384'
         - 'TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305'
         - 'TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305'
+
+experimental:
+  plugins:
+    bouncer:
+      moduleName: "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin"
+      version: "v1.4.6" # Check GitHub for the latest version

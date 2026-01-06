@@ -4,7 +4,7 @@
 ###############################################################
 
 server:
-  address: 'tcp://:9091'
+  address: 'tcp4://:9091'
 
 log:
   level: debug
@@ -25,10 +25,11 @@ authentication_backend:
     path: /config/users_database.yml
     password:
       algorithm: argon2id
-      iterations: 1
+      iterations: 3
       salt_length: 16
-      parallelism: 8
-      memory: 64
+      parallelism: 4  
+      memory: 65536
+      key_length: 32
       
 access_control:
   default_policy: deny

@@ -21,8 +21,7 @@ services:
       - ./data/traefik.yml:/traefik.yml:ro
       - ./data/acme.json:/acme.json
       - ./data/config.yml:/config.yml:ro
-      - /var/log/traefik:/log
-      - traefik-logs:/var/log/traefik
+      - /var/log/traefik:/var/log/traefik
     healthcheck:
       test: traefik healthcheck
       interval: 30s
@@ -56,5 +55,3 @@ services:
 networks:
   {{ DOCKER_NETWORK }}:
     external: true
-volumes:
-  traefik-logs:

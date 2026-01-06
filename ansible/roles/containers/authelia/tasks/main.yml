@@ -1,12 +1,14 @@
-- include_tasks: directory.yml
-  with_items:
-    - "{{ role_name }}/config"
+- include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    dirs_to_create:
+    - "{{ container_item.name }}/config"
  
 - name: Hash password
-  shell: "docker run authelia/authelia:latest authelia crypto hash generate argon2 --password '{{ AUTHELIA_PASSWORD }}'"
+  shell: "docker run authelia/authelia:latest authelia crypto hash generate argon2 --password '{{ AUTHELIA_PASSWORD }}' --iterations 3 --memory 65536 --parallelism 4 --salt-length 16 --key-length 32"
   register: authelia_hash_output
   become: true
-  become_method: sudo
 
 - name: Remove prefix from hash
   set_fact:
@@ -20,6 +22,8 @@
   template:
     src: configuration.yml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/authelia/config/configuration.yml"
+    mode: '0755'
+  become: true
 
 - name: Check if users_database.yml exists
   stat:
@@ -30,12 +34,13 @@
   template:
     src: users_database.yml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/authelia/config/users_database.yml"
+    mode: '0755'
   when: not users_db_stat.stat.exists
 
 # - include_tasks: dns.yml
 #   with_items:
 #     - auth
 
-- include_tasks: docker.yml
-  vars:
-    container: "{{ role_name }}"
+- include_role:
+    name: common
+    tasks_from: docker_deploy.yml

@@ -1,6 +1,9 @@
-- include_tasks: directory.yml
-  with_items:
-    - "{{ role_name }}/config/notifications"
+- include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    dirs_to_create:
+    - "{{ container_item.name }}/config/notifications"
 
 - name: Create acquis.yaml from template
   template:
@@ -26,18 +29,18 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_tasks: docker.yml
-  vars:
-    container: "{{ role_name }}"
+- include_role:
+    name: common
+    tasks_from: docker_deploy.yml
 
 - name: Make sure script has correct permissions
   shell: chmod +x crowdsecUpdate.sh
   args:
-    chdir: "/home/{{ SYS_USER }}/server/containers/ansible/roles/crowdsec/scripts/"
+    chdir: "/home/{{ SYS_USER }}/server/ansible/roles/containers/crowdsec/scripts/"
   become: true
   become_method: sudo
 
 - name: Add update & upgrade cronjob
   shell: ./crowdsecUpdate.sh
   args:
-    chdir: "/home/{{ SYS_USER }}/server/containers/ansible/roles/crowdsec/scripts/"
+    chdir: "/home/{{ SYS_USER }}/server/ansible/roles/containers/crowdsec/scripts/"
