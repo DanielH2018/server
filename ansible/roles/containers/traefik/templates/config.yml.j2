@@ -3,13 +3,23 @@ http:
   routers:
     dashboard:
       entryPoints:
-        - http
-      rule: Host(`traefik`)
+        - https
+      rule: "Host(`traefik.{{ DOMAIN }}`)"
       service: api@internal
+      middlewares:
+        - default-headers
+        - authelia@docker
+      tls:
+        certResolver: cloudflare
+        domains:
+          - main: "{{ DOMAIN }}"
+            sans:
+              - "*.{{ DOMAIN }}"
 
 #endregion
 #region services
   services:
+    # (Empty for now, as api@internal is built-in)
 
 #endregion
   middlewares:

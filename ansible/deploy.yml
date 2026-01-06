@@ -5,7 +5,7 @@
   vars_files:
     - .env
   pre_tasks:
-    - name:  Only run on the machine executing this command
+    - name: Only run on the machine executing this command
       meta: end_host
       when: inventory_hostname != lookup('pipe', 'hostname')
 
