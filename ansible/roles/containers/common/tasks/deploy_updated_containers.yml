@@ -44,4 +44,4 @@
   ansible.builtin.command: "{{ playbook_command }}"
   when: git_changed_containers != ''
   become: true
-  become_method: sudo
+  become_method: ansible.builtin.sudo

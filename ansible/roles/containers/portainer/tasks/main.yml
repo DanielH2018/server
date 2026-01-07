@@ -11,7 +11,7 @@
     name: apache2-utils
     state: present
   become: true
-  become_method: sudo
+  become_method: ansible.builtin.sudo
 
 # - include_tasks: dns.yml
 #   with_items:

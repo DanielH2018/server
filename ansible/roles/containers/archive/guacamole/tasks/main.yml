@@ -16,14 +16,14 @@
 - name: Setup Init script Permissions
   ansible.builtin.command: chmod -R +x /home/{{ SYS_USER }}/server/containers/{{ role_name }}/init
   become: true
-  become_method: sudo
+  become_method: ansible.builtin.sudo
 
 - name: Add DB Init Script
   ansible.builtin.shell: docker run --rm guacamole/guacamole /opt/guacamole/bin/initdb.sh --postgresql > initdb.sql
   args:
     chdir: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/init"
   become: true
-  become_method: sudo
+  become_method: ansible.builtin.sudo
 
 - ansible.builtin.include_role:
     name: common
