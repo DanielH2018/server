@@ -3,45 +3,47 @@
   ansible.builtin.command: git pull --all
   register: git
 
-- ansible.builtin.debug:
+- name: Show git output
+  ansible.builtin.debug:
     var: git.stdout_lines
 
 - name: Set Facts
   ansible.builtin.set_fact:
-    container_names: []
-    container_lines: []
-    git_changed_containers: ""
+    common_container_names: []
+    common_container_lines: []
+    common_git_changed_containers: ""
 
 - name: Get container lines from deploy.yml
   ansible.builtin.set_fact:
-    container_lines: "{{ container_lines + [item] }}"
+    common_container_lines: "{{ common_container_lines + [item] }}"
   with_lines: cat "deploy.yml"
   when: '"role:" in item'
 
 - name: Get container name from line
   ansible.builtin.set_fact:
-    container_names: "{{ container_names + [item.split(' ')[7]] }}"
-  loop: "{{ container_lines }}"
+    common_container_names: "{{ common_container_names + [item.split(' ')[7]] }}"
+  loop: "{{ common_container_lines }}"
 
 - name: Search git output for container names
   ansible.builtin.set_fact:
-    git_changed_containers: "{{ git_changed_containers + item }}"
-  loop: "{{ container_names }}"
+    common_git_changed_containers: "{{ common_git_changed_containers + item }}"
+  loop: "{{ common_container_names }}"
   when: item[:-1] + '/' in git.stdout
 
 - name: Remove hanging comma
   ansible.builtin.set_fact:
-    git_changed_containers: "{{ git_changed_containers[:-1] }}"
+    common_git_changed_containers: "{{ common_git_changed_containers[:-1] }}"
 
 - name: Setup playbook command
   ansible.builtin.set_fact:
-    playbook_command: "{{ 'ansible-playbook deploy.yml --tags \"' + git_changed_containers + '\"' }}"
+    playbook_command: "{{ 'ansible-playbook deploy.yml --tags \"' + common_git_changed_containers + '\"' }}"
 
-- ansible.builtin.debug:
+- name: Show playbook command
+  ansible.builtin.debug:
     msg: "{{ playbook_command }}"
 
 - name: Deploy updated containers, if any
   ansible.builtin.command: "{{ playbook_command }}"
-  when: git_changed_containers != ''
+  when: common_git_changed_containers != ''
   become: true
   become_method: ansible.builtin.sudo
