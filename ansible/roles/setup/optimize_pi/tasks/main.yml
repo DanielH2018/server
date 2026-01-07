@@ -1,10 +1,8 @@
 ---
 - name: Set variables
   ansible.builtin.set_fact:
-    gpu_memory_mb: 16
-    zram_percentage: 50
-    docker_log_max_size: "10m"
-    docker_log_max_file: "3"
+    optimize_pi_gpu_memory_mb: 16
+    optimize_pi_zram_percentage: 50
 
 # -------------------------------------------------------
 # 1. DYNAMIC CONFIG PATH DETECTION (Bookworm vs Bullseye)
@@ -21,11 +19,11 @@
 # -------------------------------------------------------
 # 2. GPU MEMORY SPLIT (Reclaim RAM)
 # -------------------------------------------------------
-- name: Set GPU memory MB to {{ gpu_memory_mb }}
+- name: Set GPU memory MB to {{ optimize_pi_gpu_memory_mb }}
   ansible.builtin.lineinfile:
     path: "{{ rpi_config_path }}"
     regexp: "^gpu_mem="
-    line: "gpu_mem={{ gpu_memory_mb }}"
+    line: "gpu_mem={{ optimize_pi_gpu_memory_mb }}"
     create: true
   notify: Reboot Pi
 
@@ -43,7 +41,7 @@
   ansible.builtin.lineinfile:
     path: /etc/default/zramswap
     regexp: "^PERCENT="
-    line: "PERCENT={{ zram_percentage }}"
+    line: "PERCENT={{ optimize_pi_zram_percentage }}"
   notify: Restart ZRAM
 
 # -------------------------------------------------------
