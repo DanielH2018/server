@@ -1,7 +1,6 @@
 ---
 - name: Deploy Containers
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
-  connection: local
   gather_facts: true
   vars_files:
     - .env
@@ -15,5 +14,7 @@
       loop_control:
         loop_var: container_item
       when:
-        - "'all' in ansible_run_tags or (container_item.tags | intersect(ansible_run_tags) | length > 0)"
+        - >-
+          'all' in ansible_run_tags or
+          (container_item.tags | intersect(ansible_run_tags) | length > 0)
       tags: always

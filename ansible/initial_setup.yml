@@ -1,7 +1,6 @@
 ---
 - name: Initial Server Setup
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
-  connection: local
   become: true
   gather_facts: true
   vars_files:

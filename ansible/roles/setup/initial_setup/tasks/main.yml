@@ -72,6 +72,15 @@
     user: "{{ ansible_user_id }}"
   become: true
 
+- name: Create cron job to clear ansible.log weekly
+  cron:
+    name: "Clear ansible log file"
+    minute: "0"
+    hour: "6"
+    weekday: "0" # 0 is Sunday
+    job: "truncate -s 0 /home/ubuntu/server/ansible/ansible.log"
+  become: true
+
 - name: Configure UFW firewall
   ufw:
     rule: allow
