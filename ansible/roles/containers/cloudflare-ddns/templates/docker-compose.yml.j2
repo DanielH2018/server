@@ -11,6 +11,7 @@ services:
       - CF_API_TOKEN={{ CLOUDFLARE_DNS_TOKEN }}
       - DOMAINS={{ DOMAIN }}
       - PROXIED=true
+      - IP6_PROVIDER=none
     networks:
       - {{ DOCKER_NETWORK }}
   ddns-direct:
@@ -24,6 +25,7 @@ services:
       - CF_API_TOKEN={{ CLOUDFLARE_DNS_TOKEN }}
       - DOMAINS=valheim.{{ DOMAIN }},minecraft.{{ DOMAIN }}
       - PROXIED=false
+      - IP6_PROVIDER=none
     networks:
       - {{ DOCKER_NETWORK }}
 
