@@ -54,7 +54,12 @@ services:
       - TZ={{ TZ }}
     volumes:
       - ./promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      # Access to mounted log files
       - /var/log/:/logs
+      # Access to the Docker socket to find containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Access to the host log files
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/promtail-config.yaml
     networks:
       - {{ DOCKER_NETWORK }}
