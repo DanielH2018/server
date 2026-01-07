@@ -33,14 +33,11 @@
     name: common
     tasks_from: docker_deploy.yml
 
-- name: Make sure script has correct permissions
-  shell: chmod +x crowdsecUpdate.sh
-  args:
-    chdir: "/home/{{ SYS_USER }}/server/ansible/roles/containers/crowdsec/scripts/"
-  become: true
-  become_method: sudo
-
-- name: Add update & upgrade cronjob
-  shell: ./crowdsecUpdate.sh
-  args:
-    chdir: "/home/{{ SYS_USER }}/server/ansible/roles/containers/crowdsec/scripts/"
+- name: Ensure Crowdsec hub update and upgrade job exists
+  ansible.builtin.cron:
+    name: "Update Crowdsec Hub"   # Unique ID Ansible uses to track this specific line
+    minute: "15"
+    hour: "7"
+    job: "docker exec crowdsec cscli hub update && docker exec crowdsec cscli hub upgrade"
+    user: root
+    state: present

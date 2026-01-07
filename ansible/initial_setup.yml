@@ -1,16 +1,11 @@
 ---
 - name: Initial Server Setup
-  hosts: homeservers
+  hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
+  connection: local
   become: true
-  gather_facts: false
-  env_file: .env
-  pre_tasks:
-    - name:  Only run on the machine executing this command
-      meta: end_host
-      when: inventory_hostname != lookup('pipe', 'hostname')
-
-    - name: Gather facts
-      setup: # Gather facts now that we know we are on the right host
+  gather_facts: true
+  vars_files:
+    - .env
   roles:
     - { role: config_files,             tags: [ 'config_files' ]}
     - { role: initial_setup,            tags: [ 'initial_setup' ]}
