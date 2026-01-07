@@ -3,7 +3,7 @@
     name: common
     tasks_from: setup_dirs.yml
   vars:
-    dirs_to_create:
+    common_dirs_to_create:
       - "{{ container_item.name }}/config"
       - "data/media/tv"
 

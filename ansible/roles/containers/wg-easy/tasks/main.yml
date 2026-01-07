@@ -3,13 +3,14 @@
     name: common
     tasks_from: setup_dirs.yml
   vars:
-    dirs_to_create:
+    common_dirs_to_create:
       - "{{ container_item.name }}"
 
 # - include_tasks: dns.yml
 #   with_items:
 #     - "{{ role_name }}"
 
-- ansible.builtin.include_role:
+- name: Deploy Container
+  ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

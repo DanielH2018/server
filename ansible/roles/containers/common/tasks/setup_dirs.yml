@@ -2,7 +2,7 @@
 - name: Check if directories exist
   ansible.builtin.stat:
     path: "/home/{{ SYS_USER }}/server/containers/{{ item }}"
-  loop: "{{ dirs_to_create }}"
+  loop: "{{ common_dirs_to_create }}"
   register: dir_status
 
 - name: Create directory only if it doesn't exist
