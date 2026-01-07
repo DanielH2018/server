@@ -23,3 +23,13 @@
 - include_role:
     name: common
     tasks_from: docker_deploy.yml
+
+- name: Ensure Crowdsec hub update and upgrade job exists
+  ansible.builtin.cron:
+    name: "Update Crowdsec Hub"   # Unique ID Ansible uses to track this specific line
+    minute: "45"
+    hour: "7"
+    weekday: "0"
+    job: "/usr/bin/docker restart qbittorrent"
+    user: root
+    state: present
