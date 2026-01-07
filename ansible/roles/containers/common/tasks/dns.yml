@@ -8,7 +8,7 @@
     url: "https://api.cloudflare.com/client/v4/zones"
     method: GET
     headers:
-      X-Auth-Email: "{{ EMAIL }}"
+      X-Auth-Email: "{{ email }}"
       Authorization: "Bearer {{ CLOUDFLARE_DNS_TOKEN }}"
       Content-Type: "application/json"
   register: common_zone_output

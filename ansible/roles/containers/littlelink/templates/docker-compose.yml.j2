@@ -31,7 +31,7 @@ services:
       - GITHUB=https://github.com/DanielH2018
       - LINKED_IN=https://www.linkedin.com/in/danielrhunter/
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
       interval: 30s
@@ -44,11 +44,11 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container_name, port, use_authelia) -#}
       {{ labels('www', '3000', 'n') }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

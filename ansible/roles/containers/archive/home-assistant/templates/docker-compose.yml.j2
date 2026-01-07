@@ -6,15 +6,15 @@ services:
     image: lscr.io/linuxserver/homeassistant:latest
     container_name: home-assistant
     environment:
-      - PUID={{ PUID }}
-      - PGID={{ PUID }}
-      - TZ={{ TZ }}
+      - puid={{ puid }}
+      - pgid={{ puid }}
+      - tz={{ tz }}
       - DOCKER_MODS=linuxserver/mods:homeassistant-hacs
     volumes:
       - ./config:/config
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     healthcheck:
       test: curl --fail -s http://localhost:8123/ || exit 1
       interval: 30s
@@ -24,7 +24,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -35,5 +35,5 @@ services:
       }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

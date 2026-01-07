@@ -7,7 +7,7 @@ services:
     image: nicolargo/glances:latest
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     pid: host
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -18,7 +18,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -31,5 +31,5 @@ services:
       - "traefik.frontend.rule=Host:glances.docker.localhost"
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

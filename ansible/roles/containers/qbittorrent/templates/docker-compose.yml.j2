@@ -10,9 +10,9 @@ services:
       - NET_ADMIN
       - SYS_MODULE
     environment:
-      - PUID={{ PUID }}
-      - PGID={{ PGID }}
-      - TZ={{ TZ }}
+      - puid={{ puid }}
+      - pgid={{ pgid }}
+      - tz={{ tz }}
     volumes:
       - ./config:/config
       - /lib/modules:/lib/modules
@@ -20,12 +20,12 @@ services:
       - net.ipv4.conf.all.src_valid_mark=1
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -44,15 +44,15 @@ services:
     depends_on:
       - wireguard
     environment:
-      - PUID={{ PUID }}
-      - PGID={{ PGID }}
-      - TZ={{ TZ }}
+      - puid={{ puid }}
+      - pgid={{ pgid }}
+      - tz={{ tz }}
       - UMASK_SET=022
       - WEBUI_PORT=8080
       - TORRENTING_PORT=6881
     volumes:
       - ./config:/config
-      - /home/{{ SYS_USER }}/server/containers/data/downloads:/downloads
+      - /home/{{ sys_user }}/server/containers/data/downloads:/downloads
     restart: always
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"] 
@@ -64,23 +64,23 @@ services:
     build:
       context: ./transcode
     environment:
-      - TZ={{ TZ }}
+      - tz={{ tz }}
       - TRANSCODE_PATHS=data/downloads, /data/media/movies, /data/media/tv
     volumes:
-      - /home/{{ SYS_USER }}/server/containers/data/downloads:/data/downloads
-      - /home/{{ SYS_USER }}/server/containers/data/downloads:/data/media/movies
-      - /home/{{ SYS_USER }}/server/containers/data/downloads:/data/media/tv
+      - /home/{{ sys_user }}/server/containers/data/downloads:/data/downloads
+      - /home/{{ sys_user }}/server/containers/data/downloads:/data/media/movies
+      - /home/{{ sys_user }}/server/containers/data/downloads:/data/media/tv
       - ./transcode:/usr/app
       - transcode-data:/usr/app/node_modules
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     labels:
     # Disable Watchtower
       - "com.centurylinklabs.watchtower.enable=false"
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true
 volumes:
   transcode-data:

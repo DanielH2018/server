@@ -10,7 +10,7 @@
 - name: Create prometheus.yml from template
   ansible.builtin.template:
     src: prometheus.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/prometheus/prometheus.yml"
+    dest: "/home/{{ sys_user }}/server/containers/prometheus/prometheus.yml"
     mode: "0664"
 
 # - include_tasks: dns.yml

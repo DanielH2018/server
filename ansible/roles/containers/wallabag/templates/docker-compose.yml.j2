@@ -6,7 +6,7 @@ services:
     image: wallabag/wallabag
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     environment:
       - MYSQL_ROOT_PASSWORD=wallaroot
       - SYMFONY__ENV__DATABASE_DRIVER=pdo_mysql
@@ -31,7 +31,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -45,7 +45,7 @@ services:
     container_name: wallabag-db
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     environment:
       - MYSQL_ROOT_PASSWORD=wallaroot
     volumes:
@@ -59,14 +59,14 @@ services:
     container_name: wallabag-redis
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 20s
       timeout: 3s
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true
 
 volumes:

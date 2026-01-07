@@ -8,15 +8,15 @@ services:
     volumes:
      - ./config:/config
     environment:
-    - TZ={{ TZ }}
+    - tz={{ tz }}
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     restart: unless-stopped
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -27,5 +27,5 @@ services:
       }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

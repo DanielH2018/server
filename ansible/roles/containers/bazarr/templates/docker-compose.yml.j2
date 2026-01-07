@@ -6,18 +6,18 @@ services:
     image: lscr.io/linuxserver/bazarr:latest
     container_name: bazarr
     environment:
-      - PUID={{ PUID }}
-      - PGID={{ PGID }}
-      - TZ={{ TZ }}
+      - puid={{ puid }}
+      - pgid={{ pgid }}
+      - tz={{ tz }}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config:/config
-      - /home/{{ SYS_USER }}/server/containers/data/media/tv:/tv
-      - /home/{{ SYS_USER }}/server/containers/data/media/movies:/movies
-      - /home/{{ SYS_USER }}/server/containers/data/downloads:/downloads
+      - /home/{{ sys_user }}/server/containers/data/media/tv:/tv
+      - /home/{{ sys_user }}/server/containers/data/media/movies:/movies
+      - /home/{{ sys_user }}/server/containers/data/downloads:/downloads
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     healthcheck:
       test: curl --fail -s http://localhost:6767/ || exit 1
       interval: 30s
@@ -27,7 +27,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -40,17 +40,17 @@ services:
     image: onerahmet/openai-whisper-asr-webservice:latest
     container_name: whisper
     environment:
-      - PUID={{ PUID }}
-      - PGID={{ PGID }}
-      - TZ={{ TZ }}
+      - puid={{ puid }}
+      - pgid={{ pgid }}
+      - tz={{ tz }}
       - ASR_MODEL=small
       - ASR_ENGINE=faster_whisper
     volumes:
       - ./whisper_config:/config
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     restart: unless-stopped
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

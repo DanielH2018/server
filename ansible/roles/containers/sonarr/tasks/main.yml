@@ -11,13 +11,13 @@
 - name: Create cleaner from template
   ansible.builtin.template:
     src: sonarr-episode-trimmer.py.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/sonarr/config/sonarr-episode-trimmer.py"
+    dest: "/home/{{ sys_user }}/server/containers/sonarr/config/sonarr-episode-trimmer.py"
     mode: "0755"
 
 - name: Create cleaner config from template
   ansible.builtin.template:
     src: sonarr-episode-trimmer-config.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/sonarr/config/sonarr-episode-trimmer-config"
+    dest: "/home/{{ sys_user }}/server/containers/sonarr/config/sonarr-episode-trimmer-config"
     mode: "0755"
 
 # - include_tasks: dns.yml

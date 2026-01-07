@@ -53,5 +53,5 @@
   become: true
 
 - name: Create Network
-  ansible.builtin.shell: "docker network create {{ DOCKER_NETWORK }} --subnet=172.18.0.0/16 || true"
+  ansible.builtin.shell: "docker network create {{ docker_network }} --subnet=172.18.0.0/16 || true"
   become: true

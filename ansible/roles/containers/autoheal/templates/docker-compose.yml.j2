@@ -8,10 +8,10 @@ services:
     environment:
       - AUTOHEAL_CONTAINER_LABEL=autoheal
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

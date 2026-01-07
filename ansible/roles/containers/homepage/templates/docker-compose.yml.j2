@@ -11,7 +11,7 @@ services:
       - TASKS=1 # Allow access to viewing tasks (necessary when using Docker Swarm)
       - POST=0 # Disallow any POST operations (effectively read-only)
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro # Mounted as read-only
     read_only: true
@@ -23,13 +23,13 @@ services:
     image: ghcr.io/gethomepage/homepage:latest
     container_name: homepage
     environment:
-      - PUID={{ PUID }}
-      - PGID={{ PGID }}
-      - TZ={{ TZ }}
+      - puid={{ puid }}
+      - pgid={{ pgid }}
+      - tz={{ tz }}
       - HOMEPAGE_ALLOWED_HOSTS=homepage.{{ DOMAIN }}
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     volumes:
       - ./config:/app/config
       - ./icons:/app/public/icons
@@ -37,7 +37,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -48,6 +48,6 @@ services:
       }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true
     

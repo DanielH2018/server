@@ -1,11 +1,11 @@
 ---
 - name: Git Pull
   ansible.builtin.command: git pull --all
-  register: git
+  register: common_git
 
 - name: Show git output
   ansible.builtin.debug:
-    var: git.stdout_lines
+    var: common_git.stdout_lines
 
 - name: Set Facts
   ansible.builtin.set_fact:
@@ -28,7 +28,7 @@
   ansible.builtin.set_fact:
     common_git_changed_containers: "{{ common_git_changed_containers + item }}"
   loop: "{{ common_container_names }}"
-  when: item[:-1] + '/' in git.stdout
+  when: item[:-1] + '/' in common_git.stdout
 
 - name: Remove hanging comma
   ansible.builtin.set_fact:

@@ -7,13 +7,13 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     ports:
       - 80:80
       - 443:443
       - 25565:25565/tcp
     environment:
-      - CF_API_EMAIL={{ EMAIL }}
+      - CF_API_EMAIL={{ email }}
       - CF_DNS_API_TOKEN={{ CLOUDFLARE_DNS_TOKEN }}
     volumes:
       - /etc/localtime:/etc/localtime:ro
@@ -29,5 +29,5 @@ services:
       retries: 3
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

@@ -19,18 +19,18 @@ services:
       - NODE_ENV=production
       - NODE_FUNCTION_ALLOW_EXTERNAL=fuzzball
       - WEBHOOK_URL=https://n8n.{{ DOMAIN }}/
-      - GENERIC_TIMEZONE={{ TZ }}
-      - TZ={{ TZ }}
+      - GENERIC_TIMEZONE={{ tz }}
+      - tz={{ tz }}
     volumes:
       - n8n_data:/home/node/.n8n
       - ./local-files:/files
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -41,7 +41,7 @@ services:
       }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true
 
 volumes:

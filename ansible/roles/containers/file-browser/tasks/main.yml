@@ -9,7 +9,7 @@
 
 - name: Create file-browser.db
   ansible.builtin.file:
-    path: "/home/{{ SYS_USER }}/server/containers/file-browser/data/file-browser.db"
+    path: "/home/{{ sys_user }}/server/containers/file-browser/data/file-browser.db"
     state: touch
     mode: "0664"
 

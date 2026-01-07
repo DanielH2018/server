@@ -6,13 +6,13 @@ services:
     container_name: speedtest
     image: henrywhitaker3/speedtest-tracker
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     volumes:
       - ./config:/config
     environment:
-      - TZ=
-      - PUID={{ PUID }}
-      - PGID={{ PGID }}
+      - tz=
+      - puid={{ puid }}
+      - pgid={{ pgid }}
       - OOKLA_EULA_GDPR=true
     logging:
         driver: "json-file"
@@ -24,7 +24,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -35,5 +35,5 @@ services:
       }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

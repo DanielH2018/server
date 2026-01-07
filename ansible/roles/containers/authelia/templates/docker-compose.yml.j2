@@ -8,7 +8,7 @@ services:
       - ./config:/config
       - /var/log/authelia:/var/log/authelia
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     labels:
       # Enable traefik for container
       - 'traefik.enable=true'
@@ -24,8 +24,8 @@ services:
       - 9091
     restart: unless-stopped
     environment:
-      - TZ={{ TZ }}
+      - tz={{ tz }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

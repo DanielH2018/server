@@ -10,13 +10,13 @@
 - name: Create loki-config.yml from template
   ansible.builtin.template:
     src: loki-config.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/loki-config.yaml"
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/loki-config.yaml"
     mode: "0664"
 
 - name: Create promtail-config.yml from template
   ansible.builtin.template:
     src: promtail-config.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/promtail-config.yaml"
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/promtail-config.yaml"
     mode: "0664"
 
 # - include_tasks: dns.yml

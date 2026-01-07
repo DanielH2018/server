@@ -8,17 +8,17 @@ services:
     security_opt:
       - seccomp:unconfined #optional
     environment:
-      - PUID={{ PUID }}
-      - PGID={{ PGID }}
-      - TZ={{ TZ }}
+      - puid={{ puid }}
+      - pgid={{ pgid }}
+      - tz={{ tz }}
       - PASSWORD= #optional
       - CLI_ARGS= #optional
     volumes:
       - ./config:/config
-      - /home/{{ SYS_USER }}/server/containers/data/media/books:/books
+      - /home/{{ sys_user }}/server/containers/data/media/books:/books
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     healthcheck:
       test: curl --fail -s http://localhost:8080/ || exit 1
       interval: 30s
@@ -28,7 +28,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -39,5 +39,5 @@ services:
       }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

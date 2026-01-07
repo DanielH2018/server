@@ -13,7 +13,7 @@ services:
       - PROXIED=true
       - IP6_PROVIDER=none
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
   ddns-direct:
     image: favonia/cloudflare-ddns:latest
     container_name: cloudflare-ddns-direct
@@ -27,8 +27,8 @@ services:
       - PROXIED=false
       - IP6_PROVIDER=none
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

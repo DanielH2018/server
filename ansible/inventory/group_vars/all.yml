@@ -1,11 +1,11 @@
 ---
 # Linux Vars
-SYS_USER: ubuntu
-TZ: America/New_York
-PUID: 1000
-PGID: 1000
+sys_user: ubuntu
+tz: America/New_York
+puid: 1000
+pgid: 1000
 # Docker
-DOCKER_NETWORK: proxy
-***REMOVED***
-LAT: 38.89
-LONG: -77.08
+docker_network: proxy
+email: [REMOVED_KEY]
+lat: 38.89
+long: -77.08

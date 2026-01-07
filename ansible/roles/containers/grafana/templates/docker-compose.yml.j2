@@ -5,12 +5,12 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
-    user: "{{ PUID }}"
+    user: "{{ puid }}"
     restart: unless-stopped
     volumes:
       - ./:/var/lib/grafana
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
       interval: 30s
@@ -20,7 +20,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -37,7 +37,7 @@ services:
     container_name: loki
     restart: unless-stopped
     environment:
-      - TZ={{ TZ }}
+      - tz={{ tz }}
     expose:
       - 3100
     volumes:
@@ -45,13 +45,13 @@ services:
       - loki:/tmp
     command: -config.file=/etc/loki/loki-config.yaml
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
   promtail:
     image: grafana/promtail
     container_name: promtail
     restart: unless-stopped
     environment:
-      - TZ={{ TZ }}
+      - tz={{ tz }}
     volumes:
       - ./promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
       # Access to mounted log files
@@ -62,10 +62,10 @@ services:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/promtail-config.yaml
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true
 
 volumes:

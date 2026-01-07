@@ -11,7 +11,8 @@
 - name: Copy zip
   ansible.builtin.copy:
     src: FoundryVTT-10.288.zip
-    dest: "/home/{{ SYS_USER }}/server/containers/foundry/foundrydl/FoundryVTT.zip"
+    dest: "/home/{{ sys_user }}/server/containers/foundry/foundrydl/FoundryVTT.zip"
+    mode: "0664"
 
 # - include_tasks: dns.yml
 #   with_items:

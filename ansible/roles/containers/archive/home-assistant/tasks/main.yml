@@ -10,7 +10,8 @@
 - name: Create configuration.yaml from template
   ansible.builtin.template:
     src: configuration.yaml.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/home-assistant/config/configuration.yaml"
+    dest: "/home/{{ sys_user }}/server/containers/home-assistant/config/configuration.yaml"
+    mode: "0664"
 
 # - include_tasks: dns.yml
 #   with_items:

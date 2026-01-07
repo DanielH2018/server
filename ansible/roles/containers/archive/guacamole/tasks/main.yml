@@ -10,19 +10,19 @@
       - "{{ container_item.name }}/record"
       - "{{ container_item.name }}/init"
 
-#- include_tasks: dns.yml
-#  with_items:
-#    - "{{ role_name }}"
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
 
 - name: Setup Init script Permissions
-  ansible.builtin.command: chmod -R +x /home/{{ SYS_USER }}/server/containers/{{ role_name }}/init
+  ansible.builtin.command: chmod -R +x /home/{{ sys_user }}/server/containers/{{ role_name }}/init
   become: true
   become_method: ansible.builtin.sudo
 
 - name: Add DB Init Script
   ansible.builtin.shell: docker run --rm guacamole/guacamole /opt/guacamole/bin/initdb.sh --postgresql > initdb.sql
   args:
-    chdir: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/init"
+    chdir: "/home/{{ sys_user }}/server/containers/{{ role_name }}/init"
   become: true
   become_method: ansible.builtin.sudo
 

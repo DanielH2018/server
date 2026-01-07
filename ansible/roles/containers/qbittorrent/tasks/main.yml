@@ -11,13 +11,13 @@
 - name: Copy wg0.conf
   ansible.builtin.template:
     src: wg0.conf.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/config/wg_confs/wg0.conf"
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/config/wg_confs/wg0.conf"
     mode: "0755"
 
 - name: Extract transcode.zip
   ansible.builtin.unarchive:
     src: transcode.zip
-    dest: "/home/{{ SYS_USER }}/server/containers/qbittorrent/"
+    dest: "/home/{{ sys_user }}/server/containers/qbittorrent/"
     mode: "0755"
 
 # - include_tasks: dns.yml

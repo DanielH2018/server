@@ -9,7 +9,7 @@ services:
     #  - host.docker.internal:host-gateway
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     volumes:
       - ./beszel_data:/beszel_data
       - ./beszel_socket:/beszel_socket
@@ -17,7 +17,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -41,7 +41,7 @@ services:
       KEY: "{{ BESZEL_AGENT_KEY }}"
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true
 
 volumes:

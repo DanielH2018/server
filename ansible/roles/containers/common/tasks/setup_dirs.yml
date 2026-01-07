@@ -1,13 +1,13 @@
 ---
 - name: Check if directories exist
   ansible.builtin.stat:
-    path: "/home/{{ SYS_USER }}/server/containers/{{ item }}"
+    path: "/home/{{ sys_user }}/server/containers/{{ item }}"
   loop: "{{ common_dirs_to_create }}"
   register: common_dir_status
 
 - name: Create directory only if it doesn't exist
   ansible.builtin.file:
-    path: "/home/{{ SYS_USER }}/server/containers/{{ item.item }}"
+    path: "/home/{{ sys_user }}/server/containers/{{ item.item }}"
     state: directory
     mode: "0755"
   loop: "{{ common_dir_status.results }}"

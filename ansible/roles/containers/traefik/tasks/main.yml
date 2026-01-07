@@ -9,20 +9,20 @@
 
 - name: Create acme.json
   ansible.builtin.file:
-    path: "/home/{{ SYS_USER }}/server/containers/traefik/data/acme.json"
+    path: "/home/{{ sys_user }}/server/containers/traefik/data/acme.json"
     state: touch
     mode: "0600"
 
 - name: Create config.yml from template
   ansible.builtin.template:
     src: config.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/traefik/data/config.yml"
+    dest: "/home/{{ sys_user }}/server/containers/traefik/data/config.yml"
     mode: "0664"
 
 - name: Create traefik.yml from template
   ansible.builtin.template:
     src: traefik.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/traefik/data/traefik.yml"
+    dest: "/home/{{ sys_user }}/server/containers/traefik/data/traefik.yml"
     mode: "0664"
 
 - name: Hash password

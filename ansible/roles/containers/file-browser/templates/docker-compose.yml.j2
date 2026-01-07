@@ -5,9 +5,9 @@ services:
   file-browser:
     image: filebrowser/filebrowser:latest
     container_name: file-browser
-    user: {{ PUID }}:{{ PGID }}
+    user: {{ puid }}:{{ pgid }}
     volumes:
-      - /home/{{ SYS_USER }}/server:/srv
+      - /home/{{ sys_user }}/server:/srv
       - filebrowser_db:/database
       - filebrowser_config:/config
       - filebrowser_db_file:/data/filebrowser.db
@@ -15,12 +15,12 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -31,7 +31,7 @@ services:
       }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true
 
 volumes:

@@ -11,7 +11,7 @@
 - name: Create docker-compose.yml from template
   ansible.builtin.template:
     src: docker-compose.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/pihole/docker-compose.yml"
+    dest: "/home/{{ sys_user }}/server/containers/pihole/docker-compose.yml"
     mode: "0664"
   vars:
     container: "{{ role_name }}"
@@ -19,7 +19,7 @@
 - name: Create stubby.yml from template
   ansible.builtin.template:
     src: stubby.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/pihole/data/stubby/stubby.yml"
+    dest: "/home/{{ sys_user }}/server/containers/pihole/data/stubby/stubby.yml"
     mode: "0664"
   vars:
     container: "{{ role_name }}"
@@ -27,7 +27,7 @@
 - name: Create dnsmasq.conf from template
   ansible.builtin.template:
     src: dnsmasq.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/pihole/data/etc-dnsmasq.d/02-wildcard.conf"
+    dest: "/home/{{ sys_user }}/server/containers/pihole/data/etc-dnsmasq.d/02-wildcard.conf"
     mode: "0644"
   vars:
     container: "{{ role_name }}"
@@ -60,7 +60,7 @@
 - name: Deploy Pihole
   ansible.builtin.command: docker-compose up -d --force-recreate
   args:
-    chdir: "/home/{{ SYS_USER }}/server/containers/pihole/"
+    chdir: "/home/{{ sys_user }}/server/containers/pihole/"
   become: true
   become_method: ansible.builtin.sudo
 
@@ -68,7 +68,7 @@
   ansible.builtin.lineinfile:
     path: /etc/hosts
     insertbefore: BOF
-    line: "127.0.0.1 {{ SYS_USER }}"
+    line: "127.0.0.1 {{ sys_user }}"
   become: true
   become_method: ansible.builtin.sudo
 

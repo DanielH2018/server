@@ -10,7 +10,7 @@ services:
     volumes:
       - './data/stubby/:/opt/stubby/etc/stubby/'
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
 
   unbound:
     image: mvance/unbound:1.16.1-stubby
@@ -19,7 +19,7 @@ services:
     depends_on:
       - stubby   
     networks:
-      {{ DOCKER_NETWORK }}:
+      {{ docker_network }}:
         ipv4_address: 172.18.0.255
 
   pihole:
@@ -29,9 +29,9 @@ services:
     depends_on:
       - unbound
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     environment:
-      TZ: {{ TZ }}
+      tz: {{ tz }}
       WEBPASSWORD: {{ PIHOLE_PASSWORD }}
       ServerIP: {{ SERVER_IP }}
       PIHOLE_DNS_: 172.18.0.255#5353
@@ -44,7 +44,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -57,6 +57,6 @@ services:
 networks:
   default:
     external:
-      name: {{ DOCKER_NETWORK }}
-  {{ DOCKER_NETWORK }}:
+      name: {{ docker_network }}
+  {{ docker_network }}:
     external: true

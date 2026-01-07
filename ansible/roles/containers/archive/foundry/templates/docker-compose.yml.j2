@@ -12,7 +12,7 @@ services:
       - foundry_data:/opt/foundryvtt/resources/app
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://localhost:30000/ || exit 1
       interval: 30s
@@ -22,7 +22,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -33,7 +33,7 @@ services:
       }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true
 volumes:
   foundry_data:

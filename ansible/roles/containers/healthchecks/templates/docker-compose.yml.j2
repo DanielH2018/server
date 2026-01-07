@@ -6,23 +6,23 @@ services:
     image: lscr.io/linuxserver/healthchecks
     container_name: healthchecks
     environment:
-      - PUID={{ PUID }}
-      - PGID={{ PGID }}
+      - puid={{ puid }}
+      - pgid={{ pgid }}
       - SITE_ROOT=https://healthchecks.{{ DOMAIN }}
       - SITE_NAME=Home Server healthchecks
-      - DEFAULT_FROM_EMAIL={{ EMAIL }}
+      - DEFAULT_FROM_EMAIL={{ email }}
       - ALLOWED_HOSTS=localhost,healthchecks.{{ DOMAIN }} #optional
       - EMAIL_HOST=smtp.gmail.com
       - EMAIL_PORT=587
       - EMAIL_HOST_USER={{ HEALTHCHECKS_SMTP_USER }}
       - EMAIL_HOST_PASSWORD={{ HEALTHCHECKS_SMTP_PASSWORD }}
       - EMAIL_USE_TLS=True
-      - SUPERUSER_EMAIL={{ EMAIL }}
+      - SUPERUSER_EMAIL={{ email }}
       - SUPERUSER_PASSWORD={{ HEALTHCHECKS_PASSWORD }}
     volumes:
       - ./config:/config
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     healthcheck:
       test: curl --fail -s http://localhost:8000/ || exit 1
       interval: 30s
@@ -33,7 +33,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -44,5 +44,5 @@ services:
       }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

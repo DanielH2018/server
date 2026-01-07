@@ -6,19 +6,19 @@ services:
     image: lscr.io/linuxserver/jellyfin:latest
     container_name: jellyfin
     environment:
-      - PUID={{ PUID }}
-      - PGID={{ PGID }}
-      - TZ={{ TZ }}
+      - puid={{ puid }}
+      - pgid={{ pgid }}
+      - tz={{ tz }}
       - JELLYFIN_PublishedServerUrl={{ SERVER_IP }} #optional
       - DOCKER_MODS=linuxserver/mods:jellyfin-opencl-intel
     volumes:
       - ./config:/config
-      - /home/{{ SYS_USER }}/server/containers/data/media:/data
+      - /home/{{ sys_user }}/server/containers/data/media:/data
     restart: unless-stopped
     devices:
       - /dev/dri:/dev/dri
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     healthcheck:
       test: curl --fail -s http://localhost:8096/ || exit 1
       interval: 30s
@@ -28,7 +28,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -39,5 +39,5 @@ services:
       }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

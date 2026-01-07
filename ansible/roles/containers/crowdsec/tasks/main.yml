@@ -10,25 +10,25 @@
 - name: Create acquis.yaml from template
   ansible.builtin.template:
     src: acquis.yaml.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/crowdsec/config/acquis.yaml"
+    dest: "/home/{{ sys_user }}/server/containers/crowdsec/config/acquis.yaml"
     mode: "0664"
 
 - name: Copy profiles.yaml
   ansible.builtin.copy:
     src: profiles.yaml
-    dest: "/home/{{ SYS_USER }}/server/containers/crowdsec/config/profiles.yaml"
+    dest: "/home/{{ sys_user }}/server/containers/crowdsec/config/profiles.yaml"
     mode: "0664"
 
 - name: Copy discord.yaml
   ansible.builtin.copy:
     src: discord.yaml
-    dest: "/home/{{ SYS_USER }}/server/containers/crowdsec/config/notifications/discord.yaml"
+    dest: "/home/{{ sys_user }}/server/containers/crowdsec/config/notifications/discord.yaml"
     mode: "0664"
 
 - name: Create Dockerfile from template
   ansible.builtin.template:
     src: Dockerfile.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/crowdsec/Dockerfile"
+    dest: "/home/{{ sys_user }}/server/containers/crowdsec/Dockerfile"
     mode: "0664"
 
 # - include_tasks: dns.yml

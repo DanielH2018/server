@@ -6,9 +6,9 @@ services:
     image: lscr.io/linuxserver/duplicati:latest
     container_name: duplicati
     environment:
-      - PUID=0
-      - PGID=0
-      - TZ={{ TZ }}
+      - puid=0
+      - pgid=0
+      - tz={{ tz }}
       #- CLI_ARGS= 
     volumes:
       - ./config:/config
@@ -16,12 +16,12 @@ services:
       - ../:/source
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -32,5 +32,5 @@ services:
       }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

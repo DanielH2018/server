@@ -2,12 +2,12 @@
 - name: Create docker-compose from template
   ansible.builtin.template:
     src: docker-compose.yml.j2
-    dest: "/home/{{ SYS_USER }}/server/containers/{{ container_item.name }}/docker-compose.yml"
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/docker-compose.yml"
     mode: "0664"
 
 - name: Pull docker-compose
   ansible.builtin.command: docker pull ghcr.io/linuxserver/docker-compose:latest
-- name: Deploy {{ container_item.name }} container
+- name: Deploy Container {{ container_item.name }}
   ansible.builtin.command: docker compose up -d --force-recreate
   args:
-    chdir: "/home/{{ SYS_USER }}/server/containers/{{ container_item.name }}/"
+    chdir: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/"

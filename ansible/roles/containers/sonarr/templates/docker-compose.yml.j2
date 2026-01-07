@@ -6,18 +6,18 @@ services:
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
     environment:
-      - PUID={{ PUID }}
-      - PGID={{ PGID }}
-      - TZ={{ TZ }}
+      - puid={{ puid }}
+      - pgid={{ pgid }}
+      - tz={{ tz }}
       - DOCKER_MODS=linuxserver/mods:radarr-striptracks
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config:/config
-      - /home/{{ SYS_USER }}/server/containers/data/media/tv:/tv
-      - /home/{{ SYS_USER }}/server/containers/data/downloads:/downloads
+      - /home/{{ sys_user }}/server/containers/data/media/tv:/tv
+      - /home/{{ sys_user }}/server/containers/data/downloads:/downloads
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     healthcheck:
       test: curl --fail -s http://localhost:8989/ || exit 1
       interval: 30s
@@ -27,7 +27,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -38,5 +38,5 @@ services:
       }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true

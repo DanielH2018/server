@@ -6,17 +6,17 @@ services:
     image: lscr.io/linuxserver/calibre-web:latest
     container_name: calibre-web
     environment:
-      - PUID={{ PUID }}
-      - PGID={{ PGID }}
-      - TZ={{ TZ }}
+      - puid={{ puid }}
+      - pgid={{ pgid }}
+      - tz={{ tz }}
       - DOCKER_MODS=linuxserver/mods:universal-calibre|linuxserver/mods:calibre-web-dtrpg-metadata|linuxserver/mods:calibre-web-kcc #optional
       - OAUTHLIB_RELAX_TOKEN_SCOPE=1 #optional
     volumes:
       - ./config:/config
-      - /home/{{ SYS_USER }}/server/containers/data/media/books:/books
+      - /home/{{ sys_user }}/server/containers/data/media/books:/books
     restart: unless-stopped
     networks:
-      - {{ DOCKER_NETWORK }}
+      - {{ docker_network }}
     healthcheck:
       test: curl --fail -s http://localhost:8083/ || exit 1
       interval: 30s
@@ -26,7 +26,7 @@ services:
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
-      - "traefik.docker.network={{ DOCKER_NETWORK }}"
+      - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
@@ -37,5 +37,5 @@ services:
       }}
 
 networks:
-  {{ DOCKER_NETWORK }}:
+  {{ docker_network }}:
     external: true
