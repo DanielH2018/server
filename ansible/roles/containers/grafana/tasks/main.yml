@@ -1,17 +1,18 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}"
+      - "{{ container_item.name }}"
 
 - name: Create loki-config.yml from template
-  template:
+  ansible.builtin.template:
     src: loki-config.yml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/loki-config.yaml"
 
 - name: Create promtail-config.yml from template
-  template:
+  ansible.builtin.template:
     src: promtail-config.yml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/promtail-config.yaml"
 
@@ -19,6 +20,6 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

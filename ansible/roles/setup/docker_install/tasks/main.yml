@@ -1,5 +1,6 @@
+---
 - name: Add packages
-  apt:
+  ansible.builtin.apt:
     name: "{{ packages }}"
     state: present
   vars:
@@ -10,25 +11,23 @@
       - gnupg
       - lsb-release
   become: true
-      
-- name: Add GPG Key
-  shell: "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg"
 
+- name: Add GPG Key
+  ansible.builtin.shell: "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg"
 - name: Add packages to manager
-  shell: |
+  ansible.builtin.shell: |
     echo \
     "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
     $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
 - name: Update apt-get repo and cache
-  apt:
-    upgrade: yes
-    update_cache: yes
-    force_apt_get: yes
+  ansible.builtin.apt:
+    upgrade: true
+    update_cache: true
+    force_apt_get: true
   become: true
 
 - name: Install Docker
-  apt:
+  ansible.builtin.apt:
     name: "{{ packages }}"
     state: present
   vars:
@@ -37,21 +36,21 @@
       - docker-ce-cli
       - containerd.io
   become: true
-      
+
 - name: Install Docker Compose
-  shell: "curl -L --fail https://raw.githubusercontent.com/linuxserver/docker-docker-compose/master/run.sh -o /usr/local/bin/docker-compose"
+  ansible.builtin.command: "curl -L --fail https://raw.githubusercontent.com/linuxserver/docker-docker-compose/master/run.sh -o /usr/local/bin/docker-compose"
   become: true
 
-- name: chmod Docker Compose
-  file:
+- name: Chmod Docker Compose
+  ansible.builtin.file:
     dest: /usr/local/bin/docker-compose
     mode: +x
   become: true
 
 - name: Add sudo to user
-  shell: "usermod -aG docker {{ ansible_env.USER }}"
+  ansible.builtin.command: "usermod -aG docker {{ ansible_env.USER }}"
   become: true
 
 - name: Create Network
-  shell: "docker network create {{ DOCKER_NETWORK }} --subnet=172.18.0.0/16 || true"
+  ansible.builtin.shell: "docker network create {{ DOCKER_NETWORK }} --subnet=172.18.0.0/16 || true"
   become: true

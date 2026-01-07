@@ -1,13 +1,14 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/data"
-    - "{{ container_item.name }}/foundrydl"
+      - "{{ container_item.name }}/data"
+      - "{{ container_item.name }}/foundrydl"
 
 - name: Copy zip
-  copy:
+  ansible.builtin.copy:
     src: FoundryVTT-10.288.zip
     dest: "/home/{{ SYS_USER }}/server/containers/foundry/foundrydl/FoundryVTT.zip"
 
@@ -15,6 +16,6 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

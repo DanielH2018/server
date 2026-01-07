@@ -1,12 +1,13 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/data"
+      - "{{ container_item.name }}/data"
 
 - name: Create file-browser.db
-  file:
+  ansible.builtin.file:
     path: "/home/{{ SYS_USER }}/server/containers/file-browser/data/file-browser.db"
     state: touch
 
@@ -14,6 +15,6 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

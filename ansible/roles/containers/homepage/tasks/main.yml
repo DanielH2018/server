@@ -1,13 +1,14 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/config"
-    - "{{ container_item.name }}/icons"
+      - "{{ container_item.name }}/config"
+      - "{{ container_item.name }}/icons"
 
 - name: Copy Icons
-  copy:
+  ansible.builtin.copy:
     src: "{{ item }}"
     dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/icons/{{ item }}"
   with_items:
@@ -15,7 +16,7 @@
     - tacticstools.png
 
 - name: Copy Config files
-  template:
+  ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/config/{{ item }}"
   with_items:
@@ -29,6 +30,6 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

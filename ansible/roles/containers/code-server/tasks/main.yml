@@ -1,17 +1,18 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/config/.ssh"
+      - "{{ container_item.name }}/config/.ssh"
 
 - name: Check if github key exists
-  stat:
+  ansible.builtin.stat:
     path: "/home/{{ SYS_USER }}/server/containers/ansible/roles/code-server/templates/github"
   register: github_data
 
 - name: Copy github key
-  template:
+  ansible.builtin.template:
     src: github
     dest: "/home/{{ SYS_USER }}/server/containers/code-server/config/.ssh/github"
   when: github_data.stat.exists
@@ -20,6 +21,6 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

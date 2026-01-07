@@ -1,3 +1,4 @@
+---
 SERVER_IP: 192.168.50.24
 ssh_config_path: /etc/ssh/sshd_config
 ***REMOVED***
@@ -32,7 +33,7 @@ containers_list:
       - pihole
   - name: homepage
     port: 3000
-    use_authelia: true 
+    use_authelia: true
     tags:
       - homepage
   - name: autoheal
@@ -175,10 +176,10 @@ containers_list:
   #   use_authelia: false
   #   tags:
   #     - valheim
-#  - name: foundry
-#    use_authelia: false
-#    tags:
-#      - foundry
+  #  - name: foundry
+  #    use_authelia: false
+  #    tags:
+  #      - foundry
   # Organization: Miscellaneous
   - name: file-browser
     port: 80
@@ -211,4 +212,3 @@ containers_list:
     use_authelia: true
     tags:
       - speedtest
-  

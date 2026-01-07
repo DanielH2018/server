@@ -1,22 +1,22 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/data"
+      - "{{ container_item.name }}/data"
 
 - name: Add apache2-utils
-  apt:
+  ansible.builtin.apt:
     name: apache2-utils
     state: present
   become: true
   become_method: sudo
-  
+
 # - include_tasks: dns.yml
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
-

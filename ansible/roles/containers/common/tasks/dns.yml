@@ -1,8 +1,9 @@
-- set_fact:
+---
+- ansible.builtin.set_fact:
     container: "{{ item }}"
 
 - name: Get Cloudflare Zone ID
-  uri:
+  ansible.builtin.uri:
     url: "https://api.cloudflare.com/client/v4/zones"
     method: GET
     headers:
@@ -12,13 +13,13 @@
   register: zone_output
 
 - name: Get Zone ID
-  set_fact:
+  ansible.builtin.set_fact:
     zone_id: "{{ zone_output | json_query(query) }}"
   vars:
     query: "json.result[?name=='{{ DOMAIN }}'].id | [0]"
 
 - name: Check for CNAME record
-  uri:
+  ansible.builtin.uri:
     url: "https://api.cloudflare.com/client/v4/zones/{{ zone_id }}/dns_records?type=CNAME&name={{ container }}.{{ DOMAIN }}"
     method: GET
     headers:
@@ -27,11 +28,11 @@
   register: cname_output
 
 - name: Check if record was found
-  set_fact:
+  ansible.builtin.set_fact:
     record_count: "{{ cname_output.json.result_info.count }}"
 
 - name: Create CNAME record if not found
-  uri:
+  ansible.builtin.uri:
     url: "https://api.cloudflare.com/client/v4/zones/{{ zone_id }}/dns_records"
     method: POST
     body: "{\"type\":\"CNAME\",\"name\":\"{{ container }}\",\"content\":\"{{ DOMAIN }}\",\"ttl\":1,\"proxied\":true}"

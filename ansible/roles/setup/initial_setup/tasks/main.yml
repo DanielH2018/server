@@ -1,12 +1,12 @@
-
+---
 - name: Update and upgrade system packages
-  apt:
-    update_cache: yes
+  ansible.builtin.apt:
+    update_cache: true
     upgrade: dist
   become: true
 
 - name: Install required packages
-  apt:
+  ansible.builtin.apt:
     name:
       - linux-raspi
       - openvswitch-switch-dpdk
@@ -15,12 +15,12 @@
   when: inventory_hostname == 'daniel-pi'
 
 - name: Pip Install
-  pip:
+  ansible.builtin.pip:
     name:
       - ansible-lint
 
 - name: Install required packages
-  apt:
+  ansible.builtin.apt:
     name:
       - unzip
       - unattended-upgrades
@@ -29,15 +29,15 @@
   become: true
 
 - name: Set SSH directory permissions
-  file:
+  ansible.builtin.file:
     path: ~/.ssh
-    mode: '0700'
+    mode: "0700"
     owner: ubuntu
     group: ubuntu
-    recurse: yes
+    recurse: true
 
 - name: Configure SSH security settings
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: "{{ ssh_config_path }}"
     regexp: "^{{ item.key }}"
     line: "{{ item.key }} {{ item.value }}"
@@ -50,7 +50,7 @@
   notify: Restart SSH
 
 - name: Schedule sudo crontab for weekly restart
-  cron:
+  ansible.builtin.cron:
     name: "Weekly system restart"
     minute: "30"
     hour: "7"
@@ -60,7 +60,7 @@
   become: true
 
 - name: Schedule Docker image cleanup
-  cron:
+  ansible.builtin.cron:
     name: "Clean unused Docker images"
     minute: "30"
     hour: "6"
@@ -69,7 +69,7 @@
   become: true
 
 - name: Schedule Docker Compose image pull
-  cron:
+  ansible.builtin.cron:
     name: "Repull docker-compose"
     minute: "35"
     hour: "6"
@@ -78,7 +78,7 @@
   become: true
 
 - name: Create cron job to clear ansible.log weekly
-  cron:
+  ansible.builtin.cron:
     name: "Clear ansible log file"
     minute: "0"
     hour: "6"

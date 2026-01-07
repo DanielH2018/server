@@ -6,31 +6,31 @@
   vars_files:
     - .env
   roles:
-    - { role: config_files,             tags: [ 'config_files' ]}
-    - { role: initial_setup,            tags: [ 'initial_setup' ]}
-    - { role: docker_install,           tags: [ 'docker_install' ]}
-    - { role: optimize_pi,              tags: [ 'optimize_pi' ], when: inventory_hostname == 'daniel-pi' }
+    - { role: config_files, tags: ["config_files"] }
+    - { role: initial_setup, tags: ["initial_setup"] }
+    - { role: docker_install, tags: ["docker_install"] }
+    - { role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == 'daniel-pi' }
   handlers:
     - name: Restart SSH
-      service:
+      ansible.builtin.service:
         name: ssh
         state: restarted
 
     - name: Restart ZRAM
-      service:
+      ansible.builtin.service:
         name: zramswap
         state: restarted
 
     - name: Restart Watchdog
-      service:
+      ansible.builtin.service:
         name: watchdog
         state: restarted
 
     - name: Restart Docker
-      service:
+      ansible.builtin.service:
         name: docker
         state: restarted
 
     - name: Reboot Pi
-      reboot:
+      ansible.builtin.reboot:
         msg: "Rebooting to apply low-level hardware changes (GPU/Watchdog/Log2Ram)"

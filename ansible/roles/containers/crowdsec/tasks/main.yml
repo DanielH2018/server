@@ -1,27 +1,28 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/config/notifications"
+      - "{{ container_item.name }}/config/notifications"
 
 - name: Create acquis.yaml from template
-  template:
+  ansible.builtin.template:
     src: acquis.yaml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/crowdsec/config/acquis.yaml"
 
 - name: Copy profiles.yaml
-  copy:
+  ansible.builtin.copy:
     src: profiles.yaml
     dest: "/home/{{ SYS_USER }}/server/containers/crowdsec/config/profiles.yaml"
 
 - name: Copy discord.yaml
-  copy:
+  ansible.builtin.copy:
     src: discord.yaml
     dest: "/home/{{ SYS_USER }}/server/containers/crowdsec/config/notifications/discord.yaml"
 
 - name: Create Dockerfile from template
-  template:
+  ansible.builtin.template:
     src: Dockerfile.j2
     dest: "/home/{{ SYS_USER }}/server/containers/crowdsec/Dockerfile"
 
@@ -29,13 +30,13 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
 
 - name: Ensure Crowdsec hub update and upgrade job exists
   ansible.builtin.cron:
-    name: "Update Crowdsec Hub"   # Unique ID Ansible uses to track this specific line
+    name: "Update Crowdsec Hub" # Unique ID Ansible uses to track this specific line
     minute: "15"
     hour: "7"
     job: "docker exec crowdsec cscli hub update && docker exec crowdsec cscli hub upgrade"

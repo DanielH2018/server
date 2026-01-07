@@ -1,17 +1,17 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/config"
-    - "data/media/movies"
-    - "data/media/tv"
-
+      - "{{ container_item.name }}/config"
+      - "data/media/movies"
+      - "data/media/tv"
 
 # - include_tasks: dns.yml
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

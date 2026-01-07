@@ -1,34 +1,35 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/data"
+      - "{{ container_item.name }}/data"
 
 - name: Create acme.json
-  file:
+  ansible.builtin.file:
     path: "/home/{{ SYS_USER }}/server/containers/traefik/data/acme.json"
     state: touch
-    mode: 0600
+    mode: "0600"
 
 - name: Create config.yml from template
-  template:
+  ansible.builtin.template:
     src: config.yml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/traefik/data/config.yml"
 
 - name: Create traefik.yml from template
-  template:
+  ansible.builtin.template:
     src: traefik.yml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/traefik/data/traefik.yml"
 
 - name: Hash password
-  shell: "echo $(htpasswd -nb {{ TRAEFIK_USER }} {{ TRAEFIK_PASSWORD }})"
+  ansible.builtin.shell: "echo $(htpasswd -nb {{ TRAEFIK_USER }} {{ TRAEFIK_PASSWORD }})"
   register: traefik_hash
 
 # - include_tasks: dns.yml
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

@@ -1,14 +1,14 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/configs"
-    - "{{ container_item.name }}/trainingData"
-
+      - "{{ container_item.name }}/configs"
+      - "{{ container_item.name }}/trainingData"
 
 - name: Copy trainingdata
-  copy:
+  ansible.builtin.copy:
     src: eng.traineddata
     dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/trainingData/eng.traineddata"
 
@@ -16,6 +16,6 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

@@ -1,5 +1,6 @@
+---
 - name: Set variables
-  set_fact:
+  ansible.builtin.set_fact:
     gpu_memory_mb: 16
     zram_percentage: 50
     docker_log_max_size: "10m"
@@ -9,39 +10,39 @@
 # 1. DYNAMIC CONFIG PATH DETECTION (Bookworm vs Bullseye)
 # -------------------------------------------------------
 - name: Check if /boot/firmware/config.txt exists (Bookworm)
-  stat:
+  ansible.builtin.stat:
     path: /boot/firmware/config.txt
   register: firmware_config
 
 - name: Set config.txt path variable
-  set_fact:
+  ansible.builtin.set_fact:
     rpi_config_path: "{{ '/boot/firmware/config.txt' if firmware_config.stat.exists else '/boot/config.txt' }}"
 
 # -------------------------------------------------------
 # 2. GPU MEMORY SPLIT (Reclaim RAM)
 # -------------------------------------------------------
 - name: Set GPU memory to {{ gpu_memory_mb }}MB in {{ rpi_config_path }}
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: "{{ rpi_config_path }}"
-    regexp: '^gpu_mem='
+    regexp: "^gpu_mem="
     line: "gpu_mem={{ gpu_memory_mb }}"
-    create: yes
+    create: true
   notify: Reboot Pi
 
 # -------------------------------------------------------
 # 3. ZRAM CONFIGURATION (Compressed RAM)
 # -------------------------------------------------------
 - name: Install zram-tools
-  apt:
+  ansible.builtin.apt:
     name: zram-tools
     state: present
-    update_cache: yes
+    update_cache: true
   become: true
 
 - name: Configure ZRAM percentage
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: /etc/default/zramswap
-    regexp: '^PERCENT='
+    regexp: "^PERCENT="
     line: "PERCENT={{ zram_percentage }}"
   notify: Restart ZRAM
 
@@ -49,23 +50,23 @@
 # 4. LOG2RAM (Save SD Card)
 # -------------------------------------------------------
 - name: Add Azlux GPG key for Log2Ram
-  get_url:
+  ansible.builtin.get_url:
     url: https://azlux.fr/repo.gpg
     dest: /usr/share/keyrings/azlux-archive-keyring.gpg
-    mode: '0644'
+    mode: "0644"
 
 - name: Add Log2Ram repository
-  apt_repository:
+  ansible.builtin.apt_repository:
     repo: "deb [signed-by=/usr/share/keyrings/azlux-archive-keyring.gpg] http://packages.azlux.fr/debian/ bookworm main"
     state: present
     filename: azlux
   become: true
 
 - name: Install Log2Ram
-  apt:
+  ansible.builtin.apt:
     name: log2ram
     state: present
-    update_cache: yes
+    update_cache: true
   notify: Reboot Pi
   become: true
 
@@ -73,33 +74,33 @@
 # 5. HARDWARE WATCHDOG (Auto-Reboot on Freeze)
 # -------------------------------------------------------
 - name: Enable watchdog kernel module in {{ rpi_config_path }}
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: "{{ rpi_config_path }}"
-    regexp: '^dtparam=watchdog='
+    regexp: "^dtparam=watchdog="
     line: "dtparam=watchdog=on"
   notify: Reboot Pi
 
 - name: Install watchdog daemon
-  apt:
+  ansible.builtin.apt:
     name: watchdog
     state: present
   become: true
 
 - name: Configure watchdog device
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: /etc/watchdog.conf
-    regexp: '^#?watchdog-device'
+    regexp: "^#?watchdog-device"
     line: "watchdog-device = /dev/watchdog"
 
 - name: Configure watchdog max load (Reboot if load > 24)
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: /etc/watchdog.conf
-    regexp: '^#?max-load-1\s='
+    regexp: "^#?max-load-1\\s="
     line: "max-load-1 = 24"
   notify: Restart Watchdog
 
 - name: Ensure watchdog service is enabled
-  service:
+  ansible.builtin.service:
     name: watchdog
-    enabled: yes
+    enabled: true
     state: started

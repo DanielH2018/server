@@ -1,13 +1,13 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/config/www/freshrss/extensions"
-
+      - "{{ container_item.name }}/config/www/freshrss/extensions"
 
 - name: Unzip sidebar toggle extension
-  unarchive:
+  ansible.builtin.unarchive:
     src: "{{ item }}"
     dest: "/home/{{ SYS_USER }}/server/containers/freshrss/config/www/freshrss/extensions"
   with_fileglob:
@@ -17,6 +17,6 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

@@ -1,46 +1,47 @@
+---
 - name: Git Pull
-  shell: git pull --all
+  ansible.builtin.command: git pull --all
   register: git
 
-- debug:
+- ansible.builtin.debug:
     var: git.stdout_lines
 
 - name: Set Facts
-  set_fact:
+  ansible.builtin.set_fact:
     container_names: []
     container_lines: []
-    git_changed_containers: ''
+    git_changed_containers: ""
 
 - name: Get container lines from deploy.yml
-  set_fact: 
+  ansible.builtin.set_fact:
     container_lines: "{{ container_lines + [item] }}"
   with_lines: cat "deploy.yml"
   when: '"role:" in item'
 
 - name: Get container name from line
-  set_fact:
+  ansible.builtin.set_fact:
     container_names: "{{ container_names + [item.split(' ')[7]] }}"
   loop: "{{ container_lines }}"
 
 - name: Search git output for container names
-  set_fact:
+  ansible.builtin.set_fact:
     git_changed_containers: "{{ git_changed_containers + item }}"
   loop: "{{ container_names }}"
   when: item[:-1] + '/' in git.stdout
 
 - name: Remove hanging comma
-  set_fact:
+  ansible.builtin.set_fact:
     git_changed_containers: "{{ git_changed_containers[:-1] }}"
 
 - name: Setup playbook command
-  set_fact:
-    playbook_command: "{{ 'ansible-playbook deploy.yml --tags \"' + git_changed_containers + '\"'}}"
+  ansible.builtin.set_fact:
+    playbook_command: "{{ 'ansible-playbook deploy.yml --tags \"' + git_changed_containers + '\"' }}"
 
-- debug:
+- ansible.builtin.debug:
     msg: "{{ playbook_command }}"
 
 - name: Deploy updated containers, if any
-  shell: "{{ playbook_command }}"
+  ansible.builtin.command: "{{ playbook_command }}"
   when: git_changed_containers != ''
   become: true
   become_method: sudo

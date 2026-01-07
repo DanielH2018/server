@@ -1,12 +1,13 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/config"
+      - "{{ container_item.name }}/config"
 
 - name: Create configuration.yaml from template
-  template:
+  ansible.builtin.template:
     src: configuration.yaml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/home-assistant/config/configuration.yaml"
 
@@ -14,6 +15,6 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

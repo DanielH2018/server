@@ -1,24 +1,25 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/config"
+      - "{{ container_item.name }}/config"
 
 # - include_tasks: dns.yml
 #   with_items:
 #     - "{{ role_name }}"
 
 - name: Create Dockerfile from template
-  template:
+  ansible.builtin.template:
     src: Dockerfile.j2
     dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/Dockerfile"
 
 - name: Build Docker compose
-  shell: docker compose build
+  ansible.builtin.command: docker compose build
   args:
     chdir: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

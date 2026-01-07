@@ -1,18 +1,19 @@
-- include_role:
+---
+- ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     dirs_to_create:
-    - "{{ container_item.name }}/config/wg_confs"
-    - "data/downloads"
+      - "{{ container_item.name }}/config/wg_confs"
+      - "data/downloads"
 
 - name: Copy wg0.conf
-  template:
+  ansible.builtin.template:
     src: wg0.conf.j2
     dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/config/wg_confs/wg0.conf"
 
 - name: Extract transcode.zip
-  unarchive:
+  ansible.builtin.unarchive:
     src: transcode.zip
     dest: "/home/{{ SYS_USER }}/server/containers/qbittorrent/"
 
@@ -20,13 +21,13 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_role:
+- ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
 
 - name: Ensure Crowdsec hub update and upgrade job exists
   ansible.builtin.cron:
-    name: "Update Crowdsec Hub"   # Unique ID Ansible uses to track this specific line
+    name: "Update Crowdsec Hub" # Unique ID Ansible uses to track this specific line
     minute: "45"
     hour: "7"
     weekday: "0"

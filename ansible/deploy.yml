@@ -6,7 +6,7 @@
     - .env
   tasks:
     - name: Run roles respecting tags
-      include_role:
+      ansible.builtin.include_role:
         name: "{{ container_item.name }}"
         apply:
           tags: "{{ container_item.tags }}"

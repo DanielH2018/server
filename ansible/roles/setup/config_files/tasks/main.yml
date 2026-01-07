@@ -1,17 +1,18 @@
+---
 - name: Copy .gitconfig to home directory
   ansible.builtin.copy:
     src: "{{ config_source_dir }}/.gitconfig"
     dest: "{{ ansible_env.HOME }}/.gitconfig"
-    mode: '0644'
-    backup: yes
+    mode: "0644"
+    backup: true
   tags: git
 
 - name: Copy .bashrc to home directory
   ansible.builtin.copy:
     src: "{{ config_source_dir }}/.bashrc"
     dest: "{{ ansible_env.HOME }}/.bashrc"
-    mode: '0644'
-    backup: yes
+    mode: "0644"
+    backup: true
   tags: bash
 
 - name: Display completion message
