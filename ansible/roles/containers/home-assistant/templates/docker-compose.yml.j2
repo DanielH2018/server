@@ -26,8 +26,13 @@ services:
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
 
-      {# Generate labels(container_name, port, use_authelia) -#}
-      {{ labels(container, '8123', 'y') }}
+      {# Generate labels(container, port, use_authelia) -#}
+      {{ labels(
+          container_item.hostname | default(container_item.name),
+          container_item.port | string,
+          container_item.use_authelia
+        )
+      }}
 
 networks:
   {{ DOCKER_NETWORK }}:

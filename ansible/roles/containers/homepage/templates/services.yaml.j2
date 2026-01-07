@@ -74,9 +74,9 @@
         container: traefik
         widget:
             type: traefik
-            url: http://traefik
-            username: {{ TRAEFIK_USER }}
-            password: {{ TRAEFIK_PASSWORD }}
+            url: "http://traefik:8888"
+            headers:
+                host: "traefik-internal"
     - Uptime-Kuma:
         icon: uptime-kuma.png
         href: https://uptime-kuma.[REMOVED_KEY]/

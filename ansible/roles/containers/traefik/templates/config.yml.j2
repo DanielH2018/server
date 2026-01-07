@@ -15,6 +15,12 @@ http:
           - main: "{{ DOMAIN }}"
             sans:
               - "*.{{ DOMAIN }}"
+    
+    api-internal:
+      entryPoints:
+        - internal
+      rule: "Host(`traefik-internal`)"
+      service: api@internal
 
 #endregion
 #region services

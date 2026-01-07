@@ -1,7 +1,10 @@
-- include_tasks: directory.yml
-  with_items:
-    - "{{ role_name }}/data/stubby/"
-    - "{{ role_name }}/data/etc-dnsmasq.d/"
+- include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    dirs_to_create:
+    - "{{ container_item.name }}/data/stubby"
+    - "{{ container_item.name }}/data/etc-dnsmasq.d"
 
 - name: Create docker-compose.yml from template
   template:

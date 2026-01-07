@@ -20,8 +20,14 @@ services:
       # Use traefik network
       - "traefik.docker.network={{ DOCKER_NETWORK }}"
 
-      {# Generate labels(container_name, port, use_authelia) -#}
-      {{ labels(container, '61208', 'n') }}
+      {# Generate labels(container, port, use_authelia) -#}
+      {{ labels(
+          container_item.hostname | default(container_item.name),
+          container_item.port | string,
+          container_item.use_authelia
+        )
+      }}
+      
       - "traefik.frontend.rule=Host:glances.docker.localhost"
 
 networks:

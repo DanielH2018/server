@@ -1,6 +1,9 @@
-- include_tasks: directory.yml
-  with_items:
-    - "{{ role_name }}"
+- include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    dirs_to_create:
+    - "{{ container_item.name }}"
 
 - name: Create loki-config.yml from template
   template:
@@ -16,6 +19,6 @@
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_tasks: docker.yml
-  vars:
-    container: "{{ role_name }}"
+- include_role:
+    name: common
+    tasks_from: docker_deploy.yml

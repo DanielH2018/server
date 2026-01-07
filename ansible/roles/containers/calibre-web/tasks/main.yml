@@ -1,12 +1,15 @@
-- include_tasks: directory.yml
-  with_items:
-    - "{{ role_name }}/config"
-    - "data/media/books"
+- include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    dirs_to_create:
+    - "{{ container_item.name }}/config"
+    - "/data/media/books"
 
 # - include_tasks: dns.yml
 #   with_items:
 #     - "{{ role_name }}"
 
-- include_tasks: docker.yml
-  vars:
-    container: "{{ role_name }}"
+- include_role:
+    name: common
+    tasks_from: docker_deploy.yml

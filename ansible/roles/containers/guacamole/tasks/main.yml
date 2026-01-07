@@ -1,9 +1,12 @@
-- include_tasks: directory.yml
-  with_items:
-    - "{{ role_name }}/init"
-    - "{{ role_name }}/data"
-    - "{{ role_name }}/drive"
-    - "{{ role_name }}/record"
+- include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    dirs_to_create:
+    - "{{ container_item.name }}/data"
+    - "{{ container_item.name }}/drive"
+    - "{{ container_item.name }}/record"
+    - "{{ container_item.name }}/init"
 
 #- include_tasks: dns.yml
 #  with_items:
@@ -21,6 +24,6 @@
   become: true
   become_method: sudo
 
-- include_tasks: docker.yml
-  vars:
-    container: "{{ role_name }}"
+- include_role:
+    name: common
+    tasks_from: docker_deploy.yml
