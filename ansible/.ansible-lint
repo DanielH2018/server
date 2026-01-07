@@ -1,5 +1,5 @@
 ---
-profile: production
+profile: safety
 
 exclude_paths:
   - .git/

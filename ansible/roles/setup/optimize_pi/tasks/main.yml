@@ -21,7 +21,7 @@
 # -------------------------------------------------------
 # 2. GPU MEMORY SPLIT (Reclaim RAM)
 # -------------------------------------------------------
-- name: Set GPU memory to {{ gpu_memory_mb }}MB in {{ rpi_config_path }}
+- name: Set GPU memory MB to {{ gpu_memory_mb }}
   ansible.builtin.lineinfile:
     path: "{{ rpi_config_path }}"
     regexp: "^gpu_mem="
