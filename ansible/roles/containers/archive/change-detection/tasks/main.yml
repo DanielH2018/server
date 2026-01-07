@@ -6,6 +6,7 @@
     dirs_to_create:
       - "{{ container_item.name }}/config"
 
-- ansible.builtin.include_role:
+- name: Deploy Container
+  ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
