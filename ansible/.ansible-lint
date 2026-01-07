@@ -1,0 +1,13 @@
+---
+profile: production
+
+exclude_paths:
+  - .git/
+  - .github/
+  - "*.log"
+
+skip_list:
+  - no-changed-when
+  - fqcn[action]
+
+offline: true

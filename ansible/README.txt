@@ -40,9 +40,10 @@ Not covered in these docs is port forwarding, and Cloudflare DNS setup.
 
 ---Instructions to setup server environment---
 1. If using Intel XE graphics, ensure `/dev/dri/` exists, otherwise run `sudo apt install linux-oem-22.04` and reboot.
-2. Run `ansible-playbook initial_setup.yml --ask-become-pass`.
-3. Run `ansible-playbook deploy.yml --ask-become-pass`.
-4. Run `docker exec crowdsec cscli bouncers add bouncer-traefik` and save api key to .env
+2. Run `pip install ansible`
+3. Run `ansible-playbook initial_setup.yml --ask-become-pass`.
+4. Run `ansible-playbook deploy.yml --ask-become-pass`.
+5. Run `docker exec crowdsec cscli bouncers add bouncer-traefik` and save api key to .env
 
 ---Instructions to add container to server environment---
 1. Create role and tags.

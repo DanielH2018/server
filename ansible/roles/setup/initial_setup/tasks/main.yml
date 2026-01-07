@@ -14,6 +14,11 @@
   become: true
   when: inventory_hostname == 'daniel-pi'
 
+- name: Pip Install
+  pip:
+    name:
+      - ansible-lint
+
 - name: Install required packages
   apt:
     name:

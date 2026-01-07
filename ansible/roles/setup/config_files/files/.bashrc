@@ -115,3 +115,6 @@ if ! shopt -oq posix; then
     . /etc/bash_completion
   fi
 fi
+
+# Add user's private bin directories to PATH
+export PATH="$PATH:$HOME/.local/bin"
