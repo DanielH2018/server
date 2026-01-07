@@ -1,5 +1,6 @@
 ---
-- ansible.builtin.include_role:
+- name: Create required directories
+  ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:

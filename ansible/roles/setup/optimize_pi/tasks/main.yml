@@ -10,18 +10,18 @@
 - name: Check if /boot/firmware/config.txt exists (Bookworm)
   ansible.builtin.stat:
     path: /boot/firmware/config.txt
-  register: firmware_config
+  register: optimize_pi_firmware_config
 
 - name: Set config.txt path variable
   ansible.builtin.set_fact:
-    rpi_config_path: "{{ '/boot/firmware/config.txt' if firmware_config.stat.exists else '/boot/config.txt' }}"
+    optimize_pi_rpi_config_path: "{{ '/boot/firmware/config.txt' if optimize_pi_firmware_config.stat.exists else '/boot/config.txt' }}"
 
 # -------------------------------------------------------
 # 2. GPU MEMORY SPLIT (Reclaim RAM)
 # -------------------------------------------------------
 - name: Set GPU memory MB to {{ optimize_pi_gpu_memory_mb }}
   ansible.builtin.lineinfile:
-    path: "{{ rpi_config_path }}"
+    path: "{{ optimize_pi_rpi_config_path }}"
     regexp: "^gpu_mem="
     line: "gpu_mem={{ optimize_pi_gpu_memory_mb }}"
     create: true
@@ -71,9 +71,9 @@
 # -------------------------------------------------------
 # 5. HARDWARE WATCHDOG (Auto-Reboot on Freeze)
 # -------------------------------------------------------
-- name: Enable watchdog kernel module in {{ rpi_config_path }}
+- name: Enable watchdog kernel module in {{ optimize_pi_rpi_config_path }}
   ansible.builtin.lineinfile:
-    path: "{{ rpi_config_path }}"
+    path: "{{ optimize_pi_rpi_config_path }}"
     regexp: "^dtparam=watchdog="
     line: "dtparam=watchdog=on"
   notify: Reboot Pi
