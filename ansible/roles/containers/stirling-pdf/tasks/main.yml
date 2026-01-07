@@ -12,6 +12,7 @@
   ansible.builtin.copy:
     src: eng.traineddata
     dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/trainingData/eng.traineddata"
+    mode: "0644"
 
 # - include_tasks: dns.yml
 #   with_items:

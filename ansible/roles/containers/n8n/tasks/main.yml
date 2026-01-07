@@ -15,6 +15,7 @@
   ansible.builtin.template:
     src: Dockerfile.j2
     dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/Dockerfile"
+    mode: "0664"
 
 - name: Build Docker compose
   ansible.builtin.command: docker compose build

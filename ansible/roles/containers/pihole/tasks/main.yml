@@ -12,6 +12,7 @@
   ansible.builtin.template:
     src: docker-compose.yml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/pihole/docker-compose.yml"
+    mode: "0664"
   vars:
     container: "{{ role_name }}"
 
@@ -19,6 +20,7 @@
   ansible.builtin.template:
     src: stubby.yml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/pihole/data/stubby/stubby.yml"
+    mode: "0664"
   vars:
     container: "{{ role_name }}"
 
@@ -26,6 +28,7 @@
   ansible.builtin.template:
     src: dnsmasq.yml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/pihole/data/etc-dnsmasq.d/02-wildcard.conf"
+    mode: "0644"
   vars:
     container: "{{ role_name }}"
 
@@ -80,5 +83,6 @@
   ansible.builtin.template:
     src: resolv.conf.j2
     dest: "/etc/resolv.conf"
+    mode: "0644"
   become: true
   become_method: ansible.builtin.sudo

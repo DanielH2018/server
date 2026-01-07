@@ -11,6 +11,7 @@
   ansible.builtin.template:
     src: prometheus.yml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/prometheus/prometheus.yml"
+    mode: "0664"
 
 # - include_tasks: dns.yml
 #   with_items:

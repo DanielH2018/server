@@ -11,6 +11,7 @@
   ansible.builtin.file:
     path: "/home/{{ SYS_USER }}/server/containers/file-browser/data/file-browser.db"
     state: touch
+    mode: "0664"
 
 # - include_tasks: dns.yml
 #   with_items:

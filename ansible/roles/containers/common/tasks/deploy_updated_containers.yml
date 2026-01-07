@@ -36,14 +36,14 @@
 
 - name: Setup playbook command
   ansible.builtin.set_fact:
-    playbook_command: "{{ 'ansible-playbook deploy.yml --tags \"' + common_git_changed_containers + '\"' }}"
+    common_playbook_command: "{{ 'ansible-playbook deploy.yml --tags \"' + common_git_changed_containers + '\"' }}"
 
 - name: Show playbook command
   ansible.builtin.debug:
-    msg: "{{ playbook_command }}"
+    msg: "{{ common_playbook_command }}"
 
 - name: Deploy updated containers, if any
-  ansible.builtin.command: "{{ playbook_command }}"
+  ansible.builtin.command: "{{ common_playbook_command }}"
   when: common_git_changed_containers != ''
   become: true
   become_method: ansible.builtin.sudo

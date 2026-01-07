@@ -12,6 +12,7 @@
   ansible.builtin.copy:
     src: "{{ item }}"
     dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/icons/{{ item }}"
+    mode: "0664"
   with_items:
     - opgg.png
     - tacticstools.png
@@ -20,6 +21,7 @@
   ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/home/{{ SYS_USER }}/server/containers/{{ role_name }}/config/{{ item }}"
+    mode: "0664"
   with_items:
     - settings.yaml
     - bookmarks.yaml

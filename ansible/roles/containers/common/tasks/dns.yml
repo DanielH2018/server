@@ -15,13 +15,13 @@
 
 - name: Get Zone ID
   ansible.builtin.set_fact:
-    zone_id: "{{ common_zone_output | json_query(query) }}"
+    common_zone_id: "{{ common_zone_output | json_query(common_query) }}"
   vars:
-    query: "json.result[?name=='{{ DOMAIN }}'].id | [0]"
+    common_query: "json.result[?name=='{{ DOMAIN }}'].id | [0]"
 
 - name: Check for CNAME record
   ansible.builtin.uri:
-    url: "https://api.cloudflare.com/client/v4/zones/{{ zone_id }}/dns_records?type=CNAME&name={{ common_container }}.{{ DOMAIN }}"
+    url: "https://api.cloudflare.com/client/v4/zones/{{ common_zone_id }}/dns_records?type=CNAME&name={{ common_container }}.{{ DOMAIN }}"
     method: GET
     headers:
       Authorization: "Bearer {{ CLOUDFLARE_DNS_TOKEN }}"
@@ -30,15 +30,15 @@
 
 - name: Check if record was found
   ansible.builtin.set_fact:
-    record_count: "{{ common_cname_output.json.result_info.count }}"
+    common_record_count: "{{ common_cname_output.json.result_info.count }}"
 
 - name: Create CNAME record if not found
   ansible.builtin.uri:
-    url: "https://api.cloudflare.com/client/v4/zones/{{ zone_id }}/dns_records"
+    url: "https://api.cloudflare.com/client/v4/zones/{{ common_zone_id }}/dns_records"
     method: POST
     body: "{\"type\":\"CNAME\",\"name\":\"{{ common_container }}\",\"content\":\"{{ DOMAIN }}\",\"ttl\":1,\"proxied\":true}"
     body_format: json
     headers:
       Authorization: "Bearer {{ CLOUDFLARE_DNS_TOKEN }}"
       Content-Type: "application/json"
-  when: record_count == "0"
+  when: common_record_count == "0"

@@ -17,11 +17,13 @@
   ansible.builtin.template:
     src: config.yml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/traefik/data/config.yml"
+    mode: "0664"
 
 - name: Create traefik.yml from template
   ansible.builtin.template:
     src: traefik.yml.j2
     dest: "/home/{{ SYS_USER }}/server/containers/traefik/data/traefik.yml"
+    mode: "0664"
 
 - name: Hash password
   ansible.builtin.shell: "echo $(htpasswd -nb {{ TRAEFIK_USER }} {{ TRAEFIK_PASSWORD }})"
