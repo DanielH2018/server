@@ -15,7 +15,7 @@ services:
       - "51820:51820/udp"
     environment:
       - LANG=en
-      - WG_HOST={{ domain }}
+      - WG_HOST=wireguard.{{ domain }}
       - WG_PERSISTENT_KEEPALIVE=25
     volumes:
       - ./config:/etc/wireguard
