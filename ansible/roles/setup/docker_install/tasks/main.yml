@@ -12,8 +12,19 @@
       - lsb-release
   become: true
 
-- name: Add GPG Key
-  ansible.builtin.shell: "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg"
+- name: Download Docker GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /tmp/docker.gpg
+    mode: "0644"
+
+- name: Dearmor Docker GPG key
+  ansible.builtin.command:
+    cmd: gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg --yes /tmp/docker.gpg
+  args:
+    creates: /usr/share/keyrings/docker-archive-keyring.gpg
+  become: true
+
 - name: Add packages to manager
   ansible.builtin.shell: |
     echo \
@@ -39,7 +50,10 @@
   become: true
 
 - name: Install Docker Compose
-  ansible.builtin.command: "curl -L --fail https://raw.githubusercontent.com/linuxserver/docker-docker-compose/master/run.sh -o /usr/local/bin/docker-compose"
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/linuxserver/docker-docker-compose/master/run.sh
+    dest: /usr/local/bin/docker-compose
+    mode: "0755"
   become: true
 
 - name: Chmod Docker Compose

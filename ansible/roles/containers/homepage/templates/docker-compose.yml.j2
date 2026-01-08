@@ -26,7 +26,7 @@ services:
       - puid={{ puid }}
       - pgid={{ pgid }}
       - tz={{ tz }}
-      - HOMEPAGE_ALLOWED_HOSTS=homepage.{{ DOMAIN }}
+      - HOMEPAGE_ALLOWED_HOSTS=homepage.{{ domain }}
     restart: unless-stopped
     networks:
       - {{ docker_network }}

@@ -9,7 +9,7 @@ services:
     security_opt: [no-new-privileges:true]
     environment:
       - CF_API_TOKEN={{ CLOUDFLARE_DNS_TOKEN }}
-      - DOMAINS={{ DOMAIN }}
+      - DOMAINS={{ domain }}
       - PROXIED=true
       - IP6_PROVIDER=none
     networks:
@@ -23,7 +23,7 @@ services:
     security_opt: [no-new-privileges:true]
     environment:
       - CF_API_TOKEN={{ CLOUDFLARE_DNS_TOKEN }}
-      - DOMAINS=valheim.{{ DOMAIN }},minecraft.{{ DOMAIN }}
+      - DOMAINS=valheim.{{ domain }},minecraft.{{ domain }}
       - PROXIED=false
       - IP6_PROVIDER=none
     networks:

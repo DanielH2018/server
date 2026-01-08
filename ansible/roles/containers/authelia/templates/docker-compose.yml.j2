@@ -13,7 +13,7 @@ services:
       # Enable traefik for container
       - 'traefik.enable=true'
       # Setup HTTPS entrypoint
-      - 'traefik.http.routers.authelia.rule=Host(`auth.{{ DOMAIN }}`)'
+      - 'traefik.http.routers.authelia.rule=Host(`auth.{{ domain }}`)'
       - 'traefik.http.routers.authelia.entrypoints=https'
       - 'traefik.http.routers.authelia.tls=true'
       # Setup auth forwarding

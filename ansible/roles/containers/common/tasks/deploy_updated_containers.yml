@@ -1,6 +1,10 @@
 ---
-- name: Git Pull
-  ansible.builtin.command: git pull --all
+- name: Git Pull (Ensure repo is up to date)
+  ansible.builtin.git:
+    repo: "{{ github_repo }}"
+    dest: /home/{{ sys_user }}/server/ansible
+    version: HEAD # noqa: latest[git]
+    update: true
   register: common_git
 
 - name: Show git output

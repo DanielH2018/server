@@ -1,7 +1,7 @@
 ---
-SERVER_IP: 192.168.50.48
+server_ip: 192.168.50.48
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
-DOMAIN: daniel-pi.com
+domain: daniel-pi.com
 containers_list:
   # - name: traefik
   #   use_authelia: true

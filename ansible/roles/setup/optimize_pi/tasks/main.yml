@@ -24,6 +24,7 @@
     path: "{{ optimize_pi_rpi_config_path }}"
     regexp: "^gpu_mem="
     line: "gpu_mem={{ optimize_pi_gpu_memory_mb }}"
+    mode: "0755"
     create: true
   notify: Reboot Pi
 

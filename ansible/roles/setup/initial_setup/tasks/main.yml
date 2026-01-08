@@ -83,7 +83,7 @@
     minute: "0"
     hour: "6"
     weekday: "0" # 0 is Sunday
-    job: "truncate -s 0 /home/ubuntu/server/ansible/ansible.log"
+    job: "truncate -s 0 /home/{{ sys_user }}/server/ansible/ansible.log"
   become: true
 
 - name: Configure UFW firewall

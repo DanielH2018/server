@@ -9,7 +9,7 @@ services:
       - puid={{ puid }}
       - pgid={{ pgid }}
       - tz={{ tz }}
-      - JELLYFIN_PublishedServerUrl={{ SERVER_IP }} #optional
+      - JELLYFIN_PublishedServerUrl={{ server_ip }} #optional
       - DOCKER_MODS=linuxserver/mods:jellyfin-opencl-intel
     volumes:
       - ./config:/config

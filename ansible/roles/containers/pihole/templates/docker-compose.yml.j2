@@ -33,7 +33,7 @@ services:
     environment:
       tz: {{ tz }}
       WEBPASSWORD: {{ PIHOLE_PASSWORD }}
-      ServerIP: {{ SERVER_IP }}
+      ServerIP: {{ server_ip }}
       PIHOLE_DNS_: 172.18.0.255#5353
     volumes:
        - './data/etc-pihole/:/etc/pihole/'

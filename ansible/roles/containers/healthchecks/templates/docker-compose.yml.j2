@@ -8,10 +8,10 @@ services:
     environment:
       - puid={{ puid }}
       - pgid={{ pgid }}
-      - SITE_ROOT=https://healthchecks.{{ DOMAIN }}
+      - SITE_ROOT=https://healthchecks.{{ domain }}
       - SITE_NAME=Home Server healthchecks
       - DEFAULT_FROM_EMAIL={{ email }}
-      - ALLOWED_HOSTS=localhost,healthchecks.{{ DOMAIN }} #optional
+      - ALLOWED_HOSTS=localhost,healthchecks.{{ domain }} #optional
       - EMAIL_HOST=smtp.gmail.com
       - EMAIL_PORT=587
       - EMAIL_HOST_USER={{ HEALTHCHECKS_SMTP_USER }}

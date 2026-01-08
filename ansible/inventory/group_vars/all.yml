@@ -9,3 +9,4 @@ docker_network: proxy
 email: [REMOVED_KEY]
 lat: 38.89
 long: -77.08
+github_repo: https://github.com/DanielH2018/server.git

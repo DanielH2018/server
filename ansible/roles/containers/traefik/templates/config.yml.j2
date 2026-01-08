@@ -4,7 +4,7 @@ http:
     dashboard:
       entryPoints:
         - https
-      rule: "Host(`traefik.{{ DOMAIN }}`)"
+      rule: "Host(`traefik.{{ domain }}`)"
       service: api@internal
       middlewares:
         - default-headers
@@ -12,9 +12,9 @@ http:
       tls:
         certResolver: cloudflare
         domains:
-          - main: "{{ DOMAIN }}"
+          - main: "{{ domain }}"
             sans:
-              - "*.{{ DOMAIN }}"
+              - "*.{{ domain }}"
     
     api-internal:
       entryPoints:

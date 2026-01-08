@@ -11,14 +11,14 @@ services:
     restart: always
     environment:
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
-      - N8N_HOST=n8n.{{ DOMAIN }}
+      - N8N_HOST=n8n.{{ domain }}
       - N8N_PORT=5678
       - N8N_PROTOCOL=https
       - N8N_RUNNERS_ENABLED=true
       - N8N_PROXY_HOPS=1
       - NODE_ENV=production
       - NODE_FUNCTION_ALLOW_EXTERNAL=fuzzball
-      - WEBHOOK_URL=https://n8n.{{ DOMAIN }}/
+      - WEBHOOK_URL=https://n8n.{{ domain }}/
       - GENERIC_TIMEZONE={{ tz }}
       - tz={{ tz }}
     volumes:

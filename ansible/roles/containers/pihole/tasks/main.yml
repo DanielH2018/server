@@ -48,12 +48,16 @@
   become_method: ansible.builtin.sudo
 
 - name: Stop systemd-resolved.service
-  ansible.builtin.command: systemctl stop systemd-resolved.service
+  ansible.builtin.systemd:
+    name: systemd-resolved.service
+    state: stopped
   become: true
   become_method: ansible.builtin.sudo
 
 - name: Disable systemd-resolved.service
-  ansible.builtin.command: systemctl disable systemd-resolved.service
+  ansible.builtin.systemd:
+    name: systemd-resolved.service
+    enabled: false
   become: true
   become_method: ansible.builtin.sudo
 
