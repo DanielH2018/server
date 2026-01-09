@@ -5,7 +5,7 @@
     tasks_from: setup_dirs.yml
   vars:
     common_dirs_to_create:
-      - "{{ container_item.name }}/config"
+      - "{{ container_item.name }}/configs"
       - "{{ container_item.name }}/server"
       - "{{ container_item.name }}/logs"
       - "{{ container_item.name }}/transcode_cache"

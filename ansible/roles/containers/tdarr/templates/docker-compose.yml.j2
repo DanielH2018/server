@@ -22,8 +22,7 @@ services:
       - ./configs:/app/configs
       - ./logs:/app/logs
       - ./transcode_cache:/temp
-      - /home/{{ sys_user }}/server/containers/data/media/tv:/tv
-      - /home/{{ sys_user }}/server/containers/data/media/movies:/movies
+      - /home/{{ sys_user }}/server/containers/data/media/:/media
     devices:
       - /dev/dri:/dev/dri
     labels:
