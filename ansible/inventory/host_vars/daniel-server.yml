@@ -106,16 +106,21 @@ containers_list:
     use_authelia: true
     tags:
       - prowlarr
-  - name: readarr
-    port: 8787
-    use_authelia: true
-    tags:
-      - readarr
+  # - name: readarr
+  #   port: 8787
+  #   use_authelia: true
+  #   tags:
+  #     - readarr
   - name: bazarr
     port: 6767
     use_authelia: true
     tags:
       - bazarr
+  - name: tdarr
+    port: 8265
+    use_authelia: true
+    tags:
+      - tdarr
   - name: profilarr
     port: 6868
     use_authelia: true
