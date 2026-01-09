@@ -9,7 +9,7 @@
 
 - name: Hash password
   ansible.builtin.command: "docker run authelia/authelia:latest authelia crypto hash generate argon2 --password '{{ AUTHELIA_PASSWORD }}' --iterations 3 --memory
-    65536 --parallelism 4 --salt-length 16 --key-length 32"
+    65536 --parallelism 4 --salt-size 16 --key-size 32"
   register: authelia_hash_output
   become: true
 
@@ -21,12 +21,87 @@
   ansible.builtin.debug:
     msg: "{{ authelia_password_hash }}"
 
-- name: Create configuration.yml from template
-  ansible.builtin.template:
-    src: configuration.yml.j2
-    dest: "/home/{{ sys_user }}/server/containers/authelia/config/configuration.yml"
-    mode: "0755"
-  become: true
+- name: Set Authelia Config dir
+  ansible.builtin.set_fact:
+    authelia_config_dir: "/home/{{ sys_user }}/server/containers/authelia/config"
+
+- name: Check for existing configuration
+  ansible.builtin.stat:
+    path: "{{ authelia_config_dir }}/configuration.yml"
+  register: config_file
+
+# BLOCK: Only run setup if config does NOT exist
+- name: Initial Authelia Setup
+  when: not config_file.stat.exists
+  block:
+    # --- 1. Generate HMAC Secret ---
+    - name: Generate OIDC HMAC Secret (Docker)
+      ansible.builtin.command:
+        cmd: docker run --rm authelia/authelia:latest authelia crypto rand --length 64 --charset alphanumeric
+      register: oidc_hmac_cmd
+      changed_when: true
+
+    - name: Set HMAC Fact
+      ansible.builtin.set_fact:
+        oidc_hmac_secret: "{{ oidc_hmac_cmd.stdout | trim }}"
+
+    # --- 2. Generate Client Password & Hash ---
+    - name: Generate Client Password and Hash (Docker)
+      ansible.builtin.command:
+        cmd: docker run --rm authelia/authelia:latest authelia crypto hash generate pbkdf2 --variant sha512 --random --random.length 32 --random.charset alphanumeric
+      register: client_secret_cmd
+      changed_when: true
+
+    - name: Parse Client Credentials
+      ansible.builtin.set_fact:
+        # Regex extracts the raw password and the hash from Authelia's output
+        client_plaintext_password: "{{ client_secret_cmd.stdout | regex_search('Random Password: (\\S+)', '\\1') | first }}"
+        client_password_hash: "{{ client_secret_cmd.stdout | regex_search('Digest: (\\S+)', '\\1') | first }}"
+
+    # --- 3. Generate RSA Keypair ---
+    - name: Generate RSA Keypair (Docker Volume Mount)
+      ansible.builtin.command:
+        # Mounts the host config dir to /keys inside container to write the files directly
+        cmd: docker run --rm -v {{ authelia_config_dir }}:/keys authelia/authelia:latest authelia crypto pair rsa generate --directory /keys --bits 4096
+      args:
+        creates: "{{ authelia_config_dir }}/private.pem"
+
+    # --- 4. Read Private Key for Template ---
+    - name: Read RSA Private Key
+      ansible.builtin.slurp:
+        src: "{{ authelia_config_dir }}/private.pem"
+      register: rsa_key_file
+      become: true
+
+    - name: Decode RSA Key
+      ansible.builtin.set_fact:
+        oidc_rsa_key_content: "{{ rsa_key_file['content'] | b64decode }}"
+
+    # --- 5. Create Configuration ---
+    - name: Create configuration.yml from template
+      ansible.builtin.template:
+        src: configuration.yml.j2
+        dest: "/home/{{ sys_user }}/server/containers/authelia/config/configuration.yml"
+        mode: "0755"
+      become: true
+
+    # --- 6. Output Secrets ---
+    - name: ⚠️ IMPORTANT CREDENTIALS ⚠️
+      ansible.builtin.debug:
+        msg:
+          - "--------------------------------------------------------"
+          - "SETUP COMPLETE. SAVE THESE CREDENTIALS NOW."
+          - "They will NOT be shown again."
+          - "--------------------------------------------------------"
+          - "Client App Password: {{ client_plaintext_password }}"
+          - "--------------------------------------------------------"
+
+    - name: Safety Check Message
+      when: config_file.stat.exists
+      ansible.builtin.debug:
+        msg: "Configuration file already exists. Skipping setup to prevent overwriting secrets."
+
+
 
 - name: Check if users_database.yml exists
   ansible.builtin.stat:

@@ -98,7 +98,7 @@ containers_list:
       - radarr
   - name: jellyfin
     port: 8096
-    use_authelia: true
+    use_authelia: false
     tags:
       - jellyfin
   - name: prowlarr
