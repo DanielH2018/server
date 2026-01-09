@@ -121,11 +121,10 @@ containers_list:
     use_authelia: true
     tags:
       - tdarr
-  - name: profilarr
-    port: 6868
-    use_authelia: true
+  - name: recyclarr
+    use_authelia: false
     tags:
-      - profilarr
+      - recyclarr
   # - name: calibre-web
   #   port: 8083
   #   use_authelia: true

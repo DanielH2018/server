@@ -1,0 +1,30 @@
+sonarr:
+  my-sonarr:
+    base_url: http://sonarr:8989  # Internal docker hostname or IP
+    api_key: {{ SONARR_API_KEY }}
+    delete_old_custom_formats: true
+    
+    # 1. Sync Quality Definitions (The sliders in Settings > Quality)
+    include:
+      - template: sonarr-quality-definition-series
+
+      # Anime Sonarr
+      - template: sonarr-v4-quality-profile-anime
+
+      # WEB (1080p)
+      - template: sonarr-v4-quality-profile-web-1080p
+
+radarr:
+  my-radarr:
+    base_url: http://radarr:7878
+    api_key: {{ RADARR_API_KEY }}
+    delete_old_custom_formats: true
+    
+    include:
+      - template: radarr-quality-definition-movie
+
+      # HD Bluray + WEB (1080p)
+      - template: radarr-quality-profile-hd-bluray-web
+
+      # Anime Radarr
+      - template: radarr-quality-profile-anime

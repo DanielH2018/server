@@ -1,0 +1,17 @@
+services:
+  recyclarr:
+    image: ghcr.io/recyclarr/recyclarr
+    container_name: recyclarr
+    user: {{ puid }}:{{ pgid }}
+    restart: unless-stopped
+    networks:
+      - {{ docker_network }}
+    environment:
+      - TZ={{ tz }}
+    volumes:
+      - ./recyclarr/config:/config
+
+networks:
+  {{ docker_network }}:
+    external: true
+    

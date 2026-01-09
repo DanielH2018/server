@@ -1,0 +1,23 @@
+---
+- name: Create required directories
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}/recyclarr/config"
+
+- name: Create recyclarr.yml from template
+  ansible.builtin.template:
+    src: recyclarr.yml.j2
+    dest: "/home/{{ sys_user }}/server/containers/recyclarr/recyclarr/config/recyclarr.yml"
+    mode: "0755"
+
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
+
+- name: Deploy Container
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
