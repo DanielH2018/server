@@ -8,9 +8,9 @@ services:
     security_opt:
       - seccomp:unconfined #optional
     environment:
-      - puid={{ puid }}
-      - pgid={{ pgid }}
-      - tz={{ tz }}
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ tz }}
       - PASSWORD= #optional
       - CLI_ARGS= #optional
     volumes:

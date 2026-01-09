@@ -6,8 +6,8 @@ services:
     image: lscr.io/linuxserver/healthchecks
     container_name: healthchecks
     environment:
-      - puid={{ puid }}
-      - pgid={{ pgid }}
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
       - SITE_ROOT=https://healthchecks.{{ domain }}
       - SITE_NAME=Home Server healthchecks
       - DEFAULT_FROM_EMAIL={{ email }}

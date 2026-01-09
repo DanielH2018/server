@@ -6,9 +6,9 @@ services:
     image: lscr.io/linuxserver/bazarr:latest
     container_name: bazarr
     environment:
-      - puid={{ puid }}
-      - pgid={{ pgid }}
-      - tz={{ tz }}
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ tz }}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config:/config
@@ -36,20 +36,6 @@ services:
           container_item.use_authelia
         )
       }}
-  whisper:
-    image: onerahmet/openai-whisper-asr-webservice:latest
-    container_name: whisper
-    environment:
-      - puid={{ puid }}
-      - pgid={{ pgid }}
-      - tz={{ tz }}
-      - ASR_MODEL=small
-      - ASR_ENGINE=faster_whisper
-    volumes:
-      - ./whisper_config:/config
-    networks:
-      - {{ docker_network }}
-    restart: unless-stopped
 
 networks:
   {{ docker_network }}:

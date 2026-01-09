@@ -6,9 +6,9 @@ services:
     image: lscr.io/linuxserver/homeassistant:latest
     container_name: home-assistant
     environment:
-      - puid={{ puid }}
-      - pgid={{ puid }}
-      - tz={{ tz }}
+      - PUID={{ puid }}
+      - PGID={{ puid }}
+      - TZ={{ tz }}
       - DOCKER_MODS=linuxserver/mods:homeassistant-hacs
     volumes:
       - ./config:/config

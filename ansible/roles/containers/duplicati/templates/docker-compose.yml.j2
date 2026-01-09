@@ -6,9 +6,9 @@ services:
     image: lscr.io/linuxserver/duplicati:latest
     container_name: duplicati
     environment:
-      - puid=0
-      - pgid=0
-      - tz={{ tz }}
+      - PUID=0
+      - PGID=0
+      - TZ={{ tz }}
       #- CLI_ARGS= 
     volumes:
       - ./config:/config

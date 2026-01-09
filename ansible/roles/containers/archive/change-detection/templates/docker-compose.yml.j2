@@ -6,9 +6,9 @@ services:
     image: lscr.io/linuxserver/changedetection.io:latest
     container_name: changedetection
     environment:
-      - puid={{ puid }}
-      - pgid={{ pgid }}
-      - tz={{ tz }}
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ tz }}
     volumes:
       - ./config:/config
     restart: unless-stopped

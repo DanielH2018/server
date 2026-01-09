@@ -20,7 +20,7 @@ services:
       - NODE_FUNCTION_ALLOW_EXTERNAL=fuzzball
       - WEBHOOK_URL=https://n8n.{{ domain }}/
       - GENERIC_TIMEZONE={{ tz }}
-      - tz={{ tz }}
+      - TZ={{ tz }}
     volumes:
       - n8n_data:/home/node/.n8n
       - ./local-files:/files

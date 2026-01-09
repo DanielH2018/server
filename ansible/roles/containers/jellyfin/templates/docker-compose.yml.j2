@@ -6,9 +6,9 @@ services:
     image: lscr.io/linuxserver/jellyfin:latest
     container_name: jellyfin
     environment:
-      - puid={{ puid }}
-      - pgid={{ pgid }}
-      - tz={{ tz }}
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ tz }}
       - JELLYFIN_PublishedServerUrl={{ server_ip }} #optional
       - DOCKER_MODS=linuxserver/mods:jellyfin-opencl-intel
     volumes:

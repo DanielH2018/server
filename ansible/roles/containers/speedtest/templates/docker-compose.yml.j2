@@ -10,9 +10,9 @@ services:
     volumes:
       - ./config:/config
     environment:
-      - tz=
-      - puid={{ puid }}
-      - pgid={{ pgid }}
+      - TZ=
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
       - OOKLA_EULA_GDPR=true
     logging:
         driver: "json-file"

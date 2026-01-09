@@ -6,9 +6,9 @@ services:
     image: lscr.io/linuxserver/calibre-web:latest
     container_name: calibre-web
     environment:
-      - puid={{ puid }}
-      - pgid={{ pgid }}
-      - tz={{ tz }}
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ tz }}
       - DOCKER_MODS=linuxserver/mods:universal-calibre|linuxserver/mods:calibre-web-dtrpg-metadata|linuxserver/mods:calibre-web-kcc #optional
       - OAUTHLIB_RELAX_TOKEN_SCOPE=1 #optional
     volumes:

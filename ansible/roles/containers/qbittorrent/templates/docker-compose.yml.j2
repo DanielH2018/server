@@ -10,9 +10,9 @@ services:
       - NET_ADMIN
       - SYS_MODULE
     environment:
-      - puid={{ puid }}
-      - pgid={{ pgid }}
-      - tz={{ tz }}
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ tz }}
     volumes:
       - ./config:/config
       - /lib/modules:/lib/modules
@@ -44,9 +44,9 @@ services:
     depends_on:
       - wireguard
     environment:
-      - puid={{ puid }}
-      - pgid={{ pgid }}
-      - tz={{ tz }}
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ tz }}
       - UMASK_SET=022
       - WEBUI_PORT=8080
       - TORRENTING_PORT=6881
@@ -64,7 +64,7 @@ services:
     build:
       context: ./transcode
     environment:
-      - tz={{ tz }}
+      - TZ={{ tz }}
       - TRANSCODE_PATHS=data/downloads, /data/media/movies, /data/media/tv
     volumes:
       - /home/{{ sys_user }}/server/containers/data/downloads:/data/downloads

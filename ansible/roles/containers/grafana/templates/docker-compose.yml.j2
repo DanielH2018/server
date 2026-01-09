@@ -37,7 +37,7 @@ services:
     container_name: loki
     restart: unless-stopped
     environment:
-      - tz={{ tz }}
+      - TZ={{ tz }}
     expose:
       - 3100
     volumes:
@@ -51,7 +51,7 @@ services:
     container_name: promtail
     restart: unless-stopped
     environment:
-      - tz={{ tz }}
+      - TZ={{ tz }}
     volumes:
       - ./promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
       # Access to mounted log files

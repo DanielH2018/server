@@ -6,9 +6,9 @@ services:
     image: lscr.io/linuxserver/radarr
     container_name: radarr
     environment:
-      - puid={{ puid }}
-      - pgid={{ pgid }}
-      - tz={{ tz }}
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ tz }}
       - DOCKER_MODS=linuxserver/mods:radarr-striptracks
     volumes:
       - /etc/localtime:/etc/localtime:ro
