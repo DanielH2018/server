@@ -1,0 +1,39 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
+version: "3.8"
+services:
+  jellyseerr:
+    image: ghcr.io/fallenbagel/jellyseerr:latest
+    init: true
+    container_name: jellyseerr
+    environment:
+      - LOG_LEVEL=debug
+      - TZ={{ tz }}
+    volumes:
+      - ./config:/app/config
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:5055/api/v1/status || exit 1
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - {{ docker_network }}
+    labels:
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Use traefik network
+      - "traefik.docker.network={{ docker_network }}"
+
+      {# Generate labels(container, port, use_authelia) -#}
+      {{ labels(
+          container_item.hostname | default(container_item.name),
+          container_item.port | string,
+          container_item.use_authelia
+        )
+      }}
+
+networks:
+  {{ docker_network }}:
+    external: true
