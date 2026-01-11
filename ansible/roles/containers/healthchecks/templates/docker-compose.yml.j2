@@ -43,6 +43,15 @@ services:
         )
       }}
 
+      ## Ping Bypass (Public)
+      # We use PathPrefix to catch /ping and everything after it
+      - "traefik.http.routers.healthchecks-ping.rule=Host(`healthchecks.{{ domain }}`) && (PathPrefix(`/ping`) || PathPrefix(`/api`))"
+      - "traefik.http.routers.healthchecks-ping.entrypoints=https"
+      - "traefik.http.routers.healthchecks-ping.tls=true"
+      - "traefik.http.routers.healthchecks-ping.service=healthchecks"
+      # Priority must be higher than the UI router so Traefik matches this first
+      - "traefik.http.routers.healthchecks-ping.priority=100"
+
 networks:
   {{ docker_network }}:
     external: true
