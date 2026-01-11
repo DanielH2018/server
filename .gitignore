@@ -5,6 +5,7 @@
 !/docker-cloudflare-ddns
 # Make sure these are ignored
 ansible/.env
+ansible/.aws
 ansible/roles/code-server/templates/github
 ansible/roles/foundry/files/*.zip
 ansible/ansible.log
