@@ -19,6 +19,7 @@ services:
       - WG_PERSISTENT_KEEPALIVE=25
     volumes:
       - ./config:/etc/wireguard
+      - /lib/modules:/lib/modules:ro
     restart: unless-stopped
     networks:
       - {{ docker_network }}
