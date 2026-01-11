@@ -10,6 +10,7 @@
     name:
       - linux-raspi
       - openvswitch-switch-dpdk
+      - wireguard
     state: present
   become: true
   when: inventory_hostname == 'daniel-pi'
@@ -86,11 +87,27 @@
     job: "truncate -s 0 /home/{{ sys_user }}/server/ansible/ansible.log"
   become: true
 
+- name: Enable IPv4 forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    state: present
+    reload: true
+  become: true
+
 - name: Configure UFW firewall
   ufw:
     rule: allow
     port: ssh
     proto: tcp
+
+- name: Allow WireGuard port 51820/udp
+  ufw:
+    rule: allow
+    port: '51820'
+    proto: udp
+  become: true
+  when: inventory_hostname == 'daniel-pi'
 
 - name: Enable UFW firewall
   ufw:
