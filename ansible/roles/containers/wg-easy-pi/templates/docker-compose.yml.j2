@@ -14,7 +14,7 @@ services:
       - "{{ container_item.port }}:51821/tcp"
     environment:
       - LANG=en
-      - WG_HOST=wireguard.{{ domain }}
+      - WG_HOST=wireguard.[REMOVED_KEY]
       - WG_PERSISTENT_KEEPALIVE=25
     volumes:
       - ./config:/etc/wireguard
