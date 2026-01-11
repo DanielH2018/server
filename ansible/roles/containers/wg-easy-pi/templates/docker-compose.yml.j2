@@ -3,6 +3,7 @@ services:
   wg-easy:
     image: ghcr.io/wg-easy/wg-easy
     container_name: wg-easy
+    privileged: true
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
