@@ -8,11 +8,11 @@ containers_list:
     use_authelia: false
     tags:
       - portainer
-  - name: wg-easy
+  - name: wg-easy-pi
     port: 51821
     use_authelia: false
     tags:
-      - wg-easy
+      - wg-easy-pi
   # - name: autoheal
   #   use_authelia: false
   #   tags:
