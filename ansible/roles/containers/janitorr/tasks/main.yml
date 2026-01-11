@@ -6,7 +6,13 @@
   vars:
     common_dirs_to_create:
       - "{{ container_item.name }}/config"
-      - "data/media/tv"
+      - "data/media/leaving-soon"
+
+- name: Create application.yml from template
+  ansible.builtin.template:
+    src: application.yml.j2
+    dest: "/home/{{ sys_user }}/server/containers/janitorr/config/application.yml"
+    mode: "0755"
 
 # - include_tasks: dns.yml
 #   with_items:

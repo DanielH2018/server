@@ -125,6 +125,10 @@ containers_list:
     use_authelia: false
     tags:
       - recyclarr
+  - name: janitorr
+    use_authelia: false
+    tags:
+      - janitorr
   # - name: calibre-web
   #   port: 8083
   #   use_authelia: true

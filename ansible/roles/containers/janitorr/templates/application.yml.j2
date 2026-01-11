@@ -1,0 +1,80 @@
+logging:
+  level:
+    com.github.schaka: INFO
+
+file-system:
+  access: true
+  leaving-soon-dir: "/data/media/leaving-soon"
+  media-server-leaving-soon-dir: "/data/media/leaving-soon"
+  from-scratch: true 
+  free-space-check-dir: "/"
+
+application:
+  dry-run: true
+  run-once: false
+  whole-tv-show: false
+  whole-show-seeding-check: false
+  leaving-soon: 14d
+  exclusion-tags: # Set these tags to your movies or TV shows in the *arrs to exclude media from being cleaned up
+    - "janitorr_keep"
+    - "janitorr_keep_too"
+
+  media-deletion:
+    enabled: true
+    movie-expiration:
+      5: 15d # 15 days
+      10: 30d # 1 month - if a movie's files on your system are older than this, they will be deleted
+      15: 30d # 2 months
+      20: 90d # 3 months
+    season-expiration:
+      5: 15d # 15 days
+      10: 20d # 20 days - if a season's files on your system are older than this, they will be deleted
+      15: 60d # 2 months
+      20: 120d # 4 months
+
+  tag-based-deletion:
+    enabled: true
+    minimum-free-disk-percent: 100
+    schedules:
+      - tag: 5 - demo
+        expiration: 30d
+      - tag: 10 - demo
+        expiration: 7d
+
+  episode-deletion:
+    enabled: true
+    clean-older-seasons: false
+    tag: janitorr_daily # Shows tagged with this will have all episodes of their LATEST season deleted by the below thresholds
+    max-episodes: 10
+    max-age: 60d
+
+clients:
+  # Media Libraries to Clean
+  sonarr:
+    enabled: true
+    url: "http://sonarr:8989"
+    apikey: "{{ SONARR_API_KEY }}"
+    delete-empty-shows: true
+    determine-age-by: MOST_RECENT
+    import-exclusions: false
+
+  radarr:
+    enabled: true
+    url: "http://radarr:7878"
+    apikey: "{{ RADARR_API_KEY }}"
+    only-delete-files: false
+    determine-age-by: MOST_RECENT
+    import-exclusions: false
+
+  ## User login is only needed if deletion is enabled.
+  jellyfin:
+    enabled: true
+    url: "http://jellyfin:8096"
+    api-key: "{{ JELLYFIN_API_KEY }}"
+    #username: Janitorr
+    #password: janitorr
+    delete: false # Jellyfin setup is required for JellyStat. However, if you don't want Janitorr to send delete requests to the Jellyfin API, disable it here
+    exclude-favorited: false # When enabled, items favorited by any Jellyfin user will be excluded from deletion and won't appear in Leaving Soon
+    leaving-soon-tv: "Shows (Leaving Soon)"
+    leaving-soon-movies: "Movies (Leaving Soon)"
+    leaving-soon-type: MOVIES_AND_TV # Other valid values are MOVIES, TV and NONE
