@@ -58,6 +58,8 @@ services:
     image: redis:alpine
     container_name: wallabag-redis
     restart: unless-stopped
+    volumes:
+      - wallabag-redis:/data
     networks:
       - {{ docker_network }}
     healthcheck:
@@ -73,3 +75,4 @@ volumes:
   wallabag-images:
   wallabag_data:
   wallabag-db:
+  wallabag-redis:

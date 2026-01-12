@@ -59,25 +59,6 @@ services:
       interval: 1m30s
       timeout: 2s
       retries: 1
-  transcode:
-    container_name: transcode
-    build:
-      context: ./transcode
-    environment:
-      - TZ={{ tz }}
-      - TRANSCODE_PATHS=data/downloads, /data/media/movies, /data/media/tv
-    volumes:
-      - /home/{{ sys_user }}/server/containers/data/downloads:/data/downloads
-      - /home/{{ sys_user }}/server/containers/data/downloads:/data/media/movies
-      - /home/{{ sys_user }}/server/containers/data/downloads:/data/media/tv
-      - ./transcode:/usr/app
-      - transcode-data:/usr/app/node_modules
-    restart: unless-stopped
-    networks:
-      - {{ docker_network }}
-    labels:
-    # Disable Watchtower
-      - "com.centurylinklabs.watchtower.enable=false"
 
 networks:
   {{ docker_network }}:

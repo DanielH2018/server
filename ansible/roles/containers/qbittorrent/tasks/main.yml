@@ -14,12 +14,6 @@
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/config/wg_confs/wg0.conf"
     mode: "0755"
 
-- name: Extract transcode.zip
-  ansible.builtin.unarchive:
-    src: transcode.zip
-    dest: "/home/{{ sys_user }}/server/containers/qbittorrent/"
-    mode: "0755"
-
 # - include_tasks: dns.yml
 #   with_items:
 #     - "{{ role_name }}"
@@ -29,12 +23,12 @@
     name: common
     tasks_from: docker_deploy.yml
 
-- name: Ensure Crowdsec hub update and upgrade job exists
+- name: Ensure qbittorrent restarts weekly
   ansible.builtin.cron:
     name: "Update Crowdsec Hub" # Unique ID Ansible uses to track this specific line
     minute: "45"
     hour: "7"
     weekday: "0"
     job: "/usr/bin/docker restart qbittorrent"
-    user: root
     state: present
+  become: true
