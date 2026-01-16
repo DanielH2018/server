@@ -6,6 +6,7 @@
   vars:
     common_dirs_to_create:
       - "{{ container_item.name }}/config"
+      - "{{ container_item.name }}/flaresolverr_config"
 
 # - include_tasks: dns.yml
 #   with_items:

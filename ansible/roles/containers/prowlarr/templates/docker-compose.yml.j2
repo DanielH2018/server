@@ -41,6 +41,8 @@ services:
       - LOG_LEVEL=info
       - TZ={{ tz }}
     restart: unless-stopped
+    volumes:
+      - ./flaresolverr_config:/config
     networks:
       - {{ docker_network }}
     healthcheck:
