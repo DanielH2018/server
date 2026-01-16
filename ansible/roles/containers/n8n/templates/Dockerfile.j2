@@ -4,6 +4,9 @@ FROM n8nio/n8n:latest
 # Switch to the root user to install packages
 USER root
 
+# Force npm to use /usr/local
+ENV NPM_CONFIG_PREFIX=/usr/local
+
 # Add your npm packages here.
 # Use 'RUN npm install -g ...'
 # Example:

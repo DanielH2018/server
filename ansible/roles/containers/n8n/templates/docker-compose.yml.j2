@@ -40,6 +40,15 @@ services:
         )
       }}
 
+      ## Webhook Bypass (Public)
+      # We use PathPrefix to catch /webhook or /webhook-test and everything after it
+      - "traefik.http.routers.n8n-webhook.rule=Host(`n8n.{{ domain }}`) && (PathPrefix(`/webhook/`) || PathPrefix(`/webhook-test/`))"
+      - "traefik.http.routers.n8n-webhook.entrypoints=https"
+      - "traefik.http.routers.n8n-webhook.tls=true"
+      - "traefik.http.routers.n8n-webhook.service=n8n"
+      # Priority must be higher than the UI router so Traefik matches this first
+      - "traefik.http.routers.n8n-webhook.priority=100"
+
 networks:
   {{ docker_network }}:
     external: true
