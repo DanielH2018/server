@@ -8,6 +8,7 @@
   roles:
     - { role: config_files, tags: ["config_files"] }
     - { role: initial_setup, tags: ["initial_setup"] }
+    - { role: sops_setup, tags: ["sops_setup"] }
     - { role: docker_install, tags: ["docker_install"] }
     - { role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == 'daniel-pi' }
   handlers:

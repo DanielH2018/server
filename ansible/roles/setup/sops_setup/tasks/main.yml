@@ -1,0 +1,86 @@
+---
+# -------------------------------------------------------
+# 1. INSTALLATION
+# -------------------------------------------------------
+- name: Ensure 'age' is installed (Debian/Ubuntu)
+  apt:
+    name: age
+    state: present
+    update_cache: yes
+  
+- name: Download and install SOPS binary
+  get_url:
+    url: "{{ sops_binary_url }}"
+    dest: /usr/local/bin/sops
+    mode: '0755'
+  vars:
+    # You can check https://github.com/getsops/sops/releases for the latest
+    sops_version: "v3.9.2"
+    # Ensure this matches your architecture (amd64 is standard for most PCs)
+    sops_binary_url: "https://github.com/getsops/sops/releases/download/{{ sops_version }}/sops-{{ sops_version }}.linux.amd64"
+
+- name: Install community.sops Ansible collection
+  # We run this as the regular user (become: false) so it installs for YOU, not root
+  become: false 
+  command: ansible-galaxy collection install community.sops
+  changed_when: false
+
+# -------------------------------------------------------
+# 2. KEY GENERATION
+# -------------------------------------------------------
+
+- name: Setup SOPS config directory
+  ansible.builtin.set_fact:
+    sops_config_dir: "{{ HOME }}/.config/sops/age"
+  vars:
+    HOME: "/home/{{ sys_user }}"
+
+- name: Setup SOPS with Key File location
+  ansible.builtin.set_fact:
+    sops_key_file: "{{ sops_config_dir }}/keys.txt"
+
+- name: Create directory for Age keys
+  become: false
+  file:
+    path: "{{ sops_config_dir }}"
+    state: directory
+    mode: '0700'
+
+- name: Generate Age key (only if it doesn't exist)
+  become: false
+  shell: "age-keygen -o {{ sops_key_file }}"
+  args:
+    creates: "{{ sops_key_file }}"
+  register: age_keygen_output
+
+- name: Display the new Public Key
+  become: false
+  shell: "grep 'public key' {{ sops_key_file }} | awk '{print $4}'"
+  register: public_key
+  changed_when: false
+
+- name: Show the Public Key to user
+  debug:
+    msg: "Your Public Key is: {{ public_key.stdout }}"
+
+# -------------------------------------------------------
+# 3. CONFIGURATION (.sops.yaml)
+# -------------------------------------------------------
+- name: Create .sops.yaml in the current project directory
+  become: false
+  copy:
+    dest: "./.sops.yaml"
+    content: |
+      creation_rules:
+        - path_regex: .*(vars|secrets)\/.*\.ya?ml$
+          age: "{{ public_key.stdout }}"
+    mode: '0644'
+  # This prevents overwriting an existing config if you run this twice
+  when: not (lookup('file', '.sops.yaml', errors='ignore'))
+
+- name: Export SOPS_AGE_KEY_FILE in .bashrc
+  ansible.builtin.lineinfile:
+    path: "{{ ansible_user_dir }}/.bashrc"
+    regexp: '^export SOPS_AGE_KEY_FILE='
+    line: 'export SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt'
+    create: yes
