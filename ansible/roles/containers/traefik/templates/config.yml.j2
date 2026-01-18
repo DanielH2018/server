@@ -1,5 +1,5 @@
 http:
- #region routers 
+ #region routers
   routers:
     dashboard:
       entryPoints:
@@ -15,7 +15,7 @@ http:
           - main: "{{ domain }}"
             sans:
               - "*.{{ domain }}"
-    
+
     api-internal:
       entryPoints:
         - internal

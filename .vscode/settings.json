@@ -1,0 +1,6 @@
+{
+    "ansible.python.interpreterPath": "/bin/python3",
+    "ansible.validation.enabled": true,
+    "ansible.validation.lint.enabled": true,
+    "ansible.validation.lint.arguments": ""
+}

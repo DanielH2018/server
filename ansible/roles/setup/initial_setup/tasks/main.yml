@@ -19,6 +19,7 @@
   ansible.builtin.pip:
     name:
       - ansible-lint
+      - pre-commit
 
 - name: Install required packages
   ansible.builtin.apt:
@@ -87,10 +88,17 @@
     job: "truncate -s 0 /home/{{ sys_user }}/server/ansible/ansible.log"
   become: true
 
+- name: Install Git hooks
+  ansible.builtin.command: pre-commit install
+  args:
+    chdir: "{{ playbook_dir }}"
+    # Only run this if the hook doesn't exist yet
+    creates: "{{ playbook_dir }}/.git/hooks/pre-commit"
+
 - name: Enable IPv4 forwarding
   ansible.posix.sysctl:
     name: net.ipv4.ip_forward
-    value: '1'
+    value: "1"
     state: present
     reload: true
   become: true
@@ -104,7 +112,7 @@
 - name: Allow WireGuard port 51820/udp
   ufw:
     rule: allow
-    port: '51820'
+    port: "51820"
     proto: udp
   become: true
   when: inventory_hostname == 'daniel-pi'

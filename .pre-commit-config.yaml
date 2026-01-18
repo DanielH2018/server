@@ -1,0 +1,30 @@
+repos:
+  # Standard cleanup hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  # Ansible Linting (Optional but recommended)
+  - repo: https://github.com/ansible/ansible-lint
+    rev: v24.12.2
+    hooks:
+      - id: ansible-lint
+        files: \.(yaml|yml)$
+        additional_dependencies:
+          - ansible-core>=2.17
+          - jmespath
+        entry: bash -c 'ansible-galaxy collection install -r ansible/requirements.yml -p ~/.ansible/collections && env ANSIBLE_COLLECTIONS_PATH=~/.ansible/collections ANSIBLE_CONFIG=ansible/ansible.cfg ansible-lint -c ansible/.ansible-lint'
+        pass_filenames: false
+
+  # SOPS ENCRYPTION CHECK
+  # This hook fails if any file matching the pattern does NOT contain the "sops:" metadata key
+  - repo: https://github.com/yuvipanda/pre-commit-hook-ensure-sops
+    rev: v1.0
+    hooks:
+      - id: sops-encryption
+        # CHANGE THIS regex to match your secret files
+        files: ^vars/.*\.ya?ml$

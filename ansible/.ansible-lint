@@ -11,4 +11,4 @@ skip_list:
   - fqcn[action]
   - yaml[line-length]
 
-offline: true
+offline: false

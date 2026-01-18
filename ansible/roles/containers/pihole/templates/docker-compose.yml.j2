@@ -17,7 +17,7 @@ services:
     container_name: unbound
     restart: unless-stopped
     depends_on:
-      - stubby   
+      - stubby
     networks:
       {{ docker_network }}:
         ipv4_address: 172.18.0.255

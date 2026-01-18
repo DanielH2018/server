@@ -62,7 +62,7 @@ services:
           container_item.use_authelia
         )
       }}
-      
+
       # Add guacamole prefix to url
       - "traefik.http.routers.guacamole-secure.middlewares=add-guacamole"
       - "traefik.http.middlewares.add-guacamole.addprefix.prefix=/guacamole"

@@ -3,6 +3,8 @@
 !/ansible
 !/docs
 !/docker-cloudflare-ddns
+!.pre-commit-config.yaml
+!/.vscode
 # Make sure these are ignored
 ansible/.env
 ansible/.aws

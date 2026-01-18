@@ -10,7 +10,7 @@ services:
       - TZ={{ tz }}
     volumes:
       - ./config/application.yml:/config/application.yml
-      - /home/{{ sys_user }}/server/containers/data:/data 
+      - /home/{{ sys_user }}/server/containers/data:/data
     restart: unless-stopped
     networks:
       - {{ docker_network }}

@@ -10,7 +10,7 @@
 # For stubby this MUST be set to GETDNS_RESOLUTION_STUB
 resolution_type: GETDNS_RESOLUTION_STUB
 
-# Ordered list composed of one or more transport protocols: 
+# Ordered list composed of one or more transport protocols:
 # GETDNS_TRANSPORT_UDP, GETDNS_TRANSPORT_TCP or GETDNS_TRANSPORT_TLS
 #
 # Note: If using Strict mode below, only use GETDNS_TRANSPORT_TLS.
@@ -25,7 +25,7 @@ dns_transport_list:
 tls_authentication: GETDNS_AUTHENTICATION_REQUIRED
 
 # EDNS0 option to pad the size of the DNS query to the given blocksize
-# 128 is currently recommended by 
+# 128 is currently recommended by
 # https://tools.ietf.org/html/draft-ietf-dprive-padding-policy-03
 #
 tls_query_padding_blocksize: 128
@@ -36,7 +36,7 @@ tls_query_padding_blocksize: 128
 edns_client_subnet_private : 1
 
 ############################# CONNECTION SETTINGS ##############################
-# Sets how stubby distributes queries across name servers. 
+# Sets how stubby distributes queries across name servers.
 # Set to 1 to instruct stubby to distribute queries across all available name
 # servers - this will use multiple simultaneous connections which can give
 # better performance in most (but not all) cases.
@@ -47,7 +47,7 @@ round_robin_upstreams: 1
 
 # EDNS0 option for keepalive idle timeout in ms as specified in
 # https://tools.ietf.org/html/rfc7828
-# This keeps idle TLS connections open to avoid the overhead of opening a new 
+# This keeps idle TLS connections open to avoid the overhead of opening a new
 # connection for every query.
 #
 idle_timeout: 10000
@@ -62,7 +62,7 @@ idle_timeout: 10000
 #
 # tls_backoff_time: 300
 
-# Specify where the location for CA certificates for verification purposes are 
+# Specify where the location for CA certificates for verification purposes are
 # located.
 tls_ca_path: "/etc/ssl/certs/"
 
@@ -77,7 +77,7 @@ tls_ca_path: "/etc/ssl/certs/"
 
 ################################ LISTEN ADDRESS ################################
 # Set the listen addresses for the stubby DAEMON. This specifies localhost IPv4
-# and IPv6. It will listen on port 53 by default. Use <IP_address>@<port> to 
+# and IPv6. It will listen on port 53 by default. Use <IP_address>@<port> to
 # specify a different port
 #
 listen_addresses:

@@ -14,7 +14,7 @@
       # Setup port forwarding to internal port
       - "traefik.http.routers.{{ container }}-secure.service={{ container }}"
       - "traefik.http.services.{{ container }}.loadbalancer.server.port={{ port }}"
-      {% if authelia -%}    
+      {% if authelia -%}
         # Add authelia
       - 'traefik.http.routers.{{ container }}-secure.middlewares=authelia@docker'
       {%- endif %}
