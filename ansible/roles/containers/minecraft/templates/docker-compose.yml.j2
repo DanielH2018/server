@@ -38,6 +38,10 @@ services:
         deathknightmm
     volumes:
       - ./data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     labels:
       - "traefik.enable=true"
       - "traefik.tcp.routers.minecraft.entrypoints=minecraft"

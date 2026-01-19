@@ -24,6 +24,10 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
       - ./local-files:/files
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - {{ docker_network }}
     labels:

@@ -16,6 +16,14 @@ services:
       - /home/{{ sys_user }}/server/containers/data/media/movies:/movies
       - /home/{{ sys_user }}/server/containers/data/downloads:/downloads
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - CHOWN
     networks:
       - {{ docker_network }}
     healthcheck:

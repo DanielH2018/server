@@ -20,6 +20,14 @@ services:
       - 1900:1900/udp
     devices:
       - /dev/dri:/dev/dri
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - CHOWN
     networks:
       - {{ docker_network }}
     healthcheck:
