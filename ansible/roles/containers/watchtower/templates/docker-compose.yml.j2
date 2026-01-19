@@ -3,9 +3,17 @@ services:
   watchtower:
     image: containrrr/watchtower:latest
     container_name: watchtower
+    user: {{ puid }}:{{ pgid }}
     restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      DOCKER_HOST: tcp://docker-proxy:2375
+      WATCHTOWER_CLEANUP: true
+      WATCHTOWER_INCLUDE_RESTARTING: true
     networks:
       - {{ docker_network }}
 
