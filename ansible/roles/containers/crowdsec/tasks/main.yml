@@ -12,18 +12,21 @@
     src: acquis.yaml.j2
     dest: "/home/{{ sys_user }}/server/containers/crowdsec/config/acquis.yaml"
     mode: "0664"
+  become: true
 
 - name: Copy profiles.yaml
   ansible.builtin.copy:
     src: profiles.yaml
     dest: "/home/{{ sys_user }}/server/containers/crowdsec/config/profiles.yaml"
     mode: "0664"
+  become: true
 
 - name: Copy discord.yaml
   ansible.builtin.copy:
     src: discord.yaml
     dest: "/home/{{ sys_user }}/server/containers/crowdsec/config/notifications/discord.yaml"
     mode: "0664"
+  become: true
 
 - name: Create Dockerfile from template
   ansible.builtin.template:
@@ -48,3 +51,4 @@
     job: "docker exec crowdsec cscli hub update && docker exec crowdsec cscli hub upgrade"
     user: root
     state: present
+  become: true

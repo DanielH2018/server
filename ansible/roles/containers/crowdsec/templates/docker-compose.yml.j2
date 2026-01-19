@@ -6,8 +6,10 @@ services:
     image: crowdsecurity/crowdsec:latest
     restart: unless-stopped
     container_name: crowdsec
+    security_opt:
+      - no-new-privileges:true
     environment:
-      GID: "${GID-{{ pgid}}}"
+      GID: "${GID-{{ pgid }}}"
       COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/whitelist-good-actors LePresidente/authelia"
     volumes:
       - ./config:/etc/crowdsec:rw
@@ -24,6 +26,10 @@ services:
     build: .
     container_name: crowdsec-dashboard
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       MB_DB_FILE: /data/metabase.db
       MGID: "${GID-{{ pgid}}}"
