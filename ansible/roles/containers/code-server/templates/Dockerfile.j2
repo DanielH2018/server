@@ -1,0 +1,26 @@
+# Start from the same base image you are currently using
+FROM lscr.io/linuxserver/code-server:latest
+
+# 1. Install System Dependencies (Replaces DOCKER_MODS)
+# "apt-get" is faster and more reliable than waiting for Mods to download tarballs
+RUN apt-get update && apt-get install -y \
+    git \
+    python3 \
+    python3-pip \
+    python3-venv \
+    docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Install Python Packages (Replaces INSTALL_PIP_PACKAGES)
+# We install these globally so they are ready instantly.
+# Note: "--break-system-packages" is often required on newer Ubuntu/Debian bases
+# inside containers when not using a virtual env.
+RUN pip3 install --no-cache-dir --break-system-packages \
+    uv \
+    pandas \
+    requests \
+    ruff \
+    google-genai \
+    ty \
+    structlog \
+    python-dotenv
