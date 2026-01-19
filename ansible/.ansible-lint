@@ -8,7 +8,6 @@ exclude_paths:
 
 skip_list:
   - no-changed-when
-  - fqcn[action]
   - yaml[line-length]
 
 offline: false

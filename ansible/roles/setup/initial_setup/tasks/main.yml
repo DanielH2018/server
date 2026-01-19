@@ -104,13 +104,13 @@
   become: true
 
 - name: Configure UFW firewall
-  ufw:
+  community.general.ufw:
     rule: allow
     port: ssh
     proto: tcp
 
 - name: Allow WireGuard port 51820/udp
-  ufw:
+  community.general.ufw:
     rule: allow
     port: "51820"
     proto: udp
@@ -118,5 +118,5 @@
   when: inventory_hostname == 'daniel-pi'
 
 - name: Enable UFW firewall
-  ufw:
+  community.general.ufw:
     state: enabled
