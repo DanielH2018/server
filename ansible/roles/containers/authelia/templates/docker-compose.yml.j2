@@ -23,6 +23,8 @@ services:
     expose:
       - 9091
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     environment:
       - TZ={{ tz }}
 
