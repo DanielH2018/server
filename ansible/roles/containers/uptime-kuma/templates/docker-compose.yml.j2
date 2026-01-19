@@ -7,7 +7,6 @@ services:
     container_name: uptime-kuma
     volumes:
       - ./data:/app/data
-      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

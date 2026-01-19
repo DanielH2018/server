@@ -17,7 +17,6 @@ services:
       - CF_DNS_API_TOKEN={{ cloudflare_dns_token }}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./data/traefik.yml:/traefik.yml:ro
       - ./data/acme.json:/acme.json
       - ./data/config.yml:/config.yml:ro

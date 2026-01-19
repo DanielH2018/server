@@ -10,10 +10,10 @@ services:
       - {{ docker_network }}
     pid: host
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - /etc/os-release:/etc/os-release:ro
     environment:
       - "GLANCES_OPT=-w"
+      - DOCKER_HOST=tcp://docker-proxy:2375
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
