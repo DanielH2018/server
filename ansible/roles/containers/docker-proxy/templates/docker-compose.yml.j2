@@ -6,10 +6,14 @@ services:
     image: lscr.io/linuxserver/socket-proxy:latest
     container_name: docker-proxy
     environment:
-      - CONTAINERS=1 # Allow access to viewing containers
-      - SERVICES=1 # Allow access to viewing services (necessary when using Docker Swarm)
-      - TASKS=1 # Allow access to viewing tasks (necessary when using Docker Swarm)
-      - POST=1 # Allow any POST operations (effectively read-only)
+      - CONTAINERS=1  # Allow access to viewing containers
+      - SERVICES=1    # Allow access to viewing services (necessary when using Docker Swarm)
+      - TASKS=1       # Allow access to viewing tasks (necessary when using Docker Swarm)
+      - POST=1        # Allow any POST operations (effectively read-only)
+      - EXEC=1        # Allows "Console" access
+      - INFO=1        # Portainer checks this to validate connection
+      - VERSION=1     # Portainer checks this to validate connection
+      - PING=1        # Portainer checks this to validate connection
     networks:
       - {{ docker_network }}
     volumes:
