@@ -14,10 +14,18 @@ services:
       SUDO_PASSWORD: {{ code_server_sudo_password }}
       EXTENSIONS_GALLERY: '{"serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery", "itemUrl": "https://marketplace.visualstudio.com/items"}'
       VSCODE_EXTENSION_IDS: ms-azuretools.vscode-docker|ms-python.python|ms-python.vscode-pylance|charliermarsh.ruff|GitHub.copilot|GitHub.copilot-chat|astral-sh.ty|google.geminicodeassist
+      DOCKER_HOST: tcp://socket-proxy:2375
     volumes:
       - ./config:/config
-      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
     networks:
       - {{ docker_network }}
     healthcheck:
