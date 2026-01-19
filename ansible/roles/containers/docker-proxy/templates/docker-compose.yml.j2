@@ -14,6 +14,9 @@ services:
       - INFO=1        # Portainer checks this to validate connection
       - VERSION=1     # Portainer checks this to validate connection
       - PING=1        # Portainer checks this to validate connection
+      - IMAGES=1
+      - VOLUMES=1
+      - NETWORKS=1
     networks:
       - {{ docker_network }}
     volumes:
