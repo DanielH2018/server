@@ -1,10 +1,10 @@
 [Interface]
 # Device: Funny Dog
-PrivateKey = {{ WIREGUARD_INTERFACE_PRIVATE_KEY }}
-Address = {{ WIREGUARD_INTERFACE_ADDRESS }}
-DNS = {{ WIREGUARD_INTERFACE_DNS }}
+PrivateKey = {{ wireguard_interface_private_key }}
+Address = {{ wireguard_interface_address }}
+DNS = {{ wireguard_interface_dns }}
 
 [Peer]
-PublicKey = {{ WIREGUARD_PEER_PUBLIC_KEY }}
+PublicKey = {{ wireguard_peer_public_key }}
 AllowedIPs = 0.0.0.0/0
-Endpoint = {{ WIREGUARD_PEER_ENDPOINT }}
+Endpoint = {{ wireguard_peer_endpoint }}

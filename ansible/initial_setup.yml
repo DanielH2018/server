@@ -3,8 +3,13 @@
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
   become: true
   gather_facts: true
-  vars_files:
-    - .env
+  tasks:
+    - name: Load encrypted secrets
+      community.sops.load_vars:
+        file: secrets.yml
+      delegate_to: localhost
+      run_once: true
+      tags: always
   roles:
     - { role: config_files, tags: ["config_files"] }
     - { role: initial_setup, tags: ["initial_setup"] }

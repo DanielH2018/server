@@ -26,7 +26,7 @@
     mode: "0664"
 
 - name: Hash password
-  ansible.builtin.shell: "echo $(htpasswd -nb {{ TRAEFIK_USER }} {{ TRAEFIK_PASSWORD }})"
+  ansible.builtin.shell: "echo $(htpasswd -nb {{ traefik_user }} {{ traefik_password }})"
   register: traefik_hash
 
 # - include_tasks: dns.yml

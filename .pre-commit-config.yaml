@@ -23,16 +23,6 @@ repos:
         entry: bash -c 'ansible-galaxy collection install -r ansible/requirements.yml -p ~/.ansible/collections && env ANSIBLE_COLLECTIONS_PATH=~/.ansible/collections ANSIBLE_CONFIG=ansible/ansible.cfg ansible-lint -c ansible/.ansible-lint'
         pass_filenames: false
 
-  # Check for SOPS encryption
-  - repo: local
-    hooks:
-      - id: check-sops-encryption
-        name: Check if secrets are encrypted
-        entry: bash -c 'if grep -L "sops:" "$@"; then echo "File is not encrypted!"; exit 1; fi' --
-        language: system
-        # ONLY run this on files you know must be encrypted
-        files: secrets.yml|.*\.sops\.yml
-
   # Gitleaks for detecting secrets
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.18.1

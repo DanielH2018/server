@@ -8,7 +8,7 @@ services:
     cap_drop: [all]
     security_opt: [no-new-privileges:true]
     environment:
-      - CF_API_TOKEN={{ CLOUDFLARE_DNS_TOKEN }}
+      - CF_API_TOKEN={{ cloudflare_dns_token }}
       - DOMAINS={{ domain }}
       - PROXIED=true
       - IP6_PROVIDER=none
@@ -22,7 +22,7 @@ services:
     cap_drop: [all]
     security_opt: [no-new-privileges:true]
     environment:
-      - CF_API_TOKEN={{ CLOUDFLARE_DNS_TOKEN }}
+      - CF_API_TOKEN={{ cloudflare_dns_token }}
       - DOMAINS=valheim.{{ domain }},minecraft.{{ domain }}
       - PROXIED=false
       - IP6_PROVIDER=none

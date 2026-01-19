@@ -1,7 +1,7 @@
 sonarr:
   my-sonarr:
     base_url: http://sonarr:8989  # Internal docker hostname or IP
-    api_key: {{ SONARR_API_KEY }}
+    api_key: {{ sonarr_api_key }}
     delete_old_custom_formats: true
 
     # 1. Sync Quality Definitions (The sliders in Settings > Quality)
@@ -17,7 +17,7 @@ sonarr:
 radarr:
   my-radarr:
     base_url: http://radarr:7878
-    api_key: {{ RADARR_API_KEY }}
+    api_key: {{ radarr_api_key }}
     delete_old_custom_formats: true
 
     include:

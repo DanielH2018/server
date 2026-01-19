@@ -32,7 +32,7 @@ services:
       - {{ docker_network }}
     environment:
       tz: {{ tz }}
-      WEBPASSWORD: {{ PIHOLE_PASSWORD }}
+      WEBPASSWORD: {{ pihole_password }}
       ServerIP: {{ server_ip }}
       PIHOLE_DNS_: 172.18.0.255#5353
     volumes:

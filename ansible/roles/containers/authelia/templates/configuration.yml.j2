@@ -18,7 +18,7 @@ totp:
 
 identity_validation:
   reset_password:
-    jwt_secret: {{ AUTHELIA_JWT }}
+    jwt_secret: {{ authelia_jwt }}
 
 authentication_backend:
   file:
@@ -44,7 +44,7 @@ access_control:
 
 session:
   # This secret can also be set using the env variables AUTHELIA_SESSION_SECRET_FILE
-  secret: {{ AUTHELIA_SECRET }}
+  secret: {{ authelia_secret }}
   name: 'authelia_session'
   same_site: 'lax'
   expiration: '1h'  # 1 hour
@@ -61,7 +61,7 @@ regulation:
   ban_time: 300
 
 storage:
-  encryption_key: {{ AUTHELIA_STORAGE }} # Now required
+  encryption_key: {{ authelia_storage }} # Now required
   local:
     path: /config/db.sqlite3
 

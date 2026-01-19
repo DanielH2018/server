@@ -9,7 +9,7 @@
     method: GET
     headers:
       X-Auth-Email: "{{ email }}"
-      Authorization: "Bearer {{ CLOUDFLARE_DNS_TOKEN }}"
+      Authorization: "Bearer {{ cloudflare_dns_token }}"
       Content-Type: "application/json"
   register: common_zone_output
 
@@ -29,7 +29,7 @@
     url: "https://api.cloudflare.com/client/v4/zones/{{ common_zone_id }}/dns_records?type=CNAME&name={{ common_container }}.{{ domain }}"
     method: GET
     headers:
-      Authorization: "Bearer {{ CLOUDFLARE_DNS_TOKEN }}"
+      Authorization: "Bearer {{ cloudflare_dns_token }}"
       Content-Type: "application/json"
   register: common_cname_output
 
@@ -44,6 +44,6 @@
     body: "{\"type\":\"CNAME\",\"name\":\"{{ common_container }}\",\"content\":\"{{ domain }}\",\"ttl\":1,\"proxied\":true}"
     body_format: json
     headers:
-      Authorization: "Bearer {{ CLOUDFLARE_DNS_TOKEN }}"
+      Authorization: "Bearer {{ cloudflare_dns_token }}"
       Content-Type: "application/json"
   when: common_record_count == "0"

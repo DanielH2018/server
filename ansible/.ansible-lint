@@ -5,6 +5,7 @@ exclude_paths:
   - .git/
   - .github/
   - "*.log"
+  - "secrets.yml"
 
 skip_list:
   - no-changed-when

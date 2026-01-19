@@ -2,9 +2,14 @@
 - name: Deploy Containers
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
   gather_facts: true
-  vars_files:
-    - .env
   tasks:
+    - name: Load encrypted secrets
+      community.sops.load_vars:
+        file: secrets.yml
+      delegate_to: localhost
+      run_once: true
+      tags: always
+
     - name: Run roles respecting tags
       ansible.builtin.include_role:
         name: "{{ container_item.name }}"

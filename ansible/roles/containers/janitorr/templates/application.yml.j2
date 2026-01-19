@@ -53,7 +53,7 @@ clients:
   sonarr:
     enabled: true
     url: "http://sonarr:8989"
-    apikey: "{{ SONARR_API_KEY }}"
+    apikey: "{{ sonarr_api_key }}"
     delete-empty-shows: true
     determine-age-by: MOST_RECENT
     import-exclusions: false
@@ -61,7 +61,7 @@ clients:
   radarr:
     enabled: true
     url: "http://radarr:7878"
-    apikey: "{{ RADARR_API_KEY }}"
+    apikey: "{{ radarr_api_key }}"
     only-delete-files: false
     determine-age-by: MOST_RECENT
     import-exclusions: false
@@ -70,7 +70,7 @@ clients:
   jellyfin:
     enabled: true
     url: "http://jellyfin:8096"
-    api-key: "{{ JELLYFIN_API_KEY }}"
+    api-key: "{{ jellyfin_api_key }}"
     #username: Janitorr
     #password: janitorr
     delete: false # Jellyfin setup is required for JellyStat. However, if you don't want Janitorr to send delete requests to the Jellyfin API, disable it here

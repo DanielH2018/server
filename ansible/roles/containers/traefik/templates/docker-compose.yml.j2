@@ -14,7 +14,7 @@ services:
       - 25565:25565/tcp
     environment:
       - CF_API_EMAIL={{ email }}
-      - CF_DNS_API_TOKEN={{ CLOUDFLARE_DNS_TOKEN }}
+      - CF_DNS_API_TOKEN={{ cloudflare_dns_token }}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro

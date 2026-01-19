@@ -8,7 +8,7 @@
       - "{{ container_item.name }}/config"
 
 - name: Hash password
-  ansible.builtin.command: "docker run authelia/authelia:latest authelia crypto hash generate argon2 --password '{{ AUTHELIA_PASSWORD }}' --iterations 3 --memory
+  ansible.builtin.command: "docker run authelia/authelia:latest authelia crypto hash generate argon2 --password '{{ authelia_password }}' --iterations 3 --memory
     65536 --parallelism 4 --salt-size 16 --key-size 32"
   register: authelia_hash_output
   become: true

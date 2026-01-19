@@ -6,3 +6,4 @@ collections:
     version: 6.4.0
 
   - name: community.sops
+    version: 2.2.7
