@@ -209,11 +209,11 @@ containers_list:
     use_authelia: true
     tags:
       - healthchecks
-  - name: stirling-pdf
+  - name: bento-pdf
     port: 8080
     use_authelia: true
     tags:
-      - stirling-pdf
+      - bento-pdf
   - name: littlelink
     port: 3000
     hostname: www

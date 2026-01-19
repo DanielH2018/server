@@ -2,16 +2,11 @@
 ---
 version: "3.8"
 services:
-  stirling-pdf:
-    image: frooodle/s-pdf:latest
-    container_name: stirling-pdf
-    environment:
-      - DOCKER_ENABLE_SECURITY=false
-      - INSTALL_BOOK_AND_ADVANCED_HTML_OPS=false
-      - LANGS=en_US
-    volumes:
-      - ./trainingData:/usr/share/tessdata # Required for extra OCR languages
-      - ./configs:/configs
+  bento-pdf:
+    image: ghcr.io/alam00000/bentopdf:latest
+    container_name: bento-pdf
+    ports:
+      - "3000:8080"
     restart: unless-stopped
     networks:
       - {{ docker_network }}

@@ -5,14 +5,7 @@
     tasks_from: setup_dirs.yml
   vars:
     common_dirs_to_create:
-      - "{{ container_item.name }}/configs"
-      - "{{ container_item.name }}/trainingData"
-
-- name: Copy trainingdata
-  ansible.builtin.copy:
-    src: eng.traineddata
-    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/trainingData/eng.traineddata"
-    mode: "0644"
+      - "{{ container_item.name }}"
 
 # - include_tasks: dns.yml
 #   with_items:
