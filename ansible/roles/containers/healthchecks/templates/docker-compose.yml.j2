@@ -21,6 +21,14 @@ services:
       - SUPERUSER_PASSWORD={{ healthchecks_password }}
     volumes:
       - ./config:/config
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
     networks:
       - {{ docker_network }}
     healthcheck:

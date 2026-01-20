@@ -9,6 +9,10 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       - PUID={{ puid }}
       - PGID={{ pgid }}
@@ -43,6 +47,14 @@ services:
     network_mode: service:wireguard
     depends_on:
       - wireguard
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
     environment:
       - PUID={{ puid }}
       - PGID={{ pgid }}
