@@ -23,12 +23,17 @@
     name: common
     tasks_from: docker_deploy.yml
 
-- name: Ensure qbittorrent restarts weekly
-  ansible.builtin.cron:
-    name: "Update Crowdsec Hub" # Unique ID Ansible uses to track this specific line
-    minute: "45"
-    hour: "7"
-    weekday: "0"
-    job: "/usr/bin/docker restart qbittorrent"
-    state: present
+- name: Add Systemd Service
+  ansible.builtin.template:
+    src: docker-compose.app.service.j2
+    dest: /etc/systemd/system/docker-compose-{{ role_name }}.service
+    mode: "0644"
+  become: true
+
+- name: Ensure Systemd Service is enabled and started
+  ansible.builtin.systemd:
+    name: docker-compose-{{ role_name }}.service
+    enabled: true
+    state: started
+    daemon_reload: true
   become: true
