@@ -9,8 +9,6 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
-    cap_drop:
-      - ALL
     security_opt:
       - no-new-privileges:true
     environment:
@@ -22,6 +20,12 @@ services:
       - /lib/modules:/lib/modules
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
+    healthcheck:
+      test: "ping -c 1 1.1.1.1 || exit 1"
+      interval: 20s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
     networks:
       - {{ docker_network }}
@@ -46,7 +50,8 @@ services:
     container_name: qbittorrent
     network_mode: service:wireguard
     depends_on:
-      - wireguard
+      wireguard:
+        condition: service_healthy
     cap_drop:
       - ALL
     cap_add:
