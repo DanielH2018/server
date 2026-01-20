@@ -12,7 +12,9 @@ services:
       - {{ docker_network }}
     volumes:
       - ./beszel_data:/beszel_data
-      - ./beszel_socket:/beszel_socket
+    environment:
+      - USER_CREATION=true
+      - DISABLE_PASSWORD_AUTH=true
     labels:
       # Enable traefik for container
       - "traefik.enable=true"

@@ -171,7 +171,7 @@ containers_list:
       - glances
   - name: beszel
     port: 8090
-    use_authelia: true
+    use_authelia: false
     tags:
       - beszel
   - name: uptime-kuma
