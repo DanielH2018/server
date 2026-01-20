@@ -4,6 +4,10 @@ services:
     container_name: recyclarr
     user: {{ puid }}:{{ pgid }}
     restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
       - {{ docker_network }}
     environment:

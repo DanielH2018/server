@@ -6,6 +6,10 @@ services:
     container_name: glances
     image: nicolargo/glances:latest
     restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
       - {{ docker_network }}
     pid: host

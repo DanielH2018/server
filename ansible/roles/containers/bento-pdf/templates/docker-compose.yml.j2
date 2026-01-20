@@ -8,6 +8,10 @@ services:
     ports:
       - "3000:8080"
     restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
       - {{ docker_network }}
     labels:

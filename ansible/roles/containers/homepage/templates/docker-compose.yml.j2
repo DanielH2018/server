@@ -11,6 +11,14 @@ services:
       - TZ={{ tz }}
       - HOMEPAGE_ALLOWED_HOSTS=homepage.{{ domain }}
     restart: unless-stopped
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
     networks:
       - {{ docker_network }}
     volumes:

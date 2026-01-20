@@ -6,6 +6,8 @@ services:
     container_name: scrutiny
     image: ghcr.io/analogj/scrutiny:master-omnibus
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     cap_add:
       - SYS_RAWIO
       - SYS_ADMIN

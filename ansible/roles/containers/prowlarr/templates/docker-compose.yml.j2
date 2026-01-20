@@ -12,6 +12,14 @@ services:
     volumes:
       - ./config:/config
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - CHOWN
     networks:
       - {{ docker_network }}
     healthcheck:
@@ -43,6 +51,10 @@ services:
     restart: unless-stopped
     volumes:
       - ./flaresolverr_config:/config
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - {{ docker_network }}
     healthcheck:

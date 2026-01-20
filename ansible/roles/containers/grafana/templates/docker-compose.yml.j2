@@ -7,6 +7,10 @@ services:
     container_name: grafana
     user: "{{ puid }}"
     restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - ./:/var/lib/grafana
     networks:
@@ -36,6 +40,10 @@ services:
     image: grafana/loki
     container_name: loki
     restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       - TZ={{ tz }}
     expose:
@@ -50,6 +58,8 @@ services:
     image: grafana/promtail
     container_name: promtail
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     environment:
       - TZ={{ tz }}
       - DOCKER_HOST=tcp://docker-proxy:2375

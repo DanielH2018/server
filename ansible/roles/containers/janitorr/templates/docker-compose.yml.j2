@@ -6,6 +6,10 @@ services:
     image: ghcr.io/schaka/janitorr:jvm-stable
     user: {{ puid }}:{{ pgid }}
     container_name: janitorr
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       - TZ={{ tz }}
     volumes:
