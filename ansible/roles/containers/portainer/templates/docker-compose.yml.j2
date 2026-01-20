@@ -6,6 +6,8 @@ services:
     image: portainer/portainer-ce:alpine
     container_name: portainer
     restart: unless-stopped
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     ports:

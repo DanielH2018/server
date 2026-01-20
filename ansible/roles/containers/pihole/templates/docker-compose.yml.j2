@@ -7,6 +7,8 @@ services:
     image: mvance/stubby:latest
     container_name: stubby
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - './data/stubby/:/opt/stubby/etc/stubby/'
     networks:
@@ -18,6 +20,8 @@ services:
     restart: unless-stopped
     depends_on:
       - stubby
+    security_opt:
+      - no-new-privileges:true
     networks:
       {{ docker_network }}:
         ipv4_address: 172.18.0.255
@@ -38,6 +42,8 @@ services:
     volumes:
        - './data/etc-pihole/:/etc/pihole/'
        - './data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
+    security_opt:
+      - no-new-privileges:true
     cap_add:
       - NET_ADMIN
     labels:

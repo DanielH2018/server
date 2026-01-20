@@ -5,6 +5,8 @@ services:
     container_name: wallabag
     image: wallabag/wallabag
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     networks:
       - {{ docker_network }}
     environment:

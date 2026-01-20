@@ -25,6 +25,8 @@ services:
       - /home/{{ sys_user }}/server/containers/data/media/:/media
     devices:
       - /dev/dri:/dev/dri
+    security_opt:
+      - no-new-privileges:true
     labels:
       # Enable traefik for container
       - "traefik.enable=true"

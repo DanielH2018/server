@@ -4,15 +4,17 @@ version: "3.8"
 services:
   speedtest:
     container_name: speedtest
-    image: henrywhitaker3/speedtest-tracker
+    image: lscr.io/linuxserver/speedtest-tracker:latest
     networks:
       - {{ docker_network }}
     volumes:
       - ./config:/config
     environment:
-      - TZ=
+      - TZ={{ tz }}
       - PUID={{ puid }}
       - PGID={{ pgid }}
+      - APP_KEY={{ speedtest_app_key }}
+      - APP_URL="https://speedtest.{{ domain }}"
       - OOKLA_EULA_GDPR=true
     logging:
         driver: "json-file"
@@ -20,6 +22,8 @@ services:
             max-file: "10"
             max-size: "200k"
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     labels:
       # Enable traefik for container
       - "traefik.enable=true"
