@@ -13,7 +13,9 @@ services:
     volumes:
       - ./config:/config
       - ./backups:/backups
-      - ../:/source
+      - ../:/source:ro
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
     networks:
       - {{ docker_network }}
