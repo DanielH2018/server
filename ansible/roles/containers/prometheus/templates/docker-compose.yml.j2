@@ -37,6 +37,10 @@ services:
       - /var/run:/var/run:rw
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
+    command:
+      - '--housekeeping_interval=60s'
+      - '--storage_duration=5m'
+      - '--disable_metrics=hugetlb,memory_numa,tcp,udp'
     networks:
       - {{ docker_network }}
     restart: unless-stopped
