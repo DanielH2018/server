@@ -9,7 +9,8 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-venv \
     docker.io \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s /usr/bin/python3 /usr/bin/python
 
 # 2. Install Python Packages (Replaces INSTALL_PIP_PACKAGES)
 # We install these globally so they are ready instantly.
