@@ -41,10 +41,19 @@ services:
     command:
       - '--housekeeping_interval=60s'
       - '--storage_duration=5m'
-      - '--disable_metrics=hugetlb,memory_numa,tcp,udp,referenced_memory'
+      - '--docker_only=true'
+      - '--disable_metrics=hugetlb,memory_numa,tcp,udp,referenced_memory,disk,diskIO,percpu,sched,process,accelerator,cpu_topology,resctrl'
     networks:
       - {{ docker_network }}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.30'        # Hard Limit: Capped at 30% of one core
+          memory: 200M        # Hard Limit: Max 200MB RAM
+        reservations:
+          cpus: '0.10'        # Guarantees it at least 10%
+          memory: 100M
 
   prometheus:
     image: prom/prometheus:latest
