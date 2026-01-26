@@ -29,10 +29,11 @@ services:
       retries: 3
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
     container_name: cadvisor
-    security_opt:
-      - no-new-privileges:true
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:rw
@@ -42,7 +43,7 @@ services:
       - '--housekeeping_interval=60s'
       - '--storage_duration=5m'
       - '--docker_only=true'
-      - '--disable_metrics=hugetlb,memory_numa,tcp,udp,referenced_memory,disk,diskIO,percpu,sched,process,accelerator,cpu_topology,resctrl'
+      - '--disable_metrics=hugetlb,memory_numa,tcp,udp,referenced_memory,disk,diskIO,percpu,sched,process,cpu_topology,perf_event,advtcp'
     networks:
       - {{ docker_network }}
     restart: unless-stopped
@@ -50,7 +51,7 @@ services:
       resources:
         limits:
           cpus: '0.30'        # Hard Limit: Capped at 30% of one core
-          memory: 500M        # Hard Limit: Max 500MB RAM
+          memory: 1000M        # Hard Limit: Max 1000MB RAM
         reservations:
           cpus: '0.10'        # Guarantees it at least 10%
           memory: 100M
