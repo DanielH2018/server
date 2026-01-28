@@ -169,11 +169,11 @@ containers_list:
     use_authelia: false
     tags:
       - glances
-  - name: beszel
-    port: 8090
-    use_authelia: false
-    tags:
-      - beszel
+  # - name: beszel
+  #   port: 8090
+  #   use_authelia: false
+  #   tags:
+  #     - beszel
   - name: uptime-kuma
     port: 3001
     use_authelia: true
