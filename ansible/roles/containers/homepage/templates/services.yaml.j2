@@ -66,17 +66,19 @@
           url: http://pihole:80
           version: 6
           key: {{ pihole_api_key }}
-    - Traefik:
-        icon: traefik.png
-        href: https://traefik.[REMOVED_KEY]/dashboard/
-        description: Reverse Proxy
+    - Crowdsec:
+        icon: crowdsec.png
+        href: https://crowdsec.[REMOVED_KEY]/
+        description: Crowdsec
         server: my-docker
-        container: traefik
+        container: crowdsec
         widget:
-            type: traefik
-            url: "http://traefik:8888"
-            headers:
-                host: "traefik-internal"
+            type: crowdsec
+            url: "http://crowdsec:8080"
+            username: {{ crowdsec_username }}
+            password: "{{ crowdsec_password }}"
+            limit24h: true
+
     - Uptime-Kuma:
         icon: uptime-kuma.png
         href: https://uptime-kuma.[REMOVED_KEY]/
