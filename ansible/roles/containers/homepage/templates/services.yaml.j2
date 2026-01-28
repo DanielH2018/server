@@ -78,7 +78,6 @@
             username: {{ crowdsec_username }}
             password: "{{ crowdsec_password }}"
             limit24h: true
-
     - Uptime-Kuma:
         icon: uptime-kuma.png
         href: https://uptime-kuma.[REMOVED_KEY]/
@@ -89,19 +88,16 @@
             type: uptimekuma
             url: http://uptime-kuma:3001
             slug: containers
-    - Beszel:
-        icon: beszel.png
-        href: http://beszel.[REMOVED_KEY]/
-        description: Container Monitoring
+    - Tdarr:
+        icon: tdarr.png
+        href: http://tdarr.[REMOVED_KEY]/
+        description: Media Transcoding
         server: my-docker
-        container: beszel
+        container: tdarr
         widget:
-            type: beszel
-            url: http://beszel:8090
-            username: {{ email }} # email
-            password: {{ beszel_password }}
-            systemId: {{ beszel_system }} # optional
-            version: 2
+            type: tdarr
+            url: http://tdarr:8265
+
     - Scrutiny:
         icon: scrutiny.png
         href: http://scrutiny.[REMOVED_KEY]/
