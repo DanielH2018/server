@@ -16,6 +16,9 @@ services:
       - APP_KEY={{ speedtest_app_key }}
       - APP_URL="https://speedtest.{{ domain }}"
       - OOKLA_EULA_GDPR=true
+      - SPEEDTEST_SCHEDULE="0 */6 * * *"
+      - SPEEDTEST_SERVERS="1775"
+      - PRUNE_RESULTS_OLDER_THAN="30"
     logging:
         driver: "json-file"
         options:
