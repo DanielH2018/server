@@ -6,7 +6,7 @@ This repository contains Ansible playbooks and roles for server management.
 - **Playbooks**: Located in the root (e.g., `initial_setup.yml`, `deploy.yml`).
 - **Roles**: Located in `roles/`. New container services should be added as roles in `roles/containers/`.
 - **Inventory**: Host-specific variables are in `inventory/host_vars`. Shared variables are in `inventory/group_vars`.
-- **Secrets**: Sensitive data is in `secrets.yml`.
+- **Secrets**: Sensitive data is in `vars/secrets.yml`.
 - **Configuration**: Configuration files are in `config/` and in the project root.
 
 ## Development Guidelines

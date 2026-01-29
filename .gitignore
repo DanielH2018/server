@@ -9,6 +9,7 @@
 # Make sure these are ignored
 ansible/.env
 ansible/.aws
+ansible/.ansible
 ansible/collections
 ansible/roles/code-server/templates/github
 ansible/roles/foundry/files/*.zip
