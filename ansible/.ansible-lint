@@ -6,6 +6,7 @@ exclude_paths:
   - .github/
   - "*.log"
   - "secrets.yml"
+  - "ansible/collections/"
 
 skip_list:
   - no-changed-when

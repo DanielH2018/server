@@ -5,9 +5,11 @@
 !/docker-cloudflare-ddns
 !.pre-commit-config.yaml
 !/.vscode
+!/.github
 # Make sure these are ignored
 ansible/.env
 ansible/.aws
+ansible/collections
 ansible/roles/code-server/templates/github
 ansible/roles/foundry/files/*.zip
 ansible/ansible.log
