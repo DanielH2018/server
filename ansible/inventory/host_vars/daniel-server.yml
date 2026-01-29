@@ -105,11 +105,11 @@ containers_list:
     use_authelia: false
     tags:
       - jellyfin
-  - name: jellyseerr
-    port: 5055
-    use_authelia: true
-    tags:
-      - jellyseerr
+  # - name: jellyseerr
+  #   port: 5055
+  #   use_authelia: true
+  #   tags:
+  #     - jellyseerr
   - name: prowlarr
     port: 9696
     use_authelia: true
