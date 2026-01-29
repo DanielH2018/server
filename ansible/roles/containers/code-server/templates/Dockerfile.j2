@@ -1,8 +1,6 @@
-# Start from the same base image you are currently using
 FROM lscr.io/linuxserver/code-server:latest
 
-# 1. Install System Dependencies (Replaces DOCKER_MODS)
-# "apt-get" is faster and more reliable than waiting for Mods to download tarballs
+# 1. Install System Dependencies
 RUN apt-get update && apt-get install -y \
     git \
     python3 \
@@ -13,11 +11,16 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s /usr/bin/python3 /usr/bin/python
 
-# 2. Install Python Packages (Replaces INSTALL_PIP_PACKAGES)
-# We install these globally so they are ready instantly.
-# Note: "--break-system-packages" is often required on newer Ubuntu/Debian bases
-# inside containers when not using a virtual env.
-RUN pip3 install --no-cache-dir --break-system-packages \
+# 2. Create the Virtual Environment
+# Place it in /opt/venv so it is NOT overwritten by your ./config volume mount
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+
+# 3. Update the PATH
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# 4. Install Python Packages
+RUN pip install --no-cache-dir \
     uv \
     pandas \
     requests \
@@ -26,3 +29,6 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     ty \
     structlog \
     python-dotenv
+
+# 5. Fix Permissions
+RUN chown -R {{ puid }}:{{ pgid }} $VIRTUAL_ENV
