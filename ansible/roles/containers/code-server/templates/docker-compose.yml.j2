@@ -12,8 +12,9 @@ services:
       TZ: {{ tz }}
       PASSWORD: {{ code_server_password }}
       SUDO_PASSWORD: {{ code_server_sudo_password }}
+      DOCKER_MODS: linuxserver/mods:code-server-docker|linuxserver/mods:code-server-extension-arguments
       EXTENSIONS_GALLERY: '{"serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery", "itemUrl": "https://marketplace.visualstudio.com/items"}'
-      VSCODE_EXTENSION_IDS: ms-azuretools.vscode-docker|ms-python.python|ms-python.vscode-pylance|charliermarsh.ruff|GitHub.copilot|GitHub.copilot-chat|astral-sh.ty|google.geminicodeassist
+      VSCODE_EXTENSION_IDS: ms-azuretools.vscode-docker|ms-python.python|ms-python.vscode-pylance|charliermarsh.ruff|GitHub.copilot|GitHub.copilot-chat|astral-sh.ty|google.geminicodeassist|james-yu.latex-workshop|tomoki1207.pdf
       DOCKER_HOST: tcp://socket-proxy:2375
     volumes:
       - ./config:/config
@@ -24,6 +25,7 @@ services:
       - SETGID
       - SETUID
       - CHOWN
+      - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
     networks:
