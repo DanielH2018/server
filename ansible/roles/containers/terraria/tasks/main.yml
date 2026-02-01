@@ -1,0 +1,25 @@
+---
+- name: Create required directories
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}/config"
+
+# Run `docker attach terraria` to access the server console after deployment
+
+- name: Create serverconfig.txt from template
+  ansible.builtin.template:
+    src: serverconfig.txt.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/serverconfig.txt"
+    mode: "0664"
+
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
+
+- name: Deploy Container
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml

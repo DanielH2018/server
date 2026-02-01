@@ -1,0 +1,29 @@
+version: "3.8"
+services:
+  terraria:
+    image: beardedio/terraria:vanilla-latest
+    container_name: terraria
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "7778:7777/tcp"
+    volumes:
+      - ./config:/config
+      - worlds:/vanilla
+    restart: unless-stopped
+    stdin_open: true # specific to this image to allow console commands
+    tty: true        # specific to this image to allow console commands
+    networks:
+      - {{ docker_network }}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.terraria.entrypoints=terraria"
+      - "traefik.tcp.routers.terraria.rule=HostSNI(`*`)"
+      - "traefik.tcp.services.terraria.loadbalancer.server.port=7777"
+
+volumes:
+  worlds:
+
+networks:
+  {{ docker_network }}:
+    external: true

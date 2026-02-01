@@ -189,6 +189,10 @@ containers_list:
     use_authelia: false
     tags:
       - minecraft
+  - name: terraria
+    use_authelia: false
+    tags:
+      - terraria
   # - name: valheim
   #   use_authelia: false
   #   tags:

@@ -15,6 +15,7 @@ services:
     ports:
       - 80:80
       - 443:443
+      - 7777:7777/tcp
       - 25565:25565/tcp
     environment:
       - CF_API_EMAIL={{ email }}

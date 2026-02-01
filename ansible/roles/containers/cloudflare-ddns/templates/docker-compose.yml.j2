@@ -23,7 +23,7 @@ services:
     security_opt: [no-new-privileges:true]
     environment:
       - CF_API_TOKEN={{ cloudflare_dns_token }}
-      - DOMAINS=valheim.{{ domain }},minecraft.{{ domain }}
+      - DOMAINS=valheim.{{ domain }},minecraft.{{ domain }},terraria.{{ domain }}
       - PROXIED=false
       - IP6_PROVIDER=none
     networks:
