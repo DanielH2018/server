@@ -2,16 +2,19 @@
 ---
 version: '3.8'
 services:
-  changedetection:
+  change-detection:
     image: lscr.io/linuxserver/changedetection.io:latest
-    container_name: changedetection
+    container_name: change-detection
     environment:
       - PUID={{ puid }}
       - PGID={{ pgid }}
       - TZ={{ tz }}
       - BASE_URL=https://change-detection.{{ domain }}
+      - PLAYWRIGHT_DRIVER_URL=ws://playwright:3000/?stealth=1&--disable-web-security=true
     volumes:
       - ./config:/config
+    depends_on:
+      - playwright
     restart: unless-stopped
     networks:
       - {{ docker_network }}
@@ -37,6 +40,17 @@ services:
       - "traefik.http.middlewares.force-secure-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
       # Add the middleware to the router (CHAINED with Authelia)
       - "traefik.http.routers.change-detection-secure.middlewares=authelia@docker,force-secure-headers"
+  playwright:
+    image: dgtlmoon/sockpuppetbrowser:latest
+    container_name: playwright-browser
+    restart: unless-stopped
+    networks:
+      - {{ docker_network }}
+    environment:
+      - SCREEN_WIDTH=1920
+      - SCREEN_HEIGHT=1080
+      - SCREEN_DEPTH=24
+      - MAX_CONCURRENT_SESSIONS=10
 
 networks:
   {{ docker_network }}:
