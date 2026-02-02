@@ -207,11 +207,11 @@ containers_list:
     use_authelia: true
     tags:
       - file-browser
-  # - name: change-detection
-  #   port: 5000
-  #   use_authelia: true
-  #   tags:
-  #     - change-detection
+  - name: change-detection
+    port: 5000
+    use_authelia: false
+    tags:
+      - change-detection
   - name: healthchecks
     port: 8000
     use_authelia: true

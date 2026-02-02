@@ -9,6 +9,7 @@ services:
       - PUID={{ puid }}
       - PGID={{ pgid }}
       - TZ={{ tz }}
+      - BASE_URL=https://change-detection.{{ domain }}
     volumes:
       - ./config:/config
     restart: unless-stopped
@@ -32,6 +33,10 @@ services:
           container_item.use_authelia
         )
       }}
+      # Define a middleware to force the Proto header to https
+      - "traefik.http.middlewares.force-secure-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+      # Add the middleware to the router (CHAINED with Authelia)
+      - "traefik.http.routers.change-detection-secure.middlewares=authelia@docker,force-secure-headers"
 
 networks:
   {{ docker_network }}:
