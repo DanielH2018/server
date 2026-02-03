@@ -5,9 +5,6 @@ services:
     container_name: watchtower
     user: {{ puid }}:{{ pgid }}
     restart: unless-stopped
-    read_only: true
-    cap_drop:
-      - ALL
     security_opt:
       - no-new-privileges:true
     environment:
