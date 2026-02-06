@@ -10,6 +10,9 @@ services:
       - DOCKER_SOCK=tcp://docker-proxy:2375
     networks:
       - {{ docker_network }}
+    labels:
+      # Watchtower
+      - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
 
 networks:
   {{ docker_network }}:

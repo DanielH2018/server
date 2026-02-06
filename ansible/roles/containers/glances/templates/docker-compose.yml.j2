@@ -33,6 +33,8 @@ services:
       }}
 
       - "traefik.frontend.rule=Host:glances.docker.localhost"
+      # Watchtower
+      - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
 
 networks:
   {{ docker_network }}:

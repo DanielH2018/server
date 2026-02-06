@@ -42,6 +42,9 @@ services:
       DOCKER_HOST: "tcp://docker-proxy:2375"
       LISTEN: /beszel_socket/beszel.sock
       KEY: "{{ beszel_agent_key }}"
+    labels:
+      # Watchtower
+      - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
 
 networks:
   {{ docker_network }}:

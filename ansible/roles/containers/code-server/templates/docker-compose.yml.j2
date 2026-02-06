@@ -49,6 +49,8 @@ services:
           container_item.use_authelia
         )
       }}
+      # Watchtower
+      - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
 
 networks:
   {{ docker_network }}:

@@ -72,6 +72,9 @@ services:
     command: -config.file=/etc/promtail/promtail-config.yaml
     networks:
       - {{ docker_network }}
+    labels:
+      # Watchtower
+      - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
 
 networks:
   {{ docker_network }}:
