@@ -26,6 +26,9 @@ services:
     tmpfs:
       - /run
     restart: unless-stopped
+    labels:
+      # Disable watchtower update
+      - "com.centurylinklabs.watchtower.enable=false"
 
 networks:
   {{ docker_network }}:
