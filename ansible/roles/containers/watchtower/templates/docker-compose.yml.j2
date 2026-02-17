@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   watchtower:
-    image: containrrr/watchtower:latest
+    image: nickfedor/watchtower:latest
     container_name: watchtower
     user: {{ puid }}:{{ pgid }}
     restart: unless-stopped
