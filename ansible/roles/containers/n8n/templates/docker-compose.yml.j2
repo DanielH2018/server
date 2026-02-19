@@ -17,7 +17,6 @@ services:
       - N8N_RUNNERS_ENABLED=true
       - N8N_PROXY_HOPS=1
       - NODE_ENV=production
-      - NODE_FUNCTION_ALLOW_EXTERNAL=fuzzball
       - NODE_RUNNERS_ENABLED=true
       - N8N_RUNNERS_MODE=external
       - N8N_RUNNERS_BROKER_LISTEN_ADDRESS=0.0.0.0
@@ -59,7 +58,10 @@ services:
       - "traefik.http.routers.n8n-webhook.priority=100"
 
   task-runners:
-    image: n8nio/runners:latest
+    build:
+      context: .
+      dockerfile: Dockerfile-runners
+      pull: true
     container_name: n8n-runners
     security_opt:
       - no-new-privileges:true

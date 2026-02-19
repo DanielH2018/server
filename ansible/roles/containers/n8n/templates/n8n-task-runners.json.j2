@@ -1,0 +1,19 @@
+{
+  "task-runners": [
+    {
+      "runner-type": "javascript",
+      "env-overrides": {
+        "NODE_FUNCTION_ALLOW_BUILTIN": "crypto",         // <-- allowlist Node.js builtin modules here
+        "NODE_FUNCTION_ALLOW_EXTERNAL": "fuzzball",   // <-- allowlist third-party JS packages here
+      }
+    },
+    {
+      "runner-type": "python",
+      "env-overrides": {
+        "PYTHONPATH": "/opt/runners/task-runner-python",
+        "N8N_RUNNERS_STDLIB_ALLOW": "*",              // <-- allowlist Python standard library packages here
+        "N8N_RUNNERS_EXTERNAL_ALLOW": "numpy,pandas"     // <-- allowlist third-party Python packages here
+      }
+    }
+  ]
+}

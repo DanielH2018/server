@@ -11,10 +11,22 @@
 #   with_items:
 #     - "{{ role_name }}"
 
+- name: Create n8n-task-runners.json from template
+  ansible.builtin.template:
+    src: n8n-task-runners.json.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/n8n-task-runners.json"
+    mode: "0664"
+
 - name: Create Dockerfile from template
   ansible.builtin.template:
     src: Dockerfile.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/Dockerfile"
+    mode: "0664"
+
+- name: Create Dockerfile-runners from template
+  ansible.builtin.template:
+    src: Dockerfile-runners.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/Dockerfile-runners"
     mode: "0664"
 
 - name: Deploy Container
