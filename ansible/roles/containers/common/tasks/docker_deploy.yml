@@ -5,6 +5,11 @@
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/docker-compose.yml"
     mode: "0664"
 
+- name: Build Docker compose
+  ansible.builtin.command: docker compose build
+  args:
+    chdir: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/"
+
 - name: Deploy Container {{ container_item.name }}
   ansible.builtin.command: docker compose up -d --force-recreate
   args:

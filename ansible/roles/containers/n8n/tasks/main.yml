@@ -17,11 +17,6 @@
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/Dockerfile"
     mode: "0664"
 
-- name: Build Docker compose
-  ansible.builtin.command: docker compose build
-  args:
-    chdir: "/home/{{ sys_user }}/server/containers/{{ role_name }}/"
-
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common

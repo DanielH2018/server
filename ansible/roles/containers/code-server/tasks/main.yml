@@ -10,14 +10,14 @@
 - name: Check if github key exists
   ansible.builtin.stat:
     path: "/home/{{ sys_user }}/server/containers/ansible/roles/code-server/templates/github"
-  register: github_data
+  register: containers_github_data
 
 - name: Copy github key
   ansible.builtin.template:
     src: github
     dest: "/home/{{ sys_user }}/server/containers/code-server/config/.ssh/github"
     mode: "0644"
-  when: github_data.stat.exists
+  when: containers_github_data.stat.exists
 
 # - include_tasks: dns.yml
 #   with_items:
@@ -28,11 +28,6 @@
     src: Dockerfile.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/Dockerfile"
     mode: "0664"
-
-- name: Build Docker compose
-  ansible.builtin.command: docker compose build
-  args:
-    chdir: "/home/{{ sys_user }}/server/containers/{{ role_name }}/"
 
 - name: Deploy Container
   ansible.builtin.include_role:
