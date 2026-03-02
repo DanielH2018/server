@@ -25,7 +25,7 @@ services:
       - AVATAR_2X_URL=https://i.imgur.com/HAq1SNZ.jpg
       - AVATAR_ALT=Daniel Hunter Profile Pic
       - NAME=Daniel Hunter
-      - BIO=Software Engineer @ Discover
+      - BIO=Software Engineer @ Capital One
       # use ENV variable names for order, listed buttons will be boosted to the top
       - BUTTON_ORDER=GITHUB,LINKED_IN
       - GITHUB=https://github.com/DanielH2018
@@ -49,7 +49,13 @@ services:
       - "traefik.docker.network={{ docker_network }}"
 
       {# Generate labels(container_name, port, use_authelia) -#}
-      {{ labels('www', '3000', 'n') }}
+      {# Generate labels(container, port, use_authelia) -#}
+      {{ labels(
+          container_item.hostname | default(container_item.name),
+          container_item.port | string,
+          container_item.use_authelia
+        )
+      }}
 
 networks:
   {{ docker_network }}:
