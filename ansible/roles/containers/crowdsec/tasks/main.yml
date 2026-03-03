@@ -23,7 +23,7 @@
 
 - name: Copy discord.yaml
   ansible.builtin.copy:
-    src: discord.yaml
+    src: discord.yaml.j2
     dest: "/home/{{ sys_user }}/server/containers/crowdsec/config/notifications/discord.yaml"
     mode: "0664"
   become: true
