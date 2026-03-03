@@ -1,6 +1,6 @@
 - Media:
     - Jellyfin:
-        href: https://jellyfin.[REMOVED_KEY]
+        href: https://jellyfin.{{ domain }}
         icon: jellyfin.png
         description: Mediaserver
         server: my-docker
@@ -11,7 +11,7 @@
           key: {{ jellyfin_api_key }}
     - Sonarr:
         icon: sonarr.png
-        href: https://sonarr.[REMOVED_KEY]/
+        href: https://sonarr.{{ domain }}/
         description: Series management
         server: my-docker
         container: sonarr
@@ -22,7 +22,7 @@
             key: {{ sonarr_api_key }}
     - Radarr:
         icon: radarr.png
-        href: https://radarr.[REMOVED_KEY]/
+        href: https://radarr.{{ domain }}/
         description: Movie management
         server: my-docker
         container: radarr
@@ -33,7 +33,7 @@
           key: {{ radarr_api_key }}
     - qBittorrent:
         icon: qbittorrent.png
-        href: https://qBittorrent.[REMOVED_KEY]
+        href: https://qBittorrent.{{ domain }}
         description: Download management
         server: my-docker
         container: qbittorrent
@@ -46,7 +46,7 @@
 - Services:
     - Portainer:
         icon: portainer.png
-        href: https://portainer.[REMOVED_KEY]
+        href: https://portainer.{{ domain }}
         description: Container management
         server: my-docker
         container: portainer
@@ -57,7 +57,7 @@
           key: {{ portainer_api_key }}
     - Pihole:
         icon: pi-hole.png
-        href: https://pihole.[REMOVED_KEY]/admin
+        href: https://pihole.{{ domain }}/admin
         description: DNS Ad Blocker
         server: my-docker
         container: pihole
@@ -68,7 +68,7 @@
           key: {{ pihole_api_key }}
     - Crowdsec:
         icon: crowdsec.png
-        href: https://crowdsec.[REMOVED_KEY]/
+        href: https://crowdsec.{{ domain }}/
         description: Crowdsec
         server: my-docker
         container: crowdsec
@@ -80,7 +80,7 @@
             limit24h: true
     - Uptime-Kuma:
         icon: uptime-kuma.png
-        href: https://uptime-kuma.[REMOVED_KEY]/
+        href: https://uptime-kuma.{{ domain }}/
         description: Container Monitoring
         server: my-docker
         container: uptime-kuma
@@ -90,7 +90,7 @@
             slug: containers
     - Tdarr:
         icon: tdarr.png
-        href: http://tdarr.[REMOVED_KEY]/
+        href: http://tdarr.{{ domain }}/
         description: Media Transcoding
         server: my-docker
         container: tdarr
@@ -100,7 +100,7 @@
 
     - Scrutiny:
         icon: scrutiny.png
-        href: http://scrutiny.[REMOVED_KEY]/
+        href: http://scrutiny.{{ domain }}/
         description: Drive Monitoring
         server: my-docker
         container: scrutiny
@@ -109,7 +109,7 @@
             url: http://scrutiny:8080
     - FreshRSS:
         icon: freshrss.png
-        href: https://freshrss.[REMOVED_KEY]/
+        href: https://freshrss.{{ domain }}/
         description: RSS Link Aggregator
         server: my-docker
         container: freshrss
@@ -120,7 +120,7 @@
             password: {{ freshrss_password }}
     - Speedtest:
         icon: speedtest-tracker.png
-        href: https://speedtest.[REMOVED_KEY]/
+        href: https://speedtest.{{ domain }}/
         description: Internet tracking
         server: my-docker
         container: speedtest
@@ -130,7 +130,7 @@
 
 - Monitoring:
     - CPU Usage:
-        href: http://glances.[REMOVED_KEY]/
+        href: http://glances.{{ domain }}/
         description: CPU Monitoring
         server: my-docker
         container: glances
@@ -140,7 +140,7 @@
             version: 4
             metric: cpu
     - Memory Usage:
-        href: http://glances.[REMOVED_KEY]/
+        href: http://glances.{{ domain }}/
         description: Memory Monitoring
         server: my-docker
         container: glances
@@ -151,7 +151,7 @@
             metric: memory
             diskUnits: bytes
     - Network Usage:
-        href: http://glances.[REMOVED_KEY]/
+        href: http://glances.{{ domain }}/
         description: Network Monitoring
         server: my-docker
         container: glances
@@ -161,7 +161,7 @@
             version: 4
             metric: network:eth0
     - Top Processes:
-        href: http://glances.[REMOVED_KEY]/
+        href: http://glances.{{ domain }}/
         description: Process Monitoring
         server: my-docker
         container: glances
@@ -171,7 +171,7 @@
             version: 4
             metric: process
     - CPU Temp:
-        href: http://glances.[REMOVED_KEY]/
+        href: http://glances.{{ domain }}/
         description: CPU Temperature Monitoring
         server: my-docker
         container: glances
@@ -181,7 +181,7 @@
             version: 4
             metric: sensor:Package id 0
     - Disk I/O:
-        href: http://glances.[REMOVED_KEY]/
+        href: http://glances.{{ domain }}/
         description: Disk I/O Monitoring
         server: my-docker
         container: glances

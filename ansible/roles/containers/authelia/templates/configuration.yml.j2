@@ -122,7 +122,7 @@ identity_providers:
         public: false
         authorization_policy: two_factor
         redirect_uris:
-          - https://beszel.[REMOVED_KEY]/api/oauth2-redirect
+          - https://beszel.{{ domain }}/api/oauth2-redirect
         scopes:
           - openid
           - profile
