@@ -6,7 +6,7 @@ puid: 1000
 pgid: 1000
 # Docker
 docker_network: proxy
-email: [REMOVED_KEY]
+email: "{{ email }}"
 lat: 38.89
 long: -77.08
 github_repo: https://github.com/DanielH2018/server.git

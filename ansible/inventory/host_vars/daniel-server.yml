@@ -1,7 +1,7 @@
 ---
 server_ip: 192.168.50.24
 ssh_config_path: /etc/ssh/sshd_config
-domain: [REMOVED_KEY]
+domain: "{{ domain }}"
 containers_list:
   # Organization: Core Services
   - name: traefik
