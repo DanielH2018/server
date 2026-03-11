@@ -15,14 +15,23 @@ services:
       - PUID={{ puid }}
       - PGID={{ pgid }}
       - TZ={{ tz }}
+      - DOCKER_MODS=linuxserver/mods:wireguard-mullvad
+      - MULLVAD_PRIVATE_KEY={{ wireguard_interface_private_key }}
+      - MULLVAD_ACCOUNT={{ mullvad_account}}
+      - MULLVAD_LOCATION=us-qas
+      - LAN_NETWORKS=192.168.0.0/24
+      - ALLOW_ATTACHED_NETWORKS=true
     volumes:
       - ./config:/config
       - /lib/modules:/lib/modules
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
     healthcheck:
-      test: "ping -c 1 1.1.1.1 || exit 1"
-      interval: 20s
+      test: |
+        bash -c 'curl -fs https://am.i.mullvad.net/connected | grep -q "You are connected to Mullvad" || exit 1'
+      interval: 1m
       timeout: 10s
       retries: 3
       start_period: 10s
@@ -52,12 +61,6 @@ services:
     depends_on:
       wireguard:
         condition: service_healthy
-    cap_drop:
-      - ALL
-    cap_add:
-      - SETGID
-      - SETUID
-      - CHOWN
     security_opt:
       - no-new-privileges:true
     environment:
