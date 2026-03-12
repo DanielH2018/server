@@ -3,28 +3,23 @@
 version: "3.8"
 
 services:
-  stubby:
-    image: mvance/stubby:latest
-    container_name: stubby
+  unbound:
+    image: klutchell/unbound:latest
+    container_name: unbound
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     volumes:
-      - './data/stubby/:/opt/stubby/etc/stubby/'
+      - './data/unbound/:/etc/unbound/custom.conf.d/'
+    healthcheck:
+      # Use the drill wrapper binary to reduce the exit codes to 0 or 1 for healthchecks
+      test: ['CMD', 'drill-hc', '@127.0.0.1', 'dnssec.works']
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
     networks:
       - {{ docker_network }}
-
-  unbound:
-    image: mvance/unbound:1.16.1-stubby
-    container_name: unbound
-    restart: unless-stopped
-    depends_on:
-      - stubby
-    security_opt:
-      - no-new-privileges:true
-    networks:
-      {{ docker_network }}:
-        ipv4_address: 172.18.0.255
 
   pihole:
     container_name: pihole
@@ -35,13 +30,16 @@ services:
     ports:
       - "53:53/tcp"
       - "53:53/udp"
+      - '67:67/udp'
     networks:
       - {{ docker_network }}
     environment:
       tz: {{ tz }}
       WEBPASSWORD: {{ pihole_password }}
       ServerIP: {{ server_ip }}
-      PIHOLE_DNS_: 172.18.0.255#5353
+      FTLCONF_dns_upstreams: unbound#53
+      FTLCONF_dns_listeningMode: all
+      FTLCONF_misc_etc_dnsmasq_d: "true"
     volumes:
        - './data/etc-pihole/:/etc/pihole/'
        - './data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
@@ -50,15 +48,11 @@ services:
     cap_add:
       - NET_ADMIN
     labels:
-      # Enable traefik for container
-      - "traefik.enable=true"
-      # Use traefik network
-      - "traefik.docker.network={{ docker_network }}"
-
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
+          docker_network,
           container_item.use_authelia
         )
       }}

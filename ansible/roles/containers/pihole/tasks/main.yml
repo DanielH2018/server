@@ -5,7 +5,7 @@
     tasks_from: setup_dirs.yml
   vars:
     common_dirs_to_create:
-      - "{{ container_item.name }}/data/stubby"
+      - "{{ container_item.name }}/data/unbound"
       - "{{ container_item.name }}/data/etc-dnsmasq.d"
 
 - name: Create docker-compose.yml from template
@@ -16,10 +16,10 @@
   vars:
     container: "{{ role_name }}"
 
-- name: Create stubby.yml from template
+- name: Create unbound.conf from template
   ansible.builtin.template:
-    src: stubby.yml.j2
-    dest: "/home/{{ sys_user }}/server/containers/pihole/data/stubby/stubby.yml"
+    src: unbound.conf.j2
+    dest: "/home/{{ sys_user }}/server/containers/pihole/data/unbound/my_settings.conf"
     mode: "0664"
   vars:
     container: "{{ role_name }}"
@@ -38,12 +38,7 @@
   become_method: ansible.builtin.sudo
 
 - name: Pull Unbound Image
-  ansible.builtin.command: docker pull mvance/unbound:1.16.1-stubby
-  become: true
-  become_method: ansible.builtin.sudo
-
-- name: Pull Stubby Image
-  ansible.builtin.command: docker pull mvance/stubby:latest
+  ansible.builtin.command: docker pull klutchell/unbound:latest
   become: true
   become_method: ansible.builtin.sudo
 

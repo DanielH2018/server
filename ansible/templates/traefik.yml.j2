@@ -1,21 +1,18 @@
-{% macro labels(container, port, authelia) -%}
-      # Setup HTTP entrypoint
+{% macro labels(container, port, docker_network, authelia) -%}
+      # Enable traefik for container
+      - "traefik.enable=true"
+      # Use traefik network
+      - "traefik.docker.network={{ docker_network }}"
+      # HTTP router
       - "traefik.http.routers.{{ container }}.entrypoints=http"
-      # Update: Listen for both Public AND Local domains
       - "traefik.http.routers.{{ container }}.rule=Host(`{{ container }}.{{ domain }}`) || Host(`{{ container }}.local.{{ domain }}`)"
-      # Redirect HTTP to HTTPS
-      - "traefik.http.middlewares.{{ container }}-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.{{ container }}.middlewares={{ container }}-https-redirect"
-      # Setup HTTPS entrypoint
+      # HTTPS router
       - "traefik.http.routers.{{ container }}-secure.entrypoints=https"
-      # Update: Listen for both Public AND Local domains (HTTPS)
       - "traefik.http.routers.{{ container }}-secure.rule=Host(`{{ container }}.{{ domain }}`) || Host(`{{ container }}.local.{{ domain }}`)"
       - "traefik.http.routers.{{ container }}-secure.tls=true"
-      # Setup port forwarding to internal port
       - "traefik.http.routers.{{ container }}-secure.service={{ container }}"
       - "traefik.http.services.{{ container }}.loadbalancer.server.port={{ port }}"
       {% if authelia -%}
-        # Add authelia
-      - 'traefik.http.routers.{{ container }}-secure.middlewares=authelia@docker'
+      - "traefik.http.routers.{{ container }}-secure.middlewares=authelia@docker"
       {%- endif %}
 {%- endmacro %}

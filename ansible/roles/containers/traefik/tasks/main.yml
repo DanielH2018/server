@@ -27,7 +27,7 @@
 
 - name: Hash password
   ansible.builtin.shell: "echo $(htpasswd -nb {{ traefik_user }} {{ traefik_password }})"
-  register: traefik_hash
+  register: containers_traefik_hash
 
 # - include_tasks: dns.yml
 #   with_items:

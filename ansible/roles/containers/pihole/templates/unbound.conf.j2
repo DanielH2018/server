@@ -1,0 +1,14 @@
+server:
+    verbosity: 2
+    port: 53
+    do-ip6: no
+    so-sndbuf: 0
+    so-rcvbuf: 0
+    
+    access-control: 127.0.0.0/8 allow
+    access-control: 10.0.0.0/8 allow
+    access-control: 172.16.0.0/12 allow
+    access-control: 192.168.0.0/16 allow
+    private-address: 192.168.0.0/16
+    private-address: 172.16.0.0/12
+    private-address: 10.0.0.0/8
