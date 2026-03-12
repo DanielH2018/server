@@ -76,15 +76,11 @@ services:
       timeout: 10s
       retries: 3
     labels:
-      # Enable traefik for container
-      - "traefik.enable=true"
-      # Use traefik network
-      - "traefik.docker.network={{ docker_network }}"
-
-      {# Generate labels(container, port, use_authelia) -#}
+      {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
+          docker_network,
           container_item.use_authelia
         )
       }}
