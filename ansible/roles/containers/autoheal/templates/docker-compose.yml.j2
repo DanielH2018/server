@@ -6,7 +6,7 @@ services:
     tty: true
     container_name: autoheal
     environment:
-      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_CONTAINER_LABEL=all
       - DOCKER_SOCK=tcp://docker-proxy:2375
     networks:
       - {{ docker_network }}
