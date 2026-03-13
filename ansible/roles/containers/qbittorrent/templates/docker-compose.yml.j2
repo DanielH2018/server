@@ -73,8 +73,8 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
       interval: 1m30s
-      timeout: 2s
-      retries: 1
+      timeout: 10s
+      retries: 3
 
 networks:
   {{ docker_network }}:
