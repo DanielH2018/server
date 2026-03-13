@@ -1,3 +1,32 @@
+
+- Calendar:
+    - Calendar:
+        widget:
+          type: calendar
+          firstDayInWeek: sunday
+          view: monthly
+          maxEvents: 10
+          showTime: true
+          timezone: {{ tz }}
+          integrations:
+            - type: ical
+              url: {{ calendar_1 }}
+              name: Daniel
+              color: indigo
+              params:
+                showName: true
+            - type: ical
+              url: {{ calendar_2 }}
+              name: Hannah
+              color: emerald
+              params:
+                showName: true
+            - type: ical
+              url: {{ calendar_3 }}
+              name: Holidays
+              color: purple
+              params:
+                showName: true
 - Media:
     - Jellyfin:
         href: https://jellyfin.{{ domain }}
