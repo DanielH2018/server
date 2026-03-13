@@ -12,7 +12,7 @@ services:
     security_opt:
       - no-new-privileges:true
     volumes:
-      - ./:/var/lib/grafana
+      - ./data:/var/lib/grafana
     networks:
       - {{ docker_network }}
     healthcheck:

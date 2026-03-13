@@ -166,7 +166,7 @@ containers_list:
   #     - netdata
   - name: glances
     port: 61208
-    use_authelia: false
+    use_authelia: true
     tags:
       - glances
   # - name: beszel
