@@ -10,6 +10,7 @@ services:
     environment:
       DOCKER_HOST: tcp://docker-proxy:2375
       WATCHTOWER_CLEANUP: true
+      WATCHTOWER_SCHEDULE: "0 0 4 * * *"
       WATCHTOWER_INCLUDE_RESTARTING: true
       DOCKER_API_VERSION: 1.44
     networks:
