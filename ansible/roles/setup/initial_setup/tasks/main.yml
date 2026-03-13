@@ -19,7 +19,7 @@
   ansible.builtin.pip:
     name:
       - ansible-lint
-      - pre-commit
+      - prek
 
 - name: Install required packages
   ansible.builtin.apt:
@@ -89,7 +89,7 @@
   become: true
 
 - name: Install Git hooks
-  ansible.builtin.command: pre-commit install
+  ansible.builtin.command: prek install
   args:
     chdir: "{{ playbook_dir }}"
     # Only run this if the hook doesn't exist yet
