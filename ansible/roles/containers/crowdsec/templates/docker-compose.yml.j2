@@ -17,9 +17,14 @@ services:
       - /var/log/traefik:/var/log/traefik/:ro
       - /var/log/auth.log:/var/log/auth.log:ro
       - /var/log/authelia:/var/log/authelia/:ro
+    healthcheck:
+      test: ["CMD", "cscli", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks:
       - {{ docker_network }}
-    command: docker exec crowdsec cscli hub update && docker exec crowdsec cscli hub upgrade
 
   dashboard:
     #we're using a custom Dockerfile so that metabase pops with pre-configured dashboards

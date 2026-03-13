@@ -9,6 +9,7 @@ format: |
   {
     "content": null,
     "embeds": [
+{% raw %}
       {{range . -}}
       {{$alert := . -}}
       {{range .Decisions -}}
@@ -33,6 +34,7 @@ format: |
       {{end}}
       {{end -}}
       {{end -}}
+{% endraw %}
     ]
   }
 
