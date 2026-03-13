@@ -17,11 +17,6 @@ services:
       - {{ docker_network }}
     restart: unless-stopped
     labels:
-      # Enable traefik for container
-      - "traefik.enable=true"
-      # Use traefik network
-      - "traefik.docker.network={{ docker_network }}"
-
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),
