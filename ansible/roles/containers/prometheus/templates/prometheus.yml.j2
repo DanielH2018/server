@@ -44,14 +44,14 @@ scrape_configs:
 
 #################################################################################################
 
-  - job_name: 'netdata-scrape'
+  {# - job_name: 'netdata-scrape'
     scrape_interval: 1m
     metrics_path: '/api/v1/allmetrics'
     params:
       format: [prometheus]
     honor_labels: true
     static_configs:
-      - targets: ['netdata:19999']
+      - targets: ['netdata:19999'] #}
 
 #################################################################################################
 
