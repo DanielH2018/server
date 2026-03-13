@@ -26,7 +26,8 @@ services:
     image: pihole/pihole:latest
     restart: unless-stopped
     depends_on:
-      - unbound
+      unbound:
+        condition: service_healthy
     ports:
       - "53:53/tcp"
       - "53:53/udp"
