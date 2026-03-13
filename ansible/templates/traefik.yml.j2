@@ -1,4 +1,4 @@
-{% macro labels(container, port, docker_network, authelia) -%}
+{% macro labels(container, port, docker_network, authelia, insecure_transport=false) -%}
       # Enable traefik for container
       - "traefik.enable=true"
       # Use traefik network
@@ -14,5 +14,12 @@
       - "traefik.http.services.{{ container }}.loadbalancer.server.port={{ port }}"
       {% if authelia -%}
       - "traefik.http.routers.{{ container }}-secure.middlewares=authelia@docker"
+      {%- endif %}
+
+      {% if insecure_transport -%}
+      # Tell Traefik the backend is HTTPS
+      - "traefik.http.services.{{ container }}.loadbalancer.server.scheme=https"
+      # Use a scoped transport that skips cert verification for this service only
+      - "traefik.http.services.{{ container }}.loadbalancer.serversTransport=insecure-transport"
       {%- endif %}
 {%- endmacro %}

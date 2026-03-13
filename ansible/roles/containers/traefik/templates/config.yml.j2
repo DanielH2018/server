@@ -18,6 +18,12 @@ http:
       service: api@internal
 
 #endregion
+#region Server Transports
+  serversTransports:
+      insecure-transport:
+        insecureSkipVerify: true
+
+#endregion
 #region services
   services:
     # (Empty for now, as api@internal is built-in)
