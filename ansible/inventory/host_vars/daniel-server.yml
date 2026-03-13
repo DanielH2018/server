@@ -233,6 +233,11 @@ containers_list:
     use_authelia: false
     tags:
       - livesync
+  # - name: calmerge
+  #   port: 3000
+  #   use_authelia: false
+  #   tags:
+  #     - calmerge
   - name: speedtest
     port: 80
     use_authelia: true

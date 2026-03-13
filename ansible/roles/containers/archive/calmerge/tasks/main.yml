@@ -1,0 +1,23 @@
+---
+- name: Create required directories
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}/data"
+
+- name: Create calendars.toml from template
+  ansible.builtin.template:
+    src: calendar.toml.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/data/calendars.toml"
+    mode: "0664"
+
+# - include_tasks: dns.yml
+#   with_items:
+#     - "{{ role_name }}"
+
+- name: Deploy Container
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml

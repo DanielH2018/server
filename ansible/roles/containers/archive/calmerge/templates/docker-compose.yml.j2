@@ -1,0 +1,25 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
+
+services:
+  calmerge:
+    build: https://github.com/torchbox/calmerge.git#master
+    container_name: calmerge
+    restart: unless-stopped
+    volumes:
+      - ./data/calendars.toml:/app/calendars.toml
+    networks:
+      - {{ docker_network }}
+    labels:
+      {# Generate labels(container, port, docker_network, use_authelia) -#}
+      {{ labels(
+          container_item.hostname | default(container_item.name),
+          container_item.port | string,
+          docker_network,
+          container_item.use_authelia
+        )
+      }}
+
+networks:
+  {{ docker_network }}:
+    external: true
