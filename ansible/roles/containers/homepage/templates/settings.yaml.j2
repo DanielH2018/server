@@ -4,17 +4,21 @@ theme: dark
 color: slate
 headerStyle: clean
 showStats: false
-target: _blank # Possible options include _blank, _self, and _top
+target: _blank
 layout:
-  Calendar:
-    style: column
-    rows: 1
-  Media:
+  Top Row:
     style: row
     columns: 2
-  Services:
-    style: row
-    columns: 4
+    header: false
+    Calendar:
+      style: column
+      columns: 1
+    Services:
+      style: row
+      columns: 2
+  Media:
+      style: row
+      columns: 4
   Bookmarks:
     style: row
     columns: 6
