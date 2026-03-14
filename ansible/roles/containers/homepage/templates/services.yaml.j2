@@ -29,6 +29,7 @@
                   color: purple
                   params:
                       showName: true
+
     - Services:
         - Portainer:
             icon: portainer.png
@@ -37,10 +38,10 @@
             server: my-docker
             container: portainer
             widget:
-            type: portainer
-            url: http://portainer:9000
-            env: 1
-            key: {{ portainer_api_key }}
+                type: portainer
+                url: http://portainer:9000
+                env: 1
+                key: {{ portainer_api_key }}
         - Pihole:
             icon: pi-hole.png
             href: https://pihole.{{ domain }}/admin
@@ -48,10 +49,10 @@
             server: my-docker
             container: pihole
             widget:
-            type: pihole
-            url: http://pihole:80
-            version: 6
-            key: {{ pihole_api_key }}
+                type: pihole
+                url: http://pihole:80
+                version: 6
+                key: {{ pihole_api_key }}
         - Crowdsec:
             icon: crowdsec.png
             href: https://crowdsec.{{ domain }}/
@@ -74,24 +75,24 @@
                 type: uptimekuma
                 url: http://uptime-kuma:3001
                 slug: containers
-{# - Tdarr:
-    icon: tdarr.png
-    href: http://tdarr.{{ domain }}/
-    description: Media Transcoding
-    server: my-docker
-    container: tdarr
-    widget:
-        type: tdarr
-        url: http://tdarr:8265
-- Scrutiny:
-    icon: scrutiny.png
-    href: http://scrutiny.{{ domain }}/
-    description: Drive Monitoring
-    server: my-docker
-    container: scrutiny
-    widget:
-        type: scrutiny
-        url: http://scrutiny:8080 #}
+        - Tdarr:
+            icon: tdarr.png
+            href: http://tdarr.{{ domain }}/
+            description: Media Transcoding
+            server: my-docker
+            container: tdarr
+            widget:
+                type: tdarr
+                url: http://tdarr:8265
+        - Scrutiny:
+            icon: scrutiny.png
+            href: http://scrutiny.{{ domain }}/
+            description: Drive Monitoring
+            server: my-docker
+            container: scrutiny
+            widget:
+                type: scrutiny
+                url: http://scrutiny:8080
         - FreshRSS:
             icon: freshrss.png
             href: https://freshrss.{{ domain }}/
@@ -157,8 +158,6 @@
             url: http://wireguard:8080
             username: {{ qbittorrent_username }}
             password: {{ qbittorrent_password }}
-
-
 
 - Monitoring:
     - CPU Usage:
