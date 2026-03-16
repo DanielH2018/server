@@ -1,0 +1,23 @@
+#my-calendar .service-container > div {
+  display: flex;
+  flex-direction: column;
+  max-height: 427px;
+  overflow: hidden;
+}
+
+/* Target the events list directly - it's the last div inside the calendar content */
+#my-calendar .service-container > div > div:last-child {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+#my-calendar .service-container > div > div:last-child::-webkit-scrollbar {
+  width: 4px;
+}
+#my-calendar .service-container > div > div:last-child::-webkit-scrollbar-track {
+  background: transparent;
+}
+#my-calendar .service-container > div > div:last-child::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}

@@ -1,35 +1,6 @@
 
 
 - Top Row:
-    - Calendar:
-        - Calendar:
-            widget:
-              type: calendar
-              firstDayInWeek: sunday
-              view: monthly
-              maxEvents: 10
-              showTime: true
-              timezone: {{ tz }}
-              integrations:
-                - type: ical
-                  url: {{ calendar_1 }}
-                  name: Daniel
-                  color: indigo
-                  params:
-                      showName: true
-                - type: ical
-                  url: {{ calendar_2 }}
-                  name: Hannah
-                  color: emerald
-                  params:
-                      showName: true
-                - type: ical
-                  url: {{ calendar_3 }}
-                  name: Holidays
-                  color: purple
-                  params:
-                      showName: true
-
     - Services:
         - Portainer:
             icon: portainer.png
@@ -42,6 +13,16 @@
                 url: http://portainer:9000
                 env: 1
                 key: {{ portainer_api_key }}
+        - Uptime-Kuma:
+            icon: uptime-kuma.png
+            href: https://uptime-kuma.{{ domain }}/
+            description: Container Monitoring
+            server: my-docker
+            container: uptime-kuma
+            widget:
+                type: uptimekuma
+                url: http://uptime-kuma:3001
+                slug: containers
         - Pihole:
             icon: pi-hole.png
             href: https://pihole.{{ domain }}/admin
@@ -65,16 +46,17 @@
                 username: {{ crowdsec_username }}
                 password: "{{ crowdsec_password }}"
                 limit24h: true
-        - Uptime-Kuma:
-            icon: uptime-kuma.png
-            href: https://uptime-kuma.{{ domain }}/
-            description: Container Monitoring
+        - FreshRSS:
+            icon: freshrss.png
+            href: https://freshrss.{{ domain }}/
+            description: RSS Link Aggregator
             server: my-docker
-            container: uptime-kuma
+            container: freshrss
             widget:
-                type: uptimekuma
-                url: http://uptime-kuma:3001
-                slug: containers
+                type: freshrss
+                url: http://freshrss:80
+                username: {{ freshrss_username }}
+                password: {{ freshrss_password }}
         - Tdarr:
             icon: tdarr.png
             href: http://tdarr.{{ domain }}/
@@ -93,17 +75,6 @@
             widget:
                 type: scrutiny
                 url: http://scrutiny:8080
-        - FreshRSS:
-            icon: freshrss.png
-            href: https://freshrss.{{ domain }}/
-            description: RSS Link Aggregator
-            server: my-docker
-            container: freshrss
-            widget:
-                type: freshrss
-                url: http://freshrss:80
-                username: {{ freshrss_username }}
-                password: {{ freshrss_password }}
         - Speedtest:
             icon: speedtest-tracker.png
             href: https://speedtest.{{ domain }}/
@@ -113,6 +84,41 @@
             widget:
                 type: speedtest
                 url: http://speedtest:80
+    - Calendar:
+        - Calendar:
+            id: my-calendar
+            widget:
+              type: calendar
+              firstDayInWeek: sunday
+              view: monthly
+              maxEvents: 8
+              showTime: true
+              timezone: {{ tz }}
+              integrations:
+                - type: ical
+                  url: {{ calendar_1 }}
+                  name: Daniel
+                  color: indigo
+                  params:
+                      showName: true
+                - type: ical
+                  url: {{ calendar_2 }}
+                  name: Hannah
+                  color: emerald
+                  params:
+                      showName: true
+                - type: ical
+                  url: {{ calendar_3 }}
+                  name: Holidays
+                  color: purple
+                  params:
+                      showName: true
+                - type: ical
+                  url: {{ calendar_4 }}
+                  name: TickTick
+                  color: slate
+                  params:
+                      showName: true
 
 - Media:
     - Jellyfin:

@@ -28,6 +28,7 @@
     - services.yaml
     - widgets.yaml
     - docker.yaml
+    - custom.css
 
 # - include_tasks: dns.yml
 #   with_items:
