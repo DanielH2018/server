@@ -3,6 +3,12 @@
     "ansible.validation.enabled": true,
     "ansible.validation.lint.enabled": true,
     "ansible.validation.lint.arguments": "",
+    "files.exclude": {
+        "containers/code-server/config/extensions": true
+    },
+    "search.exclude": {
+        "containers/code-server/config/extensions": true
+    },
     "files.associations": {
         "*.yml.j2": "jinja-yaml"
     }
