@@ -70,14 +70,14 @@
     user: "{{ ansible_user_id }}"
   become: true
 
-- name: Schedule Docker Compose image pull
-  ansible.builtin.cron:
-    name: "Repull docker-compose"
-    minute: "35"
-    hour: "6"
-    job: "/usr/bin/docker image pull ghcr.io/linuxserver/docker-compose:latest"
-    user: "{{ ansible_user_id }}"
-  become: true
+# - name: Schedule Docker Compose image pull
+#   ansible.builtin.cron:
+#     name: "Repull docker-compose"
+#     minute: "35"
+#     hour: "6"
+#     job: "/usr/bin/docker image pull ghcr.io/linuxserver/docker-compose:latest"
+#     user: "{{ ansible_user_id }}"
+#   become: true
 
 - name: Create cron job to clear ansible.log weekly
   ansible.builtin.cron:
