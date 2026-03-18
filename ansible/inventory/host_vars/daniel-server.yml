@@ -238,6 +238,11 @@ containers_list:
   #   use_authelia: false
   #   tags:
   #     - calmerge
+  - name: ical-proxy
+    port: false
+    use_authelia: false
+    tags:
+      - ical-proxy
   - name: speedtest
     port: 80
     use_authelia: true

@@ -97,13 +97,13 @@
               timezone: {{ tz }}
               integrations:
                 - type: ical
-                  url: {{ calendar_1 }}
+                  url: http://ical-proxy:5000/calendar1.ics
                   name: Daniel
                   color: indigo
                   params:
                       showName: true
                 - type: ical
-                  url: {{ calendar_2 }}
+                  url: http://ical-proxy:5000/calendar2.ics
                   name: Hannah
                   color: emerald
                   params:

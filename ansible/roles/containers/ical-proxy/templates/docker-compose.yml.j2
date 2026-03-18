@@ -1,0 +1,18 @@
+---
+services:
+  ical-proxy:
+    build: .   # path to the folder you created
+    container_name: ical-proxy
+    restart: unless-stopped
+    environment:
+        - GOOGLE_ICS_URL={{ calendar_1 }}
+        - GOOGLE_ICS_URL_2={{ calendar_2 }}
+        - REFRESH_INTERVAL=900   # 15 minutes in seconds
+    security_opt:
+        - no-new-privileges:true
+    networks:
+        - {{ docker_network }}
+
+networks:
+  {{ docker_network }}:
+    external: true
