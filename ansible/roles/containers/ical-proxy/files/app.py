@@ -1,6 +1,8 @@
 from flask import Flask, Response
 import requests, threading, time, os, re
 
+from datetime import datetime, timedelta
+
 app = Flask(__name__)
 
 GOOGLE_ICS_URL = os.environ.get("GOOGLE_ICS_URL", "")
@@ -68,10 +70,54 @@ def filter_superseded_occurrences(events):
         filtered.append(vevent)
     return filtered
 
+def dedup_overlapping_recurrences(events):
+    """
+    For recurring events sharing the same SUMMARY and RRULE, cap the earlier
+    series with UNTIL set to the day before the later series starts.
+    """
+
+
+    # Group recurring events by (SUMMARY, RRULE)
+    groups = {}
+    for vevent in events:
+        rrule = get_prop(vevent, 'RRULE')
+        summary = get_prop(vevent, 'SUMMARY')
+        if not rrule or not summary:
+            continue
+        key = (summary, rrule)
+        groups.setdefault(key, []).append(vevent)
+
+    # For any group with more than one series, cap all but the latest
+    to_cap = {}  # vevent index -> UNTIL value
+    for key, group in groups.items():
+        if len(group) < 2:
+            continue
+        # Sort by DTSTART
+        def get_dtstart(v):
+            raw = normalize_dt(get_prop(v, 'DTSTART'))
+            return raw or ''
+        group.sort(key=get_dtstart)
+        # Cap each earlier series at the day before the next one starts
+        for i in range(len(group) - 1):
+            later_dtstart = normalize_dt(get_prop(group[i + 1], 'DTSTART'))
+            dt = datetime.strptime(later_dtstart[:8], '%Y%m%d')
+            until = (dt - timedelta(days=1)).strftime('%Y%m%dT235959Z')
+            to_cap[id(group[i])] = until
+
+    patched = []
+    for vevent in events:
+        if id(vevent) in to_cap:
+            until = to_cap[id(vevent)]
+            vevent = re.sub(r'(RRULE:[^\r\n]+)', rf'\1;UNTIL={until}', vevent)
+            print(f"Capped recurring event UNTIL={until}: SUMMARY={get_prop(vevent, 'SUMMARY')}")
+        patched.append(vevent)
+    return patched
+
 def process_ics(raw_ics):
     """Parse, filter, and reassemble the ICS."""
     header, events, footer = parse_vevent_blocks(raw_ics)
     filtered = filter_superseded_occurrences(events)
+    filtered = dedup_overlapping_recurrences(filtered)
     return header + '\r\n'.join(filtered) + '\r\n' + footer
 
 def refresh_feed(key, url):
