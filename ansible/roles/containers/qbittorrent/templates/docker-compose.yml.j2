@@ -17,9 +17,9 @@ services:
       - TZ={{ tz }}
       - DOCKER_MODS=linuxserver/mods:wireguard-mullvad
       - MULLVAD_PRIVATE_KEY={{ wireguard_interface_private_key }}
-      - MULLVAD_ACCOUNT={{ mullvad_account}}
+      - MULLVAD_ACCOUNT={{ mullvad_account }}
       - MULLVAD_LOCATION=us-qas
-      - LAN_NETWORKS=192.168.0.0/24
+      - LAN_NETWORKS=192.168.0.0/24,10.0.0.0/24,172.16.0.0/24
       - ALLOW_ATTACHED_NETWORKS=true
     volumes:
       - ./config:/config
