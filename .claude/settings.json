@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/ubuntu/server/.claude/hooks/ansible-lint.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
