@@ -74,6 +74,11 @@ containers_list:
   #   use_authelia: true
   #   tags:
   #     - home-assistant
+  # - name: karakeep
+  #   port: 3000
+  #   use_authelia: false
+  #   tags:
+  #     - karakeep
   # Organization: Media
   - name: freshrss
     port: 80
