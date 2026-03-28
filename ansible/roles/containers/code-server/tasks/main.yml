@@ -29,6 +29,12 @@
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/Dockerfile"
     mode: "0664"
 
+- name: Copy proprietary extensions startup script
+  ansible.builtin.copy:
+    src: proprietary-extensions.sh
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/proprietary-extensions.sh"
+    mode: "0755"
+
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common

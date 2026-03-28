@@ -32,3 +32,28 @@ RUN pip install --no-cache-dir \
 
 # 5. Fix Permissions
 RUN chown -R {{ puid }}:{{ pgid }} $VIRTUAL_ENV
+
+# 6. Download proprietary VS Code Marketplace extensions (not available on Open VSX)
+RUN mkdir -p /opt/vsix && \
+    PROPRIETARY_EXTS=" \
+        GitHub.copilot \
+        GitHub.copilot-chat \
+        ms-python.vscode-pylance \
+    " && \
+    for ext in $PROPRIETARY_EXTS; do \
+        publisher=$(echo "$ext" | cut -d. -f1) && \
+        name=$(echo "$ext" | cut -d. -f2) && \
+        version=$(curl -fsSL -X POST \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json;api-version=7.2-preview.1" \
+            -d "{\"filters\":[{\"criteria\":[{\"filterType\":7,\"value\":\"${ext}\"}]}],\"flags\":1}" \
+            "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery?api-version=7.2-preview.1" | \
+            python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['extensions'][0]['versions'][0]['version'])") && \
+        curl -fsSL --compressed -A "VSCode/1.95.0" -o "/opt/vsix/${name}.vsix" \
+            "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${publisher}/vsextensions/${name}/${version}/vspackage" && \
+        echo "Downloaded ${ext} ${version}"; \
+    done
+
+# 7. Install startup script to load proprietary extensions into the config volume
+COPY proprietary-extensions.sh /custom-cont-init.d/10-proprietary-extensions.sh
+RUN chmod +x /custom-cont-init.d/10-proprietary-extensions.sh
