@@ -1,5 +1,5 @@
 ---
-description: Create a pull request from staged changes — reads the staged diff, summarizes it, waits for review, then pushes and opens the PR.
+description: Create a pull request from staged changes — reads the staged diff, summarizes it, waits for review, then pushes. Uses plain git only, no gh CLI.
 ---
 
 Create a pull request from the current staged and committed changes.
@@ -25,9 +25,6 @@ Follow these steps exactly:
 
 4. **Wait for confirmation** before proceeding.
 
-5. **Push and create the PR** — once confirmed:
+5. **Push** — once confirmed:
    - `git push origin HEAD` to push the branch
-   - `gh pr create --title "<title>" --body "<description>"` using a heredoc
-   - Return the PR URL
-
-If there are no staged commits ahead of origin, tell the user and stop.
+   - Return the branch name and remote URL so the user can open a PR manually
