@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y \
     python3-venv \
     docker.io \
     texlive-full \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s /usr/bin/python3 /usr/bin/python
 
@@ -30,14 +33,15 @@ RUN pip install --no-cache-dir \
     structlog \
     python-dotenv
 
-# 5. Fix Permissions
+# 5. Install Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
+
+# 6. Fix Python venv Permissions
 RUN chown -R {{ puid }}:{{ pgid }} $VIRTUAL_ENV
 
-# 6. Download proprietary VS Code Marketplace extensions (not available on Open VSX)
+# 7. Download proprietary VS Code Marketplace extensions (not available on Open VSX)
 RUN mkdir -p /opt/vsix && \
     PROPRIETARY_EXTS=" \
-        GitHub.copilot \
-        GitHub.copilot-chat \
         ms-python.vscode-pylance \
     " && \
     for ext in $PROPRIETARY_EXTS; do \
@@ -54,6 +58,6 @@ RUN mkdir -p /opt/vsix && \
         echo "Downloaded ${ext} ${version}"; \
     done
 
-# 7. Install startup script to load proprietary extensions into the config volume
+# 8. Install startup script to load proprietary extensions into the config volume
 COPY proprietary-extensions.sh /custom-cont-init.d/10-proprietary-extensions.sh
 RUN chmod +x /custom-cont-init.d/10-proprietary-extensions.sh

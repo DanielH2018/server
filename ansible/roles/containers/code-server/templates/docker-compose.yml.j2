@@ -14,7 +14,7 @@ services:
       SUDO_PASSWORD: {{ code_server_sudo_password }}
       DOCKER_MODS: linuxserver/mods:code-server-extension-arguments
       EXTENSIONS_GALLERY: '{"serviceUrl": "https://open-vsx.org/vscode/gallery", "itemUrl": "https://open-vsx.org/vscode/item"}'
-      VSCODE_EXTENSION_IDS: "ms-azuretools.vscode-docker|ms-python.python|charliermarsh.ruff|astral-sh.ty|james-yu.latex-workshop|tomoki1207.pdf|google.geminicodeassist|Anthropic.claude-code"
+      VSCODE_EXTENSION_IDS: "ms-azuretools.vscode-docker|ms-python.python|charliermarsh.ruff|astral-sh.ty|james-yu.latex-workshop|tomoki1207.pdf|Anthropic.claude-code"
       DOCKER_HOST: tcp://socket-proxy:2375
     volumes:
       - ./config:/config
