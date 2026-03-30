@@ -7,7 +7,10 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-venv \
     docker.io \
-    texlive-full \
+    texlive-latex-extra \
+    texlive-fonts-recommended \
+    texlive-fonts-extra \
+    latexmk \
     curl \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
@@ -28,7 +31,6 @@ RUN pip install --no-cache-dir \
     pandas \
     requests \
     ruff \
-    google-genai \
     ty \
     structlog \
     python-dotenv
