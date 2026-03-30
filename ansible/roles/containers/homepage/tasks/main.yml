@@ -16,6 +16,9 @@
   with_items:
     - opgg.png
     - tacticstools.png
+    - tftacademy.png
+    - LoLalytics.png
+    - limitless.png
 
 - name: Copy Config files
   ansible.builtin.template:
