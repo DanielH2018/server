@@ -1,9 +1,36 @@
 version: '3.8'
 services:
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    restart: unless-stopped
+    container_name: crowdsec
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      GID: "${GID-{{ pgid }}}"
+      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/whitelist-good-actors LePresidente/authelia"
+    volumes:
+      - ./crowdsec-config:/etc/crowdsec:rw
+      - crowdsec-db:/var/lib/crowdsec/data/
+      - /var/log/traefik:/var/log/traefik/:ro
+      - /var/log/auth.log:/var/log/auth.log:ro
+      - /var/log/authelia:/var/log/authelia/:ro
+    healthcheck:
+      test: ["CMD", "cscli", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - {{ docker_network }}
+
   traefik:
     image: traefik:latest
     container_name: traefik
     restart: unless-stopped
+    depends_on:
+      crowdsec:
+        condition: service_healthy
     security_opt:
       - no-new-privileges:true
     networks:
@@ -31,3 +58,7 @@ services:
 networks:
   {{ docker_network }}:
     external: true
+
+volumes:
+  crowdsec-db:
+    name: crowdsec-db

@@ -2,30 +2,6 @@
 ---
 version: '3.8'
 services:
-  crowdsec:
-    image: crowdsecurity/crowdsec:latest
-    restart: unless-stopped
-    container_name: crowdsec
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      GID: "${GID-{{ pgid }}}"
-      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/whitelist-good-actors LePresidente/authelia"
-    volumes:
-      - ./config:/etc/crowdsec:rw
-      - crowdsec-db:/var/lib/crowdsec/data/
-      - /var/log/traefik:/var/log/traefik/:ro
-      - /var/log/auth.log:/var/log/auth.log:ro
-      - /var/log/authelia:/var/log/authelia/:ro
-    healthcheck:
-      test: ["CMD", "cscli", "version"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - {{ docker_network }}
-
   dashboard:
     #we're using a custom Dockerfile so that metabase pops with pre-configured dashboards
     build: .
@@ -36,8 +12,6 @@ services:
     environment:
       MB_DB_FILE: /data/metabase.db
       MGID: "${GID-{{ pgid}}}"
-    depends_on:
-      - crowdsec
     volumes:
       - crowdsec-db:/metabase-data/
     networks:
@@ -63,5 +37,8 @@ services:
 networks:
   {{ docker_network }}:
     external: true
+
 volumes:
   crowdsec-db:
+    external: true
+    name: crowdsec-db

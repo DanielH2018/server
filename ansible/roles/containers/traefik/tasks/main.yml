@@ -6,6 +6,7 @@
   vars:
     common_dirs_to_create:
       - "{{ container_item.name }}/data"
+      - "{{ container_item.name }}/crowdsec-config/notifications"
 
 - name: Create acme.json
   ansible.builtin.file:
@@ -28,6 +29,28 @@
 - name: Hash password
   ansible.builtin.shell: "echo $(htpasswd -nb {{ traefik_user }} {{ traefik_password }})"
   register: containers_traefik_hash
+  changed_when: false
+
+- name: Create CrowdSec acquis.yaml from template
+  ansible.builtin.template:
+    src: crowdsec-acquis.yaml.j2
+    dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/acquis.yaml"
+    mode: "0664"
+  become: true
+
+- name: Copy CrowdSec profiles.yaml
+  ansible.builtin.copy:
+    src: crowdsec-profiles.yaml
+    dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/profiles.yaml"
+    mode: "0664"
+  become: true
+
+- name: Create CrowdSec discord.yaml from template
+  ansible.builtin.template:
+    src: crowdsec-discord.yaml.j2
+    dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/notifications/discord.yaml"
+    mode: "0664"
+  become: true
 
 # - include_tasks: dns.yml
 #   with_items:
@@ -37,3 +60,31 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+
+- name: Wait for CrowdSec to be healthy
+  ansible.builtin.command: docker inspect --format="{{ '{{' }}.State.Health.Status{{ '}}' }}" crowdsec
+  register: containers_crowdsec_health
+  until: containers_crowdsec_health.stdout == "healthy"
+  retries: 10
+  delay: 10
+  changed_when: false
+
+- name: Update CrowdSec hub
+  community.docker.docker_container_exec:
+    container: crowdsec
+    command: cscli hub update
+
+- name: Upgrade CrowdSec hub
+  community.docker.docker_container_exec:
+    container: crowdsec
+    command: cscli hub upgrade
+
+- name: Ensure Crowdsec hub update and upgrade job exists
+  ansible.builtin.cron:
+    name: "Update Crowdsec Hub"
+    minute: "15"
+    hour: "7"
+    job: "docker exec crowdsec cscli hub update && docker exec crowdsec cscli hub upgrade"
+    user: root
+    state: present
+  become: true

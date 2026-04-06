@@ -5,28 +5,7 @@
     tasks_from: setup_dirs.yml
   vars:
     common_dirs_to_create:
-      - "{{ container_item.name }}/config/notifications"
-
-- name: Create acquis.yaml from template
-  ansible.builtin.template:
-    src: acquis.yaml.j2
-    dest: "/home/{{ sys_user }}/server/containers/crowdsec/config/acquis.yaml"
-    mode: "0664"
-  become: true
-
-- name: Copy profiles.yaml
-  ansible.builtin.copy:
-    src: profiles.yaml
-    dest: "/home/{{ sys_user }}/server/containers/crowdsec/config/profiles.yaml"
-    mode: "0664"
-  become: true
-
-- name: Create discord.yaml from template
-  ansible.builtin.template:
-    src: discord.yaml.j2
-    dest: "/home/{{ sys_user }}/server/containers/crowdsec/config/notifications/discord.yaml"
-    mode: "0664"
-  become: true
+      - "{{ container_item.name }}"
 
 - name: Create Dockerfile from template
   ansible.builtin.template:
@@ -34,38 +13,7 @@
     dest: "/home/{{ sys_user }}/server/containers/crowdsec/Dockerfile"
     mode: "0664"
 
-# - include_tasks: dns.yml
-#   with_items:
-#     - "{{ role_name }}"
-
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
-
-- name: Wait for CrowdSec to be healthy
-  ansible.builtin.command: docker inspect --format="{{ '{{' }}.State.Health.Status{{ '}}' }}" crowdsec
-  register: containers_crowdsec_health
-  until: containers_crowdsec_health.stdout == "healthy"
-  retries: 10
-  delay: 10
-
-- name: Update CrowdSec hub
-  community.docker.docker_container_exec:
-    container: crowdsec
-    command: cscli hub update
-
-- name: Upgrade CrowdSec hub
-  community.docker.docker_container_exec:
-    container: crowdsec
-    command: cscli hub upgrade
-
-- name: Ensure Crowdsec hub update and upgrade job exists
-  ansible.builtin.cron:
-    name: "Update Crowdsec Hub" # Unique ID Ansible uses to track this specific line
-    minute: "15"
-    hour: "7"
-    job: "docker exec crowdsec cscli hub update && docker exec crowdsec cscli hub upgrade"
-    user: root
-    state: present
-  become: true
