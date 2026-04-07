@@ -17,3 +17,13 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+
+- name: Schedule weekly crowdsec redeploy cron job
+  ansible.builtin.cron:
+    name: "Redeploy crowdsec"
+    weekday: "0"
+    hour: "6"
+    minute: "10"
+    user: "{{ sys_user }}"
+    job: "cd /home/{{ sys_user }}/server && ansible-playbook ansible/deploy.yml --tags crowdsec"
+    state: present

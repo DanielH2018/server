@@ -39,3 +39,16 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+
+- name: Schedule weekly code-server redeploy cron job
+  ansible.builtin.cron:
+    name: "Redeploy code-server"
+    weekday: "0"
+    hour: "6"
+    minute: "0"
+    user: "{{ sys_user }}"
+    job: "cd /home/{{ sys_user }}/server && ansible-playbook ansible/deploy.yml --tags code-server"
+    state: present
+
+- name: Cleanup old code-server images
+  ansible.builtin.command: "docker image prune -f"
