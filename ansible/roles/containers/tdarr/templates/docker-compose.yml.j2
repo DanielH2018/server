@@ -15,8 +15,10 @@ services:
       - serverIP=0.0.0.0
       - serverPort=8266
       - webUIPort=8265
-      - internalNode=true # Runs a node inside the server container (good for simple setups)
-      - nodeID=MyInternalNode
+      - internalNode=true
+      - inContainer=true
+      - maxLogSizeMB=10
+      - nodeID=daniel-server
     volumes:
       - ./server:/app/server
       - ./configs:/app/configs
@@ -27,6 +29,12 @@ services:
       - /dev/dri:/dev/dri
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8265/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
