@@ -8,11 +8,11 @@
       - "{{ container_item.name }}/config/wg_confs"
       - "data/downloads"
 
-- name: Copy wg0.conf
-  ansible.builtin.template:
-    src: wg0.conf.j2
-    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/config/wg_confs/wg0.conf"
-    mode: "0755"
+# - name: Copy wg0.conf
+#   ansible.builtin.template:
+#     src: wg0.conf.j2
+#     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/config/wg_confs/wg0.conf"
+#     mode: "0755"
 
 # - include_tasks: dns.yml
 #   with_items:

@@ -19,8 +19,7 @@ services:
       - MULLVAD_PRIVATE_KEY={{ wireguard_interface_private_key }}
       - MULLVAD_ACCOUNT={{ mullvad_account }}
       - MULLVAD_LOCATION=us-qas
-      - LAN_NETWORKS=192.168.0.0/24,10.0.0.0/24,172.16.0.0/24
-      - ALLOW_ATTACHED_NETWORKS=true
+      - LAN_NETWORKS=192.168.0.0/24,10.0.0.0/24,172.16.0.0/12
     volumes:
       - ./config:/config
       - /lib/modules:/lib/modules
