@@ -19,7 +19,8 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - {{ docker_network }}
+      {{ docker_network }}:
+        ipv4_address: 172.18.0.200
 
   pihole:
     container_name: pihole
@@ -38,7 +39,7 @@ services:
       tz: {{ tz }}
       WEBPASSWORD: {{ pihole_password }}
       ServerIP: {{ server_ip }}
-      FTLCONF_dns_upstreams: unbound#53
+      FTLCONF_dns_upstreams: 172.18.0.200#53
       FTLCONF_dns_listeningMode: all
       FTLCONF_misc_etc_dnsmasq_d: "true"
     volumes:
