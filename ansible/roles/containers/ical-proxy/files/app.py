@@ -1,3 +1,4 @@
+import logging
 from flask import Flask, Response
 import requests, threading, time, os, re
 
@@ -7,11 +8,24 @@ app = Flask(__name__)
 
 GOOGLE_ICS_URL = os.environ.get("GOOGLE_ICS_URL", "")
 GOOGLE_ICS_URL_2 = os.environ.get("GOOGLE_ICS_URL_2", "")
+OBSIDIAN_GIST_URL = os.environ.get("OBSIDIAN_GIST_URL", "")
 REFRESH_INTERVAL = int(os.environ.get("REFRESH_INTERVAL", 900))
 
 initial_fetch_done = threading.Event()
 
-cached_ics = {"1": "", "2": ""}
+cached_ics = {"1": "", "2": "", "4": ""}
+
+EMOJI_RE = re.compile(
+    "["
+    "\U00002600-\U000027BF"   # misc symbols & dingbats
+    "\U0001F300-\U0001FAFF"   # all major emoji blocks
+    "\U00002B00-\U00002BFF"   # misc symbols and arrows (⬆)
+    "\U000023E0-\U000023FF"   # misc technical (⏫)
+    "\uFE00-\uFE0F"           # variation selectors
+    "\u200D"                   # zero-width joiner
+    "]+",
+    flags=re.UNICODE
+)
 
 def parse_vevent_blocks(ics_text):
     """Split ICS into header, list of VEVENT strings, and footer."""
@@ -75,8 +89,6 @@ def dedup_overlapping_recurrences(events):
     For recurring events sharing the same SUMMARY and RRULE, cap the earlier
     series with UNTIL set to the day before the later series starts.
     """
-
-
     # Group recurring events by (SUMMARY, RRULE)
     groups = {}
     for vevent in events:
@@ -120,11 +132,38 @@ def process_ics(raw_ics):
     filtered = dedup_overlapping_recurrences(filtered)
     return header + '\r\n'.join(filtered) + '\r\n' + footer
 
-def refresh_feed(key, url):
+def process_obsidian_ics(raw_ics):
+    """Fix date-only DTSTART/DTSTAMP, strip Habits events, clean up output."""
+    header, events, footer = parse_vevent_blocks(raw_ics)
+    fixed = []
+    for vevent in events:
+        # Filter out Habits.md events
+        location = get_prop(vevent, 'LOCATION')
+        if location and 'Habits.md' in location:
+            continue
+        # Fix date-only DTSTART → VALUE=DATE
+        vevent = re.sub(r'^(DTSTART):(\d{8})\r?$', r'\1;VALUE=DATE:\2', vevent, flags=re.MULTILINE)
+        # Fix date-only DTSTAMP → datetime
+        vevent = re.sub(r'^(DTSTAMP):(\d{8})\r?$', r'\1:\2T000000Z', vevent, flags=re.MULTILINE)
+        # Remove LOCATION lines entirely
+        vevent = re.sub(r'^LOCATION:[^\r\n]*\r?\n', '', vevent, flags=re.MULTILINE)
+        # Strip emojis from SUMMARY and collapse extra spaces
+        vevent = re.sub(
+            r'^(SUMMARY:)(.+)$',
+            lambda m: m.group(1) + ' '.join(EMOJI_RE.sub('', m.group(2)).split()),
+            vevent,
+            flags=re.MULTILINE
+        )
+        fixed.append(vevent)
+    return header + '\r\n'.join(fixed) + '\r\n' + footer
+
+def refresh_feed(key, url, processor=None):
+    if processor is None:
+        processor = process_ics
     try:
         r = requests.get(url, timeout=(10, 30))  # 10s to connect, 30s to read
         if r.status_code == 200:
-            cached_ics[key] = process_ics(r.text)
+            cached_ics[key] = processor(r.text)
             print(f"Calendar {key} refreshed successfully")
         else:
             print(f"Calendar {key}: failed to fetch, HTTP {r.status_code}")
@@ -132,18 +171,22 @@ def refresh_feed(key, url):
         print(f"Calendar {key}: error fetching — {e}")
 
 def refresh_loop():
-    feeds = [(k, u) for k, u in [("1", GOOGLE_ICS_URL), ("2", GOOGLE_ICS_URL_2)] if u]
+    feeds = [(k, u, p) for k, u, p in [
+        ("1", GOOGLE_ICS_URL, process_ics),
+        ("2", GOOGLE_ICS_URL_2, process_ics),
+        ("4", OBSIDIAN_GIST_URL, process_obsidian_ics),
+    ] if u]
     if not feeds:
         print("No ICS URLs configured.")
         initial_fetch_done.set()
         return
     while True:
-        for key, url in feeds:
+        for key, url, processor in feeds:
             try:
-                refresh_feed(key, url)
+                refresh_feed(key, url, processor)
             except Exception as e:
                 print(f"Unexpected error for calendar {key}: {e}")
-            time.sleep(1) # brief pause between feeds to avoid overwhelming source
+            time.sleep(1)  # brief pause between feeds to avoid overwhelming source
         if not initial_fetch_done.is_set():
             initial_fetch_done.set()
         print("All feeds done, sleeping until next refresh...")
@@ -156,6 +199,10 @@ def serve_ics_1():
 @app.route("/calendar2.ics")
 def serve_ics_2():
     return Response(cached_ics["2"], mimetype="text/calendar")
+
+@app.route("/calendar4.ics")
+def serve_ics_4():
+    return Response(cached_ics["4"], mimetype="text/calendar")
 
 if __name__ == "__main__":
     t = threading.Thread(target=refresh_loop, daemon=True)
