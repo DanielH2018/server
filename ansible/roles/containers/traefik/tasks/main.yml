@@ -79,6 +79,22 @@
     container: crowdsec
     command: cscli hub upgrade
 
+- name: Deploy traefik-init systemd service
+  ansible.builtin.template:
+    src: traefik-init.service.j2
+    dest: /etc/systemd/system/traefik-init.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Enable traefik-init systemd service
+  ansible.builtin.systemd:
+    name: traefik-init
+    enabled: true
+    daemon_reload: true
+  become: true
+
 - name: Ensure Crowdsec hub update and upgrade job exists
   ansible.builtin.cron:
     name: "Update Crowdsec Hub"

@@ -1,0 +1,20 @@
+[Unit]
+Description=Wait for docker-proxy to be healthy before starting Traefik
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash -c '\
+  until docker ps \
+    --filter "name=docker-proxy" \
+    --filter "health=healthy" \
+    --format "{% raw %}{{.Names}}{% endraw %}" \
+    | grep -q "docker-proxy"; \
+  do sleep 2; done && \
+  docker restart traefik'
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

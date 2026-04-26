@@ -26,6 +26,12 @@ services:
     tmpfs:
       - /run
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:2375/version || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     labels:
       # Disable watchtower update
       - "com.centurylinklabs.watchtower.enable=false"
