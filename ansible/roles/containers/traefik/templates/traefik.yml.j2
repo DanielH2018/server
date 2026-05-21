@@ -7,6 +7,15 @@ ping: {}
 entryPoints:
   http:
     address: ":80"
+    forwardedHeaders:
+      trustedIPs:
+{% for ip in cloudflare_ips %}
+        - "{{ ip }}"
+{% endfor %}
+        - "10.0.0.0/8"
+        - "192.168.0.0/16"
+        - "172.16.0.0/12"
+        - "127.0.0.1/32"
     http:
       redirections:
         entryPoint:
@@ -16,6 +25,15 @@ entryPoints:
         - crowdsec@file
   https:
     address: ":443"
+    forwardedHeaders:
+      trustedIPs:
+{% for ip in cloudflare_ips %}
+        - "{{ ip }}"
+{% endfor %}
+        - "10.0.0.0/8"
+        - "192.168.0.0/16"
+        - "172.16.0.0/12"
+        - "127.0.0.1/32"
     http:
       middlewares:
         - crowdsec@file

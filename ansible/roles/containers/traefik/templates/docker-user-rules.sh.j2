@@ -1,0 +1,21 @@
+#!/bin/bash
+# Restrict ports 80/443 to Cloudflare IPs and local network in the DOCKER-USER chain.
+# Runs after Docker so the chain exists. Safe to re-run - clears existing rules first.
+
+# Remove any previously-added rules for these ports
+iptables -D DOCKER-USER -p tcp --dport 80 -j DROP 2>/dev/null || true
+iptables -D DOCKER-USER -p tcp --dport 443 -j DROP 2>/dev/null || true
+{% for ip in cloudflare_ips | reject('search', ':') | list + ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'] %}
+iptables -D DOCKER-USER -p tcp --dport 80 -s {{ ip }} -j RETURN 2>/dev/null || true
+iptables -D DOCKER-USER -p tcp --dport 443 -s {{ ip }} -j RETURN 2>/dev/null || true
+{% endfor %}
+
+# Allow Cloudflare IPs and local network (INSERT puts each at position 1, order doesn't matter for RETURN rules)
+{% for ip in cloudflare_ips | reject('search', ':') | list + ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'] %}
+iptables -I DOCKER-USER -p tcp --dport 80 -s {{ ip }} -j RETURN
+iptables -I DOCKER-USER -p tcp --dport 443 -s {{ ip }} -j RETURN
+{% endfor %}
+
+# Drop everything else on 80/443 (appended after all RETURN rules)
+iptables -A DOCKER-USER -p tcp --dport 80 -j DROP
+iptables -A DOCKER-USER -p tcp --dport 443 -j DROP

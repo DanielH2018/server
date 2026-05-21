@@ -1,0 +1,12 @@
+[Unit]
+Description=Restrict ports 80/443 to Cloudflare IPs in DOCKER-USER chain
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash /etc/docker-user-rules.sh
+
+[Install]
+WantedBy=multi-user.target
