@@ -7,12 +7,22 @@
     common_dirs_to_create:
       - "{{ container_item.name }}/data"
       - "{{ container_item.name }}/crowdsec-config/notifications"
+      - "{{ container_item.name }}/crowdsec-config/parsers/s02-enrich"
 
 - name: Create acme.json
   ansible.builtin.file:
     path: "/home/{{ sys_user }}/server/containers/traefik/data/acme.json"
     state: touch
     mode: "0600"
+
+- name: Configure logrotate for Traefik logs
+  ansible.builtin.copy:
+    src: traefik-logrotate
+    dest: /etc/logrotate.d/traefik
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
 
 - name: Create config.yml from template
   ansible.builtin.template:
@@ -30,6 +40,13 @@
   ansible.builtin.shell: "echo $(htpasswd -nb {{ traefik_user }} {{ traefik_password }})"
   register: containers_traefik_hash
   changed_when: false
+
+- name: Deploy CrowdSec local whitelist
+  ansible.builtin.copy:
+    src: crowdsec-whitelist.yaml
+    dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/parsers/s02-enrich/whitelist.yaml"
+    mode: "0664"
+  become: true
 
 - name: Create CrowdSec acquis.yaml from template
   ansible.builtin.template:
@@ -56,6 +73,42 @@
 #   with_items:
 #     - "{{ role_name }}"
 
+- name: Deploy DOCKER-USER iptables rules script
+  ansible.builtin.template:
+    src: docker-user-rules.sh.j2
+    dest: /etc/docker-user-rules.sh
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+  register: containers_docker_user_rules_script
+
+- name: Deploy DOCKER-USER rules systemd service
+  ansible.builtin.template:
+    src: docker-user-rules.service.j2
+    dest: /etc/systemd/system/docker-user-rules.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: containers_docker_user_rules_service
+
+- name: Enable docker-user-rules systemd service
+  ansible.builtin.systemd:
+    name: docker-user-rules
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+- name: Restart docker-user-rules if script or service changed
+  ansible.builtin.systemd:
+    name: docker-user-rules
+    state: restarted
+    daemon_reload: true
+  become: true
+  when: containers_docker_user_rules_script.changed or containers_docker_user_rules_service.changed
+
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common
@@ -68,6 +121,56 @@
   retries: 10
   delay: 10
   changed_when: false
+
+- name: Enable WAL mode in CrowdSec SQLite config
+  ansible.builtin.lineinfile:
+    path: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/config.yaml"
+    insertafter: '^\s*db_path:'
+    line: '  use_wal: true'
+    regexp: '^\s*use_wal:'
+  become: true
+  register: containers_crowdsec_wal_config
+
+- name: Restart CrowdSec to apply WAL config # noqa no-handler
+  community.docker.docker_container:
+    name: crowdsec
+    state: started
+    restart: true
+  when: containers_crowdsec_wal_config.changed
+
+- name: Wait for CrowdSec to be healthy after WAL config change # noqa no-handler
+  ansible.builtin.command: docker inspect --format="{{ '{{' }}.State.Health.Status{{ '}}' }}" crowdsec
+  register: containers_crowdsec_health_post_wal
+  until: containers_crowdsec_health_post_wal.stdout == "healthy"
+  retries: 10
+  delay: 10
+  changed_when: false
+  when: containers_crowdsec_wal_config.changed
+
+- name: Register Homepage machine credentials with CrowdSec
+  community.docker.docker_container_exec:
+    container: crowdsec
+    command: "cscli machines add {{ crowdsec_username }} --password {{ crowdsec_password }} --force"
+  changed_when: false
+  no_log: true
+
+- name: Register Traefik bouncer API key with CrowdSec
+  community.docker.docker_container_exec:
+    container: crowdsec
+    command: "cscli bouncers add traefik-bouncer --key {{ crowdsec_bouncer_api_key }}"
+  register: containers_crowdsec_bouncer_registration
+  failed_when:
+    - containers_crowdsec_bouncer_registration.rc != 0
+    - "'already exist' not in (containers_crowdsec_bouncer_registration.stderr | lower)"
+  changed_when: containers_crowdsec_bouncer_registration.rc == 0
+  no_log: true
+
+- name: Restart Traefik to re-authenticate with CrowdSec bouncer # noqa no-handler
+  community.docker.docker_container:
+    name: traefik
+    state: started
+    restart: true
+  when: containers_crowdsec_bouncer_registration.changed
 
 - name: Update CrowdSec hub
   community.docker.docker_container_exec:

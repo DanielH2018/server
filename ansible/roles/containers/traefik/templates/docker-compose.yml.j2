@@ -8,7 +8,7 @@ services:
       - no-new-privileges:true
     environment:
       GID: "${GID-{{ pgid }}}"
-      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/whitelist-good-actors LePresidente/authelia"
+      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik LePresidente/authelia"
     volumes:
       - ./crowdsec-config:/etc/crowdsec:rw
       - crowdsec-db:/var/lib/crowdsec/data/

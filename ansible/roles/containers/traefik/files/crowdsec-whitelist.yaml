@@ -1,0 +1,7 @@
+name: local/home-whitelist
+description: "Whitelist home network"
+whitelist:
+  reason: "Home LAN"
+  cidr:
+    - "10.0.0.0/24"
+    - "2601:246:c301:df20::/64"
