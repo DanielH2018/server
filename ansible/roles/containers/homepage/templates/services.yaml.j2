@@ -34,18 +34,6 @@
                 url: http://pihole:80
                 version: 6
                 key: {{ pihole_api_key }}
-        - Crowdsec:
-            icon: crowdsec.png
-            href: https://crowdsec.{{ domain }}/
-            description: Crowdsec
-            server: my-docker
-            container: crowdsec
-            widget:
-                type: crowdsec
-                url: "http://crowdsec:8080"
-                username: {{ crowdsec_username }}
-                password: "{{ crowdsec_password }}"
-                limit24h: true
         - FreshRSS:
             icon: freshrss.png
             href: https://freshrss.{{ domain }}/
@@ -84,6 +72,18 @@
             widget:
                 type: speedtest
                 url: http://speedtest:80
+        - Crowdsec:
+            icon: crowdsec.png
+            href: https://crowdsec.{{ domain }}/
+            description: Crowdsec
+            server: my-docker
+            container: crowdsec
+            # widget:
+            #     type: crowdsec
+            #     url: "http://crowdsec:8080"
+            #     username: {{ crowdsec_username }}
+            #     password: "{{ crowdsec_password }}"
+            #     limit24h: false
     - Calendar:
         - Calendar:
             id: my-calendar
@@ -100,12 +100,6 @@
                   url: http://ical-proxy:5000/calendar1.ics
                   name: Daniel
                   color: indigo
-                  params:
-                      showName: true
-                - type: ical
-                  url: http://ical-proxy:5000/calendar2.ics
-                  name: Hannah
-                  color: emerald
                   params:
                       showName: true
                 - type: ical
