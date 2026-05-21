@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 
 GOOGLE_ICS_URL = os.environ.get("GOOGLE_ICS_URL", "")
-GOOGLE_ICS_URL_2 = os.environ.get("GOOGLE_ICS_URL_2", "")
 OBSIDIAN_GIST_URL = os.environ.get("OBSIDIAN_GIST_URL", "")
 REFRESH_INTERVAL = int(os.environ.get("REFRESH_INTERVAL", 900))
 
@@ -173,7 +172,6 @@ def refresh_feed(key, url, processor=None):
 def refresh_loop():
     feeds = [(k, u, p) for k, u, p in [
         ("1", GOOGLE_ICS_URL, process_ics),
-        ("2", GOOGLE_ICS_URL_2, process_ics),
         ("4", OBSIDIAN_GIST_URL, process_obsidian_ics),
     ] if u]
     if not feeds:
