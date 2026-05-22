@@ -7,6 +7,25 @@
     common_dirs_to_create:
       - "{{ container_item.name }}"
 
+- name: Create time-tagger script directory
+  ansible.builtin.file:
+    path: "/home/{{ sys_user }}/server/containers/karakeep/time-tagger/script"
+    state: directory
+    mode: "0755"
+
+- name: Create time-tagger uv cache directory
+  ansible.builtin.file:
+    path: "/home/{{ sys_user }}/server/containers/karakeep/time-tagger/uv-cache"
+    state: directory
+    mode: "0755"
+
+- name: Download karakeep-time-tagger script
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/thiswillbeyourgithub/karakeep_python_api/main/community_scripts/karakeep-time-tagger/karakeep-time-tagger.py"
+    dest: "/home/{{ sys_user }}/server/containers/karakeep/time-tagger/script/karakeep-time-tagger.py"
+    mode: "0644"
+    force: false
+
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common

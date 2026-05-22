@@ -78,6 +78,27 @@ services:
       timeout: 10s
       retries: 3
 
+  karakeep-time-tagger:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    container_name: karakeep-time-tagger
+    restart: unless-stopped
+    environment:
+      - TZ={{ tz }}
+      - KARAKEEP_PYTHON_API_ENDPOINT=http://karakeep:3000/api/v1/
+      - KARAKEEP_PYTHON_API_KEY={{ karakeep_python_api_key }}
+    volumes:
+      - ./time-tagger/script:/script:ro
+      - ./time-tagger/uv-cache:/root/.cache/uv
+    command: >-
+      bash -c "uv pip install karakeep_python_api fire tqdm beautifulsoup4 loguru -q --system && while true; do python /script/karakeep-time-tagger.py --cache_file /tmp/bookmarks.temp --reset_all=True; sleep 900; done"
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - {{ docker_network }}
+    depends_on:
+      karakeep:
+        condition: service_healthy
+
 volumes:
   karakeep_data:
   karakeep_meili:
