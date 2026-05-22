@@ -17,6 +17,7 @@ services:
       - OPENAI_API_KEY={{ karakeep_gemini_api_key }}
       - INFERENCE_TEXT_MODEL=gemini-2.5-flash-lite
       - INFERENCE_IMAGE_MODEL=gemini-2.5-flash-lite
+      - INFERENCE_TAGS_ENABLED=true
     volumes:
       - karakeep_data:/data
     security_opt:

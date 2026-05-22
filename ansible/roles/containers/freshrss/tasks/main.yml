@@ -7,7 +7,7 @@
     common_dirs_to_create:
       - "{{ container_item.name }}/config/www/freshrss/extensions"
 
-- name: Unzip sidebar toggle extension
+- name: Unzip extensions
   ansible.builtin.unarchive:
     src: "{{ item }}"
     dest: "/home/{{ sys_user }}/server/containers/freshrss/config/www/freshrss/extensions"
