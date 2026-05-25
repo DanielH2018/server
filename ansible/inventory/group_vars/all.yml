@@ -26,7 +26,7 @@ cloudflare_ips:
 
 # Linux Vars
 sys_user: ubuntu
-tz: America/New_York
+tz: America/Chicago
 puid: 1000
 pgid: 1000
 # Docker
