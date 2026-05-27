@@ -72,18 +72,16 @@
             widget:
                 type: speedtest
                 url: http://speedtest:80
-        - Crowdsec:
-            icon: crowdsec.png
-            href: https://crowdsec.{{ domain }}/
-            description: Crowdsec
+        - Karakeep:
+            icon: karakeep.png
+            href: https://karakeep.{{ domain }}/
+            description: Karakeep
             server: my-docker
-            container: crowdsec
-            # widget:
-            #     type: crowdsec
-            #     url: "http://crowdsec:8080"
-            #     username: {{ crowdsec_username }}
-            #     password: "{{ crowdsec_password }}"
-            #     limit24h: false
+            container: karakeep
+            widget:
+                type: karakeep
+                url: "http://karakeep:3000"
+                key: {{ karakeep_homepage_api_key }}
     - Calendar:
         - Calendar:
             id: my-calendar

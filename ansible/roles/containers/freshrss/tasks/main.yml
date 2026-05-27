@@ -7,6 +7,12 @@
     common_dirs_to_create:
       - "{{ container_item.name }}/config/www/freshrss/extensions"
 
+- name: Copy nginx feed cache config
+  ansible.builtin.copy:
+    src: nginx-feed-cache.conf
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/nginx-feed-cache.conf"
+    mode: "0644"
+
 - name: Unzip extensions
   ansible.builtin.unarchive:
     src: "{{ item }}"
