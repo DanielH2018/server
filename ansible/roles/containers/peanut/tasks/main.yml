@@ -1,0 +1,62 @@
+---
+- name: Create required directories
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}/config"
+      - "{{ container_item.name }}/peanut-config"
+
+- name: Deploy container build files
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/{{ item.dest }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { src: Dockerfile, dest: Dockerfile, mode: "0644" }
+    - { src: entrypoint.sh, dest: entrypoint.sh, mode: "0755" }
+    - { src: upssched-cmd, dest: upssched-cmd, mode: "0755" }
+
+- name: Deploy NUT configuration files
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/{{ item.dest }}"
+    mode: "0640"
+  no_log: true
+  loop:
+    - { src: nut.conf.j2, dest: nut.conf }
+    - { src: ups.conf.j2, dest: ups.conf }
+    - { src: upsd.conf.j2, dest: upsd.conf }
+    - { src: upsd.users.j2, dest: upsd.users }
+    - { src: upsmon.conf.j2, dest: upsmon.conf }
+    - { src: upssched.conf.j2, dest: upssched.conf }
+
+- name: Deploy PeaNUT settings
+  ansible.builtin.template:
+    src: peanut-settings.yml.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/peanut-config/settings.yml"
+    mode: "0640"
+  no_log: true
+
+- name: Install udev rule for APC UPS USB permissions
+  ansible.builtin.copy:
+    dest: /etc/udev/rules.d/99-nut-apc.rules
+    content: 'SUBSYSTEM=="usb", ATTR{idVendor}=="051d", ATTR{idProduct}=="0002", MODE="0666"'
+    mode: "0644"
+  become: true
+
+- name: Reload udev rules
+  ansible.builtin.command: udevadm control --reload-rules
+  become: true
+  changed_when: false
+
+- name: Trigger udev for USB subsystem
+  ansible.builtin.command: udevadm trigger --subsystem-match=usb
+  become: true
+  changed_when: false
+
+- name: Deploy Container
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml

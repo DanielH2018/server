@@ -1,0 +1,27 @@
+MONITOR {{ nut_ups_name | default('apc-ups') }}@localhost 1 upsmon {{ nut_monitor_password }} primary
+MINSUPPLIES 1
+SHUTDOWNCMD "nsenter -t 1 -m -u -i -n -p -- /usr/bin/systemctl poweroff"
+NOTIFYCMD /usr/sbin/upssched
+POLLFREQ 5
+POLLFREQALERT 5
+HOSTSYNC 15
+DEADTIME 15
+POWERDOWNFLAG /etc/killpower
+
+NOTIFYMSG ONLINE "UPS %s on line power"
+NOTIFYMSG ONBATT "UPS %s on battery"
+NOTIFYMSG LOWBATT "UPS %s battery is low"
+NOTIFYMSG COMMBAD "UPS %s communication lost"
+NOTIFYMSG COMMOK "UPS %s communication restored"
+NOTIFYMSG SHUTDOWN "Auto-shutdown initiated on UPS %s"
+
+NOTIFYFLAG ONLINE SYSLOG+EXEC
+NOTIFYFLAG ONBATT SYSLOG+WALL+EXEC
+NOTIFYFLAG LOWBATT SYSLOG+WALL+EXEC
+NOTIFYFLAG COMMBAD SYSLOG
+NOTIFYFLAG COMMOK SYSLOG
+NOTIFYFLAG SHUTDOWN SYSLOG+WALL
+
+RBWARNTIME 43200
+NOCOMMWARNTIME 300
+FINALDELAY 5

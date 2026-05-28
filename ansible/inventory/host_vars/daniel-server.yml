@@ -4,6 +4,11 @@ ssh_config_path: /etc/ssh/sshd_config
 domain: "{{ domain }}"
 containers_list:
   # Organization: Core Services
+  - name: peanut
+    port: 8080
+    use_authelia: true
+    tags:
+      - peanut
   - name: traefik
     use_authelia: true
     tags:

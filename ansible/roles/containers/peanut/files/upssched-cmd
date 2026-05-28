@@ -1,0 +1,19 @@
+#!/bin/bash
+# Called by upssched when UPS timer events fire.
+# Triggers graceful host shutdown via nsenter into PID 1's namespaces.
+case "$1" in
+  onbatt)
+    logger -t upssched "UPS on battery for configured delay — initiating graceful shutdown"
+    /usr/sbin/upsmon -c fsd
+    ;;
+  lowbatt)
+    logger -t upssched "UPS battery low — initiating emergency shutdown"
+    /usr/sbin/upsmon -c fsd
+    ;;
+  online)
+    logger -t upssched "UPS back on line power — shutdown cancelled"
+    ;;
+  *)
+    logger -t upssched "Unknown upssched event: $1"
+    ;;
+esac

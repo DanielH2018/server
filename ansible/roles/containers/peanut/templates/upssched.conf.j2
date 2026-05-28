@@ -1,0 +1,10 @@
+CMDSCRIPT /usr/local/bin/upssched-cmd
+PIPEFN /var/run/nut/upssched.pipe
+LOCKFN /var/run/nut/upssched.lock
+
+# Wait this many seconds on battery before triggering shutdown (survives brief outages)
+AT ONBATT * START-TIMER onbatt {{ nut_onbatt_shutdown_delay | default(120) }}
+# Cancel the timer if power is restored
+AT ONLINE * CANCEL-TIMER onbatt online
+# Shut down immediately when UPS signals low battery
+AT LOWBATT * EXECUTE lowbatt

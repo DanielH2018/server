@@ -45,15 +45,17 @@
                 url: http://freshrss:80
                 username: {{ freshrss_username }}
                 password: {{ freshrss_password }}
-        - Tdarr:
-            icon: tdarr.png
-            href: http://tdarr.{{ domain }}/
-            description: Media Transcoding
+        - UPS:
+            icon: apc.png
+            description: APC BR1500MS2
             server: my-docker
-            container: tdarr
+            container: peanut
             widget:
-                type: tdarr
-                url: http://tdarr:8265
+                type: peanut
+                url: http://peanut:8080
+                key: {{ nut_ups_name | default('apc-ups') }}
+                username: {{ peanut_username }}
+                password: {{ peanut_password }}
         - Scrutiny:
             icon: scrutiny.png
             href: http://scrutiny.{{ domain }}/

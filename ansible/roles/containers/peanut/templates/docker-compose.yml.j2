@@ -1,0 +1,49 @@
+{% from 'traefik.yml.j2' import labels with context %}
+---
+services:
+  nut:
+    container_name: nut
+    build: .
+    restart: unless-stopped
+    privileged: true
+    pid: host
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    environment:
+      - TZ={{ tz }}
+    networks:
+      - {{ docker_network }}
+    healthcheck:
+      test: ["CMD-SHELL", "upsc {{ nut_ups_name | default('apc-ups') }}@localhost battery.charge 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  peanut:
+    container_name: peanut
+    image: brandawg93/peanut:latest
+    restart: unless-stopped
+    depends_on:
+      - nut
+    volumes:
+      - ./peanut-config:/config
+    environment:
+      - TZ={{ tz }}
+      - WEB_USERNAME={{ peanut_username }}
+      - WEB_PASSWORD={{ peanut_password }}
+    networks:
+      - {{ docker_network }}
+    labels:
+      {# Generate labels(container, port, docker_network, use_authelia) -#}
+      {{ labels(
+          container_item.hostname | default(container_item.name),
+          container_item.port | string,
+          docker_network,
+          container_item.use_authelia
+        )
+      }}
+
+networks:
+  {{ docker_network }}:
+    external: true
