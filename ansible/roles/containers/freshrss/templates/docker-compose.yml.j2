@@ -43,7 +43,7 @@ services:
     networks:
       - {{ docker_network }}
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
