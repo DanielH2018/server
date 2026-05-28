@@ -34,6 +34,15 @@
                 url: http://pihole:80
                 version: 6
                 key: {{ pihole_api_key }}
+        - Speedtest:
+            icon: speedtest-tracker.png
+            href: https://speedtest.{{ domain }}/
+            description: Internet tracking
+            server: my-docker
+            container: speedtest
+            widget:
+                type: speedtest
+                url: http://speedtest:80
         - FreshRSS:
             icon: freshrss.png
             href: https://freshrss.{{ domain }}/
@@ -45,6 +54,16 @@
                 url: http://freshrss:80
                 username: {{ freshrss_username }}
                 password: {{ freshrss_password }}
+        - Karakeep:
+            icon: karakeep.png
+            href: https://karakeep.{{ domain }}/
+            description: Karakeep
+            server: my-docker
+            container: karakeep
+            widget:
+                type: karakeep
+                url: "http://karakeep:3000"
+                key: {{ karakeep_homepage_api_key }}
         - UPS:
             icon: apc.png
             description: APC BR1500MS2
@@ -65,25 +84,6 @@
             widget:
                 type: scrutiny
                 url: http://scrutiny:8080
-        - Speedtest:
-            icon: speedtest-tracker.png
-            href: https://speedtest.{{ domain }}/
-            description: Internet tracking
-            server: my-docker
-            container: speedtest
-            widget:
-                type: speedtest
-                url: http://speedtest:80
-        - Karakeep:
-            icon: karakeep.png
-            href: https://karakeep.{{ domain }}/
-            description: Karakeep
-            server: my-docker
-            container: karakeep
-            widget:
-                type: karakeep
-                url: "http://karakeep:3000"
-                key: {{ karakeep_homepage_api_key }}
     - Calendar:
         - Calendar:
             id: my-calendar
