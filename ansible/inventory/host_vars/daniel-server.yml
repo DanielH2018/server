@@ -189,6 +189,10 @@ containers_list:
     use_authelia: true
     tags:
       - uptime-kuma
+  - name: autokuma
+    use_authelia: false
+    tags:
+      - autokuma
   - name: scrutiny
     port: 8080
     use_authelia: true

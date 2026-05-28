@@ -1,0 +1,8 @@
+{% macro labels(container, port, name=none, url=none, monitor_type='http', interval=60, max_retries=2) -%}
+{% set _name = name if name is not none else container | replace('-', ' ') | title -%}
+{% set _url = url if url is not none else 'http://' ~ container ~ ':' ~ port -%}
+      - "kuma.{{ container }}.{{ monitor_type }}.name={{ _name }}"
+      - "kuma.{{ container }}.{{ monitor_type }}.url={{ _url }}"
+      - "kuma.{{ container }}.{{ monitor_type }}.interval={{ interval | string }}"
+      - "kuma.{{ container }}.{{ monitor_type }}.maxretries={{ max_retries | string }}"
+{%- endmacro %}
