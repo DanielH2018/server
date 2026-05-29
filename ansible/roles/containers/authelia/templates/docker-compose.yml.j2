@@ -1,3 +1,4 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
 version: '3.8'
 
 services:
@@ -21,6 +22,7 @@ services:
       - 'traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true'
       - 'traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'
       - "traefik.http.middlewares.authelia.forwardauth.maxResponseBodySize=1048576"
+      {{ kuma(container_item.name) }}
     expose:
       - 9091
     restart: unless-stopped

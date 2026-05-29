@@ -41,7 +41,7 @@ services:
           container_item.use_authelia
         )
       }}
-      {{ kuma(container_item.name, container_item.port | string) }}
+      {{ kuma(container_item.name) }}
 
 networks:
   {{ docker_network }}:

@@ -1,3 +1,4 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
 ---
 
 services:
@@ -17,6 +18,7 @@ services:
       - {{ docker_network }}
     labels:
       - "com.centurylinklabs.watchtower.depends-on=docker-proxy,uptime-kuma"
+      {{ kuma(container_item.name) }}
 
 networks:
   {{ docker_network }}:

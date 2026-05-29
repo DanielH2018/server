@@ -1,4 +1,5 @@
 {% from 'traefik.yml.j2' import labels with context %}
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
 ---
 version: '3.8'
 services:
@@ -25,6 +26,7 @@ services:
           container_item.use_authelia
         )
       }}
+      {{ kuma(container_item.name) }}
 
 networks:
   {{ docker_network }}:

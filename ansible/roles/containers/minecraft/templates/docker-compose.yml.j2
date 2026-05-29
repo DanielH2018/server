@@ -1,3 +1,4 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
 version: '3.8'
 services:
   minecraft:
@@ -47,6 +48,7 @@ services:
       - "traefik.tcp.routers.minecraft.entrypoints=minecraft"
       - "traefik.tcp.routers.minecraft.rule=HostSNI(`*`)"
       - "traefik.tcp.services.minecraft.loadbalancer.server.port=25565"
+      {{ kuma(container_item.name) }}
     restart: unless-stopped
 
 networks:

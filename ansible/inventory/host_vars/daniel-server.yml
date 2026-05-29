@@ -1,4 +1,5 @@
 ---
+kuma_docker_host: 1
 server_ip: 10.0.0.161
 ssh_config_path: /etc/ssh/sshd_config
 domain: "{{ domain }}"

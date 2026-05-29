@@ -1,3 +1,4 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
 version: '3.8'
 services:
   ddns-proxied:
@@ -14,6 +15,8 @@ services:
       - IP6_PROVIDER=none
     networks:
       - {{ docker_network }}
+    labels:
+      {{ kuma('cloudflare-ddns-proxied') }}
   ddns-direct:
     image: favonia/cloudflare-ddns:latest
     container_name: cloudflare-ddns-direct
@@ -28,6 +31,8 @@ services:
       - IP6_PROVIDER=none
     networks:
       - {{ docker_network }}
+    labels:
+      {{ kuma('cloudflare-ddns-direct') }}
 
 networks:
   {{ docker_network }}:

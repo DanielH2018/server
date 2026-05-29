@@ -1,8 +1,16 @@
-{% macro labels(container, port, name=none, url=none, monitor_type='http', interval=60, max_retries=2) -%}
+{% macro labels(container, port=none, name=none, url=none, monitor_type='docker', interval=60, max_retries=2) -%}
 {% set _name = name if name is not none else container | replace('-', ' ') | title -%}
+{% if monitor_type == 'docker' %}
+      - "kuma.{{ container }}.docker.name={{ _name }}"
+      - "kuma.{{ container }}.docker.docker_container={{ container }}"
+      - "kuma.{{ container }}.docker.docker_host={{ kuma_docker_host | string }}"
+      - "kuma.{{ container }}.docker.interval={{ interval | string }}"
+      - "kuma.{{ container }}.docker.maxretries={{ max_retries | string }}"
+{%- else -%}
 {% set _url = url if url is not none else 'http://' ~ container ~ ':' ~ port -%}
-      - "kuma.{{ container }}.{{ monitor_type }}.name={{ _name }}"
-      - "kuma.{{ container }}.{{ monitor_type }}.url={{ _url }}"
-      - "kuma.{{ container }}.{{ monitor_type }}.interval={{ interval | string }}"
-      - "kuma.{{ container }}.{{ monitor_type }}.maxretries={{ max_retries | string }}"
+      - "kuma.{{ container }}.http.name={{ _name }}"
+      - "kuma.{{ container }}.http.url={{ _url }}"
+      - "kuma.{{ container }}.http.interval={{ interval | string }}"
+      - "kuma.{{ container }}.http.maxretries={{ max_retries | string }}"
+{%- endif %}
 {%- endmacro %}

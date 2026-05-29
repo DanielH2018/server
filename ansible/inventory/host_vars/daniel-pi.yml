@@ -1,4 +1,5 @@
 ---
+kuma_docker_host: 1
 server_ip: 192.168.50.48
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 domain: daniel-pi.com

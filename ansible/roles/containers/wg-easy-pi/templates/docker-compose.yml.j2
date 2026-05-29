@@ -1,3 +1,4 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
 
 services:
   wg-easy:
@@ -23,6 +24,8 @@ services:
     restart: unless-stopped
     networks:
       - {{ docker_network }}
+    labels:
+      {{ kuma('wg-easy') }}
 
 networks:
   {{ docker_network }}:
