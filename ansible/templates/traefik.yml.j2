@@ -1,25 +1,18 @@
 {% macro labels(container, port, docker_network, authelia, insecure_transport=false) -%}
-      # Enable traefik for container
       - "traefik.enable=true"
-      # Use traefik network
       - "traefik.docker.network={{ docker_network }}"
-      # HTTP router
       - "traefik.http.routers.{{ container }}.entrypoints=http"
       - "traefik.http.routers.{{ container }}.rule=Host(`{{ container }}.{{ domain }}`) || Host(`{{ container }}.local.{{ domain }}`)"
-      # HTTPS router
       - "traefik.http.routers.{{ container }}-secure.entrypoints=https"
       - "traefik.http.routers.{{ container }}-secure.rule=Host(`{{ container }}.{{ domain }}`) || Host(`{{ container }}.local.{{ domain }}`)"
       - "traefik.http.routers.{{ container }}-secure.tls=true"
       - "traefik.http.routers.{{ container }}-secure.service={{ container }}"
       - "traefik.http.services.{{ container }}.loadbalancer.server.port={{ port }}"
-      {% if authelia -%}
+      {%- if authelia %}
       - "traefik.http.routers.{{ container }}-secure.middlewares=authelia@docker"
       {%- endif %}
-
-      {% if insecure_transport -%}
-      # Tell Traefik the backend is HTTPS
+      {%- if insecure_transport %}
       - "traefik.http.services.{{ container }}.loadbalancer.server.scheme=https"
-      # Use a scoped transport that skips cert verification for this service only
       - "traefik.http.services.{{ container }}.loadbalancer.serversTransport=insecure-transport"
       {%- endif %}
 {%- endmacro %}
