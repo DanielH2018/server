@@ -8,10 +8,10 @@
       - "traefik.http.routers.{{ container }}-secure.tls=true"
       - "traefik.http.routers.{{ container }}-secure.service={{ container }}"
       - "traefik.http.services.{{ container }}.loadbalancer.server.port={{ port }}"
-      {%- if authelia %}
+      {% if authelia -%}
       - "traefik.http.routers.{{ container }}-secure.middlewares=authelia@docker"
       {%- endif %}
-      {%- if insecure_transport %}
+      {% if insecure_transport -%}
       - "traefik.http.services.{{ container }}.loadbalancer.server.scheme=https"
       - "traefik.http.services.{{ container }}.loadbalancer.serversTransport=insecure-transport"
       {%- endif %}

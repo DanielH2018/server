@@ -1,6 +1,6 @@
 {% macro labels(container, port=none, name=none, url=none, monitor_type='docker', interval=60, max_retries=2) -%}
 {% set _name = name if name is not none else container | replace('-', ' ') | title -%}
-{% if monitor_type == 'docker' %}
+{% if monitor_type == 'docker' -%}
       - "kuma.{{ container }}.docker.name={{ _name }}"
       - "kuma.{{ container }}.docker.docker_container={{ container }}"
       - "kuma.{{ container }}.docker.docker_host={{ kuma_docker_host | string }}"
