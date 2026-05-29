@@ -12,7 +12,9 @@ services:
     ports:
       - 9000:9000
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data:/data
@@ -29,11 +31,13 @@ services:
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
-          docker_network,
+          (container_item.networks | default([docker_network]))[0],
           container_item.use_authelia
         )
       }}
       {{ kuma(container_item.name) }}
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}

@@ -14,7 +14,9 @@ services:
       - PROXIED=true
       - IP6_PROVIDER=none
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     labels:
       {{ kuma('cloudflare-ddns-proxied') }}
   ddns-direct:
@@ -30,10 +32,14 @@ services:
       - PROXIED=false
       - IP6_PROVIDER=none
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     labels:
       {{ kuma('cloudflare-ddns-direct') }}
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}

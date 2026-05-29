@@ -23,7 +23,7 @@ services:
       retries: 3
       start_period: 20s
     networks:
-      - {{ docker_network }}
+      - {{ (container_item.networks | default([docker_network]))[0] }}
     labels:
       {{ kuma('crowdsec') }}
 
@@ -37,7 +37,10 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - {{ docker_network }}
+      - proxy
+      - monitoring
+      - media
+      - apps
     ports:
       - 80:80
       - 443:443
@@ -61,7 +64,13 @@ services:
       {{ kuma('traefik') }}
 
 networks:
-  {{ docker_network }}:
+  proxy:
+    external: true
+  monitoring:
+    external: true
+  media:
+    external: true
+  apps:
     external: true
 
 volumes:

@@ -15,12 +15,16 @@ services:
       WATCHTOWER_INCLUDE_RESTARTING: true
       DOCKER_API_VERSION: 1.44
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     labels:
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
       {{ kuma(container_item.name) }}
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}

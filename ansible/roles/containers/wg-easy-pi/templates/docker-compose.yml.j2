@@ -23,10 +23,14 @@ services:
       - /lib/modules:/lib/modules:ro
     restart: unless-stopped
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     labels:
       {{ kuma('wg-easy') }}
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}

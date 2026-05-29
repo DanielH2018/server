@@ -13,7 +13,7 @@ services:
     environment:
       - TZ={{ tz }}
     networks:
-      - {{ docker_network }}
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "upsc {{ nut_ups_name | default('apc-ups') }}@localhost battery.charge 2>/dev/null || exit 1"]
       interval: 30s
@@ -34,18 +34,25 @@ services:
       - WEB_USERNAME={{ peanut_username }}
       - WEB_PASSWORD={{ peanut_password }}
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
+      - internal
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
-          docker_network,
+          (container_item.networks | default([docker_network]))[0],
           container_item.use_authelia
         )
       }}
       {{ kuma(container_item.name) }}
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}
+  internal:
+    internal: true

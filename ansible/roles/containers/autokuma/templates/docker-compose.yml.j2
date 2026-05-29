@@ -15,11 +15,15 @@ services:
     volumes:
       - ./data:/data
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     labels:
       - "com.centurylinklabs.watchtower.depends-on=docker-proxy,uptime-kuma"
       {{ kuma(container_item.name) }}
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}

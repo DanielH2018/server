@@ -71,10 +71,20 @@
     mode: +x
   become: true
 
-- name: Add sudo to user
-  ansible.builtin.command: "usermod -aG docker {{ ansible_env.USER }}"
+- name: Add user to docker group
+  ansible.builtin.user:
+    name: "{{ ansible_env.USER }}"
+    groups: docker
+    append: true
   become: true
 
-- name: Create Network
-  ansible.builtin.shell: "docker network create {{ docker_network }} --subnet=172.18.0.0/16 || true"
+- name: Create Docker networks
+  ansible.builtin.shell: "docker network create {{ item }} || true"
+  loop:
+    - "{{ docker_network }}"
+    - monitoring
+    - media
+    - apps
+    - homepage_private
   become: true
+  changed_when: false

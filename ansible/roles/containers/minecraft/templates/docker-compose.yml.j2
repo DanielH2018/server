@@ -5,7 +5,9 @@ services:
     image: itzg/minecraft-server:latest
     container_name: minecraft
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     environment:
       EULA: "true"
       TYPE: FABRIC
@@ -52,5 +54,7 @@ services:
     restart: unless-stopped
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}

@@ -24,7 +24,10 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
+      - internal
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
       interval: 30s
@@ -39,7 +42,7 @@ services:
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
-          docker_network,
+          (container_item.networks | default([docker_network]))[0],
           container_item.use_authelia
         )
       }}
@@ -59,7 +62,7 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - {{ docker_network }}
+      - internal
 
   karakeep-meilisearch:
     image: getmeili/meilisearch:v1.37.0
@@ -73,7 +76,7 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - {{ docker_network }}
+      - internal
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:7700/health"]
       interval: 30s
@@ -96,7 +99,7 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - {{ docker_network }}
+      - internal
     depends_on:
       karakeep:
         condition: service_healthy
@@ -106,5 +109,9 @@ volumes:
   karakeep_meili:
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}
+  internal:
+    internal: true

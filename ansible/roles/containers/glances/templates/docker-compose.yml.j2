@@ -12,7 +12,9 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     pid: host
     volumes:
       - /etc/os-release:/etc/os-release:ro
@@ -24,7 +26,7 @@ services:
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
-          docker_network,
+          (container_item.networks | default([docker_network]))[0],
           container_item.use_authelia
         )
       }}
@@ -34,5 +36,7 @@ services:
       - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}

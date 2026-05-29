@@ -22,7 +22,9 @@ services:
     expose:
       - 9100
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     healthcheck:
       test: wget --no-verbose --tries=1 -O /dev/null http://localhost:9100/metrics || exit 1
       interval: 30s
@@ -47,7 +49,9 @@ services:
       - '--docker_only=true'
       - '--disable_metrics=hugetlb,memory_numa,tcp,udp,referenced_memory,disk,diskIO,percpu,sched,process,cpu_topology,perf_event,advtcp'
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     restart: unless-stopped
     deploy:
       resources:
@@ -70,7 +74,9 @@ services:
      - ./:/etc/prometheus/
      - prometheus_data:/prometheus
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://localhost:9090/ || exit 1
       interval: 30s
@@ -81,14 +87,16 @@ services:
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
-          docker_network,
+          (container_item.networks | default([docker_network]))[0],
           container_item.use_authelia
         )
       }}
       {{ kuma(container_item.name) }}
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}
 volumes:
     prometheus_data:

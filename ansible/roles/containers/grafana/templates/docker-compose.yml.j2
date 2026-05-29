@@ -15,7 +15,9 @@ services:
     volumes:
       - ./data:/var/lib/grafana
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
       interval: 30s
@@ -26,7 +28,7 @@ services:
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
-          docker_network,
+          (container_item.networks | default([docker_network]))[0],
           container_item.use_authelia
         )
       }}
@@ -51,7 +53,9 @@ services:
       - loki:/tmp
     command: -config.file=/etc/loki/loki-config.yaml
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
   promtail:
     image: grafana/promtail
     container_name: promtail
@@ -69,14 +73,18 @@ services:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/promtail-config.yaml
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     labels:
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}
 
 volumes:
     loki:

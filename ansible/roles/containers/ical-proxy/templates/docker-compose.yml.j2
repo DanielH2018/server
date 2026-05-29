@@ -13,10 +13,14 @@ services:
     security_opt:
         - no-new-privileges:true
     networks:
-        - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     labels:
       {{ kuma('ical-proxy') }}
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}

@@ -18,10 +18,14 @@ services:
       - /home/{{ sys_user }}/server/containers/data:/data
     restart: unless-stopped
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     labels:
       {{ kuma(container_item.name) }}
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}

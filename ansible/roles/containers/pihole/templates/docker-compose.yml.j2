@@ -20,8 +20,7 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      {{ docker_network }}:
-        ipv4_address: 172.18.0.200
+      - pihole_internal
 
   pihole:
     container_name: pihole
@@ -35,12 +34,15 @@ services:
       - "53:53/udp"
       - '67:67/udp'
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
+      - pihole_internal
     environment:
-      tz: {{ tz }}
+      TZ: {{ tz }}
       WEBPASSWORD: {{ pihole_password }}
       ServerIP: {{ server_ip }}
-      FTLCONF_dns_upstreams: 172.18.0.200#53
+      FTLCONF_dns_upstreams: unbound
       FTLCONF_dns_listeningMode: all
       FTLCONF_misc_etc_dnsmasq_d: "true"
     volumes:
@@ -55,15 +57,16 @@ services:
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
-          docker_network,
+          (container_item.networks | default([docker_network]))[0],
           container_item.use_authelia
         )
       }}
       {{ kuma(container_item.name) }}
 
 networks:
-  default:
-    external:
-      name: {{ docker_network }}
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}
+  pihole_internal:
+    internal: false

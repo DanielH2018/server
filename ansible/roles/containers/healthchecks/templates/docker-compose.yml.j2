@@ -31,7 +31,9 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     healthcheck:
       test: curl --fail -s http://localhost:8000/ || exit 1
       interval: 30s
@@ -43,7 +45,7 @@ services:
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
-          docker_network,
+          (container_item.networks | default([docker_network]))[0],
           container_item.use_authelia
         )
       }}
@@ -59,5 +61,7 @@ services:
       - "traefik.http.routers.healthchecks-ping.priority=100"
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}

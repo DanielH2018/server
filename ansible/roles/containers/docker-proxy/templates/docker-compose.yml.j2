@@ -20,7 +20,9 @@ services:
       - NETWORKS=1
       - EVENTS=1
     networks:
-      - {{ docker_network }}
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro # Mounted as read-only
     read_only: true
@@ -39,5 +41,7 @@ services:
       {{ kuma(container_item.name) }}
 
 networks:
-  {{ docker_network }}:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
     external: true
+{% endfor %}
