@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  author: DanielH2018
+  description: "Sonarr/Radarr quality profile syncer"
+  license: MIT
+  min_ansible_version: "2.15"
+
+# Logical ordering: requires traefik, sonarr, and radarr
+# Actual sequencing is enforced by containers_list ordering in host_vars rather than
+# via Ansible meta dependencies, which would conflict with the include_role loop
+# variable architecture used in deploy.yml.
+dependencies: []
