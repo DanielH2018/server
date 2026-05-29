@@ -9,7 +9,7 @@
 
 - name: Check if github key exists
   ansible.builtin.stat:
-    path: "/home/{{ sys_user }}/server/containers/ansible/roles/code-server/templates/github"
+    path: "/home/{{ sys_user }}/server/ansible/roles/containers/code-server/templates/github"
   register: containers_github_data
 
 - name: Copy github key
@@ -29,10 +29,10 @@
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/Dockerfile"
     mode: "0664"
 
-- name: Copy proprietary extensions startup script
+- name: Copy extensions startup script
   ansible.builtin.copy:
-    src: proprietary-extensions.sh
-    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/proprietary-extensions.sh"
+    src: extensions.sh
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/extensions.sh"
     mode: "0755"
 
 - name: Deploy Container
@@ -51,4 +51,5 @@
     state: present
 
 - name: Cleanup old code-server images
-  ansible.builtin.command: "docker image prune -f"
+  community.docker.docker_prune:
+    images: true

@@ -1,31 +1,30 @@
 FROM lscr.io/linuxserver/code-server:latest
 
-# 1. Install System Dependencies
-RUN apt-get update && apt-get install -y \
+# 1. Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     python3 \
     python3-pip \
     python3-venv \
-    docker.io \
     texlive-latex-extra \
     texlive-fonts-recommended \
     texlive-fonts-extra \
     latexmk \
     curl \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y nodejs \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s /usr/bin/python3 /usr/bin/python
 
-# 2. Create the Virtual Environment
-# Place it in /opt/venv so it is NOT overwritten by your ./config volume mount
+# 2. Docker CLI only — daemon not needed since DOCKER_HOST points to docker-proxy
+COPY --from=docker:cli /usr/local/bin/docker /usr/local/bin/docker
+
+# 3. Python virtual environment outside /config so it survives volume mounts
 ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv $VIRTUAL_ENV
-
-# 3. Update the PATH
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# 4. Install Python Packages
+# 4. Python packages
 RUN pip install --no-cache-dir \
     uv \
     pandas \
@@ -35,18 +34,37 @@ RUN pip install --no-cache-dir \
     structlog \
     python-dotenv
 
-# 5. Install Claude Code CLI
+# 5. Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-# 6. Fix Python venv Permissions
+# 6. Fix venv ownership for container user
 RUN chown -R {{ puid }}:{{ pgid }} $VIRTUAL_ENV
 
-# 7. Download proprietary VS Code Marketplace extensions (not available on Open VSX)
+# 7. Download all VS Code extensions at build time.
+#    Open VSX: fetched via their public API.
+#    MS Marketplace: proprietary extensions not published to Open VSX.
 RUN mkdir -p /opt/vsix && \
-    PROPRIETARY_EXTS=" \
-        ms-python.vscode-pylance \
+    OPENVSX_EXTS=" \
+        ms-azuretools.vscode-docker \
+        ms-python.python \
+        charliermarsh.ruff \
+        astral-sh.ty \
+        james-yu.latex-workshop \
+        tomoki1207.pdf \
     " && \
-    for ext in $PROPRIETARY_EXTS; do \
+    for ext in $OPENVSX_EXTS; do \
+        publisher=$(echo "$ext" | cut -d. -f1) && \
+        name=$(echo "$ext" | cut -d. -f2) && \
+        info=$(curl -fsSL "https://open-vsx.org/api/${publisher}/${name}") && \
+        download=$(echo "$info" | python3 -c "import sys,json; print(json.load(sys.stdin)['files']['download'])") && \
+        curl -fsSL -o "/opt/vsix/${ext}.vsix" "$download" && \
+        echo "Downloaded from Open VSX: ${ext}"; \
+    done && \
+    MARKETPLACE_EXTS=" \
+        ms-python.vscode-pylance \
+        Anthropic.claude-code \
+    " && \
+    for ext in $MARKETPLACE_EXTS; do \
         publisher=$(echo "$ext" | cut -d. -f1) && \
         name=$(echo "$ext" | cut -d. -f2) && \
         version=$(curl -fsSL -X POST \
@@ -55,11 +73,11 @@ RUN mkdir -p /opt/vsix && \
             -d "{\"filters\":[{\"criteria\":[{\"filterType\":7,\"value\":\"${ext}\"}]}],\"flags\":1}" \
             "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery?api-version=7.2-preview.1" | \
             python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['extensions'][0]['versions'][0]['version'])") && \
-        curl -fsSL --compressed -A "VSCode/1.95.0" -o "/opt/vsix/${name}.vsix" \
+        curl -fsSL --compressed -A "VSCode/1.95.0" -o "/opt/vsix/${ext}.vsix" \
             "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${publisher}/vsextensions/${name}/${version}/vspackage" && \
-        echo "Downloaded ${ext} ${version}"; \
+        echo "Downloaded from MS Marketplace: ${ext}"; \
     done
 
-# 8. Install startup script to load proprietary extensions into the config volume
-COPY proprietary-extensions.sh /custom-cont-init.d/10-proprietary-extensions.sh
-RUN chmod +x /custom-cont-init.d/10-proprietary-extensions.sh
+# 8. Startup script installs all /opt/vsix extensions into the config volume
+COPY extensions.sh /custom-cont-init.d/10-extensions.sh
+RUN chmod +x /custom-cont-init.d/10-extensions.sh
