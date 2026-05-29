@@ -118,12 +118,12 @@
     tasks_from: docker_deploy.yml
 
 - name: Wait for CrowdSec to be healthy
-  ansible.builtin.command: docker inspect --format="{{ '{{' }}.State.Health.Status{{ '}}' }}" crowdsec
+  community.docker.docker_container_info:
+    name: crowdsec
   register: traefik_crowdsec_health
-  until: traefik_crowdsec_health.stdout == "healthy"
+  until: traefik_crowdsec_health.container.State.Health.Status == "healthy"
   retries: 10
   delay: 10
-  changed_when: false
 
 - name: Enable WAL mode in CrowdSec SQLite config
   ansible.builtin.lineinfile:
@@ -135,19 +135,21 @@
   register: traefik_crowdsec_wal_config
 
 - name: Restart CrowdSec to apply WAL config # noqa no-handler
-  community.docker.docker_container:
-    name: crowdsec
-    state: started
-    restart: true
+  community.docker.docker_compose_v2:
+    project_src: "/home/{{ sys_user }}/server/containers/traefik"
+    services:
+      - crowdsec
+    state: restarted
+  become: true
   when: traefik_crowdsec_wal_config.changed
 
 - name: Wait for CrowdSec to be healthy after WAL config change # noqa no-handler
-  ansible.builtin.command: docker inspect --format="{{ '{{' }}.State.Health.Status{{ '}}' }}" crowdsec
+  community.docker.docker_container_info:
+    name: crowdsec
   register: traefik_crowdsec_health_post_wal
-  until: traefik_crowdsec_health_post_wal.stdout == "healthy"
+  until: traefik_crowdsec_health_post_wal.container.State.Health.Status == "healthy"
   retries: 10
   delay: 10
-  changed_when: false
   when: traefik_crowdsec_wal_config.changed
 
 - name: Register Homepage machine credentials with CrowdSec

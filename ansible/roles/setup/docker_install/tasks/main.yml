@@ -78,6 +78,30 @@
     append: true
   become: true
 
+- name: Configure Docker daemon log limits
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: docker_install_daemon_config
+
+- name: Restart Docker to apply daemon config # noqa no-handler
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  become: true
+  when: docker_install_daemon_config.changed
+
 - name: Create Docker networks
   community.docker.docker_network:
     name: "{{ item }}"

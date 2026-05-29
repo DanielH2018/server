@@ -16,8 +16,8 @@
   vars:
     # You can check https://github.com/getsops/sops/releases for the latest
     sops_version: "v3.9.2"
-    # Ensure this matches your architecture (amd64 is standard for most PCs)
-    sops_binary_url: "https://github.com/getsops/sops/releases/download/{{ sops_version }}/sops-{{ sops_version }}.linux.amd64"
+    sops_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"
+    sops_binary_url: "https://github.com/getsops/sops/releases/download/{{ sops_version }}/sops-{{ sops_version }}.linux.{{ sops_arch }}"
 
 - name: Install community.sops Ansible collection
   # We run this as the regular user (become: false) so it installs for YOU, not root

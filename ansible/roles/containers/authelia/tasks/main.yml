@@ -7,6 +7,15 @@
     common_dirs_to_create:
       - "{{ container_item.name }}/config"
 
+- name: Create Authelia log directory
+  ansible.builtin.file:
+    path: /var/log/authelia
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
 - name: Hash password
   ansible.builtin.command: >-
     docker run authelia/authelia:latest authelia crypto hash generate argon2
