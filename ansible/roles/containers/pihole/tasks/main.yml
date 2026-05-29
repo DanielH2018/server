@@ -1,4 +1,8 @@
 ---
+- name: Set Pihole base path
+  ansible.builtin.set_fact:
+    containers_pihole_base: "/home/{{ sys_user }}/server/containers/pihole"
+
 - name: Create required directories
   ansible.builtin.include_role:
     name: common
@@ -8,39 +12,39 @@
       - "{{ container_item.name }}/data/unbound"
       - "{{ container_item.name }}/data/etc-dnsmasq.d"
 
-- name: Create docker-compose.yml from template
+- name: Create configuration files from templates
   ansible.builtin.template:
-    src: docker-compose.yml.j2
-    dest: "/home/{{ sys_user }}/server/containers/pihole/docker-compose.yml"
-    mode: "0664"
-  vars:
-    container: "{{ role_name }}"
-
-- name: Create unbound.conf from template
-  ansible.builtin.template:
-    src: unbound.conf.j2
-    dest: "/home/{{ sys_user }}/server/containers/pihole/data/unbound/my_settings.conf"
-    mode: "0664"
-  vars:
-    container: "{{ role_name }}"
-
-- name: Create dnsmasq.conf from template
-  ansible.builtin.template:
-    src: dnsmasq.yml.j2
-    dest: "/home/{{ sys_user }}/server/containers/pihole/data/etc-dnsmasq.d/02-wildcard.conf"
+    src: "{{ item.src }}"
+    dest: "{{ containers_pihole_base }}/{{ item.dest }}"
     mode: "0644"
   vars:
     container: "{{ role_name }}"
+  loop:
+    - src: docker-compose.yml.j2
+      dest: docker-compose.yml
+    - src: unbound.conf.j2
+      dest: data/unbound/my_settings.conf
+    - src: dnsmasq.yml.j2
+      dest: data/etc-dnsmasq.d/02-wildcard.conf
 
-- name: Pull Pihole Image
-  ansible.builtin.command: docker pull pihole/pihole:latest
+- name: Pull container images
+  community.docker.docker_image:
+    name: "{{ item }}"
+    source: pull
+    force_source: true
   become: true
   become_method: ansible.builtin.sudo
+  loop:
+    - pihole/pihole:latest
+    - klutchell/unbound:latest
 
-- name: Pull Unbound Image
-  ansible.builtin.command: docker pull klutchell/unbound:latest
+- name: Stop existing Pihole stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ containers_pihole_base }}"
+    state: absent
   become: true
   become_method: ansible.builtin.sudo
+  failed_when: false
 
 - name: Stop systemd-resolved.service
   ansible.builtin.systemd:
@@ -56,10 +60,27 @@
   become: true
   become_method: ansible.builtin.sudo
 
+- name: Remove /etc/resolv.conf symlink
+  ansible.builtin.file:
+    path: /etc/resolv.conf
+    state: absent
+  become: true
+  become_method: ansible.builtin.sudo
+
+# Set a working fallback immediately after stopping systemd-resolved so any
+# subsequent failure does not leave the host without DNS.
+- name: Create fallback /etc/resolv.conf for deployment
+  ansible.builtin.copy:
+    content: "nameserver 1.1.1.1\n"
+    dest: /etc/resolv.conf
+    mode: "0644"
+  become: true
+  become_method: ansible.builtin.sudo
+
 - name: Deploy Pihole
-  ansible.builtin.command: docker-compose up -d --force-recreate
-  args:
-    chdir: "/home/{{ sys_user }}/server/containers/pihole/"
+  community.docker.docker_compose_v2:
+    project_src: "{{ containers_pihole_base }}"
+    state: present
   become: true
   become_method: ansible.builtin.sudo
 
@@ -71,14 +92,17 @@
   become: true
   become_method: ansible.builtin.sudo
 
-- name: Remove /etc/resolv.conf symlink # TODO Add check for if already done
-  ansible.builtin.file:
-    path: /etc/resolv.conf
-    state: absent
+- name: Wait for Pihole to be healthy
+  community.docker.docker_container_info:
+    name: pihole
+  register: containers_pihole_health
+  retries: 18
+  delay: 10
+  until: containers_pihole_health.container.State.Health.Status == "healthy"
   become: true
   become_method: ansible.builtin.sudo
 
-- name: Create /etc/resolv.conf from template
+- name: Point /etc/resolv.conf at Pihole
   ansible.builtin.template:
     src: resolv.conf.j2
     dest: "/etc/resolv.conf"
