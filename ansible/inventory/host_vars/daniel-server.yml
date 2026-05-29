@@ -319,13 +319,13 @@ containers_list:
   #    tags:
   #      - foundry
   # Organization: Miscellaneous (apps network)
-  - name: file-browser
-    port: 80
-    use_authelia: true
-    networks:
-      - apps
-    tags:
-      - file-browser
+  # - name: file-browser
+  #   port: 80
+  #   use_authelia: true
+  #   networks:
+  #     - apps
+  #   tags:
+  #     - file-browser
   # - name: change-detection
   #   port: 5000
   #   use_authelia: false
