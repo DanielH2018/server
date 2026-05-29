@@ -1,7 +1,7 @@
 ---
 - name: Set Pihole base path
   ansible.builtin.set_fact:
-    containers_pihole_base: "/home/{{ sys_user }}/server/containers/pihole"
+    pihole_base: "/home/{{ sys_user }}/server/containers/pihole"
 
 - name: Create required directories
   ansible.builtin.include_role:
@@ -15,7 +15,7 @@
 - name: Create configuration files from templates
   ansible.builtin.template:
     src: "{{ item.src }}"
-    dest: "{{ containers_pihole_base }}/{{ item.dest }}"
+    dest: "{{ pihole_base }}/{{ item.dest }}"
     mode: "0644"
   vars:
     container: "{{ role_name }}"
@@ -40,7 +40,7 @@
 
 - name: Stop existing Pihole stack
   community.docker.docker_compose_v2:
-    project_src: "{{ containers_pihole_base }}"
+    project_src: "{{ pihole_base }}"
     state: absent
   become: true
   become_method: ansible.builtin.sudo
@@ -79,7 +79,7 @@
 
 - name: Deploy Pihole
   community.docker.docker_compose_v2:
-    project_src: "{{ containers_pihole_base }}"
+    project_src: "{{ pihole_base }}"
     state: present
   become: true
   become_method: ansible.builtin.sudo
@@ -95,10 +95,10 @@
 - name: Wait for Pihole to be healthy
   community.docker.docker_container_info:
     name: pihole
-  register: containers_pihole_health
+  register: pihole_health
   retries: 18
   delay: 10
-  until: containers_pihole_health.container.State.Health.Status == "healthy"
+  until: pihole_health.container.State.Health.Status == "healthy"
   become: true
   become_method: ansible.builtin.sudo
 

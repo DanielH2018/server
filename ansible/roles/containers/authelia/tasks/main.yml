@@ -8,18 +8,19 @@
       - "{{ container_item.name }}/config"
 
 - name: Hash password
-  ansible.builtin.command: "docker run authelia/authelia:latest authelia crypto hash generate argon2 --password '{{ authelia_password }}' --iterations 3 --memory
-    65536 --parallelism 4 --salt-size 16 --key-size 32"
+  ansible.builtin.command: >-
+    docker run authelia/authelia:latest authelia crypto hash generate argon2
+    --password '{{ authelia_password }}' --iterations 3 --memory 65536
+    --parallelism 4 --salt-size 16 --key-size 32
   register: authelia_hash_output
   become: true
+  no_log: true
+  changed_when: false
 
 - name: Remove prefix from hash
   ansible.builtin.set_fact:
     authelia_password_hash: "{{ authelia_hash_output.stdout | regex_replace('^Digest: ', '') }}"
-
-- name: Debug the cleaned hash
-  ansible.builtin.debug:
-    msg: "{{ authelia_password_hash }}"
+  no_log: true
 
 - name: Set Authelia Config dir
   ansible.builtin.set_fact:
@@ -44,26 +45,33 @@
     - name: Set HMAC Fact
       ansible.builtin.set_fact:
         authelia_oidc_hmac_secret: "{{ authelia_oidc_hmac_cmd.stdout | trim }}"
+      no_log: true
 
     # --- 2. Generate Client Password & Hash ---
     - name: Generate Client Password and Hash (Docker)
       ansible.builtin.command:
-        cmd: docker run --rm authelia/authelia:latest authelia crypto hash generate pbkdf2 --variant sha512 --random --random.length 32 --random.charset
-          alphanumeric
+        cmd: >-
+          docker run --rm authelia/authelia:latest authelia crypto hash generate pbkdf2
+          --variant sha512 --random --random.length 32 --random.charset alphanumeric
       register: authelia_client_secret_cmd
       changed_when: true
+      no_log: true
 
     - name: Parse Client Credentials
       ansible.builtin.set_fact:
-        # Regex extracts the raw password and the hash from Authelia's output
-        authelia_client_plaintext_password: "{{ authelia_client_secret_cmd.stdout | regex_search('Random Password: (\\S+)', '\\1') | first }}"
-        authelia_client_password_hash: "{{ authelia_client_secret_cmd.stdout | regex_search('Digest: (\\S+)', '\\1') | first }}"
+        authelia_client_plaintext_password: >-
+          {{ authelia_client_secret_cmd.stdout | regex_search('Random Password: (\S+)', '\1') | first }}
+        authelia_client_password_hash: >-
+          {{ authelia_client_secret_cmd.stdout | regex_search('Digest: (\S+)', '\1') | first }}
+      no_log: true
 
     # --- 3. Generate RSA Keypair ---
     - name: Generate RSA Keypair (Docker Volume Mount)
       ansible.builtin.command:
         # Mounts the host config dir to /keys inside container to write the files directly
-        cmd: docker run --rm -v {{ authelia_config_dir }}:/keys authelia/authelia:latest authelia crypto pair rsa generate --directory /keys --bits 4096
+        cmd: >-
+          docker run --rm -v {{ authelia_config_dir }}:/keys
+          authelia/authelia:latest authelia crypto pair rsa generate --directory /keys --bits 4096
       args:
         creates: "{{ authelia_config_dir }}/private.pem"
 
@@ -77,6 +85,7 @@
     - name: Decode RSA Key
       ansible.builtin.set_fact:
         authelia_oidc_rsa_key_content: "{{ authelia_rsa_key_file['content'] | b64decode }}"
+      no_log: true
 
     # --- 5. Create Configuration ---
     - name: Create configuration.yml from template
@@ -87,7 +96,7 @@
       become: true
 
     # --- 6. Output Secrets ---
-    - name: ⚠️ IMPORTANT CREDENTIALS ⚠️
+    - name: "⚠️ IMPORTANT CREDENTIALS ⚠️"
       ansible.builtin.debug:
         msg:
           - "--------------------------------------------------------"

@@ -94,7 +94,7 @@ services:
     container_name: karakeep-time-tagger
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "bash", "-c", "cat /proc/1/comm | grep -q bash"]
+      test: ["CMD", "pgrep", "-f", "karakeep-time-tagger.py"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -126,4 +126,4 @@ networks:
     external: true
 {% endfor %}
   internal:
-    internal: true
+    internal: false

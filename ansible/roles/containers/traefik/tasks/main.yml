@@ -14,6 +14,8 @@
     path: "/home/{{ sys_user }}/server/containers/traefik/data/acme.json"
     state: touch
     mode: "0600"
+    modification_time: preserve
+    access_time: preserve
 
 - name: Configure logrotate for Traefik logs
   ansible.builtin.copy:
@@ -38,8 +40,9 @@
 
 - name: Hash password
   ansible.builtin.shell: "echo $(htpasswd -nb {{ traefik_user }} {{ traefik_password }})"
-  register: containers_traefik_hash
+  register: traefik_hash
   changed_when: false
+  no_log: true
 
 - name: Deploy CrowdSec local whitelist
   ansible.builtin.copy:
@@ -81,7 +84,7 @@
     group: root
     mode: "0750"
   become: true
-  register: containers_docker_user_rules_script
+  register: traefik_docker_user_rules_script
 
 - name: Deploy DOCKER-USER rules systemd service
   ansible.builtin.template:
@@ -91,7 +94,7 @@
     group: root
     mode: "0644"
   become: true
-  register: containers_docker_user_rules_service
+  register: traefik_docker_user_rules_service
 
 - name: Enable docker-user-rules systemd service
   ansible.builtin.systemd:
@@ -107,7 +110,7 @@
     state: restarted
     daemon_reload: true
   become: true
-  when: containers_docker_user_rules_script.changed or containers_docker_user_rules_service.changed
+  when: traefik_docker_user_rules_script.changed or traefik_docker_user_rules_service.changed
 
 - name: Deploy Container
   ansible.builtin.include_role:
@@ -116,8 +119,8 @@
 
 - name: Wait for CrowdSec to be healthy
   ansible.builtin.command: docker inspect --format="{{ '{{' }}.State.Health.Status{{ '}}' }}" crowdsec
-  register: containers_crowdsec_health
-  until: containers_crowdsec_health.stdout == "healthy"
+  register: traefik_crowdsec_health
+  until: traefik_crowdsec_health.stdout == "healthy"
   retries: 10
   delay: 10
   changed_when: false
@@ -129,23 +132,23 @@
     line: '  use_wal: true'
     regexp: '^\s*use_wal:'
   become: true
-  register: containers_crowdsec_wal_config
+  register: traefik_crowdsec_wal_config
 
 - name: Restart CrowdSec to apply WAL config # noqa no-handler
   community.docker.docker_container:
     name: crowdsec
     state: started
     restart: true
-  when: containers_crowdsec_wal_config.changed
+  when: traefik_crowdsec_wal_config.changed
 
 - name: Wait for CrowdSec to be healthy after WAL config change # noqa no-handler
   ansible.builtin.command: docker inspect --format="{{ '{{' }}.State.Health.Status{{ '}}' }}" crowdsec
-  register: containers_crowdsec_health_post_wal
-  until: containers_crowdsec_health_post_wal.stdout == "healthy"
+  register: traefik_crowdsec_health_post_wal
+  until: traefik_crowdsec_health_post_wal.stdout == "healthy"
   retries: 10
   delay: 10
   changed_when: false
-  when: containers_crowdsec_wal_config.changed
+  when: traefik_crowdsec_wal_config.changed
 
 - name: Register Homepage machine credentials with CrowdSec
   community.docker.docker_container_exec:
@@ -158,11 +161,11 @@
   community.docker.docker_container_exec:
     container: crowdsec
     command: "cscli bouncers add traefik-bouncer --key {{ crowdsec_bouncer_api_key }}"
-  register: containers_crowdsec_bouncer_registration
+  register: traefik_crowdsec_bouncer_registration
   failed_when:
-    - containers_crowdsec_bouncer_registration.rc != 0
-    - "'already exist' not in (containers_crowdsec_bouncer_registration.stderr | lower)"
-  changed_when: containers_crowdsec_bouncer_registration.rc == 0
+    - traefik_crowdsec_bouncer_registration.rc != 0
+    - "'already exist' not in (traefik_crowdsec_bouncer_registration.stderr | lower)"
+  changed_when: traefik_crowdsec_bouncer_registration.rc == 0
   no_log: true
 
 - name: Restart Traefik to re-authenticate with CrowdSec bouncer # noqa no-handler
@@ -170,17 +173,19 @@
     name: traefik
     state: started
     restart: true
-  when: containers_crowdsec_bouncer_registration.changed
+  when: traefik_crowdsec_bouncer_registration.changed
 
 - name: Update CrowdSec hub
   community.docker.docker_container_exec:
     container: crowdsec
     command: cscli hub update
+  changed_when: false
 
 - name: Upgrade CrowdSec hub
   community.docker.docker_container_exec:
     container: crowdsec
     command: cscli hub upgrade
+  changed_when: false
 
 - name: Deploy traefik-init systemd service
   ansible.builtin.template:

@@ -2,7 +2,7 @@
 - name: Git Pull (Ensure repo is up to date)
   ansible.builtin.git:
     repo: "{{ github_repo }}"
-    dest: /home/{{ sys_user }}/server/ansible
+    dest: "/home/{{ sys_user }}/server"
     version: HEAD # noqa: latest[git]
     update: true
   register: common_git
@@ -11,43 +11,23 @@
   ansible.builtin.debug:
     var: common_git.stdout_lines
 
-- name: Set Facts
+- name: Find containers with changed role files
   ansible.builtin.set_fact:
-    common_container_names: []
-    common_container_lines: []
-    common_git_changed_containers: ""
+    common_git_changed_tags: "{{ common_git_changed_tags | default([]) + [item.name] }}"
+  loop: "{{ containers_list }}"
+  when: ('roles/containers/' + item.name + '/') in common_git.stdout
 
-- name: Get container lines from deploy.yml
+- name: Build tag string for changed containers
   ansible.builtin.set_fact:
-    common_container_lines: "{{ common_container_lines + [item] }}"
-  with_lines: cat "deploy.yml"
-  when: '"role:" in item'
+    common_git_changed_tag_string: "{{ common_git_changed_tags | default([]) | join(',') }}"
 
-- name: Get container name from line
-  ansible.builtin.set_fact:
-    common_container_names: "{{ common_container_names + [item.split(' ')[7]] }}"
-  loop: "{{ common_container_lines }}"
-
-- name: Search git output for container names
-  ansible.builtin.set_fact:
-    common_git_changed_containers: "{{ common_git_changed_containers + item }}"
-  loop: "{{ common_container_names }}"
-  when: item[:-1] + '/' in common_git.stdout
-
-- name: Remove hanging comma
-  ansible.builtin.set_fact:
-    common_git_changed_containers: "{{ common_git_changed_containers[:-1] }}"
-
-- name: Setup playbook command
-  ansible.builtin.set_fact:
-    common_playbook_command: "{{ 'ansible-playbook deploy.yml --tags \"' + common_git_changed_containers + '\"' }}"
-
-- name: Show playbook command
+- name: Show planned redeploy tags
   ansible.builtin.debug:
-    msg: "{{ common_playbook_command }}"
+    msg: "Containers to redeploy: {{ common_git_changed_tag_string }}"
 
 - name: Deploy updated containers, if any
-  ansible.builtin.command: "{{ common_playbook_command }}"
-  when: common_git_changed_containers != ''
-  become: true
-  become_method: ansible.builtin.sudo
+  ansible.builtin.command:
+    cmd: "ansible-playbook deploy.yml --tags '{{ common_git_changed_tag_string }}'"
+    chdir: "/home/{{ sys_user }}/server/ansible"
+  when: common_git_changed_tag_string != ''
+  changed_when: true

@@ -1,7 +1,6 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 ---
-version: "3.0"
 services:
   littlelink:
     image: ghcr.io/techno-tim/littlelink-server:latest

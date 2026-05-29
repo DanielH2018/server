@@ -6,8 +6,6 @@ services:
   bento-pdf:
     image: ghcr.io/alam00000/bentopdf:latest
     container_name: bento-pdf
-    ports:
-      - "3000:8080"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]

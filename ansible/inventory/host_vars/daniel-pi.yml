@@ -7,11 +7,15 @@ containers_list:
   - name: portainer
     port: 9000
     use_authelia: false
+    networks:
+      - proxy
     tags:
       - portainer
   - name: wg-easy-pi
     port: 51821
     use_authelia: false
+    networks:
+      - proxy
     tags:
       - wg-easy-pi
   # - name: autoheal
