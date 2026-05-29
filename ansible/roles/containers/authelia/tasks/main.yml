@@ -106,10 +106,10 @@
           - "Client App Password: {{ authelia_client_plaintext_password }}"
           - "--------------------------------------------------------"
 
-    - name: Safety Check Message
-      when: authelia_config_file.stat.exists
-      ansible.builtin.debug:
-        msg: "Configuration file already exists. Skipping setup to prevent overwriting secrets."
+- name: Safety Check Message
+  when: authelia_config_file.stat.exists
+  ansible.builtin.debug:
+    msg: "Configuration file already exists. Skipping setup to prevent overwriting secrets."
 
 - name: Check if users_database.yml exists
   ansible.builtin.stat:
