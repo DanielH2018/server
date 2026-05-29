@@ -6,6 +6,12 @@ services:
     image: ghcr.io/bigboot/autokuma:latest
     container_name: autokuma
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat /proc/1/comm | grep -q autokuma"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     environment:
       - AUTOKUMA__KUMA__URL=http://uptime-kuma:3001
       - AUTOKUMA__KUMA__USERNAME={{ uptime_kuma_username }}

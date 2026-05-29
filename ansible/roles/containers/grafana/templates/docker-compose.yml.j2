@@ -60,6 +60,12 @@ services:
     image: grafana/promtail
     container_name: promtail
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/9080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     security_opt:
       - no-new-privileges:true
     environment:

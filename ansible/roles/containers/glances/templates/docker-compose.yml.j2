@@ -7,6 +7,12 @@ services:
     container_name: glances
     image: nicolargo/glances:latest
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:61208/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     cap_drop:
       - ALL
     security_opt:

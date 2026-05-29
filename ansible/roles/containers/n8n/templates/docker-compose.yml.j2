@@ -34,6 +34,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}
@@ -68,6 +74,12 @@ services:
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "task-runner-launcher"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     environment:
       - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
       - N8N_RUNNERS_AUTH_TOKEN={{ n8n_runner_auth_token }}

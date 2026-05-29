@@ -9,6 +9,12 @@ services:
     ports:
       - "3000:8080"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     cap_drop:
       - ALL
     security_opt:

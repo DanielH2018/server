@@ -17,6 +17,12 @@ services:
       - ./config/application.yml:/config/application.yml
       - /home/{{ sys_user }}/server/containers/data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat /proc/1/comm | grep -q java"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}

@@ -5,6 +5,12 @@ services:
     build: .   # path to the folder you created
     container_name: ical-proxy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/5000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     environment:
         - GOOGLE_ICS_URL={{ calendar_1 }}
         - GOOGLE_ICS_URL_2={{ calendar_2 }}
