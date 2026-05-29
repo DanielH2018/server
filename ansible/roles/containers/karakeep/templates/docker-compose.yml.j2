@@ -93,12 +93,6 @@ services:
     image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
     container_name: karakeep-time-tagger
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "karakeep-time-tagger.py"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
     environment:
       - TZ={{ tz }}
       - KARAKEEP_PYTHON_API_ENDPOINT=http://karakeep:3000/api/v1/
