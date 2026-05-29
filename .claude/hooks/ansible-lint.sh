@@ -24,8 +24,7 @@ if [[ "$file_path" == *"/ansible/"* ]] && [[ "$file_path" == *.yml || "$file_pat
     fi
 
     echo "ansible-lint: checking $(basename "$file_path")..."
-    cd /home/ubuntu/server/ansible
-    # Strip the absolute ansible/ prefix so roles_path in ansible.cfg resolves correctly
-    relative_path="${file_path#/home/ubuntu/server/ansible/}"
+    cd /home/ubuntu/server
+    relative_path="${file_path#/home/ubuntu/server/}"
     /home/ubuntu/.local/bin/ansible-lint "$relative_path" 2>&1
 fi

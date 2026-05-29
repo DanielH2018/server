@@ -4,6 +4,7 @@
 !/docs
 !/docker-cloudflare-ddns
 !.pre-commit-config.yaml
+!ansible.cfg
 !/.vscode
 !/.github
 # Make sure these are ignored
