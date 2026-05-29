@@ -2,15 +2,59 @@
 - name: Deploy Containers
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
   gather_facts: true
-  tasks:
+  pre_tasks:
     - name: Load encrypted secrets
       community.sops.load_vars:
         file: secrets.yml
       delegate_to: localhost
-      run_once: true
+      run_once: true # noqa run-once[task]
       tags: always
 
-    - name: Run roles respecting tags
+    - name: Build role dependency map
+      ansible.builtin.set_fact:
+        _container_deps_map: "{{ containers_list | build_dep_map(playbook_dir, ansible_run_tags) }}"
+      tags: always
+
+    - name: Sort containers by dependency order
+      ansible.builtin.set_fact:
+        containers_list: "{{ containers_list | toposort_containers(_container_deps_map) }}"
+      tags: always
+
+    - name: Compute dependency closure for tagged containers
+      ansible.builtin.set_fact:
+        _deps_to_check: "{{ containers_list | dep_closure(_container_deps_map, ansible_run_tags) }}"
+      when: "'all' not in ansible_run_tags"
+      tags: always
+
+    - name: Check running state of dependencies
+      community.docker.docker_container_info:
+        name: "{{ item.name }}"
+      register: _container_state_results
+      loop: "{{ _deps_to_check }}"
+      ignore_errors: true
+      when: "'all' not in ansible_run_tags"
+      tags: always
+
+    - name: Expand tagged deployment to include unmet dependencies
+      ansible.builtin.set_fact:
+        containers_list: >-
+          {{
+            containers_list | expand_with_deps(
+              _container_deps_map,
+              ansible_run_tags,
+              _container_state_results.results
+                | default([])
+                | rejectattr('container', 'none')
+                | selectattr('container.State.Running', 'equalto', true)
+                | map(attribute='item.name')
+                | list
+            )
+          }}
+      when: "'all' not in ansible_run_tags"
+      tags: always
+
+  tasks:
+    - name: Run roles
       ansible.builtin.include_role:
         name: "{{ container_item.name }}"
         apply:
@@ -18,8 +62,4 @@
       loop: "{{ containers_list }}"
       loop_control:
         loop_var: container_item
-      when:
-        - >-
-          'all' in ansible_run_tags or
-          (container_item.tags | intersect(ansible_run_tags) | length > 0)
       tags: always

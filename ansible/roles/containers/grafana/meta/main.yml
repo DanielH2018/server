@@ -6,7 +6,7 @@ galaxy_info:
   min_ansible_version: "2.15"
 
 # Logical ordering: requires traefik and prometheus
-# Actual sequencing is enforced by containers_list ordering in host_vars rather than
-# via Ansible meta dependencies, which would conflict with the include_role loop
-# variable architecture used in deploy.yml.
+# Actual sequencing is computed by the toposort filter in deploy.yml reading meta/deps.yml,
+# not by Ansible meta dependencies (which conflict with the include_role loop
+# variable architecture used in deploy.yml).
 dependencies: []

@@ -83,13 +83,13 @@ containers_list:
       - apps
     tags:
       - pihole
-  - name: duplicati
-    port: 8200
-    use_authelia: true
-    networks:
-      - apps
-    tags:
-      - duplicati
+  # - name: duplicati
+  #   port: 8200
+  #   use_authelia: true
+  #   networks:
+  #     - apps
+  #   tags:
+  #     - duplicati
   - name: kopia
     port: 51515
     use_authelia: true
