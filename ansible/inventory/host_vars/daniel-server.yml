@@ -59,6 +59,11 @@ containers_list:
     use_authelia: true
     tags:
       - duplicati
+  - name: kopia
+    port: 51515
+    use_authelia: true
+    tags:
+      - kopia
   - name: wg-easy
     port: 51821
     use_authelia: true

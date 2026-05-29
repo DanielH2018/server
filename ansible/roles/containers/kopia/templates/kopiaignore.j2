@@ -1,0 +1,43 @@
+# Goal: restore server settings not managed by Ansible.
+# Exclude anything regeneratable, downloadable, or too large to justify storing.
+
+# ── Backup tools ────────────────────────────────────────────────────────────
+kopia/
+duplicati/
+
+# ── Generic regeneratable dirs (match at any depth) ─────────────────────────
+cache/
+logs/
+transcodes/
+tmp/
+
+# ── Game servers (large, fully re-downloadable) ─────────────────────────────
+valheim/
+minecraft/
+
+
+# ── Jellyfin ─────────────────────────────────────────────────────────────────
+# data* covers the metadata cache DB; metadata/ covers downloaded artwork;
+# plugins/ covers plugin binaries — all re-fetchable from TVDB/TMDB/catalog.
+jellyfin/config/data*/
+jellyfin/config/metadata/
+jellyfin/config/plugins/
+
+# ── Media stack ───────────────────────────────────────────────────────────────
+data/
+sonarr/config/MediaCover/
+radarr/config/MediaCover/
+bazarr/config/cache/
+prowlarr/config/Definitions/
+tdarr/transcode_cache/
+
+# ── Metrics & monitoring (regenerate from live services) ─────────────────────
+prometheus/data/
+scrutiny/influxdb/
+
+# ── App-specific caches ───────────────────────────────────────────────────────
+code-server/config/extensions*/
+foundrydl*/
+uptime-kuma/data*/
+freshrss/config/www/freshrss/data/cache/
+karakeep/time-tagger/uv-cache/

@@ -1,0 +1,44 @@
+#!/bin/sh
+# Idempotent startup: connect B2 repo via S3-compatible API, add server user, start server.
+set -e
+
+# Migrate from the deprecated native B2 provider to S3-compatible.
+# `repository disconnect` only removes the local config file, not the remote data.
+if /usr/bin/kopia repository status 2>/dev/null | grep -q "Storage type:.*b2"; then
+    echo "Migrating from B2 native to S3-compatible provider..."
+    /usr/bin/kopia repository disconnect
+fi
+
+# Connect to existing repository, or create it on first run.
+if ! /usr/bin/kopia repository status 2>/dev/null; then
+    echo "Connecting to repository..."
+    if ! /usr/bin/kopia repository connect s3 \
+        --bucket="${KOPIA_B2_BUCKET}" \
+        --endpoint="${KOPIA_B2_ENDPOINT}" \
+        --access-key="${KOPIA_B2_KEY_ID}" \
+        --secret-access-key="${KOPIA_B2_APPLICATION_KEY}" 2>/dev/null; then
+        echo "Repository not found in bucket, creating..."
+        /usr/bin/kopia repository create s3 \
+            --bucket="${KOPIA_B2_BUCKET}" \
+            --endpoint="${KOPIA_B2_ENDPOINT}" \
+            --access-key="${KOPIA_B2_KEY_ID}" \
+            --secret-access-key="${KOPIA_B2_APPLICATION_KEY}"
+    fi
+fi
+
+# Set snapshot schedule and retention (idempotent — safe to run on every start).
+# Exclusions are handled by .kopiaignore in the snapshot source directory.
+if /usr/bin/kopia repository status 2>/dev/null; then
+    /usr/bin/kopia policy set /data/home/ubuntu/server/containers \
+        --snapshot-interval 24h \
+        --keep-daily 7 \
+        --keep-weekly 1 \
+        --keep-monthly 1
+fi
+
+exec /usr/bin/kopia server start \
+    --disable-csrf-token-checks \
+    --insecure \
+    --without-password \
+    --address=0.0.0.0:51515 \
+    --allow-extremely-dangerous-unauthenticated-server-on-the-network

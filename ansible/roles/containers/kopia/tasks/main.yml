@@ -1,0 +1,29 @@
+---
+- name: Create required directories
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}/config"
+      - "{{ container_item.name }}/cache"
+      - "{{ container_item.name }}/logs"
+      - "{{ container_item.name }}/rclone"
+      - "{{ container_item.name }}/scripts"
+
+- name: Deploy Kopia entrypoint script
+  ansible.builtin.template:
+    src: entrypoint.sh.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/scripts/entrypoint.sh"
+    mode: "0755"
+
+- name: Deploy Kopia ignore rules
+  ansible.builtin.template:
+    src: kopiaignore.j2
+    dest: "/home/{{ sys_user }}/server/containers/.kopiaignore"
+    mode: "0644"
+
+- name: Deploy Container
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml

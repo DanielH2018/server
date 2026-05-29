@@ -1,0 +1,47 @@
+{% from 'traefik.yml.j2' import labels with context %}
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+---
+
+services:
+  kopia:
+    image: kopia/kopia:latest
+    container_name: kopia
+    hostname: kopia
+    restart: unless-stopped
+    entrypoint: /scripts/entrypoint.sh
+    environment:
+      - KOPIA_PASSWORD={{ kopia_password }}
+      - KOPIA_B2_KEY_ID={{ kopia_b2_key_id }}
+      - KOPIA_B2_APPLICATION_KEY={{ kopia_b2_application_key }}
+      - KOPIA_B2_BUCKET={{ kopia_b2_bucket }}
+      - KOPIA_B2_ENDPOINT={{ kopia_b2_endpoint }}
+      - TZ={{ tz }}
+    volumes:
+      - ./config:/app/config
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+      - ./rclone:/app/rclone
+      - ./scripts:/scripts:ro
+      - /:/data:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -so /dev/null -w '%{http_code}' http://localhost:51515/ | grep -qE '^(200|401)'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - {{ docker_network }}
+    labels:
+      {# Generate labels(container, port, docker_network, use_authelia) -#}
+      {{ labels(
+          container_item.hostname | default(container_item.name),
+          container_item.port | string,
+          docker_network,
+          container_item.use_authelia
+        )
+      }}
+      {{ kuma(container_item.name) }}
+
+networks:
+  {{ docker_network }}:
+    external: true
