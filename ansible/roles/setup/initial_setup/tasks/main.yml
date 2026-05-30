@@ -38,10 +38,23 @@
     group: ubuntu
     recurse: true
 
+- name: Create ssh-users group
+  ansible.builtin.group:
+    name: ssh-users
+    state: present
+  become: true
+
+- name: Add ubuntu to ssh-users group
+  ansible.builtin.user:
+    name: "{{ ansible_user_id }}"
+    groups: ssh-users
+    append: true
+  become: true
+
 - name: Configure SSH security settings
   ansible.builtin.lineinfile:
     path: "{{ ssh_config_path }}"
-    regexp: "^{{ item.key }}"
+    regexp: "^#?{{ item.key }}"
     line: "{{ item.key }} {{ item.value }}"
   loop:
     - { key: "PasswordAuthentication", value: "no" }
@@ -49,6 +62,12 @@
     - { key: "PermitRootLogin", value: "no" }
     - { key: "IgnoreRhosts", value: "yes" }
     - { key: "ChallengeResponseAuthentication", value: "no" }
+    - { key: "MaxAuthTries", value: "3" }
+    - { key: "MaxSessions", value: "2" }
+    - { key: "LoginGraceTime", value: "30" }
+    - { key: "LogLevel", value: "VERBOSE" }
+    - { key: "DisableForwarding", value: "yes" }
+    - { key: "AllowGroups", value: "ssh-users" }
   notify: Restart SSH
 
 - name: Schedule sudo crontab for weekly restart
@@ -103,11 +122,38 @@
     reload: true
   become: true
 
-- name: Configure UFW firewall
+- name: Apply kernel security hardening
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop:
+    - { name: "net.ipv4.conf.all.rp_filter", value: "2" }
+    - { name: "net.ipv4.conf.all.accept_redirects", value: "0" }
+    - { name: "net.ipv4.conf.default.accept_redirects", value: "0" }
+    - { name: "net.ipv4.conf.all.send_redirects", value: "0" }
+    - { name: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1" }
+    - { name: "net.ipv4.conf.all.log_martians", value: "1" }
+    - { name: "kernel.sysrq", value: "0" }
+    - { name: "kernel.dmesg_restrict", value: "1" }
+  become: true
+
+- name: Remove plain SSH allow rule (superseded by rate-limit)
   community.general.ufw:
     rule: allow
     port: ssh
     proto: tcp
+    delete: true
+  become: true
+  failed_when: false
+
+- name: Configure UFW firewall - rate-limit SSH
+  community.general.ufw:
+    rule: limit
+    port: ssh
+    proto: tcp
+  become: true
 
 - name: Allow WireGuard port 51820/udp
   community.general.ufw:
@@ -120,3 +166,35 @@
 - name: Enable UFW firewall
   community.general.ufw:
     state: enabled
+
+- name: Install auditd
+  ansible.builtin.apt:
+    name: auditd
+    state: present
+  become: true
+
+- name: Enable and start auditd
+  ansible.builtin.systemd:
+    name: auditd
+    state: started
+    enabled: true
+  become: true
+
+- name: Configure audit rules
+  ansible.builtin.copy:
+    dest: /etc/audit/rules.d/hardening.rules
+    owner: root
+    group: root
+    mode: "0640"
+    content: |
+      # Identity file changes
+      -w /etc/passwd -p wa -k identity
+      -w /etc/group -p wa -k identity
+      -w /etc/shadow -p wa -k identity
+      # SSH configuration changes
+      -w /etc/ssh/sshd_config -p wa -k sshd
+      # Privilege escalation changes
+      -w /etc/sudoers -p wa -k actions
+      -w /etc/sudoers.d -p wa -k actions
+  become: true
+  notify: Reload audit rules

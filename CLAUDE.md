@@ -61,7 +61,7 @@ ansible-playbook ansible/initial_setup.yml
 - All containers use Traefik labels for reverse proxy routing
 - Docker network: `proxy`
 - PUID/PGID: `1000`/`1000`, user: `ubuntu`
-- Timezone: `America/New_York`
+- Timezone: `America/Chicago`
 - Containers should have healthchecks defined where possible
 
 ## Pre-commit Hooks

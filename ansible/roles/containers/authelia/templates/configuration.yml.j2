@@ -49,7 +49,7 @@ session:
   same_site: 'lax'
   expiration: '1h'  # 1 hour
   inactivity: '5m'  # 5 minutes
-  remember_me: '1M' # 1 Month
+  remember_me: '1w' # 1 Week
   cookies:
     - domain: '{{ domain }}'  # Should match whatever your root protected domain is
       authelia_url: 'https://auth.{{ domain }}'

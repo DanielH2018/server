@@ -49,6 +49,7 @@ http:
       headers:
         customResponseHeaders:
           Permissions-Policy: "geolocation=(self), microphone=(), camera=(), fullscreen=*, usb=()"
+        referrerPolicy: "strict-origin-when-cross-origin"
         frameDeny: true
         browserXssFilter: true
         contentTypeNosniff: true
