@@ -5,7 +5,7 @@ exclude_paths:
   - .git/
   - .github/
   - "*.log"
-  - "secrets.yml"
+  - "ansible/vars/secrets.yml"
   - "ansible/collections/"
 
 skip_list:

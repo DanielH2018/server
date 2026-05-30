@@ -20,7 +20,7 @@ repos:
         additional_dependencies:
           - ansible-core>=2.17
           - jmespath
-        entry: bash -c 'ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c ansible/.ansible-lint'
+        entry: bash -c 'ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint'
         pass_filenames: false
 
   # Gitleaks for detecting secrets

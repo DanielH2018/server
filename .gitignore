@@ -4,6 +4,7 @@
 !/docs
 !/docker-cloudflare-ddns
 !.pre-commit-config.yaml
+!.ansible-lint
 !ansible.cfg
 !/.vscode
 !/.github
