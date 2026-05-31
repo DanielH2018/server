@@ -66,7 +66,7 @@ http:
         sourceRange:
         - "10.0.0.0/8"
         - "192.168.0.0/16"
-        - "172.0.0.0/12"
+        - "172.16.0.0/12"
 
     secured:
       chain:
@@ -81,7 +81,13 @@ http:
           crowdsecLapiKey: "{{ crowdsec_bouncer_api_key }}"
           crowdsecLapiHost: "crowdsec:8080"
           crowdsecMode: stream
-          updateIntervalSeconds: 300
+          updateIntervalSeconds: 60
+
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1m
 
     authelia:
       forwardAuth:

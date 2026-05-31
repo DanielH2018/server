@@ -34,10 +34,12 @@ services:
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.53.0
     container_name: cadvisor
-    privileged: true
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - /:/rootfs:ro
-      - /var/run:/var/run:rw
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /sys/fs/cgroup:/sys/fs/cgroup:ro

@@ -23,6 +23,7 @@ entryPoints:
           scheme: https
       middlewares:
         - crowdsec@file
+        - rate-limit@file
   https:
     address: ":443"
     forwardedHeaders:
@@ -37,6 +38,7 @@ entryPoints:
     http:
       middlewares:
         - crowdsec@file
+        - rate-limit@file
   terraria:
     address: ":7777"
   minecraft:
