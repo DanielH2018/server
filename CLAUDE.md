@@ -65,8 +65,8 @@ ansible-playbook ansible/initial_setup.yml
 - Containers should have healthchecks defined where possible
 
 ## Pre-commit Hooks
-The repo uses pre-commit with YAML linting, Ansible linting, and gitleaks (secret scanning).
-Run `pre-commit run --all-files` to check before committing.
+The repo uses [prek](https://prek.j178.dev) (config: `prek.toml`) with YAML linting, Ansible linting, and gitleaks (secret scanning).
+Run `prek run --all-files` to check before committing.
 
 ## Variables
 Global vars in `ansible/inventory/group_vars/all.yml`. Per-host overrides in `ansible/inventory/host_vars/`.

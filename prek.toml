@@ -1,0 +1,44 @@
+# Configuration file for `prek`, a git hook framework written in Rust.
+# See https://prek.j178.dev for more information.
+#:schema https://www.schemastore.org/prek.json
+
+# Standard cleanup hooks
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v4.4.0"
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+
+[[repos.hooks]]
+id = "end-of-file-fixer"
+
+[[repos.hooks]]
+id = "check-yaml"
+
+[[repos.hooks]]
+id = "check-added-large-files"
+
+[[repos.hooks]]
+id = "mixed-line-ending"
+args = ["--fix=lf"]
+
+# Ansible linting
+[[repos]]
+repo = "https://github.com/ansible/ansible-lint"
+rev = "v24.12.2"
+
+[[repos.hooks]]
+id = "ansible-lint"
+files = "\\.(yaml|yml)$"
+additional_dependencies = ["ansible-core>=2.17", "jmespath"]
+entry = "bash -c 'ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint'"
+pass_filenames = false
+
+# Secret scanning
+[[repos]]
+repo = "https://github.com/gitleaks/gitleaks"
+rev = "v8.18.1"
+
+[[repos.hooks]]
+id = "gitleaks"

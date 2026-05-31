@@ -3,7 +3,7 @@
 !/ansible
 !/docs
 !/docker-cloudflare-ddns
-!.pre-commit-config.yaml
+!prek.toml
 !.ansible-lint
 !ansible.cfg
 !/.vscode
