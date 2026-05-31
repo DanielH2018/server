@@ -67,8 +67,8 @@
     - { key: "ClientAliveCountMax", value: "2" }
     - { key: "LoginGraceTime", value: "30" }
     - { key: "LogLevel", value: "VERBOSE" }
-    - { key: "DisableForwarding", value: "yes" }
-    - { key: "AllowTcpForwarding", value: "no" }
+    - { key: "DisableForwarding", value: "no" }
+    - { key: "AllowTcpForwarding", value: "local" }
     - { key: "AllowAgentForwarding", value: "no" }
     - { key: "X11Forwarding", value: "no" }
     - { key: "Compression", value: "no" }
