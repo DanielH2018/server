@@ -12,6 +12,7 @@
         "Email-to-RSS": true
     },
     "files.associations": {
-        "*.yml.j2": "jinja-yaml"
+        "*.yml.j2": "jinja-yaml",
+        ".ansible-lint": "yaml"
     }
 }
