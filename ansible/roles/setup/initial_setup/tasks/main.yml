@@ -44,9 +44,9 @@
     state: present
   become: true
 
-- name: Add ubuntu to ssh-users group
+- name: Add sys user to ssh-users group
   ansible.builtin.user:
-    name: "{{ ansible_user_id }}"
+    name: "{{ sys_user }}"
     groups: ssh-users
     append: true
   become: true
@@ -67,13 +67,23 @@
     - { key: "ClientAliveCountMax", value: "2" }
     - { key: "LoginGraceTime", value: "30" }
     - { key: "LogLevel", value: "VERBOSE" }
-    - { key: "DisableForwarding", value: "no" }
-    - { key: "AllowTcpForwarding", value: "local" }
+    - { key: "DisableForwarding", value: "yes" }
+    - { key: "AllowTcpForwarding", value: "no" }
     - { key: "AllowAgentForwarding", value: "no" }
     - { key: "X11Forwarding", value: "no" }
     - { key: "Compression", value: "no" }
     - { key: "TCPKeepAlive", value: "no" }
     - { key: "AllowGroups", value: "ssh-users" }
+  notify: Restart SSH
+
+- name: Configure SSH Match block for sys user forwarding
+  ansible.builtin.blockinfile:
+    path: "{{ ssh_config_path }}"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - sys user forwarding"
+    block: |
+      Match User {{ sys_user }}
+          AllowTcpForwarding local
+          DisableForwarding no
   notify: Restart SSH
 
 - name: Schedule sudo crontab for weekly restart
