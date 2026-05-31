@@ -11,14 +11,10 @@
 - name: Copy Icons
   ansible.builtin.copy:
     src: "{{ item }}"
-    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/icons/{{ item }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/icons/"
     mode: "0664"
-  with_items:
-    - opgg.png
-    - tacticstools.png
-    - tftacademy.png
-    - LoLalytics.png
-    - limitless.png
+  with_fileglob:
+    - "*.png"
 
 - name: Copy Config files
   ansible.builtin.template:
