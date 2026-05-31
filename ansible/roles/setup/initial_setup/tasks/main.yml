@@ -27,8 +27,29 @@
       - unzip
       - unattended-upgrades
       - update-notifier-common
+      - fail2ban
+      - libpam-tmpdir
+      - debsums
+      - apt-show-versions
     state: present
   become: true
+
+- name: Enable and start fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: started
+    enabled: true
+  become: true
+
+- name: Deploy fail2ban jail configuration
+  ansible.builtin.template:
+    src: fail2ban_homelab.conf.j2
+    dest: /etc/fail2ban/jail.d/homelab.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart fail2ban
 
 - name: Set SSH directory permissions
   ansible.builtin.file:
@@ -355,6 +376,78 @@
     job: "/usr/bin/rkhunter --check --nocolors --skip-keypress --report-warnings-only 2>&1 | /usr/bin/logger -t rkhunter"
     user: root
   become: true
+
+- name: Set default umask to 027 in /etc/login.defs
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^UMASK\s'
+    line: "UMASK\t\t027"
+  become: true
+
+- name: Configure password hash rounds in /etc/login.defs
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^#?\s*{{ item.key }}\s'
+    line: "{{ item.key }}\t{{ item.value }}"
+  loop:
+    - { key: "SHA_CRYPT_MIN_ROUNDS", value: "65536" }
+    - { key: "SHA_CRYPT_MAX_ROUNDS", value: "65536" }
+  become: true
+
+- name: Configure password age policy in /etc/login.defs
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^{{ item.key }}\s'
+    line: "{{ item.key }}\t{{ item.value }}"
+  loop:
+    - { key: "PASS_MIN_DAYS", value: "1" }
+    - { key: "PASS_MAX_DAYS", value: "365" }
+    - { key: "PASS_WARN_AGE", value: "14" }
+  become: true
+
+- name: Disable core dumps in /etc/security/limits.conf
+  ansible.builtin.lineinfile:
+    path: /etc/security/limits.conf
+    line: "* hard core 0"
+    state: present
+  become: true
+
+- name: Create systemd coredump drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/coredump.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Disable core dumps via systemd coredump
+  ansible.builtin.copy:
+    dest: /etc/systemd/coredump.conf.d/disable.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Coredump]
+      Storage=none
+      ProcessSizeMax=0
+  become: true
+
+- name: Harden Postfix SMTP banner to hide OS info
+  ansible.builtin.lineinfile:
+    path: /etc/postfix/main.cf
+    regexp: '^smtpd_banner\s*='
+    line: "smtpd_banner = $myhostname ESMTP"
+  become: true
+  notify: Reload Postfix
+
+- name: Disable Postfix VRFY command
+  ansible.builtin.lineinfile:
+    path: /etc/postfix/main.cf
+    regexp: '^disable_vrfy_command\s*='
+    line: "disable_vrfy_command = yes"
+  become: true
+  notify: Reload Postfix
 
 - name: Install AIDE file integrity monitor
   ansible.builtin.apt:

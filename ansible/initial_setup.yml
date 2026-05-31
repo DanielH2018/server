@@ -17,6 +17,16 @@
     - { role: docker_install, tags: ["docker_install"] }
     - { role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == 'daniel-pi' }
   handlers:
+    - name: Restart fail2ban
+      ansible.builtin.service:
+        name: fail2ban
+        state: restarted
+
+    - name: Reload Postfix
+      ansible.builtin.service:
+        name: postfix
+        state: reloaded
+
     - name: Restart SSH
       ansible.builtin.service:
         name: ssh

@@ -1,0 +1,17 @@
+[DEFAULT]
+banaction = ufw
+bantime   = 1h
+findtime  = 10m
+maxretry  = 5
+
+[sshd]
+enabled = true
+
+[postfix]
+enabled = true
+
+[recidive]
+enabled  = true
+bantime  = 7d
+findtime = 1d
+maxretry = 3
