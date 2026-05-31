@@ -352,8 +352,36 @@
     state: present
   become: true
 
-- name: Initialize AIDE database (runs once)
-  ansible.builtin.command: aideinit
+- name: Deploy local AIDE exclusions for Docker homelab
+  ansible.builtin.template:
+    src: 98_aide_local.conf.j2
+    dest: /etc/aide/aide.conf.d/98_aide_local.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Initialize AIDE database with progress monitoring
+  ansible.builtin.shell: |
+    set -o pipefail
+    aideinit &
+    AIDEINIT_PID=$!
+    sleep 5
+    AIDE_PID=$(pgrep -P "$AIDEINIT_PID" -x aide 2>/dev/null || pgrep -x aide 2>/dev/null)
+    PREV_BYTES=0
+    while kill -0 "$AIDEINIT_PID" 2>/dev/null; do
+      if [ -n "$AIDE_PID" ] && [ -f "/proc/$AIDE_PID/io" ]; then
+        BYTES=$(awk '/^read_bytes/{print $2}' "/proc/$AIDE_PID/io" 2>/dev/null)
+        GB=$(( BYTES / 1073741824 ))
+        RATE_MB=$(( (BYTES - PREV_BYTES) / 1048576 ))
+        echo "AIDE progress: ${GB}GB read, ${RATE_MB}MB/min"
+        PREV_BYTES=$BYTES
+      else
+        echo "AIDE initializing..."
+      fi
+      sleep 60
+    done
+    wait "$AIDEINIT_PID"
   args:
     creates: /var/lib/aide/aide.db
   become: true

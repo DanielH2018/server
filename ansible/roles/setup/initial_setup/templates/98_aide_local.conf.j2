@@ -1,0 +1,13 @@
+# Local AIDE exclusions for Docker homelab.
+# Named 98_* so it loads before 99_aide_root's "/ Full" catch-all.
+# AIDE uses first-match-wins, so these exclusions take precedence.
+
+# Docker image layers and overlay2 filesystem — change on every pull/deploy
+!/var/lib/docker/
+
+# Container application data — media, downloads, app databases (high-churn)
+!/home/{{ sys_user }}/server/containers/data/
+
+# Virtual/pseudo filesystems — not real files, cause inflated read counts
+!/proc/
+!/sys/
