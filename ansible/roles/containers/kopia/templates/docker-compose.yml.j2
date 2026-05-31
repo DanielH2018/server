@@ -22,7 +22,7 @@ services:
       - ./logs:/app/logs
       - ./rclone:/app/rclone
       - ./scripts:/scripts:ro
-      - /:/data:ro
+      - /home/ubuntu/server/containers:/data/home/ubuntu/server/containers:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -so /dev/null -w '%{http_code}' http://localhost:51515/ | grep -qE '^(200|401)'"]
       interval: 30s

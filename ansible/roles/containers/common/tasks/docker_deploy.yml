@@ -3,7 +3,7 @@
   ansible.builtin.template:
     src: docker-compose.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/docker-compose.yml"
-    mode: "0664"
+    mode: "0600"
 
 - name: Deploy Container {{ container_item.name }}
   community.docker.docker_compose_v2:
