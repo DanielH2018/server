@@ -128,7 +128,7 @@ containers_list:
   #     - home-assistant
   - name: karakeep
     port: 3000
-    use_authelia: false
+    use_authelia: true
     networks:
       - apps
     tags:

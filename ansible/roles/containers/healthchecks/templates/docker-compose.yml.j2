@@ -20,6 +20,7 @@ services:
       - EMAIL_USE_TLS=True
       - SUPERUSER_EMAIL={{ email }}
       - SUPERUSER_PASSWORD={{ healthchecks_password }}
+      - REGISTRATION_OPEN=False
     volumes:
       - ./config:/config
     cap_drop:
@@ -53,7 +54,7 @@ services:
 
       ## Ping Bypass (Public)
       # We use PathPrefix to catch /ping and everything after it
-      - "traefik.http.routers.healthchecks-ping.rule=Host(`healthchecks.{{ domain }}`) && (PathPrefix(`/ping`) || PathPrefix(`/api`))"
+      - "traefik.http.routers.healthchecks-ping.rule=Host(`healthchecks.{{ domain }}`) && PathPrefix(`/ping`)"
       - "traefik.http.routers.healthchecks-ping.entrypoints=https"
       - "traefik.http.routers.healthchecks-ping.tls=true"
       - "traefik.http.routers.healthchecks-ping.service=healthchecks"

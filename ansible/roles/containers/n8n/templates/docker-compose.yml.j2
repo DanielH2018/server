@@ -56,8 +56,8 @@ services:
       {{ kuma(container_item.name) }}
 
       ## Webhook Bypass (Public)
-      # We use PathPrefix to catch /webhook or /webhook-test and everything after it
-      - "traefik.http.routers.n8n-webhook.rule=Host(`n8n.{{ domain }}`) && (PathPrefix(`/webhook/`) || PathPrefix(`/webhook-test/`))"
+      # /webhook-test/ is intentionally excluded — it is a dev endpoint with no legitimate external use
+      - "traefik.http.routers.n8n-webhook.rule=Host(`n8n.{{ domain }}`) && PathPrefix(`/webhook/`)"
       - "traefik.http.routers.n8n-webhook.entrypoints=https"
       - "traefik.http.routers.n8n-webhook.tls=true"
       - "traefik.http.routers.n8n-webhook.service=n8n"

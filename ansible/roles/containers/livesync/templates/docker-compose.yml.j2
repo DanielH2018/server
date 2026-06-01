@@ -3,7 +3,7 @@
 ---
 services:
   couchdb:
-    image: couchdb:latest
+    image: couchdb:3
     security_opt:
       - no-new-privileges:true
     container_name: livesync
@@ -34,6 +34,14 @@ services:
         )
       }}
       {{ kuma(container_item.name) }}
+
+      ## Block Fauxton admin UI — put it behind Authelia
+      - "traefik.http.routers.livesync-utils.rule=Host(`livesync.{{ domain }}`) && PathPrefix(`/_utils`)"
+      - "traefik.http.routers.livesync-utils.entrypoints=https"
+      - "traefik.http.routers.livesync-utils.tls=true"
+      - "traefik.http.routers.livesync-utils.service=livesync"
+      - "traefik.http.routers.livesync-utils.middlewares=authelia@docker"
+      - "traefik.http.routers.livesync-utils.priority=200"
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}

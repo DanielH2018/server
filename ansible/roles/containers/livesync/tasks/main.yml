@@ -6,10 +6,13 @@
   vars:
     common_dirs_to_create:
       - "{{ container_item.name }}"
+      - "{{ container_item.name }}/couchdb-etc"
 
-# - include_tasks: dns.yml
-#   with_items:
-#     - "www"
+- name: Deploy CouchDB local.ini
+  ansible.builtin.template:
+    src: local.ini.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/couchdb-etc/local.ini"
+    mode: "0600"
 
 - name: Deploy Container
   ansible.builtin.include_role:
