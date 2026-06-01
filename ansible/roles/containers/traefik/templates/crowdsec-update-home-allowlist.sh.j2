@@ -1,0 +1,24 @@
+#!/bin/bash
+set -euo pipefail
+
+ALLOWLIST="home-ips"
+STATE_FILE="/home/{{ sys_user }}/.crowdsec-home-ip"
+
+CURRENT_IP=$(curl -sf --max-time 10 https://api4.ipify.org) || {
+  logger -t crowdsec-home-allowlist "Failed to resolve public IP"
+  exit 1
+}
+
+STORED_IP=$(cat "$STATE_FILE" 2>/dev/null || true)
+
+[ "$CURRENT_IP" = "$STORED_IP" ] && exit 0
+
+docker exec crowdsec cscli allowlists create "$ALLOWLIST" --description "Home IPs" 2>/dev/null || true
+
+if [ -n "$STORED_IP" ]; then
+  docker exec crowdsec cscli allowlists remove "$ALLOWLIST" "$STORED_IP" 2>/dev/null || true
+fi
+
+docker exec crowdsec cscli allowlists add "$ALLOWLIST" "$CURRENT_IP"
+echo "$CURRENT_IP" > "$STATE_FILE"
+logger -t crowdsec-home-allowlist "Updated home allowlist: ${STORED_IP:-<none>} -> $CURRENT_IP"

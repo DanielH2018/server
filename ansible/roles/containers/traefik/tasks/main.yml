@@ -214,3 +214,30 @@
     user: root
     state: present
   become: true
+
+- name: Create CrowdSec home-ips allowlist
+  community.docker.docker_container_exec:
+    container: crowdsec
+    command: "cscli allowlists create home-ips --description 'Home IPs'"
+  register: traefik_crowdsec_allowlist_create
+  failed_when:
+    - traefik_crowdsec_allowlist_create.rc != 0
+    - "'already exist' not in (traefik_crowdsec_allowlist_create.stderr | lower)"
+  changed_when: traefik_crowdsec_allowlist_create.rc == 0
+
+- name: Deploy home allowlist updater script
+  ansible.builtin.template:
+    src: crowdsec-update-home-allowlist.sh.j2
+    dest: /usr/local/bin/crowdsec-update-home-allowlist.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0750"
+  become: true
+
+- name: Schedule CrowdSec home IP allowlist updater
+  ansible.builtin.cron:
+    name: "Update CrowdSec home IP allowlist"
+    minute: "*/5"
+    user: "{{ sys_user }}"
+    job: /usr/local/bin/crowdsec-update-home-allowlist.sh
+    state: present
