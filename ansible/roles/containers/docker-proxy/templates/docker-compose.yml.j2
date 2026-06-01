@@ -10,8 +10,8 @@ services:
       - CONTAINERS=1  # Allow access to viewing containers
       - SERVICES=1    # Allow access to viewing services (necessary when using Docker Swarm)
       - TASKS=1       # Allow access to viewing tasks (necessary when using Docker Swarm)
-      - POST=1        # Allow any POST operations (effectively read-only)
-      - EXEC=1        # Allows "Console" access
+      - POST=0        # Read-only: no write/lifecycle ops on this broadly-reachable proxy
+      - EXEC=0        # Read-only: no container exec (Portainer + lifecycle automation use dedicated proxies)
       - INFO=1        # Portainer checks this to validate connection
       - VERSION=1     # Portainer checks this to validate connection
       - PING=1        # Portainer checks this to validate connection
@@ -40,8 +40,52 @@ services:
       - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma(container_item.name) }}
 
+  # Write-capable proxy for lifecycle automation only (Watchtower + Autoheal).
+  # POST=1 enables create/start/stop/restart; EXEC stays off. It lives solely on the
+  # private `lifecycle` network those two containers join, so write access to the
+  # Docker API is NOT exposed to the proxy/monitoring/apps networks.
+  docker-proxy-lifecycle:
+    image: lscr.io/linuxserver/socket-proxy:latest
+    container_name: docker-proxy-lifecycle
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1         # Watchtower pulls/prunes images
+      - NETWORKS=1       # Watchtower needs network info to recreate containers
+      - INFO=1
+      - VERSION=1
+      - PING=1
+      - EVENTS=1
+      - POST=1           # Allow write methods (POST/PUT/DELETE): create/remove containers + image cleanup
+      - ALLOW_START=1    # Watchtower: start recreated containers
+      - ALLOW_STOP=1     # Watchtower: stop old containers before replacing
+      - ALLOW_RESTARTS=1 # Autoheal: restart unhealthy containers (also covers Watchtower kill)
+      # EXEC=0 blocks the exec *run* path (/exec/{id}/start -> 403, verified). Note: create-exec
+      # (/containers/{id}/exec) still slips through via CONTAINERS+POST, but with /exec/start
+      # blocked it can't execute. Accepted: this proxy is already create-capable (POST=1, needed
+      # by Watchtower) and isolated to the lifecycle net with only Watchtower + Autoheal.
+      - EXEC=0
+    networks:
+      - lifecycle
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:2375/version || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+      {{ kuma('docker-proxy-lifecycle') }}
+
 networks:
 {% for net in container_item.networks | default([docker_network]) %}
   {{ net }}:
     external: true
 {% endfor %}
+  lifecycle:
+    external: true

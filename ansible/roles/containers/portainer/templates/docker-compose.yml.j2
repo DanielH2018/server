@@ -2,6 +2,47 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 ---
 services:
+  # Dedicated socket proxy for Portainer only. Portainer needs write (POST) and
+  # exec (EXEC) access to manage containers; keeping those powerful permissions on
+  # a private 1:1 network here keeps them off the shared docker-proxy, which is
+  # reachable from the proxy/monitoring/apps networks.
+  docker-proxy-portainer:
+    image: lscr.io/linuxserver/socket-proxy:latest
+    container_name: docker-proxy-portainer
+    environment:
+      - CONTAINERS=1
+      - SERVICES=1
+      - TASKS=1
+      - POST=1        # Write ops (create/start/stop) — required by Portainer
+      - EXEC=1        # Container "Console" access — required by Portainer
+      - INFO=1
+      - VERSION=1
+      - PING=1
+      - IMAGES=1
+      - VOLUMES=1
+      - NETWORKS=1
+      - EVENTS=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - portainer_internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:2375/version || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      # Disable watchtower update
+      - "com.centurylinklabs.watchtower.enable=false"
+      {{ kuma('docker-proxy-portainer') }}
+
   portainer:
     image: portainer/portainer-ce:alpine
     container_name: portainer
@@ -9,17 +50,23 @@ services:
     security_opt:
       - no-new-privileges:true
     ports:
+      # Intentional break-glass access: lets us reach Portainer on the LAN even if
+      # Traefik / Authelia / CrowdSec are down. Not forwarded externally.
       - 9000:9000
     networks:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}
 {% endfor %}
+      - portainer_internal
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data:/data
     environment:
       TRUSTED_ORIGINS: "{{ domain }}"
-    command: -H tcp://docker-proxy:2375
+    command: -H tcp://docker-proxy-portainer:2375
+    depends_on:
+      docker-proxy-portainer:
+        condition: service_healthy
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://localhost:9000/ || exit 1
       interval: 30s
@@ -40,3 +87,5 @@ networks:
   {{ net }}:
     external: true
 {% endfor %}
+  portainer_internal:
+    internal: true

@@ -9,7 +9,7 @@ services:
     security_opt:
       - no-new-privileges:true
     environment:
-      DOCKER_HOST: tcp://docker-proxy:2375
+      DOCKER_HOST: tcp://docker-proxy-lifecycle:2375
       WATCHTOWER_CLEANUP: true
       WATCHTOWER_SCHEDULE: "0 0 4 * * *"
       WATCHTOWER_INCLUDE_RESTARTING: true
@@ -20,7 +20,7 @@ services:
 {% endfor %}
     labels:
       # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
+      - "com.centurylinklabs.watchtower.depends-on:docker-proxy-lifecycle"
       {{ kuma(container_item.name) }}
 
 networks:

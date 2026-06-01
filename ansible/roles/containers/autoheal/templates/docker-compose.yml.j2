@@ -7,14 +7,14 @@ services:
     container_name: autoheal
     environment:
       - AUTOHEAL_CONTAINER_LABEL=all
-      - DOCKER_SOCK=tcp://docker-proxy:2375
+      - DOCKER_SOCK=tcp://docker-proxy-lifecycle:2375
     networks:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}
 {% endfor %}
     labels:
       # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
+      - "com.centurylinklabs.watchtower.depends-on:docker-proxy-lifecycle"
       {{ kuma(container_item.name) }}
 
 networks:

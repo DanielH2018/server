@@ -112,4 +112,5 @@
     - media
     - apps
     - homepage_private
+    - lifecycle  # private net: Watchtower + Autoheal <-> docker-proxy-lifecycle only
   become: true

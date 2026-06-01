@@ -53,13 +53,15 @@ containers_list:
   - name: autoheal
     use_authelia: false
     networks:
-      - monitoring
+      # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
+      - lifecycle
     tags:
       - autoheal
   - name: watchtower
     use_authelia: false
     networks:
-      - monitoring
+      # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
+      - lifecycle
     tags:
       - watchtower
   - name: cloudflare-ddns
@@ -350,6 +352,8 @@ containers_list:
   - name: littlelink
     port: 3000
     hostname: www
+    # Public by design: this is the public-facing link-in-bio landing page (www),
+    # so it must be reachable without Authelia.
     use_authelia: false
     networks:
       - apps
@@ -357,6 +361,8 @@ containers_list:
       - littlelink
   - name: livesync
     port: 5984
+    # CouchDB enforces its own auth (require_valid_user = true in local.ini); the
+    # Obsidian LiveSync replication client uses basic auth and can't pass Authelia 2FA.
     use_authelia: false
     networks:
       - apps

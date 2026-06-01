@@ -34,9 +34,15 @@ authentication_backend:
 access_control:
   default_policy: deny
   rules:
-    # Rules applied to local network
+    # Rules applied to local network. The networks condition makes the bypass
+    # fail closed: a spoofed *.local Host header from outside the LAN still
+    # requires full authentication instead of skipping it.
     - domain: "*.local.{{ domain }}"
       policy: bypass
+      networks:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
 
     # Rules applied to everyone
     - domain: "*.{{ domain }}"

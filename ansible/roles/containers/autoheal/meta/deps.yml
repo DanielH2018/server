@@ -1,2 +1,3 @@
 ---
-role_deps: []
+role_deps:
+  - docker-proxy  # provides docker-proxy-lifecycle (write proxy) on the lifecycle network

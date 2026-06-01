@@ -10,6 +10,10 @@ services:
       - no-new-privileges:true
     cap_add:
       - SYS_RAWIO
+      # SYS_ADMIN is required for NVMe drives: reading the SMART/Health Information
+      # log page goes through NVME_IOCTL_ADMIN_CMD, which the kernel gates on
+      # CAP_SYS_ADMIN. With SYS_RAWIO alone that read returns "Permission denied"
+      # and the collector silently publishes records missing all health metrics.
       - SYS_ADMIN
     volumes:
       - /run/udev:/run/udev:ro
