@@ -48,8 +48,10 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    cap_drop:
-      - ALL
+    # No `cap_drop: ALL` here: the web process writes its SQLite config DB at
+    # /opt/scrutiny/config/scrutiny.db and needs a default cap (DAC_OVERRIDE) to
+    # create the WAL/journal in the bind-mounted config dir. SYS_ADMIN / SYS_RAWIO
+    # are not in Docker's default set, so the device caps stay off this service.
     depends_on:
       scrutiny-influxdb:
         condition: service_healthy
