@@ -96,7 +96,10 @@ containers_list:
     port: 51515
     use_authelia: true
     networks:
-      - apps
+      # Dedicated isolation net shared only with Traefik. Kopia runs intentionally
+      # unauthenticated (Kopia basic-auth bug workaround); keeping it off `apps`
+      # stops other app containers reaching kopia:51515 directly.
+      - kopia
     tags:
       - kopia
   - name: wg-easy

@@ -113,4 +113,5 @@
     - apps
     - homepage_private
     - lifecycle  # private net: Watchtower + Autoheal <-> docker-proxy-lifecycle only
+    - kopia      # isolation net: Kopia <-> Traefik only (unauthenticated repo not reachable by other apps)
   become: true

@@ -30,6 +30,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    labels:
+      {{ kuma('node-exporter') }}
 
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.53.0
@@ -55,6 +57,8 @@ services:
       - {{ net }}
 {% endfor %}
     restart: unless-stopped
+    labels:
+      {{ kuma('cadvisor', name='cAdvisor') }}
     deploy:
       resources:
         limits:

@@ -78,6 +78,8 @@ services:
       - no-new-privileges:true
     networks:
       - internal
+    labels:
+      {{ kuma('karakeep-chrome') }}
 
   karakeep-meilisearch:
     image: getmeili/meilisearch:v1.37.0
@@ -97,6 +99,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    labels:
+      {{ kuma('karakeep-meilisearch') }}
 
   karakeep-time-tagger:
     image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
@@ -118,6 +122,8 @@ services:
     depends_on:
       karakeep:
         condition: service_healthy
+    labels:
+      {{ kuma('karakeep-time-tagger') }}
 
 volumes:
   karakeep_data:

@@ -42,3 +42,18 @@ rev = "v8.18.1"
 
 [[repos.hooks]]
 id = "gitleaks"
+
+# Render container docker-compose.yml.j2 templates with stubbed vars and assert
+# the output is valid YAML — catches broken indentation / label-macro edits that
+# ansible-lint and check-yaml miss (they don't render .j2 files).
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "validate-compose-templates"
+name = "Validate rendered docker-compose templates"
+entry = "python3 scripts/validate_compose_templates.py"
+language = "python"
+additional_dependencies = ["jinja2>=3", "pyyaml"]
+pass_filenames = false
+files = "^(ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/templates/(traefik|autokuma)\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate_compose_templates\\.py)$"

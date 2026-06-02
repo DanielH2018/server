@@ -9,6 +9,14 @@ CURRENT_IP=$(curl -sf --max-time 10 https://api4.ipify.org) || {
   exit 1
 }
 
+# Validate the response is a well-formed IPv4 address before using it. The value
+# is already quoted and the source is HTTPS (no injection risk) — this guards
+# against a malformed/MITM'd response adding a junk or overly-broad allowlist entry.
+if ! [[ $CURRENT_IP =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+  logger -t crowdsec-home-allowlist "Invalid IP from ipify: $CURRENT_IP"
+  exit 1
+fi
+
 STORED_IP=$(cat "$STATE_FILE" 2>/dev/null || true)
 
 [ "$CURRENT_IP" = "$STORED_IP" ] && exit 0

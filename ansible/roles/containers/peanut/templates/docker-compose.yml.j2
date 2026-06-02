@@ -22,6 +22,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    labels:
+      {{ kuma('nut', name='NUT') }}
 
   peanut:
     container_name: peanut

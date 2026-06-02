@@ -40,6 +40,7 @@ services:
       - monitoring
       - media
       - apps
+      - kopia
     ports:
       - 80:80
       - 443:443
@@ -70,6 +71,8 @@ networks:
   media:
     external: true
   apps:
+    external: true
+  kopia:
     external: true
 
 volumes:

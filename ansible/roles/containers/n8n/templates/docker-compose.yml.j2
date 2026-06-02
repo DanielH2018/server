@@ -87,6 +87,8 @@ services:
         condition: service_healthy
     networks:
       - internal
+    labels:
+      {{ kuma('n8n-runners') }}
 
 
 networks:

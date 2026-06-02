@@ -2,6 +2,7 @@
 /*
 !/ansible
 !/docs
+!/scripts
 !/docker-cloudflare-ddns
 !prek.toml
 !.ansible-lint
