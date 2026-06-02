@@ -36,6 +36,15 @@ services:
       - {{ (container_item.networks | default([docker_network]))[0] }}
     labels:
       {{ kuma('crowdsec') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
 
   traefik:
     image: traefik:latest
@@ -81,6 +90,16 @@ services:
       retries: 3
     labels:
       {{ kuma('traefik') }}
+    # Resource caps for blast-radius containment (M1). Traefik is the ingress
+    # edge — keep headroom so it stays responsive; tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
 networks:
   proxy:

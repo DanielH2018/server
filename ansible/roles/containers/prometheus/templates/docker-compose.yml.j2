@@ -32,6 +32,15 @@ services:
       retries: 3
     labels:
       {{ kuma('node-exporter') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
 
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.53.0
@@ -98,6 +107,16 @@ services:
         )
       }}
       {{ kuma(container_item.name) }}
+    # Resource caps for blast-radius containment (M1). TSDB memory grows with
+    # series count, so size generously and tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}

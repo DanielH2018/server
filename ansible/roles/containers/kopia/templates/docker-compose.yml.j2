@@ -54,6 +54,15 @@ services:
         )
       }}
       {{ kuma(container_item.name) }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}

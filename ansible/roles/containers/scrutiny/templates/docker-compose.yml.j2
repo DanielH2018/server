@@ -39,6 +39,15 @@ services:
       start_period: 30s
     labels:
       {{ kuma('scrutiny-influxdb') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
 
   # Web UI + API. Authelia-facing via Traefik, but holds NO device capabilities —
   # SYS_RAWIO / SYS_ADMIN now live only on the collector below.
@@ -84,6 +93,15 @@ services:
         )
       }}
       {{ kuma(container_item.name) }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
 
   # Spoke collector: reads SMART data (needs the raw-I/O caps + the NVMe device) and
   # pushes results to the web API. No inbound network surface, never routed by Traefik.
@@ -114,6 +132,15 @@ services:
       - scrutiny_internal
     labels:
       {{ kuma('scrutiny-collector') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}

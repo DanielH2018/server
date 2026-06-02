@@ -51,6 +51,16 @@ services:
       - "traefik.tcp.services.minecraft.loadbalancer.server.port=25565"
       {{ kuma(container_item.name) }}
     restart: unless-stopped
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    # memory must exceed the 16G JVM heap (MEMORY env) plus off-heap/GC overhead.
+    deploy:
+      resources:
+        limits:
+          cpus: '6.0'
+          memory: 20480M
+        reservations:
+          cpus: '1.0'
+          memory: 4096M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}
