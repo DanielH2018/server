@@ -21,8 +21,11 @@
 
 - name: Download karakeep-time-tagger script
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/thiswillbeyourgithub/karakeep_python_api/main/community_scripts/karakeep-time-tagger/karakeep-time-tagger.py"
+    # Pinned to a specific commit + verified by checksum (supply-chain hardening).
+    # Bump both the SHA in the URL and the checksum together when intentionally updating.
+    url: "https://raw.githubusercontent.com/thiswillbeyourgithub/karakeep_python_api/37fa33fdd62b2ee5275ce8cdc1c86d29d0ec4237/community_scripts/karakeep-time-tagger/karakeep-time-tagger.py"
     dest: "/home/{{ sys_user }}/server/containers/karakeep/time-tagger/script/karakeep-time-tagger.py"
+    checksum: "sha256:066c675df6f316cd4419d376ee5f63b5f3ab871216b40d76f5f4545d6cc74dd1"
     mode: "0644"
     force: false
 

@@ -11,12 +11,6 @@ http:
         - authelia
       tls: {}
 
-    api-internal:
-      entryPoints:
-        - internal
-      rule: "Host(`traefik-internal`)"
-      service: api@internal
-
 #endregion
 #region services
   services:

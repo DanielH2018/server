@@ -14,7 +14,7 @@ services:
     environment:
       SERVER_NAME: "DBoy's Server"
       WORLD_NAME: Dedicated
-      SERVER_PASS: ThisPasswordIsAwesome
+      SERVER_PASS: {{ valheim_server_pass }}
       SERVER_PUBLIC: "true"
     restart: unless-stopped
     stop_grace_period: 2m

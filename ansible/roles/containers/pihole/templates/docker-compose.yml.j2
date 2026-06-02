@@ -30,9 +30,11 @@ services:
       unbound:
         condition: service_healthy
     ports:
-      - "53:53/tcp"
-      - "53:53/udp"
-      - '67:67/udp'
+      # Bind DNS/DHCP to the LAN interface only — not 0.0.0.0 — so the resolver
+      # isn't reachable from untrusted networks (open-resolver / rogue-DHCP risk).
+      - "{{ server_ip }}:53:53/tcp"
+      - "{{ server_ip }}:53:53/udp"
+      - "{{ server_ip }}:67:67/udp"
     networks:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}

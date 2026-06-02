@@ -11,6 +11,23 @@
 #   with_items:
 #     - "{{ role_name }}"
 
+# wg-easy runs without the SYS_MODULE capability, so the host must provide the
+# WireGuard kernel module (the container can no longer load it itself).
+- name: Ensure the WireGuard kernel module is loaded on the host
+  community.general.modprobe:
+    name: wireguard
+    state: present
+  become: true
+
+- name: Persist the WireGuard kernel module across reboots
+  ansible.builtin.copy:
+    content: "wireguard\n"
+    dest: /etc/modules-load.d/wireguard.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common
