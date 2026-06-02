@@ -282,12 +282,6 @@ containers_list:
       - monitoring
     tags:
       - uptime-kuma
-  - name: autokuma
-    use_authelia: false
-    networks:
-      - monitoring
-    tags:
-      - autokuma
   - name: scrutiny
     port: 8080
     use_authelia: true

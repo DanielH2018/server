@@ -6,6 +6,7 @@
   vars:
     common_dirs_to_create:
       - "{{ container_item.name }}/data"
+      - "{{ container_item.name }}/autokuma-data"  # AutoKuma now runs in this stack
 
 # - include_tasks: dns.yml
 #   with_items:

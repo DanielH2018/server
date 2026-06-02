@@ -28,6 +28,43 @@ services:
       }}
       {{ kuma(container_item.name) }}
 
+  # AutoKuma lives in this stack so a redeploy of uptime-kuma (recreate: always)
+  # also recreates autokuma, refreshing its Kuma Socket.IO session. It needs
+  # uptime-kuma (API) and docker-proxy (read-only socket) reachable on this network.
+  autokuma:
+    image: ghcr.io/bigboot/autokuma:latest
+    container_name: autokuma
+    restart: unless-stopped
+    # Run as 1000:1000 (owner of ./autokuma-data) so it can create its DB without
+    # needing root + DAC_OVERRIDE — keeps cap_drop: [ALL] effective.
+    user: "{{ puid }}:{{ pgid }}"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - uptime-kuma
+    environment:
+      - AUTOKUMA__KUMA__URL=http://uptime-kuma:3001
+      - AUTOKUMA__KUMA__USERNAME={{ uptime_kuma_username }}
+      - AUTOKUMA__KUMA__PASSWORD={{ uptime_kuma_password }}
+      - AUTOKUMA__DOCKER__HOSTS=tcp://docker-proxy:2375
+      - AUTOKUMA__DB_PATH=/data/autokuma.db
+    volumes:
+      - ./autokuma-data:/data
+    networks:
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat /proc/1/comm | grep -q autokuma"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.centurylinklabs.watchtower.depends-on=docker-proxy,uptime-kuma"
+      {{ kuma('autokuma') }}
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}
