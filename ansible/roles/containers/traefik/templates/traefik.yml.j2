@@ -40,10 +40,12 @@ entryPoints:
         - crowdsec@file
         - rate-limit@file
         - default-headers@file
-  terraria:
-    address: ":7777"
-  minecraft:
-    address: ":25565"
+  # Game-server entrypoints — re-enable alongside the published ports in the
+  # compose template when Terraria/Minecraft are deployed again.
+  # terraria:
+  #   address: ":7777"
+  # minecraft:
+  #   address: ":25565"
   ping:
     address: ":8082"
 

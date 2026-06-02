@@ -11,7 +11,9 @@
   ansible.builtin.template:
     src: recyclarr.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/recyclarr/recyclarr/config/recyclarr.yml"
-    mode: "0755"
+    # 0600: embeds Sonarr/Radarr API keys. Owned by the PUID the container
+    # runs as (user: 1000:1000), so it stays readable.
+    mode: "0600"
 
 # - include_tasks: dns.yml
 #   with_items:

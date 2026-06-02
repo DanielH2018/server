@@ -72,8 +72,11 @@ services:
     ports:
       - 80:80
       - 443:443
-      - 7777:7777/tcp
-      - 25565:25565/tcp
+      # Game-server ports are commented out while Terraria/Minecraft are inactive
+      # (archived). These raw-TCP entrypoints also bypass the CrowdSec + rate-limit
+      # chain, so don't publish them until those servers are deployed again.
+      # - 7777:7777/tcp
+      # - 25565:25565/tcp
     environment:
       - CF_API_EMAIL={{ email }}
       - CF_DNS_API_TOKEN={{ cloudflare_dns_token }}

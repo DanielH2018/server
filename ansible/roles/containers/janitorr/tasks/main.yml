@@ -12,7 +12,9 @@
   ansible.builtin.template:
     src: application.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/janitorr/config/application.yml"
-    mode: "0755"
+    # 0600: embeds Sonarr/Radarr/Jellyfin API keys. Owned by the PUID the
+    # container runs as (user: 1000:1000), so it stays readable.
+    mode: "0600"
 
 # - include_tasks: dns.yml
 #   with_items:

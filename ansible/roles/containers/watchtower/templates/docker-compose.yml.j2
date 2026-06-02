@@ -6,6 +6,9 @@ services:
     container_name: watchtower
     user: {{ puid }}:{{ pgid }}
     restart: unless-stopped
+    # Go binary that only talks to the lifecycle socket-proxy over TCP; needs no caps.
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     environment:

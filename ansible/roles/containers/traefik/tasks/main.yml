@@ -30,7 +30,8 @@
   ansible.builtin.template:
     src: config.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/traefik/data/config.yml"
-    mode: "0664"
+    # 0600: embeds the CrowdSec LAPI bouncer key — keep it off other local users.
+    mode: "0600"
 
 - name: Create traefik.yml from template
   ansible.builtin.template:
@@ -69,7 +70,8 @@
   ansible.builtin.template:
     src: crowdsec-discord.yaml.j2
     dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/notifications/discord.yaml"
-    mode: "0664"
+    # 0600: embeds the Discord webhook URL.
+    mode: "0600"
   become: true
 
 # - include_tasks: dns.yml

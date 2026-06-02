@@ -27,6 +27,14 @@ services:
     expose:
       - 9091
     restart: unless-stopped
+    # Authelia starts as root and su-execs down to the 'authelia' user at startup,
+    # which needs SETUID/SETGID (su-exec's setgroups/setgid/setuid — without them it
+    # crash-loops on "su-exec: setgroups(0): Operation not permitted"). No other caps.
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
     security_opt:
       - no-new-privileges:true
     environment:

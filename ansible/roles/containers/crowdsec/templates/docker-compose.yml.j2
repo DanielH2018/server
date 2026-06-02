@@ -7,6 +7,17 @@ services:
     build: .
     container_name: crowdsec-dashboard
     restart: unless-stopped
+    # Metabase's run_metabase.sh runs as root, then `chown metabase:metabase`s its
+    # H2 DB dir (line ~149) and `su`s down to the metabase user (uid 2000/gid 1000).
+    # So it needs CHOWN (the chown is `2>/dev/null` — without CHOWN it silently fails,
+    # the DB stays root-owned, and the su-dropped user can't rewrite it →
+    # "AccessDeniedException ... metabase.db.mv.db") plus SETUID/SETGID (for the su).
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
     security_opt:
       - no-new-privileges:true
     environment:

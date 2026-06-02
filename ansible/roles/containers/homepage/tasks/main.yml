@@ -20,7 +20,9 @@
   ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/config/{{ item }}"
-    mode: "0664"
+    # 0600: services.yaml/widgets.yaml embed service API keys + passwords.
+    # Owned by the PUID (1000) the container runs as, so it stays readable.
+    mode: "0600"
   with_items:
     - settings.yaml
     - bookmarks.yaml

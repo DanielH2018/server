@@ -16,7 +16,7 @@
   ansible.builtin.template:
     src: github
     dest: "/home/{{ sys_user }}/server/containers/code-server/config/.ssh/github"
-    mode: "0644"
+    mode: "0600"
   when: containers_github_data.stat.exists
 
 # - include_tasks: dns.yml
