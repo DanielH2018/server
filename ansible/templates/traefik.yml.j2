@@ -6,6 +6,9 @@
       - "traefik.http.routers.{{ container }}-secure.entrypoints=https"
       - "traefik.http.routers.{{ container }}-secure.rule=Host(`{{ container }}.{{ domain }}`) || Host(`{{ container }}.local.{{ domain }}`)"
       - "traefik.http.routers.{{ container }}-secure.tls=true"
+      - "traefik.http.routers.{{ container }}-secure.tls.certresolver=cloudflare"
+      - "traefik.http.routers.{{ container }}-secure.tls.domains[0].main={{ domain }}"
+      - "traefik.http.routers.{{ container }}-secure.tls.domains[0].sans=*.{{ domain }},*.local.{{ domain }}"
       - "traefik.http.routers.{{ container }}-secure.service={{ container }}"
       - "traefik.http.services.{{ container }}.loadbalancer.server.port={{ port }}"
       {% if authelia -%}

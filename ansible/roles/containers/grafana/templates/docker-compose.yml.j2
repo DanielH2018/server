@@ -60,6 +60,8 @@ services:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}
 {% endfor %}
+    labels:
+      {{ kuma('loki') }}
   promtail:
     image: grafana/promtail
     container_name: promtail
@@ -87,6 +89,7 @@ services:
       - {{ net }}
 {% endfor %}
     labels:
+      {{ kuma('promtail') }}
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
 

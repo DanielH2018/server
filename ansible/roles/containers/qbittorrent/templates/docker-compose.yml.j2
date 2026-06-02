@@ -47,8 +47,7 @@ services:
           container_item.use_authelia
         )
       }}
-
-      {{ kuma('qbittorrent') }}
+      {{ kuma('wireguard') }}
       # Disable Watchtower
       - "com.centurylinklabs.watchtower.enable=false"
   qbittorrent:
@@ -76,6 +75,8 @@ services:
       interval: 1m30s
       timeout: 10s
       retries: 3
+    labels:
+      {{ kuma('qbittorrent') }}
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}
