@@ -5,6 +5,8 @@ services:
     image: willfarrell/autoheal:latest
     tty: true
     container_name: autoheal
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     environment:

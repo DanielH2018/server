@@ -6,6 +6,8 @@ services:
     image: ghcr.io/bigboot/autokuma:latest
     container_name: autokuma
     restart: unless-stopped
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     healthcheck:

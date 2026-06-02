@@ -13,6 +13,17 @@ services:
     volumes:
       - ./config:/config
     restart: unless-stopped
+    # LSIO image: cap_drop ALL plus the s6 privilege-drop set and NET_BIND_SERVICE for :80.
+    # Verify on deploy (docker logs freshrss) — add back caps if it fails to start.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - FOWNER
+      - DAC_OVERRIDE
+      - NET_BIND_SERVICE
     security_opt:
       - no-new-privileges:true
     networks:
@@ -40,6 +51,14 @@ services:
     image: nginx:alpine
     container_name: freshrss-feed-cache
     restart: unless-stopped
+    # nginx binds :80 and forks workers — needs NET_BIND_SERVICE + SETUID/SETGID/CHOWN.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
     security_opt:
       - no-new-privileges:true
     volumes:

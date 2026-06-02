@@ -52,7 +52,8 @@ services:
     ports:
       # Intentional break-glass access: lets us reach Portainer on the LAN even if
       # Traefik / Authelia / CrowdSec are down. Not forwarded externally.
-      - 9000:9000
+      # Bound to the host's LAN IP only (not 0.0.0.0) to keep it off other interfaces.
+      - "{{ server_ip }}:9000:9000"
     networks:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}

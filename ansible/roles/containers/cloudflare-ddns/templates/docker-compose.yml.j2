@@ -3,7 +3,7 @@ services:
   ddns-proxied:
     image: favonia/cloudflare-ddns:latest
     container_name: cloudflare-ddns-proxied
-    restart: always
+    restart: unless-stopped
     read_only: true
     cap_drop: [all]
     security_opt: [no-new-privileges:true]
@@ -21,7 +21,7 @@ services:
   ddns-direct:
     image: favonia/cloudflare-ddns:latest
     container_name: cloudflare-ddns-direct
-    restart: always
+    restart: unless-stopped
     read_only: true
     cap_drop: [all]
     security_opt: [no-new-privileges:true]

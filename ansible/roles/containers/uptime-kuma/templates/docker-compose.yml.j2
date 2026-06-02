@@ -9,6 +9,8 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     networks:

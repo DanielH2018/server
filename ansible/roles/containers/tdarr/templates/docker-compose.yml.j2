@@ -30,6 +30,16 @@ services:
       - /home/{{ sys_user }}/server/containers/data/media/:/media
     devices:
       - /dev/dri:/dev/dri
+    # cap_drop ALL with the minimal set the image needs to chown mounts and drop to PUID/PGID.
+    # Verify on deploy (docker logs tdarr) — add back caps if it fails to start.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - FOWNER
+      - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
     healthcheck:

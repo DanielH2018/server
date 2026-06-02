@@ -35,6 +35,10 @@ services:
       - TZ={{ tz }}
       - WEB_USERNAME={{ peanut_username }}
       - WEB_PASSWORD={{ peanut_password }}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}
