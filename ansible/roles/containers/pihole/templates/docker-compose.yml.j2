@@ -54,8 +54,25 @@ services:
        - './data/etc-dnsmasq.d/:/etc/dnsmasq.d/'
     security_opt:
       - no-new-privileges:true
+    # FTL binds :53/:67/:80 (<1024 → NET_BIND_SERVICE), serves DHCP via raw sockets
+    # (NET_RAW), and manages networking (NET_ADMIN). At startup FTL applies file caps to
+    # its own binary so it can run as the non-root pihole user — that needs SETFCAP
+    # (without it: "unable to set CAP_SETFCAP ... Cannot run as non-root"). The s6 init
+    # chowns /etc/pihole and drops privileges (CHOWN/SETUID/SETGID/DAC_OVERRIDE); SYS_NICE
+    # lets FTL set its scheduling priority. Add SYS_TIME only if Pi-hole NTP is enabled.
+    # Highest-risk service (LAN DNS) — verify resolution + DHCP after deploy.
+    cap_drop:
+      - ALL
     cap_add:
       - NET_ADMIN
+      - NET_BIND_SERVICE
+      - NET_RAW
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - SYS_NICE
+      - SETFCAP
     labels:
       {# Generate labels(container, port, use_authelia) -#}
       {{ labels(

@@ -7,8 +7,20 @@ services:
     image: lscr.io/linuxserver/wireguard:latest
     container_name: wireguard
     hostname: wireguard
+    # NET_ADMIN for the tunnel interface + routing/fwmark rules; NET_RAW because the
+    # Mullvad mod's kill-switch installs iptables rules in the 'raw' table (initialising
+    # it fails with "unable to initialize table 'raw'" without NET_RAW). Plus the LSIO s6
+    # set to chown /config and drop privileges. SYS_MODULE not needed (module on host).
+    cap_drop:
+      - ALL
     cap_add:
       - NET_ADMIN
+      - NET_RAW
+      - CHOWN
+      - SETUID
+      - SETGID
+      - FOWNER
+      - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
     environment:
@@ -57,6 +69,16 @@ services:
     depends_on:
       wireguard:
         condition: service_healthy
+    # Standard LSIO s6 set to chown /config + /downloads and drop to PUID/PGID. No
+    # NET_ADMIN — networking is owned by the wireguard sidecar (shared netns), not here.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - FOWNER
+      - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
     environment:

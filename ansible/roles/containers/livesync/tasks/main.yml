@@ -16,13 +16,20 @@
     mode: "0755"
   become: true
 
+# The couchdb:3 image starts as root then gosu-drops the daemon to the built-in couchdb
+# user (uid/gid 5984), and its entrypoint chowns /opt/couchdb/etc/local.d/* to 5984 on
+# every start so the daemon can read its config. Own this file as 5984 (with become, so
+# Ansible can set it) — otherwise the unprivileged task tries to chown it back to the
+# host user, fails with "Operation not permitted", and aborts the deploy. local.ini holds
+# no secret (just require_valid_user), so 0644 is fine and matches what couchdb leaves.
 - name: Deploy CouchDB local.ini
   ansible.builtin.template:
     src: local.ini.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/couchdb-etc/local.ini"
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0600"
+    owner: "5984"
+    group: "5984"
+    mode: "0644"
+  become: true
 
 - name: Deploy Container
   ansible.builtin.include_role:

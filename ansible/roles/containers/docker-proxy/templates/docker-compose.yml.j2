@@ -28,6 +28,10 @@ services:
     read_only: true
     tmpfs:
       - /run
+    # LSIO socket-proxy is haproxy on a high port — already read_only + tmpfs.
+    # Empty add; if haproxy can't drop to its user, add [SETUID, SETGID]. Verify on deploy.
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
@@ -73,6 +77,10 @@ services:
     read_only: true
     tmpfs:
       - /run
+    # LSIO socket-proxy is haproxy on a high port — already read_only + tmpfs.
+    # Empty add; if haproxy can't drop to its user, add [SETUID, SETGID]. Verify on deploy.
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped

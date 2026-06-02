@@ -28,6 +28,10 @@ services:
     tmpfs:
       - /run
     restart: unless-stopped
+    # LSIO socket-proxy is haproxy on a high port (2375) — already read_only + tmpfs.
+    # Empty add; if haproxy can't drop to its user, add [SETUID, SETGID]. Verify on deploy.
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     networks:
@@ -47,6 +51,10 @@ services:
     image: portainer/portainer-ce:alpine
     container_name: portainer
     restart: unless-stopped
+    # Go binary on a high port; /data is root-owned and it performs no privileged ops.
+    # Verify on deploy (docker logs portainer) — add back caps if it fails.
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     ports:

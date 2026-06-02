@@ -6,8 +6,15 @@ services:
   wg-easy:
     image: ghcr.io/wg-easy/wg-easy
     container_name: wg-easy
+    # NET_ADMIN to create the wg interface + apply rules; NET_RAW because wg-quick runs
+    # iptables (the iptables CLI opens a raw socket to init the 'nat' table — fails with
+    # "can't initialize iptables table `nat`: Permission denied" without it). SYS_MODULE
+    # not needed (wireguard module loaded on host). Verify on deploy (docker logs wg-easy).
+    cap_drop:
+      - ALL
     cap_add:
       - NET_ADMIN
+      - NET_RAW
     security_opt:
       - no-new-privileges:true
     sysctls:

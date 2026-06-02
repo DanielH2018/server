@@ -8,6 +8,15 @@ services:
     container_name: kopia
     hostname: kopia
     restart: unless-stopped
+    # Runs as root. Needs DAC_OVERRIDE (read+write bypass) for two reasons: it reads an
+    # RO backup source full of 0600 files owned by uid 1000, AND it writes its own state
+    # dirs (config/cache/logs/rclone bind mounts) which are owned by uid 1000, not root.
+    # DAC_READ_SEARCH alone is insufficient — the repo connect can't write its cache and
+    # the entrypoint restart-loops. Verified: with DAC_OVERRIDE the server starts healthy.
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
     entrypoint: /scripts/entrypoint.sh

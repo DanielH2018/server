@@ -4,6 +4,15 @@
 services:
   couchdb:
     image: couchdb:3
+    # CouchDB entrypoint chowns /opt/couchdb/data then drops to the couchdb user via
+    # su-exec — the standard DB-image privilege-drop set. Add FOWNER if it complains.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
     container_name: livesync

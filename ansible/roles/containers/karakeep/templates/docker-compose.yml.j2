@@ -22,6 +22,9 @@ services:
       - INFERENCE_TAGS_ENABLED=true
     volumes:
       - karakeep_data:/data
+    # Node app on a high port; data is a named volume. Add CHOWN if it can't chown /data.
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     networks:
@@ -74,6 +77,9 @@ services:
       - --remote-debugging-address=0.0.0.0
       - --remote-debugging-port=9222
       - --hide-scrollbars
+    # Chrome already runs with --no-sandbox, so it needs no SYS_ADMIN / sandbox caps.
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     networks:
@@ -90,6 +96,9 @@ services:
       - MEILI_MASTER_KEY={{ karakeep_meili_master_key }}
     volumes:
       - karakeep_meili:/meili_data
+    # Rust binary on a high port; data is a named volume. Add CHOWN if it can't chown /meili_data.
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     networks:
@@ -115,6 +124,13 @@ services:
       - ./time-tagger/uv-cache:/root/.cache/uv
     command: >-
       bash -c "uv pip install karakeep_python_api fire tqdm beautifulsoup4 loguru -q --system && while true; do python /script/karakeep-time-tagger.py --cache_file /tmp/bookmarks.temp --reset_all=True; sleep 900; done"
+    # Python/uv worker running as root. Its uv cache (/root/.cache/uv) is a bind mount
+    # owned by uid 1000, so root needs DAC_OVERRIDE to write it — without it `uv pip
+    # install` fails with EACCES and the container crash-loops.
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
     networks:
