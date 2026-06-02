@@ -8,6 +8,8 @@ services:
     container_name: kopia
     hostname: kopia
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     entrypoint: /scripts/entrypoint.sh
     environment:
       - KOPIA_PASSWORD={{ kopia_password }}

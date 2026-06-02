@@ -6,6 +6,8 @@ services:
     image: ghcr.io/bigboot/autokuma:latest
     container_name: autokuma
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "bash", "-c", "cat /proc/1/comm | grep -q autokuma"]
       interval: 30s

@@ -11,3 +11,4 @@
     state: present
     build: always
     recreate: always
+    remove_orphans: true

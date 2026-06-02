@@ -2,29 +2,71 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 ---
 services:
-  scrutiny:
-    container_name: scrutiny
-    image: ghcr.io/analogj/scrutiny:master-omnibus
+  # Time-series store for SMART history. Internal-only (no host port, not routed by
+  # Traefik). Provisioned once via DOCKER_INFLUXDB_INIT_* with a SOPS-stored token.
+  scrutiny-influxdb:
+    image: influxdb:2.2
+    container_name: scrutiny-influxdb
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     cap_add:
-      - SYS_RAWIO
-      # SYS_ADMIN is required for NVMe drives: reading the SMART/Health Information
-      # log page goes through NVME_IOCTL_ADMIN_CMD, which the kernel gates on
-      # CAP_SYS_ADMIN. With SYS_RAWIO alone that read returns "Permission denied"
-      # and the collector silently publishes records missing all health metrics.
-      - SYS_ADMIN
+      # Entrypoint chowns the data dir then drops root via gosu before starting influxd.
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD={{ scrutiny_influxdb_admin_password }}
+      - DOCKER_INFLUXDB_INIT_ORG=scrutiny
+      - DOCKER_INFLUXDB_INIT_BUCKET=metrics
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ scrutiny_influxdb_token }}
+      - TZ={{ tz }}
     volumes:
-      - /run/udev:/run/udev:ro
+      - ./influxdb2:/var/lib/influxdb2
+    networks:
+      - scrutiny_internal
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    labels:
+      {{ kuma('scrutiny-influxdb') }}
+
+  # Web UI + API. Authelia-facing via Traefik, but holds NO device capabilities —
+  # SYS_RAWIO / SYS_ADMIN now live only on the collector below.
+  scrutiny-web:
+    image: ghcr.io/analogj/scrutiny:master-web
+    container_name: scrutiny
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      scrutiny-influxdb:
+        condition: service_healthy
+    environment:
+      - SCRUTINY_WEB_INFLUXDB_HOST=scrutiny-influxdb
+      - SCRUTINY_WEB_INFLUXDB_PORT=8086
+      - SCRUTINY_WEB_INFLUXDB_TOKEN={{ scrutiny_influxdb_token }}
+      - SCRUTINY_WEB_INFLUXDB_ORG=scrutiny
+      - SCRUTINY_WEB_INFLUXDB_BUCKET=metrics
+      - TZ={{ tz }}
+    volumes:
       - ./config:/opt/scrutiny/config
-      - ./influxdb:/opt/scrutiny/influxdb
-    devices:
-      - /dev/nvme0:/dev/nvme0
     networks:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}
 {% endfor %}
+      - scrutiny_internal
     healthcheck:
       test: curl --fail -s http://localhost:8080/api/health || exit 1
       interval: 30s
@@ -41,8 +83,40 @@ services:
       }}
       {{ kuma(container_item.name) }}
 
+  # Spoke collector: reads SMART data (needs the raw-I/O caps + the NVMe device) and
+  # pushes results to the web API. No inbound network surface, never routed by Traefik.
+  scrutiny-collector:
+    image: ghcr.io/analogj/scrutiny:master-collector
+    container_name: scrutiny-collector
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_add:
+      - SYS_RAWIO
+      # SYS_ADMIN is required for NVMe drives: reading the SMART/Health Information
+      # log page goes through NVME_IOCTL_ADMIN_CMD, which the kernel gates on
+      # CAP_SYS_ADMIN. With SYS_RAWIO alone that read returns "Permission denied"
+      # and the collector silently publishes records missing all health metrics.
+      - SYS_ADMIN
+    depends_on:
+      scrutiny-web:
+        condition: service_healthy
+    environment:
+      - COLLECTOR_API_ENDPOINT=http://scrutiny:8080
+      - TZ={{ tz }}
+    volumes:
+      - /run/udev:/run/udev:ro
+    devices:
+      - /dev/nvme0:/dev/nvme0
+    networks:
+      - scrutiny_internal
+    labels:
+      {{ kuma('scrutiny-collector') }}
+
 networks:
 {% for net in container_item.networks | default([docker_network]) %}
   {{ net }}:
     external: true
 {% endfor %}
+  scrutiny_internal:
+    internal: true

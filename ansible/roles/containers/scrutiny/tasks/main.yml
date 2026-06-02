@@ -6,7 +6,7 @@
   vars:
     common_dirs_to_create:
       - "{{ container_item.name }}/config"
-      - "{{ container_item.name }}/influxdb"
+      - "{{ container_item.name }}/influxdb2"
 
 # - include_tasks: dns.yml
 #   with_items:

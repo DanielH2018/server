@@ -20,7 +20,7 @@ format: |
         "url": "https://db-ip.com/{{$alert.Source.IP}}",
         "color": "16711680",
         "image": {
-          "url": "https://www.mapquestapi.com/staticmap/v5/map?center={{$alert.Source.Latitude}},{{$alert.Source.Longitude}}&size=500,300&key=PqFJ5K2KNaD8khGUBnf3QQFClitshAvU"
+          "url": "https://www.mapquestapi.com/staticmap/v5/map?center={{$alert.Source.Latitude}},{{$alert.Source.Longitude}}&size=500,300&key={% endraw %}{{ crowdsec_mapquest_api_key }}{% raw %}"
         }
       }
       {{end}}

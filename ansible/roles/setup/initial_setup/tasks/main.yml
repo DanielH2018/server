@@ -272,6 +272,23 @@
       install tipc /bin/true
   become: true
 
+# WireGuard containers (wg-easy, wg-easy-pi, and qbittorrent's VPN sidecar) run
+# without the SYS_MODULE capability, so the host must provide the kernel module.
+- name: Ensure the WireGuard kernel module is loaded on the host
+  community.general.modprobe:
+    name: wireguard
+    state: present
+  become: true
+
+- name: Persist the WireGuard kernel module across reboots
+  ansible.builtin.copy:
+    content: "wireguard\n"
+    dest: /etc/modules-load.d/wireguard.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: Install sysstat for system accounting
   ansible.builtin.apt:
     name: sysstat

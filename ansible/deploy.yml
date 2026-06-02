@@ -10,6 +10,13 @@
       run_once: true # noqa run-once[task]
       tags: always
 
+    - name: Use the SOPS-stored sudo password for privilege escalation
+      ansible.builtin.set_fact:
+        ansible_become_password: "{{ become_password }}"
+      no_log: true
+      when: become_password is defined
+      tags: always
+
     - name: Build role dependency map
       ansible.builtin.set_fact:
         _container_deps_map: "{{ containers_list | build_dep_map(playbook_dir, ansible_run_tags) }}"

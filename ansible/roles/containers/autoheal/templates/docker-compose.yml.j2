@@ -5,6 +5,8 @@ services:
     image: willfarrell/autoheal:latest
     tty: true
     container_name: autoheal
+    security_opt:
+      - no-new-privileges:true
     environment:
       - AUTOHEAL_CONTAINER_LABEL=all
       - DOCKER_SOCK=tcp://docker-proxy-lifecycle:2375
