@@ -74,6 +74,29 @@
           {{ authelia_client_secret_cmd.stdout | regex_search('Digest: (\S+)', '\1') | first }}
       no_log: true
 
+    # --- 2b. Generate Beszel Client Password & Hash ---
+    # Commented out until Beszel is deployed. Uncomment so Beszel gets its own OIDC
+    # client secret (authelia_beszel_password_hash) instead of sharing jellyfin's.
+    # NOTE: the config template already references authelia_beszel_password_hash, so
+    # on a *fresh* Authelia setup this block must be enabled or that var must be
+    # defined, otherwise configuration.yml.j2 fails to render with "undefined".
+    # - name: Generate Beszel Client Password and Hash (Docker)
+    #   ansible.builtin.command:
+    #     cmd: >-
+    #       docker run --rm authelia/authelia:latest authelia crypto hash generate pbkdf2
+    #       --variant sha512 --random --random.length 32 --random.charset alphanumeric
+    #   register: authelia_beszel_secret_cmd
+    #   changed_when: true
+    #   no_log: true
+    #
+    # - name: Parse Beszel Client Credentials
+    #   ansible.builtin.set_fact:
+    #     authelia_beszel_plaintext_password: >-
+    #       {{ authelia_beszel_secret_cmd.stdout | regex_search('Random Password: (\S+)', '\1') | first }}
+    #     authelia_beszel_password_hash: >-
+    #       {{ authelia_beszel_secret_cmd.stdout | regex_search('Digest: (\S+)', '\1') | first }}
+    #   no_log: true
+
     # --- 3. Generate RSA Keypair ---
     - name: Generate RSA Keypair (Docker Volume Mount)
       ansible.builtin.command:

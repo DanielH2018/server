@@ -20,7 +20,10 @@ services:
       - net.ipv4.conf.all.src_valid_mark=1
     ports:
       - "51822:51822/udp"
-      - "{{ container_item.port }}:51821/tcp"
+      # Bind the admin UI to the Pi's LAN IP only (not 0.0.0.0) so it isn't reachable
+      # on the WireGuard tunnel interface or other interfaces. UDP tunnel stays on all
+      # interfaces — clients/port-forward must reach it and it's authenticated by WG.
+      - "{{ server_ip }}:{{ container_item.port }}:51821/tcp"
     environment:
       - LANG=en
       - WG_HOST=wireguard.{{ domain }}
