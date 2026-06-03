@@ -34,23 +34,34 @@ services:
       retries: 3
       start_period: 30s
     labels:
-      {# Generate labels(container, port, docker_network, use_authelia) -#}
-      {{ labels(
-          container_item.hostname | default(container_item.name),
-          container_item.port | string,
-          (container_item.networks | default([docker_network]))[0],
-          container_item.use_authelia
-        )
-      }}
-      {{ kuma(container_item.name) }}
+      - "traefik.enable=true"
+      - "traefik.docker.network={{ (container_item.networks | default([docker_network]))[0] }}"
+      # Sync API: gated by a secret request header instead of Authelia. The Obsidian
+      # LiveSync client uses non-interactive basic auth and can't pass 2FA, so we
+      # require an X-Sync-Token header (set in the plugin's custom-headers field on
+      # each device). Only requests carrying the matching token match this router;
+      # anything else matches NO router for this host and gets a 404 before reaching
+      # CouchDB. The token lives in SOPS (livesync_sync_token); CouchDB's own
+      # require_valid_user is the second layer (defence in depth). NOTE: this is a
+      # shared secret, not per-device identity — rotate the token if a device is lost.
+      - "traefik.http.routers.livesync.rule=(Host(`livesync.{{ domain }}`) || Host(`livesync.local.{{ domain }}`)) && Header(`X-Sync-Token`, `{{ livesync_sync_token }}`)"
+      - "traefik.http.routers.livesync.entrypoints=https"
+      - "traefik.http.routers.livesync.tls=true"
+      - "traefik.http.routers.livesync.tls.certresolver=cloudflare"
+      - "traefik.http.routers.livesync.tls.domains[0].main={{ domain }}"
+      - "traefik.http.routers.livesync.tls.domains[0].sans=*.{{ domain }},*.local.{{ domain }}"
+      - "traefik.http.routers.livesync.service=livesync"
+      - "traefik.http.services.livesync.loadbalancer.server.port={{ container_item.port }}"
 
-      ## Block Fauxton admin UI — put it behind Authelia
+      ## Fauxton admin UI — human access via Authelia 2FA (no token header needed).
+      ## priority=200 so /_utils always wins over the token-gated sync router.
       - "traefik.http.routers.livesync-utils.rule=Host(`livesync.{{ domain }}`) && PathPrefix(`/_utils`)"
       - "traefik.http.routers.livesync-utils.entrypoints=https"
       - "traefik.http.routers.livesync-utils.tls=true"
       - "traefik.http.routers.livesync-utils.service=livesync"
       - "traefik.http.routers.livesync-utils.middlewares=authelia@docker"
       - "traefik.http.routers.livesync-utils.priority=200"
+      {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     deploy:
       resources:
