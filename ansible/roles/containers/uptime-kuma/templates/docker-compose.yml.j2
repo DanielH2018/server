@@ -27,6 +27,15 @@ services:
         )
       }}
       {{ kuma(container_item.name) }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
 
   # AutoKuma lives in this stack so a redeploy of uptime-kuma (recreate: always)
   # also recreates autokuma, refreshing its Kuma Socket.IO session. It needs
@@ -65,6 +74,15 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.depends-on=docker-proxy,uptime-kuma"
       {{ kuma('autokuma') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}

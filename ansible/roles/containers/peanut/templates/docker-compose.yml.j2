@@ -24,6 +24,15 @@ services:
       start_period: 30s
     labels:
       {{ kuma('nut', name='NUT') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 16M
 
   peanut:
     container_name: peanut
@@ -56,6 +65,15 @@ services:
         )
       }}
       {{ kuma(container_item.name) }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}

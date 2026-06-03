@@ -46,6 +46,15 @@ services:
         )
       }}
       {{ kuma(container_item.name) }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
 
   feed-cache:
     image: nginx:alpine
@@ -73,6 +82,15 @@ services:
       retries: 3
     labels:
       {{ kuma('freshrss-feed-cache', name='FreshRSS Cache') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 16M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}

@@ -60,6 +60,15 @@ services:
       - "traefik.http.routers.healthchecks-ping.service=healthchecks"
       # Priority must be higher than the UI router so Traefik matches this first
       - "traefik.http.routers.healthchecks-ping.priority=100"
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}

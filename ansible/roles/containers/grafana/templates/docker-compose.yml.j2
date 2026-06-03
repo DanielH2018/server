@@ -40,6 +40,15 @@ services:
 
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on: prometheus"
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
   loki:
     image: grafana/loki
     container_name: loki
@@ -62,6 +71,15 @@ services:
 {% endfor %}
     labels:
       {{ kuma('loki') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
   promtail:
     image: grafana/promtail
     container_name: promtail
@@ -92,6 +110,15 @@ services:
       {{ kuma('promtail') }}
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}

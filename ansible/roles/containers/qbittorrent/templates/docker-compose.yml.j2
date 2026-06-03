@@ -62,6 +62,15 @@ services:
       {{ kuma('wireguard') }}
       # Disable Watchtower
       - "com.centurylinklabs.watchtower.enable=false"
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
@@ -99,6 +108,15 @@ services:
       retries: 3
     labels:
       {{ kuma('qbittorrent') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}

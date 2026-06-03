@@ -49,6 +49,16 @@ services:
       {{ kuma(container_item.name) }}
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
+    # Resource caps for blast-radius containment (M1). Dev env can run builds, so
+    # size generously and tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4096M
+        reservations:
+          cpus: '0.10'
+          memory: 256M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}

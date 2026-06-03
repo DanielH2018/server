@@ -23,6 +23,11 @@ services:
     environment:
       MB_DB_FILE: /data/metabase.db
       MGID: "${GID-{{ pgid}}}"
+      # Pin the JVM heap. Metabase otherwise sizes -Xmx to 25% of the cgroup limit,
+      # which under the M1 memory cap is too small and OOMs ("OutOfMemoryError: Java
+      # heap space") in a startup crash-loop. Keep the `deploy` memory limit below
+      # >= this heap + ~1G non-heap overhead.
+      JAVA_TOOL_OPTIONS: "-Xmx1g"
     volumes:
       - crowdsec-db:/metabase-data/
     networks:
@@ -47,6 +52,17 @@ services:
 
       # Disable watchtower update
       - "com.centurylinklabs.watchtower.enable=false"
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    # Sized for the JVM: -Xmx1g heap (JAVA_TOOL_OPTIONS above) + non-heap overhead.
+    # Don't lower memory without lowering -Xmx, or Metabase OOM-crash-loops on boot.
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.10'
+          memory: 256M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}

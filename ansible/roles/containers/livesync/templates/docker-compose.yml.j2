@@ -51,6 +51,15 @@ services:
       - "traefik.http.routers.livesync-utils.service=livesync"
       - "traefik.http.routers.livesync-utils.middlewares=authelia@docker"
       - "traefik.http.routers.livesync-utils.priority=200"
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}

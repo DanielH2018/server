@@ -18,6 +18,15 @@ services:
 {% endfor %}
     labels:
       {{ kuma('cloudflare-ddns-proxied') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+        reservations:
+          cpus: '0.05'
+          memory: 16M
   ddns-direct:
     image: favonia/cloudflare-ddns:latest
     container_name: cloudflare-ddns-direct
@@ -36,6 +45,15 @@ services:
 {% endfor %}
     labels:
       {{ kuma('cloudflare-ddns-direct') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+        reservations:
+          cpus: '0.05'
+          memory: 16M
 
 networks:
 {% for net in container_item.networks | default([docker_network]) %}
