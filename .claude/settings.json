@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/auto-approve-readonly.sh"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
@@ -12,5 +23,8 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true
   }
 }
