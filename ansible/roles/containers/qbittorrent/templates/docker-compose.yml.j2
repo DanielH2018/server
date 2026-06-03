@@ -39,12 +39,20 @@ services:
       - net.ipv6.conf.all.disable_ipv6=1
       - net.ipv6.conf.default.disable_ipv6=1
     healthcheck:
+      # Probe real egress through the tunnel instead of Mullvad's detection API. The
+      # kill-switch (iptables REJECT for non-wg0 traffic) means any successful external
+      # request necessarily left via Mullvad, so reaching 1.1.1.1 proves the tunnel is
+      # up AND leak-free — without depending on am.i.mullvad.net being reachable, whose
+      # transient blips previously failed this check and triggered needless restarts
+      # (which orphaned qBittorrent). 1.1.1.1 by IP avoids DNS; public so it routes via wg0.
+      # Tolerant: retries 6 × interval 1m means only a sustained (~6 min) outage restarts
+      # the tunnel, riding out brief blips while still recovering a genuinely-dead relay.
       test: |
-        bash -c 'curl -fs https://am.i.mullvad.net/connected | grep -q "You are connected to Mullvad" || exit 1'
+        bash -c 'curl -fsm 10 https://1.1.1.1 >/dev/null || exit 1'
       interval: 1m
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+      timeout: 15s
+      retries: 6
+      start_period: 30s
     restart: unless-stopped
     networks:
 {% for net in container_item.networks | default([docker_network]) %}
@@ -102,10 +110,20 @@ services:
       - /home/{{ sys_user }}/server/containers/data/downloads:/downloads
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080"]
-      interval: 1m30s
-      timeout: 10s
+      # A loopback-only check can't detect an orphaned network namespace: if the
+      # wireguard sidecar is recreated, qBittorrent keeps serving 8080 inside the
+      # now-dead netns, so a localhost probe stays green while the WebUI is
+      # unreachable at wireguard:8080. We therefore ALSO require egress to a public
+      # IP, which the kill-switch only permits through the live Mullvad tunnel. When
+      # orphaned (or the VPN is down) this fails, autoheal marks the container
+      # unhealthy and restarts it so qBittorrent rejoins the current wireguard netns.
+      # 1.1.1.1 by IP avoids any DNS dependency; it is public so it routes via wg0.
+      test: |
+        bash -c 'curl -fsm 10 http://localhost:8080 >/dev/null && curl -fsm 10 https://1.1.1.1 >/dev/null || exit 1'
+      interval: 1m
+      timeout: 15s
       retries: 3
+      start_period: 90s
     labels:
       {{ kuma('qbittorrent') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.

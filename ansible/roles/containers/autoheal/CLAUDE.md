@@ -12,8 +12,11 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 
 ## Notable
-- Only acts on containers labelled `autoheal=true`; relies on each service defining a
-  `healthcheck`.
+- Runs with `AUTOHEAL_CONTAINER_LABEL=all`, so it monitors **every** container that defines
+  a `healthcheck` (no `autoheal=true` label required) and restarts any that report
+  `unhealthy`. Corollary: a service is only self-healing if its healthcheck actually fails
+  when it's broken — e.g. qBittorrent's check probes external egress, not just loopback, so
+  an orphaned VPN netns is caught (see the `qbittorrent` role).
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
