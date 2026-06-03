@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/auto-approve-readonly.sh"
+            "command": "~/server/.claude/hooks/auto-approve-readonly.sh"
           }
         ]
       }
