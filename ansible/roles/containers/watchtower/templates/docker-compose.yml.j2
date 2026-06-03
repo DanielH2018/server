@@ -16,6 +16,8 @@ services:
       WATCHTOWER_CLEANUP: true
       WATCHTOWER_SCHEDULE: "0 0 4 * * *"
       WATCHTOWER_INCLUDE_RESTARTING: true
+      # Cooldown: skip image updates until they've been built >1 week (supply-chain/bug soak).
+      WATCHTOWER_COOLDOWN_DELAY: 1w
       DOCKER_API_VERSION: 1.44
     networks:
 {% for net in container_item.networks | default([docker_network]) %}
