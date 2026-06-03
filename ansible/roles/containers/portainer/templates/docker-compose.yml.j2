@@ -6,6 +6,14 @@ services:
   # exec (EXEC) access to manage containers; keeping those powerful permissions on
   # a private 1:1 network here keeps them off the shared docker-proxy, which is
   # reachable from the proxy/monitoring/apps networks.
+  #
+  # ACCEPTED SECURITY TRADE-OFF: POST + EXEC on the Docker API are effectively
+  # root-on-host (EXEC = "Console" into any container). This is inherent to running
+  # Portainer for container management; the risk is accepted and contained by:
+  #   - portainer_internal (internal: true) — only Portainer can reach this proxy;
+  #     it is deliberately NOT on the proxy/monitoring/apps networks.
+  #   - Portainer's own admin login + Authelia 2FA in front of the UI (server host).
+  #   - socket mounted :ro, proxy is read_only + no-new-privileges + cap_drop ALL.
   docker-proxy-portainer:
     image: lscr.io/linuxserver/socket-proxy:latest
     container_name: docker-proxy-portainer
