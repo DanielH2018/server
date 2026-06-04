@@ -26,6 +26,15 @@ kill-switch. See repo-root `CLAUDE.md` for shared conventions.
   (or VPN-down) container goes `unhealthy` and `autoheal` restarts it automatically. A plain
   loopback healthcheck would stay green and hide the outage. Manual fix if ever needed:
   `docker restart qbittorrent`.
+- **UDP-leak-blocked failure mode (zero download progress):** qBittorrent must bind its
+  listen interface to **`wg0`**. If it doesn't, libtorrent follows the netns main-table
+  default route (`eth0`) and binds its torrent UDP socket there; the Mullvad kill-switch
+  then `EPERM`-rejects every UDP tracker / DHT / µTP packet, so peer discovery dies and
+  *all* torrents stall at 0% — while TCP egress (and a TCP-only healthcheck) still look
+  healthy. `tasks/main.yml` enforces the binding via the WebUI API (`current_network_interface=wg0`,
+  empty address so it survives Mullvad IP changes); the healthcheck also asserts a minimum
+  DHT node count so a recurrence goes `unhealthy` → `autoheal` restarts → rebinds. A plain
+  restart alone does NOT fix it (libtorrent just re-picks `eth0`); the binding must be set.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · VPN: `templates/wg0.conf.j2`

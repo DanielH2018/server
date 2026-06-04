@@ -23,6 +23,37 @@
     name: common
     tasks_from: docker_deploy.yml
 
+# qBittorrent.conf is stateful (it lives in the bind-mounted ./config and is rewritten
+# by qBittorrent itself, so it is NOT templated). Enforce the VPN interface binding via
+# the WebUI API instead: without it, libtorrent follows the netns main-table default
+# route (eth0) and binds its torrent UDP socket there, so the Mullvad kill-switch
+# EPERM-rejects every UDP tracker/DHT/uTP packet and downloads make zero progress while
+# TCP (and the old healthcheck) still look fine. Binding by interface NAME with an empty
+# address re-binds automatically when Mullvad hands out a new wg0 address. setPreferences
+# applies live and qBittorrent persists it. LocalHostAuth=false -> no creds from localhost.
+- name: Bind qBittorrent's listen interface to the VPN tunnel (wg0)
+  community.docker.docker_container_exec:
+    container: qbittorrent
+    # argv (not command) so curl's JSON arg is passed literally, with no shell re-parsing.
+    argv:
+      - curl
+      - -fsS
+      - -m
+      - "10"
+      - -X
+      - POST
+      - --data-urlencode
+      - 'json={"current_network_interface":"wg0","current_interface_address":""}'
+      - http://localhost:8080/api/v2/app/setPreferences
+  register: qbittorrent_iface_bind
+  # Wait out the WebUI warm-up after recreate (up to ~60s); curl -f returns non-zero
+  # until the API answers 200.
+  until: qbittorrent_iface_bind.rc == 0
+  retries: 12
+  delay: 5
+  # Posting the same binding is a no-op for the running config, so never report changed.
+  changed_when: false
+
 - name: Add Systemd Service
   ansible.builtin.template:
     src: docker-compose.app.service.j2

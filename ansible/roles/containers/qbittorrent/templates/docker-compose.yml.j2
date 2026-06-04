@@ -110,20 +110,32 @@ services:
       - /home/{{ sys_user }}/server/containers/data/downloads:/downloads
     restart: unless-stopped
     healthcheck:
-      # A loopback-only check can't detect an orphaned network namespace: if the
-      # wireguard sidecar is recreated, qBittorrent keeps serving 8080 inside the
-      # now-dead netns, so a localhost probe stays green while the WebUI is
-      # unreachable at wireguard:8080. We therefore ALSO require egress to a public
-      # IP, which the kill-switch only permits through the live Mullvad tunnel. When
-      # orphaned (or the VPN is down) this fails, autoheal marks the container
-      # unhealthy and restarts it so qBittorrent rejoins the current wireguard netns.
-      # 1.1.1.1 by IP avoids any DNS dependency; it is public so it routes via wg0.
+      # Three signals, because each catches a failure the others miss:
+      #   1. loopback WebUI (localhost:8080) — the qBittorrent process is up;
+      #   2. egress to a public IP (1.1.1.1) — the netns is live and the Mullvad
+      #      tunnel is up (the kill-switch permits egress only via wg0). This also
+      #      detects an orphaned netns: if the wireguard sidecar is recreated,
+      #      qBittorrent keeps serving 8080 in the now-dead netns (unreachable at
+      #      wireguard:8080, so Sonarr/Radarr see "Connection refused") while a
+      #      loopback-only probe stays green;
+      #   3. DHT node count via the API — qBittorrent's *UDP* path actually works.
+      # (3) closes a real blind spot: (1) and (2) are TCP-only, so if qBittorrent binds
+      # its torrent socket to eth0 instead of wg0 (the binding is enforced in
+      # tasks/main.yml), every UDP tracker/DHT/uTP packet is EPERM-rejected by the
+      # kill-switch and downloads silently make zero progress while this check stays
+      # green. A healthy node reaches hundreds of DHT nodes within start_period; <20
+      # sustained means UDP is dead, so autoheal restarts it to rebind to wg0. By IP,
+      # 1.1.1.1 avoids any DNS dependency; it is public so it routes via wg0.
+      # NOTE: the shell '$' are doubled ($$) so Docker Compose does NOT interpolate
+      # ${dht} / $(...) at parse time — they must reach the in-container shell verbatim.
       test: |
-        bash -c 'curl -fsm 10 http://localhost:8080 >/dev/null && curl -fsm 10 https://1.1.1.1 >/dev/null || exit 1'
+        bash -c 'curl -fsm 10 http://localhost:8080 >/dev/null && curl -fsm 10 https://1.1.1.1 >/dev/null && dht="$$(curl -fsm 10 http://localhost:8080/api/v2/transfer/info | grep -oE "dht_nodes[^0-9]+[0-9]+" | grep -oE "[0-9]+")" && [ "$${dht:-0}" -ge 20 ] || exit 1'
       interval: 1m
       timeout: 15s
       retries: 3
-      start_period: 90s
+      # 150s (was 90s): DHT re-bootstraps from ~0 on every (re)start and needs ~1-2 min
+      # to climb past the threshold, so give it headroom before failures count.
+      start_period: 150s
     labels:
       {{ kuma('qbittorrent') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
