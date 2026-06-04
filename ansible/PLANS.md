@@ -1,4 +1,3 @@
 # Future Plans
 
-- Improve CLAUDE(check saved articles)
-    - Auto-approve Read-only Tasks
+- Setup Authelia for Raspberry Pi
