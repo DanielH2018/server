@@ -19,10 +19,17 @@
     sops_arch: "{{ 'amd64' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
     sops_binary_url: "https://github.com/getsops/sops/releases/download/{{ sops_version }}/sops-{{ sops_version }}.linux.{{ sops_arch }}"
 
-- name: Install community.sops Ansible collection
-  # We run this as the regular user (become: false) so it installs for YOU, not root
+- name: Install pinned Ansible collections from requirements.yml
+  # Install community.sops (and the rest of the pinned set) at the versions locked in
+  # ansible/requirements.yml rather than pulling unpinned latest — keeps the runtime
+  # collections in lockstep with the tooling. Install into the path ansible.cfg loads
+  # from (collections_path = ansible/collections), matching the prek lint hook.
+  # Run as the regular user (become: false) so it installs for the repo owner.
   become: false
-  ansible.builtin.command: ansible-galaxy collection install community.sops
+  ansible.builtin.command: >-
+    ansible-galaxy collection install
+    -r {{ playbook_dir }}/requirements.yml
+    -p {{ playbook_dir }}/collections
   changed_when: false
 
 # -------------------------------------------------------

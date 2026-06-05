@@ -5,7 +5,7 @@
     upgrade: dist
   become: true
 
-- name: Install required packages
+- name: Install Raspberry Pi-specific packages
   ansible.builtin.apt:
     name:
       - linux-raspi
@@ -174,12 +174,15 @@
 #   become: true
 
 - name: Create cron job to clear ansible.log weekly
+  # ansible.cfg sets `log_path = ./ansible.log`, which resolves relative to the CWD
+  # the playbook is run from (the repo root) — i.e. server/ansible.log, NOT
+  # server/ansible/ansible.log. Truncate the file that actually grows.
   ansible.builtin.cron:
     name: "Clear ansible log file"
     minute: "0"
     hour: "6"
     weekday: "0" # 0 is Sunday
-    job: "truncate -s 0 /home/{{ sys_user }}/server/ansible/ansible.log"
+    job: "truncate -s 0 /home/{{ sys_user }}/server/ansible.log"
   become: true
 
 - name: Install Git hooks
@@ -422,10 +425,25 @@
   changed_when: false
   failed_when: false
 
-- name: Update rkhunter file properties baseline
+- name: Initialize rkhunter file-properties baseline (first run only)
+  # --propupd rewrites the *trusted* baseline of file hashes/properties. Running it
+  # on every play would silently re-bless any tampering that happened between runs,
+  # defeating the weekly --check. Guard it to first install; the APT_AUTOGEN setting
+  # below keeps the baseline fresh after *legitimate* package upgrades instead.
   ansible.builtin.command: rkhunter --propupd --nocolors
+  args:
+    creates: /var/lib/rkhunter/db/rkhunter.dat
   become: true
-  changed_when: false
+
+- name: Refresh rkhunter baseline automatically after apt operations
+  # With APT_AUTOGEN=true, rkhunter --propupd runs via the package-manager hook after
+  # apt installs/upgrades (including unattended-upgrades), so the only file-property
+  # changes the weekly scan flags are ones NOT explained by a trusted package event.
+  ansible.builtin.lineinfile:
+    path: /etc/default/rkhunter
+    regexp: '^APT_AUTOGEN='
+    line: 'APT_AUTOGEN="true"'
+  become: true
 
 - name: Schedule weekly rkhunter scan
   ansible.builtin.cron:
