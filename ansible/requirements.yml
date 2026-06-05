@@ -1,12 +1,11 @@
-# Versions are capped at what the runtime ansible-core (2.17.x) supports.
-# Notably community.general is held at 12.x — 13.x requires ansible-core >=2.18.
-# Bump these in lockstep with any ansible-core upgrade.
+# Pinned to latest stable, validated against the runtime ansible-core (2.21.x on
+# Python 3.12, post 24.04 upgrade). Bump in lockstep with any ansible-core change.
 collections:
   - name: ansible.posix
     version: 2.2.0
 
   - name: community.general
-    version: 12.6.1
+    version: 13.0.1
 
   - name: community.sops
     version: 2.3.0
