@@ -4,7 +4,7 @@ WireGuard VPN with the wg-easy web admin, for remote access into the homelab.
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `ghcr.io/wg-easy/wg-easy`
+- **Image:** `ghcr.io/wg-easy/wg-easy:latest`
 - **Host:** daniel-server · **Port:** 51821 (UI) · **URL:** `wg-easy.<domain>` (Authelia: yes)
 - **Networks:** apps
 - **Depends on:** traefik, authelia

@@ -3,7 +3,7 @@
 Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md`.
 
 ## At a glance
-- **Images:** `grafana/grafana:latest` + `grafana/loki` + `grafana/promtail`
+- **Images:** `grafana/grafana:latest` + `grafana/loki:latest` + `grafana/promtail:latest`
 - **Host:** daniel-server · **Port:** 3000 · **URL:** `grafana.<domain>` (Authelia: yes)
 - **Networks:** monitoring
 - **Depends on:** traefik, **prometheus**

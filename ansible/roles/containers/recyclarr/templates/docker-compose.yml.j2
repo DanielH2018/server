@@ -1,7 +1,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 services:
   recyclarr:
-    image: ghcr.io/recyclarr/recyclarr
+    image: ghcr.io/recyclarr/recyclarr:latest
     container_name: recyclarr
     user: {{ puid }}:{{ pgid }}
     restart: unless-stopped

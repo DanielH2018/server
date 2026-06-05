@@ -4,7 +4,7 @@
 
 services:
   healthchecks:
-    image: lscr.io/linuxserver/healthchecks
+    image: lscr.io/linuxserver/healthchecks:latest
     container_name: healthchecks
     environment:
       - PUID={{ puid }}

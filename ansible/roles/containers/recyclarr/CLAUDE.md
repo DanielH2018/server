@@ -4,7 +4,7 @@ Syncs TRaSH-guide quality definitions and custom formats into Sonarr & Radarr.
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `ghcr.io/recyclarr/recyclarr`
+- **Image:** `ghcr.io/recyclarr/recyclarr:latest`
 - **Host:** daniel-server · **No web UI**, no Authelia (runs on a schedule)
 - **Networks:** media
 - **Depends on:** traefik, **sonarr, radarr**

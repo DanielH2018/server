@@ -50,7 +50,7 @@ services:
           cpus: '0.10'
           memory: 128M
   loki:
-    image: grafana/loki
+    image: grafana/loki:latest
     container_name: loki
     restart: unless-stopped
     cap_drop:
@@ -81,7 +81,7 @@ services:
           cpus: '0.10'
           memory: 64M
   promtail:
-    image: grafana/promtail
+    image: grafana/promtail:latest
     container_name: promtail
     restart: unless-stopped
     healthcheck:

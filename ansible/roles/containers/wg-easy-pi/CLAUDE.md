@@ -4,7 +4,7 @@ The Pi's WireGuard instance (separate from the main-server `wg-easy` role).
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `ghcr.io/wg-easy/wg-easy`
+- **Image:** `ghcr.io/wg-easy/wg-easy:latest`
 - **Host:** **daniel-pi** (domain `daniel-pi.com`) · **Port:** 51821 (UI)
 - **Authelia:** no
 - **Networks:** proxy

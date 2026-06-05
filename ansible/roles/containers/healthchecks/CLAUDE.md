@@ -4,7 +4,7 @@ Healthchecks.io (self-hosted) — dead-man's-switch monitoring for scheduled job
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `lscr.io/linuxserver/healthchecks`
+- **Image:** `lscr.io/linuxserver/healthchecks:latest`
 - **Host:** daniel-server · **Port:** 8000 · **URL:** `healthchecks.<domain>` (Authelia: yes)
 - **Networks:** monitoring
 - **Depends on:** traefik, authelia

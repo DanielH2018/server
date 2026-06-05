@@ -16,6 +16,12 @@ See repo-root `CLAUDE.md` for shared conventions.
 - `templates/configuration.yml.j2` — access control rules, OIDC clients, session/redis.
 - `templates/users_database.yml.j2` — local users & argon2 password hashes.
 - OIDC clients (e.g. Beszel) get their own secrets in `ansible/vars/secrets.yml`.
+- **Built-in healthcheck:** the `authelia/authelia` image ships its own Docker
+  `HEALTHCHECK` (a bundled `healthcheck.sh` that probes Authelia's internal health
+  endpoint using its own binary), so Docker reports container health without a
+  `healthcheck:` block in the compose template. It keeps working under `cap_drop: [ALL]`
+  because it doesn't shell out to `curl`/`wget`. Monitoring (uptime-kuma) and `autoheal`
+  can rely on this native status — don't add a redundant compose `healthcheck`.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`

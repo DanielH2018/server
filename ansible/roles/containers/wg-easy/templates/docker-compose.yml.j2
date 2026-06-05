@@ -4,7 +4,7 @@
 
 services:
   wg-easy:
-    image: ghcr.io/wg-easy/wg-easy
+    image: ghcr.io/wg-easy/wg-easy:latest
     container_name: wg-easy
     # NET_ADMIN to create the wg interface + apply rules; NET_RAW because wg-quick runs
     # iptables (the iptables CLI opens a raw socket to init the 'nat' table — fails with
