@@ -16,7 +16,7 @@
   vars:
     # You can check https://github.com/getsops/sops/releases for the latest
     sops_version: "v3.9.2"
-    sops_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"
+    sops_arch: "{{ 'amd64' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
     sops_binary_url: "https://github.com/getsops/sops/releases/download/{{ sops_version }}/sops-{{ sops_version }}.linux.{{ sops_arch }}"
 
 - name: Install community.sops Ansible collection
@@ -83,7 +83,7 @@
 
 - name: Export SOPS_AGE_KEY_FILE in .bashrc
   ansible.builtin.lineinfile:
-    path: "{{ ansible_user_dir }}/.bashrc"
+    path: "{{ ansible_facts.user_dir }}/.bashrc"
     regexp: "^export SOPS_AGE_KEY_FILE="
     line: "export SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt"
     create: true

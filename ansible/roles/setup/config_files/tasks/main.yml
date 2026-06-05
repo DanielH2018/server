@@ -2,7 +2,7 @@
 - name: Copy .gitconfig to home directory
   ansible.builtin.copy:
     src: .gitconfig
-    dest: "{{ ansible_env.HOME }}/.gitconfig"
+    dest: "{{ ansible_facts.env.HOME }}/.gitconfig"
     mode: "0644"
     backup: true
   tags: git
@@ -10,7 +10,7 @@
 - name: Copy .bashrc to home directory
   ansible.builtin.copy:
     src: .bashrc
-    dest: "{{ ansible_env.HOME }}/.bashrc"
+    dest: "{{ ansible_facts.env.HOME }}/.bashrc"
     mode: "0644"
     backup: true
   tags: bash

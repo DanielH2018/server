@@ -38,7 +38,7 @@
   # venvs land in ~/.local alongside the existing ones, where `prek install` looks.
   ansible.builtin.command: "pipx install {{ item }}"
   args:
-    creates: "{{ ansible_env.HOME }}/.local/share/pipx/venvs/{{ item }}"
+    creates: "{{ ansible_facts.env.HOME }}/.local/share/pipx/venvs/{{ item }}"
   loop:
     - ansible-lint
     - prek
@@ -161,7 +161,7 @@
     minute: "30"
     hour: "6"
     job: "/usr/bin/docker system prune -a -f"
-    user: "{{ ansible_user_id }}"
+    user: "{{ ansible_facts.user_id }}"
   become: true
 
 # - name: Schedule Docker Compose image pull
@@ -170,7 +170,7 @@
 #     minute: "35"
 #     hour: "6"
 #     job: "/usr/bin/docker image pull ghcr.io/linuxserver/docker-compose:latest"
-#     user: "{{ ansible_user_id }}"
+#     user: "{{ ansible_facts.user_id }}"
 #   become: true
 
 - name: Create cron job to clear ansible.log weekly
@@ -192,7 +192,7 @@
   # by the repo owner, and pick up the user's pipx ~/.local/bin where prek lives.
   become: false
   environment:
-    PATH: "{{ ansible_env.HOME }}/.local/bin:{{ ansible_env.PATH }}"
+    PATH: "{{ ansible_facts.env.HOME }}/.local/bin:{{ ansible_facts.env.PATH }}"
 
 - name: Enable IPv4 forwarding
   ansible.posix.sysctl:
