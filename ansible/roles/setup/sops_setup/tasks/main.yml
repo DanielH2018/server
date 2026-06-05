@@ -55,7 +55,10 @@
 
 - name: Display the new Public Key
   become: false
-  ansible.builtin.shell: "set -o pipefail && grep 'public key' {{ sops_setup_key_file }} | awk '{print $4}'"
+  ansible.builtin.shell:
+    # pipefail needs bash; Ubuntu's /bin/sh is dash, which errors on `set -o pipefail`.
+    cmd: "set -o pipefail && grep 'public key' {{ sops_setup_key_file }} | awk '{print $4}'"
+    executable: /bin/bash
   register: sops_setup_public_key
   changed_when: false
 

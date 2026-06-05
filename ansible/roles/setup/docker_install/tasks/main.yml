@@ -56,19 +56,20 @@
       - docker-ce
       - docker-ce-cli
       - containerd.io
+      # Compose v2 is the engine behind community.docker.docker_compose_v2 (our
+      # deploy module) and buildx backs its `build: always`. Declared explicitly
+      # so the dependency is reproducible and not left to docker-ce-cli Recommends
+      # (which apt marks auto-installed and could drop under a stricter apt config).
+      - docker-compose-plugin
+      - docker-buildx-plugin
   become: true
 
-- name: Install Docker Compose
-  ansible.builtin.get_url:
-    url: https://raw.githubusercontent.com/linuxserver/docker-docker-compose/master/run.sh
-    dest: /usr/local/bin/docker-compose
-    mode: "0755"
-  become: true
-
-- name: Chmod Docker Compose
+- name: Remove the deprecated linuxserver docker-compose v1 wrapper
+  # Superseded by docker-compose-plugin (`docker compose`). The old run.sh wrapper
+  # shipped EOL Compose v1.29 and was fetched from an unpinned GitHub master.
   ansible.builtin.file:
-    dest: /usr/local/bin/docker-compose
-    mode: +x
+    path: /usr/local/bin/docker-compose
+    state: absent
   become: true
 
 - name: Add user to docker group

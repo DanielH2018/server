@@ -15,12 +15,6 @@
   become: true
   when: inventory_hostname == 'daniel-pi'
 
-- name: Pip Install
-  ansible.builtin.pip:
-    name:
-      - ansible-lint
-      - prek
-
 - name: Install required packages
   ansible.builtin.apt:
     name:
@@ -31,7 +25,51 @@
       - libpam-tmpdir
       - debsums
       - apt-show-versions
+      - pipx
     state: present
+  become: true
+
+- name: Install Python CLI tooling via pipx (PEP 668-safe on 24.04+)
+  # 24.04 / Python 3.12 marks the system environment externally-managed (PEP 668),
+  # so a global `pip install` errors. We drive the pipx CLI directly rather than the
+  # community.general.pipx module: that module requires pipx >= 1.7.0, but 24.04's
+  # apt pipx is 1.4.3 (its CLI installs fine — only the module gates on the version).
+  # pipx is per-user, so run as the connecting user (not the play's become: true) so
+  # venvs land in ~/.local alongside the existing ones, where `prek install` looks.
+  ansible.builtin.command: "pipx install {{ item }}"
+  args:
+    creates: "{{ ansible_env.HOME }}/.local/share/pipx/venvs/{{ item }}"
+  loop:
+    - ansible-lint
+    - prek
+  become: false
+
+- name: Enable periodic unattended security upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Download-Upgradeable-Packages "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Set local unattended-upgrades policy
+  # Security origins are enabled by the distro's 50unattended-upgrades. This local
+  # drop-in pins the bits we care about: no surprise reboots (the weekly "Weekly
+  # system restart" cron owns reboots) and cleanup of obsolete kernels/deps.
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/52unattended-upgrades-local
+    content: |
+      Unattended-Upgrade::Automatic-Reboot "false";
+      Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+      Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
+    owner: root
+    group: root
+    mode: "0644"
   become: true
 
 - name: Enable and start fail2ban
@@ -150,6 +188,11 @@
     chdir: "{{ playbook_dir }}"
     # Only run this if the hook doesn't exist yet
     creates: "{{ playbook_dir }}/.git/hooks/pre-commit"
+  # Run as the connecting user (not the play's become: true) so the hooks are owned
+  # by the repo owner, and pick up the user's pipx ~/.local/bin where prek lives.
+  become: false
+  environment:
+    PATH: "{{ ansible_env.HOME }}/.local/bin:{{ ansible_env.PATH }}"
 
 - name: Enable IPv4 forwarding
   ansible.posix.sysctl:
@@ -504,6 +547,8 @@
     wait "$AIDEINIT_PID"
   args:
     creates: /var/lib/aide/aide.db
+    # pipefail (and the $!/arithmetic bashisms above) need bash, not dash (/bin/sh).
+    executable: /bin/bash
   become: true
   changed_when: false
 
