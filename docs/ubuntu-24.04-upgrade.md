@@ -1,5 +1,10 @@
 # daniel-server: Ubuntu 22.04 → 24.04 LTS Upgrade Runbook
 
+> **Status: ✅ COMPLETED 2026-06-05** — daniel-server is on Ubuntu 24.04.4 / Python
+> 3.12.3, ansible-core **2.21.0** installed via pipx (`~/.local/bin`), collections at
+> latest (community.general 13.0.1). See commit `2837dbc`. The Pi is still pending
+> (see Follow-ups). Kept as a reference for the Pi and for the gotcha noted in Phase 3.
+
 **Goal:** move the host to a single, newer system Python (24.04 ships Python **3.12**)
 so we can run **ansible-core 2.21** (latest) without juggling two Python versions.
 
@@ -116,6 +121,13 @@ metadata) — it survives an in-place upgrade, but that is what a backup must pr
     - aligns the `prek.toml` ansible-core constraint,
     - re-runs `scripts/validate_compose_templates.py` + `ansible-lint`,
     - commits.
+
+> **Gotcha hit during this upgrade (apply to the Pi too):** bumping community.general
+> past 12.0.0 **removes the `community.general.yaml` stdout callback**, which
+> `ansible.cfg` referenced via `stdout_callback = yaml` — playbooks then fail to start.
+> Fix (already applied in `ansible.cfg`): `stdout_callback = default` + `result_format
+> = yaml`. A `--check` deploy of one service is what surfaced it; always run one after
+> a major core/collection bump.
 
 ---
 
