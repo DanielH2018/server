@@ -11,9 +11,17 @@ Utility role (not a container). Every container role calls into it via
   `templates/docker-compose.yml.j2` → `containers/<name>/docker-compose.yml` (mode `0600`),
   then runs `community.docker.docker_compose_v2` with `build: always`, `recreate: always`,
   `remove_orphans: true`. **This is why `containers/` is generated/read-only.**
-- **`dns.yml`** — idempotently ensures a Cloudflare **CNAME** (`<name>.{{ domain }}`,
-  proxied) exists via the Cloudflare API. Currently commented out in most roles' tasks
-  (DNS is handled by a wildcard / `cloudflare-ddns`), kept for per-record use.
+
+> **Why `recreate: always` (and not `auto`)?** It's intentional and load-bearing — see
+> the long comment in `docker_deploy.yml`. With no notify/handler pattern in the repo,
+> always-recreate is what propagates edits to the ~11 bind-mounted config templates
+> (authelia, traefik, pihole, homepage, grafana, prometheus, janitorr, livesync, peanut,
+> recyclarr, qbittorrent). `auto` would be idempotent but silently *not* apply a
+> config-file-only edit (the compose config-hash is unchanged). Switching to `auto` safely
+> needs per-service `config-hash` labels or handlers, not a one-line change.
+
+> Note: DNS is handled by a wildcard record / `cloudflare-ddns`; the former per-record
+> `dns.yml` helper (Cloudflare CNAME via API) was removed as dead code on 2026-06-05.
 
 ## Notable
 - `container_item` (name/port/networks/hostname/use_authelia) is the per-service dict from
