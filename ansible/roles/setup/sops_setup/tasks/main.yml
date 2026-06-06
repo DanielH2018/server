@@ -58,7 +58,6 @@
   ansible.builtin.command: "age-keygen -o {{ sops_setup_key_file }}"
   args:
     creates: "{{ sops_setup_key_file }}"
-  register: sops_setup_age_keygen_output
 
 - name: Display the new Public Key
   become: false

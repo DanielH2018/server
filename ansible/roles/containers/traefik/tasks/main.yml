@@ -39,12 +39,6 @@
     dest: "/home/{{ sys_user }}/server/containers/traefik/data/traefik.yml"
     mode: "0664"
 
-- name: Hash password
-  ansible.builtin.shell: "echo $(htpasswd -nb '{{ traefik_user }}' '{{ traefik_password }}')"
-  register: traefik_hash
-  changed_when: false
-  no_log: true
-
 - name: Deploy CrowdSec local whitelist
   ansible.builtin.copy:
     src: crowdsec-whitelist.yaml
