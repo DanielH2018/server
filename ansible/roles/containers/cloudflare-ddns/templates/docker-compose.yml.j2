@@ -12,12 +12,17 @@ services:
       - DOMAINS={{ domain }}
       - PROXIED=true
       - IP6_PROVIDER=none
+      # Dead-man's-switch: ping a Kuma push monitor after each successful update.
+      # Internal http (same `monitoring` net) — keeps the heartbeat off public DNS
+      # and out of the Authelia-gated public route. Token lives in secrets.yml.
+      - UPTIMEKUMA=http://uptime-kuma:3001/api/push/{{ cloudflare_ddns_proxied_push_token }}
     networks:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}
 {% endfor %}
     labels:
       {{ kuma('cloudflare-ddns-proxied') }}
+      {{ kuma('cloudflare-ddns-proxied-push', monitor_type='push', interval=300, push_token=cloudflare_ddns_proxied_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     deploy:
       resources:
@@ -39,12 +44,17 @@ services:
       - DOMAINS=valheim.{{ domain }},minecraft.{{ domain }},terraria.{{ domain }}
       - PROXIED=false
       - IP6_PROVIDER=none
+      # Dead-man's-switch: ping a Kuma push monitor after each successful update.
+      # Internal http (same `monitoring` net) — keeps the heartbeat off public DNS
+      # and out of the Authelia-gated public route. Token lives in secrets.yml.
+      - UPTIMEKUMA=http://uptime-kuma:3001/api/push/{{ cloudflare_ddns_direct_push_token }}
     networks:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}
 {% endfor %}
     labels:
       {{ kuma('cloudflare-ddns-direct') }}
+      {{ kuma('cloudflare-ddns-direct-push', monitor_type='push', interval=300, push_token=cloudflare_ddns_direct_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     deploy:
       resources:
