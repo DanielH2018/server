@@ -27,6 +27,12 @@ services:
         )
       }}
       {{ kuma(container_item.name) }}
+      # AutoKuma-managed Discord notification (id: discord == kuma_notification_id); the kuma()
+      # macro links every monitor to it via notification_name_list. Webhook in secrets.yml.
+      # Defining notifications via labels is flagged experimental by AutoKuma.
+      - "kuma.discord.notification.name=Homelab Alerts"
+      - "kuma.discord.notification.active=true"
+      - 'kuma.discord.notification.config={"type":"discord","discordWebhookUrl":"{{ monitor_discord_webhook_url }}","discordUsername":"Uptime Kuma"}'
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     deploy:
       resources:

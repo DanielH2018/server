@@ -1,0 +1,8 @@
+---
+# Deploy after the services it queries/pushes to, so they're up first. Sequencing is
+# computed by the toposort filter in deploy.yml from these names (which must match
+# containers_list entries), not by Ansible meta dependencies.
+role_deps:
+  - prometheus
+  - uptime-kuma
+  - kopia

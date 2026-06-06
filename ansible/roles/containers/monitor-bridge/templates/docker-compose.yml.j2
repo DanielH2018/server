@@ -1,0 +1,66 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+---
+
+services:
+  monitor-bridge:
+    image: python:3.12-alpine
+    container_name: monitor-bridge
+    user: "{{ puid }}:{{ pgid }}"
+    restart: unless-stopped
+    # Pure stdlib Python over HTTP — no caps, no writable rootfs needed.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command: ["python", "/app/check.py"]
+    environment:
+      - TZ={{ tz }}
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - INTERVAL=300
+      - PROMETHEUS_URL=http://prometheus:9090
+      - KOPIA_URL=http://kopia:51515
+      - KUMA_URL=http://uptime-kuma:3001
+      - BACKUP_SOURCE_PATH=/data/home/{{ sys_user }}/server/containers
+      - BACKUP_MAX_AGE_H=30
+      - DISK_MOUNTPOINTS=/
+      - DISK_MAX_PCT=90
+      - CERT_MIN_DAYS=14
+      - MEM_MAX_PCT=90
+      - OOM_WINDOW=1h
+      # Push tokens: we set them; Kuma honors client-supplied tokens. In secrets.yml.
+      - KUMA_PUSH_KOPIA={{ monitor_bridge_kopia_push_token }}
+      - KUMA_PUSH_DISK={{ monitor_bridge_disk_push_token }}
+      - KUMA_PUSH_CERT={{ monitor_bridge_cert_push_token }}
+      - KUMA_PUSH_MEM={{ monitor_bridge_mem_push_token }}
+    volumes:
+      - ./check.py:/app/check.py:ro
+    networks:
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
+    labels:
+      {# Container-liveness monitor + one push monitor per check (AutoKuma-provisioned). -#}
+      {{ kuma('monitor-bridge') }}
+      {{ kuma('monitor-bridge-backup', monitor_type='push', name='Backup Freshness', interval=600, push_token=monitor_bridge_kopia_push_token) }}
+      {{ kuma('monitor-bridge-disk', monitor_type='push', name='Root Disk', interval=600, push_token=monitor_bridge_disk_push_token) }}
+      {{ kuma('monitor-bridge-cert', monitor_type='push', name='TLS Cert Expiry', interval=600, push_token=monitor_bridge_cert_push_token) }}
+      {{ kuma('monitor-bridge-mem', monitor_type='push', name='Memory / OOM', interval=600, push_token=monitor_bridge_mem_push_token) }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 64M
+        reservations:
+          cpus: '0.02'
+          memory: 16M
+
+networks:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
+    external: true
+{% endfor %}

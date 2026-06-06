@@ -1,0 +1,19 @@
+---
+- name: Create required directories
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}"
+
+- name: Deploy monitor-bridge check script
+  ansible.builtin.copy:
+    src: check.py
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/check.py"
+    mode: "0644"
+
+- name: Deploy Container
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
