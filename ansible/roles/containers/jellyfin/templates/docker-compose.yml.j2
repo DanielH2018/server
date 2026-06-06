@@ -17,8 +17,11 @@ services:
       - /home/{{ sys_user }}/server/containers/data/media:/data
     restart: unless-stopped
     ports:
-      - 7359:7359/udp
-      - 1900:1900/udp
+      # Bind LAN discovery to the host's LAN IP (not 0.0.0.0), matching the
+      # pihole/portainer convention — these are local-network discovery
+      # protocols and shouldn't listen on every interface.
+      - "{{ server_ip }}:7359:7359/udp"
+      - "{{ server_ip }}:1900:1900/udp"
     devices:
       - /dev/dri:/dev/dri
     security_opt:
