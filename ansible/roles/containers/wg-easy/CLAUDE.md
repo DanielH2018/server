@@ -13,6 +13,13 @@ See repo-root `CLAUDE.md` for shared conventions.
 ## Notable
 - The Pi runs a separate `wg-easy-pi` role; the UI here is LAN-bound and behind Authelia
   (a recent hardening change). The WireGuard UDP listen port is published on the host.
+- **Built-in healthcheck:** the `wg-easy/wg-easy` image ships its own Docker `HEALTHCHECK`
+  (`wg show | grep -q interface` — verifies the WireGuard *interface* is actually up, not
+  just that the UI responds), so Docker reports container health without a `healthcheck:`
+  block in the compose template. `autoheal` and uptime-kuma rely on this native status —
+  don't add a redundant compose `healthcheck` (and don't "improve" it to a UI probe; the
+  interface check is the stronger signal). The Pi's `wg-easy-pi` shares this image and
+  healthcheck.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`

@@ -16,7 +16,6 @@ ansible/.ansible
 ansible/collections
 ansible/roles/containers/code-server/templates/github
 ansible/roles/foundry/files/*.zip
-ansible/ansible.log
 *.pyc
 !/CLAUDE.md
 !/.claude

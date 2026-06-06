@@ -16,6 +16,11 @@ See repo-root `CLAUDE.md` for shared conventions.
   `docker.yaml`, `custom.css` — edit these `.j2` files, not the live config.
 - Reads container state via the read-only `docker-proxy`.
 - Pulls calendar data from the internal `ical-proxy` over `homepage_private`.
+- **Built-in healthcheck:** the `gethomepage/homepage` image ships its own Docker
+  `HEALTHCHECK` (`wget --spider http://127.0.0.1:$PORT/api/healthcheck`, 10s interval),
+  so Docker reports container health without a `healthcheck:` block in the compose
+  template. `autoheal` and uptime-kuma's docker monitor rely on this native status —
+  don't add a redundant compose `healthcheck`.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Dashboard cfg: `templates/*.yaml.j2`
