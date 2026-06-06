@@ -79,16 +79,20 @@
     append: true
   become: true
 
-- name: Configure Docker daemon log limits
+- name: Configure Docker daemon (log limits + live-restore)
   ansible.builtin.copy:
     dest: /etc/docker/daemon.json
+    # live-restore keeps containers running across a daemon restart (e.g. a
+    # docker-ce package upgrade), so a Docker restart doesn't bounce all ~42
+    # containers. Safe on this single-node, non-swarm host.
     content: |
       {
         "log-driver": "json-file",
         "log-opts": {
           "max-size": "10m",
           "max-file": "3"
-        }
+        },
+        "live-restore": true
       }
     mode: "0644"
     owner: root

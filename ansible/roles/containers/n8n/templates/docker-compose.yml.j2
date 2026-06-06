@@ -27,7 +27,10 @@ services:
       - GENERIC_TIMEZONE={{ tz }}
       - TZ={{ tz }}
     volumes:
-      - n8n_data:/home/node/.n8n
+      # Bind mount (under containers/n8n/) instead of a named volume so the n8n
+      # state — workflows, execution history, and encrypted credentials + the
+      # encryption key in ./data/config — lands in Kopia's backup scope.
+      - ./data:/home/node/.n8n
       - ./local-files:/files
     security_opt:
       - no-new-privileges:true
@@ -117,6 +120,3 @@ networks:
 {% endfor %}
   internal:
     internal: true
-
-volumes:
-  n8n_data:

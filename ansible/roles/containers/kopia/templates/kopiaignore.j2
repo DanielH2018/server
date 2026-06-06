@@ -24,7 +24,12 @@ jellyfin/config/metadata/
 jellyfin/config/plugins/
 
 # ── Media stack ───────────────────────────────────────────────────────────────
-data/
+# Anchored with a leading slash so this excludes ONLY the top-level media library
+# (containers/data/, ~27G). A bare "data/" matches a dir named data at ANY depth,
+# which silently dropped service state — n8n/data, karakeep/data, grafana/data,
+# portainer/data, traefik/data — from the backup. Game/regeneratable */data dirs
+# (minecraft, valheim, uptime-kuma, jellyfin) stay excluded via their own rules.
+/data/
 sonarr/config/MediaCover/
 radarr/config/MediaCover/
 bazarr/config/cache/
