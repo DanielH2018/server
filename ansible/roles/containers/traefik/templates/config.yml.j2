@@ -32,7 +32,11 @@ http:
         contentTypeNosniff: true
         forceSTSHeader: true
         stsIncludeSubdomains: true
-        stsPreload: true
+        # No `stsPreload` on purpose: the preload directive is only honoured by
+        # browsers at max-age >= 1 year (31536000s), so at 180 days it's a no-op
+        # that advertises an intent we can't fulfil. Preloading is also a hard-to-
+        # reverse commitment that would force HTTPS on every *.{{ domain }} subdomain
+        # baked into browsers — not worth it for a homelab. Keep HSTS without preload.
         stsSeconds: 15552000
         customFrameOptionsValue: SAMEORIGIN
         customRequestHeaders:

@@ -217,6 +217,14 @@
     - { name: "net.ipv4.conf.default.accept_redirects", value: "0" }
     - { name: "net.ipv4.conf.all.send_redirects", value: "0" }
     - { name: "net.ipv4.conf.default.send_redirects", value: "0" }
+    # Reject source-routed packets (IPv4 + IPv6) — the companion to the redirect
+    # rules above. `default.*` is the template every NEW interface inherits, which
+    # matters here because Docker constantly spins up bridge/veth interfaces; the
+    # host default for default.accept_source_route was 1 (accept).
+    - { name: "net.ipv4.conf.all.accept_source_route", value: "0" }
+    - { name: "net.ipv4.conf.default.accept_source_route", value: "0" }
+    - { name: "net.ipv6.conf.all.accept_source_route", value: "0" }
+    - { name: "net.ipv6.conf.default.accept_source_route", value: "0" }
     - { name: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1" }
     - { name: "net.ipv4.conf.all.log_martians", value: "1" }
     - { name: "net.ipv4.conf.default.log_martians", value: "1" }
@@ -237,6 +245,26 @@
     delete: true
   become: true
   failed_when: false
+
+# Pin UFW's default policies in IaC rather than relying on the distro default.
+# `deny incoming` is the host's baseline — only the explicit allow/limit rules
+# below (SSH, WireGuard) open ports. Default-deny is safe to set over an active
+# SSH session because the explicit `limit ssh` rule that follows takes precedence
+# over the default policy. The FORWARD/routed policy is deliberately NOT managed
+# here: Docker owns the FORWARD chain via its own iptables rules (DOCKER-USER),
+# and the WireGuard containers depend on host forwarding — letting UFW set a
+# routed default would fight Docker and risk breaking container/VPN routing.
+- name: Set UFW default policy - deny incoming
+  community.general.ufw:
+    default: deny
+    direction: incoming
+  become: true
+
+- name: Set UFW default policy - allow outgoing
+  community.general.ufw:
+    default: allow
+    direction: outgoing
+  become: true
 
 - name: Configure UFW firewall - rate-limit SSH
   community.general.ufw:
