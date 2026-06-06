@@ -57,3 +57,17 @@ language = "python"
 additional_dependencies = ["jinja2>=3", "pyyaml"]
 pass_filenames = false
 files = "^(ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/templates/(traefik|autokuma)\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate_compose_templates\\.py)$"
+
+# Run the repo's Python unit tests: the toposort dependency-resolution filters
+# (gate every deploy's ordering/scope) and the monitor-bridge check logic. ansible-core
+# is needed because toposort.py imports ansible.errors. Runs in prek's isolated env, so
+# it works regardless of the system Python (ansible here is a pipx install).
+[[repos.hooks]]
+id = "pytest"
+name = "Run Python unit tests (toposort + monitor-bridge)"
+entry = "python3 -m pytest"
+language = "python"
+additional_dependencies = ["pytest", "ansible-core>=2.18", "pyyaml"]
+pass_filenames = false
+args = ["ansible/tests", "ansible/roles/containers/monitor-bridge/files"]
+files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/containers/monitor-bridge/files/.*\\.py)$"
