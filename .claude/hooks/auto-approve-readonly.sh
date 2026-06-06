@@ -1,5 +1,5 @@
 #!/bin/bash
-CMD=$(jq -r '.tool_input.command' < /dev/stdin)
-if echo "$CMD" | grep -qE '^(ls|cat|echo|pwd|whoami|date|git status|git log|git diff)'; then
-  echo '{"permissionDecision": "allow", "permissionDecisionReason": "Safe read-only command"}'
-fi
+# PreToolUse(Bash) hook — auto-approve provably read-only commands so they don't
+# prompt. Delegates to the Python classifier (exec keeps the hook's stdin JSON).
+# Unrecognized commands produce no output -> normal permission flow.
+exec python3 "$(dirname "$(readlink -f "$0")")/auto-approve-readonly.py"
