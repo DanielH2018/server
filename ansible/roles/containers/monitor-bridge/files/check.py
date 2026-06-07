@@ -37,6 +37,7 @@ MEM_MAX_PCT = float(_env("MEM_MAX_PCT", "90"))
 OOM_WINDOW = _env("OOM_WINDOW", "1h")
 CPU_WINDOW = _env("CPU_WINDOW", "15m")
 CPU_THROTTLE_PCT = float(_env("CPU_THROTTLE_PCT", "25"))
+CPU_MIN_THROTTLED_CORES = float(_env("CPU_MIN_THROTTLED_CORES", "0.05"))
 RESTART_WINDOW = _env("RESTART_WINDOW", "15m")
 RESTART_MAX = float(_env("RESTART_MAX", "3"))
 TRAEFIK_5XX_PCT = float(_env("TRAEFIK_5XX_PCT", "5"))
@@ -210,26 +211,47 @@ def check_oom():
 
 
 def check_cpu_throttle():
-    """Containers under sustained CPU CFS throttling within CPU_WINDOW, naming each one.
+    """Containers under *sustained* CPU CFS throttling within CPU_WINDOW, naming each one.
 
     A container pinned at its `deploy.resources` cpu limit is throttled (slowed) without
-    OOMing, restarting, or 5xx-ing — invisible to the other checks. The fraction of CFS
-    periods that were throttled is exactly the signal the resources() macro names as the
-    cue to raise a cpu cap. Containers with no cpu limit produce 0/0 -> NaN, which fails
-    the `> threshold` predicate (NaN comparisons are False), so they're ignored; if cAdvisor
-    doesn't expose the cfs metrics the query is empty and this stays green.
+    OOMing, restarting, or 5xx-ing — invisible to the other checks. We alert only when
+    BOTH conditions hold, so noise doesn't page:
+
+      1. throttled/total CFS *periods* > CPU_THROTTLE_PCT — the fraction of enforcement
+         periods that hit the cap (the cue the resources() macro names for raising a cap);
+      2. throttled *seconds* per second > CPU_MIN_THROTTLED_CORES — the absolute CPU time
+         (in cores) actually lost to throttling.
+
+    Condition 1 alone fires constantly for tiny low-limit utility containers that briefly
+    burst over their per-period slice while losing negligible absolute time (e.g. a 0.1-cpu
+    sidecar at 90% throttled periods but 0.0001 cores lost) — a perpetual false `down`. The
+    cores floor — the same volume-floor idea as check_traefik_5xx's TRAEFIK_MIN_RPS — gates
+    those out, so the monitor pushes `up` and only goes `down` on genuine starvation.
+    Containers with no cpu limit give 0/0 -> NaN for condition 1 (NaN comparisons are False)
+    and are ignored; if cAdvisor doesn't expose the cfs metrics both queries are empty -> green.
     """
-    vec = prom_vector(
+    ratio_vec = prom_vector(
         'sum(rate(container_cpu_cfs_throttled_periods_total{name!=""}[%s])) by (name) '
         '/ sum(rate(container_cpu_cfs_periods_total{name!=""}[%s])) by (name)'
         % (CPU_WINDOW, CPU_WINDOW))
+    lost_cores = dict(
+        (m.get("name", "?"), v) for m, v in prom_vector(
+            'sum(rate(container_cpu_cfs_throttled_seconds_total{name!=""}[%s])) by (name)'
+            % CPU_WINDOW))
     threshold = CPU_THROTTLE_PCT / 100.0
-    offenders = _top_offenders(vec, "name", lambda v: v > threshold)
+    offenders = []
+    for m, ratio in ratio_vec:
+        name = m.get("name", "?")
+        lost = lost_cores.get(name, 0.0)
+        if ratio > threshold and lost > CPU_MIN_THROTTLED_CORES:
+            offenders.append((name, ratio, lost))
+    offenders.sort(key=lambda nrl: -nrl[1])
     if offenders:
-        desc = ", ".join("%s (%.0f%%)" % (n, v * 100) for n, v in offenders[:5])
-        return False, "%d container(s) CPU-throttled >%.0f%% in %s: %s" % (
-            len(offenders), CPU_THROTTLE_PCT, CPU_WINDOW, desc)
-    return True, "no CPU throttling >%.0f%% in %s" % (CPU_THROTTLE_PCT, CPU_WINDOW)
+        desc = ", ".join(
+            "%s (%.0f%%, %.2f cores)" % (n, r * 100, lc) for n, r, lc in offenders[:5])
+        return False, "%d container(s) CPU-throttled >%.0f%% & >%.2f cores in %s: %s" % (
+            len(offenders), CPU_THROTTLE_PCT, CPU_MIN_THROTTLED_CORES, CPU_WINDOW, desc)
+    return True, "no sustained CPU throttling in %s" % CPU_WINDOW
 
 
 def check_targets_down():

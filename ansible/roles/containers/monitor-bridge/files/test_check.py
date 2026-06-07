@@ -164,9 +164,11 @@ def test_oom_none_is_ok(monkeypatch):
 # --- check_cpu_throttle -----------------------------------------------------
 
 def test_cpu_throttle_names_container_over_threshold(monkeypatch):
-    # default CPU_THROTTLE_PCT=25 -> 0.40 (40%) alerts, 0.10 (10%) doesn't
-    vec = [({"name": "tdarr"}, 0.40), ({"name": "sonarr"}, 0.10)]
-    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vec)
+    # Alert needs BOTH ratio > CPU_THROTTLE_PCT (25%) AND cores lost > floor (0.05).
+    # tdarr: 40% periods + 0.30 cores lost -> alerts. sonarr: 10% periods -> under ratio.
+    ratio = [({"name": "tdarr"}, 0.40), ({"name": "sonarr"}, 0.10)]
+    lost = [({"name": "tdarr"}, 0.30), ({"name": "sonarr"}, 0.30)]
+    monkeypatch.setattr(check, "prom_vector", _seq(ratio, lost))
     ok, msg = check.check_cpu_throttle()
     assert not ok
     assert "tdarr" in msg
@@ -175,14 +177,26 @@ def test_cpu_throttle_names_container_over_threshold(monkeypatch):
 
 def test_cpu_throttle_nan_is_ignored(monkeypatch):
     # unlimited container -> 0/0 -> NaN; NaN > threshold is False, so no alert
-    vec = [({"name": "jellyfin"}, float("nan"))]
-    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vec)
+    ratio = [({"name": "jellyfin"}, float("nan"))]
+    lost = [({"name": "jellyfin"}, 0.30)]
+    monkeypatch.setattr(check, "prom_vector", _seq(ratio, lost))
     ok, _ = check.check_cpu_throttle()
     assert ok
 
 
 def test_cpu_throttle_none_is_ok(monkeypatch):
     monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    ok, _ = check.check_cpu_throttle()
+    assert ok
+
+
+def test_cpu_throttle_below_cores_floor_is_ok(monkeypatch):
+    # Real-world false positive: a 0.1-cpu sidecar throttled in 90% of its (few, bursty)
+    # CFS periods but losing negligible absolute CPU time (0.0001 cores) must NOT alert.
+    # 1st prom_vector call = throttle ratio, 2nd = throttled cores/s.
+    ratio = [({"name": "monitor-bridge"}, 0.90)]
+    lost = [({"name": "monitor-bridge"}, 0.0001)]
+    monkeypatch.setattr(check, "prom_vector", _seq(ratio, lost))
     ok, _ = check.check_cpu_throttle()
     assert ok
 

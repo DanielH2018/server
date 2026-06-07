@@ -35,6 +35,7 @@ services:
       - OOM_WINDOW=1h
       - CPU_WINDOW=15m
       - CPU_THROTTLE_PCT=25
+      - CPU_MIN_THROTTLED_CORES=0.05
       - RESTART_WINDOW=15m
       - RESTART_MAX=3
       - TRAEFIK_5XX_PCT=5

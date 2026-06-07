@@ -23,10 +23,14 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   - **Container Restarts** (`changes(container_start_time_seconds[15m]) > RESTART_MAX`)
   - **Container OOM** (`increase(container_oom_events_total[1h]) by (name)` — names the
     offender; supersedes the old host-aggregate OOM that lived in the Memory check)
-  - **CPU Throttling** (`rate(container_cpu_cfs_throttled_periods_total[15m]) /
-    rate(container_cpu_cfs_periods_total[15m]) > CPU_THROTTLE_PCT` by name — catches a
-    container pinned at its `deploy.resources` cpu cap, which throttles silently without
-    OOM/restart/5xx. Unlimited containers give 0/0→NaN and are ignored)
+  - **CPU Throttling** (throttled/total CFS *periods* `> CPU_THROTTLE_PCT` **and** throttled
+    *seconds*/s `> CPU_MIN_THROTTLED_CORES`, by name — catches a container pinned at its
+    `deploy.resources` cpu cap, which throttles silently without OOM/restart/5xx. The cores
+    floor (same volume-floor idea as Traefik's `TRAEFIK_MIN_RPS`) is essential: the period
+    ratio alone runs 30–90% for tiny low-limit sidecars that briefly burst over their slice
+    while losing negligible absolute CPU — a perpetual false `down`, which Kuma renders as
+    "No heartbeat in the time window" since only `up` pushes satisfy a push monitor's
+    watchdog. Unlimited containers give 0/0→NaN and are ignored)
   - **Scrape Targets** (`up == 0` — names the down job)
   - **Traefik 5xx** (5xx ratio over 5m, gated by a `TRAEFIK_MIN_RPS` volume floor)
 - The restart/OOM/cpu/target/5xx checks use `prom_vector()` (keeps series labels) so the alert
@@ -39,7 +43,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - Thresholds are env-tunable in the compose template (`BACKUP_MAX_AGE_H`, `DISK_MAX_PCT`,
   `CERT_MIN_DAYS`, `MEM_MAX_PCT`, `RESTART_WINDOW`/`RESTART_MAX`, `OOM_WINDOW`,
-  `CPU_WINDOW`/`CPU_THROTTLE_PCT`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`). A failed
+  `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`). A failed
   query/unreachable source makes that monitor `down` with an explanatory msg — a broken
   exporter is surfaced, not silently green.
 
