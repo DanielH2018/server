@@ -60,6 +60,8 @@ services:
       {{ kuma('monitor-bridge-oom', monitor_type='push', name='Container OOM', interval=600, push_token=monitor_bridge_oom_push_token) }}
       {{ kuma('monitor-bridge-targets', monitor_type='push', name='Scrape Targets', interval=600, push_token=monitor_bridge_targets_push_token) }}
       {{ kuma('monitor-bridge-traefik', monitor_type='push', name='Traefik 5xx', interval=600, push_token=monitor_bridge_traefik_push_token) }}
+      {# Host GitOps deployer liveness — interval 2400s (40m) > the 30m tick so one missed push isn't a false alarm. -#}
+      {{ kuma('gitops-deploy', monitor_type='push', name='GitOps Deploy', interval=2400, push_token=gitops_deploy_kuma_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 
