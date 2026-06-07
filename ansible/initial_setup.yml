@@ -3,7 +3,10 @@
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
   become: true
   gather_facts: true
-  tasks:
+  pre_tasks:
+    # MUST be pre_tasks, not tasks: a play runs pre_tasks -> roles -> tasks, so
+    # under `tasks:` this would load AFTER the roles and any role templating a
+    # secret (e.g. gitops_deploy's config.env) would see it undefined.
     - name: Load encrypted secrets
       community.sops.load_vars:
         file: secrets.yml

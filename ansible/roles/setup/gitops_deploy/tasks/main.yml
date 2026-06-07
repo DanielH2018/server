@@ -22,6 +22,7 @@
     - gitops_deploy.py
     - deploy_logic.py
   become: true
+  notify: Run gitops-deploy once
 
 - name: Write deployer config (secrets, host-only)
   ansible.builtin.template:
@@ -32,6 +33,7 @@
     mode: "0600"
   become: true
   no_log: true
+  notify: Run gitops-deploy once
 
 - name: Install systemd units
   ansible.builtin.template:
@@ -43,7 +45,9 @@
     - gitops-deploy.timer
     - gitops-deploy-alert.service
   become: true
-  notify: Reload systemd
+  notify:
+    - Reload systemd
+    - Run gitops-deploy once
 
 - name: Enable and start the timer
   ansible.builtin.systemd:
