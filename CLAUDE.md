@@ -100,7 +100,37 @@ Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hook
 
 ## Pre-commit Hooks
 The repo uses [prek](https://prek.j178.dev) (config: `prek.toml`) with YAML linting, Ansible linting, and gitleaks (secret scanning).
-Run `prek run --all-files` to check before committing.
+Run `prek run --all-files` to check before committing. The `pytest` and
+`validate-compose-templates` hooks shell out to `uv` (see **Python & Tests**), so uv must be
+installed for a full `prek run`.
+
+## Python & Tests
+Dev/test tooling is managed by [uv](https://docs.astral.sh/uv/) (`pyproject.toml` + `uv.lock`).
+The repo isn't a Python package — `[tool.uv] package = false` makes it a "virtual" project that
+only pins the test deps (the `dev` dependency group) and the pytest config.
+
+```bash
+# One-time: install uv — https://docs.astral.sh/uv/getting-started/installation/
+uv run pytest                 # all repo unit tests (auto-syncs the env from uv.lock first)
+uv run pytest scripts         # just one suite
+```
+
+- **What runs is defined once** in `pyproject.toml` `[tool.pytest.ini_options]` `testpaths` —
+  consumed by both `uv run pytest` and the prek `pytest` hook. It deliberately excludes the
+  vendored `ansible/collections/**` third-party tests.
+- **Deps live once** in the `dev` dependency group; the prek `pytest` and
+  `validate-compose-templates` hooks call `uv run`, so there's no duplicated dependency list.
+  **uv must be on `PATH` for `prek run`** (CI installs it via `astral-sh/setup-uv`).
+- **Suites:** `ansible/tests/` (toposort deploy-ordering filters),
+  `ansible/roles/containers/monitor-bridge/files/` (Kopia/Prometheus check logic),
+  `.claude/hooks/` (read-only Bash classifier), `scripts/` (image-diff parser).
+- **Test-placement gotcha:** pytest tests must NOT live under `ansible/filter_plugins/` —
+  Ansible's plugin loader imports every `.py` there at deploy time and would choke on the
+  `pytest` import. `test_toposort.py` lives in `ansible/tests/` and imports its target via the
+  `pythonpath` setting in `pyproject.toml`.
+
+CI (`.github/workflows/ci.yml`) runs `prek run --all-files` on every PR and on push to master:
+these tests plus lint, template validation, and secret scanning.
 
 ## Variables
 Global vars in `ansible/inventory/group_vars/all.yml`. Per-host overrides in `ansible/inventory/host_vars/`.
