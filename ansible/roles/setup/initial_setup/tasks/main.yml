@@ -25,21 +25,30 @@
       - libpam-tmpdir
       - debsums
       - apt-show-versions
-      - pipx
     state: present
   become: true
 
-- name: Install Python CLI tooling via pipx (PEP 668-safe on 24.04+)
-  # 24.04 / Python 3.12 marks the system environment externally-managed (PEP 668),
-  # so a global `pip install` errors. We drive the pipx CLI directly rather than the
-  # community.general.pipx module: that module requires pipx >= 1.7.0, but 24.04's
-  # apt pipx is 1.4.3 (its CLI installs fine — only the module gates on the version).
-  # pipx is per-user, so run as the connecting user (not the play's become: true) so
-  # venvs land in ~/.local alongside the existing ones, where `prek install` looks.
-  ansible.builtin.command: "pipx install {{ item }}"
+- name: Install uv (per-user; PEP 668-safe on 24.04+)
+  # 24.04 / Python 3.12 marks the system environment externally-managed (PEP 668), so a
+  # global `pip install` errors. uv is a standalone binary (no system Python needed),
+  # installed per-user into ~/.local/bin via the official script. Run as the connecting
+  # user (not the play's become: true) so it lands in the repo owner's home.
+  ansible.builtin.shell:
+    cmd: set -o pipefail && curl -LsSf https://astral.sh/uv/install.sh | sh
+    creates: "{{ ansible_facts.env.HOME }}/.local/bin/uv"
+    executable: /bin/bash
+  become: false
+
+- name: Install Python CLI tooling as uv tools
+  # uv manages global CLI tools in isolated venvs (~/.local/share/uv/tools), exposing
+  # shims in ~/.local/bin — the pipx replacement. ansible-core also backs the repo's
+  # `uv run` test/validate prek hooks (via pyproject.toml), but as a CLI tool here it is
+  # what runs deploys. Per-user, so `prek install` (below) finds prek on ~/.local/bin.
+  ansible.builtin.command: "{{ ansible_facts.env.HOME }}/.local/bin/uv tool install {{ item }}"
   args:
-    creates: "{{ ansible_facts.env.HOME }}/.local/share/pipx/venvs/{{ item }}"
+    creates: "{{ ansible_facts.env.HOME }}/.local/share/uv/tools/{{ item }}"
   loop:
+    - ansible-core
     - ansible-lint
     - prek
   become: false
@@ -192,7 +201,7 @@
     # Only run this if the hook doesn't exist yet
     creates: "{{ playbook_dir }}/.git/hooks/pre-commit"
   # Run as the connecting user (not the play's become: true) so the hooks are owned
-  # by the repo owner, and pick up the user's pipx ~/.local/bin where prek lives.
+  # by the repo owner, and pick up the user's uv-managed ~/.local/bin where prek lives.
   become: false
   environment:
     PATH: "{{ ansible_facts.env.HOME }}/.local/bin:{{ ansible_facts.env.PATH }}"

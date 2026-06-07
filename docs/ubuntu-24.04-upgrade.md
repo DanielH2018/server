@@ -1,9 +1,11 @@
 # daniel-server: Ubuntu 22.04 → 24.04 LTS Upgrade Runbook
 
 > **Status: ✅ COMPLETED 2026-06-05** — daniel-server is on Ubuntu 24.04.4 / Python
-> 3.12.3, ansible-core **2.21.0** installed via pipx (`~/.local/bin`), collections at
-> latest (community.general 13.0.1). See commit `2837dbc`. The Pi is still pending
-> (see Follow-ups). Kept as a reference for the Pi and for the gotcha noted in Phase 3.
+> 3.12.3, ansible-core **2.21.0** (originally via pipx; **migrated to `uv tool` on
+> 2026-06-07** — see `docs/superpowers/specs/2026-06-07-python-uv-test-env-design.md`),
+> collections at latest (community.general 13.0.1). See commit `2837dbc`. The Pi is
+> still pending (see Follow-ups). Kept as a reference for the Pi and for the gotcha
+> noted in Phase 3.
 
 **Goal:** move the host to a single, newer system Python (24.04 ships Python **3.12**)
 so we can run **ansible-core 2.21** (latest) without juggling two Python versions.
@@ -114,6 +116,12 @@ metadata) — it survives an in-place upgrade, but that is what a backup must pr
    ```
    (The old `~/.local/lib/python3.10/site-packages` ansible-core becomes orphaned and
    can be ignored or removed.)
+
+   > **Update (2026-06-07):** the homelab moved off pipx to **uv**. Python CLI tools
+   > (ansible-core, ansible-lint, prek) are now installed via `uv tool install`, which
+   > the `initial_setup` role does automatically. For a fresh host today, install uv
+   > (`curl -LsSf https://astral.sh/uv/install.sh | sh`) then
+   > `uv tool install ansible-core ansible-lint prek` instead of the pipx steps above.
 
 10. Claude then:
     - bumps `ansible/requirements.yml` to the latest collections (community.general
