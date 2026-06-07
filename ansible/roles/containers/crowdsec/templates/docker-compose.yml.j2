@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'healthcheck.yml.j2' import healthcheck %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 services:
   dashboard:
@@ -51,14 +52,7 @@ services:
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     # Sized for the JVM: -Xmx1g heap (JAVA_TOOL_OPTIONS above) + non-heap overhead.
     # Don't lower memory without lowering -Xmx, or Metabase OOM-crash-loops on boot.
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 2048M
-        reservations:
-          cpus: '0.10'
-          memory: 256M
+    {{ resources('1.0', '2048M', '0.10', '256M') }}
 
 {{ external_networks() }}
 

@@ -57,6 +57,8 @@ Then create the following files:
     of inlining the `{% raw %}{% for net in container_item.networks %}{% endraw %}` loops.**
     Append any extra hardcoded networks (e.g. a private `internal` net) on the lines right
     after the macro call; declare them after `{{ '{{ external_networks() }}' }}`.
+  - `resources.yml.j2` → `resources(cpu_limit, mem_limit, cpu_res, mem_res)` — the
+    `deploy.resources` limits/reservations caps. Pass all four as strings.
 - Include a healthcheck if the image supports one
 - Set `restart: unless-stopped`, PUID/PGID, TZ, and a `deploy.resources.limits` cap
 - Canonical skeleton:
@@ -65,6 +67,7 @@ Then create the following files:
   {% from 'autokuma.yml.j2' import labels as kuma with context %}
   {% from 'healthcheck.yml.j2' import healthcheck %}
   {% from 'networks.yml.j2' import service_networks, external_networks with context %}
+  {% from 'resources.yml.j2' import resources %}
   ---
 
   services:
@@ -93,14 +96,7 @@ Then create the following files:
           )
         }}
         {{ kuma(container_item.name) }}
-      deploy:
-        resources:
-          limits:
-            cpus: '1.0'
-            memory: 512M
-          reservations:
-            cpus: '0.10'
-            memory: 64M
+      {{ resources('1.0', '512M', '0.10', '64M') }}
 
   {{ external_networks() }}{% endraw %}
   ```

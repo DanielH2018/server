@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'healthcheck.yml.j2' import healthcheck %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -34,14 +35,7 @@ services:
     labels:
       {{ kuma('node-exporter') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-        reservations:
-          cpus: '0.05'
-          memory: 32M
+    {{ resources('0.50', '256M', '0.05', '32M') }}
 
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.53.0
@@ -66,14 +60,7 @@ services:
     restart: unless-stopped
     labels:
       {{ kuma('cadvisor', name='cAdvisor') }}
-    deploy:
-      resources:
-        limits:
-          cpus: '0.30'        # Hard Limit: Capped at 30% of one core
-          memory: 1000M        # Hard Limit: Max 1000MB RAM
-        reservations:
-          cpus: '0.10'        # Guarantees it at least 10%
-          memory: 100M
+    {{ resources('0.30', '1000M', '0.10', '100M') }}
 
   prometheus:
     image: prom/prometheus:latest
@@ -100,14 +87,7 @@ services:
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1). TSDB memory grows with
     # series count, so size generously and tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2048M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
+    {{ resources('2.0', '2048M', '0.25', '256M') }}
 
 {{ external_networks() }}
 volumes:

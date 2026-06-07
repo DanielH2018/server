@@ -1,6 +1,7 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -32,14 +33,7 @@ services:
       - "kuma.discord.notification.active=true"
       - 'kuma.discord.notification.config={"type":"discord","discordWebhookUrl":"{{ monitor_discord_webhook_url }}","discordUsername":"Uptime Kuma"}'
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 512M
-        reservations:
-          cpus: '0.05'
-          memory: 64M
+    {{ resources('0.50', '512M', '0.05', '64M') }}
 
   # AutoKuma lives in this stack so a redeploy of uptime-kuma (recreate: always)
   # also recreates autokuma, refreshing its Kuma Socket.IO session. It needs
@@ -76,13 +70,6 @@ services:
       - "com.centurylinklabs.watchtower.depends-on=docker-proxy,uptime-kuma"
       {{ kuma('autokuma') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-        reservations:
-          cpus: '0.05'
-          memory: 32M
+    {{ resources('0.50', '256M', '0.05', '32M') }}
 
 {{ external_networks() }}

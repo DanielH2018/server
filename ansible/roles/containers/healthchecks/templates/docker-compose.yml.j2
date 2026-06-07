@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'healthcheck.yml.j2' import healthcheck %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -56,13 +57,6 @@ services:
       # Priority must be higher than the UI router so Traefik matches this first
       - "traefik.http.routers.healthchecks-ping.priority=100"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 512M
-        reservations:
-          cpus: '0.05'
-          memory: 64M
+    {{ resources('0.50', '512M', '0.05', '64M') }}
 
 {{ external_networks() }}

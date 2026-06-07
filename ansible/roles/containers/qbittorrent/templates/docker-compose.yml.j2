@@ -1,6 +1,7 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -69,14 +70,7 @@ services:
       # Disable Watchtower
       - "com.centurylinklabs.watchtower.enable=false"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 256M
-        reservations:
-          cpus: '0.05'
-          memory: 32M
+    {{ resources('1.0', '256M', '0.05', '32M') }}
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
@@ -137,13 +131,6 @@ services:
     labels:
       {{ kuma('qbittorrent') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2048M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
+    {{ resources('2.0', '2048M', '0.10', '128M') }}
 
 {{ external_networks() }}

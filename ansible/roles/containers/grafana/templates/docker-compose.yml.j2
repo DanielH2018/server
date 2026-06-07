@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'healthcheck.yml.j2' import healthcheck %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -40,14 +41,7 @@ services:
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on: prometheus"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1024M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
+    {{ resources('1.0', '1024M', '0.10', '128M') }}
   loki:
     image: grafana/loki:latest
     container_name: loki
@@ -68,14 +62,7 @@ services:
     labels:
       {{ kuma('loki') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-        reservations:
-          cpus: '0.10'
-          memory: 64M
+    {{ resources('1.0', '512M', '0.10', '64M') }}
   promtail:
     image: grafana/promtail:latest
     container_name: promtail
@@ -99,14 +86,7 @@ services:
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-        reservations:
-          cpus: '0.05'
-          memory: 32M
+    {{ resources('0.50', '256M', '0.05', '32M') }}
 
 {{ external_networks() }}
 

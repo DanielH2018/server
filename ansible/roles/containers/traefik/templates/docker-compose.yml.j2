@@ -1,4 +1,5 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'resources.yml.j2' import resources %}
 services:
   crowdsec:
     image: crowdsecurity/crowdsec:latest
@@ -41,14 +42,7 @@ services:
     labels:
       {{ kuma('crowdsec') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1024M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
+    {{ resources('1.0', '1024M', '0.10', '128M') }}
 
   traefik:
     image: traefik:latest
@@ -99,14 +93,7 @@ services:
       {{ kuma('traefik') }}
     # Resource caps for blast-radius containment (M1). Traefik is the ingress
     # edge — keep headroom so it stays responsive; tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 1024M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
+    {{ resources('2.0', '1024M', '0.25', '256M') }}
 
 networks:
   proxy:

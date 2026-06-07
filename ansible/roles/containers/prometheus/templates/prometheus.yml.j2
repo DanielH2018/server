@@ -3,13 +3,9 @@ global:
   scrape_interval:     1m
   evaluation_interval: 1m
 
-# Alertmanager configuration
-alerting:
-  alertmanagers:
-  - static_configs:
-    - targets:
-      # - alertmanager:9093
-
+# No Alertmanager: alerting is handled out-of-band by the monitor-bridge sidecar
+# (Prometheus metrics -> Uptime Kuma push monitors -> Discord), not by Prometheus
+# rules + Alertmanager. See ansible/roles/containers/monitor-bridge/.
 
 scrape_configs:
   - job_name: 'prometheus'

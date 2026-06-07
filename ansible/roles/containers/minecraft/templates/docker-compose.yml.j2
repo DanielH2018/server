@@ -1,5 +1,6 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 services:
   minecraft:
     image: itzg/minecraft-server:latest
@@ -51,13 +52,6 @@ services:
     restart: unless-stopped
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     # memory must exceed the 16G JVM heap (MEMORY env) plus off-heap/GC overhead.
-    deploy:
-      resources:
-        limits:
-          cpus: '6.0'
-          memory: 20480M
-        reservations:
-          cpus: '1.0'
-          memory: 4096M
+    {{ resources('6.0', '20480M', '1.0', '4096M') }}
 
 {{ external_networks() }}

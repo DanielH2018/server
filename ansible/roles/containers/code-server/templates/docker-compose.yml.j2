@@ -1,6 +1,7 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -49,13 +50,6 @@ services:
       - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
     # Resource caps for blast-radius containment (M1). Dev env can run builds, so
     # size generously and tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '4.0'
-          memory: 4096M
-        reservations:
-          cpus: '0.10'
-          memory: 256M
+    {{ resources('4.0', '4096M', '0.10', '256M') }}
 
 {{ external_networks() }}

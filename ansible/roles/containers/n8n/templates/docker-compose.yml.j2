@@ -1,6 +1,7 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 services:
   n8n:
@@ -65,14 +66,7 @@ services:
       # Priority must be higher than the UI router so Traefik matches this first
       - "traefik.http.routers.n8n-webhook.priority=100"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2048M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
+    {{ resources('2.0', '2048M', '0.10', '128M') }}
 
   n8n-runners:
     build:
@@ -101,14 +95,7 @@ services:
       {{ kuma('n8n-runners') }}
     # Resource caps for blast-radius containment (M1). Runner executes arbitrary
     # workflow code, so a cap here is the main DoS guard; tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2048M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
+    {{ resources('2.0', '2048M', '0.10', '128M') }}
 
 
 {{ external_networks() }}

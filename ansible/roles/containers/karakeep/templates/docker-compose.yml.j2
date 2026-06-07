@@ -1,6 +1,7 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 services:
   karakeep:
@@ -62,14 +63,7 @@ services:
       - "traefik.http.routers.karakeep-api.service=karakeep"
       - "traefik.http.routers.karakeep-api.priority=100"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2048M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
+    {{ resources('2.0', '2048M', '0.10', '128M') }}
 
   karakeep-chrome:
     image: gcr.io/zenika-hub/alpine-chrome:124
@@ -99,14 +93,7 @@ services:
       {{ kuma('karakeep-chrome') }}
     # Resource caps for blast-radius containment (M1). Headless Chrome can spike
     # memory, so size generously and tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2048M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
+    {{ resources('2.0', '2048M', '0.10', '128M') }}
 
   karakeep-meilisearch:
     image: getmeili/meilisearch:v1.37.0
@@ -132,14 +119,7 @@ services:
     labels:
       {{ kuma('karakeep-meilisearch') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1024M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
+    {{ resources('1.0', '1024M', '0.10', '128M') }}
 
   karakeep-time-tagger:
     image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
@@ -171,14 +151,7 @@ services:
     labels:
       {{ kuma('karakeep-time-tagger') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 512M
-        reservations:
-          cpus: '0.05'
-          memory: 64M
+    {{ resources('0.50', '512M', '0.05', '64M') }}
 
 volumes:
   karakeep_meili:
