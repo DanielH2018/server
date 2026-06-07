@@ -1,0 +1,33 @@
+---
+# Bootstrap a host for SOPS — WITHOUT any encrypted-secret dependency.
+#
+# Problem this solves: `initial_setup.yml` and `deploy.yml` both decrypt
+# ansible/vars/secrets.yml in a `pre_tasks` block that runs BEFORE any role — so on a
+# fresh host (no age key yet) they fail at "Load encrypted secrets" before `sops_setup`
+# ever gets a chance to install SOPS. This playbook runs `sops_setup` on its own, with NO
+# secret-loading pre_task, breaking that chicken-and-egg.
+#
+# `sops_setup` has zero secret dependency: it installs the `age` + `sops` binaries and the
+# pinned collections, generates THIS host's own age key (idempotent — `age-keygen` has a
+# `creates:` guard), and prints the host's PUBLIC key.
+#
+# Per-host-key workflow (the Pi gets its own key; the master key never leaves the server):
+#   1. On the new host:  ansible-playbook ansible/bootstrap.yml --limit <host>
+#      (no `uv`/secrets needed — uses only builtin modules; any ansible-core works)
+#      -> note the "Your Public Key is: age1..." line it prints.
+#   2. Add that public key to `.sops.yaml` (tracked) under `age:`, then on a host that can
+#      already decrypt (daniel-server):  sops updatekeys ansible/vars/secrets.yml
+#      Commit the re-encrypted secrets.yml + .sops.yaml and push.
+#   3. On the new host: `git pull`, then run `initial_setup.yml` / `deploy.yml` normally —
+#      their secret-load pre_task now decrypts using the host's own key.
+#
+# Shared-key alternative: drop an existing recipient's private key at
+# ~/.config/sops/age/keys.txt BEFORE running this; `age-keygen`'s `creates:` guard then
+# skips generation and this playbook just installs the binaries. (Spreads the master key —
+# the per-host-key flow above is preferred.)
+- name: Bootstrap a host for SOPS (no encrypted-secret dependency)
+  hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
+  become: true
+  gather_facts: true
+  roles:
+    - { role: sops_setup, tags: ["sops_setup"] }

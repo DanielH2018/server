@@ -83,9 +83,17 @@ Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hook
 
 ## Secrets Management
 - Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age
-- `.sops.yaml` auto-encrypts any `.yml`/`.yaml` in `vars/` or `secrets/` directories
+- `.sops.yaml` (tracked — public keys only) lists the age recipients new/updated secrets
+  are encrypted to, and auto-encrypts any `.yml`/`.yaml` in `vars/` or `secrets/` directories
 - At runtime, `community.sops.sops_decrypt` lookup decrypts values
-- **Never commit plaintext secrets**
+- **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
+  `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
+- **Onboarding a host to SOPS** (it can't decrypt yet, so `initial_setup.yml`/`deploy.yml`
+  fail at their secret-load pre_task): run `ansible-playbook ansible/bootstrap.yml --limit <host>`
+  on it (no secret dependency — generates the host's own key, prints its public key), add that
+  pubkey to `.sops.yaml`, `sops updatekeys ansible/vars/secrets.yml` on a host that can already
+  decrypt, commit + push, then `git pull` on the new host. Multi-recipient is OR — any listed
+  key decrypts the whole file. See `ansible/bootstrap.yml` header for the full flow.
 
 ## Ansible Conventions
 - All tasks must be **idempotent** — rerunning should be side-effect-free
