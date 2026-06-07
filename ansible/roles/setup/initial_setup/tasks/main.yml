@@ -356,8 +356,9 @@
       install tipc /bin/true
   become: true
 
-# WireGuard containers (wg-easy, wg-easy-pi, and qbittorrent's VPN sidecar) run
-# without the SYS_MODULE capability, so the host must provide the kernel module.
+# WireGuard containers (wg-easy — runs on both daniel-server and daniel-pi — and
+# qbittorrent's VPN sidecar) run without the SYS_MODULE capability, so the host must
+# provide the kernel module.
 - name: Ensure the WireGuard kernel module is loaded on the host
   community.general.modprobe:
     name: wireguard

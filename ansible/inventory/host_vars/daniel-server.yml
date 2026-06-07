@@ -97,6 +97,7 @@ containers_list:
       - kopia
   - name: wg-easy
     port: 51821
+    udp_port: 51820
     use_authelia: true
     networks:
       - apps
