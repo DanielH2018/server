@@ -1,4 +1,5 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'resources.yml.j2' import resources %}
 services:
   crowdsec:
     image: crowdsecurity/crowdsec:latest
@@ -34,17 +35,14 @@ services:
       start_period: 20s
     networks:
       - {{ (container_item.networks | default([docker_network]))[0] }}
+      # Join monitoring so Prometheus can scrape the CrowdSec metrics endpoint
+      # (crowdsec:6060, already bound 0.0.0.0). Without this the crowdsec scrape target
+      # is permanently down and the Grafana CrowdSec dashboards have no data.
+      - monitoring
     labels:
       {{ kuma('crowdsec') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1024M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
+    {{ resources('1.0', '1024M', '0.10', '128M') }}
 
   traefik:
     image: traefik:latest
@@ -95,14 +93,7 @@ services:
       {{ kuma('traefik') }}
     # Resource caps for blast-radius containment (M1). Traefik is the ingress
     # edge — keep headroom so it stays responsive; tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 1024M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
+    {{ resources('2.0', '1024M', '0.25', '256M') }}
 
 networks:
   proxy:

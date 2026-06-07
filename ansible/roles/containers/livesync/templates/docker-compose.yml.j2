@@ -1,5 +1,7 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 services:
   couchdb:
@@ -22,10 +24,7 @@ services:
     volumes:
       - ./couchdb-data:/opt/couchdb/data
       - ./couchdb-etc:/opt/couchdb/etc/local.d
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-s", "--max-time", "5", "http://localhost:5984/"]
@@ -63,17 +62,6 @@ services:
       - "traefik.http.routers.livesync-utils.priority=200"
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1024M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
+    {{ resources('1.0', '1024M', '0.10', '128M') }}
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}

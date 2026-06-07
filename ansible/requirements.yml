@@ -1,5 +1,7 @@
-# Pinned to latest stable, validated against the runtime ansible-core (2.21.x on
-# Python 3.12, post 24.04 upgrade). Bump in lockstep with any ansible-core change.
+# Pinned to latest stable, validated against the runtime ansible-core (2.21.0 on
+# Python 3.13, uv-tool managed). These were already the newest Galaxy releases as of
+# 2026-06-07 (`ansible-galaxy collection install --upgrade` found nothing newer).
+# Bump in lockstep with any ansible-core change.
 collections:
   - name: ansible.posix
     version: 2.2.0

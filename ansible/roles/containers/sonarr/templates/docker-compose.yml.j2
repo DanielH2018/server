@@ -1,5 +1,8 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -25,15 +28,8 @@ services:
       - SETGID
       - SETUID
       - CHOWN
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
-    healthcheck:
-      test: curl --fail -s http://localhost:8989/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ service_networks() }}
+    {{ healthcheck('curl --fail -s http://localhost:8989/ || exit 1') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
@@ -45,17 +41,6 @@ services:
       }}
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1024M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
+    {{ resources('1.0', '1024M', '0.10', '128M') }}
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}

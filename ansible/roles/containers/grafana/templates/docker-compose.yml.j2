@@ -1,5 +1,8 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -18,15 +21,12 @@ services:
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
     volumes:
       - ./data:/var/lib/grafana
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
-    healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      # Provisioned-as-code datasources + dashboards (read-only; UI edits persist in ./data).
+      - ./provisioning/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+    {{ service_networks() }}
+    {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
@@ -41,14 +41,7 @@ services:
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on: prometheus"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1024M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
+    {{ resources('1.0', '1024M', '0.10', '128M') }}
   loki:
     image: grafana/loki:latest
     container_name: loki
@@ -65,31 +58,16 @@ services:
       - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
       - loki:/tmp
     command: -config.file=/etc/loki/loki-config.yaml
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     labels:
       {{ kuma('loki') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-        reservations:
-          cpus: '0.10'
-          memory: 64M
+    {{ resources('1.0', '512M', '0.10', '64M') }}
   promtail:
     image: grafana/promtail:latest
     container_name: promtail
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/9080"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+    {{ healthcheck('["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/9080"]', start_period='15s') }}
     security_opt:
       - no-new-privileges:true
     environment:
@@ -102,29 +80,15 @@ services:
       # Access to the host log files
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/promtail-config.yaml
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     labels:
       {{ kuma('promtail') }}
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-        reservations:
-          cpus: '0.05'
-          memory: 32M
+    {{ resources('0.50', '256M', '0.05', '32M') }}
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}
 
 volumes:
     loki:

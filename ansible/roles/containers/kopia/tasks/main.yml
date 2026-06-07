@@ -16,6 +16,7 @@
     src: entrypoint.sh.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/scripts/entrypoint.sh"
     mode: "0755"
+  register: kopia_cfg_entrypoint
 
 - name: Deploy Kopia ignore rules
   ansible.builtin.template:
@@ -27,3 +28,29 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # entrypoint.sh is the bind-mounted container entrypoint — only a recreate applies a
+    # change. kopiaignore is read at snapshot time (data, not container config), so excluded.
+    common_config_changed: "{{ kopia_cfg_entrypoint is changed }}"
+
+- name: Schedule weekly Kopia backup integrity verification
+  # "A backup you've never restored isn't a backup." snapshot scheduling and retention
+  # are handled inside the container (entrypoint.sh policy); this closes the remaining
+  # gap — confirming the stored data is actually RESTORABLE, not merely present.
+  # `kopia snapshot verify` re-reads snapshot metadata/index from B2 and, via
+  # --verify-files-percent, downloads a sample of file contents and checks their hashes.
+  # It runs against the already-connected repo inside the running container (reusing its
+  # B2 connection + KOPIA_PASSWORD) and is read-only, so it's safe alongside the live
+  # server. Output goes to syslog -> Promtail -> Loki, so a failure shows up in Grafana
+  # just like the host rkhunter/aide integrity scans. The backup source is containers/
+  # (config + app data, not media), so a 1% content sample is cheap on B2 egress.
+  ansible.builtin.cron:
+    name: "Weekly Kopia snapshot verify"
+    minute: "0"
+    hour: "4"
+    weekday: "3"  # Wednesday — off the Monday rkhunter/aide slot to spread load
+    job: >-
+      /usr/bin/docker exec kopia /usr/bin/kopia snapshot verify
+      --verify-files-percent=1 2>&1 | /usr/bin/logger -t kopia-verify
+    user: "{{ sys_user }}"
+  become: true

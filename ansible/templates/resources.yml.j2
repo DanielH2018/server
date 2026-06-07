@@ -1,0 +1,30 @@
+{# Standard container resource caps — the `deploy.resources` block.
+
+   Every service template inlined the same eight-line deploy/resources/limits/
+   reservations block, varying only in four numbers. This macro replaces that
+   boilerplate; it emits byte-identical output to the old inline block.
+
+   `limits` are HARD caps for blast-radius containment (the container is CPU-throttled
+   at the cpu limit and OOM-killed at the memory limit). `reservations` are soft floors
+   the scheduler keeps available. Tune both from cAdvisor / Grafana once real usage is
+   visible — a container pinned at its cpu limit shows up as sustained CFS throttling,
+   the signal to raise it.
+
+   cpus is a fraction of a core ('0.50' = half a core); memory takes a Compose size
+   suffix ('512M', '2048M'). Pass all four as strings.
+
+   Invoke at the service's 4-space indent so `deploy:` lands correctly. Keep any
+   service-specific sizing rationale (JVM heap math, ingress headroom, …) as a normal
+   comment on the line(s) immediately above the call:
+       {{ resources('1.0', '1024M', '0.10', '128M') }}
+#}
+{% macro resources(cpu_limit, mem_limit, cpu_res, mem_res) -%}
+deploy:
+      resources:
+        limits:
+          cpus: '{{ cpu_limit }}'
+          memory: {{ mem_limit }}
+        reservations:
+          cpus: '{{ cpu_res }}'
+          memory: {{ mem_res }}
+{%- endmacro %}

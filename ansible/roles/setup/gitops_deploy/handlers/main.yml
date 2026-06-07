@@ -1,0 +1,15 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+# Kick an immediate deploy run on first install / whenever the script, config, or
+# units change — so activation is fully IaC (no manual `systemctl start`) and the
+# unit is validated end-to-end at provision time. Steady-state runs are timer-driven.
+# A noop when the host is already in sync; fails the play if the deploy itself fails.
+- name: Run gitops-deploy once
+  ansible.builtin.systemd:
+    name: gitops-deploy.service
+    state: started
+  become: true

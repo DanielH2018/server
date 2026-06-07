@@ -1,0 +1,10 @@
+[Unit]
+Description=Alert when gitops-deploy fails
+
+[Service]
+Type=oneshot
+# Webhook comes from the 0600 config (not embedded — this unit is world-readable).
+EnvironmentFile=/etc/gitops-deploy/config.env
+ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
+  -d '{"content":"🚨 gitops-deploy unit failed on daniel-server — check `journalctl -u gitops-deploy`."}' \
+  "${DISCORD_WEBHOOK}"

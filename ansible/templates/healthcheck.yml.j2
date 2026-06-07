@@ -1,0 +1,28 @@
+{# Standard container healthcheck block.
+
+   `test` is the image-specific probe (a plain string like
+   'curl --fail -s http://localhost:80/ || exit 1', or a YAML flow-sequence like
+   '["CMD", "wget", "--spider", "http://localhost:3000"]'). The timing fields
+   default to the fleet-wide convention.
+
+   The point of the macro is `start_period`: it is ALWAYS emitted (default 30s).
+   With `recreate: always` (common/docker_deploy.yml) bouncing containers on every
+   deploy and autoheal watching all containers (AUTOHEAL_CONTAINER_LABEL=all), a
+   slow-booting service with no start_period fails its first few checks, is marked
+   `unhealthy`, and gets restarted mid-boot — a needless loop. start_period gives
+   the app a grace window before failures count.
+
+   Bump start_period for slow starters (JVM apps, big TSDBs), e.g.
+   pass start_period='90s'.
+
+   Invoke at the service's 4-space indent so `healthcheck:` lands correctly:
+       healthcheck('curl --fail -s http://localhost:80/ || exit 1')
+#}
+{% macro healthcheck(test, start_period='30s', interval='30s', timeout='10s', retries=3) -%}
+healthcheck:
+      test: {{ test }}
+      interval: {{ interval }}
+      timeout: {{ timeout }}
+      retries: {{ retries }}
+      start_period: {{ start_period }}
+{%- endmacro %}

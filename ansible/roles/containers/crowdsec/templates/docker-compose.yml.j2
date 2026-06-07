@@ -1,5 +1,8 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 services:
   dashboard:
@@ -30,15 +33,9 @@ services:
       JAVA_TOOL_OPTIONS: "-Xmx1g"
     volumes:
       - crowdsec-db:/metabase-data/
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
-    healthcheck:
-      test: curl --fail -s http://localhost:3000/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ service_networks() }}
+    {# Metabase is a slow-booting JVM app (H2 DB init) -> long start_period. -#}
+    {{ healthcheck('curl --fail -s http://localhost:3000/ || exit 1', start_period='90s') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
@@ -55,20 +52,9 @@ services:
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     # Sized for the JVM: -Xmx1g heap (JAVA_TOOL_OPTIONS above) + non-heap overhead.
     # Don't lower memory without lowering -Xmx, or Metabase OOM-crash-loops on boot.
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 2048M
-        reservations:
-          cpus: '0.10'
-          memory: 256M
+    {{ resources('1.0', '2048M', '0.10', '256M') }}
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}
 
 volumes:
   crowdsec-db:

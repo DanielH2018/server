@@ -9,6 +9,11 @@
 !ansible.cfg
 !/.vscode
 !/.github
+!/README.md
+!/renovate.json
+!/pyproject.toml
+!/uv.lock
+!/.python-version
 # Make sure these are ignored
 ansible/.env
 ansible/.aws
@@ -17,5 +22,17 @@ ansible/collections
 ansible/roles/containers/code-server/templates/github
 ansible/roles/foundry/files/*.zip
 *.pyc
+__pycache__/
+.pytest_cache/
+# Never commit private key material — defense-in-depth alongside the gitleaks
+# pre-commit hook. These patterns have no leading slash, so they match in ANY
+# directory, including the allowlisted ansible/ tree where a stray key would
+# otherwise slip past the top-level /* deny rule.
+keys.txt
+*.agekey
+*.pem
+*.key
+id_rsa
+id_ed25519
 !/CLAUDE.md
 !/.claude

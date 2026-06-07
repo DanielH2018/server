@@ -30,6 +30,7 @@
     - widgets.yaml
     - docker.yaml
     - custom.css
+  register: homepage_cfg
 
 # - include_tasks: dns.yml
 #   with_items:
@@ -39,3 +40,6 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # Icons (a separate copy task) are excluded — served at request time, no restart needed.
+    common_config_changed: "{{ homepage_cfg is changed }}"

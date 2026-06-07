@@ -1,0 +1,59 @@
+---
+- name: Create gitops-deploy directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0750"
+  loop:
+    - /opt/gitops-deploy      # deployer scripts
+    - /var/lib/gitops-deploy  # state (hold_sha, broad_alerted_sha)
+    - /etc/gitops-deploy      # config.env (0600 secrets) — template won't mkdir its parent
+  become: true
+
+- name: Install deployer Python files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/gitops-deploy/{{ item }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  loop:
+    - gitops_deploy.py
+    - deploy_logic.py
+  become: true
+  notify: Run gitops-deploy once
+
+- name: Write deployer config (secrets, host-only)
+  ansible.builtin.template:
+    src: config.env.j2
+    dest: /etc/gitops-deploy/config.env
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  no_log: true
+  notify: Run gitops-deploy once
+
+- name: Install systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - gitops-deploy.service
+    - gitops-deploy.timer
+    - gitops-deploy-alert.service
+  become: true
+  notify:
+    - Reload systemd
+    - Run gitops-deploy once
+
+- name: Enable and start the timer
+  ansible.builtin.systemd:
+    name: gitops-deploy.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true

@@ -1,5 +1,8 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -17,8 +20,11 @@ services:
       - /home/{{ sys_user }}/server/containers/data/media:/data
     restart: unless-stopped
     ports:
-      - 7359:7359/udp
-      - 1900:1900/udp
+      # Bind LAN discovery to the host's LAN IP (not 0.0.0.0), matching the
+      # pihole/portainer convention — these are local-network discovery
+      # protocols and shouldn't listen on every interface.
+      - "{{ server_ip }}:7359:7359/udp"
+      - "{{ server_ip }}:1900:1900/udp"
     devices:
       - /dev/dri:/dev/dri
     security_opt:
@@ -29,15 +35,8 @@ services:
       - SETGID
       - SETUID
       - CHOWN
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
-    healthcheck:
-      test: curl --fail -s http://localhost:8096/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ service_networks() }}
+    {{ healthcheck('curl --fail -s http://localhost:8096/ || exit 1') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
@@ -49,17 +48,6 @@ services:
       }}
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '4.0'
-          memory: 4096M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
+    {{ resources('4.0', '4096M', '0.25', '256M') }}
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}

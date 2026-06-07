@@ -12,6 +12,7 @@
     src: prometheus.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/prometheus/prometheus.yml"
     mode: "0664"
+  register: prometheus_cfg
 
 # - include_tasks: dns.yml
 #   with_items:
@@ -21,3 +22,5 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    common_config_changed: "{{ prometheus_cfg is changed }}"

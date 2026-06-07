@@ -126,6 +126,7 @@
         dest: "/home/{{ sys_user }}/server/containers/authelia/config/configuration.yml"
         mode: "0600"
       become: true
+      register: authelia_cfg_config
 
     # --- 6. Output Secrets ---
     - name: "⚠️ IMPORTANT CREDENTIALS ⚠️"
@@ -154,6 +155,7 @@
     dest: "/home/{{ sys_user }}/server/containers/authelia/config/users_database.yml"
     mode: "0600"
   when: not authelia_users_db_stat.stat.exists
+  register: authelia_cfg_users
 
 - name: Enforce secure permissions on Authelia config files
   ansible.builtin.file:
@@ -172,3 +174,9 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # Both config templates are first-run-only (guarded by stat.exists); on an existing
+    # deploy they are skipped -> not changed -> recreate: auto. is defined guards the skip.
+    common_config_changed: >-
+      {{ (authelia_cfg_config is defined and authelia_cfg_config is changed)
+         or (authelia_cfg_users is defined and authelia_cfg_users is changed) }}

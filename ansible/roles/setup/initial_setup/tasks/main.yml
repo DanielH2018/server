@@ -25,21 +25,31 @@
       - libpam-tmpdir
       - debsums
       - apt-show-versions
-      - pipx
     state: present
   become: true
 
-- name: Install Python CLI tooling via pipx (PEP 668-safe on 24.04+)
-  # 24.04 / Python 3.12 marks the system environment externally-managed (PEP 668),
-  # so a global `pip install` errors. We drive the pipx CLI directly rather than the
-  # community.general.pipx module: that module requires pipx >= 1.7.0, but 24.04's
-  # apt pipx is 1.4.3 (its CLI installs fine — only the module gates on the version).
-  # pipx is per-user, so run as the connecting user (not the play's become: true) so
-  # venvs land in ~/.local alongside the existing ones, where `prek install` looks.
-  ansible.builtin.command: "pipx install {{ item }}"
+- name: Install uv (per-user; PEP 668-safe on 24.04+)
+  # 24.04 / Python 3.12 marks the system environment externally-managed (PEP 668), so a
+  # global `pip install` errors. uv is a standalone binary (no system Python needed),
+  # installed per-user into ~/.local/bin via the official script. Run as the connecting
+  # user (not the play's become: true) so it lands in the repo owner's home.
+  ansible.builtin.shell:
+    cmd: set -o pipefail && curl -LsSf https://astral.sh/uv/install.sh | sh
+    creates: "{{ ansible_facts.env.HOME }}/.local/bin/uv"
+    executable: /bin/bash
+  become: false
+
+- name: Install Python CLI tooling as uv tools
+  # uv manages global CLI tools in isolated venvs (~/.local/share/uv/tools), exposing
+  # shims in ~/.local/bin — the pipx replacement. Pinned to Python 3.13 to match the
+  # repo's .python-version (the test/validate `uv run` hooks); ansible-core also backs
+  # those hooks (via pyproject.toml), but as a CLI tool here it is what runs deploys.
+  # Per-user, so `prek install` (below) finds prek on ~/.local/bin.
+  ansible.builtin.command: "{{ ansible_facts.env.HOME }}/.local/bin/uv tool install --python 3.13 {{ item }}"
   args:
-    creates: "{{ ansible_facts.env.HOME }}/.local/share/pipx/venvs/{{ item }}"
+    creates: "{{ ansible_facts.env.HOME }}/.local/share/uv/tools/{{ item }}"
   loop:
+    - ansible-core
     - ansible-lint
     - prek
   become: false
@@ -192,7 +202,7 @@
     # Only run this if the hook doesn't exist yet
     creates: "{{ playbook_dir }}/.git/hooks/pre-commit"
   # Run as the connecting user (not the play's become: true) so the hooks are owned
-  # by the repo owner, and pick up the user's pipx ~/.local/bin where prek lives.
+  # by the repo owner, and pick up the user's uv-managed ~/.local/bin where prek lives.
   become: false
   environment:
     PATH: "{{ ansible_facts.env.HOME }}/.local/bin:{{ ansible_facts.env.PATH }}"
@@ -217,6 +227,14 @@
     - { name: "net.ipv4.conf.default.accept_redirects", value: "0" }
     - { name: "net.ipv4.conf.all.send_redirects", value: "0" }
     - { name: "net.ipv4.conf.default.send_redirects", value: "0" }
+    # Reject source-routed packets (IPv4 + IPv6) — the companion to the redirect
+    # rules above. `default.*` is the template every NEW interface inherits, which
+    # matters here because Docker constantly spins up bridge/veth interfaces; the
+    # host default for default.accept_source_route was 1 (accept).
+    - { name: "net.ipv4.conf.all.accept_source_route", value: "0" }
+    - { name: "net.ipv4.conf.default.accept_source_route", value: "0" }
+    - { name: "net.ipv6.conf.all.accept_source_route", value: "0" }
+    - { name: "net.ipv6.conf.default.accept_source_route", value: "0" }
     - { name: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1" }
     - { name: "net.ipv4.conf.all.log_martians", value: "1" }
     - { name: "net.ipv4.conf.default.log_martians", value: "1" }
@@ -237,6 +255,26 @@
     delete: true
   become: true
   failed_when: false
+
+# Pin UFW's default policies in IaC rather than relying on the distro default.
+# `deny incoming` is the host's baseline — only the explicit allow/limit rules
+# below (SSH, WireGuard) open ports. Default-deny is safe to set over an active
+# SSH session because the explicit `limit ssh` rule that follows takes precedence
+# over the default policy. The FORWARD/routed policy is deliberately NOT managed
+# here: Docker owns the FORWARD chain via its own iptables rules (DOCKER-USER),
+# and the WireGuard containers depend on host forwarding — letting UFW set a
+# routed default would fight Docker and risk breaking container/VPN routing.
+- name: Set UFW default policy - deny incoming
+  community.general.ufw:
+    default: deny
+    direction: incoming
+  become: true
+
+- name: Set UFW default policy - allow outgoing
+  community.general.ufw:
+    default: allow
+    direction: outgoing
+  become: true
 
 - name: Configure UFW firewall - rate-limit SSH
   community.general.ufw:

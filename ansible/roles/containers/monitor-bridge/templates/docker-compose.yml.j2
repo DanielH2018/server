@@ -1,4 +1,6 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -31,36 +33,36 @@ services:
       - CERT_MIN_DAYS=14
       - MEM_MAX_PCT=90
       - OOM_WINDOW=1h
+      - RESTART_WINDOW=15m
+      - RESTART_MAX=3
+      - TRAEFIK_5XX_PCT=5
+      - TRAEFIK_MIN_RPS=0.05
       # Push tokens: we set them; Kuma honors client-supplied tokens. In secrets.yml.
       - KUMA_PUSH_KOPIA={{ monitor_bridge_kopia_push_token }}
       - KUMA_PUSH_DISK={{ monitor_bridge_disk_push_token }}
       - KUMA_PUSH_CERT={{ monitor_bridge_cert_push_token }}
       - KUMA_PUSH_MEM={{ monitor_bridge_mem_push_token }}
+      - KUMA_PUSH_RESTARTS={{ monitor_bridge_restarts_push_token }}
+      - KUMA_PUSH_OOM={{ monitor_bridge_oom_push_token }}
+      - KUMA_PUSH_TARGETS={{ monitor_bridge_targets_push_token }}
+      - KUMA_PUSH_TRAEFIK={{ monitor_bridge_traefik_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     labels:
       {# Container-liveness monitor + one push monitor per check (AutoKuma-provisioned). -#}
       {{ kuma('monitor-bridge') }}
       {{ kuma('monitor-bridge-backup', monitor_type='push', name='Backup Freshness', interval=600, push_token=monitor_bridge_kopia_push_token) }}
       {{ kuma('monitor-bridge-disk', monitor_type='push', name='Root Disk', interval=600, push_token=monitor_bridge_disk_push_token) }}
       {{ kuma('monitor-bridge-cert', monitor_type='push', name='TLS Cert Expiry', interval=600, push_token=monitor_bridge_cert_push_token) }}
-      {{ kuma('monitor-bridge-mem', monitor_type='push', name='Memory / OOM', interval=600, push_token=monitor_bridge_mem_push_token) }}
+      {{ kuma('monitor-bridge-mem', monitor_type='push', name='Memory', interval=600, push_token=monitor_bridge_mem_push_token) }}
+      {{ kuma('monitor-bridge-restarts', monitor_type='push', name='Container Restarts', interval=600, push_token=monitor_bridge_restarts_push_token) }}
+      {{ kuma('monitor-bridge-oom', monitor_type='push', name='Container OOM', interval=600, push_token=monitor_bridge_oom_push_token) }}
+      {{ kuma('monitor-bridge-targets', monitor_type='push', name='Scrape Targets', interval=600, push_token=monitor_bridge_targets_push_token) }}
+      {{ kuma('monitor-bridge-traefik', monitor_type='push', name='Traefik 5xx', interval=600, push_token=monitor_bridge_traefik_push_token) }}
+      {# Host GitOps deployer liveness — interval 2400s (40m) > the 30m tick so one missed push isn't a false alarm. -#}
+      {{ kuma('gitops-deploy', monitor_type='push', name='GitOps Deploy', interval=2400, push_token=gitops_deploy_kuma_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '0.10'
-          memory: 64M
-        reservations:
-          cpus: '0.02'
-          memory: 16M
+    {{ resources('0.10', '64M', '0.02', '16M') }}
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}

@@ -31,6 +31,7 @@
     - { src: upsd.users.j2, dest: upsd.users }
     - { src: upsmon.conf.j2, dest: upsmon.conf }
     - { src: upssched.conf.j2, dest: upssched.conf }
+  register: peanut_cfg_nut
 
 - name: Deploy PeaNUT settings
   ansible.builtin.template:
@@ -38,6 +39,7 @@
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/peanut-config/settings.yml"
     mode: "0640"
   no_log: true
+  register: peanut_cfg_settings
 
 - name: Install udev rule for APC UPS USB permissions
   ansible.builtin.copy:
@@ -60,3 +62,6 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # Build files (Dockerfile/entrypoint) are excluded — build: always + image-change auto-recreate covers them.
+    common_config_changed: "{{ (peanut_cfg_nut is changed) or (peanut_cfg_settings is changed) }}"

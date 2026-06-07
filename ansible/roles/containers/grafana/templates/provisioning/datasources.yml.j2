@@ -1,0 +1,32 @@
+# Managed by Ansible (grafana role) — do not edit in the container.
+# Datasources provisioned as code. The uids below are ADOPTED from the datasources
+# that were originally created by hand in this Grafana — keeping them means the 9
+# pre-existing dashboards (Crowdsec, Traefik, log views) keep resolving, and a fresh
+# rebuild reproduces the same uids so every dashboard (seed + existing) stays wired.
+# Provisioning matches by uid and updates in place (no delete/recreate). `editable: true`
+# keeps them tweakable in the UI.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: EGdsQqhVk
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      # Tell Grafana the real scrape interval (prometheus.yml global + node job = 1m).
+      # Otherwise it defaults to 15s and computes $__rate_interval ≈ 1m, so rate()
+      # panels (CPU/network/pressure) return empty over short ranges on 1m-scraped
+      # data. With this, $__rate_interval becomes ~4m and rate() panels populate.
+      timeInterval: "1m"
+
+  # name must match the existing datasource exactly ("loki", lowercase) — Grafana keys
+  # update-vs-insert on orgId+name, so a case change would try to INSERT and collide on uid.
+  - name: loki
+    uid: bf4q19tuivta8e
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true

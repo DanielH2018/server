@@ -1,5 +1,8 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -19,28 +22,20 @@ services:
       - '--path.rootfs=/rootfs'
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      # Collectors that are off by default but read the already-mounted /host/proc.
+      # Back the Node Exporter Full panels for processes (PIDs/threads/states),
+      # interrupts (IRQ) and TCP connection stats — empty otherwise.
+      - '--collector.processes'
+      - '--collector.interrupts'
+      - '--collector.tcpstat'
     expose:
       - 9100
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
-    healthcheck:
-      test: wget --no-verbose --tries=1 -O /dev/null http://localhost:9100/metrics || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ service_networks() }}
+    {{ healthcheck('wget --no-verbose --tries=1 -O /dev/null http://localhost:9100/metrics || exit 1') }}
     labels:
       {{ kuma('node-exporter') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-        reservations:
-          cpus: '0.05'
-          memory: 32M
+    {{ resources('0.50', '256M', '0.05', '32M') }}
 
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.53.0
@@ -61,21 +56,11 @@ services:
       - '--store_container_labels=false'
       - '--docker_only=true'
       - '--disable_metrics=hugetlb,memory_numa,tcp,udp,referenced_memory,disk,diskIO,percpu,sched,process,cpu_topology,perf_event,advtcp'
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     restart: unless-stopped
     labels:
       {{ kuma('cadvisor', name='cAdvisor') }}
-    deploy:
-      resources:
-        limits:
-          cpus: '0.30'        # Hard Limit: Capped at 30% of one core
-          memory: 1000M        # Hard Limit: Max 1000MB RAM
-        reservations:
-          cpus: '0.10'        # Guarantees it at least 10%
-          memory: 100M
+    {{ resources('0.30', '1000M', '0.10', '100M') }}
 
   prometheus:
     image: prom/prometheus:latest
@@ -88,15 +73,8 @@ services:
     volumes:
      - ./:/etc/prometheus/
      - prometheus_data:/prometheus
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
-    healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:9090/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ service_networks() }}
+    {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:9090/ || exit 1') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
@@ -109,19 +87,8 @@ services:
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1). TSDB memory grows with
     # series count, so size generously and tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2048M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
+    {{ resources('2.0', '2048M', '0.25', '256M') }}
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}
 volumes:
     prometheus_data:

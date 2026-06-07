@@ -52,8 +52,21 @@ repo = "local"
 [[repos.hooks]]
 id = "validate-compose-templates"
 name = "Validate rendered docker-compose templates"
-entry = "python3 scripts/validate_compose_templates.py"
-language = "python"
-additional_dependencies = ["jinja2>=3", "pyyaml"]
+entry = "uv run python scripts/validate_compose_templates.py"
+language = "system"
 pass_filenames = false
 files = "^(ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/templates/(traefik|autokuma)\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate_compose_templates\\.py)$"
+
+# Run the repo's Python unit tests via uv: the toposort dependency-resolution filters
+# (gate every deploy's ordering/scope), the monitor-bridge check logic, the
+# auto-approve-readonly Bash classifier (a permission security boundary), and the
+# smoke_extract image-diff parser. Deps + test paths come from pyproject.toml (the `dev`
+# group + [tool.pytest.ini_options] testpaths); `uv run` auto-syncs from uv.lock, so it
+# works regardless of the system Python. Requires uv on PATH (CI installs astral-sh/setup-uv).
+[[repos.hooks]]
+id = "pytest"
+name = "Run Python unit tests (toposort + monitor-bridge + readonly-hook + smoke + gitops)"
+entry = "uv run python -m pytest"
+language = "system"
+pass_filenames = false
+files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/containers/monitor-bridge/files/.*\\.py|ansible/roles/setup/gitops_deploy/files/.*\\.py|\\.claude/hooks/.*\\.py|scripts/.*\\.py|pyproject\\.toml)$"

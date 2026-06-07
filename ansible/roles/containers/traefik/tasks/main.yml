@@ -32,12 +32,14 @@
     dest: "/home/{{ sys_user }}/server/containers/traefik/data/config.yml"
     # 0600: embeds the CrowdSec LAPI bouncer key — keep it off other local users.
     mode: "0600"
+  register: traefik_cfg_config
 
 - name: Create traefik.yml from template
   ansible.builtin.template:
     src: traefik.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/traefik/data/traefik.yml"
     mode: "0664"
+  register: traefik_cfg_static
 
 - name: Deploy CrowdSec local whitelist
   ansible.builtin.copy:
@@ -45,6 +47,7 @@
     dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/parsers/s02-enrich/whitelist.yaml"
     mode: "0664"
   become: true
+  register: traefik_cfg_whitelist
 
 - name: Create CrowdSec acquis.yaml from template
   ansible.builtin.template:
@@ -52,6 +55,7 @@
     dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/acquis.yaml"
     mode: "0664"
   become: true
+  register: traefik_cfg_acquis
 
 - name: Copy CrowdSec profiles.yaml
   ansible.builtin.copy:
@@ -59,6 +63,7 @@
     dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/profiles.yaml"
     mode: "0664"
   become: true
+  register: traefik_cfg_profiles
 
 - name: Create CrowdSec discord.yaml from template
   ansible.builtin.template:
@@ -67,6 +72,7 @@
     # 0600: embeds the Discord webhook URL.
     mode: "0600"
   become: true
+  register: traefik_cfg_discord
 
 # - include_tasks: dns.yml
 #   with_items:
@@ -112,6 +118,13 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # Recreate traefik+crowdsec only when a bind-mounted config changed. Excludes the
+    # host-level docker-user-rules/systemd units (handled by their own restart tasks).
+    common_config_changed: >-
+      {{ (traefik_cfg_config is changed) or (traefik_cfg_static is changed)
+         or (traefik_cfg_whitelist is changed) or (traefik_cfg_acquis is changed)
+         or (traefik_cfg_profiles is changed) or (traefik_cfg_discord is changed) }}
 
 - name: Wait for CrowdSec to be healthy
   community.docker.docker_container_info:

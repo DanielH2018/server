@@ -1,5 +1,8 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -31,15 +34,8 @@ services:
       - CHOWN
     security_opt:
       - no-new-privileges:true
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
-    healthcheck:
-      test: curl --fail -s http://localhost:8000/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ service_networks() }}
+    {{ healthcheck('curl --fail -s http://localhost:8000/ || exit 1') }}
     restart: unless-stopped
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
@@ -61,17 +57,6 @@ services:
       # Priority must be higher than the UI router so Traefik matches this first
       - "traefik.http.routers.healthchecks-ping.priority=100"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 512M
-        reservations:
-          cpus: '0.05'
-          memory: 64M
+    {{ resources('0.50', '512M', '0.05', '64M') }}
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}

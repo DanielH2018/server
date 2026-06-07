@@ -1,0 +1,16 @@
+[Unit]
+Description=GitOps deployer (pull origin/master, deploy changed services)
+After=network-online.target docker.service
+Wants=network-online.target
+OnFailure=gitops-deploy-alert.service
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+WorkingDirectory=/home/{{ sys_user }}/server
+# Need ~/.local/bin on PATH for `uv` (the deployer runs `uv run ansible-playbook`,
+# the same repo-pinned env the operator uses); systemd's default PATH omits it.
+Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 /opt/gitops-deploy/gitops_deploy.py
+# SOPS age key is already in the user's home; filter plugins auto-load next to
+# ansible/deploy.yml, so no ANSIBLE_CONFIG is needed.
