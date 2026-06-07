@@ -12,8 +12,15 @@
     src: check.py
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/check.py"
     mode: "0644"
+  register: monitor_bridge_check
 
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # check.py is bind-mounted (./check.py:/app/check.py); the loop reads it once at
+    # startup, so only a recreate applies a code change. Without this, a check.py-only
+    # edit (no compose change) leaves recreate: auto and the new logic silently never
+    # deploys. See repo-root CLAUDE.md + common/CLAUDE.md.
+    common_config_changed: "{{ monitor_bridge_check is changed }}"
