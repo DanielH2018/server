@@ -49,6 +49,29 @@ sops ansible/vars/secrets.yml
 ansible-playbook ansible/initial_setup.yml
 ```
 
+## Shell Commands — Shape Them to Auto-Approve
+A PreToolUse hook (`.claude/hooks/auto-approve-readonly.py`) auto-approves Bash it can
+**prove is read-only**, so those run without a permission prompt. Write exploratory/
+read-only commands to fit it. Anything that writes or executes still prompts — that's intended.
+
+**Auto-approves (no prompt):**
+- Single read-only commands and pipelines: `grep … | sort | head`
+- Read-only stages sequenced with `;`, `&&`, `||`, or newlines: `cd dir && grep … *.j2`
+- Write-free redirects: `… 2>/dev/null`, `>/dev/null 2>&1`
+- Read-only `git`/`docker`/`find` (no `-exec`/`-delete`) and read-only `awk`/`sed`
+
+**Forces a prompt — restructure, or just accept the one-off prompt:**
+- **Command substitution** `$(…)`, backticks, `${…}` — rejected outright. Replace
+  `svc=$(echo "$d" | cut -d/ -f4)` with a substitution-free pipeline, or split the step out.
+- **Shell control flow** — `for`/`while` loops, `if/then/else/fi`. Prefer one `grep`/`find`/`awk`
+  over a loop: e.g. `grep -L "limits:" …/*.j2` (files missing a pattern) + `grep -l "limits:" …`
+  (files with it) instead of looping `if grep -q …; then …; fi`.
+- **Writes/exec** — `> file`, `tee`, `sed -i`, `sed s///e|w`, `awk 'system()'`/`print > "f"`,
+  subshells `(…)`, backgrounding `&`. (Note: `awk` programs containing `>` — even as a
+  numeric comparison — are conservatively rejected; use a different test or accept the prompt.)
+
+Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hooks/test_auto_approve_readonly.py`.
+
 ## Secrets Management
 - Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age
 - `.sops.yaml` auto-encrypts any `.yml`/`.yaml` in `vars/` or `secrets/` directories
