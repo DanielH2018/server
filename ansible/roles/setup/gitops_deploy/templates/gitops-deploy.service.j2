@@ -1,0 +1,13 @@
+[Unit]
+Description=GitOps deployer (pull origin/master, deploy changed services)
+After=network-online.target docker.service
+Wants=network-online.target
+OnFailure=gitops-deploy-alert.service
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+WorkingDirectory=/home/{{ sys_user }}/server
+ExecStart=/usr/bin/python3 /opt/gitops-deploy/gitops_deploy.py
+# SOPS age key is already in the user's home; filter plugins auto-load next to
+# ansible/deploy.yml, so no ANSIBLE_CONFIG is needed.
