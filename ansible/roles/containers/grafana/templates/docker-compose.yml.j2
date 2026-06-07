@@ -1,5 +1,6 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 
 services:
@@ -26,11 +27,7 @@ services:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}
 {% endfor %}
-    healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
@@ -88,12 +85,7 @@ services:
     image: grafana/promtail:latest
     container_name: promtail
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/9080"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+    {{ healthcheck('["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/9080"]', start_period='15s') }}
     security_opt:
       - no-new-privileges:true
     environment:

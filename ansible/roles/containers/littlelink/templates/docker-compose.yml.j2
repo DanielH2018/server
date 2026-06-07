@@ -1,5 +1,6 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 services:
   littlelink:
@@ -34,11 +35,7 @@ services:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}
 {% endfor %}
-    healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1') }}
     restart: unless-stopped
     cap_drop:
       - ALL
