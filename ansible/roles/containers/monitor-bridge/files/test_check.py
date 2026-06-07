@@ -161,6 +161,32 @@ def test_oom_none_is_ok(monkeypatch):
     assert ok
 
 
+# --- check_cpu_throttle -----------------------------------------------------
+
+def test_cpu_throttle_names_container_over_threshold(monkeypatch):
+    # default CPU_THROTTLE_PCT=25 -> 0.40 (40%) alerts, 0.10 (10%) doesn't
+    vec = [({"name": "tdarr"}, 0.40), ({"name": "sonarr"}, 0.10)]
+    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vec)
+    ok, msg = check.check_cpu_throttle()
+    assert not ok
+    assert "tdarr" in msg
+    assert "sonarr" not in msg  # 10% is under the default 25% threshold
+
+
+def test_cpu_throttle_nan_is_ignored(monkeypatch):
+    # unlimited container -> 0/0 -> NaN; NaN > threshold is False, so no alert
+    vec = [({"name": "jellyfin"}, float("nan"))]
+    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vec)
+    ok, _ = check.check_cpu_throttle()
+    assert ok
+
+
+def test_cpu_throttle_none_is_ok(monkeypatch):
+    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    ok, _ = check.check_cpu_throttle()
+    assert ok
+
+
 # --- check_targets_down -----------------------------------------------------
 
 def test_targets_names_down_target(monkeypatch):

@@ -35,6 +35,8 @@ DISK_MAX_PCT = float(_env("DISK_MAX_PCT", "90"))
 CERT_MIN_DAYS = float(_env("CERT_MIN_DAYS", "14"))
 MEM_MAX_PCT = float(_env("MEM_MAX_PCT", "90"))
 OOM_WINDOW = _env("OOM_WINDOW", "1h")
+CPU_WINDOW = _env("CPU_WINDOW", "15m")
+CPU_THROTTLE_PCT = float(_env("CPU_THROTTLE_PCT", "25"))
 RESTART_WINDOW = _env("RESTART_WINDOW", "15m")
 RESTART_MAX = float(_env("RESTART_MAX", "3"))
 TRAEFIK_5XX_PCT = float(_env("TRAEFIK_5XX_PCT", "5"))
@@ -207,6 +209,29 @@ def check_oom():
     return True, "no OOM kills in %s" % OOM_WINDOW
 
 
+def check_cpu_throttle():
+    """Containers under sustained CPU CFS throttling within CPU_WINDOW, naming each one.
+
+    A container pinned at its `deploy.resources` cpu limit is throttled (slowed) without
+    OOMing, restarting, or 5xx-ing — invisible to the other checks. The fraction of CFS
+    periods that were throttled is exactly the signal the resources() macro names as the
+    cue to raise a cpu cap. Containers with no cpu limit produce 0/0 -> NaN, which fails
+    the `> threshold` predicate (NaN comparisons are False), so they're ignored; if cAdvisor
+    doesn't expose the cfs metrics the query is empty and this stays green.
+    """
+    vec = prom_vector(
+        'sum(rate(container_cpu_cfs_throttled_periods_total{name!=""}[%s])) by (name) '
+        '/ sum(rate(container_cpu_cfs_periods_total{name!=""}[%s])) by (name)'
+        % (CPU_WINDOW, CPU_WINDOW))
+    threshold = CPU_THROTTLE_PCT / 100.0
+    offenders = _top_offenders(vec, "name", lambda v: v > threshold)
+    if offenders:
+        desc = ", ".join("%s (%.0f%%)" % (n, v * 100) for n, v in offenders[:5])
+        return False, "%d container(s) CPU-throttled >%.0f%% in %s: %s" % (
+            len(offenders), CPU_THROTTLE_PCT, CPU_WINDOW, desc)
+    return True, "no CPU throttling >%.0f%% in %s" % (CPU_THROTTLE_PCT, CPU_WINDOW)
+
+
 def check_targets_down():
     """Any Prometheus scrape target reporting up==0 (monitoring going blind)."""
     vec = prom_vector("up")
@@ -239,6 +264,7 @@ CHECKS = [
     ("memory", _env("KUMA_PUSH_MEM", ""), check_mem),
     ("restarts", _env("KUMA_PUSH_RESTARTS", ""), check_restarts),
     ("oom", _env("KUMA_PUSH_OOM", ""), check_oom),
+    ("cpu", _env("KUMA_PUSH_CPU", ""), check_cpu_throttle),
     ("targets", _env("KUMA_PUSH_TARGETS", ""), check_targets_down),
     ("traefik5xx", _env("KUMA_PUSH_TRAEFIK", ""), check_traefik_5xx),
 ]

@@ -33,6 +33,8 @@ services:
       - CERT_MIN_DAYS=14
       - MEM_MAX_PCT=90
       - OOM_WINDOW=1h
+      - CPU_WINDOW=15m
+      - CPU_THROTTLE_PCT=25
       - RESTART_WINDOW=15m
       - RESTART_MAX=3
       - TRAEFIK_5XX_PCT=5
@@ -44,6 +46,7 @@ services:
       - KUMA_PUSH_MEM={{ monitor_bridge_mem_push_token }}
       - KUMA_PUSH_RESTARTS={{ monitor_bridge_restarts_push_token }}
       - KUMA_PUSH_OOM={{ monitor_bridge_oom_push_token }}
+      - KUMA_PUSH_CPU={{ monitor_bridge_cpu_push_token }}
       - KUMA_PUSH_TARGETS={{ monitor_bridge_targets_push_token }}
       - KUMA_PUSH_TRAEFIK={{ monitor_bridge_traefik_push_token }}
     volumes:
@@ -58,6 +61,7 @@ services:
       {{ kuma('monitor-bridge-mem', monitor_type='push', name='Memory', interval=600, push_token=monitor_bridge_mem_push_token) }}
       {{ kuma('monitor-bridge-restarts', monitor_type='push', name='Container Restarts', interval=600, push_token=monitor_bridge_restarts_push_token) }}
       {{ kuma('monitor-bridge-oom', monitor_type='push', name='Container OOM', interval=600, push_token=monitor_bridge_oom_push_token) }}
+      {{ kuma('monitor-bridge-cpu', monitor_type='push', name='CPU Throttling', interval=600, push_token=monitor_bridge_cpu_push_token) }}
       {{ kuma('monitor-bridge-targets', monitor_type='push', name='Scrape Targets', interval=600, push_token=monitor_bridge_targets_push_token) }}
       {{ kuma('monitor-bridge-traefik', monitor_type='push', name='Traefik 5xx', interval=600, push_token=monitor_bridge_traefik_push_token) }}
       {# Host GitOps deployer liveness — interval 2400s (40m) > the 30m tick so one missed push isn't a false alarm. -#}
