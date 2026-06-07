@@ -57,7 +57,7 @@ Three gaps surfaced during a non-security review of the homelab:
 ## Decisions (resolved during brainstorming)
 
 | Decision | Choice |
-|---|---|
+| --- | --- |
 | How CI reaches the host | **Pull-based GitOps** (systemd timer on the host), not a self-hosted runner |
 | What "test the image" means | **Both** — a shallow pre-merge smoke test *and* a post-merge health gate |
 | Health-gate failure behaviour | **Local rollback + alert** (no repo write access) |
@@ -123,6 +123,7 @@ contingent on the CI checks passing (Section A + C2) via branch protection.
 `ansible/roles/containers/**/templates/docker-compose.yml.j2`.
 
 **Behaviour:**
+
 1. Diff the PR to extract the changed `image:tag` from the `.j2`.
 2. `docker pull` it.
 3. `docker run -d` it with minimal arguments; then wait for **either** the image's declared
@@ -203,7 +204,7 @@ plaintext in any tracked file (this spec included).
 
 ## Data flow (end to end, pinned minor/patch image)
 
-```
+```text
 Renovate (Mon)                GitHub                         daniel-server (every 30m)
    │                            │                                   │
    ├─ open PR (bump tag) ──────▶│                                   │
