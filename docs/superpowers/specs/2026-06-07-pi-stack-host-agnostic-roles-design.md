@@ -99,14 +99,16 @@ whitespace behavior (see `compose-healthcheck-dollar-escaping` and the validator
 - Unchanged: `cap_drop: ALL` + `cap_add: [NET_ADMIN, NET_RAW]`, sysctls
   (`ip_forward`, `src_valid_mark`), `security_opt`, native image healthcheck (no compose
   `healthcheck:`), `service_networks()`/`external_networks()`, `resources('0.50','256M','0.05','32M')`.
-- `meta/deps.yml`: on the server wg-easy depends on traefik+authelia; in `lan` mode it has
-  no such deps. The dependency graph is computed from `meta/deps.yml` + the host's
-  `containers_list`; since the Pi list contains neither traefik nor authelia, the toposort
-  resolver already drops unmet/absent deps (see `ansible/tests/test_toposort.py` and the
-  `dep_closure`/`expand_with_deps` filters). Confirm wg-easy still deploys on the Pi with
-  those deps listed but absent from the Pi's stack — if the resolver errors on an absent
-  dep, make the traefik/authelia deps conditional or rely on the existing closure logic
-  that only expands deps present in `containers_list`. **(Implementation must verify.)**
+- `meta/deps.yml`: **keep `role_deps: [traefik, authelia]` unchanged** (no per-host deps
+  file). **Verified safe:** `meta/deps.yml` declares the full dependency contract, and each
+  host's `containers_list` decides which deps are active. The toposort resolver
+  (`ansible/filter_plugins/toposort.py`) silently ignores any dep absent from the host's
+  list — `toposort_containers` line 65 (`if dep in name_to_idx`), and `dep_closure` /
+  `expand_with_deps` lines 101/127 (`if dep in name_to_obj`). On the server traefik+authelia
+  are present → wg-easy sorts after them; on the Pi they're absent → dropped, no error.
+  Regression-pinned by `test_dep_absent_from_list_is_ignored` in
+  `ansible/tests/test_toposort.py`. The deleted `wg-easy-pi` role's `role_deps: []` is
+  therefore unnecessary — the unified role's deps "just work" on both hosts.
 
 #### 2. `dozzle` — new role
 
@@ -205,10 +207,10 @@ docker network rm portainer_internal   # if no longer referenced
 
 - **`expose_mode` default** in `all.yml` guarantees the server *and* the validator render
   in `traefik` mode unchanged.
-- **wg-easy deps on the Pi** (traefik/authelia absent): must verify the toposort/dep-closure
-  logic tolerates deps that aren't in the host's `containers_list` (expected — the closure
-  only expands deps that are present). If it errors, make wg-easy's traefik/authelia deps
-  conditional. **Hard gate for implementation.**
+- **wg-easy deps on the Pi** (traefik/authelia absent): **resolved.** The toposort/dep
+  filters silently ignore deps not in the host's `containers_list` (pinned by
+  `test_dep_absent_from_list_is_ignored`). Keep `role_deps: [traefik, authelia]`; no
+  conditional logic needed. See component change #1.
 - **Dozzle vs read-only proxy:** verify on deploy; isolate with a dedicated read-only proxy
   rather than loosening the shared one if needed.
 - **Portainer is only *unmanaged*, not removed** — manual `docker rm -f` step documented;
