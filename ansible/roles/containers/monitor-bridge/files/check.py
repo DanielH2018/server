@@ -35,6 +35,10 @@ DISK_MAX_PCT = float(_env("DISK_MAX_PCT", "90"))
 CERT_MIN_DAYS = float(_env("CERT_MIN_DAYS", "14"))
 MEM_MAX_PCT = float(_env("MEM_MAX_PCT", "90"))
 OOM_WINDOW = _env("OOM_WINDOW", "1h")
+RESTART_WINDOW = _env("RESTART_WINDOW", "15m")
+RESTART_MAX = float(_env("RESTART_MAX", "3"))
+TRAEFIK_5XX_PCT = float(_env("TRAEFIK_5XX_PCT", "5"))
+TRAEFIK_MIN_RPS = float(_env("TRAEFIK_MIN_RPS", "0.05"))
 
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
@@ -55,6 +59,22 @@ def prom_scalar(promql):
     if not result:
         return None
     return float(result[0]["value"][1])
+
+
+def prom_vector(promql):
+    """Run an instant query; return [(labels: dict, value: float), ...] (empty if none).
+
+    Unlike prom_scalar this keeps each series' labels, so checks can name *which*
+    container / target / route is failing.
+    """
+    url = PROM_URL + "/api/v1/query?" + urllib.parse.urlencode({"query": promql})
+    data = _get_json(url)
+    if data.get("status") != "success":
+        raise RuntimeError("prometheus query status=%s" % data.get("status"))
+    return [
+        (series.get("metric", {}), float(series["value"][1]))
+        for series in data.get("data", {}).get("result", [])
+    ]
 
 
 def parse_rfc3339(ts):
@@ -139,20 +159,77 @@ def check_cert():
 
 
 def check_mem():
+    # Host memory pressure only. Per-container OOM kills are reported (with the
+    # offending container named) by check_oom — single source of truth.
     avail = prom_scalar("node_memory_MemAvailable_bytes")
     total = prom_scalar("node_memory_MemTotal_bytes")
-    oom = prom_scalar("sum(increase(container_oom_events_total[%s]))" % OOM_WINDOW)
     if avail is None or total is None or total == 0:
         return False, "memory metric unavailable"
     used_pct = 100.0 * (1 - avail / total)
-    problems = []
     if used_pct > MEM_MAX_PCT:
-        problems.append("mem %.0f%%" % used_pct)
-    if oom and oom >= 1:
-        problems.append("%.0f OOM in %s" % (oom, OOM_WINDOW))
-    if problems:
-        return False, "; ".join(problems)
-    return True, "mem %.0f%%, no OOM" % used_pct
+        return False, "mem %.0f%% (> %.0f%%)" % (used_pct, MEM_MAX_PCT)
+    return True, "mem %.0f%%" % used_pct
+
+
+def _top_offenders(vector, label, predicate):
+    """Names (by `label`) of series matching predicate(value), sorted by value desc."""
+    hits = [(m.get(label, "?"), v) for m, v in vector if predicate(v)]
+    hits.sort(key=lambda nv: -nv[1])
+    return hits
+
+
+def check_restarts():
+    """Containers restarting more than RESTART_MAX times within RESTART_WINDOW.
+
+    Catches crash-loops that an intermittent up-check can miss.
+    """
+    vec = prom_vector('changes(container_start_time_seconds{name!=""}[%s])' % RESTART_WINDOW)
+    offenders = _top_offenders(vec, "name", lambda v: v > RESTART_MAX)
+    if offenders:
+        desc = ", ".join("%s (%.0f)" % (n, v) for n, v in offenders[:5])
+        return False, "%d container(s) restarting >%.0fx in %s: %s" % (
+            len(offenders), RESTART_MAX, RESTART_WINDOW, desc)
+    return True, "no restart loops in %s" % RESTART_WINDOW
+
+
+def check_oom():
+    """Containers OOM-killed within OOM_WINDOW, naming each one.
+
+    Closes the loop on the per-container memory limits (deploy.resources). If cAdvisor
+    doesn't expose container_oom_events_total the query is empty and this stays green.
+    """
+    vec = prom_vector(
+        'sum(increase(container_oom_events_total{name!=""}[%s])) by (name)' % OOM_WINDOW)
+    offenders = _top_offenders(vec, "name", lambda v: v > 0)
+    if offenders:
+        desc = ", ".join("%s (%.0f)" % (n, v) for n, v in offenders[:5])
+        return False, "%d container(s) OOM-killed in %s: %s" % (len(offenders), OOM_WINDOW, desc)
+    return True, "no OOM kills in %s" % OOM_WINDOW
+
+
+def check_targets_down():
+    """Any Prometheus scrape target reporting up==0 (monitoring going blind)."""
+    vec = prom_vector("up")
+    down = sorted({m.get("job") or m.get("instance") or "?" for m, v in vec if v == 0})
+    if down:
+        return False, "%d target(s) down: %s" % (len(down), ", ".join(down))
+    return True, "all %d targets up" % len(vec)
+
+
+def check_traefik_5xx():
+    """Elevated 5xx ratio at the proxy, guarded by a request-rate floor.
+
+    The TRAEFIK_MIN_RPS floor stops a single error on near-zero traffic from tripping
+    a 100%-error-ratio false alarm.
+    """
+    total = prom_scalar("sum(rate(traefik_service_requests_total[5m]))")
+    errors = prom_scalar('sum(rate(traefik_service_requests_total{code=~"5.."}[5m]))') or 0.0
+    if total is None or total < TRAEFIK_MIN_RPS:
+        return True, "traffic below floor (%.3f rps)" % (total or 0.0)
+    pct = 100.0 * errors / total
+    if pct > TRAEFIK_5XX_PCT:
+        return False, "5xx %.1f%% of %.2f rps (> %.0f%%)" % (pct, total, TRAEFIK_5XX_PCT)
+    return True, "5xx %.1f%% of %.2f rps" % (pct, total)
 
 
 CHECKS = [
@@ -160,6 +237,10 @@ CHECKS = [
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
     ("cert", _env("KUMA_PUSH_CERT", ""), check_cert),
     ("memory", _env("KUMA_PUSH_MEM", ""), check_mem),
+    ("restarts", _env("KUMA_PUSH_RESTARTS", ""), check_restarts),
+    ("oom", _env("KUMA_PUSH_OOM", ""), check_oom),
+    ("targets", _env("KUMA_PUSH_TARGETS", ""), check_targets_down),
+    ("traefik5xx", _env("KUMA_PUSH_TRAEFIK", ""), check_traefik_5xx),
 ]
 
 
