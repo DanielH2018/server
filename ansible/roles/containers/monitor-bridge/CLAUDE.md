@@ -48,7 +48,8 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Editing & testing
 - Compose: `templates/docker-compose.yml.j2` · Logic: `files/check.py`
-- Unit tests (parsing + every check's decision logic): `cd files && python3 -m unittest test_check`.
+- Unit tests (parsing + every check's decision logic):
+  `uv run pytest ansible/roles/containers/monitor-bridge/files`.
   Also run automatically by the `pytest` prek hook (`prek run pytest --all-files`).
 - Smoke test one pass: `docker exec monitor-bridge python /app/check.py --once`
 - Deploy: `ansible-playbook ansible/deploy.yml --tags "monitor-bridge"`

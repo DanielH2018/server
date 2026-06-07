@@ -1,4 +1,7 @@
-# scripts/test_smoke_extract.py
+"""Unit tests for smoke_extract.extract_changed_images (image-diff parser).
+
+Run: uv run pytest scripts
+"""
 from smoke_extract import extract_changed_images
 
 

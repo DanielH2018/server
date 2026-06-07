@@ -5,9 +5,8 @@ The classifier is a security boundary: it may only ever REDUCE permission
 prompts for *provably* read-only commands, and must NEVER auto-approve a
 command that can write, delete, or execute. These tables lock that contract.
 
-Runnable two ways:
-  * standalone (no deps):   python3 .claude/hooks/test_auto_approve_readonly.py
-  * under pytest:           python3 -m pytest .claude/hooks/test_auto_approve_readonly.py
+Run: uv run pytest .claude/hooks
+(Still importable standalone — it loads the hook by path, no third-party deps.)
 """
 import importlib.util
 import os

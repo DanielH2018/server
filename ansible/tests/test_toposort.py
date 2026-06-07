@@ -6,9 +6,10 @@ so a silent bug here would mis-order or skip services. Pure in/out logic — no 
 runtime needed beyond the AnsibleFilterError import.
 
 Lives in ansible/tests/ (not under filter_plugins/) so Ansible's filter-plugin loader
-doesn't try to import it as a plugin; conftest.py puts filter_plugins/ on sys.path.
+doesn't try to import it as a plugin; the `pythonpath` setting in pyproject.toml puts
+filter_plugins/ on sys.path so `import toposort` resolves.
 
-Run: python3 -m pytest ansible/tests/
+Run: uv run pytest ansible/tests
 """
 import pytest
 from ansible.errors import AnsibleFilterError
