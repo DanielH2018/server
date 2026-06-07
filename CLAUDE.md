@@ -21,7 +21,12 @@ files/            # Data migration utilities
 
 ## Adding a New Container Service
 1. Create `ansible/roles/containers/<name>/tasks/main.yml`
-2. Add a `docker-compose.yml.j2` template in `ansible/roles/containers/<name>/templates/`
+2. Add a `docker-compose.yml.j2` template in `ansible/roles/containers/<name>/templates/`.
+   Use the shared macros in `ansible/templates/` rather than hand-rolling boilerplate:
+   `traefik.yml.j2` (`labels`), `autokuma.yml.j2` (`kuma`), `healthcheck.yml.j2`
+   (`healthcheck`), and `networks.yml.j2` (`service_networks()` / `external_networks()` —
+   the per-service and top-level `networks:` blocks). The `/new-container` skill has the
+   canonical skeleton.
 3. Add the role to `ansible/deploy.yml` with a tag matching the service name
 4. Add any secrets to `ansible/vars/secrets.yml` (edit with `sops ansible/vars/secrets.yml`)
 5. Reference secrets via `{{ variable_name }}` in templates

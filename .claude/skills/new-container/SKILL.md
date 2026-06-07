@@ -47,9 +47,63 @@ Then create the following files:
 
 **`ansible/roles/containers/<name>/templates/docker-compose.yml.j2`**
 - Use Jinja2 variables for all configurable values
-- Include Traefik labels if reverse proxy is needed
+- **Use the shared macros** (in `ansible/templates/`) — don't hand-roll the boilerplate
+  they cover:
+  - `traefik.yml.j2` → `labels(...)` — reverse-proxy routing labels
+  - `autokuma.yml.j2` → `labels as kuma` — Uptime Kuma monitor labels
+  - `healthcheck.yml.j2` → `healthcheck(...)` — healthcheck block with `start_period`
+  - `networks.yml.j2` → `service_networks()` / `external_networks()` — the per-service
+    `networks:` list and the top-level external declaration. **Always use these instead
+    of inlining the `{% raw %}{% for net in container_item.networks %}{% endraw %}` loops.**
+    Append any extra hardcoded networks (e.g. a private `internal` net) on the lines right
+    after the macro call; declare them after `{{ '{{ external_networks() }}' }}`.
 - Include a healthcheck if the image supports one
-- Set `restart: unless-stopped`, PUID/PGID, TZ
+- Set `restart: unless-stopped`, PUID/PGID, TZ, and a `deploy.resources.limits` cap
+- Canonical skeleton:
+  ```jinja
+  {% raw %}{% from 'traefik.yml.j2' import labels with context %}
+  {% from 'autokuma.yml.j2' import labels as kuma with context %}
+  {% from 'healthcheck.yml.j2' import healthcheck %}
+  {% from 'networks.yml.j2' import service_networks, external_networks with context %}
+  ---
+
+  services:
+    <name>:
+      image: <image>:<tag>
+      container_name: <name>
+      restart: unless-stopped
+      environment:
+        - PUID={{ puid }}
+        - PGID={{ pgid }}
+        - TZ={{ tz }}
+      volumes:
+        - ./config:/config
+      security_opt:
+        - no-new-privileges:true
+      cap_drop:
+        - ALL
+      {{ service_networks() }}
+      {{ healthcheck('curl --fail -s http://localhost:<port>/ || exit 1') }}
+      labels:
+        {{ labels(
+            container_item.hostname | default(container_item.name),
+            container_item.port | string,
+            (container_item.networks | default([docker_network]))[0],
+            container_item.use_authelia
+          )
+        }}
+        {{ kuma(container_item.name) }}
+      deploy:
+        resources:
+          limits:
+            cpus: '1.0'
+            memory: 512M
+          reservations:
+            cpus: '0.10'
+            memory: 64M
+
+  {{ external_networks() }}{% endraw %}
+  ```
 
 **`ansible/inventory/host_vars/<host>.yml`**
 - Add the new service to `containers_list` under the appropriate organization comment section

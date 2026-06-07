@@ -1,6 +1,7 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
 ---
 
 services:
@@ -23,10 +24,7 @@ services:
       - ./provisioning/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - ./provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
       - ./dashboards:/var/lib/grafana/dashboards:ro
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
@@ -66,10 +64,7 @@ services:
       - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
       - loki:/tmp
     command: -config.file=/etc/loki/loki-config.yaml
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     labels:
       {{ kuma('loki') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
@@ -98,10 +93,7 @@ services:
       # Access to the host log files
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/promtail-config.yaml
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     labels:
       {{ kuma('promtail') }}
       # Watchtower
@@ -116,11 +108,7 @@ services:
           cpus: '0.05'
           memory: 32M
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}
 
 volumes:
     loki:

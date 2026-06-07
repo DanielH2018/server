@@ -1,6 +1,7 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
 ---
 services:
   dashboard:
@@ -31,10 +32,7 @@ services:
       JAVA_TOOL_OPTIONS: "-Xmx1g"
     volumes:
       - crowdsec-db:/metabase-data/
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     {# Metabase is a slow-booting JVM app (H2 DB init) -> long start_period. -#}
     {{ healthcheck('curl --fail -s http://localhost:3000/ || exit 1', start_period='90s') }}
     labels:
@@ -62,11 +60,7 @@ services:
           cpus: '0.10'
           memory: 256M
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}
 
 volumes:
   crowdsec-db:

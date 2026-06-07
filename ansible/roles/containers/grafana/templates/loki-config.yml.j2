@@ -22,6 +22,16 @@ schema_config:
       index:
         prefix: index_
         period: 24h
+# Without a compactor that has retention enabled, Loki never deletes old chunks —
+# /tmp/loki (the `loki` named volume) grows unbounded. The compactor enforces the
+# limits_config.retention_period below. delete_request_store is REQUIRED by Loki 3.x
+# whenever retention_enabled is true, even though we only use age-based deletion.
+compactor:
+  working_directory: /tmp/loki/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  delete_request_store: filesystem
 query_range:
   results_cache:
     cache:
@@ -38,6 +48,8 @@ limits_config:
   max_global_streams_per_user: 5000
   ingestion_rate_mb: 50
   per_stream_rate_limit: 50MB
+  # Drop log lines older than 31 days. Enforced by the compactor above.
+  retention_period: 744h
 analytics:
   reporting_enabled: false
   usage_stats_url: ""

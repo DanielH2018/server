@@ -1,6 +1,7 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
 ---
 
 services:
@@ -28,10 +29,7 @@ services:
       - '--collector.tcpstat'
     expose:
       - 9100
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     {{ healthcheck('wget --no-verbose --tries=1 -O /dev/null http://localhost:9100/metrics || exit 1') }}
     labels:
       {{ kuma('node-exporter') }}
@@ -64,10 +62,7 @@ services:
       - '--store_container_labels=false'
       - '--docker_only=true'
       - '--disable_metrics=hugetlb,memory_numa,tcp,udp,referenced_memory,disk,diskIO,percpu,sched,process,cpu_topology,perf_event,advtcp'
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     restart: unless-stopped
     labels:
       {{ kuma('cadvisor', name='cAdvisor') }}
@@ -91,10 +86,7 @@ services:
     volumes:
      - ./:/etc/prometheus/
      - prometheus_data:/prometheus
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:9090/ || exit 1') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
@@ -117,10 +109,6 @@ services:
           cpus: '0.25'
           memory: 256M
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}
 volumes:
     prometheus_data:

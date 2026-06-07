@@ -1,6 +1,7 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
 ---
 
 services:
@@ -22,10 +23,7 @@ services:
       - SETGID
       - SETUID
       - CHOWN
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     {{ healthcheck('curl --fail -s http://localhost:9696/ || exit 1') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
@@ -61,10 +59,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     {{ healthcheck('curl --fail -s http://localhost:8191/ || exit 1') }}
     labels:
       {{ kuma('flaresolverr') }}
@@ -79,8 +74,4 @@ services:
           cpus: '0.10'
           memory: 128M
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}

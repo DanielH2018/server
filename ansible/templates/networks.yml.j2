@@ -1,0 +1,33 @@
+{# Shared network blocks for container compose templates.
+
+   Every service template inlined the same two `networks:` blocks — the per-service
+   attachment list and the top-level external declaration — looping over
+   container_item.networks (falling back to the default docker_network). These two
+   macros replace that boilerplate; they emit byte-identical output to the old inline
+   loops, so a service can still append extra hardcoded networks on the lines that
+   follow the macro call (e.g. karakeep's `- internal`, crowdsec's `crowdsec-db:`).
+
+   `service_networks()` — the per-service `networks:` list. Invoke at the service's
+   4-space indent so the key lands correctly:
+       {{ service_networks() }}
+
+   `external_networks()` — the top-level `networks:` stanza declaring each external.
+   Invoke at column 0:
+       {{ external_networks() }}
+
+   Templates with bespoke per-service attachments (e.g. traefik) keep their networks
+   inline — these macros are only for the standard loop.
+#}
+{% macro service_networks() -%}
+networks:
+{% for net in container_item.networks | default([docker_network]) %}
+      - {{ net }}
+{% endfor %}
+{%- endmacro %}
+{% macro external_networks() -%}
+networks:
+{% for net in container_item.networks | default([docker_network]) %}
+  {{ net }}:
+    external: true
+{% endfor %}
+{%- endmacro %}

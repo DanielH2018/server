@@ -1,12 +1,10 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
 services:
   minecraft:
     image: itzg/minecraft-server:latest
     container_name: minecraft
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     environment:
       EULA: "true"
       TYPE: FABRIC
@@ -62,8 +60,4 @@ services:
           cpus: '1.0'
           memory: 4096M
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}

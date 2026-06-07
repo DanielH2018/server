@@ -1,4 +1,5 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
 services:
   autoheal:
     restart: unless-stopped
@@ -12,10 +13,7 @@ services:
     environment:
       - AUTOHEAL_CONTAINER_LABEL=all
       - DOCKER_SOCK=tcp://docker-proxy-lifecycle:2375
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
     labels:
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on:docker-proxy-lifecycle"
@@ -30,8 +28,4 @@ services:
           cpus: '0.05'
           memory: 16M
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}

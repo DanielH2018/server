@@ -1,6 +1,7 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
 ---
 
 services:
@@ -27,10 +28,7 @@ services:
       - NET_BIND_SERVICE
     security_opt:
       - no-new-privileges:true
-    networks:
-{% for net in container_item.networks | default([docker_network]) %}
-      - {{ net }}
-{% endfor %}
+    {{ service_networks() }}
       - internal
     {{ healthcheck('curl --fail -s http://localhost:80/ || exit 1') }}
     labels:
@@ -85,11 +83,7 @@ services:
           cpus: '0.05'
           memory: 16M
 
-networks:
-{% for net in container_item.networks | default([docker_network]) %}
-  {{ net }}:
-    external: true
-{% endfor %}
+{{ external_networks() }}
   internal:
     internal: false
 
