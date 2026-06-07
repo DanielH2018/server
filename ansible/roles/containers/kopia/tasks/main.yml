@@ -16,6 +16,7 @@
     src: entrypoint.sh.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/scripts/entrypoint.sh"
     mode: "0755"
+  register: kopia_cfg_entrypoint
 
 - name: Deploy Kopia ignore rules
   ansible.builtin.template:
@@ -27,3 +28,7 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # entrypoint.sh is the bind-mounted container entrypoint — only a recreate applies a
+    # change. kopiaignore is read at snapshot time (data, not container config), so excluded.
+    common_config_changed: "{{ kopia_cfg_entrypoint is changed }}"

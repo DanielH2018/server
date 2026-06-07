@@ -10,29 +10,27 @@
     project_src: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}"
     state: present
     build: always
-    # `recreate: always` is INTENTIONAL — do not "fix" it to `auto` on idempotency
-    # grounds without first reading the trade-off below.
+    # `recreate` is CONDITIONAL, not hardcoded `always` — this keeps deploys idempotent:
     #
-    # It's load-bearing: it's the de-facto restart-on-config-change mechanism for the
-    # ~11 services that bind-mount an Ansible-templated config file (authelia, traefik,
-    # pihole, homepage, grafana, prometheus, janitorr, livesync, peanut, recyclarr,
-    # qbittorrent). There is no notify/handler pattern in the repo, so an always-recreate
-    # is what makes a `config.yml.j2` edit actually take effect on the next deploy.
+    #   common_config_changed=true  -> recreate: always
+    #   otherwise (the default)        -> recreate: auto
     #
-    # `recreate: auto` (the module default) only recreates when the *compose service
-    # definition* changes (its config-hash) or the image changes. Editing a bind-mounted
-    # config file does NOT change the compose hash, so under `auto` the container would
-    # keep running with the old config and the edit would silently not apply.
+    # WHY the conditional is needed: 10 roles bind-mount an Ansible-templated config file
+    # (authelia, traefik, homepage, grafana, prometheus, janitorr, livesync, peanut,
+    # recyclarr, kopia). Editing such a file does NOT change the Compose service definition (its
+    # config-hash), so `auto` alone would leave the container running with stale config —
+    # the edit would silently not apply. Those roles `register:` their config tasks and
+    # pass `common_config_changed` so a changed config forces a recreate that picks it
+    # up. It is passed as an `include_role` var, NOT a `set_fact`: a fact would persist
+    # across the deploy.yml role loop and wrongly recreate *later* services.
     #
-    # A generic one-file fix (e.g. checksum the project dir in this task) doesn't work:
-    # the container dirs also hold runtime data (logs/DBs) next to the managed configs,
-    # so a dir checksum would thrash. Switching to `auto` safely requires per-service
-    # work — a `config-hash` label computed from each service's config file(s), or
-    # notify-handlers — pushed into the ~11 config-mounting roles.
+    # WHY `auto` is safe for everything else: a changed image (`build: always` rebuilds;
+    # an identical rebuild is a no-op) and a changed docker-compose.yml both bump the
+    # Compose config-hash and trigger an auto-recreate. Only the bind-mounted external
+    # config case is invisible to `auto` — exactly what the conditional fills.
     #
-    # Cost of keeping `always`: a redeploy recreates the target container even when
-    # nothing changed. Blast radius is small in practice — `deploy.yml`'s dependency
-    # expansion means a tagged run only touches the target service + any *down* deps;
-    # the full fleet only bounces on a tagless `deploy.yml`. (Reviewed 2026-06-05.)
-    recreate: always
+    # Result: a no-op deploy recreates nothing; editing one config recreates only that
+    # service. pihole is exempt (its own absent->present DNS-bootstrap flow). See
+    # docs/superpowers/specs/2026-06-07-idempotent-deploys-conditional-recreate-design.md
+    recreate: "{{ 'always' if common_config_changed | default(false) | bool else 'auto' }}"
     remove_orphans: true

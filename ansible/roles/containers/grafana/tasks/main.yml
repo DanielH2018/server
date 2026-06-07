@@ -14,12 +14,14 @@
     src: provisioning/datasources.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/provisioning/datasources.yml"
     mode: "0664"
+  register: grafana_cfg_datasources
 
 - name: Provision Grafana dashboard file-provider
   ansible.builtin.template:
     src: provisioning/dashboards.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/provisioning/dashboards.yml"
     mode: "0664"
+  register: grafana_cfg_dashboards_cfg
 
 # Recurses subdirectories — with foldersFromFilesStructure: true each subdir
 # (e.g. dashboards/Crowdsec/) becomes a Grafana folder of the same name.
@@ -28,18 +30,21 @@
     src: dashboards/
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/dashboards/"
     mode: "0664"
+  register: grafana_cfg_dashboards
 
 - name: Create loki-config.yml from template
   ansible.builtin.template:
     src: loki-config.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/loki-config.yaml"
     mode: "0664"
+  register: grafana_cfg_loki
 
 - name: Create promtail-config.yml from template
   ansible.builtin.template:
     src: promtail-config.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/promtail-config.yaml"
     mode: "0664"
+  register: grafana_cfg_promtail
 
 # - include_tasks: dns.yml
 #   with_items:
@@ -49,3 +54,8 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    common_config_changed: >-
+      {{ (grafana_cfg_datasources is changed) or (grafana_cfg_dashboards_cfg is changed)
+         or (grafana_cfg_dashboards is changed) or (grafana_cfg_loki is changed)
+         or (grafana_cfg_promtail is changed) }}

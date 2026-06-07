@@ -25,6 +25,11 @@ files/            # Data migration utilities
 3. Add the role to `ansible/deploy.yml` with a tag matching the service name
 4. Add any secrets to `ansible/vars/secrets.yml` (edit with `sops ansible/vars/secrets.yml`)
 5. Reference secrets via `{{ variable_name }}` in templates
+6. **If the service bind-mounts an Ansible-templated config file:** `register:` each config
+   task with a `<role>_`-prefixed name and pass `common_config_changed: "{{ <reg> is changed }}"`
+   (OR several) on the `common`/`docker_deploy` include. Deploys are idempotent (`recreate: auto`
+   by default), so without this an edit to that config won't recreate the container. See
+   `ansible/roles/containers/common/CLAUDE.md`.
 
 ## Common Commands
 ```bash

@@ -30,8 +30,11 @@
     group: "5984"
     mode: "0644"
   become: true
+  register: livesync_cfg
 
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    common_config_changed: "{{ livesync_cfg is changed }}"

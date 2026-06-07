@@ -14,6 +14,7 @@
     # 0600: embeds Sonarr/Radarr API keys. Owned by the PUID the container
     # runs as (user: 1000:1000), so it stays readable.
     mode: "0600"
+  register: recyclarr_cfg
 
 # - include_tasks: dns.yml
 #   with_items:
@@ -23,3 +24,5 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    common_config_changed: "{{ recyclarr_cfg is changed }}"
