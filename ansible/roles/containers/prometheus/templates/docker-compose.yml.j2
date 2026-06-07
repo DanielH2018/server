@@ -19,6 +19,12 @@ services:
       - '--path.rootfs=/rootfs'
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      # Collectors that are off by default but read the already-mounted /host/proc.
+      # Back the Node Exporter Full panels for processes (PIDs/threads/states),
+      # interrupts (IRQ) and TCP connection stats — empty otherwise.
+      - '--collector.processes'
+      - '--collector.interrupts'
+      - '--collector.tcpstat'
     expose:
       - 9100
     networks:

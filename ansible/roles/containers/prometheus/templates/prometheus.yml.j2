@@ -31,9 +31,13 @@ scrape_configs:
     static_configs:
     - targets: ["node-exporter:9100"]
     metric_relabel_configs:
-      - source_labels: [nodename]
-        target_label: "instance"
-        action: "replace"
+      # Pin a single, consistent `instance` across ALL node metrics. The previous rule
+      # sourced `instance` from the `nodename` label, which only exists on node_uname_info
+      # — so it stripped `instance` off every other node metric and broke node dashboards
+      # (panels filtering on instance="$node" matched nothing). A static replacement keeps
+      # one stable host identity everywhere.
+      - target_label: instance
+        replacement: daniel-server
 
 #################################################################################################
 
