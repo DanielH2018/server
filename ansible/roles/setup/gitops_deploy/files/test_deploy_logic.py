@@ -62,6 +62,24 @@ def test_next_action_deploy_when_hold_is_stale():
     assert next_action("aaa", "ccc", "bad") == "deploy"
 
 
+def test_next_action_dirty_tree_skips_even_in_sync():
+    # A dirty working tree is a *healthy* skip (operator mid-edit), not an outage.
+    # It must short-circuit to "dirty" so main() can still push liveness instead
+    # of going silent and falsely tripping the push monitor's dead-man's-switch.
+    assert next_action("aaa", "aaa", None, dirty=True) == "dirty"
+
+
+def test_next_action_dirty_tree_never_deploys():
+    # Must NOT deploy from a dirty tree even when origin has advanced — dirty
+    # takes precedence over every other outcome.
+    assert next_action("aaa", "bbb", None, dirty=True) == "dirty"
+
+
+def test_next_action_clean_tree_still_deploys():
+    # Regression: a clean tree (the default) behaves exactly as before.
+    assert next_action("aaa", "bbb", None, dirty=False) == "deploy"
+
+
 # A role may run several containers; the bumped image's container is often NOT
 # the role-named one (e.g. cadvisor lives in the prometheus role). The health
 # gate must inspect the actual container_name values from the rendered compose.

@@ -15,7 +15,9 @@ the held SHA and the hold clears automatically.
 
 ## Safety
 - Read-only against the repo (no push); rollback is local-only + self-guarding.
-- Refuses to run on a dirty working tree (the host clone is deploy-managed).
+- Refuses to *deploy* from a dirty working tree (operator mid-edit) but still pushes an
+  `up` liveness beat (`next_action(..., dirty=True) -> "dirty"`) — the skip is healthy, not
+  an outage, so it must not trip the push monitor's "No heartbeat" dead-man's-switch.
 - **Broad changes** (shared `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`)
   are NOT auto-scoped — the deployer alerts and defers to a manual full deploy.
 

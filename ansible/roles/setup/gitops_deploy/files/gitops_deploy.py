@@ -171,18 +171,23 @@ def deploy(services: set[str]) -> None:
 
 
 def main() -> int:
-    # Refuse to touch a dirty working tree (operator may be mid-edit).
-    if run(["git", "status", "--porcelain"]):
-        discord("⚠️ gitops-deploy: working tree dirty on daniel-server — skipping. "
-                "Resolve manually.")
-        return 0
+    # A dirty working tree (operator may be mid-edit) is a healthy skip, not an
+    # outage: we never deploy from it, but we still push liveness below so a long
+    # edit session doesn't falsely trip the push monitor's dead-man's-switch.
+    # (git fetch is safe on a dirty tree — it only updates remote-tracking refs.)
+    dirty = bool(run(["git", "status", "--porcelain"]))
 
     run(["git", "fetch", "origin", BRANCH])
     local = run(["git", "rev-parse", "HEAD"])
     origin = run(["git", "rev-parse", f"origin/{BRANCH}"])
     hold = read_hold()
 
-    action = next_action(local, origin, hold)
+    action = next_action(local, origin, hold, dirty)
+    if action == "dirty":
+        discord("⚠️ gitops-deploy: working tree dirty on daniel-server — skipping. "
+                "Resolve manually.")
+        kuma_push("up", "working tree dirty — skipping")
+        return 0
     if action == "noop":
         kuma_push("up", "in sync")
         return 0

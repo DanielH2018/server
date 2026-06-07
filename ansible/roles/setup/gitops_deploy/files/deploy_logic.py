@@ -48,7 +48,12 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
     return cs
 
 
-def next_action(local_head: str, origin_head: str, hold_sha: str | None) -> str:
+def next_action(local_head: str, origin_head: str, hold_sha: str | None,
+                dirty: bool = False) -> str:
+    # A dirty working tree (operator mid-edit) is a healthy skip, not an outage,
+    # and must never be deployed from — so it short-circuits every other outcome.
+    if dirty:
+        return "dirty"
     if origin_head == local_head:
         return "noop"
     if hold_sha is not None and origin_head == hold_sha:
