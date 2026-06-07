@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(ansible-lint *)",
+      "Bash(git check-ignore *)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
