@@ -1,9 +1,12 @@
 name: image-smoke
 
+# Runs on EVERY PR (no `paths:` filter) on purpose: this is a required status check,
+# and a path-filtered workflow that never triggers would leave the PR's required check
+# stuck at "Expected — waiting for status". The job self-scopes instead — the
+# "Collect changed image refs" step diffs only the compose templates, so a PR that
+# touches none yields an empty list and the boot step is skipped (a fast green).
 on:
   pull_request:
-    paths:
-      - "ansible/roles/containers/**/templates/docker-compose.yml.j2"
 
 permissions:
   contents: read
