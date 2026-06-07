@@ -82,17 +82,19 @@
 # -------------------------------------------------------
 # 3. CONFIGURATION (.sops.yaml)
 # -------------------------------------------------------
-- name: Create .sops.yaml in the current project directory
+- name: Seed ansible/.sops.yaml (first-host bootstrap only)
   become: false
   ansible.builtin.copy:
-    dest: "./.sops.yaml"
+    dest: "{{ playbook_dir }}/.sops.yaml"
     content: |
       creation_rules:
         - path_regex: .*(vars|secrets)\/.*\.ya?ml$
           age: "{{ sops_setup_public_key.stdout }}"
     mode: "0644"
-  # This prevents overwriting an existing config if you run this twice
-  when: not (lookup('file', '.sops.yaml', errors='ignore'))
+  # Only seeds the very first host. ansible/.sops.yaml is tracked, so every host that has
+  # the repo checkout already has it -> this skips. Additional hosts add their key to the
+  # existing ansible/.sops.yaml + `sops updatekeys`; they must NOT overwrite it here.
+  when: not (lookup('file', playbook_dir + '/.sops.yaml', errors='ignore'))
 
 - name: Export SOPS_AGE_KEY_FILE in .bashrc
   ansible.builtin.lineinfile:

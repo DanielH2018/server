@@ -14,7 +14,6 @@
 !/pyproject.toml
 !/uv.lock
 !/.python-version
-!/.sops.yaml
 # Make sure these are ignored
 ansible/.env
 scripts/availability_bots/.env

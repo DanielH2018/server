@@ -15,9 +15,9 @@
 #   1. On the new host:  ansible-playbook ansible/bootstrap.yml --limit <host>
 #      (no `uv`/secrets needed — uses only builtin modules; any ansible-core works)
 #      -> note the "Your Public Key is: age1..." line it prints.
-#   2. Add that public key to `.sops.yaml` (tracked) under `age:`, then on a host that can
-#      already decrypt (daniel-server):  sops updatekeys ansible/vars/secrets.yml
-#      Commit the re-encrypted secrets.yml + .sops.yaml and push.
+#   2. Add that public key to `ansible/.sops.yaml` (tracked) under `age:`, then on a host
+#      that can already decrypt (daniel-server):  sops updatekeys ansible/vars/secrets.yml
+#      Commit the re-encrypted secrets.yml + ansible/.sops.yaml and push.
 #   3. On the new host: `git pull`, then run `initial_setup.yml` / `deploy.yml` normally —
 #      their secret-load pre_task now decrypts using the host's own key.
 #
