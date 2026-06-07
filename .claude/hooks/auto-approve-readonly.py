@@ -42,7 +42,7 @@ TIER1 = {
     "vmstat", "iostat", "mpstat", "sar", "nproc", "lscpu", "lsblk", "lsusb",
     "lspci", "lsmod", "lsattr", "findmnt", "blkid", "getconf", "getent", "locale",
     "printenv", "lsof", "ss", "netstat", "dig", "host", "nslookup", "apt-cache",
-    "echo", "printf", "seq", "true", "false", "which", "type",
+    "echo", "printf", "seq", "true", "false", "which", "type", "cd",
 }
 
 # git subcommands that are read-only regardless of arguments (branch/tag/remote
@@ -176,10 +176,145 @@ def _docker(argv):
     return None
 
 
+# awk can write files (`print > "f"`), pipe to a shell (`print | "sh"`,
+# `"cmd" | getline`) or exec (`system(...)`); -f reads an uninspectable program
+# and -i edits in place. Reject the program outright if any of these appear, and
+# refuse -f/-i. The `>` check also rejects benign comparisons -- safe over-reject.
+_AWK_DANGER = ("system", "getline", "|", ">")
+
+
+def _awk(argv):
+    prog = []
+    i, n = 1, len(argv)
+    while i < n:
+        a = argv[i]
+        if a == "--":
+            i += 1
+            break
+        if not a.startswith("-") or a == "-":
+            prog.append(a)            # first positional is the program text
+            i += 1
+            break
+        if a.startswith("-f") or a.startswith("-i"):
+            return None               # -f program-file (uninspectable), -i in-place
+        if a in ("-e", "--source"):
+            if i + 1 >= n:
+                return None
+            prog.append(argv[i + 1])
+            i += 2
+            continue
+        if a in ("-v", "-F"):
+            i += 2                    # option takes a separate value
+            continue
+        i += 1                        # other/glued flags (-F:, -vX=1, -W ...)
+    text = " ".join(prog)
+    if not text or any(d in text for d in _AWK_DANGER):
+        return None
+    return "awk"
+
+
+def _sed_dangerous(script):
+    """True if a sed script can write a file or execute a command.
+
+    Walks the script skipping addresses and s///,y/// bodies so the command
+    letters w/W/r/R/e (write-file, read-file, execute) and the s/// e/w flags
+    are only matched in command position. Biased to reject: any parse ambiguity
+    leaves more text to scan, which can only add rejections, never approvals.
+    """
+    i, n = 0, len(script)
+    while i < n:
+        c = script[i]
+        if c in " \t\n;{}!" or c.isdigit() or c in "$,~+-":
+            i += 1                                     # separators / line addresses
+            continue
+        if c == "/":                                   # /regex/ address
+            i += 1
+            while i < n and script[i] != "/":
+                i += 2 if script[i] == "\\" else 1
+            i += 1
+            continue
+        if c == "\\" and i + 1 < n:                    # \cregexc address (custom delim)
+            delim = script[i + 1]
+            i += 2
+            while i < n and script[i] != delim:
+                i += 2 if script[i] == "\\" else 1
+            i += 1
+            continue
+        if c in ("s", "y"):                            # s<d>..<d>..<d>flags / y<d>..<d>..<d>
+            if i + 1 >= n:
+                return True
+            delim = script[i + 1]
+            i += 2
+            fields = 0
+            while i < n and fields < 2:
+                if script[i] == "\\":
+                    i += 2
+                    continue
+                if script[i] == delim:
+                    fields += 1
+                i += 1
+            flags = ""
+            while i < n and script[i] not in " \t\n;}":
+                flags += script[i]
+                i += 1
+            if c == "s" and ("e" in flags or "w" in flags):
+                return True                            # s///e executes, s///w writes
+            continue
+        if c in ("w", "W", "r", "R", "e"):
+            return True                                # write-file / read-file / execute
+        i += 1                                         # p d n g h x b t : = l q c a i z ...
+    return False
+
+
+def _sed(argv):
+    script, saw_script = [], False
+    i, n = 1, len(argv)
+    while i < n:
+        a = argv[i]
+        if a == "--":
+            i += 1
+            if not saw_script and i < n:
+                script.append(argv[i])
+                saw_script = True
+                i += 1
+            break
+        if a.startswith("-") and a != "-":
+            if a.startswith("-i") or a.startswith("--in-place"):
+                return None                            # in-place edit writes
+            if a == "-f" or a == "--file" or a.startswith("--file="):
+                return None                            # program file (uninspectable)
+            if a in ("-e", "--expression"):
+                if i + 1 >= n:
+                    return None
+                script.append(argv[i + 1])
+                saw_script = True
+                i += 2
+                continue
+            if a.startswith("-e"):
+                script.append(a[2:])
+                saw_script = True
+                i += 1
+                continue
+            if a.startswith("--expression="):
+                script.append(a.split("=", 1)[1])
+                saw_script = True
+                i += 1
+                continue
+            i += 1                                     # safe flags: -n -E -r -s -z ...
+            continue
+        if not saw_script:                             # first positional is the script
+            script.append(a)
+            saw_script = True
+        i += 1                                         # later positionals are input files
+    if not saw_script or _sed_dangerous("\n".join(script)):
+        return None
+    return "sed"
+
+
 HANDLERS = {
     "git": _git, "find": _find, "sort": _sort, "uniq": _uniq, "ip": _ip,
     "systemctl": _systemctl, "journalctl": _journalctl, "rg": _rg,
-    "docker": _docker,
+    "docker": _docker, "awk": _awk, "gawk": _awk, "mawk": _awk, "sed": _sed,
 }
 
 
@@ -196,45 +331,107 @@ def _argv_readonly(argv):
 
 _SUBST = ("`", "$(", "${")
 _OP_TOKEN = re.compile(r"[();<>&|]+\Z")  # a token made ENTIRELY of shell operators
+_SEQ = {";", "&&", "||"}                 # sequential separators (each side a pipeline)
+_FORBIDDEN = {"(", ")", "&"}             # subshell / backgrounding -- never read-only
+_SAFE_REDIR_TARGETS = {"/dev/null"}      # the only write target we trust
 
 
-def classify(command):
-    """Return a reason string if the whole command line is read-only, else None."""
-    if not command or "\n" in command or command.rstrip().endswith("\\"):
-        return None
-    if any(s in command for s in _SUBST):
-        return None
-    try:
-        lex = shlex.shlex(command, posix=True, punctuation_chars=True)
-        lex.whitespace_split = True
-        tokens = list(lex)
-    except ValueError:
-        return None
-    if not tokens:
-        return None
-    # Reject any shell-operator token except a bare pipe (the only composition we
-    # allow). With punctuation_chars, redirects/chaining/subshells are their own
-    # tokens, so this catches them all.
+def _split(tokens, seps):
+    """Split a token list on any separator token in `seps`."""
+    out, cur = [], []
     for t in tokens:
-        if _OP_TOKEN.match(t) and t != "|":
-            return None
-    # Split into pipeline stages on '|'; every stage must be read-only.
-    stages, cur = [], []
-    for t in tokens:
-        if t == "|":
-            stages.append(cur)
+        if t in seps:
+            out.append(cur)
             cur = []
         else:
             cur.append(t)
-    stages.append(cur)
+    out.append(cur)
+    return out
+
+
+def _is_redirect(tok):
+    # a redirect operator carries a direction (< or >) and only redirect chars
+    return bool(tok) and ("<" in tok or ">" in tok) and all(c in "<>&" for c in tok)
+
+
+def _strip_redirects(stage):
+    """Drop write-free redirects from a stage; return its argv, or None if unsafe.
+
+    Allowed: input redirects (`< file` -- reading is read-only), writes/dups that
+    target /dev/null (`>/dev/null`, `2>/dev/null`, `&>/dev/null`), and fd
+    duplication (`2>&1`). Any redirect that writes a real file -> None.
+    """
+    argv = []
+    i, n = 0, len(stage)
+    while i < n:
+        t = stage[i]
+        if _is_redirect(t):
+            if argv and argv[-1].isdigit():     # an attached fd number (e.g. 2 in 2>)
+                argv.pop()
+            if i + 1 >= n:
+                return None
+            target = stage[i + 1]
+            if _OP_TOKEN.match(target):         # e.g. process substitution <( ... )
+                return None
+            if "<" in t and ">" not in t:       # pure input redirect: reading is OK
+                pass
+            elif ">&" in t or "<&" in t:        # fd duplication: target must be a fd
+                if not target.isdigit():
+                    return None
+            else:                               # >, >>, &> : writing
+                if target not in _SAFE_REDIR_TARGETS:
+                    return None
+            i += 2
+            continue
+        argv.append(t)
+        i += 1
+    return argv
+
+
+def classify(command):
+    """Return a reason string if the whole command line is read-only, else None.
+
+    The command may be a sequence (`;`, `&&`, `||`, or newlines) of pipelines;
+    every stage of every pipeline must be read-only. Substitution, subshells,
+    backgrounding, and writes to real files are rejected outright.
+    """
+    if not command or command.rstrip().endswith("\\"):
+        return None
+    if any(s in command for s in _SUBST):
+        return None
     reasons = []
-    for stage in stages:
-        if not stage:
-            return None  # empty stage (leading/trailing/double pipe)
-        r = _argv_readonly(stage)
-        if not r:
+    # A newline separates statements like ';'. shlex treats it as plain whitespace
+    # (which would merge two commands), so split into lines before tokenizing.
+    for line in command.split("\n"):
+        if not line.strip():
+            continue
+        try:
+            lex = shlex.shlex(line, posix=True, punctuation_chars=True)
+            lex.whitespace_split = True
+            tokens = list(lex)
+        except ValueError:
             return None
-        reasons.append(r)
+        if not tokens:
+            continue
+        for stmt in _split(tokens, _SEQ):            # sequential statements
+            if not stmt:
+                return None                          # empty (e.g. ';;' or dangling op)
+            for stage in _split(stmt, {"|"}):        # pipeline stages
+                if not stage:
+                    return None
+                if any(tok in _FORBIDDEN for tok in stage):
+                    return None                      # subshell or backgrounding
+                argv = _strip_redirects(stage)
+                if argv is None:
+                    return None
+                if not argv or any(_OP_TOKEN.match(tok) for tok in argv):
+                    return None                      # redirect-only stage / stray operator
+                r = _argv_readonly(argv)
+                if not r:
+                    return None
+                reasons.append(r)
+    if not reasons:
+        return None
     return "read-only: " + " | ".join(reasons)
 
 
