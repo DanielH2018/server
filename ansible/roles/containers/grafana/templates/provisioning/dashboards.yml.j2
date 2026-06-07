@@ -1,0 +1,16 @@
+# Managed by Ansible (grafana role) — do not edit in the container.
+# File provider for the seed dashboards in /var/lib/grafana/dashboards.
+# allowUiUpdates lets you edit them in the UI (saved to Grafana's DB); the JSON
+# files only re-seed a dashboard when their internal `version` is bumped.
+apiVersion: 1
+
+providers:
+  - name: homelab
+    orgId: 1
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: true

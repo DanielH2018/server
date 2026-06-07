@@ -18,6 +18,10 @@ services:
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
     volumes:
       - ./data:/var/lib/grafana
+      # Provisioned-as-code datasources + dashboards (read-only; UI edits persist in ./data).
+      - ./provisioning/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
     networks:
 {% for net in container_item.networks | default([docker_network]) %}
       - {{ net }}

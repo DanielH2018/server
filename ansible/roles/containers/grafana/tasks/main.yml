@@ -6,6 +6,26 @@
   vars:
     common_dirs_to_create:
       - "{{ container_item.name }}/data"
+      - "{{ container_item.name }}/provisioning"
+      - "{{ container_item.name }}/dashboards"
+
+- name: Provision Grafana datasources (Prometheus + Loki)
+  ansible.builtin.template:
+    src: provisioning/datasources.yml.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/provisioning/datasources.yml"
+    mode: "0664"
+
+- name: Provision Grafana dashboard file-provider
+  ansible.builtin.template:
+    src: provisioning/dashboards.yml.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/provisioning/dashboards.yml"
+    mode: "0664"
+
+- name: Copy seed dashboards (Node Exporter Full, cAdvisor, Traefik)
+  ansible.builtin.copy:
+    src: dashboards/
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/dashboards/"
+    mode: "0664"
 
 - name: Create loki-config.yml from template
   ansible.builtin.template:
