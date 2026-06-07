@@ -13,13 +13,15 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    # SCOPE (deliberate): the auth-critical edge — traefik and authelia, both on `:latest` —
-    # is intentionally NOT opted out of auto-updates (unlike crowdsec/docker-proxy/portainer/
-    # qbittorrent, which carry `com.centurylinklabs.watchtower.enable=false`). The theoretical
-    # risk is a breaking upstream `:latest` locking us out of the SSO front door. Accepted: the
-    # COOLDOWN_DELAY soak below only pulls images built >1 week ago (filters fresh breakage), and
-    # a self-updating homelab is worth the rare lockout risk. To change, add the enable=false
-    # label to traefik/authelia — but only revisit if a bad `:latest` actually bites.
+    # SCOPE: watchtower auto-updates the `:latest` long tail (mostly stateless leaf services).
+    # The critical/stateful tier — traefik, authelia, kopia, pihole, the *arr suite
+    # (sonarr/radarr/bazarr/prowlarr) and jellyfin — is pinned to explicit version tags and
+    # carries `com.centurylinklabs.watchtower.enable=false`, so Renovate manages it instead:
+    # updates land as PRs through CI + the host health gate (version-diffed and revertable),
+    # with majors held for manual review. The COOLDOWN_DELAY soak below still filters fresh
+    # breakage on everything watchtower does pull, and Renovate mirrors it with a 7-day
+    # minimumReleaseAge. (crowdsec dashboard/docker-proxy/portainer/qbittorrent also carry
+    # enable=false for their own reasons.)
     environment:
       DOCKER_HOST: tcp://docker-proxy-lifecycle:2375
       WATCHTOWER_CLEANUP: true

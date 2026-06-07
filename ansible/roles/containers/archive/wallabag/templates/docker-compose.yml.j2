@@ -4,7 +4,7 @@
 services:
   wallabag:
     container_name: wallabag
-    image: wallabag/wallabag
+    image: wallabag/wallabag:latest
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -41,7 +41,7 @@ services:
       }}
       {{ kuma(container_item.name) }}
   db:
-    image: mariadb
+    image: mariadb:latest
     container_name: wallabag-db
     restart: unless-stopped
     networks:

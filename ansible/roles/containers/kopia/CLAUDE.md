@@ -3,7 +3,7 @@
 Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUDE.md`.
 
 ## At a glance
-- **Image:** `kopia/kopia:latest`
+- **Image:** `kopia/kopia` (version-pinned, Renovate-managed)
 - **Host:** daniel-server · **Port:** 51515 · **URL:** `kopia.<domain>` (Authelia: yes)
 - **Networks:** `kopia` — a dedicated isolation net shared only with Traefik
 - **Depends on:** traefik, authelia

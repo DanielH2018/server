@@ -7,7 +7,7 @@
 
 services:
   radarr:
-    image: lscr.io/linuxserver/radarr:latest
+    image: lscr.io/linuxserver/radarr:6.1.1.10360-ls304
     container_name: radarr
     environment:
       - PUID={{ puid }}
@@ -31,6 +31,8 @@ services:
     {{ service_networks() }}
     {{ healthcheck('curl --fail -s http://localhost:7878/ || exit 1') }}
     labels:
+      # Disable watchtower update — pinned + Renovate-managed
+      - "com.centurylinklabs.watchtower.enable=false"
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),

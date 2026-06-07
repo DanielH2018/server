@@ -45,7 +45,7 @@ services:
     {{ resources('1.0', '1024M', '0.10', '128M') }}
 
   traefik:
-    image: traefik:latest
+    image: traefik:v3.7.4
     container_name: traefik
     restart: unless-stopped
     depends_on:
@@ -90,6 +90,8 @@ services:
       timeout: 10s
       retries: 3
     labels:
+      # Disable watchtower update — pinned + Renovate-managed
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('traefik') }}
     # Resource caps for blast-radius containment (M1). Traefik is the ingress
     # edge — keep headroom so it stays responsive; tune from cAdvisor/Grafana.

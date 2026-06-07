@@ -28,7 +28,7 @@ services:
     - ./data:/var/lib/postgresql/data:Z
 
   guacamole:
-    image: guacamole/guacamole
+    image: guacamole/guacamole:latest
     container_name: guacamole
     restart: unless-stopped
     environment:

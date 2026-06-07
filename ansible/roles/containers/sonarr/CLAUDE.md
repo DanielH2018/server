@@ -3,7 +3,7 @@
 Part of the *arr media stack. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `lscr.io/linuxserver/sonarr:latest`
+- **Image:** `lscr.io/linuxserver/sonarr` (version-pinned, Renovate-managed)
 - **Host:** daniel-server · **Port:** 8989 · **URL:** `sonarr.<domain>` (Authelia: yes)
 - **Networks:** media
 - **Depends on:** traefik, authelia, **prowlarr** (indexers)

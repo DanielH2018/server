@@ -4,7 +4,7 @@ Provides the authentication layer used by every service with `use_authelia: true
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `authelia/authelia:latest`
+- **Image:** `authelia/authelia` (version-pinned, Renovate-managed)
 - **Host:** daniel-server
 - **Networks:** proxy · **Authelia:** N/A (it *is* Authelia)
 - **Depends on:** traefik

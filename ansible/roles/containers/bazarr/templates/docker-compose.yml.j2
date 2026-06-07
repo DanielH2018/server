@@ -7,7 +7,7 @@
 
 services:
   bazarr:
-    image: lscr.io/linuxserver/bazarr:latest
+    image: lscr.io/linuxserver/bazarr:v1.5.6-ls350
     container_name: bazarr
     environment:
       - PUID={{ puid }}
@@ -31,6 +31,8 @@ services:
     {{ service_networks() }}
     {{ healthcheck('curl --fail -s http://localhost:6767/ || exit 1') }}
     labels:
+      # Disable watchtower update — pinned + Renovate-managed
+      - "com.centurylinklabs.watchtower.enable=false"
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),

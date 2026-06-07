@@ -3,7 +3,7 @@
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `lscr.io/linuxserver/bazarr:latest`
+- **Image:** `lscr.io/linuxserver/bazarr` (version-pinned, Renovate-managed)
 - **Host:** daniel-server · **Port:** 6767 · **URL:** `bazarr.<domain>` (Authelia: yes)
 - **Networks:** media
 - **Depends on:** traefik, authelia, **sonarr, radarr**

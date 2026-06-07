@@ -1,8 +1,8 @@
 # traefik — Reverse proxy, TLS termination & CrowdSec WAF
 
 Edge router for the whole homelab. See repo-root `CLAUDE.md` for shared conventions.
-**This role bundles two containers:** `traefik` (`traefik:latest`) and the CrowdSec
-agent (`crowdsecurity/crowdsec:latest`). The separate `crowdsec` role is only the
+**This role bundles two containers:** `traefik` (version-pinned, Renovate-managed) and the
+CrowdSec agent (`crowdsecurity/crowdsec:latest`, watchtower). The separate `crowdsec` role is only the
 Metabase dashboard.
 
 ## At a glance

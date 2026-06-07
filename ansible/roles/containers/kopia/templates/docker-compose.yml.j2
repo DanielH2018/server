@@ -6,7 +6,7 @@
 
 services:
   kopia:
-    image: kopia/kopia:latest
+    image: kopia/kopia:0.23.0
     container_name: kopia
     hostname: kopia
     restart: unless-stopped
@@ -44,6 +44,8 @@ services:
       start_period: 30s
     {{ service_networks() }}
     labels:
+      # Disable watchtower update — pinned + Renovate-managed
+      - "com.centurylinklabs.watchtower.enable=false"
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),

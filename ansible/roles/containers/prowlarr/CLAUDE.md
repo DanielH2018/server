@@ -3,7 +3,7 @@
 Central indexer/tracker manager that feeds Sonarr & Radarr. See repo-root `CLAUDE.md`.
 
 ## At a glance
-- **Images:** `linuxserver/prowlarr:latest` + `ghcr.io/flaresolverr/flaresolverr:latest`
+- **Images:** `linuxserver/prowlarr` (version-pinned, Renovate-managed) + `ghcr.io/flaresolverr/flaresolverr:latest` (watchtower)
 - **Host:** daniel-server · **Port:** 9696 · **URL:** `prowlarr.<domain>` (Authelia: yes)
 - **Networks:** media
 - **Depends on:** traefik, authelia

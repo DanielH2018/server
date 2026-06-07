@@ -28,12 +28,19 @@
       "enabled": false
     },
     {
-      "description": "Bundle minor + patch image bumps into a single weekly PR to cut noise; majors stay separate so they get a deliberate look. Auto-merge once CI (prek + image-smoke) is green; the host health gate is the post-merge safety net.",
+      "description": "Bundle minor + patch image bumps into a single weekly PR to cut noise; majors stay separate so they get a deliberate look. Auto-merge once CI (prek + image-smoke) is green and the release has soaked 7 days (mirrors watchtower's COOLDOWN_DELAY — filters fresh upstream breakage); the host health gate is the post-merge safety net.",
       "matchManagers": ["custom.regex"],
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "container images (non-major)",
       "automerge": true,
-      "platformAutomerge": true
+      "platformAutomerge": true,
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "LinuxServer.io images tag as <upstream-version>-lsNN (e.g. 4.0.17.2952-ls312); the default docker versioning can't order those, so compare them with loose versioning. If a real bump is ever misclassified, refine this to a regex versioning.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["/linuxserver/"],
+      "versioning": "loose"
     }
   ]
 }

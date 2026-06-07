@@ -4,13 +4,15 @@
 
 services:
   authelia:
-    image: authelia/authelia:latest
+    image: authelia/authelia:4.39.20
     container_name: authelia
     volumes:
       - ./config:/config
       - /var/log/authelia:/var/log/authelia
     {{ service_networks() }}
     labels:
+      # Disable watchtower update — pinned + Renovate-managed
+      - "com.centurylinklabs.watchtower.enable=false"
       # Enable traefik for container
       - 'traefik.enable=true'
       # Setup HTTPS entrypoint

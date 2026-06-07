@@ -3,7 +3,7 @@
 Part of the *arr media stack. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `lscr.io/linuxserver/radarr:latest`
+- **Image:** `lscr.io/linuxserver/radarr` (version-pinned, Renovate-managed)
 - **Host:** daniel-server · **Port:** 7878 · **URL:** `radarr.<domain>` (Authelia: yes)
 - **Networks:** media
 - **Depends on:** traefik, authelia, **prowlarr** (indexers)

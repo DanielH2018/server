@@ -3,7 +3,7 @@
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `lscr.io/linuxserver/jellyfin:latest`
+- **Image:** `lscr.io/linuxserver/jellyfin` (version-pinned, Renovate-managed)
 - **Host:** daniel-server · **Port:** 8096 · **URL:** `jellyfin.<domain>`
 - **Authelia:** **no** — Jellyfin has its own auth and clients/apps can't pass Authelia 2FA
 - **Networks:** media
