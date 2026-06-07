@@ -8,6 +8,7 @@ the Renovate dependency dashboard.
 ## Backlog
 
 - _(none currently)_
+- Revisit Initial Setup(sops, ansible+uv setup order)
 
 ## Superseded
 
