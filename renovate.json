@@ -28,10 +28,12 @@
       "enabled": false
     },
     {
-      "description": "Bundle minor + patch image bumps into a single weekly PR to cut noise; majors stay separate so they get a deliberate look",
+      "description": "Bundle minor + patch image bumps into a single weekly PR to cut noise; majors stay separate so they get a deliberate look. Auto-merge once CI (prek + image-smoke) is green; the host health gate is the post-merge safety net.",
       "matchManagers": ["custom.regex"],
       "matchUpdateTypes": ["minor", "patch"],
-      "groupName": "container images (non-major)"
+      "groupName": "container images (non-major)",
+      "automerge": true,
+      "platformAutomerge": true
     }
   ]
 }
