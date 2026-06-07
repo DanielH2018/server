@@ -63,24 +63,33 @@ the template validator render unchanged); `lan` on `daniel-pi`.
 Follows the existing shared-macro convention (`traefik.yml.j2`, `networks.yml.j2`,
 `autokuma.yml.j2`, `resources.yml.j2`). Imports `labels` from `traefik.yml.j2`.
 
-Three macros, each emitting *either/or* based on
+Two macros, **both invoked at column 0 on their own line** (each bakes in the service-block
+indentation; the "off" mode renders to a single harmless blank line, avoiding a
+trailing-whitespace violation). Mode is
 `container_item.expose_mode | default(expose_mode | default('traefik'))`:
 
 - **`web_ui_labels(internal_port=None)`** — in `traefik` mode emits the existing Traefik
-  `labels()` (container = `hostname|name`, port = `internal_port | container_item.port`,
-  network = first of `networks`, authelia = `use_authelia`). In `lan` mode emits nothing.
-  Slots into a template's `labels:` block before `kuma()`.
+  `labels()` at 6-space indent (container = `hostname|name`, port =
+  `internal_port | container_item.port`, network = first of `networks`, authelia =
+  `use_authelia`). In `lan` mode emits nothing. Also DRYs up the 4-arg `labels()` unpacking
+  that every template currently repeats. Slots into a template's `labels:` block before
+  `kuma()`.
 - **`web_ui_ports_block(internal_port)`** — in `lan` mode emits a full `ports:` block with
   one item `"{{ server_ip }}:{{ container_item.port }}:{{ internal_port }}/tcp"`. In
   `traefik` mode emits nothing. For services whose only published port is the UI
   (glances, dozzle).
-- **`lan_port_item(internal_port)`** — in `lan` mode emits just the indented list item
-  `- "{{ server_ip }}:{{ container_item.port }}:{{ internal_port }}/tcp"`. In `traefik`
-  mode emits nothing. For services that already have a `ports:` block (wg-easy's UDP port).
 
-**Whitespace:** macros must respect Ansible's `trim_blocks`/`lstrip_blocks`. Validate with
+`wg-easy` does **not** use a third macro: it always publishes its WireGuard UDP port, so it
+appends the LAN UI port with a small inline `{% if … == 'lan' %}` conditional under its
+existing `ports:` block (with `trim_blocks`, the "off" mode renders nothing — no blank line).
+
+**Whitespace:** the macros use `{% if %}` (relying on `trim_blocks` to eat the tag's
+newline) and `{%- endif %}` to strip the content's trailing newline, with `if`/`endif` at
+column 0 so no stray indent is injected. Validate with
 `scripts/validate_compose_templates.py` — the vanilla-Jinja2 harness misses Ansible's
 whitespace behavior (see `compose-healthcheck-dollar-escaping` and the validator memo).
+Also add `expose` to the validator's `files` regex in `prek.toml` so edits to the macro
+re-trigger validation.
 
 ### Component changes
 
@@ -89,13 +98,15 @@ whitespace behavior (see `compose-healthcheck-dollar-escaping` and the validator
 - Rewrite `ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2` to be
   host-agnostic; **delete the entire `wg-easy-pi` role** (`tasks`, `templates`, `meta`,
   `CLAUDE.md`).
-- Import `web_ui_labels`, `lan_port_item` from `expose.yml.j2`.
+- Import `web_ui_labels` from `expose.yml.j2`.
 - `ports:` block always publishes the UDP listener
-  `"{{ container_item.udp_port }}:{{ container_item.udp_port }}/udp"`, then appends
-  `{{ lan_port_item('51821') }}` (LAN-binds the UI only on the Pi).
+  `"{{ container_item.udp_port }}:{{ container_item.udp_port }}/udp"`, then an inline
+  `{% if … == 'lan' %}` appends the LAN UI item
+  `"{{ server_ip }}:{{ container_item.port }}:51821/tcp"` (Pi only).
 - `environment:` adds `WG_PORT={{ container_item.udp_port }}` (explicit on both hosts).
   `WG_HOST=wireguard.{{ domain }}` unchanged (resolves per host domain).
-- `labels:` block: `{{ web_ui_labels('51821') }}` then `{{ kuma(container_item.name) }}`.
+- `labels:` block: `{{ web_ui_labels('51821') }}` (column 0) then
+  `{{ kuma(container_item.name) }}`.
 - Unchanged: `cap_drop: ALL` + `cap_add: [NET_ADMIN, NET_RAW]`, sysctls
   (`ip_forward`, `src_valid_mark`), `security_opt`, native image healthcheck (no compose
   `healthcheck:`), `service_networks()`/`external_networks()`, `resources('0.50','256M','0.05','32M')`.
