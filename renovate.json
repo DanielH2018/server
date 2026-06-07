@@ -19,6 +19,17 @@
         "image:\\s*[\"']?(?<depName>[^:\\s\"']+):(?<currentValue>[^\\s\"'@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
       ],
       "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Pinned hook revisions in prek.toml. Renovate's built-in pre-commit manager only scans .pre-commit-config.yaml, not prek.toml, so these (pre-commit-hooks, ansible-lint, gitleaks) would age silently. Match each GitHub repo URL with its adjacent rev tag.",
+      "managerFilePatterns": [
+        "/(^|/)prek\\.toml$/"
+      ],
+      "matchStrings": [
+        "repo\\s*=\\s*\"https://github\\.com/(?<depName>[^\"]+?)(?:\\.git)?\"\\s+rev\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases"
     }
   ],
   "packageRules": [
@@ -41,6 +52,11 @@
       "matchDatasources": ["docker"],
       "matchPackageNames": ["/linuxserver/"],
       "versioning": "loose"
+    },
+    {
+      "description": "Keep prek.toml hook bumps in their own weekly group, separate from the container-image group. They match the custom.regex manager, so the non-major auto-merge + 7-day soak rule above already applies; this only overrides the group name. Majors stay manual (no automerge rule matches them).",
+      "matchFileNames": ["prek.toml"],
+      "groupName": "prek hooks"
     }
   ]
 }
