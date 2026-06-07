@@ -65,8 +65,8 @@ files = "^(ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|an
 # works regardless of the system Python. Requires uv on PATH (CI installs astral-sh/setup-uv).
 [[repos.hooks]]
 id = "pytest"
-name = "Run Python unit tests (toposort + monitor-bridge + readonly-hook + smoke)"
+name = "Run Python unit tests (toposort + monitor-bridge + readonly-hook + smoke + gitops)"
 entry = "uv run python -m pytest"
 language = "system"
 pass_filenames = false
-files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/containers/monitor-bridge/files/.*\\.py|\\.claude/hooks/.*\\.py|scripts/.*\\.py|pyproject\\.toml)$"
+files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/containers/monitor-bridge/files/.*\\.py|ansible/roles/setup/gitops_deploy/files/.*\\.py|\\.claude/hooks/.*\\.py|scripts/.*\\.py|pyproject\\.toml)$"

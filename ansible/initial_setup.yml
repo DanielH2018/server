@@ -15,6 +15,7 @@
     - { role: initial_setup, tags: ["initial_setup"] }
     - { role: sops_setup, tags: ["sops_setup"] }
     - { role: docker_install, tags: ["docker_install"] }
+    - { role: gitops_deploy, tags: ["gitops_deploy"], when: inventory_hostname == 'daniel-server' }
     - { role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == 'daniel-pi' }
   handlers:
     - name: Restart fail2ban

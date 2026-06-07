@@ -20,6 +20,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/containers/monitor-bridge/files",
   ".claude/hooks",
   "scripts",                         # closes the smoke_extract CI gap
+  "ansible/roles/setup/gitops_deploy/files",   # deploy_logic decision tests
 ]
 addopts = "-q"
 pythonpath = ["ansible/filter_plugins"]   # lets test_toposort import toposort (replaces conftest.py)
