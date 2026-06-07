@@ -7,8 +7,8 @@ reactivation. See the repo-root `CLAUDE.md` for shared conventions.
 ## Status
 - None of these appear (uncommented) in `ansible/inventory/host_vars/*.yml` →
   `containers_list`, so `deploy.yml` never touches them.
-- Most predate the `meta/deps.yml` dependency system (only `file-browser` has a `meta/`),
-  so they have **no dependency declarations**.
+- Most predate the `meta/deps.yml` dependency system (only `file-browser` and `minecraft`
+  have a `meta/`), so the rest have **no dependency declarations**.
 
 ## Reactivating one
 1. Uncomment (or add) its block in the relevant `host_vars/<host>.yml` `containers_list`
