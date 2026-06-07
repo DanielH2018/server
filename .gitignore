@@ -13,6 +13,7 @@
 !/renovate.json
 !/pyproject.toml
 !/uv.lock
+!/.python-version
 # Make sure these are ignored
 ansible/.env
 ansible/.aws

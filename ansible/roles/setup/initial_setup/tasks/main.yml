@@ -41,10 +41,11 @@
 
 - name: Install Python CLI tooling as uv tools
   # uv manages global CLI tools in isolated venvs (~/.local/share/uv/tools), exposing
-  # shims in ~/.local/bin — the pipx replacement. ansible-core also backs the repo's
-  # `uv run` test/validate prek hooks (via pyproject.toml), but as a CLI tool here it is
-  # what runs deploys. Per-user, so `prek install` (below) finds prek on ~/.local/bin.
-  ansible.builtin.command: "{{ ansible_facts.env.HOME }}/.local/bin/uv tool install {{ item }}"
+  # shims in ~/.local/bin — the pipx replacement. Pinned to Python 3.13 to match the
+  # repo's .python-version (the test/validate `uv run` hooks); ansible-core also backs
+  # those hooks (via pyproject.toml), but as a CLI tool here it is what runs deploys.
+  # Per-user, so `prek install` (below) finds prek on ~/.local/bin.
+  ansible.builtin.command: "{{ ansible_facts.env.HOME }}/.local/bin/uv tool install --python 3.13 {{ item }}"
   args:
     creates: "{{ ansible_facts.env.HOME }}/.local/share/uv/tools/{{ item }}"
   loop:
