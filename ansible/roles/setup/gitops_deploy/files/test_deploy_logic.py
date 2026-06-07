@@ -1,5 +1,5 @@
 # ansible/roles/setup/gitops_deploy/files/test_deploy_logic.py
-from deploy_logic import services_from_changed_paths, next_action
+from deploy_logic import services_from_changed_paths, next_action, container_names
 
 
 def test_single_service_template():
@@ -60,3 +60,36 @@ def test_next_action_deploy_when_origin_ahead():
 def test_next_action_deploy_when_hold_is_stale():
     # origin advanced past the held bad SHA (operator reverted) -> deploy again
     assert next_action("aaa", "ccc", "bad") == "deploy"
+
+
+# A role may run several containers; the bumped image's container is often NOT
+# the role-named one (e.g. cadvisor lives in the prometheus role). The health
+# gate must inspect the actual container_name values from the rendered compose.
+def test_container_names_multi_container():
+    compose = (
+        "services:\n"
+        "  influxdb:\n"
+        "    container_name: scrutiny-influxdb\n"
+        "  web:\n"
+        "    container_name: scrutiny\n"
+        "  collector:\n"
+        "    container_name: scrutiny-collector\n"
+    )
+    assert container_names(compose) == ["scrutiny-influxdb", "scrutiny", "scrutiny-collector"]
+
+
+def test_container_names_strips_quotes():
+    assert container_names('    container_name: "cadvisor"\n') == ["cadvisor"]
+
+
+def test_container_names_ignores_other_keys():
+    compose = "    image: ghcr.io/google/cadvisor:v0.53.0\n    restart: unless-stopped\n"
+    assert container_names(compose) == []
+
+
+def test_container_names_dedupes():
+    assert container_names("    container_name: a\n    container_name: a\n") == ["a"]
+
+
+def test_container_names_empty():
+    assert container_names("") == []

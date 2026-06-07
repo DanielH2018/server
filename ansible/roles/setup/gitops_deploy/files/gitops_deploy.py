@@ -22,9 +22,17 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from deploy_logic import services_from_changed_paths, next_action  # noqa: E402
+from deploy_logic import (  # noqa: E402
+    container_names,
+    next_action,
+    services_from_changed_paths,
+)
 
 HOLD_FILE = "/var/lib/gitops-deploy/hold_sha"
+# Last origin SHA we've already alerted on for a broad change, so a deferred
+# broad change doesn't re-page Discord every 30-min tick until it's resolved.
+BROAD_FILE = "/var/lib/gitops-deploy/broad_alerted_sha"
+CURL_IMAGE = "curlimages/curl:8.11.1"  # pinned; throwaway push-ping container
 
 
 def cfg() -> dict[str, str]:
@@ -56,24 +64,32 @@ def log(msg: str) -> None:
     print(msg, flush=True)
 
 
-def read_hold() -> str | None:
+def _read_marker(path: str) -> str | None:
     try:
-        with open(HOLD_FILE) as fh:
+        with open(path) as fh:
             return fh.read().strip() or None
     except FileNotFoundError:
         return None
 
 
-def write_hold(sha: str | None) -> None:
-    os.makedirs(os.path.dirname(HOLD_FILE), exist_ok=True)
+def _write_marker(path: str, sha: str | None) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     if sha is None:
         try:
-            os.remove(HOLD_FILE)
+            os.remove(path)
         except FileNotFoundError:
             pass
     else:
-        with open(HOLD_FILE, "w") as fh:
+        with open(path, "w") as fh:
             fh.write(sha)
+
+
+def read_hold() -> str | None:
+    return _read_marker(HOLD_FILE)
+
+
+def write_hold(sha: str | None) -> None:
+    _write_marker(HOLD_FILE, sha)
 
 
 def discord(content: str) -> None:
@@ -95,27 +111,55 @@ def kuma_push(status: str, msg: str) -> None:
         return
     url = f"{base}/{token}?status={status}&msg={urllib.parse.quote(msg)}"
     # Host can't resolve the container DNS name; push from inside the monitoring net.
-    subprocess.run(
-        ["docker", "run", "--rm", "--network", NET, "curlimages/curl:latest",
+    r = subprocess.run(
+        ["docker", "run", "--rm", "--network", NET, CURL_IMAGE,
          "-sf", "-m", "10", url],
         capture_output=True, text=True,
     )
+    if r.returncode != 0:  # best-effort, but don't fail silently — stale monitor otherwise
+        log(f"kuma push failed (rc={r.returncode}): {r.stderr.strip() or r.stdout.strip()}")
 
 
-def health_ok(service: str) -> bool:
+def health_ok(container: str, settle_checks: int = 3) -> bool:
+    """True if `container` reaches 'healthy', or — for an image with no
+    HEALTHCHECK — stays 'running' across `settle_checks` consecutive polls
+    (~20s) so a boot-then-crash loop doesn't slip the gate the way a single
+    'running' sample would. Polls until HEALTH_TIMEOUT_S, then fails."""
     deadline = time.time() + TIMEOUT
+    running_streak = 0
     while time.time() < deadline:
-        st = run(["docker", "inspect", "-f", "{{.State.Health.Status}}", service],
+        st = run(["docker", "inspect", "-f", "{{.State.Health.Status}}", container],
                  cwd=None, check=False)
         if st == "healthy":
             return True
-        if st == "":  # no healthcheck -> fall back to "running"
-            run_st = run(["docker", "inspect", "-f", "{{.State.Running}}", service],
+        if st == "":  # no healthcheck (or container gone) -> require sustained running
+            run_st = run(["docker", "inspect", "-f", "{{.State.Running}}", container],
                          cwd=None, check=False)
-            if run_st == "true":
+            running_streak = running_streak + 1 if run_st == "true" else 0
+            if running_streak >= settle_checks:
                 return True
+        else:  # 'starting' / 'unhealthy' -> reset the streak, keep waiting
+            running_streak = 0
         time.sleep(10)
     return False
+
+
+def containers_for(service: str) -> list[str]:
+    """Container names declared by a deployed service's rendered compose file.
+    Falls back to the service name if the file is missing or names none."""
+    path = os.path.join(REPO, "containers", service, "docker-compose.yml")
+    try:
+        with open(path) as fh:
+            names = container_names(fh.read())
+    except FileNotFoundError:
+        names = []
+    return names or [service]
+
+
+def service_healthy(service: str) -> bool:
+    # A role may run several containers; gate every one (the bumped image's
+    # container is often not the role-named one).
+    return all(health_ok(c) for c in containers_for(service))
 
 
 def deploy(services: set[str]) -> None:
@@ -148,9 +192,12 @@ def main() -> int:
     cs = services_from_changed_paths(paths)
 
     if cs.broad:
-        discord(f"⚠️ gitops-deploy: shared template / inventory changed in "
-                f"`{origin[:8]}` — deferring to a manual full deploy "
-                f"(`ansible-playbook ansible/deploy.yml`).")
+        if _read_marker(BROAD_FILE) != origin:  # alert once per broad SHA, not every tick
+            discord(f"⚠️ gitops-deploy: shared template / inventory changed in "
+                    f"`{origin[:8]}` — deferring to a manual full deploy "
+                    f"(`ansible-playbook ansible/deploy.yml`), then `git merge --ff-only "
+                    f"origin/{BRANCH}` on the host to clear it.")
+            _write_marker(BROAD_FILE, origin)
         kuma_push("up", "broad change deferred")
         return 0
     if not cs.services:
@@ -161,7 +208,7 @@ def main() -> int:
     run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])
     deploy(cs.services)
 
-    failed = [s for s in sorted(cs.services) if not health_ok(s)]
+    failed = [s for s in sorted(cs.services) if not service_healthy(s)]
     if not failed:
         write_hold(None)
         kuma_push("up", f"deployed {','.join(sorted(cs.services))}")

@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 _ACTIVE_TPL = re.compile(
     r"^ansible/roles/containers/(?!archive/)([^/]+)/templates/docker-compose\.yml\.j2$"
 )
+# A `container_name:` line in a rendered docker-compose.yml.
+_CONTAINER_NAME = re.compile(r'^\s*container_name:\s*["\']?([^\s"\']+)["\']?\s*$')
 # Changes whose blast radius we don't try to scope automatically.
 _BROAD_PREFIXES = (
     "ansible/templates/",                 # shared macros (traefik/networks/resources/...)
@@ -52,3 +54,19 @@ def next_action(local_head: str, origin_head: str, hold_sha: str | None) -> str:
     if hold_sha is not None and origin_head == hold_sha:
         return "skip_hold"
     return "deploy"
+
+
+def container_names(compose_text: str) -> list[str]:
+    """Every `container_name:` declared in a rendered docker-compose.yml, in order.
+
+    The deployer health-gates these, not the role/service name: a single role
+    often runs several containers and the Renovate-bumped image's container is
+    usually NOT the role-named one (e.g. `cadvisor` lives in the `prometheus`
+    role, `scrutiny-influxdb` in `scrutiny`).
+    """
+    out: list[str] = []
+    for line in compose_text.splitlines():
+        m = _CONTAINER_NAME.match(line)
+        if m and m.group(1) not in out:
+            out.append(m.group(1))
+    return out

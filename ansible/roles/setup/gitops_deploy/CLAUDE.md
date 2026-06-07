@@ -26,5 +26,8 @@ the held SHA and the hold clears automatically.
 host can't resolve container DNS directly.
 
 ## Logic tests
-`files/test_deploy_logic.py` covers path→service mapping and the next-action decision.
-Run via the repo pytest hook (`uv run pytest ansible/roles/setup/gitops_deploy/files`).
+`files/test_deploy_logic.py` covers path→service mapping, the next-action decision, and
+`container_names()` (the health gate inspects every `container_name:` in the changed
+service's rendered compose — a role often runs several containers and the bumped image's
+container is usually not the role-named one). Run via the repo pytest hook
+(`uv run pytest ansible/roles/setup/gitops_deploy/files`).

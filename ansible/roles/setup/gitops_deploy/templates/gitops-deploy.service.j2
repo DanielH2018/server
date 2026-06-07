@@ -8,6 +8,10 @@ OnFailure=gitops-deploy-alert.service
 Type=oneshot
 User={{ sys_user }}
 WorkingDirectory=/home/{{ sys_user }}/server
+# Put the operator's uv-tool ansible-playbook (~/.local/bin) first so the deployer
+# uses the SAME ansible-core the operator validates with — systemd's default PATH
+# would otherwise pick a different /usr/local/bin install (toolchain drift).
+Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/bin/python3 /opt/gitops-deploy/gitops_deploy.py
 # SOPS age key is already in the user's home; filter plugins auto-load next to
 # ansible/deploy.yml, so no ANSIBLE_CONFIG is needed.
