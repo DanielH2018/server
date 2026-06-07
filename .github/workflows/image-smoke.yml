@@ -1,0 +1,72 @@
+name: image-smoke
+
+on:
+  pull_request:
+    paths:
+      - "ansible/roles/containers/**/templates/docker-compose.yml.j2"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: pull + boot changed images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0  # no floating v8 tag is published; pin the exact release
+
+      - name: Collect changed image refs
+        id: images
+        env:
+          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+        run: |
+          git fetch origin "$BASE_REF" --depth=1
+          diff="$(git diff "origin/$BASE_REF"...HEAD -- 'ansible/roles/containers/**/templates/docker-compose.yml.j2')"
+          images="$(printf '%s' "$diff" | uv run python scripts/smoke_extract.py)"
+          echo "list<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$images" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "Changed images:"; echo "$images"
+
+      - name: Pull + boot each image
+        if: steps.images.outputs.list != ''
+        env:
+          LIST: ${{ steps.images.outputs.list }}  # via env so refs are data, never shell source
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r img; do
+            [ -z "$img" ] && continue
+            echo "::group::smoke $img"
+            docker pull "$img"
+            cid="$(docker run -d --rm "$img" || true)"
+            if [ -z "$cid" ]; then echo "FAIL: $img did not start"; fail=1; echo "::endgroup::"; continue; fi
+            # If the image declares a HEALTHCHECK, wait up to 60s for healthy.
+            has_hc="$(docker inspect -f '{{if .Config.Healthcheck}}yes{{end}}' "$cid")"
+            ok=1
+            if [ "$has_hc" = "yes" ]; then
+              for _ in $(seq 1 30); do
+                st="$(docker inspect -f '{{.State.Health.Status}}' "$cid" 2>/dev/null || echo gone)"
+                [ "$st" = "healthy" ] && { ok=0; break; }
+                [ "$st" = "gone" ] && break
+                sleep 2
+              done
+            else
+              # No healthcheck: assert it stays up 30s without crash-looping.
+              sleep 30
+              [ "$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null || echo false)" = "true" ] && ok=0
+            fi
+            [ "$ok" -ne 0 ] && { echo "FAIL: $img unhealthy / exited"; docker logs "$cid" 2>&1 | tail -n 30; fail=1; }
+            docker rm -f "$cid" >/dev/null 2>&1 || true
+            echo "::endgroup::"
+          done <<< "$LIST"
+          exit "$fail"
