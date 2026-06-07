@@ -1,92 +1,103 @@
-# Server Homelab Setup
+# Host Bring-Up Runbook
 
-## Send Setup Folder to Server
+One-time, low-level steps to get a **new physical host** ready for this repo's Ansible.
+Once the host is reachable over SSH with the repo cloned, day-to-day deploys, tooling (uv),
+secrets (SOPS), and "adding a service" are documented in the repo-root
+[`README.md`](../README.md) and [`CLAUDE.md`](../CLAUDE.md) — this file only covers the
+OS/hardware bring-up that those don't.
 
-1. Create SSH key
-   1. Follow <https://phoenixnap.com/kb/generate-ssh-key-windows-10>
-2. Login to the remote machine and setup password
-3. Setup WiFi (if needed):
-   1. Run `cd /etc/netplan`.
-   2. Run `ls` and note the file present.
-   3. Run `sudo nano <file>`.
-   4. Copy the following:
+## 1. Reach the host over SSH
 
-      ```yaml
-      wifis:
-          wlan0:
-              dhcp4: true
-              optional: true
-              access-points:
-                  "Wifi SSID":
-                      password: your-wifi-password
-      ```
+1. Generate an SSH key (e.g. <https://phoenixnap.com/kb/generate-ssh-key-windows-10>) and set
+   a password on the new machine.
+2. **WiFi (if no ethernet):** edit the file under `/etc/netplan/` (`ls` to find it):
 
-   5. Run `sudo netplan apply`
-   6. Run `ip a` and locate the server's local ip address
-4. Copy SSH key from local to remote:
-   1. On local, run `type C:\Users\<username>\.ssh\id_rsa.pub | ssh username@remote_host "mkdir -p ~/.ssh && touch ~/.ssh/authorized_keys && chmod -R go= ~/.ssh && cat >> ~/.ssh/authorized_keys"`.
-5. SSH with key into server
-6. Copy repository from git
-   1. Run `git config --global user.name "your_username"`.
-   2. Run `git config --global user.email "your_email_address@example.com"`.
-   3. Run `git config --global credential.helper store`
-   4. Run `git clone https://github.com/DanielH2018/server.git`.
-      1. For password, provide a personal token generated from github.
-7. Copy secrets.yml from local to remote:
-   1. Run `scp -r <secrets file path> ubuntu@<server ip>:~/server/ansible/`
-      1. When prompted, enter the password for the remote user
-8. Fix lvm (as needed, partition name likely different):
-   1. Run `sudo lvm`
-   2. Run `lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv`
-   3. Run `exit`
-   4. Run `sudo resize2fs /dev/ubuntu-vg/ubuntu-lv`
+   ```yaml
+   wifis:
+       wlan0:
+           dhcp4: true
+           optional: true
+           access-points:
+               "Wifi SSID":
+                   password: your-wifi-password
+   ```
 
-For more instructions, look at the README in the ansible/ folder.
+   then `sudo netplan apply`, and find the host's IP with `ip a`.
+3. Copy your public key to the host:
+   `type C:\Users\<username>\.ssh\id_rsa.pub | ssh username@remote_host "mkdir -p ~/.ssh && touch ~/.ssh/authorized_keys && chmod -R go= ~/.ssh && cat >> ~/.ssh/authorized_keys"`
+4. SSH in with the key.
 
-Not covered in these docs is port forwarding, and Cloudflare DNS setup.
+## 2. Clone the repo
 
-## Setup Server Environment
+```bash
+git config --global user.name  "your_username"
+git config --global user.email "your_email@example.com"
+git config --global credential.helper store
+git clone https://github.com/DanielH2018/server.git   # use a GitHub PAT as the password
+```
 
-1. If using Intel XE graphics, ensure `/dev/dri/` exists, otherwise run `sudo apt install linux-oem-22.04` and reboot.
-2. Run `pip install ansible`
-3. Run `ansible-playbook initial_setup.yml --ask-become-pass`.
-4. Run `source ~/.bashrc`
-5. Run `ansible-playbook deploy.yml --ask-become-pass`.
-6. Run `docker exec crowdsec cscli bouncers add bouncer-traefik` and save api key to .env
+Secrets are committed **encrypted** (SOPS/age), so the clone already contains
+`ansible/vars/secrets.yml` — there is no separate secrets-copy step. To let this new host
+*decrypt* them, follow **"Onboarding a host to SOPS"** in the repo-root
+[`CLAUDE.md`](../CLAUDE.md): run `ansible/bootstrap.yml`, add the host's age public key to
+`ansible/.sops.yaml`, then `sops updatekeys` on a host that can already decrypt.
 
-## Add Container to Server Environment
+## 3. Storage (server, as needed)
 
-1. Create role and tags.
-2. Create folder in `roles/containers`, and create `tasks` and `templates` subdirectories.
-3. Create `main.yml` in `tasks` and `docker-compose.yml.j2` in templates.
-4. Add environment variables to .env and update the docker compose.
-5. Add traefik labels and cloudflare CNAME as needed.
-6. Add entry to `inventory/host_vars` for each server it should run on.
-7. Run `ansible-playbook deploy.yml --tags "<svc-name>"`.
+Extend the root LV to fill the disk (the partition name is likely different):
 
-## Setup LaTeX Editor
+```bash
+sudo lvm
+lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
+exit
+sudo resize2fs /dev/ubuntu-vg/ubuntu-lv
+```
 
-1. Clone Resume repository in server
-2. Copy .devcontainer from <https://github.com/James-Yu/LaTeX-Workshop/tree/master/samples/docker>
-3. Install VS Code Remote - Containers, and SSH
-4. Reopen the Resume directory with the container
+## 4. Intel iGPU / QuickSync (Jellyfin / Tdarr transcode)
 
-## Setup Intel QSV
+1. If `/dev/dri/` is missing: `sudo apt install linux-oem-22.04`, then reboot.
+2. Enable GuC:
 
-1. `sudo mkdir -p /etc/modprobe.d`
-2. `sudo sh -c "echo 'options i915 enable_guc=2' >> /etc/modprobe.d/i915.conf"`
-3. `sudo update-initramfs -u && sudo update-grub`
-4. `sudo reboot`
+   ```bash
+   sudo mkdir -p /etc/modprobe.d
+   echo 'options i915 enable_guc=2' | sudo tee -a /etc/modprobe.d/i915.conf
+   sudo update-initramfs -u && sudo update-grub && sudo reboot
+   ```
 
-## Duplicati
+## 5. Run the playbooks
 
-1. For backing up to Google Drive, to store not in the root directory, you need a full access token which can be attained here: <https://duplicati-oauth-handler.appspot.com/>
+Ansible runs through the repo's pinned uv env (see repo-root [`CLAUDE.md`](../CLAUDE.md) →
+"Common Commands"). From the repo root:
 
-## journald Logs
+```bash
+uv run ansible-playbook ansible/initial_setup.yml   # OS hardening; installs uv/docker/tooling
+uv run ansible-playbook ansible/deploy.yml          # deploy all containers (dependency-ordered)
+```
 
-1. `sudo nano /etc/systemd/journald.conf`
-2. Find, uncomment and change the parameters: `MaxLevelStore=notice` `MaxLevelSyslog=notice`
-3. `sudo systemctl restart systemd-journald`
+After the first deploy, register the Traefik bouncer with CrowdSec and store the key in
+`secrets.yml`: `docker exec crowdsec cscli bouncers add bouncer-traefik`.
+
+> **Adding a new service**, **secrets**, and **deploy flow** are documented once in the
+> repo-root [`CLAUDE.md`](../CLAUDE.md) and [`README.md`](../README.md) and the
+> `new-container` skill — not duplicated here. **Backups** are handled by the Kopia role
+> (snapshots the bind-mounted `containers/` data), not the legacy Duplicati setup.
+
+Not covered here: home-router port forwarding and Cloudflare DNS setup.
+
+## Misc host notes
+
+### Trim journald log level
+
+```bash
+sudo nano /etc/systemd/journald.conf   # uncomment + set MaxLevelStore=notice, MaxLevelSyslog=notice
+sudo systemctl restart systemd-journald
+```
+
+### LaTeX editor (code-server devcontainer)
+
+1. Clone the Resume repository on the server.
+2. Copy `.devcontainer` from <https://github.com/James-Yu/LaTeX-Workshop/tree/master/samples/docker>.
+3. Install the VS Code Remote - Containers + SSH extensions, then reopen the directory in the container.
 
 ## Email-to-RSS (Cloudflare Worker)
 

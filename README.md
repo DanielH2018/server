@@ -12,7 +12,7 @@ with **SOPS/age**, and reverse-proxied behind **Cloudflare**.
 | Host | Role | Notes |
 |------|------|-------|
 | `daniel-server` | Main server | Intel XE iGPU (Jellyfin/Tdarr transcode), LVM storage. Internet-exposed via Cloudflare. |
-| `daniel-pi` | Raspberry Pi | **LAN-only**, never internet-exposed. Runs Portainer + a WireGuard endpoint. |
+| `daniel-pi` | Raspberry Pi | **LAN-only**, never internet-exposed. WireGuard endpoint + a small LAN utility stack (Glances, Dozzle). |
 
 ## Repository layout
 
@@ -94,13 +94,15 @@ ansible-playbook ansible/initial_setup.yml                      # host bootstrap
   Grafana (datasources + dashboards [provisioned as code](ansible/roles/containers/grafana/));
   Loki + Promtail for logs; Uptime Kuma (monitors auto-created from AutoKuma labels);
   `monitor-bridge` turns Prometheus/Kopia signals into Uptime Kuma push alerts (backup
-  freshness, disk, cert, memory, container restarts/OOM, scrape-target down, Traefik 5xx).
+  freshness, disk, cert, memory, container restarts/OOM, CPU throttling, scrape-target down,
+  Traefik 5xx).
 - **Backups** — Kopia snapshots the bind-mounted service data under `containers/`. Services
   must use `./data` bind mounts (named volumes escape Kopia's scope); `.kopiaignore` is
   anchored to `/data/`.
 - **Updates** — Watchtower auto-updates mutable `:latest` images; **Renovate** opens PRs for
-  version-pinned images (see [`.github/renovate.json`](.github/renovate.json)). Renovate
-  requires installing the Renovate GitHub App on the repo once.
+  version-pinned images and the pinned `prek.toml` hook revisions (see
+  [`renovate.json`](renovate.json)). Renovate requires installing the Renovate GitHub App on
+  the repo once.
 - **Security** — Authelia SSO + TOTP, CrowdSec, fail2ban, UFW (default-deny inbound),
   source-route rejection. See [`docs/security-tools.md`](docs/security-tools.md).
 
