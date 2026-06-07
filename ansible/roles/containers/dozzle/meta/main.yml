@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  author: DanielH2018
+  description: "Real-time Docker log viewer"
+  license: MIT
+  min_ansible_version: "2.15"
+
+# Logical ordering: requires docker-proxy (reads the Docker API through it).
+# Actual sequencing is computed by the toposort filter in deploy.yml reading meta/deps.yml,
+# not by Ansible meta dependencies (which conflict with the include_role loop
+# variable architecture used in deploy.yml).
+dependencies: []

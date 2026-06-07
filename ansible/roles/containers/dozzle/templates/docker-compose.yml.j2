@@ -1,0 +1,42 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+{% from 'expose.yml.j2' import web_ui_labels, web_ui_ports_block with context %}
+---
+
+services:
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    # Read-only log viewer: reaches Docker through the read-only docker-proxy (no raw
+    # socket mount). It only needs GET /containers, /logs, /events — all allowed by the
+    # shared read-only proxy (CONTAINERS=1, EVENTS=1, POST=0). Verify on deploy.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - DOCKER_HOST=tcp://docker-proxy:2375
+      - DOZZLE_NO_ANALYTICS=true
+      - TZ={{ tz }}
+    {{ service_networks() }}
+    healthcheck:
+      # Dozzle ships a self-check subcommand in its own binary (no curl/wget needed,
+      # so it works under cap_drop ALL). Verify the path on deploy (docker inspect).
+      test: ["CMD", "/dozzle", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+{{ web_ui_labels('8080') }}
+      {{ kuma(container_item.name) }}
+
+      # Watchtower
+      - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
+{{ web_ui_ports_block('8080') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('0.25', '128M', '0.05', '16M') }}
+
+{{ external_networks() }}
