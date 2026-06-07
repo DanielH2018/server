@@ -1,4 +1,4 @@
 # Future Plans
 
 - Setup Authelia for Raspberry Pi
-- Add python environment configuration to CLAUDE docs
+- Add scraping python scripts to git(clean up git hook, and refactor for shared functionality.)
