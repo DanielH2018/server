@@ -21,7 +21,9 @@
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/provisioning/dashboards.yml"
     mode: "0664"
 
-- name: Copy seed dashboards (Node Exporter Full, cAdvisor, Traefik)
+# Recurses subdirectories — with foldersFromFilesStructure: true each subdir
+# (e.g. dashboards/Crowdsec/) becomes a Grafana folder of the same name.
+- name: Copy provisioned dashboards (community seeds + exported custom boards)
   ansible.builtin.copy:
     src: dashboards/
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/dashboards/"

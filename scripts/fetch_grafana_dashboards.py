@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Fetch + adapt Grafana community dashboards for headless (provisioned) use.
 
+Companion to ``export_grafana_dashboards.py`` (live DB -> code): this script owns the
+community boards (upstream = grafana.com); that one owns the custom boards (upstream = the
+live Grafana DB). They write disjoint files in ``files/dashboards/`` and never clobber each
+other (the exporter skips the uids seeded here).
+
 The grafana role seeds a few community dashboards as code. Community exports assume the
 interactive *Import* flow (which prompts for a datasource and populates template variables);
 file-provisioning skips that, so a raw export shows "datasource not found" or empty panels.

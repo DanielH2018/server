@@ -17,11 +17,19 @@ Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md
     (Crowdsec/Traefik/logs) keep resolving — provisioning updates them in place by uid
     rather than delete/recreate.
   - `templates/provisioning/dashboards.yml.j2` — a file provider with `allowUiUpdates: true`
-    pointing at `/var/lib/grafana/dashboards`.
-  - `files/dashboards/*.json` — seed dashboards (Node Exporter Full 1860, cAdvisor 14282,
-    Traefik 17346). Their datasource references are **pinned to the Prometheus uid
-    `EGdsQqhVk`** (the grafana.com `${DS_*}` import placeholders are rewritten at fetch
-    time), so they resolve without the import prompt that file-provisioning skips.
+    and `foldersFromFilesStructure: true` pointing at `/var/lib/grafana/dashboards`. Each
+    subdirectory becomes a Grafana folder of the same name (e.g. `dashboards/Crowdsec/`).
+  - `files/dashboards/**/*.json` — **every** dashboard is provisioned as code, from two
+    sources (see *Editing* below):
+    - **Community boards** (`node-exporter-full`, `cadvisor`, `traefik`) — upstream is
+      grafana.com (1860 / 14282 / 17346).
+    - **Custom boards** — upstream is the live Grafana DB: the CrowdSec set
+      (`Crowdsec/`), the Loki log views (`system-logs`, `docker-app-logs`),
+      `docker-and-system-monitoring`, and `traefik-custom`.
+    - All datasource references are **pinned to the provisioned uids** (`EGdsQqhVk`
+      Prometheus / `bf4q19tuivta8e` Loki) so they resolve without the import prompt that
+      file-provisioning skips. A stale Prometheus uid (`IH0jqv6nz`) that lingered in a
+      hand-imported CrowdSec board is remapped to `EGdsQqhVk` at export time.
 - Editing in the UI still works — changes persist in Grafana's DB (`./data`); the JSON files
   are read-only and only **re-seed** a dashboard when their internal `version` is bumped.
 - Promtail ships container logs into Loki for the Explore/log views.
@@ -30,10 +38,16 @@ Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Logging: `templates/loki-config.yml.j2`, `promtail-config.yml.j2`
 - Datasources/dashboards: `templates/provisioning/*.j2`, `files/dashboards/*.json`
-- The seed dashboards in `files/dashboards/` are produced by
-  `scripts/fetch_grafana_dashboards.py` (fetches the grafana.com boards, pins datasource
-  uids, and bakes a working default into each template variable so panels render on first
-  load without manual dropdown selection). Re-run it to refresh them.
-- To add your own dashboard: drop its JSON in `files/dashboards/` (pin datasource refs to
-  uid `EGdsQqhVk` for Prometheus / `bf4q19tuivta8e` for Loki), then redeploy.
+- Two generator scripts keep `files/dashboards/` in sync, owning **disjoint** files:
+  - `scripts/fetch_grafana_dashboards.py` — *grafana.com → code*. Fetches the community
+    boards, pins datasource uids, and bakes a working default into each template variable so
+    panels render on first load without manual dropdown selection.
+  - `scripts/export_grafana_dashboards.py` — *live DB → code*. Dumps every `dash-db`
+    dashboard **except** the community ones (`SKIP_UIDS`), preserving the live folder
+    structure as subdirectories and remapping stale datasource uids. **Run this after
+    editing a custom board in the UI** to capture the change back into version control.
+- To add your own dashboard: build it in the UI, then run `export_grafana_dashboards.py`
+  (it will be captured into the matching folder), **or** drop its JSON in `files/dashboards/`
+  manually (pin datasource refs to uid `EGdsQqhVk` for Prometheus / `bf4q19tuivta8e` for
+  Loki) and redeploy.
 - Deploy: `ansible-playbook ansible/deploy.yml --tags "grafana"`

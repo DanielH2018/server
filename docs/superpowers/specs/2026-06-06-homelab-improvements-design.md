@@ -223,12 +223,22 @@ during post-deploy verification. Recorded here so the spec matches reality.
   on `proxy` only, so Prometheus (on `monitoring`) couldn't scrape `crowdsec:6060`. Joined the
   engine to `monitoring`. (Metrics were already bound `0.0.0.0:6060`.)
 
-### Not captured as code (Grafana DB only, Kopia-backed)
-These were applied to the live Grafana via its API and are **not** in the repo (the affected
-dashboards are pre-existing, hand-made, never provisioned):
-- Loki dashboards (System Logs, Docker App Logs): removed `| logfmt` (parse errors on
-  non-logfmt logs), converted the template-variable datasource from the legacy string form to
-  the object form (it was mis-resolving to the default Prometheus datasource), set valid
-  defaults (`app=syslog`, `container=sonarr`).
-- Deleted the redundant 16-panel "Node Exporter" dashboard (kept the 31-panel provisioned
-  "Node Exporter Full").
+### Follow-up: all custom dashboards now captured as code
+Originally the hand-made boards (CrowdSec ×4, the two Loki log views,
+`docker-and-system-monitoring`, the custom `traefik`) and their fixes lived **only** in the
+Grafana DB (Kopia-backed). They are now provisioned as code via a new exporter
+(`scripts/export_grafana_dashboards.py`), the DB→code mirror of the grafana.com fetcher:
+- It dumps every `dash-db` dashboard **except** the community-fetched ones (`SKIP_UIDS`),
+  preserving the live folder layout as subdirectories (`files/dashboards/Crowdsec/`) since the
+  provider uses `foldersFromFilesStructure: true`. Idempotent (immediate re-run = no diff).
+- It remaps a **stale Prometheus datasource uid** (`IH0jqv6nz`) that lingered in the CrowdSec
+  "Details per Machine" board onto the canonical `EGdsQqhVk` — a latent "datasource not found"
+  bug, now fixed in code.
+- The earlier DB-only Loki fixes (removed `| logfmt`; template-variable datasource converted
+  from legacy string to object form so it stops mis-resolving to the default Prometheus
+  datasource; defaults `app=syslog`/`container=sonarr`) are baked into the exported
+  `system-logs.json` / `docker-app-logs.json`, so a fresh Grafana rebuild reproduces them.
+- The redundant 16-panel "Node Exporter" dashboard remains deleted (the 31-panel provisioned
+  "Node Exporter Full" is the keeper). Note two Traefik boards now coexist — the community
+  "Traefik Official Standalone Dashboard" (`traefik.json`) and a custom "Traefik"
+  (`traefik-custom.json`); dedup later if desired.
