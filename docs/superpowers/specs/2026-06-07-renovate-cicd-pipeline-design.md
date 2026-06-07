@@ -42,10 +42,14 @@ Three gaps surfaced during a non-security review of the homelab:
   datasource can't version-compare them, so they never produce a bump this flow acts on.
 - The flow therefore governs the handful of semver-pinned images:
   cadvisor (`v0.53.0`), meilisearch (`v1.37.0`), influxdb (`2.2`), couchdb (`3`),
-  uptime-kuma (`2`), alpine-chrome (`124`). (`influxdb:2.2` is a stale pin worth a manual
-  look before it auto-bumps — InfluxDB majors can break Scrutiny's TSDB.)
-- **Major** version bumps are explicitly **not** auto-merged — they keep opening a normal
-  (CI-tested) PR for a deliberate human look, matching the current `renovate.json` intent.
+  uptime-kuma (`2`), alpine-chrome (`124`). (`influxdb:2.2` is a stale pin; `2.2 → 2.x` is a
+  *minor* bump, so it **will** auto-merge — the post-merge health gate + local rollback
+  (Section D) is the safety net if a Scrutiny TSDB incompatibility surfaces. An InfluxDB
+  *major* would stay manual like every other major.)
+- **Major** version bumps are **never** auto-merged, for any package or manager — they keep
+  opening a normal (CI-tested) PR for a deliberate human look, matching the current
+  `renovate.json` intent. This is enforced by scoping the `automerge` rule to
+  `matchUpdateTypes: ["minor","patch"]` only; no rule grants `automerge` to `major`.
 - No deploys run from GitHub-hosted runners. Hosts are `ansible_connection=local`, LAN-only,
   no inbound; CI is static validation + image smoke testing only. Deployment is pull-based
   on the host.
