@@ -1,6 +1,37 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommitsDisabled"
+  ],
+  "labels": ["dependencies"],
+  "schedule": ["before 6am on monday"],
+  "prHourlyLimit": 4,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Docker image tags inside Ansible docker-compose Jinja templates (containers/ is generated, so the source of truth is the .j2)",
+      "managerFilePatterns": [
+        "/^ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2$/"
+      ],
+      "matchStrings": [
+        "image:\\s*[\"']?(?<depName>[^:\\s\"']+):(?<currentValue>[^\\s\"'@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Watchtower owns mutable :latest tags — Renovate manages only version-pinned images, so leave latest alone",
+      "matchCurrentValue": "/^latest$/",
+      "enabled": false
+    },
+    {
+      "description": "Bundle minor + patch image bumps into a single weekly PR to cut noise; majors stay separate so they get a deliberate look",
+      "matchManagers": ["custom.regex"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "container images (non-major)"
+    }
   ]
 }

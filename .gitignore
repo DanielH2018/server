@@ -9,6 +9,8 @@
 !ansible.cfg
 !/.vscode
 !/.github
+!/README.md
+!/renovate.json
 # Make sure these are ignored
 ansible/.env
 ansible/.aws
