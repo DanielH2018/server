@@ -54,7 +54,7 @@ uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --check
 # Edit encrypted secrets
 sops ansible/vars/secrets.yml
 
-# Initial server setup
+# Initial server setup — first-host bring-up ORDER (uv → SOPS onboarding → this) is in ansible/README.md
 uv run ansible-playbook ansible/initial_setup.yml
 ```
 
@@ -90,7 +90,7 @@ Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hook
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
 - **Onboarding a host to SOPS** (it can't decrypt yet, so `initial_setup.yml`/`deploy.yml`
-  fail at their secret-load pre_task): run `ansible-playbook ansible/bootstrap.yml --limit <host>`
+  fail at their secret-load pre_task): run `uv run ansible-playbook ansible/bootstrap.yml --limit <host>`
   on it (no secret dependency — generates the host's own key, prints its public key), add that
   pubkey to `ansible/.sops.yaml`, `sops updatekeys ansible/vars/secrets.yml` on a host that can already
   decrypt, commit + push, then `git pull` on the new host. Multi-recipient is OR — any listed

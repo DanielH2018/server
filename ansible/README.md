@@ -37,12 +37,54 @@ git clone https://github.com/DanielH2018/server.git   # use a GitHub PAT as the 
 ```
 
 Secrets are committed **encrypted** (SOPS/age), so the clone already contains
-`ansible/vars/secrets.yml` — there is no separate secrets-copy step. To let this new host
-*decrypt* them, follow **"Onboarding a host to SOPS"** in the repo-root
-[`CLAUDE.md`](../CLAUDE.md): run `ansible/bootstrap.yml`, add the host's age public key to
-`ansible/.sops.yaml`, then `sops updatekeys` on a host that can already decrypt.
+`ansible/vars/secrets.yml` — there is no separate secrets-copy step. Letting this host
+*decrypt* them is **§4** below (and must happen before §7's `initial_setup.yml`).
 
-## 3. Storage (server, as needed)
+## 3. Install uv
+
+> **Shortcut:** [`bring-up.sh`](bring-up.sh) wraps §3–§4 — `./ansible/bring-up.sh` installs
+> uv, runs `bootstrap.yml`, and prints the §4 manual steps. The walkthrough below is what it
+> does (and the path to take if you'd rather run each step by hand).
+
+`uv` is the **only manual prerequisite** — everything else flows from it. The repo is a uv
+"virtual" project (`pyproject.toml` pins `ansible-core` in the `dev` group; `.python-version`
+pins 3.13), so `uv run ansible-playbook …` self-provisions Python + ansible-core + the runtime
+from `uv.lock`. That includes `bootstrap.yml` in §4, so no system-wide Ansible install is
+needed.
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.bashrc   # (or re-login) to pick up ~/.local/bin on PATH
+```
+
+## 4. Onboard the host to SOPS
+
+This **gates §7**: `initial_setup.yml` (and `deploy.yml`) decrypt `ansible/vars/secrets.yml` in
+a `pre_tasks` block that runs *before any role*, so on a fresh host they fail before
+`sops_setup` could install SOPS. `bootstrap.yml` breaks that chicken-and-egg — it runs
+`sops_setup` on its own (no secret dependency): installs the `age`/`sops` binaries and the
+pinned collections (incl. `community.sops`), generates this host's age key, and prints its
+public key.
+
+```bash
+uv run ansible-playbook ansible/bootstrap.yml --limit <host>   # prints "Your Public Key is: age1…"
+```
+
+> Bare `ansible-playbook` also works here (bootstrap uses only builtin modules; any ansible-core
+> will do) — but `uv run` keeps a single path now that §3 installed uv.
+
+Then:
+
+1. Add the printed `age1…` public key to `ansible/.sops.yaml` (tracked) under `age:`.
+2. On a host that can already decrypt (daniel-server): `sops updatekeys ansible/vars/secrets.yml`,
+   then commit + push the re-encrypted `secrets.yml` + `.sops.yaml`.
+3. Back on the new host: `git pull`.
+
+**First host ever** (no other host can decrypt yet): `sops_setup` seeds `ansible/.sops.yaml`
+from this host's own key, so steps 2–3 don't apply. Multi-recipient is OR — any listed key
+decrypts the whole file. See the `ansible/bootstrap.yml` header for the full flow.
+
+## 5. Storage (server, as needed)
 
 Extend the root LV to fill the disk (the partition name is likely different):
 
@@ -53,7 +95,7 @@ exit
 sudo resize2fs /dev/ubuntu-vg/ubuntu-lv
 ```
 
-## 4. Intel iGPU / QuickSync (Jellyfin / Tdarr transcode)
+## 6. Intel iGPU / QuickSync (Jellyfin / Tdarr transcode)
 
 1. If `/dev/dri/` is missing: `sudo apt install linux-oem-22.04`, then reboot.
 2. Enable GuC:
@@ -64,13 +106,13 @@ sudo resize2fs /dev/ubuntu-vg/ubuntu-lv
    sudo update-initramfs -u && sudo update-grub && sudo reboot
    ```
 
-## 5. Run the playbooks
+## 7. Run the playbooks
 
 Ansible runs through the repo's pinned uv env (see repo-root [`CLAUDE.md`](../CLAUDE.md) →
 "Common Commands"). From the repo root:
 
 ```bash
-uv run ansible-playbook ansible/initial_setup.yml   # OS hardening; installs uv/docker/tooling
+uv run ansible-playbook ansible/initial_setup.yml   # OS hardening; base pkgs, Docker, uv-tool CLIs, gitops deployer — needs §4 SOPS
 uv run ansible-playbook ansible/deploy.yml          # deploy all containers (dependency-ordered)
 ```
 

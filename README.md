@@ -77,11 +77,14 @@ These filters are unit-tested (`ansible/tests/test_toposort.py`) — run via the
 pre-commit hook.
 
 ```bash
-ansible-playbook ansible/deploy.yml --tags "<service>"          # deploy one service (+ unmet deps)
-ansible-playbook ansible/deploy.yml --tags "<service>" --check  # dry run
-ansible-playbook ansible/deploy.yml                             # deploy everything
-ansible-playbook ansible/initial_setup.yml                      # host bootstrap/hardening
+uv run ansible-playbook ansible/deploy.yml --tags "<service>"          # deploy one service (+ unmet deps)
+uv run ansible-playbook ansible/deploy.yml --tags "<service>" --check  # dry run
+uv run ansible-playbook ansible/deploy.yml                             # deploy everything
+uv run ansible-playbook ansible/initial_setup.yml                      # host bootstrap/hardening
 ```
+
+First-host bring-up (uv → SOPS onboarding → `initial_setup.yml`) is ordered in
+[`ansible/README.md`](ansible/README.md).
 
 ## Cross-cutting systems
 
