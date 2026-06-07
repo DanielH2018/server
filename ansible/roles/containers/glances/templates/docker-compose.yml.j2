@@ -1,7 +1,7 @@
-{% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'expose.yml.j2' import web_ui_labels, web_ui_ports_block with context %}
 ---
 
 services:
@@ -27,18 +27,12 @@ services:
       - "GLANCES_OPT=-w"
       - DOCKER_HOST=tcp://docker-proxy:2375
     labels:
-      {# Generate labels(container, port, docker_network, use_authelia) -#}
-      {{ labels(
-          container_item.hostname | default(container_item.name),
-          container_item.port | string,
-          (container_item.networks | default([docker_network]))[0],
-          container_item.use_authelia
-        )
-      }}
+{{ web_ui_labels('61208') }}
       {{ kuma(container_item.name) }}
 
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
+{{ web_ui_ports_block('61208') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '256M', '0.05', '32M') }}
 

@@ -1,0 +1,40 @@
+{# Host-aware web-UI exposure. Driven by `expose_mode` (host var; default 'traefik',
+   'lan' on LAN-only hosts like daniel-pi). A per-container `expose_mode` key overrides
+   the host default. Two modes:
+
+     traefik — Traefik routes the UI via labels (Authelia-gated when use_authelia);
+               no host port is published. (main server)
+     lan     — no Traefik labels; the UI port is published bound to the host's LAN IP
+               ({{ server_ip }}), reachable only on the local network. (the Pi)
+
+   Invoke BOTH macros at COLUMN 0 on their own line (NOT indented — each bakes in the
+   service-block indentation itself, and renders empty, one harmless blank line, in the
+   other mode). The surrounding template lines keep their normal indent, e.g.:
+
+       labels:
+{{ web_ui_labels('8096') }}
+         {{ kuma(container_item.name) }}
+
+{{ web_ui_ports_block('8096') }}
+
+   `web_ui_ports_block` emits a complete `ports:` block, so it is for services whose only
+   published port is the UI (glances, dozzle). wg-easy, which always publishes its
+   WireGuard UDP port, appends its LAN UI port with an inline conditional instead.
+#}
+{% from 'traefik.yml.j2' import labels with context %}
+{% macro web_ui_labels(internal_port=none) -%}
+{% if (container_item.expose_mode | default(expose_mode | default('traefik'))) != 'lan' %}
+      {{ labels(
+          container_item.hostname | default(container_item.name),
+          (internal_port if internal_port is not none else container_item.port) | string,
+          (container_item.networks | default([docker_network]))[0],
+          container_item.use_authelia
+        ) }}
+{%- endif %}
+{%- endmacro %}
+{% macro web_ui_ports_block(internal_port) -%}
+{% if (container_item.expose_mode | default(expose_mode | default('traefik'))) == 'lan' %}
+    ports:
+      - "{{ server_ip }}:{{ container_item.port }}:{{ internal_port }}/tcp"
+{%- endif %}
+{%- endmacro %}
