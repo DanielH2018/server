@@ -9,9 +9,11 @@ package = false                      # virtual project: manage deps/lock, do not
 [dependency-groups]
 dev = [                              # `dev` is uv's default group for `uv run`/`uv sync`
   "pytest>=8",
-  "ansible-core>=2.18",             # test_toposort imports ansible.errors
+  "ansible-core>=2.18",             # test_toposort imports ansible.errors; also runs deploys via `uv run ansible-playbook`
   "pyyaml",                         # validate_compose_templates
   "jinja2>=3",                      # validate_compose_templates
+  "requests",                       # community.docker modules (docker_container_info dependency check)
+  "docker",                         # community.docker SDK-backed modules
 ]
 
 [tool.pytest.ini_options]

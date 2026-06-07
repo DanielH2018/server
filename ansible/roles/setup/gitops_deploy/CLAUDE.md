@@ -3,7 +3,8 @@
 Installs a systemd **timer** (every 30 min) that runs `/opt/gitops-deploy/gitops_deploy.py`
 as `{{ sys_user }}`. The script fetches `origin/master`; if it advanced, maps changed
 `roles/containers/<svc>/templates/docker-compose.yml.j2` files to service tags, `--ff-only`
-merges, and deploys each via `ansible-playbook ansible/deploy.yml --tags <svc>`.
+merges, and deploys each via `uv run --frozen ansible-playbook ansible/deploy.yml --tags <svc>`
+(the repo-pinned env, same as the operator — needs `uv` on the unit's PATH).
 
 ## Health gate + rollback
 After deploy it polls each container's health (`max(5min)` default, see HEALTH_TIMEOUT_S).

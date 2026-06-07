@@ -164,7 +164,10 @@ def service_healthy(service: str) -> bool:
 
 def deploy(services: set[str]) -> None:
     tags = ",".join(sorted(services))
-    run(["ansible-playbook", "ansible/deploy.yml", "--tags", tags])
+    # Run via `uv run` so the deploy uses the repo's pinned env (ansible-core plus
+    # the community.docker deps requests/docker) — the same toolchain the operator
+    # uses. --frozen: install from the committed uv.lock, never mutate it on the host.
+    run(["uv", "run", "--frozen", "ansible-playbook", "ansible/deploy.yml", "--tags", tags])
 
 
 def main() -> int:

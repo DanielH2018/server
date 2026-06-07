@@ -38,21 +38,24 @@ files/            # Data migration utilities
    `ansible/roles/containers/common/CLAUDE.md`.
 
 ## Common Commands
+Run ansible through `uv run` so it uses the repo's pinned env (`ansible-core` + the
+`community.docker` deps `requests`/`docker` — see **Python & Tests**). Bare `ansible-playbook`
+(the uv-tool shim) lacks those module deps and deploys will fail.
 ```bash
 # Deploy a specific container
-ansible-playbook ansible/deploy.yml --tags "<service-name>"
+uv run ansible-playbook ansible/deploy.yml --tags "<service-name>"
 
 # Deploy all containers
-ansible-playbook ansible/deploy.yml
+uv run ansible-playbook ansible/deploy.yml
 
 # Dry run
-ansible-playbook ansible/deploy.yml --tags "<service-name>" --check
+uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --check
 
 # Edit encrypted secrets
 sops ansible/vars/secrets.yml
 
 # Initial server setup
-ansible-playbook ansible/initial_setup.yml
+uv run ansible-playbook ansible/initial_setup.yml
 ```
 
 ## Shell Commands — Shape Them to Auto-Approve
