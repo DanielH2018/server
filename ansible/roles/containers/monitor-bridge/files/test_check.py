@@ -338,3 +338,33 @@ def test_n8n_missing_stoppedat_falls_back_to_startedat():
     wf = _workflows(("1", "Prod Flow", True))
     ex = {"data": [{"workflowId": "1", "status": "error", "startedAt": _n8n_ago(5)}]}
     assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("Prod Flow", 1)]
+
+
+# --- check_n8n --------------------------------------------------------------
+
+def test_n8n_disabled_without_key():
+    # N8N_API_KEY defaults to "" in tests -> monitoring disabled, never a false page
+    ok, msg = check.check_n8n()
+    assert ok
+    assert "disabled" in msg.lower()
+
+
+def test_n8n_check_down_on_recent_failure(monkeypatch):
+    monkeypatch.setattr(check, "N8N_API_KEY", "x")
+    wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    ex = {"data": [{"workflowId": "1", "status": "error", "stoppedAt": now_iso}]}
+    monkeypatch.setattr(check, "_get_json", _seq(wf, ex))
+    ok, msg = check.check_n8n()
+    assert not ok
+    assert "Prod Flow" in msg
+
+
+def test_n8n_check_ok_when_no_failures(monkeypatch):
+    monkeypatch.setattr(check, "N8N_API_KEY", "x")
+    wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
+    ex = {"data": []}
+    monkeypatch.setattr(check, "_get_json", _seq(wf, ex))
+    ok, msg = check.check_n8n()
+    assert ok
+    assert "no active-workflow failures" in msg

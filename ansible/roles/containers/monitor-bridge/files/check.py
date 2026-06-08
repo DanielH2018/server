@@ -42,12 +42,19 @@ RESTART_WINDOW = _env("RESTART_WINDOW", "15m")
 RESTART_MAX = float(_env("RESTART_MAX", "3"))
 TRAEFIK_5XX_PCT = float(_env("TRAEFIK_5XX_PCT", "5"))
 TRAEFIK_MIN_RPS = float(_env("TRAEFIK_MIN_RPS", "0.05"))
+N8N_URL = _env("N8N_URL", "http://n8n:5678").rstrip("/")
+N8N_API_KEY = _env("N8N_API_KEY", "")
+N8N_FAIL_WINDOW = _env("N8N_FAIL_WINDOW", "15m")
+N8N_FAIL_MAX = float(_env("N8N_FAIL_MAX", "0"))
 
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
 
-def _get_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "monitor-bridge"})
+def _get_json(url, headers=None):
+    hdrs = {"User-Agent": "monitor-bridge"}
+    if headers:
+        hdrs.update(headers)
+    req = urllib.request.Request(url, headers=hdrs)
     with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 (internal URLs)
         return json.load(resp)
 
@@ -322,6 +329,28 @@ def n8n_failures(workflows_json, executions_json, window_s, now=None):
     return pairs
 
 
+def check_n8n():
+    """Failed executions of active ("Prod") n8n workflows within N8N_FAIL_WINDOW.
+
+    Polls the n8n public API on the internal network (X-N8N-API-KEY header, no Authelia).
+    Empty N8N_API_KEY -> disabled (stays up) so it never false-pages before the operator
+    sets the key. An unreachable/erroring API raises -> the loop renders it down with the
+    error, like check_targets_down (a dead API surfaces, not silent-green).
+    """
+    if not N8N_API_KEY:
+        return True, "n8n monitoring disabled (no API key)"
+    headers = {"X-N8N-API-KEY": N8N_API_KEY}
+    workflows = _get_json(N8N_URL + "/api/v1/workflows?active=true&limit=250", headers=headers)
+    executions = _get_json(N8N_URL + "/api/v1/executions?status=error&limit=100", headers=headers)
+    offenders = n8n_failures(workflows, executions, parse_duration(N8N_FAIL_WINDOW))
+    total = sum(c for _, c in offenders)
+    if total > N8N_FAIL_MAX:
+        desc = ", ".join("%s (%d)" % (n, c) for n, c in offenders[:5])
+        return False, "%d active workflow(s) failed in %s: %s" % (
+            len(offenders), N8N_FAIL_WINDOW, desc)
+    return True, "no active-workflow failures in %s" % N8N_FAIL_WINDOW
+
+
 CHECKS = [
     ("backup", _env("KUMA_PUSH_KOPIA", ""), check_backup),
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
@@ -332,6 +361,7 @@ CHECKS = [
     ("cpu", _env("KUMA_PUSH_CPU", ""), check_cpu_throttle),
     ("targets", _env("KUMA_PUSH_TARGETS", ""), check_targets_down),
     ("traefik5xx", _env("KUMA_PUSH_TRAEFIK", ""), check_traefik_5xx),
+    ("n8n", _env("KUMA_PUSH_N8N", ""), check_n8n),
 ]
 
 
