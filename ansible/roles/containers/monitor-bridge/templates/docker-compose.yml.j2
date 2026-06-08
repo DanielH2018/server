@@ -50,6 +50,12 @@ services:
       - KUMA_PUSH_CPU={{ monitor_bridge_cpu_push_token }}
       - KUMA_PUSH_TARGETS={{ monitor_bridge_targets_push_token }}
       - KUMA_PUSH_TRAEFIK={{ monitor_bridge_traefik_push_token }}
+      # n8n Prod-workflow failure monitoring (active workflows via the n8n public API).
+      - N8N_URL=http://n8n:5678
+      - N8N_API_KEY={{ n8n_api_key }}
+      - N8N_FAIL_WINDOW=15m
+      - N8N_FAIL_MAX=0
+      - KUMA_PUSH_N8N={{ monitor_bridge_n8n_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
     {{ service_networks() }}
@@ -65,6 +71,7 @@ services:
       {{ kuma('monitor-bridge-cpu', monitor_type='push', name='CPU Throttling', interval=600, push_token=monitor_bridge_cpu_push_token) }}
       {{ kuma('monitor-bridge-targets', monitor_type='push', name='Scrape Targets', interval=600, push_token=monitor_bridge_targets_push_token) }}
       {{ kuma('monitor-bridge-traefik', monitor_type='push', name='Traefik 5xx', interval=600, push_token=monitor_bridge_traefik_push_token) }}
+      {{ kuma('monitor-bridge-n8n', monitor_type='push', name='n8n Prod Workflows', interval=600, push_token=monitor_bridge_n8n_push_token) }}
       {# Host GitOps deployer liveness — interval 2400s (40m) > the 30m tick so one missed push isn't a false alarm. -#}
       {{ kuma('gitops-deploy', monitor_type='push', name='GitOps Deploy', interval=2400, push_token=gitops_deploy_kuma_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.

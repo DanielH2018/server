@@ -236,9 +236,11 @@ containers_list:
     networks:
       # monitoring: reach prometheus + uptime-kuma. kopia: query the backup source's
       # status without putting kopia on the broad monitoring net (trusted-infra access,
-      # like traefik). No web UI, so no port / Authelia.
+      # like traefik). apps: reach the n8n public API at n8n:5678 for the workflow-failure
+      # check. No web UI, so no port / Authelia.
       - monitoring
       - kopia
+      - apps
     tags:
       - monitor-bridge
   # Organization: Miscellaneous (apps network)
