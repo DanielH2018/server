@@ -271,3 +271,13 @@ def test_mem_high_alerts(monkeypatch):
     ok, msg = check.check_mem()
     assert not ok
     assert "mem" in msg.lower()
+
+
+# --- parse_duration ---------------------------------------------------------
+
+def test_parse_duration_units():
+    assert check.parse_duration("900s") == 900
+    assert check.parse_duration("15m") == 900
+    assert check.parse_duration("1h") == 3600
+    assert check.parse_duration("2d") == 172800
+    assert check.parse_duration("300") == 300  # bare number = seconds

@@ -103,6 +103,20 @@ def parse_rfc3339(ts):
     return datetime.fromisoformat(ts)
 
 
+def parse_duration(s):
+    """Parse a Prometheus-style duration ('900s', '15m', '1h', '2d') to seconds (float).
+
+    A bare number is treated as seconds. The n8n check evaluates its failure window in
+    Python (unlike the *_WINDOW vars that are interpolated straight into PromQL, which
+    Prometheus parses), so it needs this.
+    """
+    s = str(s).strip()
+    units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    if s and s[-1] in units:
+        return float(s[:-1]) * units[s[-1]]
+    return float(s)
+
+
 def backup_age_hours(sources_json, path, now=None):
     """Return (age_hours, error_count) for the Kopia source matching `path`.
 
