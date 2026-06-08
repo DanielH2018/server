@@ -7,11 +7,7 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- _(none currently)_
+- Optimize Pi Setup, connect this server to it for Claude.
+- Add notification for n8n failed prod executions
 
 ## Superseded
-
-- ~~Setup Authelia for Raspberry Pi~~ — `daniel-pi` is now intentionally **LAN-only**
-  (`host_vars/daniel-pi.yml`: `expose_mode: lan`, all services `use_authelia: false`),
-  reached over WireGuard rather than an internet-exposed, Authelia-gated ingress. Re-open
-  only if a Pi service ever needs internet exposure.
