@@ -8,6 +8,5 @@ the Renovate dependency dashboard.
 ## Backlog
 
 - Optimize Pi Setup, connect this server to it for Claude.
-- Add notification for n8n failed prod executions
 
 ## Superseded
