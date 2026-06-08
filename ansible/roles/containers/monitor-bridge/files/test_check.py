@@ -340,6 +340,14 @@ def test_n8n_missing_stoppedat_falls_back_to_startedat():
     assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("Prod Flow", 1)]
 
 
+def test_n8n_naive_timestamp_treated_as_utc():
+    # n8n normally emits UTC 'Z'; a naive timestamp must not raise on the tz-aware compare
+    wf = _workflows(("1", "Prod Flow", True))
+    naive = (N8N_NOW - timedelta(minutes=5)).replace(tzinfo=None).isoformat()  # no offset/Z
+    ex = {"data": [{"workflowId": "1", "status": "error", "stoppedAt": naive}]}
+    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("Prod Flow", 1)]
+
+
 # --- check_n8n --------------------------------------------------------------
 
 def test_n8n_disabled_without_key():
@@ -368,3 +376,15 @@ def test_n8n_check_ok_when_no_failures(monkeypatch):
     ok, msg = check.check_n8n()
     assert ok
     assert "no active-workflow failures" in msg
+
+
+def test_n8n_check_at_threshold_is_ok(monkeypatch):
+    # total failures == N8N_FAIL_MAX must NOT alert (strictly greater)
+    monkeypatch.setattr(check, "N8N_API_KEY", "x")
+    monkeypatch.setattr(check, "N8N_FAIL_MAX", 1.0)
+    wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    ex = {"data": [{"workflowId": "1", "status": "error", "stoppedAt": now_iso}]}
+    monkeypatch.setattr(check, "_get_json", _seq(wf, ex))
+    ok, _ = check.check_n8n()
+    assert ok

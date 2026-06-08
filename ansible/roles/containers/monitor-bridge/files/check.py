@@ -52,7 +52,7 @@ N8N_FAIL_MAX = float(_env("N8N_FAIL_MAX", "0"))
 
 def _get_json(url, headers=None):
     hdrs = {"User-Agent": "monitor-bridge"}
-    if headers:
+    if headers is not None:
         hdrs.update(headers)
     req = urllib.request.Request(url, headers=hdrs)
     with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 (internal URLs)
@@ -321,7 +321,12 @@ def n8n_failures(workflows_json, executions_json, window_s, now=None):
         if wid not in active:
             continue
         ts = ex.get("stoppedAt") or ex.get("startedAt")
-        if not ts or parse_rfc3339(ts) < cutoff:
+        if not ts:
+            continue
+        dt = parse_rfc3339(ts)
+        if dt.tzinfo is None:  # n8n normally emits UTC 'Z'; assume UTC if a naive ts slips through
+            dt = dt.replace(tzinfo=timezone.utc)
+        if dt < cutoff:
             continue
         counts[wid] = counts.get(wid, 0) + 1
     pairs = [(active[wid], c) for wid, c in counts.items()]
