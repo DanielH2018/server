@@ -5,7 +5,7 @@
 
 services:
   monitor-bridge:
-    image: python:3.12-alpine
+    image: python:3.14-alpine
     container_name: monitor-bridge
     user: "{{ puid }}:{{ pgid }}"
     restart: unless-stopped
