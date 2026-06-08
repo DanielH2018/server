@@ -15,7 +15,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 def _env(name, default):
@@ -291,6 +291,35 @@ def check_traefik_5xx():
     if pct > TRAEFIK_5XX_PCT:
         return False, "5xx %.1f%% of %.2f rps (> %.0f%%)" % (pct, total, TRAEFIK_5XX_PCT)
     return True, "5xx %.1f%% of %.2f rps" % (pct, total)
+
+
+def n8n_failures(workflows_json, executions_json, window_s, now=None):
+    """Failed executions of *active* workflows within the last `window_s` seconds.
+
+    Returns [(workflow_name, count), ...] sorted by count desc. An execution counts only
+    if its workflowId belongs to an active ("Prod") workflow AND its stoppedAt (fallback
+    startedAt) is within the window. Pure — fed the n8n /workflows and /executions
+    payloads, so it's unit-tested without HTTP (like backup_age_hours).
+    """
+    now = now or datetime.now(timezone.utc)
+    active = {
+        w["id"]: w.get("name") or w["id"]
+        for w in workflows_json.get("data", [])
+        if w.get("active")
+    }
+    cutoff = now - timedelta(seconds=window_s)
+    counts = {}
+    for ex in executions_json.get("data", []):
+        wid = ex.get("workflowId")
+        if wid not in active:
+            continue
+        ts = ex.get("stoppedAt") or ex.get("startedAt")
+        if not ts or parse_rfc3339(ts) < cutoff:
+            continue
+        counts[wid] = counts.get(wid, 0) + 1
+    pairs = [(active[wid], c) for wid, c in counts.items()]
+    pairs.sort(key=lambda nc: -nc[1])
+    return pairs
 
 
 CHECKS = [

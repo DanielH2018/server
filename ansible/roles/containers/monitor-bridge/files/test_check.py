@@ -9,7 +9,7 @@ nanosecond RFC3339 parsing (Kopia emits 9 fractional digits; fromisoformat caps 
 and the Kopia /api/v1/sources age/error extraction. The HTTP glue is exercised live
 via `check.py --once` at deploy time.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import pytest
 
@@ -281,3 +281,60 @@ def test_parse_duration_units():
     assert check.parse_duration("1h") == 3600
     assert check.parse_duration("2d") == 172800
     assert check.parse_duration("300") == 300  # bare number = seconds
+
+
+# --- n8n_failures -----------------------------------------------------------
+
+N8N_NOW = datetime(2026, 6, 8, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _n8n_ago(minutes):
+    return (N8N_NOW - timedelta(minutes=minutes)).isoformat().replace("+00:00", "Z")
+
+
+def _workflows(*items):
+    """items: (id, name, active) tuples -> n8n /workflows payload."""
+    return {"data": [{"id": i, "name": n, "active": a} for i, n, a in items]}
+
+
+def _executions(*items):
+    """items: (workflowId, stoppedAt) tuples -> n8n /executions payload (all status=error)."""
+    return {"data": [{"workflowId": w, "status": "error", "stoppedAt": s} for w, s in items]}
+
+
+def test_n8n_failure_within_window_named():
+    wf = _workflows(("1", "Prod Flow", True))
+    ex = _executions(("1", _n8n_ago(5)))
+    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("Prod Flow", 1)]
+
+
+def test_n8n_failure_outside_window_ignored():
+    wf = _workflows(("1", "Prod Flow", True))
+    ex = _executions(("1", _n8n_ago(30)))  # 30m ago, window 15m
+    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == []
+
+
+def test_n8n_inactive_workflow_ignored():
+    wf = _workflows(("1", "Draft Flow", False))
+    ex = _executions(("1", _n8n_ago(5)))
+    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == []
+
+
+def test_n8n_multiple_failures_counted_and_sorted():
+    wf = _workflows(("1", "A Flow", True), ("2", "B Flow", True))
+    ex = _executions(
+        ("1", _n8n_ago(2)),
+        ("2", _n8n_ago(3)), ("2", _n8n_ago(4)), ("2", _n8n_ago(5)),
+    )
+    # B has 3 failures, A has 1 -> sorted by count desc
+    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("B Flow", 3), ("A Flow", 1)]
+
+
+def test_n8n_empty_inputs():
+    assert check.n8n_failures({"data": []}, {"data": []}, 900, now=N8N_NOW) == []
+
+
+def test_n8n_missing_stoppedat_falls_back_to_startedat():
+    wf = _workflows(("1", "Prod Flow", True))
+    ex = {"data": [{"workflowId": "1", "status": "error", "startedAt": _n8n_ago(5)}]}
+    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("Prod Flow", 1)]
