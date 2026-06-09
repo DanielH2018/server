@@ -15,9 +15,9 @@
     #   common_config_changed=true  -> recreate: always
     #   otherwise (the default)        -> recreate: auto
     #
-    # WHY the conditional is needed: 10 roles bind-mount an Ansible-templated config file
+    # WHY the conditional is needed: 11 roles bind-mount an Ansible-templated config file
     # (authelia, traefik, homepage, grafana, prometheus, janitorr, livesync, peanut,
-    # recyclarr, kopia). Editing such a file does NOT change the Compose service definition (its
+    # recyclarr, kopia, pihole). Editing such a file does NOT change the Compose service definition (its
     # config-hash), so `auto` alone would leave the container running with stale config —
     # the edit would silently not apply. Those roles `register:` their config tasks and
     # pass `common_config_changed` so a changed config forces a recreate that picks it
@@ -30,7 +30,7 @@
     # config case is invisible to `auto` — exactly what the conditional fills.
     #
     # Result: a no-op deploy recreates nothing; editing one config recreates only that
-    # service. pihole is exempt (its own absent->present DNS-bootstrap flow). See
+    # service. See
     # docs/superpowers/specs/2026-06-07-idempotent-deploys-conditional-recreate-design.md
     recreate: "{{ 'always' if common_config_changed | default(false) | bool else 'auto' }}"
     remove_orphans: true
