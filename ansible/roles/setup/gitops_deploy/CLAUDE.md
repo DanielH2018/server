@@ -15,18 +15,18 @@ the held SHA and the hold clears automatically.
 
 ## Safety
 - Read-only against the repo (no push); rollback is local-only + self-guarding.
-- Refuses to *deploy* from a dirty working tree (operator mid-edit) but still pushes an
-  `up` liveness beat (`next_action(..., dirty=True) -> "dirty"`) — the skip is healthy, not
-  an outage, so it must not trip the push monitor's "No heartbeat" dead-man's-switch.
+- Refuses to *deploy* from a dirty working tree (operator mid-edit) but the tick still
+  completes normally and writes `last_run` (`next_action(..., dirty=True) -> "dirty"`) — the
+  skip is healthy, not an outage, so it must not trip the GitOps-Alive monitor's stale-file
+  threshold.
 - **Broad changes** (shared `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`)
   are NOT auto-scoped — the deployer alerts and defers to a manual full deploy.
 
 ## Config / secrets
-`/etc/gitops-deploy/config.env` (0600) is templated from SOPS vars
-`gitops_deploy_discord_webhook` and `gitops_deploy_kuma_push_token`. Liveness pings the
-`gitops-deploy` Uptime-Kuma push monitor (provisioned via an AutoKuma label on
-`monitor-bridge`) by launching a throwaway curl container on the `monitoring` network — the
-host can't resolve container DNS directly.
+`/etc/gitops-deploy/config.env` (0600) is templated from the SOPS var
+`gitops_deploy_discord_webhook`. Liveness is now written to `/var/lib/gitops-deploy/last_run`
+(a Unix-timestamp file) on every non-crashing completion; `monitor-bridge` reads this file
+to drive the GitOps-Alive Uptime-Kuma monitor — no Kuma pushing from the deployer.
 
 ## Logic tests
 `files/test_deploy_logic.py` covers path→service mapping, the next-action decision, and
