@@ -1,0 +1,51 @@
+# initial_setup — host baseline + security hardening
+
+The big host-bring-up role: base packages, per-user Python tooling, SSH/firewall/kernel
+hardening, auditing, and file-integrity monitoring. **Not a container role** — a host-setup
+role under `ansible/roles/setup/`, run by `initial_setup.yml`, not `deploy.yml`. See repo-root
+`CLAUDE.md` for conventions. This is the largest and most fragile setup role — **`--check`
+first** and scope with `--tags` when iterating.
+
+## Where it runs
+- In `ansible/initial_setup.yml`, after [[config_files]] and before [[sops_setup]] /
+  [[docker_install]] — **every host** (Pi-specific tasks self-guard, see below).
+- `ansible-playbook ansible/initial_setup.yml --tags "initial_setup"`.
+
+## What it does (`tasks/main.yml`, grouped)
+- **Pi bring-up (guarded `inventory_hostname == 'daniel-pi'`):** stop the hardware watchdog
+  during provisioning, then create/secure/format/persist/activate a swap file — disk swap so
+  heavy apt on the 512 MB Zero 2 W doesn't OOM. Also installs Pi-only packages.
+- **Packages & tooling:** apt upgrade; base packages; install **uv per-user** (PEP 668-safe on
+  24.04+) and the Python CLI tooling as uv tools.
+- **SSH:** `.ssh` perms, an `ssh-users` group, sshd hardening, and a `Match` block enabling
+  agent/X11 forwarding for `sys_user`. → `notify: Restart SSH`.
+- **Firewall (UFW):** default-deny incoming / allow outgoing, **rate-limited** SSH (replaces a
+  plain allow), allow WireGuard `51820/udp` (Pi-guarded), then enable.
+- **Kernel/network hardening:** IPv4 forwarding, sysctl security knobs, blacklist rare network
+  modules, load + persist the WireGuard module.
+- **Auditing & accounting:** `auditd` + rules (`notify: Reload audit rules`), `sysstat`,
+  process accounting.
+- **Integrity & malware:** **AIDE** (install, init DB, weekly check) and **rkhunter**
+  (install, baseline, post-apt refresh, weekly scan).
+- **Login/password policy:** console + network login banners, umask `027`, password hash
+  rounds, password-age policy, core dumps disabled (login.defs + systemd).
+- **Postfix:** hide the OS banner, disable `VRFY` (`notify: Reload Postfix`).
+- **Cron/maintenance:** weekly reboot, Docker image cleanup, ansible.log rotation, weekly
+  autoremove + config-remnant purge, and install of the repo Git hooks.
+- **Unattended upgrades:** enable periodic security upgrades + local policy.
+
+## Notable
+- **Handlers live in the playbook, not this role** (there is no `handlers/main.yml`) — `Restart
+  SSH`, `Restart fail2ban`, `Reload audit rules`, `Reload Postfix` are defined in
+  `initial_setup.yml`. Same pattern as [[optimize_pi]]: a new `notify:` here needs a matching
+  handler added to that playbook.
+- **`become` vs HOME:** the `Resolve the deploy user's home directory` task exists because
+  `ansible_facts.env.HOME` is root's under the play's `become: true`, but uv / per-user tooling
+  must install for the unprivileged deploy user — recent fixes (Pi bring-up era) replaced naive
+  `env.HOME` refs with this resolver. Keep new per-user tasks using it, not `env.HOME`.
+- **AIDE DB init is slow (~8 min)** and runs with progress monitoring — expect a long pause on
+  first run / fresh host; not a hang.
+- **Templates:** `templates/98_aide_local.conf.j2` (AIDE exclusions for the Docker homelab) and
+  `templates/fail2ban_homelab.conf.j2` (the fail2ban jail).
+- Pi-only tasks are individually `when:`-guarded rather than block-scoped, so a server run
+  simply skips them.
