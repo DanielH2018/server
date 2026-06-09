@@ -1,9 +1,9 @@
 address=/local.{{ domain }}/{{ server_ip }}
 address=/local.{{ domain }}/::
 
-# daniel-pi is LAN-only with no external vhost, so it gets a plain <host>.<domain> record
-# WITHOUT the `.local` infix (that infix only exists on the server to distinguish local
-# vs external access). Reach the Pi's LAN-bound services at daniel-pi.<domain>:<port>.
-# IP via hostvars since the Pi isn't the host running Pi-hole. The server's own services
-# are already covered by the *.local.<domain> wildcard above.
-host-record=daniel-pi.{{ domain }},{{ hostvars['daniel-pi'].server_ip }}
+# daniel-pi is LAN-only. Use a private `.lan` TLD (resolves only here, via Pi-hole) instead
+# of a <domain> subdomain: Traefik sets HSTS with stsIncludeSubdomains on the real domain,
+# which force-upgrades any *.<domain> name to HTTPS and breaks the Pi's plain-HTTP services
+# (SSL_ERROR_RX_RECORD_TOO_LONG). `.lan` sidesteps HSTS entirely. Reach the Pi's LAN-bound
+# services at daniel-pi.lan:<port>. IP via hostvars since the Pi isn't the host running Pi-hole.
+host-record=daniel-pi.lan,{{ hostvars['daniel-pi'].server_ip }}
