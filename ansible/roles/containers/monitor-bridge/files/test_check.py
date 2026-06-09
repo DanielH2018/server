@@ -9,6 +9,7 @@ nanosecond RFC3339 parsing (Kopia emits 9 fractional digits; fromisoformat caps 
 and the Kopia /api/v1/sources age/error extraction. The HTTP glue is exercised live
 via `check.py --once` at deploy time.
 """
+import time
 from datetime import datetime, timezone, timedelta
 
 import pytest
@@ -397,26 +398,80 @@ def test_gitops_alive_fresh():
     assert ok
     assert "1m ago" in msg
 
+
 def test_gitops_alive_at_threshold_is_ok():
     # exactly at max age still counts as alive (<=)
     ok, _ = check.gitops_alive(5400, 5400)
     assert ok
+
 
 def test_gitops_alive_stale():
     ok, msg = check.gitops_alive(6000, 5400)  # 100m > 90m
     assert not ok
     assert "100m ago" in msg
 
+
 def test_gitops_status_no_hold():
     ok, msg = check.gitops_status(None)
     assert ok
     assert msg == "no held deploy"
 
+
 def test_gitops_status_empty_is_ok():
     ok, _ = check.gitops_status("")
     assert ok
 
+
 def test_gitops_status_held_names_sha():
     ok, msg = check.gitops_status("abc123def4567890")
+    assert not ok
+    assert "abc123de" in msg
+
+
+# --- check_gitops_alive / check_gitops_status (file I/O) ---------------------
+
+def _gw(tmp_path, name, content):
+    (tmp_path / name).write_text(content)
+
+
+def test_check_gitops_alive_fresh_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    _gw(tmp_path, "last_run", str(time.time()))
+    ok, _ = check.check_gitops_alive()
+    assert ok
+
+
+def test_check_gitops_alive_stale_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    _gw(tmp_path, "last_run", str(time.time() - 100 * 60))  # 100m old > default 90m
+    ok, _ = check.check_gitops_alive()
+    assert not ok
+
+
+def test_check_gitops_alive_missing_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    ok, msg = check.check_gitops_alive()
+    assert not ok
+    assert "no last_run" in msg
+
+
+def test_check_gitops_alive_unparseable(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    _gw(tmp_path, "last_run", "not-a-float")
+    ok, msg = check.check_gitops_alive()
+    assert not ok
+    assert "unparseable" in msg
+
+
+def test_check_gitops_status_no_file_is_ok(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    ok, _ = check.check_gitops_status()
+    assert ok
+
+
+def test_check_gitops_status_held(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    _gw(tmp_path, "hold_sha", "abc123def4567890")
+    ok, msg = check.check_gitops_status()
     assert not ok
     assert "abc123de" in msg

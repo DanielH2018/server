@@ -46,6 +46,8 @@ N8N_URL = _env("N8N_URL", "http://n8n:5678").rstrip("/")
 N8N_API_KEY = _env("N8N_API_KEY", "")
 N8N_FAIL_WINDOW = _env("N8N_FAIL_WINDOW", "15m")
 N8N_FAIL_MAX = float(_env("N8N_FAIL_MAX", "0"))
+GITOPS_STATE_DIR = _env("GITOPS_STATE_DIR", "/gitops-state")
+GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
 
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
@@ -370,6 +372,26 @@ def check_n8n():
     return True, "no active-workflow failures in %s" % N8N_FAIL_WINDOW
 
 
+def check_gitops_alive():
+    try:
+        with open(os.path.join(GITOPS_STATE_DIR, "last_run")) as fh:
+            ts = float(fh.read().strip())
+    except FileNotFoundError:
+        return False, "no last_run marker (deployer never completed a tick?)"
+    except ValueError:
+        return False, "last_run marker unparseable"
+    return gitops_alive(time.time() - ts, GITOPS_MAX_AGE_S)
+
+
+def check_gitops_status():
+    try:
+        with open(os.path.join(GITOPS_STATE_DIR, "hold_sha")) as fh:
+            hold = fh.read().strip() or None
+    except FileNotFoundError:
+        hold = None
+    return gitops_status(hold)
+
+
 CHECKS = [
     ("backup", _env("KUMA_PUSH_KOPIA", ""), check_backup),
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
@@ -381,6 +403,8 @@ CHECKS = [
     ("targets", _env("KUMA_PUSH_TARGETS", ""), check_targets_down),
     ("traefik5xx", _env("KUMA_PUSH_TRAEFIK", ""), check_traefik_5xx),
     ("n8n", _env("KUMA_PUSH_N8N", ""), check_n8n),
+    ("gitops_alive",  _env("KUMA_PUSH_GITOPS_ALIVE",  ""), check_gitops_alive),
+    ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
 ]
 
 
