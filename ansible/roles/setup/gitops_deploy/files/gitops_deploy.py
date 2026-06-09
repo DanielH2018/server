@@ -50,8 +50,11 @@ BRANCH = C.get("BRANCH", "master")
 TIMEOUT = int(C.get("HEALTH_TIMEOUT_S", "300"))
 
 
-def run(args: list[str], cwd: str | None = REPO, check: bool = True) -> str:
-    r = subprocess.run(args, cwd=cwd, text=True, capture_output=True)
+def run(args: list[str], cwd: str | None = REPO, check: bool = True,
+        timeout: float | None = None) -> str:
+    # timeout defaults to None so the long deploy/git calls are unbounded as before;
+    # only the health-gate's docker inspects pass a short bound (see health_ok).
+    r = subprocess.run(args, cwd=cwd, text=True, capture_output=True, timeout=timeout)
     if check and r.returncode != 0:
         raise RuntimeError(f"{' '.join(args)} -> {r.returncode}\n{r.stderr}")
     return r.stdout.strip()
@@ -101,6 +104,18 @@ def discord(content: str) -> None:
         log(f"discord alert failed: {e}")
 
 
+def _inspect(fmt: str, container: str, timeout: float = 15.0) -> str:
+    """One `docker inspect -f` field, or '' if empty/gone — or if the call exceeds
+    `timeout`. The deadline in health_ok() is only checked between calls, so a wedged
+    daemon on an unbounded inspect would block the whole deployer forever; bounding each
+    inspect lets a hang degrade into a failed gate instead."""
+    try:
+        return run(["docker", "inspect", "-f", fmt, container],
+                   cwd=None, check=False, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return ""
+
+
 def health_ok(container: str, settle_checks: int = 3) -> bool:
     """True if `container` reaches 'healthy', or — for an image with no
     HEALTHCHECK — stays 'running' across `settle_checks` consecutive polls
@@ -109,13 +124,11 @@ def health_ok(container: str, settle_checks: int = 3) -> bool:
     deadline = time.time() + TIMEOUT
     running_streak = 0
     while time.time() < deadline:
-        st = run(["docker", "inspect", "-f", "{{.State.Health.Status}}", container],
-                 cwd=None, check=False)
+        st = _inspect("{{.State.Health.Status}}", container)
         if st == "healthy":
             return True
         if st == "":  # no healthcheck (or container gone) -> require sustained running
-            run_st = run(["docker", "inspect", "-f", "{{.State.Running}}", container],
-                         cwd=None, check=False)
+            run_st = _inspect("{{.State.Running}}", container)
             running_streak = running_streak + 1 if run_st == "true" else 0
             if running_streak >= settle_checks:
                 return True
