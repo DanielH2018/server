@@ -334,6 +334,20 @@ def n8n_failures(workflows_json, executions_json, window_s, now=None):
     return pairs
 
 
+def gitops_alive(age_s, max_age_s):
+    """Pure: is the deployer's last completed tick recent enough? Returns (ok, msg)."""
+    if age_s <= max_age_s:
+        return True, "deployer ran %.0fm ago" % (age_s / 60)
+    return False, "deployer last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
+
+
+def gitops_status(hold_sha):
+    """Pure: is a rolled-back commit being held? Returns (ok, msg)."""
+    if not hold_sha:
+        return True, "no held deploy"
+    return False, "deploy held at %s — revert the offending PR" % hold_sha[:8]
+
+
 def check_n8n():
     """Failed executions of active ("Prod") n8n workflows within N8N_FAIL_WINDOW.
 

@@ -388,3 +388,35 @@ def test_n8n_check_at_threshold_is_ok(monkeypatch):
     monkeypatch.setattr(check, "_get_json", _seq(wf, ex))
     ok, _ = check.check_n8n()
     assert ok
+
+
+# --- gitops_alive / gitops_status (pure) ------------------------------------
+
+def test_gitops_alive_fresh():
+    ok, msg = check.gitops_alive(60, 5400)
+    assert ok
+    assert "1m ago" in msg
+
+def test_gitops_alive_at_threshold_is_ok():
+    # exactly at max age still counts as alive (<=)
+    ok, _ = check.gitops_alive(5400, 5400)
+    assert ok
+
+def test_gitops_alive_stale():
+    ok, msg = check.gitops_alive(6000, 5400)  # 100m > 90m
+    assert not ok
+    assert "100m ago" in msg
+
+def test_gitops_status_no_hold():
+    ok, msg = check.gitops_status(None)
+    assert ok
+    assert msg == "no held deploy"
+
+def test_gitops_status_empty_is_ok():
+    ok, _ = check.gitops_status("")
+    assert ok
+
+def test_gitops_status_held_names_sha():
+    ok, msg = check.gitops_status("abc123def4567890")
+    assert not ok
+    assert "abc123de" in msg
