@@ -12,6 +12,8 @@
       - "traefik.http.routers.{{ container }}-secure.service={{ container }}"
       - "traefik.http.services.{{ container }}.loadbalancer.server.port={{ port }}"
       {% if authelia -%}
-      - "traefik.http.routers.{{ container }}-secure.middlewares=authelia@docker"
+      - "traefik.http.routers.{{ container }}-secure.middlewares=rate-limit@file,authelia@docker"
+      {%- else -%}
+      - "traefik.http.routers.{{ container }}-secure.middlewares=rate-limit@file"
       {%- endif %}
 {%- endmacro %}

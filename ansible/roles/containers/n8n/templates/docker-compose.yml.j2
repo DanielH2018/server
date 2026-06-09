@@ -63,6 +63,8 @@ services:
       - "traefik.http.routers.n8n-webhook.entrypoints=https"
       - "traefik.http.routers.n8n-webhook.tls=true"
       - "traefik.http.routers.n8n-webhook.service=n8n"
+      # rate-limit moved off the https entrypoint to per-router; re-acquire the default.
+      - "traefik.http.routers.n8n-webhook.middlewares=rate-limit@file"
       # Priority must be higher than the UI router so Traefik matches this first
       - "traefik.http.routers.n8n-webhook.priority=100"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.

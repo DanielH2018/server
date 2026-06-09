@@ -54,6 +54,8 @@ services:
       - "traefik.http.routers.healthchecks-ping.entrypoints=https"
       - "traefik.http.routers.healthchecks-ping.tls=true"
       - "traefik.http.routers.healthchecks-ping.service=healthchecks"
+      # rate-limit moved off the https entrypoint to per-router; re-acquire the default.
+      - "traefik.http.routers.healthchecks-ping.middlewares=rate-limit@file"
       # Priority must be higher than the UI router so Traefik matches this first
       - "traefik.http.routers.healthchecks-ping.priority=100"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.

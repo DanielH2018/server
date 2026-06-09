@@ -50,6 +50,10 @@ services:
       - "traefik.http.routers.livesync.tls.domains[0].main={{ domain }}"
       - "traefik.http.routers.livesync.tls.domains[0].sans=*.{{ domain }},*.local.{{ domain }}"
       - "traefik.http.routers.livesync.service=livesync"
+      # High rate-limit ceiling for chatty CouchDB replication (rate-limit-livesync@file,
+      # defined in traefik's config.yml.j2). The shared `rate-limit` default (300/min) was
+      # too low for LiveSync and produced HTTP 429s. Other services keep the default.
+      - "traefik.http.routers.livesync.middlewares=rate-limit-livesync@file"
       - "traefik.http.services.livesync.loadbalancer.server.port={{ container_item.port }}"
 
       ## Fauxton admin UI — human access via Authelia 2FA (no token header needed).
@@ -58,7 +62,7 @@ services:
       - "traefik.http.routers.livesync-utils.entrypoints=https"
       - "traefik.http.routers.livesync-utils.tls=true"
       - "traefik.http.routers.livesync-utils.service=livesync"
-      - "traefik.http.routers.livesync-utils.middlewares=authelia@docker"
+      - "traefik.http.routers.livesync-utils.middlewares=rate-limit@file,authelia@docker"
       - "traefik.http.routers.livesync-utils.priority=200"
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
