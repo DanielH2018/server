@@ -34,12 +34,9 @@
     name: common
     tasks_from: docker_deploy.yml
 
-- name: Schedule weekly n8n redeploy cron job
-  ansible.builtin.cron:
-    name: "Redeploy n8n"
-    weekday: "0"
-    hour: "6"
-    minute: "5"
-    user: "{{ sys_user }}"
-    job: "cd /home/{{ sys_user }}/server && ansible-playbook ansible/deploy.yml --tags n8n"
-    state: present
+- name: Schedule weekly redeploy cron job
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: redeploy_cron.yml
+  vars:
+    common_redeploy_cron_minute: "5"
