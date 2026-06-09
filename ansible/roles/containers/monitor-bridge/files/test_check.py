@@ -274,6 +274,106 @@ def test_mem_high_alerts(monkeypatch):
     assert "mem" in msg.lower()
 
 
+# --- check_backup -----------------------------------------------------------
+
+def _iso_ago(hours):
+    """RFC3339 'Z' timestamp `hours` in the past. check_backup() (unlike the
+    backup_age_hours unit tests) calls now() itself, so snapshots are relative to real now."""
+    return (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat().replace("+00:00", "Z")
+
+
+def test_backup_fresh_is_ok(monkeypatch):
+    monkeypatch.setattr(check, "BACKUP_PATH", "/data/containers")  # match _sources()'s path
+    last = {"endTime": _iso_ago(1), "stats": {"errorCount": 0}}
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _sources(last))
+    ok, msg = check.check_backup()
+    assert ok
+    assert "0 errors" in msg
+
+
+def test_backup_errors_alert(monkeypatch):
+    monkeypatch.setattr(check, "BACKUP_PATH", "/data/containers")
+    last = {"endTime": _iso_ago(1), "stats": {"errorCount": 3}}
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _sources(last))
+    ok, msg = check.check_backup()
+    assert not ok
+    assert "error" in msg.lower()
+
+
+def test_backup_stale_alerts(monkeypatch):
+    # default BACKUP_MAX_AGE_H=30; a 40h-old snapshot must alert
+    monkeypatch.setattr(check, "BACKUP_PATH", "/data/containers")
+    last = {"endTime": _iso_ago(40), "stats": {"errorCount": 0}}
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _sources(last))
+    ok, msg = check.check_backup()
+    assert not ok
+    assert "ago" in msg
+
+
+def test_backup_missing_source_alerts(monkeypatch):
+    # LookupError from backup_age_hours must surface as a descriptive down, not crash
+    monkeypatch.setattr(check, "BACKUP_PATH", "/data/containers")
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"sources": []})
+    ok, msg = check.check_backup()
+    assert not ok
+    assert "no Kopia source" in msg
+
+
+# --- check_disk -------------------------------------------------------------
+
+def test_disk_under_threshold_is_ok(monkeypatch):
+    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    # avail 0.5GB of 1GB -> 50% used, under default 90%
+    monkeypatch.setattr(check, "prom_scalar", _seq(0.5e9, 1e9))
+    ok, msg = check.check_disk()
+    assert ok
+    assert "under" in msg
+
+
+def test_disk_over_threshold_names_mount(monkeypatch):
+    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    # avail 0.05GB of 1GB -> 95% used, over default 90%
+    monkeypatch.setattr(check, "prom_scalar", _seq(0.05e9, 1e9))
+    ok, msg = check.check_disk()
+    assert not ok
+    assert "/" in msg
+    assert "95" in msg
+
+
+def test_disk_metric_unavailable_alerts(monkeypatch):
+    # check_disk binds BOTH avail and size before the None/zero guard -> feed two values
+    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(check, "prom_scalar", _seq(None, 1e9))
+    ok, msg = check.check_disk()
+    assert not ok
+    assert "unavailable" in msg
+
+
+# --- check_cert -------------------------------------------------------------
+
+def test_cert_valid_is_ok(monkeypatch):
+    # default CERT_MIN_DAYS=14; 30 days left -> ok
+    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: 30.0)
+    ok, msg = check.check_cert()
+    assert ok
+    assert "valid" in msg
+
+
+def test_cert_expiring_alerts(monkeypatch):
+    # 5 days left < 14 -> down
+    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: 5.0)
+    ok, msg = check.check_cert()
+    assert not ok
+    assert "expires" in msg
+
+
+def test_cert_metric_unavailable_alerts(monkeypatch):
+    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: None)
+    ok, msg = check.check_cert()
+    assert not ok
+    assert "unavailable" in msg
+
+
 # --- parse_duration ---------------------------------------------------------
 
 def test_parse_duration_units():
