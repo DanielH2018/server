@@ -1,5 +1,8 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 services:
   wallabag:
@@ -8,8 +11,7 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    networks:
-      - {{ docker_network }}
+    {{ service_networks() }}
     environment:
       - MYSQL_ROOT_PASSWORD={{ wallabag_mysql_root_password }}
       - SYMFONY__ENV__DATABASE_DRIVER=pdo_mysql
@@ -30,16 +32,20 @@ services:
     depends_on:
       - db
       - redis
+    {{ healthcheck('curl --fail -s http://localhost:80/ || exit 1') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
-          docker_network,
+          (container_item.networks | default([docker_network]))[0],
           container_item.use_authelia
         )
       }}
       {{ kuma(container_item.name) }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('1.0', '768M', '0.10', '128M') }}
+
   db:
     image: mariadb:latest
     container_name: wallabag-db
@@ -50,10 +56,12 @@ services:
       - MYSQL_ROOT_PASSWORD={{ wallabag_mysql_root_password }}
     volumes:
       - wallabag-db:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/healthcheck.sh", "--innodb_initialized"]
-      interval: 20s
-      timeout: 3s
+    {{ healthcheck('["CMD", "/usr/local/bin/healthcheck.sh", "--innodb_initialized"]', interval='20s', timeout='3s') }}
+    labels:
+      {{ kuma('wallabag-db', name='Wallabag DB') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('1.0', '512M', '0.10', '128M') }}
+
   redis:
     image: redis:alpine
     container_name: wallabag-redis
@@ -62,14 +70,13 @@ services:
       - wallabag-redis:/data
     networks:
       - {{ docker_network }}
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 20s
-      timeout: 3s
+    {{ healthcheck('["CMD", "redis-cli", "ping"]', interval='20s', timeout='3s') }}
+    labels:
+      {{ kuma('wallabag-redis', name='Wallabag Redis') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('0.50', '128M', '0.05', '16M') }}
 
-networks:
-  {{ docker_network }}:
-    external: true
+{{ external_networks() }}
 
 volumes:
   wallabag-images:

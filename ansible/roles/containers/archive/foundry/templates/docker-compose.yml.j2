@@ -1,4 +1,8 @@
 {% from 'traefik.yml.j2' import labels with context %}
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -11,25 +15,21 @@ services:
       - ./foundrydl:/host
       - foundry_data:/opt/foundryvtt/resources/app
     restart: unless-stopped
-    networks:
-      - {{ docker_network }}
-    healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:30000/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ service_networks() }}
+    {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:30000/ || exit 1') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
-          docker_network,
+          (container_item.networks | default([docker_network]))[0],
           container_item.use_authelia
         )
       }}
+      {{ kuma(container_item.name) }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('1.0', '1024M', '0.10', '128M') }}
 
-networks:
-  {{ docker_network }}:
-    external: true
+{{ external_networks() }}
 volumes:
   foundry_data:

@@ -1,6 +1,10 @@
 {% from 'traefik.yml.j2' import labels with context %}
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
-version: '3.8'
+
 services:
   change-detection:
     image: lscr.io/linuxserver/changedetection.io:latest
@@ -16,19 +20,14 @@ services:
     depends_on:
       - playwright
     restart: unless-stopped
-    networks:
-      - {{ docker_network }}
-    healthcheck:
-      test: curl --fail -s http://localhost:5000/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ service_networks() }}
+    {{ healthcheck('curl --fail -s http://localhost:5000/ || exit 1') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
-          docker_network,
+          (container_item.networks | default([docker_network]))[0],
           container_item.use_authelia
         )
       }}
@@ -36,6 +35,10 @@ services:
       - "traefik.http.middlewares.force-secure-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
       # Add the middleware to the router (CHAINED with Authelia)
       - "traefik.http.routers.change-detection-secure.middlewares=authelia@docker,force-secure-headers"
+      {{ kuma(container_item.name) }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('1.0', '1024M', '0.10', '128M') }}
+
   playwright:
     image: dgtlmoon/sockpuppetbrowser:latest
     container_name: playwright-browser
@@ -47,7 +50,10 @@ services:
       - SCREEN_HEIGHT=1080
       - SCREEN_DEPTH=24
       - MAX_CONCURRENT_SESSIONS=10
+    labels:
+      {{ kuma('playwright-browser', name='Playwright Browser') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    # Headless Chromium renderer — needs more headroom than the app container.
+    {{ resources('2.0', '2048M', '0.25', '256M') }}
 
-networks:
-  {{ docker_network }}:
-    external: true
+{{ external_networks() }}
