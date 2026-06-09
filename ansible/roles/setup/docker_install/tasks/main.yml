@@ -72,9 +72,17 @@
     state: absent
   become: true
 
+- name: Resolve the deploy user (for docker group membership)
+  # ansible_facts.env.USER is "root" under the play's become:true, but the user who runs
+  # docker (the become:false connecting user) is who needs docker-group membership.
+  ansible.builtin.command: id -un
+  become: false
+  changed_when: false
+  register: docker_install_deploy_user
+
 - name: Add user to docker group
   ansible.builtin.user:
-    name: "{{ ansible_facts.env.USER }}"
+    name: "{{ docker_install_deploy_user.stdout }}"
     groups: docker
     append: true
   become: true
