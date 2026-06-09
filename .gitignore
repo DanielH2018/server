@@ -37,3 +37,9 @@ id_rsa
 id_ed25519
 !/CLAUDE.md
 !/.claude
+# Claude Code machine-local files live under the allowlisted .claude/ tree but are
+# per-machine state (local settings/permissions, session buffers) — never commit them.
+# The global ~/.config/git/ignore catches settings.local.json on this host; codify it
+# in-repo too so a fresh clone is protected without relying on each machine's git config.
+.claude/*.local.json
+.claude/*.local.md
