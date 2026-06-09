@@ -56,8 +56,15 @@ services:
       - N8N_FAIL_WINDOW=15m
       - N8N_FAIL_MAX=0
       - KUMA_PUSH_N8N={{ monitor_bridge_n8n_push_token }}
+      # GitOps deployer liveness + deploy-status. State files are written on the host by
+      # gitops_deploy.py and bind-mounted read-only at /gitops-state.
+      - GITOPS_STATE_DIR=/gitops-state
+      - GITOPS_MAX_AGE_MIN=90
+      - KUMA_PUSH_GITOPS_ALIVE={{ monitor_bridge_gitops_alive_push_token }}
+      - KUMA_PUSH_GITOPS_STATUS={{ monitor_bridge_gitops_status_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
+      - /var/lib/gitops-deploy:/gitops-state:ro
     {{ service_networks() }}
     labels:
       {# Container-liveness monitor + one push monitor per check (AutoKuma-provisioned). -#}
@@ -72,8 +79,10 @@ services:
       {{ kuma('monitor-bridge-targets', monitor_type='push', name='Scrape Targets', interval=600, push_token=monitor_bridge_targets_push_token) }}
       {{ kuma('monitor-bridge-traefik', monitor_type='push', name='Traefik 5xx', interval=600, push_token=monitor_bridge_traefik_push_token) }}
       {{ kuma('monitor-bridge-n8n', monitor_type='push', name='n8n Prod Workflows', interval=600, push_token=monitor_bridge_n8n_push_token) }}
-      {# Host GitOps deployer liveness — interval 2400s (40m) > the 30m tick so one missed push isn't a false alarm. -#}
-      {{ kuma('gitops-deploy', monitor_type='push', name='GitOps Deploy', interval=2400, push_token=gitops_deploy_kuma_push_token) }}
+      {# GitOps deployer: liveness (deployer ticking) + deploy-status (rollback hold), pushed by
+         check_gitops_alive/status from the host state files. interval 600s = 2× the 5-min loop. -#}
+      {{ kuma('gitops-deploy-alive', monitor_type='push', name='GitOps Deploy — Alive', interval=600, push_token=monitor_bridge_gitops_alive_push_token) }}
+      {{ kuma('gitops-deploy-status', monitor_type='push', name='GitOps Deploy — Status', interval=600, push_token=monitor_bridge_gitops_status_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 
