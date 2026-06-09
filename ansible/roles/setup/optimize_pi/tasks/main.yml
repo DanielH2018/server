@@ -48,6 +48,13 @@
 # -------------------------------------------------------
 # 4. LOG2RAM (Save SD Card)
 # -------------------------------------------------------
+- name: Install python3-debian (required by deb822_repository, below)
+  ansible.builtin.apt:
+    name: python3-debian
+    state: present
+    update_cache: true
+  become: true
+
 - name: Add Azlux GPG key for Log2Ram
   ansible.builtin.get_url:
     url: https://azlux.fr/repo.gpg
@@ -55,10 +62,23 @@
     mode: "0644"
 
 - name: Add Log2Ram repository
-  ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/usr/share/keyrings/azlux-archive-keyring.gpg] http://packages.azlux.fr/debian/ bookworm main"
+  # deb822 format (.sources) — the one-line "deb [...] ..." apt_repository form is deprecated.
+  ansible.builtin.deb822_repository:
+    name: azlux
+    types: [deb]
+    uris: http://packages.azlux.fr/debian/
+    suites: bookworm
+    components: [main]
+    signed_by: /usr/share/keyrings/azlux-archive-keyring.gpg
     state: present
-    filename: azlux
+  become: true
+
+- name: Remove the deprecated one-line Log2Ram APT source
+  # deb822_repository writes azlux.sources; drop any azlux.list left by the old
+  # apt_repository task so apt doesn't see the repo "configured multiple times".
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/azlux.list
+    state: absent
   become: true
 
 - name: Install Log2Ram
