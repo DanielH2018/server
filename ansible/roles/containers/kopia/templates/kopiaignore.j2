@@ -3,7 +3,6 @@
 
 # ── Backup tools ────────────────────────────────────────────────────────────
 kopia/
-duplicati/
 
 # ── Generic regeneratable dirs (match at any depth) ─────────────────────────
 cache/
@@ -11,9 +10,11 @@ logs/
 transcodes/
 tmp/
 
-# ── Game servers (large, fully re-downloadable) ─────────────────────────────
+# ── Game servers ──────────────────────────────────────────────────────────────
+# Server binaries are re-downloadable; NOTE the world saves inside are NOT backed
+# up anywhere as a result (operator-accepted 2026-06-10 — the service is retired,
+# the dir is kept as the only copy of the worlds).
 valheim/
-minecraft/
 
 
 # ── Jellyfin ─────────────────────────────────────────────────────────────────
@@ -28,7 +29,7 @@ jellyfin/config/plugins/
 # (containers/data/, ~27G). A bare "data/" matches a dir named data at ANY depth,
 # which silently dropped service state — n8n/data, karakeep/data, grafana/data,
 # portainer/data, traefik/data — from the backup. Game/regeneratable */data dirs
-# (minecraft, valheim, uptime-kuma, jellyfin) stay excluded via their own rules.
+# (valheim, uptime-kuma, jellyfin) stay excluded via their own rules.
 /data/
 sonarr/config/MediaCover/
 radarr/config/MediaCover/
@@ -37,12 +38,12 @@ prowlarr/config/Definitions/
 tdarr/transcode_cache/
 
 # ── Metrics & monitoring (regenerate from live services) ─────────────────────
-prometheus/data/
+# (prometheus's TSDB lives in the prometheus_data named volume — outside
+# containers/ and Kopia's scope entirely, so it needs no entry here.)
 scrutiny/influxdb/
 
 # ── App-specific caches ───────────────────────────────────────────────────────
 code-server/config/extensions*/
-foundrydl*/
 uptime-kuma/data*/
 freshrss/config/www/freshrss/data/cache/
 karakeep/time-tagger/uv-cache/
