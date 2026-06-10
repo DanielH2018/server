@@ -2,7 +2,11 @@
 - name: Initial Server Setup
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
   become: true
-  gather_facts: true
+  # Facts are gathered EXPLICITLY below, after the SOPS-stored sudo password is set.
+  # With gather_facts: true the play escalated at fact-gathering — before secrets
+  # loaded — so hosts with passworded sudo (daniel-server) needed --ask-become-pass
+  # run interactively. Same pattern as deploy.yml; -K still works as an override.
+  gather_facts: false
   pre_tasks:
     # MUST be pre_tasks, not tasks: a play runs pre_tasks -> roles -> tasks, so
     # under `tasks:` this would load AFTER the roles and any role templating a
@@ -13,7 +17,20 @@
       community.sops.load_vars:
         file: secrets.yml
       delegate_to: localhost
-      run_once: true
+      run_once: true # noqa run-once[task]
+      become: false
+      tags: always
+
+    - name: Use the SOPS-stored sudo password for privilege escalation
+      ansible.builtin.set_fact:
+        ansible_become_password: "{{ become_password }}"
+      no_log: true
+      become: false
+      when: become_password is defined
+      tags: always
+
+    - name: Gather facts (escalated — the become password is now available)
+      ansible.builtin.setup:
       tags: always
   roles:
     - { role: config_files, tags: ["config_files"] }
