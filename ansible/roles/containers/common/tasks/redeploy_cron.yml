@@ -1,0 +1,25 @@
+---
+# Weekly redeploy cron for roles whose image is built locally (`build: always` in
+# docker_deploy.yml) — a scheduled redeploy is the only way they pick up new base-image
+# layers (Watchtower can't update locally-built images).
+#
+# The job MUST go through `uv run` with an absolute path: cron's default PATH
+# (/usr/bin:/bin) has no ansible-playbook at all, and the bare uv-tool shim in
+# ~/.local/bin lacks the `community.docker` module deps (see repo-root CLAUDE.md).
+# The PATH prefix on the uv invocation is also required: the SOPS secrets pre-task
+# execs `sops`, which lives in /usr/local/bin — outside cron's default PATH.
+# Callers pass `common_redeploy_cron_minute` to stagger the Sunday 06:00 jobs.
+- name: Schedule weekly redeploy cron job for {{ container_item.name }}
+  ansible.builtin.cron:
+    name: "Redeploy {{ container_item.name }}"
+    weekday: "0"
+    hour: "6"
+    minute: "{{ common_redeploy_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: >-
+      cd /home/{{ sys_user }}/server &&
+      PATH=/usr/local/bin:/usr/bin:/bin:/home/{{ sys_user }}/.local/bin
+      /home/{{ sys_user }}/.local/bin/uv run ansible-playbook ansible/deploy.yml
+      --tags {{ container_item.name }} ||
+      logger -t redeploy-cron "{{ container_item.name }} redeploy failed"
+    state: present

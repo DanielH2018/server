@@ -12,6 +12,12 @@ Utility role (not a container). Every container role calls into it via
   then runs `community.docker.docker_compose_v2` with `build: always`,
   `recreate: "{{ 'always' if common_config_changed | default(false) else 'auto' }}"`,
   `remove_orphans: true`. **This is why `containers/` is generated/read-only.**
+- **`redeploy_cron.yml`** — weekly Sunday-06:00 redeploy cron for roles with locally-built
+  images (crowdsec, n8n, code-server); Watchtower can't update those. Callers pass
+  `common_redeploy_cron_minute` to stagger the jobs. The job runs through
+  `~/.local/bin/uv run` (absolute path — cron's PATH has no ansible-playbook, and the bare
+  uv-tool shim lacks the `community.docker` deps) and logs failures via
+  `logger -t redeploy-cron`.
 
 > **Why `recreate` is conditional (not hardcoded `always`).** Deploys are idempotent: a
 > no-op `deploy.yml` recreates nothing; editing one config recreates only that service.
@@ -22,9 +28,8 @@ Utility role (not a container). Every container role calls into it via
 > would silently *not* apply a config-file-only edit (the compose config-hash is unchanged),
 > but it *does* handle image changes (`build: always` rebuilds; identical rebuild = no-op)
 > and `docker-compose.yml` edits. Wired roles: authelia, traefik, homepage, grafana,
-> prometheus, janitorr, livesync, peanut, recyclarr, kopia (entrypoint.sh). **pihole is
-> exempt** (its own
-> `absent`→`present` DNS-bootstrap flow, not `docker_deploy`). Design:
+> prometheus, janitorr, livesync, peanut, recyclarr, kopia (entrypoint.sh), pihole
+> (resolver configs; its former `absent`→`present` exemption was removed 2026-06-09). Design:
 > `docs/superpowers/specs/2026-06-07-idempotent-deploys-conditional-recreate-design.md`.
 >
 > **New config-mounting role?** `register:` each bind-mounted config task with a

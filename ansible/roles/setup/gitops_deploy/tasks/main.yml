@@ -8,7 +8,7 @@
     mode: "0750"
   loop:
     - /opt/gitops-deploy      # deployer scripts
-    - /var/lib/gitops-deploy  # state (hold_sha, broad_alerted_sha)
+    - /var/lib/gitops-deploy  # state (hold_sha, broad_alerted_sha, last_run)
     - /etc/gitops-deploy      # config.env (0600 secrets) — template won't mkdir its parent
   become: true
 

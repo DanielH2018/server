@@ -7,8 +7,7 @@ container. On failure: reset to the previous HEAD, redeploy the prior version,
 record the bad SHA as a hold marker, and alert the dedicated Discord webhook.
 
 Config comes from /etc/gitops-deploy/config.env (KEY=VALUE), written by Ansible:
-  REPO_DIR, BRANCH, DISCORD_WEBHOOK, KUMA_PUSH_TOKEN, KUMA_PUSH_URL_BASE,
-  HEALTH_TIMEOUT_S, MONITORING_NETWORK
+  REPO_DIR, BRANCH, DISCORD_WEBHOOK, HEALTH_TIMEOUT_S
 Stdlib only.
 """
 from __future__ import annotations
@@ -18,7 +17,6 @@ import os
 import subprocess
 import sys
 import time
-import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -29,10 +27,10 @@ from deploy_logic import (  # noqa: E402
 )
 
 HOLD_FILE = "/var/lib/gitops-deploy/hold_sha"
+LAST_RUN = "/var/lib/gitops-deploy/last_run"
 # Last origin SHA we've already alerted on for a broad change, so a deferred
 # broad change doesn't re-page Discord every 30-min tick until it's resolved.
 BROAD_FILE = "/var/lib/gitops-deploy/broad_alerted_sha"
-CURL_IMAGE = "curlimages/curl:8.11.1"  # pinned; throwaway push-ping container
 
 
 def cfg() -> dict[str, str]:
@@ -50,11 +48,13 @@ C = cfg()
 REPO = C["REPO_DIR"]
 BRANCH = C.get("BRANCH", "master")
 TIMEOUT = int(C.get("HEALTH_TIMEOUT_S", "300"))
-NET = C.get("MONITORING_NETWORK", "monitoring")
 
 
-def run(args: list[str], cwd: str | None = REPO, check: bool = True) -> str:
-    r = subprocess.run(args, cwd=cwd, text=True, capture_output=True)
+def run(args: list[str], cwd: str | None = REPO, check: bool = True,
+        timeout: float | None = None) -> str:
+    # timeout defaults to None so the long deploy/git calls are unbounded as before;
+    # only the health-gate's docker inspects pass a short bound (see health_ok).
+    r = subprocess.run(args, cwd=cwd, text=True, capture_output=True, timeout=timeout)
     if check and r.returncode != 0:
         raise RuntimeError(f"{' '.join(args)} -> {r.returncode}\n{r.stderr}")
     return r.stdout.strip()
@@ -104,20 +104,16 @@ def discord(content: str) -> None:
         log(f"discord alert failed: {e}")
 
 
-def kuma_push(status: str, msg: str) -> None:
-    token = C.get("KUMA_PUSH_TOKEN", "")
-    base = C.get("KUMA_PUSH_URL_BASE", "")  # e.g. http://uptime-kuma:3001/api/push
-    if not token or not base:
-        return
-    url = f"{base}/{token}?status={status}&msg={urllib.parse.quote(msg)}"
-    # Host can't resolve the container DNS name; push from inside the monitoring net.
-    r = subprocess.run(
-        ["docker", "run", "--rm", "--network", NET, CURL_IMAGE,
-         "-sf", "-m", "10", url],
-        capture_output=True, text=True,
-    )
-    if r.returncode != 0:  # best-effort, but don't fail silently — stale monitor otherwise
-        log(f"kuma push failed (rc={r.returncode}): {r.stderr.strip() or r.stdout.strip()}")
+def _inspect(fmt: str, container: str, timeout: float = 15.0) -> str:
+    """One `docker inspect -f` field, or '' if empty/gone — or if the call exceeds
+    `timeout`. The deadline in health_ok() is only checked between calls, so a wedged
+    daemon on an unbounded inspect would block the whole deployer forever; bounding each
+    inspect lets a hang degrade into a failed gate instead."""
+    try:
+        return run(["docker", "inspect", "-f", fmt, container],
+                   cwd=None, check=False, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return ""
 
 
 def health_ok(container: str, settle_checks: int = 3) -> bool:
@@ -128,13 +124,11 @@ def health_ok(container: str, settle_checks: int = 3) -> bool:
     deadline = time.time() + TIMEOUT
     running_streak = 0
     while time.time() < deadline:
-        st = run(["docker", "inspect", "-f", "{{.State.Health.Status}}", container],
-                 cwd=None, check=False)
+        st = _inspect("{{.State.Health.Status}}", container)
         if st == "healthy":
             return True
         if st == "":  # no healthcheck (or container gone) -> require sustained running
-            run_st = run(["docker", "inspect", "-f", "{{.State.Running}}", container],
-                         cwd=None, check=False)
+            run_st = _inspect("{{.State.Running}}", container)
             running_streak = running_streak + 1 if run_st == "true" else 0
             if running_streak >= settle_checks:
                 return True
@@ -172,8 +166,8 @@ def deploy(services: set[str]) -> None:
 
 def main() -> int:
     # A dirty working tree (operator may be mid-edit) is a healthy skip, not an
-    # outage: we never deploy from it, but we still push liveness below so a long
-    # edit session doesn't falsely trip the push monitor's dead-man's-switch.
+    # outage: we never deploy from it, but the tick completes and writes last_run so
+    # a long edit session doesn't falsely trip the GitOps-Alive monitor.
     # (git fetch is safe on a dirty tree — it only updates remote-tracking refs.)
     dirty = bool(run(["git", "status", "--porcelain"]))
 
@@ -186,14 +180,11 @@ def main() -> int:
     if action == "dirty":
         discord("⚠️ gitops-deploy: working tree dirty on daniel-server — skipping. "
                 "Resolve manually.")
-        kuma_push("up", "working tree dirty — skipping")
         return 0
     if action == "noop":
-        kuma_push("up", "in sync")
         return 0
     if action == "skip_hold":
         log(f"origin at known-bad {origin[:8]}; holding")
-        kuma_push("up", "holding known-bad commit")
         return 0
 
     paths = run(["git", "diff", "--name-only", f"{local}..{origin}"]).splitlines()
@@ -206,11 +197,9 @@ def main() -> int:
                     f"(`ansible-playbook ansible/deploy.yml`), then `git merge --ff-only "
                     f"origin/{BRANCH}` on the host to clear it.")
             _write_marker(BROAD_FILE, origin)
-        kuma_push("up", "broad change deferred")
         return 0
     if not cs.services:
         run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])  # docs-only etc.
-        kuma_push("up", "no service change")
         return 0
 
     run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])
@@ -219,7 +208,6 @@ def main() -> int:
     failed = [s for s in sorted(cs.services) if not service_healthy(s)]
     if not failed:
         write_hold(None)
-        kuma_push("up", f"deployed {','.join(sorted(cs.services))}")
         return 0
 
     # Rollback: reset to prior HEAD, redeploy the failed service(s) on old version.
@@ -227,7 +215,6 @@ def main() -> int:
     run(["git", "reset", "--hard", local])
     deploy(set(failed))
     write_hold(origin)
-    kuma_push("down", f"rolled back {','.join(failed)}")
     discord(
         f"🚨 gitops-deploy: **rollback** on daniel-server.\n"
         f"Service(s) `{', '.join(failed)}` from commit `{origin[:8]}` failed the health "
@@ -239,7 +226,11 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        rc = main()
     except Exception as e:
         discord(f"🚨 gitops-deploy crashed: {e}")
         raise
+    # Liveness marker: a tick that completed without crashing (incl. a rollback, rc=1).
+    # monitor-bridge reads this; a crash skips the write so the Alive monitor goes stale.
+    _write_marker(LAST_RUN, str(time.time()))
+    sys.exit(rc)

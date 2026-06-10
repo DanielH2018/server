@@ -7,11 +7,11 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- _(none currently)_
-
 ## Superseded
 
-- ~~Setup Authelia for Raspberry Pi~~ — `daniel-pi` is now intentionally **LAN-only**
-  (`host_vars/daniel-pi.yml`: `expose_mode: lan`, all services `use_authelia: false`),
-  reached over WireGuard rather than an internet-exposed, Authelia-gated ingress. Re-open
-  only if a Pi service ever needs internet exposure.
+- Optimize Pi Setup, connect this server to it for Claude. — done 2026-06-08: wired
+  server→Pi SSH so deploys can be driven remotely; fixed the failing `initial_setup.yml`
+  (apt-show-versions/AIDE OOM-killed mid-dpkg on the 512 MB Zero 2 W → disk swapfile before
+  the heavy apt; `max-load=24` watchdog rebooting mid-apt → stop it during provisioning;
+  `uv`/`prek` `become:false` tasks using root's HOME → resolve the connecting user's). Host
+  now provisions clean (`failed=0`); container stack still via `deploy.yml`.

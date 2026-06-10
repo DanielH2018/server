@@ -5,6 +5,12 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 domain: daniel-pi.com
 # LAN-only host: publish web UIs bound to the LAN IP instead of routing through Traefik.
 expose_mode: lan
+# Disk-backed swap for the 512 MB Zero 2 W. The RAM-resident zram (optimize_pi) can't add
+# real capacity, so heavy one-shot apt/dpkg steps (apt-show-versions cache build, `upgrade: dist`,
+# AIDE init) OOM-kill mid-transaction and corrupt the package DB. Created by the initial_setup
+# role BEFORE its apt tasks run. See ansible/roles/setup/initial_setup/tasks/main.yml.
+pi_swapfile_path: /swapfile
+pi_swapfile_size: 1G
 containers_list:
   # Read-only Docker socket proxy — serves glances + dozzle; the hardcoded
   # docker-proxy-lifecycle sub-proxy (restart-only) serves autoheal.

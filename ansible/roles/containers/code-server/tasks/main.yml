@@ -12,9 +12,11 @@
     path: "/home/{{ sys_user }}/server/ansible/roles/containers/code-server/templates/github"
   register: containers_github_data
 
+# `copy`, not `template`: this is a private key — Jinja must never parse it (a key
+# containing `{%`/`{{` byte sequences would be mangled or fail the render).
 - name: Copy github key
-  ansible.builtin.template:
-    src: github
+  ansible.builtin.copy:
+    src: "/home/{{ sys_user }}/server/ansible/roles/containers/code-server/templates/github"
     dest: "/home/{{ sys_user }}/server/containers/code-server/config/.ssh/github"
     mode: "0600"
   when: containers_github_data.stat.exists
@@ -40,16 +42,18 @@
     name: common
     tasks_from: docker_deploy.yml
 
-- name: Schedule weekly code-server redeploy cron job
-  ansible.builtin.cron:
-    name: "Redeploy code-server"
-    weekday: "0"
-    hour: "6"
-    minute: "0"
-    user: "{{ sys_user }}"
-    job: "cd /home/{{ sys_user }}/server && ansible-playbook ansible/deploy.yml --tags code-server"
-    state: present
+- name: Schedule weekly redeploy cron job
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: redeploy_cron.yml
+  vars:
+    common_redeploy_cron_minute: "0"
 
-- name: Cleanup old code-server images
+# NOTE: system-wide effect — prunes dangling images from ALL roles' weekly rebuilds
+# (n8n, crowdsec too), not just code-server's. The `until` filter spares anything less
+# than a week old so freshly-built layers from other roles' deploys aren't evicted.
+- name: Cleanup old dangling images left by weekly rebuilds
   community.docker.docker_prune:
     images: true
+    images_filters:
+      until: 168h

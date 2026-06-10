@@ -38,7 +38,10 @@ entryPoints:
     http:
       middlewares:
         - crowdsec@file
-        - rate-limit@file
+        # rate-limit is NOT applied entrypoint-wide on https: it's attached per-router
+        # (rate-limit@file via the shared labels() macro + each hand-rolled router) so
+        # the livesync sync router can opt into the higher rate-limit-livesync ceiling.
+        # An entrypoint-level middleware can't be loosened for a single router.
         - default-headers@file
   # Game-server entrypoints — re-enable alongside the published ports in the
   # compose template when Terraria/Minecraft are deployed again.

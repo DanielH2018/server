@@ -19,6 +19,9 @@ services:
       - 'traefik.http.routers.authelia.rule=Host(`auth.{{ domain }}`)'
       - 'traefik.http.routers.authelia.entrypoints=https'
       - 'traefik.http.routers.authelia.tls=true'
+      # rate-limit moved off the https entrypoint to per-router; re-acquire the default
+      # (brute-force protection for the login portal). Definition lives in config.yml.j2.
+      - 'traefik.http.routers.authelia.middlewares=rate-limit@file'
       # Setup auth forwarding
       - 'traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/authz/forward-auth'
       - 'traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true'

@@ -1,4 +1,72 @@
 ---
+# =========================================================================
+# Pi memory safety — MUST run before the heavy apt below.
+# The Zero 2 W has 512 MB RAM; apt-show-versions' cache build and
+# `upgrade: dist` OOM-kill mid-dpkg without disk-backed swap, corrupting the
+# package DB (the classic "dpkg was interrupted" deploy hang). The thrash can
+# also trip the optimize_pi watchdog (max-load-1=24) into rebooting mid-apt,
+# so we stop the watchdog for the run — optimize_pi re-enables it at the end.
+# This lives here, not in optimize_pi, because optimize_pi runs LAST in
+# initial_setup.yml — too late to protect these apt tasks.
+# =========================================================================
+- name: Gather service facts
+  ansible.builtin.service_facts:
+  when: inventory_hostname == 'daniel-pi'
+
+- name: Stop the hardware watchdog during provisioning (Pi)
+  ansible.builtin.systemd:
+    name: watchdog
+    state: stopped
+  become: true
+  when:
+    - inventory_hostname == 'daniel-pi'
+    - "'watchdog.service' in (ansible_facts.services | default({}))"
+
+- name: Create swap file (Pi)
+  ansible.builtin.command:
+    cmd: "fallocate -l {{ pi_swapfile_size }} {{ pi_swapfile_path }}"
+    creates: "{{ pi_swapfile_path }}"
+  become: true
+  register: initial_setup_swapfile_create
+  when: inventory_hostname == 'daniel-pi'
+
+- name: Secure swap file permissions (Pi)
+  ansible.builtin.file:
+    path: "{{ pi_swapfile_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  when: inventory_hostname == 'daniel-pi'
+
+- name: Format swap file (Pi)
+  ansible.builtin.command:
+    cmd: "mkswap {{ pi_swapfile_path }}"
+  become: true
+  changed_when: true
+  when:
+    - inventory_hostname == 'daniel-pi'
+    - initial_setup_swapfile_create is changed
+
+- name: Persist swap file in fstab (Pi)
+  ansible.posix.mount:
+    path: none
+    src: "{{ pi_swapfile_path }}"
+    fstype: swap
+    opts: sw
+    state: present
+  become: true
+  when: inventory_hostname == 'daniel-pi'
+
+- name: Activate swap file (Pi)
+  ansible.builtin.command:
+    cmd: "swapon {{ pi_swapfile_path }}"
+  become: true
+  changed_when: true
+  when:
+    - inventory_hostname == 'daniel-pi'
+    - initial_setup_swapfile_create is changed
+
 - name: Update and upgrade system packages
   ansible.builtin.apt:
     update_cache: true
@@ -28,6 +96,16 @@
     state: present
   become: true
 
+- name: Resolve the deploy user's home directory
+  # The play runs become:true, so gather_facts escalated and ansible_facts.env.HOME is
+  # /root. The uv/prek tasks below run become:false (per-user installs as the connecting
+  # user), so they need THAT user's home, not root's. Capture it explicitly here rather
+  # than re-gathering env facts globally (config_files/docker_install also read env facts).
+  ansible.builtin.shell: echo "$HOME"
+  become: false
+  changed_when: false
+  register: initial_setup_user_home
+
 - name: Install uv (per-user; PEP 668-safe on 24.04+)
   # 24.04 / Python 3.12 marks the system environment externally-managed (PEP 668), so a
   # global `pip install` errors. uv is a standalone binary (no system Python needed),
@@ -35,7 +113,7 @@
   # user (not the play's become: true) so it lands in the repo owner's home.
   ansible.builtin.shell:
     cmd: set -o pipefail && curl -LsSf https://astral.sh/uv/install.sh | sh
-    creates: "{{ ansible_facts.env.HOME }}/.local/bin/uv"
+    creates: "{{ initial_setup_user_home.stdout }}/.local/bin/uv"
     executable: /bin/bash
   become: false
 
@@ -45,9 +123,9 @@
   # repo's .python-version (the test/validate `uv run` hooks); ansible-core also backs
   # those hooks (via pyproject.toml), but as a CLI tool here it is what runs deploys.
   # Per-user, so `prek install` (below) finds prek on ~/.local/bin.
-  ansible.builtin.command: "{{ ansible_facts.env.HOME }}/.local/bin/uv tool install --python 3.13 {{ item }}"
+  ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool install --python 3.13 {{ item }}"
   args:
-    creates: "{{ ansible_facts.env.HOME }}/.local/share/uv/tools/{{ item }}"
+    creates: "{{ initial_setup_user_home.stdout }}/.local/share/uv/tools/{{ item }}"
   loop:
     - ansible-core
     - ansible-lint
@@ -205,7 +283,7 @@
   # by the repo owner, and pick up the user's uv-managed ~/.local/bin where prek lives.
   become: false
   environment:
-    PATH: "{{ ansible_facts.env.HOME }}/.local/bin:{{ ansible_facts.env.PATH }}"
+    PATH: "{{ initial_setup_user_home.stdout }}/.local/bin:{{ ansible_facts.env.PATH }}"
 
 - name: Enable IPv4 forwarding
   ansible.posix.sysctl:
