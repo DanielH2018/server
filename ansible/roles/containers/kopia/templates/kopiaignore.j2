@@ -40,7 +40,9 @@ tdarr/transcode_cache/
 # ── Metrics & monitoring (regenerate from live services) ─────────────────────
 # (prometheus's TSDB lives in the prometheus_data named volume — outside
 # containers/ and Kopia's scope entirely, so it needs no entry here.)
-scrutiny/influxdb/
+# NB: the bind dir is influxdb2 (InfluxDB v2 layout) — a bare "influxdb/" never
+# matched and the TSDB was silently backed up until 2026-06-10.
+scrutiny/influxdb2/
 
 # ── App-specific caches ───────────────────────────────────────────────────────
 code-server/config/extensions*/
