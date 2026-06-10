@@ -29,7 +29,8 @@ Utility role (not a container). Every container role calls into it via
 > but it *does* handle image changes (`build: always` rebuilds; identical rebuild = no-op)
 > and `docker-compose.yml` edits. Wired roles: authelia, traefik, homepage, grafana,
 > prometheus, janitorr, livesync, peanut, recyclarr, kopia (entrypoint.sh), pihole
-> (resolver configs; its former `absent`→`present` exemption was removed 2026-06-09). Design:
+> (resolver configs; its former `absent`→`present` exemption was removed 2026-06-09),
+> freshrss (nginx feed-cache conf, wired 2026-06-10). Design:
 > `docs/superpowers/specs/2026-06-07-idempotent-deploys-conditional-recreate-design.md`.
 >
 > **New config-mounting role?** `register:` each bind-mounted config task with a
