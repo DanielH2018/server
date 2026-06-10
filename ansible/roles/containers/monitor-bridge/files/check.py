@@ -15,7 +15,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 def _env(name, default):
@@ -42,12 +42,21 @@ RESTART_WINDOW = _env("RESTART_WINDOW", "15m")
 RESTART_MAX = float(_env("RESTART_MAX", "3"))
 TRAEFIK_5XX_PCT = float(_env("TRAEFIK_5XX_PCT", "5"))
 TRAEFIK_MIN_RPS = float(_env("TRAEFIK_MIN_RPS", "0.05"))
+N8N_URL = _env("N8N_URL", "http://n8n:5678").rstrip("/")
+N8N_API_KEY = _env("N8N_API_KEY", "")
+N8N_FAIL_WINDOW = _env("N8N_FAIL_WINDOW", "15m")
+N8N_FAIL_MAX = float(_env("N8N_FAIL_MAX", "0"))
+GITOPS_STATE_DIR = _env("GITOPS_STATE_DIR", "/gitops-state")
+GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
 
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
 
-def _get_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "monitor-bridge"})
+def _get_json(url, headers=None):
+    hdrs = {"User-Agent": "monitor-bridge"}
+    if headers is not None:
+        hdrs.update(headers)
+    req = urllib.request.Request(url, headers=hdrs)
     with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 (internal URLs)
         return json.load(resp)
 
@@ -101,6 +110,20 @@ def parse_rfc3339(ts):
                 break
         ts = head + "." + digits[:6] + rest
     return datetime.fromisoformat(ts)
+
+
+def parse_duration(s):
+    """Parse a Prometheus-style duration ('900s', '15m', '1h', '2d') to seconds (float).
+
+    A bare number is treated as seconds. The n8n check evaluates its failure window in
+    Python (unlike the *_WINDOW vars that are interpolated straight into PromQL, which
+    Prometheus parses), so it needs this.
+    """
+    s = str(s).strip()
+    units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    if s and s[-1] in units:
+        return float(s[:-1]) * units[s[-1]]
+    return float(s)
 
 
 def backup_age_hours(sources_json, path, now=None):
@@ -279,6 +302,96 @@ def check_traefik_5xx():
     return True, "5xx %.1f%% of %.2f rps" % (pct, total)
 
 
+def n8n_failures(workflows_json, executions_json, window_s, now=None):
+    """Failed executions of *active* workflows within the last `window_s` seconds.
+
+    Returns [(workflow_name, count), ...] sorted by count desc. An execution counts only
+    if its workflowId belongs to an active ("Prod") workflow AND its stoppedAt (fallback
+    startedAt) is within the window. Pure — fed the n8n /workflows and /executions
+    payloads, so it's unit-tested without HTTP (like backup_age_hours).
+    """
+    now = now or datetime.now(timezone.utc)
+    active = {
+        w["id"]: w.get("name") or w["id"]
+        for w in workflows_json.get("data", [])
+        if w.get("active")
+    }
+    cutoff = now - timedelta(seconds=window_s)
+    counts = {}
+    for ex in executions_json.get("data", []):
+        wid = ex.get("workflowId")
+        if wid not in active:
+            continue
+        ts = ex.get("stoppedAt") or ex.get("startedAt")
+        if not ts:
+            continue
+        dt = parse_rfc3339(ts)
+        if dt.tzinfo is None:  # n8n normally emits UTC 'Z'; assume UTC if a naive ts slips through
+            dt = dt.replace(tzinfo=timezone.utc)
+        if dt < cutoff:
+            continue
+        counts[wid] = counts.get(wid, 0) + 1
+    pairs = [(active[wid], c) for wid, c in counts.items()]
+    pairs.sort(key=lambda nc: -nc[1])
+    return pairs
+
+
+def gitops_alive(age_s, max_age_s):
+    """Pure: is the deployer's last completed tick recent enough? Returns (ok, msg)."""
+    if age_s <= max_age_s:
+        return True, "deployer ran %.0fm ago" % (age_s / 60)
+    return False, "deployer last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
+
+
+def gitops_status(hold_sha):
+    """Pure: is a rolled-back commit being held? Returns (ok, msg)."""
+    if not hold_sha:
+        return True, "no held deploy"
+    return False, "deploy held at %s — revert the offending PR" % hold_sha[:8]
+
+
+def check_n8n():
+    """Failed executions of active ("Prod") n8n workflows within N8N_FAIL_WINDOW.
+
+    Polls the n8n public API on the internal network (X-N8N-API-KEY header, no Authelia).
+    Empty N8N_API_KEY -> disabled (stays up) so it never false-pages before the operator
+    sets the key. An unreachable/erroring API raises -> the loop renders it down with the
+    error, like check_targets_down (a dead API surfaces, not silent-green).
+    """
+    if not N8N_API_KEY:
+        return True, "n8n monitoring disabled (no API key)"
+    headers = {"X-N8N-API-KEY": N8N_API_KEY}
+    workflows = _get_json(N8N_URL + "/api/v1/workflows?active=true&limit=250", headers=headers)
+    executions = _get_json(N8N_URL + "/api/v1/executions?status=error&limit=100", headers=headers)
+    offenders = n8n_failures(workflows, executions, parse_duration(N8N_FAIL_WINDOW))
+    total = sum(c for _, c in offenders)
+    if total > N8N_FAIL_MAX:
+        desc = ", ".join("%s (%d)" % (n, c) for n, c in offenders[:5])
+        return False, "%d active workflow(s) failed in %s: %s" % (
+            len(offenders), N8N_FAIL_WINDOW, desc)
+    return True, "no active-workflow failures in %s" % N8N_FAIL_WINDOW
+
+
+def check_gitops_alive():
+    try:
+        with open(os.path.join(GITOPS_STATE_DIR, "last_run")) as fh:
+            ts = float(fh.read().strip())
+    except FileNotFoundError:
+        return False, "no last_run marker (deployer never completed a tick?)"
+    except ValueError:
+        return False, "last_run marker unparseable"
+    return gitops_alive(time.time() - ts, GITOPS_MAX_AGE_S)
+
+
+def check_gitops_status():
+    try:
+        with open(os.path.join(GITOPS_STATE_DIR, "hold_sha")) as fh:
+            hold = fh.read().strip() or None
+    except FileNotFoundError:
+        hold = None
+    return gitops_status(hold)
+
+
 CHECKS = [
     ("backup", _env("KUMA_PUSH_KOPIA", ""), check_backup),
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
@@ -289,6 +402,9 @@ CHECKS = [
     ("cpu", _env("KUMA_PUSH_CPU", ""), check_cpu_throttle),
     ("targets", _env("KUMA_PUSH_TARGETS", ""), check_targets_down),
     ("traefik5xx", _env("KUMA_PUSH_TRAEFIK", ""), check_traefik_5xx),
+    ("n8n", _env("KUMA_PUSH_N8N", ""), check_n8n),
+    ("gitops_alive",  _env("KUMA_PUSH_GITOPS_ALIVE",  ""), check_gitops_alive),
+    ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
 ]
 
 

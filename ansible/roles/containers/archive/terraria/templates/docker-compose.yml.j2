@@ -1,3 +1,7 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+---
 
 services:
   terraria:
@@ -13,17 +17,17 @@ services:
     restart: unless-stopped
     stdin_open: true # specific to this image to allow console commands
     tty: true        # specific to this image to allow console commands
-    networks:
-      - {{ docker_network }}
+    {{ service_networks() }}
     labels:
       - "traefik.enable=true"
       - "traefik.tcp.routers.terraria.entrypoints=terraria"
       - "traefik.tcp.routers.terraria.rule=HostSNI(`*`)"
       - "traefik.tcp.services.terraria.loadbalancer.server.port=7777"
+      {{ kuma(container_item.name) }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('2.0', '2048M', '0.25', '512M') }}
 
 volumes:
   worlds:
 
-networks:
-  {{ docker_network }}:
-    external: true
+{{ external_networks() }}

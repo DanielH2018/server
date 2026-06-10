@@ -48,7 +48,7 @@ Secrets are committed **encrypted** (SOPS/age), so the clone already contains
 
 `uv` is the **only manual prerequisite** — everything else flows from it. The repo is a uv
 "virtual" project (`pyproject.toml` pins `ansible-core` in the `dev` group; `.python-version`
-pins 3.13), so `uv run ansible-playbook …` self-provisions Python + ansible-core + the runtime
+pins 3.14), so `uv run ansible-playbook …` self-provisions Python + ansible-core + the runtime
 from `uv.lock`. That includes `bootstrap.yml` in §4, so no system-wide Ansible install is
 needed.
 

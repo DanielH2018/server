@@ -12,39 +12,29 @@
       - "{{ container_item.name }}/data/unbound"
       - "{{ container_item.name }}/data/etc-dnsmasq.d"
 
-- name: Create configuration files from templates
+# Bind-mounted resolver configs: a change here is invisible to Compose's config-hash,
+# so it must force a recreate via `common_config_changed` (see common/CLAUDE.md).
+- name: Create resolver configuration files from templates
   ansible.builtin.template:
     src: "{{ item.src }}"
     dest: "{{ pihole_base }}/{{ item.dest }}"
     mode: "0644"
-  vars:
-    container: "{{ role_name }}"
   loop:
-    - src: docker-compose.yml.j2
-      dest: docker-compose.yml
     - src: unbound.conf.j2
       dest: data/unbound/my_settings.conf
     - src: dnsmasq.yml.j2
       dest: data/etc-dnsmasq.d/02-wildcard.conf
+  register: pihole_cfg_resolver
 
-- name: Pull container images
-  community.docker.docker_image:
-    name: "{{ item }}"
-    source: pull
-    force_source: true
-  become: true
-  become_method: ansible.builtin.sudo
-  loop:
-    - pihole/pihole:latest
-    - klutchell/unbound:latest
-
-- name: Stop existing Pihole stack
-  community.docker.docker_compose_v2:
-    project_src: "{{ pihole_base }}"
-    state: absent
-  become: true
-  become_method: ansible.builtin.sudo
-  failed_when: false
+# Pre-render the compose file so we know BEFORE deploying whether a recreate is coming
+# (docker_deploy.yml re-renders it to identical content — a no-op). That early knowledge
+# gates the resolv.conf fallback below to runs where host DNS will actually blip.
+- name: Create docker-compose.yml from template
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ pihole_base }}/docker-compose.yml"
+    mode: "0600"
+  register: pihole_cfg_compose
 
 - name: Stop systemd-resolved.service
   ansible.builtin.systemd:
@@ -52,6 +42,7 @@
     state: stopped
   become: true
   become_method: ansible.builtin.sudo
+  register: pihole_resolved_stop
 
 - name: Disable systemd-resolved.service
   ansible.builtin.systemd:
@@ -60,15 +51,31 @@
   become: true
   become_method: ansible.builtin.sudo
 
+- name: Check /etc/resolv.conf state
+  ansible.builtin.stat:
+    path: /etc/resolv.conf
+    follow: false
+  register: pihole_resolv_stat
+
+# Guarded so it removes only the systemd-resolved stub symlink — once Pi-hole's regular
+# file is in place, an unconditional `state: absent` would delete it on every run.
 - name: Remove /etc/resolv.conf symlink
   ansible.builtin.file:
     path: /etc/resolv.conf
     state: absent
   become: true
   become_method: ansible.builtin.sudo
+  when: pihole_resolv_stat.stat.islnk | default(false)
+  register: pihole_resolved_symlink
 
-# Set a working fallback immediately after stopping systemd-resolved so any
-# subsequent failure does not leave the host without DNS.
+- name: Check current Pi-hole container state
+  community.docker.docker_container_info:
+    name: pihole
+  register: pihole_existing
+
+# Write the Cloudflare fallback only when host DNS is actually at risk: first install,
+# stack about to be recreated (config/compose change), or systemd-resolved was just
+# displaced. A steady-state no-op run must NOT flip resolv.conf away from Pi-hole.
 - name: Create fallback /etc/resolv.conf for deployment
   ansible.builtin.copy:
     content: "nameserver 1.1.1.1\n"
@@ -76,13 +83,23 @@
     mode: "0644"
   become: true
   become_method: ansible.builtin.sudo
+  when: >-
+    (not pihole_existing.exists)
+    or not (pihole_existing.container.State.Running | default(false))
+    or pihole_cfg_resolver is changed
+    or pihole_cfg_compose is changed
+    or pihole_resolved_stop is changed
+    or pihole_resolved_symlink is changed
+    or not pihole_resolv_stat.stat.exists
 
-- name: Deploy Pihole
-  community.docker.docker_compose_v2:
-    project_src: "{{ pihole_base }}"
-    state: present
-  become: true
-  become_method: ansible.builtin.sudo
+- name: Deploy Container
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+  vars:
+    # Compose-file changes are handled by `recreate: auto` (config-hash); only the
+    # bind-mounted resolver configs need the forced recreate.
+    common_config_changed: "{{ pihole_cfg_resolver is changed }}"
 
 - name: Update /etc/hosts
   ansible.builtin.lineinfile:

@@ -48,10 +48,10 @@
       "minimumReleaseAge": "7 days"
     },
     {
-      "description": "LinuxServer.io images tag as <upstream-version>-lsNN (e.g. 4.0.17.2952-ls312); the default docker versioning can't order those, so compare them with loose versioning. If a real bump is ever misclassified, refine this to a regex versioning.",
+      "description": "LinuxServer.io images tag as <upstream-version>-lsNN (e.g. 4.0.17.2952-ls312). Regex versioning both orders these correctly and rejects non-release tags (commit hashes like 438eee94-ls46, nightlies) as invalid, so they're never offered. Optional 4th version part -> build, OS suffix (ubu2404) -> compatibility, -lsNN -> revision.",
       "matchDatasources": ["docker"],
       "matchPackageNames": ["/linuxserver/"],
-      "versioning": "loose"
+      "versioning": "regex:^v?(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:\\.(?<build>\\d+))?(?<compatibility>[a-z]+\\d+)?-ls(?<revision>\\d+)$"
     },
     {
       "description": "Keep prek.toml hook bumps in their own weekly group, separate from the container-image group. They match the custom.regex manager, so the non-major auto-merge + 7-day soak rule above already applies; this only overrides the group name. Majors stay manual (no automerge rule matches them).",

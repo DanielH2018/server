@@ -1,4 +1,8 @@
 {% from 'traefik.yml.j2' import labels with context %}
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
 ---
 
 services:
@@ -11,6 +15,10 @@ services:
     volumes:
     - ./drive:/drive:rw
     - ./record:/record:rw
+    labels:
+      {{ kuma('guacd') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('0.50', '512M', '0.10', '64M') }}
 
   postgres:
     image: postgres:15.2-alpine
@@ -26,6 +34,11 @@ services:
     volumes:
     - ./init:/docker-entrypoint-initdb.d:z
     - ./data:/var/lib/postgresql/data:Z
+    {{ healthcheck('["CMD-SHELL", "pg_isready -U {{ POSTGRES_USER }}"]') }}
+    labels:
+      {{ kuma('guacamole_db', name='Guacamole DB') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('1.0', '512M', '0.10', '128M') }}
 
   guacamole:
     image: guacamole/guacamole:latest
@@ -37,8 +50,7 @@ services:
       POSTGRES_PASSWORD: {{ POSTGRES_PASSWORD }}
       POSTGRES_USER: {{ POSTGRES_USER }}
       POSTGRES_HOSTNAME: {{ POSTGRES_HOSTNAME }}
-    networks:
-      - {{ docker_network }}
+    {{ service_networks() }}
     links:
       - guacd
     depends_on:
@@ -54,7 +66,7 @@ services:
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
-          docker_network,
+          (container_item.networks | default([docker_network]))[0],
           container_item.use_authelia
         )
       }}
@@ -62,7 +74,8 @@ services:
       # Add guacamole prefix to url
       - "traefik.http.routers.guacamole-secure.middlewares=add-guacamole"
       - "traefik.http.middlewares.add-guacamole.addprefix.prefix=/guacamole"
+      {{ kuma(container_item.name) }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('1.0', '1024M', '0.10', '256M') }}
 
-networks:
-  {{ docker_network }}:
-    external: true
+{{ external_networks() }}

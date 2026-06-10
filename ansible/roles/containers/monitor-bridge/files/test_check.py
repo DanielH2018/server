@@ -9,7 +9,8 @@ nanosecond RFC3339 parsing (Kopia emits 9 fractional digits; fromisoformat caps 
 and the Kopia /api/v1/sources age/error extraction. The HTTP glue is exercised live
 via `check.py --once` at deploy time.
 """
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timezone, timedelta
 
 import pytest
 
@@ -271,3 +272,306 @@ def test_mem_high_alerts(monkeypatch):
     ok, msg = check.check_mem()
     assert not ok
     assert "mem" in msg.lower()
+
+
+# --- check_backup -----------------------------------------------------------
+
+def _iso_ago(hours):
+    """RFC3339 'Z' timestamp `hours` in the past. check_backup() (unlike the
+    backup_age_hours unit tests) calls now() itself, so snapshots are relative to real now."""
+    return (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat().replace("+00:00", "Z")
+
+
+def test_backup_fresh_is_ok(monkeypatch):
+    monkeypatch.setattr(check, "BACKUP_PATH", "/data/containers")  # match _sources()'s path
+    last = {"endTime": _iso_ago(1), "stats": {"errorCount": 0}}
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _sources(last))
+    ok, msg = check.check_backup()
+    assert ok
+    assert "0 errors" in msg
+
+
+def test_backup_errors_alert(monkeypatch):
+    monkeypatch.setattr(check, "BACKUP_PATH", "/data/containers")
+    last = {"endTime": _iso_ago(1), "stats": {"errorCount": 3}}
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _sources(last))
+    ok, msg = check.check_backup()
+    assert not ok
+    assert "error" in msg.lower()
+
+
+def test_backup_stale_alerts(monkeypatch):
+    # default BACKUP_MAX_AGE_H=30; a 40h-old snapshot must alert
+    monkeypatch.setattr(check, "BACKUP_PATH", "/data/containers")
+    last = {"endTime": _iso_ago(40), "stats": {"errorCount": 0}}
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _sources(last))
+    ok, msg = check.check_backup()
+    assert not ok
+    assert "ago" in msg
+
+
+def test_backup_missing_source_alerts(monkeypatch):
+    # LookupError from backup_age_hours must surface as a descriptive down, not crash
+    monkeypatch.setattr(check, "BACKUP_PATH", "/data/containers")
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"sources": []})
+    ok, msg = check.check_backup()
+    assert not ok
+    assert "no Kopia source" in msg
+
+
+# --- check_disk -------------------------------------------------------------
+
+def test_disk_under_threshold_is_ok(monkeypatch):
+    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    # avail 0.5GB of 1GB -> 50% used, under default 90%
+    monkeypatch.setattr(check, "prom_scalar", _seq(0.5e9, 1e9))
+    ok, msg = check.check_disk()
+    assert ok
+    assert "under" in msg
+
+
+def test_disk_over_threshold_names_mount(monkeypatch):
+    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    # avail 0.05GB of 1GB -> 95% used, over default 90%
+    monkeypatch.setattr(check, "prom_scalar", _seq(0.05e9, 1e9))
+    ok, msg = check.check_disk()
+    assert not ok
+    assert "/" in msg
+    assert "95" in msg
+
+
+def test_disk_metric_unavailable_alerts(monkeypatch):
+    # check_disk binds BOTH avail and size before the None/zero guard -> feed two values
+    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(check, "prom_scalar", _seq(None, 1e9))
+    ok, msg = check.check_disk()
+    assert not ok
+    assert "unavailable" in msg
+
+
+# --- check_cert -------------------------------------------------------------
+
+def test_cert_valid_is_ok(monkeypatch):
+    # default CERT_MIN_DAYS=14; 30 days left -> ok
+    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: 30.0)
+    ok, msg = check.check_cert()
+    assert ok
+    assert "valid" in msg
+
+
+def test_cert_expiring_alerts(monkeypatch):
+    # 5 days left < 14 -> down
+    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: 5.0)
+    ok, msg = check.check_cert()
+    assert not ok
+    assert "expires" in msg
+
+
+def test_cert_metric_unavailable_alerts(monkeypatch):
+    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: None)
+    ok, msg = check.check_cert()
+    assert not ok
+    assert "unavailable" in msg
+
+
+# --- parse_duration ---------------------------------------------------------
+
+def test_parse_duration_units():
+    assert check.parse_duration("900s") == 900
+    assert check.parse_duration("15m") == 900
+    assert check.parse_duration("1h") == 3600
+    assert check.parse_duration("2d") == 172800
+    assert check.parse_duration("300") == 300  # bare number = seconds
+
+
+# --- n8n_failures -----------------------------------------------------------
+
+N8N_NOW = datetime(2026, 6, 8, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _n8n_ago(minutes):
+    return (N8N_NOW - timedelta(minutes=minutes)).isoformat().replace("+00:00", "Z")
+
+
+def _workflows(*items):
+    """items: (id, name, active) tuples -> n8n /workflows payload."""
+    return {"data": [{"id": i, "name": n, "active": a} for i, n, a in items]}
+
+
+def _executions(*items):
+    """items: (workflowId, stoppedAt) tuples -> n8n /executions payload (all status=error)."""
+    return {"data": [{"workflowId": w, "status": "error", "stoppedAt": s} for w, s in items]}
+
+
+def test_n8n_failure_within_window_named():
+    wf = _workflows(("1", "Prod Flow", True))
+    ex = _executions(("1", _n8n_ago(5)))
+    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("Prod Flow", 1)]
+
+
+def test_n8n_failure_outside_window_ignored():
+    wf = _workflows(("1", "Prod Flow", True))
+    ex = _executions(("1", _n8n_ago(30)))  # 30m ago, window 15m
+    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == []
+
+
+def test_n8n_inactive_workflow_ignored():
+    wf = _workflows(("1", "Draft Flow", False))
+    ex = _executions(("1", _n8n_ago(5)))
+    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == []
+
+
+def test_n8n_multiple_failures_counted_and_sorted():
+    wf = _workflows(("1", "A Flow", True), ("2", "B Flow", True))
+    ex = _executions(
+        ("1", _n8n_ago(2)),
+        ("2", _n8n_ago(3)), ("2", _n8n_ago(4)), ("2", _n8n_ago(5)),
+    )
+    # B has 3 failures, A has 1 -> sorted by count desc
+    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("B Flow", 3), ("A Flow", 1)]
+
+
+def test_n8n_empty_inputs():
+    assert check.n8n_failures({"data": []}, {"data": []}, 900, now=N8N_NOW) == []
+
+
+def test_n8n_missing_stoppedat_falls_back_to_startedat():
+    wf = _workflows(("1", "Prod Flow", True))
+    ex = {"data": [{"workflowId": "1", "status": "error", "startedAt": _n8n_ago(5)}]}
+    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("Prod Flow", 1)]
+
+
+def test_n8n_naive_timestamp_treated_as_utc():
+    # n8n normally emits UTC 'Z'; a naive timestamp must not raise on the tz-aware compare
+    wf = _workflows(("1", "Prod Flow", True))
+    naive = (N8N_NOW - timedelta(minutes=5)).replace(tzinfo=None).isoformat()  # no offset/Z
+    ex = {"data": [{"workflowId": "1", "status": "error", "stoppedAt": naive}]}
+    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("Prod Flow", 1)]
+
+
+# --- check_n8n --------------------------------------------------------------
+
+def test_n8n_disabled_without_key():
+    # N8N_API_KEY defaults to "" in tests -> monitoring disabled, never a false page
+    ok, msg = check.check_n8n()
+    assert ok
+    assert "disabled" in msg.lower()
+
+
+def test_n8n_check_down_on_recent_failure(monkeypatch):
+    monkeypatch.setattr(check, "N8N_API_KEY", "x")
+    wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    ex = {"data": [{"workflowId": "1", "status": "error", "stoppedAt": now_iso}]}
+    monkeypatch.setattr(check, "_get_json", _seq(wf, ex))
+    ok, msg = check.check_n8n()
+    assert not ok
+    assert "Prod Flow" in msg
+
+
+def test_n8n_check_ok_when_no_failures(monkeypatch):
+    monkeypatch.setattr(check, "N8N_API_KEY", "x")
+    wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
+    ex = {"data": []}
+    monkeypatch.setattr(check, "_get_json", _seq(wf, ex))
+    ok, msg = check.check_n8n()
+    assert ok
+    assert "no active-workflow failures" in msg
+
+
+def test_n8n_check_at_threshold_is_ok(monkeypatch):
+    # total failures == N8N_FAIL_MAX must NOT alert (strictly greater)
+    monkeypatch.setattr(check, "N8N_API_KEY", "x")
+    monkeypatch.setattr(check, "N8N_FAIL_MAX", 1.0)
+    wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    ex = {"data": [{"workflowId": "1", "status": "error", "stoppedAt": now_iso}]}
+    monkeypatch.setattr(check, "_get_json", _seq(wf, ex))
+    ok, _ = check.check_n8n()
+    assert ok
+
+
+# --- gitops_alive / gitops_status (pure) ------------------------------------
+
+def test_gitops_alive_fresh():
+    ok, msg = check.gitops_alive(60, 5400)
+    assert ok
+    assert "1m ago" in msg
+
+
+def test_gitops_alive_at_threshold_is_ok():
+    # exactly at max age still counts as alive (<=)
+    ok, _ = check.gitops_alive(5400, 5400)
+    assert ok
+
+
+def test_gitops_alive_stale():
+    ok, msg = check.gitops_alive(6000, 5400)  # 100m > 90m
+    assert not ok
+    assert "100m ago" in msg
+
+
+def test_gitops_status_no_hold():
+    ok, msg = check.gitops_status(None)
+    assert ok
+    assert msg == "no held deploy"
+
+
+def test_gitops_status_empty_is_ok():
+    ok, _ = check.gitops_status("")
+    assert ok
+
+
+def test_gitops_status_held_names_sha():
+    ok, msg = check.gitops_status("abc123def4567890")
+    assert not ok
+    assert "abc123de" in msg
+
+
+# --- check_gitops_alive / check_gitops_status (file I/O) ---------------------
+
+def _gw(tmp_path, name, content):
+    (tmp_path / name).write_text(content)
+
+
+def test_check_gitops_alive_fresh_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    _gw(tmp_path, "last_run", str(time.time()))
+    ok, _ = check.check_gitops_alive()
+    assert ok
+
+
+def test_check_gitops_alive_stale_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    _gw(tmp_path, "last_run", str(time.time() - 100 * 60))  # 100m old > default 90m
+    ok, _ = check.check_gitops_alive()
+    assert not ok
+
+
+def test_check_gitops_alive_missing_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    ok, msg = check.check_gitops_alive()
+    assert not ok
+    assert "no last_run" in msg
+
+
+def test_check_gitops_alive_unparseable(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    _gw(tmp_path, "last_run", "not-a-float")
+    ok, msg = check.check_gitops_alive()
+    assert not ok
+    assert "unparseable" in msg
+
+
+def test_check_gitops_status_no_file_is_ok(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    ok, _ = check.check_gitops_status()
+    assert ok
+
+
+def test_check_gitops_status_held(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    _gw(tmp_path, "hold_sha", "abc123def4567890")
+    ok, msg = check.check_gitops_status()
+    assert not ok
+    assert "abc123de" in msg

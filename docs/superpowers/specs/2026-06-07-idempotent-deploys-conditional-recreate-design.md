@@ -103,11 +103,12 @@ are excluded — they don't belong to the container and are handled by their own
 
 ## Out of scope / special cases
 
-- **pihole** — does not use `common/docker_deploy`. It renders its own `docker-compose.yml`
-  and runs a deliberate `state: absent` → `state: present` DNS-bootstrap sequence (stop
-  systemd-resolved, fallback `/etc/resolv.conf`, deploy, wait healthy, repoint resolv.conf)
-  every run. Making *that* idempotent is a separate, careful task (highest-risk LAN-DNS
-  service). **Untouched by this change.**
+- **pihole** — *(resolved 2026-06-09)* originally exempt: it rendered its own
+  `docker-compose.yml` and ran a `state: absent` → `state: present` DNS-bootstrap sequence
+  every run. It now uses `common/docker_deploy` with
+  `common_config_changed: pihole_cfg_resolver is changed` (the bind-mounted
+  `unbound.conf`/dnsmasq configs), and the systemd-resolved displacement + fallback
+  `/etc/resolv.conf` steps are gated so a no-op run touches neither the stack nor host DNS.
 - **qbittorrent** — uses `docker_deploy` but templates no bind-mounted config (`wg0.conf`
   template is commented out; `qBittorrent.conf` is stateful/self-managed). It passes nothing
   → inherits `auto`. This is *safer*: it avoids needlessly recreating qBittorrent (whose

@@ -49,6 +49,14 @@
   become: true
   register: traefik_cfg_whitelist
 
+- name: Deploy CrowdSec trusted-remote whitelist (pinned Mullvad exit)
+  ansible.builtin.copy:
+    src: crowdsec-trusted-remote-whitelist.yaml
+    dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/parsers/s02-enrich/trusted-remote-whitelist.yaml"
+    mode: "0664"
+  become: true
+  register: traefik_cfg_trusted_remote_whitelist
+
 - name: Create CrowdSec acquis.yaml from template
   ansible.builtin.template:
     src: crowdsec-acquis.yaml.j2
@@ -123,7 +131,8 @@
     # host-level docker-user-rules/systemd units (handled by their own restart tasks).
     common_config_changed: >-
       {{ (traefik_cfg_config is changed) or (traefik_cfg_static is changed)
-         or (traefik_cfg_whitelist is changed) or (traefik_cfg_acquis is changed)
+         or (traefik_cfg_whitelist is changed) or (traefik_cfg_trusted_remote_whitelist is changed)
+         or (traefik_cfg_acquis is changed)
          or (traefik_cfg_profiles is changed) or (traefik_cfg_discord is changed) }}
 
 - name: Wait for CrowdSec to be healthy

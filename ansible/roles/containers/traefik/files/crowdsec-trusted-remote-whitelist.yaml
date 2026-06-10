@@ -1,0 +1,16 @@
+name: local/trusted-remote-whitelist
+description: "Whitelist trusted remote clients (pinned Mullvad multihop exit)"
+# Exempts the operator's own browsing when tunnelled through a pinned Mullvad
+# server. Mullvad exits are shared datacenter IPs (AS-class CrowdSec distrusts),
+# so burst browsing trips http-probing / http-crawl-non_statics / 403-bf and
+# self-bans (the ban's own 403s feed the 403-bf scenario). Whitelisting at
+# parse-time stops those events from ever becoming decisions for THIS IP only.
+#
+# Trade-off: this also exempts anyone else exiting through the same Mullvad
+# server. Keep it to a single pinned exit (/32) — do NOT widen to Mullvad's
+# whole range. If you re-pin to a different server, update the IP below and
+# redeploy traefik.
+whitelist:
+  reason: "Trusted remote — operator's pinned Mullvad multihop exit"
+  ip:
+    - "173.249.254.225"

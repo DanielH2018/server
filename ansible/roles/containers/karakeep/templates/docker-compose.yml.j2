@@ -61,6 +61,8 @@ services:
       - "traefik.http.routers.karakeep-api.entrypoints=https"
       - "traefik.http.routers.karakeep-api.tls=true"
       - "traefik.http.routers.karakeep-api.service=karakeep"
+      # rate-limit moved off the https entrypoint to per-router; re-acquire the default.
+      - "traefik.http.routers.karakeep-api.middlewares=rate-limit@file"
       - "traefik.http.routers.karakeep-api.priority=100"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('2.0', '2048M', '0.10', '128M') }}

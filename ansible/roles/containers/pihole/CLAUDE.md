@@ -11,6 +11,11 @@ LAN DNS sinkhole (Pi-hole) with a recursive Unbound upstream. See repo-root `CLA
 
 ## Notable
 - **Highest-risk service (LAN DNS/DHCP).** After any change, verify resolution + DHCP.
+- **Idempotent deploy (since 2026-06-09):** uses `common/docker_deploy` with
+  `common_config_changed` wired to the bind-mounted resolver configs (`unbound.conf.j2`,
+  `dnsmasq.yml.j2`). A no-op run recreates nothing and never touches `/etc/resolv.conf`;
+  the Cloudflare fallback resolv.conf is written only on first install or when a
+  recreate is actually coming.
 - DNS/DHCP ports bound to **`{{ server_ip }}` (the LAN IP), not 0.0.0.0** — avoids being
   an open resolver / rogue DHCP source.
 - Pi-hole resolves via Unbound (`FTLCONF_dns_upstreams: unbound`), a local recursive
