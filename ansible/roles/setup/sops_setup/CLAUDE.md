@@ -7,7 +7,7 @@ role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup
 
 ## Where it runs
 - In `ansible/initial_setup.yml`, after [[config_files]] / [[initial_setup]] — every host.
-- `ansible-playbook ansible/initial_setup.yml --tags "sops_setup"`.
+- `uv run ansible-playbook ansible/initial_setup.yml --tags "sops_setup"`.
 
 ## What it does (`tasks/main.yml`)
 1. **Install** `age` (apt) and the `sops` binary (pinned `v3.9.2`, arch-mapped amd64/arm64)

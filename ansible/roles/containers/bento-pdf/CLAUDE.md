@@ -14,4 +14,4 @@ Self-hosted BentoPDF (browser-based PDF tools). See repo-root `CLAUDE.md`.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "bento-pdf"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "bento-pdf"`

@@ -7,7 +7,7 @@ repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
 
 ## Where it runs
 - In `ansible/initial_setup.yml`, after [[sops_setup]] — every host.
-- `ansible-playbook ansible/initial_setup.yml --tags "docker_install"`.
+- `uv run ansible-playbook ansible/initial_setup.yml --tags "docker_install"`.
 
 ## What it does (`tasks/main.yml`)
 1. **APT repo (deb822):** installs prereqs (incl. `python3-debian`, required by
@@ -21,7 +21,7 @@ repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
    and appends them to the `docker` group.
 4. **Daemon config** (`/etc/docker/daemon.json`): json-file log limits (10m × 3) +
    `live-restore: true` so a daemon restart (e.g. a `docker-ce` upgrade) doesn't bounce all
-   ~42 containers. Restarts Docker only when the file changes.
+   ~58 containers. Restarts Docker only when the file changes.
 5. **Networks:** creates `proxy` (`{{ docker_network }}`), `monitoring`, `media`, `apps`,
    `homepage_private`, `lifecycle` (Watchtower/Autoheal ↔ docker-proxy only), `kopia`
    (Kopia ↔ Traefik only — keeps the unauthenticated repo off other apps).

@@ -18,4 +18,4 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Rules: `templates/application.yml.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "janitorr"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "janitorr"`

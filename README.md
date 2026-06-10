@@ -1,6 +1,6 @@
 # Server Homelab
 
-Docker-based homelab managed as infrastructure-as-code with **Ansible**. ~40 containerized
+Docker-based homelab managed as infrastructure-as-code with **Ansible**. ~44 containerized
 services across two hosts, fronted by **Traefik** with **Authelia** SSO, secrets encrypted
 with **SOPS/age**, and reverse-proxied behind **Cloudflare**.
 

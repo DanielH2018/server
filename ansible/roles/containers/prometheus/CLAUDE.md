@@ -4,7 +4,7 @@ Prometheus plus its exporters; the scrape source for Grafana. See repo-root `CLA
 
 ## At a glance
 - **Images:** `prom/prometheus:latest` + `prom/node-exporter:latest`
-  + `ghcr.io/google/cadvisor` (container metrics)
+  + `ghcr.io/google/cadvisor` (container metrics; version-pinned, Renovate-managed)
 - **Host:** daniel-server · **Port:** 9090 · **URL:** `prometheus.<domain>` (Authelia: yes)
 - **Networks:** monitoring
 - **Depends on:** traefik
@@ -14,7 +14,9 @@ Prometheus plus its exporters; the scrape source for Grafana. See repo-root `CLA
 - Bundles **node-exporter** (host metrics) and **cAdvisor** (per-container CPU/mem) — the
   data behind the M1 resource-limit tuning.
 - Scrape targets in `templates/prometheus.yml.j2`.
+- **Retention is explicit** (compose `command:`): 90d, with a 10GB size backstop. The TSDB
+  lives in the `prometheus_data` named volume — deliberately outside Kopia's backup scope.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Scrape cfg: `templates/prometheus.yml.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "prometheus"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "prometheus"`

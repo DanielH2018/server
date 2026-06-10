@@ -38,4 +38,4 @@ kill-switch. See repo-root `CLAUDE.md` for shared conventions.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · VPN: `templates/wg0.conf.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "qbittorrent"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "qbittorrent"`

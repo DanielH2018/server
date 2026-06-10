@@ -17,9 +17,10 @@ Metabase dashboard.
   `crowdsec-whitelist.yaml`, Discord alerts, home-IP allowlist updater.
 - Ships **systemd units** (`traefik-init.service`, `docker-user-rules.service`) and
   logrotate — this role does more than run a container.
-- The `labels()` and Authelia middleware macros live in `templates/traefik.yml.j2`,
-  imported by every other service's compose.
+- The `labels()` macro imported by every other service's compose lives in the repo-level
+  shared templates (`ansible/templates/traefik.yml.j2`) — NOT this role's
+  `templates/traefik.yml.j2`, which is Traefik's *static config* (entrypoints, providers).
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Static/dynamic cfg: `templates/config.yml.j2`, `templates/traefik.yml.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "traefik"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "traefik"`

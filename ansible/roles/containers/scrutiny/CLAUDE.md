@@ -16,4 +16,4 @@ Scrutiny web UI + collector, backed by InfluxDB. See repo-root `CLAUDE.md`.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "scrutiny"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "scrutiny"`

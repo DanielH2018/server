@@ -20,4 +20,4 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Image: `templates/Dockerfile.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "crowdsec"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "crowdsec"`

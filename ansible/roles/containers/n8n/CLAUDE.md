@@ -19,4 +19,4 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Images: `templates/Dockerfile*.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "n8n"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "n8n"`

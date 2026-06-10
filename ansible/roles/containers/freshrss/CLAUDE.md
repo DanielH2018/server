@@ -16,4 +16,4 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Extensions/cache: `files/`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "freshrss"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "freshrss"`

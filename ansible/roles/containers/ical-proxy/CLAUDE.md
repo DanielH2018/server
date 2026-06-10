@@ -14,8 +14,9 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 ## Notable
 - Aggregates Google + Obsidian ICS URLs (`calendar_1/2/4` from secrets), refreshing every
   15 min. Not exposed publicly — Homepage consumes it over the private network.
-- Image is built — update via redeploy, not Watchtower.
+- Image is built — update via redeploy, not Watchtower; a weekly Sunday rebuild cron
+  (06:20, via `common/redeploy_cron.yml`) pulls the newest `python:3.14-slim` base.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · App: `files/app.py`, `templates/Dockerfile.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "ical-proxy"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "ical-proxy"`

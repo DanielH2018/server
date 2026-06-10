@@ -9,7 +9,7 @@ first** and scope with `--tags` when iterating.
 ## Where it runs
 - In `ansible/initial_setup.yml`, after [[config_files]] and before [[sops_setup]] /
   [[docker_install]] — **every host** (Pi-specific tasks self-guard, see below).
-- `ansible-playbook ansible/initial_setup.yml --tags "initial_setup"`.
+- `uv run ansible-playbook ansible/initial_setup.yml --tags "initial_setup"`.
 
 ## What it does (`tasks/main.yml`, grouped)
 - **Pi bring-up (guarded `inventory_hostname == 'daniel-pi'`):** stop the hardware watchdog

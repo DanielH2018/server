@@ -16,4 +16,4 @@ Central indexer/tracker manager that feeds Sonarr & Radarr. See repo-root `CLAUD
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "prowlarr"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "prowlarr"`

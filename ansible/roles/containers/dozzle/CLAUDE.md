@@ -20,4 +20,5 @@ ad-hoc logging tool in place of Portainer. See repo-root `CLAUDE.md` for shared 
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
-- Deploy: run on daniel-pi — `uv run ansible-playbook ansible/deploy.yml --tags "dozzle" --limit daniel-pi`
+- Deploy (driven from the server): `uv run ansible-playbook ansible/deploy.yml --tags "dozzle" -e target=daniel-pi`
+  (`-e target=`, not `--limit` — `--limit daniel-pi` from the server matches zero hosts)

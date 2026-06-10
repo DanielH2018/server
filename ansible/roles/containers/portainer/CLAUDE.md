@@ -13,9 +13,9 @@ See repo-root `CLAUDE.md` for shared conventions.
 ## Notable
 - Reaches Docker through its own socket-proxy sidecar rather than mounting the raw
   `docker.sock` directly.
-- Same role serves both hosts; per-host port/authelia come from each
-  `inventory/host_vars/<host>.yml` → `containers_list`.
+- The role is host-agnostic (per-host port/authelia come from `containers_list`), but it is
+  currently only in daniel-server's list — the Pi runs its own lighter docker-proxy stack.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "portainer"` (add `--limit daniel-pi` for the Pi)
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "portainer"`

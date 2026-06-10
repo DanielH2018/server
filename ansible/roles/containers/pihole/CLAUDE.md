@@ -26,4 +26,4 @@ LAN DNS sinkhole (Pi-hole) with a recursive Unbound upstream. See repo-root `CLA
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Resolver: `templates/unbound.conf.j2`, `dnsmasq.yml.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "pihole"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "pihole"`

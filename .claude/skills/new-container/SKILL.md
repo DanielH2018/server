@@ -1,6 +1,6 @@
 ---
 name: new-container
-description: Scaffold a new container service for the homelab — creates the Ansible role, docker-compose template, and registers it in deploy.yml.
+description: Scaffold a new container service for the homelab — creates the Ansible role, docker-compose template, and registers it in the host's containers_list (deploy tags derive automatically).
 allowed-tools: Read, Write, Edit, Glob, Bash, WebFetch, WebSearch
 ---
 

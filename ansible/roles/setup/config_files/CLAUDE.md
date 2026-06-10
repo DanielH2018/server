@@ -7,7 +7,7 @@ See repo-root `CLAUDE.md` for conventions.
 ## Where it runs
 - **First** role in `ansible/initial_setup.yml` (before [[initial_setup]], [[sops_setup]],
   [[docker_install]]) — every host, no host guard.
-- `ansible-playbook ansible/initial_setup.yml --tags "config_files"`
+- `uv run ansible-playbook ansible/initial_setup.yml --tags "config_files"`
   (sub-tags `git`, `bash` select one file).
 
 ## What it does (`tasks/main.yml`)

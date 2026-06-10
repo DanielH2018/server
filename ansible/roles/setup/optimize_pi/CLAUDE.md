@@ -8,8 +8,10 @@ See repo-root `CLAUDE.md` for conventions.
 - Invoked from `ansible/initial_setup.yml`:
   `{ role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == 'daniel-pi' }`
   — **Pi only** (guarded by `inventory_hostname`).
-- Run it with: `ansible-playbook ansible/initial_setup.yml --tags "optimize_pi" --limit daniel-pi`
-  (use `--check` first — several changes trigger a reboot).
+- Run it with: `uv run ansible-playbook ansible/initial_setup.yml --tags "optimize_pi" -e target=daniel-pi`
+  (use `--check` first — several changes trigger a reboot). NB `-e target=`, not `--limit`:
+  the play's `hosts:` defaults to the local hostname, so `--limit daniel-pi` from the
+  server intersects to zero hosts and silently does nothing.
 
 ## What it does (`tasks/main.yml`)
 1. **Config path detection** — picks `/boot/firmware/config.txt` (Bookworm) vs

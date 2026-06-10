@@ -1,7 +1,7 @@
 # Server Homelab — Claude Code Context
 
 ## Project Overview
-Docker-based homelab managed with Ansible. ~42 containerized services deployed across two hosts via infrastructure-as-code.
+Docker-based homelab managed with Ansible. ~44 containerized services deployed across two hosts via infrastructure-as-code.
 
 **Hosts:**
 - `daniel-server` — main server (Intel XE graphics, LVM storage)
@@ -46,6 +46,10 @@ Run ansible through `uv run` so it uses the repo's pinned env (`ansible-core` + 
 ```bash
 # Deploy a specific container
 uv run ansible-playbook ansible/deploy.yml --tags "<service-name>"
+
+# Target the Pi from the server (NB: -e target=, NOT --limit — the play's hosts:
+# defaults to the local hostname, so --limit daniel-pi matches zero hosts)
+uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" -e target=daniel-pi
 
 # Deploy all containers
 uv run ansible-playbook ansible/deploy.yml

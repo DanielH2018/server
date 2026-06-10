@@ -26,4 +26,6 @@ WireGuard VPN with the wg-easy web admin, for remote access into the homelab.
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
 - Deploy (server): `uv run ansible-playbook ansible/deploy.yml --tags "wg-easy"`
-- Deploy (Pi): run on daniel-pi — `uv run ansible-playbook ansible/deploy.yml --tags "wg-easy" --limit daniel-pi`
+- Deploy (Pi, driven from the server): `uv run ansible-playbook ansible/deploy.yml --tags "wg-easy" -e target=daniel-pi`
+  (`-e target=`, not `--limit` — the play's `hosts:` defaults to the local hostname, so
+  `--limit daniel-pi` from the server matches zero hosts)

@@ -18,4 +18,4 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Entry/ignore: `templates/entrypoint.sh.j2`, `kopiaignore.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "kopia"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "kopia"`

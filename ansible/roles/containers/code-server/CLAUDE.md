@@ -17,4 +17,4 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Image: `templates/Dockerfile.j2`, `files/extensions.sh`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "code-server"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "code-server"`

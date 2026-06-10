@@ -17,4 +17,4 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · CouchDB cfg: `templates/local.ini.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "livesync"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "livesync"`

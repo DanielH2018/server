@@ -16,7 +16,10 @@ See repo-root `CLAUDE.md` for shared conventions.
 - NUT config is fully templated: `ups.conf`, `upsd.conf`, `upsd.users`, `upsmon.conf`,
   `upssched.conf`, `nut.conf`.
 - PeaNUT web creds (`peanut_username`/`peanut_password`) come from secrets.
+- The built `nut` sidecar rides a rolling base (`debian:bookworm-slim`) — a weekly
+  Sunday rebuild cron (06:15, via `common/redeploy_cron.yml`) delivers base updates;
+  Watchtower can't.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · NUT cfg: `templates/*.j2`, `files/`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "peanut"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "peanut"`

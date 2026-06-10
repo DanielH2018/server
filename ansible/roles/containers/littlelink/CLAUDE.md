@@ -17,4 +17,4 @@ The public "linktree"-style landing page. See repo-root `CLAUDE.md`.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "littlelink"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "littlelink"`

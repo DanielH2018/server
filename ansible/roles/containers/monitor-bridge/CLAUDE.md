@@ -82,4 +82,4 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   `uv run pytest ansible/roles/containers/monitor-bridge/files`.
   Also run automatically by the `pytest` prek hook (`prek run pytest --all-files`).
 - Smoke test one pass: `docker exec monitor-bridge python /app/check.py --once`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "monitor-bridge"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "monitor-bridge"`

@@ -31,7 +31,9 @@ Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md
       file-provisioning skips. A stale Prometheus uid (`IH0jqv6nz`) that lingered in a
       hand-imported CrowdSec board is remapped to `EGdsQqhVk` at export time.
 - Editing in the UI still works — changes persist in Grafana's DB (`./data`); the JSON files
-  are read-only and only **re-seed** a dashboard when their internal `version` is bumped.
+  **re-seed** a dashboard whenever their *content* changes (Grafana ignores the JSON
+  `version` field for provisioned boards — the export script pins it to 1 purely so
+  drift-check re-exports don't produce noise diffs).
 - Promtail ships container logs into Loki for the Explore/log views.
 - Loki/Promtail config in `templates/loki-config.yml.j2`, `promtail-config.yml.j2`.
 
@@ -50,4 +52,4 @@ Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md
   (it will be captured into the matching folder), **or** drop its JSON in `files/dashboards/`
   manually (pin datasource refs to uid `EGdsQqhVk` for Prometheus / `bf4q19tuivta8e` for
   Loki) and redeploy.
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "grafana"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "grafana"`

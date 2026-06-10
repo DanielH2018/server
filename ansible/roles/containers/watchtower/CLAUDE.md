@@ -19,4 +19,4 @@ Polls for newer image tags and recreates containers. See repo-root `CLAUDE.md`.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
-- Deploy: `ansible-playbook ansible/deploy.yml --tags "watchtower"`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "watchtower"`
