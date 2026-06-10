@@ -6,7 +6,9 @@ Lightweight idea backlog. Detailed, ready-to-execute work lives in
 the Renovate dependency dashboard.
 
 ## Backlog
+
 - Make sure n8n is up-to-date and redeployed often
+- Fix 'Email-to-RSS' not showing in VS Code file explorer
 
 ## Superseded
 
