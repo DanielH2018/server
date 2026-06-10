@@ -59,6 +59,12 @@ GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
 RESTORE_DRILL_STATE = _env("RESTORE_DRILL_STATE", "/restore-drill/state.json")
 RESTORE_DRILL_MAX_AGE_S = float(_env("RESTORE_DRILL_MAX_AGE_D", "35")) * 86400
 
+# Scrutiny SMART freshness: the collector cron runs daily (00:00) and has no usable
+# container healthcheck (cron is PID 1) — a silently-dead collector only shows as
+# aging collector_date values in the web API. 26h allows one run + slack.
+SCRUTINY_URL = _env("SCRUTINY_URL", "http://scrutiny:8080").rstrip("/")
+SCRUTINY_MAX_AGE_H = float(_env("SCRUTINY_MAX_AGE_H", "26"))
+
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
 
@@ -402,6 +408,35 @@ def check_gitops_status():
     return gitops_status(hold)
 
 
+def scrutiny_freshness(summary, max_age_h, now=None):
+    """`summary` is the data.summary dict of scrutiny's /api/summary."""
+    now = now or datetime.now(timezone.utc)
+    stale, n = [], 0
+    for wwn, entry in (summary or {}).items():
+        dev = entry.get("device") or {}
+        if dev.get("archived"):
+            continue
+        n += 1
+        name = dev.get("device_name") or wwn
+        cdate = (entry.get("smart") or {}).get("collector_date")
+        if not cdate:
+            stale.append("%s (no SMART data)" % name)
+            continue
+        age_h = (now - parse_rfc3339(cdate)).total_seconds() / 3600
+        if age_h > max_age_h:
+            stale.append("%s (last report %.1fh ago)" % (name, age_h))
+    if not n:
+        return False, "scrutiny reports no devices (collector never ran?)"
+    if stale:
+        return False, "stale SMART data: " + ", ".join(stale)
+    return True, "%d device(s) reported within %gh" % (n, max_age_h)
+
+
+def check_scrutiny():
+    data = _get_json(SCRUTINY_URL + "/api/summary")
+    return scrutiny_freshness((data.get("data") or {}).get("summary"), SCRUTINY_MAX_AGE_H)
+
+
 def restore_drill(state, age_s, max_age_s):
     if not state.get("ok"):
         return False, "last restore drill FAILED: %s" % state.get("msg", "?")
@@ -437,6 +472,7 @@ CHECKS = [
     ("gitops_alive",  _env("KUMA_PUSH_GITOPS_ALIVE",  ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
     ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
+    ("scrutiny",      _env("KUMA_PUSH_SCRUTINY",      ""), check_scrutiny),
 ]
 
 

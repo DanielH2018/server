@@ -13,6 +13,10 @@ Scrutiny web UI + collector, backed by InfluxDB. See repo-root `CLAUDE.md`.
 - The **collector** needs host disk access (SMART data) — it maps physical devices /
   runs with the privileges required to read `smartctl`. Verify drives appear after deploy.
 - InfluxDB stores the time-series SMART history.
+- **Collector liveness is monitored via monitor-bridge** ("SMART Data Freshness": every
+  device must report within 26 h via the web `/api/summary`). The collector itself has no
+  Docker healthcheck on purpose — cron is PID 1 (death self-heals via restart) and its
+  only meaningful failure mode is silently-aging data, which the bridge check catches.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`

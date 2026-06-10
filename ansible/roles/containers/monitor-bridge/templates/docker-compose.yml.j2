@@ -72,6 +72,11 @@ services:
       - RESTORE_DRILL_STATE=/restore-drill/state.json
       - RESTORE_DRILL_MAX_AGE_D=35
       - KUMA_PUSH_RESTORE_DRILL={{ kopia_restore_drill_push_token }}
+      # Scrutiny SMART freshness: the collector (cron-as-PID1, daily 00:00, no usable
+      # healthcheck) only shows death as aging collector_date in the web API.
+      - SCRUTINY_URL=http://scrutiny:8080
+      - SCRUTINY_MAX_AGE_H=26
+      - KUMA_PUSH_SCRUTINY={{ monitor_bridge_scrutiny_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
@@ -95,6 +100,7 @@ services:
       {{ kuma('gitops-deploy-alive', monitor_type='push', name='GitOps Deploy — Alive', interval=600, push_token=monitor_bridge_gitops_alive_push_token) }}
       {{ kuma('gitops-deploy-status', monitor_type='push', name='GitOps Deploy — Status', interval=600, push_token=monitor_bridge_gitops_status_push_token) }}
       {{ kuma('kopia-restore-drill', monitor_type='push', name='Backup Restore Drill', interval=600, push_token=kopia_restore_drill_push_token) }}
+      {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data Freshness', interval=600, push_token=monitor_bridge_scrutiny_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 

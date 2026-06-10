@@ -642,3 +642,51 @@ def test_restore_drill_unparseable_is_down(tmp_path, monkeypatch):
     ok, msg = check.check_restore_drill()
     assert not ok
     assert "unparseable" in msg
+
+
+# ── scrutiny SMART-data freshness (collector runs daily; web API holds last report) ──
+
+
+def _summary(*entries):
+    return {e["device"]["wwn"]: e for e in entries}
+
+
+def _dev(wwn, name, collector_date=None, archived=False):
+    e = {"device": {"wwn": wwn, "device_name": name, "archived": archived}}
+    e["smart"] = {"collector_date": collector_date} if collector_date else None
+    return e
+
+
+def test_scrutiny_fresh_device_is_ok():
+    s = _summary(_dev("w1", "nvme0", "2026-06-06T06:00:00Z"))
+    ok, msg = check.scrutiny_freshness(s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc))
+    assert ok
+    assert "1 device" in msg
+
+
+def test_scrutiny_stale_device_is_named():
+    s = _summary(_dev("w1", "nvme0", "2026-06-04T06:00:00Z"),
+                 _dev("w2", "sda", "2026-06-06T06:00:00Z"))
+    ok, msg = check.scrutiny_freshness(s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc))
+    assert not ok
+    assert "nvme0" in msg and "sda" not in msg
+
+
+def test_scrutiny_no_smart_data_is_down():
+    s = _summary(_dev("w1", "nvme0"))
+    ok, msg = check.scrutiny_freshness(s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc))
+    assert not ok
+    assert "no SMART data" in msg
+
+
+def test_scrutiny_archived_device_is_skipped():
+    s = _summary(_dev("w1", "nvme0", "2026-06-06T06:00:00Z"),
+                 _dev("w2", "old-disk", "2020-01-01T00:00:00Z", archived=True))
+    ok, _ = check.scrutiny_freshness(s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc))
+    assert ok
+
+
+def test_scrutiny_no_devices_is_down():
+    ok, msg = check.scrutiny_freshness({}, 26)
+    assert not ok
+    assert "no devices" in msg
