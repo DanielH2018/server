@@ -4,12 +4,12 @@
     "ansible.validation.lint.enabled": true,
     "ansible.validation.lint.arguments": "--config-file .ansible-lint",
     "files.exclude": {
-        "containers/code-server/config/extensions": true,
-        "Email-to-RSS": true
+        "containers/code-server/config/extensions": true
     },
     "search.exclude": {
         "containers/code-server/config/extensions": true,
-        "Email-to-RSS": true
+        "Email-to-RSS/node_modules": true,
+        "Email-to-RSS/.wrangler": true
     },
     "files.associations": {
         "*.yml.j2": "jinja-yaml",

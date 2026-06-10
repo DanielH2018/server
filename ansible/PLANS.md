@@ -7,10 +7,17 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- Make sure n8n is up-to-date and redeployed often
-- Fix 'Email-to-RSS' not showing in VS Code file explorer
-
 ## Superseded
+
+- Make sure n8n is up-to-date and redeployed often. — done 2026-06-10: it already was
+  (`FROM n8nio/n8n:latest` + `build.pull: true` + the Sunday 06:05 redeploy cron), but the
+  audit found the OTHER built images (crowdsec, code-server, peanut, ical-proxy) used bare
+  `build: .` with no pull — their redeploy crons rebuilt on the cached base forever and
+  delivered nothing. All four now set `build.pull: true` like n8n.
+- Fix 'Email-to-RSS' not showing in VS Code file explorer. — done 2026-06-10: it was
+  hidden by `files.exclude` in `.vscode/settings.json` (added back when it was an
+  untracked foreign clone; it's a tracked submodule now). Explorer shows it; search still
+  skips its `node_modules`/`.wrangler`.
 
 - Optimize Pi Setup, connect this server to it for Claude. — done 2026-06-08: wired
   server→Pi SSH so deploys can be driven remotely; fixed the failing `initial_setup.yml`
