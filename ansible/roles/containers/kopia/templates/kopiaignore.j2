@@ -45,7 +45,18 @@ tdarr/transcode_cache/
 scrutiny/influxdb2/
 
 # ── App-specific caches ───────────────────────────────────────────────────────
-code-server/config/extensions*/
+# NB real path — the old `code-server/config/extensions*/` never matched and 2.2GB
+# of reinstallable VS Code extensions was silently backed up (found 2026-06-10).
+code-server/config/.local/share/code-server/extensions/
+code-server/config/.cache/
 uptime-kuma/data*/
 freshrss/config/www/freshrss/data/cache/
 karakeep/time-tagger/uv-cache/
+
+# ── Pi-hole: keep config (pihole.toml, custom lists, *_backups), drop the bulk ──
+# pihole-FTL.db is DNS query HISTORY (432M, rewritten constantly — poor dedup);
+# gravity*.db + listsCache are rebuilt from config by `pihole -g`.
+pihole/data/etc-pihole/pihole-FTL.db*
+pihole/data/etc-pihole/gravity.db
+pihole/data/etc-pihole/gravity_old.db
+pihole/data/etc-pihole/listsCache/
