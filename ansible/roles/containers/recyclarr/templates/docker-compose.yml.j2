@@ -3,7 +3,9 @@
 {% from 'resources.yml.j2' import resources %}
 services:
   recyclarr:
-    image: ghcr.io/recyclarr/recyclarr:latest
+    # Pinned + Renovate-managed (was :latest/watchtower — the unsupervised v8 major
+    # jump removed include templates and silently killed the nightly sync, 2026-06-10).
+    image: ghcr.io/recyclarr/recyclarr:8.3.2
     container_name: recyclarr
     user: {{ puid }}:{{ pgid }}
     restart: unless-stopped
@@ -23,6 +25,8 @@ services:
     volumes:
       - ./recyclarr/config:/config
     labels:
+      # Disable watchtower update — pinned + Renovate-managed
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '256M', '0.05', '16M') }}

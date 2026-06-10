@@ -7,17 +7,14 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- Delete the dangling Docker volumes orphaned by retired services (data loss is the
-  point — operator call): `file-browser_filebrowser_config`, `file-browser_filebrowser_db`,
-  `file-browser_filebrowser_db_file` (file-browser role is archived), `promtail_config`
-  (promtail's config is templated now). Found 2026-06-10; `docker system prune` never
-  touches volumes, so they persist until an explicit
-  `docker volume rm <name>...`.
-- Decide on pinning recyclarr (it's *arr-tier but still `:latest`/watchtower — missed by
-  the 2026-06-07 critical-tier pinning; the 2026-06-10 v8 include-template breakage that
-  silently killed nightly syncs is the argument for pin+Renovate).
-
 ## Superseded
+
+- Delete the dangling Docker volumes orphaned by retired services — done 2026-06-10
+  (operator approved): `file-browser_filebrowser_{config,db,db_file}` + `promtail_config`
+  removed with `docker volume rm`.
+- Decide on pinning recyclarr — done 2026-06-10 (operator approved): pinned to 8.3.2,
+  `watchtower.enable=false`, Renovate-managed via the existing compose-.j2 regex manager
+  (plain semver tags, no extra packageRule needed).
 
 - Fix Speedtest to use tz instead of UTC timezone — done 2026-06-10: results are stored
   UTC by design (APP_TIMEZONE deliberately left default); the UI was UTC because
