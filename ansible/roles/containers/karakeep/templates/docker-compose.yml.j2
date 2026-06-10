@@ -28,6 +28,14 @@ services:
       # scope. karakeep-meilisearch's index stays a named volume — it's
       # rebuildable by reindexing from this data.
       - ./data:/data
+      # Next.js image-optimization cache: the image dir is node-owned 755, but we
+      # run as root with cap_drop ALL (no DAC_OVERRIDE) → every thumbnail write
+      # EACCESed and got re-optimized per request. Ephemeral scratch is enough
+      # (tmpfs is 1777; pages count against the container's mem cap).
+      - type: tmpfs
+        target: /app/apps/web/.next/cache
+        tmpfs:
+          size: 268435456  # 256 MiB
     # Node app on a high port. Add CHOWN if it can't chown /data.
     cap_drop:
       - ALL
