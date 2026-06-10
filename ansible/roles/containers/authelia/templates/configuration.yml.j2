@@ -95,10 +95,13 @@ identity_providers:
           {{ authelia_oidc_rsa_key_content | indent(10) }}
         algorithm: 'RS256'
 
-    access_token_lifespan: '1h'
-    authorize_code_lifespan: '1m'
-    id_token_lifespan: '1h'
-    refresh_token_lifespan: '90m'
+    # nested under lifespans: since 4.38 — the old flat *_lifespan keys are
+    # auto-mapped today but removed in 5.0 (was warning on every startup).
+    lifespans:
+      access_token: '1h'
+      authorize_code: '1m'
+      id_token: '1h'
+      refresh_token: '90m'
     enable_client_debug_messages: false
 
     clients:

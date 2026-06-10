@@ -157,6 +157,23 @@
   when: not authelia_users_db_stat.stat.exists
   register: authelia_cfg_users
 
+# configuration.yml is templated ONLY on first run (the block above) — template fixes
+# never reach an existing install, so config-format migrations need an explicit edit of
+# the live file. Idempotent: once migrated, the pattern no longer matches.
+- name: Migrate deprecated OIDC lifespan keys (auto-mapping removed in Authelia 5.0)
+  ansible.builtin.replace:
+    path: "{{ authelia_config_dir }}/configuration.yml"
+    regexp: >-
+      ^    access_token_lifespan: '1h'\n    authorize_code_lifespan: '1m'\n    id_token_lifespan: '1h'\n    refresh_token_lifespan: '90m'$
+    replace: |-2
+          lifespans:
+            access_token: '1h'
+            authorize_code: '1m'
+            id_token: '1h'
+            refresh_token: '90m'
+  become: true
+  register: authelia_cfg_lifespans
+
 - name: Enforce secure permissions on Authelia config files
   ansible.builtin.file:
     path: "{{ item }}"
@@ -175,4 +192,5 @@
     # deploy they are skipped -> not changed -> recreate: auto. is defined guards the skip.
     common_config_changed: >-
       {{ (authelia_cfg_config is defined and authelia_cfg_config is changed)
-         or (authelia_cfg_users is defined and authelia_cfg_users is changed) }}
+         or (authelia_cfg_users is defined and authelia_cfg_users is changed)
+         or (authelia_cfg_lifespans is changed) }}
