@@ -98,8 +98,13 @@
 
 - name: Export SOPS_AGE_KEY_FILE in .bashrc
   ansible.builtin.lineinfile:
-    path: "{{ ansible_facts.user_dir }}/.bashrc"
+    # The deploy user's .bashrc, NOT ansible_facts.user_dir — that's /root under the
+    # play's become:true (same bug class as config_files' env.HOME, fixed 2026-06-10);
+    # the export silently landed in /root/.bashrc. Matches the key-dir tasks above.
+    path: "/home/{{ sys_user }}/.bashrc"
     regexp: "^export SOPS_AGE_KEY_FILE="
     line: "export SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt"
     create: true
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
     mode: "0644"
