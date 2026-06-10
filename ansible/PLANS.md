@@ -13,6 +13,7 @@ the Renovate dependency dashboard.
   (promtail's config is templated now). Found 2026-06-10; `docker system prune` never
   touches volumes, so they persist until an explicit
   `docker volume rm <name>...`.
+- Fix Speedtest to use tz instead of UTC timezone
 
 ## Superseded
 
