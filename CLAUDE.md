@@ -14,7 +14,7 @@ Docker-based homelab managed with Ansible. ~42 containerized services deployed a
 ansible/          # Ansible playbooks, roles, inventory, templates  ← EDIT HERE
 containers/       # Docker Compose definitions deployed by Ansible  ← DO NOT EDIT
 scripts/          # Python helper scripts
-files/            # Data migration utilities
+docs/             # Runbooks, design specs, security notes
 ```
 
 > **`containers/` is read-only.** Files here are generated and deployed by Ansible from templates in `ansible/roles/containers/*/templates/`. Any direct edits will be overwritten on the next deploy. Always modify the corresponding Ansible role template instead.
