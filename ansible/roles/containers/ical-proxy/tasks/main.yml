@@ -15,18 +15,13 @@
   with_items:
     - app.py
 
-- name: Copy Docker files
+# docker-compose.yml is templated by common/docker_deploy.yml below — only the
+# build-context Dockerfile needs templating here.
+- name: Create Dockerfile from template
   ansible.builtin.template:
-    src: "{{ item }}.j2"
-    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/{{ item }}"
+    src: Dockerfile.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/Dockerfile"
     mode: "0664"
-  with_items:
-    - docker-compose.yml
-    - Dockerfile
-
-# - include_tasks: dns.yml
-#   with_items:
-#     - "{{ role_name }}"
 
 - name: Deploy Container
   ansible.builtin.include_role:

@@ -7,10 +7,6 @@
     common_dirs_to_create:
       - "{{ container_item.name }}"
 
-# - include_tasks: dns.yml
-#   with_items:
-#     - "www"
-
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common

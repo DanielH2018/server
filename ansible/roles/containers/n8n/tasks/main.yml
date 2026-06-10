@@ -7,10 +7,6 @@
     common_dirs_to_create:
       - "{{ container_item.name }}/config"
 
-# - include_tasks: dns.yml
-#   with_items:
-#     - "{{ role_name }}"
-
 - name: Create n8n-task-runners.json from template
   ansible.builtin.template:
     src: n8n-task-runners.json.j2

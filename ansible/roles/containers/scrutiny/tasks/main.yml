@@ -8,10 +8,6 @@
       - "{{ container_item.name }}/config"
       - "{{ container_item.name }}/influxdb2"
 
-# - include_tasks: dns.yml
-#   with_items:
-#     - "{{ role_name }}"
-
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common

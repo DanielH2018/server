@@ -14,10 +14,6 @@
   become: true
   become_method: ansible.builtin.sudo
 
-# - include_tasks: dns.yml
-#   with_items:
-#     - "{{ role_name }}"
-
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common

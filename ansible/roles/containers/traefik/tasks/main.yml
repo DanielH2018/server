@@ -82,10 +82,6 @@
   become: true
   register: traefik_cfg_discord
 
-# - include_tasks: dns.yml
-#   with_items:
-#     - "{{ role_name }}"
-
 - name: Deploy DOCKER-USER iptables rules script
   ansible.builtin.template:
     src: docker-user-rules.sh.j2

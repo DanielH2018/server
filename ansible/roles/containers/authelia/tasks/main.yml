@@ -166,10 +166,6 @@
     - "/home/{{ sys_user }}/server/containers/authelia/config/users_database.yml"
   failed_when: false
 
-# - include_tasks: dns.yml
-#   with_items:
-#     - auth
-
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common

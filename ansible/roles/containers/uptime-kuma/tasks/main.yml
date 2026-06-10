@@ -8,10 +8,6 @@
       - "{{ container_item.name }}/data"
       - "{{ container_item.name }}/autokuma-data"  # AutoKuma now runs in this stack
 
-# - include_tasks: dns.yml
-#   with_items:
-#     - "{{ role_name }}"
-
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common

@@ -14,10 +14,6 @@
 #     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/config/wg_confs/wg0.conf"
 #     mode: "0755"
 
-# - include_tasks: dns.yml
-#   with_items:
-#     - "{{ role_name }}"
-
 - name: Deploy Container
   ansible.builtin.include_role:
     name: common
