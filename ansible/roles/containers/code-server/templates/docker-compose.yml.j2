@@ -6,7 +6,9 @@
 
 services:
   code-server:
-    build: .
+    build:
+      context: .
+      pull: true  # weekly redeploy cron rebuilds — without pull it reuses the cached base forever
     image: my-code-server:latest
     container_name: code-server
     environment:

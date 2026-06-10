@@ -6,7 +6,9 @@
 services:
   nut:
     container_name: nut
-    build: .
+    build:
+      context: .
+      pull: true  # rebuilds must fetch the newest base, or the redeploy delivers nothing new
     restart: unless-stopped
     # USB access is granted via the device mapping below plus the udev rule
     # (99-nut-apc.rules, MODE=0666) installed by the role — no privileged/pid:host needed.

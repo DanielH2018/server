@@ -7,7 +7,9 @@
 services:
   dashboard:
     #we're using a custom Dockerfile so that metabase pops with pre-configured dashboards
-    build: .
+    build:
+      context: .
+      pull: true  # weekly redeploy cron rebuilds — without pull it reuses the cached base forever
     container_name: crowdsec-dashboard
     restart: unless-stopped
     # Metabase's run_metabase.sh runs as root, then `chown metabase:metabase`s its

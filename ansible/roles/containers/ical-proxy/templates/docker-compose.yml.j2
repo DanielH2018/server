@@ -4,7 +4,9 @@
 ---
 services:
   ical-proxy:
-    build: .   # path to the folder you created
+    build:
+      context: .
+      pull: true  # rebuilds must fetch the newest python base
     container_name: ical-proxy
     restart: unless-stopped
     healthcheck:
