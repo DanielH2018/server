@@ -1,3 +1,9 @@
+[user]
+        name = DanielH2018
+        email = danielh.2018@gmail.com
+[credential]
+        # Token lives in ~/.git-credentials (not tracked); needed for https pushes.
+        helper = store
 [pull]
         rebase = true
 [init]
@@ -46,9 +52,9 @@
         pager = less
         excludesfile = ~/.gitignore
 [alias]
-        lg = log --online --graph --decorate --all
-        lga = log --online --graph --decorate --all --date=relative
-        lgb = log --online --graph --decorate --all --date=relative --branches
-        lgc = log --online --graph --decorate --all --date=relative --branches --tags
+        lg = log --oneline --graph --decorate --all
+        lga = log --oneline --graph --decorate --all --date=relative
+        lgb = log --oneline --graph --decorate --all --date=relative --branches
+        lgc = log --oneline --graph --decorate --all --date=relative --branches --tags
 [color]
         ui = auto

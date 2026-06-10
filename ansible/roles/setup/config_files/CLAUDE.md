@@ -11,9 +11,11 @@ See repo-root `CLAUDE.md` for conventions.
   (sub-tags `git`, `bash` select one file).
 
 ## What it does (`tasks/main.yml`)
-- `copy`s the tracked static `files/.gitconfig` and `files/.bashrc` to `$HOME`
-  (`dest` uses `ansible_facts.env.HOME`, `mode 0644`, `backup: true` → an existing file is
-  preserved as a timestamped `.bak` when content changes).
+- Resolves the **deploy user's** home (become:false `echo $HOME` — the play runs
+  become:true, so `ansible_facts.env.HOME` is /root; using it shipped these dotfiles to
+  root's home until 2026-06-10), then `copy`s the tracked static `files/.gitconfig` and
+  `files/.bashrc` there (`owner`/`group` `sys_user`, `mode 0644`, `backup: true` → an
+  existing file is preserved as a timestamped `.bak` when content changes).
 
 ## Notable
 - **Run-order coupling with SOPS:** [[sops_setup]] later *appends*

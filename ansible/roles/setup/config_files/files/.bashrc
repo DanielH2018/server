@@ -118,3 +118,9 @@ fi
 
 # Add user's private bin directories to PATH
 export PATH="$PATH:$HOME/.local/bin"
+
+# nvm (Node version manager) — Node/wrangler for the Email-to-RSS Cloudflare Worker.
+# Guarded: a no-op on hosts without ~/.nvm (e.g. the Pi).
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
