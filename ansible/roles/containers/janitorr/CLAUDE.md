@@ -12,7 +12,9 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## Notable
 - Behaviour (retention rules, leaving-soon thresholds, dry-run flag) lives in
-  `templates/application.yml.j2`. **It deletes files** — keep `dryRun` on until verified.
+  `templates/application.yml.j2`. **It deletes files** — `dry-run` was flipped off
+  2026-06-10 (operator decision after the initial trial period), so it now cleans for
+  real. Tag media `janitorr_keep` in the *arrs to exempt it.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Rules: `templates/application.yml.j2`

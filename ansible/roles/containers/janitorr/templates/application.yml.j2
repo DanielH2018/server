@@ -10,7 +10,10 @@ file-system:
   free-space-check-dir: "/"
 
 application:
-  dry-run: true
+  # Live since 2026-06-10 (operator call after a dry-run trial period since the role
+  # was added) — janitorr now actually deletes per the rules below. The *arr tags
+  # janitorr_keep / janitorr_keep_too exclude media from cleanup.
+  dry-run: false
   run-once: false
   whole-tv-show: false
   whole-show-seeding-check: false
