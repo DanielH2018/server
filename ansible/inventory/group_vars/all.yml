@@ -43,4 +43,3 @@ kuma_notification_id: discord
 kuma_docker_host: 1
 lat: 38.89
 long: -77.08
-github_repo: https://github.com/DanielH2018/server.git
