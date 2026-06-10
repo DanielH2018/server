@@ -107,11 +107,16 @@ services:
     {{ resources('2.0', '2048M', '0.10', '128M') }}
 
   karakeep-meilisearch:
-    # Meilisearch refuses to boot on a DB created by an older MINOR version — bumps
-    # are excluded from Renovate automerge (see renovate.json). Upgrade manually:
-    # snapshot/back up /meili_data, then either run the new version once with
-    # --experimental-dumpless-upgrade or dump + reimport.
-    image: getmeili/meilisearch:v1.37.0
+    # VERSION POLICY: track the version karakeep officially tests against (1.41.0 as
+    # of karakeep docs 2026-06) — NOT latest; Renovate's newer offers stay unmerged in
+    # their manual-only group until karakeep bumps support.
+    # UPGRADE RUNBOOK (meili refuses to boot on an older minor's DB; the index is
+    # disposable by design — named volume, outside Kopia, rebuilt from karakeep's DB):
+    #   1. bump this tag   2. docker stop karakeep-meilisearch
+    #   3. docker run --rm -v karakeep_karakeep_meili:/meili_data alpine rm -rf /meili_data/data.ms
+    #   4. deploy karakeep   5. Karakeep UI: Admin Settings -> Background Jobs ->
+    #      "Reindex All Bookmarks"   6. verify /stats doc count recovered.
+    image: getmeili/meilisearch:v1.41.0
     container_name: karakeep-meilisearch
     restart: unless-stopped
     environment:

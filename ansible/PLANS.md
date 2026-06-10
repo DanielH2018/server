@@ -7,10 +7,15 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- Plan Mellisearch upgrade path
 - Pi Ubuntu update
 
 ## Superseded
+
+- Plan Meilisearch upgrade path — done 2026-06-10: policy = track the version karakeep
+  officially tests (1.41.0), not latest; Renovate's newer offers deliberately sit in the
+  manual group. Upgraded 1.37.0→1.41.0 via the upstream-blessed wipe-and-reindex (the
+  index is disposable by design); full runbook lives as a comment on the meilisearch
+  service in the karakeep compose template.
 
 - Delete the dangling Docker volumes orphaned by retired services — done 2026-06-10
   (operator approved): `file-browser_filebrowser_{config,db,db_file}` + `promtail_config`
