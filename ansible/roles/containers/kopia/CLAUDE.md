@@ -15,6 +15,14 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
   network (no other app container can reach `kopia:51515`) are the compensating controls.
 - `templates/entrypoint.sh.j2` starts the server; `templates/kopiaignore.j2` is the
   global exclude list.
+- **B2 bucket lifecycle (2026-06-10):** the repo speaks B2's *S3 endpoint*, where deletes
+  only HIDE versions — without a lifecycle rule the bucket billed 7.6 GiB for a 4.6 GiB
+  repo (years of maintenance churn). Rule now: `daysFromHidingToDeleting: 7` — a one-week
+  undelete window (deliberate: kopia is unauthenticated, hidden versions are the last
+  defense against a backup wipe) after which B2 purges. Inspect/adjust via rclone inside
+  the container (creds from `/app/config/repository.config`):
+  `rclone backend lifecycle b2:daniel-server-kopia` · billable size:
+  `rclone size b2:daniel-server-kopia --b2-versions` · purge hidden now: `rclone cleanup`.
 - **Backup assurance is three-tier:** snapshots (daily 19:00, in-container policy) →
   weekly `kopia snapshot verify --verify-files-percent=1` cron (blobs readable) →
   **monthly restore drill** (`files/restore-drill.sh` → `/usr/local/bin/`, cron 1st
