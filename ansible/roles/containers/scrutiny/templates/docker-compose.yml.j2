@@ -31,6 +31,9 @@ services:
       - TZ={{ tz }}
     volumes:
       - ./influxdb2:/var/lib/influxdb2
+      # The image also declares VOLUME /etc/influxdb2 (the CLI's influx-configs file);
+      # without a mapping Docker silently created an anonymous volume for it.
+      - ./influxdb2-config:/etc/influxdb2
     networks:
       - scrutiny_internal
     healthcheck:

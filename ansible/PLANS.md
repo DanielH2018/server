@@ -7,6 +7,13 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
+- Delete the dangling Docker volumes orphaned by retired services (data loss is the
+  point — operator call): `file-browser_filebrowser_config`, `file-browser_filebrowser_db`,
+  `file-browser_filebrowser_db_file` (file-browser role is archived), `promtail_config`
+  (promtail's config is templated now). Found 2026-06-10; `docker system prune` never
+  touches volumes, so they persist until an explicit
+  `docker volume rm <name>...`.
+
 ## Superseded
 
 - Make sure n8n is up-to-date and redeployed often. — done 2026-06-10: it already was
