@@ -98,6 +98,10 @@ services:
     {{ resources('2.0', '2048M', '0.10', '128M') }}
 
   karakeep-meilisearch:
+    # Meilisearch refuses to boot on a DB created by an older MINOR version — bumps
+    # are excluded from Renovate automerge (see renovate.json). Upgrade manually:
+    # snapshot/back up /meili_data, then either run the new version once with
+    # --experimental-dumpless-upgrade or dump + reimport.
     image: getmeili/meilisearch:v1.37.0
     container_name: karakeep-meilisearch
     restart: unless-stopped

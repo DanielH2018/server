@@ -57,6 +57,13 @@
       "description": "Keep prek.toml hook bumps in their own weekly group, separate from the container-image group. They match the custom.regex manager, so the non-major auto-merge + 7-day soak rule above already applies; this only overrides the group name. Majors stay manual (no automerge rule matches them).",
       "matchFileNames": ["prek.toml"],
       "groupName": "prek hooks"
+    },
+    {
+      "description": "Meilisearch (karakeep's search index) changes its on-disk DB format between MINOR versions and refuses to boot on an old database; the dumpless-upgrade flag is still experimental with a documented corruption risk, so upgrades are manual (snapshot first, then flag or dump/restore). Own PR + no automerge — and kept out of the non-major group so it can't block that bundle's automerge.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["getmeili/meilisearch"],
+      "groupName": "meilisearch (manual upgrade — DB format migration)",
+      "automerge": false
     }
   ]
 }
