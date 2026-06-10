@@ -262,6 +262,6 @@
   "timezone": "",
   "title": "Docker App Logs",
   "uid": "sadlil-loki-apps-dashboard",
-  "version": 10,
+  "version": 1,
   "weekStart": ""
 }

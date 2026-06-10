@@ -101,6 +101,9 @@ def main():
         d = gapi("/api/dashboards/uid/%s" % uid)["dashboard"]
         normalize(d)
         d["id"] = None  # let Grafana assign a local id; the stable `uid` is the key
+        # DB save-counter, not config — provisioning reloads bump it, so leaving it in
+        # makes every later drift-check dirty even when no panel changed.
+        d["version"] = 1
 
         name = FILENAME_OVERRIDE.get(uid, slug(title))
         subdir = "" if folder == "General" else folder
