@@ -67,9 +67,15 @@ services:
       - GITOPS_MAX_AGE_MIN=90
       - KUMA_PUSH_GITOPS_ALIVE={{ monitor_bridge_gitops_alive_push_token }}
       - KUMA_PUSH_GITOPS_STATUS={{ monitor_bridge_gitops_status_push_token }}
+      # Monthly kopia restore drill: the host cron (kopia role) writes state.json;
+      # we alert on failure, >35d staleness, or a missing/corrupt file.
+      - RESTORE_DRILL_STATE=/restore-drill/state.json
+      - RESTORE_DRILL_MAX_AGE_D=35
+      - KUMA_PUSH_RESTORE_DRILL={{ kopia_restore_drill_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
+      - /var/lib/kopia-restore-drill:/restore-drill:ro
     {{ service_networks() }}
     labels:
       {# Container-liveness monitor + one push monitor per check (AutoKuma-provisioned). -#}
@@ -88,6 +94,7 @@ services:
          check_gitops_alive/status from the host state files. interval 600s = 2× the 5-min loop. -#}
       {{ kuma('gitops-deploy-alive', monitor_type='push', name='GitOps Deploy — Alive', interval=600, push_token=monitor_bridge_gitops_alive_push_token) }}
       {{ kuma('gitops-deploy-status', monitor_type='push', name='GitOps Deploy — Status', interval=600, push_token=monitor_bridge_gitops_status_push_token) }}
+      {{ kuma('kopia-restore-drill', monitor_type='push', name='Backup Restore Drill', interval=600, push_token=kopia_restore_drill_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 

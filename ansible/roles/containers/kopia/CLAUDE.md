@@ -15,6 +15,14 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
   network (no other app container can reach `kopia:51515`) are the compensating controls.
 - `templates/entrypoint.sh.j2` starts the server; `templates/kopiaignore.j2` is the
   global exclude list.
+- **Backup assurance is three-tier:** snapshots (daily 19:00, in-container policy) →
+  weekly `kopia snapshot verify --verify-files-percent=1` cron (blobs readable) →
+  **monthly restore drill** (`files/restore-drill.sh` → `/usr/local/bin/`, cron 1st
+  05:00): restores one rotating service dir from the latest snapshot inside the
+  container, asserts sanity (compose-file sentinel + file-count floor), writes
+  `/var/lib/kopia-restore-drill/state.json` — monitor-bridge's `restore_drill` check
+  alerts on failure, >35 d staleness, or missing state. Run it manually anytime:
+  `/usr/local/bin/kopia-restore-drill.sh`.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Entry/ignore: `templates/entrypoint.sh.j2`, `kopiaignore.j2`

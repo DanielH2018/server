@@ -596,3 +596,49 @@ def test_touch_heartbeat_never_raises(monkeypatch):
     # Best-effort like push(): a heartbeat failure must not kill the loop.
     monkeypatch.setattr(check, "HEARTBEAT_FILE", "/nonexistent-dir/heartbeat")
     check.touch_heartbeat()
+
+
+# ── kopia restore drill (monthly host cron writes state.json; we alert on it) ──
+
+
+def _drill_state(tmp_path, monkeypatch, ts, ok, msg):
+    p = tmp_path / "state.json"
+    p.write_text('{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg))
+    monkeypatch.setattr(check, "RESTORE_DRILL_STATE", str(p))
+
+
+def test_restore_drill_fresh_success_is_up(tmp_path, monkeypatch):
+    _drill_state(tmp_path, monkeypatch, time.time() - 86400, True, "restored pihole: 23 files")
+    ok, msg = check.check_restore_drill()
+    assert ok
+    assert "pihole" in msg
+
+
+def test_restore_drill_failure_is_down(tmp_path, monkeypatch):
+    _drill_state(tmp_path, monkeypatch, time.time(), False, "restore of n8n failed")
+    ok, msg = check.check_restore_drill()
+    assert not ok
+    assert "n8n" in msg
+
+
+def test_restore_drill_stale_success_is_down(tmp_path, monkeypatch):
+    _drill_state(tmp_path, monkeypatch, time.time() - 40 * 86400, True, "restored grafana")
+    ok, msg = check.check_restore_drill()
+    assert not ok
+    assert "ago" in msg
+
+
+def test_restore_drill_missing_state_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "RESTORE_DRILL_STATE", str(tmp_path / "nope.json"))
+    ok, msg = check.check_restore_drill()
+    assert not ok
+    assert "never ran" in msg
+
+
+def test_restore_drill_unparseable_is_down(tmp_path, monkeypatch):
+    p = tmp_path / "state.json"
+    p.write_text("not json")
+    monkeypatch.setattr(check, "RESTORE_DRILL_STATE", str(p))
+    ok, msg = check.check_restore_drill()
+    assert not ok
+    assert "unparseable" in msg

@@ -53,6 +53,12 @@ N8N_FAIL_MAX = float(_env("N8N_FAIL_MAX", "0"))
 GITOPS_STATE_DIR = _env("GITOPS_STATE_DIR", "/gitops-state")
 GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
 
+# Monthly kopia restore drill: the host cron (kopia-restore-drill.sh, kopia role)
+# writes {"ts": epoch, "ok": bool, "msg": str} after each run; we alert on failure,
+# staleness (cron broken / never ran), or a missing/corrupt state file.
+RESTORE_DRILL_STATE = _env("RESTORE_DRILL_STATE", "/restore-drill/state.json")
+RESTORE_DRILL_MAX_AGE_S = float(_env("RESTORE_DRILL_MAX_AGE_D", "35")) * 86400
+
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
 
@@ -396,6 +402,27 @@ def check_gitops_status():
     return gitops_status(hold)
 
 
+def restore_drill(state, age_s, max_age_s):
+    if not state.get("ok"):
+        return False, "last restore drill FAILED: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return False, "last successful restore drill %.1fd ago (max %dd)" % (
+            age_s / 86400, max_age_s / 86400)
+    return True, "restore drill ok %.1fd ago: %s" % (age_s / 86400, state.get("msg", ""))
+
+
+def check_restore_drill():
+    try:
+        with open(RESTORE_DRILL_STATE) as fh:
+            state = json.load(fh)
+        age_s = time.time() - float(state.get("ts", 0))
+    except FileNotFoundError:
+        return False, "no restore-drill state (drill never ran?)"
+    except (ValueError, TypeError):
+        return False, "restore-drill state unparseable"
+    return restore_drill(state, age_s, RESTORE_DRILL_MAX_AGE_S)
+
+
 CHECKS = [
     ("backup", _env("KUMA_PUSH_KOPIA", ""), check_backup),
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
@@ -409,6 +436,7 @@ CHECKS = [
     ("n8n", _env("KUMA_PUSH_N8N", ""), check_n8n),
     ("gitops_alive",  _env("KUMA_PUSH_GITOPS_ALIVE",  ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
+    ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
 ]
 
 

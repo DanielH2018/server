@@ -33,6 +33,41 @@
     # change. kopiaignore is read at snapshot time (data, not container config), so excluded.
     common_config_changed: "{{ kopia_cfg_entrypoint is changed }}"
 
+- name: Create restore-drill state directory
+  # monitor-bridge bind-mounts this read-only and alerts on failed/stale/missing
+  # state — created here (not by Docker) so it's sys_user-writable for the cron.
+  ansible.builtin.file:
+    path: /var/lib/kopia-restore-drill
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Deploy the monthly restore-drill script
+  # Companion to the verify cron below: verify proves blobs are READABLE, the drill
+  # proves a restore reproduces a service's files (rotating one service per month).
+  ansible.builtin.copy:
+    src: restore-drill.sh
+    dest: /usr/local/bin/kopia-restore-drill.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Schedule monthly Kopia restore drill
+  # 1st of the month, 05:00 — after the 00:00 snapshot, clear of the Wednesday-04:00
+  # verify and the Sunday-06:00 rebuild crons. Result lands in
+  # /var/lib/kopia-restore-drill/state.json -> monitor-bridge -> Kuma + syslog.
+  ansible.builtin.cron:
+    name: "Monthly Kopia restore drill"
+    minute: "0"
+    hour: "5"
+    day: "1"
+    job: "/usr/local/bin/kopia-restore-drill.sh"
+    user: "{{ sys_user }}"
+  become: true
+
 - name: Schedule weekly Kopia backup integrity verification
   # "A backup you've never restored isn't a backup." snapshot scheduling and retention
   # are handled inside the container (entrypoint.sh policy); this closes the remaining
