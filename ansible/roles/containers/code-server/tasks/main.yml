@@ -46,7 +46,7 @@
     common_redeploy_cron_minute: "0"
 
 # NOTE: system-wide effect — prunes dangling images from ALL roles' weekly rebuilds
-# (n8n, crowdsec too), not just code-server's. The `until` filter spares anything less
+# (n8n, crowdsec, peanut, ical-proxy too), not just code-server's. The `until` filter spares anything less
 # than a week old so freshly-built layers from other roles' deploys aren't evicted.
 - name: Cleanup old dangling images left by weekly rebuilds
   community.docker.docker_prune:

@@ -65,3 +65,13 @@
   vars:
     # Build files (Dockerfile/entrypoint) are excluded — build: always + image-change auto-recreate covers them.
     common_config_changed: "{{ (peanut_cfg_nut is changed) or (peanut_cfg_settings is changed) }}"
+
+# Locally-built image on a rolling base (debian:bookworm-slim, invisible to Renovate) —
+# without this cron it only rebuilds when the role's files change, so base updates
+# never arrive. Same pattern as crowdsec/n8n/code-server; minute staggers the 06:00 slot.
+- name: Schedule weekly redeploy cron job
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: redeploy_cron.yml
+  vars:
+    common_redeploy_cron_minute: "15"
