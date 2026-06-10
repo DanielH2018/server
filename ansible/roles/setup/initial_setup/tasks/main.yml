@@ -93,6 +93,7 @@
       - libpam-tmpdir
       - debsums
       - apt-show-versions
+      - jq  # Claude Code plugin hooks (ralph-loop stop-hook) parse hook JSON with it
     state: present
   become: true
 
