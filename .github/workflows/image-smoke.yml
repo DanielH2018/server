@@ -51,7 +51,9 @@ jobs:
             [ -z "$img" ] && continue
             echo "::group::smoke $img"
             docker pull "$img"
-            cid="$(docker run -d --rm "$img" || true)"
+            # No --rm: an exited container must survive so its exit code and logs
+            # are still inspectable below.
+            cid="$(docker run -d "$img" || true)"
             if [ -z "$cid" ]; then echo "FAIL: $img did not start"; fail=1; echo "::endgroup::"; continue; fi
             # If the image declares a HEALTHCHECK, wait up to 60s for healthy.
             has_hc="$(docker inspect -f '{{if .Config.Healthcheck}}yes{{end}}' "$cid")"
@@ -64,9 +66,15 @@ jobs:
                 sleep 2
               done
             else
-              # No healthcheck: assert it stays up 30s without crash-looping.
+              # No healthcheck: assert it stays up 30s without crash-looping. A clean
+              # exit (code 0) also passes — base images with no service entrypoint
+              # (python, uv) run a REPL that exits 0 on EOF; crash loops exit non-zero.
               sleep 30
-              [ "$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null || echo false)" = "true" ] && ok=0
+              if [ "$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null || echo false)" = "true" ]; then
+                ok=0
+              elif [ "$(docker inspect -f '{{.State.ExitCode}}' "$cid" 2>/dev/null || echo 1)" = "0" ]; then
+                ok=0
+              fi
             fi
             [ "$ok" -ne 0 ] && { echo "FAIL: $img unhealthy / exited"; docker logs "$cid" 2>&1 | tail -n 30; fail=1; }
             docker rm -f "$cid" >/dev/null 2>&1 || true
