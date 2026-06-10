@@ -19,6 +19,18 @@ See repo-root `CLAUDE.md` for shared conventions.
 - The built `nut` sidecar rides a rolling base (`debian:bookworm-slim`) — a weekly
   Sunday rebuild cron (06:15, via `common/redeploy_cron.yml`) delivers base updates;
   Watchtower can't.
+- **Host shutdown is two-tier (fixed 2026-06-10):** the container upsmon (primary) only
+  *raises FSD* — its old `nsenter -t 1 … poweroff` SHUTDOWNCMD silently failed (needs
+  pid:host + SYS_ADMIN we don't grant), so battery exhaustion meant a hard power-cut.
+  The role now installs **nut-client on the host**: a `secondary`-mode upsmon watches
+  the containerized upsd via the `127.0.0.1:3493` publish (over the dedicated `nut_host`
+  bridge — `internal: true` nets can't publish ports) and runs the real
+  `systemctl poweroff` when FSD propagates. Sequence: 120 s on battery (upssched) or
+  LOWBATT → container `upsmon -c fsd` → host secondary powers off.
+- **Manual shutdown drill** (actually powers the host off — have console access):
+  `docker exec nut upsmon -c fsd` → the host should begin `systemctl poweroff` within
+  ~15 s (HOSTSYNC). The benign `nut-common-tmpfiles.conf` warning from nut-monitor is
+  a Debian packaging nit.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · NUT cfg: `templates/*.j2`, `files/`

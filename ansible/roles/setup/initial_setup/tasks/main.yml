@@ -313,6 +313,49 @@
   notify: Restart systemd-journald
   tags: [journald]
 
+# ── Server performance tuning (NOT the Pi — it needs powersave + eager zram swap) ──
+- name: Install CPU performance-governor unit (daniel-server)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/cpu-governor-performance.service
+    content: |
+      # Managed by Ansible (initial_setup role) — edits here are overwritten.
+      [Unit]
+      Description=Set CPU frequency governor to performance
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/sh -c 'for g in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do echo performance > "$g"; done'
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+  become: true
+  when: inventory_hostname == 'daniel-server'
+  register: initial_setup_cpugov_unit
+  tags: [tuning]
+
+- name: Enable and apply the performance governor (daniel-server)
+  ansible.builtin.systemd_service:
+    name: cpu-governor-performance
+    enabled: true
+    daemon_reload: "{{ initial_setup_cpugov_unit is changed }}"
+    state: "{{ 'restarted' if initial_setup_cpugov_unit is changed else 'started' }}"
+  become: true
+  when: inventory_hostname == 'daniel-server'
+  tags: [tuning]
+
+- name: Lower swappiness (daniel-server)
+  # 30G RAM and swap sits unused — prefer reclaiming page cache over swapping
+  # service heaps. The Pi keeps the kernel default: 512 MB + zram NEEDS eager swap.
+  ansible.posix.sysctl:
+    name: vm.swappiness
+    value: "10"
+    state: present
+    sysctl_set: true
+  become: true
+  when: inventory_hostname == 'daniel-server'
+  tags: [tuning]
+
 - name: Install Git hooks
   ansible.builtin.command: prek install
   args:

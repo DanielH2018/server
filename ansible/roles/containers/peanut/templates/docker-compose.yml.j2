@@ -20,6 +20,15 @@ services:
       - TZ={{ tz }}
     networks:
       - internal
+      # Plain bridge ONLY for the loopback publish below — `internal: true` networks
+      # cannot publish ports. No other container joins it.
+      - nut_host
+    # Host-loopback upsd: the host runs its own upsmon in `secondary` mode against this
+    # (see the role's nut-client tasks). The container CANNOT power off the host — the
+    # old SHUTDOWNCMD nsenter needed pid:host + SYS_ADMIN we rightly don't grant — so
+    # the host secondary is what actually runs `systemctl poweroff` when FSD is raised.
+    ports:
+      - "127.0.0.1:3493:3493"
     healthcheck:
       test: ["CMD-SHELL", "upsc {{ nut_ups_name | default('apc-ups') }}@localhost battery.charge 2>/dev/null || exit 1"]
       interval: 30s
@@ -65,3 +74,5 @@ services:
 {{ external_networks() }}
   internal:
     internal: true
+  nut_host:
+    driver: bridge

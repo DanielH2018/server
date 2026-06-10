@@ -1,6 +1,11 @@
 MONITOR {{ nut_ups_name | default('apc-ups') }}@localhost 1 upsmon {{ nut_monitor_password }} primary
 MINSUPPLIES 1
-SHUTDOWNCMD "nsenter -t 1 -m -u -i -n -p -- /usr/bin/systemctl poweroff"
+# This upsmon (container, primary) only RAISES FSD — it cannot power off the host:
+# nsenter into host PID 1 needs pid:host + SYS_ADMIN, which the container rightly
+# lacks (verified failing 2026-06-10). The HOST runs its own upsmon in `secondary`
+# mode (role-installed nut-client over 127.0.0.1:3493) and performs the real
+# `systemctl poweroff` when FSD propagates.
+SHUTDOWNCMD "logger -t upsmon 'FSD raised — host-side secondary upsmon performs the actual poweroff'"
 NOTIFYCMD /usr/sbin/upssched
 POLLFREQ 5
 POLLFREQALERT 5

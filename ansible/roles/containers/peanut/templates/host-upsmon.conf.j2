@@ -1,0 +1,26 @@
+# Host-side upsmon (SECONDARY) — managed by Ansible (peanut role); edits overwritten.
+#
+# The NUT primary lives in the `nut` container (USB access); it raises FSD on
+# battery events but cannot power off the host. This secondary connects to the
+# container's upsd over the loopback publish (127.0.0.1:3493) and is the one
+# that actually shuts the host down when FSD is set.
+MONITOR {{ nut_ups_name | default('apc-ups') }}@127.0.0.1 1 upsmon {{ nut_monitor_password }} secondary
+MINSUPPLIES 1
+SHUTDOWNCMD "/usr/bin/systemctl poweroff"
+POLLFREQ 5
+POLLFREQALERT 5
+HOSTSYNC 15
+DEADTIME 15
+POWERDOWNFLAG /etc/killpower
+
+NOTIFYMSG ONBATT "UPS %s on battery (host secondary)"
+NOTIFYMSG LOWBATT "UPS %s battery is low (host secondary)"
+NOTIFYMSG SHUTDOWN "Host auto-shutdown initiated by UPS %s"
+
+NOTIFYFLAG ONBATT SYSLOG
+NOTIFYFLAG LOWBATT SYSLOG
+NOTIFYFLAG SHUTDOWN SYSLOG+WALL
+
+RBWARNTIME 43200
+NOCOMMWARNTIME 300
+FINALDELAY 5
