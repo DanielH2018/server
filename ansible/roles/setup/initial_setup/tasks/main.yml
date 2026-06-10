@@ -289,6 +289,30 @@
     job: "truncate -s 0 /home/{{ sys_user }}/server/ansible.log"
   become: true
 
+- name: Create journald drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    mode: "0755"
+  become: true
+  tags: [journald]
+
+- name: Cap systemd-journal disk usage
+  # Unmanaged, journald's default cap is 10% of / bounded at 4G — and the journal had
+  # grown to 3.9G of low-value history. Container logs are already rotated by the
+  # Docker daemon (10m × 3) and shipped to Loki, so 1G is plenty for host forensics.
+  # journald vacuums archived files down to the cap on restart.
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/50-homelab.conf
+    content: |
+      # Managed by Ansible (initial_setup role) — edits here are overwritten.
+      [Journal]
+      SystemMaxUse=1G
+    mode: "0644"
+  become: true
+  notify: Restart systemd-journald
+  tags: [journald]
+
 - name: Install Git hooks
   ansible.builtin.command: prek install
   args:

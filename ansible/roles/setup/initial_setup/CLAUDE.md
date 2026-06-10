@@ -36,8 +36,8 @@ first** and scope with `--tags` when iterating.
 
 ## Notable
 - **Handlers live in the playbook, not this role** (there is no `handlers/main.yml`) — `Restart
-  SSH`, `Restart fail2ban`, `Reload audit rules`, `Reload Postfix` are defined in
-  `initial_setup.yml`. Same pattern as [[optimize_pi]]: a new `notify:` here needs a matching
+  SSH`, `Restart fail2ban`, `Reload audit rules`, `Reload Postfix`, `Restart systemd-journald`
+  are defined in `initial_setup.yml`. Same pattern as [[optimize_pi]]: a new `notify:` here needs a matching
   handler added to that playbook.
 - **`become` vs HOME:** the `Resolve the deploy user's home directory` task exists because
   `ansible_facts.env.HOME` is root's under the play's `become: true`, but uv / per-user tooling
