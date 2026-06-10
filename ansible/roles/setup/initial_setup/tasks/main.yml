@@ -92,10 +92,31 @@
       - fail2ban
       - libpam-tmpdir
       - debsums
-      - apt-show-versions
       - jq  # Claude Code plugin hooks (ralph-loop stop-hook) parse hook JSON with it
     state: present
   become: true
+  tags: packages
+
+# apt-show-versions hooks EVERY apt invocation with a full cache rebuild — 10-30 min
+# of swap-thrash on the 512 MB Pi (caused the 2026-06-08 dpkg corruption pre-swapfile,
+# and the 2026-06-10 "hung play" → stacked-run → watchdog-reboot incident). The Pi
+# gets nothing from it (apticron-style reporting), so it's roomy-hosts-only.
+- name: Install apt-show-versions (non-Pi hosts only)
+  ansible.builtin.apt:
+    name: apt-show-versions
+    state: present
+  become: true
+  when: inventory_hostname != 'daniel-pi'
+  tags: packages
+
+- name: Remove apt-show-versions (daniel-pi — apt-hook tax on 512 MB)
+  ansible.builtin.apt:
+    name: apt-show-versions
+    state: absent
+    purge: true
+  become: true
+  when: inventory_hostname == 'daniel-pi'
+  tags: packages
 
 - name: Resolve the deploy user's home directory
   # The play runs become:true, so gather_facts escalated and ansible_facts.env.HOME is
