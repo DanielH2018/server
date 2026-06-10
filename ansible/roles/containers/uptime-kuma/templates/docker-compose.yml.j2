@@ -13,6 +13,11 @@ services:
     restart: unless-stopped
     cap_drop:
       - ALL
+    cap_add:
+      # Ping monitors (daniel-pi-host) need raw ICMP sockets; with cap_drop ALL the
+      # ping binary fails with "operation not permitted" and the monitor can never
+      # be up. NET_RAW is the narrow, standard grant for monitoring containers.
+      - NET_RAW
     security_opt:
       - no-new-privileges:true
     {{ service_networks() }}
