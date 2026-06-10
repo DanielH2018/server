@@ -73,6 +73,14 @@ services:
     volumes:
      - ./:/etc/prometheus/
      - prometheus_data:/prometheus
+    command:
+      # Overriding command replaces the image CMD, so restate the stock flags first.
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      # Explicit retention (default is only 15d). ~350M covered 15d here, so 90d of
+      # trend history costs ~2G; the size cap is the backstop if series ever explode.
+      - '--storage.tsdb.retention.time=90d'
+      - '--storage.tsdb.retention.size=10GB'
     {{ service_networks() }}
     {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:9090/ || exit 1') }}
     labels:
