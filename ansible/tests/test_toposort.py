@@ -179,5 +179,39 @@ class TestExpandWithDeps:
         assert set(_names(result)) == {"a", "c"}
 
 
+# --- implicit tags (no `tags:` key => acts as [name]) ------------------------
+
+class TestImplicitTags:
+    """host_vars entries no longer carry `tags:` — every tag-matching filter must
+    fall back to [name] when the key is absent (explicit tags still override)."""
+
+    def _untagged(self, *names):
+        return [{"name": n} for n in names]
+
+    def test_build_dep_map_tagged_deploy_matches_untagged_entry(self, tmp_path):
+        helper = TestBuildDepMap()
+        helper._write_deps(tmp_path, "a", ["b"])
+        helper._write_deps(tmp_path, "b", [])
+        cl = self._untagged("a", "b", "c")
+        dep_map = build_dep_map(cl, str(tmp_path), ["a"])
+        assert dep_map["a"] == ["b"]
+
+    def test_dep_closure_matches_untagged_entry(self):
+        cl = self._untagged("a", "b")
+        assert _names(dep_closure(cl, {"a": ["b"], "b": []}, ["a"])) == ["b"]
+
+    def test_expand_with_deps_matches_untagged_entry(self):
+        cl = self._untagged("a", "b")
+        result = expand_with_deps(cl, {"a": ["b"], "b": []}, ["a"], running_names=[])
+        assert set(_names(result)) == {"a", "b"}
+
+    def test_explicit_tags_still_override_name(self):
+        cl = [{"name": "a", "tags": ["alias"]}]
+        # matched via the alias...
+        assert _names(expand_with_deps(cl, {"a": []}, ["alias"], [])) == ["a"]
+        # ...and NOT via the name once tags are explicit
+        assert expand_with_deps(cl, {"a": []}, ["a"], []) == []
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

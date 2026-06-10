@@ -65,7 +65,9 @@
       ansible.builtin.include_role:
         name: "{{ container_item.name }}"
         apply:
-          tags: "{{ container_item.tags }}"
+          # Effective tags default to the role name (mirrors _tags() in
+          # filter_plugins/toposort.py); entries may still override with `tags:`.
+          tags: "{{ container_item.tags | default([container_item.name]) }}"
       loop: "{{ containers_list }}"
       loop_control:
         loop_var: container_item

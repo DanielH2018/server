@@ -5,6 +5,12 @@ import yaml
 from ansible.errors import AnsibleFilterError
 
 
+def _tags(container):
+    """Effective deploy tags for a containers_list entry: defaults to [name] so
+    host_vars don't have to repeat `tags: [<name>]`; an explicit `tags:` overrides."""
+    return container.get('tags', [container['name']])
+
+
 def build_dep_map(containers_list, playbook_dir, requested_tags):
     """Build the role dependency map, loading only relevant deps.yml files.
 
@@ -31,7 +37,7 @@ def build_dep_map(containers_list, playbook_dir, requested_tags):
     else:
         requested = {
             c['name'] for c in containers_list
-            if set(c.get('tags', [])) & set(requested_tags)
+            if set(_tags(c)) & set(requested_tags)
         }
         frontier = list(requested)
         loaded = set()
@@ -92,7 +98,7 @@ def dep_closure(containers_list, deps_map, requested_tags):
     name_to_obj = {c['name']: c for c in containers_list}
     requested = {
         c['name'] for c in containers_list
-        if set(c.get('tags', [])) & set(requested_tags)
+        if set(_tags(c)) & set(requested_tags)
     }
     all_deps = set()
     frontier = list(requested)
@@ -117,7 +123,7 @@ def expand_with_deps(containers_list, deps_map, requested_tags, running_names):
 
     requested = {
         c['name'] for c in containers_list
-        if set(c.get('tags', [])) & set(requested_tags)
+        if set(_tags(c)) & set(requested_tags)
     }
 
     all_needed = set(requested)

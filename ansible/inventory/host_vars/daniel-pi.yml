@@ -1,5 +1,4 @@
 ---
-kuma_docker_host: 1
 server_ip: 10.0.0.139
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 domain: daniel-pi.com
@@ -18,34 +17,24 @@ containers_list:
     use_authelia: false
     networks:
       - proxy
-    tags:
-      - docker-proxy
   - name: wg-easy
     port: 51821
     udp_port: 51822
     use_authelia: false
     networks:
       - proxy
-    tags:
-      - wg-easy
   - name: glances
     port: 61208
     use_authelia: false
     networks:
       - proxy
-    tags:
-      - glances
   - name: dozzle
     port: 8080
     use_authelia: false
     networks:
       - proxy
-    tags:
-      - dozzle
   - name: autoheal
     use_authelia: false
     networks:
       # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
       - lifecycle
-    tags:
-      - autoheal

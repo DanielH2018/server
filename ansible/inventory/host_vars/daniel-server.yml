@@ -1,44 +1,32 @@
 ---
-kuma_docker_host: 1
 server_ip: 10.0.0.161
 ssh_config_path: /etc/ssh/sshd_config
-domain: "{{ domain }}"
 containers_list:
   # Organization: Core Services (proxy network)
   - name: traefik
     use_authelia: true
     networks:
       - proxy
-    tags:
-      - traefik
   - name: authelia
     use_authelia: false
     networks:
       - proxy
-    tags:
-      - authelia
   - name: crowdsec
     port: 3000
     use_authelia: true
     networks:
       - proxy
-    tags:
-      - crowdsec
   - name: portainer
     port: 9000
     use_authelia: true
     networks:
       - proxy
-    tags:
-      - portainer
   - name: docker-proxy
     use_authelia: false
     networks:
       - proxy
       - monitoring
       - apps
-    tags:
-      - docker-proxy
   - name: homepage
     port: 3000
     use_authelia: true
@@ -48,43 +36,31 @@ containers_list:
       - monitoring
       - media
       - homepage_private
-    tags:
-      - homepage
   - name: autoheal
     use_authelia: false
     networks:
       # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
       - lifecycle
-    tags:
-      - autoheal
   - name: watchtower
     use_authelia: false
     networks:
       # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
       - lifecycle
-    tags:
-      - watchtower
   - name: cloudflare-ddns
     use_authelia: false
     networks:
       - monitoring
-    tags:
-      - cloudflare-ddns
   # Organization: Apps network
   - name: peanut
     port: 8080
     use_authelia: true
     networks:
       - apps
-    tags:
-      - peanut
   - name: pihole
     port: 80
     use_authelia: true
     networks:
       - apps
-    tags:
-      - pihole
   - name: kopia
     port: 51515
     use_authelia: true
@@ -93,143 +69,103 @@ containers_list:
       # unauthenticated (Kopia basic-auth bug workaround); keeping it off `apps`
       # stops other app containers reaching kopia:51515 directly.
       - kopia
-    tags:
-      - kopia
   - name: wg-easy
     port: 51821
     udp_port: 51820
     use_authelia: true
     networks:
       - apps
-    tags:
-      - wg-easy
   # Organization: Development
   - name: code-server
     port: 8443
     use_authelia: true
     networks:
       - apps
-    tags:
-      - code-server
   - name: n8n
     port: 5678
     use_authelia: true
     networks:
       - apps
-    tags:
-      - n8n
   - name: karakeep
     port: 3000
     use_authelia: true
     networks:
       - apps
-    tags:
-      - karakeep
   # Organization: Media
   - name: freshrss
     port: 80
     use_authelia: true
     networks:
       - apps
-    tags:
-      - freshrss
   - name: qbittorrent
     port: 8080
     use_authelia: true
     networks:
       - media
-    tags:
-      - qbittorrent
   - name: sonarr
     port: 8989
     use_authelia: true
     networks:
       - media
-    tags:
-      - sonarr
   - name: radarr
     port: 7878
     use_authelia: true
     networks:
       - media
-    tags:
-      - radarr
   - name: jellyfin
     port: 8096
     use_authelia: false
     networks:
       - media
-    tags:
-      - jellyfin
   - name: prowlarr
     port: 9696
     use_authelia: true
     networks:
       - media
-    tags:
-      - prowlarr
   - name: bazarr
     port: 6767
     use_authelia: true
     networks:
       - media
-    tags:
-      - bazarr
   - name: tdarr
     port: 8265
     use_authelia: true
     networks:
       - media
-    tags:
-      - tdarr
   - name: recyclarr
     use_authelia: false
     networks:
       - media
-    tags:
-      - recyclarr
   - name: janitorr
     use_authelia: false
     networks:
       - media
-    tags:
-      - janitorr
   # Organization: Monitoring
   - name: prometheus
     port: 9090
     use_authelia: true
     networks:
       - monitoring
-    tags:
-      - prometheus
   - name: grafana
     port: 3000
     use_authelia: true
     networks:
       - monitoring
-    tags:
-      - grafana
   - name: glances
     port: 61208
     use_authelia: true
     networks:
       - monitoring
-    tags:
-      - glances
   - name: uptime-kuma
     port: 3001
     use_authelia: true
     networks:
       - monitoring
-    tags:
-      - uptime-kuma
   - name: scrutiny
     port: 8080
     use_authelia: true
     networks:
       - monitoring
-    tags:
-      - scrutiny
   - name: monitor-bridge
     port: false
     use_authelia: false
@@ -241,23 +177,17 @@ containers_list:
       - monitoring
       - kopia
       - apps
-    tags:
-      - monitor-bridge
   # Organization: Miscellaneous (apps network)
   - name: healthchecks
     port: 8000
     use_authelia: true
     networks:
       - monitoring
-    tags:
-      - healthchecks
   - name: bento-pdf
     port: 8080
     use_authelia: true
     networks:
       - apps
-    tags:
-      - bento-pdf
   - name: littlelink
     port: 3000
     hostname: www
@@ -266,8 +196,6 @@ containers_list:
     use_authelia: false
     networks:
       - apps
-    tags:
-      - littlelink
   - name: livesync
     port: 5984
     # CouchDB enforces its own auth (require_valid_user = true in local.ini); the
@@ -275,19 +203,13 @@ containers_list:
     use_authelia: false
     networks:
       - apps
-    tags:
-      - livesync
   - name: ical-proxy
     port: false
     use_authelia: false
     networks:
       - homepage_private
-    tags:
-      - ical-proxy
   - name: speedtest
     port: 80
     use_authelia: true
     networks:
       - monitoring
-    tags:
-      - speedtest

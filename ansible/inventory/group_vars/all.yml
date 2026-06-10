@@ -38,7 +38,9 @@ expose_mode: traefik
 # AutoKuma id of the managed notification provider (a static entity defined in the
 # uptime-kuma role); the kuma() macro links every monitor to it via notification_name_list.
 kuma_notification_id: discord
-email: "{{ email }}"
+# Uptime Kuma "docker host" id referenced by AutoKuma docker monitors; the same id on
+# every host so far, so it lives here — override per-host if one ever diverges.
+kuma_docker_host: 1
 lat: 38.89
 long: -77.08
 github_repo: https://github.com/DanielH2018/server.git
