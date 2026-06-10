@@ -28,7 +28,9 @@ files/            # Data migration utilities
    the per-service and top-level `networks:` blocks), and `resources.yml.j2`
    (`resources(cpu_limit, mem_limit, cpu_res, mem_res)` — the `deploy.resources` caps).
    The `/new-container` skill has the canonical skeleton.
-3. Add the role to `ansible/deploy.yml` with a tag matching the service name
+3. Add the service to `containers_list` in `ansible/inventory/host_vars/<host>.yml`
+   (`name`, `port` if web-facing, `use_authelia`, `networks`). Deploy tags derive from
+   `name` automatically — `deploy.yml` needs no edit.
 4. Add any secrets to `ansible/vars/secrets.yml` (edit with `sops ansible/vars/secrets.yml`)
 5. Reference secrets via `{{ variable_name }}` in templates
 6. **If the service bind-mounts an Ansible-templated config file:** `register:` each config

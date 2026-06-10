@@ -103,6 +103,7 @@ Then create the following files:
 
 **`ansible/inventory/host_vars/<host>.yml`**
 - Add the new service to `containers_list` under the appropriate organization comment section
-- Include `name`, `port` (if web-facing), `use_authelia`, and `tags` (tag must match service name)
+- Include `name`, `port` (if web-facing), `use_authelia`, and `networks` (deploy tags
+  derive from `name` automatically; only set `tags:` to override)
 
 Reference an existing similar container role before writing anything new.
