@@ -32,6 +32,22 @@ services:
       - "kuma.discord.notification.name=Homelab Alerts"
       - "kuma.discord.notification.active=true"
       - 'kuma.discord.notification.config={"type":"discord","discordWebhookUrl":"{{ monitor_discord_webhook_url }}","discordUsername":"Uptime Kuma"}'
+      # daniel-pi monitors (static, defined here like the notification above): AutoKuma
+      # only reads the SERVER's docker socket, so the kuma() labels rendered on the Pi's
+      # own compose files are never seen. Probe the Pi's LAN-bound UIs over HTTP instead
+      # (expose_mode: lan already publishes them on the Pi's LAN IP — no new exposure),
+      # plus a ping for the host itself.
+      - "kuma.daniel-pi-host.ping.name=Daniel Pi Host"
+      - "kuma.daniel-pi-host.ping.hostname={{ hostvars['daniel-pi'].server_ip }}"
+      - "kuma.daniel-pi-host.ping.interval=60"
+      - "kuma.daniel-pi-host.ping.maxretries=2"
+      - 'kuma.daniel-pi-host.ping.notification_name_list=["{{ kuma_notification_id }}"]'
+      {{ kuma('daniel-pi-glances', name='Daniel Pi Glances', monitor_type='http',
+              url='http://' ~ hostvars['daniel-pi'].server_ip ~ ':61208') }}
+      {{ kuma('daniel-pi-dozzle', name='Daniel Pi Dozzle', monitor_type='http',
+              url='http://' ~ hostvars['daniel-pi'].server_ip ~ ':8080') }}
+      {{ kuma('daniel-pi-wg-easy', name='Daniel Pi WG Easy', monitor_type='http',
+              url='http://' ~ hostvars['daniel-pi'].server_ip ~ ':51821') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '512M', '0.05', '64M') }}
 
@@ -50,7 +66,13 @@ services:
     security_opt:
       - no-new-privileges:true
     depends_on:
-      - uptime-kuma
+      uptime-kuma:
+        condition: service_started
+        # Recreating uptime-kuma invalidates AutoKuma's Socket.IO session (endless
+        # "You are not logged in" sync errors). Deploys are recreate:auto (only the
+        # changed service is recreated), so the old "same stack = recreated together"
+        # assumption no longer holds — restart the sidecar with its dependency.
+        restart: true
     environment:
       - AUTOKUMA__KUMA__URL=http://uptime-kuma:3001
       - AUTOKUMA__KUMA__USERNAME={{ uptime_kuma_username }}
