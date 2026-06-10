@@ -144,13 +144,21 @@ sudo systemctl restart systemd-journald
 ## Email-to-RSS (Cloudflare Worker)
 
 Converts email newsletters to RSS feeds. Runs as a Cloudflare Worker (not a Docker container).
-Repo cloned at `~/server/Email-to-RSS`. Admin UI at <https://email-rss.daniel-hunter.com/admin>.
+Tracked as a **git submodule** at `~/server/Email-to-RSS` (upstream
+<https://github.com/yl8976/Email-to-RSS>, pinned to a known-good commit in `.gitmodules`).
+Admin UI at <https://email-rss.daniel-hunter.com/admin>.
+
+`wrangler.toml` (KV namespace ids, routes) is ignored by the submodule's own `.gitignore`
+and stays local-only — recreate it from `wrangler-example.toml` + step 5 below on a fresh
+machine. To pull upstream changes: `cd Email-to-RSS && git pull`, redeploy, then commit the
+new submodule pointer here. If local patches are ever needed, fork upstream and re-point
+the submodule URL at the fork.
 
 **Prerequisites:** Node.js 20+, Cloudflare account, ForwardEmail account, domain managed in Cloudflare DNS.
 
 **Initial setup (already done — for reference):**
 
-1. Clone repo: `git clone https://github.com/yl8976/Email-to-RSS.git`
+1. Fetch the code: `git submodule update --init Email-to-RSS` (originally a plain clone of the repo above)
 2. Run `npm install` in the repo directory.
 3. Authenticate with Cloudflare: `npx wrangler login`
 4. Create KV namespaces manually (setup.sh has a bug with namespace title matching):

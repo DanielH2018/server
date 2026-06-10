@@ -1,0 +1,3 @@
+[submodule "Email-to-RSS"]
+	path = Email-to-RSS
+	url = https://github.com/yl8976/Email-to-RSS.git
