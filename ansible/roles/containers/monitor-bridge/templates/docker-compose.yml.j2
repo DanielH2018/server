@@ -1,4 +1,5 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
 ---
@@ -18,6 +19,10 @@ services:
     security_opt:
       - no-new-privileges:true
     command: ["python", "/app/check.py"]
+    # check.py touches /tmp/heartbeat (tmpfs) after every completed cycle; stale mtime
+    # means the loop HUNG (death already exits the container) -> unhealthy -> autoheal
+    # restart. 1000s ≈ 3×INTERVAL + slack. Kuma push silence remains the alerting path.
+    {{ healthcheck("[\"CMD\", \"python3\", \"-c\", \"import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/heartbeat').st_mtime<1000 else 1)\"]") }}
     environment:
       - TZ={{ tz }}
       - PYTHONUNBUFFERED=1

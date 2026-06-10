@@ -20,6 +20,9 @@ See repo-root `CLAUDE.md` for shared conventions.
 - `/app/apps/web/.next/cache` is a **tmpfs** (256M): the image dir is node-owned but the
   container runs as root with `cap_drop: ALL` (no DAC_OVERRIDE), so thumbnail-cache writes
   EACCESed without it.
+- **time-tagger healthcheck:** the loop touches `/tmp/healthy` only on a *successful*
+  tagger run; the healthcheck (mtime < ~2 cycles) flags hung or persistently failing runs
+  and autoheal restarts. `start_period: 600s` covers the `uv pip install` + first run.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`

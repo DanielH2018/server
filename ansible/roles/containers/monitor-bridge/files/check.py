@@ -24,6 +24,10 @@ def _env(name, default):
 
 INTERVAL = int(_env("INTERVAL", "300"))
 HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
+# Touched after every completed cycle; the container healthcheck compares its mtime
+# against ~3×INTERVAL. PID death already restarts the container, but a HANG only shows
+# up as push silence in Kuma — the healthcheck lets autoheal restart on that too.
+HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
 PROM_URL = _env("PROMETHEUS_URL", "http://prometheus:9090").rstrip("/")
 KOPIA_URL = _env("KOPIA_URL", "http://kopia:51515").rstrip("/")
 KUMA_URL = _env("KUMA_URL", "http://uptime-kuma:3001").rstrip("/")
@@ -433,11 +437,20 @@ def run_once():
         push(token, ok, msg)
 
 
+def touch_heartbeat():
+    try:
+        with open(HEARTBEAT_FILE, "w") as fh:
+            fh.write("%s\n" % time.time())
+    except OSError as e:  # best-effort like push(); never crash the loop
+        log("WARN: heartbeat write failed:", e)
+
+
 def main():
     once = "--once" in sys.argv
     log("monitor-bridge starting (interval=%ss, once=%s)" % (INTERVAL, once))
     while True:
         run_once()
+        touch_heartbeat()
         if once:
             break
         time.sleep(INTERVAL)

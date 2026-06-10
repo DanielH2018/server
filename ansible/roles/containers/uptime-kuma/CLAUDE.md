@@ -25,6 +25,11 @@ See repo-root `CLAUDE.md` for shared conventions.
   nested `config` so each sync sees a diff and re-syncs. Functionally harmless (the
   notification works, monitor links are stable); it's churn/log-noise only. Don't chase it as
   a deploy bug.
+- **KNOWN QUIRK (Kuma 2 + AutoKuma):** changing a monitor's *type* via labels (e.g. loki
+  docker→http, 2026-06-10) edits the monitor in place and desyncs Kuma's in-memory stats
+  cache — every beat then fails its `stat_hourly` INSERT (`UNIQUE constraint`), rolls back,
+  and the monitor sticks at PENDING with "Try to restart the monitor" log spam. Fix:
+  `docker restart uptime-kuma autokuma` (together — autokuma otherwise keeps a stale session).
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`

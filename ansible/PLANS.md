@@ -7,6 +7,9 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
+- Plan Mellisearch upgrade path
+- Pi Ubuntu update
+
 ## Superseded
 
 - Delete the dangling Docker volumes orphaned by retired services — done 2026-06-10

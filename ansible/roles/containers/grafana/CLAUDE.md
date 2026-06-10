@@ -35,6 +35,10 @@ Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md
   `version` field for provisioned boards — the export script pins it to 1 purely so
   drift-check re-exports don't produce noise diffs).
 - Promtail ships container logs into Loki for the Explore/log views.
+- **Loki has no Docker healthcheck** — the image is a single Go binary (no shell/wget), so
+  its Kuma monitor is an **HTTP probe of `http://loki:3100/ready`** instead of the default
+  container-running docker monitor. NB `/ready` 503s for ~15s after a restart while the
+  ingester warms up — brief PENDING in Kuma after a deploy is normal.
 - Loki/Promtail config in `templates/loki-config.yml.j2`, `promtail-config.yml.j2`.
 
 ## Editing

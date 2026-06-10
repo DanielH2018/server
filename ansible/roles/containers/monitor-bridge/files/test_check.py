@@ -9,6 +9,7 @@ nanosecond RFC3339 parsing (Kopia emits 9 fractional digits; fromisoformat caps 
 and the Kopia /api/v1/sources age/error extraction. The HTTP glue is exercised live
 via `check.py --once` at deploy time.
 """
+import os
 import time
 from datetime import datetime, timezone, timedelta
 
@@ -575,3 +576,23 @@ def test_check_gitops_status_held(tmp_path, monkeypatch):
     ok, msg = check.check_gitops_status()
     assert not ok
     assert "abc123de" in msg
+
+
+# ── loop heartbeat (container healthcheck reads this file's mtime) ─────────────
+
+
+def test_touch_heartbeat_writes_and_refreshes(tmp_path, monkeypatch):
+    hb = tmp_path / "heartbeat"
+    monkeypatch.setattr(check, "HEARTBEAT_FILE", str(hb))
+    check.touch_heartbeat()
+    assert hb.exists()
+    first = hb.stat().st_mtime
+    os.utime(hb, (first - 100, first - 100))  # backdate, then refresh
+    check.touch_heartbeat()
+    assert hb.stat().st_mtime > first - 100
+
+
+def test_touch_heartbeat_never_raises(monkeypatch):
+    # Best-effort like push(): a heartbeat failure must not kill the loop.
+    monkeypatch.setattr(check, "HEARTBEAT_FILE", "/nonexistent-dir/heartbeat")
+    check.touch_heartbeat()

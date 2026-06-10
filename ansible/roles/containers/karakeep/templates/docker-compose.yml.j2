@@ -1,5 +1,6 @@
 {% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
 ---
@@ -146,8 +147,14 @@ services:
     volumes:
       - ./time-tagger/script:/script:ro
       - ./time-tagger/uv-cache:/root/.cache/uv
+    # `touch /tmp/healthy` only on a SUCCESSFUL tagger run — the healthcheck below goes
+    # unhealthy when the file is older than ~2 cycles (hung or persistently failing run),
+    # and autoheal restarts the container. Process death alone is covered by restart:.
     command: >-
-      bash -c "uv pip install karakeep_python_api fire tqdm beautifulsoup4 loguru -q --system && while true; do python /script/karakeep-time-tagger.py --cache_file /tmp/bookmarks.temp --reset_all=True; sleep 900; done"
+      bash -c "uv pip install karakeep_python_api fire tqdm beautifulsoup4 loguru -q --system && while true; do python /script/karakeep-time-tagger.py --cache_file /tmp/bookmarks.temp --reset_all=True && touch /tmp/healthy; sleep 900; done"
+    # start_period covers the uv pip install + the first tagging run; the loop sleeps
+    # 900s, so <2100 allows one missed cycle before going unhealthy.
+    {{ healthcheck("[\"CMD\", \"python3\", \"-c\", \"import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/healthy').st_mtime<2100 else 1)\"]", start_period='600s', interval='60s') }}
     # Python/uv worker running as root. Its uv cache (/root/.cache/uv) is a bind mount
     # owned by uid 1000, so root needs DAC_OVERRIDE to write it — without it `uv pip
     # install` fails with EACCES and the container crash-loops.

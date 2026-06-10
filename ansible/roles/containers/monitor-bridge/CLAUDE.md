@@ -50,6 +50,10 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 - Explicit `down` = fast, descriptive alert; the push monitor's heartbeat interval (600 s,
   2× the loop) is the backstop for "the bridge itself died". Same dead-man's-switch idea as
   `cloudflare-ddns` — see [[its CLAUDE.md]] and the `kuma(..., monitor_type='push')` macro.
+- **Container healthcheck (2026-06-10):** check.py touches `/tmp/heartbeat` (tmpfs) after
+  every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
+  so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
+  silence remains the alerting path; the healthcheck adds auto-recovery.
 - Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,n8n,gitops_alive,gitops_status}_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.

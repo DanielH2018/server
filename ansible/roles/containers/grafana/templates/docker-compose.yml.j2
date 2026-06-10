@@ -60,7 +60,10 @@ services:
     command: -config.file=/etc/loki/loki-config.yaml
     {{ service_networks() }}
     labels:
-      {{ kuma('loki') }}
+      # The image has NO shell or HTTP client (single Go binary), so a Docker
+      # healthcheck is impossible — instead Kuma probes /ready over the shared
+      # monitoring net, which beats the old container-running docker monitor.
+      {{ kuma('loki', monitor_type='http', url='http://loki:3100/ready') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('1.0', '512M', '0.10', '64M') }}
   promtail:
