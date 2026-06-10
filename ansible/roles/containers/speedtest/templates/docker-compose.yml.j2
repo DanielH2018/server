@@ -16,11 +16,14 @@ services:
       - PUID={{ puid }}
       - PGID={{ pgid }}
       - APP_KEY={{ speedtest_app_key }}
-      - APP_URL="https://speedtest.{{ domain }}"
+      # No quotes around values: list-form environment passes them literally into the
+      # var (APP_URL was `"https://…"` with the quotes). The app's .env templating
+      # happened to strip them, but don't rely on that.
+      - APP_URL=https://speedtest.{{ domain }}
       - OOKLA_EULA_GDPR=true
-      - SPEEDTEST_SCHEDULE="0 */6 * * *"
-      - SPEEDTEST_SERVERS="1775"
-      - PRUNE_RESULTS_OLDER_THAN="30"
+      - "SPEEDTEST_SCHEDULE=0 */6 * * *"
+      - SPEEDTEST_SERVERS=1775
+      - PRUNE_RESULTS_OLDER_THAN=30
     # Log rotation is set globally in the Docker daemon (daemon.json: json-file,
     # max-size 10m × 3) by the docker_install role — no per-service logging block needed.
     restart: unless-stopped
