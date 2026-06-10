@@ -20,6 +20,9 @@ services:
       # var (APP_URL was `"https://…"` with the quotes). The app's .env templating
       # happened to strip them, but don't rely on that.
       - APP_URL=https://speedtest.{{ domain }}
+      # Results are stored in UTC by design (APP_TIMEZONE stays default); this is
+      # the UI-display timezone, which otherwise also defaults to Etc/UTC.
+      - DISPLAY_TIMEZONE={{ tz }}
       - OOKLA_EULA_GDPR=true
       - "SPEEDTEST_SCHEDULE=0 */6 * * *"
       - SPEEDTEST_SERVERS=1775

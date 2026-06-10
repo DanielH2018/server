@@ -13,9 +13,16 @@ the Renovate dependency dashboard.
   (promtail's config is templated now). Found 2026-06-10; `docker system prune` never
   touches volumes, so they persist until an explicit
   `docker volume rm <name>...`.
-- Fix Speedtest to use tz instead of UTC timezone
+- Decide on pinning recyclarr (it's *arr-tier but still `:latest`/watchtower — missed by
+  the 2026-06-07 critical-tier pinning; the 2026-06-10 v8 include-template breakage that
+  silently killed nightly syncs is the argument for pin+Renovate).
 
 ## Superseded
+
+- Fix Speedtest to use tz instead of UTC timezone — done 2026-06-10: results are stored
+  UTC by design (APP_TIMEZONE deliberately left default); the UI was UTC because
+  `DISPLAY_TIMEZONE` *also* defaults to Etc/UTC — now set to `{{ tz }}`
+  (America/Chicago).
 
 - Make sure n8n is up-to-date and redeployed often. — done 2026-06-10: it already was
   (`FROM n8nio/n8n:latest` + `build.pull: true` + the Sunday 06:05 redeploy cron), but the
