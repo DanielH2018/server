@@ -18,172 +18,74 @@
     mode: "0755"
   become: true
 
-- name: Hash password
-  tags: [config]
-  ansible.builtin.command: >-
-    docker run --rm authelia/authelia:latest authelia crypto hash generate argon2
-    --password '{{ authelia_password }}' --iterations 3 --memory 65536
-    --parallelism 4 --salt-size 16 --key-size 32
-  register: authelia_hash_output
-  become: true
-  no_log: true
-  changed_when: false
-
-- name: Remove prefix from hash
-  tags: [config]
-  ansible.builtin.set_fact:
-    authelia_password_hash: "{{ authelia_hash_output.stdout | regex_replace('^Digest: ', '') }}"
-  no_log: true
-
 - name: Set Authelia Config dir
   tags: [config]
   ansible.builtin.set_fact:
     authelia_config_dir: "/home/{{ sys_user }}/server/containers/authelia/config"
 
-- name: Check for existing configuration
+# configuration.yml is rendered fresh on EVERY deploy — template edits reach the live
+# install and recreate the container via common_config_changed. All inputs are
+# deterministic: static template text + SOPS vars, including the four formerly
+# first-run-generated values asserted below (migrated to secrets.yml 2026-06-11; see
+# docs/superpowers/specs/2026-06-11-authelia-retemplatable-config-design.md).
+- name: Require the generated Authelia OIDC secrets from SOPS
   tags: [config]
-  ansible.builtin.stat:
-    path: "{{ authelia_config_dir }}/configuration.yml"
-  register: authelia_config_file
+  ansible.builtin.assert:
+    that:
+      - authelia_oidc_hmac_secret is defined
+      - authelia_client_password_hash is defined
+      - authelia_beszel_password_hash is defined
+      - authelia_oidc_rsa_key_content is defined
+    fail_msg: >-
+      Missing Authelia OIDC secrets in ansible/vars/secrets.yml. On a fresh install,
+      generate and add them first — see "Fresh install" in
+      ansible/roles/containers/authelia/CLAUDE.md.
+    quiet: true
 
-# BLOCK: Only run setup if config does NOT exist
-- name: Initial Authelia Setup
+- name: Create configuration.yml from template
   tags: [config]
-  when: not authelia_config_file.stat.exists
-  block:
-    # --- 1. Generate HMAC Secret ---
-    - name: Generate OIDC HMAC Secret (Docker)
-      ansible.builtin.command:
-        cmd: docker run --rm authelia/authelia:latest authelia crypto rand --length 64 --charset alphanumeric
-      register: authelia_oidc_hmac_cmd
-      changed_when: true
-
-    - name: Set HMAC Fact
-      ansible.builtin.set_fact:
-        authelia_oidc_hmac_secret: "{{ authelia_oidc_hmac_cmd.stdout | trim }}"
-      no_log: true
-
-    # --- 2. Generate Client Password & Hash ---
-    - name: Generate Client Password and Hash (Docker)
-      ansible.builtin.command:
-        cmd: >-
-          docker run --rm authelia/authelia:latest authelia crypto hash generate pbkdf2
-          --variant sha512 --random --random.length 32 --random.charset alphanumeric
-      register: authelia_client_secret_cmd
-      changed_when: true
-      no_log: true
-
-    - name: Parse Client Credentials
-      ansible.builtin.set_fact:
-        authelia_client_plaintext_password: >-
-          {{ authelia_client_secret_cmd.stdout | regex_search('Random Password: (\S+)', '\1') | first }}
-        authelia_client_password_hash: >-
-          {{ authelia_client_secret_cmd.stdout | regex_search('Digest: (\S+)', '\1') | first }}
-      no_log: true
-
-    # --- 2b. Generate Beszel Client Password & Hash ---
-    # Commented out until Beszel is deployed. Uncomment so Beszel gets its own OIDC
-    # client secret (authelia_beszel_password_hash) instead of sharing jellyfin's.
-    # NOTE: the config template already references authelia_beszel_password_hash, so
-    # on a *fresh* Authelia setup this block must be enabled or that var must be
-    # defined, otherwise configuration.yml.j2 fails to render with "undefined".
-    # - name: Generate Beszel Client Password and Hash (Docker)
-    #   ansible.builtin.command:
-    #     cmd: >-
-    #       docker run --rm authelia/authelia:latest authelia crypto hash generate pbkdf2
-    #       --variant sha512 --random --random.length 32 --random.charset alphanumeric
-    #   register: authelia_beszel_secret_cmd
-    #   changed_when: true
-    #   no_log: true
-    #
-    # - name: Parse Beszel Client Credentials
-    #   ansible.builtin.set_fact:
-    #     authelia_beszel_plaintext_password: >-
-    #       {{ authelia_beszel_secret_cmd.stdout | regex_search('Random Password: (\S+)', '\1') | first }}
-    #     authelia_beszel_password_hash: >-
-    #       {{ authelia_beszel_secret_cmd.stdout | regex_search('Digest: (\S+)', '\1') | first }}
-    #   no_log: true
-
-    # --- 3. Generate RSA Keypair ---
-    - name: Generate RSA Keypair (Docker Volume Mount)
-      ansible.builtin.command:
-        # Mounts the host config dir to /keys inside container to write the files directly
-        cmd: >-
-          docker run --rm -v {{ authelia_config_dir }}:/keys
-          authelia/authelia:latest authelia crypto pair rsa generate --directory /keys --bits 4096
-      args:
-        creates: "{{ authelia_config_dir }}/private.pem"
-
-    # --- 4. Read Private Key for Template ---
-    - name: Read RSA Private Key
-      ansible.builtin.slurp:
-        src: "{{ authelia_config_dir }}/private.pem"
-      register: authelia_rsa_key_file
-      become: true
-
-    - name: Decode RSA Key
-      ansible.builtin.set_fact:
-        authelia_oidc_rsa_key_content: "{{ authelia_rsa_key_file['content'] | b64decode }}"
-      no_log: true
-
-    # --- 5. Create Configuration ---
-    - name: Create configuration.yml from template
-      ansible.builtin.template:
-        src: configuration.yml.j2
-        dest: "/home/{{ sys_user }}/server/containers/authelia/config/configuration.yml"
-        mode: "0600"
-      become: true
-      register: authelia_cfg_config
-
-    # --- 6. Output Secrets ---
-    - name: "⚠️ IMPORTANT CREDENTIALS ⚠️"
-      ansible.builtin.debug:
-        msg:
-          - "--------------------------------------------------------"
-          - "SETUP COMPLETE. SAVE THESE CREDENTIALS NOW."
-          - "They will NOT be shown again."
-          - "--------------------------------------------------------"
-          - "Client App Password: {{ authelia_client_plaintext_password }}"
-          - "--------------------------------------------------------"
-
-- name: Safety Check Message
-  tags: [config]
-  when: authelia_config_file.stat.exists
-  ansible.builtin.debug:
-    msg: "Configuration file already exists. Skipping setup to prevent overwriting secrets."
+  ansible.builtin.template:
+    src: configuration.yml.j2
+    dest: "{{ authelia_config_dir }}/configuration.yml"
+    mode: "0600"
+  become: true
+  no_log: true
+  register: authelia_cfg_config
 
 - name: Check if users_database.yml exists
   tags: [config]
   ansible.builtin.stat:
-    path: "/home/{{ sys_user }}/server/containers/authelia/config/users_database.yml"
+    path: "{{ authelia_config_dir }}/users_database.yml"
   register: authelia_users_db_stat
 
-- name: Create users_database.yml from template
+# users_database.yml stays FIRST-RUN-ONLY: Authelia writes password changes back into
+# it at runtime, so re-templating would clobber live user state. The argon2 hashing
+# docker-run lives in here too — its output is only consumed by this template.
+- name: Initial users database setup
   tags: [config]
-  ansible.builtin.template:
-    src: users_database.yml.j2
-    dest: "/home/{{ sys_user }}/server/containers/authelia/config/users_database.yml"
-    mode: "0600"
   when: not authelia_users_db_stat.stat.exists
-  register: authelia_cfg_users
+  block:
+    - name: Hash password
+      ansible.builtin.command: >-
+        docker run --rm authelia/authelia:latest authelia crypto hash generate argon2
+        --password '{{ authelia_password }}' --iterations 3 --memory 65536
+        --parallelism 4 --salt-size 16 --key-size 32
+      register: authelia_hash_output
+      become: true
+      no_log: true
+      changed_when: false
 
-# configuration.yml is templated ONLY on first run (the block above) — template fixes
-# never reach an existing install, so config-format migrations need an explicit edit of
-# the live file. Idempotent: once migrated, the pattern no longer matches.
-- name: Migrate deprecated OIDC lifespan keys (auto-mapping removed in Authelia 5.0)
-  tags: [config]
-  ansible.builtin.replace:
-    path: "{{ authelia_config_dir }}/configuration.yml"
-    regexp: >-
-      ^    access_token_lifespan: '1h'\n    authorize_code_lifespan: '1m'\n    id_token_lifespan: '1h'\n    refresh_token_lifespan: '90m'$
-    replace: |-2
-          lifespans:
-            access_token: '1h'
-            authorize_code: '1m'
-            id_token: '1h'
-            refresh_token: '90m'
-  become: true
-  register: authelia_cfg_lifespans
+    - name: Remove prefix from hash
+      ansible.builtin.set_fact:
+        authelia_password_hash: "{{ authelia_hash_output.stdout | regex_replace('^Digest: ', '') }}"
+      no_log: true
+
+    - name: Create users_database.yml from template
+      ansible.builtin.template:
+        src: users_database.yml.j2
+        dest: "{{ authelia_config_dir }}/users_database.yml"
+        mode: "0600"
+      register: authelia_cfg_users
 
 - name: Enforce secure permissions on Authelia config files
   tags: [config]
@@ -191,8 +93,8 @@
     path: "{{ item }}"
     mode: "0600"
   loop:
-    - "/home/{{ sys_user }}/server/containers/authelia/config/configuration.yml"
-    - "/home/{{ sys_user }}/server/containers/authelia/config/users_database.yml"
+    - "{{ authelia_config_dir }}/configuration.yml"
+    - "{{ authelia_config_dir }}/users_database.yml"
   failed_when: false
 
 - name: Deploy Container
@@ -201,9 +103,8 @@
     name: common
     tasks_from: docker_deploy.yml
   vars:
-    # Both config templates are first-run-only (guarded by stat.exists); on an existing
-    # deploy they are skipped -> not changed -> recreate: auto. is defined guards the skip.
+    # configuration.yml re-renders every run; users_database.yml is first-run-only
+    # (skipped -> not changed on existing installs). is defined guards the skips.
     common_config_changed: >-
       {{ (authelia_cfg_config is defined and authelia_cfg_config is changed)
-         or (authelia_cfg_users is defined and authelia_cfg_users is changed)
-         or (authelia_cfg_lifespans is changed) }}
+         or (authelia_cfg_users is defined and authelia_cfg_users is changed) }}

@@ -5,6 +5,11 @@
 
 server:
   address: 'tcp4://:9091'
+  buffers:
+    # fasthttp's 4096B default rejects (431) forward-auth subrequests for apps with
+    # long URIs — Traefik packs the full original URI + cookies into the subrequest
+    # headers (seen: Pi-hole v6 query log, ~2.4KB DataTables query string).
+    read: 16384
 
 log:
   level: info
@@ -14,7 +19,7 @@ log:
 theme: dark
 
 totp:
-  issuer: {{ domain }}
+  issuer: authelia.com
 
 identity_validation:
   reset_password:
@@ -34,13 +39,13 @@ authentication_backend:
 access_control:
   default_policy: deny
   rules:
-    # Rules applied to the local network. *.local hosts require single-factor
-    # (username + password) rather than a full bypass — narrowing the LAN trust
-    # so a compromised/rogue device on the LAN can't reach services unauthenticated.
-    # The networks condition still fails closed: a spoofed *.local Host header from
-    # outside the LAN doesn't match this rule and falls through to two_factor below.
+    # Rules applied to local network. The networks condition makes the bypass
+    # fail closed: a spoofed *.local Host header from outside the LAN still
+    # requires full authentication instead of skipping it.
+    # TODO(2026-06-11): narrowing this to one_factor was drafted in the template but
+    # never deployed (pre-refactor template edits silently no-oped); re-apply deliberately.
     - domain: "*.local.{{ domain }}"
-      policy: one_factor
+      policy: bypass
       networks:
         - 10.0.0.0/8
         - 172.16.0.0/12
@@ -57,7 +62,7 @@ session:
   same_site: 'lax'
   expiration: '1h'  # 1 hour
   inactivity: '5m'  # 5 minutes
-  remember_me: '1w' # 1 Week
+  remember_me: '1M' # 1 Month
   cookies:
     - domain: '{{ domain }}'  # Should match whatever your root protected domain is
       authelia_url: 'https://auth.{{ domain }}'
@@ -65,8 +70,8 @@ session:
 
 regulation:
   max_retries: 3
-  find_time: 5m
-  ban_time: 12h
+  find_time: 120
+  ban_time: 300
 
 storage:
   encryption_key: {{ authelia_storage }} # Now required
@@ -127,15 +132,15 @@ identity_providers:
         userinfo_signed_response_alg: 'none'
         token_endpoint_auth_method: 'client_secret_post'
 
-      #- client_id: beszel
-      #  client_name: Beszel
-      #  client_secret: '{{ authelia_beszel_password_hash }}'
-      #  public: false
-      #  authorization_policy: two_factor
-      #  redirect_uris:
-      #    - https://beszel.{{ domain }}/api/oauth2-redirect
-      #  scopes:
-      #    - openid
-      #    - profile
-      #    - email
-      #  userinfo_signed_response_alg: none
+      - client_id: beszel
+        client_name: Beszel
+        client_secret: '{{ authelia_beszel_password_hash }}'
+        public: false
+        authorization_policy: two_factor
+        redirect_uris:
+          - https://beszel.{{ domain }}/api/oauth2-redirect
+        scopes:
+          - openid
+          - profile
+          - email
+        userinfo_signed_response_alg: none
