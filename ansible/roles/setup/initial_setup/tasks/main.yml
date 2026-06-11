@@ -283,6 +283,32 @@
           DisableForwarding no
   notify: Restart SSH
 
+- name: Deploy the daily secret-rotation audit wrapper (server only)
+  tags: [crons]
+  # Server-only: the authoritative repo + SOPS live here. Reads names from the encrypted
+  # secrets.yml (values stay encrypted) and the rotation registry; see scripts/secret_rotation.py.
+  when: inventory_hostname == 'daniel-server'
+  ansible.builtin.template:
+    src: secret-rotation-audit.sh.j2
+    dest: /usr/local/bin/secret-rotation-audit.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0700"
+  become: true
+
+- name: Schedule the daily secret-rotation audit (server only)
+  tags: [crons]
+  # 08:00 — after the Sunday 07:30 reboot + 07:15 CrowdSec-hub jobs settle; clear of the
+  # 06:xx redeploy window. Pushes the "Secret Rotation" Kuma monitor (uptime-kuma role).
+  when: inventory_hostname == 'daniel-server'
+  ansible.builtin.cron:
+    name: "Daily secret rotation audit"
+    minute: "0"
+    hour: "8"
+    job: "/usr/local/bin/secret-rotation-audit.sh"
+    user: "{{ sys_user }}"
+  become: true
+
 - name: Schedule sudo crontab for weekly restart
   tags: [crons]
   ansible.builtin.cron:

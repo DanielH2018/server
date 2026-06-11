@@ -59,6 +59,11 @@ services:
       # (authelia: ^/api/push/ on this .local host); interval 600 = 2x the cron,
       # so the push watchdog also catches a dead cron/host.
       {{ kuma('daniel-pi-sd-health', name='Daniel Pi SD Health', monitor_type='push', interval=600, push_token=pi_sd_health_push_token) }}
+      # Secret rotation: a daily server cron (secret-rotation-audit.sh, initial_setup) runs
+      # scripts/secret_rotation.py audit --push — down when any secret is past its
+      # per-tier rotation window OR an unregistered secret exists (run `sync`). interval
+      # 90000s (25h) = 1 day + slack, so a dead audit cron also trips the push watchdog.
+      {{ kuma('secret-rotation', name='Secret Rotation', monitor_type='push', interval=90000, push_token=secret_rotation_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '512M', '0.05', '64M') }}
 

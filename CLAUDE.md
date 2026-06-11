@@ -99,6 +99,11 @@ Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hook
   secrets are encrypted to, and auto-encrypts any `.yml`/`.yaml` in `vars/` or `secrets/`
   directories (SOPS searches upward from the file, so this lives at `ansible/`, not root)
 - At runtime, `community.sops.sops_decrypt` lookup decrypts values
+- **Rotation tracking:** `ansible/secret_rotation.yml` (plaintext registry — names/dates/tiers,
+  no values) + `scripts/secret_rotation.py` (`sync`/`audit`/`rotate`). A daily server cron pushes
+  the "Secret Rotation" Kuma monitor; due-dates are staggered. After adding a secret, run
+  `uv run python scripts/secret_rotation.py sync` and commit. Runbook + the DANGER `pinned`
+  procedures (kopia repo password, authelia storage key): `docs/secret-rotation.md`.
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
 - **Onboarding a host to SOPS** (it can't decrypt yet, so `initial_setup.yml`/`deploy.yml`

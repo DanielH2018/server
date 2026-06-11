@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""Secret rotation registry: audit + staggered rotation for ansible/vars/secrets.yml.
+
+Three subcommands:
+  sync   — reconcile the registry (ansible/secret_rotation.yml) with the live secret
+           names. New secrets are classified into a tier and given a STAGGERED seed
+           date so their rotations never all fall due on the same day. Removed secrets
+           are reported. Existing entries (tier overrides + real rotation dates) are
+           preserved.
+  audit  — compute which secrets are due / overdue per tier and print a report. With
+           --push, post up/down to an Uptime Kuma push monitor (the SECRET_ROTATION_KUMA
+           env var holds the full push URL incl. token).
+  rotate — rotate DUE `auto`-tier secrets (locally-generated push tokens — no external
+           coupling). Dry-run by default; --commit writes new values via `sops set` and
+           records the new date. Only-due-by-default means rotations stay staggered.
+
+Secret NAMES are read straight from the encrypted secrets.yml — SOPS encrypts values but
+leaves keys in plaintext — so `audit`/`sync` never decrypt anything and never see a value.
+Only `rotate --commit` needs the age key (it shells out to `sops set`).
+
+Tiers (and default rotation cadence):
+  auto     180d  locally-generated, no external coupling — this tool can rotate it
+  assisted 365d  app-issued / coupled (app password, API key, OIDC secret) — needs an
+                 app-side step; the audit reminds, rotation is a documented runbook
+  external 365d  provider-managed (Cloudflare/Discord/Mullvad/SMTP/LLM keys) — mint in
+                 the provider console; audit-only
+  pinned   730d  MUST NOT be naively swapped (kopia repo password, authelia storage
+                 encryption key) — needs a dedicated migration command or backups/DB break
+  ignore   —     not a rotatable secret (domain, usernames, static interface addresses)
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import hashlib
+import os
+import secrets as pysecrets
+import subprocess
+import sys
+import urllib.parse
+import urllib.request
+
+import yaml
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SECRETS_FILE = os.path.join(REPO, "ansible", "vars", "secrets.yml")
+REGISTRY_FILE = os.path.join(REPO, "ansible", "secret_rotation.yml")
+
+TIER_DAYS = {"auto": 180, "assisted": 365, "external": 365, "pinned": 730, "ignore": None}
+
+# Classification by name. First matching rule wins; default is `assisted` (the safe,
+# reminds-but-doesn't-touch tier). Override per-secret by editing `tier` in the registry —
+# `sync` preserves overrides.
+_IGNORE = {"domain"}
+_IGNORE_SUFFIX = ("_user", "_username")
+_PINNED = {"kopia_password", "authelia_storage"}
+_EXTERNAL = {
+    "cloudflare_dns_token", "monitor_discord_webhook_url", "crowdsec_discord_webhook_url",
+    "gitops_deploy_discord_webhook", "coinmarket_api_key", "karakeep_gemini_api_key",
+    "weather_api_key", "crowdsec_mapquest_api_key", "mullvad_account", "email",
+    "healthchecks_smtp_password", "wireguard_interface_private_key",
+    "wireguard_peer_endpoint", "wireguard_peer_public_key",
+}
+_IGNORE_EXACT = {"wireguard_interface_address", "wireguard_interface_dns"}
+
+
+def classify(name: str) -> str:
+    if name in _IGNORE or name in _IGNORE_EXACT or name.endswith(_IGNORE_SUFFIX):
+        return "ignore"
+    if name in _PINNED:
+        return "pinned"
+    if name in _EXTERNAL:
+        return "external"
+    if name.endswith("_push_token"):
+        return "auto"
+    return "assisted"
+
+
+def _stable_offset(name: str, span: int) -> int:
+    """Deterministic 0..span-1 from the name — spreads seed dates so due-dates fan out."""
+    if span <= 0:
+        return 0
+    return int(hashlib.sha256(name.encode()).hexdigest(), 16) % span
+
+
+def seed_last_rotated(name: str, tier: str, today: dt.date) -> str | None:
+    """A staggered seed date: due = seed + cadence lands in [today+lead, today+cadence],
+    so nothing is overdue at registration and the due-dates are spread across the window."""
+    days = TIER_DAYS[tier]
+    if not days:
+        return None
+    lead = max(14, days // 12)
+    offset = _stable_offset(name, days - lead)
+    return (today - dt.timedelta(days=offset)).isoformat()
+
+
+def secret_names(path: str = SECRETS_FILE) -> list[str]:
+    """Top-level secret keys from the (encrypted) secrets.yml — values stay encrypted."""
+    with open(path) as fh:
+        data = yaml.safe_load(fh) or {}
+    return sorted(k for k in data if k != "sops")
+
+
+def load_registry(path: str = REGISTRY_FILE) -> dict:
+    if not os.path.exists(path):
+        return {"secrets": {}}
+    with open(path) as fh:
+        return yaml.safe_load(fh) or {"secrets": {}}
+
+
+_HEADER = """\
+# Secret rotation registry — MANAGED by scripts/secret_rotation.py.
+# Plaintext on purpose (names + dates + tiers only, never values); lives outside vars/ so
+# SOPS does not encrypt it. Run `secret_rotation.py sync` after adding/removing a secret.
+# You MAY edit a `tier` to override classification (sync preserves it); don't hand-edit
+# `last_rotated` — `rotate` updates it. Tiers: auto|assisted|external|pinned|ignore.
+"""
+
+
+def save_registry(reg: dict, path: str = REGISTRY_FILE) -> None:
+    body = yaml.safe_dump(reg, sort_keys=True, default_flow_style=False)
+    with open(path, "w") as fh:
+        fh.write(_HEADER)
+        fh.write(body)
+
+
+def sync(reg: dict, names: list[str], today: dt.date) -> tuple[list[str], list[str]]:
+    """Add missing secrets (classified + staggered seed); report stale registry entries."""
+    entries = reg.setdefault("secrets", {})
+    added, stale = [], []
+    for name in names:
+        if name not in entries:
+            tier = classify(name)
+            entries[name] = {"tier": tier, "last_rotated": seed_last_rotated(name, tier, today)}
+            added.append(name)
+    live = set(names)
+    stale = sorted(n for n in entries if n not in live)
+    return added, stale
+
+
+def due_date(entry: dict) -> dt.date | None:
+    tier = entry.get("tier", "assisted")
+    days = TIER_DAYS.get(tier)
+    lr = entry.get("last_rotated")
+    if not days or not lr:
+        return None
+    return dt.date.fromisoformat(lr) + dt.timedelta(days=days)
+
+
+def audit(reg: dict, today: dt.date) -> dict:
+    """Returns {overdue: [...], soon: [...], by_tier: {...}} sorted by urgency."""
+    rows = []
+    for name, entry in reg.get("secrets", {}).items():
+        d = due_date(entry)
+        if d is None:
+            continue
+        rows.append((name, entry.get("tier"), d, (d - today).days))
+    rows.sort(key=lambda r: r[3])
+    overdue = [r for r in rows if r[3] < 0]
+    soon = [r for r in rows if 0 <= r[3] <= 14]
+    by_tier: dict[str, int] = {}
+    for _, tier, _, days_left in rows:
+        if days_left < 0:
+            by_tier[tier] = by_tier.get(tier, 0) + 1
+    return {"overdue": overdue, "soon": soon, "by_tier": by_tier, "all": rows}
+
+
+def _push(url: str, ok: bool, msg: str) -> None:
+    full = "%s?status=%s&msg=%s" % (url, "up" if ok else "down", urllib.parse.quote(msg))
+    urllib.request.urlopen(full, timeout=10).read()
+
+
+def cmd_sync(args) -> int:
+    reg = load_registry()
+    added, stale = sync(reg, secret_names(), dt.date.today())
+    save_registry(reg)
+    print("sync: %d added, %d stale" % (len(added), len(stale)))
+    for n in added:
+        print("  + %-40s %s" % (n, reg["secrets"][n]["tier"]))
+    for n in stale:
+        print("  ! stale (in registry, not in secrets.yml): %s" % n)
+    return 0
+
+
+def cmd_audit(args) -> int:
+    reg = load_registry()
+    # Warn (don't fail) if the registry is out of sync, so a forgotten `sync` is visible.
+    missing = sorted(set(secret_names()) - set(reg.get("secrets", {})))
+    res = audit(reg, dt.date.today())
+    n_over = len(res["overdue"])
+    for name, tier, d, days_left in res["all"]:
+        flag = "OVERDUE" if days_left < 0 else ("soon" if days_left <= 14 else "ok")
+        print("  %-7s %-40s %-9s due %s (%+d d)" % (flag, name, tier, d, days_left))
+    parts = ["%d %s" % (c, t) for t, c in sorted(res["by_tier"].items())]
+    summary = ("%d secret(s) overdue (%s)" % (n_over, ", ".join(parts))) if n_over else \
+              "all secrets within rotation window"
+    if missing:
+        summary += "; %d unregistered (run sync)" % len(missing)
+    print("audit:", summary)
+    if args.push:
+        url = os.environ.get("SECRET_ROTATION_KUMA")
+        if not url:
+            print("--push set but SECRET_ROTATION_KUMA env missing", file=sys.stderr)
+            return 2
+        _push(url, ok=(n_over == 0 and not missing), msg=summary)
+    return 0
+
+
+def cmd_rotate(args) -> int:
+    reg = load_registry()
+    today = dt.date.today()
+    res = audit(reg, today)
+    targets = [r for r in res["all"] if r[1] == "auto" and (args.all or r[3] < 0)]
+    if args.name:
+        targets = [r for r in res["all"] if r[0] == args.name]
+        if targets and targets[0][1] != "auto":
+            print("refusing: %s is tier '%s', not auto-rotatable" % (args.name, targets[0][1]),
+                  file=sys.stderr)
+            return 2
+    if not targets:
+        print("rotate: nothing due in the auto tier" + (" today" if not args.all else ""))
+        return 0
+    for name, tier, _d, days_left in targets:
+        if not args.commit:
+            print("  DRY-RUN would rotate %-40s (due %+d d)" % (name, days_left))
+            continue
+        new = pysecrets.token_hex(16)  # 32 hex chars — the format Kuma push tokens require
+        subprocess.run(["sops", "set", SECRETS_FILE, '["%s"]' % name, '"%s"' % new],
+                       check=True, cwd=REPO)
+        reg["secrets"][name]["last_rotated"] = today.isoformat()
+        print("  rotated %s" % name)
+    if args.commit:
+        save_registry(reg)
+        print("\nNext: redeploy the consuming service(s) so the new token takes effect,")
+        print("e.g. `uv run ansible-playbook ansible/deploy.yml --tags monitor-bridge`.")
+    return 0
+
+
+def main(argv=None) -> int:
+    p = argparse.ArgumentParser(description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("sync").set_defaults(func=cmd_sync)
+    pa = sub.add_parser("audit")
+    pa.add_argument("--push", action="store_true", help="post status to Uptime Kuma")
+    pa.set_defaults(func=cmd_audit)
+    pr = sub.add_parser("rotate")
+    pr.add_argument("--commit", action="store_true", help="actually write (default: dry-run)")
+    pr.add_argument("--all", action="store_true", help="all auto secrets, not only due")
+    pr.add_argument("--name", help="rotate one named auto secret")
+    pr.set_defaults(func=cmd_rotate)
+    args = p.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
