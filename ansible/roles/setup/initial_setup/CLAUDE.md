@@ -18,7 +18,7 @@ Every task carries a block tag (placed right under `name:`), so e.g.
 · `packages` · `tooling` (uv + CLI tools) · `unattended-upgrades` · `fail2ban` · `ssh`
 · `crons` (restart / prune / log-truncate / autoremove / dpkg-purge; the prune cron also
 answers to `prune`) · `journald` · `tuning` (server CPU governor + swappiness) · `debloat`
-(server LXD-snap removal) · `git-hooks` · `sysctl` · `firewall` (UFW) · `audit` ·
+(server LXD-snap removal + both-hosts networkd-dispatcher mask) · `git-hooks` · `sysctl` · `firewall` (UFW) · `audit` ·
 `file-perms` · `kernel-modules` (blacklist + wireguard) · `accounting` (sysstat + acct) ·
 `banners` · `rkhunter` · `login-defs` · `coredumps` · `postfix` · `aide`.
 **Fact-dependency rule:** a task whose `register:` feeds other blocks carries ALL its

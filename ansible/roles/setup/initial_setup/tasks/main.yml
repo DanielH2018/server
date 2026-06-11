@@ -919,3 +919,19 @@
     state: stopped
     masked: true
   become: true
+
+- name: Mask networkd-dispatcher (no hooks installed — pure veth-event noise)
+  tags: [debloat]
+  # Found 2026-06-11: Ubuntu ships this Python daemon enabled, but its only job is
+  # running hook scripts from /etc/networkd-dispatcher/*.d — and every one of those
+  # dirs is empty on both hosts. Meanwhile each Docker container create/destroy is a
+  # veth link event, so it wakes constantly, forks a `networkctl` per event (extra
+  # churn on the Pi), and races the vanishing veth — the recurring journal error
+  # `networkctl[...]: Interface "vethXXX" not found`. Mask rather than purge:
+  # zero package-dependency risk, and an apt upgrade can't re-enable it.
+  ansible.builtin.systemd_service:
+    name: networkd-dispatcher.service
+    enabled: false
+    state: stopped
+    masked: true
+  become: true
