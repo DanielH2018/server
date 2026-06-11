@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -8,18 +9,21 @@
       - "{{ container_item.name }}"
 
 - name: Create time-tagger script directory
+  tags: [config]
   ansible.builtin.file:
     path: "/home/{{ sys_user }}/server/containers/karakeep/time-tagger/script"
     state: directory
     mode: "0755"
 
 - name: Create time-tagger uv cache directory
+  tags: [config]
   ansible.builtin.file:
     path: "/home/{{ sys_user }}/server/containers/karakeep/time-tagger/uv-cache"
     state: directory
     mode: "0755"
 
 - name: Download karakeep-time-tagger script
+  tags: [config]
   ansible.builtin.get_url:
     # Pinned to a specific commit + verified by checksum (supply-chain hardening).
     # Bump both the SHA in the URL and the checksum together when intentionally updating.
@@ -30,6 +34,7 @@
     force: false
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

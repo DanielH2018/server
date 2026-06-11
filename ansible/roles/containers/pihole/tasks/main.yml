@@ -1,9 +1,11 @@
 ---
 - name: Set Pihole base path
+  tags: [config, deploy]
   ansible.builtin.set_fact:
     pihole_base: "/home/{{ sys_user }}/server/containers/pihole"
 
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -15,6 +17,7 @@
 # Bind-mounted resolver configs: a change here is invisible to Compose's config-hash,
 # so it must force a recreate via `common_config_changed` (see common/CLAUDE.md).
 - name: Create resolver configuration files from templates
+  tags: [config]
   ansible.builtin.template:
     src: "{{ item.src }}"
     dest: "{{ pihole_base }}/{{ item.dest }}"
@@ -30,6 +33,7 @@
 # (docker_deploy.yml re-renders it to identical content — a no-op). That early knowledge
 # gates the resolv.conf fallback below to runs where host DNS will actually blip.
 - name: Create docker-compose.yml from template
+  tags: [config]
   ansible.builtin.template:
     src: docker-compose.yml.j2
     dest: "{{ pihole_base }}/docker-compose.yml"
@@ -37,6 +41,7 @@
   register: pihole_cfg_compose
 
 - name: Stop systemd-resolved.service
+  tags: [deploy]
   ansible.builtin.systemd:
     name: systemd-resolved.service
     state: stopped
@@ -45,6 +50,7 @@
   register: pihole_resolved_stop
 
 - name: Disable systemd-resolved.service
+  tags: [deploy]
   ansible.builtin.systemd:
     name: systemd-resolved.service
     enabled: false
@@ -52,6 +58,7 @@
   become_method: ansible.builtin.sudo
 
 - name: Check /etc/resolv.conf state
+  tags: [deploy]
   ansible.builtin.stat:
     path: /etc/resolv.conf
     follow: false
@@ -60,6 +67,7 @@
 # Guarded so it removes only the systemd-resolved stub symlink — once Pi-hole's regular
 # file is in place, an unconditional `state: absent` would delete it on every run.
 - name: Remove /etc/resolv.conf symlink
+  tags: [deploy]
   ansible.builtin.file:
     path: /etc/resolv.conf
     state: absent
@@ -69,6 +77,7 @@
   register: pihole_resolved_symlink
 
 - name: Check current Pi-hole container state
+  tags: [deploy]
   community.docker.docker_container_info:
     name: pihole
   register: pihole_existing
@@ -77,6 +86,7 @@
 # stack about to be recreated (config/compose change), or systemd-resolved was just
 # displaced. A steady-state no-op run must NOT flip resolv.conf away from Pi-hole.
 - name: Create fallback /etc/resolv.conf for deployment
+  tags: [deploy]
   ansible.builtin.copy:
     content: "nameserver 1.1.1.1\n"
     dest: /etc/resolv.conf
@@ -93,6 +103,7 @@
     or not pihole_resolv_stat.stat.exists
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
@@ -102,6 +113,7 @@
     common_config_changed: "{{ pihole_cfg_resolver is changed }}"
 
 - name: Update /etc/hosts
+  tags: [deploy]
   ansible.builtin.lineinfile:
     path: /etc/hosts
     insertbefore: BOF
@@ -110,6 +122,7 @@
   become_method: ansible.builtin.sudo
 
 - name: Wait for Pihole to be healthy
+  tags: [deploy]
   community.docker.docker_container_info:
     name: pihole
   register: pihole_health
@@ -120,6 +133,7 @@
   become_method: ansible.builtin.sudo
 
 - name: Point /etc/resolv.conf at Pihole
+  tags: [deploy]
   ansible.builtin.template:
     src: resolv.conf.j2
     dest: "/etc/resolv.conf"

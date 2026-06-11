@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -8,17 +9,20 @@
       - "{{ container_item.name }}"
 
 - name: Create Dockerfile from template
+  tags: [config]
   ansible.builtin.template:
     src: Dockerfile.j2
     dest: "/home/{{ sys_user }}/server/containers/crowdsec/Dockerfile"
     mode: "0664"
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
 
 - name: Schedule weekly redeploy cron job
+  tags: [cron]
   ansible.builtin.include_role:
     name: common
     tasks_from: redeploy_cron.yml

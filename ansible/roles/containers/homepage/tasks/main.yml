@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -9,6 +10,7 @@
       - "{{ container_item.name }}/icons"
 
 - name: Copy Icons
+  tags: [config]
   ansible.builtin.copy:
     src: "{{ item }}"
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/icons/"
@@ -17,6 +19,7 @@
     - "*.png"
 
 - name: Copy Config files
+  tags: [config]
   ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/config/{{ item }}"
@@ -33,6 +36,7 @@
   register: homepage_cfg
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

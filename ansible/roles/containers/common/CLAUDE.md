@@ -45,6 +45,15 @@ Utility role (not a container). Every container role calls into it via
 - `container_item` (name/port/networks/hostname/use_authelia) is the per-service dict from
   `containers_list`; the deploy loop in `deploy.yml` sets it for each role.
 - No `meta/deps.yml` deps — it's a pure utility, ordered first implicitly.
+- **Task block tags (fleet-wide convention, 2026-06-11):** every container-role task
+  carries `config` (dirs/templates/files/host config), `deploy` (the docker_deploy
+  include + post-deploy container ops), or `cron` (scheduled jobs), placed right under
+  `name:`. deploy.yml's `apply.tags` adds the service tag, and Ansible tags UNION, so
+  scoping is subtractive: `--tags <svc> --skip-tags deploy` = config-only. Rules: a
+  register feeding another block carries that block's tag too (e.g. pihole's base-path
+  set_fact is `[config, deploy]`); `--skip-tags config` is unsupported — the
+  `common_config_changed` registers (see above) feed the recreate decision. Tasks inside
+  common/*.yml need no tags of their own — they inherit from the include task.
 
 ## Editing
 Changing `docker_deploy.yml` affects **every** service's deploy — test with `--check`.

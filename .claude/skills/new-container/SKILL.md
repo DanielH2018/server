@@ -27,10 +27,17 @@ Then create the following files:
 **`ansible/roles/containers/<name>/tasks/main.yml`**
 - Always include a "Create required directories" task first using the `common` role's `setup_dirs.yml`, with at minimum `"{{ container_item.name }}"` in `common_dirs_to_create`
 - Follow with a "Deploy Container" task using the `common` role's `docker_deploy.yml`
+- **Every task carries a block tag** (right under `name:`): `config` for dirs/templates/
+  files/host config, `deploy` for the container lifecycle and post-deploy container ops,
+  `cron` for scheduled-job tasks. This enables config-only runs
+  (`--tags <name> --skip-tags deploy`). A task whose `register:` feeds another block must
+  carry that block's tag too. (`--skip-tags config` is NOT supported — config registers
+  feed the recreate decision.)
 - Pattern:
   ```yaml
   ---
   - name: Create required directories
+    tags: [config]
     ansible.builtin.include_role:
       name: common
       tasks_from: setup_dirs.yml
@@ -39,6 +46,7 @@ Then create the following files:
         - "{{ container_item.name }}"
 
   - name: Deploy Container
+    tags: [deploy]
     ansible.builtin.include_role:
       name: common
       tasks_from: docker_deploy.yml

@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -8,6 +9,7 @@
       - "{{ container_item.name }}"
 
 - name: Deploy monitor-bridge check script
+  tags: [config]
   ansible.builtin.copy:
     src: check.py
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/check.py"
@@ -15,6 +17,7 @@
   register: monitor_bridge_check
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -9,6 +10,7 @@
       - "{{ container_item.name }}/peanut-config"
 
 - name: Deploy container build files
+  tags: [config]
   ansible.builtin.copy:
     src: "{{ item.src }}"
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/{{ item.dest }}"
@@ -19,6 +21,7 @@
     - { src: upssched-cmd, dest: upssched-cmd, mode: "0755" }
 
 - name: Deploy NUT configuration files
+  tags: [config]
   ansible.builtin.template:
     src: "{{ item.src }}"
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/{{ item.dest }}"
@@ -34,6 +37,7 @@
   register: peanut_cfg_nut
 
 - name: Deploy PeaNUT settings
+  tags: [config]
   ansible.builtin.template:
     src: peanut-settings.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/peanut-config/settings.yml"
@@ -42,6 +46,7 @@
   register: peanut_cfg_settings
 
 - name: Install udev rule for APC UPS USB permissions
+  tags: [config]
   ansible.builtin.copy:
     dest: /etc/udev/rules.d/99-nut-apc.rules
     content: 'SUBSYSTEM=="usb", ATTR{idVendor}=="051d", ATTR{idProduct}=="0002", MODE="0666"'
@@ -49,16 +54,19 @@
   become: true
 
 - name: Reload udev rules
+  tags: [config]
   ansible.builtin.command: udevadm control --reload-rules
   become: true
   changed_when: false
 
 - name: Trigger udev for USB subsystem
+  tags: [config]
   ansible.builtin.command: udevadm trigger --subsystem-match=usb
   become: true
   changed_when: false
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
@@ -70,6 +78,7 @@
 # without this cron it only rebuilds when the role's files change, so base updates
 # never arrive. Same pattern as crowdsec/n8n/code-server; minute staggers the 06:00 slot.
 - name: Schedule weekly redeploy cron job
+  tags: [cron]
   ansible.builtin.include_role:
     name: common
     tasks_from: redeploy_cron.yml
@@ -82,12 +91,14 @@
 # grant (verified failing 2026-06-10). A host-native upsmon in `secondary` mode
 # watches the same upsd over the 127.0.0.1:3493 publish and runs the real poweroff.
 - name: Install NUT client (host-side upsmon)
+  tags: [config]
   ansible.builtin.apt:
     name: nut-client
     state: present
   become: true
 
 - name: Configure host NUT mode (netclient)
+  tags: [config]
   ansible.builtin.template:
     src: host-nut.conf.j2
     dest: /etc/nut/nut.conf
@@ -98,6 +109,7 @@
   register: peanut_host_nutconf
 
 - name: Configure host upsmon (secondary, performs the actual poweroff)
+  tags: [config]
   ansible.builtin.template:
     src: host-upsmon.conf.j2
     dest: /etc/nut/upsmon.conf
@@ -109,6 +121,7 @@
   register: peanut_host_upsmon
 
 - name: Enable and start the host upsmon service
+  tags: [config]
   ansible.builtin.systemd_service:
     name: nut-monitor
     enabled: true

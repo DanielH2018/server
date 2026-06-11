@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -8,6 +9,7 @@
       - "{{ container_item.name }}"
 
 - name: Create couchdb-etc directory with correct ownership
+  tags: [config]
   ansible.builtin.file:
     path: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/couchdb-etc"
     state: directory
@@ -23,6 +25,7 @@
 # host user, fails with "Operation not permitted", and aborts the deploy. local.ini holds
 # no secret (just require_valid_user), so 0644 is fine and matches what couchdb leaves.
 - name: Deploy CouchDB local.ini
+  tags: [config]
   ansible.builtin.template:
     src: local.ini.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/couchdb-etc/local.ini"
@@ -33,6 +36,7 @@
   register: livesync_cfg
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

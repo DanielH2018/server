@@ -57,6 +57,12 @@ uv run ansible-playbook ansible/deploy.yml
 # Dry run
 uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --check
 
+# Config-only: render dirs/templates/host config WITHOUT touching the container
+# (every container-role task is block-tagged config/deploy/cron; tags union in
+# Ansible, so scope with --skip-tags. --skip-tags config is NOT supported — the
+# registered config-change facts feed docker_deploy's recreate decision.)
+uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --skip-tags deploy
+
 # Edit encrypted secrets
 sops ansible/vars/secrets.yml
 

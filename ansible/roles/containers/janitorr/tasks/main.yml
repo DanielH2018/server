@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -9,6 +10,7 @@
       - "data/media/leaving-soon"
 
 - name: Create application.yml from template
+  tags: [config]
   ansible.builtin.template:
     src: application.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/janitorr/config/application.yml"
@@ -18,6 +20,7 @@
   register: janitorr_cfg
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

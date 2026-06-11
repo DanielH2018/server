@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -8,6 +9,7 @@
       - "{{ container_item.name }}/config"
 
 - name: Create Authelia log directory
+  tags: [config]
   ansible.builtin.file:
     path: /var/log/authelia
     state: directory
@@ -17,6 +19,7 @@
   become: true
 
 - name: Hash password
+  tags: [config]
   ansible.builtin.command: >-
     docker run --rm authelia/authelia:latest authelia crypto hash generate argon2
     --password '{{ authelia_password }}' --iterations 3 --memory 65536
@@ -27,21 +30,25 @@
   changed_when: false
 
 - name: Remove prefix from hash
+  tags: [config]
   ansible.builtin.set_fact:
     authelia_password_hash: "{{ authelia_hash_output.stdout | regex_replace('^Digest: ', '') }}"
   no_log: true
 
 - name: Set Authelia Config dir
+  tags: [config]
   ansible.builtin.set_fact:
     authelia_config_dir: "/home/{{ sys_user }}/server/containers/authelia/config"
 
 - name: Check for existing configuration
+  tags: [config]
   ansible.builtin.stat:
     path: "{{ authelia_config_dir }}/configuration.yml"
   register: authelia_config_file
 
 # BLOCK: Only run setup if config does NOT exist
 - name: Initial Authelia Setup
+  tags: [config]
   when: not authelia_config_file.stat.exists
   block:
     # --- 1. Generate HMAC Secret ---
@@ -140,16 +147,19 @@
           - "--------------------------------------------------------"
 
 - name: Safety Check Message
+  tags: [config]
   when: authelia_config_file.stat.exists
   ansible.builtin.debug:
     msg: "Configuration file already exists. Skipping setup to prevent overwriting secrets."
 
 - name: Check if users_database.yml exists
+  tags: [config]
   ansible.builtin.stat:
     path: "/home/{{ sys_user }}/server/containers/authelia/config/users_database.yml"
   register: authelia_users_db_stat
 
 - name: Create users_database.yml from template
+  tags: [config]
   ansible.builtin.template:
     src: users_database.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/authelia/config/users_database.yml"
@@ -161,6 +171,7 @@
 # never reach an existing install, so config-format migrations need an explicit edit of
 # the live file. Idempotent: once migrated, the pattern no longer matches.
 - name: Migrate deprecated OIDC lifespan keys (auto-mapping removed in Authelia 5.0)
+  tags: [config]
   ansible.builtin.replace:
     path: "{{ authelia_config_dir }}/configuration.yml"
     regexp: >-
@@ -175,6 +186,7 @@
   register: authelia_cfg_lifespans
 
 - name: Enforce secure permissions on Authelia config files
+  tags: [config]
   ansible.builtin.file:
     path: "{{ item }}"
     mode: "0600"
@@ -184,6 +196,7 @@
   failed_when: false
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

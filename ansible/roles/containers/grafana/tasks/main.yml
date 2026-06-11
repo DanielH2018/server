@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -10,6 +11,7 @@
       - "{{ container_item.name }}/dashboards"
 
 - name: Provision Grafana datasources (Prometheus + Loki)
+  tags: [config]
   ansible.builtin.template:
     src: provisioning/datasources.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/provisioning/datasources.yml"
@@ -17,6 +19,7 @@
   register: grafana_cfg_datasources
 
 - name: Provision Grafana dashboard file-provider
+  tags: [config]
   ansible.builtin.template:
     src: provisioning/dashboards.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/provisioning/dashboards.yml"
@@ -26,6 +29,7 @@
 # Recurses subdirectories — with foldersFromFilesStructure: true each subdir
 # (e.g. dashboards/Crowdsec/) becomes a Grafana folder of the same name.
 - name: Copy provisioned dashboards (community seeds + exported custom boards)
+  tags: [config]
   ansible.builtin.copy:
     src: dashboards/
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/dashboards/"
@@ -33,6 +37,7 @@
   register: grafana_cfg_dashboards
 
 - name: Create loki-config.yml from template
+  tags: [config]
   ansible.builtin.template:
     src: loki-config.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/loki-config.yaml"
@@ -40,6 +45,7 @@
   register: grafana_cfg_loki
 
 - name: Create promtail-config.yml from template
+  tags: [config]
   ansible.builtin.template:
     src: promtail-config.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/promtail-config.yaml"
@@ -47,6 +53,7 @@
   register: grafana_cfg_promtail
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

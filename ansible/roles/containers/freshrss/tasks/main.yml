@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -10,6 +11,7 @@
 # Bind-mounted into the nginx sidecar — register so a conf edit forces a recreate
 # (recreate: auto can't see bind-mounted file changes; see common/CLAUDE.md).
 - name: Copy nginx feed cache config
+  tags: [config]
   ansible.builtin.copy:
     src: nginx-feed-cache.conf
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/nginx-feed-cache.conf"
@@ -17,6 +19,7 @@
   register: freshrss_nginx_conf
 
 - name: Unzip extensions
+  tags: [config]
   ansible.builtin.unarchive:
     src: "{{ item }}"
     dest: "/home/{{ sys_user }}/server/containers/freshrss/config/www/freshrss/extensions"
@@ -24,6 +27,7 @@
     - "*.zip"
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

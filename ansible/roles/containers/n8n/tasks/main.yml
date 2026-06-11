@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -8,29 +9,34 @@
       - "{{ container_item.name }}/config"
 
 - name: Create n8n-task-runners.json from template
+  tags: [config]
   ansible.builtin.template:
     src: n8n-task-runners.json.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/n8n-task-runners.json"
     mode: "0664"
 
 - name: Create Dockerfile from template
+  tags: [config]
   ansible.builtin.template:
     src: Dockerfile.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/Dockerfile"
     mode: "0664"
 
 - name: Create Dockerfile-runners from template
+  tags: [config]
   ansible.builtin.template:
     src: Dockerfile-runners.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/Dockerfile-runners"
     mode: "0664"
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
 
 - name: Schedule weekly redeploy cron job
+  tags: [cron]
   ansible.builtin.include_role:
     name: common
     tasks_from: redeploy_cron.yml

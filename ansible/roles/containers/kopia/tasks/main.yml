@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -12,6 +13,7 @@
       - "{{ container_item.name }}/scripts"
 
 - name: Deploy Kopia entrypoint script
+  tags: [config]
   ansible.builtin.template:
     src: entrypoint.sh.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/scripts/entrypoint.sh"
@@ -19,12 +21,14 @@
   register: kopia_cfg_entrypoint
 
 - name: Deploy Kopia ignore rules
+  tags: [config]
   ansible.builtin.template:
     src: kopiaignore.j2
     dest: "/home/{{ sys_user }}/server/containers/.kopiaignore"
     mode: "0644"
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
@@ -34,6 +38,7 @@
     common_config_changed: "{{ kopia_cfg_entrypoint is changed }}"
 
 - name: Create restore-drill state directory
+  tags: [cron]
   # monitor-bridge bind-mounts this read-only and alerts on failed/stale/missing
   # state — created here (not by Docker) so it's sys_user-writable for the cron.
   ansible.builtin.file:
@@ -45,6 +50,7 @@
   become: true
 
 - name: Deploy the monthly restore-drill script
+  tags: [cron]
   # Companion to the verify cron below: verify proves blobs are READABLE, the drill
   # proves a restore reproduces a service's files (rotating one service per month).
   ansible.builtin.copy:
@@ -56,6 +62,7 @@
   become: true
 
 - name: Schedule monthly Kopia restore drill
+  tags: [cron]
   # 1st of the month, 05:00 — after the 00:00 snapshot, clear of the Wednesday-04:00
   # verify and the Sunday-06:00 rebuild crons. Result lands in
   # /var/lib/kopia-restore-drill/state.json -> monitor-bridge -> Kuma + syslog.
@@ -69,6 +76,7 @@
   become: true
 
 - name: Schedule weekly Kopia backup integrity verification
+  tags: [cron]
   # "A backup you've never restored isn't a backup." snapshot scheduling and retention
   # are handled inside the container (entrypoint.sh policy); this closes the remaining
   # gap — confirming the stored data is actually RESTORABLE, not merely present.

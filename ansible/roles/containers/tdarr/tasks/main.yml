@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -11,11 +12,13 @@
       - "{{ container_item.name }}/transcode_cache"
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
 
 - name: Schedule weekly cleanup of orphaned transcode work dirs
+  tags: [cron]
   # Tdarr cleans its work dir after a successful job, but failed/interrupted
   # transcodes leave tdarr-workDir2-* behind forever — 36 GB of them had
   # accumulated by 2026-06-11 (oldest from April). The cache is regenerable by

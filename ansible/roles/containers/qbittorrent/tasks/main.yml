@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -15,6 +16,7 @@
 #     mode: "0755"
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
@@ -28,6 +30,7 @@
 # address re-binds automatically when Mullvad hands out a new wg0 address. setPreferences
 # applies live and qBittorrent persists it. LocalHostAuth=false -> no creds from localhost.
 - name: Bind qBittorrent's listen interface to the VPN tunnel (wg0)
+  tags: [deploy]
   community.docker.docker_container_exec:
     container: qbittorrent
     # argv (not command) so curl's JSON arg is passed literally, with no shell re-parsing.
@@ -51,6 +54,7 @@
   changed_when: false
 
 - name: Add Systemd Service
+  tags: [deploy]
   ansible.builtin.template:
     src: docker-compose.app.service.j2
     dest: /etc/systemd/system/docker-compose-{{ role_name }}.service
@@ -58,6 +62,7 @@
   become: true
 
 - name: Ensure Systemd Service is enabled and started
+  tags: [deploy]
   ansible.builtin.systemd:
     name: docker-compose-{{ role_name }}.service
     enabled: true

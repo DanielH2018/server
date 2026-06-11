@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -10,6 +11,7 @@
       - "{{ container_item.name }}/crowdsec-config/parsers/s02-enrich"
 
 - name: Create acme.json
+  tags: [config]
   ansible.builtin.file:
     path: "/home/{{ sys_user }}/server/containers/traefik/data/acme.json"
     state: touch
@@ -18,6 +20,7 @@
     access_time: preserve
 
 - name: Configure logrotate for Traefik logs
+  tags: [config]
   ansible.builtin.copy:
     src: traefik-logrotate
     dest: /etc/logrotate.d/traefik
@@ -27,6 +30,7 @@
   become: true
 
 - name: Create config.yml from template
+  tags: [config]
   ansible.builtin.template:
     src: config.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/traefik/data/config.yml"
@@ -35,6 +39,7 @@
   register: traefik_cfg_config
 
 - name: Create traefik.yml from template
+  tags: [config]
   ansible.builtin.template:
     src: traefik.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/traefik/data/traefik.yml"
@@ -42,6 +47,7 @@
   register: traefik_cfg_static
 
 - name: Deploy CrowdSec local whitelist
+  tags: [config]
   ansible.builtin.copy:
     src: crowdsec-whitelist.yaml
     dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/parsers/s02-enrich/whitelist.yaml"
@@ -50,6 +56,7 @@
   register: traefik_cfg_whitelist
 
 - name: Deploy CrowdSec trusted-remote whitelist (pinned Mullvad exit)
+  tags: [config]
   ansible.builtin.copy:
     src: crowdsec-trusted-remote-whitelist.yaml
     dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/parsers/s02-enrich/trusted-remote-whitelist.yaml"
@@ -58,6 +65,7 @@
   register: traefik_cfg_trusted_remote_whitelist
 
 - name: Create CrowdSec acquis.yaml from template
+  tags: [config]
   ansible.builtin.template:
     src: crowdsec-acquis.yaml.j2
     dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/acquis.yaml"
@@ -66,6 +74,7 @@
   register: traefik_cfg_acquis
 
 - name: Copy CrowdSec profiles.yaml
+  tags: [config]
   ansible.builtin.copy:
     src: crowdsec-profiles.yaml
     dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/profiles.yaml"
@@ -74,6 +83,7 @@
   register: traefik_cfg_profiles
 
 - name: Create CrowdSec discord.yaml from template
+  tags: [config]
   ansible.builtin.template:
     src: crowdsec-discord.yaml.j2
     dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/notifications/discord.yaml"
@@ -83,6 +93,7 @@
   register: traefik_cfg_discord
 
 - name: Deploy DOCKER-USER iptables rules script
+  tags: [config]
   ansible.builtin.template:
     src: docker-user-rules.sh.j2
     dest: /etc/docker-user-rules.sh
@@ -93,6 +104,7 @@
   register: traefik_docker_user_rules_script
 
 - name: Deploy DOCKER-USER rules systemd service
+  tags: [config]
   ansible.builtin.template:
     src: docker-user-rules.service.j2
     dest: /etc/systemd/system/docker-user-rules.service
@@ -103,6 +115,7 @@
   register: traefik_docker_user_rules_service
 
 - name: Enable docker-user-rules systemd service
+  tags: [config]
   ansible.builtin.systemd:
     name: docker-user-rules
     enabled: true
@@ -111,6 +124,7 @@
   become: true
 
 - name: Restart docker-user-rules if script or service changed
+  tags: [config]
   ansible.builtin.systemd:
     name: docker-user-rules
     state: restarted
@@ -119,6 +133,7 @@
   when: traefik_docker_user_rules_script.changed or traefik_docker_user_rules_service.changed
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
@@ -132,6 +147,7 @@
          or (traefik_cfg_profiles is changed) or (traefik_cfg_discord is changed) }}
 
 - name: Wait for CrowdSec to be healthy
+  tags: [deploy]
   community.docker.docker_container_info:
     name: crowdsec
   register: traefik_crowdsec_health
@@ -140,6 +156,7 @@
   delay: 10
 
 - name: Enable WAL mode in CrowdSec SQLite config
+  tags: [deploy]
   ansible.builtin.lineinfile:
     path: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/config.yaml"
     insertafter: '^\s*db_path:'
@@ -149,6 +166,7 @@
   register: traefik_crowdsec_wal_config
 
 - name: Restart CrowdSec to apply WAL config # noqa no-handler
+  tags: [deploy]
   community.docker.docker_compose_v2:
     project_src: "/home/{{ sys_user }}/server/containers/traefik"
     services:
@@ -158,6 +176,7 @@
   when: traefik_crowdsec_wal_config.changed
 
 - name: Wait for CrowdSec to be healthy after WAL config change # noqa no-handler
+  tags: [deploy]
   community.docker.docker_container_info:
     name: crowdsec
   register: traefik_crowdsec_health_post_wal
@@ -167,6 +186,7 @@
   when: traefik_crowdsec_wal_config.changed
 
 - name: Register Homepage machine credentials with CrowdSec
+  tags: [deploy]
   community.docker.docker_container_exec:
     container: crowdsec
     command: "cscli machines add {{ crowdsec_username }} --password {{ crowdsec_password }} --force"
@@ -174,6 +194,7 @@
   no_log: true
 
 - name: Register Traefik bouncer API key with CrowdSec
+  tags: [deploy]
   community.docker.docker_container_exec:
     container: crowdsec
     command: "cscli bouncers add traefik-bouncer --key {{ crowdsec_bouncer_api_key }}"
@@ -185,6 +206,7 @@
   no_log: true
 
 - name: Restart Traefik to re-authenticate with CrowdSec bouncer # noqa no-handler
+  tags: [deploy]
   community.docker.docker_container:
     name: traefik
     state: started
@@ -192,18 +214,21 @@
   when: traefik_crowdsec_bouncer_registration.changed
 
 - name: Update CrowdSec hub
+  tags: [deploy]
   community.docker.docker_container_exec:
     container: crowdsec
     command: cscli hub update
   changed_when: false
 
 - name: Upgrade CrowdSec hub
+  tags: [deploy]
   community.docker.docker_container_exec:
     container: crowdsec
     command: cscli hub upgrade
   changed_when: false
 
 - name: Deploy traefik-init systemd service
+  tags: [config]
   ansible.builtin.template:
     src: traefik-init.service.j2
     dest: /etc/systemd/system/traefik-init.service
@@ -213,6 +238,7 @@
   become: true
 
 - name: Enable traefik-init systemd service
+  tags: [config]
   ansible.builtin.systemd:
     name: traefik-init
     enabled: true
@@ -220,6 +246,7 @@
   become: true
 
 - name: Ensure Crowdsec hub update and upgrade job exists
+  tags: [cron]
   ansible.builtin.cron:
     name: "Update Crowdsec Hub"
     minute: "15"
@@ -230,6 +257,7 @@
   become: true
 
 - name: Create CrowdSec home-ips allowlist
+  tags: [config]
   community.docker.docker_container_exec:
     container: crowdsec
     command: "cscli allowlists create home-ips --description 'Home IPs'"
@@ -240,6 +268,7 @@
   changed_when: traefik_crowdsec_allowlist_create.rc == 0
 
 - name: Deploy home allowlist updater script
+  tags: [config]
   ansible.builtin.template:
     src: crowdsec-update-home-allowlist.sh.j2
     dest: /usr/local/bin/crowdsec-update-home-allowlist.sh
@@ -249,6 +278,7 @@
   become: true
 
 - name: Schedule CrowdSec home IP allowlist updater
+  tags: [cron]
   ansible.builtin.cron:
     name: "Update CrowdSec home IP allowlist"
     minute: "*/5"

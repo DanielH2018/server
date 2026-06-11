@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -8,6 +9,7 @@
       - "{{ container_item.name }}/data"
 
 - name: Add apache2-utils
+  tags: [config]
   ansible.builtin.apt:
     name: apache2-utils
     state: present
@@ -15,6 +17,7 @@
   become_method: ansible.builtin.sudo
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml

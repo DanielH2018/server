@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -8,6 +9,7 @@
       - "{{ container_item.name }}/config/.ssh"
 
 - name: Check if github key exists
+  tags: [config]
   ansible.builtin.stat:
     path: "/home/{{ sys_user }}/server/ansible/roles/containers/code-server/templates/github"
   register: containers_github_data
@@ -15,6 +17,7 @@
 # `copy`, not `template`: this is a private key — Jinja must never parse it (a key
 # containing `{%`/`{{` byte sequences would be mangled or fail the render).
 - name: Copy github key
+  tags: [config]
   ansible.builtin.copy:
     src: "/home/{{ sys_user }}/server/ansible/roles/containers/code-server/templates/github"
     dest: "/home/{{ sys_user }}/server/containers/code-server/config/.ssh/github"
@@ -22,23 +25,27 @@
   when: containers_github_data.stat.exists
 
 - name: Create Dockerfile from template
+  tags: [config]
   ansible.builtin.template:
     src: Dockerfile.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/Dockerfile"
     mode: "0664"
 
 - name: Copy extensions startup script
+  tags: [config]
   ansible.builtin.copy:
     src: extensions.sh
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/extensions.sh"
     mode: "0755"
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
 
 - name: Schedule weekly redeploy cron job
+  tags: [cron]
   ansible.builtin.include_role:
     name: common
     tasks_from: redeploy_cron.yml

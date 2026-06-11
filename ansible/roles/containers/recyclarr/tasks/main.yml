@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -8,6 +9,7 @@
       - "{{ container_item.name }}/recyclarr/config"
 
 - name: Create recyclarr.yml from template
+  tags: [config]
   ansible.builtin.template:
     src: recyclarr.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/recyclarr/recyclarr/config/recyclarr.yml"
@@ -17,6 +19,7 @@
   register: recyclarr_cfg
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
