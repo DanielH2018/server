@@ -527,12 +527,20 @@
     proto: tcp
   become: true
 
-- name: Allow WireGuard port 51820/udp
+- name: Remove the stale WireGuard 51820/udp allow on the Pi
   tags: [firewall]
+  # History: written when the Pi's wg-easy listened on 51820; the Pi moved to 51822
+  # (both hosts share one public IP, so the listen ports must differ) and this rule
+  # was never updated. No replacement is added: wg-easy publishes its UDP port via
+  # Docker, whose nat/FORWARD rules bypass UFW INPUT entirely — proven by the Pi's
+  # dozzle/glances web UIs being LAN-reachable with no UFW allows for 8080/61208.
+  # The Pi's manually-added 51822 allow is left in place (harmless, documents intent).
+  # Kept as a delete-task (not just removed) so existing hosts converge.
   community.general.ufw:
     rule: allow
     port: "51820"
     proto: udp
+    delete: true
   become: true
   when: inventory_hostname == 'daniel-pi'
 

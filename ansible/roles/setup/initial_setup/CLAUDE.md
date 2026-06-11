@@ -34,7 +34,9 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
 - **SSH:** `.ssh` perms, an `ssh-users` group, sshd hardening, and a `Match` block enabling
   agent/X11 forwarding for `sys_user`. → `notify: Restart SSH`.
 - **Firewall (UFW):** default-deny incoming / allow outgoing, **rate-limited** SSH (replaces a
-  plain allow), allow WireGuard `51820/udp` (Pi-guarded), then enable.
+  plain allow), then enable. No WireGuard allow: Docker-published ports (incl. wg-easy's UDP
+  port) bypass UFW INPUT via Docker's own chains; a stale Pi-only `51820/udp` allow from the
+  pre-port-split era is actively deleted (the Pi listens on 51822).
 - **Kernel/network hardening:** IPv4 forwarding, sysctl security knobs, blacklist rare network
   modules, load + persist the WireGuard module.
 - **Auditing & accounting:** `auditd` + rules (`notify: Reload audit rules`), `sysstat`,
