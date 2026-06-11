@@ -1,10 +1,14 @@
 ---
 - name: Set variables
   # Dual-tagged: vars are consumed by the gpu_mem task AND the zram task.
+  # zram 75% of RAM is the device's UNCOMPRESSED capacity (~343 MB), not its RAM
+  # cost — with zstd (~3.5:1 on typical anon pages) a full device costs ~98 MB
+  # physical, about what lz4 paid for the old 50% device. Net: +115 MB swap
+  # capacity before the SD-card swapfile gets touched, for free.
   tags: [gpu-mem, zram]
   ansible.builtin.set_fact:
     optimize_pi_gpu_memory_mb: 16
-    optimize_pi_zram_percentage: 50
+    optimize_pi_zram_percentage: 75
 
 # -------------------------------------------------------
 # 1. DYNAMIC CONFIG PATH DETECTION (Bookworm vs Bullseye)
@@ -52,6 +56,41 @@
     regexp: "^PERCENT="
     line: "PERCENT={{ optimize_pi_zram_percentage }}"
   notify: Restart ZRAM
+
+- name: Compress ZRAM with zstd instead of lz4
+  tags: [zram]
+  # ~3.5:1 vs lz4's ~2.5:1 on this workload — the better ratio is what makes the
+  # 75% device size affordable. zstd costs more CPU per page than lz4, but the
+  # A53 cores idle ~95% here; the SD-card swapfile this avoids is FAR slower.
+  ansible.builtin.lineinfile:
+    path: /etc/default/zramswap
+    regexp: "^#?ALGO="
+    line: "ALGO=zstd"
+  notify: Restart ZRAM
+
+- name: Prefer zram swap over page-cache eviction (vm.swappiness=130)
+  tags: [zram]
+  # Kernel default 60 treats swap as expensive (true for the SD swapfile, false
+  # for zram). >100 (valid on 5.8+; this is 6.8) tells reclaim that compressing
+  # an idle anon page is cheaper than re-reading a hot file page from SD.
+  # daniel-server runs swappiness=10 for the opposite reason — see initial_setup.
+  ansible.posix.sysctl:
+    name: vm.swappiness
+    value: "130"
+    state: present
+    sysctl_set: true
+  become: true
+
+- name: Disable swap readahead (vm.page-cluster=0)
+  tags: [zram]
+  # 3 = 8-page readahead per fault: a win on rotating disks, pure decompression
+  # waste on zram where each page is random-access. 0 cuts swap-in latency ~8x.
+  ansible.posix.sysctl:
+    name: vm.page-cluster
+    value: "0"
+    state: present
+    sysctl_set: true
+  become: true
 
 # -------------------------------------------------------
 # 4. LOG2RAM (Save SD Card)
@@ -178,4 +217,73 @@
     state: absent
     purge: true
     autoremove: true
+  become: true
+
+# -------------------------------------------------------
+# 7. LOG RAM BUDGET (log2ram tmpfs is 128 MB of REAL RAM)
+# -------------------------------------------------------
+# Everything under /var/log lives in log2ram's RAM-backed tmpfs. Found 2026-06-11
+# at 81% (103/128 MB): journald carried the server-sized 1G cap from initial_setup
+# (would overflow the tmpfs and fail log writes), and acct's savelog kept 30 daily
+# pacct generations (36 MB and growing toward ~90 MB). Cap both.
+
+- name: Cap journald to fit the log2ram tmpfs (overrides initial_setup's 1G)
+  tags: [log2ram]
+  # 60-homelab-pi sorts after initial_setup's 50-homelab.conf, so this wins.
+  # journald vacuums archived journals down to the cap on restart.
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/60-homelab-pi.conf
+    content: |
+      # Managed by Ansible (optimize_pi role) — edits here are overwritten.
+      # /var/log is a 128 MB log2ram tmpfs (= RAM); the 1G default would overflow it.
+      [Journal]
+      SystemMaxUse=32M
+      SystemMaxFileSize=8M
+    mode: "0644"
+  become: true
+  notify: Restart systemd-journald
+
+- name: Keep 3 days of process accounting, not 30 (ACCT_LOGGING)
+  tags: [log2ram]
+  # /etc/cron.daily/acct rotates pacct with savelog -c $ACCT_LOGGING. The healthcheck
+  # exec churn writes ~28 MB/day, all of it RAM via log2ram; 30 generations is a
+  # server-disk default. 3 days keeps enough for "what ran last night" forensics.
+  ansible.builtin.lineinfile:
+    path: /etc/default/acct
+    regexp: '^#?ACCT_LOGGING='
+    line: 'ACCT_LOGGING="3"'
+  become: true
+
+# -------------------------------------------------------
+# 8. EARLYOOM (kill the hog before the watchdog reboots)
+# -------------------------------------------------------
+- name: Install earlyoom
+  tags: [earlyoom]
+  ansible.builtin.apt:
+    name: earlyoom
+    state: present
+  become: true
+
+- name: Configure earlyoom thresholds and protected processes
+  tags: [earlyoom]
+  # Without this the only escape from a memory spiral is the hardware watchdog
+  # hard-rebooting at load 24 (≥10 min of full stall first). earlyoom SIGTERMs the
+  # largest process once BOTH avail mem < 10% AND free swap < 10% — a true OOM
+  # spiral, not the swap-heavy-but-stable steady state this box likes to run.
+  # --avoid shields the processes whose death would be worse than the stall.
+  ansible.builtin.lineinfile:
+    path: /etc/default/earlyoom
+    regexp: '^#?EARLYOOM_ARGS='
+    line: >-
+      EARLYOOM_ARGS="-m 10 -s 10 -r 3600 --avoid
+      '(^|/)(systemd|systemd-.*|init|sshd|dockerd|containerd|containerd-shim.*|watchdog)$'"
+  become: true
+  notify: Restart earlyoom
+
+- name: Enable earlyoom service
+  tags: [earlyoom]
+  ansible.builtin.systemd:
+    name: earlyoom
+    enabled: true
+    state: started
   become: true

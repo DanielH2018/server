@@ -70,6 +70,11 @@
         name: zramswap
         state: restarted
 
+    - name: Restart earlyoom
+      ansible.builtin.service:
+        name: earlyoom
+        state: restarted
+
     - name: Restart Watchdog
       ansible.builtin.service:
         name: watchdog

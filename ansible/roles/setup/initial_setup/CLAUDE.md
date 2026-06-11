@@ -42,7 +42,9 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
 - **Integrity & malware:** **AIDE** (install, init DB, weekly check; the package's own
   `dailyaidecheck.timer` is masked — it duplicated the weekly cron nightly with broken
   mail alerting, ~1h20m CPU/night on the Pi) and **rkhunter**
-  (install, baseline, post-apt refresh, weekly scan).
+  (install, baseline, post-apt refresh, weekly scan). Both weekly scans run
+  `nice -n19 ionice -c3` and are staggered (AIDE Mon 03:00, rkhunter Wed 02:00) — they
+  used to overlap Monday mornings at full priority, >1h each on the Pi's 4 slow cores.
 - **Login/password policy:** console + network login banners, umask `027`, password hash
   rounds, password-age policy, core dumps disabled (login.defs + systemd).
 - **Postfix:** hide the OS banner, disable `VRFY` (`notify: Reload Postfix`).

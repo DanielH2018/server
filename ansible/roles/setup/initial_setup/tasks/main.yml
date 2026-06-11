@@ -398,7 +398,8 @@
 
 - name: Lower swappiness (daniel-server)
   # 30G RAM and swap sits unused — prefer reclaiming page cache over swapping
-  # service heaps. The Pi keeps the kernel default: 512 MB + zram NEEDS eager swap.
+  # service heaps. The Pi runs the OPPOSITE tuning (swappiness=130, zram-eager)
+  # in optimize_pi — 512 MB + zram needs eager swap.
   ansible.posix.sysctl:
     name: vm.swappiness
     value: "10"
@@ -755,8 +756,12 @@
     name: "Weekly rkhunter malware scan"
     minute: "0"
     hour: "2"
-    weekday: "1"
-    job: "/usr/bin/rkhunter --check --nocolors --skip-keypress --report-warnings-only 2>&1 | /usr/bin/logger -t rkhunter"
+    # Wednesday, staggered off the Monday AIDE check: both scans run >1h on the
+    # Pi's 4 slow cores and used to overlap (rkhunter 02:00 still running when
+    # AIDE started at 03:00). nice/ionice-idle so a scan can never starve
+    # containers — found 2026-06-11 while chasing Pi swap-thrash storms.
+    weekday: "3"
+    job: "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/rkhunter --check --nocolors --skip-keypress --report-warnings-only 2>&1 | /usr/bin/logger -t rkhunter"
     user: root
   become: true
 
@@ -888,12 +893,15 @@
 
 - name: Schedule weekly AIDE integrity check
   tags: [aide]
+  # nice/ionice-idle: the check reads the whole filesystem for >1h (Pi); at normal
+  # priority it competes with containers for CPU and SD-card IO. The rkhunter scan
+  # is staggered to Wednesday for the same reason.
   ansible.builtin.cron:
     name: "Weekly AIDE file integrity check"
     minute: "0"
     hour: "3"
     weekday: "1"
-    job: "/usr/bin/aide --check 2>&1 | /usr/bin/logger -t aide"
+    job: "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --check 2>&1 | /usr/bin/logger -t aide"
     user: root
   become: true
 
