@@ -65,6 +65,15 @@ RESTORE_DRILL_MAX_AGE_S = float(_env("RESTORE_DRILL_MAX_AGE_D", "35")) * 86400
 SCRUTINY_URL = _env("SCRUTINY_URL", "http://scrutiny:8080").rstrip("/")
 SCRUTINY_MAX_AGE_H = float(_env("SCRUTINY_MAX_AGE_H", "26"))
 
+# Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
+# 2026-06-11 (fwupd): hourly load5/core >1.7 episodes with healthcheck-timeout storms
+# that no other monitor saw (containers stayed "restarting", never down long enough).
+# Polled from the glances API already running on the Pi (zero added Pi footprint);
+# the separate static Kuma HTTP monitor covers glances itself being down.
+PI_GLANCES_URL = _env("PI_GLANCES_URL", "").rstrip("/")
+PI_LOAD_MAX = float(_env("PI_LOAD_MAX", "1.5"))  # load5 per core
+PI_MEM_MIN_MB = float(_env("PI_MEM_MIN_MB", "50"))
+
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
 
@@ -437,6 +446,45 @@ def check_scrutiny():
     return scrutiny_freshness((data.get("data") or {}).get("summary"), SCRUTINY_MAX_AGE_H)
 
 
+def pi_pressure(load_json, mem_json, load_max, mem_min_mb):
+    """Pure: sustained load per core OR an available-memory floor breach on the Pi.
+
+    Fed glances /api/4/load and /api/4/mem payloads. load5 (not load1) matches the
+    5-min poll interval and rides out single-probe spikes; `available` (not `free`)
+    is what the kernel can actually reclaim — the box thrashes when THAT runs out.
+    Missing fields alert rather than silently passing (a glances plugin regression
+    must surface, same principle as the other checks' unreachable-source handling).
+    """
+    cores = load_json.get("cpucore") or 0
+    load5 = load_json.get("min5")
+    avail = mem_json.get("available")
+    if not cores or load5 is None or avail is None:
+        return False, "glances payload missing load/mem fields"
+    per_core = load5 / cores
+    avail_mb = avail / 1048576.0
+    problems = []
+    if per_core > load_max:
+        problems.append("load5 %.2f/core (> %.2f)" % (per_core, load_max))
+    if avail_mb < mem_min_mb:
+        problems.append("mem available %.0fMB (< %.0fMB)" % (avail_mb, mem_min_mb))
+    if problems:
+        return False, "; ".join(problems)
+    return True, "load5 %.2f/core, %.0fMB available" % (per_core, avail_mb)
+
+
+def check_pi_pressure():
+    """Swap-thrash / overload early warning for the memory-constrained Pi.
+
+    Empty PI_GLANCES_URL -> disabled (stays up), like check_n8n without an API key.
+    An unreachable glances raises -> the loop renders it down with the error.
+    """
+    if not PI_GLANCES_URL:
+        return True, "pi monitoring disabled (no glances URL)"
+    load = _get_json(PI_GLANCES_URL + "/api/4/load")
+    mem = _get_json(PI_GLANCES_URL + "/api/4/mem")
+    return pi_pressure(load, mem, PI_LOAD_MAX, PI_MEM_MIN_MB)
+
+
 def restore_drill(state, age_s, max_age_s):
     if not state.get("ok"):
         return False, "last restore drill FAILED: %s" % state.get("msg", "?")
@@ -473,6 +521,7 @@ CHECKS = [
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
     ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
     ("scrutiny",      _env("KUMA_PUSH_SCRUTINY",      ""), check_scrutiny),
+    ("pi_pressure",   _env("KUMA_PUSH_PI",            ""), check_pi_pressure),
 ]
 
 

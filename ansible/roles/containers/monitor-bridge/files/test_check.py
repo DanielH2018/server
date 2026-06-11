@@ -690,3 +690,80 @@ def test_scrutiny_no_devices_is_down():
     ok, msg = check.scrutiny_freshness({}, 26)
     assert not ok
     assert "no devices" in msg
+
+
+# ── pi_pressure (Pi load / memory headroom via the Pi's glances API) ─────────
+
+
+MB = 1048576
+
+
+def test_pi_pressure_ok():
+    ok, msg = check.pi_pressure({"min5": 0.8, "cpucore": 4}, {"available": 150 * MB}, 1.5, 50)
+    assert ok
+    assert "0.20/core" in msg and "150MB" in msg
+
+
+def test_pi_pressure_high_load_alerts():
+    # 2026-06-11 fwupd incident signature: load5 ~7.2 on 4 cores while every
+    # container healthcheck timed out (mem available still ~150MB at that instant)
+    ok, msg = check.pi_pressure({"min5": 7.2, "cpucore": 4}, {"available": 150 * MB}, 1.5, 50)
+    assert not ok
+    assert "load5 1.80/core" in msg
+
+
+def test_pi_pressure_low_mem_alerts():
+    ok, msg = check.pi_pressure({"min5": 0.4, "cpucore": 4}, {"available": 13 * MB}, 1.5, 50)
+    assert not ok
+    assert "13MB" in msg
+
+
+def test_pi_pressure_both_breaches_named():
+    ok, msg = check.pi_pressure({"min5": 8.0, "cpucore": 4}, {"available": 10 * MB}, 1.5, 50)
+    assert not ok
+    assert "load5" in msg and "available" in msg
+
+
+def test_pi_pressure_at_threshold_is_ok():
+    # strictly greater / strictly less, like the other checks' threshold semantics
+    ok, _ = check.pi_pressure({"min5": 6.0, "cpucore": 4}, {"available": 50 * MB}, 1.5, 50)
+    assert ok
+
+
+def test_pi_pressure_missing_fields_alert():
+    ok, msg = check.pi_pressure({}, {"available": 150 * MB}, 1.5, 50)
+    assert not ok
+    assert "missing" in msg
+
+
+def test_pi_pressure_zero_cores_alerts_not_divides():
+    ok, msg = check.pi_pressure({"min5": 1.0, "cpucore": 0}, {"available": 150 * MB}, 1.5, 50)
+    assert not ok
+    assert "missing" in msg
+
+
+# --- check_pi_pressure -------------------------------------------------------
+
+
+def test_pi_check_disabled_without_url():
+    # PI_GLANCES_URL defaults to "" in tests -> monitoring disabled, never a false page
+    ok, msg = check.check_pi_pressure()
+    assert ok
+    assert "disabled" in msg.lower()
+
+
+def test_pi_check_down_on_pressure(monkeypatch):
+    monkeypatch.setattr(check, "PI_GLANCES_URL", "http://pi:61208")
+    monkeypatch.setattr(
+        check, "_get_json", _seq({"min5": 7.2, "cpucore": 4}, {"available": 150 * MB}))
+    ok, msg = check.check_pi_pressure()
+    assert not ok
+    assert "load5" in msg
+
+
+def test_pi_check_up_when_quiet(monkeypatch):
+    monkeypatch.setattr(check, "PI_GLANCES_URL", "http://pi:61208")
+    monkeypatch.setattr(
+        check, "_get_json", _seq({"min5": 0.4, "cpucore": 4}, {"available": 150 * MB}))
+    ok, _ = check.check_pi_pressure()
+    assert ok

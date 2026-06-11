@@ -77,6 +77,14 @@ services:
       - SCRUTINY_URL=http://scrutiny:8080
       - SCRUTINY_MAX_AGE_H=26
       - KUMA_PUSH_SCRUTINY={{ monitor_bridge_scrutiny_push_token }}
+      # Pi pressure: swap-thrash early warning for the 512MB Zero 2 W, polled from the
+      # glances API already running there (zero Pi-side footprint; the static Kuma HTTP
+      # monitor covers glances itself). 2026-06-11 fwupd incident: load5/core >1.7 with
+      # mem available bottoming at 13MB — invisible to every other monitor.
+      - PI_GLANCES_URL=http://{{ hostvars['daniel-pi'].server_ip }}:61208
+      - PI_LOAD_MAX=1.5
+      - PI_MEM_MIN_MB=50
+      - KUMA_PUSH_PI={{ monitor_bridge_pi_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
@@ -101,6 +109,7 @@ services:
       {{ kuma('gitops-deploy-status', monitor_type='push', name='GitOps Deploy — Status', interval=600, push_token=monitor_bridge_gitops_status_push_token) }}
       {{ kuma('kopia-restore-drill', monitor_type='push', name='Backup Restore Drill', interval=600, push_token=kopia_restore_drill_push_token) }}
       {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data Freshness', interval=600, push_token=monitor_bridge_scrutiny_push_token) }}
+      {{ kuma('monitor-bridge-pi', monitor_type='push', name='Pi Pressure', interval=600, push_token=monitor_bridge_pi_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 
