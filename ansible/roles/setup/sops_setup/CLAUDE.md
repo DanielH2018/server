@@ -26,11 +26,11 @@ role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup
 5. **Export `SOPS_AGE_KEY_FILE`** in `~/.bashrc` so `sops`/the lookup find the key.
 
 ## Notable
-- **DR single point of failure:** the private key at `~/.config/sops/age/keys.txt` is the
-  ONLY thing that can decrypt the secrets, and it is in **no automated backup** (Kopia backs
-  up only `containers/`). It must be kept off-box (password manager / hardware token).
-  Confirmed backed up out-of-band 2026-06-06 (see the in-file `DR NOTE`). A second `age`
-  recipient in `.sops.yaml` would remove the single-key dependency — not yet done.
+- **DR:** host keys at `~/.config/sops/age/keys.txt` are in **no automated backup** (Kopia
+  backs up only `containers/`); they're backed up out-of-band (2026-06-06). Since
+  **2026-06-11** `.sops.yaml` also lists an **off-box recovery recipient** (private half
+  only in the operator's password manager), so the secrets survive losing both hosts.
+  Gotcha: `sops updatekeys` resolves `.sops.yaml` from the CWD — run it from `ansible/`.
 - **Onboarding an Nth host is NOT this role** — `.sops.yaml` is tracked, so every checkout
   already has it and step 4 self-skips. Adding a host = run `ansible/bootstrap.yml` on it,
   add its pubkey to `.sops.yaml`, `sops updatekeys`, commit/pull. See `bootstrap.yml` header

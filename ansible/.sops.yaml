@@ -20,5 +20,7 @@
 creation_rules:
   - path_regex: .*(vars|secrets)\/.*\.ya?ml$
     # Recipients (multi-recipient = OR; ANY one key decrypts the whole file).
-    # First key = daniel-server, second = daniel-pi.
-    age: "age1shgt54wq7y9pk4nksxcfr5s539rh2g5uqkh9t2jlx6wj4a8aq34q4cyg7k,age1934n4c4xe4rfnpczex2nkr4nlc3c820yu47ehyt6adljx5wmk58sspvpyf"
+    # First key = daniel-server, second = daniel-pi, third = OFF-BOX RECOVERY key
+    # (private half lives only in the operator's password manager, added 2026-06-11 —
+    # the DR escape hatch if both hosts' ~/.config/sops/age/keys.txt are lost).
+    age: "age1shgt54wq7y9pk4nksxcfr5s539rh2g5uqkh9t2jlx6wj4a8aq34q4cyg7k,age1934n4c4xe4rfnpczex2nkr4nlc3c820yu47ehyt6adljx5wmk58sspvpyf,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp"

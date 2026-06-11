@@ -59,13 +59,10 @@
     state: directory
     mode: "0700"
 
-# DR NOTE: this private key is the ONLY thing that can decrypt ansible/vars/secrets.yml.
-# The encrypted secrets live in git (offsite), but Kopia backs up only `containers/` — the
-# key at ~/.config/sops/age/keys.txt is in NO automated backup. It MUST be kept somewhere
-# off-box (password manager / hardware token); otherwise a disk loss means the encrypted
-# secrets are unrecoverable. The key is currently backed up out-of-band (confirmed
-# 2026-06-06). A second `age` recipient in .sops.yaml would be the in-repo way to remove
-# the single-key dependency — not yet done.
+# DR NOTE: host keys at ~/.config/sops/age/keys.txt are in NO automated backup (Kopia
+# backs up only `containers/`). Since 2026-06-11 .sops.yaml has a third, OFF-BOX recovery
+# recipient (private half only in the operator's password manager), so losing both hosts'
+# keys no longer strands the secrets. Host keys also backed up out-of-band (2026-06-06).
 - name: Generate Age key (only if it doesn't exist)
   tags: [age-key]
   become: false

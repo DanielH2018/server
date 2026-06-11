@@ -7,14 +7,17 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- Add a second SOPS age recipient (DR: `.sops.yaml` currently has ONE key; the private
-  key is backed up out-of-band but a recovery recipient removes the single point of
-  recovery). Operator generates `age-keygen` OFF-BOX (password manager / printed /
-  hardware token — a second key on the same host adds nothing), then: add the public
-  key to `ansible/.sops.yaml`, run `sops updatekeys ansible/vars/secrets.yml`, commit.
-  Multi-recipient is OR — either key decrypts.
+(empty)
 
 ## Superseded
+
+- Add a second SOPS age recipient — done 2026-06-11: operator generated the key
+  off-box (private half lives only in the password manager), pubkey
+  `age1npl…feyp` added to `ansible/.sops.yaml` as the third recipient (server, Pi,
+  recovery), `sops updatekeys` re-wrapped secrets.yml, decrypt verified. Remaining
+  operator step: test the recovery path once from a non-infra machine
+  (`SOPS_AGE_KEY_FILE=… sops -d ansible/vars/secrets.yml`). NB `sops updatekeys`
+  must run from `ansible/` — it resolves `.sops.yaml` from CWD, not the file path.
 
 - Pi Ubuntu update — done by 2026-06-11: daniel-pi reports Ubuntu 24.04.4 LTS
   (`lsb_release -ds`, OpenSSH 9.6p1 noble build). Nothing left to run.
