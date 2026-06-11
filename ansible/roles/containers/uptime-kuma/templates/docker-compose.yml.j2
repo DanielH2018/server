@@ -53,6 +53,12 @@ services:
               url='http://' ~ hostvars['daniel-pi'].server_ip ~ ':8080') }}
       {{ kuma('daniel-pi-wg-easy', name='Daniel Pi WG Easy', monitor_type='http',
               url='http://' ~ hostvars['daniel-pi'].server_ip ~ ':51821') }}
+      # Pi SD-card health: SD cards have no SMART, so a dying card only announces
+      # itself via ext4 errors. The Pi's pi-sd-health.sh cron (optimize_pi role)
+      # pushes errors_count every 5 min through the LAN-bypassed push API
+      # (authelia: ^/api/push/ on this .local host); interval 600 = 2x the cron,
+      # so the push watchdog also catches a dead cron/host.
+      {{ kuma('daniel-pi-sd-health', name='Daniel Pi SD Health', monitor_type='push', interval=600, push_token=pi_sd_health_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '512M', '0.05', '64M') }}
 

@@ -46,6 +46,20 @@ access_control:
     # authelia router rule). The networks condition still fails closed: a spoofed
     # *.local Host header from outside the LAN doesn't match this rule and falls
     # through to two_factor below.
+    # Machine endpoint, LAN only: Uptime Kuma's push API authenticates with its own
+    # 32-char tokens in the URL path, and the Pi's host crons (SD-health heartbeat)
+    # have no Authelia session to present. Scoped to the exact path prefix on the
+    # .local host AND the RFC1918 networks condition — from outside the LAN this
+    # rule doesn't match and the request falls through to two_factor below.
+    - domain: "uptime-kuma.local.{{ domain }}"
+      policy: bypass
+      networks:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+      resources:
+        - "^/api/push/.*$"
+
     - domain: "*.local.{{ domain }}"
       policy: one_factor
       networks:

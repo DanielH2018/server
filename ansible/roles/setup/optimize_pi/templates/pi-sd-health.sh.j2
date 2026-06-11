@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Pi SD-card health heartbeat — managed by Ansible (optimize_pi role); edits overwritten.
+#
+# SD cards have no SMART (no ATA/NVMe command set behind mmcblk0), so a dying card
+# only announces itself through filesystem errors. The kernel counts them per ext4
+# filesystem in sysfs; any nonzero errors_count on the root fs is the earliest
+# reliable "replace this card" signal (it persists across reboots until fsck clears
+# the superblock error state).
+#
+# Pushes status to the static "Daniel Pi SD Health" Kuma push monitor every 5 min
+# (cron). Dead-man's-switch: an explicit `down` names the problem fast, while a dead
+# cron/host simply stops pushing and trips the monitor's 600s heartbeat watchdog.
+# Route: Traefik's .local router on the server, resolved directly to the server's
+# LAN IP (no DNS dependency); Authelia bypasses ^/api/push/ on this host LAN-only —
+# the URL token is the credential.
+set -uo pipefail
+
+COUNTER=/sys/fs/ext4/mmcblk0p2/errors_count
+{# `domain` here is the SOPS-loaded server domain (community.sops.load_vars in
+   initial_setup.yml outranks the Pi host_vars' daniel-pi.com override), NOT
+   hostvars['daniel-server'].domain — secrets are play-scoped, so that lookup
+   fails cross-host. Verified: the Pi's wg-easy renders the same way. #}
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+PUSH_URL="https://${KUMA_HOST}/api/push/{{ pi_sd_health_push_token }}"
+
+if COUNT=$(cat "$COUNTER" 2>/dev/null); then
+  if [ "$COUNT" = "0" ]; then
+    STATUS=up;   MSG="ext4 errors_count=0 on mmcblk0p2"
+  else
+    STATUS=down; MSG="ext4 errors_count=${COUNT} on mmcblk0p2 — SD card may be failing; check dmesg + fsck"
+  fi
+else
+  # Surface a missing counter (device renamed? sysfs layout change) instead of
+  # silently passing — same principle as monitor-bridge's unreachable-source rule.
+  STATUS=down; MSG="cannot read ${COUNTER}"
+fi
+
+curl -fsS --max-time 10 -G \
+  --resolve "${KUMA_HOST}:443:{{ hostvars['daniel-server'].server_ip }}" \
+  --data-urlencode "status=${STATUS}" \
+  --data-urlencode "msg=${MSG}" \
+  "$PUSH_URL" >/dev/null \
+  || logger -t pi-sd-health "push failed (status=${STATUS}: ${MSG})"

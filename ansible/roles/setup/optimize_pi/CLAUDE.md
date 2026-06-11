@@ -13,7 +13,7 @@ See repo-root `CLAUDE.md` for conventions.
   the play's `hosts:` defaults to the local hostname, so `--limit daniel-pi` from the
   server intersects to zero hosts and silently does nothing.
 - **Granular tags** (one section without the whole role): `gpu-mem`, `zram`, `log2ram`,
-  `watchdog`, `debloat`, `earlyoom`. The shared prep tasks are dual-tagged (`Set variables` →
+  `watchdog`, `debloat`, `earlyoom`, `sd-health`. The shared prep tasks are dual-tagged (`Set variables` →
   `[gpu-mem, zram]`; the config.txt path detection → `[gpu-mem, watchdog]`) so
   tag-scoped runs still get the facts they consume. `log2ram` also covers the log
   RAM-budget tasks (journald cap, acct retention) — they exist because of the tmpfs.
@@ -45,6 +45,11 @@ See repo-root `CLAUDE.md` for conventions.
    under 10%, with `--avoid` shielding systemd/sshd/dockerd/containerd/watchdog.
    Before this, the only escape from a memory spiral was the hardware watchdog
    hard-rebooting at load 24 after ≥10 min of stall.
+9. **SD-card health heartbeat** — SD cards have no SMART, so `templates/pi-sd-health.sh.j2`
+   (cron, */5) pushes the root fs's ext4 `errors_count` to the static "Daniel Pi SD
+   Health" Kuma push monitor (uptime-kuma role) via the LAN-only Authelia bypass on
+   `^/api/push/` (authelia role). Nonzero count = explicit `down`; a dead cron/host
+   trips the 600s push watchdog. Token: `pi_sd_health_push_token` in `secrets.yml`.
 
 ## Notable
 - **Handlers live in the playbook, not this role:** `Reboot Pi`, `Restart ZRAM`,

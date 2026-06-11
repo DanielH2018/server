@@ -287,3 +287,31 @@
     enabled: true
     state: started
   become: true
+
+- name: Deploy the SD-card health heartbeat script
+  tags: [sd-health]
+  # SD cards can't do SMART (no ATA/NVMe command set behind mmcblk0), so scrutiny is
+  # useless here; the ext4 errors_count sysfs counter is the earliest reliable
+  # failure signal. The script pushes it to the static "Daniel Pi SD Health" Kuma
+  # push monitor (defined in the uptime-kuma role) through the LAN-only Authelia
+  # bypass on ^/api/push/. Mode 0700: the push token is embedded, so it's legible
+  # only to the cron user that runs it.
+  ansible.builtin.template:
+    src: pi-sd-health.sh.j2
+    dest: /usr/local/bin/pi-sd-health.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0700"
+  become: true
+
+- name: Schedule the SD-card health heartbeat
+  tags: [sd-health]
+  # Every 5 min — the Kuma monitor's 600s heartbeat window is 2x this, so one
+  # missed push is tolerated but a dead cron/host alerts. Cost per run: one sysfs
+  # read + one LAN HTTPS request; nothing measurable on the Zero 2 W.
+  ansible.builtin.cron:
+    name: "Pi SD-card health heartbeat"
+    minute: "*/5"
+    job: "/usr/local/bin/pi-sd-health.sh"
+    user: "{{ sys_user }}"
+  become: true
