@@ -29,7 +29,7 @@ services:
       # adding more load (observed 2026-06-11). The check is in-binary and cheap; the
       # long timeout only delays detection, it can't mask a real failure.
       test: ["CMD", "/dozzle", "healthcheck"]
-      interval: 30s
+      interval: {{ container_healthcheck_interval | default('30s') }}
       timeout: 30s
       retries: 3
       start_period: 15s

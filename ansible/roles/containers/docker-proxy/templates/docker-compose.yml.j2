@@ -36,7 +36,9 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:2375/version || exit 1"]
-      interval: 10s
+      # Host-tunable cadence: 10s is fine on the server, but each probe forks runc twice —
+      # real CPU/PID churn on the Pi (see container_healthcheck_interval in its host_vars).
+      interval: {{ container_healthcheck_interval | default('10s') }}
       timeout: 5s
       retries: 3
       start_period: 10s
@@ -87,7 +89,7 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:2375/version || exit 1"]
-      interval: 10s
+      interval: {{ container_healthcheck_interval | default('10s') }}
       timeout: 5s
       retries: 3
       start_period: 10s

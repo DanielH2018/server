@@ -19,6 +19,12 @@ services:
       # latency for an unhealthy container is fine for this fleet.
       - AUTOHEAL_INTERVAL=30
       - DOCKER_SOCK=tcp://docker-proxy-lifecycle:2375
+    healthcheck:
+      # Interval-only override: `test` is deliberately omitted, so Docker inherits the
+      # image's own probe (pgrep -f autoheal). The image bakes interval=5s — that's a
+      # sh+pgrep exec (2 runc invocations) every 5s, the single largest source of
+      # process churn on the Pi (2026-06-11). A self-pgrep doesn't need 5s cadence.
+      interval: {{ container_healthcheck_interval | default('30s') }}
     {{ service_networks() }}
     labels:
       # Watchtower

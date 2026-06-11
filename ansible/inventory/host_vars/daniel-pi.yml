@@ -10,6 +10,12 @@ expose_mode: lan
 # role BEFORE its apt tasks run. See ansible/roles/setup/initial_setup/tasks/main.yml.
 pi_swapfile_path: /swapfile
 pi_swapfile_size: 1G
+# Slow healthcheck cadence on the Zero 2 W: every probe is 2 runc invocations (multi-
+# threaded Go — ~20-30 PIDs each incl. threads). At the template defaults (10-30s across
+# 6 containers) that was ~10 forks/sec, constant RCU expedited-stall warnings (~150/hr in
+# the journal) and 13% CPU PSI at idle. Templates fall back to their own defaults where
+# this is unset (the server keeps 10s/30s). Detection latency worst-case = 60s x 3 retries.
+container_healthcheck_interval: 60s
 containers_list:
   # Read-only Docker socket proxy — serves glances + dozzle; the hardcoded
   # docker-proxy-lifecycle sub-proxy (restart-only) serves autoheal.
