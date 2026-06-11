@@ -348,34 +348,52 @@
   tags: [journald]
 
 # ── Server performance tuning (NOT the Pi — it needs powersave + eager zram swap) ──
-- name: Install CPU performance-governor unit (daniel-server)
-  ansible.builtin.copy:
-    dest: /etc/systemd/system/cpu-governor-performance.service
-    content: |
-      # Managed by Ansible (initial_setup role) — edits here are overwritten.
-      [Unit]
-      Description=Set CPU frequency governor to performance
-
-      [Service]
-      Type=oneshot
-      ExecStart=/bin/sh -c 'for g in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do echo performance > "$g"; done'
-
-      [Install]
-      WantedBy=multi-user.target
-    mode: "0644"
-  become: true
+# REVERTED 2026-06-11: the performance governor (added 8074318) set EPP=performance on
+# the i5-1135G7, pinning cores at 3.5-3.8 GHz at idle → 92°C package at load 0.5,
+# 217k package-throttle events in 18 h, fan at full tilt. powersave + HWP still
+# turbos to 4.2 GHz on demand; the pinned clocks bought only heat and throttling.
+- name: Check for the legacy performance-governor unit (daniel-server)
+  ansible.builtin.stat:
+    path: /etc/systemd/system/cpu-governor-performance.service
   when: inventory_hostname == 'daniel-server'
-  register: initial_setup_cpugov_unit
+  register: initial_setup_cpugov_unit_file
   tags: [tuning]
 
-- name: Enable and apply the performance governor (daniel-server)
+- name: Disable the legacy performance-governor unit (daniel-server)
   ansible.builtin.systemd_service:
     name: cpu-governor-performance
-    enabled: true
-    daemon_reload: "{{ initial_setup_cpugov_unit is changed }}"
-    state: "{{ 'restarted' if initial_setup_cpugov_unit is changed else 'started' }}"
+    enabled: false
+  become: true
+  when:
+    - inventory_hostname == 'daniel-server'
+    - initial_setup_cpugov_unit_file.stat.exists
+  tags: [tuning]
+
+- name: Remove the legacy performance-governor unit file (daniel-server)
+  ansible.builtin.file:
+    path: /etc/systemd/system/cpu-governor-performance.service
+    state: absent
   become: true
   when: inventory_hostname == 'daniel-server'
+  tags: [tuning]
+
+- name: Read the active CPU governor (daniel-server)
+  ansible.builtin.slurp:
+    src: /sys/devices/system/cpu/cpufreq/policy0/scaling_governor
+  when: inventory_hostname == 'daniel-server'
+  register: initial_setup_cpugov_current
+  tags: [tuning]
+
+- name: Revert the live CPU governor to powersave (daniel-server)
+  ansible.builtin.shell: |
+    for g in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do
+      echo powersave > "$g"
+    done
+  become: true
+  changed_when: true
+  when:
+    - inventory_hostname == 'daniel-server'
+    - (initial_setup_cpugov_current.content | b64decode | trim) == 'performance'
   tags: [tuning]
 
 - name: Lower swappiness (daniel-server)
