@@ -1,7 +1,15 @@
 ---
 server_ip: 10.0.0.139
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
-domain: daniel-pi.com
+# `domain` is inherited from SOPS (secrets.yml → daniel-hunter.com), exactly like
+# daniel-server — the Pi carries no host-specific override. The only domain consumer
+# here is wg-easy's WG_HOST (wireguard.daniel-hunter.com — the one hostname with a DNS
+# record at the public IP; verified resolving). A former `domain: daniel-pi.com` override
+# was removed 2026-06-11: that zone does not resolve, and it was only harmless because the
+# SOPS value shadowed it (un-shadowed it would have broken the VPN endpoint). To give a
+# future Pi-exposed service a "daniel-pi" hostname, use a `pi.`-prefixed subdomain of the
+# working zone (e.g. dozzle.pi.daniel-hunter.com — real DNS via cloudflare-ddns), not a
+# separate daniel-pi.com zone.
 # LAN-only host: publish web UIs bound to the LAN IP instead of routing through Traefik.
 expose_mode: lan
 # Disk-backed swap for the 512 MB Zero 2 W. The RAM-resident zram (optimize_pi) can't add
