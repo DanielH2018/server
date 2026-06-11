@@ -80,6 +80,18 @@ session:
   inactivity: '5m'  # 5 minutes
   remember_me: '1M' # 1 Month
   cookies:
+    # LAN/offline path FIRST (most specific wins — Authelia uses the first cookie whose
+    # domain the request host is a subdomain of). *.local.<domain> resolves to the server's
+    # LAN IP via split-horizon DNS, so logins for it must redirect to the LAN auth portal
+    # (auth.local.<domain>), NOT auth.<domain> which is Cloudflare-proxied. Routing the
+    # login through Cloudflare made Authelia see the public IP, failing the `*.local`
+    # one_factor `networks` (RFC1918) condition and forcing 2FA. Keeping the login on the
+    # LAN preserves the real 10.x source IP so one_factor applies as intended.
+    - domain: 'local.{{ domain }}'
+      authelia_url: 'https://auth.local.{{ domain }}'
+      # No default_redirection_url: Authelia rejects it when equal to authelia_url, and we
+      # want post-login to return to the originally-requested .local URL (the `rd` param)
+      # anyway, so the default landing page is unnecessary here.
     - domain: '{{ domain }}'  # Should match whatever your root protected domain is
       authelia_url: 'https://auth.{{ domain }}'
       default_redirection_url: 'https://www.{{ domain }}'
