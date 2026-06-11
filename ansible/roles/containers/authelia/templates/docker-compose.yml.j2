@@ -15,8 +15,12 @@ services:
       - "com.centurylinklabs.watchtower.enable=false"
       # Enable traefik for container
       - 'traefik.enable=true'
-      # Setup HTTPS entrypoint
-      - 'traefik.http.routers.authelia.rule=Host(`auth.{{ domain }}`)'
+      # Setup HTTPS entrypoint. auth.local.* is the LAN/offline path: *.local DNS is
+      # answered locally by Pi-hole's dnsmasq and the wildcard cert already covers it,
+      # so the portal stays reachable for the one_factor *.local rule even when public
+      # DNS/Cloudflare is unreachable (log in here, then the session cookie — scoped to
+      # the root domain — passes forward-auth on every *.local service).
+      - 'traefik.http.routers.authelia.rule=Host(`auth.{{ domain }}`) || Host(`auth.local.{{ domain }}`)'
       - 'traefik.http.routers.authelia.entrypoints=https'
       - 'traefik.http.routers.authelia.tls=true'
       # rate-limit moved off the https entrypoint to per-router; re-acquire the default

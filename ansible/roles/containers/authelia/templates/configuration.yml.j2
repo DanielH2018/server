@@ -39,13 +39,15 @@ authentication_backend:
 access_control:
   default_policy: deny
   rules:
-    # Rules applied to local network. The networks condition makes the bypass
-    # fail closed: a spoofed *.local Host header from outside the LAN still
-    # requires full authentication instead of skipping it.
-    # TODO(2026-06-11): narrowing this to one_factor was drafted in the template but
-    # never deployed (pre-refactor template edits silently no-oped); re-apply deliberately.
+    # Rules applied to the local network. *.local hosts require single-factor
+    # (username + password) rather than a full bypass — narrowing the LAN trust
+    # so a compromised/rogue device on the LAN can't reach services unauthenticated
+    # (applied 2026-06-11; offline login path is auth.local.<domain>, see the
+    # authelia router rule). The networks condition still fails closed: a spoofed
+    # *.local Host header from outside the LAN doesn't match this rule and falls
+    # through to two_factor below.
     - domain: "*.local.{{ domain }}"
-      policy: bypass
+      policy: one_factor
       networks:
         - 10.0.0.0/8
         - 172.16.0.0/12
