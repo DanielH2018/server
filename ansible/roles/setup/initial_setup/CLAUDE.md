@@ -11,6 +11,20 @@ first** and scope with `--tags` when iterating.
   [[docker_install]] — **every host** (Pi-specific tasks self-guard, see below).
 - `uv run ansible-playbook ansible/initial_setup.yml --tags "initial_setup"`.
 
+## Granular tags (run one block without the whole role)
+Every task carries a block tag (placed right under `name:`), so e.g.
+`--tags fail2ban` or `--tags "ssh,firewall"` runs just that slice:
+`pi-swap` (Pi swapfile + watchdog-stop preamble) · `apt-upgrade` (the full dist-upgrade)
+· `packages` · `tooling` (uv + CLI tools) · `unattended-upgrades` · `fail2ban` · `ssh`
+· `crons` (restart / prune / log-truncate / autoremove / dpkg-purge; the prune cron also
+answers to `prune`) · `journald` · `tuning` (server CPU governor + swappiness) · `debloat`
+(server LXD-snap removal) · `git-hooks` · `sysctl` · `firewall` (UFW) · `audit` ·
+`file-perms` · `kernel-modules` (blacklist + wireguard) · `accounting` (sysstat + acct) ·
+`banners` · `rkhunter` · `login-defs` · `coredumps` · `postfix` · `aide`.
+**Fact-dependency rule:** a task whose `register:` feeds other blocks carries ALL its
+consumers' tags (e.g. the home-dir resolver is `[tooling, git-hooks]`) — keep that
+invariant when adding tasks, or tag-scoped runs die on undefined variables.
+
 ## What it does (`tasks/main.yml`, grouped)
 - **Pi bring-up (guarded `inventory_hostname == 'daniel-pi'`):** stop the hardware watchdog
   during provisioning, then create/secure/format/persist/activate a swap file — disk swap so

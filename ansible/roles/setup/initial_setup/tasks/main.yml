@@ -10,10 +10,12 @@
 # initial_setup.yml — too late to protect these apt tasks.
 # =========================================================================
 - name: Gather service facts
+  tags: [pi-swap]
   ansible.builtin.service_facts:
   when: inventory_hostname == 'daniel-pi'
 
 - name: Stop the hardware watchdog during provisioning (Pi)
+  tags: [pi-swap]
   ansible.builtin.systemd:
     name: watchdog
     state: stopped
@@ -23,6 +25,7 @@
     - "'watchdog.service' in (ansible_facts.services | default({}))"
 
 - name: Create swap file (Pi)
+  tags: [pi-swap]
   ansible.builtin.command:
     cmd: "fallocate -l {{ pi_swapfile_size }} {{ pi_swapfile_path }}"
     creates: "{{ pi_swapfile_path }}"
@@ -31,6 +34,7 @@
   when: inventory_hostname == 'daniel-pi'
 
 - name: Secure swap file permissions (Pi)
+  tags: [pi-swap]
   ansible.builtin.file:
     path: "{{ pi_swapfile_path }}"
     owner: root
@@ -40,6 +44,7 @@
   when: inventory_hostname == 'daniel-pi'
 
 - name: Format swap file (Pi)
+  tags: [pi-swap]
   ansible.builtin.command:
     cmd: "mkswap {{ pi_swapfile_path }}"
   become: true
@@ -49,6 +54,7 @@
     - initial_setup_swapfile_create is changed
 
 - name: Persist swap file in fstab (Pi)
+  tags: [pi-swap]
   ansible.posix.mount:
     path: none
     src: "{{ pi_swapfile_path }}"
@@ -59,6 +65,7 @@
   when: inventory_hostname == 'daniel-pi'
 
 - name: Activate swap file (Pi)
+  tags: [pi-swap]
   ansible.builtin.command:
     cmd: "swapon {{ pi_swapfile_path }}"
   become: true
@@ -68,16 +75,21 @@
     - initial_setup_swapfile_create is changed
 
 - name: Update and upgrade system packages
+  tags: [apt-upgrade]
   ansible.builtin.apt:
     update_cache: true
     upgrade: dist
   become: true
 
 - name: Install Raspberry Pi-specific packages
+  # openvswitch-switch-dpdk was removed from this list 2026-06-11: it was never
+  # configured (no bridges, no netplan stanzas) and mlockall-pinned ~14 MB on the
+  # 512 MB board — optimize_pi's debloat task now purges it, and listing it here
+  # would reinstall it on every full run.
+  tags: [packages]
   ansible.builtin.apt:
     name:
       - linux-raspi
-      - openvswitch-switch-dpdk
       - wireguard
     state: present
   become: true
@@ -96,7 +108,7 @@
     purge: true
   become: true
   when: inventory_hostname == 'daniel-pi'
-  tags: packages
+  tags: [packages]
 
 - name: Install required packages
   ansible.builtin.apt:
@@ -110,7 +122,7 @@
       - jq  # Claude Code plugin hooks (ralph-loop stop-hook) parse hook JSON with it
     state: present
   become: true
-  tags: packages
+  tags: [packages]
 
 - name: Install apt-show-versions (non-Pi hosts only)
   ansible.builtin.apt:
@@ -118,9 +130,12 @@
     state: present
   become: true
   when: inventory_hostname != 'daniel-pi'
-  tags: packages
+  tags: [packages]
 
 - name: Resolve the deploy user's home directory
+  # Dual-tagged: registers a fact consumed by BOTH the uv tasks (tooling) and the
+  # prek task (git-hooks); a tag-scoped run of either still needs it.
+  tags: [tooling, git-hooks]
   # The play runs become:true, so gather_facts escalated and ansible_facts.env.HOME is
   # /root. The uv/prek tasks below run become:false (per-user installs as the connecting
   # user), so they need THAT user's home, not root's. Capture it explicitly here rather
@@ -131,6 +146,7 @@
   register: initial_setup_user_home
 
 - name: Install uv (per-user; PEP 668-safe on 24.04+)
+  tags: [tooling]
   # 24.04 / Python 3.12 marks the system environment externally-managed (PEP 668), so a
   # global `pip install` errors. uv is a standalone binary (no system Python needed),
   # installed per-user into ~/.local/bin via the official script. Run as the connecting
@@ -142,6 +158,7 @@
   become: false
 
 - name: Install Python CLI tooling as uv tools
+  tags: [tooling]
   # uv manages global CLI tools in isolated venvs (~/.local/share/uv/tools), exposing
   # shims in ~/.local/bin — the pipx replacement. Pinned to Python 3.14 to match the
   # repo's .python-version (the test/validate `uv run` hooks); ansible-core also backs
@@ -157,6 +174,7 @@
   become: false
 
 - name: Enable periodic unattended security upgrades
+  tags: [unattended-upgrades]
   ansible.builtin.copy:
     dest: /etc/apt/apt.conf.d/20auto-upgrades
     content: |
@@ -170,6 +188,7 @@
   become: true
 
 - name: Set local unattended-upgrades policy
+  tags: [unattended-upgrades]
   # Security origins are enabled by the distro's 50unattended-upgrades. This local
   # drop-in pins the bits we care about: no surprise reboots (the weekly "Weekly
   # system restart" cron owns reboots) and cleanup of obsolete kernels/deps.
@@ -185,6 +204,7 @@
   become: true
 
 - name: Enable and start fail2ban
+  tags: [fail2ban]
   ansible.builtin.systemd:
     name: fail2ban
     state: started
@@ -192,6 +212,7 @@
   become: true
 
 - name: Deploy fail2ban jail configuration
+  tags: [fail2ban]
   ansible.builtin.template:
     src: fail2ban_homelab.conf.j2
     dest: /etc/fail2ban/jail.d/homelab.conf
@@ -202,6 +223,7 @@
   notify: Restart fail2ban
 
 - name: Set SSH directory permissions
+  tags: [ssh]
   ansible.builtin.file:
     path: ~/.ssh
     mode: "0700"
@@ -210,12 +232,14 @@
     recurse: true
 
 - name: Create ssh-users group
+  tags: [ssh]
   ansible.builtin.group:
     name: ssh-users
     state: present
   become: true
 
 - name: Add sys user to ssh-users group
+  tags: [ssh]
   ansible.builtin.user:
     name: "{{ sys_user }}"
     groups: ssh-users
@@ -223,6 +247,7 @@
   become: true
 
 - name: Configure SSH security settings
+  tags: [ssh]
   ansible.builtin.lineinfile:
     path: "{{ ssh_config_path }}"
     regexp: "^#?{{ item.key }}"
@@ -248,6 +273,7 @@
   notify: Restart SSH
 
 - name: Configure SSH Match block for sys user forwarding
+  tags: [ssh]
   ansible.builtin.blockinfile:
     path: "{{ ssh_config_path }}"
     marker: "# {mark} ANSIBLE MANAGED BLOCK - sys user forwarding"
@@ -258,6 +284,7 @@
   notify: Restart SSH
 
 - name: Schedule sudo crontab for weekly restart
+  tags: [crons]
   ansible.builtin.cron:
     name: "Weekly system restart"
     minute: "30"
@@ -280,7 +307,7 @@
     job: '/usr/bin/docker system prune -a -f --filter "until=168h"'
     user: "{{ ansible_facts.user_id }}"
   become: true
-  tags: [prune]
+  tags: [prune, crons]
 
 
 - name: Create cron job to clear ansible.log weekly
@@ -294,6 +321,7 @@
     weekday: "0" # 0 is Sunday
     job: "truncate -s 0 /home/{{ sys_user }}/server/ansible.log"
   become: true
+  tags: [crons]
 
 - name: Create journald drop-in directory
   ansible.builtin.file:
@@ -384,11 +412,14 @@
   tags: [debloat]
 
 - name: Install Git hooks
+  tags: [git-hooks]
   ansible.builtin.command: prek install
   args:
     chdir: "{{ playbook_dir }}"
-    # Only run this if the hook doesn't exist yet
-    creates: "{{ playbook_dir }}/.git/hooks/pre-commit"
+    # Only run this if the hook doesn't exist yet. NB: .git lives at the REPO root,
+    # one level above playbook_dir (ansible/) — the old `{{ playbook_dir }}/.git/...`
+    # path never existed, so prek install re-ran on every play.
+    creates: "{{ playbook_dir }}/../.git/hooks/pre-commit"
   # Run as the connecting user (not the play's become: true) so the hooks are owned
   # by the repo owner, and pick up the user's uv-managed ~/.local/bin where prek lives.
   become: false
@@ -396,6 +427,7 @@
     PATH: "{{ initial_setup_user_home.stdout }}/.local/bin:{{ ansible_facts.env.PATH }}"
 
 - name: Enable IPv4 forwarding
+  tags: [sysctl]
   ansible.posix.sysctl:
     name: net.ipv4.ip_forward
     value: "1"
@@ -404,6 +436,7 @@
   become: true
 
 - name: Apply kernel security hardening
+  tags: [sysctl]
   ansible.posix.sysctl:
     name: "{{ item.name }}"
     value: "{{ item.value }}"
@@ -436,6 +469,7 @@
   become: true
 
 - name: Remove plain SSH allow rule (superseded by rate-limit)
+  tags: [firewall]
   community.general.ufw:
     rule: allow
     port: ssh
@@ -453,18 +487,21 @@
 # and the WireGuard containers depend on host forwarding — letting UFW set a
 # routed default would fight Docker and risk breaking container/VPN routing.
 - name: Set UFW default policy - deny incoming
+  tags: [firewall]
   community.general.ufw:
     default: deny
     direction: incoming
   become: true
 
 - name: Set UFW default policy - allow outgoing
+  tags: [firewall]
   community.general.ufw:
     default: allow
     direction: outgoing
   become: true
 
 - name: Configure UFW firewall - rate-limit SSH
+  tags: [firewall]
   community.general.ufw:
     rule: limit
     port: ssh
@@ -472,6 +509,7 @@
   become: true
 
 - name: Allow WireGuard port 51820/udp
+  tags: [firewall]
   community.general.ufw:
     rule: allow
     port: "51820"
@@ -480,16 +518,19 @@
   when: inventory_hostname == 'daniel-pi'
 
 - name: Enable UFW firewall
+  tags: [firewall]
   community.general.ufw:
     state: enabled
 
 - name: Install auditd
+  tags: [audit]
   ansible.builtin.apt:
     name: auditd
     state: present
   become: true
 
 - name: Enable and start auditd
+  tags: [audit]
   ansible.builtin.systemd:
     name: auditd
     state: started
@@ -497,6 +538,7 @@
   become: true
 
 - name: Configure audit rules
+  tags: [audit]
   ansible.builtin.copy:
     dest: /etc/audit/rules.d/hardening.rules
     owner: root
@@ -516,6 +558,7 @@
   notify: Reload audit rules
 
 - name: Restrict sensitive file permissions
+  tags: [file-perms]
   ansible.builtin.file:
     path: "{{ item.path }}"
     mode: "{{ item.mode }}"
@@ -532,6 +575,7 @@
   failed_when: false
 
 - name: Blacklist unused rare network kernel modules
+  tags: [kernel-modules]
   ansible.builtin.copy:
     dest: /etc/modprobe.d/blacklist-rare-network.conf
     owner: root
@@ -548,12 +592,14 @@
 # qbittorrent's VPN sidecar) run without the SYS_MODULE capability, so the host must
 # provide the kernel module.
 - name: Ensure the WireGuard kernel module is loaded on the host
+  tags: [kernel-modules]
   community.general.modprobe:
     name: wireguard
     state: present
   become: true
 
 - name: Persist the WireGuard kernel module across reboots
+  tags: [kernel-modules]
   ansible.builtin.copy:
     content: "wireguard\n"
     dest: /etc/modules-load.d/wireguard.conf
@@ -563,12 +609,14 @@
   become: true
 
 - name: Install sysstat for system accounting
+  tags: [accounting]
   ansible.builtin.apt:
     name: sysstat
     state: present
   become: true
 
 - name: Enable sysstat data collection
+  tags: [accounting]
   ansible.builtin.lineinfile:
     path: /etc/default/sysstat
     regexp: '^ENABLED='
@@ -576,6 +624,7 @@
   become: true
 
 - name: Enable and start sysstat service
+  tags: [accounting]
   ansible.builtin.systemd:
     name: sysstat
     state: started
@@ -584,12 +633,14 @@
   become: true
 
 - name: Install process accounting tools
+  tags: [accounting]
   ansible.builtin.apt:
     name: acct
     state: present
   become: true
 
 - name: Enable and start process accounting service
+  tags: [accounting]
   ansible.builtin.systemd:
     name: acct
     state: started
@@ -597,6 +648,7 @@
   become: true
 
 - name: Set login banner for local console (/etc/issue)
+  tags: [banners]
   ansible.builtin.copy:
     dest: /etc/issue
     owner: root
@@ -609,6 +661,7 @@
   become: true
 
 - name: Set login banner for network logins (/etc/issue.net)
+  tags: [banners]
   ansible.builtin.copy:
     dest: /etc/issue.net
     owner: root
@@ -621,6 +674,7 @@
   become: true
 
 - name: Schedule weekly package autoremove
+  tags: [crons]
   ansible.builtin.cron:
     name: "Weekly apt autoremove"
     minute: "0"
@@ -631,6 +685,7 @@
   become: true
 
 - name: Schedule weekly purge of removed-package config remnants
+  tags: [crons]
   ansible.builtin.cron:
     name: "Weekly dpkg purge orphaned configs"
     minute: "15"
@@ -641,18 +696,21 @@
   become: true
 
 - name: Install rkhunter malware scanner
+  tags: [rkhunter]
   ansible.builtin.apt:
     name: rkhunter
     state: present
   become: true
 
 - name: Update rkhunter data files
+  tags: [rkhunter]
   ansible.builtin.command: rkhunter --update --nocolors
   become: true
   changed_when: false
   failed_when: false
 
 - name: Initialize rkhunter file-properties baseline (first run only)
+  tags: [rkhunter]
   # --propupd rewrites the *trusted* baseline of file hashes/properties. Running it
   # on every play would silently re-bless any tampering that happened between runs,
   # defeating the weekly --check. Guard it to first install; the APT_AUTOGEN setting
@@ -663,6 +721,7 @@
   become: true
 
 - name: Refresh rkhunter baseline automatically after apt operations
+  tags: [rkhunter]
   # With APT_AUTOGEN=true, rkhunter --propupd runs via the package-manager hook after
   # apt installs/upgrades (including unattended-upgrades), so the only file-property
   # changes the weekly scan flags are ones NOT explained by a trusted package event.
@@ -673,6 +732,7 @@
   become: true
 
 - name: Schedule weekly rkhunter scan
+  tags: [rkhunter]
   ansible.builtin.cron:
     name: "Weekly rkhunter malware scan"
     minute: "0"
@@ -683,6 +743,7 @@
   become: true
 
 - name: Set default umask to 027 in /etc/login.defs
+  tags: [login-defs]
   ansible.builtin.lineinfile:
     path: /etc/login.defs
     regexp: '^UMASK\s'
@@ -690,6 +751,7 @@
   become: true
 
 - name: Configure password hash rounds in /etc/login.defs
+  tags: [login-defs]
   ansible.builtin.lineinfile:
     path: /etc/login.defs
     regexp: '^#?\s*{{ item.key }}\s'
@@ -700,6 +762,7 @@
   become: true
 
 - name: Configure password age policy in /etc/login.defs
+  tags: [login-defs]
   ansible.builtin.lineinfile:
     path: /etc/login.defs
     regexp: '^{{ item.key }}\s'
@@ -711,6 +774,7 @@
   become: true
 
 - name: Disable core dumps in /etc/security/limits.conf
+  tags: [coredumps]
   ansible.builtin.lineinfile:
     path: /etc/security/limits.conf
     line: "* hard core 0"
@@ -718,6 +782,7 @@
   become: true
 
 - name: Create systemd coredump drop-in directory
+  tags: [coredumps]
   ansible.builtin.file:
     path: /etc/systemd/coredump.conf.d
     state: directory
@@ -727,6 +792,7 @@
   become: true
 
 - name: Disable core dumps via systemd coredump
+  tags: [coredumps]
   ansible.builtin.copy:
     dest: /etc/systemd/coredump.conf.d/disable.conf
     owner: root
@@ -739,6 +805,7 @@
   become: true
 
 - name: Harden Postfix SMTP banner to hide OS info
+  tags: [postfix]
   ansible.builtin.lineinfile:
     path: /etc/postfix/main.cf
     regexp: '^smtpd_banner\s*='
@@ -747,6 +814,7 @@
   notify: Reload Postfix
 
 - name: Disable Postfix VRFY command
+  tags: [postfix]
   ansible.builtin.lineinfile:
     path: /etc/postfix/main.cf
     regexp: '^disable_vrfy_command\s*='
@@ -755,12 +823,14 @@
   notify: Reload Postfix
 
 - name: Install AIDE file integrity monitor
+  tags: [aide]
   ansible.builtin.apt:
     name: aide
     state: present
   become: true
 
 - name: Deploy local AIDE exclusions for Docker homelab
+  tags: [aide]
   ansible.builtin.template:
     src: 98_aide_local.conf.j2
     dest: /etc/aide/aide.conf.d/98_aide_local.conf
@@ -770,6 +840,7 @@
   become: true
 
 - name: Initialize AIDE database with progress monitoring
+  tags: [aide]
   ansible.builtin.shell: |
     set -o pipefail
     aideinit &
@@ -798,6 +869,7 @@
   changed_when: false
 
 - name: Schedule weekly AIDE integrity check
+  tags: [aide]
   ansible.builtin.cron:
     name: "Weekly AIDE file integrity check"
     minute: "0"

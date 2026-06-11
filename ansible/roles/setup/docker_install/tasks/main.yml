@@ -1,5 +1,6 @@
 ---
 - name: Add packages
+  tags: [docker-repo]
   ansible.builtin.apt:
     name: "{{ packages }}"
     state: present
@@ -14,12 +15,14 @@
   become: true
 
 - name: Download Docker GPG key
+  tags: [docker-repo]
   ansible.builtin.get_url:
     url: https://download.docker.com/linux/ubuntu/gpg
     dest: /tmp/docker.gpg
     mode: "0644"
 
 - name: Dearmor Docker GPG key
+  tags: [docker-repo]
   ansible.builtin.command:
     cmd: gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg --yes /tmp/docker.gpg
   args:
@@ -27,6 +30,7 @@
   become: true
 
 - name: Add Docker APT repository
+  tags: [docker-repo]
   # deb822 format (.sources) — the one-line "deb [...] ..." apt_repository form is deprecated.
   # No update_cache here (deb822_repository lacks it); the next task refreshes the cache.
   ansible.builtin.deb822_repository:
@@ -44,6 +48,7 @@
   become: true
 
 - name: Remove the deprecated one-line Docker APT source
+  tags: [docker-repo]
   # deb822_repository writes docker.sources; drop any docker.list left by the old
   # apt_repository task so apt doesn't see the repo "configured multiple times".
   ansible.builtin.file:
@@ -52,6 +57,7 @@
   become: true
 
 - name: Update apt-get repo and cache
+  tags: [docker-repo]
   ansible.builtin.apt:
     upgrade: true
     update_cache: true
@@ -59,6 +65,7 @@
   become: true
 
 - name: Install Docker
+  tags: [docker-engine]
   ansible.builtin.apt:
     name: "{{ packages }}"
     state: present
@@ -76,6 +83,7 @@
   become: true
 
 - name: Remove the deprecated linuxserver docker-compose v1 wrapper
+  tags: [docker-engine]
   # Superseded by docker-compose-plugin (`docker compose`). The old run.sh wrapper
   # shipped EOL Compose v1.29 and was fetched from an unpinned GitHub master.
   ansible.builtin.file:
@@ -84,6 +92,7 @@
   become: true
 
 - name: Resolve the deploy user (for docker group membership)
+  tags: [docker-group]
   # ansible_facts.env.USER is "root" under the play's become:true, but the user who runs
   # docker (the become:false connecting user) is who needs docker-group membership.
   ansible.builtin.command: id -un
@@ -92,6 +101,7 @@
   register: docker_install_deploy_user
 
 - name: Add user to docker group
+  tags: [docker-group]
   ansible.builtin.user:
     name: "{{ docker_install_deploy_user.stdout }}"
     groups: docker
@@ -99,6 +109,7 @@
   become: true
 
 - name: Configure Docker daemon (log limits + live-restore)
+  tags: [docker-daemon]
   ansible.builtin.copy:
     dest: /etc/docker/daemon.json
     # live-restore keeps containers running across a daemon restart (e.g. a
@@ -120,6 +131,7 @@
   register: docker_install_daemon_config
 
 - name: Restart Docker to apply daemon config # noqa no-handler
+  tags: [docker-daemon]
   ansible.builtin.systemd:
     name: docker
     state: restarted
@@ -127,6 +139,7 @@
   when: docker_install_daemon_config.changed
 
 - name: Create Docker networks
+  tags: [docker-networks]
   community.docker.docker_network:
     name: "{{ item }}"
     state: present

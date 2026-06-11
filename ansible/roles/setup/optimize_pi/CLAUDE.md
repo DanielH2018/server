@@ -12,6 +12,10 @@ See repo-root `CLAUDE.md` for conventions.
   (use `--check` first — several changes trigger a reboot). NB `-e target=`, not `--limit`:
   the play's `hosts:` defaults to the local hostname, so `--limit daniel-pi` from the
   server intersects to zero hosts and silently does nothing.
+- **Granular tags** (one section without the whole role): `gpu-mem`, `zram`, `log2ram`,
+  `watchdog`, `debloat`. The shared prep tasks are dual-tagged (`Set variables` →
+  `[gpu-mem, zram]`; the config.txt path detection → `[gpu-mem, watchdog]`) so
+  tag-scoped runs still get the facts they consume.
 
 ## What it does (`tasks/main.yml`)
 1. **Config path detection** — picks `/boot/firmware/config.txt` (Bookworm) vs

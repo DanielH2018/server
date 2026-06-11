@@ -8,6 +8,9 @@ repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
 ## Where it runs
 - In `ansible/initial_setup.yml`, after [[sops_setup]] — every host.
 - `uv run ansible-playbook ansible/initial_setup.yml --tags "docker_install"`.
+- **Granular tags:** `docker-repo` (APT repo + GPG + the cache-refresh/upgrade task),
+  `docker-engine` (install + v1-wrapper removal), `docker-group` (user resolution +
+  membership), `docker-daemon` (daemon.json + conditional restart), `docker-networks`.
 
 ## What it does (`tasks/main.yml`)
 1. **APT repo (deb822):** installs prereqs (incl. `python3-debian`, required by

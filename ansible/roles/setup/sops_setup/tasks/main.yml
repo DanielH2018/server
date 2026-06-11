@@ -3,12 +3,14 @@
 # 1. INSTALLATION
 # -------------------------------------------------------
 - name: Ensure 'age' is installed (Debian/Ubuntu)
+  tags: [sops-install]
   ansible.builtin.apt:
     name: age
     state: present
     update_cache: true
 
 - name: Download and install SOPS binary
+  tags: [sops-install]
   ansible.builtin.get_url:
     url: "{{ sops_binary_url }}"
     dest: /usr/local/bin/sops
@@ -20,6 +22,7 @@
     sops_binary_url: "https://github.com/getsops/sops/releases/download/{{ sops_version }}/sops-{{ sops_version }}.linux.{{ sops_arch }}"
 
 - name: Install pinned Ansible collections from requirements.yml
+  tags: [collections]
   # Install community.sops (and the rest of the pinned set) at the versions locked in
   # ansible/requirements.yml rather than pulling unpinned latest — keeps the runtime
   # collections in lockstep with the tooling. Install into the path ansible.cfg loads
@@ -37,16 +40,19 @@
 # -------------------------------------------------------
 
 - name: Setup SOPS config directory
+  tags: [age-key]
   ansible.builtin.set_fact:
     sops_setup_sops_config_dir: "{{ home_dir }}/.config/sops/age"
   vars:
     home_dir: "/home/{{ sys_user }}"
 
 - name: Setup SOPS with Key File location
+  tags: [age-key]
   ansible.builtin.set_fact:
     sops_setup_key_file: "{{ sops_setup_sops_config_dir }}/keys.txt"
 
 - name: Create directory for Age keys
+  tags: [age-key]
   become: false
   ansible.builtin.file:
     path: "{{ sops_setup_sops_config_dir }}"
@@ -61,12 +67,14 @@
 # 2026-06-06). A second `age` recipient in .sops.yaml would be the in-repo way to remove
 # the single-key dependency — not yet done.
 - name: Generate Age key (only if it doesn't exist)
+  tags: [age-key]
   become: false
   ansible.builtin.command: "age-keygen -o {{ sops_setup_key_file }}"
   args:
     creates: "{{ sops_setup_key_file }}"
 
 - name: Display the new Public Key
+  tags: [age-key]
   become: false
   ansible.builtin.shell:
     # pipefail needs bash; Ubuntu's /bin/sh is dash, which errors on `set -o pipefail`.
@@ -76,6 +84,7 @@
   changed_when: false
 
 - name: Show the Public Key to user
+  tags: [age-key]
   ansible.builtin.debug:
     msg: "Your Public Key is: {{ sops_setup_public_key.stdout }}"
 
@@ -83,6 +92,9 @@
 # 3. CONFIGURATION (.sops.yaml)
 # -------------------------------------------------------
 - name: Seed ansible/.sops.yaml (first-host bootstrap only)
+  # Tagged age-key (not its own tag): consumes sops_setup_public_key registered above,
+  # so it can only run as part of the key-generation block.
+  tags: [age-key]
   become: false
   ansible.builtin.copy:
     dest: "{{ playbook_dir }}/.sops.yaml"
@@ -97,6 +109,7 @@
   when: not (lookup('file', playbook_dir + '/.sops.yaml', errors='ignore'))
 
 - name: Export SOPS_AGE_KEY_FILE in .bashrc
+  tags: [sops-config]
   ansible.builtin.lineinfile:
     # The deploy user's .bashrc, NOT ansible_facts.user_dir — that's /root under the
     # play's become:true (same bug class as config_files' env.HOME, fixed 2026-06-10);
