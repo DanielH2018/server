@@ -55,6 +55,14 @@
         name: postfix
         state: reloaded
 
+    # inet_interfaces changes require a full restart — `postfix reload` does not
+    # rebind listening sockets (per Postfix docs), so loopback-only wouldn't take
+    # effect until the next restart without this.
+    - name: Restart Postfix
+      ansible.builtin.service:
+        name: postfix
+        state: restarted
+
     - name: Restart SSH
       ansible.builtin.service:
         name: ssh

@@ -835,6 +835,22 @@
       ProcessSizeMax=0
   become: true
 
+- name: Bind Postfix to loopback only (send-only local mailer)
+  tags: [postfix]
+  # Postfix here only delivers local system mail (cron/AIDE/rkhunter -> root); it
+  # never needs to accept SMTP from the network. The package default
+  # `inet_interfaces = all` binds 0.0.0.0:25 — exposed to the whole LAN (and to the
+  # internet if the router ever forwards 25). `mynetworks` already restricts RELAY to
+  # loopback so it's not an open relay, but loopback-only removes the listener from
+  # the network surface entirely while local submission + delivery keep working.
+  # Needs a RESTART (notify below), not reload — inet_interfaces rebinds sockets.
+  ansible.builtin.lineinfile:
+    path: /etc/postfix/main.cf
+    regexp: '^inet_interfaces\s*='
+    line: "inet_interfaces = loopback-only"
+  become: true
+  notify: Restart Postfix
+
 - name: Harden Postfix SMTP banner to hide OS info
   tags: [postfix]
   ansible.builtin.lineinfile:

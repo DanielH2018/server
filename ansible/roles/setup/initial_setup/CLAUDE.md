@@ -49,15 +49,17 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   used to overlap Monday mornings at full priority, >1h each on the Pi's 4 slow cores.
 - **Login/password policy:** console + network login banners, umask `027`, password hash
   rounds, password-age policy, core dumps disabled (login.defs + systemd).
-- **Postfix:** hide the OS banner, disable `VRFY` (`notify: Reload Postfix`).
+- **Postfix:** bind `inet_interfaces = loopback-only` (send-only local mailer — drops the
+  `0.0.0.0:25` listener off the network surface; `notify: Restart Postfix`, a reload won't
+  rebind sockets), hide the OS banner, disable `VRFY` (`notify: Reload Postfix`).
 - **Cron/maintenance:** weekly reboot, Docker image cleanup, ansible.log rotation, weekly
   autoremove + config-remnant purge, and install of the repo Git hooks.
 - **Unattended upgrades:** enable periodic security upgrades + local policy.
 
 ## Notable
 - **Handlers live in the playbook, not this role** (there is no `handlers/main.yml`) — `Restart
-  SSH`, `Restart fail2ban`, `Reload audit rules`, `Reload Postfix`, `Restart systemd-journald`
-  are defined in `initial_setup.yml`. Same pattern as [[optimize_pi]]: a new `notify:` here needs a matching
+  SSH`, `Restart fail2ban`, `Reload audit rules`, `Reload Postfix`, `Restart Postfix`, `Restart
+  systemd-journald` are defined in `initial_setup.yml`. Same pattern as [[optimize_pi]]: a new `notify:` here needs a matching
   handler added to that playbook.
 - **`become` vs HOME:** the `Resolve the deploy user's home directory` task exists because
   `ansible_facts.env.HOME` is root's under the play's `become: true`, but uv / per-user tooling
