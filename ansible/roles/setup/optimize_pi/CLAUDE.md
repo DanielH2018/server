@@ -27,7 +27,10 @@ See repo-root `CLAUDE.md` for conventions.
    load > 24.
 6. **Debloat** — purges Open vSwitch (was installed but had no bridges/netplan config,
    yet mlockall-pinned ~14 MB) and snapd (zero snaps installed). Verified dependency-safe;
-   netplan only Suggests OVS.
+   netplan only Suggests OVS. Also purges fwupd: its hourly `fwupd-refresh.timer`
+   swap-thrashed the 512 MB board (healthcheck-timeout storms → autoheal restart loops)
+   while never surviving its own 25 s dbus activation timeout; Pi firmware comes via apt,
+   not LVFS.
 
 ## Notable
 - **Handlers live in the playbook, not this role:** `Reboot Pi`, `Restart ZRAM`,

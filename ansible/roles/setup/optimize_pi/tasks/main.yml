@@ -162,3 +162,20 @@
     purge: true
     autoremove: true
   become: true
+
+- name: Purge fwupd (no LVFS-updatable firmware on a Pi; daemon start thrashes 512 MB RAM)
+  tags: [debloat]
+  # Found 2026-06-11: fwupd-refresh.timer fired ~hourly; each dbus activation of
+  # fwupd.service swapped the Zero 2 W into the ground (zram 100% full, IO PSI
+  # full>40%, RCU stalls) — every container healthcheck timed out and autoheal
+  # restart-stormed (RestartCount=20 on itself). fwupd never even started: it hit
+  # the 25 s dbus activation timeout every time, so it provided nothing. Pi firmware
+  # ships via apt (raspi packages), not LVFS. Dependency-safe: `apt-get -s purge`
+  # removes exactly fwupd; ubuntu-server/ubuntu-server-raspi only Recommend it.
+  # daniel-server already has no fwupd installed, so this is Pi-only debloat.
+  ansible.builtin.apt:
+    name: fwupd
+    state: absent
+    purge: true
+    autoremove: true
+  become: true

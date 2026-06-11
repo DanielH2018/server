@@ -896,3 +896,18 @@
     job: "/usr/bin/aide --check 2>&1 | /usr/bin/logger -t aide"
     user: root
   become: true
+
+- name: Mask the Debian dailyaidecheck timer (duplicates our weekly cron)
+  tags: [aide]
+  # Found 2026-06-11: the aide package ships dailyaidecheck.timer, so both hosts ran
+  # a FULL integrity check nightly on top of the weekly cron above — ~1h20m of CPU
+  # per night on the Pi Zero 2 W. The timer's run is also alert-broken (the _aide
+  # user can't mail(1) without extra capabilities; it warned every run), while the
+  # weekly cron logs to syslog as root. Mask rather than disable so a package
+  # upgrade can't re-enable it.
+  ansible.builtin.systemd_service:
+    name: dailyaidecheck.timer
+    enabled: false
+    state: stopped
+    masked: true
+  become: true

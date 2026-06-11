@@ -39,7 +39,9 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   modules, load + persist the WireGuard module.
 - **Auditing & accounting:** `auditd` + rules (`notify: Reload audit rules`), `sysstat`,
   process accounting.
-- **Integrity & malware:** **AIDE** (install, init DB, weekly check) and **rkhunter**
+- **Integrity & malware:** **AIDE** (install, init DB, weekly check; the package's own
+  `dailyaidecheck.timer` is masked — it duplicated the weekly cron nightly with broken
+  mail alerting, ~1h20m CPU/night on the Pi) and **rkhunter**
   (install, baseline, post-apt refresh, weekly scan).
 - **Login/password policy:** console + network login banners, umask `027`, password hash
   rounds, password-age policy, core dumps disabled (login.defs + systemd).
