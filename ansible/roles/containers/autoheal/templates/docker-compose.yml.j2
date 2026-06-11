@@ -13,6 +13,11 @@ services:
       - no-new-privileges:true
     environment:
       - AUTOHEAL_CONTAINER_LABEL=all
+      # Default poll is 5s: each cycle fetches the full container list through the
+      # proxy and parses it with jq — constant CPU churn on the Pi (Zero 2 W), where
+      # the jq pass alone was visible in top under load (2026-06-11). 30s detection
+      # latency for an unhealthy container is fine for this fleet.
+      - AUTOHEAL_INTERVAL=30
       - DOCKER_SOCK=tcp://docker-proxy-lifecycle:2375
     {{ service_networks() }}
     labels:

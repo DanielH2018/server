@@ -7,7 +7,6 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- Pi Ubuntu update
 - Add a second SOPS age recipient (DR: `.sops.yaml` currently has ONE key; the private
   key is backed up out-of-band but a recovery recipient removes the single point of
   recovery). Operator generates `age-keygen` OFF-BOX (password manager / printed /
@@ -16,6 +15,9 @@ the Renovate dependency dashboard.
   Multi-recipient is OR — either key decrypts.
 
 ## Superseded
+
+- Pi Ubuntu update — done by 2026-06-11: daniel-pi reports Ubuntu 24.04.4 LTS
+  (`lsb_release -ds`, OpenSSH 9.6p1 noble build). Nothing left to run.
 
 - Plan Meilisearch upgrade path — done 2026-06-10: policy = track the version karakeep
   officially tests (1.41.0), not latest; Renovate's newer offers deliberately sit in the
