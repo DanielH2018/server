@@ -356,6 +356,27 @@
   when: inventory_hostname == 'daniel-server'
   tags: [tuning]
 
+# ── Debloat (daniel-server) ──────────────────────────────────────────────────
+# The Pi's equivalent (OVS + snapd purge) lives in optimize_pi. Here only the
+# unused snaps go: LXD was seeded by the Ubuntu Server installer, its daemon is
+# inactive and no system containers exist (operator confirmed removal 2026-06-11);
+# core20/core22 are its base snaps, needed by nothing else. snapd itself stays —
+# zero-regret subset; purging it would block any future snap-packaged tool.
+- name: Remove the unused LXD snap and its orphaned bases (daniel-server)
+  # One snap per call, ordered (lxd before the bases it uses): passing the list in
+  # a single call made community.general.snap (11.x) mangle its snap-remove argv
+  # and fail without removing anything.
+  community.general.snap:
+    name: "{{ item }}"
+    state: absent
+  loop:
+    - lxd
+    - core20
+    - core22
+  become: true
+  when: inventory_hostname == 'daniel-server'
+  tags: [debloat]
+
 - name: Install Git hooks
   ansible.builtin.command: prek install
   args:
