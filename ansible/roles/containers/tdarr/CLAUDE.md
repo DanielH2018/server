@@ -13,6 +13,9 @@ See repo-root `CLAUDE.md` for shared conventions.
 ## Notable
 - Operates on the shared `data/media` tree; can use the Intel iGPU for transcodes
   (same `/dev/dri` device class as Jellyfin) if configured.
+- **Weekly cron cleans `transcode_cache/`** (Mon 05:45, `-mtime +7`): failed/interrupted
+  jobs orphan `tdarr-workDir2-*` dirs forever — 36 GB had piled up by 2026-06-11. The
+  cache is kopiaignore-excluded (regenerable), so week-old leftovers are safe to drop.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`

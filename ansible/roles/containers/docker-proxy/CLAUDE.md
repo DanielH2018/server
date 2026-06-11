@@ -5,10 +5,10 @@ raw socket. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 - **Image:** `lscr.io/linuxserver/socket-proxy:latest` (two instances)
-- **Host:** daniel-server · **No web UI**, no Authelia
+- **Hosts:** daniel-server AND daniel-pi (host-agnostic; listed in both `containers_list`s) · **No web UI**, no Authelia
 - **Networks:** proxy, monitoring, apps (+ a `lifecycle` write proxy)
 - **Depends on:** nothing (consumed by other roles)
-- **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
+- **Config in:** each `ansible/inventory/host_vars/<host>.yml` → `containers_list`
 
 ## Notable
 - Read-only proxy serves monitoring consumers (e.g. AutoKuma in `uptime-kuma`, Homepage).

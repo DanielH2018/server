@@ -123,3 +123,23 @@
     name: watchdog
     enabled: true
     state: started
+
+# -------------------------------------------------------
+# 6. DEBLOAT (Reclaim RAM on the 512 MB board)
+# -------------------------------------------------------
+- name: Purge Open vSwitch (unused) and snapd (no snaps installed)
+  # Found 2026-06-11: openvswitch-switch-dpdk was installed (apt-mark: manual) but
+  # `ovs-vsctl show` had no bridges and netplan has no OVS stanzas — yet ovs-vswitchd
+  # ran with --mlockall, pinning ~14 MB of unswappable RAM. snapd ran with zero snaps
+  # installed. netplan-generator only *Suggests* openvswitch-switch, so this purge is
+  # dependency-safe (verified with `apt-get -s purge`: exactly these 4, nothing else).
+  ansible.builtin.apt:
+    name:
+      - openvswitch-switch-dpdk
+      - openvswitch-switch
+      - openvswitch-common
+      - snapd
+    state: absent
+    purge: true
+    autoremove: true
+  become: true

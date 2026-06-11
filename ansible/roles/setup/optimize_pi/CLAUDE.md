@@ -21,6 +21,9 @@ See repo-root `CLAUDE.md` for conventions.
 4. **Log2Ram** — adds the Azlux repo + installs `log2ram` to spare the SD card from log writes.
 5. **Hardware watchdog** — `dtparam=watchdog=on` + `watchdog` daemon, auto-reboot if 1-min
    load > 24.
+6. **Debloat** — purges Open vSwitch (was installed but had no bridges/netplan config,
+   yet mlockall-pinned ~14 MB) and snapd (zero snaps installed). Verified dependency-safe;
+   netplan only Suggests OVS.
 
 ## Notable
 - **Handlers live in the playbook, not this role:** `Reboot Pi`, `Restart ZRAM`,

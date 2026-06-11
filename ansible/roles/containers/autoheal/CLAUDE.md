@@ -5,7 +5,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 - **Image:** `willfarrell/autoheal:latest`
-- **Host:** daniel-server · **No web UI**, no Authelia
+- **Hosts:** daniel-server AND daniel-pi (host-agnostic; listed in both `containers_list`s) · **No web UI**, no Authelia
 - **Networks:** lifecycle only (reaches the write-capable `docker-proxy-lifecycle`,
   not the broad networks)
 - **Depends on:** docker-proxy

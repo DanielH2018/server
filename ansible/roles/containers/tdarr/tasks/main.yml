@@ -14,3 +14,16 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+
+- name: Schedule weekly cleanup of orphaned transcode work dirs
+  # Tdarr cleans its work dir after a successful job, but failed/interrupted
+  # transcodes leave tdarr-workDir2-* behind forever — 36 GB of them had
+  # accumulated by 2026-06-11 (oldest from April). The cache is regenerable by
+  # design (kopiaignore excludes it), so anything a week old is safe to drop.
+  # -mtime +7 also guarantees we never touch an in-flight job's fresh files.
+  ansible.builtin.cron:
+    name: "Clean stale tdarr transcode cache"
+    minute: "45"
+    hour: "5"
+    weekday: "1"
+    job: "find /home/{{ sys_user }}/server/containers/tdarr/transcode_cache -mindepth 1 -mtime +7 -delete 2>/dev/null"
