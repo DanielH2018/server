@@ -268,13 +268,19 @@
   become: true
 
 - name: Schedule Docker image cleanup
+  # `until=168h` keeps anything created in the last week: after a bad Renovate
+  # bump the previous pinned image is still local, so rollback = git revert +
+  # redeploy with no registry re-pull. Older unused images/build cache still go
+  # daily. (Caveat: `until` filters on CreatedAt, so an upstream image built >1wk
+  # ago is pruned as soon as it's unused — the window protects fresh builds/pulls.)
   ansible.builtin.cron:
     name: "Clean unused Docker images"
     minute: "30"
     hour: "6"
-    job: "/usr/bin/docker system prune -a -f"
+    job: '/usr/bin/docker system prune -a -f --filter "until=168h"'
     user: "{{ ansible_facts.user_id }}"
   become: true
+  tags: [prune]
 
 
 - name: Create cron job to clear ansible.log weekly

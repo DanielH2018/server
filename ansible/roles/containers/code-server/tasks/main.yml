@@ -45,7 +45,6 @@
   vars:
     common_redeploy_cron_minute: "0"
 
-# Image cleanup happens via the daily `docker system prune -a -f` root cron installed
-# by setup/initial_setup ("Clean unused Docker images") — a filtered docker_prune task
-# here was redundant with it (and its "spare <168h" intent was defeated by that
-# unfiltered daily prune anyway), so it was removed (2026-06-11).
+# Image cleanup happens via the daily `docker system prune -a -f --filter "until=168h"`
+# root cron installed by setup/initial_setup ("Clean unused Docker images") — a filtered
+# docker_prune task here was redundant with it, so it was removed (2026-06-11).
