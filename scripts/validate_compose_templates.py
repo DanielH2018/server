@@ -21,10 +21,16 @@ render or produces invalid YAML.
 from __future__ import annotations
 
 import sys
+import hashlib
 from pathlib import Path
 
 import yaml
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
+
+
+def _ansible_hash(value, algo="sha1"):
+    """Mirror Ansible's `hash` filter so templates using it render identically here."""
+    return hashlib.new(algo, str(value).encode("utf-8")).hexdigest()
 
 REPO = Path(__file__).resolve().parent.parent
 ANSIBLE = REPO / "ansible"
@@ -70,7 +76,7 @@ def load_yaml(path: Path) -> dict:
 
 def build_env(role: str) -> Environment:
     role_tpl_dir = ROLES / role / "templates"
-    return Environment(
+    env = Environment(
         loader=FileSystemLoader([str(role_tpl_dir), str(SHARED_TPL)]),
         undefined=StubUndefined,
         # Match Ansible's Templar so rendered whitespace matches a real deploy.
@@ -78,6 +84,8 @@ def build_env(role: str) -> Environment:
         lstrip_blocks=False,
         keep_trailing_newline=True,
     )
+    env.filters["hash"] = _ansible_hash  # used by healthcheck.yml.j2's interval jitter
+    return env
 
 
 def dump_numbered(text: str) -> None:
