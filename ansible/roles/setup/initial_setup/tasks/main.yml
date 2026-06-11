@@ -309,6 +309,34 @@
     user: "{{ sys_user }}"
   become: true
 
+- name: Deploy the weekly secret-rotation wrapper (server only)
+  tags: [crons]
+  # Unattended rotation of DUE auto-tier push tokens (rotate --commit --deploy + git push).
+  # Reverts on failure; cross-host tokens stay manual. See scripts/secret_rotation.py +
+  # docs/secret-rotation.md.
+  when: inventory_hostname == 'daniel-server'
+  ansible.builtin.template:
+    src: secret-rotate.sh.j2
+    dest: /usr/local/bin/secret-rotate.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0700"
+  become: true
+
+- name: Schedule the weekly secret rotation (server only)
+  tags: [crons]
+  # Sunday 09:00 — after the 07:30 reboot, the 06:xx redeploys, and the 08:00 daily audit
+  # have all settled; quiet window minimises any clash with a concurrent operator session.
+  when: inventory_hostname == 'daniel-server'
+  ansible.builtin.cron:
+    name: "Weekly secret rotation (auto tier)"
+    minute: "0"
+    hour: "9"
+    weekday: "0"
+    job: "/usr/local/bin/secret-rotate.sh"
+    user: "{{ sys_user }}"
+  become: true
+
 - name: Schedule sudo crontab for weekly restart
   tags: [crons]
   ansible.builtin.cron:

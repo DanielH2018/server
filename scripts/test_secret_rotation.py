@@ -112,6 +112,22 @@ def test_sync_reports_stale_registry_entries():
     assert stale == ["gone_push_token"]
 
 
+# ── consumer mapping (which redeploy applies a rotated token) ────────────────
+def test_consumer_tag_monitor_bridge_tokens():
+    assert sr.consumer_tag("monitor_bridge_cpu_push_token") == "monitor-bridge"
+    assert sr.consumer_tag("kopia_restore_drill_push_token") == "monitor-bridge"
+
+
+def test_consumer_tag_cloudflare_ddns_tokens():
+    assert sr.consumer_tag("cloudflare_ddns_proxied_push_token") == "cloudflare-ddns"
+
+
+def test_consumer_tag_cross_host_tokens_are_manual():
+    # Cross-host / self-referential — the unattended cron must NOT auto-rotate these.
+    assert sr.consumer_tag("pi_sd_health_push_token") is None
+    assert sr.consumer_tag("secret_rotation_push_token") is None
+
+
 def test_sync_preserves_a_manual_tier_override():
     today = dt.date(2026, 6, 11)
     # Operator downgraded a push token to ignore — sync must not reclassify it.

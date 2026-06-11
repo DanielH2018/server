@@ -76,6 +76,18 @@ def classify(name: str) -> str:
     return "assisted"
 
 
+def consumer_tag(name: str) -> str | None:
+    """Deploy tag whose redeploy makes a rotated push token take effect — or None when the
+    consumer spans hosts / is self-referential (those stay MANUAL: the unattended cron skips
+    them, the audit still reminds). A push token lives in two places on one compose file: the
+    pusher's env AND the AutoKuma `push_token` label, so one redeploy updates both atomically."""
+    if name.startswith("monitor_bridge_") or name == "kopia_restore_drill_push_token":
+        return "monitor-bridge"
+    if name.startswith("cloudflare_ddns_"):
+        return "cloudflare-ddns"
+    return None  # pi_sd_health (Pi cron + server label), secret_rotation (self) -> manual
+
+
 def _stable_offset(name: str, span: int) -> int:
     """Deterministic 0..span-1 from the name — spreads seed dates so due-dates fan out."""
     if span <= 0:
@@ -210,29 +222,52 @@ def cmd_rotate(args) -> int:
     reg = load_registry()
     today = dt.date.today()
     res = audit(reg, today)
-    targets = [r for r in res["all"] if r[1] == "auto" and (args.all or r[3] < 0)]
     if args.name:
         targets = [r for r in res["all"] if r[0] == args.name]
         if targets and targets[0][1] != "auto":
             print("refusing: %s is tier '%s', not auto-rotatable" % (args.name, targets[0][1]),
                   file=sys.stderr)
             return 2
+    else:
+        # Unattended path: auto-tier, due (unless --all), AND with a single-redeploy consumer.
+        # Tokens with no consumer_tag (cross-host / self-referential) are reported but skipped.
+        due_auto = [r for r in res["all"] if r[1] == "auto" and (args.all or r[3] < 0)]
+        targets = [r for r in due_auto if consumer_tag(r[0])]
+        for name, _t, _d, _dl in due_auto:
+            if not consumer_tag(name):
+                print("  skip (manual: cross-host consumer) %s" % name)
     if not targets:
-        print("rotate: nothing due in the auto tier" + (" today" if not args.all else ""))
+        print("rotate: nothing to rotate in the auto tier" + ("" if args.all else " today"))
         return 0
-    for name, tier, _d, days_left in targets:
+
+    tags = set()
+    for name, _tier, _d, days_left in targets:
         if not args.commit:
-            print("  DRY-RUN would rotate %-40s (due %+d d)" % (name, days_left))
+            print("  DRY-RUN would rotate %-40s -> %s (due %+d d)"
+                  % (name, consumer_tag(name) or "?", days_left))
             continue
         new = pysecrets.token_hex(16)  # 32 hex chars — the format Kuma push tokens require
         subprocess.run(["sops", "set", SECRETS_FILE, '["%s"]' % name, '"%s"' % new],
                        check=True, cwd=REPO)
         reg["secrets"][name]["last_rotated"] = today.isoformat()
+        if consumer_tag(name):
+            tags.add(consumer_tag(name))
         print("  rotated %s" % name)
-    if args.commit:
-        save_registry(reg)
-        print("\nNext: redeploy the consuming service(s) so the new token takes effect,")
-        print("e.g. `uv run ansible-playbook ansible/deploy.yml --tags monitor-bridge`.")
+    if not args.commit:
+        return 0
+
+    save_registry(reg)
+    if args.deploy and tags:
+        cmd = ["uv", "run", "ansible-playbook", "ansible/deploy.yml", "--tags", ",".join(sorted(tags))]
+        print("  deploying:", " ".join(cmd))
+        r = subprocess.run(cmd, cwd=REPO)
+        if r.returncode != 0:
+            print("DEPLOY FAILED — new tokens written to secrets.yml but consumers NOT updated; "
+                  "the caller should revert the working tree", file=sys.stderr)
+            return 1
+    elif not args.deploy:
+        print("\nNext: redeploy the consumer(s): "
+              "uv run ansible-playbook ansible/deploy.yml --tags %s" % ",".join(sorted(tags)))
     return 0
 
 
@@ -248,6 +283,7 @@ def main(argv=None) -> int:
     pr.add_argument("--commit", action="store_true", help="actually write (default: dry-run)")
     pr.add_argument("--all", action="store_true", help="all auto secrets, not only due")
     pr.add_argument("--name", help="rotate one named auto secret")
+    pr.add_argument("--deploy", action="store_true", help="redeploy consumers after rotating")
     pr.set_defaults(func=cmd_rotate)
     args = p.parse_args(argv)
     return args.func(args)
