@@ -59,6 +59,18 @@ GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
 RESTORE_DRILL_STATE = _env("RESTORE_DRILL_STATE", "/restore-drill/state.json")
 RESTORE_DRILL_MAX_AGE_S = float(_env("RESTORE_DRILL_MAX_AGE_D", "35")) * 86400
 
+# B2 storage usage: the daily host cron (kopia-b2-usage.sh, kopia role) writes
+# {"ts": epoch, "ok": bool, "bytes": int, "msg": str} with the bucket's BILLABLE
+# bytes (incl. hidden versions — what counts against the free tier). We alert when
+# usage crosses the threshold, on probe failure, staleness, or missing state.
+# 2.5d staleness = two missed daily runs + slack.
+B2_USAGE_STATE = _env("B2_USAGE_STATE", "/b2-usage/state.json")
+B2_USAGE_MAX_AGE_S = float(_env("B2_USAGE_MAX_AGE_D", "2.5")) * 86400
+# Decimal GB (1e9), not GiB: B2 bills and displays decimal units, and the cap we're
+# protecting is B2's "10 GB" free tier — GiB math would overstate the allowance ~7%.
+B2_CAP_BYTES = float(_env("B2_CAP_GB", "10")) * 1e9
+B2_USAGE_MAX_PCT = float(_env("B2_USAGE_MAX_PCT", "85"))
+
 # Scrutiny SMART freshness: the collector cron runs daily (00:00) and has no usable
 # container healthcheck (cron is PID 1) — a silently-dead collector only shows as
 # aging collector_date values in the web API. 26h allows one run + slack.
@@ -506,6 +518,42 @@ def check_restore_drill():
     return restore_drill(state, age_s, RESTORE_DRILL_MAX_AGE_S)
 
 
+def b2_usage(state, age_s, max_age_s, cap_bytes, max_pct):
+    """Pure: billable B2 bytes vs the plan cap, plus probe-failure/staleness.
+
+    The threshold fires BEFORE the cap (default 85% of 10GB) — once the bucket is
+    full, B2 rejects uploads and kopia's nightly snapshot starts failing, so the
+    point is runway to prune/upgrade, not a post-mortem.
+    """
+    if not state.get("ok"):
+        return False, "B2 usage probe FAILED: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return False, "B2 usage data %.1fd old (max %.1fd)" % (
+            age_s / 86400, max_age_s / 86400)
+    try:
+        used = float(state["bytes"])
+    except (KeyError, TypeError, ValueError):
+        return False, "B2 usage state missing/invalid bytes"
+    pct = used / cap_bytes * 100
+    msg = "B2 %.2f/%.0fGB billable (%.0f%% of plan)" % (
+        used / 1e9, cap_bytes / 1e9, pct)
+    if pct > max_pct:
+        return False, msg + " — over %g%% threshold" % max_pct
+    return True, msg
+
+
+def check_b2_usage():
+    try:
+        with open(B2_USAGE_STATE) as fh:
+            state = json.load(fh)
+        age_s = time.time() - float(state.get("ts", 0))
+    except FileNotFoundError:
+        return False, "no B2-usage state (probe never ran?)"
+    except (ValueError, TypeError):
+        return False, "B2-usage state unparseable"
+    return b2_usage(state, age_s, B2_USAGE_MAX_AGE_S, B2_CAP_BYTES, B2_USAGE_MAX_PCT)
+
+
 CHECKS = [
     ("backup", _env("KUMA_PUSH_KOPIA", ""), check_backup),
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
@@ -520,6 +568,7 @@ CHECKS = [
     ("gitops_alive",  _env("KUMA_PUSH_GITOPS_ALIVE",  ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
     ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
+    ("b2_usage",      _env("KUMA_PUSH_B2",            ""), check_b2_usage),
     ("scrutiny",      _env("KUMA_PUSH_SCRUTINY",      ""), check_scrutiny),
     ("pi_pressure",   _env("KUMA_PUSH_PI",            ""), check_pi_pressure),
 ]

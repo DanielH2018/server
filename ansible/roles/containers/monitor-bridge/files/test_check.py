@@ -644,6 +644,64 @@ def test_restore_drill_unparseable_is_down(tmp_path, monkeypatch):
     assert "unparseable" in msg
 
 
+# ── B2 storage usage (daily host cron writes billable bytes; we alert on it) ──
+
+
+def _b2_state(tmp_path, monkeypatch, ts, ok, bytes_, msg="probe"):
+    p = tmp_path / "state.json"
+    p.write_text('{"ts": %s, "ok": %s, "bytes": %s, "msg": "%s"}'
+                 % (ts, "true" if ok else "false", bytes_, msg))
+    monkeypatch.setattr(check, "B2_USAGE_STATE", str(p))
+
+
+def test_b2_usage_under_threshold_is_up(tmp_path, monkeypatch):
+    # 6.56GB of the 10GB plan = 66% < the 85% default threshold. Decimal GB
+    # throughout — B2 bills decimal, so the message matches its dashboard.
+    _b2_state(tmp_path, monkeypatch, time.time() - 3600, True, 6_559_400_355)
+    ok, msg = check.check_b2_usage()
+    assert ok
+    assert "6.56/10GB" in msg
+
+
+def test_b2_usage_over_threshold_is_down(tmp_path, monkeypatch):
+    # 9.5GB of 10GB = 95% > 85% — alert with the threshold in the message.
+    _b2_state(tmp_path, monkeypatch, time.time(), True, int(9.5e9))
+    ok, msg = check.check_b2_usage()
+    assert not ok
+    assert "over 85% threshold" in msg
+
+
+def test_b2_usage_failed_probe_is_down(tmp_path, monkeypatch):
+    _b2_state(tmp_path, monkeypatch, time.time(), False, 0, "rclone size query failed")
+    ok, msg = check.check_b2_usage()
+    assert not ok
+    assert "rclone" in msg
+
+
+def test_b2_usage_stale_state_is_down(tmp_path, monkeypatch):
+    # Fresh-enough data is 2.5d; 4d-old state means the daily cron is broken.
+    _b2_state(tmp_path, monkeypatch, time.time() - 4 * 86400, True, 1073741824)
+    ok, msg = check.check_b2_usage()
+    assert not ok
+    assert "old" in msg
+
+
+def test_b2_usage_missing_state_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "B2_USAGE_STATE", str(tmp_path / "nope.json"))
+    ok, msg = check.check_b2_usage()
+    assert not ok
+    assert "never ran" in msg
+
+
+def test_b2_usage_invalid_bytes_is_down(tmp_path, monkeypatch):
+    p = tmp_path / "state.json"
+    p.write_text('{"ts": %s, "ok": true, "bytes": null, "msg": "x"}' % time.time())
+    monkeypatch.setattr(check, "B2_USAGE_STATE", str(p))
+    ok, msg = check.check_b2_usage()
+    assert not ok
+    assert "bytes" in msg
+
+
 # ── scrutiny SMART-data freshness (collector runs daily; web API holds last report) ──
 
 

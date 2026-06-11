@@ -75,6 +75,44 @@
     user: "{{ sys_user }}"
   become: true
 
+- name: Create B2-usage state directory
+  tags: [cron]
+  # monitor-bridge bind-mounts this read-only and alerts on over-threshold/stale/
+  # missing state — created here (not by Docker) so it's sys_user-writable for the cron.
+  ansible.builtin.file:
+    path: /var/lib/kopia-b2-usage
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Deploy the daily B2-usage probe script
+  tags: [cron]
+  # The repo's B2 bucket is the 10 GB free tier; billable bytes (incl. hidden
+  # versions) must stay under it or backups die silently. See files/b2-usage.sh.
+  ansible.builtin.copy:
+    src: b2-usage.sh
+    dest: /usr/local/bin/kopia-b2-usage.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Schedule daily B2-usage probe
+  tags: [cron]
+  # 02:30 daily — clear of the 19:00 snapshot, Wed-04:00 verify, Sun-06:00 rebuild
+  # and 1st-05:00 restore drill. One version-listing call against B2 (~450 blobs ≈
+  # one page); negligible API usage. Result lands in
+  # /var/lib/kopia-b2-usage/state.json -> monitor-bridge -> Kuma + syslog.
+  ansible.builtin.cron:
+    name: "Daily Kopia B2 usage probe"
+    minute: "30"
+    hour: "2"
+    job: "/usr/local/bin/kopia-b2-usage.sh"
+    user: "{{ sys_user }}"
+  become: true
+
 - name: Schedule weekly Kopia backup integrity verification
   tags: [cron]
   # "A backup you've never restored isn't a backup." snapshot scheduling and retention

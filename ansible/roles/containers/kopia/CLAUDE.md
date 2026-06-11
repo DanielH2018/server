@@ -23,6 +23,12 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
   the container (creds from `/app/config/repository.config`):
   `rclone backend lifecycle b2:daniel-server-kopia` · billable size:
   `rclone size b2:daniel-server-kopia --b2-versions` · purge hidden now: `rclone cleanup`.
+- **B2 usage monitor (2026-06-11):** the bucket is the **10 GB free tier**; a daily host
+  cron (`files/b2-usage.sh` → `/usr/local/bin/kopia-b2-usage.sh`, 02:30) measures
+  **billable** bytes (`rclone size --b2-versions` — hidden versions count, `kopia blob
+  stats` undercounts) with creds read at runtime from `repository.config`, and writes
+  `/var/lib/kopia-b2-usage/state.json` — monitor-bridge's `b2_usage` check alerts at 85%
+  of the cap, on probe failure, or staleness. Was 6.56 GB (66%) when added.
 - **Backup assurance is three-tier:** snapshots (daily 19:00, in-container policy) →
   weekly `kopia snapshot verify --verify-files-percent=1` cron (blobs readable) →
   **monthly restore drill** (`files/restore-drill.sh` → `/usr/local/bin/`, cron 1st
