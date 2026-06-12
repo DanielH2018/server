@@ -41,6 +41,9 @@ services:
       - CPU_WINDOW=15m
       - CPU_THROTTLE_PCT=25
       - CPU_MIN_THROTTLED_CORES=0.05
+      # Hysteresis: only the 3rd consecutive breaching cycle (~15 min) alerts; one- or
+      # two-cycle bursts log the offender but push up. A clean cycle resets the streak.
+      - CPU_CONSECUTIVE=3
       - RESTART_WINDOW=15m
       - RESTART_MAX=3
       - TRAEFIK_5XX_PCT=5
@@ -99,26 +102,32 @@ services:
       - /var/lib/kopia-b2-usage:/b2-usage:ro
     {{ service_networks() }}
     labels:
-      {# Container-liveness monitor + one push monitor per check (AutoKuma-provisioned). -#}
+      {# Container-liveness monitor + one push monitor per check (AutoKuma-provisioned).
+         max_retries=0 on every push monitor: with retries, Kuma parks a pushed `down`
+         (and its named-offender msg) in PENDING, then its 60s watchdog — which only an
+         `up` push satisfies — crosses maxretries first, so the visible DOWN event always
+         reads "No heartbeat in the time window". With 0 retries the bridge's own push
+         flips the state and the descriptive msg survives into the event + notification.
+         Trade-off: a dead bridge pages after one missed 600s window (no grace beats). -#}
       {{ kuma('monitor-bridge') }}
-      {{ kuma('monitor-bridge-backup', monitor_type='push', name='Backup Freshness', interval=600, push_token=monitor_bridge_kopia_push_token) }}
-      {{ kuma('monitor-bridge-disk', monitor_type='push', name='Root Disk', interval=600, push_token=monitor_bridge_disk_push_token) }}
-      {{ kuma('monitor-bridge-cert', monitor_type='push', name='TLS Cert Expiry', interval=600, push_token=monitor_bridge_cert_push_token) }}
-      {{ kuma('monitor-bridge-mem', monitor_type='push', name='Memory', interval=600, push_token=monitor_bridge_mem_push_token) }}
-      {{ kuma('monitor-bridge-restarts', monitor_type='push', name='Container Restarts', interval=600, push_token=monitor_bridge_restarts_push_token) }}
-      {{ kuma('monitor-bridge-oom', monitor_type='push', name='Container OOM', interval=600, push_token=monitor_bridge_oom_push_token) }}
-      {{ kuma('monitor-bridge-cpu', monitor_type='push', name='CPU Throttling', interval=600, push_token=monitor_bridge_cpu_push_token) }}
-      {{ kuma('monitor-bridge-targets', monitor_type='push', name='Scrape Targets', interval=600, push_token=monitor_bridge_targets_push_token) }}
-      {{ kuma('monitor-bridge-traefik', monitor_type='push', name='Traefik 5xx', interval=600, push_token=monitor_bridge_traefik_push_token) }}
-      {{ kuma('monitor-bridge-n8n', monitor_type='push', name='n8n Prod Workflows', interval=600, push_token=monitor_bridge_n8n_push_token) }}
+      {{ kuma('monitor-bridge-backup', monitor_type='push', name='Backup Freshness', interval=600, max_retries=0, push_token=monitor_bridge_kopia_push_token) }}
+      {{ kuma('monitor-bridge-disk', monitor_type='push', name='Root Disk', interval=600, max_retries=0, push_token=monitor_bridge_disk_push_token) }}
+      {{ kuma('monitor-bridge-cert', monitor_type='push', name='TLS Cert Expiry', interval=600, max_retries=0, push_token=monitor_bridge_cert_push_token) }}
+      {{ kuma('monitor-bridge-mem', monitor_type='push', name='Memory', interval=600, max_retries=0, push_token=monitor_bridge_mem_push_token) }}
+      {{ kuma('monitor-bridge-restarts', monitor_type='push', name='Container Restarts', interval=600, max_retries=0, push_token=monitor_bridge_restarts_push_token) }}
+      {{ kuma('monitor-bridge-oom', monitor_type='push', name='Container OOM', interval=600, max_retries=0, push_token=monitor_bridge_oom_push_token) }}
+      {{ kuma('monitor-bridge-cpu', monitor_type='push', name='CPU Throttling', interval=600, max_retries=0, push_token=monitor_bridge_cpu_push_token) }}
+      {{ kuma('monitor-bridge-targets', monitor_type='push', name='Scrape Targets', interval=600, max_retries=0, push_token=monitor_bridge_targets_push_token) }}
+      {{ kuma('monitor-bridge-traefik', monitor_type='push', name='Traefik 5xx', interval=600, max_retries=0, push_token=monitor_bridge_traefik_push_token) }}
+      {{ kuma('monitor-bridge-n8n', monitor_type='push', name='n8n Prod Workflows', interval=600, max_retries=0, push_token=monitor_bridge_n8n_push_token) }}
       {# GitOps deployer: liveness (deployer ticking) + deploy-status (rollback hold), pushed by
          check_gitops_alive/status from the host state files. interval 600s = 2× the 5-min loop. -#}
-      {{ kuma('gitops-deploy-alive', monitor_type='push', name='GitOps Deploy — Alive', interval=600, push_token=monitor_bridge_gitops_alive_push_token) }}
-      {{ kuma('gitops-deploy-status', monitor_type='push', name='GitOps Deploy — Status', interval=600, push_token=monitor_bridge_gitops_status_push_token) }}
-      {{ kuma('kopia-restore-drill', monitor_type='push', name='Backup Restore Drill', interval=600, push_token=kopia_restore_drill_push_token) }}
-      {{ kuma('monitor-bridge-b2', monitor_type='push', name='B2 Storage Usage', interval=600, push_token=monitor_bridge_b2_push_token) }}
-      {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data Freshness', interval=600, push_token=monitor_bridge_scrutiny_push_token) }}
-      {{ kuma('monitor-bridge-pi', monitor_type='push', name='Pi Pressure', interval=600, push_token=monitor_bridge_pi_push_token) }}
+      {{ kuma('gitops-deploy-alive', monitor_type='push', name='GitOps Deploy — Alive', interval=600, max_retries=0, push_token=monitor_bridge_gitops_alive_push_token) }}
+      {{ kuma('gitops-deploy-status', monitor_type='push', name='GitOps Deploy — Status', interval=600, max_retries=0, push_token=monitor_bridge_gitops_status_push_token) }}
+      {{ kuma('kopia-restore-drill', monitor_type='push', name='Backup Restore Drill', interval=600, max_retries=0, push_token=kopia_restore_drill_push_token) }}
+      {{ kuma('monitor-bridge-b2', monitor_type='push', name='B2 Storage Usage', interval=600, max_retries=0, push_token=monitor_bridge_b2_push_token) }}
+      {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data Freshness', interval=600, max_retries=0, push_token=monitor_bridge_scrutiny_push_token) }}
+      {{ kuma('monitor-bridge-pi', monitor_type='push', name='Pi Pressure', interval=600, max_retries=0, push_token=monitor_bridge_pi_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 

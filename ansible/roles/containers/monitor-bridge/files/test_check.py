@@ -165,28 +165,72 @@ def test_oom_none_is_ok(monkeypatch):
 
 # --- check_cpu_throttle -----------------------------------------------------
 
-def test_cpu_throttle_names_container_over_threshold(monkeypatch):
-    # Alert needs BOTH ratio > CPU_THROTTLE_PCT (25%) AND cores lost > floor (0.05).
-    # tdarr: 40% periods + 0.30 cores lost -> alerts. sonarr: 10% periods -> under ratio.
-    ratio = [({"name": "tdarr"}, 0.40), ({"name": "sonarr"}, 0.10)]
-    lost = [({"name": "tdarr"}, 0.30), ({"name": "sonarr"}, 0.30)]
+def _cpu_cycle(monkeypatch, ratio, lost):
+    """Feed one loop iteration's two prom_vector calls and run the check."""
     monkeypatch.setattr(check, "prom_vector", _seq(ratio, lost))
-    ok, msg = check.check_cpu_throttle()
+    return check.check_cpu_throttle()
+
+
+BREACH_RATIO = [({"name": "tdarr"}, 0.40), ({"name": "sonarr"}, 0.10)]
+BREACH_LOST = [({"name": "tdarr"}, 0.30), ({"name": "sonarr"}, 0.30)]
+
+
+def test_cpu_throttle_single_breach_is_suppressed(monkeypatch):
+    # One breaching cycle (a short burst) must NOT alert — sustained throttling only.
+    # The up-msg still names the offender so the bridge log keeps the evidence.
+    monkeypatch.setattr(check, "_cpu_breach_streak", 0)
+    ok, msg = _cpu_cycle(monkeypatch, BREACH_RATIO, BREACH_LOST)
+    assert ok
+    assert "tdarr" in msg
+    assert "1/3" in msg  # streak progress vs default CPU_CONSECUTIVE=3
+
+
+def test_cpu_throttle_sustained_breach_alerts_and_names(monkeypatch):
+    # Default CPU_CONSECUTIVE=3: the 3rd consecutive breaching cycle (~15 min at the
+    # 5-min loop) goes down, naming the offender. sonarr stays under the ratio gate.
+    monkeypatch.setattr(check, "_cpu_breach_streak", 0)
+    for _ in range(2):
+        ok, _ = _cpu_cycle(monkeypatch, BREACH_RATIO, BREACH_LOST)
+        assert ok
+    ok, msg = _cpu_cycle(monkeypatch, BREACH_RATIO, BREACH_LOST)
     assert not ok
     assert "tdarr" in msg
     assert "sonarr" not in msg  # 10% is under the default 25% threshold
 
 
+def test_cpu_throttle_clean_cycle_resets_streak(monkeypatch):
+    # breach, breach, clean, breach -> never down (the streak restarts after the gap)
+    monkeypatch.setattr(check, "_cpu_breach_streak", 0)
+    assert _cpu_cycle(monkeypatch, BREACH_RATIO, BREACH_LOST)[0]
+    assert _cpu_cycle(monkeypatch, BREACH_RATIO, BREACH_LOST)[0]
+    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    assert check.check_cpu_throttle()[0]
+    assert _cpu_cycle(monkeypatch, BREACH_RATIO, BREACH_LOST)[0]
+
+
+def test_cpu_throttle_stays_down_while_breaching(monkeypatch):
+    # Once the streak crosses the threshold, every further breaching cycle is down too
+    # (no flapping back to up until a clean cycle).
+    monkeypatch.setattr(check, "_cpu_breach_streak", 0)
+    for _ in range(3):
+        ok, _ = _cpu_cycle(monkeypatch, BREACH_RATIO, BREACH_LOST)
+    assert not ok
+    ok, msg = _cpu_cycle(monkeypatch, BREACH_RATIO, BREACH_LOST)
+    assert not ok
+    assert "tdarr" in msg
+
+
 def test_cpu_throttle_nan_is_ignored(monkeypatch):
     # unlimited container -> 0/0 -> NaN; NaN > threshold is False, so no alert
+    monkeypatch.setattr(check, "_cpu_breach_streak", 0)
     ratio = [({"name": "jellyfin"}, float("nan"))]
     lost = [({"name": "jellyfin"}, 0.30)]
-    monkeypatch.setattr(check, "prom_vector", _seq(ratio, lost))
-    ok, _ = check.check_cpu_throttle()
+    ok, _ = _cpu_cycle(monkeypatch, ratio, lost)
     assert ok
 
 
 def test_cpu_throttle_none_is_ok(monkeypatch):
+    monkeypatch.setattr(check, "_cpu_breach_streak", 0)
     monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
     ok, _ = check.check_cpu_throttle()
     assert ok
@@ -196,10 +240,10 @@ def test_cpu_throttle_below_cores_floor_is_ok(monkeypatch):
     # Real-world false positive: a 0.1-cpu sidecar throttled in 90% of its (few, bursty)
     # CFS periods but losing negligible absolute CPU time (0.0001 cores) must NOT alert.
     # 1st prom_vector call = throttle ratio, 2nd = throttled cores/s.
+    monkeypatch.setattr(check, "_cpu_breach_streak", 0)
     ratio = [({"name": "monitor-bridge"}, 0.90)]
     lost = [({"name": "monitor-bridge"}, 0.0001)]
-    monkeypatch.setattr(check, "prom_vector", _seq(ratio, lost))
-    ok, _ = check.check_cpu_throttle()
+    ok, _ = _cpu_cycle(monkeypatch, ratio, lost)
     assert ok
 
 

@@ -31,7 +31,11 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     ratio alone runs 30–90% for tiny low-limit sidecars that briefly burst over their slice
     while losing negligible absolute CPU — a perpetual false `down`, which Kuma renders as
     "No heartbeat in the time window" since only `up` pushes satisfy a push monitor's
-    watchdog. Unlimited containers give 0/0→NaN and are ignored)
+    watchdog. Unlimited containers give 0/0→NaN and are ignored. On top of both gates,
+    `CPU_CONSECUTIVE` (3) adds hysteresis: only the 3rd consecutive breaching cycle
+    (~15 min) pushes `down`; shorter bursts push `up` with a "throttling streak n/3"
+    msg naming the offender, and a clean cycle resets the streak — so one-cycle blips
+    (flaresolverr solving a challenge, homepage hugging the cores floor) never page.)
   - **Scrape Targets** (`up == 0` — names the down job)
   - **Traefik 5xx** (5xx ratio over 5m, gated by a `TRAEFIK_MIN_RPS` volume floor)
   - **n8n Prod Workflows** (n8n public API: failed executions of *active* workflows within
@@ -71,6 +75,13 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 - Explicit `down` = fast, descriptive alert; the push monitor's heartbeat interval (600 s,
   2× the loop) is the backstop for "the bridge itself died". Same dead-man's-switch idea as
   `cloudflare-ddns` — see [[its CLAUDE.md]] and the `kuma(..., monitor_type='push')` macro.
+- **All push monitors set `max_retries=0`** (2026-06-12): with retries, Kuma parks a pushed
+  `down` in PENDING and the 60s watchdog — which only `up` pushes satisfy — crosses
+  maxretries first, so every visible DOWN event read "No heartbeat in the time window"
+  instead of the check's named-offender msg. Zero retries means the bridge's own push flips
+  the state and the descriptive msg lands in the event + Discord notification. Trade-off:
+  a dead bridge pages after one missed 600s window (acceptable — that's the dead-man's
+  switch doing its job).
 - **Container healthcheck (2026-06-10):** check.py touches `/tmp/heartbeat` (tmpfs) after
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
@@ -85,7 +96,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   auto-creates the mount source root-owned and the non-root container can't read it).
 - Thresholds are env-tunable in the compose template (`BACKUP_MAX_AGE_H`, `DISK_MAX_PCT`,
   `CERT_MIN_DAYS`, `MEM_MAX_PCT`, `RESTART_WINDOW`/`RESTART_MAX`, `OOM_WINDOW`,
-  `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`,
+  `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`/`CPU_CONSECUTIVE`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`,
   `N8N_FAIL_WINDOW`/`N8N_FAIL_MAX`; n8n connection config: `N8N_URL`/`N8N_API_KEY`; GitOps
   liveness: `GITOPS_MAX_AGE_MIN`/`GITOPS_STATE_DIR`; Pi pressure:
   `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`). A failed

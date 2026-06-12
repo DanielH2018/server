@@ -42,6 +42,7 @@ OOM_WINDOW = _env("OOM_WINDOW", "1h")
 CPU_WINDOW = _env("CPU_WINDOW", "15m")
 CPU_THROTTLE_PCT = float(_env("CPU_THROTTLE_PCT", "25"))
 CPU_MIN_THROTTLED_CORES = float(_env("CPU_MIN_THROTTLED_CORES", "0.05"))
+CPU_CONSECUTIVE = int(_env("CPU_CONSECUTIVE", "3"))
 RESTART_WINDOW = _env("RESTART_WINDOW", "15m")
 RESTART_MAX = float(_env("RESTART_MAX", "3"))
 TRAEFIK_5XX_PCT = float(_env("TRAEFIK_5XX_PCT", "5"))
@@ -270,6 +271,9 @@ def check_oom():
     return True, "no OOM kills in %s" % OOM_WINDOW
 
 
+_cpu_breach_streak = 0
+
+
 def check_cpu_throttle():
     """Containers under *sustained* CPU CFS throttling within CPU_WINDOW, naming each one.
 
@@ -289,7 +293,14 @@ def check_cpu_throttle():
     those out, so the monitor pushes `up` and only goes `down` on genuine starvation.
     Containers with no cpu limit give 0/0 -> NaN for condition 1 (NaN comparisons are False)
     and are ignored; if cAdvisor doesn't expose the cfs metrics both queries are empty -> green.
+
+    On top of the two gates, CPU_CONSECUTIVE adds hysteresis: only the Nth consecutive
+    breaching cycle goes `down` (~(N×INTERVAL)s of continuous throttling at the loop
+    cadence). One- or two-cycle bursts — flaresolverr solving a challenge, homepage
+    briefly hugging the cores floor — push `up` with the offender named in the msg, so
+    the evidence stays in the bridge log without paging. A clean cycle resets the streak.
     """
+    global _cpu_breach_streak
     ratio_vec = prom_vector(
         'sum(rate(container_cpu_cfs_throttled_periods_total{name!=""}[%s])) by (name) '
         '/ sum(rate(container_cpu_cfs_periods_total{name!=""}[%s])) by (name)'
@@ -306,12 +317,17 @@ def check_cpu_throttle():
         if ratio > threshold and lost > CPU_MIN_THROTTLED_CORES:
             offenders.append((name, ratio, lost))
     offenders.sort(key=lambda nrl: -nrl[1])
-    if offenders:
-        desc = ", ".join(
-            "%s (%.0f%%, %.2f cores)" % (n, r * 100, lc) for n, r, lc in offenders[:5])
-        return False, "%d container(s) CPU-throttled >%.0f%% & >%.2f cores in %s: %s" % (
-            len(offenders), CPU_THROTTLE_PCT, CPU_MIN_THROTTLED_CORES, CPU_WINDOW, desc)
-    return True, "no sustained CPU throttling in %s" % CPU_WINDOW
+    if not offenders:
+        _cpu_breach_streak = 0
+        return True, "no sustained CPU throttling in %s" % CPU_WINDOW
+    _cpu_breach_streak += 1
+    desc = ", ".join(
+        "%s (%.0f%%, %.2f cores)" % (n, r * 100, lc) for n, r, lc in offenders[:5])
+    if _cpu_breach_streak < CPU_CONSECUTIVE:
+        return True, "throttling streak %d/%d (not alerting yet): %s" % (
+            _cpu_breach_streak, CPU_CONSECUTIVE, desc)
+    return False, "%d container(s) CPU-throttled >%.0f%% & >%.2f cores for %d cycles: %s" % (
+        len(offenders), CPU_THROTTLE_PCT, CPU_MIN_THROTTLED_CORES, _cpu_breach_streak, desc)
 
 
 def check_targets_down():
