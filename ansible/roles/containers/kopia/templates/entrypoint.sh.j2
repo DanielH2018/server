@@ -28,12 +28,21 @@ fi
 
 # Set snapshot schedule and retention (idempotent — safe to run on every start).
 # Exclusions are handled by .kopiaignore in the snapshot source directory.
+# Operator-chosen (2026-06-12): 7 dailies + 4 weeklies (incl. current week), nothing
+# older — no monthly/annual tiers. hourly/monthly/annual/latest are pinned explicitly:
+# unset tiers inherit kopia's global defaults (hourly 48, monthly 24, annual 3,
+# latest 10), which silently widened retention before. latest 3 (not 0) briefly
+# protects manual/verification snapshots that would otherwise be reaped at the next
+# maintenance for fitting no calendar bucket.
 if /usr/bin/kopia repository status 2>/dev/null; then
     /usr/bin/kopia policy set /data/home/ubuntu/server/containers \
         --snapshot-interval 24h \
+        --keep-latest 3 \
+        --keep-hourly 0 \
         --keep-daily 7 \
-        --keep-weekly 1 \
-        --keep-monthly 1
+        --keep-weekly 4 \
+        --keep-monthly 0 \
+        --keep-annual 0
 fi
 
 exec /usr/bin/kopia server start \
