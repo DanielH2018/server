@@ -4,6 +4,13 @@
 # ── Backup tools ────────────────────────────────────────────────────────────
 kopia/
 
+# ── SQLite sidecar files (match at any depth) ────────────────────────────────
+# A WAL is only meaningful with an atomic FS snapshot (kopia's file walk isn't one);
+# the main .sqlite file alone restores consistent-as-of-last-checkpoint. Backing WALs
+# up is pure churn — n8n's stuck 405M WAL re-uploaded ~400M/night (found 2026-06-12).
+*.sqlite-wal
+*.sqlite-shm
+
 # ── Generic regeneratable dirs (match at any depth) ─────────────────────────
 cache/
 logs/
@@ -45,13 +52,24 @@ tdarr/transcode_cache/
 scrutiny/influxdb2/
 
 # ── App-specific caches ───────────────────────────────────────────────────────
-# NB real path — the old `code-server/config/extensions*/` never matched and 2.2GB
-# of reinstallable VS Code extensions was silently backed up (found 2026-06-10).
+# Reinstallable VS Code extensions live in BOTH paths (this image's --extensions-dir
+# is config/extensions; .local/share is code-server's data dir). 2026-06-10's "fix"
+# (fb5857e) swapped the top-level exclude for the .local one — snapshot diffs prove
+# the old pattern DID match: extensions/ (788M) re-entered the backup that night and
+# auto-update churn then bled ~0.8GB/day of unique content into B2. Keep both lines.
+code-server/config/extensions/
 code-server/config/.local/share/code-server/extensions/
 code-server/config/.cache/
 uptime-kuma/data*/
 freshrss/config/www/freshrss/data/cache/
 karakeep/time-tagger/uv-cache/
+# Reinstallable Grafana plugins; grafana.db + provisioned dashboards stay backed up.
+grafana/data/plugins/
+# Tdarr's internal DB backup zips — the live DB2/ is backed up directly, so these
+# are backups-of-a-backup. (DB2/ itself KEPT by operator choice 2026-06-12.)
+tdarr/server/Tdarr/Backups/
+# Cloned TRaSH-guides repos, re-fetched by every nightly recyclarr sync.
+recyclarr/recyclarr/config/resources/
 
 # ── Pi-hole: keep config (pihole.toml, custom lists, *_backups), drop the bulk ──
 # pihole-FTL.db is DNS query HISTORY (432M, rewritten constantly — poor dedup);
