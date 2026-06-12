@@ -18,7 +18,8 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   `INTERVAL` (300 s) it runs **sixteen checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Backup Freshness** (Kopia `/api/v1/sources` last-snapshot age + errorCount)
-  - **Root Disk** (`node_filesystem_*`)
+  - **Root Disk** (`node_filesystem_*` for `/` **and `/boot`** — old kernels filling /boot
+    quietly breaks upgrades; server-only, the Pi's disk lives in the Pi Pressure check)
   - **TLS Cert Expiry** (`traefik_tls_certs_not_after`)
   - **Memory** (host `node_memory_*` pressure only)
   - **Container Restarts** (`changes(container_start_time_seconds[15m]) > RESTART_MAX`)
@@ -37,7 +38,9 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     msg naming the offender, and a clean cycle resets the streak — so one-cycle blips
     (flaresolverr solving a challenge, homepage hugging the cores floor) never page.)
   - **Scrape Targets** (`up == 0` — names the down job)
-  - **Traefik 5xx** (5xx ratio over 5m, gated by a `TRAEFIK_MIN_RPS` volume floor)
+  - **Traefik 5xx** (5xx ratio over 5m **per service**, naming each offender, gated by a
+    per-service `TRAEFIK_MIN_RPS` volume floor — per-service so the alert points at the
+    erroring backend and a broken low-traffic service can't hide diluted in the aggregate)
   - **n8n Prod Workflows** (n8n public API: failed executions of *active* workflows within
     `N8N_FAIL_WINDOW`, naming each one. "Prod" = active. Empty `N8N_API_KEY` = disabled
     (stays up); an unreachable API surfaces as `down`. Reached at `n8n:5678` over `apps`,
@@ -62,8 +65,12 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     non-archived device must have a `collector_date` within 26 h — the collector is
     cron-as-PID1 with no usable healthcheck, so a silently-dead collector only shows up as
     aging SMART data. Also `down` when scrutiny lists no devices at all.)
-  - **Pi Pressure** (the Pi's glances API `/api/4/load` + `/api/4/mem` over the LAN:
-    `down` when load5/core > `PI_LOAD_MAX` or mem `available` < `PI_MEM_MIN_MB`. The 512MB
+  - **Pi Pressure** (the Pi's glances API `/api/4/load` + `/api/4/mem` + `/api/4/fs` over
+    the LAN: `down` when load5/core > `PI_LOAD_MAX`, mem `available` < `PI_MEM_MIN_MB`, or
+    any filesystem device > `PI_DISK_MAX_PCT` — glances' fs list is its *container* view
+    (bind-mount paths), so entries are deduped by `device_name`, which carries the host SD
+    card's usage percent. A filling SD card is the classic slow Pi death the server-only
+    Root Disk check can't see. The 512MB
     Zero 2 W dies by swap-thrash — 2026-06-11 fwupd episodes ran load5/core >1.7 with
     healthcheck-timeout storms no other monitor saw. Polls glances rather than adding a
     Pi node-exporter: zero Pi-side RAM cost, and a second node-exporter would have broken
@@ -99,7 +106,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`/`CPU_CONSECUTIVE`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`,
   `N8N_FAIL_WINDOW`/`N8N_FAIL_MAX`; n8n connection config: `N8N_URL`/`N8N_API_KEY`; GitOps
   liveness: `GITOPS_MAX_AGE_MIN`/`GITOPS_STATE_DIR`; Pi pressure:
-  `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`). A failed
+  `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`). A failed
   query/unreachable source makes that monitor `down` with an explanatory msg — a broken
   exporter is surfaced, not silently green.
 

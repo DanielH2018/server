@@ -266,30 +266,49 @@ def test_targets_all_up_is_ok(monkeypatch):
 
 
 # --- check_traefik_5xx ------------------------------------------------------
+# Per-service: 1st prom_vector call = total rps by service, 2nd = 5xx rps by service.
 
-def test_traefik_high_5xx_with_traffic_alerts(monkeypatch):
-    # total 1.0 rps, 0.2 rps of 5xx -> 20% > 5%
-    monkeypatch.setattr(check, "prom_scalar", _seq(1.0, 0.2))
+def test_traefik_names_erroring_service(monkeypatch):
+    # sonarr: 0.2 of 1.0 rps = 20% 5xx -> named. jellyfin: clean -> not named.
+    total = [({"service": "sonarr@docker"}, 1.0), ({"service": "jellyfin@docker"}, 2.0)]
+    errs = [({"service": "sonarr@docker"}, 0.2)]
+    monkeypatch.setattr(check, "prom_vector", _seq(total, errs))
     ok, msg = check.check_traefik_5xx()
     assert not ok
-    assert "%" in msg
+    assert "sonarr@docker" in msg
+    assert "jellyfin" not in msg
+
+
+def test_traefik_low_traffic_service_cannot_hide_behind_busy_one(monkeypatch):
+    # The old aggregate ratio diluted a broken low-traffic service below 5%:
+    # 0.06 rps all-5xx next to 9.94 rps clean = 0.6% aggregate. Per-service it alerts.
+    total = [({"service": "broken@docker"}, 0.06), ({"service": "busy@docker"}, 9.94)]
+    errs = [({"service": "broken@docker"}, 0.06)]
+    monkeypatch.setattr(check, "prom_vector", _seq(total, errs))
+    ok, msg = check.check_traefik_5xx()
+    assert not ok
+    assert "broken@docker" in msg
 
 
 def test_traefik_high_ratio_below_floor_is_ok(monkeypatch):
-    # 100% 5xx but only 0.01 rps (< 0.05 floor) -> must NOT alert
-    monkeypatch.setattr(check, "prom_scalar", _seq(0.01, 0.01))
+    # 100% 5xx but only 0.01 rps (< 0.05 per-service floor) -> must NOT alert
+    total = [({"service": "quiet@docker"}, 0.01)]
+    errs = [({"service": "quiet@docker"}, 0.01)]
+    monkeypatch.setattr(check, "prom_vector", _seq(total, errs))
     ok, _ = check.check_traefik_5xx()
     assert ok
 
 
 def test_traefik_low_5xx_is_ok(monkeypatch):
-    monkeypatch.setattr(check, "prom_scalar", _seq(1.0, 0.01))
+    total = [({"service": "sonarr@docker"}, 1.0)]
+    errs = [({"service": "sonarr@docker"}, 0.01)]  # 1% < 5%
+    monkeypatch.setattr(check, "prom_vector", _seq(total, errs))
     ok, _ = check.check_traefik_5xx()
     assert ok
 
 
-def test_traefik_no_traffic_metric_is_ok(monkeypatch):
-    monkeypatch.setattr(check, "prom_scalar", _seq(None, None))
+def test_traefik_no_traffic_is_ok(monkeypatch):
+    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
     ok, _ = check.check_traefik_5xx()
     assert ok
 
@@ -794,52 +813,88 @@ def test_scrutiny_no_devices_is_down():
     assert "no devices" in msg
 
 
-# ── pi_pressure (Pi load / memory headroom via the Pi's glances API) ─────────
+# ── pi_pressure (Pi load / memory / disk headroom via the Pi's glances API) ──
 
 
 MB = 1048576
 
+LOAD_OK = {"min5": 0.8, "cpucore": 4}
+MEM_OK = {"available": 150 * MB}
+# Glances in its container sees its own bind-mounts (/etc/resolv.conf etc.), all backed
+# by the SD card device with the HOST fs usage percent — so entries are keyed by
+# device_name, and one device appears many times.
+FS_OK = [
+    {"device_name": "/dev/mmcblk0p2", "mnt_point": "/etc/resolv.conf", "percent": 3.3},
+    {"device_name": "/dev/mmcblk0p2", "mnt_point": "/etc/hostname", "percent": 3.3},
+]
+
 
 def test_pi_pressure_ok():
-    ok, msg = check.pi_pressure({"min5": 0.8, "cpucore": 4}, {"available": 150 * MB}, 1.5, 50)
+    ok, msg = check.pi_pressure(LOAD_OK, MEM_OK, FS_OK, 1.5, 50, 90)
     assert ok
-    assert "0.20/core" in msg and "150MB" in msg
+    assert "0.20/core" in msg and "150MB" in msg and "disk 3%" in msg
 
 
 def test_pi_pressure_high_load_alerts():
     # 2026-06-11 fwupd incident signature: load5 ~7.2 on 4 cores while every
     # container healthcheck timed out (mem available still ~150MB at that instant)
-    ok, msg = check.pi_pressure({"min5": 7.2, "cpucore": 4}, {"available": 150 * MB}, 1.5, 50)
+    ok, msg = check.pi_pressure({"min5": 7.2, "cpucore": 4}, MEM_OK, FS_OK, 1.5, 50, 90)
     assert not ok
     assert "load5 1.80/core" in msg
 
 
 def test_pi_pressure_low_mem_alerts():
-    ok, msg = check.pi_pressure({"min5": 0.4, "cpucore": 4}, {"available": 13 * MB}, 1.5, 50)
+    ok, msg = check.pi_pressure({"min5": 0.4, "cpucore": 4}, {"available": 13 * MB}, FS_OK, 1.5, 50, 90)
     assert not ok
     assert "13MB" in msg
 
 
+def test_pi_pressure_full_disk_alerts_naming_device():
+    fs = [{"device_name": "/dev/mmcblk0p2", "mnt_point": "/etc/hostname", "percent": 94.0}]
+    ok, msg = check.pi_pressure(LOAD_OK, MEM_OK, fs, 1.5, 50, 90)
+    assert not ok
+    assert "/dev/mmcblk0p2" in msg and "94" in msg
+
+
+def test_pi_pressure_duplicate_device_entries_alert_once():
+    fs = [
+        {"device_name": "/dev/mmcblk0p2", "mnt_point": "/etc/resolv.conf", "percent": 94.0},
+        {"device_name": "/dev/mmcblk0p2", "mnt_point": "/etc/hostname", "percent": 94.0},
+    ]
+    ok, msg = check.pi_pressure(LOAD_OK, MEM_OK, fs, 1.5, 50, 90)
+    assert not ok
+    assert msg.count("/dev/mmcblk0p2") == 1
+
+
 def test_pi_pressure_both_breaches_named():
-    ok, msg = check.pi_pressure({"min5": 8.0, "cpucore": 4}, {"available": 10 * MB}, 1.5, 50)
+    ok, msg = check.pi_pressure({"min5": 8.0, "cpucore": 4}, {"available": 10 * MB}, FS_OK, 1.5, 50, 90)
     assert not ok
     assert "load5" in msg and "available" in msg
 
 
 def test_pi_pressure_at_threshold_is_ok():
     # strictly greater / strictly less, like the other checks' threshold semantics
-    ok, _ = check.pi_pressure({"min5": 6.0, "cpucore": 4}, {"available": 50 * MB}, 1.5, 50)
+    fs = [{"device_name": "/dev/mmcblk0p2", "mnt_point": "/", "percent": 90.0}]
+    ok, _ = check.pi_pressure({"min5": 6.0, "cpucore": 4}, {"available": 50 * MB}, fs, 1.5, 50, 90)
     assert ok
 
 
 def test_pi_pressure_missing_fields_alert():
-    ok, msg = check.pi_pressure({}, {"available": 150 * MB}, 1.5, 50)
+    ok, msg = check.pi_pressure({}, MEM_OK, FS_OK, 1.5, 50, 90)
+    assert not ok
+    assert "missing" in msg
+
+
+def test_pi_pressure_empty_fs_alerts():
+    # a glances fs-plugin regression must surface, not silently pass (same principle
+    # as the load/mem missing-field handling)
+    ok, msg = check.pi_pressure(LOAD_OK, MEM_OK, [], 1.5, 50, 90)
     assert not ok
     assert "missing" in msg
 
 
 def test_pi_pressure_zero_cores_alerts_not_divides():
-    ok, msg = check.pi_pressure({"min5": 1.0, "cpucore": 0}, {"available": 150 * MB}, 1.5, 50)
+    ok, msg = check.pi_pressure({"min5": 1.0, "cpucore": 0}, MEM_OK, FS_OK, 1.5, 50, 90)
     assert not ok
     assert "missing" in msg
 
@@ -857,7 +912,7 @@ def test_pi_check_disabled_without_url():
 def test_pi_check_down_on_pressure(monkeypatch):
     monkeypatch.setattr(check, "PI_GLANCES_URL", "http://pi:61208")
     monkeypatch.setattr(
-        check, "_get_json", _seq({"min5": 7.2, "cpucore": 4}, {"available": 150 * MB}))
+        check, "_get_json", _seq({"min5": 7.2, "cpucore": 4}, MEM_OK, FS_OK))
     ok, msg = check.check_pi_pressure()
     assert not ok
     assert "load5" in msg
@@ -866,6 +921,6 @@ def test_pi_check_down_on_pressure(monkeypatch):
 def test_pi_check_up_when_quiet(monkeypatch):
     monkeypatch.setattr(check, "PI_GLANCES_URL", "http://pi:61208")
     monkeypatch.setattr(
-        check, "_get_json", _seq({"min5": 0.4, "cpucore": 4}, {"available": 150 * MB}))
+        check, "_get_json", _seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK))
     ok, _ = check.check_pi_pressure()
     assert ok

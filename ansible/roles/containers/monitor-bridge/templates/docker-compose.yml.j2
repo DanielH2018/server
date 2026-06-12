@@ -33,7 +33,8 @@ services:
       - KUMA_URL=http://uptime-kuma:3001
       - BACKUP_SOURCE_PATH=/data/home/{{ sys_user }}/server/containers
       - BACKUP_MAX_AGE_H=30
-      - DISK_MOUNTPOINTS=/
+      # /boot: old kernels filling it quietly breaks upgrades (node-exporter exposes it)
+      - DISK_MOUNTPOINTS=/,/boot
       - DISK_MAX_PCT=90
       - CERT_MIN_DAYS=14
       - MEM_MAX_PCT=90
@@ -94,6 +95,9 @@ services:
       - PI_GLANCES_URL=http://{{ hostvars['daniel-pi'].server_ip }}:61208
       - PI_LOAD_MAX=1.5
       - PI_MEM_MIN_MB=50
+      # SD card usage via glances /api/4/fs (deduped by device) — the server-only
+      # Root Disk check can't see the Pi, and a filling SD card is the classic slow death.
+      - PI_DISK_MAX_PCT=90
       - KUMA_PUSH_PI={{ monitor_bridge_pi_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro

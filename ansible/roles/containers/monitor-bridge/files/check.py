@@ -86,6 +86,7 @@ SCRUTINY_MAX_AGE_H = float(_env("SCRUTINY_MAX_AGE_H", "26"))
 PI_GLANCES_URL = _env("PI_GLANCES_URL", "").rstrip("/")
 PI_LOAD_MAX = float(_env("PI_LOAD_MAX", "1.5"))  # load5 per core
 PI_MEM_MIN_MB = float(_env("PI_MEM_MIN_MB", "50"))
+PI_DISK_MAX_PCT = float(_env("PI_DISK_MAX_PCT", "90"))
 
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
@@ -340,19 +341,36 @@ def check_targets_down():
 
 
 def check_traefik_5xx():
-    """Elevated 5xx ratio at the proxy, guarded by a request-rate floor.
+    """Elevated 5xx ratio per Traefik service, naming each offender.
 
-    The TRAEFIK_MIN_RPS floor stops a single error on near-zero traffic from tripping
-    a 100%-error-ratio false alarm.
+    Per-service (not aggregate) for two reasons: the alert points at *which* backend is
+    erroring, and a broken low-traffic service can't hide diluted below the threshold by
+    healthy high-traffic ones. The TRAEFIK_MIN_RPS floor is per-service too — same idea
+    as before, a single error on a near-idle route is not a 100%-error-ratio alarm.
     """
-    total = prom_scalar("sum(rate(traefik_service_requests_total[5m]))")
-    errors = prom_scalar('sum(rate(traefik_service_requests_total{code=~"5.."}[5m]))') or 0.0
-    if total is None or total < TRAEFIK_MIN_RPS:
-        return True, "traffic below floor (%.3f rps)" % (total or 0.0)
-    pct = 100.0 * errors / total
-    if pct > TRAEFIK_5XX_PCT:
-        return False, "5xx %.1f%% of %.2f rps (> %.0f%%)" % (pct, total, TRAEFIK_5XX_PCT)
-    return True, "5xx %.1f%% of %.2f rps" % (pct, total)
+    total_vec = prom_vector(
+        "sum(rate(traefik_service_requests_total[5m])) by (service)")
+    err_rps = dict(
+        (m.get("service", "?"), v) for m, v in prom_vector(
+            'sum(rate(traefik_service_requests_total{code=~"5.."}[5m])) by (service)'))
+    offenders = []
+    total_rps = 0.0
+    eligible = 0
+    for m, rps in total_vec:
+        total_rps += rps
+        if rps < TRAEFIK_MIN_RPS:
+            continue
+        eligible += 1
+        svc = m.get("service", "?")
+        pct = 100.0 * err_rps.get(svc, 0.0) / rps
+        if pct > TRAEFIK_5XX_PCT:
+            offenders.append((svc, pct, rps))
+    offenders.sort(key=lambda spr: -spr[1])
+    if offenders:
+        desc = ", ".join("%s (%.0f%% of %.2f rps)" % o for o in offenders[:5])
+        return False, "%d service(s) over %.0f%% 5xx: %s" % (
+            len(offenders), TRAEFIK_5XX_PCT, desc)
+    return True, "5xx ok: %d service(s) above floor, %.2f rps total" % (eligible, total_rps)
 
 
 def n8n_failures(workflows_json, executions_json, window_s, now=None):
@@ -474,20 +492,29 @@ def check_scrutiny():
     return scrutiny_freshness((data.get("data") or {}).get("summary"), SCRUTINY_MAX_AGE_H)
 
 
-def pi_pressure(load_json, mem_json, load_max, mem_min_mb):
-    """Pure: sustained load per core OR an available-memory floor breach on the Pi.
+def pi_pressure(load_json, mem_json, fs_json, load_max, mem_min_mb, disk_max_pct):
+    """Pure: load per core, available-memory floor, or a full filesystem on the Pi.
 
-    Fed glances /api/4/load and /api/4/mem payloads. load5 (not load1) matches the
-    5-min poll interval and rides out single-probe spikes; `available` (not `free`)
-    is what the kernel can actually reclaim — the box thrashes when THAT runs out.
-    Missing fields alert rather than silently passing (a glances plugin regression
-    must surface, same principle as the other checks' unreachable-source handling).
+    Fed glances /api/4/load, /api/4/mem and /api/4/fs payloads. load5 (not load1)
+    matches the 5-min poll interval and rides out single-probe spikes; `available`
+    (not `free`) is what the kernel can actually reclaim — the box thrashes when THAT
+    runs out. The fs list is glances' *container* view: every entry is a bind-mount
+    path, but they're all backed by the SD card device with the HOST usage percent —
+    so filesystems are deduped by device_name (a filling SD card is the classic slow
+    Pi death the server-only Root Disk check can't see). Missing fields and an empty
+    fs list alert rather than silently passing (a glances plugin regression must
+    surface, same principle as the other checks' unreachable-source handling).
     """
     cores = load_json.get("cpucore") or 0
     load5 = load_json.get("min5")
     avail = mem_json.get("available")
-    if not cores or load5 is None or avail is None:
-        return False, "glances payload missing load/mem fields"
+    devices = {}
+    for fs in fs_json or []:
+        dev, pct = fs.get("device_name"), fs.get("percent")
+        if dev and pct is not None:
+            devices[dev] = max(pct, devices.get(dev, 0.0))
+    if not cores or load5 is None or avail is None or not devices:
+        return False, "glances payload missing load/mem/fs fields"
     per_core = load5 / cores
     avail_mb = avail / 1048576.0
     problems = []
@@ -495,9 +522,13 @@ def pi_pressure(load_json, mem_json, load_max, mem_min_mb):
         problems.append("load5 %.2f/core (> %.2f)" % (per_core, load_max))
     if avail_mb < mem_min_mb:
         problems.append("mem available %.0fMB (< %.0fMB)" % (avail_mb, mem_min_mb))
+    for dev, pct in sorted(devices.items(), key=lambda dp: -dp[1]):
+        if pct > disk_max_pct:
+            problems.append("disk %s %.0f%% (> %.0f%%)" % (dev, pct, disk_max_pct))
     if problems:
         return False, "; ".join(problems)
-    return True, "load5 %.2f/core, %.0fMB available" % (per_core, avail_mb)
+    return True, "load5 %.2f/core, %.0fMB available, disk %.0f%%" % (
+        per_core, avail_mb, max(devices.values()))
 
 
 def check_pi_pressure():
@@ -510,7 +541,8 @@ def check_pi_pressure():
         return True, "pi monitoring disabled (no glances URL)"
     load = _get_json(PI_GLANCES_URL + "/api/4/load")
     mem = _get_json(PI_GLANCES_URL + "/api/4/mem")
-    return pi_pressure(load, mem, PI_LOAD_MAX, PI_MEM_MIN_MB)
+    fs = _get_json(PI_GLANCES_URL + "/api/4/fs")
+    return pi_pressure(load, mem, fs, PI_LOAD_MAX, PI_MEM_MIN_MB, PI_DISK_MAX_PCT)
 
 
 def restore_drill(state, age_s, max_age_s):
