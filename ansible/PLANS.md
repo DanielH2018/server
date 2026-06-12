@@ -7,7 +7,7 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- Evaluate Whisper(or similiar speech-to-text model) for Bazarr
+(empty)
 
 ## Superseded
 
