@@ -219,6 +219,30 @@
     autoremove: true
   become: true
 
+- name: Check the purged fwupd units for stale failed state # noqa command-instead-of-module
+  tags: [debloat]
+  # Found 2026-06-12: apt purge removes the unit files but never runs reset-failed,
+  # so units that were `failed` at purge time (fwupd.service hit the 25 s dbus
+  # timeout every activation) stay pinned in memory as not-found/failed and pollute
+  # `systemctl --failed` until a reset or reboot.
+  ansible.builtin.command: systemctl is-failed {{ item }}
+  loop: [fwupd.service, fwupd-refresh.service]
+  register: optimize_pi_fwupd_unit_state
+  changed_when: false
+  failed_when: false
+  check_mode: false # read-only query; must run under --check or the when: below breaks
+  become: true
+
+- name: Clear stale failed state left behind by the purge
+  tags: [debloat]
+  ansible.builtin.command: systemctl reset-failed {{ item.item }}
+  loop: "{{ optimize_pi_fwupd_unit_state.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.stdout == 'failed'
+  changed_when: true
+  become: true
+
 # -------------------------------------------------------
 # 7. LOG RAM BUDGET (log2ram tmpfs is 128 MB of REAL RAM)
 # -------------------------------------------------------

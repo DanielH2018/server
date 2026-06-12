@@ -998,6 +998,26 @@
     masked: true
   become: true
 
+- name: Check the masked AIDE timer for a stale pre-mask failed state # noqa command-instead-of-module
+  tags: [aide]
+  # Found 2026-06-12: masking doesn't clear a unit's last recorded state — the timer
+  # was already `failed` when the task above masked it (the broken _aide mail(1)
+  # alert), so systemd pins it in memory as masked/failed forever and it pollutes
+  # `systemctl --failed` on every incident triage. Only reset-failed clears it.
+  ansible.builtin.command: systemctl is-failed dailyaidecheck.timer
+  register: initial_setup_aide_timer_state
+  changed_when: false
+  failed_when: false
+  check_mode: false # read-only query; must run under --check or the when: below breaks
+  become: true
+
+- name: Clear the stale failed state (masking alone keeps the flag forever)
+  tags: [aide]
+  ansible.builtin.command: systemctl reset-failed dailyaidecheck.timer
+  when: initial_setup_aide_timer_state.stdout == 'failed'
+  changed_when: true
+  become: true
+
 - name: Mask networkd-dispatcher (no hooks installed — pure veth-event noise)
   tags: [debloat]
   # Found 2026-06-11: Ubuntu ships this Python daemon enabled, but its only job is
