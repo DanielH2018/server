@@ -7,10 +7,27 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- Add Healthcheck to Terraria
-  - Also add stats?
+- Player stats for Terraria (deaths, time on server, etc.) — NOT possible on vanilla
+  natively: the server keeps no player stats and exposes no API/metrics. The only data
+  source is the console log, which DOES print joins/leaves/deaths/chat — but only once
+  players actually connect (none had yet as of 2026-06-14; external access was still
+  timing out). Two realistic paths, each its own project — scope before building:
+  - (a) a log-parsing sidecar tailing `docker logs terraria` → a small stateful store.
+    Caveats: cumulative deaths/playtime are reconstructed forward-only (no history before
+    the parser starts), reset-prone across restarts, and keyed on character name (not a
+    stable id). Surface in Grafana / Homepage / Kuma.
+  - (b) migrate to a TShock server (real player stats via a DB plugin) — but that's
+    different server software and risks the just-stabilized vanilla world-persistence work.
+  Revisit once external play works — nothing to measure until someone can connect.
 
 ## Superseded
+
+- Add Healthcheck to Terraria — done 2026-06-14: probe reads `/proc/net/tcp` for a LISTEN
+  on port 7777 (hex `1E61`, state `0A`) rather than opening a connection — Terraria's
+  binary protocol logs every accepted socket as `<ip> is connecting...`, so a `/dev/tcp`
+  connect probe would spam the game console ~2400×/day. `start_period=120s` covers the
+  ~74s world-load before the port binds. Deployed + verified healthy with zero console
+  noise; rationale lives in the terraria role's `CLAUDE.md`.
 
 - Add a second SOPS age recipient — done 2026-06-11: operator generated the key
   off-box (private half lives only in the password manager), pubkey

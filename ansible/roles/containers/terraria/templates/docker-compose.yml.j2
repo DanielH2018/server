@@ -1,4 +1,5 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
 ---
@@ -21,6 +22,15 @@ services:
     restart: unless-stopped
     stdin_open: true # specific to this image to allow console commands
     tty: true        # specific to this image to allow console commands
+    # Liveness = a LISTEN socket on 7777 in the kernel table, NOT a connect probe.
+    # Terraria's binary protocol logs every accepted socket as "<ip> is connecting...",
+    # so a /dev/tcp connect (the grafana-style probe) would spam the game console
+    # ~2400x/day. Reading /proc/net/tcp for local port 1E61 (hex 7777), remote :0000,
+    # state 0A (LISTEN) confirms the server is actually serving the port — stronger
+    # than pidof — with zero connection noise. start_period 120s covers the ~74s
+    # world-load before the port binds (else autoheal would restart it mid-load);
+    # a first-boot world *generation* can exceed this but is a rare one-time event.
+    {{ healthcheck("[\"CMD\", \"bash\", \"-c\", \"grep -q ':1E61 [0-9A-F]*:0000 0A ' /proc/net/tcp\"]", start_period='120s') }}
     {{ service_networks() }}
     labels:
       - "traefik.enable=true"

@@ -21,6 +21,17 @@ Vanilla Terraria dedicated server. See repo-root `CLAUDE.md` for shared conventi
   container on the next deploy.
 - `stdin_open` + `tty` are set for this image — `docker attach terraria` to reach the
   server console after deployment.
+- **Healthcheck reads `/proc/net/tcp`, it does NOT connect.** The probe greps the kernel
+  socket table for a LISTEN on local port `1E61` (hex 7777, state `0A`) — confirming the
+  server is actually serving the port (stronger than `pidof`) — instead of opening a
+  socket. **Do not "simplify" it to a `/dev/tcp` connect probe** (the grafana-style one):
+  Terraria's binary protocol logs every accepted socket as `<ip> is connecting...`, so a
+  connect probe firing every ~30s would spam the game console ~2400×/day (verified — both
+  `echo >` and bare `exec 3<>` forms trigger it; the connection itself is what logs, not
+  the byte). Half-open probes don't linger or eat player slots. `start_period=120s` covers
+  the world-load before the port binds (a cold load measured ~74s; warm ~10s) so autoheal
+  (`AUTOHEAL_CONTAINER_LABEL=all`) doesn't restart it mid-load — a first-boot world
+  *generation* can exceed 120s but is a rare one-time event.
 - **All persistent state is `./config` → `/config`** (Kopia-backed): config, banlist,
   and worlds. Worlds only land here because `serverconfig.txt` sets an **absolute**
   `world=/config/DBoys_Terraria_Server.wld` — **keep it absolute.** A bare `world=` name
