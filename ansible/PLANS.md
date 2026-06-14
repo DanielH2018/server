@@ -7,7 +7,8 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-(empty)
+- Add Healthcheck to Terraria
+  - Also add stats?
 
 ## Superseded
 
