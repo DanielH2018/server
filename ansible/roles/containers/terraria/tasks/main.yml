@@ -1,25 +1,29 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
   vars:
     common_dirs_to_create:
-      - "{{ container_item.name }}/config"
+      - "{{ container_item.name }}/config"  # worlds + config + banlist (see compose)
 
 # Run `docker attach terraria` to access the server console after deployment
 
 - name: Create serverconfig.txt from template
+  tags: [config]
   ansible.builtin.template:
     src: serverconfig.txt.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/serverconfig.txt"
     mode: "0664"
-
-# - include_tasks: dns.yml
-#   with_items:
-#     - "{{ role_name }}"
+  no_log: true  # embeds terraria_password
+  register: terraria_serverconfig
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # serverconfig.txt is a bind-mounted templated config — recreate on edit.
+    common_config_changed: "{{ terraria_serverconfig is changed }}"

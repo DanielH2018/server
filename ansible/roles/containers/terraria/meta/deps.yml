@@ -1,0 +1,5 @@
+---
+# TCP game server fronted by a dedicated Traefik entrypoint (terraria, :7777); no
+# Authelia (raw-TCP route can't carry forward-auth) — so traefik is the only dep.
+role_deps:
+  - traefik

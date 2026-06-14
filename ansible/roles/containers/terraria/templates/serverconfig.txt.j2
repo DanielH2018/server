@@ -1,0 +1,13 @@
+# Save/load worlds in the bind-mounted (Kopia-backed) /config via an ABSOLUTE path.
+# A bare `world=` name resolves against the WORKDIR (/vanilla, the unmounted image app
+# dir) — even with worldpath set — so the world would land in the ephemeral container
+# layer and be lost on recreate. Tested: absolute path saves to /config; bare name +
+# worldpath does not.
+worldpath=/config
+world=/config/DBoys_Terraria_Server.wld
+worldname=DBoys_Terraria_Server
+autocreate=3
+difficulty=2
+maxplayers=16
+password={{ terraria_password }}
+secure=1

@@ -12,8 +12,12 @@ services:
     ports:
       - "7778:7777/tcp"
     volumes:
+      # Worlds + config + banlist all live in /config (run.sh symlinks Terraria's
+      # Worlds dir here), so this bind mount is the entire persistent state — and it's
+      # in Kopia's containers/ backup scope. The image's app dir (/vanilla, the WORKDIR
+      # holding run.sh + binaries) is deliberately NOT mounted: it carries no user state
+      # and persisting it would pin stale binaries across image updates.
       - ./config:/config
-      - worlds:/vanilla
     restart: unless-stopped
     stdin_open: true # specific to this image to allow console commands
     tty: true        # specific to this image to allow console commands
@@ -26,8 +30,5 @@ services:
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('2.0', '2048M', '0.25', '512M') }}
-
-volumes:
-  worlds:
 
 {{ external_networks() }}

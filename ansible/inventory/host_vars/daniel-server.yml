@@ -213,3 +213,10 @@ containers_list:
     use_authelia: true
     networks:
       - monitoring
+  # Organization: Game servers (apps network)
+  - name: terraria
+    # No HTTP port — exposed over a dedicated raw-TCP Traefik entrypoint (terraria,
+    # :7777) plus a direct 7778->7777 host publish; can't carry Authelia forward-auth.
+    use_authelia: false
+    networks:
+      - apps
