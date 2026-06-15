@@ -1,3 +1,9 @@
 [upsmon]
   password = {{ nut_monitor_password }}
   upsmon primary
+
+# Read-only login for Home Assistant's NUT integration: it can read every UPS
+# variable but holds no upsmon role and no instcmds/actions, so it cannot raise
+# FSD or run instant commands. Reaches upsd over the `ups` isolation network.
+[homeassistant]
+  password = {{ nut_ha_password }}
