@@ -63,5 +63,9 @@ scrape_configs:
       labels:
         machine: 'daniel-server'
 
+  - job_name: "terraria-stats"
+    scrape_interval: 1m
+    static_configs:
+    - targets: ["terraria-stats:9420"]
 
 #################################################################################################
