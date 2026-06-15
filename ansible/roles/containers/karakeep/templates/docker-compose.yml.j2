@@ -116,7 +116,7 @@ services:
     #   3. docker run --rm -v karakeep_karakeep_meili:/meili_data alpine rm -rf /meili_data/data.ms
     #   4. deploy karakeep   5. Karakeep UI: Admin Settings -> Background Jobs ->
     #      "Reindex All Bookmarks"   6. verify /stats doc count recovered.
-    image: getmeili/meilisearch:v1.41.0
+    image: getmeili/meilisearch:v1.45.2
     container_name: karakeep-meilisearch
     restart: unless-stopped
     environment:
