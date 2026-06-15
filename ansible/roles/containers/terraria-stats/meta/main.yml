@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  author: DanielH2018
+  description: "Terraria player playtime/presence stats (Loki -> SQLite -> Prometheus)"
+  license: MIT
+  min_ansible_version: "2.15"
+
+# Logical ordering: needs Loki (grafana role) up first to read from. Actual sequencing is
+# computed by the toposort filter in deploy.yml reading meta/deps.yml.
+dependencies: []

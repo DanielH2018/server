@@ -1,0 +1,5 @@
+---
+# Deploy after grafana (which ships Loki) so the log source is up; Prometheus scrapes
+# this service but tolerates an absent target, so it is not an ordering dependency.
+role_deps:
+  - grafana

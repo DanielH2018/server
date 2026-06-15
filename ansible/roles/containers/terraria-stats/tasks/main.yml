@@ -1,0 +1,30 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}"
+      # ./data holds the SQLite DB; create it owned by the deploy user so the non-root
+      # container can write it (else Docker auto-creates the bind-mount root-owned).
+      - "{{ container_item.name }}/data"
+
+- name: Deploy terraria-stats script
+  tags: [config]
+  ansible.builtin.copy:
+    src: stats.py
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/stats.py"
+    mode: "0644"
+  register: terraria_stats_script
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+  vars:
+    # stats.py is bind-mounted and read once at startup, so only a recreate applies a
+    # code change. Without this a script-only edit leaves recreate: auto and never deploys.
+    common_config_changed: "{{ terraria_stats_script is changed }}"
