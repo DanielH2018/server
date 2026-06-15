@@ -165,8 +165,7 @@ def test_store_roundtrip_and_cursor(tmp_path):
     st = stats.StatsState()
     st.apply("join", "DBoy", 1000.0)
     st.apply("leave", "DBoy", 1100.0)
-    store.append_events([(1_100_000_000_000, "DBoy", "leave", "DBoy has left.")])
-    store.save(st, cursor_ns=1_100_000_000_000)
+    store.save(st, cursor_ns=1_100_000_000_000, events=[(1_100_000_000_000, "DBoy", "leave", "DBoy has left.")])
 
     # Reopen: state + cursor survive (durable source of truth).
     store2 = stats.Store(db)

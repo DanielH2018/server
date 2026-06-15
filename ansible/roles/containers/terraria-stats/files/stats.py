@@ -214,6 +214,10 @@ class Store:
             st.players[name] = {
                 "total_playtime": float(tot), "sessions": int(sess),
                 "first_seen": fs, "last_seen": ls, "open_start": css}
+            # NOTE: last_event_ts is approximated from player last_seen on reload. It can
+            # lag the true last-event time if the last event was a server restart with no
+            # one online. Only the observability gauge is affected; the cursor drives all
+            # correctness decisions.
             if ls:
                 st.last_event_ts = max(st.last_event_ts, ls)
         return st
@@ -222,15 +226,12 @@ class Store:
         row = self.conn.execute("SELECT last_ts_ns FROM cursor WHERE id=1").fetchone()
         return int(row[0]) if row else 0
 
-    def append_events(self, events):
-        if events:
-            self.conn.executemany(
-                "INSERT INTO events(ts_ns,player,kind,raw) VALUES(?,?,?,?)", events)
-            self.conn.commit()
-
-    def save(self, state, cursor_ns):
-        """Persist player snapshot + cursor atomically (single transaction)."""
+    def save(self, state, cursor_ns, events=()):
+        """Persist events + player snapshot + cursor atomically (single transaction)."""
         c = self.conn
+        if events:
+            c.executemany(
+                "INSERT INTO events(ts_ns,player,kind,raw) VALUES(?,?,?,?)", events)
         for name, p in state.players.items():
             c.execute(
                 "INSERT INTO players(name,total_playtime_seconds,session_count,"
@@ -275,10 +276,9 @@ def run_cycle(state, store, cursor, end_ns, fetch):
         if not entries:
             break
         events, max_ts = apply_entries(state, entries)
-        store.append_events(events)
         if max_ts > cursor:
             cursor = max_ts
-        store.save(state, cursor)
+        store.save(state, cursor, events)
         if len(entries) < LOKI_PAGE_LIMIT:
             break
     return cursor
@@ -290,6 +290,9 @@ def log(*args):
 
 _state = StatsState()
 _lock = threading.Lock()
+# _last_poll_ok is written by the poll loop and read by /healthz without a lock. Safe under
+# CPython's GIL (float assignment is atomic). If ever run on a free-threaded interpreter,
+# guard it with _lock in both places.
 _last_poll_ok = 0.0
 
 
@@ -324,7 +327,7 @@ def main():
     store = Store(DB_PATH)
     with _lock:
         _state = store.load_state()
-    cursor = 0 if backfill else store.get_cursor()
+    cursor = int((time.time() - BACKFILL_DAYS * 86400) * 1e9) if backfill else store.get_cursor()
     log("terraria-stats starting (loki=%s once=%s backfill=%s players=%d)"
         % (LOKI_URL, once, backfill, len(_state.players)))
     if not (once or backfill):
