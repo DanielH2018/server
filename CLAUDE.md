@@ -93,6 +93,19 @@ read-only commands to fit it. Anything that writes or executes still prompts —
 
 Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hooks/test_auto_approve_readonly.py`.
 
+## Claude Tooling in This Repo (`.claude/`)
+- **`scripts/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt). Resolves the
+  live container IP via `docker inspect`, so prefer it over curling bridge IPs (which change on
+  recreate): `uv run python scripts/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
+  scrutiny | pi <path> | cert <host>>`.
+- **block-containers-edit** (PreToolUse) — *denies* edits under `containers/`; edit the
+  `ansible/roles/containers/<svc>/templates/` source instead.
+- **validate-compose** (PostToolUse) — re-renders all compose templates after you edit a
+  `docker-compose.yml.j2`, an `ansible/templates/*.j2` macro, or `host_vars`/`group_vars/all.yml`;
+  fails on malformed YAML (catches Jinja indent bugs `ansible-lint` misses).
+- **homelab-network-diagnostician** agent — connectivity/DNS/Traefik/WireGuard/CrowdSec triage (read-only).
+- **`/add-secret`** skill — guided SOPS add → `secret_rotation.py sync` → commit.
+
 ## Secrets Management
 - Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age
 - `ansible/.sops.yaml` (tracked — public keys only) lists the age recipients new/updated
