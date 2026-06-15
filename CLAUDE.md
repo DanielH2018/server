@@ -80,6 +80,10 @@ read-only commands to fit it. Anything that writes or executes still prompts —
 - Read-only stages sequenced with `;`, `&&`, `||`, or newlines: `cd dir && grep … *.j2`
 - Write-free redirects: `… 2>/dev/null`, `>/dev/null 2>&1`
 - Read-only `git`/`docker`/`find` (no `-exec`/`-delete`) and read-only `awk`/`sed`
+- Read-only host/package queries: `apt list`/`apt show`/`apt policy`, `apt-cache …`,
+  `dpkg -l`/`-L`/`-s`/`-S`, `dpkg-query …`, `apt-mark showmanual`, `pipx list`,
+  `lsb_release`, `sensors`, `mailq`, `crontab -l` (the write forms — `dpkg -i`,
+  `apt install`, `crontab -r`, `sensors -s`, … — still prompt)
 
 **Forces a prompt — restructure, or just accept the one-off prompt:**
 - **Command substitution** `$(…)`, backticks, `${…}` — rejected outright. Replace

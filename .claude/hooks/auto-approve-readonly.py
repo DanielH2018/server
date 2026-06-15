@@ -43,6 +43,8 @@ TIER1 = {
     "lspci", "lsmod", "lsattr", "findmnt", "blkid", "getconf", "getent", "locale",
     "printenv", "lsof", "ss", "netstat", "dig", "host", "nslookup", "apt-cache",
     "echo", "printf", "seq", "true", "false", "which", "type", "cd",
+    # package / host queries with no write mode under any argument
+    "lsb_release", "mailq", "dpkg-query",
 }
 
 # git subcommands that are read-only regardless of arguments (branch/tag/remote
@@ -311,10 +313,108 @@ def _sed(argv):
     return "sed"
 
 
+# --- package-manager / host-query guards ------------------------------------
+# Same binaries query read-only but mutate under install/remove/etc. actions, so
+# each is gated to its read-only forms (deny by default). The always-read-only
+# query tools (apt-cache, dpkg-query, lsb_release, mailq) live in TIER1 instead.
+
+# dpkg: an action flag selects the mode. Approve only when a read-only action is
+# present and no mutating action (-i/--install, -r/--remove, -P/--purge,
+# --configure, --unpack, --set-selections, ...) appears.
+_DPKG_READ = {"-l", "--list", "-L", "--listfiles", "-s", "--status", "-p",
+              "--print-avail", "-S", "--search", "-V", "--verify", "-C",
+              "--audit", "--get-selections", "--print-architecture",
+              "--print-foreign-architectures"}
+_DPKG_WRITE = {"-i", "--install", "--unpack", "--configure", "-r", "--remove",
+               "-P", "--purge", "-A", "--record-avail", "--update-avail",
+               "--merge-avail", "--clear-avail", "--set-selections",
+               "--clear-selections", "--forget-old-unavail",
+               "--add-architecture", "--remove-architecture", "--triggers-only"}
+
+
+def _dpkg(argv):
+    saw_read = False
+    for a in argv[1:]:
+        key = a.split("=", 1)[0]
+        if key in _DPKG_WRITE:
+            return None
+        if key in _DPKG_READ:
+            saw_read = True
+    return "dpkg" if saw_read else None
+
+
+# apt: the first non-option token is the subcommand; approve only query ones.
+_APT_READ = {"list", "show", "search", "policy", "depends", "rdepends",
+             "showsrc", "madison", "moo"}
+_APT_SKIP_VALUE = {"-o", "--option", "-c", "--config-file", "-t", "--target-release"}
+
+
+def _apt(argv):
+    i, n = 1, len(argv)
+    while i < n:
+        a = argv[i]
+        if a in _APT_SKIP_VALUE:
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        return ("apt " + a) if a in _APT_READ else None
+    return None
+
+
+_APT_MARK_READ = {"showmanual", "showauto", "showhold", "showinstall"}
+
+
+def _apt_mark(argv):
+    for a in argv[1:]:
+        if a.startswith("-"):
+            continue
+        return ("apt-mark " + a) if a in _APT_MARK_READ else None
+    return None
+
+
+_PIPX_READ = {"list", "environment"}
+
+
+def _pipx(argv):
+    for a in argv[1:]:
+        if a == "--version":
+            return "pipx --version"
+        if a.startswith("-"):
+            continue
+        return ("pipx " + a) if a in _PIPX_READ else None
+    return None
+
+
+def _crontab(argv):
+    # Read-only ONLY as `crontab -l`. `-r` deletes, `-e`/`-i` edit, and a bare file
+    # argument (or bare `crontab` reading stdin) installs a new crontab.
+    saw_list = False
+    i, n = 1, len(argv)
+    while i < n:
+        a = argv[i]
+        if a == "-l":
+            saw_list = True
+            i += 1
+        elif a == "-u":
+            i += 2  # -u USER takes a value
+        else:
+            return None
+    return "crontab -l" if saw_list else None
+
+
+def _sensors(argv):
+    # lm-sensors reads, except -s/--set which applies config back to the hardware.
+    return None if any(a in ("-s", "--set") for a in argv[1:]) else "sensors"
+
+
 HANDLERS = {
     "git": _git, "find": _find, "sort": _sort, "uniq": _uniq, "ip": _ip,
     "systemctl": _systemctl, "journalctl": _journalctl, "rg": _rg,
     "docker": _docker, "awk": _awk, "gawk": _awk, "mawk": _awk, "sed": _sed,
+    "dpkg": _dpkg, "apt": _apt, "apt-mark": _apt_mark, "pipx": _pipx,
+    "crontab": _crontab, "sensors": _sensors,
 }
 
 
