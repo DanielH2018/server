@@ -246,3 +246,104 @@ class Store:
             "INSERT INTO cursor(id,last_ts_ns) VALUES(1,?) "
             "ON CONFLICT(id) DO UPDATE SET last_ts_ns=excluded.last_ts_ns", (cursor_ns,))
         c.commit()
+
+
+# --- HTTP I/O + main loop ---------------------------------------------------
+def http_get_json(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "terraria-stats"})
+    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 internal
+        return json.load(resp)
+
+
+def loki_fetch(start_ns, end_ns):
+    """Fetch entries in (start_ns, end_ns] as [(ts_ns, line)] (one page)."""
+    qs = urllib.parse.urlencode({
+        "query": LOKI_QUERY, "start": start_ns + 1, "end": end_ns,
+        "limit": LOKI_PAGE_LIMIT, "direction": "forward"})
+    return extract_entries(http_get_json(LOKI_URL + "/loki/api/v1/query_range?" + qs))
+
+
+def run_cycle(state, store, cursor, end_ns, fetch):
+    """One poll: page through new entries from `cursor`, fold, persist. Returns new cursor.
+
+    `fetch(start_ns, end_ns) -> [(ts_ns, line)]`. Pages until a short/empty page.
+    State mutation + cursor advance are persisted together so a crash re-runs the
+    batch cleanly (events past the saved cursor simply re-apply on next start).
+    """
+    while True:
+        entries = fetch(cursor, end_ns)
+        if not entries:
+            break
+        events, max_ts = apply_entries(state, entries)
+        store.append_events(events)
+        if max_ts > cursor:
+            cursor = max_ts
+        store.save(state, cursor)
+        if len(entries) < LOKI_PAGE_LIMIT:
+            break
+    return cursor
+
+
+def log(*args):
+    print("[%s]" % time.strftime("%Y-%m-%dT%H:%M:%S"), *args, flush=True)
+
+
+_state = StatsState()
+_lock = threading.Lock()
+_last_poll_ok = 0.0
+
+
+def _make_handler():
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            if self.path == "/metrics":
+                with _lock:
+                    body = render_metrics(_state, time.time()).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; version=0.0.4")
+                self.end_headers()
+                self.wfile.write(body)
+            elif self.path == "/healthz":
+                fresh = (time.time() - _last_poll_ok) < HEALTH_MAX_AGE
+                self.send_response(200 if fresh else 503)
+                self.end_headers()
+                self.wfile.write(b"ok\n" if fresh else b"stale\n")
+            else:
+                self.send_response(404)
+                self.end_headers()
+    return Handler
+
+
+def main():
+    global _state, _last_poll_ok
+    once = "--once" in sys.argv
+    backfill = "--backfill" in sys.argv
+    store = Store(DB_PATH)
+    with _lock:
+        _state = store.load_state()
+    cursor = 0 if backfill else store.get_cursor()
+    log("terraria-stats starting (loki=%s once=%s backfill=%s players=%d)"
+        % (LOKI_URL, once, backfill, len(_state.players)))
+    if not (once or backfill):
+        threading.Thread(target=lambda: HTTPServer(
+            ("0.0.0.0", METRICS_PORT), _make_handler()).serve_forever(),
+            daemon=True).start()
+    while True:
+        try:
+            end_ns = int(time.time() * 1e9)
+            with _lock:
+                cursor = run_cycle(_state, store, cursor, end_ns, loki_fetch)
+            _last_poll_ok = time.time()
+            log("poll ok: %d players, %d online" % (len(_state.players), _state.online_count()))
+        except Exception as e:  # an unreachable Loki must not kill the loop
+            log("poll error:", e)
+        if once or backfill:
+            break
+        time.sleep(POLL_INTERVAL)
+
+
+if __name__ == "__main__":
+    main()

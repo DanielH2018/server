@@ -185,3 +185,24 @@ def test_store_preserves_open_session(tmp_path):
     loaded = stats.Store(db).load_state()
     assert loaded.players["DBoy"]["open_start"] == 2000.0
     assert loaded.online_count() == 1
+
+
+def test_run_cycle_end_to_end(tmp_path):
+    db = str(tmp_path / "stats.db")
+    store = stats.Store(db)
+    state = store.load_state()
+    pages = [[
+        (1_000_000_000, "DBoy has joined."),
+        (4_000_000_000, "DBoy has left."),
+    ]]
+
+    def fake_fetch(start_ns, end_ns):
+        # one page then empty (mimics pagination end)
+        return pages.pop(0) if pages else []
+
+    cursor = stats.run_cycle(state, store, cursor=0,
+                             end_ns=9_000_000_000, fetch=fake_fetch)
+    assert cursor == 4_000_000_000
+    assert state.players["DBoy"]["total_playtime"] == 3.0
+    # persisted
+    assert stats.Store(db).get_cursor() == 4_000_000_000
