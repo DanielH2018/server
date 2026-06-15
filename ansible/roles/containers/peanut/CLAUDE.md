@@ -6,7 +6,8 @@ See repo-root `CLAUDE.md` for shared conventions.
 ## At a glance
 - **Images:** `brandawg93/peanut:latest` (UI) + built `nut` sidecar (`files/Dockerfile`)
 - **Host:** daniel-server · **Port:** 8080 · **URL:** `peanut.<domain>` (Authelia: yes)
-- **Networks:** apps + internal (NUT only on `internal`)
+- **Networks:** peanut on apps + internal; `nut` sidecar on `internal` + `nut_host` + `ups`
+  (`ups` is a shared isolation net so Home Assistant's NUT integration can reach upsd:3493)
 - **Depends on:** traefik, authelia
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 

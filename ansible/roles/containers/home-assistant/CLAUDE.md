@@ -5,7 +5,9 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
 ## At a glance
 - **Image:** `lscr.io/linuxserver/homeassistant:latest` (LSIO is x86-64-maintained;
   only the 32-bit ARM variant was deprecated — fine for daniel-server)
-- **Host:** daniel-server · **Port:** 8123 · **Networks:** apps · **Authelia:** no
+- **Host:** daniel-server · **Port:** 8123 · **Networks:** apps + ups · **Authelia:** no
+  (`ups` = isolation net to the `nut` sidecar's upsd:3493 for the NUT integration;
+  `apps` stays networks[0] so the Traefik label binds to it)
 - **Depends on:** traefik
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 
