@@ -1,7 +1,7 @@
 # Connect the APC UPS to Home Assistant via NUT
 
 **Date:** 2026-06-15
-**Status:** Approved — pending implementation plan
+**Status:** Implemented 2026-06-15 — commits `3e8aede`, `1e07de0`, `1c24843`; deployed and verified on daniel-server (nut on `ups` + healthy, HA reaches `nut:3493`, read-only `homeassistant` user live). HA UI NUT integration configured.
 **Host:** daniel-server
 
 ## Goal
