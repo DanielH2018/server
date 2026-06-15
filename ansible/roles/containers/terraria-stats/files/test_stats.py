@@ -42,3 +42,33 @@ def test_unparsed_player_line_false_for_valid_and_noise():
     assert stats.is_unparsed_player_line("DBoy has joined.") is False
     assert stats.is_unparsed_player_line("Saving world data: 75%") is False
     assert stats.is_unparsed_player_line("1.2.3.4:5 is connecting...") is False
+
+
+def test_state_join_then_leave_accrues_playtime():
+    st = stats.StatsState()
+    st.apply("join", "DBoy", 1000.0)
+    st.apply("leave", "DBoy", 1060.0)
+    p = st.players["DBoy"]
+    assert p["total_playtime"] == 60.0
+    assert p["sessions"] == 1
+    assert p["open_start"] is None
+    assert p["first_seen"] == 1000.0
+    assert p["last_seen"] == 1060.0
+
+
+def test_state_first_seen_is_sticky():
+    st = stats.StatsState()
+    st.apply("join", "DBoy", 1000.0)
+    st.apply("leave", "DBoy", 1060.0)
+    st.apply("join", "DBoy", 2000.0)
+    st.apply("leave", "DBoy", 2030.0)
+    p = st.players["DBoy"]
+    assert p["first_seen"] == 1000.0
+    assert p["total_playtime"] == 90.0
+    assert p["sessions"] == 2
+
+
+def test_state_leave_without_join_is_noop():
+    st = stats.StatsState()
+    st.apply("leave", "Ghost", 1000.0)
+    assert "Ghost" not in st.players or st.players["Ghost"]["sessions"] == 0

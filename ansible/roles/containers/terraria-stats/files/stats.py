@@ -68,3 +68,45 @@ def is_unparsed_player_line(line):
         return False
     low = line.lower()
     return "joined" in low or "has left" in low
+
+
+# --- state (pure, testable) -------------------------------------------------
+class StatsState:
+    """In-memory all-time stats. Timestamps are unix seconds (float)."""
+
+    def __init__(self):
+        self.players = {}        # name -> dict
+        self.last_event_ts = 0.0
+        self.unmatched = 0
+
+    def _player(self, name):
+        return self.players.setdefault(name, {
+            "total_playtime": 0.0,
+            "sessions": 0,
+            "first_seen": None,
+            "last_seen": None,
+            "open_start": None,
+        })
+
+    def _close(self, name, ts):
+        p = self.players.get(name)
+        if p and p["open_start"] is not None:
+            p["total_playtime"] += max(0.0, ts - p["open_start"])
+            p["sessions"] += 1
+            p["open_start"] = None
+            p["last_seen"] = ts
+
+    def apply(self, kind, name, ts):
+        self.last_event_ts = max(self.last_event_ts, ts)
+        if kind == "join":
+            self._close(name, ts)          # defensive: a rejoin with no leave line
+            p = self._player(name)
+            p["open_start"] = ts
+            if p["first_seen"] is None:
+                p["first_seen"] = ts
+            p["last_seen"] = ts
+        elif kind == "leave":
+            self._close(name, ts)
+        elif kind == "restart":
+            for n in list(self.players):
+                self._close(n, ts)
