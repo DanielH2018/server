@@ -30,3 +30,15 @@ def test_parse_noise_returns_none():
         "",
     ):
         assert stats.parse_line(line) is None
+
+
+def test_unparsed_player_line_detects_drift():
+    # A future console wording that no longer matches the strict patterns.
+    assert stats.is_unparsed_player_line("DBoy has joined the game") is True
+    assert stats.is_unparsed_player_line("DBoy has left the world") is True
+
+
+def test_unparsed_player_line_false_for_valid_and_noise():
+    assert stats.is_unparsed_player_line("DBoy has joined.") is False
+    assert stats.is_unparsed_player_line("Saving world data: 75%") is False
+    assert stats.is_unparsed_player_line("1.2.3.4:5 is connecting...") is False

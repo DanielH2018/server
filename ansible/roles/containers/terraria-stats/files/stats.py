@@ -55,3 +55,16 @@ def parse_line(line):
         if line.startswith(marker):
             return ("restart", None)
     return None
+
+
+def is_unparsed_player_line(line):
+    """Drift safety net: looks like a join/leave but did NOT strictly parse.
+
+    Incremented as terraria_stats_unmatched_player_lines_total so a future
+    console-wording change surfaces in Grafana instead of silently dropping
+    events. Valid lines parse (return None here); noise lacks the keywords.
+    """
+    if parse_line(line) is not None:
+        return False
+    low = line.lower()
+    return "joined" in low or "has left" in low
