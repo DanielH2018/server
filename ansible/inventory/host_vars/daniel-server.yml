@@ -78,8 +78,16 @@ containers_list:
     # Cloudflare/CrowdSec). Mobile full-tunnel clients use it directly; desktop
     # split-tunnel clients override it (hosts file) to keep general DNS on Mullvad.
     default_dns: "{{ server_ip }}"
+    # On `monitoring`, NOT `apps`: wg-easy must not share a Docker bridge with the
+    # containers behind the host-published ports WG clients reach (Traefik 80/443 ->
+    # apps, Pi-hole 53 -> apps, Portainer 9000 -> proxy, Jellyfin DLNA -> media). Reaching
+    # a same-bridge container via a host-published port hairpins: the DNAT'd reply
+    # returns straight across the bridge, bypassing the host's reverse-NAT, so conntrack
+    # drops it and the WG client times out. `monitoring` is cross-bridge from all of them
+    # (only Traefik is host-published there, and its 80/443 DNAT to its apps IP), and
+    # Traefik is on it so the wg-easy UI still routes. See docs/wireguard-private-homelab-access.md.
     networks:
-      - apps
+      - monitoring
   - name: home-assistant
     port: 8123
     # HA uses its own auth (+ optional TOTP), NOT Authelia: forward-auth breaks the

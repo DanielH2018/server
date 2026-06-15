@@ -115,6 +115,19 @@ together.
 
 ---
 
+## Server-side networking (already handled — don't undo)
+wg-easy runs on the **`monitoring`** Docker network, deliberately **not** `apps` or `proxy`.
+It must not share a bridge with the containers behind the host-published ports WG clients
+reach — Traefik 80/443 → `apps`, Pi-hole 53 → `apps`, Portainer 9000 → `proxy`,
+Jellyfin DLNA → `media`. A WG client hitting `10.0.0.161:<port>` is DNAT'd to that
+container; if it's on the **same** bridge as wg-easy, the reply returns straight across the
+bridge, bypasses the host's reverse-NAT, and conntrack drops it → the client times out
+(looks exactly like a firewall block, but it isn't — the 80/443 allow-list in
+`docker-user-rules.sh.j2` already permits `10.0.0.0/8` + `172.16.0.0/12`). `monitoring` is
+cross-bridge from all of those, so every host-published service returns symmetrically.
+**If wg-easy is ever moved back onto `apps`/`proxy`, `.local` and Portainer access over WG
+breaks.** (Set in `host_vars/daniel-server.yml`.)
+
 ## Notes
 - You still authenticate everywhere: WireGuard keypair + Authelia one_factor on `.local`.
   Nothing is exposed unauthenticated.
