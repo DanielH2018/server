@@ -108,7 +108,10 @@ Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hook
   (b) SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill).
 - **validate-compose** (PostToolUse) — re-renders all compose templates after you edit a
   `docker-compose.yml.j2`, an `ansible/templates/*.j2` macro, or `host_vars`/`group_vars/all.yml`;
-  fails on malformed YAML (catches Jinja indent bugs `ansible-lint` misses).
+  fails on malformed YAML (catches Jinja indent bugs `ansible-lint` misses) and on an
+  un-escaped `$` in a `command`/`entrypoint`/`healthcheck.test` (Compose interpolates a lone
+  `$VAR`/`$(…)` at parse time — shell `$` must be doubled `$$`; legit `${VAR-…}` in
+  `environment:` is not flagged).
 - **homelab-network-diagnostician** agent — connectivity/DNS/Traefik/WireGuard/CrowdSec triage (read-only).
 - **`/add-secret`** skill — guided SOPS add → `secret_rotation.py sync` → commit.
 

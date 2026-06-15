@@ -93,6 +93,39 @@ def dump_numbered(text: str) -> None:
         print(f"  {i:3d}| {line}", file=sys.stderr)
 
 
+def _unescaped_dollars(value) -> list[str]:
+    """From a string or list-of-strings, return the items containing a `$` that is
+    NOT doubled as `$$`. Dropping every `$$` first means an escaped `$$(...)` leaves
+    no `$` behind, while a lone `$VAR` / `$(...)` does."""
+    items = value if isinstance(value, list) else [value]
+    return [s for s in items if isinstance(s, str) and "$" in s.replace("$$", "")]
+
+
+def find_dollar_escape_bugs(docs) -> list[tuple[str, str, str]]:
+    """Return (service, key, snippet) for every command/entrypoint/healthcheck.test
+    string holding an un-doubled `$`. Docker Compose interpolates `$VAR` / `${VAR}` /
+    `$(...)` at parse time, so a shell `$` meant for the container must be written
+    `$$`; otherwise the value is silently blanked or substituted. Restricted to these
+    shell-bearing keys so the deliberate `${GID-...}` interpolation that some services
+    use in `environment:` is not flagged. The plain-YAML validator and ansible-lint
+    both miss this."""
+    bugs: list[tuple[str, str, str]] = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if not isinstance(spec, dict):
+                continue
+            for key in ("command", "entrypoint"):
+                if key in spec:
+                    bugs += [(svc, key, s) for s in _unescaped_dollars(spec[key])]
+            hc = spec.get("healthcheck")
+            if isinstance(hc, dict) and "test" in hc:
+                bugs += [(svc, "healthcheck.test", s) for s in _unescaped_dollars(hc["test"])]
+    return bugs
+
+
 def check_container(host_ctx: dict, ci: dict) -> str | None:
     """Render one container template; return an error string or None on success."""
     name = ci.get("name")
@@ -111,11 +144,16 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
         return f"render error: {type(exc).__name__}: {exc}"
 
     try:
-        list(yaml.safe_load_all(rendered))
+        docs = list(yaml.safe_load_all(rendered))
     except yaml.YAMLError as exc:
         print(f"\n----- rendered {name}/docker-compose.yml.j2 -----", file=sys.stderr)
         dump_numbered(rendered)
         return f"invalid YAML: {exc}"
+
+    bugs = find_dollar_escape_bugs(docs)
+    if bugs:
+        detail = "; ".join(f"{svc}.{key}: {snippet.strip()[:80]}" for svc, key, snippet in bugs)
+        return (f"un-escaped '$' (Compose will interpolate it — double it to '$$'): {detail}")
     return None
 
 
