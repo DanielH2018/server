@@ -27,11 +27,17 @@ print((data.get('tool_input', {}) or {}).get('file_path', ''))
 
 [[ -z "$file_path" ]] && exit 0
 
-# Only run for compose templates or the shared macros they include — editing
-# other .j2 files (e.g. homepage services.yaml.j2) does not affect compose YAML.
+# Run for anything that changes what the compose templates render to — mirrors the
+# prek `validate-compose-templates` file scope so in-session validation matches CI:
+#   - a service's own compose template
+#   - a shared macro it includes (ansible/templates/*.j2 — traefik/networks/etc.)
+#   - host_vars (containers_list: services, networks, ports, authelia) or group_vars/all
+# Editing other .j2 files (e.g. homepage services.yaml.j2) does not affect compose YAML.
 case "$file_path" in
     */templates/docker-compose.yml.j2) ;;
     */ansible/templates/*.j2) ;;
+    */ansible/inventory/host_vars/*.yml) ;;
+    */ansible/inventory/group_vars/all.yml) ;;
     *) exit 0 ;;
 esac
 
