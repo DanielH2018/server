@@ -320,6 +320,19 @@ def _make_handler():
     return Handler
 
 
+def initial_cursor(stored_cursor, backfill, now, backfill_days):
+    """Pick the starting cursor (ns).
+
+    On a fresh DB (stored_cursor==0) or an explicit --backfill, bound the start to the
+    last `backfill_days` rather than epoch. A first query spanning 1970->now exceeds
+    Loki's max_query_length (~30d) and returns HTTP 400; bounding it also makes the
+    first deploy backfill recent history. A normal run resumes from the stored cursor.
+    """
+    if backfill or stored_cursor == 0:
+        return int((now - backfill_days * 86400) * 1e9)
+    return stored_cursor
+
+
 def main():
     global _state, _last_poll_ok
     once = "--once" in sys.argv
@@ -327,7 +340,7 @@ def main():
     store = Store(DB_PATH)
     with _lock:
         _state = store.load_state()
-    cursor = int((time.time() - BACKFILL_DAYS * 86400) * 1e9) if backfill else store.get_cursor()
+    cursor = initial_cursor(store.get_cursor(), backfill, time.time(), BACKFILL_DAYS)
     log("terraria-stats starting (loki=%s once=%s backfill=%s players=%d)"
         % (LOKI_URL, once, backfill, len(_state.players)))
     if not (once or backfill):

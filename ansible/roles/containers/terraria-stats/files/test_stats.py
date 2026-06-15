@@ -205,3 +205,16 @@ def test_run_cycle_end_to_end(tmp_path):
     assert state.players["DBoy"]["total_playtime"] == 3.0
     # persisted
     assert stats.Store(db).get_cursor() == 4_000_000_000
+
+
+def test_initial_cursor_bounds_first_run_and_backfill():
+    now = 1_000_000.0
+    days = 30
+    expected = int((now - days * 86400) * 1e9)
+    # Fresh DB (cursor 0): bound to now-backfill_days so the first Loki query doesn't
+    # span 1970->now and trip Loki's max_query_length (HTTP 400).
+    assert stats.initial_cursor(0, False, now, days) == expected
+    # Explicit --backfill: bounded start regardless of any stored cursor.
+    assert stats.initial_cursor(5_000, True, now, days) == expected
+    # Normal resume: stored cursor used unchanged.
+    assert stats.initial_cursor(12_345, False, now, days) == 12_345
