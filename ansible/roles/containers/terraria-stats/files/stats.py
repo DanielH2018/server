@@ -121,3 +121,32 @@ class StatsState:
         if p["open_start"] is not None:
             base += max(0.0, now - p["open_start"])
         return base
+
+
+# --- Prometheus exposition (pure) -------------------------------------------
+def escape_label_value(v):
+    return v.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+def render_metrics(state, now):
+    out = []
+    out.append("# HELP terraria_player_playtime_seconds_total Total seconds a player has been connected.")
+    out.append("# TYPE terraria_player_playtime_seconds_total counter")
+    for name in sorted(state.players):
+        out.append('terraria_player_playtime_seconds_total{player="%s"} %d'
+                   % (escape_label_value(name), int(state.playtime(name, now))))
+    out.append("# HELP terraria_player_sessions_total Completed play sessions.")
+    out.append("# TYPE terraria_player_sessions_total counter")
+    for name in sorted(state.players):
+        out.append('terraria_player_sessions_total{player="%s"} %d'
+                   % (escape_label_value(name), state.players[name]["sessions"]))
+    out.append("# HELP terraria_players_online Currently connected players.")
+    out.append("# TYPE terraria_players_online gauge")
+    out.append("terraria_players_online %d" % state.online_count())
+    out.append("# HELP terraria_stats_last_event_timestamp Unix time of the last processed event.")
+    out.append("# TYPE terraria_stats_last_event_timestamp gauge")
+    out.append("terraria_stats_last_event_timestamp %d" % int(state.last_event_ts))
+    out.append("# HELP terraria_stats_unmatched_player_lines_total Player-shaped lines that did not parse.")
+    out.append("# TYPE terraria_stats_unmatched_player_lines_total counter")
+    out.append("terraria_stats_unmatched_player_lines_total %d" % state.unmatched)
+    return "\n".join(out) + "\n"

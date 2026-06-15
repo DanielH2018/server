@@ -100,3 +100,22 @@ def test_live_playtime_includes_open_session():
     assert st.playtime("DBoy", now=1040.0) == 40.0   # 0 closed + 40 live
     st.apply("leave", "DBoy", 1100.0)
     assert st.playtime("DBoy", now=9999.0) == 100.0  # closed, no live delta
+
+
+def test_escape_label_value():
+    assert stats.escape_label_value('a"b\\c') == 'a\\"b\\\\c'
+
+
+def test_render_metrics_contains_expected_series():
+    st = stats.StatsState()
+    st.apply("join", "DBoy", 1000.0)
+    st.apply("leave", "DBoy", 1060.0)
+    st.apply("join", "Pal", 2000.0)
+    st.unmatched = 2
+    out = stats.render_metrics(st, now=2030.0)
+    assert 'terraria_player_playtime_seconds_total{player="DBoy"} 60' in out
+    assert 'terraria_player_playtime_seconds_total{player="Pal"} 30' in out
+    assert 'terraria_player_sessions_total{player="DBoy"} 1' in out
+    assert "terraria_players_online 1" in out
+    assert "terraria_stats_unmatched_player_lines_total 2" in out
+    assert "# TYPE terraria_players_online gauge" in out
