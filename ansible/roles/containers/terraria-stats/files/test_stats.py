@@ -119,3 +119,39 @@ def test_render_metrics_contains_expected_series():
     assert "terraria_players_online 1" in out
     assert "terraria_stats_unmatched_player_lines_total 2" in out
     assert "# TYPE terraria_players_online gauge" in out
+
+
+def _loki_response(entries):
+    # entries: list of (ts_ns_int, line). Mimics Loki query_range JSON.
+    return {"data": {"result": [
+        {"stream": {"container": "terraria"},
+         "values": [[str(ts), line] for ts, line in entries]}
+    ]}}
+
+
+def test_extract_entries_sorts_ascending():
+    resp = _loki_response([(300, "c"), (100, "a"), (200, "b")])
+    assert stats.extract_entries(resp) == [(100, "a"), (200, "b"), (300, "c")]
+
+
+def test_extract_entries_empty():
+    assert stats.extract_entries({"data": {"result": []}}) == []
+
+
+def test_apply_entries_folds_and_counts_unmatched():
+    st = stats.StatsState()
+    entries = [
+        (1_000_000_000, "DBoy has joined."),
+        (5_000_000_000, "DBoy has left."),          # +4s
+        (6_000_000_000, "DBoy has joined the game"),  # drift -> unmatched
+        (7_000_000_000, "Saving world data: 5%"),     # noise -> ignored
+    ]
+    evs, maxts = stats.apply_entries(st, entries)
+    assert st.players["DBoy"]["total_playtime"] == 4.0
+    assert st.players["DBoy"]["sessions"] == 1
+    assert st.unmatched == 1
+    assert maxts == 7_000_000_000
+    assert evs == [
+        (1_000_000_000, "DBoy", "join", "DBoy has joined."),
+        (5_000_000_000, "DBoy", "leave", "DBoy has left."),
+    ]

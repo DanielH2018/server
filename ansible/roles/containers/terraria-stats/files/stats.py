@@ -150,3 +150,35 @@ def render_metrics(state, now):
     out.append("# TYPE terraria_stats_unmatched_player_lines_total counter")
     out.append("terraria_stats_unmatched_player_lines_total %d" % state.unmatched)
     return "\n".join(out) + "\n"
+
+
+# --- Loki ingestion ---------------------------------------------------------
+def extract_entries(loki_json):
+    """Flatten a Loki query_range response to [(ts_ns:int, line:str)] ascending."""
+    out = []
+    for stream in loki_json.get("data", {}).get("result", []):
+        for ts, line in stream.get("values", []):
+            out.append((int(ts), line))
+    out.sort(key=lambda tl: tl[0])
+    return out
+
+
+def apply_entries(state, entries):
+    """Apply ascending (ts_ns, line) entries to `state`.
+
+    Returns (events, max_ts_ns) where events is [(ts_ns, name, kind, raw)] for the
+    SQLite audit log. Pure: no I/O, so it is unit-tested directly.
+    """
+    events = []
+    max_ts = 0
+    for ts_ns, line in entries:
+        ev = parse_line(line)
+        if ev is not None:
+            kind, name = ev
+            state.apply(kind, name, ts_ns / 1e9)
+            events.append((ts_ns, name, kind, line))
+        elif is_unparsed_player_line(line):
+            state.unmatched += 1
+        if ts_ns > max_ts:
+            max_ts = ts_ns
+    return events, max_ts
