@@ -7,20 +7,18 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- Player stats for Terraria (deaths, time on server, etc.) — NOT possible on vanilla
-  natively: the server keeps no player stats and exposes no API/metrics. The only data
-  source is the console log, which DOES print joins/leaves/deaths/chat — but only once
-  players actually connect (none had yet as of 2026-06-14; external access was still
-  timing out). Two realistic paths, each its own project — scope before building:
-  - (a) a log-parsing sidecar tailing `docker logs terraria` → a small stateful store.
-    Caveats: cumulative deaths/playtime are reconstructed forward-only (no history before
-    the parser starts), reset-prone across restarts, and keyed on character name (not a
-    stable id). Surface in Grafana / Homepage / Kuma.
-  - (b) migrate to a TShock server (real player stats via a DB plugin) — but that's
-    different server software and risks the just-stabilized vanilla world-persistence work.
-  Revisit once external play works — nothing to measure until someone can connect.
+_(empty)_
 
 ## Superseded
+
+- Player stats for Terraria — done 2026-06-15: shipped the `terraria-stats` sidecar
+  (Loki → SQLite → Prometheus → Grafana) tracking all-time per-player playtime, sessions,
+  and presence. **Deaths were dropped:** a Phase 0 LAN capture proved the vanilla console
+  emits only `<name> has joined.`/`has left.` (no deaths/chat — character data is
+  client-side without SSC), and deaths would need a TShock+SSC migration (evaluated,
+  rejected). The Terraria container is untouched. First deploy backfilled 30d of history
+  (found players Ben + DBoy). Spec + plan under `docs/superpowers/`; role docs in
+  `ansible/roles/containers/terraria-stats/CLAUDE.md`.
 
 - Add Healthcheck to Terraria — done 2026-06-14: probe reads `/proc/net/tcp` for a LISTEN
   on port 7777 (hex `1E61`, state `0A`) rather than opening a connection — Terraria's

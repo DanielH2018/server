@@ -1,7 +1,7 @@
 # terraria-player-stats — playtime & presence from the game console
 
 **Date:** 2026-06-15
-**Status:** Approved (design)
+**Status:** Implemented (2026-06-15)
 **Context:** PLANS.md backlog asked for player stats — originally *deaths + time on server*.
 A **Phase 0 LAN capture on 2026-06-15** (operator joined, died, chatted, left) proved the
 vanilla dedicated-server console emits **only connection events** (`has joined` / `has left`)
