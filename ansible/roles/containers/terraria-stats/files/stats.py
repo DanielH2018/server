@@ -182,3 +182,67 @@ def apply_entries(state, entries):
         if ts_ns > max_ts:
             max_ts = ts_ns
     return events, max_ts
+
+
+# --- SQLite source of truth -------------------------------------------------
+class Store:
+    def __init__(self, path):
+        self.conn = sqlite3.connect(path)
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self._init_schema()
+
+    def _init_schema(self):
+        c = self.conn
+        c.execute("""CREATE TABLE IF NOT EXISTS players(
+            name TEXT PRIMARY KEY,
+            total_playtime_seconds REAL NOT NULL DEFAULT 0,
+            session_count INTEGER NOT NULL DEFAULT 0,
+            first_seen REAL, last_seen REAL,
+            current_session_start REAL)""")
+        c.execute("""CREATE TABLE IF NOT EXISTS cursor(
+            id INTEGER PRIMARY KEY CHECK(id=1), last_ts_ns INTEGER NOT NULL)""")
+        c.execute("""CREATE TABLE IF NOT EXISTS events(
+            ts_ns INTEGER, player TEXT, kind TEXT, raw TEXT)""")
+        c.commit()
+
+    def load_state(self):
+        st = StatsState()
+        for name, tot, sess, fs, ls, css in self.conn.execute(
+            "SELECT name,total_playtime_seconds,session_count,first_seen,"
+            "last_seen,current_session_start FROM players"
+        ):
+            st.players[name] = {
+                "total_playtime": float(tot), "sessions": int(sess),
+                "first_seen": fs, "last_seen": ls, "open_start": css}
+            if ls:
+                st.last_event_ts = max(st.last_event_ts, ls)
+        return st
+
+    def get_cursor(self):
+        row = self.conn.execute("SELECT last_ts_ns FROM cursor WHERE id=1").fetchone()
+        return int(row[0]) if row else 0
+
+    def append_events(self, events):
+        if events:
+            self.conn.executemany(
+                "INSERT INTO events(ts_ns,player,kind,raw) VALUES(?,?,?,?)", events)
+            self.conn.commit()
+
+    def save(self, state, cursor_ns):
+        """Persist player snapshot + cursor atomically (single transaction)."""
+        c = self.conn
+        for name, p in state.players.items():
+            c.execute(
+                "INSERT INTO players(name,total_playtime_seconds,session_count,"
+                "first_seen,last_seen,current_session_start) VALUES(?,?,?,?,?,?) "
+                "ON CONFLICT(name) DO UPDATE SET "
+                "total_playtime_seconds=excluded.total_playtime_seconds,"
+                "session_count=excluded.session_count,first_seen=excluded.first_seen,"
+                "last_seen=excluded.last_seen,"
+                "current_session_start=excluded.current_session_start",
+                (name, p["total_playtime"], p["sessions"], p["first_seen"],
+                 p["last_seen"], p["open_start"]))
+        c.execute(
+            "INSERT INTO cursor(id,last_ts_ns) VALUES(1,?) "
+            "ON CONFLICT(id) DO UPDATE SET last_ts_ns=excluded.last_ts_ns", (cursor_ns,))
+        c.commit()

@@ -155,3 +155,33 @@ def test_apply_entries_folds_and_counts_unmatched():
         (1_000_000_000, "DBoy", "join", "DBoy has joined."),
         (5_000_000_000, "DBoy", "leave", "DBoy has left."),
     ]
+
+
+def test_store_roundtrip_and_cursor(tmp_path):
+    db = str(tmp_path / "stats.db")
+    store = stats.Store(db)
+    assert store.get_cursor() == 0
+
+    st = stats.StatsState()
+    st.apply("join", "DBoy", 1000.0)
+    st.apply("leave", "DBoy", 1100.0)
+    store.append_events([(1_100_000_000_000, "DBoy", "leave", "DBoy has left.")])
+    store.save(st, cursor_ns=1_100_000_000_000)
+
+    # Reopen: state + cursor survive (durable source of truth).
+    store2 = stats.Store(db)
+    assert store2.get_cursor() == 1_100_000_000_000
+    loaded = store2.load_state()
+    assert loaded.players["DBoy"]["total_playtime"] == 100.0
+    assert loaded.players["DBoy"]["sessions"] == 1
+
+
+def test_store_preserves_open_session(tmp_path):
+    db = str(tmp_path / "stats.db")
+    store = stats.Store(db)
+    st = stats.StatsState()
+    st.apply("join", "DBoy", 2000.0)     # still online
+    store.save(st, cursor_ns=2_000_000_000_000)
+    loaded = stats.Store(db).load_state()
+    assert loaded.players["DBoy"]["open_start"] == 2000.0
+    assert loaded.online_count() == 1
