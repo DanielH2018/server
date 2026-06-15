@@ -1,31 +1,46 @@
-# terraria-player-stats — all-time player stats from the game console
+# terraria-player-stats — playtime & presence from the game console
 
 **Date:** 2026-06-15
 **Status:** Approved (design)
-**Context:** PLANS.md backlog asked "Add stats?" alongside the Terraria healthcheck. The
-operator wants **player gameplay stats** — primarily *deaths* and *time on server* — kept
-**all-time / cumulative** per player. Vanilla Terraria keeps no player stats and exposes no
-API; the only data source is the server console (joins/leaves/deaths/chat). A TShock
-migration was evaluated and rejected for this goal: it's an admin-platform migration that
-would re-touch the just-stabilized world-persistence setup and still needs SSC + a plugin +
-a display surface to deliver deaths. This design gets the same stats with **zero changes to
-the Terraria container** by reading the console logs already in Loki.
+**Context:** PLANS.md backlog asked for player stats — originally *deaths + time on server*.
+A **Phase 0 LAN capture on 2026-06-15** (operator joined, died, chatted, left) proved the
+vanilla dedicated-server console emits **only connection events** (`has joined` / `has left`)
+— **not deaths and not chat.** On a vanilla server without SSC, character data (including
+death counts) lives **client-side**; the server never sees it. Deaths therefore require a
+**TShock + SSC migration**, which the operator evaluated and declined. The feature is
+**finalized to what vanilla actually exposes: playtime, sessions, and presence** — with
+**zero changes to the Terraria container**, reading console lines already in Loki.
 
 ## Goal
 
 A small, headless sidecar (`terraria-stats`) that reads the Terraria console lines already
-ingested into **Loki**, parses player events, maintains **all-time cumulative** per-player
-stats in **SQLite** (the durable source of truth), and exposes them as **Prometheus
-metrics** for a **Grafana** dashboard.
+ingested into **Loki**, parses connection events, maintains **all-time cumulative** per-player
+**playtime + session counts + first/last seen** in **SQLite** (the durable source of truth),
+and exposes them as **Prometheus metrics** for a **Grafana** dashboard.
 
-**Non-goals (v1):** TShock / SSC / any change to the terraria container; a Homepage widget;
-chat logging/analytics; a bespoke web UI; stable cross-rename player identity.
+**Non-goals:** **deaths** (unavailable on vanilla — would require a TShock+SSC migration; see
+Context / Phase 0); chat logging; TShock / SSC / any change to the terraria container; a
+Homepage widget; stable cross-rename player identity.
+
+## Confirmed log grammar (Phase 0 — real samples, 2026-06-15)
+
+```text
+join          "DBoy has joined."          ->  ^(?P<name>.+) has joined\.$
+leave         "DBoy has left."            ->  ^(?P<name>.+) has left\.$
+server_restart "Listening on port 7777"   (and "Server started")
+ignore (noise) "172.21.0.15:59682 is connecting..."   (TCP accepts, incl. healthcheck-era probes)
+ignore (noise) "Saving world data: N%" / "Validating world save: N%" / "Backing up world file"
+NOT EMITTED    deaths, chat   (verified: operator died & chatted -> zero console output)
+```
+
+These captured lines are the **test fixtures** for the parser. Join/leave formats are stable
+across Terraria versions, so the parser is simple and robust (no death-template enumeration).
 
 ## Architecture
 
 ```text
  terraria (vanilla, UNCHANGED)
-   │ stdout: joins / leaves / deaths / chat
+   │ stdout: "<name> has joined." / "<name> has left." / boot lines
    ▼
  Promtail ──► Loki                        (both already running, monitoring net)
                 │  LogQL query_range API, polled ~20s, cursor-based
@@ -86,20 +101,19 @@ deploy:
 
 ## Parser & state model
 
-**Event kinds:** `join`, `leave`, `death`, `server_restart`.
+**Event kinds:** `join`, `leave`, `server_restart`.
 
-- **`server_restart`** is detected from the existing boot lines (`Listening on port 7777` /
+- `join` / `leave` match the Phase 0 grammar above (name capture before the literal suffix).
+- **`server_restart`** is detected from the boot lines (`Listening on port 7777` /
   `Server started`) — it closes all open sessions (players drop with no "has left" line).
-- **Death detection anchors on the online-player set, not on enumerating death messages.**
-  Terraria has dozens of death templates; instead, joins tell us who is online, and a
-  broadcast line that *starts with an online player's name* and is not chat counts as a
-  death. We match the *player*, not the *cause*.
+- Any line that looks player-event-shaped but matches none of the above increments
+  `terraria_stats_unmatched_player_lines_total` and is logged — a safety net against future
+  console-format drift.
 
 **SQLite schema** (source of truth, `./data/stats.db`):
 
 ```sql
 players(name TEXT PRIMARY KEY,
-        total_deaths INTEGER NOT NULL DEFAULT 0,
         total_playtime_seconds INTEGER NOT NULL DEFAULT 0,
         session_count INTEGER NOT NULL DEFAULT 0,
         first_seen TEXT, last_seen TEXT,
@@ -123,7 +137,6 @@ missed leaves/restarts reconcile.
 ## Metrics exposed (`/metrics`)
 
 ```text
-terraria_player_deaths_total{player="X"}              counter
 terraria_player_playtime_seconds_total{player="X"}    counter (incl. live session)
 terraria_player_sessions_total{player="X"}            counter
 terraria_players_online                               gauge
@@ -134,9 +147,8 @@ terraria_stats_unmatched_player_lines_total           counter (parser health)
 ## Display (Grafana)
 
 A provisioned dashboard in a new "Terraria" folder (datasource uid `EGdsQqhVk`):
-- **Leaderboard table**: player · deaths · total playtime · sessions · last seen.
-- **Deaths over time** and **playtime accrual** (per player).
-- **Players online** (stat + timeseries).
+- **Leaderboard table**: player · total playtime · sessions · last seen.
+- **Playtime accrual** (per player) and **players online** (stat + timeseries).
 - **Parser health**: `rate(terraria_stats_unmatched_player_lines_total)` and last-event
   freshness — so a broken parser is *visible*, not silently green.
 
@@ -144,9 +156,8 @@ A provisioned dashboard in a new "Terraria" folder (datasource uid `EGdsQqhVk`):
 
 - Loki query failure / unreachable → log, leave cursor unchanged, retry next loop (no data
   loss; events wait in Loki). `/healthz` reflects last successful poll.
-- A line that looks like a player event but matches no known pattern → increment
-  `terraria_stats_unmatched_player_lines_total` and log it, so missed death templates surface
-  for iterative pattern extension.
+- Unmatched player-shaped line → `terraria_stats_unmatched_player_lines_total`++ and log it
+  (catches console-format drift).
 - All SQLite writes are transactional with the cursor advance; a crash mid-batch re-processes
   the batch cleanly on restart (idempotent by `(ts, raw)` dedup).
 
@@ -155,27 +166,16 @@ A provisioned dashboard in a new "Terraria" folder (datasource uid `EGdsQqhVk`):
 **None.** Loki is internal/unauthenticated on the `monitoring` network (same posture as its
 existing `/ready` Kuma probe). No tokens, no SOPS entries, no rotation registry change.
 
-## Operator prerequisites — Phase 0 (GATE for all parser work)
-
-We have **zero real samples** of player events: nobody has successfully joined this server
-(38k log lines, no joins/deaths), and external access was still timing out as of 2026-06-14.
-Before the parser patterns can be finalized:
-
-1. Connect a Terraria client over LAN to `daniel-server:7778`, **join → die several ways →
-   leave**, while capturing `docker logs terraria`.
-2. Save the real `join` / `leave` / `death` / chat lines as **test fixtures**.
-3. (Independent, optional) fix external access (`terraria.daniel-hunter.com:7777` TCP
-   timeout) — stats are only meaningful once people can actually play.
-
 ## Verification
 
 1. `validate_compose_templates.py` renders the new compose (pre-commit).
-2. `uv run pytest` — parser/session unit tests over the captured fixtures pass.
-3. `stats.py --backfill --once` against live Loki: DB populates, `/metrics` serves expected
-   series, `terraria_stats_unmatched_player_lines_total` stays ~0 on the sample set.
+2. `uv run pytest` — parser/session unit tests over the Phase 0 fixtures pass.
+3. `stats.py --backfill --once` against live Loki: DB populates from history (the 2026-06-15
+   join/leave cycles appear), `/metrics` serves expected series,
+   `terraria_stats_unmatched_player_lines_total` stays ~0.
 4. Deploy `--check` then for real; Prometheus shows the `terraria-stats` target **up**; the
    Grafana dashboard renders.
-5. Play a short live session: deaths/playtime increment; restart the sidecar mid-session and
+5. Play a short live session: playtime/sessions increment; restart the sidecar mid-session and
    confirm no double-count and the open session is preserved.
 
 ## Testing approach
@@ -193,13 +193,16 @@ touched**, so there is nothing to undo on the game server.
 
 ## Phasing
 
-- **Phase 0** — capture real log samples (LAN play session). *Gate for everything below.*
-- **Phase 1** — `stats.py`: parser + SQLite + `/metrics`, TDD against fixtures.
+- **Phase 0 — DONE (2026-06-15):** real join/leave/restart grammar captured (see above);
+  established deaths/chat are not console-available on vanilla.
+- **Phase 1** — `stats.py`: parser + SQLite + `/metrics`, TDD against the fixtures.
 - **Phase 2** — Ansible role + compose + registration + Prometheus scrape job; deploy.
 - **Phase 3** — Grafana dashboard.
 
 ## Known limits (accepted)
 
+- **Deaths are out of scope** — not available on vanilla; revisit only via TShock+SSC.
 - Identity is character-name (not a stable ID); two players sharing a name merge.
 - First-run backfill only reaches as far as Loki's retention window.
-- Death detection depends on console wording; the unmatched-line counter is the safety net.
+- Playtime granularity is bounded by the connection-event timestamps (join/leave), which is
+  exactly the "time on server" the operator asked for.
