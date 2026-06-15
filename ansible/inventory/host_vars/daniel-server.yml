@@ -83,6 +83,7 @@ containers_list:
     use_authelia: false
     networks:
       - apps
+      - ups  # reach the nut sidecar's upsd:3493 for the Home Assistant NUT integration
   # Organization: Development
   - name: code-server
     port: 8443

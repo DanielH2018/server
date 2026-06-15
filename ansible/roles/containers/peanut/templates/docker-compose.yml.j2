@@ -23,6 +23,8 @@ services:
       # Plain bridge ONLY for the loopback publish below — `internal: true` networks
       # cannot publish ports. No other container joins it.
       - nut_host
+      # Shared isolation net so Home Assistant's NUT integration can reach upsd:3493.
+      - ups
     # Host-loopback upsd: the host runs its own upsmon in `secondary` mode against this
     # (see the role's nut-client tasks). The container CANNOT power off the host — the
     # old SHUTDOWNCMD nsenter needed pid:host + SYS_ADMIN we rightly don't grant — so
@@ -76,3 +78,5 @@ services:
     internal: true
   nut_host:
     driver: bridge
+  ups:
+    external: true
