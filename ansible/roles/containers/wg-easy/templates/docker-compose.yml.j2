@@ -34,6 +34,12 @@ services:
       - WG_HOST=wireguard.{{ domain }}
       - WG_PORT={{ container_item.udp_port }}
       - WG_PERSISTENT_KEEPALIVE=25
+{% if container_item.default_dns is defined %}
+      # DNS baked into generated client configs so *.local.{{ domain }} resolves via Pi-hole
+      # over the tunnel (private homelab path, bypasses Cloudflare/CrowdSec). Only set where
+      # defined per host; desktop split-tunnel clients override AllowedIPs/DNS locally.
+      - WG_DEFAULT_DNS={{ container_item.default_dns }}
+{% endif %}
     volumes:
       - ./config:/etc/wireguard
     restart: unless-stopped
