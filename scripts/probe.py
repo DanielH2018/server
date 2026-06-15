@@ -22,10 +22,12 @@ Subcommands:
     scrutiny                 Disk SMART summary              (scrutiny :8080)
     pi <subpath>             Pi glances API, e.g. `pi fs`    (daniel-pi.lan:61208)
     cert <host[:port]>       Served TLS cert subj/dates [--sni NAME]
+    health <container>       Container state + healthcheck rollup (exit 0 = healthy)
 
 Add `--dry-run` to print the command(s) instead of running them.
 """
 import argparse
+import json
 import subprocess
 import sys
 from urllib.parse import urlencode
@@ -80,6 +82,37 @@ def parse_ip(inspect_output):
     return None
 
 
+def inspect_argv(container):
+    return ["docker", "inspect", container]
+
+
+def format_health(data, container):
+    """Summarize a container's state + healthcheck from `docker inspect` output.
+
+    Pure: takes the parsed JSON list and returns (text, exit_code). exit_code is 0
+    only when the container is running and (has no healthcheck, or is healthy) — so
+    `probe.py health <svc>` is usable as a post-deploy gate.
+    """
+    if not data:
+        return (f"{container}: not found (not created — wrong name, or deploy failed?)", 1)
+    state = data[0].get("State") or {}
+    status = state.get("Status", "unknown")
+    restarts = data[0].get("RestartCount", 0)
+    health = state.get("Health")
+    if health:
+        hstatus = health.get("Status", "unknown")
+        line = f"{container}: {status}, health={hstatus}, restarts={restarts}"
+        if hstatus != "healthy":
+            line += f" — failing streak {health.get('FailingStreak', 0)}"
+            log = health.get("Log") or []
+            last = (log[-1].get("Output") or "").strip().splitlines() if log else []
+            if last:
+                line += f"; last check: {last[-1][:160]}"
+        return (line, 0 if status == "running" and hstatus == "healthy" else 1)
+    return (f"{container}: {status} (no healthcheck), restarts={restarts}",
+            0 if status == "running" else 1)
+
+
 def cert_stages(host, port, sni):
     """Two-stage pipeline: open a TLS session (with SNI) and decode the served
     leaf cert's subject/issuer/validity. Read-only — no data is sent."""
@@ -111,6 +144,8 @@ def _build_parser():
     ct = sub.add_parser("cert", help="served TLS cert details")
     ct.add_argument("target", help="host or host:port")
     ct.add_argument("--sni", help="SNI servername (defaults to host)")
+    hl = sub.add_parser("health", help="container state + healthcheck rollup (exit 0 = healthy)")
+    hl.add_argument("container", help="container name, e.g. jellyfin")
     return p
 
 
@@ -173,11 +208,28 @@ def run_pipeline(stages):
     return procs[-1].wait()
 
 
+def run_health(container):
+    out = subprocess.run(inspect_argv(container), capture_output=True, text=True)
+    try:
+        data = json.loads(out.stdout) if out.returncode == 0 else []
+    except json.JSONDecodeError:
+        data = []
+    text, code = format_health(data, container)
+    print(text)
+    return code
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    dry = "--dry-run" in argv
+    ns = _build_parser().parse_args(argv)
+    # `health` parses/formats docker inspect rather than streaming a pipeline.
+    if ns.cmd == "health":
+        if ns.dry_run:
+            print(" ".join(inspect_argv(ns.container)))
+            return 0
+        return run_health(ns.container)
     stages = plan(argv, resolve_ip)
-    if dry:
+    if ns.dry_run:
         for stage in stages:
             print(" ".join(stage))
         return 0

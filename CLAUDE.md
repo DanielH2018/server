@@ -97,7 +97,8 @@ Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hook
 - **`scripts/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt). Resolves the
   live container IP via `docker inspect`, so prefer it over curling bridge IPs (which change on
   recreate): `uv run python scripts/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
-  scrutiny | pi <path> | cert <host>>`.
+  scrutiny | pi <path> | cert <host> | health <svc>>`. `health <svc>` exits 0 only when the
+  container is running + healthy — usable as a post-deploy gate.
 - **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
   `containers/` (edit the `ansible/roles/containers/<svc>/templates/` source instead) and
   (b) SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill).

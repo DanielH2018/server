@@ -124,3 +124,49 @@ def test_cert_stages_is_a_two_stage_pipeline():
     assert s1[:2] == ["openssl", "s_client"]
     assert "h:443" in s1
     assert s2[:2] == ["openssl", "x509"]
+
+
+# --- health: container state + healthcheck rollup ---------------------------
+
+def _inspect(state, restarts=0):
+    return [{"State": state, "RestartCount": restarts}]
+
+
+def test_inspect_argv():
+    assert probe.inspect_argv("jellyfin") == ["docker", "inspect", "jellyfin"]
+
+
+def test_health_running_and_healthy_exits_zero():
+    data = _inspect({"Status": "running",
+                     "Health": {"Status": "healthy", "FailingStreak": 0,
+                                "Log": [{"Output": "ok\n"}]}})
+    text, code = probe.format_health(data, "jellyfin")
+    assert code == 0
+    assert "healthy" in text and "running" in text
+
+
+def test_health_unhealthy_exits_one_and_shows_streak_and_last_log():
+    data = _inspect({"Status": "running",
+                     "Health": {"Status": "unhealthy", "FailingStreak": 3,
+                                "Log": [{"Output": "connection refused\n"}]}})
+    text, code = probe.format_health(data, "qbittorrent")
+    assert code == 1
+    assert "unhealthy" in text and "3" in text and "connection refused" in text
+
+
+def test_health_no_healthcheck_running_exits_zero():
+    text, code = probe.format_health(_inspect({"Status": "running"}), "valheim")
+    assert code == 0
+    assert "no healthcheck" in text
+
+
+def test_health_exited_exits_one():
+    text, code = probe.format_health(_inspect({"Status": "exited"}), "valheim")
+    assert code == 1
+    assert "exited" in text
+
+
+def test_health_not_found_exits_one():
+    text, code = probe.format_health([], "nope")
+    assert code == 1
+    assert "not found" in text
