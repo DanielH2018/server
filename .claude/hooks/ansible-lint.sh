@@ -4,8 +4,12 @@
 # Read hook input from stdin
 input=$(cat)
 
-# Extract the file path from tool input
-file_path=$(echo "$input" | python3 -c "
+cd /home/ubuntu/server || exit 0
+UV=/home/ubuntu/.local/bin/uv
+
+# Extract the file path from tool input. Routed through uv so the project-pinned
+# interpreter parses the hook JSON (not the system python3); --no-sync keeps it fast.
+file_path=$(echo "$input" | "$UV" run --no-sync --quiet python -c "
 import sys, json
 data = json.load(sys.stdin)
 tool_input = data.get('tool_input', {})
@@ -24,7 +28,6 @@ if [[ "$file_path" == *"/ansible/"* ]] && [[ "$file_path" == *.yml || "$file_pat
     fi
 
     echo "ansible-lint: checking $(basename "$file_path")..."
-    cd /home/ubuntu/server
     relative_path="${file_path#/home/ubuntu/server/}"
     /home/ubuntu/.local/bin/ansible-lint "$relative_path" 2>&1
 fi

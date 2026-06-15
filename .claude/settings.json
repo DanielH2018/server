@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(ansible-lint *)",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(uv run python scripts/probe.py:*)"
     ]
   },
   "hooks": {
@@ -15,6 +16,15 @@
             "command": "~/server/.claude/hooks/auto-approve-readonly.sh"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/block-containers-edit.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -24,6 +34,11 @@
           {
             "type": "command",
             "command": "bash /home/ubuntu/server/.claude/hooks/ansible-lint.sh",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "bash /home/ubuntu/server/.claude/hooks/validate-compose.sh",
             "timeout": 30
           }
         ]
