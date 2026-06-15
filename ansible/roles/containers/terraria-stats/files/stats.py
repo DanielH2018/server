@@ -110,3 +110,14 @@ class StatsState:
         elif kind == "restart":
             for n in list(self.players):
                 self._close(n, ts)
+
+    def online_count(self):
+        return sum(1 for p in self.players.values() if p["open_start"] is not None)
+
+    def playtime(self, name, now):
+        """Total playtime incl. the in-progress session so the counter ticks live."""
+        p = self.players[name]
+        base = p["total_playtime"]
+        if p["open_start"] is not None:
+            base += max(0.0, now - p["open_start"])
+        return base

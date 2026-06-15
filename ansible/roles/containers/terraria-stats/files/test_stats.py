@@ -72,3 +72,31 @@ def test_state_leave_without_join_is_noop():
     st = stats.StatsState()
     st.apply("leave", "Ghost", 1000.0)
     assert "Ghost" not in st.players or st.players["Ghost"]["sessions"] == 0
+
+
+def test_restart_closes_open_sessions():
+    st = stats.StatsState()
+    st.apply("join", "DBoy", 1000.0)
+    st.apply("join", "Pal", 1010.0)
+    st.apply("restart", None, 1100.0)
+    assert st.players["DBoy"]["total_playtime"] == 100.0
+    assert st.players["Pal"]["total_playtime"] == 90.0
+    assert st.online_count() == 0
+
+
+def test_rejoin_without_leave_closes_prior_session():
+    st = stats.StatsState()
+    st.apply("join", "DBoy", 1000.0)
+    st.apply("join", "DBoy", 1050.0)   # crash/rejoin, no leave
+    assert st.players["DBoy"]["sessions"] == 1
+    assert st.players["DBoy"]["total_playtime"] == 50.0
+    assert st.players["DBoy"]["open_start"] == 1050.0
+    assert st.online_count() == 1
+
+
+def test_live_playtime_includes_open_session():
+    st = stats.StatsState()
+    st.apply("join", "DBoy", 1000.0)
+    assert st.playtime("DBoy", now=1040.0) == 40.0   # 0 closed + 40 live
+    st.apply("leave", "DBoy", 1100.0)
+    assert st.playtime("DBoy", now=9999.0) == 100.0  # closed, no live delta
