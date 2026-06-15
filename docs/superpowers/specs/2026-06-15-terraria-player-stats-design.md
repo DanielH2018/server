@@ -30,7 +30,7 @@ chat logging/analytics; a bespoke web UI; stable cross-rename player identity.
  Promtail ──► Loki                        (both already running, monitoring net)
                 │  LogQL query_range API, polled ~20s, cursor-based
                 ▼
- terraria-stats  (NEW, python:3.12-alpine, stdlib-only, headless, monitoring net)
+ terraria-stats  (NEW, python:3.14-alpine, stdlib-only, headless, monitoring net)
    • poll Loki {container="terraria"} since cursor → parse → events
    • SQLite = source of truth (./data bind-mount, Kopia-backed)
    • session pairing (join→leave; server-restart closes open sessions)
@@ -45,7 +45,7 @@ chat logging/analytics; a bespoke web UI; stable cross-rename player identity.
 - **Network: `monitoring` only** — reaches `http://loki:3100`, scraped by Prometheus.
   No Traefik route, no host port, **no new external attack surface, no secret** (Loki is
   internal/unauthenticated on this net, same as its `/ready` probe today).
-- **Image `python:3.12-alpine`, stdlib only** (`urllib`, `json`, `sqlite3`, `http.server`) —
+- **Image `python:3.14-alpine`, stdlib only** (`urllib`, `json`, `sqlite3`, `http.server`) —
   Loki query over HTTP, SQLite via stdlib, Prometheus exposition format emitted by hand. No
   pip deps, **no build step** — `copy` the `.py` like monitor-bridge.
 - **Terraria container is never modified** at any point (the world-persistence fix is
