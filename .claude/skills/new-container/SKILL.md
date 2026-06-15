@@ -52,6 +52,31 @@ Then create the following files:
       tasks_from: docker_deploy.yml
   ```
 - Add extra entries to `common_dirs_to_create` if the service needs subdirectories (e.g. config, data)
+- **If the service bind-mounts an Ansible-templated/copied config _file_** (a specific file,
+  not just a `./config` data dir — e.g. `./app.ini:/etc/app/app.ini:ro`), an edit to that file
+  will **silently NOT recreate the container**: `docker_deploy` defaults to `recreate: auto`,
+  which only notices `docker-compose.yml`/image changes, never a bind-mounted file's contents.
+  You MUST `register:` the `template:`/`copy:` task and pass its `is changed` to
+  `common_config_changed` on the `docker_deploy` include. Mirror the freshrss role:
+  ```yaml
+  {% raw %}- name: Copy nginx feed cache config
+    tags: [config]
+    ansible.builtin.copy:
+      src: nginx-feed-cache.conf
+      dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/nginx-feed-cache.conf"
+      mode: "0644"
+    register: <name>_conf          # <name>_-prefixed
+
+  - name: Deploy Container
+    tags: [deploy]
+    ansible.builtin.include_role:
+      name: common
+      tasks_from: docker_deploy.yml
+    vars:
+      common_config_changed: "{{ <name>_conf is changed }}"   # OR several `is changed`{% endraw %}
+  ```
+  Files baked into a `build:` context need NONE of this — `build: always` rebuilds them.
+  (Root `CLAUDE.md` step 6 + `ansible/roles/containers/common/CLAUDE.md`.)
 
 **`ansible/roles/containers/<name>/templates/docker-compose.yml.j2`**
 - Use Jinja2 variables for all configurable values
