@@ -12,7 +12,9 @@ services:
       - PUID={{ puid }}
       - PGID={{ pgid }}
       - TZ={{ tz }}
-      - HOMEPAGE_ALLOWED_HOSTS=homepage.{{ domain }}
+      # Both the public (Cloudflare) host and the .local host used over the WireGuard
+      # private path — Homepage rejects any Host header not listed here.
+      - HOMEPAGE_ALLOWED_HOSTS=homepage.{{ domain }},homepage.local.{{ domain }}
     restart: unless-stopped
     cap_drop:
       - ALL
