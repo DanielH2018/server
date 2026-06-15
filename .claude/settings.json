@@ -22,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/block-containers-edit.sh"
+            "command": "~/server/.claude/hooks/block-protected-edits.sh"
           }
         ]
       }

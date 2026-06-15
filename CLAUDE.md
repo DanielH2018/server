@@ -98,8 +98,9 @@ Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hook
   live container IP via `docker inspect`, so prefer it over curling bridge IPs (which change on
   recreate): `uv run python scripts/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
   scrutiny | pi <path> | cert <host>>`.
-- **block-containers-edit** (PreToolUse) — *denies* edits under `containers/`; edit the
-  `ansible/roles/containers/<svc>/templates/` source instead.
+- **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
+  `containers/` (edit the `ansible/roles/containers/<svc>/templates/` source instead) and
+  (b) SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill).
 - **validate-compose** (PostToolUse) — re-renders all compose templates after you edit a
   `docker-compose.yml.j2`, an `ansible/templates/*.j2` macro, or `host_vars`/`group_vars/all.yml`;
   fails on malformed YAML (catches Jinja indent bugs `ansible-lint` misses).

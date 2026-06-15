@@ -1,0 +1,9 @@
+#!/bin/bash
+# PreToolUse(Edit|Write|...) hook — deny direct edits to generated containers/ files
+# and to SOPS-encrypted files. Routed through uv so the project-pinned interpreter
+# runs (not the system python3); --no-sync skips the env reconcile to stay fast on
+# the per-edit hot path. `exec` preserves the hook's stdin JSON. No output -> normal
+# permission flow.
+cd /home/ubuntu/server || exit 0
+exec /home/ubuntu/.local/bin/uv run --no-sync --quiet python \
+  "$(dirname "$(readlink -f "$0")")/block-protected-edits.py"
