@@ -57,18 +57,36 @@ def test_containers_reason_points_at_template_dir():
 
 
 # --- SOPS content detection (pure) ------------------------------------------
-
-SOPS_TEXT = "db_password: ENC[AES256_GCM,data:abc,iv:xyz,tag:t,type:str]\nsops:\n  age: []\n"
+# Fixtures are built by concatenation so a SOPS signature never appears as a
+# contiguous string in THIS source file — otherwise the guard would block editing
+# this very test. _ENC keeps "ENC[" + "AES256_GCM" split across the +; the encrypted
+# fixture carries a `mac:` metadata line (the structural signal the guard keys off).
+_ENC = "ENC[" + "AES256_GCM,data:Zz==,iv:Yy=,tag:Xx==,type:str]"
+SOPS_TEXT = (
+    "db_password: " + _ENC + "\n"
+    "sops:\n"
+    '    lastmodified: "2026-06-15T13:17:13Z"\n'
+    "    mac: " + _ENC + "\n"
+    "    version: 3.9.2\n"
+)
 PLAINTEXT_HOST_VARS = "server_ip: 10.0.0.161\ncontainers_list:\n  - name: jellyfin\n"
+# A doc/log that merely *mentions* the marker in prose — must NOT be flagged. This is
+# the iteration-3 regression: the bare-substring check wrongly blocked such files.
+PROSE_MENTIONING_MARKER = "Detection keys off the file's " + "ENC[" + "AES256_GCM markers.\n"
 
 
-def test_is_sops_encrypted_true_on_enc_markers():
+def test_is_sops_encrypted_true_on_real_sops_metadata():
     assert is_sops_encrypted(SOPS_TEXT) is True
 
 
 def test_is_sops_encrypted_false_on_plaintext():
     assert is_sops_encrypted(PLAINTEXT_HOST_VARS) is False
     assert is_sops_encrypted("") is False
+
+
+def test_is_sops_encrypted_false_on_prose_mention():
+    # regression: a file that only TALKS about the marker is plaintext, not encrypted.
+    assert is_sops_encrypted(PROSE_MENTIONING_MARKER) is False
 
 
 # --- SOPS guard via classify (content-based, hermetic via tmp files) --------

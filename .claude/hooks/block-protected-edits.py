@@ -9,10 +9,11 @@ Two classes, both always a mistake in this repo:
 
   2. A SOPS-encrypted file (e.g. `ansible/vars/secrets.yml`) — editing the ciphertext
      corrupts it, and pasting a plaintext secret in risks committing it. You must go
-     through `sops`. (`.claude/rules/secrets.md`.) This check is CONTENT-based, not
+     through `sops`. (`.claude/rules/secrets.md`.) Detection is CONTENT-based, not
      path-based: `host_vars/*.yml` / `group_vars/all.yml` contain the substring
-     "vars/" but are PLAINTEXT and must stay editable, so we key off the file's actual
-     `ENC[AES256_GCM` markers rather than its path.
+     "vars/" but are PLAINTEXT and must stay editable. It keys off the SOPS integrity
+     MAC field (a `mac:` metadata line) — NOT a bare ciphertext substring, so a file
+     that merely *mentions* the marker (a doc, a test, this hook) is not misclassified.
 
 Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision when the target is
 one of the above; otherwise no output -> normal permission flow. The hook can only
@@ -20,19 +21,25 @@ ever BLOCK; it never approves.
 """
 import json
 import os
+import re
 import sys
 
 
+_SOPS_MAC_RE = re.compile(r'(?m)^\s*"?mac"?:\s*"?ENC\[AES256_GCM,')
+
+
 def is_sops_encrypted(text):
-    """True if text is a SOPS-encrypted document. SOPS YAML/JSON always carries
-    `ENC[AES256_GCM,...]` ciphertext values; that marker is specific enough to never
-    false-positive on a plaintext config (and avoids the vars/ path-substring trap)."""
-    return "ENC[AES256_GCM" in text
+    """True iff text is a SOPS-encrypted document. Keys off the structural integrity
+    MAC field in the sops metadata block (a `mac:` line whose value is AES256-GCM
+    ciphertext) rather than the bare marker substring — so a file that merely mentions
+    the marker (docs, tests, this progress log) is not misclassified as ciphertext."""
+    return bool(_SOPS_MAC_RE.search(text))
 
 
-def _read_head(path, limit=16384):
-    """Read the first chunk of a file for marker detection. SOPS scatters ENC[...]
-    values from the top, so the head is sufficient. Missing/binary -> ''."""
+def _read_file(path, limit=1_048_576):
+    """Read a file's text for marker detection. SOPS keeps its integrity MAC in the
+    metadata block at the END of the file, so we read the whole thing (capped — a real
+    secrets file is small; anything over the cap is not one). Missing/binary -> ''."""
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             return f.read(limit)
@@ -64,7 +71,7 @@ def classify(file_path, repo_root):
         )
 
     # 2. SOPS-encrypted file (content-based)
-    if is_sops_encrypted(_read_head(target)):
+    if is_sops_encrypted(_read_file(target)):
         rel = os.path.relpath(target, repo_root) if target.startswith(repo_root + os.sep) else target
         return (
             f"`{rel}` is SOPS-encrypted — don't edit it directly (you'd corrupt the "
