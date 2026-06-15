@@ -1,0 +1,48 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+---
+
+services:
+  terraria-stats:
+    image: python:3.14-alpine
+    container_name: terraria-stats
+    user: "{{ puid }}:{{ pgid }}"
+    restart: unless-stopped
+    # Pure stdlib Python; only ./data (SQLite) needs to be writable.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command: ["python", "/app/stats.py"]
+    # /healthz returns 503 once the last successful Loki poll is older than ~3x the poll
+    # interval, so autoheal restarts a hung loop (a crash already exits the container).
+    {{ healthcheck("[\"CMD\", \"python3\", \"-c\", \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:9420/healthz',timeout=5).status==200 else 1)\"]") }}
+    environment:
+      - TZ={{ tz }}
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - LOKI_URL=http://loki:3100
+      # Quote: the value starts with '{', a YAML flow-mapping indicator. (stats.py's
+      # default selector is identical, so this is for discoverability/tunability.)
+      - 'LOKI_QUERY={container="terraria"}'
+      - POLL_INTERVAL=20
+      - METRICS_PORT=9420
+      - DB_PATH=/data/stats.db
+      - BACKFILL_DAYS=30
+    volumes:
+      - ./stats.py:/app/stats.py:ro
+      - ./data:/data
+    {{ service_networks() }}
+    labels:
+      # Container-liveness monitor; the actual stats are scraped by Prometheus + shown
+      # in Grafana, so no push monitor here.
+      {{ kuma('terraria-stats') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('0.50', '128M', '0.05', '32M') }}
+
+{{ external_networks() }}
