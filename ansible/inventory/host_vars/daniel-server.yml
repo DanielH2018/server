@@ -228,3 +228,11 @@ containers_list:
     use_authelia: false
     networks:
       - apps
+  - name: terraria-stats
+    # Headless sidecar: reads terraria console lines from Loki, serves Prometheus
+    # metrics on :9420. No web UI -> no port/Authelia. monitoring net = reach Loki
+    # and be scraped by Prometheus.
+    port: false
+    use_authelia: false
+    networks:
+      - monitoring
