@@ -20,6 +20,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
 testpaths = [                        # single source of truth for WHAT runs; excludes vendored
   "ansible/tests",                   # ansible/collections/** third-party tests
   "ansible/roles/containers/monitor-bridge/files",
+  "ansible/roles/containers/terraria-stats/files",
   ".claude/hooks",
   "scripts",                         # closes the smoke_extract CI gap
   "ansible/roles/setup/gitops_deploy/files",   # deploy_logic decision tests
