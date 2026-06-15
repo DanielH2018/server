@@ -32,7 +32,9 @@ POLL_INTERVAL = int(_env("POLL_INTERVAL", "20"))
 HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
 METRICS_PORT = int(_env("METRICS_PORT", "9420"))
 DB_PATH = _env("DB_PATH", "/data/stats.db")
-BACKFILL_DAYS = float(_env("BACKFILL_DAYS", "30"))
+# 28d (672h) stays well under Loki's max_query_length (~721h/30d1h) — the first-run/backfill
+# query spans this whole window, so keep headroom below that limit (else HTTP 400).
+BACKFILL_DAYS = float(_env("BACKFILL_DAYS", "28"))
 LOKI_PAGE_LIMIT = int(_env("LOKI_PAGE_LIMIT", "5000"))
 HEALTH_MAX_AGE = int(_env("HEALTH_MAX_AGE", str(3 * POLL_INTERVAL + 30)))
 

@@ -35,7 +35,8 @@ services:
       - POLL_INTERVAL=20
       - METRICS_PORT=9420
       - DB_PATH=/data/stats.db
-      - BACKFILL_DAYS=30
+      # 28d keeps the first-run/backfill query under Loki's ~30d max_query_length (HTTP 400).
+      - BACKFILL_DAYS=28
     volumes:
       - ./stats.py:/app/stats.py:ro
       - ./data:/data
