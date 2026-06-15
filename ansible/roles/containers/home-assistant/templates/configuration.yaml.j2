@@ -1,0 +1,10 @@
+# Configure a default setup of Home Assistant (frontend, api, etc)
+default_config:
+
+http:
+  use_x_forwarded_for: true
+  # Trust the whole Docker bridge range (RFC1918 172.16/12) so HA honors
+  # X-Forwarded-For from Traefik regardless of which bridge subnet it connects
+  # from — matches the trusted-proxy ranges in the authelia and traefik configs.
+  trusted_proxies:
+    - 172.16.0.0/12

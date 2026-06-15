@@ -75,6 +75,14 @@ containers_list:
     use_authelia: true
     networks:
       - apps
+  - name: home-assistant
+    port: 8123
+    # HA uses its own auth (+ optional TOTP), NOT Authelia: forward-auth breaks the
+    # companion mobile app, webhooks, and long-lived API tokens. Route still gets
+    # Traefik TLS + CrowdSec + rate-limiting.
+    use_authelia: false
+    networks:
+      - apps
   # Organization: Development
   - name: code-server
     port: 8443

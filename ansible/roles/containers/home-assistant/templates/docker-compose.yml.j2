@@ -17,8 +17,25 @@ services:
     volumes:
       - ./config:/config
     restart: unless-stopped
+    # LSIO image: cap_drop ALL plus the s6 privilege-drop set. No NET_BIND_SERVICE —
+    # HA binds high port 8123, not :80. Verify on deploy (docker logs home-assistant)
+    # — add back caps if it fails to start.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - FOWNER
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true
     {{ service_networks() }}
-    {{ healthcheck('curl --fail -s http://localhost:8123/ || exit 1') }}
+    # HA is a slow first-booter: the LSIO image does a one-time "fixing python package
+    # permissions" pass, then HA core starts before :8123 binds — past the default 30s.
+    # start_period 120s keeps autoheal (AUTOHEAL_CONTAINER_LABEL=all) from restarting it
+    # mid-boot. Warm reboots are much faster.
+    {{ healthcheck('curl --fail -s http://localhost:8123/ || exit 1', start_period='120s') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(

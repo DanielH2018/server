@@ -1,0 +1,6 @@
+---
+# HTTP service fronted by Traefik; uses Home Assistant's own auth (no Authelia
+# forward-auth — the companion app / webhooks / API tokens can't carry it), so
+# traefik is the only dep needed for the deploy toposort.
+role_deps:
+  - traefik

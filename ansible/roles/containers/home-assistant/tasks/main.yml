@@ -1,5 +1,6 @@
 ---
 - name: Create required directories
+  tags: [config]
   ansible.builtin.include_role:
     name: common
     tasks_from: setup_dirs.yml
@@ -8,16 +9,18 @@
       - "{{ container_item.name }}/config"
 
 - name: Create configuration.yaml from template
+  tags: [config]
   ansible.builtin.template:
     src: configuration.yaml.j2
-    dest: "/home/{{ sys_user }}/server/containers/home-assistant/config/configuration.yaml"
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/configuration.yaml"
     mode: "0664"
-
-# - include_tasks: dns.yml
-#   with_items:
-#     - "{{ role_name }}"
+  register: home_assistant_config
 
 - name: Deploy Container
+  tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # configuration.yaml is a bind-mounted templated config — recreate on edit.
+    common_config_changed: "{{ home_assistant_config is changed }}"
