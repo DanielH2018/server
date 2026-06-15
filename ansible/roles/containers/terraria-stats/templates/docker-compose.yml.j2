@@ -19,8 +19,10 @@ services:
     security_opt:
       - no-new-privileges:true
     command: ["python", "/app/stats.py"]
-    # /healthz returns 503 once the last successful Loki poll is older than ~3x the poll
-    # interval, so autoheal restarts a hung loop (a crash already exits the container).
+    # /healthz returns 503 on startup (until the first successful Loki poll) and whenever
+    # the last successful poll is older than HEALTH_MAX_AGE (~3x the poll interval); the
+    # start_period covers the startup window, and autoheal restarts a hung loop afterwards
+    # (a crash already exits the container).
     {{ healthcheck("[\"CMD\", \"python3\", \"-c\", \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:9420/healthz',timeout=5).status==200 else 1)\"]") }}
     environment:
       - TZ={{ tz }}
