@@ -1,0 +1,89 @@
+{
+  "uid": "terraria-player-stats",
+  "title": "Terraria — Player Stats",
+  "tags": ["terraria"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-30d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Players Online",
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "refId": "A", "expr": "terraria_players_online", "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" } }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Leaderboard",
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "gridPos": { "h": 10, "w": 18, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "custom": {} }, "overrides": [
+        { "matcher": { "id": "byName", "options": "Playtime" },
+          "properties": [ { "id": "unit", "value": "s" } ] }
+      ] },
+      "transformations": [
+        { "id": "joinByField", "options": { "byField": "player", "mode": "outer" } },
+        { "id": "organize", "options": {
+          "renameByName": {
+            "player": "Player",
+            "Value #Playtime": "Playtime",
+            "Value #Sessions": "Sessions"
+          },
+          "excludeByName": { "Time": true, "Time 1": true, "Time 2": true,
+            "__name__": true, "__name__ 1": true, "__name__ 2": true,
+            "job": true, "job 1": true, "job 2": true,
+            "instance": true, "instance 1": true, "instance 2": true } } }
+      ],
+      "targets": [
+        { "refId": "Playtime", "format": "table", "instant": true,
+          "expr": "terraria_player_playtime_seconds_total",
+          "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" } },
+        { "refId": "Sessions", "format": "table", "instant": true,
+          "expr": "terraria_player_sessions_total",
+          "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" } }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Playtime Accrual (per player)",
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 10 },
+      "targets": [
+        { "refId": "A", "expr": "terraria_player_playtime_seconds_total",
+          "legendFormat": "{{player}}",
+          "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" } }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Players Online (over time)",
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "gridPos": { "h": 9, "w": 6, "x": 12, "y": 10 },
+      "targets": [
+        { "refId": "A", "expr": "terraria_players_online",
+          "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" } }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Parser Health (unmatched lines/min)",
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "gridPos": { "h": 9, "w": 6, "x": 18, "y": 10 },
+      "targets": [
+        { "refId": "A", "expr": "rate(terraria_stats_unmatched_player_lines_total[5m]) * 60",
+          "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" } }
+      ]
+    }
+  ]
+}
