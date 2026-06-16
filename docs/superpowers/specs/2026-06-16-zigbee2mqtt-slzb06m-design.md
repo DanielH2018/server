@@ -23,8 +23,8 @@ existing homelab conventions. HA consumes Zigbee devices over MQTT using HA MQTT
 
 ## Architecture
 
-```
-SLZB-06M (LAN <ip>:6638)            ← physical Zigbee coordinator
+```text
+SLZB-06M (10.0.0.127:6638)         ← physical Zigbee coordinator
       │  serial-over-TCP
       ▼
 zigbee2mqtt  ──MQTT──►  mosquitto  ◄──MQTT──►  home-assistant
@@ -69,12 +69,12 @@ per-device HA configuration.
   `coordinator_backup.json`, and the Zigbee **network key**. Losing it means re-pairing every
   device. Must be inside Kopia scope; ensure no kopiaignore pattern excludes it.
 - **Templated `configuration.yaml`** (wired to `common_config_changed`):
-  - `serial: { port: "tcp://<slzb-ip>:6638", adapter: ember }`
+  - `serial: { port: "tcp://10.0.0.127:6638", adapter: ember }`
   - `mqtt: { server: "mqtt://mosquitto:1883", user/password from SOPS }`
   - `homeassistant: true` (HA discovery)
   - `frontend` enabled on 8080
   - `permit_join: false` (pairing is performed deliberately via the UI)
-  - The SLZB IP is a templated var (host_vars), not hardcoded in the template.
+  - The SLZB IP (`10.0.0.127`) is a templated var (host_vars), not hardcoded in the template.
 - **`adapter` value:** `ember` is correct for the SLZB-06M's Silabs EFR32 EmberZNet firmware;
   confirm against the flashed firmware during implementation.
 - **Healthcheck:** HTTP GET against the frontend on 8080 (use the tool the image ships —
@@ -111,7 +111,7 @@ per-device HA configuration.
 
 - Add `mosquitto` and `zigbee2mqtt` entries to `containers_list` in
   `ansible/inventory/host_vars/daniel-server.yml`.
-- Add a templated `slzb_ip` (or similar) var for the coordinator's LAN IP.
+- Add a templated `slzb_ip: 10.0.0.127` (or similar) var for the coordinator's LAN IP.
 
 ## Deploy order
 
@@ -128,7 +128,7 @@ per-device HA configuration.
 - `scripts/validate_compose_templates.py` (PostToolUse hook re-renders on template edit).
 - `uv run python scripts/probe.py health mosquitto` and `health zigbee2mqtt` (post-deploy gate;
   exits 0 only when running + healthy).
-- Z2M UI shows the coordinator online (adapter connected, on `tcp://<ip>:6638`).
+- Z2M UI shows the coordinator online (adapter connected, on `tcp://10.0.0.127:6638`).
 - HA MQTT integration connected; a paired device appears as an HA entity.
 
 ## Out of scope (YAGNI)
