@@ -1,0 +1,35 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}/config"
+      - "{{ container_item.name }}/data"
+
+- name: Deploy Mosquitto config
+  tags: [config]
+  ansible.builtin.template:
+    src: mosquitto.conf.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/mosquitto.conf"
+    mode: "0640"
+  register: mosquitto_conf
+
+- name: Deploy Mosquitto password file
+  tags: [config]
+  ansible.builtin.template:
+    src: passwordfile.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/passwordfile"
+    mode: "0640"
+  no_log: true
+  register: mosquitto_passwordfile
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+  vars:
+    common_config_changed: "{{ (mosquitto_conf is changed) or (mosquitto_passwordfile is changed) }}"

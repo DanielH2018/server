@@ -1,0 +1,37 @@
+{% from 'traefik.yml.j2' import labels with context %}
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+---
+
+services:
+  zigbee2mqtt:
+    image: ghcr.io/koenkk/zigbee2mqtt:2.12.0
+    container_name: zigbee2mqtt
+    environment:
+      - TZ={{ tz }}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    {{ service_networks() }}
+    # Z2M takes a moment to connect to the coordinator before the frontend serves.
+    {{ healthcheck('wget -q -O /dev/null http://localhost:8080/ || exit 1', start_period='60s') }}
+    labels:
+      {# Generate labels(container, port, docker_network, use_authelia) -#}
+      {{ labels(
+          container_item.hostname | default(container_item.name),
+          container_item.port | string,
+          (container_item.networks | default([docker_network]))[0],
+          container_item.use_authelia
+        )
+      }}
+      {{ kuma(container_item.name) }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('0.50', '256M', '0.05', '64M') }}
+
+{{ external_networks() }}

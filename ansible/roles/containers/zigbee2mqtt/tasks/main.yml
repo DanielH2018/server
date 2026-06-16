@@ -1,0 +1,27 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}/data"
+
+- name: Create Zigbee2MQTT configuration.yaml from template
+  tags: [config]
+  ansible.builtin.template:
+    src: configuration.yaml.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/data/configuration.yaml"
+    mode: "0640"
+  no_log: true
+  register: zigbee2mqtt_config
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+  vars:
+    # configuration.yaml is the Ansible source of truth — recreate on edit.
+    common_config_changed: "{{ zigbee2mqtt_config is changed }}"

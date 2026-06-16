@@ -1,0 +1,34 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+---
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    user: "{{ puid }}:{{ pgid }}"
+    environment:
+      - TZ={{ tz }}
+    volumes:
+      - ./config:/mosquitto/config
+      - ./data:/mosquitto/data
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    {{ service_networks() }}
+    # $$SYS so Compose passes a literal $SYS to the broker (escaping; validate-hook won't catch it).
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -u {{ mqtt_username }} -P {{ mqtt_password }} -t '$$SYS/broker/uptime' -C 1 -W 3 >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      {{ kuma(container_item.name, name='Mosquitto') }}
+    # Resource caps for blast-radius containment (M1); broker is tiny — tune from Grafana.
+    {{ resources('0.25', '64M', '0.02', '16M') }}
+
+{{ external_networks() }}

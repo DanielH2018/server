@@ -1,0 +1,6 @@
+---
+# HTTP UI fronted by Traefik + Authelia; bridges to MQTT, so it needs both traefik and
+# the broker up first.
+role_deps:
+  - traefik
+  - mosquitto

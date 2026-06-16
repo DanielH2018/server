@@ -1,0 +1,8 @@
+# Managed by Ansible (roles/containers/mosquitto). Source of truth — overwritten on deploy.
+listener 1883
+allow_anonymous false
+password_file /mosquitto/config/passwordfile
+persistence true
+persistence_location /mosquitto/data/
+# Log to stdout so `docker logs` / Loki capture broker logs.
+log_dest stdout

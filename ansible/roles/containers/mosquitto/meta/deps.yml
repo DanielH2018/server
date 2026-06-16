@@ -1,0 +1,4 @@
+---
+# Internal MQTT broker — no Traefik route, no Authelia. Nothing must deploy before it;
+# zigbee2mqtt and (re)deploys of home-assistant depend on IT (see their deps.yml).
+role_deps: []

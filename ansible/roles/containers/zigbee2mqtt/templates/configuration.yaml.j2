@@ -1,0 +1,26 @@
+# Managed by Ansible (roles/containers/zigbee2mqtt). Source of truth — overwritten on deploy.
+# Device pairings + network state live in ./data (database.db, coordinator_backup.json,
+# devices.yaml, groups.yaml), owned by Z2M and backed up by Kopia — NOT templated here.
+homeassistant:
+  enabled: true
+mqtt:
+  base_topic: zigbee2mqtt
+  server: mqtt://mosquitto:1883
+  user: "{{ mqtt_username }}"
+  password: "{{ mqtt_password }}"
+serial:
+  port: tcp://{{ slzb_ip }}:6638
+  adapter: ember
+frontend:
+  enabled: true
+  host: 0.0.0.0
+  port: 8080
+advanced:
+  log_level: info
+  # Pinned network identity — fixed so a templated-config redeploy can't regenerate it
+  # and silently un-pair every device.
+  network_key: {{ zigbee_network_key }}
+  pan_id: {{ zigbee_pan_id }}
+  ext_pan_id: {{ zigbee_ext_pan_id }}
+devices: devices.yaml
+groups: groups.yaml
