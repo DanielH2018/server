@@ -6,13 +6,21 @@ kopia/
 
 # ── SQLite sidecar files (match at any depth) ────────────────────────────────
 # A WAL is only meaningful with an atomic FS snapshot (kopia's file walk isn't one);
-# the main .sqlite file alone restores consistent-as-of-last-checkpoint. Backing WALs
+# the main DB file alone restores consistent-as-of-last-checkpoint. Backing WALs
 # up is pure churn — n8n's stuck 405M WAL re-uploaded ~400M/night (found 2026-06-12).
+# Both naming conventions: .sqlite-wal AND .db-wal — the latter (HA recorder
+# home-assistant_v2.db, the *arr apps, tdarr, bazarr, terraria-stats) slipped past the
+# .sqlite-only rule and was churning ~25M/night unfiltered (found 2026-06-16).
 *.sqlite-wal
 *.sqlite-shm
+*.db-wal
+*.db-shm
 
 # ── Generic regeneratable dirs (match at any depth) ─────────────────────────
+# ".cache" (dotted) is a DISTINCT name from "cache" — the bare cache/ rule never
+# matched the HA / jellyfin / qbittorrent .cache dirs (found 2026-06-16). List both.
 cache/
+.cache/
 logs/
 transcodes/
 tmp/
@@ -59,7 +67,6 @@ scrutiny/influxdb2/
 # auto-update churn then bled ~0.8GB/day of unique content into B2. Keep both lines.
 code-server/config/extensions/
 code-server/config/.local/share/code-server/extensions/
-code-server/config/.cache/
 uptime-kuma/data*/
 freshrss/config/www/freshrss/data/cache/
 karakeep/time-tagger/uv-cache/
@@ -70,6 +77,12 @@ grafana/data/plugins/
 tdarr/server/Tdarr/Backups/
 # Cloned TRaSH-guides repos, re-fetched by every nightly recyclarr sync.
 recyclarr/recyclarr/config/resources/
+
+# ── Home Assistant ─────────────────────────────────────────────────────────────
+# HACS frontend bundles (51M) are re-downloaded by HACS on demand — pure regeneratable
+# weight, and the bulk of the +2537-file snapshot jump on 2026-06-15. The recorder DB
+# (home-assistant_v2.db) itself stays backed up; its .db-wal/.db-shm churn is dropped above.
+home-assistant/config/custom_components/hacs/hacs_frontend/
 
 # ── Pi-hole: keep config (pihole.toml, custom lists, *_backups), drop the bulk ──
 # pihole-FTL.db is DNS query HISTORY (432M, rewritten constantly — poor dedup);
