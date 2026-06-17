@@ -1,12 +1,13 @@
-# Managed by Ansible (roles/containers/home-assistant) — YAML-mode Lovelace dashboard.
-# Edit here + deploy (recreates HA), or for a faster loop edit the rendered file and use
+# Managed by Ansible (roles/containers/home-assistant) — ROOT YAML-mode dashboard.
+# This file IS the Home Assistant landing page (lovelace: mode: yaml). Edit here + deploy
+# (recreates HA), or for a faster loop edit the rendered file and use
 # Developer Tools → YAML → "Reload Lovelace" to apply without an HA restart.
 # Built-in cards only (no HACS resources required).
-title: Smart Home
+title: Home
 views:
-  - title: Overview
-    path: overview
-    icon: mdi:home-automation
+  - title: Bedroom
+    path: bedroom
+    icon: mdi:bed
     cards:
       # ── APC UPS ──────────────────────────────────────────────────────────
       - type: vertical-stack
@@ -63,25 +64,14 @@ views:
                 name: Display Auto-Off
               - entity: switch.tower_fan_panel_sound
                 name: Panel Sound
-      # ── Aqara FP300 presence sensor ──────────────────────────────────────
-      - type: vertical-stack
-        cards:
-          - type: glance
-            title: Aqara FP300
-            entities:
-              - entity: binary_sensor.aqara_fp300_presence
-                name: Presence
-              - entity: binary_sensor.aqara_fp300_pir_detection
-                name: PIR
-              - entity: sensor.aqara_fp300_battery
-                name: Battery
-          - type: entities
-            entities:
-              - entity: sensor.aqara_fp300_illuminance
-                name: Illuminance
-              - entity: sensor.aqara_fp300_temperature
-                name: Temperature
-              - entity: sensor.aqara_fp300_humidity
-                name: Humidity
-              - entity: sensor.aqara_fp300_target_distance
-                name: Target Distance
+      # ── Aqara FP300 presence sensor (essentials only) ────────────────────
+      - type: glance
+        title: Aqara FP300
+        columns: 3
+        entities:
+          - entity: binary_sensor.aqara_fp300_presence
+            name: Presence
+          - entity: sensor.aqara_fp300_temperature
+            name: Temperature
+          - entity: sensor.aqara_fp300_illuminance
+            name: Illuminance

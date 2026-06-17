@@ -7,7 +7,6 @@
   vars:
     common_dirs_to_create:
       - "{{ container_item.name }}/config"
-      - "{{ container_item.name }}/config/dashboards"
 
 - name: Create configuration.yaml from template
   tags: [config]
@@ -25,13 +24,19 @@
     mode: "0664"
   register: home_assistant_customize
 
-- name: Create Smart Home dashboard from template
+- name: Create root Lovelace dashboard from template
   tags: [config]
   ansible.builtin.template:
-    src: dashboards/smart-home.yaml.j2
-    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/dashboards/smart-home.yaml"
+    src: ui-lovelace.yaml.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/ui-lovelace.yaml"
     mode: "0664"
   register: home_assistant_dashboard
+
+- name: Remove the superseded per-dashboard file (migrated to root ui-lovelace.yaml)
+  tags: [config]
+  ansible.builtin.file:
+    path: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/dashboards"
+    state: absent
 
 - name: Deploy Container
   tags: [deploy]

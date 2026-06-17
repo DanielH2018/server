@@ -13,15 +13,8 @@ http:
   trusted_proxies:
     - 172.16.0.0/12
 
-# Repo-managed YAML-mode dashboard, registered ALONGSIDE the default storage-mode
-# "Overview" dashboard. No top-level `mode:`, so the default stays UI-editable; only
-# `smart-home` is file-defined (templates/dashboards/smart-home.yaml.j2). Built-in cards
-# only, so no `resources:` are needed.
+# Root dashboard is YAML-mode: ui-lovelace.yaml IS the landing page, so the single-room
+# setup opens straight to it with no sidebar click. This replaces the auto-generated
+# storage-mode "Overview". Built-in cards only, so no `resources:` are needed.
 lovelace:
-  dashboards:
-    smart-home:
-      mode: yaml
-      title: Smart Home
-      icon: mdi:home-automation
-      show_in_sidebar: true
-      filename: dashboards/smart-home.yaml
+  mode: yaml
