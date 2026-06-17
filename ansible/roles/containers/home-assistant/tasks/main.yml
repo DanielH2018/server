@@ -7,6 +7,7 @@
   vars:
     common_dirs_to_create:
       - "{{ container_item.name }}/config"
+      - "{{ container_item.name }}/config/dashboards"
 
 - name: Create configuration.yaml from template
   tags: [config]
@@ -16,11 +17,27 @@
     mode: "0664"
   register: home_assistant_config
 
+- name: Create entity customizations from template
+  tags: [config]
+  ansible.builtin.template:
+    src: customize.yaml.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/customize.yaml"
+    mode: "0664"
+  register: home_assistant_customize
+
+- name: Create Smart Home dashboard from template
+  tags: [config]
+  ansible.builtin.template:
+    src: dashboards/smart-home.yaml.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/dashboards/smart-home.yaml"
+    mode: "0664"
+  register: home_assistant_dashboard
+
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
   vars:
-    # configuration.yaml is a bind-mounted templated config — recreate on edit.
-    common_config_changed: "{{ home_assistant_config is changed }}"
+    # All three are bind-mounted templated configs — recreate so HA reloads them on edit.
+    common_config_changed: "{{ (home_assistant_config is changed) or (home_assistant_customize is changed) or (home_assistant_dashboard is changed) }}"

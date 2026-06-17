@@ -1,0 +1,34 @@
+# Managed by Ansible (roles/containers/home-assistant). Entity friendly-name + icon overrides.
+# `customize:` applies because these entities are not renamed in HA's UI entity registry
+# (a UI rename would take precedence). Names are neutral — add room prefixes if you like.
+sensor.apc_ups_battery_charge:
+  friendly_name: UPS Battery
+  icon: mdi:battery-charging
+sensor.apc_ups_load:
+  friendly_name: UPS Load
+  icon: mdi:gauge
+sensor.apc_ups_battery_runtime:
+  friendly_name: UPS Runtime
+  icon: mdi:timer-outline
+sensor.apc_ups_input_voltage:
+  friendly_name: UPS Input Voltage
+  icon: mdi:flash
+sensor.apc_ups_status:
+  friendly_name: UPS Status
+  icon: mdi:power-plug
+fan.tower_fan:
+  friendly_name: Tower Fan
+  icon: mdi:fan
+sensor.tower_fan_temperature:
+  friendly_name: Fan Temperature
+binary_sensor.aqara_fp300_presence:
+  friendly_name: Presence
+  icon: mdi:motion-sensor
+binary_sensor.aqara_fp300_pir_detection:
+  friendly_name: PIR Detection
+sensor.aqara_fp300_illuminance:
+  friendly_name: Illuminance
+sensor.aqara_fp300_temperature:
+  friendly_name: Temperature
+sensor.aqara_fp300_humidity:
+  friendly_name: Humidity

@@ -28,6 +28,14 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   own config via the UI, but this file is the Ansible source of truth and is
   overwritten on deploy — keep UI-managed config (integrations, etc.) in the areas HA
   stores separately (`.storage/`, automations.yaml…), which are NOT templated.
+- **YAML-mode dashboard + entity customization (templated).** `configuration.yaml` registers
+  a `smart-home` YAML dashboard (`templates/dashboards/smart-home.yaml.j2` → `config/dashboards/`)
+  **alongside** the default storage-mode "Overview" (no top-level `lovelace: mode:`, so Overview
+  stays UI-editable). `homeassistant: customize: !include customize.yaml` holds friendly-name/icon
+  overrides (`templates/customize.yaml.j2`). Both feed `common_config_changed`, so an edit
+  recreates HA (~120s). Built-in cards only — no Lovelace `resources:`. **Fast loop for
+  dashboard-only tweaks:** edit the rendered file and Developer Tools → YAML → **Reload Lovelace**
+  (no HA restart). Dashboard entity IDs are exact as of 2026-06-17 (UPS/DREO Tower Fan/Aqara FP300).
 - **All persistent state is `./config` → `/config`** (Kopia-backed): the SQLite
   recorder DB, `.storage/`, secrets, automations, and the templated `configuration.yaml`.
 - **Bridge networking, not host.** Cloud/API-based integrations work fine. **Local
