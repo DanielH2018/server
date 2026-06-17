@@ -38,11 +38,13 @@ views:
             title: APC UPS
             icon: mdi:power-plug
             entities:
-              # NOTE: NUT disables most sensors by default (disabled_by: integration).
-              # Only enabled apc_ups sensors are used here. To add Runtime, enable
-              # sensor.apc_ups_battery_runtime in the UI first (it's disabled by default).
+              # NUT disables most sensors by default (disabled_by: integration); only
+              # enabled apc_ups sensors are used here. Runtime was enabled in the UI
+              # 2026-06-17 (disabled by default) — keep it enabled or this row breaks.
               - entity: sensor.apc_ups_status
                 name: Status
+              - entity: sensor.apc_ups_battery_runtime
+                name: Runtime
               - entity: sensor.apc_ups_input_voltage
                 name: Input Voltage
       # ── DREO Tower Fan (DR-HTF024S) ──────────────────────────────────────
