@@ -67,7 +67,7 @@ views:
       # ── Aqara FP300 presence sensor (essentials only) ────────────────────
       - type: glance
         title: Aqara FP300
-        columns: 3
+        columns: 2
         entities:
           - entity: binary_sensor.aqara_fp300_presence
             name: Presence
@@ -75,3 +75,5 @@ views:
             name: Temperature
           - entity: sensor.aqara_fp300_illuminance
             name: Illuminance
+          - entity: sensor.aqara_fp300_battery
+            name: Battery
