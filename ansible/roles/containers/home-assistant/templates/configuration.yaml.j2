@@ -13,8 +13,17 @@ http:
   trusted_proxies:
     - 172.16.0.0/12
 
-# Root dashboard is YAML-mode: ui-lovelace.yaml IS the landing page, so the single-room
-# setup opens straight to it with no sidebar click. This replaces the auto-generated
-# storage-mode "Overview". Built-in cards only, so no `resources:` are needed.
+# Lovelace dashboard defined from YAML (ui-lovelace.yaml), shown in the sidebar as "Bedroom".
+# Uses the `dashboards:` form, NOT the legacy top-level `mode: yaml` (deprecated, removed in
+# HA 2026.8). Built-in cards only, so no `resource_mode: yaml` is needed.
+# NOTE: HA has no config option for the *landing* dashboard — to open straight to this one,
+# set it as default in the UI: Settings → Dashboards → (Bedroom) ⋮ → "Set as default for
+# everyone" (persists in HA's .storage). Without that, HA opens its auto-generated areas view.
 lovelace:
-  mode: yaml
+  dashboards:
+    lovelace:
+      mode: yaml
+      filename: ui-lovelace.yaml
+      title: Bedroom
+      icon: mdi:bed
+      show_in_sidebar: true
