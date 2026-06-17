@@ -11,9 +11,13 @@ Eclipse Mosquitto 2.x. Internal-only broker for the Zigbee2MQTT stack. See repo-
 
 ## Notable
 - **Authenticated, not anonymous.** `allow_anonymous false` + `password_file`. Creds come
-  from SOPS: `mqtt_username` / `mqtt_password` (clients) and `mqtt_password_hash` (the
-  templated `passwordfile`, a `mosquitto_passwd` line). Regenerate the hash with
-  `docker run --rm eclipse-mosquitto:2 sh -c 'mosquitto_passwd -b -c /tmp/pw USER PASS; cat /tmp/pw'`.
+  from SOPS: `mqtt_username` / `mqtt_password` (clients) and `mqtt_password_hash` (the hash).
+  Regenerate the hash with
+  `docker run --rm eclipse-mosquitto:2 sh -c 'mosquitto_passwd -b -c /tmp/pw x PASS; cat /tmp/pw'`
+  — the `passwordfile` template prepends `{{ mqtt_username }}:` and strips any `user:` prefix
+  from the stored hash, so the username in the hash command is irrelevant (mosquitto's PBKDF2
+  hash is salt+password only, not username). This is the single-source-of-truth fix for the
+  2026-06-17 `not authorised` bug (hash baked `homelab:` while `mqtt_username` was `ubuntu`).
 - **Port 1883 is NOT host-published** — only reachable on the `mqtt` net. No external MQTT clients.
 - **Runs as `1000:1000`** (`user:`) so the bind-mounted `./config`/`./data` are writable
   (Mosquitto's default uid is 1883, which can't write deploy-user-owned dirs).

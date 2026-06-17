@@ -9,6 +9,9 @@ services:
   zigbee2mqtt:
     image: ghcr.io/koenkk/zigbee2mqtt:2.12.0
     container_name: zigbee2mqtt
+    # Run as 1000:1000 so it owns its 0640 ./data/configuration.yaml: the image runs as
+    # root, but cap_drop ALL strips DAC_OVERRIDE, so root can't bypass file perms (EACCES).
+    user: "{{ puid }}:{{ pgid }}"
     environment:
       - TZ={{ tz }}
     volumes:
@@ -20,7 +23,9 @@ services:
       - no-new-privileges:true
     {{ service_networks() }}
     # Z2M takes a moment to connect to the coordinator before the frontend serves.
-    {{ healthcheck('wget -q -O /dev/null http://localhost:8080/ || exit 1', start_period='60s') }}
+    # Use 127.0.0.1 not localhost: Z2M listens IPv4-only (0.0.0.0:8080), but busybox wget
+    # resolves localhost to ::1 first and won't fall back to IPv4 → false "unhealthy".
+    {{ healthcheck('wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1', start_period='60s') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
