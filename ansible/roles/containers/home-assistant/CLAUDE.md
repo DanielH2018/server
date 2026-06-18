@@ -35,14 +35,27 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   automation/scene edits are overwritten on deploy. Both feed `common_config_changed`, so an
   edit recreates HA (~120s). First automation: Hue Tap Dial (RDM002) drives the
   `light.bedroom_lights` group (dial = brightness, button 1 = smart toggle, buttons 2-3 =
-  scenes, button 4 = adaptive reset). Presence (FP300) + an `input_boolean` manual-off override
-  + a weekday/weekend morning reset live in the same file.
+  scenes, button 4 = natural-state reset → `script.bedroom_apply_natural`, see below). Presence
+  (FP300) + an `input_boolean` manual-off override + a weekday/weekend morning reset (which also
+  calls `script.bedroom_apply_natural`) live in the same file.
 - **Adaptive Lighting is a HACS dependency (since 2026-06-18).** `configuration.yaml` declares
   `adaptive_lighting:` for the bedroom group; the integration code installs via HACS into
   `custom_components/adaptive_lighting/` (Kopia-backed, not templated — like `dreo`). Install it
   via HACS BEFORE deploying, or HA logs "integration not found" and skips the block. The deploy's
-  full restart loads a newly added custom component (a YAML "Quick Reload" does not). Tap Dial
-  button 4 calls `adaptive_lighting.apply` to snap the group back to the natural curve.
+  full restart loads a newly added custom component (a YAML "Quick Reload" does not).
+- **`files/scripts.yaml` — the "natural lighting state" dispatcher (templated via `copy`, like
+  automations/scenes; wired via `script: !include scripts.yaml`; feeds `common_config_changed`).**
+  `script.bedroom_apply_natural` sets the bedroom group to what it would be with no manual
+  intervention RIGHT NOW: an ordered `choose:` of time-based **exceptions** (brightness overrides
+  on AL's natural color) with **full Adaptive Lighting (color + brightness) as `default:`**. The
+  morning wake (06:00 Mon–Fri / 07:00 Sat–Sun, 1%→50% over 15 min) is the first exception, encoded
+  as `brightness = 1+(50-1)·elapsed/900` over `transition = 900-elapsed` — so `elapsed=0` equals
+  the wake's start and pressing button 4 mid-window *resumes* the ramp. **Both Tap Dial button 4
+  and the `bedroom_morning_reset` automation call this dispatcher** (single source of truth — no
+  duplicated ramp math). Color temp ALWAYS comes from AL; exceptions override brightness only.
+  Helper `script.bedroom_set_natural_brightness(brightness_pct, transition)` holds the AL
+  release + color-apply boilerplate so a new exception is just a `(condition, brightness,
+  transition)` triple dropped above `default:` — see the worked example comment in the file.
 - **YAML dashboard + entity customization (templated).** `configuration.yaml` registers a YAML
   dashboard via `lovelace: dashboards:` (NOT the legacy top-level `mode: yaml` — deprecated,
   removed in HA 2026.8) pointing at `config/ui-lovelace.yaml` (`templates/ui-lovelace.yaml.j2`),

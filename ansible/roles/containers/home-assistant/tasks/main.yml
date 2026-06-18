@@ -57,6 +57,14 @@
     mode: "0664"
   register: home_assistant_scenes
 
+- name: Deploy scripts from static file
+  tags: [config]
+  ansible.builtin.copy:
+    src: scripts.yaml
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/scripts.yaml"
+    mode: "0664"
+  register: home_assistant_scripts
+
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:
@@ -64,4 +72,4 @@
     tasks_from: docker_deploy.yml
   vars:
     # All three are bind-mounted templated configs — recreate so HA reloads them on edit.
-    common_config_changed: "{{ (home_assistant_config is changed) or (home_assistant_customize is changed) or (home_assistant_dashboard is changed) or (home_assistant_automations is changed) or (home_assistant_scenes is changed) }}"
+    common_config_changed: "{{ (home_assistant_config is changed) or (home_assistant_customize is changed) or (home_assistant_dashboard is changed) or (home_assistant_automations is changed) or (home_assistant_scenes is changed) or (home_assistant_scripts is changed) }}"

@@ -10,6 +10,9 @@ homeassistant:
 # open, but edits are NOT persistent — git is the source of truth; redeploy to change.
 automation: !include automations.yaml
 scene: !include scenes.yaml
+# Reusable scripts: bedroom_apply_natural (the "natural lighting state" dispatcher used by
+# Tap Dial button 4 + the morning reset) and its bedroom_set_natural_brightness helper.
+script: !include scripts.yaml
 
 # Helper: manual-off override. When on, presence will NOT auto-turn-on the bedroom lights.
 # Set by the Tap Dial when you turn the lights off; cleared on manual-on or the morning reset.

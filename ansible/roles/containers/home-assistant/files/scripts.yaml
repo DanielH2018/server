@@ -1,0 +1,98 @@
+---
+# Managed by Ansible (roles/containers/home-assistant/files/scripts.yaml).
+# Source of truth — copied to ./config and overwritten on deploy. HA UI script edits are
+# NOT persistent. To change, edit this file and run:
+#   uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"
+#
+# These scripts define the bedroom lights' "natural" state: what they would be with no manual
+# intervention. Adaptive Lighting (AL) is the default governor (sun-curve color + brightness);
+# time-based EXCEPTIONS override brightness only inside their window. Button 4 on the Tap Dial
+# and the morning reset both call bedroom_apply_natural, so the ramp math lives in one place.
+
+# Helper: apply AL's natural COLOR temp, then set a caller-chosen brightness over a transition.
+# Every exception calls this so the AL release + color-apply boilerplate lives in exactly one
+# place — a new exception never has to touch Adaptive Lighting service syntax.
+bedroom_set_natural_brightness:
+  alias: "Bedroom — set brightness with natural color"
+  description: >-
+    Release Adaptive Lighting, apply its natural color temperature, then set the
+    caller-supplied brightness over a transition. Used by bedroom_apply_natural's exceptions.
+  mode: restart
+  fields:
+    brightness_pct:
+      description: Target brightness percent (0-100).
+      required: true
+      example: 24
+    transition:
+      description: Fade duration in seconds.
+      required: true
+      example: 480
+  sequence:
+    # Release manual control so adaptive_lighting.apply takes effect.
+    - service: adaptive_lighting.set_manual_control
+      data:
+        entity_id: switch.bedroom_adaptive_lighting_bedroom
+        manual_control: false
+    # Natural COLOR temp only — leave brightness for the explicit turn_on below.
+    - service: adaptive_lighting.apply
+      data:
+        entity_id: switch.bedroom_adaptive_lighting_bedroom
+        adapt_color: true
+        adapt_brightness: false
+        turn_on_lights: true
+        transition: 1
+    # Caller's brightness over their fade. The explicit brightness re-marks the group as
+    # manually controlled (AL take_over_control), so AL pauses for the exception's duration.
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        brightness_pct: "{{ brightness_pct | int }}"
+        transition: "{{ transition | int }}"
+
+# Dispatcher: set the bedroom lights to their natural state for RIGHT NOW. Ordered choose: of
+# time-based exceptions, with full Adaptive Lighting (color + brightness) as the default.
+# This is the single source of truth for "what is natural".
+#
+# To ADD a future exception, drop a block above `default:`:
+#   - conditions:
+#       - condition: template
+#         value_template: "{{ now() >= today_at('21:00') and now() < today_at('21:30') }}"
+#     sequence:
+#       - service: script.bedroom_set_natural_brightness
+#         data: {brightness_pct: 15, transition: 5}   # flat; a ramp computes these from now()
+bedroom_apply_natural:
+  alias: "Bedroom — apply natural lighting state"
+  description: >-
+    Set the bedroom lights to what they would be with no manual intervention: a time-based
+    exception's brightness on AL's natural color, or full Adaptive Lighting outside every window.
+  mode: restart
+  sequence:
+    - choose:
+        # Exception: morning wake ramp — 06:00 Mon-Fri / 07:00 Sat-Sun, 15 min, 1% -> 50%.
+        # elapsed=0 yields 1% over 900s (identical to the morning reset's start); pressed
+        # partway through, it resumes the ramp from the current point over the remaining time.
+        - conditions:
+            - condition: template
+              value_template: >-
+                {% set start = today_at('06:00') if now().weekday() < 5 else today_at('07:00') %}
+                {{ 0 <= (now() - start).total_seconds() < 900 }}
+          sequence:
+            - variables:
+                wake_start: "{{ today_at('06:00') if now().weekday() < 5 else today_at('07:00') }}"
+                wake_elapsed: "{{ (now() - wake_start).total_seconds() }}"
+            - service: script.bedroom_set_natural_brightness
+              data:
+                brightness_pct: "{{ (1 + (50 - 1) * wake_elapsed / 900) | round(0) | int }}"
+                transition: "{{ (900 - wake_elapsed) | round(0) | int }}"
+      # Default: full Adaptive Lighting — natural color AND brightness from the sun curve.
+      default:
+        - service: adaptive_lighting.set_manual_control
+          data:
+            entity_id: switch.bedroom_adaptive_lighting_bedroom
+            manual_control: false
+        - service: adaptive_lighting.apply
+          data:
+            entity_id: switch.bedroom_adaptive_lighting_bedroom
+            turn_on_lights: true
+            transition: 1
