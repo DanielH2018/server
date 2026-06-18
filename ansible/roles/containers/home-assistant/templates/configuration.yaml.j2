@@ -74,7 +74,7 @@ binary_sensor:
   - platform: threshold
     name: "Bedroom CO2 high"          # -> binary_sensor.bedroom_co2_high
     entity_id: sensor.bedroom_airgradient_one_carbon_dioxide
-    upper: 900                         # alerts >= 1000 ppm, clears <= 800 ppm
+    upper: 1000                        # alerts >= 1100 ppm, clears <= 900 ppm
     hysteresis: 100
   - platform: threshold
     name: "Bedroom PM2.5 high"        # -> binary_sensor.bedroom_pm2_5_high
@@ -150,6 +150,24 @@ binary_sensor:
 # they lived inline in this .j2 (configuration.yaml IS rendered by Ansible; even a brace pair in a
 # comment breaks it). Currently holds sensor.bedroom_wake_start (watch alarm minus 15 min).
 template: !include templates.yaml
+
+# Recorder hygiene: default_config enables the recorder with defaults (SQLite, keep 10 days, record
+# everything); a top-level recorder: block customizes it without disabling default_config. Trim the
+# highest-churn, lowest-value entities so the DB stays lean — faster history queries + faster startup
+# recovery after the (benign) unclean-shutdown WAL replay. Chosen from the ACTUAL top-churn entities in
+# home-assistant_v2.db; none are needed for restore or any automation (those read LIVE state, not
+# history): sun.sun is recomputed on boot, pm0_3 is an unused fine-particle count (alerts + dashboard
+# use pm2_5/pm10), linkquality/last_seen are Zigbee diagnostics. UPS load/voltage and the
+# automation/script domains are the next candidates if the DB is still large — kept for now
+# (dashboarded / useful in the logbook). Tune from the observed DB size over time.
+recorder:
+  exclude:
+    entities:
+      - sun.sun
+      - sensor.bedroom_airgradient_one_pm0_3
+    entity_globs:
+      - sensor.*_linkquality
+      - sensor.*_last_seen
 
 http:
   use_x_forwarded_for: true

@@ -70,8 +70,8 @@ These are **not** captured by `deploy.yml` — they're device/app/UI state:
 
 | File | What it holds | Deployed via |
 |---|---|---|
-| `templates/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 12 `threshold` sensors, `template: !include`, http/trusted-proxy, Lovelace | `template` (Ansible-rendered) |
-| `files/automations.yaml` | the 17 automations | `copy` (verbatim — HA Jinja) |
+| `templates/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 12 `threshold` sensors, `template: !include`, `recorder:` excludes, http/trusted-proxy, Lovelace | `template` (Ansible-rendered) |
+| `files/automations.yaml` | the 18 automations | `copy` (verbatim — HA Jinja) |
 | `files/scripts.yaml` | the 6 scripts | `copy` |
 | `files/scenes.yaml` | `bedroom_bright` / `bedroom_nightlight` | `copy` |
 | `files/templates.yaml` | `sensor.bedroom_wake_start` template sensor | `copy` |
@@ -159,6 +159,8 @@ recovery, no bounce". Twelve, feeding `bedroom_threshold_alert`:
 - `bedroom_threshold_alert` — the unified engine: any threshold sensor crossing → routed notify
   (air-quality also pulses the lights; severe air-quality pierces DND).
 - `bedroom_sensor_offline_alert` — a watched dependency `unavailable` 5 min → notify (watch).
+- `zigbee_bridge_offline` — the Zigbee2MQTT bridge (whole mesh) offline 2 min → notify (watch); a
+  faster root-cause signal than the per-device offline alert, via `binary_sensor.zigbee2mqtt_bridge_connection_state`. Recovery when it returns.
 - `bedroom_notification_action` — handles taps on notification buttons (`BEDROOM_*` actions).
 - `update_available_digest` — Sunday 10:00, a digest of pending device/integration updates.
 

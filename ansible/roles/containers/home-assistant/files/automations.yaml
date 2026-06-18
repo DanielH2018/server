@@ -790,3 +790,46 @@
                 title: "✅ Power restored"
                 message: "Mains power back; UPS online ({{ charge }}%)."
                 tag: ups_power
+
+# Zigbee bridge offline alert: binary_sensor.zigbee2mqtt_bridge_connection_state (HA auto-discovers it
+# from Z2M; on=online / off=offline, fed by the zigbee2mqtt/bridge/state topic) going `off` means the
+# WHOLE Zigbee mesh is down — coordinator unreachable, Z2M crashed, or MQTT dropped. Because Mosquitto
+# publishes Z2M's MQTT Last-Will 'offline' if Z2M disconnects, this fires even on a hard Z2M crash as
+# long as Mosquitto + HA are up — ONE fast root-cause signal vs. waiting on the per-device
+# bedroom_sensor_offline_alert (5 min × each device). The 2-min `for:` rides out the brief
+# offline/online flap on a Z2M restart/redeploy (and HA's own restart, where the sensor is briefly
+# unknown). Routine + watch — same severity model as the per-device offline alert (glanceable, silent
+# in DND/sleep, and a mesh outage often self-heals). Homelab-wide (no bedroom_ prefix), shared notify.
+- id: zigbee_bridge_offline
+  alias: Zigbee bridge offline alert
+  description: Notify when the Zigbee2MQTT bridge goes offline (whole mesh down); recovery when it returns.
+  mode: queued
+  max: 10
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.zigbee2mqtt_bridge_connection_state
+      to: "off"
+      for: "00:02:00"
+      id: offline
+    - platform: state
+      entity_id: binary_sensor.zigbee2mqtt_bridge_connection_state
+      from: "off"
+      to: "on"
+      id: recovery
+  action:
+    - choose:
+        - conditions: "{{ trigger.id == 'offline' }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🛑 Zigbee bridge offline"
+                message: "Zigbee2MQTT / the coordinator is down — all Zigbee devices are unavailable."
+                tag: zigbee_bridge
+                watch: true
+      # from:"off" -> "on" recovery edge only (the remaining default case). Same tag replaces the alert.
+      default:
+        - service: script.bedroom_notify
+          data:
+            title: "✅ Zigbee bridge online"
+            message: "Zigbee2MQTT is back; devices are reconnecting."
+            tag: zigbee_bridge
