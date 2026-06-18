@@ -125,6 +125,21 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   devices join automatically; gated to only fire when ≥1 update is pending. **Notify-only — never
   auto-flashes.** Routine via `bedroom_notify`. Zigbee versions/names are opaque (build ints / IEEE)
   until devices are renamed in Z2M.
+- **CO₂ calibration reminder (since 2026-06-18).** `automation.bedroom_co2_calibration_reminder` —
+  quarterly (1st of Jan/Apr/Jul/Oct at 10:00, daily-trigger + date condition like the update digest)
+  notify-only nudge to recalibrate the AirGradient's drifting SenseAir CO₂ sensor. Message carries the
+  live reading + an air-out-FIRST instruction (manual calibration sets the CURRENT reading as the 400
+  ppm baseline). **No one-tap calibrate button by design** — an accidental tap on stale indoor air
+  would lock in a wrong baseline. Routine via `bedroom_notify`. Keeps the air-quality thresholds honest.
+- **UPS power-event alert (since 2026-06-18).** `automation.ups_power_event` (homelab-wide, no
+  `bedroom_` prefix) — nothing watched the UPS before. Driven off the **raw NUT flags**
+  `sensor.apc_ups_status_data` (`OL`=online, `OB`=on battery, `LB`=low battery, `CHRG`=charging — more
+  reliable than the friendly status string). Triggers on every `status_data` change and derives the
+  edge from `from_state`/`to_state`, **requiring BOTH sides valid (not `unavailable`)** so the
+  `unavailable→OL` reconnect on each HA restart can't fire a spurious "Power restored" (same startup-spam
+  trap as the sensor-offline recovery; verified `last_triggered=None` post-deploy). Three edges:
+  on-battery (`watch`), low-battery (`watch`+`pierce` — server may shut down), restored (routine), one
+  coalescing `ups_power` tag. Routes through `bedroom_notify`.
 - **Unexpected-occupancy tripwire (since 2026-06-18).** `automation.bedroom_unexpected_occupancy` —
   FP300 presence `off→on` (`for: 30s`) while `person.daniel` is away (not home/unknown/unavailable)
   **and** has been away >5 min → a security alert via `bedroom_notify` (`watch: true, pierce: true`).
@@ -227,9 +242,14 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   unless "Bedroom" is set as default in the UI (Settings → Dashboards → ⋮ → "Set as default for
   everyone" → persists in `.storage/core.config` `default_panel`, Kopia-backed). **Fast loop for
   dashboard-only tweaks:** edit the rendered file and Developer Tools → YAML → **Reload Lovelace**
-  (no HA restart). Dashboard entity IDs are exact as of 2026-06-17 (UPS / DREO Tower Fan / Aqara FP300).
+  (no HA restart). Cards (as of 2026-06-18): APC UPS, **AirGradient ONE air quality** (CO₂ gauge +
+  pollutant glance — the metrics the threshold alerts fire on), DREO Tower Fan, **Bedroom Controls**
+  (lights group + AL master switch + the three override booleans), and the Aqara FP300 glance.
 - **All persistent state is `./config` → `/config`** (Kopia-backed): the SQLite
   recorder DB, `.storage/`, secrets, automations, and the templated `configuration.yaml`.
+  The compose sets `stop_grace_period: 30s` so HA closes the recorder DB cleanly on stop/recreate —
+  Docker's default 10s SIGKILLed it mid-WAL ("could not validate that the sqlite3 database was
+  shutdown cleanly" on the next boot).
 - **Bridge networking, not host.** Cloud/API-based integrations work fine. **Local
   device discovery** (mDNS/SSDP, Bluetooth, Zigbee/Z-Wave USB dongles) generally needs
   `network_mode: host` and/or `devices:` passthrough — which is incompatible with the

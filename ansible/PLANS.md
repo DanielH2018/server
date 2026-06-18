@@ -16,12 +16,19 @@ the Renovate dependency dashboard.
   (~100 baseline) and NOx (~1 + spikes) *index* sensors, which drift per room. Edit the config +
   redeploy `home-assistant`. Spec: `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`.
 
-- HA AirGradient CO₂ calibration reminder — the SenseAir CO₂ sensor drifts; remind every few months to
-  run `button.bedroom_airgradient_one_calibrate_co2_sensor`, ideally after the room's been aired to the
-  ~400 ppm outdoor baseline. Keeps the air-quality alert thresholds honest. Hygiene — low excitement,
-  real accuracy benefit. (2026-06-18)
-
 ## Superseded
+
+- HA setup review pass — done 2026-06-18 (5 changes; full rationale in the home-assistant role
+  `CLAUDE.md`):
+  - **Tap Dial template-warning fix** — `bedroom_tap_dial_control` now gates on `action is defined`
+    so Z2M state reports (battery/link-quality) no longer log `'dict object' has no attribute 'action'`.
+  - **`stop_grace_period: 30s`** — clean recorder shutdown (was SIGKILLed in 10s → unclean SQLite).
+  - **CO₂ calibration reminder** — `bedroom_co2_calibration_reminder` (quarterly notify-only nudge to
+    recalibrate the AirGradient against the ~400 ppm outdoor baseline; replaces the paper backlog note).
+  - **UPS power-event alert** — `ups_power_event` off the raw NUT flags (outage / low-battery /
+    restored); nothing watched the UPS before.
+  - **Dashboard** — air-quality card (CO₂ gauge + pollutant glance) + a Bedroom Controls card (lights,
+    AL master, the three override booleans).
 
 - Bedroom Home Assistant automation suite — done 2026-06-18 (16 changes; full rationale in
   `docs/superpowers/specs/2026-06-18-ha-*` + the home-assistant & zigbee2mqtt role `CLAUDE.md`):
