@@ -245,3 +245,59 @@ bedroom_bedtime:
     - if: "{{ is_state('input_boolean.bedroom_fan_manual', 'off') }}"
       then:
         - service: script.bedroom_apply_fan
+
+# Routed notification: the single cross-cutting layer EVERY bedroom alert calls. Picks the Android
+# channel + importance from the alert's flags and the live "quiet" state (phone DND on OR sleep mode
+# on): `pierce` always sounds (high importance — can bypass DND if you allow the "Bedroom critical"
+# channel in Android); otherwise silent (low) while quiet, default when not. `watch` also mirrors to
+# the Pixel Watch. Flags default false so a bare call is routine + phone-only. ONE-TIME phone setup:
+# mark the "Bedroom critical" channel as a DND exception (Settings → Apps → Home Assistant →
+# Notifications) after the first critical alert creates it — high importance alone doesn't pierce DND.
+bedroom_notify:
+  alias: "Bedroom — routed notification"
+  description: >-
+    Send a bedroom alert with DND-aware channel/importance and optional watch mirroring. `pierce`
+    sounds even while quiet (DND/sleep); else silent while quiet. `watch` also buzzes the wrist.
+  fields:
+    title:
+      description: Notification title.
+      required: true
+    message:
+      description: Notification body.
+      required: true
+    tag:
+      description: Coalescing tag (a new alert with the same tag replaces the old one).
+      required: true
+    watch:
+      description: Also send to the Pixel Watch.
+      required: false
+      example: true
+    pierce:
+      description: Sound even while quiet (DND/sleep) via the high-importance channel.
+      required: false
+      example: true
+  mode: parallel
+  max: 10
+  sequence:
+    - variables:
+        quiet: >-
+          {{ states('sensor.pixel_9_pro_do_not_disturb_sensor') not in ['off', 'unknown', 'unavailable']
+             or is_state('input_boolean.bedroom_sleep_mode', 'on') }}
+        importance: "{{ 'high' if (pierce | default(false)) else ('low' if quiet else 'default') }}"
+        channel: "{{ 'Bedroom critical' if (pierce | default(false)) else 'Bedroom alerts' }}"
+    - service: notify.mobile_app_pixel_9_pro
+      data:
+        title: "{{ title }}"
+        message: "{{ message }}"
+        data:
+          tag: "{{ tag }}"
+          channel: "{{ channel }}"
+          importance: "{{ importance }}"
+    - if: "{{ watch | default(false) }}"
+      then:
+        - service: notify.pixel_watch_3
+          data:
+            title: "{{ title }}"
+            message: "{{ message }}"
+            data:
+              tag: "{{ tag }}"

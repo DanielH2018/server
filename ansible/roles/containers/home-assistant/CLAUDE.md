@@ -70,31 +70,39 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   Helper `script.bedroom_set_natural_brightness(brightness_pct, transition)` holds the AL
   release + color-apply boilerplate so a new exception is just a `(condition, brightness,
   transition)` triple dropped above `default:` — see the worked example comment in the file.
-- **Threshold alerts — unified engine (since 2026-06-18).** `configuration.yaml` defines eight
+- **Threshold alerts — unified engine (since 2026-06-18).** `configuration.yaml` defines twelve
   built-in `threshold` binary-sensors; the platform's native hysteresis (on past bound±hyst) IS the
   "alert once + recovery, no bounce" lifecycle. ALL feed ONE automation `bedroom_threshold_alert`
-  (files/automations.yaml) in three **categories** — air quality (CO2/PM2.5/VOC/NOx, `upper`),
-  battery (FP300/Tap Dial, `lower`), humidity (high `upper` + low `lower` — two one-sided sensors,
-  since humidity is two-sided). The category is encoded in each trigger `id` (`<cat>_bad`/`<cat>_ok`);
-  everything else (label/value/unit, message, recovery, coalescing `tag`) is derived generically
-  from the triggering sensor. The ONLY per-category differences live in a Jinja `cfg` map: the
-  notification title, **whether to pulse the lights**, and **whether to also buzz the watch**
-  (`cfg.watch`) — air quality calls `script.bedroom_alert_pulse` (snapshot → red flash → restore;
-  only when `light.bedroom_lights` is on) AND mirrors the bad alert to `notify.pixel_watch_3`
-  (alert only, not recovery — a persistent wrist alert until dismissed); battery/humidity are
-  phone-only. **Anchored on `off`↔`on` (not `unknown`)** so an HA restart while bad doesn't re-alert and an
-  unavailable source can't false-alert (offline is `bedroom_sensor_offline_alert`'s job). Per-category
-  debounce: air quality 30s, battery 1m, humidity 5m (rides out spikes). The label-strip is
-  `friendly_name | replace(' high','') | replace(' low','')` (the ` low` strip makes battery +
-  low-humidity read right). **Adding a metric** = one threshold sensor in `configuration.yaml.j2`
-  + add it to its category's two trigger lists; a **new category** = two trigger blocks + one `cfg`
-  entry. Thresholds are starting points — tune the VOC/NOx *index* + humidity ones to the observed
-  baseline (the ~2026-06-25 pass).
+  (files/automations.yaml) in four **categories** — air quality (CO2/PM2.5/VOC/NOx, `upper`),
+  **air quality SEVERE** (same 4 at a higher cutoff), battery (FP300/Tap Dial, `lower`), humidity
+  (high `upper` + low `lower`). The category is encoded in each trigger `id` (`<cat>_bad`/`<cat>_ok`);
+  everything else (label/value/unit, message, coalescing `tag`) is derived generically from the
+  triggering sensor. Per-category differences live in a Jinja `cfg` map: `pulse` (red light flash —
+  air quality only, via `script.bedroom_alert_pulse` when lights on), `watch` (wrist buzz), `pierce`
+  (sound through DND — **severe air quality only**), `recovery` (send a "back to normal" notice —
+  severe skips it; the moderate recovery covers it). **All notify routes through `script.bedroom_notify`**
+  (DND/sleep-aware — see the notification-routing bullet). **Anchored on `off`↔`on` (not `unknown`)**
+  so an HA restart while bad doesn't re-alert and an unavailable source can't false-alert (offline is
+  `bedroom_sensor_offline_alert`'s job). Per-category debounce: air quality 30s, battery 1m, humidity
+  5m. The label-strip is `friendly_name | replace(' high','') | replace(' low','') | replace(' severe','')`.
+  **Adding a metric** = one threshold sensor + add it to its category's two trigger lists; a **new
+  category** = two trigger blocks + one `cfg` entry. Thresholds (incl. the severe cutoffs CO2 2000 /
+  PM2.5 100 / VOC 400 / NOx 200) are starting points — tune in the ~2026-06-25 pass.
+- **Notification routing — `script.bedroom_notify` (since 2026-06-18).** The single cross-cutting
+  layer EVERY bedroom alert calls (threshold engine, sensor-offline, away). Fields:
+  `title, message, tag, watch, pierce` (last two default false). Computes the Android `channel` +
+  `importance` from `pierce` and the live **"quiet"** state (`sensor.pixel_9_pro_do_not_disturb_sensor`
+  not `off` OR `input_boolean.bedroom_sleep_mode` on): `pierce` → high-importance "Bedroom critical"
+  channel (sounds, can bypass DND); else "Bedroom alerts", **low/silent while quiet**, default
+  otherwise. `watch` → also `notify.pixel_watch_3`. **One-time phone setup:** mark the "Bedroom
+  critical" channel as a DND exception in Android (after the first critical alert creates it) — high
+  importance alone doesn't pierce DND. Only **severe air quality** sets `pierce`; sensor-offline +
+  air-quality set `watch`; battery/humidity/recoveries are routine (silent while quiet, phone-only).
 - **Sensor-offline alerts (since 2026-06-18).** `bedroom_sensor_offline_alert` (files/automations.yaml,
   a structural twin of the air-quality alert) notifies `notify.mobile_app_pixel_9_pro` when a
   bedroom-automation dependency goes `unavailable` for 5 min, with a coalescing-tag recovery notice.
-  A dead dependency is critical, so the offline alert ALSO buzzes `notify.pixel_watch_3` (alert
-  only; recovery stays phone-only).
+  Routed through `script.bedroom_notify` (offline: `watch:true` — wrist buzz, but routine for DND, so
+  a dropout overnight doesn't wake you; recovery: routine, phone-only).
   Watched (one representative entity per device — Z2M flips all of a device's entities together):
   `sensor.bedroom_airgradient_one_carbon_dioxide`, `binary_sensor.aqara_fp300_presence`,
   `sensor.0x001788010f0ccda4_battery` (Tap Dial), `fan.tower_fan`. **Required dependency: Z2M

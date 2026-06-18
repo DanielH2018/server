@@ -91,6 +91,31 @@ binary_sensor:
     entity_id: sensor.bedroom_airgradient_one_nox_index
     upper: 50                          # alerts >= 60, clears <= 40 (index)
     hysteresis: 10
+  # SEVERE air-quality tier — a higher cutoff per pollutant that fires its OWN edge when air gets
+  # genuinely unhealthy. Feeds the `airqualitysevere` category of bedroom_threshold_alert, the only
+  # alerts that PIERCE DND/sleep with sound (the moderate ones above are routine). Escalation-aware:
+  # a gradual CO2 climb trips the moderate sensor first (routine nudge), then these (critical wake).
+  # Cutoffs are STARTING POINTS (join the ~2026-06-25 tuning pass).
+  - platform: threshold
+    name: "Bedroom CO2 severe"        # -> binary_sensor.bedroom_co2_severe
+    entity_id: sensor.bedroom_airgradient_one_carbon_dioxide
+    upper: 2000                        # alerts >= 2100 ppm, clears <= 1900 ppm
+    hysteresis: 100
+  - platform: threshold
+    name: "Bedroom PM2.5 severe"      # -> binary_sensor.bedroom_pm2_5_severe
+    entity_id: sensor.bedroom_airgradient_one_pm2_5
+    upper: 100                         # alerts >= 105 ug/m3, clears <= 95
+    hysteresis: 5
+  - platform: threshold
+    name: "Bedroom VOC severe"        # -> binary_sensor.bedroom_voc_severe
+    entity_id: sensor.bedroom_airgradient_one_voc_index
+    upper: 400                         # alerts >= 425, clears <= 375 (index)
+    hysteresis: 25
+  - platform: threshold
+    name: "Bedroom NOx severe"        # -> binary_sensor.bedroom_nox_severe
+    entity_id: sensor.bedroom_airgradient_one_nox_index
+    upper: 200                         # alerts >= 210, clears <= 190 (index)
+    hysteresis: 10
   # Low-battery thresholds — the LOWER-bound mirror of the air-quality ones above. A `lower`
   # threshold is `on` (low) when value <= lower-hysteresis and `off` (recovered) when >= lower+
   # hysteresis. Battery drain is monotonic (only jumps up on replacement), so flapping is a

@@ -17,11 +17,6 @@ the Renovate dependency dashboard.
   Edit the config + redeploy `home-assistant`. Spec:
   `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
-- HA DND-aware notification routing — respect `sensor.pixel_9_pro_do_not_disturb_sensor`: hold or
-  soften *routine* alerts (air quality, humidity) while DND/asleep, but let *critical* ones (UPS,
-  sensor-offline) bypass via a high-priority Android notification channel (`data: {channel,
-  importance: high}` on `notify.mobile_app_pixel_9_pro`). A cross-cutting layer over every alert. (2026-06-18)
-
 - HA actionable notifications — add action buttons to existing/future alerts via the companion app
   (`data: {actions: [...]}` + a `mobile_app_notification_action` event handler): air-quality alert →
   "Turn on fan"; away alert → "Turn off lights"; low-battery → "Snooze". One tap instead of opening
@@ -52,6 +47,16 @@ the Renovate dependency dashboard.
 - Rename Devices in Zigbee2MQTT
 
 ## Superseded
+
+- HA DND-aware notification routing — done 2026-06-18: new `script.bedroom_notify` is the single
+  cross-cutting notify layer (threshold engine + sensor-offline + away all route through it). It
+  picks Android channel/importance from the alert's `pierce` flag and the live "quiet" state (phone
+  DND on OR `bedroom_sleep_mode` on): routine alerts go silent (low importance) while quiet; `pierce`
+  alerts sound (high-importance "Bedroom critical" channel). Decoupled `watch` (wrist) from `pierce`
+  (DND-bypass). Added a SEVERE air-quality tier (4 new threshold sensors CO2 2000 / PM2.5 100 / VOC
+  400 / NOx 200 → new `airqualitysevere` engine category) as the ONLY `pierce` alert — escalation-aware
+  (moderate routine nudge, then severe wake-up). One-time phone step: allow the "Bedroom critical"
+  channel through DND. Spec: `docs/superpowers/specs/2026-06-18-ha-dnd-aware-routing-design.md`.
 
 - HA night-time "got up" dim nightlight — done 2026-06-18: a new FIRST exception in
   `script.bedroom_apply_natural` applies `scene.bedroom_nightlight` (warm amber 3%) instead of full

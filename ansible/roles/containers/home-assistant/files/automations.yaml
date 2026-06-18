@@ -171,15 +171,16 @@
         - service: script.bedroom_apply_natural
 
 # Unified threshold alert engine: ALL `threshold` binary-sensors in configuration.yaml.j2 (air
-# quality CO2/PM2.5/VOC/NOx, battery FP300/Tap Dial, humidity high/low) feed this ONE automation.
-# Hysteresis lives in the threshold sensors, so this just reacts to off<->on edges, anchored on
-# off<->on (NOT unknown) so an HA restart while bad doesn't re-alert and an unavailable source
-# can't false-alert (sensor-offline owns offline). The category is encoded in each trigger id
+# quality CO2/PM2.5/VOC/NOx + the SEVERE tier, battery FP300/Tap Dial, humidity high/low) feed this
+# ONE automation. Hysteresis lives in the threshold sensors, so this just reacts to off<->on edges,
+# anchored on off<->on (NOT unknown) so an HA restart while bad doesn't re-alert and an unavailable
+# source can't false-alert (sensor-offline owns offline). The category is encoded in each trigger id
 # (<category>_bad / <category>_ok); everything else is derived generically from the triggering
-# sensor. The ONLY per-category differences are the notification title and whether to pulse the
-# lights (the `cfg` map) — air quality pulses, battery/humidity notify only. Adding a metric = one
-# threshold sensor in configuration.yaml.j2 + add it to its category's two trigger lists; a NEW
-# category = two trigger blocks + one `cfg` entry.
+# sensor. Per-category differences live in the `cfg` map: title, `pulse` (light flash, air quality
+# only), `watch` (wrist buzz), `pierce` (sound through DND — severe air quality only), `recovery`
+# (whether to send a "back to normal" notice). All notify routes through script.bedroom_notify
+# (DND/sleep-aware channel + importance + watch mirroring). Adding a metric = one threshold sensor +
+# add it to its category's two trigger lists; a NEW category = two trigger blocks + one `cfg` entry.
 - id: bedroom_threshold_alert
   alias: Bedroom threshold alert
   description: Notify when any air-quality/battery/humidity threshold crosses; recovery when it clears; pulse the lights for air quality only.
@@ -206,6 +207,26 @@
       to: "off"
       for: "00:00:30"
       id: airquality_ok
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_co2_severe
+        - binary_sensor.bedroom_pm2_5_severe
+        - binary_sensor.bedroom_voc_severe
+        - binary_sensor.bedroom_nox_severe
+      from: "off"
+      to: "on"
+      for: "00:00:30"
+      id: airqualitysevere_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_co2_severe
+        - binary_sensor.bedroom_pm2_5_severe
+        - binary_sensor.bedroom_voc_severe
+        - binary_sensor.bedroom_nox_severe
+      from: "on"
+      to: "off"
+      for: "00:00:30"
+      id: airqualitysevere_ok
     - platform: state
       entity_id:
         - binary_sensor.bedroom_fp300_battery_low
@@ -247,50 +268,46 @@
         category: "{{ trigger.id.split('_')[0] }}"
         edge: "{{ trigger.id.split('_')[1] }}"
         src: "{{ trigger.to_state.attributes.entity_id }}"
-        label: "{{ trigger.to_state.attributes.friendly_name | replace(' high', '') | replace(' low', '') }}"
+        label: "{{ trigger.to_state.attributes.friendly_name | replace(' high', '') | replace(' low', '') | replace(' severe', '') }}"
         value: "{{ states(src) }}"
         unit: "{{ state_attr(src, 'unit_of_measurement') or '' }}"
+        unit_sp: "{{ ' ' ~ unit if unit else '' }}"
         # Same tag for bad + recovery → the recovery replaces the alert on the phone.
         tag: "threshold_alert_{{ trigger.entity_id }}"
-        # Per-category title, whether to pulse the lights, and whether it's critical enough to also
-        # buzz the watch. `pulse` = air quality only; `watch` = the can't-miss categories (air
-        # quality is health). Battery/humidity stay phone-only.
+        # Per-category routing flags. `pulse` = brief red light flash (air quality only). `watch` =
+        # also buzz the wrist (glanceable). `pierce` = sound even while quiet/DND (severe air quality
+        # only — the can't-miss tier). `recovery` = send a "back to normal" notice (severe skips it;
+        # the moderate recovery covers it). All notify goes through script.bedroom_notify (DND-aware).
         cfg: >-
-          {{ {'airquality': {'bad': '⚠️ Air quality', 'ok': '✅ Air quality', 'pulse': true,  'watch': true},
-              'battery':    {'bad': '🔋 Battery low',  'ok': '🔋 Battery OK',  'pulse': false, 'watch': false},
-              'humidity':   {'bad': '💧 Humidity',     'ok': '💧 Humidity OK', 'pulse': false, 'watch': false}}[category] }}
+          {{ {'airquality':       {'bad': '⚠️ Air quality', 'ok': '✅ Air quality', 'pulse': true,  'watch': true,  'pierce': false, 'recovery': true},
+              'airqualitysevere': {'bad': '🚨 Air quality HIGH', 'ok': '✅ Air quality', 'pulse': true, 'watch': true, 'pierce': true, 'recovery': false},
+              'battery':          {'bad': '🔋 Battery low', 'ok': '🔋 Battery OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
+              'humidity':         {'bad': '💧 Humidity', 'ok': '💧 Humidity OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true}}[category] }}
     - choose:
         - conditions: "{{ edge == 'bad' }}"
           sequence:
-            - service: notify.mobile_app_pixel_9_pro
+            - service: script.bedroom_notify
               data:
                 title: "{{ cfg.bad }}"
-                message: "{{ label }} is {{ value }}{{ ' ' ~ unit if unit else '' }}"
-                data:
-                  tag: "{{ tag }}"
-            # Critical categories (cfg.watch) also buzz the watch — the alert only, not the
-            # recovery; a persistent critical alert on the wrist until dismissed is desirable.
-            - if: "{{ cfg.watch }}"
-              then:
-                - service: notify.pixel_watch_3
-                  data:
-                    title: "{{ cfg.bad }}"
-                    message: "{{ label }} is {{ value }}{{ ' ' ~ unit if unit else '' }}"
-                    data:
-                      tag: "{{ tag }}"
+                message: "{{ label }} is {{ value }}{{ unit_sp }}"
+                tag: "{{ tag }}"
+                watch: "{{ cfg.watch }}"
+                pierce: "{{ cfg.pierce }}"
             # Light pulse only for air quality (cfg.pulse) and only when the lights are already on —
             # never wakes you, never fights Adaptive Lighting / the manual-off override at night.
             - if: "{{ cfg.pulse and is_state('light.bedroom_lights', 'on') }}"
               then:
                 - service: script.bedroom_alert_pulse
-      # off<->on edges only, so the remaining case (edge == 'ok') is the default.
+      # off<->on edges only, so the remaining case (edge == 'ok') is the default. Recovery is always
+      # routine (no watch/pierce); the severe tier skips it (cfg.recovery false).
       default:
-        - service: notify.mobile_app_pixel_9_pro
-          data:
-            title: "{{ cfg.ok }}"
-            message: "{{ label }} back to normal ({{ value }}{{ ' ' ~ unit if unit else '' }})"
-            data:
-              tag: "{{ tag }}"
+        - if: "{{ cfg.recovery }}"
+          then:
+            - service: script.bedroom_notify
+              data:
+                title: "{{ cfg.ok }}"
+                message: "{{ label }} back to normal ({{ value }}{{ unit_sp }})"
+                tag: "{{ tag }}"
 
 # Temperature → fan: drive fan.tower_fan from the AirGradient temperature via script.bedroom_apply_fan
 # (off <72 / Low 72-74 / Medium 74-76 / High >=76 °F; Medium cap 22:00-06:00; 0.5°F deadband).
@@ -409,30 +426,23 @@
         # Same tag for offline + recovery → the recovery replaces the alert on the phone.
         tag: "sensor_offline_{{ trigger.entity_id }}"
     - choose:
+        # A dead dependency buzzes the watch (glanceable) but is routine for DND — a sensor offline
+        # overnight isn't worth waking for (no pierce). Recovery is routine, phone-only.
         - conditions: "{{ trigger.id == 'offline' }}"
           sequence:
-            - service: notify.mobile_app_pixel_9_pro
+            - service: script.bedroom_notify
               data:
                 title: "⚠️ Sensor offline"
                 message: "{{ name }} is offline (no data)"
-                data:
-                  tag: "{{ tag }}"
-            # A dead dependency is critical (silently breaks the automation layer) — also buzz the
-            # watch. Offline alert only; the recovery notice goes to the phone.
-            - service: notify.pixel_watch_3
-              data:
-                title: "⚠️ Sensor offline"
-                message: "{{ name }} is offline (no data)"
-                data:
-                  tag: "{{ tag }}"
+                tag: "{{ tag }}"
+                watch: true
       # from:"unavailable" edges only, so the remaining case (id == 'recovery') is the default.
       default:
-        - service: notify.mobile_app_pixel_9_pro
+        - service: script.bedroom_notify
           data:
             title: "✅ Sensor back online"
             message: "{{ name }} is reporting again"
-            data:
-              tag: "{{ tag }}"
+            tag: "{{ tag }}"
 
 # Home/away: turn the bedroom off when you leave the HOUSE (person.daniel) — a different layer than
 # the FP300's ROOM presence. Two stages absorb GPS jitter: 'leave' at 10 min away, a 'failsafe'
@@ -474,12 +484,12 @@
             - service: fan.turn_off
               target:
                 entity_id: fan.tower_fan
-            - service: notify.mobile_app_pixel_9_pro
+            # Routine notify (you're not quiet when leaving) — one notify path for the whole system.
+            - service: script.bedroom_notify
               data:
                 title: "🏠 Left on"
                 message: "Turned off bedroom {{ on_items | join(' + ') }} (you're away)"
-                data:
-                  tag: bedroom_away
+                tag: bedroom_away
 
 # Arrive home nudge: resume the gated automations promptly on return (person.daniel -> home). NOT a
 # welcome-home — never forces lights on. The fan resumes per the temperature band (unless the fan
