@@ -17,13 +17,6 @@ the Renovate dependency dashboard.
   Edit the config + redeploy `home-assistant`. Spec:
   `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
-- HA sensor-offline alerts — notify when a sensor the bedroom automations depend on goes
-  `unavailable`/`unknown` for a few minutes: Aqara FP300 (presence lighting), AirGradient ONE
-  (air-quality alerts + temp→fan control), Hue Tap Dial RDM002 (the controller). A dead sensor
-  currently fails **silently** (e.g. an FP300 Zigbee dropout → presence lighting just stops, no
-  signal), which undermines everything built this session. Likely a template/state trigger
-  watching those entities' availability → `notify.mobile_app_pixel_9_pro`. (2026-06-18)
-
 - HA low-battery alerts — generic "any battery < ~15%" notifier for the battery Zigbee devices
   (`sensor.aqara_fp300_battery`, the Tap Dial battery). **Reuses the air-quality alert pattern
   exactly:** a lower-bound `threshold` binary-sensor per battery + one generic attribute-driven
@@ -98,6 +91,17 @@ the Renovate dependency dashboard.
   real accuracy benefit. (2026-06-18)
 
 ## Superseded
+
+- HA sensor-offline alerts — done 2026-06-18: `bedroom_sensor_offline_alert` notifies when a
+  bedroom-automation dependency (AirGradient ONE, FP300, Tap Dial, DREO fan) goes `unavailable`
+  for 5 min, with a coalescing-tag recovery notice — a structural twin of the air-quality alert.
+  **Root finding:** the two battery Zigbee devices (FP300, Tap Dial) couldn't fail loudly because
+  Z2M availability was OFF (their entities never went `unavailable`); enabling
+  `availability.enabled: true` in the zigbee2mqtt role (passive timeout 60 min — battery radios
+  can't be actively pinged, so detection is ~hour-coarse, not minutes) is the load-bearing fix.
+  Spec: `docs/superpowers/specs/2026-06-18-ha-sensor-offline-alerts-design.md`. Scope added the
+  DREO fan beyond the original three. Out of scope (separate backlog items): DND/critical routing,
+  actionable buttons.
 
 - Player stats for Terraria — done 2026-06-15: shipped the `terraria-stats` sidecar
   (Loki → SQLite → Prometheus → Grafana) tracking all-time per-player playtime, sessions,

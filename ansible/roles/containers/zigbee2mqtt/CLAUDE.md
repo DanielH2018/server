@@ -23,6 +23,16 @@ See repo-root `CLAUDE.md` for shared conventions.
   → Kopia-backed. Losing `./data` = re-pair everything.
 - **HA discovery on** (`homeassistant.enabled: true`) — paired devices auto-appear in HA via
   the MQTT integration; no per-device HA config.
+- **Availability tracking on (since 2026-06-18).** `availability.enabled: true` (off by default
+  in Z2M 2.x) publishes `online`/`offline` to `zigbee2mqtt/<device>/availability` and adds
+  `availability_topic` to the HA discovery configs, so a dropped device's HA entities go
+  `unavailable` — consumed by HA's `bedroom_sensor_offline_alert`. `active.timeout` (10 min) =
+  mains/routed devices (the Hue bulbs), actively pinged; `passive.timeout` (60 min) = battery
+  end-devices (FP300, Tap Dial), judged on last-seen only since pinging a sleeping radio drains it.
+  60 min is a STARTING POINT (Z2M default is 1500 min/25h): the Tap Dial self-reports every
+  ~7-18 min and the FP300 is very chatty, so 60 min catches a real dropout within the hour without
+  false offline alerts. Tune per observed cadence. Verify after deploy:
+  `docker logs zigbee2mqtt | grep "/availability'"` should show `online` publishes.
 - **Pairing is closed by default** (no `permit_join` in 2.x). Enable join from the Z2M UI
   (`zigbee2mqtt.<domain>`) when adding devices, then disable.
 

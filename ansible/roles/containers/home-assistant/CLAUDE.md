@@ -72,6 +72,20 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   so a new pollutant = one more threshold sensor in `configuration.yaml.j2` + add its
   `binary_sensor` to BOTH trigger lists. Thresholds are starting points — tune the VOC/NOx *index*
   ones to the observed baseline.
+- **Sensor-offline alerts (since 2026-06-18).** `bedroom_sensor_offline_alert` (files/automations.yaml,
+  a structural twin of the air-quality alert) notifies `notify.mobile_app_pixel_9_pro` when a
+  bedroom-automation dependency goes `unavailable` for 5 min, with a coalescing-tag recovery notice.
+  Watched (one representative entity per device — Z2M flips all of a device's entities together):
+  `sensor.bedroom_airgradient_one_carbon_dioxide`, `binary_sensor.aqara_fp300_presence`,
+  `sensor.0x001788010f0ccda4_battery` (Tap Dial), `fan.tower_fan`. **Required dependency: Z2M
+  availability must be ON** (enabled 2026-06-18 in the zigbee2mqtt role) — without it the battery
+  Zigbee devices (FP300, Tap Dial) never go `unavailable` and this automation can't see them fail.
+  Two reusable gotchas: (1) the 5-min `for:` rides out HA/Z2M restarts + the ~120s deploy recreate;
+  (2) an entity's `friendly_name` attribute is EMPTY while `unavailable`, so the human name is read
+  from the AVAILABLE side of the transition (`from_state` for offline, `to_state` for recovery,
+  `default(entity_id)` fallback). Battery-Zigbee offline detection is inherently coarse (~the Z2M
+  passive timeout, 60 min), not minutes — a sleeping radio can't be pinged. Adding a watched device
+  = add its entity to BOTH trigger lists.
 - **Temperature → fan control (since 2026-06-18).** `script.bedroom_apply_fan` (in
   `files/scripts.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
   `sensor.bedroom_airgradient_one_temperature` (°F): off <72 / Low 72–74 / Medium 74–76 / High ≥76,

@@ -22,5 +22,20 @@ advanced:
   network_key: {{ zigbee_network_key }}
   pan_id: {{ zigbee_pan_id }}
   ext_pan_id: {{ zigbee_ext_pan_id }}
+# Device availability tracking. Off by default in Z2M 2.x; enabling it publishes
+# online/offline to zigbee2mqtt/<device>/availability and adds availability_topic to the HA
+# MQTT-discovery configs, so a dropped device's HA entities go `unavailable` (consumed by the
+# bedroom_sensor_offline_alert automation in home-assistant). `active` = mains/routed devices
+# (the Hue bulbs), polled every `timeout` min. `passive` = battery end-devices (FP300, Tap Dial)
+# which can't be pinged without draining them, so they're judged purely on last-seen — set to 60
+# min as a STARTING POINT: the Tap Dial self-reports every ~7-18 min and the FP300 is very chatty,
+# so 60 min catches a real dropout within the hour without false offline alerts (Z2M's default is
+# 1500 min / 25h). Tune per observed cadence.
+availability:
+  enabled: true
+  active:
+    timeout: 10
+  passive:
+    timeout: 60
 devices: devices.yaml
 groups: groups.yaml
