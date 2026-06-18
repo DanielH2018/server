@@ -158,6 +158,16 @@ http:
   # from — matches the trusted-proxy ranges in the authelia and traefik configs.
   trusted_proxies:
     - 172.16.0.0/12
+  # Brute-force defense for the internet-facing login. Authelia is intentionally OFF on this route
+  # (it breaks the companion app), so HA's own login is the last gate — CrowdSec + per-router
+  # rate-limit front it, this hardens the gate itself. Auto-bans an IP after 5 failed logins (writes
+  # config/ip_bans.yaml; delete a line to unban). Bans the REAL client IP, not Cloudflare/Traefik:
+  # Cloudflare puts it in X-Forwarded-For, Traefik trusts the CF ranges
+  # (forwardedHeaders.trustedIPs=cloudflare_ips) and forwards it, and use_x_forwarded_for honors it.
+  # Only FAILED password logins count — valid long-lived tokens, the companion app, and webhooks are
+  # unaffected. NOT a substitute for MFA: enrol TOTP in HA (Profile → Multi-factor Authentication).
+  ip_ban_enabled: true
+  login_attempts_threshold: 5
 
 # Lovelace dashboard defined from YAML (ui-lovelace.yaml), shown in the sidebar as "Bedroom".
 # Uses the `dashboards:` form, NOT the legacy top-level `mode: yaml` (deprecated, removed in

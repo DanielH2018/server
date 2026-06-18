@@ -17,9 +17,18 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 - **Auth: HA's own login, NOT Authelia.** `use_authelia: false` is deliberate —
   Authelia forward-auth breaks the HA companion mobile app, webhooks, and long-lived
   API tokens (none can complete the portal login flow). The route still gets Traefik
-  TLS + CrowdSec + per-router rate-limiting; harden the gate inside HA (strong
-  password + TOTP). If you ever want Authelia on the *web UI only*, you'd need
-  per-path bypass rules for `/api/`, `/auth/`, and the webhook paths.
+  TLS + CrowdSec + per-router rate-limiting; harden the gate inside HA. If you ever want
+  Authelia on the *web UI only*, you'd need per-path bypass rules for `/api/`, `/auth/`,
+  and the webhook paths.
+  - **`ip_ban_enabled: true` + `login_attempts_threshold: 5`** (in `configuration.yaml`'s
+    `http:`) auto-ban an IP after 5 failed logins (→ `config/ip_bans.yaml`; delete a line to
+    unban). Bans the REAL client IP because the CF→Traefik→HA chain forwards X-Forwarded-For
+    (Traefik `forwardedHeaders.trustedIPs=cloudflare_ips` + HA `use_x_forwarded_for`). Only
+    failed PASSWORD logins count — tokens/app/webhooks unaffected.
+  - **⚠️ TOTP is NOT enrolled** (verified 2026-06-18: `.storage/auth_module.totp` absent). This
+    route is internet-facing (Cloudflare-proxied `home-assistant.<domain>`), so MFA is the
+    compensating control for Authelia-off — **enrol it: HA → Profile → Multi-factor
+    Authentication → TOTP.** `ip_ban` is defense-in-depth, not a substitute.
 - **HACS preinstalled** via `DOCKER_MODS=linuxserver/mods:homeassistant-hacs`
   (LSIO Docker mod that drops the Home Assistant Community Store into `/config`).
 - **`configuration.yaml` is templated** from `configuration.yaml.j2` to `./config`.
