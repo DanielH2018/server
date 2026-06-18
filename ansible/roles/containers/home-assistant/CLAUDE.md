@@ -71,9 +71,11 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   since humidity is two-sided). The category is encoded in each trigger `id` (`<cat>_bad`/`<cat>_ok`);
   everything else (label/value/unit, message, recovery, coalescing `tag`) is derived generically
   from the triggering sensor. The ONLY per-category differences live in a Jinja `cfg` map: the
-  notification title + **whether to pulse the lights** — air quality calls `script.bedroom_alert_pulse`
-  (snapshot → red flash → restore; only when `light.bedroom_lights` is on), battery/humidity notify
-  only. **Anchored on `off`↔`on` (not `unknown`)** so an HA restart while bad doesn't re-alert and an
+  notification title, **whether to pulse the lights**, and **whether to also buzz the watch**
+  (`cfg.watch`) — air quality calls `script.bedroom_alert_pulse` (snapshot → red flash → restore;
+  only when `light.bedroom_lights` is on) AND mirrors the bad alert to `notify.pixel_watch_3`
+  (alert only, not recovery — a persistent wrist alert until dismissed); battery/humidity are
+  phone-only. **Anchored on `off`↔`on` (not `unknown`)** so an HA restart while bad doesn't re-alert and an
   unavailable source can't false-alert (offline is `bedroom_sensor_offline_alert`'s job). Per-category
   debounce: air quality 30s, battery 1m, humidity 5m (rides out spikes). The label-strip is
   `friendly_name | replace(' high','') | replace(' low','')` (the ` low` strip makes battery +
@@ -84,6 +86,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
 - **Sensor-offline alerts (since 2026-06-18).** `bedroom_sensor_offline_alert` (files/automations.yaml,
   a structural twin of the air-quality alert) notifies `notify.mobile_app_pixel_9_pro` when a
   bedroom-automation dependency goes `unavailable` for 5 min, with a coalescing-tag recovery notice.
+  A dead dependency is critical, so the offline alert ALSO buzzes `notify.pixel_watch_3` (alert
+  only; recovery stays phone-only).
   Watched (one representative entity per device — Z2M flips all of a device's entities together):
   `sensor.bedroom_airgradient_one_carbon_dioxide`, `binary_sensor.aqara_fp300_presence`,
   `sensor.0x001788010f0ccda4_battery` (Tap Dial), `fan.tower_fan`. **Required dependency: Z2M

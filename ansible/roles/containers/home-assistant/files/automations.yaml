@@ -244,12 +244,13 @@
         unit: "{{ state_attr(src, 'unit_of_measurement') or '' }}"
         # Same tag for bad + recovery → the recovery replaces the alert on the phone.
         tag: "threshold_alert_{{ trigger.entity_id }}"
-        # Per-category title + whether to pulse the lights. The single point that encodes
-        # "air quality pulses, battery/humidity don't".
+        # Per-category title, whether to pulse the lights, and whether it's critical enough to also
+        # buzz the watch. `pulse` = air quality only; `watch` = the can't-miss categories (air
+        # quality is health). Battery/humidity stay phone-only.
         cfg: >-
-          {{ {'airquality': {'bad': '⚠️ Air quality', 'ok': '✅ Air quality', 'pulse': true},
-              'battery':    {'bad': '🔋 Battery low',  'ok': '🔋 Battery OK',  'pulse': false},
-              'humidity':   {'bad': '💧 Humidity',     'ok': '💧 Humidity OK', 'pulse': false}}[category] }}
+          {{ {'airquality': {'bad': '⚠️ Air quality', 'ok': '✅ Air quality', 'pulse': true,  'watch': true},
+              'battery':    {'bad': '🔋 Battery low',  'ok': '🔋 Battery OK',  'pulse': false, 'watch': false},
+              'humidity':   {'bad': '💧 Humidity',     'ok': '💧 Humidity OK', 'pulse': false, 'watch': false}}[category] }}
     - choose:
         - conditions: "{{ edge == 'bad' }}"
           sequence:
@@ -259,6 +260,16 @@
                 message: "{{ label }} is {{ value }}{{ ' ' ~ unit if unit else '' }}"
                 data:
                   tag: "{{ tag }}"
+            # Critical categories (cfg.watch) also buzz the watch — the alert only, not the
+            # recovery; a persistent critical alert on the wrist until dismissed is desirable.
+            - if: "{{ cfg.watch }}"
+              then:
+                - service: notify.pixel_watch_3
+                  data:
+                    title: "{{ cfg.bad }}"
+                    message: "{{ label }} is {{ value }}{{ ' ' ~ unit if unit else '' }}"
+                    data:
+                      tag: "{{ tag }}"
             # Light pulse only for air quality (cfg.pulse) and only when the lights are already on —
             # never wakes you, never fights Adaptive Lighting / the manual-off override at night.
             - if: "{{ cfg.pulse and is_state('light.bedroom_lights', 'on') }}"
@@ -393,6 +404,14 @@
         - conditions: "{{ trigger.id == 'offline' }}"
           sequence:
             - service: notify.mobile_app_pixel_9_pro
+              data:
+                title: "⚠️ Sensor offline"
+                message: "{{ name }} is offline (no data)"
+                data:
+                  tag: "{{ tag }}"
+            # A dead dependency is critical (silently breaks the automation layer) — also buzz the
+            # watch. Offline alert only; the recovery notice goes to the phone.
+            - service: notify.pixel_watch_3
               data:
                 title: "⚠️ Sensor offline"
                 message: "{{ name }} is offline (no data)"
