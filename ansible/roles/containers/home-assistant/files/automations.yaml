@@ -61,8 +61,7 @@
               target:
                 entity_id: input_boolean.bedroom_manual_off
         # Button 3 = reset the FAN to automatic: clear the fan override, then apply the
-        # temperature band for right now (night-cap aware). Does not touch the lights. The
-        # bedroom_relax scene stays defined in scenes.yaml but is no longer bound to the dial.
+        # temperature band for right now (night-cap aware). Does not touch the lights.
         - conditions: "{{ act == 'button_3_press' }}"
           sequence:
             - service: input_boolean.turn_off
@@ -121,7 +120,7 @@
     - condition: template
       value_template: >-
         {% set ws = states('sensor.bedroom_wake_start') %}
-        {% set in_window = ws not in ['unknown', 'unavailable'] and 0 <= (now() - as_datetime(ws)).total_seconds() < 900 %}
+        {% set in_window = ws not in ['unknown', 'unavailable'] and timedelta(0) <= (now() - as_datetime(ws)) < timedelta(minutes=15) %}
         {{ in_window or (states('sensor.aqara_fp300_illuminance') | float(9999) < 50) }}
   action:
     - service: script.bedroom_apply_natural
@@ -392,9 +391,10 @@
   condition:
     - condition: template
       value_template: >-
+        {% from 'fan.jinja' import pct_to_level %}
         {% set ts = trigger.to_state %}
         {% set fs = trigger.from_state %}
-        {% set new_level = 0 if (ts is none or ts.state != 'on') else (ts.attributes.percentage | float(0) * 9 / 100) | round | int %}
+        {% set new_level = 0 if (ts is none or ts.state != 'on') else pct_to_level(ts.attributes.percentage) | int %}
         {% set expected = states('input_number.bedroom_fan_expected_level') | int(-1) %}
         {{ ts is not none
            and ts.state not in ['unavailable', 'unknown']

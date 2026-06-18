@@ -7,6 +7,8 @@
   vars:
     common_dirs_to_create:
       - "{{ container_item.name }}/config"
+      # HA auto-loads custom_templates/*.jinja at startup (shared Jinja macros — see fan.jinja).
+      - "{{ container_item.name }}/config/custom_templates"
 
 - name: Create configuration.yaml from template
   tags: [config]
@@ -73,6 +75,16 @@
     mode: "0664"
   register: home_assistant_templates
 
+# Shared HA Jinja macros (custom_templates/*.jinja), imported by automations/scripts. Static file
+# via copy (HA Jinja, not Ansible-templated) — same reason as automations/scenes/scripts.
+- name: Deploy custom Jinja templates from static file
+  tags: [config]
+  ansible.builtin.copy:
+    src: custom_templates/fan.jinja
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/custom_templates/fan.jinja"
+    mode: "0664"
+  register: home_assistant_custom_templates
+
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:
@@ -80,4 +92,4 @@
     tasks_from: docker_deploy.yml
   vars:
     # All three are bind-mounted templated configs — recreate so HA reloads them on edit.
-    common_config_changed: "{{ (home_assistant_config is changed) or (home_assistant_customize is changed) or (home_assistant_dashboard is changed) or (home_assistant_automations is changed) or (home_assistant_scenes is changed) or (home_assistant_scripts is changed) or (home_assistant_templates is changed) }}"
+    common_config_changed: "{{ (home_assistant_config is changed) or (home_assistant_customize is changed) or (home_assistant_dashboard is changed) or (home_assistant_automations is changed) or (home_assistant_scenes is changed) or (home_assistant_scripts is changed) or (home_assistant_templates is changed) or (home_assistant_custom_templates is changed) }}"

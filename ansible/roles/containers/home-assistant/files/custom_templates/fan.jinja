@@ -1,0 +1,20 @@
+{# DREO tower fan (DR-HTF024S): percentage <-> discrete-level conversion. The SINGLE source of
+   truth for the fan's level math — imported by BOTH bedroom_apply_fan (files/scripts.yaml) and
+   bedroom_fan_manual_detect (files/automations.yaml) so the round-trip can never drift between them.
+   The fan exposes FAN_LEVELS discrete speeds; the DREO integration math.ceil()s a requested % up to
+   the next level, so to land ON a level we send the midpoint of its % range.
+   HA loads custom_templates/*.jinja at startup; this deploy recreates the container (full restart),
+   so edits take effect on deploy. Live edit: Developer Tools -> Actions ->
+   homeassistant.reload_custom_templates. #}
+{% set FAN_LEVELS = 9 %}
+
+{# Reported % -> level (0..FAN_LEVELS). round is banker's (Python round), matching the rest of HA. #}
+{%- macro pct_to_level(pct) -%}
+{{ (pct | float(0) * FAN_LEVELS / 100) | round | int }}
+{%- endmacro -%}
+
+{# Level (0..FAN_LEVELS) -> the % to SEND so the integration's ceil lands exactly on it: the
+   midpoint of the level's range ((L-0.5)/FAN_LEVELS*100) ceils to L. 0 = off. #}
+{%- macro level_to_pct(level) -%}
+{{ (((level | int - 0.5) * 100 / FAN_LEVELS) | round | int) if (level | int) > 0 else 0 }}
+{%- endmacro -%}

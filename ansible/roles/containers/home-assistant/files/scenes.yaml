@@ -9,13 +9,6 @@
       state: "on"
       color_temp_kelvin: 4000
       brightness_pct: 100
-- id: bedroom_relax
-  name: Bedroom Relax
-  entities:
-    light.bedroom_lights:
-      state: "on"
-      color_temp_kelvin: 2700
-      brightness_pct: 40
 - id: bedroom_nightlight
   name: Bedroom Nightlight
   entities:

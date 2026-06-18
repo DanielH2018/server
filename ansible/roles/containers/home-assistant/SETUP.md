@@ -73,8 +73,9 @@ These are **not** captured by `deploy.yml` — they're device/app/UI state:
 | `templates/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 12 `threshold` sensors, `template: !include`, http/trusted-proxy, Lovelace | `template` (Ansible-rendered) |
 | `files/automations.yaml` | the 17 automations | `copy` (verbatim — HA Jinja) |
 | `files/scripts.yaml` | the 6 scripts | `copy` |
-| `files/scenes.yaml` | `bedroom_bright` / `bedroom_relax` / `bedroom_nightlight` | `copy` |
+| `files/scenes.yaml` | `bedroom_bright` / `bedroom_nightlight` | `copy` |
 | `files/templates.yaml` | `sensor.bedroom_wake_start` template sensor | `copy` |
+| `files/custom_templates/fan.jinja` | shared `pct_to_level` / `level_to_pct` fan macros | `copy` |
 | `templates/customize.yaml.j2` | entity friendly-name / icon overrides | `template` |
 | `templates/ui-lovelace.yaml.j2` | the Bedroom dashboard | `template` |
 

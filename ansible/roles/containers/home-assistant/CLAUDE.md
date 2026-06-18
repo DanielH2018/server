@@ -42,8 +42,9 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   own config via the UI, but this file is the Ansible source of truth and is
   overwritten on deploy — keep UI-managed config (integrations, etc.) in the areas HA
   stores separately (`.storage/`, the recorder DB…), which are NOT templated.
-- **Automations + scenes + scripts + template sensors ARE copy'd (since 2026-06-18).**
-  `files/automations.yaml`, `files/scenes.yaml`, `files/scripts.yaml`, and `files/templates.yaml`
+- **Automations + scenes + scripts + template sensors + shared Jinja macros ARE copy'd (since 2026-06-18).**
+  `files/automations.yaml`, `files/scenes.yaml`, `files/scripts.yaml`, `files/templates.yaml`, and
+  `files/custom_templates/fan.jinja`
   are static files deployed by `ansible.builtin.copy` (NOT `template` — they use HA `{{ }}` Jinja
   that Ansible's templater would try to render and fail; `copy` ships them verbatim, no `{% raw %}`
   needed). **This is why HA Jinja lives in copy'd files, never inline in `configuration.yaml.j2`**
@@ -85,8 +86,9 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   The morning wake (1%→`wake_peak` over the 15 min ENDING at the real alarm; peak 50%, or 30% after a
   short night — see the sleep-quality bullet) is the next exception, its window
   = `sensor.bedroom_wake_start .. +15 min` (dynamic — see the dynamic-wake bullet below), encoded
-  as `brightness = 1+(wake_peak-1)·elapsed/900` over `transition = 900-elapsed` — so `elapsed=0` equals
-  the wake's start and pressing button 4 mid-window *resumes* the ramp. **Both Tap Dial button 4
+  as `brightness = 1+(wake_peak-1)·elapsed_min/15` over `transition = (15-elapsed_min)·60`s (the window
+  length is written in minutes; only the `transition` converts to seconds, because that is HA's service
+  unit) — so `elapsed_min=0` equals the wake's start and pressing button 4 mid-window *resumes* the ramp. **Both Tap Dial button 4
   and the `bedroom_morning_reset` automation call this dispatcher** (single source of truth — no
   duplicated ramp math). Color temp ALWAYS comes from AL; exceptions override brightness only.
   Helper `script.bedroom_set_natural_brightness(brightness_pct, transition)` holds the AL
@@ -230,7 +232,10 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   deadband** (`want` only steps when temp wants ≥0.7 level away from current; turning on jumps to the
   ideal) prevents flapping. **Level caps:** max **L4** during 22:00–06:00, max **L2** in sleep mode.
   Works in fan LEVELS, not raw %, because the DREO integration `math.ceil()`s a requested % up to the
-  next level — send `(L−0.5)/9·100`% to hit level L; tune the curve via the `71` start offset / slope.
+  next level — send `(L−0.5)/9·100`% to hit level L. That `%`<->level conversion (and the `9`-level
+  count) lives once in the `pct_to_level`/`level_to_pct` macros in `files/custom_templates/fan.jinja`,
+  shared with `bedroom_fan_manual_detect` so the round-trip can't drift. Tune the curve via the `71`
+  start offset / slope in `bedroom_apply_fan`.
   Same script-computes / caller-gates split as the lights:
   `bedroom_fan_temperature` (triggers on temp change + 22:00 + 06:00) gates on
   `input_boolean.bedroom_fan_manual` then calls the script. `bedroom_fan_manual_detect` sets that
@@ -242,8 +247,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   our echo (level == expected) is ignored, a real manual/remote change is caught. The RF remote is
   caught too (the fan reports app/panel/remote changes to the DREO cloud).
   **Tap Dial button 3 = reset the fan to automatic** (clear `bedroom_fan_manual` + apply, night-cap
-  aware); the morning reset clears it too. The `bedroom_relax` scene remains defined but is no longer
-  bound to the dial. Tune the fan curve (start offset / slope / caps) in `bedroom_apply_fan` only.
+  aware); the morning reset clears it too. Tune the fan curve (start offset / slope / caps) in
+  `bedroom_apply_fan` only.
 - **YAML dashboard + entity customization (templated).** `configuration.yaml` registers a YAML
   dashboard via `lovelace: dashboards:` (NOT the legacy top-level `mode: yaml` — deprecated,
   removed in HA 2026.8) pointing at `config/ui-lovelace.yaml` (`templates/ui-lovelace.yaml.j2`),

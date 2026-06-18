@@ -84,18 +84,19 @@ bedroom_apply_natural:
                 entity_id: scene.bedroom_nightlight
         # Exception: morning wake ramp — 15 min, 1% -> 50%, ENDING at the real alarm. The window
         # start is sensor.bedroom_wake_start (alarm - 15 min, morning-only — see configuration.yaml).
-        # elapsed=0 yields 1% over 900s; pressed partway through, it resumes from the current point
-        # over the remaining time. When no morning alarm is set the sensor is unavailable -> this
-        # exception is false and the default (full AL) applies. SINGLE source of truth for the wake
-        # window — bedroom_presence_on's window reads the same sensor (no duplicated formula).
+        # elapsed=0 yields 1% over the full 15 min; pressed partway through, it resumes from the
+        # current point over the remaining time. When no morning alarm is set the sensor is
+        # unavailable -> this exception is false and the default (full AL) applies. SINGLE source of
+        # truth for the wake window — bedroom_presence_on's window reads the same sensor.
         - conditions:
             - condition: template
               value_template: >-
                 {% set ws = states('sensor.bedroom_wake_start') %}
-                {{ ws not in ['unknown', 'unavailable'] and 0 <= (now() - as_datetime(ws)).total_seconds() < 900 }}
+                {{ ws not in ['unknown', 'unavailable'] and timedelta(0) <= (now() - as_datetime(ws)) < timedelta(minutes=15) }}
           sequence:
             - variables:
-                wake_elapsed: "{{ (now() - as_datetime(states('sensor.bedroom_wake_start'))).total_seconds() }}"
+                # Minutes elapsed into the 15-min wake window (0 at the window start, 15 at the alarm).
+                wake_elapsed_min: "{{ (now() - as_datetime(states('sensor.bedroom_wake_start'))).total_seconds() / 60 }}"
                 # Sleep-aware peak: after a short night (<6h slept) wake gentler to 30% instead of
                 # 50%. sleep_duration may lag (Google Sleep API finalizes around wake) — unknown/0
                 # falls back to the normal 50%. Only the peak changes; the window/transition don't.
@@ -103,8 +104,9 @@ bedroom_apply_natural:
                 wake_peak: "{{ 30 if (0 < sleep_min < 360) else 50 }}"
             - service: script.bedroom_set_natural_brightness
               data:
-                brightness_pct: "{{ (1 + (wake_peak - 1) * wake_elapsed / 900) | round(0) | int }}"
-                transition: "{{ (900 - wake_elapsed) | round(0) | int }}"
+                brightness_pct: "{{ (1 + (wake_peak - 1) * wake_elapsed_min / 15) | round(0) | int }}"
+                # transition is seconds (HA service unit): minutes left in the 15-min window -> seconds.
+                transition: "{{ ((15 - wake_elapsed_min) * 60) | round(0) | int }}"
       # Default: full Adaptive Lighting — natural color AND brightness from the sun curve.
       default:
         - service: adaptive_lighting.set_manual_control
@@ -120,7 +122,7 @@ bedroom_apply_natural:
 # Air-quality alert pulse: a brief red flash to flag bad air, then restore EXACTLY what was
 # showing. Snapshots the current light state into a throwaway scene, flashes red, and restores
 # the snapshot — so a manual scene / the morning ramp / Adaptive Lighting all come back intact
-# (vs. forcing AL and clobbering a chosen scene). Caller (bedroom_air_quality_alert) gates this
+# (vs. forcing AL and clobbering a chosen scene). Caller (bedroom_threshold_alert) gates this
 # on the lights already being on and calls it as a blocking service, so calls serialize and the
 # snapshot can never capture the red pulse itself. mode: single is belt-and-suspenders on that.
 bedroom_alert_pulse:
@@ -168,9 +170,11 @@ bedroom_apply_fan:
     - variables:
         # Temperature (°F; -1 if the sensor is unavailable).
         t: "{{ states('sensor.bedroom_airgradient_one_temperature') | float(-1) }}"
-        # The fan's current LEVEL (0 if off) from its reported %.
+        # The fan's current LEVEL (0 if off) from its reported %. pct_to_level/level_to_pct live in
+        # custom_templates/fan.jinja — the single source of truth for the % <-> level conversion,
+        # shared with bedroom_fan_manual_detect so the round-trip can't drift.
         cur_pct: "{{ state_attr('fan.tower_fan', 'percentage') | float(0) if is_state('fan.tower_fan', 'on') else 0 }}"
-        cur_level: "{{ (cur_pct * 9 / 100) | round | int }}"
+        cur_level: "{% from 'fan.jinja' import pct_to_level %}{{ pct_to_level(cur_pct) | int }}"
         # Smooth temp -> LEVEL: off below ~72°F, then ~1 DREO level per °F (72→L1 .. 80→L9). `ideal`
         # is the continuous level the temp wants right now. TUNE the curve here: the 71 offset sets
         # the start temp; for a gentler slope divide (t - 71) by a factor (e.g. /1.3).
@@ -190,9 +194,9 @@ bedroom_apply_fan:
                    else cur_level) }}
         # Apply the cap; result is 0..9.
         target_level: "{{ [want, cap] | min | int }}"
-        # % to SEND to hit target_level despite the integration's ceil: the midpoint of the level's
-        # range ((L-0.5)/9*100) ceils to exactly L. 0 = off.
-        send_pct: "{{ (((target_level - 0.5) * 100 / 9) | round | int) if target_level > 0 else 0 }}"
+        # % to SEND to hit target_level despite the integration's ceil (level -> midpoint %, via the
+        # shared fan.jinja macro): the midpoint of the level's range ceils to exactly L. 0 = off.
+        send_pct: "{% from 'fan.jinja' import level_to_pct %}{{ level_to_pct(target_level) | int }}"
     # Sensor unavailable (t < 0) → do nothing rather than switch the fan off.
     - condition: template
       value_template: "{{ t >= 0 }}"
