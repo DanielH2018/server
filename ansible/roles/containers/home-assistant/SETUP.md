@@ -71,7 +71,7 @@ These are **not** captured by `deploy.yml` — they're device/app/UI state:
 | File | What it holds | Deployed via |
 |---|---|---|
 | `templates/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 12 `threshold` sensors, `template: !include`, http/trusted-proxy, Lovelace | `template` (Ansible-rendered) |
-| `files/automations.yaml` | the 15 automations | `copy` (verbatim — HA Jinja) |
+| `files/automations.yaml` | the 17 automations | `copy` (verbatim — HA Jinja) |
 | `files/scripts.yaml` | the 6 scripts | `copy` |
 | `files/scenes.yaml` | `bedroom_bright` / `bedroom_relax` / `bedroom_nightlight` | `copy` |
 | `files/templates.yaml` | `sensor.bedroom_wake_start` template sensor | `copy` |
@@ -160,6 +160,12 @@ recovery, no bounce". Twelve, feeding `bedroom_threshold_alert`:
 - `bedroom_sensor_offline_alert` — a watched dependency `unavailable` 5 min → notify (watch).
 - `bedroom_notification_action` — handles taps on notification buttons (`BEDROOM_*` actions).
 - `update_available_digest` — Sunday 10:00, a digest of pending device/integration updates.
+
+**Maintenance & power**
+- `bedroom_co2_calibration_reminder` — quarterly (1st of Jan/Apr/Jul/Oct) notify to recalibrate the
+  AirGradient CO₂ sensor against the outdoor ~400 ppm baseline (notify-only; no one-tap calibrate).
+- `ups_power_event` — UPS outage / low-battery / restored, off the raw NUT flags
+  (`sensor.apc_ups_status_data`); low-battery pierces DND (the server may shut down).
 
 ---
 
