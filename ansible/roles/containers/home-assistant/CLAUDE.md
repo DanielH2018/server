@@ -135,7 +135,10 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   a structural twin of the threshold engine) fires when a
   bedroom-automation dependency goes `unavailable` for 5 min, with a coalescing-tag recovery notice.
   Routed through `script.bedroom_notify` (offline: `watch:true` — wrist buzz, but routine for DND, so
-  a dropout overnight doesn't wake you; recovery: routine, phone-only).
+  a dropout overnight doesn't wake you; recovery: routine, phone-only). The **recovery branch is
+  gated on the device having been unavailable ≥5 min** (`to_state.last_changed − from_state.last_changed`)
+  so the `unavailable→available` blip on every HA/Z2M restart doesn't fire a spurious "back online"
+  (a real ≥5-min outage still notifies).
   Watched (one representative entity per device — Z2M flips all of a device's entities together):
   `sensor.bedroom_airgradient_one_carbon_dioxide`, `binary_sensor.aqara_fp300_presence`,
   `sensor.0x001788010f0ccda4_battery` (Tap Dial), `fan.tower_fan`. **Required dependency: Z2M
