@@ -48,6 +48,13 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   first creation, NOT its `id` — so `bedroom_fan_temperature` (id) is
   `automation.bedroom_fan_temperature_control` (alias) in the state machine / recorder DB. Query by
   the alias-slug, not the id, when checking whether an automation loaded.
+  **FP300 presence tuning (2026-06-18, "lights off while sitting at the desk" fix):** the FP300 was
+  dropping `presence` ~2 min while the operator sat still (187 flips/24h, 16 false-absences 1–5 min
+  that crossed `bedroom_absence_off`'s 1-min timeout). Fixed via Z2M **device settings** (NOT
+  templated — set with `mosquitto_pub -t 'zigbee2mqtt/Aqara FP300/set' -m '{...}'`; re-apply after a
+  re-pair): `presence_detection_options: mmwave` (radar-only — holds a stationary person; PIR sees
+  only motion), `motion_sensitivity: high`, `absence_delay_timer: 60` (sec; was 10, range 10–300 —
+  the hold-vs-prompt knob). `bedroom_absence_off` stays at 1 min; bump it if drops persist.
 - **Adaptive Lighting is a HACS dependency (since 2026-06-18).** `configuration.yaml` declares
   `adaptive_lighting:` for the bedroom group; the integration code installs via HACS into
   `custom_components/adaptive_lighting/` (Kopia-backed, not templated — like `dreo`). Install it

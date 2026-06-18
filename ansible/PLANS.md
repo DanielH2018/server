@@ -22,7 +22,13 @@ the Renovate dependency dashboard.
   ~400 ppm outdoor baseline. Keeps the air-quality alert thresholds honest. Hygiene — low excitement,
   real accuracy benefit. (2026-06-18)
 
-- If I sit at my desk for a while, the lights turn off, please try to tune it to lessen that happening.
+- ~~If I sit at my desk for a while, the lights turn off~~ — done 2026-06-18: diagnosed the FP300
+  dropping `presence` ~2 min while still (187 flips/24h; 16 false-absences 1–5 min crossing
+  `bedroom_absence_off`'s 1-min timeout). Fixed via FP300 Z2M device settings (not git, re-apply on
+  re-pair): `presence_detection_options: both→mmwave` (radar holds a still person), `motion_sensitivity:
+  medium→high`, `absence_delay_timer: 10→60 s`. Kept the 1-min absence-off; observe + iterate (bump
+  the absence delay toward 120 s or the automation timeout if it still drops). Documented in the
+  home-assistant role CLAUDE.md.
 - ~~Smooth out Fan curve for temperature~~ — done 2026-06-18: `bedroom_apply_fan` now maps temp to
   the DREO's full 9 levels on a smooth ~1-level-per-°F curve (off <~72°F, 72→L1 .. 80→L9) instead of
   the old 4 bands → levels 0/2/4/6. ~0.7-level hysteresis deadband (no flapping, simulated); night
