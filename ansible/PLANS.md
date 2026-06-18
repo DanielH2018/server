@@ -17,6 +17,35 @@ the Renovate dependency dashboard.
   Edit the config + redeploy `home-assistant`. Spec:
   `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
+- HA sensor-offline alerts — notify when a sensor the bedroom automations depend on goes
+  `unavailable`/`unknown` for a few minutes: Aqara FP300 (presence lighting), AirGradient ONE
+  (air-quality alerts + temp→fan control), Hue Tap Dial RDM002 (the controller). A dead sensor
+  currently fails **silently** (e.g. an FP300 Zigbee dropout → presence lighting just stops, no
+  signal), which undermines everything built this session. Likely a template/state trigger
+  watching those entities' availability → `notify.mobile_app_pixel_9_pro`. (2026-06-18)
+
+- HA low-battery alerts — generic "any battery < ~15%" notifier for the battery Zigbee devices
+  (`sensor.aqara_fp300_battery`, the Tap Dial battery). **Reuses the air-quality alert pattern
+  exactly:** a lower-bound `threshold` binary-sensor per battery + one generic attribute-driven
+  notify automation — cheap and consistent with `bedroom_air_quality_alert`. (2026-06-18)
+
+- HA home/away automations — off `device_tracker.pixel_9_pro` (HA companion app GPS/Wi-Fi), a
+  different layer than the FP300's *room* presence. Leave home → bedroom lights + fan off, and
+  notify if something was left on; "nobody home for ~30 min" failsafe → all off. Must respect the
+  `bedroom_manual_off` / `bedroom_fan_manual` overrides. (2026-06-18)
+
+- HA humidity comfort alerts — alert on `sensor.bedroom_airgradient_one_humidity` too HIGH
+  (>~60%, mold) or too LOW (<~30%, winter-dry). **Design wrinkle:** humidity is *two-sided*, so a
+  single `threshold` sensor (one bound) won't cover it — use a `threshold` with both `lower` and
+  `upper` (range type → on when OUT of range), or two sensors. Fold the notify into the
+  air-quality alert engine. (2026-06-18)
+
+- HA bedtime / sleep routine — one trigger (a Tap Dial button *hold*, a set time, or "phone
+  started charging after 22:00" via the companion app's charging sensor) → `scene.bedroom_nightlight`
+  + fan to a low/sleep speed + flip Adaptive Lighting into **sleep mode** (warmer/dimmer; AL exposes
+  a per-config `..._sleep_mode_bedroom` switch). Ties the subsystems into one "going to bed" action;
+  pair with clearing AL sleep mode at the morning wake. (2026-06-18)
+
 ## Superseded
 
 - Player stats for Terraria — done 2026-06-15: shipped the `terraria-stats` sidecar
