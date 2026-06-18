@@ -72,6 +72,19 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   so a new pollutant = one more threshold sensor in `configuration.yaml.j2` + add its
   `binary_sensor` to BOTH trigger lists. Thresholds are starting points — tune the VOC/NOx *index*
   ones to the observed baseline.
+- **Temperature → fan control (since 2026-06-18).** `script.bedroom_apply_fan` (in
+  `files/scripts.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
+  `sensor.bedroom_airgradient_one_temperature` (°F): off <72 / Low 72–74 (33%) / Medium 74–76 (67%)
+  / High ≥76 (100%), with a **0.5°F hysteresis deadband** (steps down only 0.5° below a boundary)
+  and a **22:00–06:00 Medium night cap**. Same script-computes / caller-gates split as the lights:
+  `bedroom_fan_temperature` (triggers on temp change + 22:00 + 06:00) gates on
+  `input_boolean.bedroom_fan_manual` then calls the script. `bedroom_fan_manual_detect` is a
+  **best-effort** override-setter — it flags manual control when the fan's percentage/preset/on-off
+  changes with `context.parent_id is none` (app/physical/UI, not our automations); a cloud-fan echo
+  can occasionally mis-fire, so it's bounded by the daily reset and the toggle is hand-flippable.
+  **Tap Dial button 3 = reset the fan to automatic** (clear `bedroom_fan_manual` + apply, night-cap
+  aware); the morning reset clears it too. The `bedroom_relax` scene remains defined but is no longer
+  bound to the dial. Adding a pollutant-style fan band = edit the band ladder in the script only.
 - **YAML dashboard + entity customization (templated).** `configuration.yaml` registers a YAML
   dashboard via `lovelace: dashboards:` (NOT the legacy top-level `mode: yaml` — deprecated,
   removed in HA 2026.8) pointing at `config/ui-lovelace.yaml` (`templates/ui-lovelace.yaml.j2`),

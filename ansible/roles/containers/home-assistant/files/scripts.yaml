@@ -129,3 +129,52 @@ bedroom_alert_pulse:
         entity_id: scene.bedroom_pre_alert
       data:
         transition: 0.5
+
+# Fan: set the DREO tower fan to its target speed for the CURRENT temperature + time. Single source
+# of truth for the temperature->speed bands, the 0.5°F hysteresis deadband, and the 22:00-06:00
+# night cap (Medium max). Callers (bedroom_fan_temperature, the morning reset, Tap Dial button 3)
+# gate on the bedroom_fan_manual override themselves — this just applies the right level, and only
+# commands the fan when the target level actually differs (avoids churn + self-echo manual-detects).
+bedroom_apply_fan:
+  alias: "Bedroom — apply temperature fan state"
+  description: >-
+    Set fan.tower_fan from sensor.bedroom_airgradient_one_temperature (°F): off <72 / Low 72-74 /
+    Medium 74-76 / High >=76, with a 0.5°F deadband and a Medium cap during 22:00-06:00.
+  mode: restart
+  sequence:
+    - variables:
+        # Temperature (°F; -1 if the sensor is unavailable) and the fan's current band 0-3 from its %.
+        t: "{{ states('sensor.bedroom_airgradient_one_temperature') | float(-1) }}"
+        cur_pct: "{{ state_attr('fan.tower_fan', 'percentage') | float(0) if is_state('fan.tower_fan', 'on') else 0 }}"
+        cb: "{{ (0 if cur_pct < 17 else (1 if cur_pct < 50 else (2 if cur_pct < 84 else 3))) | int }}"
+        # Pure rising band, then 0.5°F deadband: rise jumps straight there; only step DOWN once
+        # the temp is 0.5°F below the current band's lower edge (cb>=1 in that branch, so index ok).
+        abs_band: "{{ (3 if t >= 76 else (2 if t >= 74 else (1 if t >= 72 else 0))) | int }}"
+        band_raw: "{{ (abs_band if abs_band >= cb else (abs_band if t < [71.5, 73.5, 75.5][cb - 1] else cb)) | int }}"
+        is_night: "{{ now().hour >= 22 or now().hour < 6 }}"
+        band: "{{ ([band_raw, 2] | min if is_night else band_raw) | int }}"
+        target_pct: "{{ [0, 33, 67, 100][band] }}"
+    # Sensor unavailable (t < 0) → do nothing rather than switch the fan off.
+    - condition: template
+      value_template: "{{ t >= 0 }}"
+    - choose:
+        # OFF band — turn the fan off only if it is currently on.
+        - conditions: "{{ band == 0 }}"
+          sequence:
+            - if: "{{ is_state('fan.tower_fan', 'on') }}"
+              then:
+                - service: fan.turn_off
+                  target:
+                    entity_id: fan.tower_fan
+      # On bands — set the percentage, only if it differs from the current level.
+      default:
+        - if: "{{ not is_state('fan.tower_fan', 'on') or (cur_pct | round(0) | int != target_pct) }}"
+          then:
+            - service: fan.turn_on
+              target:
+                entity_id: fan.tower_fan
+            - service: fan.set_percentage
+              target:
+                entity_id: fan.tower_fan
+              data:
+                percentage: "{{ target_pct }}"

@@ -20,6 +20,11 @@ input_boolean:
   bedroom_manual_off:
     name: Bedroom manual off override
     icon: mdi:lightbulb-off
+  # Manual-fan override. When on, the temperature automation will NOT drive the fan. Set
+  # (best-effort) when the fan is changed by hand; cleared by Tap Dial button 3 or the morning reset.
+  bedroom_fan_manual:
+    name: Bedroom fan manual override
+    icon: mdi:fan-off
 
 # Adaptive Lighting (HACS integration) — sun-tracking color temp + brightness for the bedroom
 # group while it is on. Installed via HACS into custom_components/ (Kopia-backed, like dreo).

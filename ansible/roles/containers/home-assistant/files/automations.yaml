@@ -44,14 +44,15 @@
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_manual_off
+        # Button 3 = reset the FAN to automatic: clear the fan override, then apply the
+        # temperature band for right now (night-cap aware). Does not touch the lights. The
+        # bedroom_relax scene stays defined in scenes.yaml but is no longer bound to the dial.
         - conditions: "{{ trigger.payload_json.action == 'button_3_press' }}"
           sequence:
-            - service: scene.turn_on
-              target:
-                entity_id: scene.bedroom_relax
             - service: input_boolean.turn_off
               target:
-                entity_id: input_boolean.bedroom_manual_off
+                entity_id: input_boolean.bedroom_fan_manual
+            - service: script.bedroom_apply_fan
         # Button 4 = reset to the NATURAL state for right now. The dispatcher script picks the
         # active time-based exception (e.g. the morning wake ramp) or full Adaptive Lighting as
         # the default — single source of truth. See files/scripts.yaml.
@@ -140,6 +141,11 @@
     - service: input_boolean.turn_off
       target:
         entity_id: input_boolean.bedroom_manual_off
+    # Reset the FAN to automatic too (independent of presence) and apply the current band.
+    - service: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.bedroom_fan_manual
+    - service: script.bedroom_apply_fan
     - if: "{{ is_state('binary_sensor.aqara_fp300_presence', 'on') }}"
       then:
         # Gentle wake via the natural-state dispatcher: at 06:00/07:00 it computes elapsed=0,
@@ -214,3 +220,61 @@
             message: "{{ label }} back to normal ({{ value }}{{ ' ' ~ unit if unit else '' }})"
             data:
               tag: "{{ tag }}"
+
+# Temperature → fan: drive fan.tower_fan from the AirGradient temperature via script.bedroom_apply_fan
+# (off <72 / Low 72-74 / Medium 74-76 / High >=76 °F; Medium cap 22:00-06:00; 0.5°F deadband).
+# Re-evaluates on every temperature change and at the night-cap boundaries (22:00 / 06:00) so the cap
+# engages/releases even when the temperature is steady. Skipped while the manual override is on.
+- id: bedroom_fan_temperature
+  alias: Bedroom fan temperature control
+  description: Set the tower fan speed from the AirGradient temperature (night-capped); skipped when the fan override is on.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: sensor.bedroom_airgradient_one_temperature
+    - platform: time
+      at: "22:00:00"
+    - platform: time
+      at: "06:00:00"
+  condition:
+    - condition: state
+      entity_id: input_boolean.bedroom_fan_manual
+      state: "off"
+  action:
+    - service: script.bedroom_apply_fan
+
+# Best-effort manual-fan detector: when the fan's speed / preset / on-off changes and the change was
+# NOT caused by one of our automations (context.parent_id is null = app / physical / UI), engage the
+# manual override so the temperature automation backs off. Triggers on the controllable attributes
+# only (NOT a bare state trigger) — the fan's onboard `temperature` attribute drifts and would
+# false-trigger. Cloud-fan echoes can still mis-fire occasionally; the morning reset and Tap Dial
+# button 3 clear it. Ignores unavailable<->state reconnect noise.
+- id: bedroom_fan_manual_detect
+  alias: Bedroom fan manual override detect
+  description: Set the fan manual override when the fan is changed by hand (best-effort, via change context).
+  mode: queued
+  max: 10
+  trigger:
+    - platform: state
+      entity_id: fan.tower_fan
+      attribute: percentage
+    - platform: state
+      entity_id: fan.tower_fan
+      attribute: preset_mode
+    - platform: state
+      entity_id: fan.tower_fan
+      to: "on"
+    - platform: state
+      entity_id: fan.tower_fan
+      to: "off"
+  condition:
+    - condition: template
+      value_template: >-
+        {{ trigger.to_state is not none
+           and trigger.to_state.state not in ['unavailable', 'unknown']
+           and (trigger.from_state is none or trigger.from_state.state not in ['unavailable', 'unknown'])
+           and trigger.to_state.context.parent_id is none }}
+  action:
+    - service: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.bedroom_fan_manual
