@@ -20,11 +20,24 @@ input_boolean:
   bedroom_manual_off:
     name: Bedroom manual off override
     icon: mdi:lightbulb-off
-  # Manual-fan override. When on, the temperature automation will NOT drive the fan. Set
-  # (best-effort) when the fan is changed by hand; cleared by Tap Dial button 3 or the morning reset.
+  # Manual-fan override. When on, the temperature automation will NOT drive the fan. Set when the
+  # fan is changed by hand; cleared by Tap Dial button 3 or the morning reset.
   bedroom_fan_manual:
     name: Bedroom fan manual override
     icon: mdi:fan-off
+
+# Helper: the fan LEVEL script.bedroom_apply_fan last commanded (0-9). bedroom_fan_manual_detect
+# ignores a fan change whose level matches this (= our own command's cloud echo) and only flags a
+# mismatch as a real manual change — the DREO push integration echoes our commands back parent-less,
+# so the change-context alone can't tell them apart.
+input_number:
+  bedroom_fan_expected_level:
+    name: Bedroom fan expected level
+    min: 0
+    max: 9
+    step: 1
+    mode: box
+    icon: mdi:fan-chevron-up
 
 # Adaptive Lighting (HACS integration) — sun-tracking color temp + brightness for the bedroom
 # group while it is on. Installed via HACS into custom_components/ (Kopia-backed, like dreo).

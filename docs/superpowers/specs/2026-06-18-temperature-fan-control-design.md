@@ -22,17 +22,23 @@ control on the Tap Dial.
 
 ### Temperature → speed bands (°F)
 
-| Temp | Speed | Fan % (level) |
+| Temp | Speed | Fan level (reports ~%) |
 |---|---|---|
 | < 72 | Off | — |
-| 72–74 | Low | 33 (3) |
-| 74–76 | Medium | 67 (6) |
-| ≥ 76 | High | 100 (9) |
+| 72–74 | Low | level 2 (22%) |
+| 74–76 | Medium | level 4 (44%) |
+| ≥ 76 | High | level 6 (67%) |
+
+> Tuned gentler 2026-06-18 (was 33% / 67% / 100% at levels 3/7/9). Work in **fan levels**, not
+> raw %, because the DREO integration `math.ceil()`s a requested % up to the next level (so a
+> requested `67%` lands on level 7 ≈ 77%). To hit level `L`, send `(L−0.5)/9·100`% (the midpoint of
+> the level's range), which ceils to exactly `L`. Speeds are tuned via one `levels` list in the
+> script.
 
 ### Night cap
 
-22:00–06:00 the target is clamped to **Medium (67%)** — a hot night gives Medium, never High.
-Night is computed by hour: `now().hour >= 22 or now().hour < 6`.
+22:00–06:00 the target is clamped to **Medium (level 4, 44%)** — a hot night gives Medium, never
+High. Night is computed by hour: `now().hour >= 22 or now().hour < 6`.
 
 ### Anti-flap (hysteresis)
 
@@ -52,8 +58,8 @@ else:
 band = min(band, 2) if is_night else band  # night cap
 ```
 
-`cb` from current percentage: `<17→0, <50→1, <84→2, else→3` (midpoints of 0/33/67/100).
-`band → percentage`: `[off, 33, 67, 100]`.
+`cb` from the fan's current level (`cur_level = round(cur_pct·9/100)`): `<1→0, <3→1, <5→2, else→3`
+(midpoints of the `levels` list `[0,2,4,6]`). `band → level`: `[0, 2, 4, 6]`; send `(L−0.5)/9·100`%.
 
 ## Architecture
 
@@ -62,9 +68,10 @@ thin automations trigger it. Lives in the existing templated static files.
 
 ### `script.bedroom_apply_fan` (new, in `files/scripts.yaml`)
 
-Reads temp + clock + the fan's current level, computes `band` (above), then:
+Reads temp + clock + the fan's current level, computes `band` (above), records the target level in
+`input_number.bedroom_fan_expected_level` (so the detector can recognize its own echo), then:
 - `band == 0` → `fan.turn_off` (only if currently on).
-- else → `fan.turn_on` + `fan.set_percentage` to the band's % (only if it differs from current).
+- else → `fan.turn_on` + `fan.set_percentage` to the level's send-% (only if the current level differs).
 
 Stateless and reusable. Does **not** check the override — callers gate that (same split as the
 lights dispatcher: "what value" here, "whether to act" in the caller).
@@ -77,21 +84,24 @@ lights dispatcher: "what value" here, "whether to act" in the caller).
 - **Action:** `script.bedroom_apply_fan`.
 - `mode: single`.
 
-### `automation bedroom_fan_manual_detect` (new — best-effort override setter)
+### `automation bedroom_fan_manual_detect` (new — override setter)
 
 - **Triggers:** `fan.tower_fan` `attribute: percentage`, `attribute: preset_mode`, `to: "on"`,
   `to: "off"` (deliberately NOT a bare state trigger — the fan's onboard `temperature` attribute
   drifts and would false-trigger).
-- **Condition:** `trigger.to_state.context.parent_id == none` — i.e. the change was **not** caused
-  by one of our automations/scripts (those carry a parent context).
+- **Condition:** `parent_id is none` **AND** (the trigger is a `preset_mode` change **OR** the new
+  fan level ≠ `input_number.bedroom_fan_expected_level`). New level = `round(percentage·9/100)`, 0 if off.
 - **Action:** `input_boolean.turn_on bedroom_fan_manual`.
 - `mode: queued`.
-- **Caveat:** a cloud-polled DREO can echo its own state with a fresh context, so this is
-  best-effort and may occasionally mis-fire. It is bounded by the daily reset, and the toggle is
-  also flippable by hand (a guaranteed manual pause). If it proves noisy, drop to explicit-toggle-
-  only. The "only command on change" rule in the script reduces self-echo.
+- **Why expected-level, not just context:** DREO is `cloud_push` and its pydreo setters only
+  `_send_command` (no optimistic state), so our OWN command's value lands via a websocket **echo**
+  that usually arrives after the service-call context clears → parent-less → indistinguishable from
+  manual by context alone (verified: it self-tripped after a speed change). Comparing the new level
+  to the level the script just commanded fixes it: our echo matches (ignored), a real manual/remote
+  change differs (flagged). A `preset_mode` change is always treated as manual (the script never
+  sets preset). The RF remote is caught (the fan reports app/panel/remote changes to the cloud).
 
-### `input_boolean.bedroom_fan_manual` (new helper, `configuration.yaml.j2`)
+### `input_boolean.bedroom_fan_manual` + `input_number.bedroom_fan_expected_level` (new helpers, `configuration.yaml.j2`)
 
 Manual-fan override, parallel to `bedroom_manual_off`. When on, `bedroom_fan_temperature` skips.
 

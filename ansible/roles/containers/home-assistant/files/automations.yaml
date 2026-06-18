@@ -243,15 +243,17 @@
   action:
     - service: script.bedroom_apply_fan
 
-# Best-effort manual-fan detector: when the fan's speed / preset / on-off changes and the change was
-# NOT caused by one of our automations (context.parent_id is null = app / physical / UI), engage the
-# manual override so the temperature automation backs off. Triggers on the controllable attributes
-# only (NOT a bare state trigger) — the fan's onboard `temperature` attribute drifts and would
-# false-trigger. Cloud-fan echoes can still mis-fire occasionally; the morning reset and Tap Dial
-# button 3 clear it. Ignores unavailable<->state reconnect noise.
+# Manual-fan detector: when the fan's speed / preset / on-off changes and it was NOT our own
+# command, engage the override so the temperature automation backs off. The DREO push integration
+# echoes our OWN commands back parent-less, so context alone can't tell them apart — we ALSO compare
+# the new fan LEVEL to input_number.bedroom_fan_expected_level (what bedroom_apply_fan last
+# commanded): a match = our echo (ignore), a mismatch = a real manual/remote change (flag). A preset
+# change is always manual (the automation never sets preset). Triggers on the controllable
+# attributes only (NOT a bare state trigger) — the fan's onboard `temperature` attribute drifts and
+# would false-fire. Ignores unavailable<->state reconnect noise.
 - id: bedroom_fan_manual_detect
   alias: Bedroom fan manual override detect
-  description: Set the fan manual override when the fan is changed by hand (best-effort, via change context).
+  description: Set the fan manual override when the fan is changed by hand (level differs from what the automation commanded).
   mode: queued
   max: 10
   trigger:
@@ -270,10 +272,15 @@
   condition:
     - condition: template
       value_template: >-
-        {{ trigger.to_state is not none
-           and trigger.to_state.state not in ['unavailable', 'unknown']
-           and (trigger.from_state is none or trigger.from_state.state not in ['unavailable', 'unknown'])
-           and trigger.to_state.context.parent_id is none }}
+        {% set ts = trigger.to_state %}
+        {% set fs = trigger.from_state %}
+        {% set new_level = 0 if (ts is none or ts.state != 'on') else (ts.attributes.percentage | float(0) * 9 / 100) | round | int %}
+        {% set expected = states('input_number.bedroom_fan_expected_level') | int(-1) %}
+        {{ ts is not none
+           and ts.state not in ['unavailable', 'unknown']
+           and (fs is none or fs.state not in ['unavailable', 'unknown'])
+           and ts.context.parent_id is none
+           and ((trigger.attribute | default('')) == 'preset_mode' or new_level != expected) }}
   action:
     - service: input_boolean.turn_on
       target:

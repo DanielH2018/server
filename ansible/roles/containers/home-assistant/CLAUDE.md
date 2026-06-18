@@ -74,14 +74,21 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   ones to the observed baseline.
 - **Temperature → fan control (since 2026-06-18).** `script.bedroom_apply_fan` (in
   `files/scripts.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
-  `sensor.bedroom_airgradient_one_temperature` (°F): off <72 / Low 72–74 (33%) / Medium 74–76 (67%)
-  / High ≥76 (100%), with a **0.5°F hysteresis deadband** (steps down only 0.5° below a boundary)
-  and a **22:00–06:00 Medium night cap**. Same script-computes / caller-gates split as the lights:
+  `sensor.bedroom_airgradient_one_temperature` (°F): off <72 / Low 72–74 / Medium 74–76 / High ≥76,
+  mapped to fan **levels 2/4/6 (≈22/44/67%)**, with a **0.5°F hysteresis deadband** (steps down only
+  0.5° below a boundary) and a **22:00–06:00 Medium night cap**. Works in fan LEVELS, not raw %,
+  because the DREO integration `math.ceil()`s a requested % up to the next level (a `67%` request
+  lands on level 7 ≈ 77%) — send `(L−0.5)/9·100`% to hit level L; speeds tune via one `levels` list.
+  Same script-computes / caller-gates split as the lights:
   `bedroom_fan_temperature` (triggers on temp change + 22:00 + 06:00) gates on
-  `input_boolean.bedroom_fan_manual` then calls the script. `bedroom_fan_manual_detect` is a
-  **best-effort** override-setter — it flags manual control when the fan's percentage/preset/on-off
-  changes with `context.parent_id is none` (app/physical/UI, not our automations); a cloud-fan echo
-  can occasionally mis-fire, so it's bounded by the daily reset and the toggle is hand-flippable.
+  `input_boolean.bedroom_fan_manual` then calls the script. `bedroom_fan_manual_detect` sets that
+  override on a real manual change. **`parent_id is none` alone self-trips** here — `dreo` is
+  `cloud_push` and its setters only `_send_command` (no optimistic state), so our OWN command's
+  value arrives via a parent-less websocket echo that looks manual. Fix: `bedroom_apply_fan` writes
+  the level it's about to command to `input_number.bedroom_fan_expected_level` first, and the
+  detector flags only when `parent_id is none AND (preset change OR new fan level != expected)` — so
+  our echo (level == expected) is ignored, a real manual/remote change is caught. The RF remote is
+  caught too (the fan reports app/panel/remote changes to the DREO cloud).
   **Tap Dial button 3 = reset the fan to automatic** (clear `bedroom_fan_manual` + apply, night-cap
   aware); the morning reset clears it too. The `bedroom_relax` scene remains defined but is no longer
   bound to the dial. Adding a pollutant-style fan band = edit the band ladder in the script only.
