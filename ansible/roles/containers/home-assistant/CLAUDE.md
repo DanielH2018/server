@@ -98,6 +98,16 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   critical" channel as a DND exception in Android (after the first critical alert creates it) — high
   importance alone doesn't pierce DND. Only **severe air quality** sets `pierce`; sensor-offline +
   air-quality set `watch`; battery/humidity/recoveries are routine (silent while quiet, phone-only).
+- **Actionable notifications (since 2026-06-18).** `bedroom_notify` takes an optional `actions` list
+  (`[{action, title}]`, phone-only) → the companion app renders buttons; taps fire
+  `mobile_app_notification_action`, dispatched by `automation.bedroom_notification_action` on the
+  namespaced `BEDROOM_*` action id. Wired buttons: air-quality bad → **Boost fan**
+  (`BEDROOM_BOOST_FAN`: fan_manual on + 100% — persists until button-3/morning reset; moves air,
+  doesn't lower CO2); away "Left on" → **Turn back on** (`BEDROOM_AWAY_TURN_ON`: apply_natural +
+  apply_fan, ignores home-gates — undo a false-away); and a nightly **bedtime prompt**
+  (`automation.bedroom_bedtime_prompt`, 22:00 if present + not in sleep mode + home) → **Start now**
+  (`BEDROOM_START_BEDTIME` → `script.bedroom_bedtime`). Add a button = pass `actions` to
+  `bedroom_notify` + a case in the dispatcher.
 - **Sensor-offline alerts (since 2026-06-18).** `bedroom_sensor_offline_alert` (files/automations.yaml,
   a structural twin of the air-quality alert) notifies `notify.mobile_app_pixel_9_pro` when a
   bedroom-automation dependency goes `unavailable` for 5 min, with a coalescing-tag recovery notice.

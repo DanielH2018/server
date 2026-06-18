@@ -283,6 +283,9 @@
               'airqualitysevere': {'bad': '🚨 Air quality HIGH', 'ok': '✅ Air quality', 'pulse': true, 'watch': true, 'pierce': true, 'recovery': false},
               'battery':          {'bad': '🔋 Battery low', 'ok': '🔋 Battery OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
               'humidity':         {'bad': '💧 Humidity', 'ok': '💧 Humidity OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true}}[category] }}
+        # Air-quality bad alerts get a "Boost fan" action button (circulate the air); other
+        # categories get none. Handled by bedroom_notification_action.
+        boost_actions: "{{ [{'action': 'BEDROOM_BOOST_FAN', 'title': 'Boost fan'}] if category in ['airquality', 'airqualitysevere'] else [] }}"
     - choose:
         - conditions: "{{ edge == 'bad' }}"
           sequence:
@@ -293,6 +296,7 @@
                 tag: "{{ tag }}"
                 watch: "{{ cfg.watch }}"
                 pierce: "{{ cfg.pierce }}"
+                actions: "{{ boost_actions }}"
             # Light pulse only for air quality (cfg.pulse) and only when the lights are already on —
             # never wakes you, never fights Adaptive Lighting / the manual-off override at night.
             - if: "{{ cfg.pulse and is_state('light.bedroom_lights', 'on') }}"
@@ -490,6 +494,10 @@
                 title: "🏠 Left on"
                 message: "Turned off bedroom {{ on_items | join(' + ') }} (you're away)"
                 tag: bedroom_away
+                # One-tap undo for a false-away (GPS jitter while you're actually home).
+                actions:
+                  - action: BEDROOM_AWAY_TURN_ON
+                    title: Turn back on
 
 # Arrive home nudge: resume the gated automations promptly on return (person.daniel -> home). NOT a
 # welcome-home — never forces lights on. The fan resumes per the temperature band (unless the fan
@@ -533,3 +541,72 @@
       state: "home"
   action:
     - service: script.bedroom_bedtime
+
+# Actionable-notification dispatcher: handle taps on notification buttons. The companion app fires
+# mobile_app_notification_action with the BEDROOM_* action id from the button. Buttons are attached
+# by passing `actions` to script.bedroom_notify (air-quality bad -> Boost fan; away -> Turn back on;
+# the bedtime prompt -> Start now). Add a new button = add its case here + pass it in the actions list.
+- id: bedroom_notification_action
+  alias: Bedroom notification action
+  description: Dispatch taps on actionable notification buttons (mobile_app_notification_action).
+  mode: queued
+  max: 10
+  trigger:
+    - platform: event
+      event_type: mobile_app_notification_action
+  action:
+    - choose:
+        # Boost fan: max circulation. Engages the manual override so it persists (clear via Tap Dial
+        # button 3 or the morning reset). Honest caveat: moves air, doesn't lower CO2.
+        - conditions: "{{ trigger.event.data.action == 'BEDROOM_BOOST_FAN' }}"
+          sequence:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.bedroom_fan_manual
+            - service: fan.turn_on
+              target:
+                entity_id: fan.tower_fan
+            - service: fan.set_percentage
+              target:
+                entity_id: fan.tower_fan
+              data:
+                percentage: 100
+        - conditions: "{{ trigger.event.data.action == 'BEDROOM_START_BEDTIME' }}"
+          sequence:
+            - service: script.bedroom_bedtime
+        # Undo a false-away: restore lights + fan. Calls the apply_* scripts directly so they ignore
+        # the home-gates (you're tapping because the tracker is wrong / you're actually home).
+        - conditions: "{{ trigger.event.data.action == 'BEDROOM_AWAY_TURN_ON' }}"
+          sequence:
+            - service: script.bedroom_apply_natural
+            - service: script.bedroom_apply_fan
+
+# Bedtime prompt: at 22:00, if you're in the bedroom and haven't started bedtime, send a nudge with
+# a "Start now" button (-> BEDROOM_START_BEDTIME -> script.bedroom_bedtime). Gated on present + not
+# already in sleep mode + home, so it only nudges when you're actually around and haven't gone to bed.
+- id: bedroom_bedtime_prompt
+  alias: Bedroom bedtime prompt
+  description: At 22:00, if present and not yet in sleep mode, prompt to start the bedtime routine.
+  mode: single
+  trigger:
+    - platform: time
+      at: "22:00:00"
+  condition:
+    - condition: state
+      entity_id: binary_sensor.aqara_fp300_presence
+      state: "on"
+    - condition: state
+      entity_id: input_boolean.bedroom_sleep_mode
+      state: "off"
+    - condition: state
+      entity_id: person.daniel
+      state: "home"
+  action:
+    - service: script.bedroom_notify
+      data:
+        title: "🌙 Ready for bed?"
+        message: "Tap to start the bedtime routine."
+        tag: bedtime_prompt
+        actions:
+          - action: BEDROOM_START_BEDTIME
+            title: Start now

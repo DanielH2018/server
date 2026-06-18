@@ -276,6 +276,10 @@ bedroom_notify:
       description: Sound even while quiet (DND/sleep) via the high-importance channel.
       required: false
       example: true
+    actions:
+      description: List of {action, title} button dicts for actionable notifications (phone only).
+      required: false
+      example: "[{action: BEDROOM_BOOST_FAN, title: Boost fan}]"
   mode: parallel
   max: 10
   sequence:
@@ -293,6 +297,9 @@ bedroom_notify:
           tag: "{{ tag }}"
           channel: "{{ channel }}"
           importance: "{{ importance }}"
+          # Action buttons (empty list = none). Taps fire mobile_app_notification_action ->
+          # bedroom_notification_action dispatches on the BEDROOM_* action id.
+          actions: "{{ actions | default([]) }}"
     - if: "{{ watch | default(false) }}"
       then:
         - service: notify.pixel_watch_3

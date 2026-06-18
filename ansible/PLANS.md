@@ -17,11 +17,6 @@ the Renovate dependency dashboard.
   Edit the config + redeploy `home-assistant`. Spec:
   `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
-- HA actionable notifications — add action buttons to existing/future alerts via the companion app
-  (`data: {actions: [...]}` + a `mobile_app_notification_action` event handler): air-quality alert →
-  "Turn on fan"; away alert → "Turn off lights"; low-battery → "Snooze". One tap instead of opening
-  the app. (2026-06-18)
-
 - HA update-available digest — notify when a device/HA update appears via the `update.*` entities
   (`update.aqara_fp300`, `update.0x001788010f0ccda4` Tap Dial, `update.bedroom_airgradient_one_firmware`,
   plus HA core/OS). Extends the repo's Renovate/IaC update discipline to the one corner it doesn't
@@ -47,6 +42,15 @@ the Renovate dependency dashboard.
 - Rename Devices in Zigbee2MQTT
 
 ## Superseded
+
+- HA actionable notifications — done 2026-06-18: `script.bedroom_notify` gained an `actions`
+  pass-through (phone buttons); `automation.bedroom_notification_action` dispatches taps
+  (`mobile_app_notification_action`) on namespaced `BEDROOM_*` ids. Three buttons: air-quality bad →
+  "Boost fan" (fan to 100%, persists), away "Left on" → "Turn back on" (undo false-away, ignores
+  home-gates), and a new nightly `bedroom_bedtime_prompt` (22:00 if present + not in sleep mode +
+  home) → "Start now" (runs `script.bedroom_bedtime`). Ruled out snooze (engine never nags) and
+  restart-offline-device (unreachable). Spec:
+  `docs/superpowers/specs/2026-06-18-ha-actionable-notifications-design.md`.
 
 - HA DND-aware notification routing — done 2026-06-18: new `script.bedroom_notify` is the single
   cross-cutting notify layer (threshold engine + sensor-offline + away all route through it). It
