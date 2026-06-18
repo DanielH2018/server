@@ -36,8 +36,11 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   edit recreates HA (~120s). First automation: Hue Tap Dial (RDM002) drives the
   `light.bedroom_lights` group (dial = brightness, button 1 = smart toggle, buttons 2-3 =
   scenes, button 4 = natural-state reset → `script.bedroom_apply_natural`, see below). Presence
-  (FP300) + an `input_boolean` manual-off override + a weekday/weekend morning reset (which also
-  calls `script.bedroom_apply_natural`) live in the same file.
+  (FP300) + an `input_boolean` manual-off override + a weekday/weekend morning reset live in the
+  same file; `bedroom_presence_on` and the morning reset BOTH call `script.bedroom_apply_natural`.
+  Presence-on's lux gate is window-aware: `in morning window OR illuminance < 50` — wake regardless
+  of ambient light during the 15-min window, gate on darkness afterwards. That window template
+  duplicates the dispatcher's morning exception (in `files/scripts.yaml`) — keep the two in sync.
 - **Adaptive Lighting is a HACS dependency (since 2026-06-18).** `configuration.yaml` declares
   `adaptive_lighting:` for the bedroom group; the integration code installs via HACS into
   `custom_components/adaptive_lighting/` (Kopia-backed, not templated — like `dreo`). Install it

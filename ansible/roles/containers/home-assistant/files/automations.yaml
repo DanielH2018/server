@@ -78,10 +78,14 @@
                 brightness_step_pct: -12
                 transition: 0.2
 
-# Presence ON: occupied + dim + not overridden → lights on (Adaptive Lighting then tones them).
+# Presence ON: occupied + not overridden → set the lights to their NATURAL state via the
+# dispatcher (morning ramp in-window, else full Adaptive Lighting). The lux gate applies OUTSIDE
+# the morning wake window only: during the window (06:00 Mon-Fri / 07:00 Sat-Sun, 15 min) we wake
+# regardless of ambient light; afterwards we only turn on when the room is dim. The window formula
+# mirrors the dispatcher's first exception in files/scripts.yaml — keep the two in sync.
 - id: bedroom_presence_on
   alias: Bedroom presence on
-  description: Turn on the bedroom lights when the room becomes occupied and is dim, unless overridden.
+  description: When the room becomes occupied, set the lights to their natural state (unless overridden); gate on darkness outside the morning wake window.
   mode: single
   trigger:
     - platform: state
@@ -91,13 +95,13 @@
     - condition: state
       entity_id: input_boolean.bedroom_manual_off
       state: "off"
-    - condition: numeric_state
-      entity_id: sensor.aqara_fp300_illuminance
-      below: 50
+    - condition: template
+      value_template: >-
+        {% set start = today_at('06:00') if now().weekday() < 5 else today_at('07:00') %}
+        {% set in_window = 0 <= (now() - start).total_seconds() < 900 %}
+        {{ in_window or (states('sensor.aqara_fp300_illuminance') | float(9999) < 50) }}
   action:
-    - service: light.turn_on
-      target:
-        entity_id: light.bedroom_lights
+    - service: script.bedroom_apply_natural
 
 # Absence OFF: room empty for a minute → lights off (ignores the override — leaving always allows off).
 - id: bedroom_absence_off

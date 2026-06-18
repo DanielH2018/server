@@ -142,11 +142,27 @@ condition answers "is now in my window?"; the helper handles all AL plumbing.
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"`, then gate on
   `uv run python scripts/probe.py health home-assistant`.
 
+## Presence walk-in (added — was out of scope)
+
+`bedroom_presence_on` now routes through the dispatcher too, so walking in mid-morning honors the
+ramp instead of doing a bare `light.turn_on`:
+
+- **Action:** `script.bedroom_apply_natural` (morning ramp in-window, else full AL).
+- **Condition:** `bedroom_manual_off` is off **AND** (`in morning window` **OR**
+  `illuminance < 50`). The lux gate is **bypassed during the 15-min wake window** (wake regardless
+  of ambient light) and **applies afterwards** (only turn on when dim). The window template mirrors
+  the dispatcher's first exception — both live in `files/scripts.yaml` + this automation; keep in
+  sync.
+
+**Why the lux gate stays in the caller, not the dispatcher:** the dispatcher is shared with
+button 4, an explicit manual command that must always set the lights regardless of brightness. A
+lux gate in the dispatcher would make button 4 a no-op in a bright room. "Whether to turn on" is
+the caller's (presence's) concern; "what value" is the dispatcher's.
+
 ## Out of scope
 
-- `bedroom_presence_on` keeps its current behavior (turn on, AL tones) — it governs *whether* to
-  turn on, not *what value*. Routing walk-in through the dispatcher is a possible later change.
-- No change to scenes, the lux gate, or the override state machine.
+- No change to scenes or the override state machine.
+- `bedroom_absence_off` unchanged (leaving always allows off).
 
 ## Verification
 
