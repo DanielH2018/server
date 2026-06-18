@@ -52,11 +52,19 @@
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_manual_off
+        # Button 4 = reset to the natural adaptive value for right now: un-mark manual control
+        # so Adaptive Lighting resumes, then apply the current sun-curve value immediately.
         - conditions: "{{ trigger.payload_json.action == 'button_4_press' }}"
           sequence:
-            - service: scene.turn_on
-              target:
-                entity_id: scene.bedroom_nightlight
+            - service: adaptive_lighting.set_manual_control
+              data:
+                entity_id: switch.bedroom_adaptive_lighting_bedroom
+                manual_control: false
+            - service: adaptive_lighting.apply
+              data:
+                entity_id: switch.bedroom_adaptive_lighting_bedroom
+                turn_on_lights: true
+                transition: 1
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_manual_off

@@ -18,6 +18,26 @@ input_boolean:
     name: Bedroom manual off override
     icon: mdi:lightbulb-off
 
+# Adaptive Lighting (HACS integration) — sun-tracking color temp + brightness for the bedroom
+# group while it is on. Installed via HACS into custom_components/ (Kopia-backed, like dreo).
+# A full HA restart (this deploy recreates the container) loads the integration; a YAML
+# "Quick Reload" is NOT enough for a newly added custom component. Creates the master switch
+# switch.bedroom_adaptive_lighting_bedroom (AL device-prefixes the name "Adaptive Lighting:
+# Bedroom"); the Tap Dial button-4 reset targets that exact entity_id.
+adaptive_lighting:
+  - name: "Bedroom"
+    lights:
+      - light.bedroom_lights
+    min_brightness: 1
+    max_brightness: 100
+    min_color_temp: 2200
+    max_color_temp: 4500
+    sleep_brightness: 1
+    sleep_color_temp: 2200
+    take_over_control: true
+    detect_non_ha_changes: false
+    transition: 45
+
 http:
   use_x_forwarded_for: true
   # Trust the whole Docker bridge range (RFC1918 172.16/12) so HA honors

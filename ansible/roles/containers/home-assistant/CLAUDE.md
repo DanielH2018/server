@@ -34,7 +34,15 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   ships them verbatim, no `{% raw %}` needed). Git is the source of truth; HA UI
   automation/scene edits are overwritten on deploy. Both feed `common_config_changed`, so an
   edit recreates HA (~120s). First automation: Hue Tap Dial (RDM002) drives the
-  `light.bedroom_lights` group (dial = brightness, buttons = toggle + 3 scenes).
+  `light.bedroom_lights` group (dial = brightness, button 1 = smart toggle, buttons 2-3 =
+  scenes, button 4 = adaptive reset). Presence (FP300) + an `input_boolean` manual-off override
+  + a weekday/weekend morning reset live in the same file.
+- **Adaptive Lighting is a HACS dependency (since 2026-06-18).** `configuration.yaml` declares
+  `adaptive_lighting:` for the bedroom group; the integration code installs via HACS into
+  `custom_components/adaptive_lighting/` (Kopia-backed, not templated — like `dreo`). Install it
+  via HACS BEFORE deploying, or HA logs "integration not found" and skips the block. The deploy's
+  full restart loads a newly added custom component (a YAML "Quick Reload" does not). Tap Dial
+  button 4 calls `adaptive_lighting.apply` to snap the group back to the natural curve.
 - **YAML dashboard + entity customization (templated).** `configuration.yaml` registers a YAML
   dashboard via `lovelace: dashboards:` (NOT the legacy top-level `mode: yaml` — deprecated,
   removed in HA 2026.8) pointing at `config/ui-lovelace.yaml` (`templates/ui-lovelace.yaml.j2`),
