@@ -453,12 +453,19 @@
                 tag: "{{ tag }}"
                 watch: true
       # from:"unavailable" edges only, so the remaining case (id == 'recovery') is the default.
+      # Only notify recovery if the device was actually unavailable >= 5 min (the same threshold the
+      # offline alert needs) — otherwise the unavailable→available blip on every HA/Z2M restart would
+      # send a spurious "back online" with no preceding alert.
       default:
-        - service: script.bedroom_notify
-          data:
-            title: "✅ Sensor back online"
-            message: "{{ name }} is reporting again"
-            tag: "{{ tag }}"
+        - if: >-
+            {{ trigger.from_state is not none and trigger.to_state is not none
+               and (as_timestamp(trigger.to_state.last_changed) - as_timestamp(trigger.from_state.last_changed)) >= 300 }}
+          then:
+            - service: script.bedroom_notify
+              data:
+                title: "✅ Sensor back online"
+                message: "{{ name }} is reporting again"
+                tag: "{{ tag }}"
 
 # Home/away: turn the bedroom off when you leave the HOUSE (person.daniel) — a different layer than
 # the FP300's ROOM presence. Two stages absorb GPS jitter: 'leave' at 10 min away, a 'failsafe'
