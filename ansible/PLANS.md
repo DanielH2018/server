@@ -7,7 +7,19 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-_(empty)_
+- Fix the Zigbee2MQTT frontend "no devices" display — the Z2M **backend is healthy** (all 5
+  devices reporting, MQTT + HA discovery fine, the Tap Dial/FP300 automations work), only the
+  frontend device table is empty. The table loads over a browser↔Z2M websocket, proxied through
+  Traefik + Authelia at `zigbee.<domain>`, so the likely cause is a dropped WS upgrade (or a
+  stale browser cache — rule that out first). Investigate the Traefik websocket headers/labels
+  for the Z2M router. Non-blocking: HA already has every entity. (2026-06-18)
+
+- AirGradient air-quality automations — use the `airgradient` integration (CO₂, PM1/2.5/10,
+  TVOC/NOx) to drive the bedroom bulbs (e.g. tint red on high CO₂/PM) and/or push a phone
+  notification. Reuse the existing `light.bedroom_lights` group + scenes; respect the
+  `input_boolean.bedroom_manual_off` override and avoid fighting Adaptive Lighting (likely use a
+  distinct alert scene/flash rather than a steady color). Brainstorm → spec/plan when picked up.
+  (2026-06-18)
 
 ## Superseded
 
