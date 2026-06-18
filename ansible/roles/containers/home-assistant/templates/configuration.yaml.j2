@@ -66,7 +66,7 @@ adaptive_lighting:
 
 # Air-quality thresholds — built-in `threshold` binary-sensors give native hysteresis (on above
 # upper+hysteresis, off below upper-hysteresis), which IS the "alert once + recovery, no bounce"
-# lifecycle consumed by the bedroom_air_quality_alert automation (files/automations.yaml).
+# lifecycle consumed by the bedroom_threshold_alert automation (files/automations.yaml).
 # Source = the bedroom AirGradient ONE. Thresholds are STARTING POINTS — tune to the observed
 # baseline, especially the VOC/NOx *index* sensors (Sensirion indices drift per environment).
 # Adding a pollutant = one more block here + add its binary_sensor to the automation trigger list.
@@ -74,7 +74,7 @@ binary_sensor:
   - platform: threshold
     name: "Bedroom CO2 high"          # -> binary_sensor.bedroom_co2_high
     entity_id: sensor.bedroom_airgradient_one_carbon_dioxide
-    upper: 1200                        # alerts >= 1300 ppm, clears <= 1100 ppm
+    upper: 900                         # alerts >= 1000 ppm, clears <= 800 ppm
     hysteresis: 100
   - platform: threshold
     name: "Bedroom PM2.5 high"        # -> binary_sensor.bedroom_pm2_5_high
@@ -119,7 +119,7 @@ binary_sensor:
   # Low-battery thresholds — the LOWER-bound mirror of the air-quality ones above. A `lower`
   # threshold is `on` (low) when value <= lower-hysteresis and `off` (recovered) when >= lower+
   # hysteresis. Battery drain is monotonic (only jumps up on replacement), so flapping is a
-  # non-issue. Consumed by the bedroom_battery_low_alert automation (files/automations.yaml).
+  # non-issue. Consumed by the bedroom_threshold_alert automation (files/automations.yaml).
   # Starting points — tune per device. Adding a battery = one block here + add it to the automation.
   - platform: threshold
     name: "Bedroom FP300 battery low"     # -> binary_sensor.bedroom_fp300_battery_low
