@@ -69,18 +69,20 @@ bedroom_apply_natural:
   mode: restart
   sequence:
     - choose:
-        # Exception: morning wake ramp — 06:00 Mon-Fri / 07:00 Sat-Sun, 15 min, 1% -> 50%.
-        # elapsed=0 yields 1% over 900s (identical to the morning reset's start); pressed
-        # partway through, it resumes the ramp from the current point over the remaining time.
+        # Exception: morning wake ramp — 15 min, 1% -> 50%, ENDING at the real alarm. The window
+        # start is sensor.bedroom_wake_start (alarm - 15 min, morning-only — see configuration.yaml).
+        # elapsed=0 yields 1% over 900s; pressed partway through, it resumes from the current point
+        # over the remaining time. When no morning alarm is set the sensor is unavailable -> this
+        # exception is false and the default (full AL) applies. SINGLE source of truth for the wake
+        # window — bedroom_presence_on's window reads the same sensor (no duplicated formula).
         - conditions:
             - condition: template
               value_template: >-
-                {% set start = today_at('06:00') if now().weekday() < 5 else today_at('07:00') %}
-                {{ 0 <= (now() - start).total_seconds() < 900 }}
+                {% set ws = states('sensor.bedroom_wake_start') %}
+                {{ ws not in ['unknown', 'unavailable'] and 0 <= (now() - as_datetime(ws)).total_seconds() < 900 }}
           sequence:
             - variables:
-                wake_start: "{{ today_at('06:00') if now().weekday() < 5 else today_at('07:00') }}"
-                wake_elapsed: "{{ (now() - wake_start).total_seconds() }}"
+                wake_elapsed: "{{ (now() - as_datetime(states('sensor.bedroom_wake_start'))).total_seconds() }}"
             - service: script.bedroom_set_natural_brightness
               data:
                 brightness_pct: "{{ (1 + (50 - 1) * wake_elapsed / 900) | round(0) | int }}"

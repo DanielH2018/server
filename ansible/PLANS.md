@@ -17,14 +17,6 @@ the Renovate dependency dashboard.
   Edit the config + redeploy `home-assistant`. Spec:
   `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
-- HA dynamic morning wake to the real alarm — replace the dispatcher's hardcoded 06:00/07:00
-  wake-ramp window with one derived from `sensor.pixel_9_pro_next_alarm`, starting the 15-min
-  fade-up ahead of the actual alarm time. **Watch caveat:** that sensor reads the *phone's* alarm;
-  a Pixel Watch 3 alarm set on the watch won't surface — set the wake alarm in the phone's Google
-  Clock (it still rings on the watch) and confirm `sensor.pixel_9_pro_next_alarm` populates first.
-  Plugs into the morning-wake exception in `files/scripts.yaml` (single source of truth — keep the
-  `bedroom_presence_on` window template in sync). (2026-06-18)
-
 - HA night-time "got up" dim nightlight — between ~00:00–05:00, presence/PIR
   (`binary_sensor.aqara_fp300_pir_detection` / `_presence`) → the warm dim `scene.bedroom_nightlight`
   *instead* of full lighting, so a night trip doesn't blast you. Drops in as another time-based
@@ -71,6 +63,16 @@ the Renovate dependency dashboard.
 - Rename Devices in Zigbee2MQTT
 
 ## Superseded
+
+- HA dynamic morning wake to the real alarm — done 2026-06-18: new `sensor.bedroom_wake_start`
+  (template timestamp = `sensor.pixel_watch_3_next_alarm − 15 min`, availability-gated to morning
+  alarms 03:00–11:00) is the single source of truth for the wake window. `bedroom_morning_reset`
+  now time-triggers `at: sensor.bedroom_wake_start` (+ a 09:00 fallback for no-alarm-day override
+  hygiene), and both `bedroom_apply_natural`'s morning exception and `bedroom_presence_on`'s window
+  read it — killing the triplicated 06:00/07:00 formula. Uses the WATCH alarm (per operator), not
+  the phone's. Template sensors now live in a copy'd `files/templates.yaml` (HA Jinja can't go in the
+  Ansible-templated `configuration.yaml.j2`). Spec:
+  `docs/superpowers/specs/2026-06-18-ha-dynamic-morning-wake-design.md`.
 
 - HA automatic bedtime / sleep routine — done 2026-06-18: `script.bedroom_bedtime` (shared by
   `automation.bedroom_bedtime` off `binary_sensor.pixel_watch_3_bedtime_mode` + Tap Dial button-1

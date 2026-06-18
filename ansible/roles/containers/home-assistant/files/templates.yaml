@@ -1,0 +1,23 @@
+---
+# Managed by Ansible (roles/containers/home-assistant/files/templates.yaml).
+# Source of truth — copied to ./config (NOT templated: HA's {{ }} Jinja would be mangled by
+# Ansible's templater) and included via `template: !include templates.yaml` in configuration.yaml.
+# HA UI edits are NOT persistent. To change, edit this file and redeploy home-assistant.
+#
+# Dynamic morning wake: the wake ramp starts 15 min before the real alarm and ends AT it. Source is
+# the WATCH alarm (sensor.pixel_watch_3_next_alarm) — the phone's next_alarm is unreliable. This
+# timestamp sensor (alarm - 15 min) is the SINGLE source of truth for the wake window [wake_start,
+# alarm): the bedroom_morning_reset time trigger fires on it, and both bedroom_apply_natural's
+# morning exception and bedroom_presence_on's window read it (so they're inherently in sync). The
+# availability guard makes it `unavailable` unless the next alarm is a MORNING alarm (local hour
+# 03:00-11:00) — so a nap/evening alarm never arms the trigger or ramps the lights, and no alarm =
+# no wake (the 09:00 fallback in bedroom_morning_reset still clears overnight overrides).
+- sensor:
+    - name: "Bedroom wake start"
+      unique_id: bedroom_wake_start
+      device_class: timestamp
+      availability: >-
+        {% set na = states('sensor.pixel_watch_3_next_alarm') %}
+        {{ na not in ['unknown', 'unavailable', 'none', ''] and 3 <= (as_datetime(na) | as_local).hour < 11 }}
+      state: >-
+        {{ (as_datetime(states('sensor.pixel_watch_3_next_alarm')) - timedelta(minutes=15)).isoformat() }}

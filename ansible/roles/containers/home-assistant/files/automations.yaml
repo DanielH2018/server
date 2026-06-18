@@ -85,9 +85,10 @@
 
 # Presence ON: occupied + not overridden → set the lights to their NATURAL state via the
 # dispatcher (morning ramp in-window, else full Adaptive Lighting). The lux gate applies OUTSIDE
-# the morning wake window only: during the window (06:00 Mon-Fri / 07:00 Sat-Sun, 15 min) we wake
-# regardless of ambient light; afterwards we only turn on when the room is dim. The window formula
-# mirrors the dispatcher's first exception in files/scripts.yaml — keep the two in sync.
+# the morning wake window only: during the window (the 15 min before the real alarm, ending at it)
+# we wake regardless of ambient light; afterwards we only turn on when the room is dim. The window
+# reads sensor.bedroom_wake_start — the SAME source the dispatcher's morning exception uses
+# (inherently in sync, no duplicated formula).
 - id: bedroom_presence_on
   alias: Bedroom presence on
   description: When the room becomes occupied, set the lights to their natural state (unless overridden); gate on darkness outside the morning wake window.
@@ -107,8 +108,8 @@
       state: "home"
     - condition: template
       value_template: >-
-        {% set start = today_at('06:00') if now().weekday() < 5 else today_at('07:00') %}
-        {% set in_window = 0 <= (now() - start).total_seconds() < 900 %}
+        {% set ws = states('sensor.bedroom_wake_start') %}
+        {% set in_window = ws not in ['unknown', 'unavailable'] and 0 <= (now() - as_datetime(ws)).total_seconds() < 900 %}
         {{ in_window or (states('sensor.aqara_fp300_illuminance') | float(9999) < 50) }}
   action:
     - service: script.bedroom_apply_natural
@@ -128,50 +129,45 @@
       target:
         entity_id: light.bedroom_lights
 
-# Morning reset + gentle wake. 06:00 Mon-Fri / 07:00 Sat-Sun: always clear the manual-off
-# override (so a stuck/overnight override resets); if present, fade the lights up over 15 min.
+# Morning reset + gentle wake, driven by the REAL alarm. The `alarm` trigger fires at
+# sensor.bedroom_wake_start (watch alarm - 15 min, morning-only — see configuration.yaml); the
+# `fallback` at 09:00 guarantees the overnight overrides clear even on a no-alarm day. Both clear the
+# overrides (manual-off, fan-manual, sleep mode, AL sleep) and re-apply the fan if home; only the
+# `alarm` trigger runs the wake ramp (the fallback never forces lights, so it can't clobber a scene
+# you set after waking). The alarm encodes the day, so the old weekday/weekend split is gone.
 - id: bedroom_morning_reset
   alias: Bedroom morning reset and wake
-  description: 06:00 Mon-Fri / 07:00 Sat-Sun — clear the manual-off override; gently wake if present.
+  description: At the alarm (wake ramp) + a 09:00 fallback (hygiene) — clear overnight overrides; gently wake if present.
   mode: single
   trigger:
     - platform: time
-      at: "06:00:00"
-      id: weekday
+      at: sensor.bedroom_wake_start
+      id: alarm
     - platform: time
-      at: "07:00:00"
-      id: weekend
-  condition:
-    - condition: or
-      conditions:
-        - "{{ trigger.id == 'weekday' and now().weekday() < 5 }}"
-        - "{{ trigger.id == 'weekend' and now().weekday() >= 5 }}"
+      at: "09:00:00"
+      id: fallback
   action:
+    # Daily hygiene (BOTH triggers): clear every overnight override so sleep state / manual-off can't
+    # persist into the day. One turn_off over the list covers all three input_booleans.
     - service: input_boolean.turn_off
       target:
-        entity_id: input_boolean.bedroom_manual_off
-    # Reset the FAN to automatic too (independent of presence). Only re-apply the band if home —
-    # this calls the fan script DIRECTLY, bypassing bedroom_fan_temperature's home gate, so without
-    # this guard 06:00/07:00 would turn the fan on in an empty house. The arrive nudge resumes it.
-    - service: input_boolean.turn_off
-      target:
-        entity_id: input_boolean.bedroom_fan_manual
-    # End sleep mode (quiet fan cap) + Adaptive Lighting sleep mode, BEFORE the re-applies below, so
-    # the fan recomputes without the Low cap and the wake ramp runs on AL's normal (non-sleep) curve.
-    - service: input_boolean.turn_off
-      target:
-        entity_id: input_boolean.bedroom_sleep_mode
+        entity_id:
+          - input_boolean.bedroom_manual_off
+          - input_boolean.bedroom_fan_manual
+          - input_boolean.bedroom_sleep_mode
     - service: switch.turn_off
       target:
         entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+    # Re-apply the fan now the sleep cap is cleared — only when home (this calls the fan script
+    # DIRECTLY, bypassing bedroom_fan_temperature's home gate).
     - if: "{{ is_state('person.daniel', 'home') }}"
       then:
         - service: script.bedroom_apply_fan
-    - if: "{{ is_state('binary_sensor.aqara_fp300_presence', 'on') }}"
+    # Wake ramp: ONLY on the alarm trigger and only if present. apply_natural's morning exception
+    # (window = sensor.bedroom_wake_start .. +15 min) computes the 1%->50% ramp — same source of
+    # truth as the Tap Dial button-4 reset. The 09:00 fallback deliberately never forces lights.
+    - if: "{{ trigger.id == 'alarm' and is_state('binary_sensor.aqara_fp300_presence', 'on') }}"
       then:
-        # Gentle wake via the natural-state dispatcher: at 06:00/07:00 it computes elapsed=0,
-        # i.e. 1% brightness over a 900 s (15 min) ramp to 50% on AL's natural color. Same
-        # source of truth as the Tap Dial button-4 reset — see files/scripts.yaml.
         - service: script.bedroom_apply_natural
 
 # Unified threshold alert engine: ALL `threshold` binary-sensors in configuration.yaml.j2 (air

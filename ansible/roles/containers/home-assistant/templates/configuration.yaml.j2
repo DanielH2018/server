@@ -120,6 +120,12 @@ binary_sensor:
     lower: 30                          # alerts <= 27%, clears >= 33% (winter-dry)
     hysteresis: 3
 
+# Template sensors are a STATIC copy'd file (files/templates.yaml), included here — same reason as
+# automations/scenes/scripts: their HA Jinja expressions would be mangled by Ansible's templater if
+# they lived inline in this .j2 (configuration.yaml IS rendered by Ansible; even a brace pair in a
+# comment breaks it). Currently holds sensor.bedroom_wake_start (watch alarm minus 15 min).
+template: !include templates.yaml
+
 http:
   use_x_forwarded_for: true
   # Trust the whole Docker bridge range (RFC1918 172.16/12) so HA honors
