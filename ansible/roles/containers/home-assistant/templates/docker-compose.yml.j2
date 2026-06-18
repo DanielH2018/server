@@ -52,6 +52,9 @@ services:
       }}
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    {{ resources('1.0', '1024M', '0.10', '256M') }}
+    # mem 1536M: HA + HACS + recorder + integrations idles at ~810M (79% of the old 1024M cap) —
+    # too thin to absorb a recorder purge / integration reload. Bumped 2026-06-18 from live
+    # measurement (host has 20G free; still a ceiling, not a reservation, so HA uses only what it needs).
+    {{ resources('1.0', '1536M', '0.10', '256M') }}
 
 {{ external_networks() }}
