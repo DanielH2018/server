@@ -36,6 +36,12 @@ services:
         )
       }}
       {{ kuma(container_item.name) }}
+      {# Static TCP monitor for the SLZB-06M coordinator itself ({{ slzb_ip }}:6638) — an infra-level
+         page that fires even if HA/MQTT are down, catching an EHOSTUNREACH like the 2026-06-18 unplug
+         (the z2m `docker` monitor above stays UP while Z2M crash-loops against an unreachable radio).
+         Declared as a second AutoKuma monitor on this container's labels — AutoKuma keys monitors by
+         id, not by container, so the target need not be a container. -#}
+      {{ kuma('slzb-coordinator', port=6638, name='SLZB-06M Coordinator', hostname=slzb_ip, monitor_type='port') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '256M', '0.05', '64M') }}
 

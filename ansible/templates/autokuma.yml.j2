@@ -1,4 +1,4 @@
-{% macro labels(container, port=none, name=none, url=none, monitor_type='docker', interval=60, max_retries=2, push_token=none, notify=true) -%}
+{% macro labels(container, port=none, name=none, url=none, monitor_type='docker', interval=60, max_retries=2, push_token=none, notify=true, hostname=none) -%}
 {% set _name = name if name is not none else container | replace('-', ' ') | title -%}
 {% if monitor_type == 'docker' -%}
       - "kuma.{{ container }}.docker.name={{ _name }}"
@@ -15,6 +15,14 @@
 {% if push_token is not none %}      - "kuma.{{ container }}.push.push_token={{ push_token }}"
 {% endif -%}
 {% if notify and kuma_notification_id is defined and kuma_notification_id %}      - 'kuma.{{ container }}.push.notification_name_list=["{{ kuma_notification_id }}"]'
+{% endif -%}
+{%- elif monitor_type == 'port' -%}
+      - "kuma.{{ container }}.port.name={{ _name }}"
+      - "kuma.{{ container }}.port.hostname={{ hostname }}"
+      - "kuma.{{ container }}.port.port={{ port | string }}"
+      - "kuma.{{ container }}.port.interval={{ interval | string }}"
+      - "kuma.{{ container }}.port.maxretries={{ max_retries | string }}"
+{% if notify and kuma_notification_id is defined and kuma_notification_id %}      - 'kuma.{{ container }}.port.notification_name_list=["{{ kuma_notification_id }}"]'
 {% endif -%}
 {%- else -%}
 {% set _url = url if url is not none else 'http://' ~ container ~ ':' ~ port -%}

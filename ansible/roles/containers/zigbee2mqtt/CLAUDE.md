@@ -45,6 +45,15 @@ See repo-root `CLAUDE.md` for shared conventions.
   ~7-18 min and the FP300 is very chatty, so 60 min catches a real dropout within the hour without
   false offline alerts. Tune per observed cadence. Verify after deploy:
   `docker logs zigbee2mqtt | grep "/availability'"` should show `online` publishes.
+- **Coordinator monitored at the infra level (since 2026-06-18).** An AutoKuma `port` monitor
+  ("SLZB-06M Coordinator", `{{ slzb_ip }}:6638`) is declared as a SECOND monitor on this container's
+  labels — `kuma('slzb-coordinator', monitor_type='port', hostname=slzb_ip, port=6638)` (AutoKuma keys
+  monitors by id, not container, so the target need not be a container; the `port` type was added to
+  the shared `ansible/templates/autokuma.yml.j2` macro). It pages even if HA/MQTT are down — catching
+  an `EHOSTUNREACH` like the 2026-06-18 accidental unplug, which the container's own `docker` monitor
+  misses (Z2M stays "running" while crash-looping against an unreachable radio). HA layers a second,
+  software-side alert on `binary_sensor.zigbee2mqtt_bridge_connection_state` (the home-assistant role's
+  `zigbee_bridge_offline` automation, fed by Z2M's MQTT Last-Will).
 - **Pairing is closed by default** (no `permit_join` in 2.x). Enable join from the Z2M UI
   (`zigbee2mqtt.<domain>`) when adding devices, then disable.
 
