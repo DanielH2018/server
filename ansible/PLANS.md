@@ -7,7 +7,15 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- (empty)
+- Tune bedroom air-quality alert thresholds (revisit ~2026-06-25, after ~1 week of baseline) —
+  the four `threshold` binary-sensors in `home-assistant/templates/configuration.yaml.j2`
+  (`binary_sensor.bedroom_co2_high` / `_pm2_5_high` / `_voc_high` / `_nox_high`) shipped with
+  STARTING values (CO₂ 1200/100, PM2.5 35/5, VOC 250/25, NOx 50/10). Check the HA recorder
+  history for `sensor.bedroom_airgradient_one_carbon_dioxide` / `_pm2_5` / `_voc_index` /
+  `_nox_index` and adjust `upper`/`hysteresis` to the observed baseline — especially the
+  Sensirion VOC (~100 baseline) and NOx (~1 + spikes) *index* sensors, which drift per room.
+  Edit the config + redeploy `home-assistant`. Spec:
+  `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
 ## Superseded
 
