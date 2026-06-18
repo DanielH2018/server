@@ -7,7 +7,10 @@
 
 services:
   home-assistant:
-    image: lscr.io/linuxserver/homeassistant:latest
+    # Pinned (was :latest) — HA is stateful with monthly, occasionally-breaking releases, so updates
+    # go through Renovate PRs (the /linuxserver/ regex manager tracks the X.Y.Z-lsNN tag) not
+    # watchtower, like jellyfin/the *arr stack. Bump deliberately; don't float on :latest.
+    image: lscr.io/linuxserver/homeassistant:2026.6.3-ls221
     container_name: home-assistant
     environment:
       - PUID={{ puid }}
@@ -43,6 +46,9 @@ services:
     # mid-boot. Warm reboots are much faster.
     {{ healthcheck('curl --fail -s http://localhost:8123/ || exit 1', start_period='120s') }}
     labels:
+      # Disable watchtower auto-update — HA was silently in the watch-all :latest pool; it belongs in
+      # the pinned + Renovate-managed critical/stateful tier (see the image comment above).
+      - "com.centurylinklabs.watchtower.enable=false"
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),

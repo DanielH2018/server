@@ -5,8 +5,11 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 (this file is the editing-gotchas reference).
 
 ## At a glance
-- **Image:** `lscr.io/linuxserver/homeassistant:latest` (LSIO is x86-64-maintained;
-  only the 32-bit ARM variant was deprecated — fine for daniel-server)
+- **Image:** `lscr.io/linuxserver/homeassistant:<X.Y.Z-lsNN>` — **pinned + Renovate-managed**
+  (`watchtower.enable=false`), NOT `:latest`. HA is stateful with monthly, occasionally-breaking
+  releases, so it belongs in the critical/stateful tier (like jellyfin/the *arr stack) — bump via
+  Renovate PRs (the `/linuxserver/` regex tracks the tag), not watchtower's watch-all `:latest` pool.
+  (LSIO is x86-64-maintained; only the 32-bit ARM variant was deprecated — fine for daniel-server.)
 - **Host:** daniel-server · **Port:** 8123 · **Networks:** apps + ups · **Authelia:** no
   (`ups` = isolation net to the `nut` sidecar's upsd:3493 for the NUT integration;
   `apps` stays networks[0] so the Traefik label binds to it)
