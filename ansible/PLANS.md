@@ -23,7 +23,10 @@ the Renovate dependency dashboard.
   real accuracy benefit. (2026-06-18)
 
 - If I sit at my desk for a while, the lights turn off, please try to tune it to lessen that happening.
-- Smooth out Fan curve for temperature(Currently goes in steps of 2)
+- ~~Smooth out Fan curve for temperature~~ — done 2026-06-18: `bedroom_apply_fan` now maps temp to
+  the DREO's full 9 levels on a smooth ~1-level-per-°F curve (off <~72°F, 72→L1 .. 80→L9) instead of
+  the old 4 bands → levels 0/2/4/6. ~0.7-level hysteresis deadband (no flapping, simulated); night
+  cap L4 / sleep cap L2. Spec: `docs/superpowers/specs/2026-06-18-ha-smooth-fan-curve-design.md`.
 - ~~Rename Devices in Zigbee2MQTT~~ — done 2026-06-18: renamed the 3 Hue bulbs (Lamp / Left Light /
   Right Light, cross-referenced from the HA device names), the Tap Dial, and confirmed Aqara FP300,
   via the `zigbee2mqtt/bridge/request/device/rename` MQTT request. HA entity_ids stay IEEE-based

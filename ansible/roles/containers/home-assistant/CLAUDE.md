@@ -183,13 +183,14 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   Google Sleep API finalizes `sleep_duration` around wake, so at alarm−15min it can be stale —
   best-effort (graceful fallback to a normal wake). Only the peak changes; the window/transition and
   `presence_on` are untouched.
-- **Temperature → fan control (since 2026-06-18).** `script.bedroom_apply_fan` (in
-  `files/scripts.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
-  `sensor.bedroom_airgradient_one_temperature` (°F): off <72 / Low 72–74 / Medium 74–76 / High ≥76,
-  mapped to fan **levels 2/4/6 (≈22/44/67%)**, with a **0.5°F hysteresis deadband** (steps down only
-  0.5° below a boundary) and a **22:00–06:00 Medium night cap**. Works in fan LEVELS, not raw %,
-  because the DREO integration `math.ceil()`s a requested % up to the next level (a `67%` request
-  lands on level 7 ≈ 77%) — send `(L−0.5)/9·100`% to hit level L; speeds tune via one `levels` list.
+- **Temperature → fan control (since 2026-06-18; smoothed 2026-06-18).** `script.bedroom_apply_fan`
+  (in `files/scripts.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
+  `sensor.bedroom_airgradient_one_temperature` (°F) on a **smooth ~1-level-per-°F curve**: off below
+  ~72°F, then `ideal = t − 71` → `round` clamped 1–9 (72→L1 … 80→L9). A **~0.7-level hysteresis
+  deadband** (`want` only steps when temp wants ≥0.7 level away from current; turning on jumps to the
+  ideal) prevents flapping. **Level caps:** max **L4** during 22:00–06:00, max **L2** in sleep mode.
+  Works in fan LEVELS, not raw %, because the DREO integration `math.ceil()`s a requested % up to the
+  next level — send `(L−0.5)/9·100`% to hit level L; tune the curve via the `71` start offset / slope.
   Same script-computes / caller-gates split as the lights:
   `bedroom_fan_temperature` (triggers on temp change + 22:00 + 06:00) gates on
   `input_boolean.bedroom_fan_manual` then calls the script. `bedroom_fan_manual_detect` sets that

@@ -160,34 +160,36 @@ bedroom_alert_pulse:
 bedroom_apply_fan:
   alias: "Bedroom — apply temperature fan state"
   description: >-
-    Set fan.tower_fan from sensor.bedroom_airgradient_one_temperature (°F): off <72 / Low 72-74 /
-    Medium 74-76 / High >=76, mapped to fan levels 2/4/6 (22/44/67%), with a 0.5°F deadband and a
-    Medium cap during 22:00-06:00.
+    Set fan.tower_fan from sensor.bedroom_airgradient_one_temperature (°F): a smooth curve of ~1
+    DREO level per °F (off below ~72°F, 72→L1 .. 80→L9), with a ~0.7-level hysteresis deadband and
+    level caps (max L4 during 22:00-06:00, max L2 in sleep mode).
   mode: restart
   sequence:
     - variables:
         # Temperature (°F; -1 if the sensor is unavailable).
         t: "{{ states('sensor.bedroom_airgradient_one_temperature') | float(-1) }}"
-        # Band -> fan LEVEL (DREO has 9): [off, Low, Medium, High]. TUNE SPEEDS HERE; if you change
-        # these, also update the cb midpoints below to the midpoints of this list.
-        levels: "{{ [0, 2, 4, 6] }}"
-        # The fan's current level (0 if off) from its reported %, and the band index that implies
-        # (midpoints of levels [0,2,4,6] = 1,3,5).
+        # The fan's current LEVEL (0 if off) from its reported %.
         cur_pct: "{{ state_attr('fan.tower_fan', 'percentage') | float(0) if is_state('fan.tower_fan', 'on') else 0 }}"
         cur_level: "{{ (cur_pct * 9 / 100) | round | int }}"
-        cb: "{{ (0 if cur_level < 1 else (1 if cur_level < 3 else (2 if cur_level < 5 else 3))) | int }}"
-        # Pure rising band, then 0.5°F deadband: rise jumps straight there; only step DOWN once
-        # the temp is 0.5°F below the current band's lower edge (cb>=1 in that branch, so index ok).
-        abs_band: "{{ (3 if t >= 76 else (2 if t >= 74 else (1 if t >= 72 else 0))) | int }}"
-        band_raw: "{{ (abs_band if abs_band >= cb else (abs_band if t < [71.5, 73.5, 75.5][cb - 1] else cb)) | int }}"
+        # Smooth temp -> LEVEL: off below ~72°F, then ~1 DREO level per °F (72→L1 .. 80→L9). `ideal`
+        # is the continuous level the temp wants right now. TUNE the curve here: the 71 offset sets
+        # the start temp; for a gentler slope divide (t - 71) by a factor (e.g. /1.3).
+        ideal: "{{ (t - 71) if t >= 0 else 0 }}"
+        # Quiet caps on the LEVEL: sleep mode (bedtime) -> max L2 (~Low); the 22:00-06:00 night
+        # window -> max L4 (~Medium); otherwise uncapped (L9). Still temperature-responsive — only
+        # the ceiling drops.
         is_night: "{{ now().hour >= 22 or now().hour < 6 }}"
-        # Quiet caps on the band INDEX (0 off / 1 Low / 2 Medium / 3 High): sleep mode (set at
-        # bedtime) -> Low; the 22:00-06:00 night window -> Medium; otherwise uncapped. Still
-        # temperature-responsive (band_raw is computed from temp) — only the ceiling drops.
         sleep: "{{ is_state('input_boolean.bedroom_sleep_mode', 'on') }}"
-        cap: "{{ (1 if sleep else (2 if is_night else 3)) | int }}"
-        band: "{{ [band_raw, cap] | min | int }}"
-        target_level: "{{ levels[band] }}"
+        cap: "{{ (2 if sleep else (4 if is_night else 9)) | int }}"
+        # Hysteresis: off below ~71.3°F; when turning ON jump straight to the ideal level; otherwise
+        # only step when the temp wants a level >=0.7 away from the current one (a ~0.7°F deadband
+        # around each step, so sensor noise doesn't flap the fan).
+        want: >-
+          {{ 0 if (t < 0 or ideal < 0.3)
+             else ((ideal | round | int) if (cur_level == 0 or ideal > cur_level + 0.7 or ideal < cur_level - 0.7)
+                   else cur_level) }}
+        # Apply the cap; result is 0..9.
+        target_level: "{{ [want, cap] | min | int }}"
         # % to SEND to hit target_level despite the integration's ceil: the midpoint of the level's
         # range ((L-0.5)/9*100) ceils to exactly L. 0 = off.
         send_pct: "{{ (((target_level - 0.5) * 100 / 9) | round | int) if target_level > 0 else 0 }}"
@@ -202,8 +204,8 @@ bedroom_apply_fan:
       data:
         value: "{{ target_level }}"
     - choose:
-        # OFF band — turn the fan off only if it is currently on.
-        - conditions: "{{ band == 0 }}"
+        # Level 0 — turn the fan off only if it is currently on.
+        - conditions: "{{ target_level == 0 }}"
           sequence:
             - if: "{{ is_state('fan.tower_fan', 'on') }}"
               then:
