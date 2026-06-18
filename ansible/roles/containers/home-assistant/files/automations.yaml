@@ -640,3 +640,32 @@
         title: "📦 {{ pending | count }} update(s) available"
         message: "{{ lines }}"
         tag: update_digest
+
+# Unexpected-occupancy tripwire: FP300 presence newly detected (off->on, 30s) while you're away ->
+# security alert. Triggers on the EDGE (a fresh detection), so a GPS glitch while you're physically
+# present can't fire it (presence already on). Away guard requires person not-home for >5 min, so a
+# brief away-glitch-then-return can't alarm; the fan is off while away (no airflow false-positive).
+# watch + pierce (a security event should reach you even in DND). Pairs with the home/away logic.
+- id: bedroom_unexpected_occupancy
+  alias: Bedroom unexpected occupancy
+  description: Alert (watch + pierce) when the bedroom is occupied while you're away.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.aqara_fp300_presence
+      from: "off"
+      to: "on"
+      for: "00:00:30"
+  condition:
+    - condition: template
+      value_template: >-
+        {{ states('person.daniel') not in ['home', 'unknown', 'unavailable']
+           and (now() - states.person.daniel.last_changed).total_seconds() > 300 }}
+  action:
+    - service: script.bedroom_notify
+      data:
+        title: "🚨 Bedroom occupied"
+        message: "Motion detected in the bedroom while you're away."
+        tag: unexpected_occupancy
+        watch: true
+        pierce: true

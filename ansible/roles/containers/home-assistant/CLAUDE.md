@@ -115,6 +115,12 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   devices join automatically; gated to only fire when ≥1 update is pending. **Notify-only — never
   auto-flashes.** Routine via `bedroom_notify`. Zigbee versions/names are opaque (build ints / IEEE)
   until devices are renamed in Z2M.
+- **Unexpected-occupancy tripwire (since 2026-06-18).** `automation.bedroom_unexpected_occupancy` —
+  FP300 presence `off→on` (`for: 30s`) while `person.daniel` is away (not home/unknown/unavailable)
+  **and** has been away >5 min → a security alert via `bedroom_notify` (`watch: true, pierce: true`).
+  Edge-triggered so a GPS glitch while you're physically present can't fire it (presence already on);
+  the >5-min guard filters brief away-glitches; the fan is off while away (no airflow false-positive).
+  Pure logic over two trusted sensors — pairs with the home/away work.
 - **Sensor-offline alerts (since 2026-06-18).** `bedroom_sensor_offline_alert` (files/automations.yaml,
   a structural twin of the air-quality alert) notifies `notify.mobile_app_pixel_9_pro` when a
   bedroom-automation dependency goes `unavailable` for 5 min, with a coalescing-tag recovery notice.

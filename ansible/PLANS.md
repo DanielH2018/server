@@ -17,11 +17,6 @@ the Renovate dependency dashboard.
   Edit the config + redeploy `home-assistant`. Spec:
   `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
-- HA unexpected-occupancy tripwire — if `binary_sensor.aqara_fp300_presence` turns on while
-  `device_tracker.pixel_9_pro` is **away** (short debounce; reuse the home/away logic), alert: someone
-  in the bedroom when you're not home. Pure logic over two sensors already trusted elsewhere — no new
-  hardware. Pairs with the home/away backlog item. (2026-06-18)
-
 - HA sleep-quality-aware morning — read `sensor.pixel_9_pro_sleep_duration`; if you slept under ~6 h,
   soften or slightly delay the wake ramp and add a "you slept N h" note. Hooks the dispatcher's
   morning-wake exception in `files/scripts.yaml` (keep the `bedroom_presence_on` window template in
@@ -37,6 +32,12 @@ the Renovate dependency dashboard.
 - Rename Devices in Zigbee2MQTT
 
 ## Superseded
+
+- HA unexpected-occupancy tripwire — done 2026-06-18: `automation.bedroom_unexpected_occupancy` —
+  FP300 presence off→on (30s) while `person.daniel` away >5 min → security alert via `bedroom_notify`
+  (watch + pierce). Edge-triggered (a GPS glitch while present can't fire it); >5-min away guard +
+  fan-off-while-away filter false positives. Spec:
+  `docs/superpowers/specs/2026-06-18-ha-unexpected-occupancy-design.md`.
 
 - HA update-available digest — done 2026-06-18: `automation.update_available_digest` (Sunday 10:00)
   notifies a digest of any `update.*` entity that is `on` — Zigbee/sensor firmware + HACS integrations
