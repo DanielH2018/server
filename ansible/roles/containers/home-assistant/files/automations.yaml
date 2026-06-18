@@ -146,3 +146,71 @@
         # i.e. 1% brightness over a 900 s (15 min) ramp to 50% on AL's natural color. Same
         # source of truth as the Tap Dial button-4 reset — see files/scripts.yaml.
         - service: script.bedroom_apply_natural
+
+# Air-quality alert: any pollutant threshold binary-sensor (CO2/PM2.5/VOC/NOx — the `threshold`
+# sensors in configuration.yaml.j2) crossing into "bad" sends a phone notification and, ONLY if
+# the lights are already on, a brief red pulse (script.bedroom_alert_pulse). A recovery notice
+# fires when it clears. Hysteresis lives in the threshold sensors, so this just reacts to
+# off<->on edges. Triggers anchor on off<->on (NOT unknown): an HA restart while air is bad
+# doesn't re-alert, and an unavailable source can't false-alert. The message is derived
+# generically from the triggering sensor, so a new pollutant only needs its binary_sensor added
+# to BOTH trigger entity_id lists below.
+- id: bedroom_air_quality_alert
+  alias: Bedroom air quality alert
+  description: Notify (and pulse the lights if on) when CO2/PM2.5/VOC/NOx crosses its threshold; recovery notice when it clears.
+  mode: queued
+  max: 10
+  trigger:
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_co2_high
+        - binary_sensor.bedroom_pm2_5_high
+        - binary_sensor.bedroom_voc_high
+        - binary_sensor.bedroom_nox_high
+      from: "off"
+      to: "on"
+      for: "00:00:30"
+      id: bad
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_co2_high
+        - binary_sensor.bedroom_pm2_5_high
+        - binary_sensor.bedroom_voc_high
+        - binary_sensor.bedroom_nox_high
+      from: "on"
+      to: "off"
+      for: "00:00:30"
+      id: recovery
+  action:
+    # Derive everything from the triggering threshold sensor — no per-pollutant map. A threshold
+    # sensor's `entity_id` attribute points at its SOURCE sensor, so we read the live value/unit
+    # from there and the human label from the threshold sensor's own friendly name.
+    - variables:
+        src: "{{ trigger.to_state.attributes.entity_id }}"
+        label: "{{ trigger.to_state.attributes.friendly_name | replace(' high', '') }}"
+        value: "{{ states(src) }}"
+        unit: "{{ state_attr(src, 'unit_of_measurement') or '' }}"
+        tag: "air_quality_{{ trigger.entity_id }}"
+    - choose:
+        - conditions: "{{ trigger.id == 'bad' }}"
+          sequence:
+            - service: notify.mobile_app_pixel_9_pro
+              data:
+                title: "⚠️ Air quality"
+                message: "{{ label }} is {{ value }}{{ ' ' ~ unit if unit else '' }}"
+                # Same tag for bad + recovery → the recovery replaces the alert on the phone.
+                data:
+                  tag: "{{ tag }}"
+            # Light pulse only when the lights are already on (operator present/awake) — never
+            # wakes you and never fights Adaptive Lighting / the manual-off override at night.
+            - if: "{{ is_state('light.bedroom_lights', 'on') }}"
+              then:
+                - service: script.bedroom_alert_pulse
+      # off<->on edges only, so the remaining case (id == 'recovery') is the default.
+      default:
+        - service: notify.mobile_app_pixel_9_pro
+          data:
+            title: "✅ Air quality"
+            message: "{{ label }} back to normal ({{ value }}{{ ' ' ~ unit if unit else '' }})"
+            data:
+              tag: "{{ tag }}"

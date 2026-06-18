@@ -59,6 +59,19 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   Helper `script.bedroom_set_natural_brightness(brightness_pct, transition)` holds the AL
   release + color-apply boilerplate so a new exception is just a `(condition, brightness,
   transition)` triple dropped above `default:` — see the worked example comment in the file.
+- **Air-quality alerts (since 2026-06-18).** `configuration.yaml` adds four built-in `threshold`
+  binary-sensors over the bedroom AirGradient ONE (CO2/PM2.5/VOC/NOx); the `threshold` platform's
+  native hysteresis (on > upper+hyst, off < upper−hyst) IS the "alert once + recovery, no bounce"
+  lifecycle. One generic automation `bedroom_air_quality_alert` (files/automations.yaml) triggers
+  on any of them flipping — **anchored on `off`↔`on` (not `unknown`)** so an HA restart while air
+  is bad doesn't re-alert and an unavailable source can't false-alert — notifies
+  `notify.mobile_app_pixel_9_pro` (same `tag` for bad + recovery so they coalesce on the phone),
+  and **only if `light.bedroom_lights` is already on** calls `script.bedroom_alert_pulse`
+  (snapshot → red flash → restore the snapshot, so a manual scene / morning ramp / AL all return
+  intact). The message is derived from the triggering sensor's attributes (no per-pollutant map),
+  so a new pollutant = one more threshold sensor in `configuration.yaml.j2` + add its
+  `binary_sensor` to BOTH trigger lists. Thresholds are starting points — tune the VOC/NOx *index*
+  ones to the observed baseline.
 - **YAML dashboard + entity customization (templated).** `configuration.yaml` registers a YAML
   dashboard via `lovelace: dashboards:` (NOT the legacy top-level `mode: yaml` — deprecated,
   removed in HA 2026.8) pointing at `config/ui-lovelace.yaml` (`templates/ui-lovelace.yaml.j2`),

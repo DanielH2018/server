@@ -41,6 +41,34 @@ adaptive_lighting:
     detect_non_ha_changes: false
     transition: 45
 
+# Air-quality thresholds — built-in `threshold` binary-sensors give native hysteresis (on above
+# upper+hysteresis, off below upper-hysteresis), which IS the "alert once + recovery, no bounce"
+# lifecycle consumed by the bedroom_air_quality_alert automation (files/automations.yaml).
+# Source = the bedroom AirGradient ONE. Thresholds are STARTING POINTS — tune to the observed
+# baseline, especially the VOC/NOx *index* sensors (Sensirion indices drift per environment).
+# Adding a pollutant = one more block here + add its binary_sensor to the automation trigger list.
+binary_sensor:
+  - platform: threshold
+    name: "Bedroom CO2 high"          # -> binary_sensor.bedroom_co2_high
+    entity_id: sensor.bedroom_airgradient_one_carbon_dioxide
+    upper: 1200                        # alerts >= 1300 ppm, clears <= 1100 ppm
+    hysteresis: 100
+  - platform: threshold
+    name: "Bedroom PM2.5 high"        # -> binary_sensor.bedroom_pm2_5_high
+    entity_id: sensor.bedroom_airgradient_one_pm2_5
+    upper: 35                          # alerts >= 40 ug/m3, clears <= 30 ug/m3
+    hysteresis: 5
+  - platform: threshold
+    name: "Bedroom VOC high"          # -> binary_sensor.bedroom_voc_high
+    entity_id: sensor.bedroom_airgradient_one_voc_index
+    upper: 250                         # alerts >= 275, clears <= 225 (index)
+    hysteresis: 25
+  - platform: threshold
+    name: "Bedroom NOx high"          # -> binary_sensor.bedroom_nox_high
+    entity_id: sensor.bedroom_airgradient_one_nox_index
+    upper: 50                          # alerts >= 60, clears <= 40 (index)
+    hysteresis: 10
+
 http:
   use_x_forwarded_for: true
   # Trust the whole Docker bridge range (RFC1918 172.16/12) so HA honors

@@ -96,3 +96,36 @@ bedroom_apply_natural:
             entity_id: switch.bedroom_adaptive_lighting_bedroom
             turn_on_lights: true
             transition: 1
+
+# Air-quality alert pulse: a brief red flash to flag bad air, then restore EXACTLY what was
+# showing. Snapshots the current light state into a throwaway scene, flashes red, and restores
+# the snapshot — so a manual scene / the morning ramp / Adaptive Lighting all come back intact
+# (vs. forcing AL and clobbering a chosen scene). Caller (bedroom_air_quality_alert) gates this
+# on the lights already being on and calls it as a blocking service, so calls serialize and the
+# snapshot can never capture the red pulse itself. mode: single is belt-and-suspenders on that.
+bedroom_alert_pulse:
+  alias: "Bedroom — air-quality alert pulse"
+  description: >-
+    Snapshot the bedroom lights, flash red for ~2s to flag bad air quality, then restore the
+    snapshot. Only meaningful when the lights are already on (the caller enforces that), so it
+    never wakes you and never fights Adaptive Lighting at night.
+  mode: single
+  sequence:
+    - service: scene.create
+      data:
+        scene_id: bedroom_pre_alert
+        snapshot_entities:
+          - light.bedroom_lights
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        rgb_color: [255, 0, 0]
+        brightness_pct: 60
+        transition: 0.3
+    - delay: "00:00:02"
+    - service: scene.turn_on
+      target:
+        entity_id: scene.bedroom_pre_alert
+      data:
+        transition: 0.5
