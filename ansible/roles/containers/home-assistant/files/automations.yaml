@@ -16,15 +16,26 @@
   trigger:
     - platform: mqtt
       topic: zigbee2mqtt/Tap Dial
+  # Z2M publishes the FULL device state to this topic on every report (battery, link quality, …),
+  # not only on button/dial actions. Gate on an action actually being present so the automation
+  # no-ops on those state reports — without this the dial_rotate_* conditions below stringify an
+  # undefined `action` and log "dict object has no attribute 'action'" on every report (and on the
+  # retained-state replay each HA restart). `payload_json is defined` first guards a non-JSON retain.
+  condition:
+    - condition: template
+      value_template: "{{ trigger.payload_json is defined and trigger.payload_json.action is defined }}"
   action:
+    # Read the action once, safely defaulted — so no condition below can hit an undefined attribute.
+    - variables:
+        act: "{{ trigger.payload_json.action | default('') }}"
     - choose:
         # Button 1 HOLD = bedtime / sleep routine — the manual fallback for phone Bedtime mode.
-        - conditions: "{{ trigger.payload_json.action == 'button_1_hold' }}"
+        - conditions: "{{ act == 'button_1_hold' }}"
           sequence:
             - service: script.bedroom_bedtime
         # Button 1 = smart toggle. Turning the group OFF here engages the manual-off override
         # (presence won't re-on); turning it ON clears the override (back to auto).
-        - conditions: "{{ trigger.payload_json.action == 'button_1_press' }}"
+        - conditions: "{{ act == 'button_1_press' }}"
           sequence:
             - if: "{{ is_state('light.bedroom_lights', 'on') }}"
               then:
@@ -41,7 +52,7 @@
                 - service: input_boolean.turn_off
                   target:
                     entity_id: input_boolean.bedroom_manual_off
-        - conditions: "{{ trigger.payload_json.action == 'button_2_press' }}"
+        - conditions: "{{ act == 'button_2_press' }}"
           sequence:
             - service: scene.turn_on
               target:
@@ -52,7 +63,7 @@
         # Button 3 = reset the FAN to automatic: clear the fan override, then apply the
         # temperature band for right now (night-cap aware). Does not touch the lights. The
         # bedroom_relax scene stays defined in scenes.yaml but is no longer bound to the dial.
-        - conditions: "{{ trigger.payload_json.action == 'button_3_press' }}"
+        - conditions: "{{ act == 'button_3_press' }}"
           sequence:
             - service: input_boolean.turn_off
               target:
@@ -61,13 +72,13 @@
         # Button 4 = reset to the NATURAL state for right now. The dispatcher script picks the
         # active time-based exception (e.g. the morning wake ramp) or full Adaptive Lighting as
         # the default — single source of truth. See files/scripts.yaml.
-        - conditions: "{{ trigger.payload_json.action == 'button_4_press' }}"
+        - conditions: "{{ act == 'button_4_press' }}"
           sequence:
             - service: script.bedroom_apply_natural
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_manual_off
-        - conditions: "{{ 'dial_rotate_right' in (trigger.payload_json.action | string) }}"
+        - conditions: "{{ 'dial_rotate_right' in act }}"
           sequence:
             - service: light.turn_on
               target:
@@ -75,7 +86,7 @@
               data:
                 brightness_step_pct: 12
                 transition: 0.2
-        - conditions: "{{ 'dial_rotate_left' in (trigger.payload_json.action | string) }}"
+        - conditions: "{{ 'dial_rotate_left' in act }}"
           sequence:
             - service: light.turn_on
               target:
