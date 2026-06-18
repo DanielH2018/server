@@ -17,11 +17,6 @@ the Renovate dependency dashboard.
   Edit the config + redeploy `home-assistant`. Spec:
   `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
-- HA update-available digest — notify when a device/HA update appears via the `update.*` entities
-  (`update.aqara_fp300`, `update.0x001788010f0ccda4` Tap Dial, `update.bedroom_airgradient_one_firmware`,
-  plus HA core/OS). Extends the repo's Renovate/IaC update discipline to the one corner it doesn't
-  cover — Zigbee/sensor firmware. **Notify only — never auto-flash Zigbee firmware.** (2026-06-18)
-
 - HA unexpected-occupancy tripwire — if `binary_sensor.aqara_fp300_presence` turns on while
   `device_tracker.pixel_9_pro` is **away** (short debounce; reuse the home/away logic), alert: someone
   in the bedroom when you're not home. Pure logic over two sensors already trusted elsewhere — no new
@@ -42,6 +37,13 @@ the Renovate dependency dashboard.
 - Rename Devices in Zigbee2MQTT
 
 ## Superseded
+
+- HA update-available digest — done 2026-06-18: `automation.update_available_digest` (Sunday 10:00)
+  notifies a digest of any `update.*` entity that is `on` — Zigbee/sensor firmware + HACS integrations
+  (the corner Renovate doesn't cover; LSIO HA has no `update.home_assistant_*`). Generic over all
+  update entities (new devices auto-join), gated to fire only when ≥1 is pending, NOTIFY-ONLY (never
+  auto-flashes). Routes through `bedroom_notify` (routine). Spec:
+  `docs/superpowers/specs/2026-06-18-ha-update-digest-design.md`.
 
 - HA actionable notifications — done 2026-06-18: `script.bedroom_notify` gained an `actions`
   pass-through (phone buttons); `automation.bedroom_notification_action` dispatches taps

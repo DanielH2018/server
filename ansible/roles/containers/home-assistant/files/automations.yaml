@@ -610,3 +610,33 @@
         actions:
           - action: BEDROOM_START_BEDTIME
             title: Start now
+
+# Update-available digest: weekly (Sunday 10:00) roundup of pending device/integration updates that
+# Renovate doesn't cover — Zigbee/sensor firmware + HACS integrations. Generic over ALL update.*
+# entities (a newly paired device joins automatically). NOTIFY-ONLY — never auto-flashes firmware.
+# Homelab-wide (no bedroom_ prefix) but routes through the shared bedroom_notify layer (routine).
+- id: update_available_digest
+  alias: Update available digest
+  description: Sunday 10:00 — notify a digest of any device/integration updates available (notify-only).
+  mode: single
+  trigger:
+    - platform: time
+      at: "10:00:00"
+  condition:
+    # Sunday only (Mon=0 .. Sun=6), and only if at least one update is actually pending.
+    - condition: template
+      value_template: "{{ now().weekday() == 6 }}"
+    - condition: template
+      value_template: "{{ states.update | selectattr('state', 'eq', 'on') | list | count > 0 }}"
+  action:
+    - variables:
+        pending: "{{ states.update | selectattr('state', 'eq', 'on') | list }}"
+        # One bullet per pending update: "• <name> (<installed> → <latest>)". Zigbee versions are
+        # opaque build integers / IEEE names until devices are renamed in Z2M — still informative.
+        lines: >-
+          {% for u in pending %}{{ '\n• ' ~ u.name ~ ' (' ~ (state_attr(u.entity_id, 'installed_version') | string) ~ ' → ' ~ (state_attr(u.entity_id, 'latest_version') | string) ~ ')' }}{% endfor %}
+    - service: script.bedroom_notify
+      data:
+        title: "📦 {{ pending | count }} update(s) available"
+        message: "{{ lines }}"
+        tag: update_digest

@@ -108,6 +108,13 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   (`automation.bedroom_bedtime_prompt`, 22:00 if present + not in sleep mode + home) → **Start now**
   (`BEDROOM_START_BEDTIME` → `script.bedroom_bedtime`). Add a button = pass `actions` to
   `bedroom_notify` + a case in the dispatcher.
+- **Update-available digest (since 2026-06-18).** `automation.update_available_digest` (homelab-wide,
+  no `bedroom_` prefix) — Sunday 10:00, notifies a digest of any `update.*` entity that is `on`
+  (Zigbee/sensor firmware + HACS integrations — the gap Renovate doesn't cover; LSIO container HA has
+  no `update.home_assistant_*`). Generic over `states.update | selectattr('state','eq','on')` so new
+  devices join automatically; gated to only fire when ≥1 update is pending. **Notify-only — never
+  auto-flashes.** Routine via `bedroom_notify`. Zigbee versions/names are opaque (build ints / IEEE)
+  until devices are renamed in Z2M.
 - **Sensor-offline alerts (since 2026-06-18).** `bedroom_sensor_offline_alert` (files/automations.yaml,
   a structural twin of the air-quality alert) notifies `notify.mobile_app_pixel_9_pro` when a
   bedroom-automation dependency goes `unavailable` for 5 min, with a coalescing-tag recovery notice.
