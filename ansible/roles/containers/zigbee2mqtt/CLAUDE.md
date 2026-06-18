@@ -23,6 +23,9 @@ See repo-root `CLAUDE.md` for shared conventions.
   → Kopia-backed. Losing `./data` = re-pair everything. **Friendly names** (renamed 2026-06-18:
   Lamp / Left Light / Right Light / Tap Dial / Aqara FP300) live here too — set via the Z2M UI or
   the `zigbee2mqtt/bridge/request/device/rename` MQTT request `{"from":"<ieee>","to":"<name>"}`.
+  **Per-device settings** (exposed as HA number/select entities) are also Z2M-owned device state —
+  e.g. the FP300 presence tuning (`presence_detection_options`/`motion_sensitivity`/`absence_delay_timer`,
+  see the home-assistant role CLAUDE.md). Re-apply via `zigbee2mqtt/<name>/set` after a re-pair.
 - **Renaming a device keeps its HA entity_ids (sticky, IEEE-based unique_id) but MOVES its raw MQTT
   topic** to `zigbee2mqtt/<new name>` (verified 2026-06-18). So a rename is zero-cascade for entities
   referenced by `entity_id` (e.g. the bulbs in the `light.bedroom_lights` group, the Tap Dial's

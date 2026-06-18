@@ -25,6 +25,11 @@ Eclipse Mosquitto 2.x. Internal-only broker for the Zigbee2MQTT stack. See repo-
   escaping is required (Compose interpolates a lone `$SYS`).
 - **Persistence** (`./data`) is regenerable retained-message state; bind-mounted so Kopia
   backs it up, but losing it is harmless.
+- **Ad-hoc publish/subscribe (admin/debug)** — from the host, `docker exec mosquitto mosquitto_pub
+  -h localhost -u <user> -P <pass> -t <topic> -m '<payload>'` (and `mosquitto_sub`). The creds are
+  in SOPS (`mqtt_username`/`mqtt_password`); the rendered values also sit in the Z2M container's
+  `data/configuration.yaml`. Used for Z2M bridge requests (`zigbee2mqtt/bridge/request/device/rename`)
+  and device settings (`zigbee2mqtt/<name>/set`) — e.g. renames and the FP300 presence tuning.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · cfg: `templates/mosquitto.conf.j2`, `templates/passwordfile.j2`

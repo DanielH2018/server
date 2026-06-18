@@ -1,6 +1,8 @@
 # home-assistant — Home automation platform
 
-LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
+LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions, and
+[`SETUP.md`](SETUP.md) for a human-readable setup / operation / tuning guide to the bedroom suite
+(this file is the editing-gotchas reference).
 
 ## At a glance
 - **Image:** `lscr.io/linuxserver/homeassistant:latest` (LSIO is x86-64-maintained;
@@ -64,13 +66,14 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   automations/scenes; wired via `script: !include scripts.yaml`; feeds `common_config_changed`).**
   `script.bedroom_apply_natural` sets the bedroom group to what it would be with no manual
   intervention RIGHT NOW: an ordered `choose:` of time-based **exceptions** (brightness overrides
-  on AL's natural color) with **full Adaptive Lighting (color + brightness) as `default:`**. The
+  on AL's natural color) with **full Adaptive Lighting (color + brightness) as `default:`**.
   The FIRST exception is the night-time dim nightlight (`scene.bedroom_nightlight`) when
   `bedroom_sleep_mode` is on OR it's 00:00–05:00 — so a presence re-trigger overnight doesn't blast
   you (it wins over the wake ramp; at wake time sleep_mode is cleared and hour≥5, so it's false).
-  The morning wake (1%→50% over the 15 min ENDING at the real alarm) is the next exception, its window
+  The morning wake (1%→`wake_peak` over the 15 min ENDING at the real alarm; peak 50%, or 30% after a
+  short night — see the sleep-quality bullet) is the next exception, its window
   = `sensor.bedroom_wake_start .. +15 min` (dynamic — see the dynamic-wake bullet below), encoded
-  as `brightness = 1+(50-1)·elapsed/900` over `transition = 900-elapsed` — so `elapsed=0` equals
+  as `brightness = 1+(wake_peak-1)·elapsed/900` over `transition = 900-elapsed` — so `elapsed=0` equals
   the wake's start and pressing button 4 mid-window *resumes* the ramp. **Both Tap Dial button 4
   and the `bedroom_morning_reset` automation call this dispatcher** (single source of truth — no
   duplicated ramp math). Color temp ALWAYS comes from AL; exceptions override brightness only.
@@ -129,7 +132,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   the >5-min guard filters brief away-glitches; the fan is off while away (no airflow false-positive).
   Pure logic over two trusted sensors — pairs with the home/away work.
 - **Sensor-offline alerts (since 2026-06-18).** `bedroom_sensor_offline_alert` (files/automations.yaml,
-  a structural twin of the air-quality alert) notifies `notify.mobile_app_pixel_9_pro` when a
+  a structural twin of the threshold engine) fires when a
   bedroom-automation dependency goes `unavailable` for 5 min, with a coalescing-tag recovery notice.
   Routed through `script.bedroom_notify` (offline: `watch:true` — wrist buzz, but routine for DND, so
   a dropout overnight doesn't wake you; recovery: routine, phone-only).
@@ -165,8 +168,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   off `binary_sensor.pixel_watch_3_bedtime_mode` → on (gated `person.daniel == home`), with **Tap
   Dial button-1 HOLD** as the manual fallback (`bedroom_tap_dial_control`). **Charging is deliberately
   NOT a trigger** (operator charges in-room). **Fan stays temperature-responsive, just quieter:**
-  `bedroom_apply_fan` caps the band to Low (1) when `bedroom_sleep_mode` is on — layered on the
-  existing 22:00–06:00 Medium (2) night cap, via `cap = 1 if sleep else (2 if night else 3)`; it does
+  `bedroom_apply_fan` caps the fan to Low (level 2) when `bedroom_sleep_mode` is on — below the
+  22:00–06:00 Medium (level 4) night cap, via `cap = 2 if sleep else (4 if night else 9)`; it does
   NOT freeze the fan. `bedroom_morning_reset` unwinds both sleep_mode + AL sleep mode before its fan/
   light re-applies (later moves to the watch-alarm wake). Phone bedtime/sleep sensors (DND,
   sleep_confidence, next_alarm) are now enabled in the companion app; the watch exposes
@@ -210,7 +213,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   caught too (the fan reports app/panel/remote changes to the DREO cloud).
   **Tap Dial button 3 = reset the fan to automatic** (clear `bedroom_fan_manual` + apply, night-cap
   aware); the morning reset clears it too. The `bedroom_relax` scene remains defined but is no longer
-  bound to the dial. Adding a pollutant-style fan band = edit the band ladder in the script only.
+  bound to the dial. Tune the fan curve (start offset / slope / caps) in `bedroom_apply_fan` only.
 - **YAML dashboard + entity customization (templated).** `configuration.yaml` registers a YAML
   dashboard via `lovelace: dashboards:` (NOT the legacy top-level `mode: yaml` — deprecated,
   removed in HA 2026.8) pointing at `config/ui-lovelace.yaml` (`templates/ui-lovelace.yaml.j2`),
