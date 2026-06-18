@@ -4,17 +4,18 @@
 # are NOT persistent. To change, edit this file and run:
 #   uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"
 #
-# Trigger topic is the Hue Tap Dial's (RDM002) IEEE address — Z2M publishes one JSON blob
-# per device on zigbee2mqtt/<friendly_name> (default output: json), so we read .action from
-# the payload. If the dial is later renamed in Z2M, update the topic to the new name.
+# Trigger topic is the Hue Tap Dial's Z2M friendly_name — Z2M publishes one JSON blob per device on
+# zigbee2mqtt/<friendly_name> (default output: json), so we read .action from the payload. The dial
+# was renamed in Z2M to "Tap Dial" (2026-06-18), so the topic has a space; if renamed again, update
+# the topic here to match. (Its HA entity_ids stay IEEE-based — sticky — so battery refs are unchanged.)
 - id: bedroom_tap_dial_control
   alias: Bedroom Tap Dial control
-  description: Hue Tap Dial (RDM002, 0x001788010f0ccda4) controls the Bedroom Lights group.
+  description: Hue Tap Dial (RDM002, Z2M name "Tap Dial") controls the Bedroom Lights group.
   mode: queued
   max: 10
   trigger:
     - platform: mqtt
-      topic: zigbee2mqtt/0x001788010f0ccda4
+      topic: zigbee2mqtt/Tap Dial
   action:
     - choose:
         # Button 1 HOLD = bedtime / sleep routine — the manual fallback for phone Bedtime mode.

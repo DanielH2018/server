@@ -20,7 +20,16 @@ See repo-root `CLAUDE.md` for shared conventions.
   redeploy can NEVER regenerate it and un-pair every device. Do not switch these to GENERATE.
 - **Device/pairing state is Z2M-owned, NOT templated:** `data/database.db`,
   `coordinator_backup.json`, `devices.yaml`, `groups.yaml`. All under the `./data` bind mount
-  → Kopia-backed. Losing `./data` = re-pair everything.
+  → Kopia-backed. Losing `./data` = re-pair everything. **Friendly names** (renamed 2026-06-18:
+  Lamp / Left Light / Right Light / Tap Dial / Aqara FP300) live here too — set via the Z2M UI or
+  the `zigbee2mqtt/bridge/request/device/rename` MQTT request `{"from":"<ieee>","to":"<name>"}`.
+- **Renaming a device keeps its HA entity_ids (sticky, IEEE-based unique_id) but MOVES its raw MQTT
+  topic** to `zigbee2mqtt/<new name>` (verified 2026-06-18). So a rename is zero-cascade for entities
+  referenced by `entity_id` (e.g. the bulbs in the `light.bedroom_lights` group, the Tap Dial's
+  `sensor.0x…_battery`) — only consumers of the *raw topic* break. The Tap Dial automation
+  (`bedroom_tap_dial_control`) triggers on `zigbee2mqtt/Tap Dial` (the raw topic) and was the one
+  edit needed. Entity_ids stay IEEE-based until separately renamed in the HA UI (display names follow
+  the Z2M name regardless).
 - **HA discovery on** (`homeassistant.enabled: true`) — paired devices auto-appear in HA via
   the MQTT integration; no per-device HA config.
 - **Availability tracking on (since 2026-06-18).** `availability.enabled: true` (off by default

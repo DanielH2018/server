@@ -24,7 +24,11 @@ the Renovate dependency dashboard.
 
 - If I sit at my desk for a while, the lights turn off, please try to tune it to lessen that happening.
 - Smooth out Fan curve for temperature(Currently goes in steps of 2)
-- Rename Devices in Zigbee2MQTT
+- ~~Rename Devices in Zigbee2MQTT~~ — done 2026-06-18: renamed the 3 Hue bulbs (Lamp / Left Light /
+  Right Light, cross-referenced from the HA device names), the Tap Dial, and confirmed Aqara FP300,
+  via the `zigbee2mqtt/bridge/request/device/rename` MQTT request. HA entity_ids stay IEEE-based
+  (sticky unique_id) — zero-cascade except the Tap Dial automation's raw MQTT topic
+  (→ `zigbee2mqtt/Tap Dial`). Names now show in the update digest / UI. Z2M-owned state (`./data`).
 
 ## Superseded
 
