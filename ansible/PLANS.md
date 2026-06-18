@@ -18,17 +18,19 @@ the Renovate dependency dashboard.
 
 ## Superseded
 
-- HA setup review pass — done 2026-06-18 (5 changes; full rationale in the home-assistant role
-  `CLAUDE.md`):
+- HA setup review pass — done 2026-06-18 (full rationale in the home-assistant role `CLAUDE.md`):
   - **Tap Dial template-warning fix** — `bedroom_tap_dial_control` now gates on `action is defined`
     so Z2M state reports (battery/link-quality) no longer log `'dict object' has no attribute 'action'`.
-  - **`stop_grace_period: 30s`** — clean recorder shutdown (was SIGKILLed in 10s → unclean SQLite).
   - **CO₂ calibration reminder** — `bedroom_co2_calibration_reminder` (quarterly notify-only nudge to
     recalibrate the AirGradient against the ~400 ppm outdoor baseline; replaces the paper backlog note).
   - **UPS power-event alert** — `ups_power_event` off the raw NUT flags (outage / low-battery /
     restored); nothing watched the UPS before.
   - **Dashboard** — air-quality card (CO₂ gauge + pollutant glance) + a Bedroom Controls card (lights,
     AL master, the three override booleans).
+  - **Memory cap 1024M → 1536M** — HA idled at ~810M (79% of the old hard cap); measured right-size.
+  - **Investigated the unclean-SQLite-shutdown warning** — found it's NOT fixable via
+    `stop_grace_period` (HA is SIGKILLed at 30s AND 90s; the warning is benign, WAL auto-recovers);
+    the briefly-added grace was reverted.
 
 - Bedroom Home Assistant automation suite — done 2026-06-18 (16 changes; full rationale in
   `docs/superpowers/specs/2026-06-18-ha-*` + the home-assistant & zigbee2mqtt role `CLAUDE.md`):

@@ -247,9 +247,11 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   (lights group + AL master switch + the three override booleans), and the Aqara FP300 glance.
 - **All persistent state is `./config` → `/config`** (Kopia-backed): the SQLite
   recorder DB, `.storage/`, secrets, automations, and the templated `configuration.yaml`.
-  The compose sets `stop_grace_period: 30s` so HA closes the recorder DB cleanly on stop/recreate —
-  Docker's default 10s SIGKILLed it mid-WAL ("could not validate that the sqlite3 database was
-  shutdown cleanly" on the next boot).
+  **The "could not validate that the sqlite3 database was shutdown cleanly" warning on every boot is
+  benign and NOT fixable via `stop_grace_period`** — a timed `docker stop` hit the full grace and
+  exited 137 (SIGKILL) at both 30s and 90s, so HA under the LSIO/s6 image is effectively hung on
+  shutdown (HA core / the dreo cloud_push integration never finishes stopping). SQLite WAL auto-
+  recovers, so don't chase it with a longer grace (it only slows deploys). Tested + reverted 2026-06-18.
 - **Bridge networking, not host.** Cloud/API-based integrations work fine. **Local
   device discovery** (mDNS/SSDP, Bluetooth, Zigbee/Z-Wave USB dongles) generally needs
   `network_mode: host` and/or `devices:` passthrough — which is incompatible with the

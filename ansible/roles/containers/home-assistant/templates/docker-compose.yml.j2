@@ -17,11 +17,12 @@ services:
     volumes:
       - ./config:/config
     restart: unless-stopped
-    # Give HA time to shut down cleanly on stop/recreate. Docker's default grace is 10s, but the
-    # recorder + cloud integrations (e.g. dreo cloud_push) don't always close the SQLite DB in time
-    # -> SIGKILL leaves the WAL mid-transaction and HA logs "could not validate that the sqlite3
-    # database was shutdown cleanly" + does a recovery pass on the next boot. 30s lets it flush.
-    stop_grace_period: 30s
+    # NOTE: no stop_grace_period override. HA under the LSIO/s6 image does NOT exit on SIGTERM — a
+    # timed `docker stop` hit the FULL grace and exited 137 (SIGKILL) at both 30s and 90s, so HA is
+    # effectively hung on shutdown (HA core / the dreo cloud_push integration never completes its
+    # stop). A longer grace therefore can't avoid the "could not validate that the sqlite3 database
+    # was shutdown cleanly" warning on the next boot — it only slows every deploy's recreate. The
+    # warning is benign: SQLite WAL auto-recovers (HA's recovery pass succeeds). Verified 2026-06-18.
     # LSIO image: cap_drop ALL plus the s6 privilege-drop set. No NET_BIND_SERVICE —
     # HA binds high port 8123, not :80. Verify on deploy (docker logs home-assistant)
     # — add back caps if it fails to start.
