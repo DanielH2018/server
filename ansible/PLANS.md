@@ -74,6 +74,8 @@ the Renovate dependency dashboard.
   ~400 ppm outdoor baseline. Keeps the air-quality alert thresholds honest. Hygiene — low excitement,
   real accuracy benefit. (2026-06-18)
 
+- If I sit at my desk for a while, the lights turn off, please try to tune it to lessen that happening.
+
 ## Superseded
 
 - HA humidity comfort alerts + unified threshold engine — done 2026-06-18: two one-sided humidity
