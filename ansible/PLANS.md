@@ -77,6 +77,26 @@ the Renovate dependency dashboard.
   "Turn on fan"; away alert → "Turn off lights"; low-battery → "Snooze". One tap instead of opening
   the app. (2026-06-18)
 
+- HA update-available digest — notify when a device/HA update appears via the `update.*` entities
+  (`update.aqara_fp300`, `update.0x001788010f0ccda4` Tap Dial, `update.bedroom_airgradient_one_firmware`,
+  plus HA core/OS). Extends the repo's Renovate/IaC update discipline to the one corner it doesn't
+  cover — Zigbee/sensor firmware. **Notify only — never auto-flash Zigbee firmware.** (2026-06-18)
+
+- HA unexpected-occupancy tripwire — if `binary_sensor.aqara_fp300_presence` turns on while
+  `device_tracker.pixel_9_pro` is **away** (short debounce; reuse the home/away logic), alert: someone
+  in the bedroom when you're not home. Pure logic over two sensors already trusted elsewhere — no new
+  hardware. Pairs with the home/away backlog item. (2026-06-18)
+
+- HA sleep-quality-aware morning — read `sensor.pixel_9_pro_sleep_duration`; if you slept under ~6 h,
+  soften or slightly delay the wake ramp and add a "you slept N h" note. Hooks the dispatcher's
+  morning-wake exception in `files/scripts.yaml` (keep the `bedroom_presence_on` window template in
+  sync). Depends on the Pixel feeding Health Connect sleep data into HA. (2026-06-18)
+
+- HA AirGradient CO₂ calibration reminder — the SenseAir CO₂ sensor drifts; remind every few months to
+  run `button.bedroom_airgradient_one_calibrate_co2_sensor`, ideally after the room's been aired to the
+  ~400 ppm outdoor baseline. Keeps the air-quality alert thresholds honest. Hygiene — low excitement,
+  real accuracy benefit. (2026-06-18)
+
 ## Superseded
 
 - Player stats for Terraria — done 2026-06-15: shipped the `terraria-stats` sidecar
