@@ -112,3 +112,34 @@
     - service: light.turn_off
       target:
         entity_id: light.bedroom_lights
+
+# Morning reset + gentle wake. 06:00 Mon-Fri / 07:00 Sat-Sun: always clear the manual-off
+# override (so a stuck/overnight override resets); if present, fade the lights up over 5 min.
+- id: bedroom_morning_reset
+  alias: Bedroom morning reset and wake
+  description: 06:00 Mon-Fri / 07:00 Sat-Sun — clear the manual-off override; gently wake if present.
+  mode: single
+  trigger:
+    - platform: time
+      at: "06:00:00"
+      id: weekday
+    - platform: time
+      at: "07:00:00"
+      id: weekend
+  condition:
+    - condition: or
+      conditions:
+        - "{{ trigger.id == 'weekday' and now().weekday() < 5 }}"
+        - "{{ trigger.id == 'weekend' and now().weekday() >= 5 }}"
+  action:
+    - service: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.bedroom_manual_off
+    - if: "{{ is_state('binary_sensor.aqara_fp300_presence', 'on') }}"
+      then:
+        - service: light.turn_on
+          target:
+            entity_id: light.bedroom_lights
+          data:
+            brightness_pct: 50
+            transition: 300
