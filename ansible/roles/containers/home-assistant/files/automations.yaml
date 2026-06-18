@@ -17,26 +17,49 @@
       topic: zigbee2mqtt/0x001788010f0ccda4
   action:
     - choose:
+        # Button 1 = smart toggle. Turning the group OFF here engages the manual-off override
+        # (presence won't re-on); turning it ON clears the override (back to auto).
         - conditions: "{{ trigger.payload_json.action == 'button_1_press' }}"
           sequence:
-            - service: light.toggle
-              target:
-                entity_id: light.bedroom_lights
+            - if: "{{ is_state('light.bedroom_lights', 'on') }}"
+              then:
+                - service: light.turn_off
+                  target:
+                    entity_id: light.bedroom_lights
+                - service: input_boolean.turn_on
+                  target:
+                    entity_id: input_boolean.bedroom_manual_off
+              else:
+                - service: light.turn_on
+                  target:
+                    entity_id: light.bedroom_lights
+                - service: input_boolean.turn_off
+                  target:
+                    entity_id: input_boolean.bedroom_manual_off
         - conditions: "{{ trigger.payload_json.action == 'button_2_press' }}"
           sequence:
             - service: scene.turn_on
               target:
                 entity_id: scene.bedroom_bright
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_manual_off
         - conditions: "{{ trigger.payload_json.action == 'button_3_press' }}"
           sequence:
             - service: scene.turn_on
               target:
                 entity_id: scene.bedroom_relax
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_manual_off
         - conditions: "{{ trigger.payload_json.action == 'button_4_press' }}"
           sequence:
             - service: scene.turn_on
               target:
                 entity_id: scene.bedroom_nightlight
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_manual_off
         - conditions: "{{ 'dial_rotate_right' in (trigger.payload_json.action | string) }}"
           sequence:
             - service: light.turn_on
@@ -53,3 +76,39 @@
               data:
                 brightness_step_pct: -12
                 transition: 0.2
+
+# Presence ON: occupied + dim + not overridden → lights on (Adaptive Lighting then tones them).
+- id: bedroom_presence_on
+  alias: Bedroom presence on
+  description: Turn on the bedroom lights when the room becomes occupied and is dim, unless overridden.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.aqara_fp300_presence
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: input_boolean.bedroom_manual_off
+      state: "off"
+    - condition: numeric_state
+      entity_id: sensor.aqara_fp300_illuminance
+      below: 50
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_lights
+
+# Absence OFF: room empty for a minute → lights off (ignores the override — leaving always allows off).
+- id: bedroom_absence_off
+  alias: Bedroom absence off
+  description: Turn off the bedroom lights after the room has been empty for a minute.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.aqara_fp300_presence
+      to: "off"
+      for: "00:01:00"
+  action:
+    - service: light.turn_off
+      target:
+        entity_id: light.bedroom_lights

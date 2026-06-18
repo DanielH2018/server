@@ -11,6 +11,13 @@ homeassistant:
 automation: !include automations.yaml
 scene: !include scenes.yaml
 
+# Helper: manual-off override. When on, presence will NOT auto-turn-on the bedroom lights.
+# Set by the Tap Dial when you turn the lights off; cleared on manual-on or the morning reset.
+input_boolean:
+  bedroom_manual_off:
+    name: Bedroom manual off override
+    icon: mdi:lightbulb-off
+
 http:
   use_x_forwarded_for: true
   # Trust the whole Docker bridge range (RFC1918 172.16/12) so HA honors
