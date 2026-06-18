@@ -17,12 +17,6 @@ the Renovate dependency dashboard.
   Edit the config + redeploy `home-assistant`. Spec:
   `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
-- HA humidity comfort alerts — alert on `sensor.bedroom_airgradient_one_humidity` too HIGH
-  (>~60%, mold) or too LOW (<~30%, winter-dry). **Design wrinkle:** humidity is *two-sided*, so a
-  single `threshold` sensor (one bound) won't cover it — use a `threshold` with both `lower` and
-  `upper` (range type → on when OUT of range), or two sensors. Fold the notify into the
-  air-quality alert engine. (2026-06-18)
-
 - HA automatic bedtime / sleep routine — fire the "going to bed" action automatically off real
   phone signals: `binary_sensor.pixel_9_pro_is_charging` after ~22:00, Android
   `sensor.pixel_9_pro_sleep_segment` / `_sleep_confidence`, or
@@ -81,6 +75,16 @@ the Renovate dependency dashboard.
   real accuracy benefit. (2026-06-18)
 
 ## Superseded
+
+- HA humidity comfort alerts + unified threshold engine — done 2026-06-18: two one-sided humidity
+  `threshold` sensors (high `upper:60`, low `lower:30`) over `sensor.bedroom_airgradient_one_humidity`,
+  folded into a NEW unified `bedroom_threshold_alert` automation that **replaced** the separate
+  `bedroom_air_quality_alert` + `bedroom_battery_low_alert` (the "full unification" option). One
+  engine over three categories (air quality / battery / humidity), category encoded in the trigger
+  `id`, with a `cfg` map for the only per-category differences (title + whether to pulse the lights
+  — air quality only). Spec:
+  `docs/superpowers/specs/2026-06-18-ha-humidity-and-unified-threshold-alerts-design.md`. Humidity
+  thresholds join the ~2026-06-25 air-quality tuning pass.
 
 - HA home/away automations — done 2026-06-18: off `person.daniel` (HA person entity over the
   Pixel tracker). `bedroom_away` (two-stage: `leave` at 10 min away, `failsafe` at 30 min) turns

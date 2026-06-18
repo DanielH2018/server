@@ -162,17 +162,19 @@
         # source of truth as the Tap Dial button-4 reset — see files/scripts.yaml.
         - service: script.bedroom_apply_natural
 
-# Air-quality alert: any pollutant threshold binary-sensor (CO2/PM2.5/VOC/NOx — the `threshold`
-# sensors in configuration.yaml.j2) crossing into "bad" sends a phone notification and, ONLY if
-# the lights are already on, a brief red pulse (script.bedroom_alert_pulse). A recovery notice
-# fires when it clears. Hysteresis lives in the threshold sensors, so this just reacts to
-# off<->on edges. Triggers anchor on off<->on (NOT unknown): an HA restart while air is bad
-# doesn't re-alert, and an unavailable source can't false-alert. The message is derived
-# generically from the triggering sensor, so a new pollutant only needs its binary_sensor added
-# to BOTH trigger entity_id lists below.
-- id: bedroom_air_quality_alert
-  alias: Bedroom air quality alert
-  description: Notify (and pulse the lights if on) when CO2/PM2.5/VOC/NOx crosses its threshold; recovery notice when it clears.
+# Unified threshold alert engine: ALL `threshold` binary-sensors in configuration.yaml.j2 (air
+# quality CO2/PM2.5/VOC/NOx, battery FP300/Tap Dial, humidity high/low) feed this ONE automation.
+# Hysteresis lives in the threshold sensors, so this just reacts to off<->on edges, anchored on
+# off<->on (NOT unknown) so an HA restart while bad doesn't re-alert and an unavailable source
+# can't false-alert (sensor-offline owns offline). The category is encoded in each trigger id
+# (<category>_bad / <category>_ok); everything else is derived generically from the triggering
+# sensor. The ONLY per-category differences are the notification title and whether to pulse the
+# lights (the `cfg` map) — air quality pulses, battery/humidity notify only. Adding a metric = one
+# threshold sensor in configuration.yaml.j2 + add it to its category's two trigger lists; a NEW
+# category = two trigger blocks + one `cfg` entry.
+- id: bedroom_threshold_alert
+  alias: Bedroom threshold alert
+  description: Notify when any air-quality/battery/humidity threshold crosses; recovery when it clears; pulse the lights for air quality only.
   mode: queued
   max: 10
   trigger:
@@ -185,7 +187,7 @@
       from: "off"
       to: "on"
       for: "00:00:30"
-      id: bad
+      id: airquality_bad
     - platform: state
       entity_id:
         - binary_sensor.bedroom_co2_high
@@ -195,37 +197,78 @@
       from: "on"
       to: "off"
       for: "00:00:30"
-      id: recovery
+      id: airquality_ok
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_fp300_battery_low
+        - binary_sensor.bedroom_tap_dial_battery_low
+      from: "off"
+      to: "on"
+      for: "00:01:00"
+      id: battery_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_fp300_battery_low
+        - binary_sensor.bedroom_tap_dial_battery_low
+      from: "on"
+      to: "off"
+      for: "00:01:00"
+      id: battery_ok
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_humidity_high
+        - binary_sensor.bedroom_humidity_low
+      from: "off"
+      to: "on"
+      for: "00:05:00"
+      id: humidity_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_humidity_high
+        - binary_sensor.bedroom_humidity_low
+      from: "on"
+      to: "off"
+      for: "00:05:00"
+      id: humidity_ok
   action:
-    # Derive everything from the triggering threshold sensor — no per-pollutant map. A threshold
-    # sensor's `entity_id` attribute points at its SOURCE sensor, so we read the live value/unit
-    # from there and the human label from the threshold sensor's own friendly name.
+    # Derive everything from the triggering threshold sensor — its `entity_id` attribute points at
+    # its SOURCE sensor (live value + unit); the label is the threshold sensor's own friendly name
+    # with the trailing " high"/" low" stripped (the extra ' low' strip is what makes battery and
+    # the low-humidity sensor read correctly). Category + edge come from the trigger id.
     - variables:
+        category: "{{ trigger.id.split('_')[0] }}"
+        edge: "{{ trigger.id.split('_')[1] }}"
         src: "{{ trigger.to_state.attributes.entity_id }}"
-        label: "{{ trigger.to_state.attributes.friendly_name | replace(' high', '') }}"
+        label: "{{ trigger.to_state.attributes.friendly_name | replace(' high', '') | replace(' low', '') }}"
         value: "{{ states(src) }}"
         unit: "{{ state_attr(src, 'unit_of_measurement') or '' }}"
-        tag: "air_quality_{{ trigger.entity_id }}"
+        # Same tag for bad + recovery → the recovery replaces the alert on the phone.
+        tag: "threshold_alert_{{ trigger.entity_id }}"
+        # Per-category title + whether to pulse the lights. The single point that encodes
+        # "air quality pulses, battery/humidity don't".
+        cfg: >-
+          {{ {'airquality': {'bad': '⚠️ Air quality', 'ok': '✅ Air quality', 'pulse': true},
+              'battery':    {'bad': '🔋 Battery low',  'ok': '🔋 Battery OK',  'pulse': false},
+              'humidity':   {'bad': '💧 Humidity',     'ok': '💧 Humidity OK', 'pulse': false}}[category] }}
     - choose:
-        - conditions: "{{ trigger.id == 'bad' }}"
+        - conditions: "{{ edge == 'bad' }}"
           sequence:
             - service: notify.mobile_app_pixel_9_pro
               data:
-                title: "⚠️ Air quality"
+                title: "{{ cfg.bad }}"
                 message: "{{ label }} is {{ value }}{{ ' ' ~ unit if unit else '' }}"
-                # Same tag for bad + recovery → the recovery replaces the alert on the phone.
                 data:
                   tag: "{{ tag }}"
-            # Light pulse only when the lights are already on (operator present/awake) — never
-            # wakes you and never fights Adaptive Lighting / the manual-off override at night.
-            - if: "{{ is_state('light.bedroom_lights', 'on') }}"
+            # Light pulse only for air quality (cfg.pulse) and only when the lights are already on —
+            # never wakes you, never fights Adaptive Lighting / the manual-off override at night.
+            - if: "{{ cfg.pulse and is_state('light.bedroom_lights', 'on') }}"
               then:
                 - service: script.bedroom_alert_pulse
-      # off<->on edges only, so the remaining case (id == 'recovery') is the default.
+      # off<->on edges only, so the remaining case (edge == 'ok') is the default.
       default:
         - service: notify.mobile_app_pixel_9_pro
           data:
-            title: "✅ Air quality"
+            title: "{{ cfg.ok }}"
             message: "{{ label }} back to normal ({{ value }}{{ ' ' ~ unit if unit else '' }})"
             data:
               tag: "{{ tag }}"
@@ -361,64 +404,6 @@
           data:
             title: "✅ Sensor back online"
             message: "{{ name }} is reporting again"
-            data:
-              tag: "{{ tag }}"
-
-# Low-battery alert: a battery `threshold` binary-sensor (the LOWER-bound sensors in
-# configuration.yaml.j2) crossing into "low" sends a phone notification; a recovery notice fires
-# when a fresh battery clears it. A near-exact twin of bedroom_air_quality_alert — hysteresis lives
-# in the threshold sensors, the message is derived generically from the triggering sensor, and the
-# triggers anchor on off<->on (NOT unknown) so an HA restart while low doesn't re-alert and a
-# battery source going unavailable (device offline — owned by bedroom_sensor_offline_alert) can't
-# false-alert. No light pulse (low battery isn't urgent). Adding a battery = add one threshold
-# sensor in configuration.yaml.j2 + add its binary_sensor to BOTH trigger lists below.
-- id: bedroom_battery_low_alert
-  alias: Bedroom battery low alert
-  description: Notify when the FP300 or Tap Dial battery crosses low; recovery notice when a fresh battery clears it.
-  mode: queued
-  max: 10
-  trigger:
-    - platform: state
-      entity_id:
-        - binary_sensor.bedroom_fp300_battery_low
-        - binary_sensor.bedroom_tap_dial_battery_low
-      from: "off"
-      to: "on"
-      for: "00:01:00"
-      id: low
-    - platform: state
-      entity_id:
-        - binary_sensor.bedroom_fp300_battery_low
-        - binary_sensor.bedroom_tap_dial_battery_low
-      from: "on"
-      to: "off"
-      for: "00:01:00"
-      id: recovery
-  action:
-    # Derive everything from the triggering threshold sensor — its `entity_id` attribute points at
-    # its SOURCE battery sensor, so we read the live % from there and the device label from the
-    # threshold sensor's own friendly name.
-    - variables:
-        src: "{{ trigger.to_state.attributes.entity_id }}"
-        label: "{{ trigger.to_state.attributes.friendly_name | replace(' battery low', '') }}"
-        value: "{{ states(src) }}"
-        # Same tag for low + recovery → the recovery replaces the alert on the phone.
-        tag: "battery_low_{{ trigger.entity_id }}"
-    - choose:
-        - conditions: "{{ trigger.id == 'low' }}"
-          sequence:
-            - service: notify.mobile_app_pixel_9_pro
-              data:
-                title: "🔋 Battery low"
-                message: "{{ label }} battery at {{ value }}%"
-                data:
-                  tag: "{{ tag }}"
-      # off<->on edges only, so the remaining case (id == 'recovery') is the default.
-      default:
-        - service: notify.mobile_app_pixel_9_pro
-          data:
-            title: "🔋 Battery OK"
-            message: "{{ label }} battery back to {{ value }}%"
             data:
               tag: "{{ tag }}"
 

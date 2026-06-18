@@ -101,6 +101,19 @@ binary_sensor:
     entity_id: sensor.0x001788010f0ccda4_battery
     lower: 20                             # alerts <= 15%, clears >= 25%
     hysteresis: 5
+  # Humidity comfort — two-sided, so TWO one-sided sensors (high = mold risk, low = winter-dry).
+  # Both feed the humidity category of bedroom_threshold_alert. Starting points — tune with the
+  # air-quality thresholds (~2026-06-25 baseline pass).
+  - platform: threshold
+    name: "Bedroom humidity high"     # -> binary_sensor.bedroom_humidity_high
+    entity_id: sensor.bedroom_airgradient_one_humidity
+    upper: 60                          # alerts >= 63%, clears <= 57% (mold)
+    hysteresis: 3
+  - platform: threshold
+    name: "Bedroom humidity low"      # -> binary_sensor.bedroom_humidity_low
+    entity_id: sensor.bedroom_airgradient_one_humidity
+    lower: 30                          # alerts <= 27%, clears >= 33% (winter-dry)
+    hysteresis: 3
 
 http:
   use_x_forwarded_for: true

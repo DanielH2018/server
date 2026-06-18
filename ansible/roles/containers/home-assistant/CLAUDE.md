@@ -63,19 +63,24 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   Helper `script.bedroom_set_natural_brightness(brightness_pct, transition)` holds the AL
   release + color-apply boilerplate so a new exception is just a `(condition, brightness,
   transition)` triple dropped above `default:` — see the worked example comment in the file.
-- **Air-quality alerts (since 2026-06-18).** `configuration.yaml` adds four built-in `threshold`
-  binary-sensors over the bedroom AirGradient ONE (CO2/PM2.5/VOC/NOx); the `threshold` platform's
-  native hysteresis (on > upper+hyst, off < upper−hyst) IS the "alert once + recovery, no bounce"
-  lifecycle. One generic automation `bedroom_air_quality_alert` (files/automations.yaml) triggers
-  on any of them flipping — **anchored on `off`↔`on` (not `unknown`)** so an HA restart while air
-  is bad doesn't re-alert and an unavailable source can't false-alert — notifies
-  `notify.mobile_app_pixel_9_pro` (same `tag` for bad + recovery so they coalesce on the phone),
-  and **only if `light.bedroom_lights` is already on** calls `script.bedroom_alert_pulse`
-  (snapshot → red flash → restore the snapshot, so a manual scene / morning ramp / AL all return
-  intact). The message is derived from the triggering sensor's attributes (no per-pollutant map),
-  so a new pollutant = one more threshold sensor in `configuration.yaml.j2` + add its
-  `binary_sensor` to BOTH trigger lists. Thresholds are starting points — tune the VOC/NOx *index*
-  ones to the observed baseline.
+- **Threshold alerts — unified engine (since 2026-06-18).** `configuration.yaml` defines eight
+  built-in `threshold` binary-sensors; the platform's native hysteresis (on past bound±hyst) IS the
+  "alert once + recovery, no bounce" lifecycle. ALL feed ONE automation `bedroom_threshold_alert`
+  (files/automations.yaml) in three **categories** — air quality (CO2/PM2.5/VOC/NOx, `upper`),
+  battery (FP300/Tap Dial, `lower`), humidity (high `upper` + low `lower` — two one-sided sensors,
+  since humidity is two-sided). The category is encoded in each trigger `id` (`<cat>_bad`/`<cat>_ok`);
+  everything else (label/value/unit, message, recovery, coalescing `tag`) is derived generically
+  from the triggering sensor. The ONLY per-category differences live in a Jinja `cfg` map: the
+  notification title + **whether to pulse the lights** — air quality calls `script.bedroom_alert_pulse`
+  (snapshot → red flash → restore; only when `light.bedroom_lights` is on), battery/humidity notify
+  only. **Anchored on `off`↔`on` (not `unknown`)** so an HA restart while bad doesn't re-alert and an
+  unavailable source can't false-alert (offline is `bedroom_sensor_offline_alert`'s job). Per-category
+  debounce: air quality 30s, battery 1m, humidity 5m (rides out spikes). The label-strip is
+  `friendly_name | replace(' high','') | replace(' low','')` (the ` low` strip makes battery +
+  low-humidity read right). **Adding a metric** = one threshold sensor in `configuration.yaml.j2`
+  + add it to its category's two trigger lists; a **new category** = two trigger blocks + one `cfg`
+  entry. Thresholds are starting points — tune the VOC/NOx *index* + humidity ones to the observed
+  baseline (the ~2026-06-25 pass).
 - **Sensor-offline alerts (since 2026-06-18).** `bedroom_sensor_offline_alert` (files/automations.yaml,
   a structural twin of the air-quality alert) notifies `notify.mobile_app_pixel_9_pro` when a
   bedroom-automation dependency goes `unavailable` for 5 min, with a coalescing-tag recovery notice.
@@ -90,19 +95,6 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   `default(entity_id)` fallback). Battery-Zigbee offline detection is inherently coarse (~the Z2M
   passive timeout, 60 min), not minutes — a sleeping radio can't be pinged. Adding a watched device
   = add its entity to BOTH trigger lists.
-- **Low-battery alerts (since 2026-06-18).** The LOWER-bound mirror of the air-quality engine:
-  `configuration.yaml.j2` adds two `threshold` binary-sensors over the battery Zigbee devices
-  (`sensor.aqara_fp300_battery` → `binary_sensor.bedroom_fp300_battery_low`,
-  `sensor.0x001788010f0ccda4_battery` Tap Dial → `binary_sensor.bedroom_tap_dial_battery_low`),
-  each `lower: 20, hysteresis: 5` (alerts ≤15%, clears ≥25% — tunable). `bedroom_battery_low_alert`
-  (files/automations.yaml) is a near-exact twin of `bedroom_air_quality_alert`: off↔on triggers,
-  message derived from the triggering sensor's source/friendly-name, notify-only (no light pulse),
-  coalescing tag. Anchored on off↔on so a battery going `unavailable` (device offline, owned by
-  `bedroom_sensor_offline_alert`) can't false battery-alert. A `lower` threshold inverts the
-  hysteresis: on (low) at ≤lower−hyst, off at ≥lower+hyst; battery drain is monotonic so no
-  flapping. **These three threshold-driven alert automations (air-quality, battery, and the planned
-  humidity one) are the same skeleton** — once humidity lands, consider unifying into one
-  `bedroom_threshold_alert` engine (category→title/icon map, pulse gated to air-quality).
 - **Home/away automations (since 2026-06-18).** Off `person.daniel` (HA person entity over
   `device_tracker.pixel_9_pro` GPS/Wi-Fi — a different layer than the FP300's ROOM presence).
   `bedroom_away` (two triggers, both `from:"home"`: `leave` at `for:10m`, `failsafe` at `for:30m`)
