@@ -699,3 +699,30 @@
         tag: unexpected_occupancy
         watch: true
         pierce: true
+
+# Quarterly CO2 calibration reminder: the AirGradient ONE's SenseAir CO2 sensor drifts over months,
+# which would quietly skew the air-quality alert thresholds. 4x/year (the 1st of Jan/Apr/Jul/Oct at
+# 10:00 — daily trigger + a date condition, same shape as update_available_digest) nudge to
+# recalibrate. NOTIFY-ONLY with the live reading + an air-out-FIRST instruction: manual calibration
+# sets the CURRENT reading as the 400 ppm baseline, so it must be done at the outdoor baseline. A
+# one-tap "calibrate now" button is deliberately omitted — an accidental tap on stale indoor air
+# would lock in a wrong baseline. Routine via bedroom_notify (phone-only, silent while quiet).
+- id: bedroom_co2_calibration_reminder
+  alias: Bedroom CO2 calibration reminder
+  description: Quarterly nudge to recalibrate the AirGradient CO2 sensor against the outdoor ~400 ppm baseline.
+  mode: single
+  trigger:
+    - platform: time
+      at: "10:00:00"
+  condition:
+    - condition: template
+      value_template: "{{ now().day == 1 and now().month in [1, 4, 7, 10] }}"
+  action:
+    - service: script.bedroom_notify
+      data:
+        title: "🌬️ CO₂ sensor calibration due"
+        message: >-
+          Air the room out (~15 min, window open) to reach the outdoor ~400 ppm baseline, then press
+          the AirGradient "Calibrate CO₂" button (Settings → Devices → AirGradient ONE). Current
+          reading: {{ states('sensor.bedroom_airgradient_one_carbon_dioxide') }} ppm.
+        tag: co2_calibration_reminder
