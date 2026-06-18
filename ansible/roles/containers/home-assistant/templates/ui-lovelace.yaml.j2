@@ -47,6 +47,36 @@ views:
                 name: Runtime
               - entity: sensor.apc_ups_input_voltage
                 name: Input Voltage
+      # ── AirGradient ONE air quality (the metrics the threshold alerts fire on) ──
+      - type: vertical-stack
+        cards:
+          - type: gauge
+            entity: sensor.bedroom_airgradient_one_carbon_dioxide
+            name: CO₂
+            unit: ppm
+            min: 400
+            max: 2500
+            # Mirrors the alert tiers: green to the moderate band, yellow up to severe, red past it.
+            severity:
+              green: 400
+              yellow: 1000
+              red: 1500
+          - type: glance
+            title: Air Quality
+            columns: 3
+            entities:
+              - entity: sensor.bedroom_airgradient_one_pm2_5
+                name: PM2.5
+              - entity: sensor.bedroom_airgradient_one_voc_index
+                name: VOC
+              - entity: sensor.bedroom_airgradient_one_nox_index
+                name: NOx
+              - entity: sensor.bedroom_airgradient_one_humidity
+                name: Humidity
+              - entity: sensor.bedroom_airgradient_one_temperature
+                name: Temp
+              - entity: sensor.bedroom_airgradient_one_pm10
+                name: PM10
       # ── DREO Tower Fan (DR-HTF024S) ──────────────────────────────────────
       - type: vertical-stack
         cards:
@@ -65,6 +95,26 @@ views:
                 name: Display Auto-Off
               - entity: switch.tower_fan_panel_sound
                 name: Panel Sound
+      # ── Bedroom lighting + automation overrides ──────────────────────────
+      - type: entities
+        title: Bedroom Controls
+        icon: mdi:tune
+        entities:
+          - entity: light.bedroom_lights
+            name: Bedroom Lights
+          - entity: switch.bedroom_adaptive_lighting_bedroom
+            name: Adaptive Lighting
+          - type: section
+            label: Automation overrides
+          # On = presence won't auto-on the lights (Tap Dial button 1 sets it; morning reset clears).
+          - entity: input_boolean.bedroom_manual_off
+            name: Manual-off
+          # On = temperature automation won't drive the fan (Tap Dial button 3 / morning reset clears).
+          - entity: input_boolean.bedroom_fan_manual
+            name: Fan manual
+          # On = quiet fan cap + AL sleep mode (bedtime sets it; morning reset clears).
+          - entity: input_boolean.bedroom_sleep_mode
+            name: Sleep mode
       # ── Aqara FP300 presence sensor (essentials only) ────────────────────
       - type: glance
         title: Aqara FP300
