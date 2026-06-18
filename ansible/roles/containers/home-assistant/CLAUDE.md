@@ -25,10 +25,10 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
     unban). Bans the REAL client IP because the CF→Traefik→HA chain forwards X-Forwarded-For
     (Traefik `forwardedHeaders.trustedIPs=cloudflare_ips` + HA `use_x_forwarded_for`). Only
     failed PASSWORD logins count — tokens/app/webhooks unaffected.
-  - **⚠️ TOTP is NOT enrolled** (verified 2026-06-18: `.storage/auth_module.totp` absent). This
-    route is internet-facing (Cloudflare-proxied `home-assistant.<domain>`), so MFA is the
-    compensating control for Authelia-off — **enrol it: HA → Profile → Multi-factor
-    Authentication → TOTP.** `ip_ban` is defense-in-depth, not a substitute.
+  - **TOTP/MFA: enrolled (2026-06-18).** This route is internet-facing (Cloudflare-proxied
+    `home-assistant.<domain>`), so MFA is the compensating control for Authelia-off; `ip_ban` is
+    defense-in-depth on top. If MFA is ever reset/lost, re-enrol: HA → Profile → Multi-factor
+    Authentication → TOTP (and keep the recovery code from enrolment).
 - **HACS preinstalled** via `DOCKER_MODS=linuxserver/mods:homeassistant-hacs`
   (LSIO Docker mod that drops the Home Assistant Community Store into `/config`).
 - **`configuration.yaml` is templated** from `configuration.yaml.j2` to `./config`.
