@@ -5,7 +5,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 - **Image:** `ghcr.io/koenkk/zigbee2mqtt:2.12.0` (pinned → Renovate-managed, not Watchtower)
-- **Host:** daniel-server · **Port:** 8080 · **URL:** `zigbee.<domain>` (Authelia: yes)
+- **Host:** daniel-server · **Port:** 8080 · **URL:** `zigbee2mqtt.<domain>` (Authelia: yes)
 - **Networks:** `apps` (Traefik) + `mqtt` (broker). Reaches the coordinator at
   `tcp://{{ slzb_ip }}:6638` over the LAN via Docker's outbound NAT — no host networking.
 - **Depends on:** traefik, mosquitto
@@ -24,7 +24,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **HA discovery on** (`homeassistant.enabled: true`) — paired devices auto-appear in HA via
   the MQTT integration; no per-device HA config.
 - **Pairing is closed by default** (no `permit_join` in 2.x). Enable join from the Z2M UI
-  (`zigbee.<domain>`) when adding devices, then disable.
+  (`zigbee2mqtt.<domain>`) when adding devices, then disable.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Z2M cfg: `templates/configuration.yaml.j2`
