@@ -8,142 +8,40 @@ the Renovate dependency dashboard.
 ## Backlog
 
 - Tune bedroom air-quality alert thresholds (revisit ~2026-06-25, after ~1 week of baseline) —
-  the four `threshold` binary-sensors in `home-assistant/templates/configuration.yaml.j2`
-  (`binary_sensor.bedroom_co2_high` / `_pm2_5_high` / `_voc_high` / `_nox_high`) shipped with
-  STARTING values (CO₂ 1200/100, PM2.5 35/5, VOC 250/25, NOx 50/10). Check the HA recorder
-  history for `sensor.bedroom_airgradient_one_carbon_dioxide` / `_pm2_5` / `_voc_index` /
-  `_nox_index` and adjust `upper`/`hysteresis` to the observed baseline — especially the
-  Sensirion VOC (~100 baseline) and NOx (~1 + spikes) *index* sensors, which drift per room.
-  Edit the config + redeploy `home-assistant`. Spec:
-  `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
+  the four moderate + four SEVERE `threshold` binary-sensors in
+  `home-assistant/templates/configuration.yaml.j2` (`binary_sensor.bedroom_{co2,pm2_5,voc,nox}_high`
+  / `_severe`) shipped with STARTING values. Check the HA recorder history for
+  `sensor.bedroom_airgradient_one_{carbon_dioxide,pm2_5,voc_index,nox_index}` (+ `_humidity`) and
+  adjust `upper`/`lower`/`hysteresis` to the observed baseline — especially the Sensirion VOC
+  (~100 baseline) and NOx (~1 + spikes) *index* sensors, which drift per room. Edit the config +
+  redeploy `home-assistant`. Spec: `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`.
 
 - HA AirGradient CO₂ calibration reminder — the SenseAir CO₂ sensor drifts; remind every few months to
   run `button.bedroom_airgradient_one_calibrate_co2_sensor`, ideally after the room's been aired to the
   ~400 ppm outdoor baseline. Keeps the air-quality alert thresholds honest. Hygiene — low excitement,
   real accuracy benefit. (2026-06-18)
 
-- ~~If I sit at my desk for a while, the lights turn off~~ — done 2026-06-18: diagnosed the FP300
-  dropping `presence` ~2 min while still (187 flips/24h; 16 false-absences 1–5 min crossing
-  `bedroom_absence_off`'s 1-min timeout). Fixed via FP300 Z2M device settings (not git, re-apply on
-  re-pair): `presence_detection_options: both→mmwave` (radar holds a still person), `motion_sensitivity:
-  medium→high`, `absence_delay_timer: 10→60 s`. Kept the 1-min absence-off; observe + iterate (bump
-  the absence delay toward 120 s or the automation timeout if it still drops). Documented in the
-  home-assistant role CLAUDE.md.
-- ~~Smooth out Fan curve for temperature~~ — done 2026-06-18: `bedroom_apply_fan` now maps temp to
-  the DREO's full 9 levels on a smooth ~1-level-per-°F curve (off <~72°F, 72→L1 .. 80→L9) instead of
-  the old 4 bands → levels 0/2/4/6. ~0.7-level hysteresis deadband (no flapping, simulated); night
-  cap L4 / sleep cap L2. Spec: `docs/superpowers/specs/2026-06-18-ha-smooth-fan-curve-design.md`.
-- ~~Rename Devices in Zigbee2MQTT~~ — done 2026-06-18: renamed the 3 Hue bulbs (Lamp / Left Light /
-  Right Light, cross-referenced from the HA device names), the Tap Dial, and confirmed Aqara FP300,
-  via the `zigbee2mqtt/bridge/request/device/rename` MQTT request. HA entity_ids stay IEEE-based
-  (sticky unique_id) — zero-cascade except the Tap Dial automation's raw MQTT topic
-  (→ `zigbee2mqtt/Tap Dial`). Names now show in the update digest / UI. Z2M-owned state (`./data`).
-
 ## Superseded
 
-- HA sleep-quality-aware morning — done 2026-06-18: the wake ramp softens after a short night —
-  `bedroom_apply_natural`'s morning exception peaks at 30% (vs 50%) when
-  `sensor.pixel_9_pro_sleep_duration` < 360 min (unknown/0 → normal 50%); `bedroom_morning_reset`
-  also sends a routine "you slept N h" note (😴/☀️). Chose soften over delay (one-variable change vs
-  shifting the wake-start sensor). Caveat: Google Sleep API may lag at alarm−15min (best-effort,
-  graceful fallback). Spec: `docs/superpowers/specs/2026-06-18-ha-sleep-quality-morning-design.md`.
-
-- HA unexpected-occupancy tripwire — done 2026-06-18: `automation.bedroom_unexpected_occupancy` —
-  FP300 presence off→on (30s) while `person.daniel` away >5 min → security alert via `bedroom_notify`
-  (watch + pierce). Edge-triggered (a GPS glitch while present can't fire it); >5-min away guard +
-  fan-off-while-away filter false positives. Spec:
-  `docs/superpowers/specs/2026-06-18-ha-unexpected-occupancy-design.md`.
-
-- HA update-available digest — done 2026-06-18: `automation.update_available_digest` (Sunday 10:00)
-  notifies a digest of any `update.*` entity that is `on` — Zigbee/sensor firmware + HACS integrations
-  (the corner Renovate doesn't cover; LSIO HA has no `update.home_assistant_*`). Generic over all
-  update entities (new devices auto-join), gated to fire only when ≥1 is pending, NOTIFY-ONLY (never
-  auto-flashes). Routes through `bedroom_notify` (routine). Spec:
-  `docs/superpowers/specs/2026-06-18-ha-update-digest-design.md`.
-
-- HA actionable notifications — done 2026-06-18: `script.bedroom_notify` gained an `actions`
-  pass-through (phone buttons); `automation.bedroom_notification_action` dispatches taps
-  (`mobile_app_notification_action`) on namespaced `BEDROOM_*` ids. Three buttons: air-quality bad →
-  "Boost fan" (fan to 100%, persists), away "Left on" → "Turn back on" (undo false-away, ignores
-  home-gates), and a new nightly `bedroom_bedtime_prompt` (22:00 if present + not in sleep mode +
-  home) → "Start now" (runs `script.bedroom_bedtime`). Ruled out snooze (engine never nags) and
-  restart-offline-device (unreachable). Spec:
-  `docs/superpowers/specs/2026-06-18-ha-actionable-notifications-design.md`.
-
-- HA DND-aware notification routing — done 2026-06-18: new `script.bedroom_notify` is the single
-  cross-cutting notify layer (threshold engine + sensor-offline + away all route through it). It
-  picks Android channel/importance from the alert's `pierce` flag and the live "quiet" state (phone
-  DND on OR `bedroom_sleep_mode` on): routine alerts go silent (low importance) while quiet; `pierce`
-  alerts sound (high-importance "Bedroom critical" channel). Decoupled `watch` (wrist) from `pierce`
-  (DND-bypass). Added a SEVERE air-quality tier (4 new threshold sensors CO2 2000 / PM2.5 100 / VOC
-  400 / NOx 200 → new `airqualitysevere` engine category) as the ONLY `pierce` alert — escalation-aware
-  (moderate routine nudge, then severe wake-up). One-time phone step: allow the "Bedroom critical"
-  channel through DND. Spec: `docs/superpowers/specs/2026-06-18-ha-dnd-aware-routing-design.md`.
-
-- HA night-time "got up" dim nightlight — done 2026-06-18: a new FIRST exception in
-  `script.bedroom_apply_natural` applies `scene.bedroom_nightlight` (warm amber 3%) instead of full
-  lighting when `input_boolean.bedroom_sleep_mode` is on OR it's 00:00–05:00 — so a presence
-  re-trigger on re-entering the dark room overnight doesn't blast you. Rides the existing
-  `bedroom_presence_on` → dispatcher path (no new trigger); ordered above the wake ramp (sleep_mode
-  is cleared + hour≥5 at wake time, so the ramp wins then). No spec doc (single-exception drop-in).
-
-- HA dynamic morning wake to the real alarm — done 2026-06-18: new `sensor.bedroom_wake_start`
-  (template timestamp = `sensor.pixel_watch_3_next_alarm − 15 min`, availability-gated to morning
-  alarms 03:00–11:00) is the single source of truth for the wake window. `bedroom_morning_reset`
-  now time-triggers `at: sensor.bedroom_wake_start` (+ a 09:00 fallback for no-alarm-day override
-  hygiene), and both `bedroom_apply_natural`'s morning exception and `bedroom_presence_on`'s window
-  read it — killing the triplicated 06:00/07:00 formula. Uses the WATCH alarm (per operator), not
-  the phone's. Template sensors now live in a copy'd `files/templates.yaml` (HA Jinja can't go in the
-  Ansible-templated `configuration.yaml.j2`). Spec:
-  `docs/superpowers/specs/2026-06-18-ha-dynamic-morning-wake-design.md`.
-
-- HA automatic bedtime / sleep routine — done 2026-06-18: `script.bedroom_bedtime` (shared by
-  `automation.bedroom_bedtime` off `binary_sensor.pixel_watch_3_bedtime_mode` + Tap Dial button-1
-  hold) engages `input_boolean.bedroom_sleep_mode` (a quiet fan cap), AL sleep mode, and
-  `scene.bedroom_nightlight`. **Fan stays temperature-responsive but quieter** — `bedroom_apply_fan`
-  caps the band to Low when sleep_mode is on (layered on the Medium night cap), NOT a frozen speed.
-  Charging deliberately not used (operator charges in-room). Morning reset unwinds sleep_mode + AL
-  sleep mode. Spec: `docs/superpowers/specs/2026-06-18-ha-bedtime-sleep-routine-design.md`. Wake
-  alarm will use `sensor.pixel_watch_3_next_alarm` (watch, not phone) when the morning-wake item lands.
-
-- HA humidity comfort alerts + unified threshold engine — done 2026-06-18: two one-sided humidity
-  `threshold` sensors (high `upper:60`, low `lower:30`) over `sensor.bedroom_airgradient_one_humidity`,
-  folded into a NEW unified `bedroom_threshold_alert` automation that **replaced** the separate
-  `bedroom_air_quality_alert` + `bedroom_battery_low_alert` (the "full unification" option). One
-  engine over three categories (air quality / battery / humidity), category encoded in the trigger
-  `id`, with a `cfg` map for the only per-category differences (title + whether to pulse the lights
-  — air quality only). Spec:
-  `docs/superpowers/specs/2026-06-18-ha-humidity-and-unified-threshold-alerts-design.md`. Humidity
-  thresholds join the ~2026-06-25 air-quality tuning pass.
-
-- HA home/away automations — done 2026-06-18: off `person.daniel` (HA person entity over the
-  Pixel tracker). `bedroom_away` (two-stage: `leave` at 10 min away, `failsafe` at 30 min) turns
-  off the bedroom lights + fan and notifies what was on; `bedroom_arrive_home` nudges the fan back
-  and re-checks lights if already in the room (no forced-on). The load-bearing work was gating
-  every on-path on `person.daniel == home` (`bedroom_fan_temperature`, `bedroom_presence_on`, and
-  the morning reset's direct `apply_fan`) so nothing switches on in an empty house; the override
-  booleans are never written by home/away logic. Spec:
-  `docs/superpowers/specs/2026-06-18-ha-home-away-automations-design.md`. Prereq for the
-  unexpected-occupancy tripwire item.
-
-- HA low-battery alerts — done 2026-06-18: `bedroom_battery_low_alert` notifies when the FP300 or
-  Tap Dial battery crosses ~15% (with a recovery notice on a fresh battery), via two lower-bound
-  `threshold` binary-sensors (`lower: 20, hysteresis: 5`) + one generic notify automation — a
-  near-exact twin of `bedroom_air_quality_alert`, notify-only (no light pulse). Anchored on off↔on
-  so an offline device (owned by the sensor-offline alert) can't false battery-alert. Spec:
-  `docs/superpowers/specs/2026-06-18-ha-low-battery-alerts-design.md`. Noted the refactor point:
-  unify air-quality + battery + future humidity into one threshold-alert engine.
-
-- HA sensor-offline alerts — done 2026-06-18: `bedroom_sensor_offline_alert` notifies when a
-  bedroom-automation dependency (AirGradient ONE, FP300, Tap Dial, DREO fan) goes `unavailable`
-  for 5 min, with a coalescing-tag recovery notice — a structural twin of the air-quality alert.
-  **Root finding:** the two battery Zigbee devices (FP300, Tap Dial) couldn't fail loudly because
-  Z2M availability was OFF (their entities never went `unavailable`); enabling
-  `availability.enabled: true` in the zigbee2mqtt role (passive timeout 60 min — battery radios
-  can't be actively pinged, so detection is ~hour-coarse, not minutes) is the load-bearing fix.
-  Spec: `docs/superpowers/specs/2026-06-18-ha-sensor-offline-alerts-design.md`. Scope added the
-  DREO fan beyond the original three. Out of scope (separate backlog items): DND/critical routing,
-  actionable buttons.
+- Bedroom Home Assistant automation suite — done 2026-06-18 (16 changes; full rationale in
+  `docs/superpowers/specs/2026-06-18-ha-*` + the home-assistant & zigbee2mqtt role `CLAUDE.md`):
+  - **Unified `bedroom_threshold_alert` engine** — one `cfg`-map-driven automation over air-quality
+    (4 pollutants + a SEVERE tier), battery, and humidity `threshold` sensors (replaced the separate
+    air-quality + battery automations).
+  - **`script.bedroom_notify`** — single cross-cutting notify layer: DND/sleep-aware channel +
+    importance (routine goes silent while quiet; `pierce` → high-importance "Bedroom critical"
+    channel that bypasses DND), `watch` mirroring to the Pixel Watch, and actionable buttons.
+  - **Reliability alerts:** sensor-offline (enabled Z2M `availability`), low-battery, humidity.
+  - **Presence & lighting:** home/away off `person.daniel` (every on-path gated on `== home`),
+    night-time "got up" dim nightlight, bedtime routine (quiet fan cap + AL sleep mode + nightlight),
+    dynamic morning wake off the **watch** alarm (`sensor.bedroom_wake_start`), and a
+    sleep-quality-aware gentler wake after a short night.
+  - **Security/maintenance:** unexpected-occupancy tripwire (watch + pierce), weekly
+    update-available digest (notify-only).
+  - **Fan:** smooth ~1-level-per-°F temperature curve (full 9 DREO levels); FP300 tuning
+    (mmwave / high sensitivity / 60 s absence delay) so sitting still at the desk no longer drops the lights.
+  - **Z2M device renames:** Lamp / Left Light / Right Light / Tap Dial / Aqara FP300 (entity_ids stay
+    IEEE-based; only the Tap Dial automation's raw MQTT topic moved).
 
 - Player stats for Terraria — done 2026-06-15: shipped the `terraria-stats` sidecar
   (Loki → SQLite → Prometheus → Grafana) tracking all-time per-player playtime, sessions,
