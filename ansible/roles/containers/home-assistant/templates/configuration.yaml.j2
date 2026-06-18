@@ -86,6 +86,21 @@ binary_sensor:
     entity_id: sensor.bedroom_airgradient_one_nox_index
     upper: 50                          # alerts >= 60, clears <= 40 (index)
     hysteresis: 10
+  # Low-battery thresholds — the LOWER-bound mirror of the air-quality ones above. A `lower`
+  # threshold is `on` (low) when value <= lower-hysteresis and `off` (recovered) when >= lower+
+  # hysteresis. Battery drain is monotonic (only jumps up on replacement), so flapping is a
+  # non-issue. Consumed by the bedroom_battery_low_alert automation (files/automations.yaml).
+  # Starting points — tune per device. Adding a battery = one block here + add it to the automation.
+  - platform: threshold
+    name: "Bedroom FP300 battery low"     # -> binary_sensor.bedroom_fp300_battery_low
+    entity_id: sensor.aqara_fp300_battery
+    lower: 20                             # alerts <= 15%, clears >= 25%
+    hysteresis: 5
+  - platform: threshold
+    name: "Bedroom Tap Dial battery low"  # -> binary_sensor.bedroom_tap_dial_battery_low
+    entity_id: sensor.0x001788010f0ccda4_battery
+    lower: 20                             # alerts <= 15%, clears >= 25%
+    hysteresis: 5
 
 http:
   use_x_forwarded_for: true

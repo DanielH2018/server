@@ -349,3 +349,61 @@
             message: "{{ name }} is reporting again"
             data:
               tag: "{{ tag }}"
+
+# Low-battery alert: a battery `threshold` binary-sensor (the LOWER-bound sensors in
+# configuration.yaml.j2) crossing into "low" sends a phone notification; a recovery notice fires
+# when a fresh battery clears it. A near-exact twin of bedroom_air_quality_alert — hysteresis lives
+# in the threshold sensors, the message is derived generically from the triggering sensor, and the
+# triggers anchor on off<->on (NOT unknown) so an HA restart while low doesn't re-alert and a
+# battery source going unavailable (device offline — owned by bedroom_sensor_offline_alert) can't
+# false-alert. No light pulse (low battery isn't urgent). Adding a battery = add one threshold
+# sensor in configuration.yaml.j2 + add its binary_sensor to BOTH trigger lists below.
+- id: bedroom_battery_low_alert
+  alias: Bedroom battery low alert
+  description: Notify when the FP300 or Tap Dial battery crosses low; recovery notice when a fresh battery clears it.
+  mode: queued
+  max: 10
+  trigger:
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_fp300_battery_low
+        - binary_sensor.bedroom_tap_dial_battery_low
+      from: "off"
+      to: "on"
+      for: "00:01:00"
+      id: low
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_fp300_battery_low
+        - binary_sensor.bedroom_tap_dial_battery_low
+      from: "on"
+      to: "off"
+      for: "00:01:00"
+      id: recovery
+  action:
+    # Derive everything from the triggering threshold sensor — its `entity_id` attribute points at
+    # its SOURCE battery sensor, so we read the live % from there and the device label from the
+    # threshold sensor's own friendly name.
+    - variables:
+        src: "{{ trigger.to_state.attributes.entity_id }}"
+        label: "{{ trigger.to_state.attributes.friendly_name | replace(' battery low', '') }}"
+        value: "{{ states(src) }}"
+        # Same tag for low + recovery → the recovery replaces the alert on the phone.
+        tag: "battery_low_{{ trigger.entity_id }}"
+    - choose:
+        - conditions: "{{ trigger.id == 'low' }}"
+          sequence:
+            - service: notify.mobile_app_pixel_9_pro
+              data:
+                title: "🔋 Battery low"
+                message: "{{ label }} battery at {{ value }}%"
+                data:
+                  tag: "{{ tag }}"
+      # off<->on edges only, so the remaining case (id == 'recovery') is the default.
+      default:
+        - service: notify.mobile_app_pixel_9_pro
+          data:
+            title: "🔋 Battery OK"
+            message: "{{ label }} battery back to {{ value }}%"
+            data:
+              tag: "{{ tag }}"

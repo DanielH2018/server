@@ -86,6 +86,19 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   `default(entity_id)` fallback). Battery-Zigbee offline detection is inherently coarse (~the Z2M
   passive timeout, 60 min), not minutes — a sleeping radio can't be pinged. Adding a watched device
   = add its entity to BOTH trigger lists.
+- **Low-battery alerts (since 2026-06-18).** The LOWER-bound mirror of the air-quality engine:
+  `configuration.yaml.j2` adds two `threshold` binary-sensors over the battery Zigbee devices
+  (`sensor.aqara_fp300_battery` → `binary_sensor.bedroom_fp300_battery_low`,
+  `sensor.0x001788010f0ccda4_battery` Tap Dial → `binary_sensor.bedroom_tap_dial_battery_low`),
+  each `lower: 20, hysteresis: 5` (alerts ≤15%, clears ≥25% — tunable). `bedroom_battery_low_alert`
+  (files/automations.yaml) is a near-exact twin of `bedroom_air_quality_alert`: off↔on triggers,
+  message derived from the triggering sensor's source/friendly-name, notify-only (no light pulse),
+  coalescing tag. Anchored on off↔on so a battery going `unavailable` (device offline, owned by
+  `bedroom_sensor_offline_alert`) can't false battery-alert. A `lower` threshold inverts the
+  hysteresis: on (low) at ≤lower−hyst, off at ≥lower+hyst; battery drain is monotonic so no
+  flapping. **These three threshold-driven alert automations (air-quality, battery, and the planned
+  humidity one) are the same skeleton** — once humidity lands, consider unifying into one
+  `bedroom_threshold_alert` engine (category→title/icon map, pulse gated to air-quality).
 - **Temperature → fan control (since 2026-06-18).** `script.bedroom_apply_fan` (in
   `files/scripts.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
   `sensor.bedroom_airgradient_one_temperature` (°F): off <72 / Low 72–74 / Medium 74–76 / High ≥76,

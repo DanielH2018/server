@@ -17,11 +17,6 @@ the Renovate dependency dashboard.
   Edit the config + redeploy `home-assistant`. Spec:
   `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
-- HA low-battery alerts — generic "any battery < ~15%" notifier for the battery Zigbee devices
-  (`sensor.aqara_fp300_battery`, the Tap Dial battery). **Reuses the air-quality alert pattern
-  exactly:** a lower-bound `threshold` binary-sensor per battery + one generic attribute-driven
-  notify automation — cheap and consistent with `bedroom_air_quality_alert`. (2026-06-18)
-
 - HA home/away automations — off `device_tracker.pixel_9_pro` (HA companion app GPS/Wi-Fi), a
   different layer than the FP300's *room* presence. Leave home → bedroom lights + fan off, and
   notify if something was left on; "nobody home for ~30 min" failsafe → all off. Must respect the
@@ -91,6 +86,14 @@ the Renovate dependency dashboard.
   real accuracy benefit. (2026-06-18)
 
 ## Superseded
+
+- HA low-battery alerts — done 2026-06-18: `bedroom_battery_low_alert` notifies when the FP300 or
+  Tap Dial battery crosses ~15% (with a recovery notice on a fresh battery), via two lower-bound
+  `threshold` binary-sensors (`lower: 20, hysteresis: 5`) + one generic notify automation — a
+  near-exact twin of `bedroom_air_quality_alert`, notify-only (no light pulse). Anchored on off↔on
+  so an offline device (owned by the sensor-offline alert) can't false battery-alert. Spec:
+  `docs/superpowers/specs/2026-06-18-ha-low-battery-alerts-design.md`. Noted the refactor point:
+  unify air-quality + battery + future humidity into one threshold-alert engine.
 
 - HA sensor-offline alerts — done 2026-06-18: `bedroom_sensor_offline_alert` notifies when a
   bedroom-automation dependency (AirGradient ONE, FP300, Tap Dial, DREO fan) goes `unavailable`
