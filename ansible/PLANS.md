@@ -40,11 +40,42 @@ the Renovate dependency dashboard.
   `upper` (range type → on when OUT of range), or two sensors. Fold the notify into the
   air-quality alert engine. (2026-06-18)
 
-- HA bedtime / sleep routine — one trigger (a Tap Dial button *hold*, a set time, or "phone
-  started charging after 22:00" via the companion app's charging sensor) → `scene.bedroom_nightlight`
-  + fan to a low/sleep speed + flip Adaptive Lighting into **sleep mode** (warmer/dimmer; AL exposes
-  a per-config `..._sleep_mode_bedroom` switch). Ties the subsystems into one "going to bed" action;
-  pair with clearing AL sleep mode at the morning wake. (2026-06-18)
+- HA automatic bedtime / sleep routine — fire the "going to bed" action automatically off real
+  phone signals: `binary_sensor.pixel_9_pro_is_charging` after ~22:00, Android
+  `sensor.pixel_9_pro_sleep_segment` / `_sleep_confidence`, or
+  `sensor.pixel_9_pro_do_not_disturb_sensor` turning on — with a Tap Dial button *hold* as a manual
+  fallback → `scene.bedroom_nightlight` + fan to a low/sleep speed + flip Adaptive Lighting into
+  **sleep mode** (`switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom`,
+  warmer/dimmer). Pair with clearing AL sleep mode at the morning wake. (2026-06-18)
+
+- HA dynamic morning wake to the real alarm — replace the dispatcher's hardcoded 06:00/07:00
+  wake-ramp window with one derived from `sensor.pixel_9_pro_next_alarm`, starting the 15-min
+  fade-up ahead of the actual alarm time. **Watch caveat:** that sensor reads the *phone's* alarm;
+  a Pixel Watch 3 alarm set on the watch won't surface — set the wake alarm in the phone's Google
+  Clock (it still rings on the watch) and confirm `sensor.pixel_9_pro_next_alarm` populates first.
+  Plugs into the morning-wake exception in `files/scripts.yaml` (single source of truth — keep the
+  `bedroom_presence_on` window template in sync). (2026-06-18)
+
+- HA night-time "got up" dim nightlight — between ~00:00–05:00, presence/PIR
+  (`binary_sensor.aqara_fp300_pir_detection` / `_presence`) → the warm dim `scene.bedroom_nightlight`
+  *instead* of full lighting, so a night trip doesn't blast you. Drops in as another time-based
+  exception in `script.bedroom_apply_natural` (above the morning-wake exception) — presence-on
+  already routes through the dispatcher. (2026-06-18)
+
+- HA distance-zoned lighting — use `sensor.aqara_fp300_target_distance` so full lighting only
+  engages when you're actually up and across the room (e.g. >1.5 m), staying dim while you're at/near
+  the bed. Refines `bedroom_presence_on` beyond binary on/off; tune the distance band against
+  observed values. (2026-06-18)
+
+- HA DND-aware notification routing — respect `sensor.pixel_9_pro_do_not_disturb_sensor`: hold or
+  soften *routine* alerts (air quality, humidity) while DND/asleep, but let *critical* ones (UPS,
+  sensor-offline) bypass via a high-priority Android notification channel (`data: {channel,
+  importance: high}` on `notify.mobile_app_pixel_9_pro`). A cross-cutting layer over every alert. (2026-06-18)
+
+- HA actionable notifications — add action buttons to existing/future alerts via the companion app
+  (`data: {actions: [...]}` + a `mobile_app_notification_action` event handler): air-quality alert →
+  "Turn on fan"; away alert → "Turn off lights"; low-battery → "Snooze". One tap instead of opening
+  the app. (2026-06-18)
 
 ## Superseded
 
