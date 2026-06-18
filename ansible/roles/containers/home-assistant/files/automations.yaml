@@ -169,6 +169,17 @@
     - if: "{{ trigger.id == 'alarm' and is_state('binary_sensor.aqara_fp300_presence', 'on') }}"
       then:
         - service: script.bedroom_apply_natural
+        # Sleep-quality note: "you slept N h" (gentler wake if <6h — apply_natural already softened
+        # the ramp peak to 30%). Skipped if sleep_duration is unknown/0 (Google Sleep API may lag).
+        - variables:
+            slept_h: "{{ (states('sensor.pixel_9_pro_sleep_duration') | float(0) / 60) | round(1) }}"
+        - if: "{{ slept_h > 0 }}"
+          then:
+            - service: script.bedroom_notify
+              data:
+                title: "{{ '😴 Short night' if slept_h < 6 else '☀️ Good morning' }}"
+                message: "You slept {{ slept_h }}h{{ ' — gentler wake.' if slept_h < 6 else '.' }}"
+                tag: sleep_morning
 
 # Unified threshold alert engine: ALL `threshold` binary-sensors in configuration.yaml.j2 (air
 # quality CO2/PM2.5/VOC/NOx + the SEVERE tier, battery FP300/Tap Dial, humidity high/low) feed this

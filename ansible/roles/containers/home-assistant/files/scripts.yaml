@@ -96,9 +96,14 @@ bedroom_apply_natural:
           sequence:
             - variables:
                 wake_elapsed: "{{ (now() - as_datetime(states('sensor.bedroom_wake_start'))).total_seconds() }}"
+                # Sleep-aware peak: after a short night (<6h slept) wake gentler to 30% instead of
+                # 50%. sleep_duration may lag (Google Sleep API finalizes around wake) — unknown/0
+                # falls back to the normal 50%. Only the peak changes; the window/transition don't.
+                sleep_min: "{{ states('sensor.pixel_9_pro_sleep_duration') | float(0) }}"
+                wake_peak: "{{ 30 if (0 < sleep_min < 360) else 50 }}"
             - service: script.bedroom_set_natural_brightness
               data:
-                brightness_pct: "{{ (1 + (50 - 1) * wake_elapsed / 900) | round(0) | int }}"
+                brightness_pct: "{{ (1 + (wake_peak - 1) * wake_elapsed / 900) | round(0) | int }}"
                 transition: "{{ (900 - wake_elapsed) | round(0) | int }}"
       # Default: full Adaptive Lighting — natural color AND brightness from the sun curve.
       default:

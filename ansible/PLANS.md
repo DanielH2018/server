@@ -17,11 +17,6 @@ the Renovate dependency dashboard.
   Edit the config + redeploy `home-assistant`. Spec:
   `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
-- HA sleep-quality-aware morning — read `sensor.pixel_9_pro_sleep_duration`; if you slept under ~6 h,
-  soften or slightly delay the wake ramp and add a "you slept N h" note. Hooks the dispatcher's
-  morning-wake exception in `files/scripts.yaml` (keep the `bedroom_presence_on` window template in
-  sync). Depends on the Pixel feeding Health Connect sleep data into HA. (2026-06-18)
-
 - HA AirGradient CO₂ calibration reminder — the SenseAir CO₂ sensor drifts; remind every few months to
   run `button.bedroom_airgradient_one_calibrate_co2_sensor`, ideally after the room's been aired to the
   ~400 ppm outdoor baseline. Keeps the air-quality alert thresholds honest. Hygiene — low excitement,
@@ -32,6 +27,13 @@ the Renovate dependency dashboard.
 - Rename Devices in Zigbee2MQTT
 
 ## Superseded
+
+- HA sleep-quality-aware morning — done 2026-06-18: the wake ramp softens after a short night —
+  `bedroom_apply_natural`'s morning exception peaks at 30% (vs 50%) when
+  `sensor.pixel_9_pro_sleep_duration` < 360 min (unknown/0 → normal 50%); `bedroom_morning_reset`
+  also sends a routine "you slept N h" note (😴/☀️). Chose soften over delay (one-variable change vs
+  shifting the wake-start sensor). Caveat: Google Sleep API may lag at alarm−15min (best-effort,
+  graceful fallback). Spec: `docs/superpowers/specs/2026-06-18-ha-sleep-quality-morning-design.md`.
 
 - HA unexpected-occupancy tripwire — done 2026-06-18: `automation.bedroom_unexpected_occupancy` —
   FP300 presence off→on (30s) while `person.daniel` away >5 min → security alert via `bedroom_notify`

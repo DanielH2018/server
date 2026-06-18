@@ -175,6 +175,14 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   overnight overrides (sleep mode, AL sleep, manual-off, fan-manual) on no-alarm days WITHOUT forcing
   lights; only the `alarm` trigger runs the ramp. **Uses the WATCH alarm** (`pixel_watch_3`), not the
   phone's (unreliable). Watch caveat moot now — set alarms anywhere; only morning ones wake.
+- **Sleep-quality-aware morning (since 2026-06-18).** The wake ramp adapts to how you slept: in
+  `bedroom_apply_natural`'s morning exception, `wake_peak` = 30% (gentler) if
+  `sensor.pixel_9_pro_sleep_duration` is `0 < x < 360` min (under 6h), else 50% — unknown/0 falls
+  back to 50%. `bedroom_morning_reset`'s alarm+present block also sends a routine "you slept N h"
+  note (😴 short night / ☀️ good morning), skipped if sleep_duration is 0/unknown. **Caveat:** the
+  Google Sleep API finalizes `sleep_duration` around wake, so at alarm−15min it can be stale —
+  best-effort (graceful fallback to a normal wake). Only the peak changes; the window/transition and
+  `presence_on` are untouched.
 - **Temperature → fan control (since 2026-06-18).** `script.bedroom_apply_fan` (in
   `files/scripts.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
   `sensor.bedroom_airgradient_one_temperature` (°F): off <72 / Low 72–74 / Medium 74–76 / High ≥76,
