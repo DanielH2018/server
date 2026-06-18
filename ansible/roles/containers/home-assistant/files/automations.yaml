@@ -726,3 +726,67 @@
           the AirGradient "Calibrate CO₂" button (Settings → Devices → AirGradient ONE). Current
           reading: {{ states('sensor.bedroom_airgradient_one_carbon_dioxide') }} ppm.
         tag: co2_calibration_reminder
+
+# UPS power-event alert: nothing else watches the UPS. Driven off the RAW NUT status flags
+# (sensor.apc_ups_status_data: "OL"=online, "OB"=on battery, "LB"=low battery, "CHRG"=charging) —
+# more reliable than the friendly status string. Triggers on every status_data change and derives the
+# edge from from_state/to_state, requiring BOTH sides valid (not unavailable) so the unavailable->OL
+# reconnect on every HA restart can't fire a spurious "Power restored" (the same startup-spam trap the
+# sensor-offline recovery hit). Three edges: newly on battery (outage), newly low battery (server may
+# shut down — pierce DND), and recovered (was on battery, mains back). One coalescing tag so the
+# lifecycle outage -> low battery -> restored replaces in place. Homelab-wide (no bedroom_ prefix) but
+# routes through the shared bedroom_notify layer, like the update digest.
+- id: ups_power_event
+  alias: UPS power event
+  description: Notify when the UPS goes on battery (outage), warn on low battery, and recover when mains returns.
+  mode: queued
+  max: 10
+  trigger:
+    - platform: state
+      entity_id: sensor.apc_ups_status_data
+  condition:
+    # Ignore unavailable<->value reconnect noise: only act on transitions between two real flag values.
+    - condition: template
+      value_template: >-
+        {{ trigger.to_state is not none and trigger.to_state.state not in ['unavailable', 'unknown']
+           and trigger.from_state is not none and trigger.from_state.state not in ['unavailable', 'unknown'] }}
+  action:
+    - variables:
+        prev: "{{ trigger.from_state.state }}"
+        cur: "{{ trigger.to_state.state }}"
+        was_ob: "{{ 'OB' in prev }}"
+        is_ob: "{{ 'OB' in cur }}"
+        was_lb: "{{ 'LB' in prev }}"
+        is_lb: "{{ 'LB' in cur }}"
+        charge: "{{ states('sensor.apc_ups_battery_charge') }}"
+        runtime_min: "{{ (states('sensor.apc_ups_battery_runtime') | float(0) / 60) | round }}"
+    - choose:
+        # Newly on battery — a power outage. Watch buzz; routine for DND (a brief blip shouldn't wake
+        # you; the low-battery escalation below is the can't-miss one).
+        - conditions: "{{ is_ob and not was_ob }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🔌 Power outage"
+                message: "UPS on battery ({{ charge }}% · ~{{ runtime_min }} min runtime)."
+                tag: ups_power
+                watch: true
+        # Newly low battery — runtime critical, the server may shut down imminently. Pierce DND.
+        - conditions: "{{ is_lb and not was_lb }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🪫 UPS low battery"
+                message: "Battery critical ({{ charge }}%) — server may shut down. ~{{ runtime_min }} min left."
+                tag: ups_power
+                watch: true
+                pierce: true
+        # Recovered — was on battery, mains is back (can only be a genuine OB->OL runtime transition,
+        # never the startup reconnect, because from_state must be a valid OB flag, not unavailable).
+        - conditions: "{{ was_ob and not is_ob }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "✅ Power restored"
+                message: "Mains power back; UPS online ({{ charge }}%)."
+                tag: ups_power
