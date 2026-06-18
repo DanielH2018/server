@@ -17,17 +17,6 @@ the Renovate dependency dashboard.
   Edit the config + redeploy `home-assistant`. Spec:
   `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
-- HA night-time "got up" dim nightlight — between ~00:00–05:00, presence/PIR
-  (`binary_sensor.aqara_fp300_pir_detection` / `_presence`) → the warm dim `scene.bedroom_nightlight`
-  *instead* of full lighting, so a night trip doesn't blast you. Drops in as another time-based
-  exception in `script.bedroom_apply_natural` (above the morning-wake exception) — presence-on
-  already routes through the dispatcher. (2026-06-18)
-
-- HA distance-zoned lighting — use `sensor.aqara_fp300_target_distance` so full lighting only
-  engages when you're actually up and across the room (e.g. >1.5 m), staying dim while you're at/near
-  the bed. Refines `bedroom_presence_on` beyond binary on/off; tune the distance band against
-  observed values. (2026-06-18)
-
 - HA DND-aware notification routing — respect `sensor.pixel_9_pro_do_not_disturb_sensor`: hold or
   soften *routine* alerts (air quality, humidity) while DND/asleep, but let *critical* ones (UPS,
   sensor-offline) bypass via a high-priority Android notification channel (`data: {channel,
@@ -63,6 +52,13 @@ the Renovate dependency dashboard.
 - Rename Devices in Zigbee2MQTT
 
 ## Superseded
+
+- HA night-time "got up" dim nightlight — done 2026-06-18: a new FIRST exception in
+  `script.bedroom_apply_natural` applies `scene.bedroom_nightlight` (warm amber 3%) instead of full
+  lighting when `input_boolean.bedroom_sleep_mode` is on OR it's 00:00–05:00 — so a presence
+  re-trigger on re-entering the dark room overnight doesn't blast you. Rides the existing
+  `bedroom_presence_on` → dispatcher path (no new trigger); ordered above the wake ramp (sleep_mode
+  is cleared + hour≥5 at wake time, so the ramp wins then). No spec doc (single-exception drop-in).
 
 - HA dynamic morning wake to the real alarm — done 2026-06-18: new `sensor.bedroom_wake_start`
   (template timestamp = `sensor.pixel_watch_3_next_alarm − 15 min`, availability-gated to morning

@@ -58,7 +58,10 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   `script.bedroom_apply_natural` sets the bedroom group to what it would be with no manual
   intervention RIGHT NOW: an ordered `choose:` of time-based **exceptions** (brightness overrides
   on AL's natural color) with **full Adaptive Lighting (color + brightness) as `default:`**. The
-  morning wake (1%→50% over the 15 min ENDING at the real alarm) is the first exception, its window
+  The FIRST exception is the night-time dim nightlight (`scene.bedroom_nightlight`) when
+  `bedroom_sleep_mode` is on OR it's 00:00–05:00 — so a presence re-trigger overnight doesn't blast
+  you (it wins over the wake ramp; at wake time sleep_mode is cleared and hour≥5, so it's false).
+  The morning wake (1%→50% over the 15 min ENDING at the real alarm) is the next exception, its window
   = `sensor.bedroom_wake_start .. +15 min` (dynamic — see the dynamic-wake bullet below), encoded
   as `brightness = 1+(50-1)·elapsed/900` over `transition = 900-elapsed` — so `elapsed=0` equals
   the wake's start and pressing button 4 mid-window *resumes* the ramp. **Both Tap Dial button 4
