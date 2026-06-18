@@ -17,11 +17,6 @@ the Renovate dependency dashboard.
   Edit the config + redeploy `home-assistant`. Spec:
   `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
-- HA home/away automations — off `device_tracker.pixel_9_pro` (HA companion app GPS/Wi-Fi), a
-  different layer than the FP300's *room* presence. Leave home → bedroom lights + fan off, and
-  notify if something was left on; "nobody home for ~30 min" failsafe → all off. Must respect the
-  `bedroom_manual_off` / `bedroom_fan_manual` overrides. (2026-06-18)
-
 - HA humidity comfort alerts — alert on `sensor.bedroom_airgradient_one_humidity` too HIGH
   (>~60%, mold) or too LOW (<~30%, winter-dry). **Design wrinkle:** humidity is *two-sided*, so a
   single `threshold` sensor (one bound) won't cover it — use a `threshold` with both `lower` and
@@ -86,6 +81,16 @@ the Renovate dependency dashboard.
   real accuracy benefit. (2026-06-18)
 
 ## Superseded
+
+- HA home/away automations — done 2026-06-18: off `person.daniel` (HA person entity over the
+  Pixel tracker). `bedroom_away` (two-stage: `leave` at 10 min away, `failsafe` at 30 min) turns
+  off the bedroom lights + fan and notifies what was on; `bedroom_arrive_home` nudges the fan back
+  and re-checks lights if already in the room (no forced-on). The load-bearing work was gating
+  every on-path on `person.daniel == home` (`bedroom_fan_temperature`, `bedroom_presence_on`, and
+  the morning reset's direct `apply_fan`) so nothing switches on in an empty house; the override
+  booleans are never written by home/away logic. Spec:
+  `docs/superpowers/specs/2026-06-18-ha-home-away-automations-design.md`. Prereq for the
+  unexpected-occupancy tripwire item.
 
 - HA low-battery alerts — done 2026-06-18: `bedroom_battery_low_alert` notifies when the FP300 or
   Tap Dial battery crosses ~15% (with a recovery notice on a fresh battery), via two lower-bound

@@ -96,6 +96,11 @@
     - condition: state
       entity_id: input_boolean.bedroom_manual_off
       state: "off"
+    # Only auto-light when someone is actually home — an FP300 radar false-positive must not
+    # light an empty house while away. The arrive nudge re-checks lights on return.
+    - condition: state
+      entity_id: person.daniel
+      state: "home"
     - condition: template
       value_template: >-
         {% set start = today_at('06:00') if now().weekday() < 5 else today_at('07:00') %}
@@ -141,11 +146,15 @@
     - service: input_boolean.turn_off
       target:
         entity_id: input_boolean.bedroom_manual_off
-    # Reset the FAN to automatic too (independent of presence) and apply the current band.
+    # Reset the FAN to automatic too (independent of presence). Only re-apply the band if home —
+    # this calls the fan script DIRECTLY, bypassing bedroom_fan_temperature's home gate, so without
+    # this guard 06:00/07:00 would turn the fan on in an empty house. The arrive nudge resumes it.
     - service: input_boolean.turn_off
       target:
         entity_id: input_boolean.bedroom_fan_manual
-    - service: script.bedroom_apply_fan
+    - if: "{{ is_state('person.daniel', 'home') }}"
+      then:
+        - service: script.bedroom_apply_fan
     - if: "{{ is_state('binary_sensor.aqara_fp300_presence', 'on') }}"
       then:
         # Gentle wake via the natural-state dispatcher: at 06:00/07:00 it computes elapsed=0,
@@ -240,6 +249,11 @@
     - condition: state
       entity_id: input_boolean.bedroom_fan_manual
       state: "off"
+    # Don't drive the fan when nobody's home — else it would re-run seconds after the away-sweep
+    # turns it off. The arrive nudge (bedroom_arrive_home) resumes it on return.
+    - condition: state
+      entity_id: person.daniel
+      state: "home"
   action:
     - service: script.bedroom_apply_fan
 
@@ -407,3 +421,73 @@
             message: "{{ label }} battery back to {{ value }}%"
             data:
               tag: "{{ tag }}"
+
+# Home/away: turn the bedroom off when you leave the HOUSE (person.daniel) — a different layer than
+# the FP300's ROOM presence. Two stages absorb GPS jitter: 'leave' at 10 min away, a 'failsafe'
+# re-sweep at 30 min. Triggering on from:"home" catches leaving to any away state (not_home or a
+# named zone); the `for:` cancels on an early return (mailbox/jitter bounce). Turn-off is
+# unconditional (leaving always allows off) and the override booleans are left UNTOUCHED (respecting
+# them = never writing them here). The fan/light on-paths are separately gated on person.daniel ==
+# home (bedroom_fan_temperature, bedroom_presence_on, the morning reset's fan apply) so nothing
+# turns back on while away. Known gap: an HA restart while already away misses these (from:"home"
+# needs a live transition) — the gates still prevent away-on, so it self-corrects.
+- id: bedroom_away
+  alias: Bedroom away
+  description: When you leave home (10 min) and as a 30-min failsafe, turn off the bedroom lights + fan and notify what was on.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: person.daniel
+      from: "home"
+      for: "00:10:00"
+      id: leave
+    - platform: state
+      entity_id: person.daniel
+      from: "home"
+      for: "00:30:00"
+      id: failsafe
+  action:
+    - variables:
+        on_items: >-
+          {{ (['lights'] if is_state('light.bedroom_lights', 'on') else [])
+           + (['fan'] if is_state('fan.tower_fan', 'on') else []) }}
+    - choose:
+        # Only act + notify when something is actually on — so the 30-min failsafe stays silent
+        # unless it caught something the 10-min leave missed (or that came on since).
+        - conditions: "{{ on_items | length > 0 }}"
+          sequence:
+            - service: light.turn_off
+              target:
+                entity_id: light.bedroom_lights
+            - service: fan.turn_off
+              target:
+                entity_id: fan.tower_fan
+            - service: notify.mobile_app_pixel_9_pro
+              data:
+                title: "🏠 Left on"
+                message: "Turned off bedroom {{ on_items | join(' + ') }} (you're away)"
+                data:
+                  tag: bedroom_away
+
+# Arrive home nudge: resume the gated automations promptly on return (person.daniel -> home). NOT a
+# welcome-home — never forces lights on. The fan resumes per the temperature band (unless the fan
+# override is on); lights only re-check if you're actually standing in the bedroom (FP300 present)
+# and haven't engaged the manual-off override — so arriving mid-day elsewhere in the house lights
+# nothing. Both routes go through the apply_* scripts, which honor the overrides internally.
+- id: bedroom_arrive_home
+  alias: Bedroom arrive home
+  description: On returning home, resume the fan per temperature and re-check lights if already in the bedroom.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: person.daniel
+      to: "home"
+  action:
+    - if: "{{ is_state('input_boolean.bedroom_fan_manual', 'off') }}"
+      then:
+        - service: script.bedroom_apply_fan
+    - if: >-
+        {{ is_state('binary_sensor.aqara_fp300_presence', 'on')
+           and is_state('input_boolean.bedroom_manual_off', 'off') }}
+      then:
+        - service: script.bedroom_apply_natural

@@ -41,6 +41,10 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   Presence-on's lux gate is window-aware: `in morning window OR illuminance < 50` — wake regardless
   of ambient light during the 15-min window, gate on darkness afterwards. That window template
   duplicates the dispatcher's morning exception (in `files/scripts.yaml`) — keep the two in sync.
+  **Verification gotcha:** an automation's `entity_id` derives from its `alias` (slugified) at
+  first creation, NOT its `id` — so `bedroom_fan_temperature` (id) is
+  `automation.bedroom_fan_temperature_control` (alias) in the state machine / recorder DB. Query by
+  the alias-slug, not the id, when checking whether an automation loaded.
 - **Adaptive Lighting is a HACS dependency (since 2026-06-18).** `configuration.yaml` declares
   `adaptive_lighting:` for the bedroom group; the integration code installs via HACS into
   `custom_components/adaptive_lighting/` (Kopia-backed, not templated — like `dreo`). Install it
@@ -99,6 +103,20 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   flapping. **These three threshold-driven alert automations (air-quality, battery, and the planned
   humidity one) are the same skeleton** — once humidity lands, consider unifying into one
   `bedroom_threshold_alert` engine (category→title/icon map, pulse gated to air-quality).
+- **Home/away automations (since 2026-06-18).** Off `person.daniel` (HA person entity over
+  `device_tracker.pixel_9_pro` GPS/Wi-Fi — a different layer than the FP300's ROOM presence).
+  `bedroom_away` (two triggers, both `from:"home"`: `leave` at `for:10m`, `failsafe` at `for:30m`)
+  turns off `light.bedroom_lights` + `fan.tower_fan` and notifies what was on; silent if nothing
+  was on. `bedroom_arrive_home` (`to:"home"`) nudges the fan back (via `script.bedroom_apply_fan`)
+  and re-checks lights only if FP300-present (no forced-on). **Load-bearing detail: every on-path
+  is gated on `person.daniel == home`** — `bedroom_fan_temperature` + `bedroom_presence_on` get a
+  `person home` condition, and `bedroom_morning_reset` wraps its DIRECT `apply_fan` call in
+  `if person home` (it bypasses the fan automation's gate). Miss any one and the fan/lights switch
+  on in an empty house. **Overrides (`bedroom_manual_off`/`bedroom_fan_manual`) are never written by
+  home/away logic** — leave-off is unconditional, arrive routes through the apply_* scripts which
+  read the overrides. Known gap: an HA restart while already away misses the `from:"home"` triggers
+  (no live transition); the gates still prevent away-on so it self-corrects. Prereq for the
+  unexpected-occupancy tripwire backlog item.
 - **Temperature → fan control (since 2026-06-18).** `script.bedroom_apply_fan` (in
   `files/scripts.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
   `sensor.bedroom_airgradient_one_temperature` (°F): off <72 / Low 72–74 / Medium 74–76 / High ≥76,
