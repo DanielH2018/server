@@ -27,7 +27,14 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   it recreates the container on the next deploy. **Note:** HA may rewrite parts of its
   own config via the UI, but this file is the Ansible source of truth and is
   overwritten on deploy — keep UI-managed config (integrations, etc.) in the areas HA
-  stores separately (`.storage/`, automations.yaml…), which are NOT templated.
+  stores separately (`.storage/`, the recorder DB…), which are NOT templated.
+- **Automations + scenes ARE templated (since 2026-06-18).** `files/automations.yaml` and
+  `files/scenes.yaml` are static files deployed by `ansible.builtin.copy` (NOT `template` —
+  HA automation YAML uses `{{ }}` Jinja that Ansible would try to render and fail; `copy`
+  ships them verbatim, no `{% raw %}` needed). Git is the source of truth; HA UI
+  automation/scene edits are overwritten on deploy. Both feed `common_config_changed`, so an
+  edit recreates HA (~120s). First automation: Hue Tap Dial (RDM002) drives the
+  `light.bedroom_lights` group (dial = brightness, buttons = toggle + 3 scenes).
 - **YAML dashboard + entity customization (templated).** `configuration.yaml` registers a YAML
   dashboard via `lovelace: dashboards:` (NOT the legacy top-level `mode: yaml` — deprecated,
   removed in HA 2026.8) pointing at `config/ui-lovelace.yaml` (`templates/ui-lovelace.yaml.j2`),

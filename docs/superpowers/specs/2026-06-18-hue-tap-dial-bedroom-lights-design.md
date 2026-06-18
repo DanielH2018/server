@@ -172,6 +172,21 @@ Adjust the static files to the verified entity_id / topic / payloads before depl
 - HA automation **Trace** shows the correct `choose` branch per event.
 - `uv run python scripts/probe.py health home-assistant` passes (container running + healthy).
 
+## Implementation deltas (verified 2026-06-18)
+
+Two things the live verification checkpoint corrected vs. the draft above. The canonical
+source is now `roles/containers/home-assistant/files/automations.yaml`:
+
+- **Grouping is a Home Assistant Light Group helper**, not a Z2M group (user built it in the
+  HA UI). Same entity_id `light.bedroom_lights`; HA fans out to the 3 bulbs as separate
+  commands rather than one Zigbee groupcast. Fine for 3 bulbs; revisit a Z2M group if fast
+  dial spins drift.
+- **Trigger reads the dial's JSON, not a `/action` subtopic.** Z2M runs default `output: json`,
+  so it publishes one blob per device. The dial was not renamed, so the topic is its IEEE
+  address: `zigbee2mqtt/0x001788010f0ccda4`, and branches test
+  `trigger.payload_json.action` (dial variants matched by substring via `| string` to be
+  null-safe on non-action state updates).
+
 ## Out of scope (future)
 
 - Air-quality-driven automations (AirGradient CO₂/PM → tint bulbs or notify).

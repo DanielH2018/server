@@ -5,6 +5,12 @@ default_config:
 homeassistant:
   customize: !include customize.yaml
 
+# Automations + scenes are Ansible-managed static files (role files/automations.yaml,
+# files/scenes.yaml), copied to ./config and version-controlled. The HA UI editors still
+# open, but edits are NOT persistent — git is the source of truth; redeploy to change.
+automation: !include automations.yaml
+scene: !include scenes.yaml
+
 http:
   use_x_forwarded_for: true
   # Trust the whole Docker bridge range (RFC1918 172.16/12) so HA honors

@@ -38,6 +38,25 @@
     path: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/dashboards"
     state: absent
 
+# Automations + scenes are shipped as STATIC files via copy (not template): HA automation
+# YAML uses {{ }} Jinja that Ansible's templater would try to render and fail. copy ships
+# them verbatim. Git is the source of truth; UI edits are overwritten on deploy.
+- name: Deploy automations from static file
+  tags: [config]
+  ansible.builtin.copy:
+    src: automations.yaml
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/automations.yaml"
+    mode: "0664"
+  register: home_assistant_automations
+
+- name: Deploy scenes from static file
+  tags: [config]
+  ansible.builtin.copy:
+    src: scenes.yaml
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/scenes.yaml"
+    mode: "0664"
+  register: home_assistant_scenes
+
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:
@@ -45,4 +64,4 @@
     tasks_from: docker_deploy.yml
   vars:
     # All three are bind-mounted templated configs — recreate so HA reloads them on edit.
-    common_config_changed: "{{ (home_assistant_config is changed) or (home_assistant_customize is changed) or (home_assistant_dashboard is changed) }}"
+    common_config_changed: "{{ (home_assistant_config is changed) or (home_assistant_customize is changed) or (home_assistant_dashboard is changed) or (home_assistant_automations is changed) or (home_assistant_scenes is changed) }}"

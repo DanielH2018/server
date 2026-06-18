@@ -1,0 +1,25 @@
+---
+# Managed by Ansible (roles/containers/home-assistant/files/scenes.yaml).
+# Source of truth — copied to ./config and overwritten on deploy. HA UI scene edits are
+# NOT persistent. To change a scene, edit this file and redeploy home-assistant.
+- id: bedroom_bright
+  name: Bedroom Bright
+  entities:
+    light.bedroom_lights:
+      state: "on"
+      color_temp_kelvin: 4000
+      brightness_pct: 100
+- id: bedroom_relax
+  name: Bedroom Relax
+  entities:
+    light.bedroom_lights:
+      state: "on"
+      color_temp_kelvin: 2700
+      brightness_pct: 40
+- id: bedroom_nightlight
+  name: Bedroom Nightlight
+  entities:
+    light.bedroom_lights:
+      state: "on"
+      rgb_color: [255, 140, 40]
+      brightness_pct: 3

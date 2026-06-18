@@ -1,0 +1,55 @@
+---
+# Managed by Ansible (roles/containers/home-assistant/files/automations.yaml).
+# Source of truth — copied to ./config and overwritten on deploy. HA UI automation edits
+# are NOT persistent. To change, edit this file and run:
+#   uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"
+#
+# Trigger topic is the Hue Tap Dial's (RDM002) IEEE address — Z2M publishes one JSON blob
+# per device on zigbee2mqtt/<friendly_name> (default output: json), so we read .action from
+# the payload. If the dial is later renamed in Z2M, update the topic to the new name.
+- id: bedroom_tap_dial_control
+  alias: Bedroom Tap Dial control
+  description: Hue Tap Dial (RDM002, 0x001788010f0ccda4) controls the Bedroom Lights group.
+  mode: queued
+  max: 10
+  trigger:
+    - platform: mqtt
+      topic: zigbee2mqtt/0x001788010f0ccda4
+  action:
+    - choose:
+        - conditions: "{{ trigger.payload_json.action == 'button_1_press' }}"
+          sequence:
+            - service: light.toggle
+              target:
+                entity_id: light.bedroom_lights
+        - conditions: "{{ trigger.payload_json.action == 'button_2_press' }}"
+          sequence:
+            - service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_bright
+        - conditions: "{{ trigger.payload_json.action == 'button_3_press' }}"
+          sequence:
+            - service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_relax
+        - conditions: "{{ trigger.payload_json.action == 'button_4_press' }}"
+          sequence:
+            - service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_nightlight
+        - conditions: "{{ 'dial_rotate_right' in (trigger.payload_json.action | string) }}"
+          sequence:
+            - service: light.turn_on
+              target:
+                entity_id: light.bedroom_lights
+              data:
+                brightness_step_pct: 12
+                transition: 0.2
+        - conditions: "{{ 'dial_rotate_left' in (trigger.payload_json.action | string) }}"
+          sequence:
+            - service: light.turn_on
+              target:
+                entity_id: light.bedroom_lights
+              data:
+                brightness_step_pct: -12
+                transition: 0.2
