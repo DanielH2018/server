@@ -7,12 +7,7 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- AirGradient air-quality automations — use the `airgradient` integration (CO₂, PM1/2.5/10,
-  TVOC/NOx) to drive the bedroom bulbs (e.g. tint red on high CO₂/PM) and/or push a phone
-  notification. Reuse the existing `light.bedroom_lights` group + scenes; respect the
-  `input_boolean.bedroom_manual_off` override and avoid fighting Adaptive Lighting (likely use a
-  distinct alert scene/flash rather than a steady color). Brainstorm → spec/plan when picked up.
-  (2026-06-18)
+- (empty)
 
 ## Superseded
 
