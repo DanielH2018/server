@@ -75,6 +75,7 @@ the Renovate dependency dashboard.
   real accuracy benefit. (2026-06-18)
 
 - If I sit at my desk for a while, the lights turn off, please try to tune it to lessen that happening.
+- Smooth out Fan curve for temperature(Currently goes in steps of 2)
 
 ## Superseded
 
