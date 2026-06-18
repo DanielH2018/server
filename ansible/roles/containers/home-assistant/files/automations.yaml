@@ -17,6 +17,10 @@
       topic: zigbee2mqtt/0x001788010f0ccda4
   action:
     - choose:
+        # Button 1 HOLD = bedtime / sleep routine — the manual fallback for phone Bedtime mode.
+        - conditions: "{{ trigger.payload_json.action == 'button_1_hold' }}"
+          sequence:
+            - service: script.bedroom_bedtime
         # Button 1 = smart toggle. Turning the group OFF here engages the manual-off override
         # (presence won't re-on); turning it ON clears the override (back to auto).
         - conditions: "{{ trigger.payload_json.action == 'button_1_press' }}"
@@ -152,6 +156,14 @@
     - service: input_boolean.turn_off
       target:
         entity_id: input_boolean.bedroom_fan_manual
+    # End sleep mode (quiet fan cap) + Adaptive Lighting sleep mode, BEFORE the re-applies below, so
+    # the fan recomputes without the Low cap and the wake ramp runs on AL's normal (non-sleep) curve.
+    - service: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.bedroom_sleep_mode
+    - service: switch.turn_off
+      target:
+        entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
     - if: "{{ is_state('person.daniel', 'home') }}"
       then:
         - service: script.bedroom_apply_fan
@@ -495,3 +507,23 @@
            and is_state('input_boolean.bedroom_manual_off', 'off') }}
       then:
         - service: script.bedroom_apply_natural
+
+# Bedtime: when the phone's Bedtime mode turns on (surfaced by the Pixel Watch companion app) while
+# home, run the sleep routine (script.bedroom_bedtime: quiet fan cap + AL sleep mode + nightlight).
+# The Tap Dial button-1 hold (in bedroom_tap_dial_control) is the manual fallback. Gated on home so
+# it never sets the room up for sleep — or switches the fan on — while away. The morning reset
+# unwinds it. Charging is deliberately NOT a trigger (the operator charges in-room at a desk).
+- id: bedroom_bedtime
+  alias: Bedroom bedtime
+  description: When phone Bedtime mode turns on while home, run the bedtime/sleep routine.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.pixel_watch_3_bedtime_mode
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: person.daniel
+      state: "home"
+  action:
+    - service: script.bedroom_bedtime

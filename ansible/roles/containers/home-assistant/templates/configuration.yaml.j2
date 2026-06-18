@@ -25,6 +25,11 @@ input_boolean:
   bedroom_fan_manual:
     name: Bedroom fan manual override
     icon: mdi:fan-off
+  # Sleep mode. Set by the bedtime routine (script.bedroom_bedtime); caps bedroom_apply_fan to Low
+  # for a quiet night (still temperature-responsive, NOT frozen). Cleared by the morning reset.
+  bedroom_sleep_mode:
+    name: Bedroom sleep mode
+    icon: mdi:power-sleep
 
 # Helper: the fan LEVEL script.bedroom_apply_fan last commanded (0-9). bedroom_fan_manual_detect
 # ignores a fan change whose level matches this (= our own command's cloud echo) and only flags a

@@ -17,14 +17,6 @@ the Renovate dependency dashboard.
   Edit the config + redeploy `home-assistant`. Spec:
   `docs/superpowers/specs/2026-06-18-bedroom-air-quality-alerts-design.md`. (2026-06-18)
 
-- HA automatic bedtime / sleep routine — fire the "going to bed" action automatically off real
-  phone signals: `binary_sensor.pixel_9_pro_is_charging` after ~22:00, Android
-  `sensor.pixel_9_pro_sleep_segment` / `_sleep_confidence`, or
-  `sensor.pixel_9_pro_do_not_disturb_sensor` turning on — with a Tap Dial button *hold* as a manual
-  fallback → `scene.bedroom_nightlight` + fan to a low/sleep speed + flip Adaptive Lighting into
-  **sleep mode** (`switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom`,
-  warmer/dimmer). Pair with clearing AL sleep mode at the morning wake. (2026-06-18)
-
 - HA dynamic morning wake to the real alarm — replace the dispatcher's hardcoded 06:00/07:00
   wake-ramp window with one derived from `sensor.pixel_9_pro_next_alarm`, starting the 15-min
   fade-up ahead of the actual alarm time. **Watch caveat:** that sensor reads the *phone's* alarm;
@@ -76,8 +68,18 @@ the Renovate dependency dashboard.
 
 - If I sit at my desk for a while, the lights turn off, please try to tune it to lessen that happening.
 - Smooth out Fan curve for temperature(Currently goes in steps of 2)
+- Rename Devices in Zigbee2MQTT
 
 ## Superseded
+
+- HA automatic bedtime / sleep routine — done 2026-06-18: `script.bedroom_bedtime` (shared by
+  `automation.bedroom_bedtime` off `binary_sensor.pixel_watch_3_bedtime_mode` + Tap Dial button-1
+  hold) engages `input_boolean.bedroom_sleep_mode` (a quiet fan cap), AL sleep mode, and
+  `scene.bedroom_nightlight`. **Fan stays temperature-responsive but quieter** — `bedroom_apply_fan`
+  caps the band to Low when sleep_mode is on (layered on the Medium night cap), NOT a frozen speed.
+  Charging deliberately not used (operator charges in-room). Morning reset unwinds sleep_mode + AL
+  sleep mode. Spec: `docs/superpowers/specs/2026-06-18-ha-bedtime-sleep-routine-design.md`. Wake
+  alarm will use `sensor.pixel_watch_3_next_alarm` (watch, not phone) when the morning-wake item lands.
 
 - HA humidity comfort alerts + unified threshold engine — done 2026-06-18: two one-sided humidity
   `threshold` sensors (high `upper:60`, low `lower:30`) over `sensor.bedroom_airgradient_one_humidity`,

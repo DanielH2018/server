@@ -113,6 +113,19 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions.
   read the overrides. Known gap: an HA restart while already away misses the `from:"home"` triggers
   (no live transition); the gates still prevent away-on so it self-corrects. Prereq for the
   unexpected-occupancy tripwire backlog item.
+- **Bedtime / sleep routine (since 2026-06-18).** `script.bedroom_bedtime` (the shared "going to
+  sleep" action) engages `input_boolean.bedroom_sleep_mode` (a quiet fan cap), flips AL into sleep
+  mode (`switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom`, warm/dim), sets
+  `scene.bedroom_nightlight` (amber 3%), and re-applies the fan. Triggered by `automation.bedroom_bedtime`
+  off `binary_sensor.pixel_watch_3_bedtime_mode` → on (gated `person.daniel == home`), with **Tap
+  Dial button-1 HOLD** as the manual fallback (`bedroom_tap_dial_control`). **Charging is deliberately
+  NOT a trigger** (operator charges in-room). **Fan stays temperature-responsive, just quieter:**
+  `bedroom_apply_fan` caps the band to Low (1) when `bedroom_sleep_mode` is on — layered on the
+  existing 22:00–06:00 Medium (2) night cap, via `cap = 1 if sleep else (2 if night else 3)`; it does
+  NOT freeze the fan. `bedroom_morning_reset` unwinds both sleep_mode + AL sleep mode before its fan/
+  light re-applies (later moves to the watch-alarm wake). Phone bedtime/sleep sensors (DND,
+  sleep_confidence, next_alarm) are now enabled in the companion app; the watch exposes
+  `sensor.pixel_watch_3_next_alarm` (the real wake alarm) + `notify.pixel_watch_3`.
 - **Temperature → fan control (since 2026-06-18).** `script.bedroom_apply_fan` (in
   `files/scripts.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
   `sensor.bedroom_airgradient_one_temperature` (°F): off <72 / Low 72–74 / Medium 74–76 / High ≥76,
