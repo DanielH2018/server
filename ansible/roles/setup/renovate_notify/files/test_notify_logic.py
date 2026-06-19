@@ -95,3 +95,59 @@ def test_actionable_keeps_stuck_and_manual_drops_ontrack():
     ]
     out = nl.actionable(prs)
     assert [(pr.number, b) for pr, b in out] == [(8, "stuck"), (9, "manual")]
+
+
+# --- fingerprint ---
+def test_fingerprint_is_sorted_and_stable():
+    a = [(_pr(number=9), "manual"), (_pr(number=8), "stuck")]
+    b = [(_pr(number=8), "stuck"), (_pr(number=9), "manual")]
+    assert nl.fingerprint(a) == nl.fingerprint(b) == "#8:stuck,#9:manual"
+
+
+def test_fingerprint_empty_is_blank():
+    assert nl.fingerprint([]) == ""
+
+
+# --- should_notify ---
+def test_should_notify_unchanged_is_silent():
+    assert nl.should_notify("#8:stuck", "#8:stuck") == (False, "none")
+
+
+def test_should_notify_new_backlog_is_digest():
+    assert nl.should_notify("", "#8:stuck") == (True, "digest")
+
+
+def test_should_notify_changed_backlog_is_digest():
+    assert nl.should_notify("#8:stuck", "#8:stuck,#9:manual") == (True, "digest")
+
+
+def test_should_notify_cleared_when_now_empty():
+    assert nl.should_notify("#8:stuck", "") == (True, "cleared")
+
+
+def test_should_notify_empty_to_empty_is_silent():
+    assert nl.should_notify("", "") == (False, "none")
+
+
+# --- render_digest ---
+def test_render_digest_groups_and_links():
+    items = [
+        (_pr(number=8, title="container images", url="http://x/8",
+             automerge=True, ci="failure"), "stuck"),
+        (_pr(number=9, title="community.sops", url="http://x/9",
+             automerge=False, ci="success"), "manual"),
+    ]
+    msg = nl.render_digest(items)
+    assert "2 PR(s) need attention" in msg
+    assert "#8 container images" in msg
+    assert "http://x/8" in msg
+    assert "Awaiting your merge" in msg
+    assert "#9 community.sops" in msg
+
+
+def test_render_digest_truncates_and_counts_overflow():
+    items = [(_pr(number=i, title="x" * 80, url="http://x/%d" % i,
+                  automerge=False, ci="success"), "manual") for i in range(60)]
+    msg = nl.render_digest(items, limit=600)
+    assert len(msg) <= 600
+    assert "more" in msg

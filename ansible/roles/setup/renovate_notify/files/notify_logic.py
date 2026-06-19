@@ -68,3 +68,66 @@ def actionable(prs: list[PR]) -> list[tuple[PR, str]]:
         if bucket in ("stuck", "manual"):
             out.append((pr, bucket))
     return out
+
+
+CLEARED_MSG = "✅ Renovate backlog cleared — nothing needs your attention."
+
+_BUCKET_ORDER = ("stuck", "manual")
+_BUCKET_HEADER = {
+    "stuck": "🔧 Stuck (should auto-merge, can't):",
+    "manual": "✋ Awaiting your merge (merging → auto-deploys, health-gated, ≤30 min):",
+}
+
+
+def fingerprint(items: list[tuple[PR, str]]) -> str:
+    return ",".join(sorted("#%d:%s" % (pr.number, bucket) for pr, bucket in items))
+
+
+def should_notify(prev_fp: str, cur_fp: str) -> tuple[bool, str]:
+    if cur_fp == prev_fp:
+        return False, "none"
+    if cur_fp == "":
+        return True, "cleared"
+    return True, "digest"
+
+
+def _pr_note(pr: PR) -> str:
+    if pr.conflicting:
+        return "⚠️ conflicting"
+    if pr.ci == "failure":
+        return "❌ CI failing"
+    if pr.ci == "pending":
+        return "⏳ CI pending"
+    return "✅ green"
+
+
+def render_digest(items: list[tuple[PR, str]], limit: int = 1900) -> str:
+    total = len(items)
+    head = "📦 Renovate — %d PR(s) need attention" % total
+    # Build per-PR entries in bucket order; add as many as fit, count the remainder.
+    entries: list[tuple[str, list[str]]] = []  # (bucket_header, [lines]) groups
+    for bucket in _BUCKET_ORDER:
+        group = [(pr) for pr, b in items if b == bucket]
+        if not group:
+            continue
+        lines = []
+        for pr in group:
+            lines.append(" • #%d %s — %s" % (pr.number, pr.title, _pr_note(pr)))
+            lines.append("   %s" % pr.url)
+        entries.append((_BUCKET_HEADER[bucket], lines))
+
+    out = [head, ""]
+    shown = 0
+    truncated = False
+    for header, lines in entries:
+        block = [header] + lines + [""]
+        # +len for a possible "…and N more" tail keeps us safely under the limit.
+        if len("\n".join(out + block)) > limit - 20:
+            truncated = True
+            break
+        out += block
+        shown += len(lines) // 2
+    msg = "\n".join(out).rstrip()
+    if truncated and shown < total:
+        msg += "\n…and %d more" % (total - shown)
+    return msg
