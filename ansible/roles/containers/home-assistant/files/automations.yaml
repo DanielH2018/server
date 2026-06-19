@@ -100,12 +100,9 @@
           sequence:
             - service: script.bedroom_exit_sleep
             # Clearing AL sleep mode makes Adaptive Lighting self-on the lights — but this is the FAN
-            # button, so respect the lux gate (same condition as bedroom_presence_on / _gated): turn
-            # them back off unless it's dark enough, or in the morning wake window, to warrant light.
-            - if: >-
-                {% set ws = states('sensor.bedroom_wake_start') %}
-                {% set in_window = ws not in ['unknown', 'unavailable'] and timedelta(0) <= (now() - as_datetime(ws)) < timedelta(minutes=15) %}
-                {{ not (in_window or (states('sensor.aqara_fp300_illuminance') | float(9999) < 50)) }}
+            # button, so respect the shared lux gate (binary_sensor.bedroom_auto_light_allowed): turn
+            # them back off when it's NOT dark enough / not the wake window to warrant light.
+            - if: "{{ is_state('binary_sensor.bedroom_auto_light_allowed', 'off') }}"
               then:
                 - service: light.turn_off
                   target:
@@ -182,11 +179,10 @@
     - condition: state
       entity_id: binary_sensor.aqara_fp300_presence
       state: "on"
-    - condition: template
-      value_template: >-
-        {% set ws = states('sensor.bedroom_wake_start') %}
-        {% set in_window = ws not in ['unknown', 'unavailable'] and timedelta(0) <= (now() - as_datetime(ws)) < timedelta(minutes=15) %}
-        {{ in_window or (states('sensor.aqara_fp300_illuminance') | float(9999) < 50) }}
+    # Dark enough — or in the morning wake window — to auto-light (shared gate, templates.yaml).
+    - condition: state
+      entity_id: binary_sensor.bedroom_auto_light_allowed
+      state: "on"
   action:
     - service: script.bedroom_apply_natural
 

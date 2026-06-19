@@ -72,10 +72,13 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `brightness_step_*` no-ops. Presence
   (FP300) + an `input_boolean` manual-off override + an alarm-driven morning reset live in the
   same file; `bedroom_presence_on` and the morning reset BOTH call `script.bedroom_apply_natural`.
-  Presence-on's lux gate is window-aware: `in morning window OR illuminance < 50` — wake regardless
-  of ambient light during the 15-min window, gate on darkness afterwards. The window now reads
-  `sensor.bedroom_wake_start` (the shared dynamic-wake source — see below), the SAME sensor the
-  dispatcher's morning exception uses, so the two are inherently in sync (no duplicated formula).
+  The lux gate is window-aware (`in morning window OR illuminance < 50` — wake regardless of ambient
+  light during the 15-min window, gate on darkness afterwards) and lives in ONE place:
+  `binary_sensor.bedroom_auto_light_allowed` (templates.yaml). `bedroom_presence_on` (its darkness
+  condition), `bedroom_apply_natural_gated`, and the Tap Dial Button-4 sleep-exit all reference that
+  sensor — tune the 50-lux threshold / window there, once. The window reads `sensor.bedroom_wake_start`
+  (the shared dynamic-wake source — see below), the SAME sensor the dispatcher's morning exception uses,
+  so the two are inherently in sync (no duplicated formula).
   **Verification gotcha:** an automation's `entity_id` derives from its `alias` (slugified) at
   first creation, NOT its `id` — so `bedroom_fan_temperature` (id) is
   `automation.bedroom_fan_temperature_control` (alias) in the state machine / recorder DB. Query by

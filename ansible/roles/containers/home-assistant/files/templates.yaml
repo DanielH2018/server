@@ -21,3 +21,16 @@
         {{ na not in ['unknown', 'unavailable', 'none', ''] and 3 <= (as_datetime(na) | as_local).hour < 11 }}
       state: >-
         {{ (as_datetime(states('sensor.pixel_watch_3_next_alarm')) - timedelta(minutes=15)).isoformat() }}
+
+# Auto-light gate: the SINGLE source of truth for "is it dark enough (or the morning wake window) to
+# put the bedroom lights on automatically" — illuminance < 50 OR inside the wake window
+# [wake_start, +15min]. Referenced by bedroom_presence_on (its darkness condition),
+# bedroom_apply_natural_gated, and the Tap Dial Button-4 sleep-exit (which checks it `off` to suppress
+# Adaptive Lighting's self-on in a bright room). Tune the 50-lux threshold / window here, in ONE place.
+- binary_sensor:
+    - name: "Bedroom auto-light allowed"
+      unique_id: bedroom_auto_light_allowed
+      state: >-
+        {% set ws = states('sensor.bedroom_wake_start') %}
+        {% set in_window = ws not in ['unknown', 'unavailable'] and timedelta(0) <= (now() - as_datetime(ws)) < timedelta(minutes=15) %}
+        {{ in_window or (states('sensor.aqara_fp300_illuminance') | float(9999) < 50) }}

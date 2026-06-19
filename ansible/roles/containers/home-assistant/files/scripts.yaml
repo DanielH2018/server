@@ -125,19 +125,17 @@ bedroom_apply_natural:
             turn_on_lights: true
             transition: 1
 
-# Gated dispatcher: apply the natural lighting state ONLY if the darkness gate allows (in the
-# morning wake window OR illuminance < 50) — otherwise turn the lights OFF, i.e. produce the same
-# outcome the automatic presence path would. Used by the Tap Dial button-1 HOLD ("reset to auto");
-# the manual taps call the ungated bedroom_apply_natural directly. The gate expression mirrors
-# bedroom_presence_on's condition (the one other place it lives).
+# Gated dispatcher: apply the natural lighting state ONLY if the shared darkness gate allows
+# (binary_sensor.bedroom_auto_light_allowed = wake window OR illuminance < 50, defined in
+# templates.yaml) — otherwise turn the lights OFF, i.e. produce the same outcome the automatic presence
+# path would. Used by the Tap Dial button-1 HOLD ("reset to auto"); the manual taps call the ungated
+# bedroom_apply_natural directly. The gate lives in ONE place now (that binary_sensor), shared with
+# bedroom_presence_on and the Button-4 sleep-exit.
 bedroom_apply_natural_gated:
   alias: "Bedroom — apply natural lighting, lux-gated"
   mode: restart
   sequence:
-    - if: >-
-        {% set ws = states('sensor.bedroom_wake_start') %}
-        {% set in_window = ws not in ['unknown', 'unavailable'] and timedelta(0) <= (now() - as_datetime(ws)) < timedelta(minutes=15) %}
-        {{ in_window or (states('sensor.aqara_fp300_illuminance') | float(9999) < 50) }}
+    - if: "{{ is_state('binary_sensor.bedroom_auto_light_allowed', 'on') }}"
       then:
         - service: script.bedroom_apply_natural
       else:
