@@ -102,12 +102,20 @@
 # (inherently in sync, no duplicated formula).
 - id: bedroom_presence_on
   alias: Bedroom presence on
-  description: When the room becomes occupied, set the lights to their natural state (unless overridden); gate on darkness outside the morning wake window.
+  description: Set the lights to their natural state when the room becomes occupied OR when it darkens past the lux gate while you're already present (unless overridden); gated on darkness outside the morning wake window.
   mode: single
   trigger:
+    # Two ways in: you arrive (presence off->on), OR the room dims past the gate while you're
+    # already here (illuminance crossing below 50). The latter closes an edge-vs-level gap —
+    # entering while it was still bright used to leave you in the dark as dusk fell, since the
+    # only trigger was the arrival edge. The `for:` rides out transient lux dips (a passing shadow).
     - platform: state
       entity_id: binary_sensor.aqara_fp300_presence
       to: "on"
+    - platform: numeric_state
+      entity_id: sensor.aqara_fp300_illuminance
+      below: 50
+      for: "00:00:30"
   condition:
     - condition: state
       entity_id: input_boolean.bedroom_manual_off
@@ -117,6 +125,12 @@
     - condition: state
       entity_id: person.daniel
       state: "home"
+    # Require the room to actually be occupied — the lux trigger can fire as dusk falls on an
+    # EMPTY room, and presence-based lighting must never light a room nobody's in. (No-op for the
+    # arrival edge, where presence is on by definition.)
+    - condition: state
+      entity_id: binary_sensor.aqara_fp300_presence
+      state: "on"
     - condition: template
       value_template: >-
         {% set ws = states('sensor.bedroom_wake_start') %}

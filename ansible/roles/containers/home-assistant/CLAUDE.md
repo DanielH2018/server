@@ -70,6 +70,15 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   re-pair): `presence_detection_options: mmwave` (radar-only — holds a stationary person; PIR sees
   only motion), `motion_sensitivity: high`, `absence_delay_timer: 60` (sec; was 10, range 10–300 —
   the hold-vs-prompt knob). `bedroom_absence_off` stays at 1 min; bump it if drops persist.
+  **FP300 fan false-HOLD (2026-06-18, the mirror-image fix):** the above hold-harder tuning
+  over-corrected — the high-sensitivity mmwave radar read the **running tower fan's** moving air as a
+  permanent occupant, so `presence` stuck `true` in an empty room (15+ min observed) and
+  `bedroom_absence_off` never fired → lights stayed on. Confirmed by experiment: fan OFF → `presence`
+  cleared to `false` 72s later (= the 60s `absence_delay_timer`). Fixed via another Z2M **device
+  setting** (same `mosquitto_pub .../Aqara FP300/set`, NOT templated, re-apply after a re-pair):
+  `ai_interference_source_selfidentification: ON` — Aqara's purpose-built interference rejection;
+  keeps `motion_sensitivity: high` so the desk-sitting fix survives. The dog is NOT a factor (an
+  mmwave radar does see a pet as presence, but the room was confirmed pet-free during the incident).
 - **Adaptive Lighting is a HACS dependency (since 2026-06-18).** `configuration.yaml` declares
   `adaptive_lighting:` for the bedroom group; the integration code installs via HACS into
   `custom_components/adaptive_lighting/` (Kopia-backed, not templated — like `dreo`). Install it
