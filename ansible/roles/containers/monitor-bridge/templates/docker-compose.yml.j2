@@ -107,9 +107,15 @@ services:
       - HA_TOKEN={{ monitor_bridge_ha_token }}
       - HA_HEARTBEAT_MAX_AGE=300
       - KUMA_PUSH_HA={{ monitor_bridge_ha_push_token }}
+      # Renovate manual-action notifier liveness: renovate_notify.py writes last_run on the
+      # host (daily timer); bind-mounted read-only at /renovate-state. 36h = one missed run + slack.
+      - RENOVATE_STATE_DIR=/renovate-state
+      - RENOVATE_MAX_AGE_MIN=2160
+      - KUMA_PUSH_RENOVATE_ALIVE={{ monitor_bridge_renovate_alive_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
+      - /var/lib/renovate-notify:/renovate-state:ro
       - /var/lib/kopia-restore-drill:/restore-drill:ro
       - /var/lib/kopia-b2-usage:/b2-usage:ro
     {{ service_networks() }}
@@ -143,6 +149,7 @@ services:
       {# HA automation-engine liveness: check_ha_heartbeat polls the HA heartbeat helper's freshness
          over `apps`. interval 600s (2× the 300s loop), max_retries=0 like every bridge push monitor. -#}
       {{ kuma('monitor-bridge-ha', monitor_type='push', name='Home Assistant Automations', interval=600, max_retries=0, push_token=monitor_bridge_ha_push_token) }}
+      {{ kuma('renovate-notify-alive', monitor_type='push', name='Renovate Notifier — Alive', interval=600, max_retries=0, push_token=monitor_bridge_renovate_alive_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 
