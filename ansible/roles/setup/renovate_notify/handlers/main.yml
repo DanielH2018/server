@@ -1,0 +1,13 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+# Kick one run on first install / whenever the script, config, or units change, so
+# activation is fully IaC and posts the current backlog once. Steady-state is timer-driven.
+- name: Run renovate-notify once
+  ansible.builtin.systemd:
+    name: renovate-notify.service
+    state: started
+  become: true

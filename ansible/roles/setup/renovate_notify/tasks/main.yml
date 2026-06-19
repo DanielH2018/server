@@ -1,0 +1,58 @@
+---
+- name: Create renovate-notify directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0750"
+  loop:
+    - /opt/renovate-notify       # notifier scripts
+    - /var/lib/renovate-notify   # state (last_notified, last_run) + monitor-bridge bind source
+    - /etc/renovate-notify       # config.env (0600 secret)
+  become: true
+
+- name: Install notifier Python files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/renovate-notify/{{ item }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  loop:
+    - renovate_notify.py
+    - notify_logic.py
+  become: true
+  notify: Run renovate-notify once
+
+- name: Write notifier config (secret webhook, host-only)
+  ansible.builtin.template:
+    src: config.env.j2
+    dest: /etc/renovate-notify/config.env
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  no_log: true
+  notify: Run renovate-notify once
+
+- name: Install systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - renovate-notify.service
+    - renovate-notify.timer
+  become: true
+  notify:
+    - Reload systemd
+    - Run renovate-notify once
+
+- name: Enable and start the timer
+  ansible.builtin.systemd:
+    name: renovate-notify.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true

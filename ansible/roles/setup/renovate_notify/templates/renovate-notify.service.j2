@@ -1,0 +1,9 @@
+[Unit]
+Description=Renovate manual-action notifier (query open PRs, alert on change)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+ExecStart=/usr/bin/python3 /opt/renovate-notify/renovate_notify.py
