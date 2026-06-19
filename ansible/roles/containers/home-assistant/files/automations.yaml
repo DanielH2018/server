@@ -185,6 +185,44 @@
   action:
     - service: script.bedroom_apply_natural
 
+# Presence BLIP: you arrived but the room is too bright for auto-on (the lux gate is OFF), so the
+# lights won't come on. Flash them softly to acknowledge the detection. Sibling of bedroom_presence_on,
+# sharing ONLY the arrival edge (not the dusk lux-crossing — that path is when lights DO come on), with
+# the lux gate INVERTED. Mutually exclusive with presence_on per arrival: auto_light_allowed is either
+# on (presence_on lights up) or off (this blips). Won't loop the lux trigger: a ~1s blip can't satisfy
+# presence_on's `below: 50 for: 30s`, and it only fires when illuminance is already >= 50 (bright ambient).
+- id: bedroom_presence_blip
+  alias: Bedroom presence blip too bright
+  description: Soft acknowledgement flash when presence is detected on arrival but the lux gate blocks auto-on.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.aqara_fp300_presence
+      to: "on"
+  condition:
+    # Didn't deliberately kill the lights.
+    - condition: state
+      entity_id: input_boolean.bedroom_manual_off
+      state: "off"
+    # Never blip an empty house on an FP300 radar false-positive.
+    - condition: state
+      entity_id: person.daniel
+      state: "home"
+    # Still actually occupied.
+    - condition: state
+      entity_id: binary_sensor.aqara_fp300_presence
+      state: "on"
+    # INVERTED lux gate: auto-on is BLOCKED (too bright) — the whole reason to blip instead of light up.
+    - condition: state
+      entity_id: binary_sensor.bedroom_auto_light_allowed
+      state: "off"
+    # Only "won't turn on" makes sense when the lights are currently off.
+    - condition: state
+      entity_id: light.bedroom_lights
+      state: "off"
+  action:
+    - service: script.bedroom_blip
+
 # Absence OFF: room empty for a minute → lights off (ignores the override — leaving always allows off).
 - id: bedroom_absence_off
   alias: Bedroom absence off

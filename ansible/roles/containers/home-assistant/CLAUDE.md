@@ -89,6 +89,16 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   threshold sits right in this room's lights-off ambient (~48), so it's borderline; pick a value clearly
   below the lights-off daytime ambient if you want to stop daytime auto-lighting (this is why the fan
   button stays out of light control entirely).
+- **Too-bright arrival blip (since 2026-06-19).** `automation.bedroom_presence_blip_too_bright` is a
+  sibling of `bedroom_presence_on`: same arrival edge (`binary_sensor.aqara_fp300_presence` -> on),
+  but the lux gate is **inverted** (`binary_sensor.bedroom_auto_light_allowed` == off) plus
+  `manual_off` off, `person home`, and lights currently off. When you walk in but it's too bright to
+  auto-light, it calls `script.bedroom_blip` (off -> 15% warm 2700K ~1s -> off) so you get an
+  acknowledgement instead of silence. `bedroom_blip` is the inverse of `bedroom_alert_pulse` — it
+  needs NO `scene.create` snapshot because it only runs with the lights already off, so a plain
+  `turn_off` restores the known state. No feedback loop: it fires only at illuminance >= 50 (bright
+  ambient), and a ~1s blip can't satisfy `presence_on`'s `below: 50 for: 30s`. No cooldown initially;
+  add a trigger `for:` debounce if presence flapping makes it chatty.
   **Verification gotcha:** an automation's `entity_id` derives from its `alias` (slugified) at
   first creation, NOT its `id` — so `bedroom_fan_temperature` (id) is
   `automation.bedroom_fan_temperature_control` (alias) in the state machine / recorder DB. Query by

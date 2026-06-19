@@ -193,6 +193,29 @@ bedroom_alert_pulse:
       data:
         transition: 0.5
 
+bedroom_blip:
+  alias: "Bedroom — too-bright acknowledgement blip"
+  description: >-
+    Soft warm flash (off -> 15% -> off) to acknowledge that presence was detected but the room is
+    too bright for auto-on (the lux gate is blocking it). Inverse of bedroom_alert_pulse: it only
+    runs when the lights are already OFF (the caller enforces that), so no scene snapshot is needed —
+    a plain turn_off restores the known prior state.
+  mode: single
+  sequence:
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        brightness_pct: 15
+        color_temp_kelvin: 2700
+        transition: 0.4
+    - delay: "00:00:01"
+    - service: light.turn_off
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        transition: 0.6
+
 # Fan: set the DREO tower fan to its target speed for the CURRENT temperature + time. Single source
 # of truth for the temperature->band mapping, the 0.5°F hysteresis deadband, and the 22:00-06:00
 # night cap (Medium max). Works in the fan's 9 discrete LEVELS, not raw %, because the DREO
