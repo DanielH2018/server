@@ -32,8 +32,9 @@
         # Button 1 = POWER. PRESS = smart toggle: ON -> off + engage manual-off (presence won't
         # re-on); OFF -> Adaptive Lighting natural look (UNGATED — a manual tap always lights) +
         # clear manual-off. HOLD = reset to auto (below).
-        - conditions: "{{ act == 'button_1_press' }}"
+        - conditions: "{{ act == 'button_1_press_release' }}"
           sequence:
+            - service: script.bedroom_exit_sleep
             - if: "{{ is_state('light.bedroom_lights', 'on') }}"
               then:
                 - service: light.turn_off
@@ -49,8 +50,9 @@
                     entity_id: input_boolean.bedroom_manual_off
         # Button 1 HOLD = reset to auto: clear the light + fan overrides, re-sync lights to their
         # natural state HONORING the lux gate (bright room -> off), and re-apply the fan if home.
-        - conditions: "{{ act == 'button_1_hold' }}"
+        - conditions: "{{ act == 'button_1_hold_release' }}"
           sequence:
+            - service: script.bedroom_exit_sleep
             - service: input_boolean.turn_off
               target:
                 entity_id:
@@ -61,16 +63,18 @@
               then:
                 - service: script.bedroom_apply_fan
         # Button 2 = BRIGHTNESS. PRESS = Relax/cozy scene; HOLD = Bright (full). Both clear manual-off.
-        - conditions: "{{ act == 'button_2_press' }}"
+        - conditions: "{{ act == 'button_2_press_release' }}"
           sequence:
+            - service: script.bedroom_exit_sleep
             - service: scene.turn_on
               target:
                 entity_id: scene.bedroom_relax
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_manual_off
-        - conditions: "{{ act == 'button_2_hold' }}"
+        - conditions: "{{ act == 'button_2_hold_release' }}"
           sequence:
+            - service: script.bedroom_exit_sleep
             - service: scene.turn_on
               target:
                 entity_id: scene.bedroom_bright
@@ -78,7 +82,7 @@
               target:
                 entity_id: input_boolean.bedroom_manual_off
         # Button 3 = SLEEP. PRESS = nightlight (warm dim); HOLD = bedtime / sleep routine.
-        - conditions: "{{ act == 'button_3_press' }}"
+        - conditions: "{{ act == 'button_3_press_release' }}"
           sequence:
             - service: scene.turn_on
               target:
@@ -86,18 +90,18 @@
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_manual_off
-        - conditions: "{{ act == 'button_3_hold' }}"
+        - conditions: "{{ act == 'button_3_hold_release' }}"
           sequence:
             - service: script.bedroom_bedtime
         # Button 4 = FAN. PRESS = reset to automatic (clear fan override + apply temp band);
         # HOLD = boost to 100% (engage fan override so it sticks until reset/morning).
-        - conditions: "{{ act == 'button_4_press' }}"
+        - conditions: "{{ act == 'button_4_press_release' }}"
           sequence:
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_fan_manual
             - service: script.bedroom_apply_fan
-        - conditions: "{{ act == 'button_4_hold' }}"
+        - conditions: "{{ act == 'button_4_hold_release' }}"
           sequence:
             - service: input_boolean.turn_on
               target:

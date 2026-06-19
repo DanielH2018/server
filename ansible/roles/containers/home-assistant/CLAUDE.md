@@ -57,7 +57,16 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   hold = `scene.bedroom_bright`; B3 = Sleep: press = `scene.bedroom_nightlight`, hold =
   `script.bedroom_bedtime`; B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`],
   hold = boost 100%). Manual taps are ungated by design — the lux gate lives on the presence
-  path + the reset hold. Presence
+  path + the reset hold. **Tap Dial gotchas (RDM002, verified live):** match button actions on the
+  `*_press_release`/`*_hold_release` events — a tap fires `button_N_press`→`button_N_press_release`,
+  but a HOLD fires `button_N_press` (!) then repeats `button_N_hold` then `button_N_hold_release`, so
+  matching `*_press`/`*_hold` double-fires the tap before every hold AND runs holds ~3×; the release
+  events are mutually exclusive (exactly one per gesture). Every non-Sleep-button (B1/B2) LIGHT action
+  calls `script.bedroom_exit_sleep` FIRST (clears `sleep_mode` + AL sleep mode) — touching the normal
+  lights releases the night state (the daytime sleep-exit the morning reset otherwise owns; without it
+  a stuck `sleep_mode` made B1's `apply_natural` serve the amber nightlight = the "very red" trap). The
+  dial emits `dial_rotate_<dir>_<slow|fast|step>` (caught by the substring match) alongside harmless
+  `brightness_step_*` no-ops. Presence
   (FP300) + an `input_boolean` manual-off override + an alarm-driven morning reset live in the
   same file; `bedroom_presence_on` and the morning reset BOTH call `script.bedroom_apply_natural`.
   Presence-on's lux gate is window-aware: `in morning window OR illuminance < 50` — wake regardless

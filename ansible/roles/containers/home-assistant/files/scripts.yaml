@@ -145,6 +145,23 @@ bedroom_apply_natural_gated:
           target:
             entity_id: light.bedroom_lights
 
+# Exit sleep mode: release the night/sleep state — clear the sleep-mode flag AND Adaptive Lighting's
+# sleep mode (the bedtime routine sets BOTH). Called FIRST by every Tap Dial LIGHT action that is NOT
+# on the Sleep button (button 3): touching the normal lights means you're up, so sleep should release.
+# Running it FIRST matters — bedroom_apply_natural serves the nightlight exception while sleep_mode is
+# on, so clearing it beforehand is what lets a Button-1 tap give daytime light instead of amber. Mirrors
+# the morning reset's sleep-clearing hygiene (same two service calls, now a shared single source).
+bedroom_exit_sleep:
+  alias: "Bedroom — exit sleep mode"
+  mode: single
+  sequence:
+    - service: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.bedroom_sleep_mode
+    - service: switch.turn_off
+      target:
+        entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+
 # Air-quality alert pulse: a brief red flash to flag bad air, then restore EXACTLY what was
 # showing. Snapshots the current light state into a throwaway scene, flashes red, and restores
 # the snapshot — so a manual scene / the morning ramp / Adaptive Lighting all come back intact
