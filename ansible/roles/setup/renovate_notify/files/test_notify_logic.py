@@ -1,0 +1,97 @@
+import notify_logic as nl
+
+
+def _pr(number=1, title="t", url="u", automerge=True, ci="success", conflicting=False):
+    return nl.PR(number=number, title=title, url=url, automerge=automerge,
+                 ci=ci, conflicting=conflicting)
+
+
+# --- parse_automerge ---
+def test_parse_automerge_enabled():
+    assert nl.parse_automerge("🚦 **Automerge**: Enabled.") is True
+
+
+def test_parse_automerge_disabled():
+    assert nl.parse_automerge("🚦 **Automerge**: Disabled.") is False
+
+
+def test_parse_automerge_absent_defaults_false():
+    assert nl.parse_automerge("no marker here") is False
+    assert nl.parse_automerge("") is False
+
+
+# --- ci_rollup ---
+def test_ci_rollup_all_success():
+    runs = [{"status": "completed", "conclusion": "success"}]
+    statuses = [{"state": "success"}]
+    assert nl.ci_rollup(runs, statuses) == "success"
+
+
+def test_ci_rollup_failed_checkrun():
+    runs = [{"status": "completed", "conclusion": "failure"}]
+    assert nl.ci_rollup(runs, []) == "failure"
+
+
+def test_ci_rollup_failed_legacy_status():
+    # a failing commit-status (e.g. GitGuardian) with all check-runs green
+    runs = [{"status": "completed", "conclusion": "success"}]
+    statuses = [{"state": "failure"}]
+    assert nl.ci_rollup(runs, statuses) == "failure"
+
+
+def test_ci_rollup_pending_when_incomplete():
+    runs = [{"status": "in_progress", "conclusion": None}]
+    assert nl.ci_rollup(runs, []) == "pending"
+
+
+def test_ci_rollup_pending_status_is_pending():
+    # renovate/stability-days still soaking
+    assert nl.ci_rollup([], [{"state": "pending"}]) == "pending"
+
+
+def test_ci_rollup_failure_beats_pending():
+    runs = [{"status": "in_progress", "conclusion": None},
+            {"status": "completed", "conclusion": "failure"}]
+    assert nl.ci_rollup(runs, []) == "failure"
+
+
+def test_ci_rollup_neutral_and_skipped_are_ok():
+    runs = [{"status": "completed", "conclusion": "neutral"},
+            {"status": "completed", "conclusion": "skipped"}]
+    assert nl.ci_rollup(runs, []) == "success"
+
+
+# --- classify_pr ---
+def test_classify_manual_when_automerge_disabled():
+    assert nl.classify_pr(_pr(automerge=False, ci="success")) == "manual"
+
+
+def test_classify_manual_even_if_failing():
+    assert nl.classify_pr(_pr(automerge=False, ci="failure")) == "manual"
+
+
+def test_classify_stuck_automerge_but_failing():
+    assert nl.classify_pr(_pr(automerge=True, ci="failure")) == "stuck"
+
+
+def test_classify_stuck_automerge_but_conflicting():
+    assert nl.classify_pr(_pr(automerge=True, ci="success", conflicting=True)) == "stuck"
+
+
+def test_classify_on_track_automerge_healthy():
+    assert nl.classify_pr(_pr(automerge=True, ci="success")) == "on-track"
+
+
+def test_classify_on_track_automerge_pending():
+    assert nl.classify_pr(_pr(automerge=True, ci="pending")) == "on-track"
+
+
+# --- actionable ---
+def test_actionable_keeps_stuck_and_manual_drops_ontrack():
+    prs = [
+        _pr(number=8, automerge=True, ci="failure"),         # stuck
+        _pr(number=9, automerge=False, ci="success"),        # manual
+        _pr(number=12, automerge=True, ci="success"),        # on-track -> dropped
+    ]
+    out = nl.actionable(prs)
+    assert [(pr.number, b) for pr, b in out] == [(8, "stuck"), (9, "manual")]
