@@ -879,3 +879,24 @@
         - service: light.turn_off
           target:
             entity_id: light.bedroom_lights
+
+# HA automation-engine heartbeat: stamp input_datetime.ha_heartbeat with now() every minute so its
+# last_changed stays fresh ONLY while the automation scheduler is executing. monitor-bridge polls it
+# (check_ha_heartbeat) over the apps net and pushes the "Home Assistant Automations" Kuma monitor down
+# when it goes stale — detecting a wedged-but-running HA the container healthcheck (HTTP :8123) can't
+# see. No conditions (must tick unconditionally); homelab-wide (no bedroom_ prefix); does NOT route
+# through bedroom_notify. Excluded from the recorder (see configuration.yaml). Spec:
+# docs/superpowers/specs/2026-06-19-ha-automation-heartbeat-watchdog-design.md.
+- id: ha_heartbeat
+  alias: HA heartbeat
+  description: Stamp input_datetime.ha_heartbeat every minute so monitor-bridge can detect a wedged automation engine.
+  mode: single
+  trigger:
+    - platform: time_pattern
+      minutes: "/1"
+  action:
+    - service: input_datetime.set_datetime
+      target:
+        entity_id: input_datetime.ha_heartbeat
+      data:
+        timestamp: "{{ now().timestamp() }}"

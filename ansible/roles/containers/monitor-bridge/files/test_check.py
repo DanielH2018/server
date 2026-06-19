@@ -924,3 +924,46 @@ def test_pi_check_up_when_quiet(monkeypatch):
         check, "_get_json", _seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK))
     ok, _ = check.check_pi_pressure()
     assert ok
+
+
+# ── HA automation-engine heartbeat (input_datetime stamped by a 1-min automation) ──
+# ha_heartbeat_fresh reads last_changed off the /api/states/input_datetime.ha_heartbeat
+# payload: fresh => the scheduler ran recently; stale/missing => wedged or never ran.
+HB_NOW = datetime(2026, 6, 6, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _ha_state(last_changed, state="2026-06-06 11:59:00"):
+    """Minimal HA state shape — only last_changed is read by the check."""
+    return {
+        "entity_id": "input_datetime.ha_heartbeat",
+        "state": state,
+        "last_changed": last_changed,
+        "last_updated": last_changed,
+    }
+
+
+def test_ha_heartbeat_fresh_is_ok():
+    ok, msg = check.ha_heartbeat_fresh(_ha_state("2026-06-06T11:59:00Z"), 300, now=HB_NOW)  # 60s old
+    assert ok
+    assert "fresh" in msg
+
+
+def test_ha_heartbeat_stale_is_down():
+    ok, msg = check.ha_heartbeat_fresh(_ha_state("2026-06-06T11:50:00Z"), 300, now=HB_NOW)  # 600s old
+    assert not ok
+    assert "stale" in msg
+
+
+def test_ha_heartbeat_at_threshold_is_ok():
+    ok, _ = check.ha_heartbeat_fresh(_ha_state("2026-06-06T11:55:00Z"), 300, now=HB_NOW)  # exactly 300s
+    assert ok
+
+
+def test_ha_heartbeat_missing_last_changed_is_down():
+    ok, _ = check.ha_heartbeat_fresh({"state": "unknown"}, 300, now=HB_NOW)
+    assert not ok
+
+
+def test_ha_heartbeat_none_state_is_down():
+    ok, _ = check.ha_heartbeat_fresh(None, 300, now=HB_NOW)
+    assert not ok

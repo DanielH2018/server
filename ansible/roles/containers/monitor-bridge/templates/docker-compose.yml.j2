@@ -99,6 +99,14 @@ services:
       # Root Disk check can't see the Pi, and a filling SD card is the classic slow death.
       - PI_DISK_MAX_PCT=90
       - KUMA_PUSH_PI={{ monitor_bridge_pi_push_token }}
+      # HA automation-engine heartbeat: poll input_datetime.ha_heartbeat (stamped every minute by an
+      # HA time_pattern automation) over the `apps` net with a long-lived token; `down` when it's
+      # stale -> a wedged-but-running HA (HTTP :8123 up, scheduler stuck) the container healthcheck
+      # can't see. Empty HA_URL/HA_TOKEN = disabled (stays up). 300s = 5 missed 1-min beats.
+      - HA_URL=http://home-assistant:8123
+      - HA_TOKEN={{ monitor_bridge_ha_token }}
+      - HA_HEARTBEAT_MAX_AGE=300
+      - KUMA_PUSH_HA={{ monitor_bridge_ha_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
@@ -132,6 +140,9 @@ services:
       {{ kuma('monitor-bridge-b2', monitor_type='push', name='B2 Storage Usage', interval=600, max_retries=0, push_token=monitor_bridge_b2_push_token) }}
       {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data Freshness', interval=600, max_retries=0, push_token=monitor_bridge_scrutiny_push_token) }}
       {{ kuma('monitor-bridge-pi', monitor_type='push', name='Pi Pressure', interval=600, max_retries=0, push_token=monitor_bridge_pi_push_token) }}
+      {# HA automation-engine liveness: check_ha_heartbeat polls the HA heartbeat helper's freshness
+         over `apps`. interval 600s (2× the 300s loop), max_retries=0 like every bridge push monitor. -#}
+      {{ kuma('monitor-bridge-ha', monitor_type='push', name='Home Assistant Automations', interval=600, max_retries=0, push_token=monitor_bridge_ha_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 

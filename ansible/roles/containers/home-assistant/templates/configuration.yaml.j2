@@ -44,6 +44,19 @@ input_number:
     mode: box
     icon: mdi:fan-chevron-up
 
+# Heartbeat helper — the `ha_heartbeat` automation (files/automations.yaml) stamps this with now()
+# every minute, so its last_changed is fresh ONLY while the automation scheduler is executing.
+# monitor-bridge polls it over the apps net (check_ha_heartbeat) and pushes a Kuma monitor down when
+# it goes stale — catching a wedged-but-running HA the container healthcheck (HTTP :8123) can't see.
+# Excluded from the recorder below (it changes every minute, zero history value). See the
+# 2026-06-19 spec in docs/superpowers/specs/.
+input_datetime:
+  ha_heartbeat:
+    name: HA heartbeat
+    has_date: true
+    has_time: true
+    icon: mdi:heart-pulse
+
 # Adaptive Lighting (HACS integration) — sun-tracking color temp + brightness for the bedroom
 # group while it is on. Installed via HACS into custom_components/ (Kopia-backed, like dreo).
 # A full HA restart (this deploy recreates the container) loads the integration; a YAML
@@ -165,6 +178,9 @@ recorder:
     entities:
       - sun.sun
       - sensor.bedroom_airgradient_one_pm0_3
+      # Heartbeat helper — rewritten every minute by the ha_heartbeat automation; the live
+      # last_changed is all monitor-bridge reads, so its history is pure churn.
+      - input_datetime.ha_heartbeat
     entity_globs:
       - sensor.*_linkquality
       - sensor.*_last_seen

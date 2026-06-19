@@ -88,6 +88,19 @@ PI_LOAD_MAX = float(_env("PI_LOAD_MAX", "1.5"))  # load5 per core
 PI_MEM_MIN_MB = float(_env("PI_MEM_MIN_MB", "50"))
 PI_DISK_MAX_PCT = float(_env("PI_DISK_MAX_PCT", "90"))
 
+# HA automation-engine heartbeat: an HA time_pattern automation stamps
+# input_datetime.ha_heartbeat with now() every minute, so its last_changed is fresh ONLY
+# while HA's automation scheduler is executing. We poll HA's /api/states over the apps
+# network (Bearer token) and go down when it's stale — catching a wedged-but-running HA
+# (HTTP :8123 up, scheduler stuck) that the container healthcheck can't see. Empty
+# URL/token = disabled (stays up), like N8N_API_KEY/PI_GLANCES_URL. 300s = 5 missed
+# 1-min beats; rides out an HA restart/deploy. Seconds (no unit suffix) — kept a plain
+# float here because parse_duration is defined below this config block.
+HA_URL = _env("HA_URL", "").rstrip("/")
+HA_TOKEN = _env("HA_TOKEN", "")
+HA_HEARTBEAT_MAX_AGE_S = float(_env("HA_HEARTBEAT_MAX_AGE", "300"))
+HA_HEARTBEAT_ENTITY = "input_datetime.ha_heartbeat"
+
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
 
@@ -602,6 +615,36 @@ def check_b2_usage():
     return b2_usage(state, age_s, B2_USAGE_MAX_AGE_S, B2_CAP_BYTES, B2_USAGE_MAX_PCT)
 
 
+def ha_heartbeat_fresh(state, max_age_s, now=None):
+    """`state` is HA's /api/states/input_datetime.ha_heartbeat payload.
+
+    Its last_changed advances every minute only while HA's automation scheduler runs the
+    heartbeat automation, so a stale (or missing) last_changed means HA is wedged or the
+    automation never resumed after a restart — invisible to the HTTP healthcheck.
+    """
+    now = now or datetime.now(timezone.utc)
+    lc = (state or {}).get("last_changed")
+    if not lc:
+        return False, "no heartbeat state (entity missing or never set)"
+    age = (now - parse_rfc3339(lc)).total_seconds()
+    if age > max_age_s:
+        return False, "stale — automations last ran %.0fs ago (> %gs)" % (age, max_age_s)
+    return True, "fresh — automations ran %.0fs ago" % age
+
+
+def check_ha_heartbeat():
+    """Poll HA's automation-driven heartbeat over the apps network (Bearer token).
+
+    Empty HA_URL/HA_TOKEN -> disabled (stays up), like check_n8n. A 404/auth/unreachable
+    HA raises -> run_once renders it down with the error (a dead API surfaces, not green).
+    """
+    if not HA_URL or not HA_TOKEN:
+        return True, "HA heartbeat monitoring disabled (no URL/token)"
+    state = _get_json(HA_URL + "/api/states/" + HA_HEARTBEAT_ENTITY,
+                      headers={"Authorization": "Bearer " + HA_TOKEN})
+    return ha_heartbeat_fresh(state, HA_HEARTBEAT_MAX_AGE_S)
+
+
 CHECKS = [
     ("backup", _env("KUMA_PUSH_KOPIA", ""), check_backup),
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
@@ -619,6 +662,7 @@ CHECKS = [
     ("b2_usage",      _env("KUMA_PUSH_B2",            ""), check_b2_usage),
     ("scrutiny",      _env("KUMA_PUSH_SCRUTINY",      ""), check_scrutiny),
     ("pi_pressure",   _env("KUMA_PUSH_PI",            ""), check_pi_pressure),
+    ("ha_heartbeat",  _env("KUMA_PUSH_HA",            ""), check_ha_heartbeat),
 ]
 
 
