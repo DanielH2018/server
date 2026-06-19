@@ -97,7 +97,11 @@ def discord(content: str) -> None:
     if not url:
         return
     data = json.dumps({"content": content[:1900]}).encode()
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    # User-Agent required: Discord is behind Cloudflare, which 403s the default Python-urllib
+    # UA (error code 1010) — without this the alert silently fails (the except below swallows it).
+    req = urllib.request.Request(
+        url, data=data,
+        headers={"Content-Type": "application/json", "User-Agent": "gitops-deploy"})
     try:
         urllib.request.urlopen(req, timeout=10)
     except Exception as e:  # alerting must never crash the deployer
