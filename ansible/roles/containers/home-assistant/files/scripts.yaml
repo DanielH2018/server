@@ -351,6 +351,10 @@ bedroom_notify:
       description: Sound even while quiet (DND/sleep) via the high-importance channel.
       required: false
       example: true
+    recovery:
+      description: This is an "all clear" — while away it cancels the held alert with the same tag instead of being delivered.
+      required: false
+      example: true
     actions:
       description: List of {action, title} button dicts for actionable notifications (phone only).
       required: false
@@ -364,6 +368,28 @@ bedroom_notify:
              or is_state('input_boolean.bedroom_sleep_mode', 'on') }}
         importance: "{{ 'high' if (pierce | default(false)) else ('low' if quiet else 'default') }}"
         channel: "{{ 'Bedroom critical' if (pierce | default(false)) else 'Bedroom alerts' }}"
+        away: "{{ states('person.daniel') not in ['home', 'unknown', 'unavailable'] }}"
+    # Away-aware hold: while you're outside the home geofence, non-critical (non-pierce) alerts are
+    # parked as a persistent_notification (id hold_<tag>) instead of pushed — then either cancelled by
+    # their recovery (same tag) or flushed as a digest on arrival (bedroom_flush_held_notifications).
+    # pierce alerts and the at-home path fall straight through to the normal push below. `away` fails
+    # open (unknown/unavailable -> deliver) so a tracker glitch over-notifies rather than swallowing.
+    - if: "{{ away and not (pierce | default(false)) }}"
+      then:
+        - if: "{{ recovery | default(false) }}"
+          then:
+            # Resolved while away -> drop the held alert; you'll never see it.
+            - service: persistent_notification.dismiss
+              data:
+                notification_id: "hold_{{ tag }}"
+          else:
+            # Park it (same tag updates in place) — held until you get home.
+            - service: persistent_notification.create
+              data:
+                notification_id: "hold_{{ tag }}"
+                title: "{{ title }}"
+                message: "{{ message }}"
+        - stop: "held while away (non-critical)"
     - service: notify.mobile_app_pixel_9_pro
       data:
         title: "{{ title }}"
