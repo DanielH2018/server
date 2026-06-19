@@ -967,3 +967,38 @@ def test_ha_heartbeat_missing_last_changed_is_down():
 def test_ha_heartbeat_none_state_is_down():
     ok, _ = check.ha_heartbeat_fresh(None, 300, now=HB_NOW)
     assert not ok
+
+
+# --- renovate_alive / check_renovate_alive ---------------------------------
+
+def test_renovate_alive_fresh():
+    ok, msg = check.renovate_alive(60, 129600)  # 36h = 129600s
+    assert ok
+    assert "1m ago" in msg
+
+
+def test_renovate_alive_at_threshold_is_ok():
+    ok, _ = check.renovate_alive(129600, 129600)
+    assert ok
+
+
+def test_renovate_alive_stale():
+    ok, msg = check.renovate_alive(140000, 129600)
+    assert not ok
+    assert "ago" in msg
+
+
+def test_check_renovate_alive_missing_marker_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "RENOVATE_STATE_DIR", str(tmp_path))
+    ok, msg = check.check_renovate_alive()
+    assert not ok
+    assert "no last_run marker" in msg
+
+
+def test_check_renovate_alive_fresh_file_is_up(tmp_path, monkeypatch):
+    import time as _t
+    monkeypatch.setattr(check, "RENOVATE_STATE_DIR", str(tmp_path))
+    monkeypatch.setattr(check, "RENOVATE_MAX_AGE_S", 129600)
+    (tmp_path / "last_run").write_text(str(_t.time()))
+    ok, _ = check.check_renovate_alive()
+    assert ok

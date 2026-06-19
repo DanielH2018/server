@@ -53,6 +53,8 @@ N8N_FAIL_WINDOW = _env("N8N_FAIL_WINDOW", "15m")
 N8N_FAIL_MAX = float(_env("N8N_FAIL_MAX", "0"))
 GITOPS_STATE_DIR = _env("GITOPS_STATE_DIR", "/gitops-state")
 GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
+RENOVATE_STATE_DIR = _env("RENOVATE_STATE_DIR", "/renovate-state")
+RENOVATE_MAX_AGE_S = float(_env("RENOVATE_MAX_AGE_MIN", "2160")) * 60
 
 # Monthly kopia restore drill: the host cron (kopia-restore-drill.sh, kopia role)
 # writes {"ts": epoch, "ok": bool, "msg": str} after each run; we alert on failure,
@@ -476,6 +478,24 @@ def check_gitops_status():
     return gitops_status(hold)
 
 
+def renovate_alive(age_s, max_age_s):
+    """Pure: is the notifier's last completed run recent enough? Returns (ok, msg)."""
+    if age_s <= max_age_s:
+        return True, "notifier ran %.0fm ago" % (age_s / 60)
+    return False, "notifier last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
+
+
+def check_renovate_alive():
+    try:
+        with open(os.path.join(RENOVATE_STATE_DIR, "last_run")) as fh:
+            ts = float(fh.read().strip())
+    except FileNotFoundError:
+        return False, "no last_run marker (notifier never completed a run?)"
+    except ValueError:
+        return False, "last_run marker unparseable"
+    return renovate_alive(time.time() - ts, RENOVATE_MAX_AGE_S)
+
+
 def scrutiny_freshness(summary, max_age_h, now=None):
     """`summary` is the data.summary dict of scrutiny's /api/summary."""
     now = now or datetime.now(timezone.utc)
@@ -663,6 +683,7 @@ CHECKS = [
     ("scrutiny",      _env("KUMA_PUSH_SCRUTINY",      ""), check_scrutiny),
     ("pi_pressure",   _env("KUMA_PUSH_PI",            ""), check_pi_pressure),
     ("ha_heartbeat",  _env("KUMA_PUSH_HA",            ""), check_ha_heartbeat),
+    ("renovate_alive", _env("KUMA_PUSH_RENOVATE_ALIVE", ""), check_renovate_alive),
 ]
 
 
