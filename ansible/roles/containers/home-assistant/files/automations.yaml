@@ -99,6 +99,17 @@
         - conditions: "{{ act == 'button_4_press_release' }}"
           sequence:
             - service: script.bedroom_exit_sleep
+            # Clearing AL sleep mode makes Adaptive Lighting self-on the lights — but this is the FAN
+            # button, so respect the lux gate (same condition as bedroom_presence_on / _gated): turn
+            # them back off unless it's dark enough, or in the morning wake window, to warrant light.
+            - if: >-
+                {% set ws = states('sensor.bedroom_wake_start') %}
+                {% set in_window = ws not in ['unknown', 'unavailable'] and timedelta(0) <= (now() - as_datetime(ws)) < timedelta(minutes=15) %}
+                {{ not (in_window or (states('sensor.aqara_fp300_illuminance') | float(9999) < 50)) }}
+              then:
+                - service: light.turn_off
+                  target:
+                    entity_id: light.bedroom_lights
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_fan_manual
