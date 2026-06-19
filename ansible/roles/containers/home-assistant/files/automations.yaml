@@ -437,6 +437,7 @@
                 title: "{{ cfg.ok }}"
                 message: "{{ label }} back to normal ({{ value }}{{ unit_sp }})"
                 tag: "{{ tag }}"
+                recovery: true
 
 # Temperature → fan: drive fan.tower_fan from the AirGradient temperature via script.bedroom_apply_fan
 # (off <72 / Low 72-74 / Medium 74-76 / High >=76 °F; Medium cap 22:00-06:00; 0.5°F deadband).
@@ -580,6 +581,7 @@
                 title: "✅ Sensor back online"
                 message: "{{ name }} is reporting again"
                 tag: "{{ tag }}"
+                recovery: true
 
 # Home/away: turn the bedroom off when you leave the HOUSE (person.daniel) — a different layer than
 # the FP300's ROOM presence. Two stages absorb GPS jitter: 'leave' at 10 min away, a 'failsafe'
@@ -897,6 +899,7 @@
                 title: "✅ Power restored"
                 message: "Mains power back; UPS online ({{ charge }}%)."
                 tag: ups_power
+                recovery: true
 
 # Zigbee bridge offline alert: binary_sensor.zigbee2mqtt_bridge_connection_state (HA auto-discovers it
 # from Z2M; on=online / off=offline, fed by the zigbee2mqtt/bridge/state topic) going `off` means the
@@ -940,6 +943,7 @@
             title: "✅ Zigbee bridge online"
             message: "Zigbee2MQTT is back; devices are reconnecting."
             tag: zigbee_bridge
+            recovery: true
 
 # AL self-on suppression: Adaptive Lighting re-applies its managed state on every HA start and turns
 # light.bedroom_lights ON by itself (AL's own log flags this; it happens on every deploy, ~120s). Cancel
