@@ -55,26 +55,32 @@ Entity reads (`states()`, `now()`, `as_datetime`, `state_attr`) stay in the YAML
 take **plain numbers → return numbers/bools**, making them drift-proof and unit-testable.
 
 **`files/custom_templates/fan.jinja` (extend):**
+
 - Add `fan_target_level(temp_f, cur_level, is_night, sleep)` → `0..9`. Encapsulates the
   `(temp_f − 71)/1.3` ideal curve, the ±0.7-level hysteresis deadband, and the sleep/night caps
   (`2 if sleep else (4 if is_night else 9)`).
 - Keep `pct_to_level` / `level_to_pct` unchanged.
 
 **`files/custom_templates/lighting.jinja` (new):**
+
 - `in_wake_window(elapsed_min)` → bool (`0 ≤ elapsed_min < 15`). Replaces the `in_window`
-  expression currently duplicated across the nightlight exception, the wake exception, and
-  `bedroom_presence_on`.
+  expression currently duplicated across three inline sites: `templates.yaml`'s
+  `bedroom_auto_light_allowed`, and `bedroom_apply_natural`'s nightlight + wake exceptions.
+  (`bedroom_presence_on` already consumes the `bedroom_auto_light_allowed` sensor, so it inherits
+  the macro transitively.)
 - `wake_brightness(elapsed_min, sleep_min)` → `1..peak`, where
   `peak = 30 if (0 < sleep_min < 360) else 50`, value `= (1 + (peak−1)·elapsed_min/15) round int`.
 - `wake_transition(elapsed_min)` → seconds remaining: `(15 − elapsed_min)·60 round int`.
 - `auto_light_allowed(in_window, illuminance)` → bool (`in_window or illuminance < 50`).
 
 **Rewire callers** (pure refactor — behavior preserved):
+
 - `files/scripts.yaml` → `bedroom_apply_fan` (fan curve), `bedroom_apply_natural` (wake ramp +
   the nightlight exception's `in_window`).
-- `files/templates.yaml` → `bedroom_auto_light_allowed` (lux gate), and `bedroom_wake_start`
-  window consumers reuse `in_wake_window`.
-- `files/automations.yaml` → `bedroom_presence_on`'s window condition reuses `in_wake_window`.
+- `files/templates.yaml` → `bedroom_auto_light_allowed` (lux gate + its inline `in_window`).
+
+No `automations.yaml` rewire needed — `bedroom_presence_on` already reads the
+`bedroom_auto_light_allowed` sensor rather than recomputing the window.
 
 This also **DRYs the triplicated `in_window` formula** into one macro — a code improvement, not
 just test scaffolding.
