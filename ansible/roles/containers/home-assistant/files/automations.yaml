@@ -657,6 +657,41 @@
       then:
         - service: script.bedroom_apply_natural
 
+# Flush held notifications on arrival: when you re-enter the home geofence, any alerts that were
+# parked while you were away (persistent_notification ids starting with hold_) and did NOT resolve
+# meanwhile are delivered as ONE "While you were out" digest, then cleared. Anything that resolved
+# while away was already dismissed by its recovery (bedroom_notify), so it never appears here. The
+# condition gates the whole thing so arriving with nothing held is silent. `match` is start-anchored,
+# so 'hold_' won't catch the pierce path's bare-tag persistent notifications.
+- id: bedroom_flush_held_notifications
+  alias: Bedroom flush held notifications
+  description: On arrival home, deliver any still-unresolved away-held alerts as one digest, then clear them.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: person.daniel
+      to: "home"
+  condition:
+    - condition: template
+      value_template: "{{ states.persistent_notification | selectattr('object_id', 'match', 'hold_') | list | count > 0 }}"
+  action:
+    - variables:
+        held: "{{ states.persistent_notification | selectattr('object_id', 'match', 'hold_') | list }}"
+        count: "{{ held | count }}"
+        body: "{{ held | map(attribute='attributes.message') | map('regex_replace', '^', '• ') | join('\n') }}"
+    - service: notify.mobile_app_pixel_9_pro
+      data:
+        title: "🏠 While you were out ({{ count }})"
+        message: "{{ body }}"
+        data:
+          tag: held_digest
+    - repeat:
+        for_each: "{{ held | map(attribute='object_id') | list }}"
+        sequence:
+          - service: persistent_notification.dismiss
+            data:
+              notification_id: "{{ repeat.item }}"
+
 # Bedtime: when the phone's Bedtime mode turns on (surfaced by the Pixel Watch companion app) while
 # home, run the sleep routine (script.bedroom_bedtime: quiet fan cap + AL sleep mode + nightlight).
 # The Tap Dial button-1 hold (in bedroom_tap_dial_control) is the manual fallback. Gated on home so

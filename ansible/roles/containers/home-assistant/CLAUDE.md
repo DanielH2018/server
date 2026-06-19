@@ -171,6 +171,22 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   critical" channel as a DND exception in Android (after the first critical alert creates it) — high
   importance alone doesn't pierce DND. Only **severe air quality** sets `pierce`; sensor-offline +
   air-quality set `watch`; battery/humidity/recoveries are routine (silent while quiet, phone-only).
+- **Away-aware notification hold (since 2026-06-19).** `script.bedroom_notify` parks non-critical
+  alerts while you're outside the home geofence. `away = person.daniel not in [home, unknown,
+  unavailable]` (fails OPEN — a tracker glitch over-notifies, the opposite safe default to the
+  unexpected-occupancy tripwire). While away + NOT `pierce`: instead of pushing, it
+  `persistent_notification.create`s id `hold_<tag>` (so a re-fire with the same tag updates in place),
+  then `stop`s before the push path. A recovery (`recovery: true`, same tag) `dismiss`es `hold_<tag>`
+  and sends nothing — so a condition that self-resolves before you return is never seen. `pierce`
+  alerts and the at-home path are unchanged. On arrival (`automation.bedroom_flush_held_notifications`,
+  `person.daniel -> home`), all still-held `hold_*` notifications are delivered as ONE "While you were
+  out (N)" digest (bulleted messages; phone-only, so per-alert action buttons like Boost fan are lost —
+  tap into HA to act) and then dismissed; arriving with nothing held is silent. Recovery call-sites
+  carrying `recovery: true`: threshold-ok, sensor-online, UPS-restored, zigbee-bridge-online.
+  **Known limitation:** persistent notifications are in-memory, so an HA restart (e.g. a deploy) while
+  away loses the held queue — accepted, since held items are non-critical and the overlap is rare.
+  `match` filtering is start-anchored, so `hold_` never catches the pierce path's bare-`tag`
+  persistent notifications.
 - **Actionable notifications (since 2026-06-18).** `bedroom_notify` takes an optional `actions` list
   (`[{action, title}]`, phone-only) → the companion app renders buttons; taps fire
   `mobile_app_notification_action`, dispatched by `automation.bedroom_notification_action` on the
