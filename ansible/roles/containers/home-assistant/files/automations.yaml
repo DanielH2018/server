@@ -29,12 +29,9 @@
     - variables:
         act: "{{ trigger.payload_json.action | default('') }}"
     - choose:
-        # Button 1 HOLD = bedtime / sleep routine — the manual fallback for phone Bedtime mode.
-        - conditions: "{{ act == 'button_1_hold' }}"
-          sequence:
-            - service: script.bedroom_bedtime
-        # Button 1 = smart toggle. Turning the group OFF here engages the manual-off override
-        # (presence won't re-on); turning it ON clears the override (back to auto).
+        # Button 1 = POWER. PRESS = smart toggle: ON -> off + engage manual-off (presence won't
+        # re-on); OFF -> Adaptive Lighting natural look (UNGATED — a manual tap always lights) +
+        # clear manual-off. HOLD = reset to auto (below).
         - conditions: "{{ act == 'button_1_press' }}"
           sequence:
             - if: "{{ is_state('light.bedroom_lights', 'on') }}"
@@ -46,13 +43,33 @@
                   target:
                     entity_id: input_boolean.bedroom_manual_off
               else:
-                - service: light.turn_on
-                  target:
-                    entity_id: light.bedroom_lights
+                - service: script.bedroom_apply_natural
                 - service: input_boolean.turn_off
                   target:
                     entity_id: input_boolean.bedroom_manual_off
+        # Button 1 HOLD = reset to auto: clear the light + fan overrides, re-sync lights to their
+        # natural state HONORING the lux gate (bright room -> off), and re-apply the fan if home.
+        - conditions: "{{ act == 'button_1_hold' }}"
+          sequence:
+            - service: input_boolean.turn_off
+              target:
+                entity_id:
+                  - input_boolean.bedroom_manual_off
+                  - input_boolean.bedroom_fan_manual
+            - service: script.bedroom_apply_natural_gated
+            - if: "{{ is_state('person.daniel', 'home') }}"
+              then:
+                - service: script.bedroom_apply_fan
+        # Button 2 = BRIGHTNESS. PRESS = Relax/cozy scene; HOLD = Bright (full). Both clear manual-off.
         - conditions: "{{ act == 'button_2_press' }}"
+          sequence:
+            - service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_relax
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_manual_off
+        - conditions: "{{ act == 'button_2_hold' }}"
           sequence:
             - service: scene.turn_on
               target:
@@ -60,23 +77,40 @@
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_manual_off
-        # Button 3 = reset the FAN to automatic: clear the fan override, then apply the
-        # temperature band for right now (night-cap aware). Does not touch the lights.
+        # Button 3 = SLEEP. PRESS = nightlight (warm dim); HOLD = bedtime / sleep routine.
         - conditions: "{{ act == 'button_3_press' }}"
+          sequence:
+            - service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_nightlight
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_manual_off
+        - conditions: "{{ act == 'button_3_hold' }}"
+          sequence:
+            - service: script.bedroom_bedtime
+        # Button 4 = FAN. PRESS = reset to automatic (clear fan override + apply temp band);
+        # HOLD = boost to 100% (engage fan override so it sticks until reset/morning).
+        - conditions: "{{ act == 'button_4_press' }}"
           sequence:
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_fan_manual
             - service: script.bedroom_apply_fan
-        # Button 4 = reset to the NATURAL state for right now. The dispatcher script picks the
-        # active time-based exception (e.g. the morning wake ramp) or full Adaptive Lighting as
-        # the default — single source of truth. See files/scripts.yaml.
-        - conditions: "{{ act == 'button_4_press' }}"
+        - conditions: "{{ act == 'button_4_hold' }}"
           sequence:
-            - service: script.bedroom_apply_natural
-            - service: input_boolean.turn_off
+            - service: input_boolean.turn_on
               target:
-                entity_id: input_boolean.bedroom_manual_off
+                entity_id: input_boolean.bedroom_fan_manual
+            - service: fan.turn_on
+              target:
+                entity_id: fan.tower_fan
+            - service: fan.set_percentage
+              target:
+                entity_id: fan.tower_fan
+              data:
+                percentage: 100
+        # Dial rotate = brightness +/- 12% (substring match catches the *_step variants).
         - conditions: "{{ 'dial_rotate_right' in act }}"
           sequence:
             - service: light.turn_on
