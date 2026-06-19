@@ -6,8 +6,9 @@
 #
 # These scripts define the bedroom lights' "natural" state: what they would be with no manual
 # intervention. Adaptive Lighting (AL) is the default governor (sun-curve color + brightness);
-# time-based EXCEPTIONS override brightness only inside their window. Button 4 on the Tap Dial
-# and the morning reset both call bedroom_apply_natural, so the ramp math lives in one place.
+# time-based EXCEPTIONS override brightness only inside their window. Button 1 (press -> on) on
+# the Tap Dial and the morning reset both call bedroom_apply_natural, so the ramp math lives in
+# one place.
 
 # Helper: apply AL's natural COLOR temp, then set a caller-chosen brightness over a transition.
 # Every exception calls this so the AL release + color-apply boilerplate lives in exactly one

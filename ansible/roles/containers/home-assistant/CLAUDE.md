@@ -57,7 +57,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   hold = `scene.bedroom_bright`; B3 = Sleep: press = `scene.bedroom_nightlight`, hold =
   `script.bedroom_bedtime`; B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`],
   hold = boost 100%). Manual taps are ungated by design — the lux gate lives on the presence
-  path + the reset hold.. Presence
+  path + the reset hold. Presence
   (FP300) + an `input_boolean` manual-off override + an alarm-driven morning reset live in the
   same file; `bedroom_presence_on` and the morning reset BOTH call `script.bedroom_apply_natural`.
   Presence-on's lux gate is window-aware: `in morning window OR illuminance < 50` — wake regardless
