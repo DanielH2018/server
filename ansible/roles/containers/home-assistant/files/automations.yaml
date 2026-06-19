@@ -93,20 +93,19 @@
         - conditions: "{{ act == 'button_3_hold_release' }}"
           sequence:
             - service: script.bedroom_bedtime
-        # Button 4 = FAN. TAP = reset to automatic: exit sleep mode FIRST (so the fan un-caps from the
-        # L2 sleep cap), then clear the fan override + apply the temp band. HOLD = boost to 100% (engage
-        # fan override so it sticks until reset/morning; boost sets % directly, overriding the cap itself).
+        # Button 4 = FAN (fan only). TAP = clear the sleep_mode flag (un-caps the fan) + the fan override,
+        # then apply the temp band — does NOT touch the lights or AL sleep (see the branch for why). HOLD =
+        # boost to 100% (engage fan override so it sticks until reset/morning; boost sets % directly).
         - conditions: "{{ act == 'button_4_press_release' }}"
           sequence:
-            - service: script.bedroom_exit_sleep
-            # Clearing AL sleep mode makes Adaptive Lighting self-on the lights — but this is the FAN
-            # button, so respect the shared lux gate (binary_sensor.bedroom_auto_light_allowed): turn
-            # them back off when it's NOT dark enough / not the wake window to warrant light.
-            - if: "{{ is_state('binary_sensor.bedroom_auto_light_allowed', 'off') }}"
-              then:
-                - service: light.turn_off
-                  target:
-                    entity_id: light.bedroom_lights
+            # Fan ONLY. Clear the fan's sleep cap (the sleep_mode flag) + the fan override, then apply the
+            # temp band. Deliberately does NOT touch the lights or AL sleep mode: clearing AL sleep makes
+            # Adaptive Lighting self-on the lights, and the FP300 illuminance is dominated by the bedroom
+            # lights THEMSELVES (~640 lux on / ~48 off) — so any light the fan button left on would just be
+            # re-lit by presence (off-state reads "dark"). Light + AL-sleep state is owned by B1/B2 + presence.
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_sleep_mode
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_fan_manual

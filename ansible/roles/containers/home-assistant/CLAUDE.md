@@ -61,11 +61,16 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `*_press_release`/`*_hold_release` events — a tap fires `button_N_press`→`button_N_press_release`,
   but a HOLD fires `button_N_press` (!) then repeats `button_N_hold` then `button_N_hold_release`, so
   matching `*_press`/`*_hold` double-fires the tap before every hold AND runs holds ~3×; the release
-  events are mutually exclusive (exactly one per gesture). Every non-Sleep-button action — B1, B2, and
-  B4's fan-auto **tap** — calls `script.bedroom_exit_sleep` FIRST (clears `sleep_mode` + AL sleep mode):
-  using the normal lights/fan releases the night state (the daytime sleep-exit the morning reset otherwise
-  owns). Two traps this closes: a stuck `sleep_mode` made B1's `apply_natural` serve the amber nightlight
-  (the "very red" bug), and it kept `apply_fan` pinned at the L2 sleep cap (B4-tap now un-caps it). The
+  events are mutually exclusive (exactly one per gesture). The two LIGHT buttons (B1, B2) call
+  `script.bedroom_exit_sleep` FIRST (clears `sleep_mode` + AL sleep mode) — using the normal lights
+  releases the night state (the daytime sleep-exit the morning reset otherwise owns; closes the "very
+  red" trap where a stuck `sleep_mode` made B1's `apply_natural` serve the amber nightlight). The FAN
+  button (B4) is **fan-only** — it clears the `sleep_mode` flag (un-caps `apply_fan` from its L2 sleep cap)
+  but does NOT touch AL sleep or the lights. Two reasons it stays off the lights: clearing AL sleep makes
+  AL **self-on the lights asynchronously** (a flash that beat a prompt `light.turn_off`), and the FP300
+  illuminance is dominated by the bedroom lights THEMSELVES (~640 lux on / ~48 off), so anything that
+  turns the lights off makes the in-room sensor read "dark" and `presence_on` re-lights them (a feedback
+  loop the fan button must not get tangled in — see the lux-gate note below). The
   stuck state itself recurs because the LSIO HA's unclean shutdown restores a STALE `input_boolean` snapshot
   on restart — every deploy can resurrect an overnight override until the 09:00/alarm morning reset clears it. The
   dial emits `dial_rotate_<dir>_<slow|fast|step>` (caught by the substring match) alongside harmless
@@ -75,10 +80,15 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   The lux gate is window-aware (`in morning window OR illuminance < 50` — wake regardless of ambient
   light during the 15-min window, gate on darkness afterwards) and lives in ONE place:
   `binary_sensor.bedroom_auto_light_allowed` (templates.yaml). `bedroom_presence_on` (its darkness
-  condition), `bedroom_apply_natural_gated`, and the Tap Dial Button-4 sleep-exit all reference that
-  sensor — tune the 50-lux threshold / window there, once. The window reads `sensor.bedroom_wake_start`
-  (the shared dynamic-wake source — see below), the SAME sensor the dispatcher's morning exception uses,
-  so the two are inherently in sync (no duplicated formula).
+  condition) and `bedroom_apply_natural_gated` reference that sensor — tune the 50-lux threshold / window
+  there, once. The window reads `sensor.bedroom_wake_start` (the shared dynamic-wake source — see below),
+  the SAME sensor the dispatcher's morning exception uses, so the two are inherently in sync (no duplicated
+  formula). **Feedback-loop caveat (tuning):** `sensor.aqara_fp300_illuminance` is dominated by the
+  bedroom lights themselves (~640 lux with them on, ~48 off), so the gate is partly circular — turning the
+  lights off makes the room read "dark," which can have `presence_on` re-light it ~30 s later. The 50-lux
+  threshold sits right in this room's lights-off ambient (~48), so it's borderline; pick a value clearly
+  below the lights-off daytime ambient if you want to stop daytime auto-lighting (this is why the fan
+  button stays out of light control entirely).
   **Verification gotcha:** an automation's `entity_id` derives from its `alias` (slugified) at
   first creation, NOT its `id` — so `bedroom_fan_temperature` (id) is
   `automation.bedroom_fan_temperature_control` (alias) in the state machine / recorder DB. Query by
