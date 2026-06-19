@@ -7,6 +7,20 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
+- HA → Uptime-Kuma heartbeat (catch a wedged-but-running Home Assistant) — review item 4.1 in
+  `docs/home-assistant-review-2026-06-19.md`. The AutoKuma label only proves the HA *container* is up;
+  a wedged automation engine (stuck event loop / locked recorder) still serves HTTP `:8123` but fires
+  no alerts, and nothing external notices. Fix = HA actively pushes a Kuma **Push** monitor every
+  ~5 min, so the watchdog lives outside HA. Three steps: (1) create a Kuma Push monitor (heartbeat
+  ~10 min, **retries 0** — a missed push parks in PENDING otherwise, per the kuma-push-down lesson),
+  copy its push URL; (2) add the token as SOPS secret `ha_kuma_heartbeat_url` + a
+  `rest_command: ha_kuma_heartbeat` (GET `<url>&status=up&msg=ok`) in
+  `home-assistant/templates/configuration.yaml.j2`; (3) a `time_pattern: minutes:"/5"` automation in
+  `home-assistant/files/automations.yaml` calling it. Pairs with the shipped 1.2 persistent_notification
+  fallback (1.2 surfaces a critical alert if push fails; 4.1 catches HA being dead entirely).
+  Ready-to-paste code in the review doc §4.1. Caveat: not a perfect liveness proof (a partial wedge
+  may still tick the timer) but catches the common scheduler/loop-stuck failures the HTTP check misses.
+
 - Tune bedroom air-quality alert thresholds (revisit ~2026-06-25, after ~1 week of baseline) —
   the four moderate + four SEVERE `threshold` binary-sensors in
   `home-assistant/templates/configuration.yaml.j2` (`binary_sensor.bedroom_{co2,pm2_5,voc,nox}_high`

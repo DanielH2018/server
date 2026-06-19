@@ -856,3 +856,26 @@
             title: "✅ Zigbee bridge online"
             message: "Zigbee2MQTT is back; devices are reconnecting."
             tag: zigbee_bridge
+
+# AL self-on suppression: Adaptive Lighting re-applies its managed state on every HA start and turns
+# light.bedroom_lights ON by itself (AL's own log flags this; it happens on every deploy, ~120s). Cancel
+# it — but ONLY when the room is empty AND it's not the morning wake window, so it never fights a
+# legitimate on-state (worst case it leaves the lights on = status quo, never off-when-you-want-on). The
+# 20s delay must outlast AL's startup apply; if a restart shows AL re-on the lights AFTER this fires,
+# bump the delay (watch `custom_components.adaptive_lighting` in the log for the apply timing).
+- id: bedroom_al_startup_suppress
+  alias: Bedroom suppress AL self-on at startup
+  description: AL turns the bedroom lights on by itself after every HA restart; turn them back off unless the room is occupied or it's the wake window.
+  mode: single
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    - delay: "00:00:20"
+    - if: >-
+        {{ is_state('binary_sensor.aqara_fp300_presence', 'off')
+           and states('sensor.bedroom_wake_start') in ['unknown', 'unavailable'] }}
+      then:
+        - service: light.turn_off
+          target:
+            entity_id: light.bedroom_lights

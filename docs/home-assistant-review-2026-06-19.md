@@ -84,7 +84,11 @@ lands in the HA UI even if the mobile push silently fails (zero change to the no
 
 ## 2. Behaviour worth changing
 
-### 2.1 — Adaptive Lighting self-turns-on the bedroom lights at every HA start/deploy **[recommend]**
+### 2.1 — Adaptive Lighting self-turns-on the bedroom lights at every HA start/deploy **[implemented 2026-06-19]**
+Shipped as `automation.bedroom_al_startup_suppress` (`files/automations.yaml`). **Verify the 20 s delay
+outlasts AL's startup apply** on your box — if a restart shows AL re-on the lights *after* the
+suppress fires, bump the delay. Fails safe (gated on empty room + no wake window → worst case leaves
+lights on = status quo).
 Known + logged (memory `ha-adaptive-lighting-self-on-startup`, AL's own log flags the bug): after
 **every** HA restart/deploy (~every config edit, ~120 s) AL flips `light.bedroom_lights` on by itself.
 With `min_brightness: 1` it's a brief low flash, but it's a real daily annoyance and — combined with
@@ -153,7 +157,7 @@ reproducible from the repo. Lower priority; documented so it's a conscious choic
 
 ## 4. Observability gaps
 
-### 4.1 — HA is monitored as a *container*, not as a *function* **[recommend]**
+### 4.1 — HA is monitored as a *container*, not as a *function* **[deferred → `ansible/PLANS.md` backlog]**
 The autokuma label gives you up/down on the container, but a **wedged-but-running** HA (event loop
 stuck, automations not firing, recorder locked) looks "up". The system already has the monitor-bridge
 / Uptime-Kuma push pattern. A trivial HA automation that pushes a Kuma push-monitor heartbeat
