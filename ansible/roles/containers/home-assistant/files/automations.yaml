@@ -93,10 +93,12 @@
         - conditions: "{{ act == 'button_3_hold_release' }}"
           sequence:
             - service: script.bedroom_bedtime
-        # Button 4 = FAN. PRESS = reset to automatic (clear fan override + apply temp band);
-        # HOLD = boost to 100% (engage fan override so it sticks until reset/morning).
+        # Button 4 = FAN. TAP = reset to automatic: exit sleep mode FIRST (so the fan un-caps from the
+        # L2 sleep cap), then clear the fan override + apply the temp band. HOLD = boost to 100% (engage
+        # fan override so it sticks until reset/morning; boost sets % directly, overriding the cap itself).
         - conditions: "{{ act == 'button_4_press_release' }}"
           sequence:
+            - service: script.bedroom_exit_sleep
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_fan_manual

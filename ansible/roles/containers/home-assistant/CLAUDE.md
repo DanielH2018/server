@@ -61,10 +61,13 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `*_press_release`/`*_hold_release` events — a tap fires `button_N_press`→`button_N_press_release`,
   but a HOLD fires `button_N_press` (!) then repeats `button_N_hold` then `button_N_hold_release`, so
   matching `*_press`/`*_hold` double-fires the tap before every hold AND runs holds ~3×; the release
-  events are mutually exclusive (exactly one per gesture). Every non-Sleep-button (B1/B2) LIGHT action
-  calls `script.bedroom_exit_sleep` FIRST (clears `sleep_mode` + AL sleep mode) — touching the normal
-  lights releases the night state (the daytime sleep-exit the morning reset otherwise owns; without it
-  a stuck `sleep_mode` made B1's `apply_natural` serve the amber nightlight = the "very red" trap). The
+  events are mutually exclusive (exactly one per gesture). Every non-Sleep-button action — B1, B2, and
+  B4's fan-auto **tap** — calls `script.bedroom_exit_sleep` FIRST (clears `sleep_mode` + AL sleep mode):
+  using the normal lights/fan releases the night state (the daytime sleep-exit the morning reset otherwise
+  owns). Two traps this closes: a stuck `sleep_mode` made B1's `apply_natural` serve the amber nightlight
+  (the "very red" bug), and it kept `apply_fan` pinned at the L2 sleep cap (B4-tap now un-caps it). The
+  stuck state itself recurs because the LSIO HA's unclean shutdown restores a STALE `input_boolean` snapshot
+  on restart — every deploy can resurrect an overnight override until the 09:00/alarm morning reset clears it. The
   dial emits `dial_rotate_<dir>_<slow|fast|step>` (caught by the substring match) alongside harmless
   `brightness_step_*` no-ops. Presence
   (FP300) + an `input_boolean` manual-off override + an alarm-driven morning reset live in the
