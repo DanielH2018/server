@@ -72,12 +72,17 @@ bedroom_apply_natural:
         # Exception: night-time "got up" dim nightlight. While in sleep mode (set at bedtime) OR
         # deep night (00:00-05:00), a presence re-trigger gives the warm dim scene.bedroom_nightlight
         # instead of full lighting — so walking back into a dark room at night doesn't blast you.
-        # FIRST (above the wake ramp) so it wins overnight; at wake time the morning reset has already
-        # cleared sleep_mode and the hour is >= 5, so this is false and the ramp below runs instead.
+        # FIRST (above the wake ramp) so it wins overnight — BUT it must YIELD to the wake window:
+        # an early alarm (e.g. 05:00 → window starts 04:45) has now().hour < 5 during the ramp, which
+        # would otherwise mask the wake with the 3% nightlight. `and not in_window` lets the ramp below
+        # run inside its window even before 05:00. Uses the SAME in_window expression as the wake
+        # exception so the two branches stay provably mutually exclusive at the boundary.
         - conditions:
             - condition: template
               value_template: >-
-                {{ is_state('input_boolean.bedroom_sleep_mode', 'on') or now().hour < 5 }}
+                {% set ws = states('sensor.bedroom_wake_start') %}
+                {% set in_window = ws not in ['unknown', 'unavailable'] and timedelta(0) <= (now() - as_datetime(ws)) < timedelta(minutes=15) %}
+                {{ (is_state('input_boolean.bedroom_sleep_mode', 'on') or now().hour < 5) and not in_window }}
           sequence:
             - service: scene.turn_on
               target:
@@ -319,3 +324,15 @@ bedroom_notify:
             message: "{{ message }}"
             data:
               tag: "{{ tag }}"
+    # Fallback for the can't-miss tier only: a `pierce` alert ALSO lands in the HA UI as a persistent
+    # notification, so a critical event is still visible even if the mobile push silently fails (lapsed
+    # FCM token, phone re-paired → the notify.mobile_app_* service name changed). notification_id = tag
+    # so a repeat replaces in place; it lingers until acknowledged (intended for a critical event — the
+    # routine recovery is non-pierce and deliberately does NOT clear it). Zero change to the normal path.
+    - if: "{{ pierce | default(false) }}"
+      then:
+        - service: persistent_notification.create
+          data:
+            notification_id: "{{ tag }}"
+            title: "{{ title }}"
+            message: "{{ message }}"

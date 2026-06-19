@@ -780,17 +780,11 @@
         charge: "{{ states('sensor.apc_ups_battery_charge') }}"
         runtime_min: "{{ (states('sensor.apc_ups_battery_runtime') | float(0) / 60) | round }}"
     - choose:
-        # Newly on battery — a power outage. Watch buzz; routine for DND (a brief blip shouldn't wake
-        # you; the low-battery escalation below is the can't-miss one).
-        - conditions: "{{ is_ob and not was_ob }}"
-          sequence:
-            - service: script.bedroom_notify
-              data:
-                title: "🔌 Power outage"
-                message: "UPS on battery ({{ charge }}% · ~{{ runtime_min }} min runtime)."
-                tag: ups_power
-                watch: true
-        # Newly low battery — runtime critical, the server may shut down imminently. Pierce DND.
+        # Newly low battery FIRST — the can't-miss tier. `choose:` is first-match-wins, so a sudden
+        # OL->"OB LB" transition (battery already weak when mains drops, both flags set in one step)
+        # must hit this pierce branch and not be shadowed by the routine outage branch below. The
+        # normal OL->OB->"OB LB" sequence is unaffected: on the OL->OB step is_lb is false, so the
+        # outage branch still fires, then this one fires on the later OB->"OB LB" step.
         - conditions: "{{ is_lb and not was_lb }}"
           sequence:
             - service: script.bedroom_notify
@@ -800,6 +794,16 @@
                 tag: ups_power
                 watch: true
                 pierce: true
+        # Newly on battery — a routine outage. Watch buzz; routine for DND (a brief blip shouldn't wake
+        # you; the low-battery escalation above is the can't-miss one).
+        - conditions: "{{ is_ob and not was_ob }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🔌 Power outage"
+                message: "UPS on battery ({{ charge }}% · ~{{ runtime_min }} min runtime)."
+                tag: ups_power
+                watch: true
         # Recovered — was on battery, mains is back (can only be a genuine OB->OL runtime transition,
         # never the startup reconnect, because from_state must be a valid OB flag, not unavailable).
         - conditions: "{{ was_ob and not is_ob }}"
