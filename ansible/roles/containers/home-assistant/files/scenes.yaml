@@ -16,3 +16,10 @@
       state: "on"
       rgb_color: [255, 140, 40]
       brightness_pct: 3
+- id: bedroom_relax
+  name: Bedroom Relax
+  entities:
+    light.bedroom_lights:
+      state: "on"
+      color_temp_kelvin: 2200
+      brightness_pct: 30
