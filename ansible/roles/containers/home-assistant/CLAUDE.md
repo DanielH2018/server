@@ -51,8 +51,13 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   (which IS Ansible-templated) — `template: !include templates.yaml` pulls the template sensors in.
   Git is the source of truth; HA UI edits are overwritten on deploy. Both feed `common_config_changed`, so an
   edit recreates HA (~120s). First automation: Hue Tap Dial (RDM002) drives the
-  `light.bedroom_lights` group (dial = brightness, button 1 = smart toggle, buttons 2-3 =
-  scenes, button 4 = natural-state reset → `script.bedroom_apply_natural`, see below). Presence
+  `light.bedroom_lights` group (dial = brightness ±12%; B1 = Power: press = smart toggle [on → `bedroom_apply_natural`
+  ungated, off → off + manual-off], hold = reset-to-auto [clear overrides, re-sync lux-gated
+  via `bedroom_apply_natural_gated` + fan]; B2 = Brightness: press = `scene.bedroom_relax`,
+  hold = `scene.bedroom_bright`; B3 = Sleep: press = `scene.bedroom_nightlight`, hold =
+  `script.bedroom_bedtime`; B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`],
+  hold = boost 100%). Manual taps are ungated by design — the lux gate lives on the presence
+  path + the reset hold.. Presence
   (FP300) + an `input_boolean` manual-off override + an alarm-driven morning reset live in the
   same file; `bedroom_presence_on` and the morning reset BOTH call `script.bedroom_apply_natural`.
   Presence-on's lux gate is window-aware: `in morning window OR illuminance < 50` — wake regardless

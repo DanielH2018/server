@@ -175,12 +175,14 @@ recovery, no bounce". Twelve, feeding `bedroom_threshold_alert`:
 ## 8. Operator controls
 
 **Tap Dial (RDM002):**
-- **Rotate** — brightness ±12%.
-- **Button 1 press** — smart toggle (off engages `manual_off`; on clears it).
-- **Button 1 hold** — start the bedtime routine.
-- **Button 2** — `scene.bedroom_bright`.
-- **Button 3** — reset the fan to automatic (clear `fan_manual`, apply the temperature band).
-- **Button 4** — reset the lights to their natural state (clear `manual_off`).
+
+| Control | Press / Rotate | Hold |
+|---------|----------------|------|
+| **Button 1 — Power** | toggle: on → natural (Adaptive Lighting, ungated); off → off + stay-off | reset to auto (clear overrides, re-sync lights lux-gated + fan) |
+| **Button 2 — Brightness** | Relax / cozy scene (warm ~30%) | Bright scene (full) |
+| **Button 3 — Sleep** | Nightlight (warm ~3%) | Bedtime routine |
+| **Button 4 — Fan** | fan → auto | boost 100% |
+| **Dial** | brightness ±12% | — |
 
 **Phone / watch:**
 - **Bedtime mode** (watch) → runs the bedtime routine.
