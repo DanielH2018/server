@@ -157,7 +157,13 @@ reproducible from the repo. Lower priority; documented so it's a conscious choic
 
 ## 4. Observability gaps
 
-### 4.1 — HA is monitored as a *container*, not as a *function* **[deferred → `ansible/PLANS.md` backlog]**
+### 4.1 — HA is monitored as a *container*, not as a *function* **[implemented 2026-06-19]**
+Shipped (commit `9a3404b`) — an HA `time_pattern:/1min` automation stamps `input_datetime.ha_heartbeat`
+(recorder-excluded); `monitor-bridge.check_ha_heartbeat()` polls its freshness over the `apps` net
+(Bearer token) and pushes the "Home Assistant Automations" Kuma push monitor down when it goes stale
+— catching a wedged automation engine the HTTP healthcheck can't see. Design:
+`docs/superpowers/specs/2026-06-19-ha-automation-heartbeat-watchdog-design.md`. Verified live: `OK
+ha_heartbeat - fresh`, AutoKuma created the monitor, unit tests cover the stale/missing/disabled paths.
 The autokuma label gives you up/down on the container, but a **wedged-but-running** HA (event loop
 stuck, automations not firing, recorder locked) looks "up". The system already has the monitor-bridge
 / Uptime-Kuma push pattern. A trivial HA automation that pushes a Kuma push-monitor heartbeat

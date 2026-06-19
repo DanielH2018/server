@@ -15,7 +15,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **sixteen checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **seventeen checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Backup Freshness** (Kopia `/api/v1/sources` last-snapshot age + errorCount)
   - **Root Disk** (`node_filesystem_*` for `/` **and `/boot`** — old kernels filling /boot
@@ -77,6 +77,13 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     the instance-blind `node_*` queries in the Memory/Root Disk checks. Empty
     `PI_GLANCES_URL` = disabled (stays up); the static Kuma HTTP monitor
     `daniel-pi-glances` covers glances itself being down.)
+  - **Home Assistant Automations** (HA's REST API `/api/states/input_datetime.ha_heartbeat` over
+    `apps`, Bearer `HA_TOKEN`: an HA `time_pattern:/1min` automation stamps that helper with `now()`,
+    so its `last_changed` is fresh ONLY while HA's automation *scheduler* is executing. `down` once
+    it's older than `HA_HEARTBEAT_MAX_AGE` (300 s) — a wedged-but-running HA (HTTP `:8123` up,
+    scheduler stuck) that the container healthcheck can't see. Empty `HA_URL`/`HA_TOKEN` = disabled
+    (stays up); a 404/auth/unreachable HA surfaces as `down`. Pure `ha_heartbeat_fresh()` is
+    unit-tested. Spec: `docs/superpowers/specs/2026-06-19-ha-automation-heartbeat-watchdog-design.md`.)
 - The restart/OOM/cpu/target/5xx checks use `prom_vector()` (keeps series labels) so the alert
   names *which* container / target / route is failing; the others use `prom_scalar()`.
 - Explicit `down` = fast, descriptive alert; the push monitor's heartbeat interval (600 s,
@@ -93,9 +100,12 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,n8n,gitops_alive,gitops_status,scrutiny,pi,b2}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,n8n,gitops_alive,gitops_status,scrutiny,pi,b2,ha}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
+- The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
+  **Long-Lived Access Token** (operator-minted in HA → Profile → Security; can't be templated), NOT
+  a Kuma push token. tier `assisted` (rotate = revoke + reissue in HA). Empty `HA_TOKEN` disables it.
 - The two GitOps monitors read host state via a **read-only bind-mount**
   `/var/lib/gitops-deploy:/gitops-state:ro` (written by the `gitops_deploy` host role) — no
   Prometheus/Kopia/n8n source. That dir must exist owned by the deploy user before deploy; the
@@ -111,7 +121,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the sixteen push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the seventeen push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI
