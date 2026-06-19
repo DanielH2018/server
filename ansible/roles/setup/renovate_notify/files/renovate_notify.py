@@ -76,8 +76,11 @@ def discord(webhook: str, content: str) -> None:
         log("no DISCORD_WEBHOOK set; skipping post")
         return
     data = json.dumps({"content": content[:1900]}).encode()
+    # User-Agent is required: Discord is behind Cloudflare, which 403s the default
+    # Python-urllib UA (error code 1010) — without this the post silently fails.
     req = urllib.request.Request(
-        webhook, data=data, headers={"Content-Type": "application/json"})
+        webhook, data=data,
+        headers={"Content-Type": "application/json", "User-Agent": "renovate-notify"})
     try:
         urllib.request.urlopen(req, timeout=10)
     except Exception as e:  # alerting must never crash the notifier
