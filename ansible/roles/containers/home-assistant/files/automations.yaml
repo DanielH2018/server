@@ -162,7 +162,7 @@
 # you set after waking). The alarm encodes the day, so the old weekday/weekend split is gone.
 - id: bedroom_morning_reset
   alias: Bedroom morning reset and wake
-  description: At the alarm (wake ramp) + a 09:00 fallback (hygiene) — clear overnight overrides; gently wake if present.
+  description: At the alarm (wake ramp) + a 09:00 fallback (hygiene) — clear overnight overrides; gently wake if home.
   mode: single
   trigger:
     - platform: time
@@ -188,10 +188,15 @@
     - if: "{{ is_state('person.daniel', 'home') }}"
       then:
         - service: script.bedroom_apply_fan
-    # Wake ramp: ONLY on the alarm trigger and only if present. apply_natural's morning exception
-    # (window = sensor.bedroom_wake_start .. +15 min) computes the 1%->50% ramp — same source of
-    # truth as the Tap Dial button-4 reset. The 09:00 fallback deliberately never forces lights.
-    - if: "{{ trigger.id == 'alarm' and is_state('binary_sensor.aqara_fp300_presence', 'on') }}"
+    # Wake ramp: ONLY on the alarm trigger and only if HOME — gated on the GEOFENCE (person.daniel),
+    # NOT the FP300 room sensor. At motion_sensitivity:high (reverted because no setting separates the
+    # fan from a person — see the role CLAUDE.md / [[ha-fp300-fan-false-hold]]) the radar drops a
+    # motionless sleeper, so `presence` can read `off` at the exact moment you need waking. person.daniel
+    # == home is the reliable "you're here to be woken" signal and still won't ramp an empty bedroom while
+    # away (an FP300 dog/false-positive can't trigger the wake either). apply_natural's morning exception
+    # (window = sensor.bedroom_wake_start .. +15 min) computes the 1%->50% ramp — same source of truth as
+    # the Tap Dial button-4 reset. The 09:00 fallback deliberately never forces lights.
+    - if: "{{ trigger.id == 'alarm' and is_state('person.daniel', 'home') }}"
       then:
         - service: script.bedroom_apply_natural
         # Sleep-quality note: "you slept N h" (gentler wake if <6h — apply_natural already softened

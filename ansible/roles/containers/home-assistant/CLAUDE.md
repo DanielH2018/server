@@ -224,7 +224,14 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   and `bedroom_presence_on`'s window read it (the old triplicated 06:00/07:00 formula + weekday/weekend
   split are GONE). `bedroom_morning_reset` also has a `09:00` `fallback` trigger that clears the
   overnight overrides (sleep mode, AL sleep, manual-off, fan-manual) on no-alarm days WITHOUT forcing
-  lights; only the `alarm` trigger runs the ramp. **Uses the WATCH alarm** (`pixel_watch_3`), not the
+  lights; only the `alarm` trigger runs the ramp. **The wake ramp is gated on the GEOFENCE
+  (`person.daniel == home`), NOT the FP300 room sensor** (changed 2026-06-19). The room presence
+  sensor was the gate originally, but with `motion_sensitivity` reverted to `high` (no setting
+  separates the running fan from a person — see the FP300 fan false-HOLD note) the radar drops a
+  motionless sleeper, so `presence` can read `off`/`unknown` at the exact moment you need waking
+  (e.g. right after an HA restart the battery Zigbee radio hasn't reported yet). `person home` is the
+  reliable "you're here to be woken" signal and still won't ramp an empty bedroom while away (an FP300
+  dog/false-positive can't trigger the wake either). **Uses the WATCH alarm** (`pixel_watch_3`), not the
   phone's (unreliable). Watch caveat moot now — set alarms anywhere; only morning ones wake.
 - **Sleep-quality-aware morning (since 2026-06-18).** The wake ramp adapts to how you slept: in
   `bedroom_apply_natural`'s morning exception, `wake_peak` = 30% (gentler) if
