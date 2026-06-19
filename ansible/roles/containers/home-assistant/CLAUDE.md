@@ -257,8 +257,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `presence_on` are untouched.
 - **Temperature → fan control (since 2026-06-18; smoothed 2026-06-18).** `script.bedroom_apply_fan`
   (in `files/scripts.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
-  `sensor.bedroom_airgradient_one_temperature` (°F) on a **smooth ~1-level-per-°F curve**: off below
-  ~72°F, then `ideal = t − 71` → `round` clamped 1–9 (72→L1 … 80→L9). A **~0.7-level hysteresis
+  `sensor.bedroom_airgradient_one_temperature` (°F) on a **smooth ~0.8-level-per-°F curve**: off below
+  ~72°F, then `ideal = (t − 71)/1.3` → `round` clamped 1–9 (72→L1 … ~82→L9). A **~0.7-level hysteresis
   deadband** (`want` only steps when temp wants ≥0.7 level away from current; turning on jumps to the
   ideal) prevents flapping. **Level caps:** max **L4** during 22:00–06:00, max **L2** in sleep mode.
   Works in fan LEVELS, not raw %, because the DREO integration `math.ceil()`s a requested % up to the
