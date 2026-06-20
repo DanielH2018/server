@@ -168,6 +168,20 @@ binary_sensor:
     entity_id: sensor.bedroom_airgradient_one_humidity
     lower: 30                          # alerts <= 27%, clears >= 33% (winter-dry)
     hysteresis: 3
+  # Outdoor air quality (source = Open-Meteo sensor.outdoor_pm2_5, files/rest.yaml). Two tiers like
+  # the indoor air-quality sensors: moderate (high) and the wildfire/"unhealthy" cutoff (severe).
+  # Feed the airqualityoutdoor / airqualityoutdoorsevere categories of bedroom_threshold_alert AND
+  # the smoke guard in the window advisor. Starting points — tune with the indoor ones (~2026-06-25).
+  - platform: threshold
+    name: "Outdoor PM2.5 high"        # -> binary_sensor.outdoor_pm2_5_high
+    entity_id: sensor.outdoor_pm2_5
+    upper: 35                          # alerts >= 40, clears <= 30 µg/m³ (US AQI "moderate"+)
+    hysteresis: 5
+  - platform: threshold
+    name: "Outdoor PM2.5 severe"      # -> binary_sensor.outdoor_pm2_5_severe
+    entity_id: sensor.outdoor_pm2_5
+    upper: 100                         # alerts >= 105, clears <= 95 µg/m³ (wildfire / "unhealthy")
+    hysteresis: 5
 
 # Template sensors are a STATIC copy'd file (files/templates.yaml), included here — same reason as
 # automations/scenes/scripts: their HA Jinja expressions would be mangled by Ansible's templater if
