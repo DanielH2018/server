@@ -209,7 +209,9 @@ Create `ansible/roles/containers/home-assistant/tests/test_fan_macros.py`:
 
 ```python
 """Unit tests for the DREO fan macros in custom_templates/fan.jinja."""
-from jinja_harness import render_macro
+import math
+
+from jinja_harness import _forgiving_round, render_macro
 
 FAN = "fan.jinja"
 
@@ -226,10 +228,25 @@ def _target(temp_f, cur_level, is_night, sleep):
     return int(render_macro(FAN, "fan_target_level", temp_f, cur_level, is_night, sleep))
 
 
-def test_level_pct_roundtrip_never_drifts():
-    # The fan.jinja promise: send the midpoint % for a level, read it back, get the same level.
-    for level in range(0, 10):
-        assert _level(_pct(level)) == level, f"round-trip drifted at level {level}"
+def test_send_pct_ceils_to_target_level():
+    # The real fan.jinja promise: level_to_pct sends the MIDPOINT of a level's range, and the DREO
+    # integration math.ceil()s the requested % up to a discrete level — landing exactly on L. (This
+    # is NOT pct_to_level(level_to_pct(L)): pct_to_level expects the fan's REPORTED %, not the send %.)
+    for level in range(1, 10):
+        assert math.ceil(_pct(level) * 9 / 100) == level, f"send% for L{level} does not ceil to it"
+
+
+def test_reported_pct_recovers_level():
+    # pct_to_level maps the fan's REPORTED percentage back to its level (so bedroom_fan_manual_detect
+    # can compare our commanded level against the cloud echo). A 9-speed fan reports round(L*100/9)%.
+    for level in range(1, 10):
+        reported = _forgiving_round(level * 100 / 9)
+        assert _level(reported) == level, f"reported% for L{level} does not recover it"
+
+
+def test_level_zero_is_off_both_ways():
+    assert _pct(0) == 0
+    assert _level(0) == 0
 
 
 def test_off_below_start_temperature():
@@ -271,7 +288,7 @@ def test_night_cap_limits_to_level_4():
 - [ ] **Step 2: Run to verify failure**
 
 Run: `uv run pytest ansible/roles/containers/home-assistant/tests/test_fan_macros.py -v`
-Expected: FAIL — `test_level_pct_roundtrip_*` may pass (existing macros), but every `_target` test fails because `fan_target_level` is not defined (Jinja `TemplateAssertionError`).
+Expected: FAIL — the three `pct_to_level`/`level_to_pct` tests (`test_send_pct_ceils_to_target_level`, `test_reported_pct_recovers_level`, `test_level_zero_is_off_both_ways`) PASS against the existing macros, but every `_target` test FAILS because `fan_target_level` is not yet defined (Jinja `TemplateAssertionError`).
 
 - [ ] **Step 3: Add the macro to fan.jinja**
 
