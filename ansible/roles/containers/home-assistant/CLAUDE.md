@@ -361,6 +361,19 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   (no HA restart). Cards (as of 2026-06-18): APC UPS, **AirGradient ONE air quality** (CO₂ gauge +
   pollutant glance — the metrics the threshold alerts fire on), DREO Tower Fan, **Bedroom Controls**
   (lights group + AL master switch + the three override booleans), and the Aqara FP300 glance.
+- **Outdoor AQI + window advisor (since 2026-06-20).** Open-Meteo's free air-quality API feeds
+  three sensors: `sensor.outdoor_pm2_5` (µg/m³), `sensor.outdoor_us_aqi`, `sensor.outdoor_pm10`
+  — pulled via `files/rest.yaml` (copy'd, not templated; no API key; uses `zone.home`
+  lat/lon from HA; polls every 30 min via a `scan_interval`). Two outdoor threshold
+  `binary_sensor`s wire into the existing **threshold-alert engine** with their own category ids:
+  `airqualityoutdoor` (PM2.5 ≥ 35 µg/m³ → moderate, `watch`) and `airqualityoutdoorsevere`
+  (PM2.5 ≥ 55 µg/m³ → severe, `watch`+`pierce`). The **"Open the window?"** advisor lives in
+  `automation.bedroom_window_advisor` (triggers: CO₂/VOC high OR indoor-hotter-than-outdoor by
+  ≥ 3 °F) and calls `custom_templates/ventilation.jinja` `ventilation_advice()` macro (numbers
+  in → `'none'`/`'stale'`/`'cool'` out; stale = data too old, free-cooling = outdoor cooler AND
+  PM2.5 safe). The macro is unit-tested in `tests/test_ventilation_macros.py`. Smoke-guarded
+  (skips advice when `binary_sensor.outdoor_pm2_5_high` is on). Dashboard: `weather.forecast_home`
+  weather card + outdoor AQI glance added to `ui-lovelace.yaml.j2`.
 - **All persistent state is `./config` → `/config`** (Kopia-backed): the SQLite
   recorder DB, `.storage/`, secrets, automations, and the templated `configuration.yaml`.
   **The "could not validate that the sqlite3 database was shutdown cleanly" warning on every boot is
