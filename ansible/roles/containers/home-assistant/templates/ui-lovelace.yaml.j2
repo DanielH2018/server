@@ -77,6 +77,27 @@ views:
                 name: Temp
               - entity: sensor.bedroom_airgradient_one_pm10
                 name: PM10
+      # ── Outdoor weather + air quality (Met.no forecast + Open-Meteo AQI) ──
+      - type: vertical-stack
+        cards:
+          - type: weather-forecast
+            entity: weather.forecast_home
+            name: Outdoor
+            show_current: true
+            show_forecast: true
+            forecast_type: daily
+          - type: glance
+            title: Outdoor Air
+            columns: 4
+            entities:
+              - entity: sensor.outdoor_us_aqi
+                name: US AQI
+              - entity: sensor.outdoor_pm2_5
+                name: PM2.5
+              - entity: sensor.outdoor_pm10
+                name: PM10
+              - entity: sensor.outdoor_ozone
+                name: Ozone
       # ── DREO Tower Fan (DR-HTF024S) ──────────────────────────────────────
       - type: vertical-stack
         cards:
