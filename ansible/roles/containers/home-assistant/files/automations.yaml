@@ -58,7 +58,20 @@
                 entity_id:
                   - input_boolean.bedroom_manual_off
                   - input_boolean.bedroom_fan_manual
+            # Remember whether the lights were already off BEFORE the reset, so the acknowledgement
+            # blip below only fires when the reset produces NO visible change (the lights "won't turn
+            # on"), not when it turns an already-on light off (that's already visible feedback).
+            - variables:
+                was_off: "{{ is_state('light.bedroom_lights', 'off') }}"
             - service: script.bedroom_apply_natural_gated
+            # Too-bright acknowledgement: if the lux gate blocked auto-on (room too bright) and the
+            # lights were off, the gated apply left them off — soft-flash to confirm the reset
+            # registered, exactly like bedroom_presence_blip does on a too-bright arrival. The blip
+            # needs the lights already off (it takes no snapshot); the blocked gate guarantees that.
+            # No feedback loop: this is button-driven, not lux-driven, so the ~1s flash can't retrigger.
+            - if: "{{ was_off and is_state('binary_sensor.bedroom_auto_light_allowed', 'off') }}"
+              then:
+                - service: script.bedroom_blip
             - if: "{{ is_state('person.daniel', 'home') }}"
               then:
                 - service: script.bedroom_apply_fan

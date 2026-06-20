@@ -112,6 +112,18 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `turn_off` restores the known state. No feedback loop: it fires only at illuminance >= 50 (bright
   ambient), and a ~1s blip can't satisfy `presence_on`'s `below: 50 for: 30s`. No cooldown initially;
   add a trigger `for:` debounce if presence flapping makes it chatty.
+  **Tap Dial button-1 HOLD blips too (since 2026-06-20).** The "reset to auto" branch in
+  `bedroom_tap_dial_control` calls the SAME `script.bedroom_blip` when its lux-gated apply
+  (`script.bedroom_apply_natural_gated`) leaves the lights off — i.e. `bedroom_auto_light_allowed` ==
+  off (too bright) AND the lights were already off before the reset (a `was_off` snapshot taken before
+  the apply, so a reset that turns an already-on light off doesn't double-up the visible feedback with
+  a blip). Same too-bright acknowledgement as the arrival blip, but button-driven (not lux-driven), so
+  there is no feedback-loop concern at all.
+  **`script.bedroom_blip` is the SINGLE source of truth for the blip flash** (off -> 15% warm 2700K ->
+  off). Both the arrival automation AND this Button 1 HOLD branch reference that one script — never
+  re-roll an inline flash — so the acknowledgement is identical by construction and can't drift. Any
+  future "the lights stayed off on purpose, acknowledge it" feedback should call `script.bedroom_blip`
+  too (it requires the lights already off — no snapshot; each caller must enforce that precondition).
   **Verification gotcha:** an automation's `entity_id` derives from its `alias` (slugified) at
   first creation, NOT its `id` — so `bedroom_fan_temperature` (id) is
   `automation.bedroom_fan_temperature_control` (alias) in the state machine / recorder DB. Query by
