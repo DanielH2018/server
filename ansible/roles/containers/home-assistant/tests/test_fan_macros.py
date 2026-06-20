@@ -99,3 +99,29 @@ def test_macro_matches_original_inline_formula():
                     assert _target(t, cur_level, is_night, sleep) == _inline_target(
                         t, cur_level, is_night, sleep
                     ), f"drift at t={t} cur={cur_level} night={is_night} sleep={sleep}"
+
+
+# fan_nudge_level: the Tap Dial fan-dial-mode step. Current level + delta, clamped to 0..9 (0 = off).
+def _nudge(cur_level, delta):
+    return int(render_macro(FAN, "fan_nudge_level", cur_level, delta))
+
+
+def test_fan_nudge_steps_within_range():
+    assert _nudge(3, 1) == 4
+    assert _nudge(3, -1) == 2
+
+
+def test_fan_nudge_clamps_at_zero():
+    assert _nudge(0, -1) == 0   # already off, stays off
+    assert _nudge(1, -1) == 0   # step down to off
+
+
+def test_fan_nudge_clamps_at_max():
+    assert _nudge(9, 1) == 9    # already max, stays
+    assert _nudge(8, 1) == 9
+
+
+def test_fan_nudge_stays_bounded_over_full_range():
+    for cur in range(0, 10):
+        for delta in (-1, 1):
+            assert 0 <= _nudge(cur, delta) <= 9

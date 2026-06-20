@@ -57,6 +57,17 @@ input_datetime:
     has_time: true
     icon: mdi:heart-pulse
 
+# Fan-dial mode timer — its `active` state IS "the dial controls the fan" (Tap Dial button-4 hold
+# toggles it; bedroom_tap_dial_control's dial_rotate branches read it). 5-min SLIDING window: each
+# dial turn restarts it (timer.start), and it auto-reverts to light control on expiry. No `restore:`
+# — idle after an HA restart is intended, so a deploy can't strand the dial in fan mode. No separate
+# input_boolean: the timer IS the source of truth, which is why restart-safety is free.
+timer:
+  bedroom_fan_dial:
+    name: Bedroom fan-dial mode
+    duration: "00:05:00"
+    icon: mdi:fan-chevron-up
+
 # Adaptive Lighting (HACS integration) — sun-tracking color temp + brightness for the bedroom
 # group while it is on. Installed via HACS into custom_components/ (Kopia-backed, like dreo).
 # A full HA restart (this deploy recreates the container) loads the integration; a YAML

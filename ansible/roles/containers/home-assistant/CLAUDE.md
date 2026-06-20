@@ -56,8 +56,11 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   via `bedroom_apply_natural_gated` + fan]; B2 = Brightness: press = `scene.bedroom_relax`,
   hold = `scene.bedroom_bright`; B3 = Sleep: press = sleep TOGGLE [in sleep mode + lights on → lights
   off (stay in sleep mode, fan quiet); else → `scene.bedroom_nightlight` + clear manual-off], hold =
-  `script.bedroom_bedtime` (15-min fade); B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`],
-  hold = boost 100%). Manual taps are ungated by design — the lux gate lives on the presence
+  `script.bedroom_bedtime` (15-min fade); B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`
+  + cancel fan-dial mode], hold = toggle fan-dial mode [`timer.bedroom_fan_dial`, 5-min sliding window:
+  the dial then steps the fan ±1 level via `script.bedroom_fan_nudge`; auto-reverts to light dial on
+  expiry — replaces the old hold-to-boost-100%, max fan still reachable by dialing to L9]). Manual taps
+  are ungated by design — the lux gate lives on the presence
   path + the reset hold. **Tap Dial gotchas (RDM002, verified live):** match button actions on the
   `*_press_release`/`*_hold_release` events — a tap fires `button_N_press`→`button_N_press_release`,
   but a HOLD fires `button_N_press` (!) then repeats `button_N_hold` then `button_N_hold_release`, so
@@ -71,7 +74,16 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   AL **self-on the lights asynchronously** (a flash that beat a prompt `light.turn_off`), and the FP300
   illuminance is dominated by the bedroom lights THEMSELVES (~640 lux on / ~48 off), so anything that
   turns the lights off makes the in-room sensor read "dark" and `presence_on` re-lights them (a feedback
-  loop the fan button must not get tangled in — see the lux-gate note below). The
+  loop the fan button must not get tangled in — see the lux-gate note below).
+  **Fan-dial mode (since 2026-06-20):** B4 HOLD toggles `timer.bedroom_fan_dial` (5-min sliding
+  window) — while it's `active` the dial steps the fan ±1 level (`script.bedroom_fan_nudge`) instead
+  of the lights; it auto-reverts to the light dial on expiry, and a B4 tap cancels it. The timer's
+  `active` state IS the mode (no `input_boolean`, so it's off after any HA restart — deliberately
+  sidesteps the stale-override-restore trap below). The nudge drives off the
+  `input_number.bedroom_fan_expected_level` accumulator (not the laggy DREO cloud %) so rapid turns
+  accumulate, engages `bedroom_fan_manual`, and ignores the night/sleep caps (you're in control until
+  a B4 tap / the morning reset clears the override). `fan_nudge_level` clamp math is a tested macro.
+  The
   stuck state itself recurs because the LSIO HA's unclean shutdown restores a STALE `input_boolean` snapshot
   on restart — every deploy can resurrect an overnight override until the 09:00/alarm morning reset clears it. The
   dial emits `dial_rotate_<dir>_<slow|fast|step>` (caught by the substring match) alongside harmless

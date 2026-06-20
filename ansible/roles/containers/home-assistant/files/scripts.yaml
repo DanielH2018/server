@@ -277,6 +277,59 @@ bedroom_apply_fan:
               data:
                 percentage: "{{ send_pct }}"
 
+# Nudge the fan one DREO level (Tap Dial fan-dial mode: dial = +/-1 level). Driven off the
+# input_number.bedroom_fan_expected_level ACCUMULATOR (instant + server-side) rather than the fan's
+# laggy cloud-pushed percentage, so rapid dial turns accumulate correctly. Engages the manual
+# override (a hand-dialed fan is a manual change); writes the new expected level so
+# bedroom_fan_manual_detect treats our own cloud echo as expected (not an external change). Ignores
+# the night/sleep caps by design — you're explicitly in control. The level PERSISTS after fan-dial
+# mode reverts; clear it via Tap Dial button-4 tap or the morning reset. The % <-> level conversion
+# and the clamp live in fan.jinja (single source of truth).
+bedroom_fan_nudge:
+  alias: "Bedroom — nudge fan one level (Tap Dial fan-dial mode)"
+  description: >-
+    Step fan.tower_fan up/down one DREO level (clamped 0-9, 0 = off) from the
+    bedroom_fan_expected_level accumulator. Engages the manual fan override.
+  mode: queued
+  max: 10
+  fields:
+    delta:
+      description: "+1 to step up a level, -1 to step down."
+      example: 1
+  sequence:
+    - variables:
+        new_level: "{% from 'fan.jinja' import fan_nudge_level %}{{ fan_nudge_level(states('input_number.bedroom_fan_expected_level') | int(0), delta) | int }}"
+        send_pct: "{% from 'fan.jinja' import level_to_pct %}{{ level_to_pct(new_level) | int }}"
+    # Manual override: a hand-dialed fan must not be stomped by the temperature automation.
+    - service: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.bedroom_fan_manual
+    # Accumulator = source of truth (instant); also = expected level, so the parent-less cloud echo
+    # isn't mis-flagged as an external manual change by bedroom_fan_manual_detect.
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.bedroom_fan_expected_level
+      data:
+        value: "{{ new_level }}"
+    - choose:
+        # Level 0 — turn the fan off only if it's currently on.
+        - conditions: "{{ new_level | int == 0 }}"
+          sequence:
+            - if: "{{ is_state('fan.tower_fan', 'on') }}"
+              then:
+                - service: fan.turn_off
+                  target:
+                    entity_id: fan.tower_fan
+      default:
+        - service: fan.turn_on
+          target:
+            entity_id: fan.tower_fan
+        - service: fan.set_percentage
+          target:
+            entity_id: fan.tower_fan
+          data:
+            percentage: "{{ send_pct }}"
+
 # Bedtime / sleep routine: the single "going to sleep" action, shared by the bedroom_bedtime
 # automation (phone Bedtime mode) and the Tap Dial button-3 (Sleep) hold. Engages sleep mode (which caps the
 # fan to Low via bedroom_apply_fan — quiet but still temperature-responsive, NOT frozen), flips

@@ -106,8 +106,9 @@
           sequence:
             - service: script.bedroom_bedtime
         # Button 4 = FAN (fan only). TAP = clear the sleep_mode flag (un-caps the fan) + the fan override,
-        # then apply the temp band — does NOT touch the lights or AL sleep (see the branch for why). HOLD =
-        # boost to 100% (engage fan override so it sticks until reset/morning; boost sets % directly).
+        # then apply the temp band — does NOT touch the lights or AL sleep (see the branch for why); also
+        # cancels fan-dial mode. HOLD = toggle fan-dial mode (the dial then steps the fan +/-1 level; see
+        # the dial_rotate branches + timer.bedroom_fan_dial). Replaces the old hold-to-boost-100%.
         - conditions: "{{ act == 'button_4_press_release' }}"
           sequence:
             # Fan ONLY. Clear the fan's sleep cap (the sleep_mode flag) + the fan override, then apply the
@@ -115,6 +116,10 @@
             # Adaptive Lighting self-on the lights, and the FP300 illuminance is dominated by the bedroom
             # lights THEMSELVES (~640 lux on / ~48 off) — so any light the fan button left on would just be
             # re-lit by presence (off-state reads "dark"). Light + AL-sleep state is owned by B1/B2 + presence.
+            # Tapping "fan back to auto" also exits fan-dial mode (the dial returns to lights). No-op if idle.
+            - service: timer.cancel
+              target:
+                entity_id: timer.bedroom_fan_dial
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_sleep_mode
@@ -122,36 +127,67 @@
               target:
                 entity_id: input_boolean.bedroom_fan_manual
             - service: script.bedroom_apply_fan
+        # Button 4 HOLD = toggle "fan-dial mode": while timer.bedroom_fan_dial is active the dial
+        # controls the FAN level (see the dial_rotate branches); hold again to cancel. It auto-reverts
+        # to light control when the 5-min timer expires (SLIDING — each dial turn restarts it). The
+        # timer's `active` state IS the mode (no separate boolean) so it's off after any HA restart.
+        # Replaces the old hold-to-boost-100% — max fan is still reachable by dialing to L9, and the
+        # notification "Boost fan" action is unchanged.
         - conditions: "{{ act == 'button_4_hold_release' }}"
           sequence:
-            - service: input_boolean.turn_on
-              target:
-                entity_id: input_boolean.bedroom_fan_manual
-            - service: fan.turn_on
-              target:
-                entity_id: fan.tower_fan
-            - service: fan.set_percentage
-              target:
-                entity_id: fan.tower_fan
-              data:
-                percentage: 100
-        # Dial rotate = brightness +/- 12% (substring match catches the *_step variants).
+            - if: "{{ is_state('timer.bedroom_fan_dial', 'active') }}"
+              then:
+                - service: timer.cancel
+                  target:
+                    entity_id: timer.bedroom_fan_dial
+              else:
+                - service: timer.start
+                  target:
+                    entity_id: timer.bedroom_fan_dial
+                # Seed the accumulator from the fan's ACTUAL level so the first dial step is relative
+                # to reality (a prior remote change may have left expected_level stale).
+                - service: input_number.set_value
+                  target:
+                    entity_id: input_number.bedroom_fan_expected_level
+                  data:
+                    value: "{% from 'fan.jinja' import pct_to_level %}{{ pct_to_level(state_attr('fan.tower_fan', 'percentage') | float(0) if is_state('fan.tower_fan', 'on') else 0) | int }}"
+        # Dial rotate = brightness +/- 12% NORMALLY; in fan-dial mode (timer active) = fan +/-1 level.
+        # (Substring match catches the *_step variants.)
         - conditions: "{{ 'dial_rotate_right' in act }}"
           sequence:
-            - service: light.turn_on
-              target:
-                entity_id: light.bedroom_lights
-              data:
-                brightness_step_pct: 12
-                transition: 0.2
+            - if: "{{ is_state('timer.bedroom_fan_dial', 'active') }}"
+              then:
+                - service: script.bedroom_fan_nudge
+                  data:
+                    delta: 1
+                # Sliding window: each turn restarts the 5-min revert timer.
+                - service: timer.start
+                  target:
+                    entity_id: timer.bedroom_fan_dial
+              else:
+                - service: light.turn_on
+                  target:
+                    entity_id: light.bedroom_lights
+                  data:
+                    brightness_step_pct: 12
+                    transition: 0.2
         - conditions: "{{ 'dial_rotate_left' in act }}"
           sequence:
-            - service: light.turn_on
-              target:
-                entity_id: light.bedroom_lights
-              data:
-                brightness_step_pct: -12
-                transition: 0.2
+            - if: "{{ is_state('timer.bedroom_fan_dial', 'active') }}"
+              then:
+                - service: script.bedroom_fan_nudge
+                  data:
+                    delta: -1
+                - service: timer.start
+                  target:
+                    entity_id: timer.bedroom_fan_dial
+              else:
+                - service: light.turn_on
+                  target:
+                    entity_id: light.bedroom_lights
+                  data:
+                    brightness_step_pct: -12
+                    transition: 0.2
 
 # Presence ON: occupied + not overridden → set the lights to their NATURAL state via the
 # dispatcher (morning ramp in-window, else full Adaptive Lighting). The lux gate applies OUTSIDE

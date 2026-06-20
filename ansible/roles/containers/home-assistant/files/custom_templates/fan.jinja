@@ -34,3 +34,10 @@
    else ((ideal | round | int) if (cl == 0 or ideal > cl + 0.7 or ideal < cl - 0.7) else cl) -%}
 {{ [want, cap] | min | int }}
 {%- endmacro -%}
+
+{# Current level + delta -> new level, clamped to 0..FAN_LEVELS (0 = off). Used by
+   script.bedroom_fan_nudge for the Tap Dial fan-dial mode (dial = +/-1 fan level). Pure clamp —
+   the bounds are the tunable bit. Tested in tests/test_fan_macros.py. #}
+{%- macro fan_nudge_level(cur_level, delta) -%}
+{{ [[ (cur_level | int(0)) + (delta | int(0)), 0 ] | max, FAN_LEVELS] | min | int }}
+{%- endmacro -%}
