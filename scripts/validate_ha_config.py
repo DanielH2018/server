@@ -58,30 +58,47 @@ class HAConfigLoader(yaml.SafeLoader):
         super().__init__(stream)
 
     def construct_mapping(self, node, deep=False):
-        mapping = {}
-        for key_node, value_node in node.value:
+        # Reject genuine duplicate keys (HA does; stock PyYAML silently keeps the last). Check the
+        # EXPLICIT keys only — skip YAML merge keys (`<<`) so a legal merge-override (an explicit
+        # key overriding a merged one) is not mis-flagged — then delegate to SafeConstructor, which
+        # processes the merge and builds the dict.
+        seen = set()
+        for key_node, _ in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                continue
             key = self.construct_object(key_node, deep=True)
-            if key in mapping:
+            if key in seen:
                 mark = key_node.start_mark
                 raise HAConfigError(f"duplicate key {key!r} at {mark.name}:{mark.line + 1}")
-            mapping[key] = self.construct_object(value_node, deep=deep)
-        return mapping
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
+# Tracks the !include files currently being loaded, so a cyclic include (a -> b -> a) raises a
+# clear error instead of blowing the stack with an uncaught RecursionError.
+_INCLUDE_STACK: set[Path] = set()
 
 
 def _construct_include(loader: HAConfigLoader, node: yaml.Node):
     target = (loader._root / loader.construct_scalar(node)).resolve()
+    mark = node.start_mark
     if not target.is_file():
-        mark = node.start_mark
         raise HAConfigError(
             f"!include target not found: {target} (at {mark.name}:{mark.line + 1})"
         )
-    with target.open() as f:
-        return yaml.load(f, Loader=HAConfigLoader)
+    if target in _INCLUDE_STACK:
+        raise HAConfigError(f"circular !include: {target} (at {mark.name}:{mark.line + 1})")
+    _INCLUDE_STACK.add(target)
+    try:
+        with target.open() as f:
+            return yaml.load(f, Loader=HAConfigLoader)
+    finally:
+        _INCLUDE_STACK.discard(target)
 
 
 def _construct_placeholder(loader: HAConfigLoader, node: yaml.Node):
     # We don't validate secret/env values; return a harmless string so the tree loads.
-    return f"<{node.tag.lstrip('!')}>"
+    return f"<{node.tag.removeprefix('!')}>"
 
 
 HAConfigLoader.add_constructor("!include", _construct_include)

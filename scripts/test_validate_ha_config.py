@@ -7,7 +7,9 @@ from validate_ha_config import (
     HAConfigLoader,
     ROLE_DIR,
     assemble_config,
+    jinja_errors,
     load_config,
+    validate,
 )
 
 
@@ -67,7 +69,32 @@ def test_real_config_structural_clean(tmp_path):
     assert len(trees) == 2  # configuration.yaml + ui-lovelace.yaml both loaded
 
 
-from validate_ha_config import jinja_errors, validate
+def test_loader_supports_merge_keys(tmp_path):
+    # A legal YAML merge-override must NOT be mis-flagged as a duplicate key.
+    p = tmp_path / "m.yaml"
+    p.write_text("base: &b\n  x: 1\nderived:\n  <<: *b\n  y: 2\n")
+    assert _load(p)["derived"] == {"x": 1, "y": 2}
+
+
+def test_loader_rejects_circular_include(tmp_path):
+    _write(tmp_path / "a.yaml", "x: !include b.yaml\n")
+    _write(tmp_path / "b.yaml", "y: !include a.yaml\n")
+    with pytest.raises(HAConfigError, match="circular"):
+        _load(tmp_path / "a.yaml")
+
+
+def test_loader_detects_duplicate_inside_include(tmp_path):
+    _write(tmp_path / "b.yaml", "k: 1\nk: 2\n")
+    _write(tmp_path / "a.yaml", "data: !include b.yaml\n")
+    with pytest.raises(HAConfigError, match="duplicate key"):
+        _load(tmp_path / "a.yaml")
+
+
+def test_loader_detects_duplicate_in_list_item(tmp_path):
+    p = tmp_path / "list.yaml"
+    p.write_text("- name: one\n  name: two\n")
+    with pytest.raises(HAConfigError, match="duplicate key"):
+        _load(p)
 
 
 def test_jinja_errors_flags_unclosed_inline_block(tmp_path):
