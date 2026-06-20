@@ -65,3 +65,47 @@ def test_real_config_structural_clean(tmp_path):
     errors, trees = load_config(tmp_path)
     assert errors == [], errors
     assert len(trees) == 2  # configuration.yaml + ui-lovelace.yaml both loaded
+
+
+from validate_ha_config import jinja_errors, validate
+
+
+def test_jinja_errors_flags_unclosed_inline_block(tmp_path):
+    cdir = tmp_path / "ct"
+    cdir.mkdir()
+    trees = [{"automation": [{"value_template": "{% if x %}no end"}]}]
+    errors = jinja_errors(trees, cdir)
+    assert errors and "Jinja syntax error" in errors[0]
+
+
+def test_jinja_errors_flags_bad_macro_file(tmp_path):
+    cdir = tmp_path / "ct"
+    cdir.mkdir()
+    (cdir / "broken.jinja").write_text("{% macro f(x) %}{{ x }}\n")  # missing endmacro
+    errors = jinja_errors([], cdir)
+    assert any("broken.jinja" in e for e in errors)
+
+
+def test_jinja_errors_clean_on_valid(tmp_path):
+    cdir = tmp_path / "ct"
+    cdir.mkdir()
+    (cdir / "ok.jinja").write_text("{% macro f(x) %}{{ x | float(0) }}{% endmacro %}\n")
+    trees = [{"value_template": "{{ states('sensor.x') | float(0) }}"}]
+    assert jinja_errors(trees, cdir) == []
+
+
+def test_validate_real_config_is_clean():
+    # The headline regression guard: the live role config passes structural + Jinja checks.
+    assert validate() == []
+
+
+def test_validate_reports_structural_error(tmp_path):
+    role = tmp_path / "role"
+    _write(role / "templates/configuration.yaml.j2", "recorder:\n  x: 1\nrecorder:\n  y: 2\n")
+    _write(role / "templates/customize.yaml.j2", "{}\n")
+    _write(role / "templates/ui-lovelace.yaml.j2", "{}\n")
+    for s in ("automations.yaml", "scenes.yaml", "scripts.yaml", "templates.yaml"):
+        _write(role / "files" / s, "[]\n")
+    (role / "files/custom_templates").mkdir(parents=True)
+    errors = validate(role)
+    assert any("duplicate key" in e for e in errors)

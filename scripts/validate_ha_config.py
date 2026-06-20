@@ -23,6 +23,8 @@ import tempfile
 from pathlib import Path
 
 import yaml
+from jinja2 import Environment
+from jinja2.exceptions import TemplateSyntaxError
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ROLE_DIR = REPO_ROOT / "ansible/roles/containers/home-assistant"
@@ -124,3 +126,68 @@ def load_config(dest: Path) -> tuple[list[str], list]:
         except (HAConfigError, yaml.YAMLError) as exc:
             errors.append(f"structural error in {entry}: {exc}")
     return errors, trees
+
+
+def _iter_template_strings(node):
+    """Yield every string in a loaded YAML structure that looks like a Jinja template."""
+    if isinstance(node, str):
+        if "{{" in node or "{%" in node:
+            yield node
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from _iter_template_strings(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _iter_template_strings(value)
+
+
+def jinja_errors(trees: list, custom_templates_dir: Path) -> list[str]:
+    """Syntax-check (parse, not render) every inline template string in `trees` and each
+    custom_templates/*.jinja file. parse() needs no filters/globals/state, so HA's custom
+    filters and `{% from ... import ... %}` don't cause false positives."""
+    env = Environment()
+    errors: list[str] = []
+    for tree in trees:
+        for template in _iter_template_strings(tree):
+            try:
+                env.parse(template)
+            except TemplateSyntaxError as exc:
+                snippet = template.strip().splitlines()[0][:80]
+                errors.append(f"Jinja syntax error: {exc.message} — in: {snippet!r}")
+    for jinja_file in sorted(custom_templates_dir.glob("*.jinja")):
+        try:
+            env.parse(jinja_file.read_text())
+        except TemplateSyntaxError as exc:
+            errors.append(f"Jinja syntax error in {jinja_file.name}:{exc.lineno}: {exc.message}")
+    return errors
+
+
+def validate(role_dir: Path = ROLE_DIR) -> list[str]:
+    """Assemble + structurally load + Jinja-syntax-check the HA config. Returns error strings
+    ([] = clean)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        dest = Path(tmp)
+        try:
+            assemble_config(role_dir, dest)
+        except HAConfigError as exc:
+            return [str(exc)]
+        errors, trees = load_config(dest)
+        # Jinja-check whatever loaded (a structural failure drops that tree but the macro files
+        # are checked independently).
+        errors += jinja_errors(trees, dest / "custom_templates")
+        return errors
+
+
+def main() -> int:
+    errors = validate()
+    if errors:
+        print("Home Assistant config validation FAILED:")
+        for error in errors:
+            print(f"  - {error}")
+        return 1
+    print("Home Assistant config OK")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
