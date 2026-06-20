@@ -362,18 +362,30 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   pollutant glance — the metrics the threshold alerts fire on), DREO Tower Fan, **Bedroom Controls**
   (lights group + AL master switch + the three override booleans), and the Aqara FP300 glance.
 - **Outdoor AQI + window advisor (since 2026-06-20).** Open-Meteo's free air-quality API feeds
-  three sensors: `sensor.outdoor_pm2_5` (µg/m³), `sensor.outdoor_us_aqi`, `sensor.outdoor_pm10`
-  — pulled via `files/rest.yaml` (copy'd, not templated; no API key; uses `zone.home`
-  lat/lon from HA; polls every 30 min via a `scan_interval`). Two outdoor threshold
-  `binary_sensor`s wire into the existing **threshold-alert engine** with their own category ids:
-  `airqualityoutdoor` (PM2.5 ≥ 35 µg/m³ → moderate, `watch`) and `airqualityoutdoorsevere`
-  (PM2.5 ≥ 55 µg/m³ → severe, `watch`+`pierce`). The **"Open the window?"** advisor lives in
-  `automation.bedroom_window_advisor` (triggers: CO₂/VOC high OR indoor-hotter-than-outdoor by
-  ≥ 3 °F) and calls `custom_templates/ventilation.jinja` `ventilation_advice()` macro (numbers
-  in → `'none'`/`'stale'`/`'cool'` out; stale = data too old, free-cooling = outdoor cooler AND
-  PM2.5 safe). The macro is unit-tested in `tests/test_ventilation_macros.py`. Smoke-guarded
-  (skips advice when `binary_sensor.outdoor_pm2_5_high` is on). Dashboard: `weather.forecast_home`
-  weather card + outdoor AQI glance added to `ui-lovelace.yaml.j2`.
+  four sensors: `sensor.outdoor_pm2_5` & `sensor.outdoor_pm10` (µg/m³), `sensor.outdoor_us_aqi`,
+  `sensor.outdoor_ozone` — pulled via `files/rest.yaml` (copy'd, not templated; **no API key**;
+  a `resource_template` reads `zone.home` lat/lon so the coordinates never enter git;
+  `scan_interval: 1800` = poll every 30 min, the API being hourly). Two outdoor threshold
+  `binary_sensor`s (inline in `configuration.yaml.j2`) wire into the existing **threshold-alert
+  engine** as their own categories: `airqualityoutdoor` (`binary_sensor.outdoor_pm2_5_high`,
+  `upper: 35` → alerts ≥ 40, moderate → `watch`) and `airqualityoutdoorsevere`
+  (`binary_sensor.outdoor_pm2_5_severe`, `upper: 100` → alerts ≥ 105, wildfire tier →
+  `watch`+`pierce`). Mirrors the indoor `airquality`/`airqualitysevere` split (one `watch`/`pierce`
+  per category). The **"Open the window?"** advisor is `automation.bedroom_window_advisor`
+  (gated on `person.daniel` home + not sleep mode). Triggers: (a) `binary_sensor.bedroom_co2_high`/
+  `bedroom_voc_high` off→on (the stale-air edge); (b) indoor temp `numeric_state above: 78` (= the
+  macro's `comfort_hi`) `for: 5m`; (c) `sensor.outdoor_pm2_5` change (the ~30-min poll). It calls
+  the tested `custom_templates/ventilation.jinja` `ventilation_advice()` macro ONCE (numbers in →
+  `'none'`/`'stale'`/`'cool'`): **`stale`** = indoor air stale (CO₂ or VOC high) AND outside clean
+  & comfortable (55–78 °F); **`cool`** = indoor > 78 °F AND outdoor ≥ 5 °F cooler (`cool_delta`) AND
+  outdoor air safe; `stale` outranks `cool`; the `choose:` no-ops on `none`. **Smoke guard (load-
+  bearing):** the macro returns `none` whenever `outdoor_pm > 25` (`pm_safe`) OR
+  `outdoor_pm > indoor_pm`, so it can never advise ventilating into worse/unsafe air. Notify is
+  routine via `script.bedroom_notify` (`tag: window_advice`). Macro math unit-tested in
+  `tests/test_ventilation_macros.py`; the HA `round` returns an int at precision 0
+  (`forgiving_round`), so the "N° cooler" message renders cleanly. Dashboard:
+  `weather.forecast_home` card + an outdoor-AQI glance (US AQI/PM2.5/PM10/ozone) next to the
+  indoor AirGradient card in `ui-lovelace.yaml.j2`.
 - **All persistent state is `./config` → `/config`** (Kopia-backed): the SQLite
   recorder DB, `.storage/`, secrets, automations, and the templated `configuration.yaml`.
   **The "could not validate that the sqlite3 database was shutdown cleanly" warning on every boot is
