@@ -131,7 +131,7 @@ def test_validate_reports_structural_error(tmp_path):
     _write(role / "templates/configuration.yaml.j2", "recorder:\n  x: 1\nrecorder:\n  y: 2\n")
     _write(role / "templates/customize.yaml.j2", "{}\n")
     _write(role / "templates/ui-lovelace.yaml.j2", "{}\n")
-    for s in ("automations.yaml", "scenes.yaml", "scripts.yaml", "templates.yaml"):
+    for s in ("automations.yaml", "scenes.yaml", "scripts.yaml", "templates.yaml", "rest.yaml"):
         _write(role / "files" / s, "[]\n")
     (role / "files/custom_templates").mkdir(parents=True)
     errors = validate(role)

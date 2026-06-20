@@ -32,7 +32,7 @@ ROLE_DIR = REPO_ROOT / "ansible/roles/containers/home-assistant"
 # templates/*.j2 render verbatim (no Ansible vars) -> copied to <name>.yaml.
 _TEMPLATE_FILES = ["configuration.yaml.j2", "customize.yaml.j2", "ui-lovelace.yaml.j2"]
 # files/* copied as-is into the config dir root.
-_STATIC_FILES = ["automations.yaml", "scenes.yaml", "scripts.yaml", "templates.yaml"]
+_STATIC_FILES = ["automations.yaml", "scenes.yaml", "scripts.yaml", "templates.yaml", "rest.yaml"]
 _ANSIBLE_MARKERS = ("{{", "{%")
 # Entry files to structurally load. configuration.yaml pulls in customize/automations/scenes/
 # scripts/templates via !include; ui-lovelace.yaml is referenced by filename (not !include), so

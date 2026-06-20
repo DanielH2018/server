@@ -175,6 +175,11 @@ binary_sensor:
 # comment breaks it). Currently holds sensor.bedroom_wake_start (watch alarm minus 15 min).
 template: !include templates.yaml
 
+# Outdoor air quality (Open-Meteo, no key) — git-managed REST sensor. Copy'd (files/rest.yaml),
+# not inline, because its value_templates use value_json / state_attr that Ansible would mangle.
+# Feeds the outdoor PM2.5 threshold alerts (below) and the window advisor (files/automations.yaml).
+rest: !include rest.yaml
+
 # Recorder hygiene: default_config enables the recorder with defaults (SQLite, keep 10 days, record
 # everything); a top-level recorder: block customizes it without disabling default_config. Trim the
 # highest-churn, lowest-value entities so the DB stays lean — faster history queries + faster startup

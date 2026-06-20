@@ -1,0 +1,36 @@
+---
+# Managed by Ansible (roles/containers/home-assistant/files/rest.yaml).
+# Source of truth — copied to ./config (NOT templated: the {{ value_json }} / {{ state_attr }}
+# Jinja would be mangled by Ansible's templater) and included via `rest: !include rest.yaml`.
+# HA UI edits are NOT persistent. To change, edit this file and redeploy home-assistant.
+#
+# Open-Meteo Air Quality (free, NO API key). resource_template reads zone.home lat/long so the
+# coordinates stay in HA's .storage, never in git. API updates hourly, so scan every 30 min.
+# Fields: current.pm2_5 / pm10 (µg/m³, comparable to the indoor AirGradient), us_aqi (0-500), ozone.
+- resource_template: >-
+    https://air-quality-api.open-meteo.com/v1/air-quality?latitude={{ state_attr('zone.home','latitude') }}&longitude={{ state_attr('zone.home','longitude') }}&current=pm2_5,pm10,us_aqi,ozone&timezone=America%2FChicago
+  scan_interval: 1800
+  sensor:
+    - name: "Outdoor PM2.5"
+      unique_id: outdoor_pm2_5
+      value_template: "{{ value_json.current.pm2_5 }}"
+      unit_of_measurement: "µg/m³"
+      device_class: pm25
+      state_class: measurement
+    - name: "Outdoor PM10"
+      unique_id: outdoor_pm10
+      value_template: "{{ value_json.current.pm10 }}"
+      unit_of_measurement: "µg/m³"
+      device_class: pm10
+      state_class: measurement
+    - name: "Outdoor US AQI"
+      unique_id: outdoor_us_aqi
+      value_template: "{{ value_json.current.us_aqi }}"
+      device_class: aqi
+      state_class: measurement
+    - name: "Outdoor Ozone"
+      unique_id: outdoor_ozone
+      value_template: "{{ value_json.current.ozone }}"
+      unit_of_measurement: "µg/m³"
+      device_class: ozone
+      state_class: measurement
