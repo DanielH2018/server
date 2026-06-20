@@ -73,3 +73,29 @@ def test_sleep_cap_limits_to_level_2():
 
 def test_night_cap_limits_to_level_4():
     assert _target(83.0, 0, True, False) == 4
+
+
+# Migration safety net: the extracted macro must equal the ORIGINAL inline bedroom_apply_fan
+# formula for every input. This pins behavior-preservation of the Task 5 rewire; keep it as a
+# permanent regression guard against the curve being changed in only one place.
+def _inline_target(t, cur_level, is_night, sleep):
+    # The pre-extraction formula, transcribed from scripts.yaml's bedroom_apply_fan.
+    ideal = (t - 71) / 1.3 if t >= 0 else 0
+    cap = 2 if sleep else (4 if is_night else 9)
+    if t < 0 or ideal < 0.3:
+        want = 0
+    elif cur_level == 0 or ideal > cur_level + 0.7 or ideal < cur_level - 0.7:
+        want = _forgiving_round(ideal)  # banker's rounding, matching HA's forgiving_round
+    else:
+        want = cur_level
+    return min(want, cap)
+
+
+def test_macro_matches_original_inline_formula():
+    for t in [x / 10 for x in range(680, 900)]:        # 68.0 .. 89.9 °F
+        for cur_level in range(0, 10):
+            for is_night in (False, True):
+                for sleep in (False, True):
+                    assert _target(t, cur_level, is_night, sleep) == _inline_target(
+                        t, cur_level, is_night, sleep
+                    ), f"drift at t={t} cur={cur_level} night={is_night} sleep={sleep}"

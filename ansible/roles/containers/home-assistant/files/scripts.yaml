@@ -239,25 +239,12 @@ bedroom_apply_fan:
         # shared with bedroom_fan_manual_detect so the round-trip can't drift.
         cur_pct: "{{ state_attr('fan.tower_fan', 'percentage') | float(0) if is_state('fan.tower_fan', 'on') else 0 }}"
         cur_level: "{% from 'fan.jinja' import pct_to_level %}{{ pct_to_level(cur_pct) | int }}"
-        # Smooth temp -> LEVEL: off below ~72°F, then ~0.8 DREO level per °F (72→L1 .. ~82→L9). `ideal`
-        # is the continuous level the temp wants right now. TUNE the curve here: the 71 offset sets the
-        # start temp; the /1.3 divisor sets the slope (bigger = gentler; /1 was the old ~1 level/°F).
-        ideal: "{{ ((t - 71) / 1.3) if t >= 0 else 0 }}"
-        # Quiet caps on the LEVEL: sleep mode (bedtime) -> max L2 (~Low); the 22:00-06:00 night
-        # window -> max L4 (~Medium); otherwise uncapped (L9). Still temperature-responsive — only
-        # the ceiling drops.
+        # Clock + sleep flag stay here (entity/time reads); the curve, hysteresis deadband, and the
+        # night/sleep caps live in fan.jinja's fan_target_level (single source of truth, unit-tested
+        # in tests/test_fan_macros.py). TUNE the curve there.
         is_night: "{{ now().hour >= 22 or now().hour < 6 }}"
         sleep: "{{ is_state('input_boolean.bedroom_sleep_mode', 'on') }}"
-        cap: "{{ (2 if sleep else (4 if is_night else 9)) | int }}"
-        # Hysteresis: off below ~71.3°F; when turning ON jump straight to the ideal level; otherwise
-        # only step when the temp wants a level >=0.7 away from the current one (a ~0.7°F deadband
-        # around each step, so sensor noise doesn't flap the fan).
-        want: >-
-          {{ 0 if (t < 0 or ideal < 0.3)
-             else ((ideal | round | int) if (cur_level == 0 or ideal > cur_level + 0.7 or ideal < cur_level - 0.7)
-                   else cur_level) }}
-        # Apply the cap; result is 0..9.
-        target_level: "{{ [want, cap] | min | int }}"
+        target_level: "{% from 'fan.jinja' import fan_target_level %}{{ fan_target_level(t, cur_level, is_night, sleep) | int }}"
         # % to SEND to hit target_level despite the integration's ceil (level -> midpoint %, via the
         # shared fan.jinja macro): the midpoint of the level's range ceils to exactly L. 0 = off.
         send_pct: "{% from 'fan.jinja' import level_to_pct %}{{ level_to_pct(target_level) | int }}"
