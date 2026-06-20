@@ -23,16 +23,29 @@ Subcommands:
     pi <subpath>             Pi glances API, e.g. `pi fs`    (daniel-pi.lan:61208)
     cert <host[:port]>       Served TLS cert subj/dates [--sni NAME]
     health <container>       Container state + healthcheck rollup (exit 0 = healthy)
+    ha state <entity_id>     Live HA entity state + attrs    (home-assistant :8123)
+    ha automation <id|alias> One automation's on/off + last_triggered (resolves alias!=id)
+    ha get <api-path>        Raw GET /api/<path>, e.g. `ha get error_log`
 
+`ha` is read-only (GET) and authenticates with the SOPS-encrypted claude_ha_token
+(server-only — needs the host age key). The token is fed to curl via stdin, never argv.
 Add `--dry-run` to print the command(s) instead of running them.
 """
 import argparse
 import json
+import os
+import re
 import subprocess
 import sys
 from urllib.parse import urlencode
 
 DEFAULT_TIMEOUT = 10
+HA_PORT = 8123
+HA_CONTAINER = "home-assistant"
+# claude_ha_token lives in the SOPS-encrypted secrets file (repo-root relative).
+SECRETS_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "ansible", "vars", "secrets.yml")
 
 # --- URL builders (pure) ----------------------------------------------------
 
@@ -59,6 +72,83 @@ def scrutiny_url(ip):
 
 def pi_url(subpath):
     return f"http://daniel-pi.lan:61208/api/4/{subpath}"
+
+
+# --- Home Assistant (pure) --------------------------------------------------
+
+
+def ha_state_url(ip, entity_id):
+    return f"http://{ip}:{HA_PORT}/api/states/{entity_id}"
+
+
+def ha_get_url(ip, path):
+    """URL for an arbitrary HA REST path. Normalizes a leading `/` and an
+    `api/` prefix so `error_log`, `/error_log`, and `/api/error_log` all work."""
+    path = path.lstrip("/")
+    if path.startswith("api/"):
+        path = path[len("api/"):]
+    return f"http://{ip}:{HA_PORT}/api/{path}"
+
+
+def ha_curl_argv(url, timeout=DEFAULT_TIMEOUT):
+    """curl argv for an HA GET. The bearer header is fed via stdin (`--config -`,
+    see ha_curl_config), so the token NEVER appears in argv / `ps` / shell history."""
+    return ["curl", "-sS", "--max-time", str(timeout), "--config", "-", url]
+
+
+def ha_curl_config(token):
+    """The `curl --config -` body carrying the auth header (consumed via stdin)."""
+    return f'header = "Authorization: Bearer {token}"\n'
+
+
+def _slug(name):
+    """HA-style slug: lowercase, non-alphanumerics collapsed to single `_`."""
+    return re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
+
+
+def match_automation(states, query):
+    """Find an automation in a `/api/states` list by entity_id, `attributes.id`,
+    or friendly-name slug. Resolves the alias-slug-vs-id trap: an automation's
+    entity_id derives from its *alias*, not its `id`, so the two can differ
+    (e.g. id `bedroom_fan_temperature` -> `automation.bedroom_fan_temperature_control`).
+    Accepts a bare slug/id or a full `automation.<slug>` entity_id. None if no match."""
+    want_entity = query if query.startswith("automation.") else "automation." + query
+    for s in states:
+        eid = s.get("entity_id", "")
+        if not eid.startswith("automation."):
+            continue
+        attrs = s.get("attributes") or {}
+        if eid == want_entity:
+            return s
+        if attrs.get("id") == query:
+            return s
+        if _slug(attrs.get("friendly_name")) == query:
+            return s
+    return None
+
+
+def format_ha_state(obj):
+    """One-to-two-line human summary of a single `/api/states/<entity>` object."""
+    attrs = obj.get("attributes") or {}
+    head = f"{obj.get('entity_id', '?')} = {obj.get('state')}"
+    name = attrs.get("friendly_name")
+    if name:
+        head += f"  ({name})"
+    lc, lu = obj.get("last_changed"), obj.get("last_updated")
+    tail = []
+    if lc:
+        tail.append(f"last_changed={lc}")
+    if lu and lu != lc:
+        tail.append(f"last_updated={lu}")
+    return head + ("\n  " + "  ".join(tail) if tail else "")
+
+
+def format_ha_automation(obj):
+    """Human summary of an automation state — on/off + id + last_triggered."""
+    attrs = obj.get("attributes") or {}
+    return (f"{obj.get('entity_id', '?')} = {obj.get('state')}  "
+            f"({attrs.get('friendly_name', '?')})\n"
+            f"  id={attrs.get('id')}  last_triggered={attrs.get('last_triggered')}")
 
 
 # --- low-level argv / parsing helpers (pure) --------------------------------
@@ -146,6 +236,16 @@ def _build_parser():
     ct.add_argument("--sni", help="SNI servername (defaults to host)")
     hl = sub.add_parser("health", help="container state + healthcheck rollup (exit 0 = healthy)")
     hl.add_argument("container", help="container name, e.g. jellyfin")
+    ha = sub.add_parser("ha", help="Home Assistant live state (read-only, GET)")
+    hasub = ha.add_subparsers(dest="ha_cmd", required=True)
+    hs = hasub.add_parser("state", help="GET /api/states/<entity_id>")
+    hs.add_argument("entity_id", help="e.g. fan.tower_fan")
+    hs.add_argument("--json", action="store_true", help="print raw JSON")
+    hauto = hasub.add_parser("automation", help="one automation by id, alias-slug, or entity_id")
+    hauto.add_argument("query", help="automation id, alias-slug, or full automation.<slug>")
+    hauto.add_argument("--json", action="store_true", help="print raw JSON")
+    hg = hasub.add_parser("get", help="raw GET /api/<path>, e.g. error_log")
+    hg.add_argument("path")
     return p
 
 
@@ -219,6 +319,69 @@ def run_health(container):
     return code
 
 
+def ha_token():
+    """Decrypt claude_ha_token from the SOPS secrets file. Requires the host's age
+    key (present on daniel-server, where HA runs)."""
+    out = subprocess.run(
+        ["sops", "-d", "--extract", '["claude_ha_token"]', SECRETS_PATH],
+        capture_output=True, text=True)
+    if out.returncode != 0:
+        raise SystemExit(
+            f"could not decrypt claude_ha_token from {SECRETS_PATH}: {out.stderr.strip()}")
+    return out.stdout.strip()
+
+
+def ha_get(url, token):
+    """Authenticated HA GET; returns the response body. Token is passed via stdin."""
+    out = subprocess.run(ha_curl_argv(url), input=ha_curl_config(token),
+                         capture_output=True, text=True)
+    if out.returncode != 0:
+        raise SystemExit(f"curl {url} failed: {out.stderr.strip()}")
+    return out.stdout
+
+
+def _ha_url(ip, ns):
+    if ns.ha_cmd == "state":
+        return ha_state_url(ip, ns.entity_id)
+    if ns.ha_cmd == "automation":
+        return ha_get_url(ip, "states")  # fetch all, then match locally
+    return ha_get_url(ip, ns.path)        # get
+
+
+def run_ha(ns):
+    if ns.dry_run:
+        argv = ha_curl_argv(_ha_url("<ha-ip>", ns))
+        print(" ".join(argv) + "   # + Authorization: Bearer <redacted> (via --config stdin)")
+        return 0
+    body = ha_get(_ha_url(resolve_ip(HA_CONTAINER), ns), ha_token())
+    if ns.ha_cmd == "get":
+        print(body, end="")
+        return 0
+    if ns.ha_cmd == "state":
+        if ns.json:
+            print(body)
+            return 0
+        try:
+            obj = json.loads(body)
+        except json.JSONDecodeError:
+            print(body.strip())
+            return 1
+        # A missing entity returns {"message": "Entity not found."}.
+        if not isinstance(obj, dict) or "entity_id" not in obj:
+            msg = obj.get("message") if isinstance(obj, dict) else body.strip()
+            print(f"{ns.entity_id}: {msg or 'not found'}")
+            return 1
+        print(format_ha_state(obj))
+        return 0
+    # automation
+    m = match_automation(json.loads(body), ns.query)
+    if m is None:
+        print(f"automation '{ns.query}' not found (by entity_id, id, or alias-slug)")
+        return 1
+    print(json.dumps(m, indent=2) if ns.json else format_ha_automation(m))
+    return 0
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     ns = _build_parser().parse_args(argv)
@@ -228,6 +391,9 @@ def main(argv=None):
             print(" ".join(inspect_argv(ns.container)))
             return 0
         return run_health(ns.container)
+    # `ha` resolves a token + talks to the HA REST API rather than streaming a pipeline.
+    if ns.cmd == "ha":
+        return run_ha(ns)
     stages = plan(argv, resolve_ip)
     if ns.dry_run:
         for stage in stages:

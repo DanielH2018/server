@@ -170,3 +170,108 @@ def test_health_not_found_exits_one():
     text, code = probe.format_health([], "nope")
     assert code == 1
     assert "not found" in text
+
+
+# --- ha subcommand: URL builders --------------------------------------------
+
+def test_ha_state_url():
+    assert probe.ha_state_url("10.1.2.3", "fan.tower_fan") == \
+        "http://10.1.2.3:8123/api/states/fan.tower_fan"
+
+
+def test_ha_get_url_bare_path():
+    assert probe.ha_get_url("10.1.2.3", "error_log") == "http://10.1.2.3:8123/api/error_log"
+
+
+def test_ha_get_url_normalizes_leading_slash_and_api_prefix():
+    # A user may type any of these; all mean the same endpoint.
+    for path in ("error_log", "/error_log", "api/error_log", "/api/error_log"):
+        assert probe.ha_get_url("h", path) == "http://h:8123/api/error_log"
+
+
+# --- ha subcommand: match_automation (the alias-slug-vs-id trap) -------------
+
+def _auto(entity_id, _id, friendly, state="on", last_triggered="2026-06-20T12:00:00+00:00"):
+    return {"entity_id": entity_id, "state": state,
+            "attributes": {"id": _id, "friendly_name": friendly,
+                           "last_triggered": last_triggered}}
+
+
+_HA_STATES = [
+    {"entity_id": "fan.tower_fan", "state": "on", "attributes": {}},
+    _auto("automation.bedroom_presence_on", "presence_1", "Bedroom Presence On"),
+    # The CLAUDE.md trap: alias-slug != id. The id is bedroom_fan_temperature,
+    # but the entity_id (derived from the alias) is ..._control.
+    _auto("automation.bedroom_fan_temperature_control", "bedroom_fan_temperature",
+          "Bedroom Fan Temperature Control"),
+]
+
+
+def test_match_automation_by_entity_slug():
+    m = probe.match_automation(_HA_STATES, "bedroom_presence_on")
+    assert m["entity_id"] == "automation.bedroom_presence_on"
+
+
+def test_match_automation_by_id_when_alias_differs():
+    # Querying the id finds the entity even though its slug differs — the whole point.
+    m = probe.match_automation(_HA_STATES, "bedroom_fan_temperature")
+    assert m["entity_id"] == "automation.bedroom_fan_temperature_control"
+
+
+def test_match_automation_by_friendly_name_slug():
+    m = probe.match_automation(_HA_STATES, "bedroom_fan_temperature_control")
+    assert m["attributes"]["id"] == "bedroom_fan_temperature"
+
+
+def test_match_automation_accepts_full_entity_id():
+    m = probe.match_automation(_HA_STATES, "automation.bedroom_presence_on")
+    assert m["attributes"]["id"] == "presence_1"
+
+
+def test_match_automation_none_for_unknown():
+    assert probe.match_automation(_HA_STATES, "does_not_exist") is None
+
+
+def test_match_automation_ignores_non_automation_domain():
+    # "tower_fan" is a fan, not an automation — must not match.
+    assert probe.match_automation(_HA_STATES, "tower_fan") is None
+
+
+# --- ha subcommand: curl argv must never carry the token ---------------------
+
+def test_ha_curl_argv_reads_header_from_stdin_config():
+    argv = probe.ha_curl_argv("http://h:8123/api/states/x")
+    assert "--config" in argv and "-" in argv
+    assert argv[-1] == "http://h:8123/api/states/x"
+
+
+def test_ha_curl_argv_carries_no_token():
+    # Regression guard: no element of argv may carry the bearer token (ps/history).
+    argv = probe.ha_curl_argv("http://h:8123/api/states/x")
+    assert not any("Bearer" in a or "Authorization" in a for a in argv)
+
+
+def test_ha_curl_config_has_bearer_header():
+    cfg = probe.ha_curl_config("SECRET_TOKEN")
+    assert 'header = "Authorization: Bearer SECRET_TOKEN"' in cfg
+
+
+# --- ha subcommand: output formatters ---------------------------------------
+
+def test_format_ha_state_shows_entity_state_and_name():
+    obj = {"entity_id": "fan.tower_fan", "state": "on",
+           "attributes": {"friendly_name": "Tower Fan"},
+           "last_changed": "2026-06-20T12:00:00+00:00",
+           "last_updated": "2026-06-20T12:00:00+00:00"}
+    out = probe.format_ha_state(obj)
+    assert "fan.tower_fan" in out and "on" in out and "Tower Fan" in out
+    assert "last_changed=2026-06-20T12:00:00+00:00" in out
+
+
+def test_format_ha_automation_includes_id_and_last_triggered():
+    obj = _auto("automation.bedroom_presence_on", "presence_1", "Bedroom Presence On")
+    out = probe.format_ha_automation(obj)
+    assert "automation.bedroom_presence_on" in out
+    assert "presence_1" in out
+    assert "last_triggered=2026-06-20T12:00:00+00:00" in out
+    assert "Bedroom Presence On" in out
