@@ -1111,3 +1111,67 @@
         entity_id: input_datetime.ha_heartbeat
       data:
         timestamp: "{{ now().timestamp() }}"
+
+# Window advisor: suggest opening a window when it's worth it AND safe. Two paths, both gated on
+# OUTDOOR air being safe + no dirtier than indoors (the smoke guard lives in ventilation.jinja, so
+# this can never advise ventilating into bad air): (a) STALE — indoor CO2/VOC crossed high while it's
+# clean + comfortable outside; (b) COOL — the room is warm and it's meaningfully cooler + clean
+# outside (free cooling vs. running the fan). The decision is the tested ventilation_advice macro;
+# this automation only reads entities + notifies. Routine via bedroom_notify (silent while DND/sleep,
+# phone-only, away-hold-aware), coalescing tag so a persistent condition refreshes in place. The
+# cooling 'above: 78' trigger must track the macro's comfort_hi default (78). No cooldown initially —
+# the routine channel updates the same tag silently; add a debounce only if it proves chatty.
+- id: bedroom_window_advisor
+  alias: Bedroom window advisor
+  description: Suggest opening a window for stale air or free cooling when outdoor air is safe.
+  mode: single
+  trigger:
+    # Stale-air edge: indoor CO2/VOC crosses high (fires promptly, once per episode).
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_co2_high
+        - binary_sensor.bedroom_voc_high
+      from: "off"
+      to: "on"
+    # Free-cooling: the room crosses into "warm" (edge, 5-min stable — NOT a `for:` on a noisy temp
+    # value, which would never settle). Re-checked when outdoor PM updates (~every 30 min) so a
+    # clearing-outside while already warm still nudges. A time-pattern is intentionally avoided.
+    - platform: numeric_state
+      entity_id: sensor.bedroom_airgradient_one_temperature
+      above: 78
+      for: "00:05:00"
+    - platform: state
+      entity_id: sensor.outdoor_pm2_5
+  condition:
+    - condition: state
+      entity_id: person.daniel
+      state: "home"
+    - condition: state
+      entity_id: input_boolean.bedroom_sleep_mode
+      state: "off"
+  action:
+    # The macro is evaluated ONCE here (DRY — no duplicate call in a condition gate). When the
+    # verdict is 'none' (e.g. an outdoor-PM poll fired but nothing's actionable) the choose below
+    # matches no branch and the automation no-ops. Single-line {% from %}{{ }} (no surrounding
+    # whitespace) so verdict is exactly 'stale'/'cool'/'none' — same single-line import pattern as
+    # the fan.jinja use elsewhere in this file.
+    - variables:
+        verdict: "{% from 'ventilation.jinja' import ventilation_advice %}{{ ventilation_advice(states('sensor.bedroom_airgradient_one_temperature'), state_attr('weather.forecast_home', 'temperature'), states('sensor.bedroom_airgradient_one_pm2_5'), states('sensor.outdoor_pm2_5'), is_state('binary_sensor.bedroom_co2_high', 'on') or is_state('binary_sensor.bedroom_voc_high', 'on')) }}"
+        out_temp: "{{ state_attr('weather.forecast_home', 'temperature') | round }}"
+        in_temp: "{{ states('sensor.bedroom_airgradient_one_temperature') | round }}"
+        co2: "{{ states('sensor.bedroom_airgradient_one_carbon_dioxide') }}"
+    - choose:
+        - conditions: "{{ verdict == 'stale' }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🪟 Open a window?"
+                message: "Air's stale (CO₂ {{ co2 }} ppm) — it's {{ out_temp }}°F & clean outside. Crack a window."
+                tag: window_advice
+        - conditions: "{{ verdict == 'cool' }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🪟 Free cooling"
+                message: "It's {{ out_temp }}°F outside ({{ in_temp - out_temp }}° cooler) & clean — open up instead of the fan."
+                tag: window_advice
