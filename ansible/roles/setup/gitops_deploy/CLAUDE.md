@@ -18,7 +18,9 @@ the held SHA and the hold clears automatically.
 - Refuses to *deploy* from a dirty working tree (operator mid-edit) but the tick still
   completes normally and writes `last_run` (`next_action(..., dirty=True) -> "dirty"`) — the
   skip is healthy, not an outage, so it must not trip the GitOps-Alive monitor's stale-file
-  threshold.
+  threshold. The dirty-tree Discord page is throttled (`should_alert_dirty`) to at most once
+  per America/Chicago calendar day, on the first tick at/after 07:00 CT — without it a long
+  edit session would re-page every 30-min tick. State: `/var/lib/gitops-deploy/dirty_alerted_date`.
 - **Broad changes** (shared `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`)
   are NOT auto-scoped — the deployer alerts and defers to a manual full deploy.
 

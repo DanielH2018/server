@@ -18,12 +18,15 @@ import subprocess
 import sys
 import time
 import urllib.request
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from deploy_logic import (  # noqa: E402
     container_names,
     next_action,
     services_from_changed_paths,
+    should_alert_dirty,
 )
 
 HOLD_FILE = "/var/lib/gitops-deploy/hold_sha"
@@ -31,6 +34,13 @@ LAST_RUN = "/var/lib/gitops-deploy/last_run"
 # Last origin SHA we've already alerted on for a broad change, so a deferred
 # broad change doesn't re-page Discord every 30-min tick until it's resolved.
 BROAD_FILE = "/var/lib/gitops-deploy/broad_alerted_sha"
+# Last CT date (YYYY-MM-DD) we paged for a dirty working tree. The tick runs every
+# 30 min, so without this an open edit session would re-alert all day; we throttle
+# to one alert per day, fired on the first tick at/after DIRTY_ALERT_HOUR (07:00 CT).
+DIRTY_ALERT_FILE = "/var/lib/gitops-deploy/dirty_alerted_date"
+DIRTY_ALERT_HOUR = 7
+# Host clock is UTC; the operator wants the daily reminder at 07:00 local time.
+CHICAGO = ZoneInfo("America/Chicago")
 
 
 def cfg() -> dict[str, str]:
@@ -182,8 +192,13 @@ def main() -> int:
 
     action = next_action(local, origin, hold, dirty)
     if action == "dirty":
-        discord("⚠️ gitops-deploy: working tree dirty on daniel-server — skipping. "
-                "Resolve manually.")
+        # Healthy skip (operator mid-edit). Throttle the page to once a day at
+        # ~07:00 CT instead of every 30-min tick (see DIRTY_ALERT_FILE).
+        now_ct = datetime.now(CHICAGO)
+        if should_alert_dirty(now_ct, _read_marker(DIRTY_ALERT_FILE), DIRTY_ALERT_HOUR):
+            discord("⚠️ gitops-deploy: working tree dirty on daniel-server — skipping. "
+                    "Resolve manually.")
+            _write_marker(DIRTY_ALERT_FILE, now_ct.date().isoformat())
         return 0
     if action == "noop":
         return 0

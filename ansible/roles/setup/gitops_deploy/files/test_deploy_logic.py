@@ -1,5 +1,12 @@
 # ansible/roles/setup/gitops_deploy/files/test_deploy_logic.py
-from deploy_logic import services_from_changed_paths, next_action, container_names
+from datetime import datetime
+
+from deploy_logic import (
+    services_from_changed_paths,
+    next_action,
+    container_names,
+    should_alert_dirty,
+)
 
 
 def test_single_service_template():
@@ -111,3 +118,47 @@ def test_container_names_dedupes():
 
 def test_container_names_empty():
     assert container_names("") == []
+
+
+# The dirty-tree alert fires on every 30-min tick by default, which spams the
+# webhook through a long edit session. should_alert_dirty() throttles it to at
+# most once per America/Chicago calendar day, and never before the morning hour
+# (07:00 CT) — so an overnight-dirty tree pages once at ~7 AM, not all night.
+def test_dirty_alert_fires_first_tick_after_7am_when_never_alerted():
+    # Overnight-dirty tree, first eligible morning tick, no prior alert today.
+    now = datetime(2026, 6, 20, 7, 0)
+    assert should_alert_dirty(now, None) is True
+
+
+def test_dirty_alert_suppressed_before_7am():
+    # A pre-dawn tick must stay silent even if we've never alerted.
+    now = datetime(2026, 6, 20, 6, 59)
+    assert should_alert_dirty(now, None) is False
+
+
+def test_dirty_alert_suppressed_when_already_alerted_today():
+    # Second (and every later) tick on the same CT day after the morning alert.
+    now = datetime(2026, 6, 20, 12, 30)
+    assert should_alert_dirty(now, "2026-06-20") is False
+
+
+def test_dirty_alert_fires_again_on_a_new_day():
+    # Still dirty the next morning -> a fresh once-a-day reminder.
+    now = datetime(2026, 6, 21, 7, 15)
+    assert should_alert_dirty(now, "2026-06-20") is True
+
+
+def test_dirty_alert_at_exactly_7am_boundary_inclusive():
+    now = datetime(2026, 6, 20, 7, 0)
+    assert should_alert_dirty(now, "2026-06-19") is True
+
+
+def test_dirty_alert_newly_dirtied_after_7am_alerts_once():
+    # Tree goes dirty mid-afternoon with no alert recorded today -> one alert now.
+    now = datetime(2026, 6, 20, 15, 0)
+    assert should_alert_dirty(now, None) is True
+
+
+def test_dirty_alert_custom_hour():
+    assert should_alert_dirty(datetime(2026, 6, 20, 8, 0), None, alert_hour=9) is False
+    assert should_alert_dirty(datetime(2026, 6, 20, 9, 0), None, alert_hour=9) is True

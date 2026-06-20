@@ -61,6 +61,24 @@ def next_action(local_head: str, origin_head: str, hold_sha: str | None,
     return "deploy"
 
 
+def should_alert_dirty(now, last_alert_date: str | None,
+                       alert_hour: int = 7) -> bool:
+    """Whether this tick should send the dirty-working-tree Discord alert.
+
+    The deploy timer fires every 30 min, so an unthrottled dirty alert pages the
+    webhook through every long edit session. This caps it to at most once per
+    calendar day and suppresses it before `alert_hour`, so an overnight-dirty
+    tree pages once in the morning (~07:00 CT) instead of all night.
+
+    `now` is the current time already in the target timezone (America/Chicago);
+    `last_alert_date` is the ISO date (`YYYY-MM-DD`) we last alerted on, or None.
+    The caller records `now.date().isoformat()` whenever this returns True.
+    """
+    if now.hour < alert_hour:
+        return False
+    return last_alert_date != now.date().isoformat()
+
+
 def container_names(compose_text: str) -> list[str]:
     """Every `container_name:` declared in a rendered docker-compose.yml, in order.
 
