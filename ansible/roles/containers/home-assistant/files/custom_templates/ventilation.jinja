@@ -1,0 +1,21 @@
+{# Ventilation advisor — should you open a window? Pure decision math; entity reads (states/now)
+   stay in the caller (bedroom_window_advisor, files/automations.yaml). Returns 'stale' (indoor air
+   is stale, ventilate), 'cool' (free cooling available), or 'none' (don't suggest). Every non-'none'
+   verdict REQUIRES outdoor air to be both under the safe cap AND no dirtier than indoors — the
+   system can never advise ventilating into worse/unsafe air (the smoke guard). Args coerce inside
+   (like lighting.jinja) so a caller may pass strings or numbers. Unavailable -> safe 'none'.
+   Unit-tested in tests/test_ventilation_macros.py. Tune the comfort band / cool delta / PM cap here.
+   'stale' outranks 'cool' when both apply. #}
+{%- macro ventilation_advice(indoor_temp, outdoor_temp, indoor_pm, outdoor_pm, air_stale,
+                             comfort_lo=55, comfort_hi=78, cool_delta=5, pm_safe=25) -%}
+{%- set it = indoor_temp | float(0) -%}
+{%- set ot = outdoor_temp | float(999) -%}
+{%- set ip = indoor_pm | float(0) -%}
+{%- set op = outdoor_pm | float(999) -%}
+{%- set stale = air_stale | bool -%}
+{%- if op > pm_safe or op > ip -%}none
+{%- elif stale and comfort_lo <= ot <= comfort_hi -%}stale
+{%- elif it > comfort_hi and (it - ot) >= cool_delta -%}cool
+{%- else -%}none
+{%- endif -%}
+{%- endmacro -%}
