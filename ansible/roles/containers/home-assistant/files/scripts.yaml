@@ -82,7 +82,8 @@ bedroom_apply_natural:
             - condition: template
               value_template: >-
                 {% set ws = states('sensor.bedroom_wake_start') %}
-                {% set in_window = ws not in ['unknown', 'unavailable'] and timedelta(0) <= (now() - as_datetime(ws)) < timedelta(minutes=15) %}
+                {% from 'lighting.jinja' import in_wake_window %}
+                {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool %}
                 {{ (is_state('input_boolean.bedroom_sleep_mode', 'on') or now().hour < 5) and not in_window }}
           sequence:
             - service: scene.turn_on
@@ -98,21 +99,17 @@ bedroom_apply_natural:
             - condition: template
               value_template: >-
                 {% set ws = states('sensor.bedroom_wake_start') %}
-                {{ ws not in ['unknown', 'unavailable'] and timedelta(0) <= (now() - as_datetime(ws)) < timedelta(minutes=15) }}
+                {% from 'lighting.jinja' import in_wake_window %}
+                {{ in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool }}
           sequence:
             - variables:
-                # Minutes elapsed into the 15-min wake window (0 at the window start, 15 at the alarm).
+                # now()/sensor reads stay here; the ramp + sleep-aware peak live in lighting.jinja.
                 wake_elapsed_min: "{{ (now() - as_datetime(states('sensor.bedroom_wake_start'))).total_seconds() / 60 }}"
-                # Sleep-aware peak: after a short night (<6h slept) wake gentler to 30% instead of
-                # 50%. sleep_duration may lag (Google Sleep API finalizes around wake) — unknown/0
-                # falls back to the normal 50%. Only the peak changes; the window/transition don't.
                 sleep_min: "{{ states('sensor.pixel_9_pro_sleep_duration') | float(0) }}"
-                wake_peak: "{{ 30 if (0 < sleep_min < 360) else 50 }}"
             - service: script.bedroom_set_natural_brightness
               data:
-                brightness_pct: "{{ (1 + (wake_peak - 1) * wake_elapsed_min / 15) | round(0) | int }}"
-                # transition is seconds (HA service unit): minutes left in the 15-min window -> seconds.
-                transition: "{{ ((15 - wake_elapsed_min) * 60) | round(0) | int }}"
+                brightness_pct: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(wake_elapsed_min, sleep_min) | int }}"
+                transition: "{% from 'lighting.jinja' import wake_transition %}{{ wake_transition(wake_elapsed_min) | int }}"
       # Default: full Adaptive Lighting — natural color AND brightness from the sun curve.
       default:
         - service: adaptive_lighting.set_manual_control
