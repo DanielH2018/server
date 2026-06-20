@@ -54,8 +54,9 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `light.bedroom_lights` group (dial = brightness ±12%; B1 = Power: press = smart toggle [on → `bedroom_apply_natural`
   ungated, off → off + manual-off], hold = reset-to-auto [clear overrides, re-sync lux-gated
   via `bedroom_apply_natural_gated` + fan]; B2 = Brightness: press = `scene.bedroom_relax`,
-  hold = `scene.bedroom_bright`; B3 = Sleep: press = `scene.bedroom_nightlight`, hold =
-  `script.bedroom_bedtime`; B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`],
+  hold = `scene.bedroom_bright`; B3 = Sleep: press = sleep TOGGLE [in sleep mode + lights on → lights
+  off (stay in sleep mode, fan quiet); else → `scene.bedroom_nightlight` + clear manual-off], hold =
+  `script.bedroom_bedtime` (15-min fade); B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`],
   hold = boost 100%). Manual taps are ungated by design — the lux gate lives on the presence
   path + the reset hold. **Tap Dial gotchas (RDM002, verified live):** match button actions on the
   `*_press_release`/`*_hold_release` events — a tap fires `button_N_press`→`button_N_press_release`,
@@ -130,8 +131,13 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   intervention RIGHT NOW: an ordered `choose:` of time-based **exceptions** (brightness overrides
   on AL's natural color) with **full Adaptive Lighting (color + brightness) as `default:`**.
   The FIRST exception is the night-time dim nightlight (`scene.bedroom_nightlight`) when
-  `bedroom_sleep_mode` is on OR it's 00:00–05:00 — so a presence re-trigger overnight doesn't blast
+  `bedroom_sleep_mode` is on OR it's 00:00–05:00 — so a presence re-trigger doesn't blast
   you (it wins over the wake ramp; at wake time sleep_mode is cleared and hour≥5, so it's false).
+  **Note (since 2026-06-20):** while `sleep_mode` is on, `bedroom_presence_on` is GATED OFF entirely
+  (see its conditions), so there is NO automatic "got up overnight" nightlight — getting up leaves
+  the room dark and a B3 tap brings the nightlight back. The sleep-mode arm of this exception is thus
+  reached via `presence_on` only in the 00:00–05:00 *no-sleep-mode* case (up late, not yet in bed);
+  it still protects the B3-tap nightlight and any other direct caller of the dispatcher.
   The morning wake (1%→`wake_peak` over the 15 min ENDING at the real alarm; peak 50%, or 30% after a
   short night — see the sleep-quality bullet) is the next exception, its window
   = `sensor.bedroom_wake_start .. +15 min` (dynamic — see the dynamic-wake bullet below), encoded

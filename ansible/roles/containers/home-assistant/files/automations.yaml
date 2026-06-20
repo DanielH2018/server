@@ -81,15 +81,27 @@
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.bedroom_manual_off
-        # Button 3 = SLEEP. PRESS = nightlight (warm dim); HOLD = bedtime / sleep routine.
+        # Button 3 = SLEEP. HOLD = bedtime / sleep routine (15-min fade). PRESS = sleep TOGGLE:
+        # while in sleep mode WITH the lights on (you've wound down and want the room fully dark to
+        # sleep) -> lights OFF, staying in sleep mode so the fan stays quiet AND presence can't relight
+        # you (bedroom_presence_on is gated on sleep_mode below). Otherwise (daytime, or lights already
+        # off) -> the warm nightlight, clearing manual-off. So at night a tap toggles dark <-> nightlight,
+        # and a daytime tap is unchanged (quick nightlight). The auto "got up overnight" nightlight is
+        # gone by design (see the sleep_mode gate on bedroom_presence_on) — get light back with a tap.
         - conditions: "{{ act == 'button_3_press_release' }}"
           sequence:
-            - service: scene.turn_on
-              target:
-                entity_id: scene.bedroom_nightlight
-            - service: input_boolean.turn_off
-              target:
-                entity_id: input_boolean.bedroom_manual_off
+            - if: "{{ is_state('input_boolean.bedroom_sleep_mode', 'on') and is_state('light.bedroom_lights', 'on') }}"
+              then:
+                - service: light.turn_off
+                  target:
+                    entity_id: light.bedroom_lights
+              else:
+                - service: scene.turn_on
+                  target:
+                    entity_id: scene.bedroom_nightlight
+                - service: input_boolean.turn_off
+                  target:
+                    entity_id: input_boolean.bedroom_manual_off
         - conditions: "{{ act == 'button_3_hold_release' }}"
           sequence:
             - service: script.bedroom_bedtime
@@ -166,6 +178,15 @@
   condition:
     - condition: state
       entity_id: input_boolean.bedroom_manual_off
+      state: "off"
+    # Once you're asleep (sleep mode engaged), do NOT auto-light on a presence edge or the dusk lux
+    # crossing — getting up leaves the room dark; tap Tap Dial button 3 for the nightlight. This is
+    # what removes the automatic "got up overnight" nightlight, and it also defuses the mmWave radar
+    # blip relight (a motionless sleeper the radar briefly drops then re-acquires fires the same
+    # off->on edge). SAFE vs. the morning wake: bedroom_morning_reset clears sleep_mode at wake_start
+    # BEFORE the ramp, so presence-driven waking still works once the alarm window opens.
+    - condition: state
+      entity_id: input_boolean.bedroom_sleep_mode
       state: "off"
     # Only auto-light when someone is actually home — an FP300 radar false-positive must not
     # light an empty house while away. The arrive nudge re-checks lights on return.

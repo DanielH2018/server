@@ -17,7 +17,9 @@ uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"
 ## 1. What it does (at a glance)
 
 - **Lighting** follows room presence (Aqara FP300) with an Adaptive-Lighting sun curve, a gentle
-  morning wake ramp tied to your real alarm, and a dim nightlight for night trips.
+  morning wake ramp tied to your real alarm, and a tap-on dim nightlight (Button 3) for night trips.
+  Once you're in sleep mode the room stays dark on its own — presence won't auto-light you until
+  morning.
 - **The fan** (DREO tower) tracks temperature on a smooth curve, with quieter caps at night / in
   sleep mode.
 - **A bedtime routine** sets the room up for sleep; **home/away** turns everything off when you
@@ -180,7 +182,7 @@ recovery, no bounce". Twelve, feeding `bedroom_threshold_alert`:
 |---------|----------------|------|
 | **Button 1 — Power** | toggle: on → natural (Adaptive Lighting, ungated); off → off + stay-off | reset to auto (clear overrides, re-sync lights lux-gated + fan) |
 | **Button 2 — Brightness** | Relax / cozy scene (warm ~30%) | Bright scene (full) |
-| **Button 3 — Sleep** | Nightlight (warm ~3%) | Bedtime routine |
+| **Button 3 — Sleep** | sleep toggle: in sleep mode + lights on → all off (room dark, fan stays quiet); otherwise → nightlight (warm ~3%) | Bedtime routine (15-min fade to nightlight) |
 | **Button 4 — Fan** | fan → auto | boost 100% |
 | **Dial** | brightness ±12% | — |
 
@@ -213,6 +215,7 @@ All set per-category in `bedroom_threshold_alert`'s `cfg` map or per-call to `be
 | Fan curve (start temp / slope / caps) | `bedroom_apply_fan` in `scripts.yaml` (the `ideal`/`cap` lines) |
 | Wake ramp peak / short-night softening | `bedroom_apply_natural` morning exception (`wake_peak`) |
 | Nightlight window | `bedroom_apply_natural` first exception (`sleep_mode` or 00:00–05:00) |
+| Bedtime fade length (15 min) | `transition:` on the `scene.turn_on` in `bedroom_bedtime` (`scripts.yaml`) |
 | Away timings (10 / 30 min) | `bedroom_away` trigger `for:` |
 | Bedtime prompt time (22:00) | `bedroom_bedtime_prompt` trigger |
 | FP300 presence drop-out (desk-sitting) | Z2M **device settings** (not git): `motion_sensitivity`, `absence_delay_timer`, `presence_detection_options` — set via `mosquitto_pub -t 'zigbee2mqtt/Aqara FP300/set'` (current: mmwave / high / 60 s) |
