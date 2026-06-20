@@ -448,12 +448,12 @@ Add at the end of `files/automations.yaml`:
     - condition: state
       entity_id: input_boolean.bedroom_sleep_mode
       state: "off"
-    # Gate the whole automation on a real verdict so the outdoor-PM poll no-ops when nothing's
-    # actionable. Single-line {% from %}{{ }} (no surrounding whitespace) so the result is exactly
-    # 'stale'/'cool'/'none' — same pattern as the fan.jinja import elsewhere in this file.
-    - condition: template
-      value_template: "{% from 'ventilation.jinja' import ventilation_advice %}{{ ventilation_advice(states('sensor.bedroom_airgradient_one_temperature'), state_attr('weather.forecast_home', 'temperature'), states('sensor.bedroom_airgradient_one_pm2_5'), states('sensor.outdoor_pm2_5'), is_state('binary_sensor.bedroom_co2_high', 'on') or is_state('binary_sensor.bedroom_voc_high', 'on')) != 'none' }}"
   action:
+    # The macro is evaluated ONCE here (DRY — no duplicate call in a condition gate). When the
+    # verdict is 'none' (e.g. an outdoor-PM poll fired but nothing's actionable) the choose below
+    # matches no branch and the automation no-ops. Single-line {% from %}{{ }} (no surrounding
+    # whitespace) so verdict is exactly 'stale'/'cool'/'none' — same single-line import pattern as
+    # the fan.jinja use elsewhere in this file.
     - variables:
         verdict: "{% from 'ventilation.jinja' import ventilation_advice %}{{ ventilation_advice(states('sensor.bedroom_airgradient_one_temperature'), state_attr('weather.forecast_home', 'temperature'), states('sensor.bedroom_airgradient_one_pm2_5'), states('sensor.outdoor_pm2_5'), is_state('binary_sensor.bedroom_co2_high', 'on') or is_state('binary_sensor.bedroom_voc_high', 'on')) }}"
         out_temp: "{{ state_attr('weather.forecast_home', 'temperature') | round }}"
@@ -620,4 +620,4 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 **Placeholder scan:** No TBD/TODO/"handle edge cases"/"similar to". All steps carry literal code + exact commands.
 
-**Type/name consistency:** `ventilation_advice(...)` signature and the `'stale'`/`'cool'`/`'none'` return values match between the macro (Task 4), its tests (Task 4), and both call-sites in the automation (Task 5). Entity ids (`sensor.outdoor_pm2_5`, `binary_sensor.outdoor_pm2_5_high`/`_severe`, category ids `airqualityoutdoor`/`airqualityoutdoorsevere`) are consistent across Tasks 1–3 and 5. `home_assistant_rest` register var consistent between the copy task and `common_config_changed` (Task 1). The cooling trigger `above: 78` matches the macro's `comfort_hi` default (78) — flagged as a coupling to keep in sync.
+**Type/name consistency:** `ventilation_advice(...)` signature and the `'stale'`/`'cool'`/`'none'` return values match between the macro (Task 4), its tests (Task 4), and the single call-site in the automation (Task 5 — evaluated once in the action variables, DRY). Entity ids (`sensor.outdoor_pm2_5`, `binary_sensor.outdoor_pm2_5_high`/`_severe`, category ids `airqualityoutdoor`/`airqualityoutdoorsevere`) are consistent across Tasks 1–3 and 5. `home_assistant_rest` register var consistent between the copy task and `common_config_changed` (Task 1). The cooling trigger `above: 78` matches the macro's `comfort_hi` default (78) — flagged as a coupling to keep in sync.
