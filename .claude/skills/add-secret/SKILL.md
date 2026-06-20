@@ -2,7 +2,7 @@
 name: add-secret
 description: Add a new SOPS-encrypted secret to ansible/vars/secrets.yml and register it for rotation tracking. Use when the user wants to add a credential, token, or password that a template will reference.
 allowed-tools: Bash, Read, Edit
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 Add a new secret end-to-end, following the repo's documented flow (CLAUDE.md "Secrets
