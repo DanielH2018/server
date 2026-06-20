@@ -75,13 +75,14 @@
     mode: "0664"
   register: home_assistant_templates
 
-# Shared HA Jinja macros (custom_templates/*.jinja), imported by automations/scripts. Static file
-# via copy (HA Jinja, not Ansible-templated) — same reason as automations/scenes/scripts.
-- name: Deploy custom Jinja templates from static file
+# Shared HA Jinja macros (custom_templates/*.jinja), imported by automations/scripts/templates.
+# Whole-directory copy (HA Jinja, not Ansible-templated) so new macro files ship automatically —
+# same copy-not-template reason as automations/scenes/scripts.
+- name: Deploy custom Jinja templates from static files
   tags: [config]
   ansible.builtin.copy:
-    src: custom_templates/fan.jinja
-    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/custom_templates/fan.jinja"
+    src: custom_templates/
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/custom_templates/"
     mode: "0664"
   register: home_assistant_custom_templates
 

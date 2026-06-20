@@ -25,6 +25,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "scripts",                         # closes the smoke_extract CI gap
   "ansible/roles/setup/gitops_deploy/files",   # deploy_logic decision tests
   "ansible/roles/setup/renovate_notify/files", # notifier decision tests
+  "ansible/roles/containers/home-assistant/tests", # HA Jinja macro logic tests
 ]
 addopts = "-q"
 pythonpath = ["ansible/filter_plugins"]   # lets test_toposort import toposort (replaces conftest.py)
