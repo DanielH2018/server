@@ -347,6 +347,26 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   Traefik-label + bridge-network setup here. Switching to host mode is a separate,
   larger change; revisit only if you add local hardware.
 
+## Testing
+- **Bedroom Jinja math is unit-tested** (`tests/`, run via `uv run pytest` / the prek `pytest`
+  hook / CI — wired in `pyproject.toml` `testpaths`). The bug-prone computed logic now lives in
+  pure `custom_templates/{fan,lighting}.jinja` macros (entity/time reads — `states()`/`now()` —
+  stay in the YAML callers; macros take plain numbers): `fan_target_level` (curve + ±0.7-level
+  hysteresis + night/sleep caps, used by `bedroom_apply_fan`), `in_wake_window` /
+  `wake_brightness` / `wake_transition` (morning ramp, used by `bedroom_apply_natural`), and
+  `auto_light_allowed` (lux gate, used by `templates.yaml`'s `bedroom_auto_light_allowed`).
+- The harness `tests/jinja_harness.py` renders macros in a bare Jinja2 env that mirrors the handful
+  of HA filter overrides the macros use — most importantly HA's `round` is **banker's** rounding
+  (`forgiving_round`, round-half-to-even, int at precision 0), NOT Jinja's stock half-away-from-zero
+  float; the fan level math lands on `.5` midpoints by design, so this is load-bearing.
+  `test_ha_round_semantics.py` pins it. `test_fan_macros.py` carries an old-inline-vs-macro
+  equivalence grid (8.8k points) as a permanent behavior-preservation guard against the curve being
+  changed in only one place.
+- **Adding a tunable formula:** put the math in a `custom_templates/*.jinja` macro (numbers in →
+  numbers/bool out), import it from the YAML caller, and add a test — don't inline new math in the
+  automations. The `custom_templates/` deploy is a whole-directory copy, so a new `.jinja` ships
+  automatically. Config validation (`hass --script check_config`) is a deferred follow-up, not yet wired.
+
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · HA cfg: `templates/configuration.yaml.j2`
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"`
