@@ -4,7 +4,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 **push** monitors, so threshold/backup problems actually page. See repo-root `CLAUDE.md`.
 
 ## At a glance
-- **Image:** `python:3.12-alpine` (stdlib only — no build, no extra deps)
+- **Image:** `python:3.14-alpine` (stdlib only — no build, no extra deps)
 - **Host:** daniel-server · **No web UI**, no Authelia
 - **Networks:** `monitoring` (reach `prometheus:9090`, `uptime-kuma:3001`) + `kopia`
   (reach `kopia:51515`) + `apps` (reach the n8n public API at `n8n:5678`). Joins the `kopia`

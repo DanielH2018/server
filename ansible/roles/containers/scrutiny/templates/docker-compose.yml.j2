@@ -7,7 +7,7 @@ services:
   # Time-series store for SMART history. Internal-only (no host port, not routed by
   # Traefik). Provisioned once via DOCKER_INFLUXDB_INIT_* with a SOPS-stored token.
   scrutiny-influxdb:
-    image: influxdb:2.2
+    image: influxdb:2.9
     container_name: scrutiny-influxdb
     restart: unless-stopped
     security_opt:

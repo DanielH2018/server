@@ -3,7 +3,7 @@
 Scrutiny web UI + collector, backed by InfluxDB. See repo-root `CLAUDE.md`.
 
 ## At a glance
-- **Images:** `ghcr.io/analogj/scrutiny:master-web` + `:master-collector` + `influxdb:2.2`
+- **Images:** `ghcr.io/analogj/scrutiny:master-web` + `:master-collector` + `influxdb:2.9`
 - **Host:** daniel-server · **Port:** 8080 · **URL:** `scrutiny.<domain>` (Authelia: yes)
 - **Networks:** monitoring
 - **Depends on:** traefik, authelia
