@@ -969,6 +969,76 @@ def test_ha_heartbeat_none_state_is_down():
     assert not ok
 
 
+# ── check_ha_heartbeat hysteresis (rides out the ~120s deploy/restart) ──────
+# A redeploy makes the HTTP API briefly unreachable AND leaves the automation
+# scheduler a beat behind, so a single cycle can read unreachable OR stale. Like
+# CPU_CONSECUTIVE, only HA_CONSECUTIVE straight down-cycles page; a single blip
+# pushes up with a streak msg. ha_heartbeat_fresh uses the real clock (no `now`
+# override on this path), so payloads are built relative to real now.
+def _ha_payload(age_s):
+    lc = (datetime.now(timezone.utc) - timedelta(seconds=age_s)).isoformat()
+    return _ha_state(lc)
+
+
+def _ha_cycle(monkeypatch, age_s=600, raises=False):
+    monkeypatch.setattr(check, "HA_URL", "http://home-assistant:8123")
+    monkeypatch.setattr(check, "HA_TOKEN", "tok")
+    if raises:
+        def boom(*a, **k):
+            raise OSError("connection refused")
+        monkeypatch.setattr(check, "_get_json", boom)
+    else:
+        monkeypatch.setattr(check, "_get_json", lambda *a, **k: _ha_payload(age_s))
+    return check.check_ha_heartbeat()
+
+
+def test_ha_heartbeat_single_stale_cycle_is_suppressed(monkeypatch):
+    # One stale cycle (a deploy mid-recreate) must NOT page — pushes up with a streak msg.
+    monkeypatch.setattr(check, "_ha_down_streak", 0)
+    ok, msg = _ha_cycle(monkeypatch, age_s=600)
+    assert ok
+    assert "1/2" in msg  # streak progress vs default HA_CONSECUTIVE=2
+
+
+def test_ha_heartbeat_two_consecutive_stale_cycles_alert(monkeypatch):
+    # Default HA_CONSECUTIVE=2: the 2nd straight stale cycle is a genuinely wedged HA -> down.
+    monkeypatch.setattr(check, "_ha_down_streak", 0)
+    ok, _ = _ha_cycle(monkeypatch, age_s=600)
+    assert ok
+    ok, msg = _ha_cycle(monkeypatch, age_s=600)
+    assert not ok
+    assert "stale" in msg
+
+
+def test_ha_heartbeat_fresh_read_resets_streak(monkeypatch):
+    # stale, then fresh -> never down (a recovered deploy clears the streak).
+    monkeypatch.setattr(check, "_ha_down_streak", 0)
+    assert _ha_cycle(monkeypatch, age_s=600)[0]
+    ok, msg = _ha_cycle(monkeypatch, age_s=60)  # scheduler resumed, heartbeat fresh
+    assert ok
+    assert "fresh" in msg
+    # the next stale cycle starts a NEW streak, so it's suppressed again
+    ok, msg = _ha_cycle(monkeypatch, age_s=600)
+    assert ok
+    assert "1/2" in msg
+
+
+def test_ha_heartbeat_unreachable_api_rides_grace(monkeypatch):
+    # The recreate-window connection error must ride the SAME grace, not page immediately.
+    monkeypatch.setattr(check, "_ha_down_streak", 0)
+    ok, msg = _ha_cycle(monkeypatch, raises=True)
+    assert ok
+    assert "1/2" in msg
+
+
+def test_ha_heartbeat_disabled_when_no_url_token(monkeypatch):
+    monkeypatch.setattr(check, "HA_URL", "")
+    monkeypatch.setattr(check, "HA_TOKEN", "")
+    ok, msg = check.check_ha_heartbeat()
+    assert ok
+    assert "disabled" in msg
+
+
 # --- renovate_alive / check_renovate_alive ---------------------------------
 
 def test_renovate_alive_fresh():

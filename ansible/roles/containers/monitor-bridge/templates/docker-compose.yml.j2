@@ -103,9 +103,13 @@ services:
       # HA time_pattern automation) over the `apps` net with a long-lived token; `down` when it's
       # stale -> a wedged-but-running HA (HTTP :8123 up, scheduler stuck) the container healthcheck
       # can't see. Empty HA_URL/HA_TOKEN = disabled (stays up). 300s = 5 missed 1-min beats.
+      # HA_CONSECUTIVE=2: hysteresis (like CPU_CONSECUTIVE) so a planned redeploy — API
+      # unreachable ~120s, then the scheduler a beat behind — doesn't false-page; only 2 straight
+      # down cycles (~one INTERVAL of continuous badness) go `down`. A real wedge still pages.
       - HA_URL=http://home-assistant:8123
       - HA_TOKEN={{ monitor_bridge_ha_token }}
       - HA_HEARTBEAT_MAX_AGE=300
+      - HA_CONSECUTIVE=2
       - KUMA_PUSH_HA={{ monitor_bridge_ha_push_token }}
       # Renovate manual-action notifier liveness: renovate_notify.py writes last_run on the
       # host (daily timer); bind-mounted read-only at /renovate-state. 36h = one missed run + slack.

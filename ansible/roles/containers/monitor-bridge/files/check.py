@@ -102,6 +102,10 @@ HA_URL = _env("HA_URL", "").rstrip("/")
 HA_TOKEN = _env("HA_TOKEN", "")
 HA_HEARTBEAT_MAX_AGE_S = float(_env("HA_HEARTBEAT_MAX_AGE", "300"))
 HA_HEARTBEAT_ENTITY = "input_datetime.ha_heartbeat"
+# Consecutive-cycle hysteresis (like CPU_CONSECUTIVE) so a planned HA redeploy — which takes
+# the API unreachable for ~120s and then leaves the scheduler a beat behind — doesn't page.
+# 2 straight down cycles (~one full INTERVAL of continuous badness) before `down`.
+HA_CONSECUTIVE = int(_env("HA_CONSECUTIVE", "2"))
 
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
@@ -652,17 +656,40 @@ def ha_heartbeat_fresh(state, max_age_s, now=None):
     return True, "fresh — automations ran %.0fs ago" % age
 
 
+_ha_down_streak = 0
+
+
 def check_ha_heartbeat():
     """Poll HA's automation-driven heartbeat over the apps network (Bearer token).
 
-    Empty HA_URL/HA_TOKEN -> disabled (stays up), like check_n8n. A 404/auth/unreachable
-    HA raises -> run_once renders it down with the error (a dead API surfaces, not green).
+    Empty HA_URL/HA_TOKEN -> disabled (stays up), like check_n8n.
+
+    Hysteresis (HA_CONSECUTIVE, like check_cpu_throttle): a planned redeploy takes HA's REST
+    API unreachable for ~120s and then leaves the automation scheduler a beat behind, so a
+    single cycle can read unreachable OR stale — a transient that should NOT page. Only the
+    HA_CONSECUTIVE'th consecutive down cycle pushes `down`; earlier ones push `up` with a
+    "streak n/N" msg, and one fresh read resets the streak. A genuinely wedged or auth-broken
+    HA stays bad across cycles and still pages. The unreachable-API exception is caught HERE
+    (not left to run_once) so the recreate-window connection error rides the same grace as
+    staleness — both are the deploy, not a wedge.
     """
+    global _ha_down_streak
     if not HA_URL or not HA_TOKEN:
         return True, "HA heartbeat monitoring disabled (no URL/token)"
-    state = _get_json(HA_URL + "/api/states/" + HA_HEARTBEAT_ENTITY,
-                      headers={"Authorization": "Bearer " + HA_TOKEN})
-    return ha_heartbeat_fresh(state, HA_HEARTBEAT_MAX_AGE_S)
+    try:
+        state = _get_json(HA_URL + "/api/states/" + HA_HEARTBEAT_ENTITY,
+                          headers={"Authorization": "Bearer " + HA_TOKEN})
+        ok, msg = ha_heartbeat_fresh(state, HA_HEARTBEAT_MAX_AGE_S)
+    except Exception as e:  # unreachable/auth -> route through the streak, don't page yet
+        ok, msg = False, "HA API unreachable: %s" % e
+    if ok:
+        _ha_down_streak = 0
+        return True, msg
+    _ha_down_streak += 1
+    if _ha_down_streak < HA_CONSECUTIVE:
+        return True, "down streak %d/%d (deploy/restart grace): %s" % (
+            _ha_down_streak, HA_CONSECUTIVE, msg)
+    return False, "%s (%d cycles)" % (msg, _ha_down_streak)
 
 
 CHECKS = [

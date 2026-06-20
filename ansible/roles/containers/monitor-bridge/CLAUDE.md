@@ -81,9 +81,16 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     `apps`, Bearer `HA_TOKEN`: an HA `time_pattern:/1min` automation stamps that helper with `now()`,
     so its `last_changed` is fresh ONLY while HA's automation *scheduler* is executing. `down` once
     it's older than `HA_HEARTBEAT_MAX_AGE` (300 s) — a wedged-but-running HA (HTTP `:8123` up,
-    scheduler stuck) that the container healthcheck can't see. Empty `HA_URL`/`HA_TOKEN` = disabled
-    (stays up); a 404/auth/unreachable HA surfaces as `down`. Pure `ha_heartbeat_fresh()` is
-    unit-tested. Spec: `docs/superpowers/specs/2026-06-19-ha-automation-heartbeat-watchdog-design.md`.)
+    scheduler stuck) that the container healthcheck can't see. **Consecutive-cycle hysteresis
+    (`HA_CONSECUTIVE`=2, same idiom as `CPU_CONSECUTIVE`):** a planned redeploy takes the API
+    unreachable for ~120 s and then leaves the scheduler a beat behind, so a single cycle reads
+    unreachable OR stale — only the 2nd straight down cycle pages; the first pushes `up` with a
+    "down streak n/N" msg, and one fresh read resets the streak. The unreachable-API error is
+    caught inside the check (not left to `run_once`) so it rides the SAME grace as staleness — both
+    are the deploy, not a wedge; a genuinely wedged/auth-broken HA stays bad across cycles and still
+    pages. Empty `HA_URL`/`HA_TOKEN` = disabled (stays up). Pure `ha_heartbeat_fresh()` + the
+    streak wrapper are unit-tested.
+    Spec: `docs/superpowers/specs/2026-06-19-ha-automation-heartbeat-watchdog-design.md`.)
   - **Renovate Notifier — Alive** (reads `/renovate-state/last_run`, a bind-mounted host
     timestamp the `renovate_notify` daily timer rewrites each clean run; `down` once it's
     older than `RENOVATE_MAX_AGE_MIN` (2160 = 36 h, one missed daily run + slack) — i.e. the
@@ -125,7 +132,8 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`/`CPU_CONSECUTIVE`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`,
   `N8N_FAIL_WINDOW`/`N8N_FAIL_MAX`; n8n connection config: `N8N_URL`/`N8N_API_KEY`; GitOps
   liveness: `GITOPS_MAX_AGE_MIN`/`GITOPS_STATE_DIR`; Pi pressure:
-  `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`). A failed
+  `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`; HA heartbeat:
+  `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`). A failed
   query/unreachable source makes that monitor `down` with an explanatory msg — a broken
   exporter is surfaced, not silently green.
 
