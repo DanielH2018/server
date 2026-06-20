@@ -1,0 +1,39 @@
+{# Shared bedroom lighting math. Entity reads (sensor.bedroom_wake_start, now(), illuminance) stay
+   in the callers; these macros are pure so they are unit-tested in tests/test_lighting_macros.py.
+   HA loads custom_templates/*.jinja at startup; this deploy recreates the container, so edits take
+   effect on deploy. Live edit: Developer Tools -> Actions -> homeassistant.reload_custom_templates. #}
+
+{# Minutes elapsed into the 15-min morning wake window -> is the wake ramp active? The caller passes
+   the minutes since sensor.bedroom_wake_start (or a negative sentinel when the sensor is
+   unavailable). SINGLE source of truth for the window [0, 15), shared by bedroom_apply_natural's
+   nightlight + wake exceptions and templates.yaml's bedroom_auto_light_allowed. #}
+{%- macro in_wake_window(elapsed_min) -%}
+{%- set e = elapsed_min | float(-1) -%}
+{{ 0 <= e < 15 }}
+{%- endmacro -%}
+
+{# Wake-ramp brightness %: 1% at window start (elapsed 0) ramping linearly to `peak` at the alarm
+   (elapsed 15). Sleep-aware peak: 30% after a short night (0 < sleep_min < 360), else 50%
+   (unknown/0/long -> 50). #}
+{%- macro wake_brightness(elapsed_min, sleep_min) -%}
+{%- set e = elapsed_min | float(0) -%}
+{%- set s = sleep_min | float(0) -%}
+{%- set peak = 30 if (0 < s < 360) else 50 -%}
+{{ (1 + (peak - 1) * e / 15) | round(0) | int }}
+{%- endmacro -%}
+
+{# Wake-ramp transition (seconds): the minutes remaining in the 15-min window, as seconds. #}
+{%- macro wake_transition(elapsed_min) -%}
+{%- set e = elapsed_min | float(0) -%}
+{{ ((15 - e) * 60) | round(0) | int }}
+{%- endmacro -%}
+
+{# Auto-light gate: dark enough OR inside the wake window. illuminance < 50 lux is "dark"; in_window
+   forces allow for the morning ramp regardless of ambient. SINGLE source of truth for the 50-lux
+   threshold. in_window is coerced with `| bool` because a macro argument arrives as a string when
+   passed a macro's rendered output. #}
+{%- macro auto_light_allowed(in_window, illuminance) -%}
+{%- set iw = in_window | bool -%}
+{%- set lux = illuminance | float(9999) -%}
+{{ iw or lux < 50 }}
+{%- endmacro -%}
