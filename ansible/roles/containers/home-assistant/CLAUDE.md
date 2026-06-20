@@ -365,7 +365,15 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 - **Adding a tunable formula:** put the math in a `custom_templates/*.jinja` macro (numbers in →
   numbers/bool out), import it from the YAML caller, and add a test — don't inline new math in the
   automations. The `custom_templates/` deploy is a whole-directory copy, so a new `.jinja` ships
-  automatically. Config validation (`hass --script check_config`) is a deferred follow-up, not yet wired.
+  automatically.
+- **Config is structurally validated pre-deploy** by the `validate-ha-config` prek hook
+  (`scripts/validate_ha_config.py`, runs locally + in CI on any change under the role's
+  `templates/`+`files/`). Pure Python (no Docker): it assembles the deployed `/config` layout and
+  checks YAML syntax, **duplicate keys**, broken `!include` targets, and the **syntax** of every
+  inline `{{ }}`/`{% %}` template + each `custom_templates/*.jinja`. It does NOT do HA *schema*
+  validation (unknown keys, bad integration options) or entity-existence checks — that needs
+  `hass --script check_config` in a Docker HA image (out of scope); the deploy still catches schema
+  errors live.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · HA cfg: `templates/configuration.yaml.j2`
