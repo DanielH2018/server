@@ -57,6 +57,18 @@ language = "system"
 pass_filenames = false
 files = "^(ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/templates/(traefik|autokuma|expose)\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate_compose_templates\\.py)$"
 
+# Structurally validate the Home Assistant config (pure Python, no Docker): YAML syntax,
+# duplicate keys, broken !include targets, and a syntax parse-check of inline + custom_templates
+# Jinja. Catches authoring errors before a deploy recreates the container. Schema validation
+# (hass --script check_config) is intentionally out of scope.
+[[repos.hooks]]
+id = "validate-ha-config"
+name = "Validate Home Assistant config"
+entry = "uv run python scripts/validate_ha_config.py"
+language = "system"
+pass_filenames = false
+files = "^(ansible/roles/containers/home-assistant/(templates|files)/.*|scripts/validate_ha_config\\.py)$"
+
 # Run the repo's Python unit tests via uv: the toposort dependency-resolution filters
 # (gate every deploy's ordering/scope), the monitor-bridge check logic, the
 # auto-approve-readonly Bash classifier (a permission security boundary), and the
