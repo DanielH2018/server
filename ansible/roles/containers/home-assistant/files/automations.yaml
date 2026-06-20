@@ -442,6 +442,34 @@
       to: "off"
       for: "00:05:00"
       id: humidity_ok
+    - platform: state
+      entity_id:
+        - binary_sensor.outdoor_pm2_5_high
+      from: "off"
+      to: "on"
+      for: "00:00:30"
+      id: airqualityoutdoor_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.outdoor_pm2_5_high
+      from: "on"
+      to: "off"
+      for: "00:00:30"
+      id: airqualityoutdoor_ok
+    - platform: state
+      entity_id:
+        - binary_sensor.outdoor_pm2_5_severe
+      from: "off"
+      to: "on"
+      for: "00:00:30"
+      id: airqualityoutdoorsevere_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.outdoor_pm2_5_severe
+      from: "on"
+      to: "off"
+      for: "00:00:30"
+      id: airqualityoutdoorsevere_ok
   action:
     # Derive everything from the triggering threshold sensor — its `entity_id` attribute points at
     # its SOURCE sensor (live value + unit); the label is the threshold sensor's own friendly name
@@ -465,7 +493,9 @@
           {{ {'airquality':       {'bad': '⚠️ Air quality', 'ok': '✅ Air quality', 'pulse': true,  'watch': true,  'pierce': false, 'recovery': true},
               'airqualitysevere': {'bad': '🚨 Air quality HIGH', 'ok': '✅ Air quality', 'pulse': true, 'watch': true, 'pierce': true, 'recovery': false},
               'battery':          {'bad': '🔋 Battery low', 'ok': '🔋 Battery OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
-              'humidity':         {'bad': '💧 Humidity', 'ok': '💧 Humidity OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true}}[category] }}
+              'humidity':         {'bad': '💧 Humidity', 'ok': '💧 Humidity OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
+              'airqualityoutdoor':       {'bad': '🌫️ Outdoor air', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true,  'pierce': false, 'recovery': true},
+              'airqualityoutdoorsevere': {'bad': '🚨 Outdoor air HIGH', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true, 'pierce': true, 'recovery': false}}[category] }}
         # Air-quality bad alerts get a "Boost fan" action button (circulate the air); other
         # categories get none. Handled by bedroom_notification_action.
         boost_actions: "{{ [{'action': 'BEDROOM_BOOST_FAN', 'title': 'Boost fan'}] if category in ['airquality', 'airqualitysevere'] else [] }}"
