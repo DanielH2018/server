@@ -32,5 +32,6 @@
       unique_id: bedroom_auto_light_allowed
       state: >-
         {% set ws = states('sensor.bedroom_wake_start') %}
-        {% set in_window = ws not in ['unknown', 'unavailable'] and timedelta(0) <= (now() - as_datetime(ws)) < timedelta(minutes=15) %}
-        {{ in_window or (states('sensor.aqara_fp300_illuminance') | float(9999) < 50) }}
+        {% from 'lighting.jinja' import in_wake_window, auto_light_allowed %}
+        {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool %}
+        {{ auto_light_allowed(in_window, states('sensor.aqara_fp300_illuminance')) }}
