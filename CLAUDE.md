@@ -101,8 +101,10 @@ Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hook
 - **`scripts/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt). Resolves the
   live container IP via `docker inspect`, so prefer it over curling bridge IPs (which change on
   recreate): `uv run python scripts/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
-  scrutiny | pi <path> | cert <host> | health <svc>>`. `health <svc>` exits 0 only when the
-  container is running + healthy — usable as a post-deploy gate.
+  scrutiny | pi <path> | cert <host> | health <svc> | ha <state|automation|get> …>`. `health <svc>`
+  exits 0 only when the container is running + healthy — usable as a post-deploy gate. `ha …`
+  reads live Home Assistant state (authed with the SOPS `claude_ha_token`); `ha automation
+  <id-or-alias>` resolves the alias-slug≠id trap. See the home-assistant role's CLAUDE.md.
 - **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
   `containers/` (edit the `ansible/roles/containers/<svc>/templates/` source instead) and
   (b) SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill).
@@ -113,6 +115,9 @@ Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hook
   `$VAR`/`$(…)` at parse time — shell `$` must be doubled `$$`; legit `${VAR-…}` in
   `environment:` is not flagged).
 - **homelab-network-diagnostician** agent — connectivity/DNS/Traefik/WireGuard/CrowdSec triage (read-only).
+- **home-assistant-engineer** agent — read+write HA engineer (automations/scenes/scripts/macros)
+  that knows the copy-not-template + tested-macro conventions and the verification traps; pairs
+  with the `ha-edit-automation` / `ha-deploy` / `ha-verify-state` / `z2m-device-setting` skills.
 - **`/add-secret`** skill — guided SOPS add → `secret_rotation.py sync` → commit.
 
 ## Secrets Management

@@ -387,6 +387,17 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `hass --script check_config` in a Docker HA image (out of scope); the deploy still catches schema
   errors live.
 
+## Claude tooling for this role
+- **`home-assistant-engineer` agent** (`.claude/agents/`) — read+write HA engineer that knows
+  these conventions + traps; delegate HA authoring/debugging to it.
+- **Skills** (`.claude/skills/`): `ha-edit-automation` (the authoring workflow — copy-not-template,
+  math-in-a-tested-macro, validate→deploy→verify), `ha-deploy` (deploy + confirm-loaded),
+  `ha-verify-state` (live state via the API; the recorder + alias-slug traps), `z2m-device-setting`
+  (persist a Zigbee device setting via `mosquitto_pub`).
+- **`scripts/probe.py ha`** — read-only live HA state (allow-listed, no prompt), authed with the
+  SOPS `claude_ha_token`: `probe.py ha state <entity>` · `ha automation <id-or-alias>` (resolves
+  the alias-slug≠id trap) · `ha get <api-path>` (e.g. `error_log`). Prefer it over recorder-DB reads.
+
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · HA cfg: `templates/configuration.yaml.j2`
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"`

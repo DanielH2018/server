@@ -52,8 +52,9 @@ Subcommands:
   (e.g. `error_log`, `config`). Output passed through verbatim.
 
 Implementation honoring probe.py's existing **pure/impure split**:
-- **Pure + unit-tested** (new `scripts/test_probe.py`; probe.py has no tests today): the URL
-  builders (`ha_state_url`, `ha_get_url`) and `match_automation(states, query) -> obj|None`.
+- **Pure + unit-tested** (added to the existing `scripts/test_probe.py`): the URL builders
+  (`ha_state_url`, `ha_get_url`), `match_automation(states, query) -> obj|None`, the curl-argv
+  builder (token-never-in-argv guard), and the output formatters.
 - **Impure** `run_ha(...)` runtime path, parallel to the existing `run_health(...)` (so
   `plan()` stays token-free): resolves the HA IP via the existing `resolve_ip("home-assistant")`,
   decrypts the token via `sops -d --extract '["claude_ha_token"]' <repo>/ansible/vars/secrets.yml`
