@@ -358,9 +358,15 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   unless "Bedroom" is set as default in the UI (Settings → Dashboards → ⋮ → "Set as default for
   everyone" → persists in `.storage/core.config` `default_panel`, Kopia-backed). **Fast loop for
   dashboard-only tweaks:** edit the rendered file and Developer Tools → YAML → **Reload Lovelace**
-  (no HA restart). Cards (as of 2026-06-18): APC UPS, **AirGradient ONE air quality** (CO₂ gauge +
-  pollutant glance — the metrics the threshold alerts fire on), DREO Tower Fan, **Bedroom Controls**
-  (lights group + AL master switch + the three override booleans), and the Aqara FP300 glance.
+  (no HA restart). Cards: APC UPS, **AirGradient ONE air quality** (CO₂ gauge +
+  pollutant glance — the metrics the threshold alerts fire on), the outdoor weather + AQI cards
+  (see the outdoor-AQI bullet), DREO Tower Fan, and **Bedroom lighting + controls** — a
+  `light.bedroom_lights` **`tile`** card carrying inline `light-brightness` + `light-color-temp`
+  feature sliders (built-in features, no HACS; tap the tile for HA's full RGB color wheel in the
+  more-info dialog — the Hue bulbs are `color_temp` + `xy`) stacked above the **Bedroom Controls**
+  `entities` card (AL master switch + the three override booleans) — then the Aqara FP300 glance.
+  **AL caveat:** Adaptive Lighting runs `take_over_control: true`, so dragging the color-temp (or
+  brightness) slider pauses AL for that light until the next reset — expected, not a bug.
 - **Outdoor AQI + window advisor (since 2026-06-20).** Open-Meteo's free air-quality API feeds
   four sensors: `sensor.outdoor_pm2_5` & `sensor.outdoor_pm10` (µg/m³), `sensor.outdoor_us_aqi`,
   `sensor.outdoor_ozone` — pulled via `files/rest.yaml` (copy'd, not templated; **no API key**;

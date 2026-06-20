@@ -117,25 +117,34 @@ views:
               - entity: switch.tower_fan_panel_sound
                 name: Panel Sound
       # ── Bedroom lighting + automation overrides ──────────────────────────
-      - type: entities
-        title: Bedroom Controls
-        icon: mdi:tune
-        entities:
-          - entity: light.bedroom_lights
+      - type: vertical-stack
+        cards:
+          # Light tile with inline brightness + color-temperature sliders (built-in tile
+          # features — no HACS). Tap the tile to open HA's more-info dialog for the full
+          # RGB color wheel (the Hue bulbs are color_temp + xy capable).
+          - type: tile
+            entity: light.bedroom_lights
             name: Bedroom Lights
-          - entity: switch.bedroom_adaptive_lighting_bedroom
-            name: Adaptive Lighting
-          - type: section
-            label: Automation overrides
-          # On = presence won't auto-on the lights (Tap Dial button 1 sets it; morning reset clears).
-          - entity: input_boolean.bedroom_manual_off
-            name: Manual-off
-          # On = temperature automation won't drive the fan (Tap Dial button 3 / morning reset clears).
-          - entity: input_boolean.bedroom_fan_manual
-            name: Fan manual
-          # On = quiet fan cap + AL sleep mode (bedtime sets it; morning reset clears).
-          - entity: input_boolean.bedroom_sleep_mode
-            name: Sleep mode
+            features:
+              - type: light-brightness
+              - type: light-color-temp
+          - type: entities
+            title: Bedroom Controls
+            icon: mdi:tune
+            entities:
+              - entity: switch.bedroom_adaptive_lighting_bedroom
+                name: Adaptive Lighting
+              - type: section
+                label: Automation overrides
+              # On = presence won't auto-on the lights (Tap Dial button 1 sets it; morning reset clears).
+              - entity: input_boolean.bedroom_manual_off
+                name: Manual-off
+              # On = temperature automation won't drive the fan (Tap Dial button 3 / morning reset clears).
+              - entity: input_boolean.bedroom_fan_manual
+                name: Fan manual
+              # On = quiet fan cap + AL sleep mode (bedtime sets it; morning reset clears).
+              - entity: input_boolean.bedroom_sleep_mode
+                name: Sleep mode
       # ── Aqara FP300 presence sensor (essentials only) ────────────────────
       - type: glance
         title: Aqara FP300
