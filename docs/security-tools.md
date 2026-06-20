@@ -177,6 +177,62 @@ The `S` flag means the process ran with superuser privileges.
 
 ---
 
+## fail2ban (Intrusion Prevention)
+
+**What it does:** Watches auth logs and bans IPs that show repeated failed logins, enforcing the ban at the firewall (`banaction = ufw`). Jails are enabled for **sshd** and **postfix**, plus a **recidive** jail that re-bans repeat offenders for much longer. Configured in `/etc/fail2ban/jail.d/homelab.conf` (deployed from `ansible/roles/setup/initial_setup/templates/fail2ban_homelab.conf.j2`).
+
+**Schedule:** Runs continuously as a systemd service — it reacts to log events in real time, not on a cron.
+
+**Ban policy:**
+
+| Jail | Trigger | Ban |
+|------|---------|-----|
+| `sshd` / `postfix` | 5 failures in 10 min (`maxretry 5`, `findtime 10m`) | 1 hour |
+| `recidive` | 3 bans within 1 day | 7 days |
+
+**Check for findings:**
+
+```bash
+# Overall status + which jails are active
+sudo fail2ban-client status
+
+# Currently-banned IPs for a jail
+sudo fail2ban-client status sshd
+
+# Ban / unban history
+sudo grep -E 'Ban|Unban' /var/log/fail2ban.log
+
+# Manually unban a false-positive IP
+sudo fail2ban-client set sshd unbanip <IP>
+```
+
+Because bans are enforced through UFW, a banned IP also shows up in `sudo ufw status numbered`.
+
+---
+
+## unattended-upgrades (Automatic Security Patching)
+
+**What it does:** Automatically installs security updates so the host doesn't drift behind on known-vulnerable packages. The distro's `50unattended-upgrades` enables the **security** origins; a local drop-in (`/etc/apt/apt.conf.d/52unattended-upgrades-local`) sets the homelab policy: **no automatic reboot** (the weekly "system restart" cron owns reboots) plus cleanup of obsolete kernels and unused dependencies. `/etc/apt/apt.conf.d/20auto-upgrades` turns on the daily package-list update, download, and unattended run, with an autoclean every 7 days.
+
+**Schedule:** Daily, via systemd's `apt-daily` / `apt-daily-upgrade` timers.
+
+**Check for findings:**
+
+```bash
+# What was installed, and when
+sudo grep -E 'Package|Install|Upgrade' /var/log/unattended-upgrades/unattended-upgrades.log
+
+# Timer schedule and last run
+systemctl list-timers 'apt-daily*'
+
+# Dry-run what would be upgraded right now
+sudo unattended-upgrade --dry-run --debug
+```
+
+> A lingering `/var/run/reboot-required` (e.g. after a kernel update) is **intentional** — reboots are deferred to the weekly restart cron, not applied automatically.
+
+---
+
 ## Quick Reference
 
 | Concern | Command |
@@ -186,4 +242,6 @@ The `S` flag means the process ran with superuser privileges.
 | Unexpected file change | `sudo aide --check` |
 | Unusual commands run as root | `sudo lastcomm` |
 | Unusual I/O or CPU activity | `sar -d` / `sar -u` |
+| Brute-force attempts / banned IPs | `sudo fail2ban-client status sshd` |
+| Auto-patch history | `sudo grep Install /var/log/unattended-upgrades/unattended-upgrades.log` |
 | Any security cron warning | `sudo grep -E 'rkhunter\|aide\|apt-autoremove\|dpkg-purge' /var/log/syslog` |

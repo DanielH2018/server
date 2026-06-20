@@ -50,7 +50,9 @@ redeploy the app **and** every consumer (e.g. Homepage, monitor-bridge, recyclar
 - `*_api_key` (sonarr/radarr/jellyfin/prowlarr): Settings → General → regenerate API key.
 - `grafana_admin_password`, `*_password`: change in the app (or its env on first run).
 - `authelia_secret` / `authelia_jwt`: rotating forces all users to re-login (not breaking).
-- `authelia_oidc_hmac_secret` / `*_password_hash`: re-issues OIDC — re-pair beszel/jellyfin.
+- `authelia_oidc_hmac_secret` / `*_password_hash`: re-issues OIDC — re-pair jellyfin (the
+  live OIDC client; beszel's client is provisioned but parked in `archive/`, re-pair only
+  if reactivated).
 
 ## `external` — provider consoles (audit-only)
 

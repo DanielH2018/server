@@ -3,9 +3,9 @@
 > **Status: ✅ COMPLETED 2026-06-05** — daniel-server is on Ubuntu 24.04.4 / Python
 > 3.12.3, ansible-core **2.21.0** (originally via pipx; **migrated to `uv tool` on
 > 2026-06-07** — see `docs/superpowers/specs/2026-06-07-python-uv-test-env-design.md`),
-> collections at latest (community.general 13.0.1). See commit `2837dbc`. The Pi is
-> still pending (see Follow-ups). Kept as a reference for the Pi and for the gotcha
-> noted in Phase 3.
+> collections at latest (community.general 13.0.1). See commit `2837dbc`. **The Pi is
+> now also on Ubuntu 24.04.4** (aarch64), driven remotely as an Ansible target from
+> daniel-server (see Follow-ups). Kept as a reference for the gotcha noted in Phase 3.
 
 **Goal:** move the host to a single, newer system Python (24.04 ships Python **3.12**)
 so we can run **ansible-core 2.21** (latest) without juggling two Python versions.
@@ -149,5 +149,6 @@ metadata) — it survives an in-place upgrade, but that is what a backup must pr
 
 ## Follow-ups
 
-- `daniel-pi` also runs Ansible locally (Raspberry Pi OS, not Ubuntu) — separate
-  upgrade/decision, tackle after the server is settled.
+- ✅ `daniel-pi` is on **Ubuntu 24.04** (aarch64). It no longer runs Ansible locally —
+  it is driven remotely over SSH from daniel-server, the sole Ansible controller
+  (`-e target=daniel-pi`; see `ansible/inventory/hosts.ini`).
