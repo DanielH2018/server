@@ -339,12 +339,16 @@
 
 - name: Schedule sudo crontab for weekly restart
   tags: [crons]
+  # Pings the Healthchecks "Reboot" monitor, then reboots. The ping lives INSIDE the
+  # Ansible-managed job (not a manual crontab append, which a later [crons] deploy would
+  # strip — that silent regression is exactly why this check went stale). `;` not `&&`:
+  # the reboot must happen even if the ping fails. UUID = the check's dashed code.
   ansible.builtin.cron:
     name: "Weekly system restart"
     minute: "30"
     hour: "7"
     weekday: "0"
-    job: "/sbin/shutdown -r +5"
+    job: "curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/ea0ed733-f631-4bd5-b1c9-4ab394bd13eb ; /sbin/shutdown -r +5"
     user: root
   become: true
 
@@ -354,11 +358,14 @@
   # redeploy with no registry re-pull. Older unused images/build cache still go
   # daily. (Caveat: `until` filters on CreatedAt, so an upstream image built >1wk
   # ago is pruned as soon as it's unused — the window protects fresh builds/pulls.)
+  # Pings the Healthchecks "Docker Image Prune" monitor ON SUCCESS (`&&`): a failed
+  # prune leaves the check un-pinged so it alerts. Ping kept in the Ansible-managed job
+  # so a [crons] redeploy can't silently strip it (the late-May regression). Dashed UUID.
   ansible.builtin.cron:
     name: "Clean unused Docker images"
     minute: "30"
     hour: "6"
-    job: '/usr/bin/docker system prune -a -f --filter "until=168h"'
+    job: '/usr/bin/docker system prune -a -f --filter "until=168h" && curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/6c716f7f-219c-42e1-9f8b-d1d964b6cc35'
     user: "{{ ansible_facts.user_id }}"
   become: true
   tags: [prune, crons]
