@@ -185,7 +185,10 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `importance` from `pierce` and the live **"quiet"** state (`sensor.pixel_9_pro_do_not_disturb_sensor`
   not `off` OR `input_boolean.bedroom_sleep_mode` on): `pierce` → high-importance "Bedroom critical"
   channel (sounds, can bypass DND); else "Bedroom alerts", **low/silent while quiet**, default
-  otherwise. `watch` → also `notify.pixel_watch_3`. **One-time phone setup:** mark the "Bedroom
+  otherwise. `watch` → also `notify.mobile_app_pixel_watch_3` (the mobile-app notify service; the
+  un-prefixed `notify.pixel_watch_3` does NOT exist — every `watch:true` alert raised a
+  `service_not_found` Repair per calling automation until fixed 2026-06-20). **One-time phone setup:**
+  mark the "Bedroom
   critical" channel as a DND exception in Android (after the first critical alert creates it) — high
   importance alone doesn't pierce DND. Only **severe air quality** sets `pierce`; sensor-offline +
   air-quality set `watch`; battery/humidity/recoveries are routine (silent while quiet, phone-only).
@@ -294,7 +297,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   NOT freeze the fan. `bedroom_morning_reset` unwinds both sleep_mode + AL sleep mode before its fan/
   light re-applies (later moves to the watch-alarm wake). Phone bedtime/sleep sensors (DND,
   sleep_confidence, next_alarm) are now enabled in the companion app; the watch exposes
-  `sensor.pixel_watch_3_next_alarm` (the real wake alarm) + `notify.pixel_watch_3`.
+  `sensor.pixel_watch_3_next_alarm` (the real wake alarm) + `notify.mobile_app_pixel_watch_3`.
 - **Dynamic morning wake (since 2026-06-18).** The wake ramp is driven by the real alarm, not a
   hardcoded time. `sensor.bedroom_wake_start` (a `device_class: timestamp` template sensor in
   `files/templates.yaml`) = `sensor.pixel_watch_3_next_alarm − 15 min`, `availability:` gated to

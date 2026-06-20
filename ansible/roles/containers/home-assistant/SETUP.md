@@ -40,7 +40,7 @@ uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"
 | AirGradient ONE air monitor | AirGradient (local) | `sensor.bedroom_airgradient_one_{carbon_dioxide,pm2_5,voc_index,nox_index,temperature,humidity}` |
 | DREO tower fan | `dreo` (HACS, cloud) | `fan.tower_fan` |
 | APC UPS | NUT | (power monitoring) |
-| Pixel 9 Pro + Pixel Watch 3 | HA companion apps | `person.daniel`, `device_tracker.{pixel_9_pro,pixel_watch_3}`, `sensor.pixel_9_pro_{do_not_disturb_sensor,sleep_duration}`, `sensor.pixel_watch_3_next_alarm`, `binary_sensor.pixel_watch_3_bedtime_mode`, `notify.mobile_app_pixel_9_pro`, `notify.pixel_watch_3` |
+| Pixel 9 Pro + Pixel Watch 3 | HA companion apps | `person.daniel`, `device_tracker.{pixel_9_pro,pixel_watch_3}`, `sensor.pixel_9_pro_{do_not_disturb_sensor,sleep_duration}`, `sensor.pixel_watch_3_next_alarm`, `binary_sensor.pixel_watch_3_bedtime_mode`, `notify.mobile_app_pixel_9_pro`, `notify.mobile_app_pixel_watch_3` |
 | Adaptive Lighting | HACS | `switch.bedroom_adaptive_lighting_bedroom` (master), `switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom` |
 
 ---
