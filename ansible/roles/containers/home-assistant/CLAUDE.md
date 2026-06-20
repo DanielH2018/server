@@ -260,10 +260,16 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   unexpected-occupancy tripwire backlog item.
 - **Bedtime / sleep routine (since 2026-06-18).** `script.bedroom_bedtime` (the shared "going to
   sleep" action) engages `input_boolean.bedroom_sleep_mode` (a quiet fan cap), flips AL into sleep
-  mode (`switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom`, warm/dim), sets
-  `scene.bedroom_nightlight` (amber 3%), and re-applies the fan. Triggered by `automation.bedroom_bedtime`
+  mode (`switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom`, warm/dim), **fades**
+  to `scene.bedroom_nightlight` (amber 3%) over 15 min, and re-applies the fan. The fade is a
+  per-call `transition: 900` on `scene.turn_on` (NOT baked into the scene), so only bedtime ramps —
+  the B3-press and overnight "got up" nightlight stay instant. AL sleep mode is engaged BEFORE the
+  scene so the scene is the last command on the lights, and `take_over_control: true` +
+  `detect_non_ha_changes: false` keep AL from re-stomping the group mid-fade. The bulb does the
+  brightness+color ramp internally (single Zigbee command, ZCL caps ~6553s), so an HA/Z2M restart
+  mid-fade doesn't abort it — only a bulb power-cycle would. Triggered by `automation.bedroom_bedtime`
   off `binary_sensor.pixel_watch_3_bedtime_mode` → on (gated `person.daniel == home`), with **Tap
-  Dial button-1 HOLD** as the manual fallback (`bedroom_tap_dial_control`). **Charging is deliberately
+  Dial button-3 (Sleep) HOLD** as the manual fallback (`bedroom_tap_dial_control`). **Charging is deliberately
   NOT a trigger** (operator charges in-room). **Fan stays temperature-responsive, just quieter:**
   `bedroom_apply_fan` caps the fan to Low (level 2) when `bedroom_sleep_mode` is on — below the
   22:00–06:00 Medium (level 4) night cap, via `cap = 2 if sleep else (4 if night else 9)`; it does

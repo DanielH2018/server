@@ -278,27 +278,36 @@ bedroom_apply_fan:
                 percentage: "{{ send_pct }}"
 
 # Bedtime / sleep routine: the single "going to sleep" action, shared by the bedroom_bedtime
-# automation (phone Bedtime mode) and the Tap Dial button-1 hold. Engages sleep mode (which caps the
+# automation (phone Bedtime mode) and the Tap Dial button-3 (Sleep) hold. Engages sleep mode (which caps the
 # fan to Low via bedroom_apply_fan — quiet but still temperature-responsive, NOT frozen), flips
-# Adaptive Lighting into sleep mode (warm/dim), and sets the warm nightlight scene. The morning reset
+# Adaptive Lighting into sleep mode (warm/dim), and fades to the warm nightlight scene over 15 min. The morning reset
 # unwinds sleep mode + AL sleep mode. NOT gated on presence (sets the room up for sleep even if you're
 # brushing teeth); the caller gates on person==home so it never runs while away.
 bedroom_bedtime:
   alias: "Bedroom — bedtime / sleep routine"
   description: >-
-    Engage sleep mode (quiet fan cap), Adaptive Lighting sleep mode, and the warm nightlight scene.
-    Keeps the fan temperature-responsive but quiet; does not freeze it.
+    Engage sleep mode (quiet fan cap), Adaptive Lighting sleep mode, and fade to the warm nightlight
+    scene over 15 min. Keeps the fan temperature-responsive but quiet; does not freeze it.
   mode: single
   sequence:
     - service: input_boolean.turn_on
       target:
         entity_id: input_boolean.bedroom_sleep_mode
+    # AL sleep mode FIRST: its forced ~45s apply runs before the scene below, so the scene is the last
+    # word on the lights. take_over_control + detect_non_ha_changes:false (configuration.yaml) mark the
+    # scene as a manual takeover, so AL won't re-stomp the lights on its interval during the long fade.
     - service: switch.turn_on
       target:
         entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+    # Gradual wind-down (NOT a hard cutover): `transition` is passed per-call (not baked into the
+    # scene), so ONLY bedtime fades — the B3-press + overnight "got up" nightlight stay instant. The
+    # bulb ramps brightness+color from its CURRENT state to amber 3% internally over 900s, so an
+    # HA/Z2M restart mid-fade doesn't abort it (only a bulb power-cycle would). ZCL caps ~6553s.
     - service: scene.turn_on
       target:
         entity_id: scene.bedroom_nightlight
+      data:
+        transition: 900
     # Re-apply the fan so the Low sleep cap takes effect now, not at the next temperature change.
     # Gated on the manual-fan override like every other apply_fan caller (a hand-set fan wins).
     - if: "{{ is_state('input_boolean.bedroom_fan_manual', 'off') }}"
