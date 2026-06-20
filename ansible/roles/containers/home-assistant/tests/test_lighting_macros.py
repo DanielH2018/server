@@ -54,6 +54,6 @@ def test_wake_transition_counts_down_seconds():
 def test_auto_light_allowed_truth_table():
     assert _allowed(True, 1000) == "True"   # in-window wakes regardless of brightness
     assert _allowed(False, 40) == "True"    # dark enough
-    assert _allowed(False, 49) == "True"
-    assert _allowed(False, 50) == "False"   # strict < 50
-    assert _allowed(False, 60) == "False"
+    assert _allowed(False, 74) == "True"
+    assert _allowed(False, 75) == "False"   # strict < 75
+    assert _allowed(False, 80) == "False"

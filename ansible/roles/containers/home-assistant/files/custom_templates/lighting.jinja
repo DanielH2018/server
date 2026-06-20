@@ -28,12 +28,12 @@
 {{ ((15 - e) * 60) | round(0) | int }}
 {%- endmacro -%}
 
-{# Auto-light gate: dark enough OR inside the wake window. illuminance < 50 lux is "dark"; in_window
-   forces allow for the morning ramp regardless of ambient. SINGLE source of truth for the 50-lux
+{# Auto-light gate: dark enough OR inside the wake window. illuminance < 75 lux is "dark"; in_window
+   forces allow for the morning ramp regardless of ambient. SINGLE source of truth for the 75-lux
    threshold. in_window is coerced with `| bool` because a macro argument arrives as a string when
    passed a macro's rendered output. #}
 {%- macro auto_light_allowed(in_window, illuminance) -%}
 {%- set iw = in_window | bool -%}
 {%- set lux = illuminance | float(9999) -%}
-{{ iw or lux < 50 }}
+{{ iw or lux < 75 }}
 {%- endmacro -%}
