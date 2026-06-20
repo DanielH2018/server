@@ -76,15 +76,25 @@
                 key: {{ nut_ups_name | default('apc-ups') }}
                 username: {{ peanut_username }}
                 password: {{ peanut_password }}
-        - Scrutiny:
-            icon: scrutiny.png
-            href: http://scrutiny.{{ domain }}/
-            description: Drive Monitoring
+        - Home Assistant:
+            icon: home-assistant.png
+            href: https://home-assistant.{{ domain }}/
+            description: Bedroom air quality
             server: my-docker
-            container: scrutiny
+            container: home-assistant
             widget:
-                type: scrutiny
-                url: http://scrutiny:8080
+                type: homeassistant
+                url: http://home-assistant:8123
+                key: {{ homepage_ha_token }}
+                custom:
+                    - state: sensor.bedroom_airgradient_one_carbon_dioxide
+                      label: CO₂
+                    - template: "{% raw %}{{ states('sensor.bedroom_airgradient_one_temperature') | float | round(1) }}{% endraw %} °F"
+                      label: Temp
+                    - state: sensor.bedroom_airgradient_one_humidity
+                      label: Humidity
+                    - state: sensor.bedroom_airgradient_one_voc_index
+                      label: VOC
     - Calendar:
         - Calendar:
             id: my-calendar
