@@ -204,9 +204,9 @@
 
 # Presence ON: occupied + not overridden → set the lights to their NATURAL state via the
 # dispatcher (morning ramp in-window, else full Adaptive Lighting). The lux gate applies OUTSIDE
-# the morning wake window only: during the window (the 15 min before the real alarm, ending at it)
-# we wake regardless of ambient light; afterwards we only turn on when the room is dim. The window
-# reads sensor.bedroom_wake_start — the SAME source the dispatcher's morning exception uses
+# the morning wake window only: during the window (the 30 min centered on the alarm — alarm-15 to
+# alarm+15) we wake regardless of ambient light; afterwards we only turn on when the room is dim. The
+# window reads sensor.bedroom_wake_start — the SAME source the dispatcher's wake exception uses
 # (inherently in sync, no duplicated formula).
 - id: bedroom_presence_on
   alias: Bedroom presence on
@@ -300,10 +300,10 @@
   action:
     - service: script.bedroom_blip
 
-# Absence OFF: room empty for a minute → lights off (ignores the override — leaving always allows off).
+# Absence OFF: room empty for 5 minutes → lights off (ignores the override — leaving always allows off).
 - id: bedroom_absence_off
   alias: Bedroom absence off
-  description: Turn off the bedroom lights after the room has been empty for a minute.
+  description: Turn off the bedroom lights after the room has been empty for 5 minutes.
   mode: single
   trigger:
     - platform: state
@@ -354,9 +354,9 @@
     # fan from a person — see the role CLAUDE.md / [[ha-fp300-fan-false-hold]]) the radar drops a
     # motionless sleeper, so `presence` can read `off` at the exact moment you need waking. person.daniel
     # == home is the reliable "you're here to be woken" signal and still won't ramp an empty bedroom while
-    # away (an FP300 dog/false-positive can't trigger the wake either). apply_natural's morning exception
-    # (window = sensor.bedroom_wake_start .. +15 min) computes the 1%->50% ramp — same source of truth as
-    # the Tap Dial button-4 reset. The 09:00 fallback deliberately never forces lights.
+    # away (an FP300 dog/false-positive can't trigger the wake either). apply_natural's wake exception
+    # delegates to script.bedroom_apply_wake (the gentle-then-steep 30-min ramp, alarm at midpoint),
+    # which automation.bedroom_wake_ramp then drives per-minute. The 09:00 fallback never forces lights.
     - if: "{{ trigger.id == 'alarm' and is_state('person.daniel', 'home') }}"
       then:
         - service: script.bedroom_apply_natural

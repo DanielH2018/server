@@ -134,7 +134,9 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   templated — set with `mosquitto_pub -t 'zigbee2mqtt/Aqara FP300/set' -m '{...}'`; re-apply after a
   re-pair): `presence_detection_options: mmwave` (radar-only — holds a stationary person; PIR sees
   only motion), `motion_sensitivity: high`, `absence_delay_timer: 60` (sec; was 10, range 10–300 —
-  the hold-vs-prompt knob). `bedroom_absence_off` stays at 1 min; bump it if drops persist.
+  the hold-vs-prompt knob). `bedroom_absence_off` was bumped to **5 min** (`for: 00:05:00`) for
+  FP300 false-absence de-flap (was 1 min; the Z2M device-tuning alone wasn't enough to eliminate
+  brief drops on a stationary person).
   **FP300 fan false-HOLD (2026-06-18, the mirror-image fix):** the above hold-harder tuning
   over-corrected — the high-sensitivity mmwave radar read the **running tower fan's** moving air as a
   permanent occupant, so `presence` stuck `true` in an empty room (15+ min observed) and
@@ -153,7 +155,10 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   automations/scenes; wired via `script: !include scripts.yaml`; feeds `common_config_changed`).**
   `script.bedroom_apply_natural` sets the bedroom group to what it would be with no manual
   intervention RIGHT NOW: an ordered `choose:` of time-based **exceptions** (brightness overrides
-  on AL's natural color) with **full Adaptive Lighting (color + brightness) as `default:`**.
+  on AL's natural color) with **AL color + ambient-fill brightness (`natural_brightness(hour,
+  illuminance)` macro) as `default:`**. AL is a color source at turn-on; the per-minute
+  `automation.bedroom_color_tracking` (id `bedroom_color_track`) slow-drifts color toward AL every
+  5 min while in auto so brightness sticks but color follows the sun (see item 5b in the brief).
   The FIRST exception is the night-time dim nightlight (`scene.bedroom_nightlight`) when
   `bedroom_sleep_mode` is on OR it's 00:00–05:00 — so a presence re-trigger doesn't blast
   you (it wins over the wake ramp; at wake time sleep_mode is cleared and hour≥5, so it's false).
@@ -162,17 +167,24 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   the room dark and a B3 tap brings the nightlight back. The sleep-mode arm of this exception is thus
   reached via `presence_on` only in the 00:00–05:00 *no-sleep-mode* case (up late, not yet in bed);
   it still protects the B3-tap nightlight and any other direct caller of the dispatcher.
-  The morning wake (1%→`wake_peak` over the 15 min ENDING at the real alarm; peak 50%, or 30% after a
-  short night — see the sleep-quality bullet) is the next exception, its window
-  = `sensor.bedroom_wake_start .. +15 min` (dynamic — see the dynamic-wake bullet below), encoded
-  as `brightness = 1+(wake_peak-1)·elapsed_min/15` over `transition = (15-elapsed_min)·60`s (the window
-  length is written in minutes; only the `transition` converts to seconds, because that is HA's service
-  unit) — so `elapsed_min=0` equals the wake's start and pressing button 4 mid-window *resumes* the ramp. **Both Tap Dial button 4
-  and the `bedroom_morning_reset` automation call this dispatcher** (single source of truth — no
-  duplicated ramp math). Color temp ALWAYS comes from AL; exceptions override brightness only.
+  The morning wake ramp is the next exception. It spans a **30-min window centered on the alarm**
+  (`alarm−15` → `alarm+15`), with a gentle-then-steep curve: 1% at window start → ~12% at the alarm
+  → 40% at `alarm+15`. `sensor.bedroom_wake_start` = alarm−15 min (the window open edge; dynamic —
+  see the dynamic-wake bullet below). Delegated entirely to `script.bedroom_apply_wake` (fixed warm
+  2200K, no `adaptive_lighting.apply` turn-on flash), driven per-minute by
+  `automation.bedroom_wake_ramp`. Short night (<6h) scales mid/peak to ~7/24% (the sleep-quality
+  bullet). Pressing button 4 mid-window resumes the ramp from the current point (`bedroom_apply_wake`
+  recomputes the right frame for now()). When no morning alarm is set the sensor is `unavailable` →
+  this exception is false and the default applies. `wake_transition` macro is gone — transition is
+  now always 60 s (one ramp step). **`bedroom_morning_reset` also calls this dispatcher** (single
+  source of truth — no duplicated ramp math). Color temp ALWAYS comes from AL; exceptions override
+  brightness only (except the wake exception, which uses fixed 2200K).
   Helper `script.bedroom_set_natural_brightness(brightness_pct, transition)` holds the AL
   release + color-apply boilerplate so a new exception is just a `(condition, brightness,
-  transition)` triple dropped above `default:` — see the worked example comment in the file.
+  transition)` triple dropped above `default:` — see the worked example comment in the file. It
+  also arms `input_number.bedroom_light_expected_color_temp` (the color tracker's "auto" baseline)
+  so `automation.bedroom_color_tracking` (id `bedroom_color_track`) knows what color it last set
+  and can drift from there without treating it as a manual override.
 - **Threshold alerts — unified engine (since 2026-06-18).** `configuration.yaml` defines twelve
   built-in `threshold` binary-sensors; the platform's native hysteresis (on past bound±hyst) IS the
   "alert once + recovery, no bounce" lifecycle. ALL feed ONE automation `bedroom_threshold_alert`
@@ -227,8 +239,9 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   (`BEDROOM_BOOST_FAN`: fan_manual on + 100% — persists until button-3/morning reset; moves air,
   doesn't lower CO2); away "Left on" → **Turn back on** (`BEDROOM_AWAY_TURN_ON`: apply_natural +
   apply_fan, ignores home-gates — undo a false-away); and a nightly **bedtime prompt**
-  (`automation.bedroom_bedtime_prompt`, 22:00 if present + not in sleep mode + home) → **Start now**
-  (`BEDROOM_START_BEDTIME` → `script.bedroom_bedtime`). Add a button = pass `actions` to
+  (`automation.bedroom_bedtime_prompt`, alarm-anchored: fires at `sensor.bedroom_winddown_start` =
+  next morning alarm − 8h, with a 22:30 no-alarm fallback; gated: present + not in sleep mode +
+  home) → **Start now** (`BEDROOM_START_BEDTIME` → `script.bedroom_bedtime`). Add a button = pass `actions` to
   `bedroom_notify` + a case in the dispatcher.
 - **Update-available digest (since 2026-06-18).** `automation.update_available_digest` (homelab-wide,
   no `bedroom_` prefix) — Sunday 10:00, notifies a digest of any `update.*` entity that is `on`
@@ -296,8 +309,10 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `bedroom_away` (two triggers, both `from:"home"`: `leave` at `for:10m`, `failsafe` at `for:30m`)
   turns off `light.bedroom_lights` + `fan.tower_fan` and notifies what was on; silent if nothing
   was on. `bedroom_arrive_home` (`to:"home"`) nudges the fan back (via `script.bedroom_apply_fan`)
-  and re-checks lights only if FP300-present (no forced-on). **Load-bearing detail: every on-path
-  is gated on `person.daniel == home`** — `bedroom_fan_temperature` + `bedroom_presence_on` get a
+  and re-checks lights only if FP300-present (no forced-on). **`bedroom_presence_on` and
+  `bedroom_arrive_home` both have a `light.bedroom_lights == off` guard** — they only turn lights
+  off→on; if the lights are already on, manual brightness is left untouched. **Load-bearing detail:
+  every on-path is gated on `person.daniel == home`** — `bedroom_fan_temperature` + `bedroom_presence_on` get a
   `person home` condition, and `bedroom_morning_reset` wraps its DIRECT `apply_fan` call in
   `if person home` (it bypasses the fan automation's gate). Miss any one and the fan/lights switch
   on in an empty house. **Overrides (`bedroom_manual_off`/`bedroom_fan_manual`) are never written by
@@ -306,13 +321,16 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   (no live transition); the gates still prevent away-on so it self-corrects. Prereq for the
   unexpected-occupancy tripwire backlog item.
 - **Bedtime / sleep routine (since 2026-06-18).** `script.bedroom_bedtime` (the shared "going to
-  sleep" action) engages `input_boolean.bedroom_sleep_mode` (a quiet fan cap), flips AL into sleep
-  mode (`switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom`, warm/dim), **fades**
-  to `scene.bedroom_nightlight` (amber 3%) over 15 min, and re-applies the fan. The fade is a
-  per-call `transition: 900` on `scene.turn_on` (NOT baked into the scene), so only bedtime ramps —
-  the B3-press and overnight "got up" nightlight stay instant. AL sleep mode is engaged BEFORE the
-  scene so the scene is the last command on the lights, and `take_over_control: true` +
-  `detect_non_ha_changes: false` keep AL from re-stomping the group mid-fade. The bulb does the
+  sleep" action) engages `input_boolean.bedroom_sleep_mode` (a quiet fan cap), then — **critically
+  reordered** — calls `adaptive_lighting.set_manual_control: true` BEFORE flipping AL into sleep
+  mode, so AL can't fire its own ~45s pre-dim before the fade begins; then fades to
+  `scene.bedroom_nightlight` (amber 3%) over 15 min; then enables AL sleep mode (warm/dim target for
+  after morning reset). The fade is a per-call `transition: 900` on `scene.turn_on` (NOT baked into
+  the scene), so only bedtime ramps — the B3-press and overnight "got up" nightlight stay instant.
+  This reorder is what makes the 15-min nightlight fade genuinely gradual: without it, enabling AL
+  sleep mode FIRST caused AL to immediately pre-dim to its sleep_brightness before the fade started.
+  `take_over_control: true` + `detect_non_ha_changes: false` keep AL from re-stomping the group
+  mid-fade. The bulb does the
   brightness+color ramp internally (single Zigbee command, ZCL caps ~6553s), so an HA/Z2M restart
   mid-fade doesn't abort it — only a bulb power-cycle would. Triggered by `automation.bedroom_bedtime`
   off `binary_sensor.pixel_watch_3_bedtime_mode` → on (gated `person.daniel == home`), with **Tap
@@ -437,7 +455,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   pure `custom_templates/{fan,lighting}.jinja` macros (entity/time reads — `states()`/`now()` —
   stay in the YAML callers; macros take plain numbers): `fan_target_level` (curve + ±0.7-level
   hysteresis + night/sleep caps, used by `bedroom_apply_fan`), `in_wake_window` /
-  `wake_brightness` / `wake_transition` (morning ramp, used by `bedroom_apply_natural`), and
+  `wake_brightness` (morning ramp, used by `bedroom_apply_natural` + `bedroom_apply_wake`;
+  `wake_transition` was removed — transition is now a fixed 60 s per ramp step), and
   `auto_light_allowed` (lux gate, used by `templates.yaml`'s `bedroom_auto_light_allowed`).
 - The harness `tests/jinja_harness.py` renders macros in a bare Jinja2 env that mirrors the handful
   of HA filter overrides the macros use — most importantly HA's `round` is **banker's** rounding
