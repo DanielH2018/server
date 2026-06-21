@@ -13,7 +13,8 @@
 ## Global Constraints
 
 - **`containers/` is read-only** — edit only under `ansible/roles/containers/home-assistant/`.
-- **HA Jinja files are `copy`'d verbatim, not Ansible-templated** — `files/automations.yaml`, `files/scripts.yaml`, `files/scenes.yaml`, `files/templates.yaml`, `files/custom_templates/*.jinja`. Never put HA `{{ }}` in `configuration.yaml.j2` *unless* it has no HA-Jinja (the `input_number:` helper does not). Use plain `#` YAML comments — never Jinja `{# #}` — in the `.jinja`/compose-style files.
+- **HA Jinja files are `copy`'d verbatim, not Ansible-templated** — `files/automations.yaml`, `files/scripts.yaml`, `files/scenes.yaml`, `files/templates.yaml`, `files/custom_templates/*.jinja`. Never put HA `{{ }}` in `configuration.yaml.j2` *unless* it has no HA-Jinja (the `input_number:` helper does not).
+- **Comment syntax:** in compose templates and Ansible-templated YAML (`*.j2`), use plain `#` comments — Jinja `{# #}` between YAML blocks corrupts indentation there. In pure macro files (`custom_templates/*.jinja`), `{# #}` IS the correct comment syntax (it renders to nothing) — match the existing `lighting.jinja`.
 - **Tunable math lives in a tested `custom_templates/*.jinja` macro** (numbers in → numbers/bool out); import it from the YAML caller; never inline new math in automations.
 - **HA's `round` is banker's rounding** (round-half-to-even) — the test harness (`tests/jinja_harness.py`) mirrors this. Pick test points that avoid exact `.5` midpoints unless you intend the banker's result.
 - **Verification alias-slug trap:** an automation's entity_id derives from its `alias` (slugified), NOT its `id`. `id: bedroom_color_track` + `alias: Bedroom color tracking` → `automation.bedroom_color_tracking`. Query by the alias-slug.
