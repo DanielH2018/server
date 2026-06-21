@@ -22,6 +22,20 @@
       state: >-
         {{ (as_datetime(states('sensor.pixel_watch_3_next_alarm')) - timedelta(minutes=15)).isoformat() }}
 
+# Wind-down anchor: the bedtime PROMPT fires 8 h before the next MORNING alarm (target sleep ~8h),
+# so it tracks the real schedule instead of a fixed clock. Same morning-alarm availability guard as
+# bedroom_wake_start (local hour 03:00-11:00), so a nap/evening alarm never arms it. For a 6:00am
+# alarm this resolves to 10:00pm. No alarm -> unavailable, and the prompt's 22:30 fallback covers it.
+- sensor:
+    - name: "Bedroom winddown start"
+      unique_id: bedroom_winddown_start
+      device_class: timestamp
+      availability: >-
+        {% set na = states('sensor.pixel_watch_3_next_alarm') %}
+        {{ na not in ['unknown', 'unavailable', 'none', ''] and 3 <= (as_datetime(na) | as_local).hour < 11 }}
+      state: >-
+        {{ (as_datetime(states('sensor.pixel_watch_3_next_alarm')) - timedelta(hours=8)).isoformat() }}
+
 # UPS power (W) — the NUT integration only exposes ups.load as a PERCENTAGE; the Energy dashboard
 # needs energy (kWh), which requires power (W) first. Derive it from the load % and the UPS's rated
 # real-power output: power = load% / 100 * realpower.nominal. The 900 W is ups.realpower.nominal read

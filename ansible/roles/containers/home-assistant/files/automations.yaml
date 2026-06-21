@@ -959,11 +959,15 @@
 # already in sleep mode + home, so it only nudges when you're actually around and haven't gone to bed.
 - id: bedroom_bedtime_prompt
   alias: Bedroom bedtime prompt
-  description: At 22:00, if present and not yet in sleep mode, prompt to start the bedtime routine.
+  description: At wind-down time (alarm − 8h, or 22:30 fallback on no-alarm nights), if present and not yet in sleep mode, prompt to start the bedtime routine.
   mode: single
   trigger:
     - platform: time
-      at: "22:00:00"
+      at: sensor.bedroom_winddown_start
+      id: dynamic
+    - platform: time
+      at: "22:30:00"
+      id: fallback
   condition:
     - condition: state
       entity_id: binary_sensor.aqara_fp300_presence
@@ -974,6 +978,10 @@
     - condition: state
       entity_id: person.daniel
       state: "home"
+    # The fixed 22:30 fallback only fires on no-alarm nights (sensor unavailable) -> no double prompt
+    # on a night that already has an alarm-anchored dynamic trigger.
+    - condition: template
+      value_template: "{{ trigger.id == 'dynamic' or states('sensor.bedroom_winddown_start') in ['unknown', 'unavailable'] }}"
   action:
     - service: script.bedroom_notify
       data:
