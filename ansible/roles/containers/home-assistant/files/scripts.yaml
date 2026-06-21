@@ -16,8 +16,10 @@
 bedroom_set_natural_brightness:
   alias: "Bedroom — set brightness with natural color"
   description: >-
-    Release Adaptive Lighting, apply its natural color temperature, then set the
-    caller-supplied brightness over a transition. Used by bedroom_apply_natural's exceptions.
+    Turn the bedroom lights on at a caller-supplied brightness and Adaptive Lighting's CURRENT
+    natural color temperature, in a single light.turn_on (no AL turn-on flash). Arms the color
+    tracker (input_number.bedroom_light_expected_color_temp) so bedroom_color_track treats this
+    color as "auto". The explicit brightness marks the group manually controlled (AL take_over).
   mode: restart
   fields:
     brightness_pct:
@@ -27,29 +29,49 @@ bedroom_set_natural_brightness:
     transition:
       description: Fade duration in seconds.
       required: true
-      example: 480
+      example: 2
   sequence:
-    # Release manual control so adaptive_lighting.apply takes effect.
-    - service: adaptive_lighting.set_manual_control
-      data:
-        entity_id: switch.bedroom_adaptive_lighting_bedroom
-        manual_control: false
-    # Natural COLOR temp only — leave brightness for the explicit turn_on below.
-    - service: adaptive_lighting.apply
-      data:
-        entity_id: switch.bedroom_adaptive_lighting_bedroom
-        adapt_color: true
-        adapt_brightness: false
-        turn_on_lights: true
-        transition: 1
-    # Caller's brightness over their fade. The explicit brightness re-marks the group as
-    # manually controlled (AL take_over_control), so AL pauses for the exception's duration.
+    # AL keeps COMPUTING its sun-curve color even while taken over, so its color_temp_kelvin
+    # attribute is the right "time of day" color to apply. Fallback 2700K if unavailable.
+    - variables:
+        al_ct: "{{ state_attr('switch.bedroom_adaptive_lighting_bedroom', 'color_temp_kelvin') | int(2700) }}"
     - service: light.turn_on
       target:
         entity_id: light.bedroom_lights
       data:
         brightness_pct: "{{ brightness_pct | int }}"
+        color_temp_kelvin: "{{ al_ct }}"
         transition: "{{ transition | int }}"
+    # Arm the color tracker: record the color we just set so bedroom_color_track recognizes it as auto.
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.bedroom_light_expected_color_temp
+      data:
+        value: "{{ al_ct }}"
+
+# Wake frame: set the lights to the current sunrise-ramp brightness for NOW (warm 2200K), computed
+# from sensor.bedroom_wake_start via the wake_brightness macro. bedroom_wake_ramp calls this every
+# minute through the 30-min window; bedroom_apply_natural's wake exception also calls it so a mid-ramp
+# resume (presence / Tap-Dial) recomputes the right frame. No-op when no morning alarm is set.
+bedroom_apply_wake:
+  alias: "Bedroom — apply wake ramp frame"
+  mode: restart
+  sequence:
+    - variables:
+        ws: "{{ states('sensor.bedroom_wake_start') }}"
+    - condition: template
+      value_template: "{{ ws not in ['unknown', 'unavailable'] }}"
+    - variables:
+        wake_elapsed_min: "{{ (now() - as_datetime(ws)).total_seconds() / 60 }}"
+        sleep_min: "{{ states('sensor.pixel_9_pro_sleep_duration') | float(0) }}"
+        target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(wake_elapsed_min, sleep_min) | int }}"
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        brightness_pct: "{{ target }}"
+        color_temp_kelvin: 2200
+        transition: 60
 
 # Dispatcher: set the bedroom lights to their natural state for RIGHT NOW. Ordered choose: of
 # time-based exceptions, with full Adaptive Lighting (color + brightness) as the default.
@@ -102,25 +124,15 @@ bedroom_apply_natural:
                 {% from 'lighting.jinja' import in_wake_window %}
                 {{ in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool }}
           sequence:
-            - variables:
-                # now()/sensor reads stay here; the ramp + sleep-aware peak live in lighting.jinja.
-                wake_elapsed_min: "{{ (now() - as_datetime(states('sensor.bedroom_wake_start'))).total_seconds() / 60 }}"
-                sleep_min: "{{ states('sensor.pixel_9_pro_sleep_duration') | float(0) }}"
-            - service: script.bedroom_set_natural_brightness
-              data:
-                brightness_pct: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(wake_elapsed_min, sleep_min) | int }}"
-                transition: "{% from 'lighting.jinja' import wake_transition %}{{ wake_transition(wake_elapsed_min) | int }}"
-      # Default: full Adaptive Lighting — natural color AND brightness from the sun curve.
+            - service: script.bedroom_apply_wake
+      # Default: ambient-fill brightness (time of day + current ambient lux) on AL's natural color.
+      # Read illuminance while the lights are off -> true ambient. set_natural_brightness applies the
+      # color and arms the color tracker; bedroom_color_track then drifts color with the sun.
       default:
-        - service: adaptive_lighting.set_manual_control
+        - service: script.bedroom_set_natural_brightness
           data:
-            entity_id: switch.bedroom_adaptive_lighting_bedroom
-            manual_control: false
-        - service: adaptive_lighting.apply
-          data:
-            entity_id: switch.bedroom_adaptive_lighting_bedroom
-            turn_on_lights: true
-            transition: 1
+            brightness_pct: "{% from 'lighting.jinja' import natural_brightness %}{{ natural_brightness(now().hour, states('sensor.aqara_fp300_illuminance')) | int }}"
+            transition: 2
 
 # Gated dispatcher: apply the natural lighting state ONLY if the shared darkness gate allows
 # (binary_sensor.bedroom_auto_light_allowed = wake window OR illuminance < 50, defined in
