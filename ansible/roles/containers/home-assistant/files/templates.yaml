@@ -4,11 +4,12 @@
 # Ansible's templater) and included via `template: !include templates.yaml` in configuration.yaml.
 # HA UI edits are NOT persistent. To change, edit this file and redeploy home-assistant.
 #
-# Dynamic morning wake: the wake ramp starts 15 min before the real alarm and ends AT it. Source is
-# the WATCH alarm (sensor.pixel_watch_3_next_alarm) — the phone's next_alarm is unreliable. This
-# timestamp sensor (alarm - 15 min) is the SINGLE source of truth for the wake window [wake_start,
-# alarm): the bedroom_morning_reset time trigger fires on it, and both bedroom_apply_natural's
-# morning exception and bedroom_presence_on's window read it (so they're inherently in sync). The
+# Dynamic morning wake: the wake ramp starts 15 min before the real alarm and continues 15 min AFTER
+# it — a 30-min window centered on the alarm. Source is the WATCH alarm
+# (sensor.pixel_watch_3_next_alarm) — the phone's next_alarm is unreliable. This timestamp sensor
+# (alarm - 15 min) is the SINGLE source of truth for the wake window [wake_start, wake_start+30 min):
+# the bedroom_morning_reset time trigger fires on it (ramp start), and bedroom_apply_natural's wake
+# exception, bedroom_wake_ramp, and bedroom_presence_on's window all read it (inherently in sync). The
 # availability guard makes it `unavailable` unless the next alarm is a MORNING alarm (local hour
 # 03:00-11:00) — so a nap/evening alarm never arms the trigger or ramps the lights, and no alarm =
 # no wake (the 09:00 fallback in bedroom_morning_reset still clears overnight overrides).
@@ -56,7 +57,7 @@
 
 # Auto-light gate: the SINGLE source of truth for "is it dark enough (or the morning wake window) to
 # put the bedroom lights on automatically" — illuminance < 75 OR inside the wake window
-# [wake_start, +15min]. Referenced by bedroom_presence_on (its darkness condition),
+# [wake_start, +30min] (inherited from in_wake_window). Referenced by bedroom_presence_on (its darkness condition),
 # bedroom_apply_natural_gated, and the Tap Dial Button-4 sleep-exit (which checks it `off` to suppress
 # Adaptive Lighting's self-on in a bright room). Tune the 75-lux threshold / window here, in ONE place.
 - binary_sensor:

@@ -53,7 +53,7 @@ bedroom_set_natural_brightness:
 # Wake frame: set the lights to the current sunrise-ramp brightness for NOW (warm 2200K), computed
 # from sensor.bedroom_wake_start via the wake_brightness macro. bedroom_wake_ramp calls this every
 # minute through the 30-min window; bedroom_apply_natural's wake exception also calls it so a mid-ramp
-# resume (presence / Tap-Dial) recomputes the right frame. No-op when no morning alarm is set.
+# resume (a presence re-trigger) recomputes the right frame. No-op when no morning alarm is set.
 bedroom_apply_wake:
   alias: "Bedroom — apply wake ramp frame"
   mode: restart

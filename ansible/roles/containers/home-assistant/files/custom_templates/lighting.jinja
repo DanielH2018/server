@@ -3,10 +3,12 @@
    HA loads custom_templates/*.jinja at startup; this deploy recreates the container, so edits take
    effect on deploy. Live edit: Developer Tools -> Actions -> homeassistant.reload_custom_templates. #}
 
-{# Wake window: the ramp runs for WAKE_WINDOW_MIN minutes total, CENTERED on the alarm —
-   it starts at sensor.bedroom_wake_start (alarm - WAKE_PRE_MIN) and ends WAKE_PRE_MIN after the
-   alarm. WAKE_WINDOW_MIN (30) MUST equal 2 * the offset in templates.yaml's bedroom_wake_start
-   (15). The caller passes minutes since wake_start (or a negative sentinel when unavailable). #}
+{# Wake window: the ramp runs 30 minutes total, CENTERED on the alarm — it starts at
+   sensor.bedroom_wake_start (alarm - 15 min) and ends 15 min after the alarm. The 30 below (and the
+   15s in wake_brightness, which split it pre/post-alarm) are hardcoded literals that MUST stay equal
+   to 2x the 15-min offset baked into templates.yaml's bedroom_wake_start state expression — change
+   the window length in all three places together. The caller passes minutes since wake_start (or a
+   negative sentinel when unavailable). #}
 {%- macro in_wake_window(elapsed_min) -%}
 {%- set e = elapsed_min | float(-1) -%}
 {{ 0 <= e < 30 }}
