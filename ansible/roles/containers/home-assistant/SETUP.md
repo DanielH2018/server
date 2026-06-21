@@ -223,3 +223,105 @@ All set per-category in `bedroom_threshold_alert`'s `cfg` map or per-call to `be
 
 After any edit, redeploy (§ top). Device-level settings (Z2M names, FP300 tuning) live in Z2M's
 `./data` (Kopia-backed, not git) — re-apply after a re-pair.
+
+---
+
+## 11. Google Nest Hub Max — voice control + dashboard casting
+
+Two **independent**, self-hosted (no Nabu Casa) integrations with a Nest Hub Max:
+
+- **Voice control** ("Hey Google, turn on the bedroom lights") via HA's **manual
+  `google_assistant`** integration → your own Google Cloud project pointed at HA's existing
+  public HTTPS endpoint. Authelia is already off for HA, so no per-path bypass is needed.
+- **Dashboard casting** (show a Lovelace view on the Hub Max screen) via the local **`cast`**
+  integration. **Why `known_hosts`:** HA is bridge-networked, so it can't discover Cast devices
+  over mDNS — `known_hosts` names the Hub Max by IP and skips discovery entirely. Outbound
+  container→LAN traffic works through bridge+NAT, so **no host-networking change is needed.**
+
+### 11a. Prerequisite — give the Hub Max a fixed IP
+`cast` `known_hosts` needs a stable address. Reserve a DHCP lease for the Hub Max's MAC (home
+router, or — if Pi-hole serves DHCP — a `dhcp-host=<MAC>,<IP>` line in
+`pihole/templates/dnsmasq.yml.j2`). Find the MAC in the Google Home app (device → Settings →
+Technical information) or the router's lease table. Record the IP for `known_hosts`.
+
+### 11b. Voice control — Google-side (one-time clickops; not captured by `deploy.yml`)
+Google's console UI shifts often — the HA docs are authoritative:
+<https://www.home-assistant.io/integrations/google_assistant/>. **This is the smart-home /
+cloud-to-cloud path** (HomeGraph device control) — NOT "Conversational Actions" (those were sunset
+June 2023, <https://developers.google.com/assistant/ca-sunset>; smart-home Actions are explicitly
+unaffected). Google has since **moved smart-home dev off the legacy Actions console** to the Google
+Home Developer Console — use that. Repo-specific values:
+
+1. **Create a project** at <https://console.home.google.com/projects> (the **Google Home Developer
+   Console**) → "Create project" → note the **Project ID**.
+2. **Add a Cloud-to-cloud integration → fulfillment URL:**
+   `https://home-assistant.daniel-hunter.com/api/google_assistant`
+3. **Account linking** (OAuth; HA *is* the auth provider):
+   - Authorization URL: `https://home-assistant.daniel-hunter.com/auth/authorize`
+   - Token URL: `https://home-assistant.daniel-hunter.com/auth/token`
+   - Client ID: `https://oauth-redirect.googleusercontent.com/r/<PROJECT_ID>`
+   - Client secret: any non-empty string (HA ignores it); Scopes: `email` (dummy)
+4. **Google Cloud Console → enable the HomeGraph API** → create a **service account**, download
+   its **JSON key** → also create an **API key** (used by `google_assistant.request_sync`).
+5. **Test** the Action, then in the **Google Home app** → *Works with Google* → link
+   `[test] <action name>`. Re-sync anytime with "Hey Google, sync my devices" or the
+   `google_assistant.request_sync` service.
+
+> Hand off three things from the above: the **Project ID**, the **service-account JSON**, and the
+> **HomeGraph API key**. They become the SOPS secrets below.
+
+### 11c. Voice control — repo-side (Ansible) — IMPLEMENTED (2026-06-21)
+**Key constraint:** `configuration.yaml.j2` is copied verbatim — it must contain **no** Ansible
+`{{ }}` (the `validate-ha-config` hook rejects it). So all templated/secret values go through HA's
+native `!secret` indirection backed by an Ansible-generated `secrets.yaml`.
+
+1. **One SOPS secret** holds the whole downloaded JSON: `google_assistant_service_account`
+   (`sops ansible/vars/secrets.yml`; registered in `ansible/secret_rotation.yml`, tier `assisted`).
+   No `api_key` (skipped — `request_sync` works via the service account) and no `secure_devices_pin`
+   (no locks/covers exposed).
+2. **`templates/secrets.yaml.j2`** (Ansible-rendered → `config/secrets.yaml`, `no_log`) derives the
+   `!secret` values from that one JSON with `| from_json` / `| to_json` — the `to_json` flattens the
+   multi-line PEM key into one escaped scalar: `google_assistant_project_id`,
+   `google_assistant_sa_client_email`, `google_assistant_sa_private_key`, plus `external_url` /
+   `internal_url` (these need the `domain` var, which is why they can't live in configuration.yaml).
+3. **`configuration.yaml.j2`** references them via `!secret` (curated exposure — `expose_by_default`
+   off, so ONLY entities flagged `expose: true` are visible to Google):
+   ```yaml
+   google_assistant:
+     project_id: !secret google_assistant_project_id
+     service_account:
+       client_email: !secret google_assistant_sa_client_email
+       private_key: !secret google_assistant_sa_private_key
+     report_state: true
+     expose_by_default: false
+     entity_config:
+       light.bedroom_lights: {name: Bedroom Lights, expose: true}
+       fan.tower_fan: {name: Bedroom Fan, expose: true}
+   ```
+   Both new config tasks are wired into `common_config_changed`. Deploy: `ha-deploy`.
+4. **Finish in the Google Home app:** link the `[test] <action>` (§11b step 5), then say
+   "Hey Google, sync my devices". Expose another device later = one more `entity_config` entry with
+   `expose: true`, redeploy, resync.
+
+### 11d. Dashboard casting — UI / `.storage` (the `cast` integration is NOT YAML)
+Modern HA **rejects** a YAML `cast:` block ("does not support YAML setup") — Cast is a config-entry
+integration. `external_url`/`internal_url` are already set (§11c step 2), so only the device list is
+left, and it's a one-time UI step:
+- **Settings → Devices & Services → + Add Integration → Google Cast.** HA is bridge-networked (no
+  mDNS), so when prompted add the Hub by IP under **Known hosts = `10.0.0.137`** (or set it later via
+  the integration's **Configure**). The Hub must keep that reserved DHCP lease (§11a).
+- A `media_player.<hub>` entity then appears. Cast a view from **Developer Tools → Actions** with
+  `cast.show_lovelace_view` (target that media_player, `dashboard_path: lovelace`, `view_path: 0`);
+  optionally automate it.
+
+> **HA Cast caveat (self-hosted):** needs a publicly-trusted cert (we have the Cloudflare wildcard)
+> and the Hub Max to resolve + reach the `external_url`. If casting misbehaves, check that the Hub
+> Max resolves `home-assistant.daniel-hunter.com`, or fall back to the LAN `internal_url`.
+
+### 11e. Verify
+- `uv run python scripts/validate_ha_config.py` passes; deploy with `ha-deploy` (gates on health).
+- `scripts/probe.py ha get error_log` shows no `google_assistant` setup errors (it loads with no
+  entities — it's cloud-fulfillment). After adding Cast in the UI,
+  `scripts/probe.py ha get states | grep media_player` shows the Hub.
+- Voice: "Hey Google, turn on the bedroom lights" toggles `light.bedroom_lights`.
+- Cast: `cast.show_lovelace_view` puts the Bedroom dashboard on the Hub Max screen.

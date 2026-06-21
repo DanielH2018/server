@@ -4,6 +4,13 @@ default_config:
 # Entity friendly-name / icon overrides (templated — see customize.yaml.j2).
 homeassistant:
   customize: !include customize.yaml
+  # Instance URLs so the Google Cast receiver on the Nest Hub Max can reach the HA frontend when
+  # casting a dashboard (cast.show_lovelace_view). Resolved from HA's secrets.yaml, which Ansible
+  # generates from SOPS (external_url = Cloudflare public host, internal_url = LAN/WireGuard host).
+  # They live in secrets.yaml because this file is copied verbatim — the domain var cannot be
+  # inlined here (the HA-config validator rejects Ansible markers in configuration.yaml).
+  external_url: !secret external_url
+  internal_url: !secret internal_url
 
 # Automations + scenes are Ansible-managed static files (role files/automations.yaml,
 # files/scenes.yaml), copied to ./config and version-controlled. The HA UI editors still
@@ -277,3 +284,35 @@ lovelace:
       title: Bedroom
       icon: mdi:bed
       show_in_sidebar: true
+
+# Google Assistant (smart-home / cloud-to-cloud) — "Hey Google" voice control of HA entities via a
+# self-hosted Google Cloud project (NOT Nabu Casa). Google reaches HA at the public fulfillment URL
+# https://home-assistant.<domain>/api/google_assistant (Authelia is off on this route, so no bypass
+# needed). report_state pushes live state to Google's HomeGraph, signed by the service account;
+# re-sync exposed devices with the google_assistant.request_sync service (no api_key needed).
+# Secrets come from HA's secrets.yaml (Ansible-generated from the SOPS google_assistant_service_account
+# JSON): project_id + the service account's client_email/private_key. Exposure is CURATED —
+# expose_by_default is off, so ONLY the entities flagged `expose: true` below are visible to Google.
+# Add a device = another entity_config entry with `expose: true`, then say "Hey Google, sync my devices".
+google_assistant:
+  project_id: !secret google_assistant_project_id
+  service_account:
+    client_email: !secret google_assistant_sa_client_email
+    private_key: !secret google_assistant_sa_private_key
+  report_state: true
+  expose_by_default: false
+  entity_config:
+    light.bedroom_lights:
+      name: Bedroom Lights
+      expose: true
+    fan.tower_fan:
+      name: Bedroom Fan
+      expose: true
+
+# Google Cast (Nest Hub Max) is intentionally NOT configured here. The `cast` integration is
+# config-entry / UI-only in modern HA — a YAML `cast:` block is rejected ("does not support YAML
+# setup"). Because HA is bridge-networked and can't discover Cast devices over mDNS, the Hub is added
+# by IP in the integration's options: Settings -> Devices & Services -> Google Cast -> Configure ->
+# Known hosts = 10.0.0.137 (the Hub's reserved lease). This is a one-time .storage step, like the
+# Energy dashboard. external_url/internal_url (in the homeassistant: block above) let the cast
+# receiver reach HA. Full runbook: SETUP.md §11.

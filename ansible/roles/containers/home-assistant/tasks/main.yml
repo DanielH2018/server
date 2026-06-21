@@ -18,6 +18,19 @@
     mode: "0664"
   register: home_assistant_config
 
+# HA secrets.yaml — resolves the !secret references in configuration.yaml (Google Assistant
+# service-account fields + project_id, derived from the SOPS google_assistant_service_account JSON;
+# external_url/internal_url for Google Cast). Ansible-rendered (NOT copy'd) so the domain var and
+# SOPS values can be templated here, kept out of the verbatim-copied configuration.yaml.
+- name: Create Home Assistant secrets.yaml from template
+  tags: [config]
+  ansible.builtin.template:
+    src: secrets.yaml.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/secrets.yaml"
+    mode: "0640"
+  no_log: true  # contains the Google service-account private key
+  register: home_assistant_secrets
+
 - name: Create entity customizations from template
   tags: [config]
   ansible.builtin.template:
@@ -101,4 +114,4 @@
     tasks_from: docker_deploy.yml
   vars:
     # All three are bind-mounted templated configs — recreate so HA reloads them on edit.
-    common_config_changed: "{{ (home_assistant_config is changed) or (home_assistant_customize is changed) or (home_assistant_dashboard is changed) or (home_assistant_automations is changed) or (home_assistant_scenes is changed) or (home_assistant_scripts is changed) or (home_assistant_templates is changed) or (home_assistant_rest is changed) or (home_assistant_custom_templates is changed) }}"
+    common_config_changed: "{{ (home_assistant_config is changed) or (home_assistant_secrets is changed) or (home_assistant_customize is changed) or (home_assistant_dashboard is changed) or (home_assistant_automations is changed) or (home_assistant_scenes is changed) or (home_assistant_scripts is changed) or (home_assistant_templates is changed) or (home_assistant_rest is changed) or (home_assistant_custom_templates is changed) }}"
