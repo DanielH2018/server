@@ -252,6 +252,20 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   trap as the sensor-offline recovery; verified `last_triggered=None` post-deploy). Three edges:
   on-battery (`watch`), low-battery (`watch`+`pierce` — server may shut down), restored (routine), one
   coalescing `ups_power` tag. Routes through `bedroom_notify`.
+- **UPS energy for the Energy dashboard (since 2026-06-21).** The NUT integration exposes `ups.load`
+  as a **percentage only** — the Energy dashboard needs energy (kWh). Two-hop chain: `sensor.ups_power`
+  (`files/templates.yaml`, HA Jinja) converts load% to watts via `load% / 100 * 900`, where **900 W is
+  `ups.realpower.nominal` read off the NUT server for THIS unit (APC Back-UPS RS 1500MS2) — change the
+  constant if the UPS is swapped**; then a Riemann-sum `integration` platform sensor `sensor.ups_energy`
+  (inline `sensor:` in `configuration.yaml.j2` — no HA Jinja, so it's fine in the verbatim-copied file)
+  accumulates that to kWh and auto-stamps `device_class: energy` + `state_class: total` (what the
+  dashboard requires). `method: left` (load is a step function) + `max_sub_interval: "00:05:00"` so a
+  steady load still accrues. Accuracy is a **coarse estimate** (Back-UPS load% is quantized) covering
+  **only UPS-connected gear** (server + networking), not the whole home. **Energy-dashboard gotcha
+  (UI-only, `.storage/energy`, not YAML):** the "Individual devices" panel is **gated behind a
+  configured Electricity Grid source** — with no grid it never appears. With the UPS as the only meter,
+  add `sensor.ups_energy` directly as **Grid consumption**; if a whole-home meter is ever added, put
+  THAT on grid and demote the UPS to an individual device.
 - **Unexpected-occupancy tripwire (since 2026-06-18).** `automation.bedroom_unexpected_occupancy` —
   FP300 presence `off→on` (`for: 30s`) while `person.daniel` is away (not home/unknown/unavailable)
   **and** has been away >5 min → a security alert via `bedroom_notify` (`watch: true, pierce: true`).

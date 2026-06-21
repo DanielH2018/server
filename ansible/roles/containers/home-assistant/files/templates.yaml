@@ -22,6 +22,24 @@
       state: >-
         {{ (as_datetime(states('sensor.pixel_watch_3_next_alarm')) - timedelta(minutes=15)).isoformat() }}
 
+# UPS power (W) — the NUT integration only exposes ups.load as a PERCENTAGE; the Energy dashboard
+# needs energy (kWh), which requires power (W) first. Derive it from the load % and the UPS's rated
+# real-power output: power = load% / 100 * realpower.nominal. The 900 W is ups.realpower.nominal read
+# off the NUT server for this exact unit (APC Back-UPS RS 1500MS2) — change it if the UPS is swapped.
+# This feeds the `integration` (Riemann-sum) sensor.ups_energy in configuration.yaml.j2, which is what
+# the Energy dashboard consumes. NB: a Back-UPS reports load in coarse % steps, so this is a good
+# estimate, not metered accuracy.
+- sensor:
+    - name: "UPS Power"
+      unique_id: ups_power
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+      availability: >-
+        {{ states('sensor.apc_ups_load') not in ['unknown', 'unavailable'] }}
+      state: >-
+        {{ (states('sensor.apc_ups_load') | float(0) / 100 * 900) | round(1) }}
+
 # Auto-light gate: the SINGLE source of truth for "is it dark enough (or the morning wake window) to
 # put the bedroom lights on automatically" — illuminance < 75 OR inside the wake window
 # [wake_start, +15min]. Referenced by bedroom_presence_on (its darkness condition),

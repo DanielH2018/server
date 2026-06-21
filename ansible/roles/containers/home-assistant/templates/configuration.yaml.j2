@@ -189,6 +189,26 @@ binary_sensor:
 # comment breaks it). Currently holds sensor.bedroom_wake_start (watch alarm minus 15 min).
 template: !include templates.yaml
 
+# UPS energy (kWh) for the Energy dashboard. The dashboard only accepts energy sensors
+# (device_class: energy, state_class: total/total_increasing) — the NUT integration gives load %
+# only. sensor.ups_power (files/templates.yaml) converts that to watts; this Riemann-sum
+# `integration` sensor accumulates it into kWh and auto-stamps device_class: energy + state_class:
+# total, making it eligible. method: left because the UPS load is a step function (holds a value
+# until it changes); max_sub_interval keeps the integral accruing while the load sits steady (else
+# it only re-integrates on a source change and a constant load would under-count). No HA Jinja
+# expressions here, so it can live inline in this verbatim-copied file. Add it to the Energy dashboard via the UI
+# (Settings → Dashboards → Energy → Individual devices → UPS Energy) — that step is .storage-only.
+sensor:
+  - platform: integration
+    source: sensor.ups_power
+    name: "UPS Energy"
+    unique_id: ups_energy
+    unit_prefix: k
+    unit_time: h
+    method: left
+    max_sub_interval: "00:05:00"
+    round: 3
+
 # Outdoor air quality (Open-Meteo, no key) — git-managed REST sensor. Copy'd (files/rest.yaml),
 # not inline, because its value_templates use value_json / state_attr that Ansible would mangle.
 # Feeds the outdoor PM2.5 threshold alerts (below) and the window advisor (files/automations.yaml).
