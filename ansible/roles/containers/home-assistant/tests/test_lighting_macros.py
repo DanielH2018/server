@@ -49,3 +49,23 @@ def test_auto_light_allowed_truth_table():
     assert _allowed(False, 74) == "True"
     assert _allowed(False, 75) == "False"   # strict < 75
     assert _allowed(False, 80) == "False"
+
+
+def _natural(hour, illuminance):
+    return int(render_macro(LIGHT, "natural_brightness", hour, illuminance))
+
+
+def test_natural_brightness_time_bands_dark_room():
+    assert _natural(7, 0) == 55     # morning base, dark room -> factor 1.0
+    assert _natural(12, 0) == 45    # daytime base
+    assert _natural(20, 0) == 35    # evening base
+
+
+def test_natural_brightness_dims_with_ambient():
+    assert _natural(12, 75) == 9    # at the gate ceiling: 45 * 0.2
+    assert _natural(12, 750) == 9   # above the gate: factor clamps at 0.2
+    assert _natural(20, 0) > _natural(20, 70)   # brighter room -> dimmer output
+
+
+def test_natural_brightness_deep_night_falls_back_low():
+    assert _natural(3, 0) == 35     # 00:00-05:00 is the nightlight path; fallback base

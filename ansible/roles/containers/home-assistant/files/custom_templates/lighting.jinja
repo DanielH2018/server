@@ -39,3 +39,18 @@
 {%- set lux = illuminance | float(9999) -%}
 {{ iw or lux < 75 }}
 {%- endmacro -%}
+
+{# Ambient-fill auto-on brightness: the level to turn the lights on at, from the time of day AND the
+   current ambient illuminance. Time-of-day base (the level if the room were pitch dark): morning
+   (05-09) 55, daytime (09-17) 45, evening (else) 35. Then dimmed by ambient: factor falls linearly
+   1.0 -> 0.2 across 0 -> 75 lux (the auto_light_allowed gate ceiling), so a brighter room gets less
+   added light. Output floored at 5% so it's always visibly on. Read illuminance while the lights are
+   OFF (true ambient — the FP300 is dominated by the bulbs when on). Color comes from Adaptive
+   Lighting in the caller; this is brightness only. TUNE the bases / factor here. #}
+{%- macro natural_brightness(hour, illuminance) -%}
+{%- set h = hour | int(12) -%}
+{%- set lux = illuminance | float(0) -%}
+{%- set base = 55 if (5 <= h < 9) else (45 if (9 <= h < 17) else 35) -%}
+{%- set factor = [[1.0 - 0.8 * lux / 75, 1.0] | min, 0.2] | max -%}
+{{ [(base * factor) | round(0) | int, 5] | max }}
+{%- endmacro -%}
