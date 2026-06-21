@@ -714,6 +714,17 @@
     - condition: state
       entity_id: person.daniel
       state: "home"
+    # Ignore the boot-time temperature re-report: at HA start the AirGradient sensor comes up
+    # unavailable/unknown then its first reading fires this state trigger, which would re-apply the auto
+    # level while the manual override is still STALE-restored off (HA's unclean shutdown can drop a fan
+    # speed you set in the ~15 min before a deploy — see bedroom_fan_startup_reconcile). Time triggers
+    # (22:00/06:00) have no from_state and always pass. This first-reading skip also gives the reconcile
+    # automation a clean window to rebuild the override before the second reading can drive the fan.
+    - condition: template
+      value_template: >-
+        {{ trigger.platform != 'state'
+           or (trigger.from_state is not none
+               and trigger.from_state.state not in ['unknown', 'unavailable']) }}
   action:
     - service: script.bedroom_apply_fan
 
@@ -760,6 +771,74 @@
     - service: input_boolean.turn_on
       target:
         entity_id: input_boolean.bedroom_fan_manual
+
+# Fan override RECONCILE on restart. HA's unclean shutdown (SIGKILL on every deploy) can drop the
+# input_boolean.bedroom_fan_manual + input_number.bedroom_fan_expected_level helpers when they changed
+# within ~15 min of the restart (the restore_state dump cycle) — so a fan speed you just dialed by hand
+# is restored STALE (override off, old expected level) and bedroom_fan_temperature re-applies the auto
+# level on the first post-boot temp report (observed: a hand-set L3 bumped back to L5 after a deploy).
+# This rebuilds the override from the PHYSICAL fan, whose speed the DREO cloud keeps across an HA
+# restart. It captures the restored level BEFORE the temp sensor reports (so the capture can't be
+# polluted by an auto re-apply racing in), then once temp is known compares it to the hysteresis-free
+# auto ideal (fan_target_level with cur_level=0): under auto control the fan always tracks within ~1
+# level of ideal, so a fan running MORE than 1 level off was hand-set — re-engage the override, re-arm
+# expected_level, and re-assert the level (undoing any auto nudge that slipped in). Pairs with the
+# from_state guard on bedroom_fan_temperature, which skips the first reading so this wins the race.
+- id: bedroom_fan_startup_reconcile
+  alias: Bedroom fan startup reconcile
+  description: After an HA restart, rebuild the fan manual override from the physical fan so a hand-set speed survives the unclean-shutdown loss of the override helpers.
+  mode: single
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    # Capture the device's restored level FIRST — the DREO cloud holds the physical speed across the
+    # restart, and the fan reconnects well before the AirGradient temp sensor's first poll.
+    - wait_template: "{{ states('fan.tower_fan') in ['on', 'off'] }}"
+      timeout: "00:01:30"
+      continue_on_timeout: true
+    - variables:
+        boot_level: "{% from 'fan.jinja' import pct_to_level %}{{ (pct_to_level(state_attr('fan.tower_fan', 'percentage')) | int) if is_state('fan.tower_fan', 'on') else 0 }}"
+    # Wait for the temperature so we can compute what auto WOULD pick.
+    - wait_template: "{{ states('sensor.bedroom_airgradient_one_temperature') not in ['unknown', 'unavailable'] }}"
+      timeout: "00:03:00"
+      continue_on_timeout: true
+    - variables:
+        t: "{{ states('sensor.bedroom_airgradient_one_temperature') | float(-1) }}"
+        is_night: "{{ now().hour >= 22 or now().hour < 6 }}"
+        sleep: "{{ is_state('input_boolean.bedroom_sleep_mode', 'on') }}"
+        # Hysteresis-free auto ideal — cur_level=0 bypasses fan_target_level's ±0.7-level deadband.
+        ideal: "{% from 'fan.jinja' import fan_target_level %}{{ fan_target_level(t, 0, is_night, sleep) | int }}"
+    # Hand-set fan? Home, fan on, temp known, running >1 level from auto's pick, and the override wasn't
+    # restored (still off). The >1 tolerance absorbs the curve's hysteresis so a legit auto level never
+    # trips this — only a deliberate manual speed sits that far from ideal.
+    - condition: template
+      value_template: >-
+        {{ is_state('person.daniel', 'home')
+           and (boot_level | int) > 0
+           and t >= 0
+           and ((boot_level | int) - (ideal | int)) | abs > 1
+           and is_state('input_boolean.bedroom_fan_manual', 'off') }}
+    - service: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.bedroom_fan_manual
+    # Arm expected_level BEFORE re-asserting, so our own cloud echo matches and bedroom_fan_manual_detect
+    # doesn't re-flag it.
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.bedroom_fan_expected_level
+      data:
+        value: "{{ boot_level | int }}"
+    # Re-assert the hand-set level last (level -> midpoint % via the shared macro, same DREO ceil
+    # handling as bedroom_apply_fan), undoing any auto nudge that slipped in during boot.
+    - service: fan.turn_on
+      target:
+        entity_id: fan.tower_fan
+    - service: fan.set_percentage
+      target:
+        entity_id: fan.tower_fan
+      data:
+        percentage: "{% from 'fan.jinja' import level_to_pct %}{{ level_to_pct(boot_level | int) | int }}"
 
 # Sensor-offline alert: any bedroom-automation dependency going `unavailable` for 5 min sends a
 # phone notification; a recovery notice fires when it returns (same tag, so it replaces the alert).

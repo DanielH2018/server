@@ -417,6 +417,21 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   **Tap Dial button 3 = reset the fan to automatic** (clear `bedroom_fan_manual` + apply, night-cap
   aware); the morning reset clears it too. Tune the fan curve (start offset / slope / caps) in
   `bedroom_apply_fan` only.
+  **Manual fan survives a restart (since 2026-06-21).** A hand-set fan speed used to be undone by a
+  deploy/restart: HA's unclean shutdown (SIGKILL) can drop the `bedroom_fan_manual` +
+  `bedroom_fan_expected_level` helpers when they changed within ~15 min of the restart (the
+  `restore_state` dump cycle), so they restore STALE (override off, old level) and
+  `bedroom_fan_temperature` re-applies the auto level on the first post-boot temp report (observed live:
+  a hand-set L3 bumped to L5 after a deploy — the documented [[ha-stale-override-restore-on-deploy]]
+  trap, in the "lost my change" direction). Two coordinated fixes: (1) `bedroom_fan_temperature` now
+  skips a temp **state** trigger whose `from_state` is `unknown`/`unavailable` (the boot re-report), so
+  the restart can't drive the fan and the reconcile gets a clean window; (2) `bedroom_fan_startup_reconcile`
+  (on `homeassistant` start) captures the fan's restored level FIRST (the DREO cloud keeps the physical
+  speed across the restart), then once temp is known compares it to the **hysteresis-free** auto ideal
+  (`fan_target_level` with `cur_level=0`) — under auto control the fan tracks within ~1 level of ideal,
+  so a fan >1 level off was hand-set: it re-engages the override, re-arms `expected_level`, and
+  re-asserts the level. Only when home + fan on + temp known; the `>1` tolerance means a legit auto level
+  never trips it. Does NOT recover a manual speed within 1 level of the auto ideal (accepted).
 - **YAML dashboard + entity customization (templated).** `configuration.yaml` registers a YAML
   dashboard via `lovelace: dashboards:` (NOT the legacy top-level `mode: yaml` — deprecated,
   removed in HA 2026.8) pointing at `config/ui-lovelace.yaml` (`templates/ui-lovelace.yaml.j2`),
