@@ -1298,3 +1298,82 @@
                 title: "🪟 Free cooling"
                 message: "It's {{ out_temp }}°F outside ({{ in_temp - out_temp }}° cooler) & clean — open up instead of the fan."
                 tag: window_advice
+
+# ── Nest Hub Max dashboard (cast to media_player.bedroom_display) ─────────────────────────────────
+# Keep the Bedroom Lovelace view up on the Hub while the room is lit + awake; let it fall back to the
+# Hub's ambient screen when dark or in sleep mode. Cast itself is config-entry/UI-only (known_hosts =
+# 10.0.0.137); these just drive cast.show_lovelace_view / media_player.turn_off. Lux thresholds
+# (show > 60, dark < 50; FP300 reads ~553 lights-on / ~48 lights-off) are STARTING POINTS — tune here.
+- id: bedroom_display_show
+  alias: Bedroom display keep dashboard up
+  description: >-
+    Re-cast the Bedroom Lovelace view to media_player.bedroom_display while the room is lit
+    (FP300 illuminance > 60) and not in sleep mode. Only casts when the Hub is NOT already playing
+    something (state != playing) so it never re-casts an already-shown dashboard (no flicker) nor
+    overrides user-started media; re-establishes after an HA restart or when the Hub returns to its
+    ambient screen.
+  mode: single
+  trigger:
+    - platform: homeassistant
+      event: start
+    - platform: time_pattern
+      minutes: "/10"
+    - platform: state
+      entity_id: media_player.bedroom_display
+      to:
+        - idle
+        - "off"
+        - standby
+    - platform: state
+      entity_id: input_boolean.bedroom_sleep_mode
+      to: "off"
+    - platform: numeric_state
+      entity_id: sensor.aqara_fp300_illuminance
+      above: 60
+      for: "00:00:30"
+  condition:
+    - condition: state
+      entity_id: input_boolean.bedroom_sleep_mode
+      state: "off"
+    - condition: numeric_state
+      entity_id: sensor.aqara_fp300_illuminance
+      above: 60
+    # Only (re)cast when the Hub isn't actively showing something — avoids flicker on an already-cast
+    # dashboard and never clobbers user-started media (both report media_player state 'playing').
+    - condition: not
+      conditions:
+        - condition: state
+          entity_id: media_player.bedroom_display
+          state: playing
+  action:
+    - service: cast.show_lovelace_view
+      data:
+        entity_id: media_player.bedroom_display
+        dashboard_path: lovelace
+        view_path: bedroom
+
+- id: bedroom_display_dismiss
+  alias: Bedroom display go ambient when dark or sleeping
+  description: >-
+    Send the Hub back to its ambient screen the moment the room goes dark (FP300 illuminance < 50)
+    or sleep mode turns on — but ONLY if it is currently showing the HA dashboard
+    (app_name == "Home Assistant Lovelace"), so user-started media is never interrupted. Edge-
+    triggered (not periodic) so it can't repeatedly kill media later.
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.aqara_fp300_illuminance
+      below: 50
+      for: "00:00:30"
+    - platform: state
+      entity_id: input_boolean.bedroom_sleep_mode
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: media_player.bedroom_display
+      attribute: app_name
+      state: "Home Assistant Lovelace"
+  action:
+    - service: media_player.turn_off
+      target:
+        entity_id: media_player.bedroom_display
