@@ -10,9 +10,10 @@
 # the Tap Dial and the morning reset both call bedroom_apply_natural, so the ramp math lives in
 # one place.
 
-# Helper: apply AL's natural COLOR temp, then set a caller-chosen brightness over a transition.
-# Every exception calls this so the AL release + color-apply boilerplate lives in exactly one
-# place — a new exception never has to touch Adaptive Lighting service syntax.
+# Helper: turn the lights on at a caller-chosen brightness + AL's CURRENT natural color, in ONE
+# light.turn_on (no adaptive_lighting.apply, so no turn-on flash), then arm the color tracker
+# (input_number.bedroom_light_expected_color_temp). Every exception/default calls this so the
+# color-read + tracker wiring lives in one place — a new exception never repeats it.
 bedroom_set_natural_brightness:
   alias: "Bedroom — set brightness with natural color"
   description: >-
