@@ -3,29 +3,31 @@
    HA loads custom_templates/*.jinja at startup; this deploy recreates the container, so edits take
    effect on deploy. Live edit: Developer Tools -> Actions -> homeassistant.reload_custom_templates. #}
 
-{# Minutes elapsed into the 15-min morning wake window -> is the wake ramp active? The caller passes
-   the minutes since sensor.bedroom_wake_start (or a negative sentinel when the sensor is
-   unavailable). SINGLE source of truth for the window [0, 15), shared by bedroom_apply_natural's
-   nightlight + wake exceptions and templates.yaml's bedroom_auto_light_allowed. #}
+{# Wake window: the ramp runs for WAKE_WINDOW_MIN minutes total, CENTERED on the alarm —
+   it starts at sensor.bedroom_wake_start (alarm - WAKE_PRE_MIN) and ends WAKE_PRE_MIN after the
+   alarm. WAKE_WINDOW_MIN (30) MUST equal 2 * the offset in templates.yaml's bedroom_wake_start
+   (15). The caller passes minutes since wake_start (or a negative sentinel when unavailable). #}
 {%- macro in_wake_window(elapsed_min) -%}
 {%- set e = elapsed_min | float(-1) -%}
-{{ 0 <= e < 15 }}
+{{ 0 <= e < 30 }}
 {%- endmacro -%}
 
-{# Wake-ramp brightness %: 1% at window start (elapsed 0) ramping linearly to `peak` at the alarm
-   (elapsed 15). Sleep-aware peak: 30% after a short night (0 < sleep_min < 360), else 50%
-   (unknown/0/long -> 50). #}
+{# Wake-ramp brightness %: a gentle-then-steep sunrise. 1% at window start (e=0) rises to a mid
+   point at the alarm (e=15), then climbs steeper to the peak at e=30 (alarm+15) to actually get you
+   up. Sleep-aware: a short night (0 < sleep_min < 360) scales the mid/peak down. Re-evaluated once a
+   minute by bedroom_wake_ramp, so a single call returns the level for the current elapsed. #}
 {%- macro wake_brightness(elapsed_min, sleep_min) -%}
 {%- set e = elapsed_min | float(0) -%}
 {%- set s = sleep_min | float(0) -%}
-{%- set peak = 30 if (0 < s < 360) else 50 -%}
-{{ (1 + (peak - 1) * e / 15) | round(0) | int }}
-{%- endmacro -%}
-
-{# Wake-ramp transition (seconds): the minutes remaining in the 15-min window, as seconds. #}
-{%- macro wake_transition(elapsed_min) -%}
-{%- set e = elapsed_min | float(0) -%}
-{{ ((15 - e) * 60) | round(0) | int }}
+{%- set short = (0 < s < 360) -%}
+{%- set start = 1 -%}
+{%- set mid = 7 if short else 12 -%}
+{%- set peak = 24 if short else 40 -%}
+{%- if e <= 15 -%}
+{{ (start + (mid - start) * e / 15) | round(0) | int }}
+{%- else -%}
+{{ (mid + (peak - mid) * (e - 15) / 15) | round(0) | int }}
+{%- endif -%}
 {%- endmacro -%}
 
 {# Auto-light gate: dark enough OR inside the wake window. illuminance < 75 lux is "dark"; in_window

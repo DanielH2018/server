@@ -12,43 +12,35 @@ def _brightness(elapsed, sleep_min):
     return int(render_macro(LIGHT, "wake_brightness", elapsed, sleep_min))
 
 
-def _transition(elapsed):
-    return int(render_macro(LIGHT, "wake_transition", elapsed))
-
-
 def _allowed(in_window, illuminance):
     return render_macro(LIGHT, "auto_light_allowed", in_window, illuminance)
 
 
 def test_in_wake_window_boundaries():
     assert _window(0) == "True"
-    assert _window(7.5) == "True"
-    assert _window(14.99) == "True"
-    assert _window(15) == "False"      # strict upper bound (window ends AT the alarm)
+    assert _window(15) == "True"       # the alarm is now mid-window, not the end
+    assert _window(29.99) == "True"
+    assert _window(30) == "False"      # window ends 15 min AFTER the alarm
     assert _window(-1) == "False"      # unavailable-sensor sentinel
 
 
-def test_wake_brightness_ramp_endpoints():
-    assert _brightness(0, 0) == 1      # 1% at window start
-    assert _brightness(15, 0) == 50    # full peak at the alarm (normal night)
+def test_wake_brightness_curve_endpoints():
+    assert _brightness(0, 0) == 1      # 1% at window start (alarm-15)
+    assert _brightness(15, 0) == 12    # ~12% at the alarm (gentle pre-alarm)
+    assert _brightness(30, 0) == 40    # 40% peak at alarm+15 (the "get up" push)
 
 
-def test_wake_brightness_short_night_lowers_peak():
-    assert _brightness(15, 300) == 30  # 0 < 300 < 360 -> gentler 30% peak
-    assert _brightness(15, 0) == 50    # unknown/0 sleep -> normal 50%
-    assert _brightness(15, 400) == 50  # long night -> normal 50%
+def test_wake_brightness_is_gentle_then_steep():
+    # Post-alarm slope (28% over 15 min) is steeper than pre-alarm (11% over 15 min).
+    assert _brightness(22.5, 0) == 26  # 12 + (40-12)*0.5
+    assert _brightness(7.5, 0) == 6    # 1 + (12-1)*0.5 = 6.5 -> banker's round -> 6
 
 
-def test_wake_brightness_is_monotonic():
-    vals = [_brightness(e, 0) for e in range(0, 16)]
-    assert vals == sorted(vals)
-    assert vals[0] == 1 and vals[-1] == 50
-
-
-def test_wake_transition_counts_down_seconds():
-    assert _transition(0) == 900       # full 15 min remaining
-    assert _transition(7.5) == 450
-    assert _transition(15) == 0
+def test_wake_brightness_short_night_lowers_curve():
+    assert _brightness(15, 300) == 7   # 0 < 300 < 360 -> gentler ~7% at the alarm
+    assert _brightness(30, 300) == 24  # ...and ~24% peak
+    assert _brightness(15, 0) == 12    # unknown/0 sleep -> normal
+    assert _brightness(15, 400) == 12  # long night -> normal
 
 
 def test_auto_light_allowed_truth_table():
