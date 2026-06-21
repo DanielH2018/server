@@ -399,6 +399,68 @@
           sequence:
             - service: script.bedroom_apply_natural
 
+# Slow color tracking: while the lights are in AUTO mode, drift their color every 5 min toward
+# Adaptive Lighting's CURRENT sun-curve color (read off the AL switch attribute — AL computes it even
+# while taken over). Color only (no brightness arg), so the one-shot ambient brightness is untouched
+# and there's no lux feedback loop. "Auto" = the live color is still within ~150K of what the auto
+# path last set (input_number.bedroom_light_expected_color_temp); a manual scene/slider/RGB pick fails
+# that and pauses tracking until a reset/fresh turn-on re-arms it. Gated off during the wake ramp
+# (fixed warm), sleep/00:00-05:00 (night warmth), away, and lights-off.
+- id: bedroom_color_track
+  alias: Bedroom color tracking
+  description: While in auto, slowly follow Adaptive Lighting's sun-curve color without touching brightness.
+  mode: single
+  trigger:
+    - platform: time_pattern
+      minutes: "/5"
+  condition:
+    - condition: state
+      entity_id: light.bedroom_lights
+      state: "on"
+    - condition: state
+      entity_id: person.daniel
+      state: "home"
+    - condition: state
+      entity_id: input_boolean.bedroom_manual_off
+      state: "off"
+    - condition: state
+      entity_id: input_boolean.bedroom_sleep_mode
+      state: "off"
+    # Not the deep-night warmth window (00:00-05:00).
+    - condition: template
+      value_template: "{{ now().hour >= 5 }}"
+    # Not during the wake ramp (it owns a fixed warm color).
+    - condition: template
+      value_template: >-
+        {% set ws = states('sensor.bedroom_wake_start') %}
+        {% from 'lighting.jinja' import in_wake_window %}
+        {{ not (in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool) }}
+    # Only when the bulb is in color-temp mode (a manual RGB pick switches color_mode to xy -> skip).
+    - condition: template
+      value_template: "{{ state_attr('light.bedroom_lights', 'color_mode') == 'color_temp' }}"
+    # Still "auto": live color within ~150K of what the auto path last set (else a manual color is active).
+    - condition: template
+      value_template: >-
+        {{ (state_attr('light.bedroom_lights', 'color_temp_kelvin') | int(0)
+            - states('input_number.bedroom_light_expected_color_temp') | int(0)) | abs <= 150 }}
+  action:
+    - variables:
+        al_ct: "{{ state_attr('switch.bedroom_adaptive_lighting_bedroom', 'color_temp_kelvin') | int(0) }}"
+    # Skip if AL's color is unreadable (0) — don't slam the lights to a bogus value.
+    - condition: template
+      value_template: "{{ al_ct > 0 }}"
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        color_temp_kelvin: "{{ al_ct }}"
+        transition: 290
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.bedroom_light_expected_color_temp
+      data:
+        value: "{{ al_ct }}"
+
 # Unified threshold alert engine: ALL `threshold` binary-sensors in configuration.yaml.j2 (air
 # quality CO2/PM2.5/VOC/NOx + the SEVERE tier, battery FP300/Tap Dial, humidity high/low) feed this
 # ONE automation. Hysteresis lives in the threshold sensors, so this just reacts to off<->on edges,
