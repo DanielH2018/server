@@ -367,23 +367,25 @@ bedroom_bedtime:
     - service: input_boolean.turn_on
       target:
         entity_id: input_boolean.bedroom_sleep_mode
-    # AL sleep mode FIRST: its forced ~45s apply runs before the scene below, so the scene is the last
-    # word on the lights. take_over_control + detect_non_ha_changes:false (configuration.yaml) mark the
-    # scene as a manual takeover, so AL won't re-stomp the lights on its interval during the long fade.
-    - service: switch.turn_on
-      target:
-        entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
-    # Gradual wind-down (NOT a hard cutover): `transition` is passed per-call (not baked into the
-    # scene), so ONLY bedtime fades — the B3-press + overnight "got up" nightlight stay instant. The
-    # bulb ramps brightness+color from its CURRENT state to amber 3% internally over 900s, so an
-    # HA/Z2M restart mid-fade doesn't abort it (only a bulb power-cycle would). ZCL caps ~6553s.
+    # Mark AL hands-off FIRST so enabling AL sleep mode below can't force a ~45s pre-dim to
+    # sleep_brightness before the fade — the fade must be the only brightness change.
+    - service: adaptive_lighting.set_manual_control
+      data:
+        entity_id: switch.bedroom_adaptive_lighting_bedroom
+        manual_control: true
+    # The ONLY brightness change: a smooth 15-min fade from the current level to amber 3%. The bulb
+    # ramps internally (single Zigbee command), so an HA/Z2M restart mid-fade doesn't abort it.
     - service: scene.turn_on
       target:
         entity_id: scene.bedroom_nightlight
       data:
         transition: 900
-    # Re-apply the fan so the Low sleep cap takes effect now, not at the next temperature change.
-    # Gated on the manual-fan override like every other apply_fan caller (a hand-set fan wins).
+    # Set AL's sleep target (warm/dim) for after the morning reset releases control. Harmless now —
+    # AL is already hands-off, so this can't move the lights.
+    - service: switch.turn_on
+      target:
+        entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+    # Re-apply the fan so the Low sleep cap takes effect now (gated on the manual-fan override).
     - if: "{{ is_state('input_boolean.bedroom_fan_manual', 'off') }}"
       then:
         - service: script.bedroom_apply_fan
