@@ -1,5 +1,6 @@
 """Hermetic tests for the HA state-model extractor + checks (no live HA / Docker / network)."""
 import ha_state_model as hsm
+import validate_ha_config as vhc
 
 
 def test_call_service_handles_service_and_action_keys():
@@ -83,3 +84,44 @@ def test_extract_writes_attributes_and_resolves_scenes():
     assert dynamic["script.bedroom_bedtime"] == ["{{ some_var }}"]
     # the scene entity itself is not recorded as a written entity
     assert "scene.bedroom_nightlight" not in writes
+
+
+CONFIG = {
+    "input_boolean": {"bedroom_manual_off": {"name": "Bedroom manual off override"}},
+    "input_number": {"bedroom_fan_expected_level": {"name": "Bedroom fan expected level"}},
+    "timer": {"bedroom_fan_dial": {"name": "Bedroom fan-dial mode"}},
+    "binary_sensor": [
+        {"platform": "threshold", "name": "Bedroom CO2 high",
+         "entity_id": "sensor.bedroom_airgradient_one_carbon_dioxide", "upper": 1000},
+        {"platform": "threshold", "name": "Bedroom FP300 battery low",
+         "entity_id": "sensor.aqara_fp300_battery", "lower": 20},
+    ],
+}
+
+
+def test_extract_cells():
+    cells = hsm.extract_cells(CONFIG)
+    assert cells["bedroom_manual_off"]["entity"] == "input_boolean.bedroom_manual_off"
+    assert cells["bedroom_fan_dial"]["entity"] == "timer.bedroom_fan_dial"
+    assert cells["bedroom_fan_expected_level"]["domain"] == "input_number"
+
+
+def test_extract_thresholds_records_bound_direction():
+    th = {t["entity"]: t for t in hsm.extract_thresholds(CONFIG)}
+    assert th["binary_sensor.bedroom_co2_high"]["bound"] == "upper"
+    assert th["binary_sensor.bedroom_fp300_battery_low"]["bound"] == "lower"
+
+
+def test_config_entities_includes_helpers_scenes_thresholds():
+    ents = hsm.config_entities(CONFIG, SCENES)
+    assert "input_boolean.bedroom_manual_off" in ents
+    assert "timer.bedroom_fan_dial" in ents
+    assert "binary_sensor.bedroom_co2_high" in ents
+    assert "scene.bedroom_nightlight" in ents
+
+
+def test_load_role_returns_real_automation_list():
+    config = hsm.load_role()
+    aliases = {a.get("alias") for a in config.get("automation", [])}
+    assert "Bedroom away" in aliases          # sanity: the real role loaded
+    assert isinstance(config.get("script"), dict)

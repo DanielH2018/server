@@ -9,8 +9,14 @@ for any of that — `refresh` (snapshot integration entities) is the only live p
 from __future__ import annotations
 
 import re
+import tempfile
 from collections import defaultdict
 from collections.abc import Iterator
+from pathlib import Path
+
+import yaml
+
+from validate_ha_config import ROLE_DIR, HAConfigLoader, assemble_config
 
 _TEMPLATE_MARKERS = ("{{", "{%")
 
@@ -112,3 +118,76 @@ def extract_writes(automations, scripts, scene_map):
 
     return ({k: sorted(v) for k, v in writes.items()},
             {k: sorted(v) for k, v in dynamic.items()})
+
+
+_CELL_DOMAINS = ("input_boolean", "input_number", "input_datetime", "timer")
+
+
+def load_role(role_dir: Path = ROLE_DIR) -> dict:
+    """Assemble the deployed /config layout into a temp dir and return the loaded
+    configuration.yaml tree (automation/script/scene/template sub-trees inlined via !include)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        dest = Path(tmp)
+        assemble_config(role_dir, dest)
+        with (dest / "configuration.yaml").open() as fh:
+            return yaml.load(fh, Loader=HAConfigLoader)
+
+
+def extract_cells(config: dict) -> dict[str, dict]:
+    """name -> {entity, domain, name} for every helper that is coordination state."""
+    cells: dict[str, dict] = {}
+    for domain in _CELL_DOMAINS:
+        for name, spec in (config.get(domain) or {}).items():
+            cells[name] = {
+                "entity": f"{domain}.{name}",
+                "domain": domain,
+                "name": (spec or {}).get("name", name),
+            }
+    return cells
+
+
+def _threshold_sensors(config: dict) -> list[dict]:
+    bs = config.get("binary_sensor") or []
+    return [s for s in bs if isinstance(s, dict) and s.get("platform") == "threshold"]
+
+
+def extract_thresholds(config: dict) -> list[dict]:
+    """Each threshold binary_sensor -> {entity, name, bound, source}. The derived entity id is
+    binary_sensor.<slug(name)> (how HA names a platform sensor from its `name`)."""
+    out = []
+    for s in _threshold_sensors(config):
+        name = s.get("name", "")
+        bound = "upper" if "upper" in s else "lower"
+        out.append({
+            "entity": f"binary_sensor.{slugify(name)}",
+            "name": name,
+            "bound": bound,
+            "source": s.get("entity_id"),
+        })
+    return out
+
+
+def _template_sensor_entities(config: dict) -> set[str]:
+    """Entity ids declared by the modern `template:` integration (templates.yaml)."""
+    ents: set[str] = set()
+    tmpl = config.get("template") or []
+    blocks = tmpl if isinstance(tmpl, list) else [tmpl]
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        for domain in ("sensor", "binary_sensor"):
+            for item in block.get(domain, []) or []:
+                uid = item.get("unique_id")
+                if uid:
+                    ents.add(f"{domain}.{uid}")
+    return ents
+
+
+def config_entities(config: dict, scenes: list) -> set[str]:
+    """Every entity id derivable from the repo config — helpers, scenes, threshold sensors,
+    template sensors. The resolution check unions this with the live external-entity snapshot."""
+    ents = {c["entity"] for c in extract_cells(config).values()}
+    ents |= {t["entity"] for t in extract_thresholds(config)}
+    ents |= set(scene_entity_map(scenes).keys())
+    ents |= _template_sensor_entities(config)
+    return ents
