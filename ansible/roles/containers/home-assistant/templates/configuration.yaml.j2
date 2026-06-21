@@ -12,6 +12,31 @@ homeassistant:
   external_url: !secret external_url
   internal_url: !secret internal_url
 
+# Frontend theme — a compact dark theme PINNED to the Bedroom dashboard (ui-lovelace.yaml.j2 sets
+# `theme: nest_dark` on the view) so it renders dark when cast to the Nest Hub. The cast receiver
+# runs with NO logged-in user, so it ignores the app/browser dark-mode profile and would otherwise
+# show light; pinning an explicit theme to the view forces dark regardless of device/user. Static
+# color values only (no HA Jinja), so it is safe in this verbatim-copied file; one `frontend:` key,
+# compatible with default_config. Tune the hex values to taste.
+frontend:
+  themes:
+    nest_dark:
+      primary-color: "#2196f3"
+      accent-color: "#ff9800"
+      primary-background-color: "#0f0f0f"
+      secondary-background-color: "#1a1a1a"
+      card-background-color: "#1e1e1e"
+      ha-card-background: "#1e1e1e"
+      divider-color: "rgba(255, 255, 255, 0.10)"
+      primary-text-color: "#e8e8e8"
+      secondary-text-color: "#9aa0a6"
+      text-primary-color: "#e8e8e8"
+      disabled-text-color: "#6b6b6b"
+      app-header-background-color: "#1e1e1e"
+      app-header-text-color: "#e8e8e8"
+      state-icon-color: "#c4c8cc"
+      paper-item-icon-color: "#c4c8cc"
+
 # Automations + scenes are Ansible-managed static files (role files/automations.yaml,
 # files/scenes.yaml), copied to ./config and version-controlled. The HA UI editors still
 # open, but edits are NOT persistent — git is the source of truth; redeploy to change.
