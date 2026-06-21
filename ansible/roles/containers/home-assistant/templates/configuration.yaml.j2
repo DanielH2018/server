@@ -333,6 +333,16 @@ google_assistant:
     fan.tower_fan:
       name: Bedroom Fan
       expose: true
+    # Scenes are activate-only to Google ("Hey Google, activate Bedroom Bright").
+    scene.bedroom_bright:
+      name: Bedroom Bright
+      expose: true
+    scene.bedroom_relax:
+      name: Bedroom Relax
+      expose: true
+    scene.bedroom_nightlight:
+      name: Bedroom Nightlight
+      expose: true
 
 # Google Cast (Nest Hub Max) is intentionally NOT configured here. The `cast` integration is
 # config-entry / UI-only in modern HA — a YAML `cast:` block is rejected ("does not support YAML
