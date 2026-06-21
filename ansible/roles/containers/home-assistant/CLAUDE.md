@@ -101,7 +101,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   lights off makes the room read "dark," which can have `presence_on` re-light it ~30 s later. The 50-lux
   threshold sits right in this room's lights-off ambient (~48), so it's borderline; pick a value clearly
   below the lights-off daytime ambient if you want to stop daytime auto-lighting (this is why the fan
-  button stays out of light control entirely).
+  button stays out of light control entirely). The illuminance also **LAGS** (sleepy battery sensor on
+  `light_sampling: low`, ~100 s to reflect a lights-off drop) — see the sun-aware button-1 HOLD note below.
 - **Too-bright arrival blip (since 2026-06-19).** `automation.bedroom_presence_blip_too_bright` is a
   sibling of `bedroom_presence_on`: same arrival edge (`binary_sensor.aqara_fp300_presence` -> on),
   but the lux gate is **inverted** (`binary_sensor.bedroom_auto_light_allowed` == off) plus
@@ -115,10 +116,22 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   **Tap Dial button-1 HOLD blips too (since 2026-06-20).** The "reset to auto" branch in
   `bedroom_tap_dial_control` calls the SAME `script.bedroom_blip` when its lux-gated apply
   (`script.bedroom_apply_natural_gated`) leaves the lights off — i.e. `bedroom_auto_light_allowed` ==
-  off (too bright) AND the lights were already off before the reset (a `was_off` snapshot taken before
-  the apply, so a reset that turns an already-on light off doesn't double-up the visible feedback with
-  a blip). Same too-bright acknowledgement as the arrival blip, but button-driven (not lux-driven), so
-  there is no feedback-loop concern at all.
+  off (too bright) AND the sun is up AND the lights were already off before the reset (a `was_off` snapshot
+  taken before the apply, so a reset that turns an already-on light off doesn't double-up the visible
+  feedback with a blip). Same too-bright acknowledgement as the arrival blip, but button-driven (not
+  lux-driven), so there is no feedback-loop concern at all.
+  **Sun-aware HOLD reset (since 2026-06-21).** `script.bedroom_apply_natural_gated` now lights when the
+  lux gate allows **OR `sun.sun` is `below_horizon`** (no longer lux-only). Root cause it fixes: the FP300
+  illuminance LAGS ~100 s after the bulbs switch off (sleepy `light_sampling: low` sensor — see the
+  feedback-loop caveat above), so right after a manual/voice off the gate read "bright" and the HOLD reset
+  just blipped; you had to HOLD a SECOND time once the sensor caught up (confirmed live via history:
+  illuminance held 553 for ~100 s, lights came on only once it dropped < 50). At night a stale-bright
+  reading is physically impossible, so sun-below-horizon makes one HOLD light reliably; by day live lux
+  still rules (bright room stays off). Scoped to the HOLD path ONLY — the automatic `presence_on` gate is
+  unchanged — and the HOLD blip condition above carries the EXACT complement (`... and sun above_horizon`)
+  so the reset can't both light and blip. A `light_sampling: high` write to shrink the lag was attempted
+  but did NOT land (sleepy-device downlink not accepted — the FP300 kept reporting `low`); the sun term is
+  the deterministic, git-managed fix and doesn't depend on it.
   **`script.bedroom_blip` is the SINGLE source of truth for the blip flash** (off -> 15% warm 2700K ->
   off). Both the arrival automation AND this Button 1 HOLD branch reference that one script — never
   re-roll an inline flash — so the acknowledgement is identical by construction and can't drift. Any
@@ -320,6 +333,18 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   read the overrides. Known gap: an HA restart while already away misses the `from:"home"` triggers
   (no live transition); the gates still prevent away-on so it self-corrects. Prereq for the
   unexpected-occupancy tripwire backlog item.
+- **Manual light detect (since 2026-06-21).** `automation.bedroom_manual_light_detect` makes a
+  hand/voice/dashboard turn-off of `light.bedroom_lights` engage `input_boolean.bedroom_manual_off`
+  (and a manual turn-on clear it) — the SAME override the Tap Dial's power button sets. Without it, an
+  external "off" was re-lit ~30s later by `bedroom_presence_on`'s dusk-lux trigger: the bulbs going
+  dark drop the FP300 illuminance below the gate (the documented lights-dominate-illuminance feedback
+  loop), and only the Tap Dial — not Google Assistant / the dashboard tile / the app — had been
+  engaging manual-off. Confirmed live via the logbook (voice `google_assistant_command` OnOff-off →
+  `presence_on` numeric-state relight 36s later). Discriminates a genuine external action from our own
+  automations' parented service calls via **`trigger.to_state.context.parent_id is none`** (same trick
+  as `bedroom_fan_manual_detect`), so absence_off / away / bedtime / apply_natural / the Tap Dial never
+  reach its action; a `from_state` unavailable/unknown guard stops an HA-restart group recompute from
+  clearing the override. Symmetric with button 1 (off→engage, on→clear).
 - **Bedtime / sleep routine (since 2026-06-18).** `script.bedroom_bedtime` (the shared "going to
   sleep" action) engages `input_boolean.bedroom_sleep_mode` (a quiet fan cap), then — **critically
   reordered** — calls `adaptive_lighting.set_manual_control: true` BEFORE flipping AL into sleep

@@ -137,17 +137,24 @@ bedroom_apply_natural:
             brightness_pct: "{% from 'lighting.jinja' import natural_brightness %}{{ natural_brightness(now().hour, states('sensor.aqara_fp300_illuminance')) | int }}"
             transition: 2
 
-# Gated dispatcher: apply the natural lighting state ONLY if the shared darkness gate allows
+# Gated dispatcher: apply the natural lighting state if the shared darkness gate allows
 # (binary_sensor.bedroom_auto_light_allowed = wake window OR illuminance < 50, defined in
-# templates.yaml) — otherwise turn the lights OFF, i.e. produce the same outcome the automatic presence
-# path would. Used by the Tap Dial button-1 HOLD ("reset to auto"); the manual taps call the ungated
-# bedroom_apply_natural directly. The gate lives in ONE place now (that binary_sensor), shared with
-# bedroom_presence_on and the Button-4 sleep-exit.
+# templates.yaml) OR the sun is below the horizon — otherwise turn the lights OFF, i.e. produce the
+# same outcome the automatic presence path would in a bright room. Used ONLY by the Tap Dial button-1
+# HOLD ("reset to auto"); the manual taps call the ungated bedroom_apply_natural directly.
+# The sun term is the deterministic fix for the FP300 illuminance reporting lag (~100s, sleepy battery
+# sensor): right after a manual/voice off the bulbs go dark but sensor.aqara_fp300_illuminance still
+# reads the STALE lights-on value, so the pure lux gate refused to relight on the first HOLD (it only
+# blipped — you had to hold a second time once the sensor caught up). At night a stale-bright reading
+# is physically impossible, so sun-below-horizon guarantees the reset lights on the first press; by
+# day we still honor the live lux (a genuinely bright room stays off). Scoped to this HOLD path only —
+# the automatic presence gate (the binary_sensor, used by bedroom_presence_on / the Button-4 sleep-exit)
+# is unchanged. The button-1 HOLD blip condition is the exact complement of this `if` (keep them in sync).
 bedroom_apply_natural_gated:
   alias: "Bedroom — apply natural lighting, lux-gated"
   mode: restart
   sequence:
-    - if: "{{ is_state('binary_sensor.bedroom_auto_light_allowed', 'on') }}"
+    - if: "{{ is_state('binary_sensor.bedroom_auto_light_allowed', 'on') or is_state('sun.sun', 'below_horizon') }}"
       then:
         - service: script.bedroom_apply_natural
       else:
