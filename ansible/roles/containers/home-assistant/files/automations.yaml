@@ -253,6 +253,12 @@
     - condition: state
       entity_id: binary_sensor.bedroom_auto_light_allowed
       state: "on"
+    # Only ever turn lights from off -> on. Never re-stomp an already-on light: that's what lets a
+    # manual dim stick (the dusk-lux trigger used to fire apply_natural and slam back to AL ~100%),
+    # and it preserves the "light a dark room as dusk falls" purpose (lights are off in that case).
+    - condition: state
+      entity_id: light.bedroom_lights
+      state: "off"
   action:
     - service: script.bedroom_apply_natural
 
@@ -303,7 +309,7 @@
     - platform: state
       entity_id: binary_sensor.aqara_fp300_presence
       to: "off"
-      for: "00:01:00"
+      for: "00:05:00"
   action:
     - service: light.turn_off
       target:
@@ -849,7 +855,8 @@
         - service: script.bedroom_apply_fan
     - if: >-
         {{ is_state('binary_sensor.aqara_fp300_presence', 'on')
-           and is_state('input_boolean.bedroom_manual_off', 'off') }}
+           and is_state('input_boolean.bedroom_manual_off', 'off')
+           and is_state('light.bedroom_lights', 'off') }}
       then:
         - service: script.bedroom_apply_natural
 
