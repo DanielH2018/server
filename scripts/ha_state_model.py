@@ -9,6 +9,7 @@ for any of that — `refresh` (snapshot integration entities) is the only live p
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from collections.abc import Iterator
 
 _TEMPLATE_MARKERS = ("{{", "{%")
@@ -57,3 +58,57 @@ def iter_service_calls(node) -> Iterator[dict]:
     elif isinstance(node, list):
         for value in node:
             yield from iter_service_calls(value)
+
+
+def _is_templated(entity_id: str) -> bool:
+    return any(marker in entity_id for marker in _TEMPLATE_MARKERS)
+
+
+def scene_entity_map(scenes: list) -> dict[str, list[str]]:
+    """Map `scene.<id>` -> the entity ids the scene sets (so `scene.turn_on` counts as a write
+    to those entities)."""
+    out: dict[str, list[str]] = {}
+    for scene in scenes or []:
+        sid = scene.get("id")
+        ents = scene.get("entities") or {}
+        if sid:
+            out[f"scene.{sid}"] = list(ents.keys())
+    return out
+
+
+def automation_writer(auto: dict) -> str:
+    """The state-machine name of an automation: `automation.<slug(alias)>` (HA derives the
+    entity_id from the alias, not the id; fall back to the id when alias is absent)."""
+    return "automation." + slugify(auto.get("alias") or auto.get("id") or "unknown")
+
+
+def extract_writes(automations, scripts, scene_map):
+    """Return (writes, dynamic_writes). writes[entity] = sorted writer names; dynamic_writes
+    [writer] = sorted templated target strings that couldn't be resolved to an entity."""
+    writes: dict[str, set] = defaultdict(set)
+    dynamic: dict[str, set] = defaultdict(set)
+
+    def record(writer, call):
+        svc = call_service(call)
+        for ent in call_targets(call):
+            if _is_templated(ent):
+                dynamic[writer].add(ent)
+            elif svc == "scene.turn_on" and ent in scene_map:
+                for real in scene_map[ent]:
+                    writes[real].add(writer)
+            elif svc and svc.startswith("scene."):
+                continue  # scene.create / scene.reload — not a device-state write
+            else:
+                writes[ent].add(writer)
+
+    for auto in automations or []:
+        writer = automation_writer(auto)
+        for call in iter_service_calls(auto.get("action", [])):
+            record(writer, call)
+    for name, body in (scripts or {}).items():
+        writer = f"script.{name}"
+        for call in iter_service_calls((body or {}).get("sequence", [])):
+            record(writer, call)
+
+    return ({k: sorted(v) for k, v in writes.items()},
+            {k: sorted(v) for k, v in dynamic.items()})
