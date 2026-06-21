@@ -43,6 +43,16 @@ input_number:
     step: 1
     mode: box
     icon: mdi:fan-chevron-up
+  # The color temperature the auto-lighting path (bedroom_set_natural_brightness) last set, so
+  # bedroom_color_track can tell its own auto color from a manual scene/slider pick (expected-value
+  # pattern, like bedroom_fan_expected_level).
+  bedroom_light_expected_color_temp:
+    name: Bedroom light expected color temp
+    min: 2000
+    max: 6600
+    step: 1
+    unit_of_measurement: K
+    mode: box
 
 # Heartbeat helper — the `ha_heartbeat` automation (files/automations.yaml) stamps this with now()
 # every minute, so its last_changed is fresh ONLY while the automation scheduler is executing.
