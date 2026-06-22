@@ -208,7 +208,7 @@ def uncoerced_macro_bool_uses(template: str, macro_names: set[str],
         return None
 
     bad: list[str] = []
-    for op in list(ast.find_all(nodes.And)) + list(ast.find_all(nodes.Or)):
+    for op in ast.find_all((nodes.And, nodes.Or)):
         for operand in (op.left, op.right):
             name = bare_macro_call(operand)
             if name:

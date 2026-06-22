@@ -145,6 +145,7 @@ def test_uncoerced_macro_bool_uses_truth_table():
     assert u("{{ x or m() }}", names) == ["m"]
     assert u("{{ not m() }}", names) == ["m"]
     assert u("{{ (m() | bool) and x }}", names) == []
+    assert u("{{ m() | bool and x }}", names) == []     # filter binds tighter than `and` -> Filter operand
     assert u("{{ m() == 'wake' }}", names) == []
     assert u("{{ m() }}", names) == []
     assert u("{{ states('x') and y }}", names) == []   # unknown name, not a tracked macro
