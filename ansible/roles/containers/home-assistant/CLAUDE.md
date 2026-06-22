@@ -164,6 +164,22 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `custom_components/adaptive_lighting/` (Kopia-backed, not templated — like `dreo`). Install it
   via HACS BEFORE deploying, or HA logs "integration not found" and skips the block. The deploy's
   full restart loads a newly added custom component (a YAML "Quick Reload" does not).
+- **Light/fan mediator — single guarded writer (Phase 2, since 2026-06-22).** AUTO/programmatic
+  writes of `light.bedroom_lights` go through `script.bedroom_lights_set(reason)` and of
+  `fan.tower_fan` through `script.bedroom_fan_set(reason)`. The light gate is the tested
+  `light_decision(reason, …)` macro in `lighting.jinja`: `presence` is GATED (manual_off/sleep/home/
+  presence/lux/light-off — the conditions that used to live on `bedroom_presence_on`); `natural`/
+  `wake`/`off` are pass-through (the caller pre-gates). The mediator DELEGATES to the existing
+  primitives (`apply_natural`/`apply_wake`/`light.turn_off`) — it does not reimplement them.
+  `bedroom_fan_set` is `auto`→`apply_fan` / `boost`→max+override (arms `expected_level=9`) /
+  `off`→`fan.turn_off`. **The manual Tap Dial is a DECLARED EXEMPTION** (writes directly, by design —
+  intentional/ungated, and its brightness dial is a latency-sensitive relative step), as are
+  `apply_natural_gated`, `bedroom_blip`, `bedroom_alert_pulse`, `bedroom_color_tracking`, and
+  `bedroom_fan_startup_reconcile`. The allowed writer set is enforced **HARD** by the
+  `validate-ha-config` hook via `state/sanctioned_writers.yml` (module ∪ exemptions): a new automation
+  that writes an actuator directly fails CI. **Add a writer = route it through the mediator, or
+  declare it in `sanctioned_writers.yml`.** `reason: "off"` MUST stay quoted (unquoted `off` is YAML
+  `false` → silent no-op). Design: `docs/superpowers/specs/2026-06-21-ha-state-model-phase2-mediator-design.md`.
 - **`files/scripts.yaml` — the "natural lighting state" dispatcher (templated via `copy`, like
   automations/scenes; wired via `script: !include scripts.yaml`; feeds `common_config_changed`).**
   `script.bedroom_apply_natural` sets the bedroom group to what it would be with no manual
