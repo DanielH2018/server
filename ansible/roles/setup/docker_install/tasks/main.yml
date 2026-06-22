@@ -39,6 +39,19 @@
     creates: /usr/share/keyrings/docker-archive-keyring.gpg
   become: true
 
+- name: Verify the Docker GPG key fingerprint
+  tags: [docker-repo]
+  # Fail the play closed if the imported keyring is NOT Docker's published signing key
+  # (fingerprint 9DC85822 9FC7DD38 854AE2D8 8D81803C 0EBFCD88, per docs.docker.com). Without
+  # this, a swapped/MITM'd key fetched over the network would be silently dearmored and then
+  # trusted by apt. Runs every play (changed_when: false), so a tampered keyring is also caught
+  # on re-runs, not just first install.
+  ansible.builtin.command:
+    cmd: gpg --show-keys --with-colons /usr/share/keyrings/docker-archive-keyring.gpg
+  register: docker_install_key_fpr
+  changed_when: false
+  failed_when: "'9DC858229FC7DD38854AE2D88D81803C0EBFCD88' not in docker_install_key_fpr.stdout"
+
 - name: Add Docker APT repository
   tags: [docker-repo]
   # deb822 format (.sources) — the one-line "deb [...] ..." apt_repository form is deprecated.
