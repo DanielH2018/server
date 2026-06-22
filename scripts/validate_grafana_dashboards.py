@@ -43,7 +43,12 @@ def provisioned_datasource_ids(datasources_template: Path = DATASOURCES_TEMPLATE
 
 def _uid_from_ref(ref) -> list[str]:
     """The uid(s) a `datasource` value references: object form {"uid": "X"} or legacy bare
-    string "X". null / anything else → no ref."""
+    string "X". null / anything else → no ref.
+
+    A `${DS_*}` template-variable string is intentionally NOT special-cased: every board in
+    this repo bakes a concrete uid into its panel refs, and the plan forbids template-var
+    datasources in new boards, so such a ref would (correctly) be reported as unresolved
+    rather than silently accepted."""
     if isinstance(ref, str):
         return [ref]
     if isinstance(ref, dict):
