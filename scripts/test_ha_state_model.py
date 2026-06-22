@@ -265,11 +265,18 @@ def test_alias_collision_flags_duplicate_slug():
     assert hsm.alias_collision_errors(config) != []
 
 
-def test_single_writer_report_lists_extra_writers():
-    writes = {"light.bedroom_lights": ["script.bedroom_lights_set", "automation.bedroom_away"]}
-    sanctioned = {"light.bedroom_lights": "script.bedroom_lights_set"}
-    rep = hsm.single_writer_report(writes, sanctioned)
-    assert any("automation.bedroom_away" in r for r in rep)
+def test_single_writer_errors_flags_unsanctioned_writer():
+    writes = {"light.bedroom_lights": ["script.bedroom_lights_set", "automation.sneaky_new"]}
+    sanctioned = {"light.bedroom_lights": {"module": ["script.bedroom_lights_set"], "exemptions": []}}
+    errs = hsm.single_writer_errors(writes, sanctioned)
+    assert any("sneaky_new" in e for e in errs)
+
+
+def test_single_writer_errors_clean_when_all_sanctioned():
+    writes = {"light.bedroom_lights": ["script.bedroom_lights_set", "script.bedroom_blip"]}
+    sanctioned = {"light.bedroom_lights":
+                  {"module": ["script.bedroom_lights_set"], "exemptions": ["script.bedroom_blip"]}}
+    assert hsm.single_writer_errors(writes, sanctioned) == []
 
 
 def test_freshness_errors_flag_stale_committed_file(tmp_path, monkeypatch):

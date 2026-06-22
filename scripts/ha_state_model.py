@@ -365,9 +365,7 @@ EXPECTED_OVERRIDE_WRITERS = STATE_DIR / "expected_override_writers.yml"
 OVERRIDE_CELLS = ("input_boolean.bedroom_manual_off",
                   "input_boolean.bedroom_fan_manual",
                   "input_boolean.bedroom_sleep_mode")
-# Phase 2 will flip these report checks to hard; the sanctioned writer per actuator:
-SANCTIONED_WRITERS = {"light.bedroom_lights": "script.bedroom_lights_set",
-                      "fan.tower_fan": "script.bedroom_apply_fan"}
+SANCTIONED_YAML = STATE_DIR / "sanctioned_writers.yml"
 
 
 def load_expected_override_writers() -> dict:
@@ -462,13 +460,22 @@ def alias_collision_errors(config: dict) -> list[str]:
     return errs
 
 
-def single_writer_report(writes: dict, sanctioned: dict) -> list[str]:
-    rep = []
-    for act, owner in sanctioned.items():
-        extras = [w for w in writes.get(act, []) if w != owner]
-        if extras:
-            rep.append(f"{act}: {len(extras)} writer(s) besides {owner}: {', '.join(extras)}")
-    return rep
+def load_sanctioned_writers() -> dict:
+    if not SANCTIONED_YAML.is_file():
+        return {}
+    return yaml.safe_load(SANCTIONED_YAML.read_text()) or {}
+
+
+def single_writer_errors(writes: dict, sanctioned: dict) -> list[str]:
+    """HARD: every derived writer of a sanctioned actuator must be in module ∪ exemptions."""
+    errs = []
+    for actuator, spec in sorted(sanctioned.items()):
+        allowed = set(spec.get("module", [])) | set(spec.get("exemptions", []))
+        for writer in sorted(set(writes.get(actuator, [])) - allowed):
+            errs.append(f"{actuator}: unsanctioned writer {writer} — route it through the mediator "
+                        f"(script.bedroom_lights_set / bedroom_fan_set) or declare it in "
+                        f"state/sanctioned_writers.yml")
+    return errs
 
 
 def override_consistency_report(writes: dict) -> list[str]:
@@ -517,8 +524,8 @@ def check_errors(role_dir: Path = ROLE_DIR) -> list[str]:
     errs += override_writer_errors(model["writes"], load_expected_override_writers())
     errs += threshold_pairing_errors(config)
     errs += alias_collision_errors(config)
-    for line in (single_writer_report(model["writes"], SANCTIONED_WRITERS)
-                 + override_consistency_report(model["writes"])):
+    errs += single_writer_errors(model["writes"], load_sanctioned_writers())
+    for line in override_consistency_report(model["writes"]):
         print(f"[state-model report] {line}", file=sys.stderr)
     return errs
 
