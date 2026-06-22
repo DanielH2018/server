@@ -285,6 +285,13 @@ recorder:
 system_log:
   fire_event: true
 
+# Expose HA metrics to the homelab Prometheus at /api/prometheus (core integration, bearer-auth).
+# Scraped by the `home-assistant` job in the prometheus role; metrics are prefixed `hass_`. No
+# `filter` — HA's default curated metric set (tune later only if cardinality is noisy).
+# Spec: docs/superpowers/specs/2026-06-22-ha-prometheus-design.md.
+prometheus:
+  namespace: hass
+
 http:
   use_x_forwarded_for: true
   # Trust the whole Docker bridge range (RFC1918 172.16/12) so HA honors

@@ -68,4 +68,12 @@ scrape_configs:
     static_configs:
     - targets: ["terraria-stats:9420"]
 
+  - job_name: "home-assistant"
+    scrape_interval: 1m
+    metrics_path: /api/prometheus
+    authorization:
+      credentials: "{{ prometheus_ha_token }}"
+    static_configs:
+      - targets: ["home-assistant:8123"]
+
 #################################################################################################

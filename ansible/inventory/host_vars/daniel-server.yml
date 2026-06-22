@@ -189,6 +189,7 @@ containers_list:
     use_authelia: true
     networks:
       - monitoring
+      - apps  # reach home-assistant:8123 for the /api/prometheus scrape (mirrors monitor-bridge)
   - name: grafana
     port: 3000
     use_authelia: true
