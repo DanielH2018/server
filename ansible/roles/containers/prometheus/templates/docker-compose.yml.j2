@@ -11,6 +11,10 @@ services:
     container_name: node-exporter
     hostname: node-exporter
     restart: unless-stopped
+    # Read-only host exporter: runs root but only reads world-readable /host/proc + /host/sys,
+    # so it needs no capabilities. Verify metrics still populate on deploy (probe metric 'node_load1').
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     volumes:

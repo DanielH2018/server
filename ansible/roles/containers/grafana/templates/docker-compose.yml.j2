@@ -39,7 +39,7 @@ services:
       {{ kuma(container_item.name) }}
 
       # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on: prometheus"
+      - "com.centurylinklabs.watchtower.depends-on=prometheus"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('1.0', '1024M', '0.10', '128M') }}
   loki:
@@ -71,6 +71,13 @@ services:
     container_name: promtail
     restart: unless-stopped
     {{ healthcheck('["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/9080"]', start_period='15s') }}
+    cap_drop:
+      - ALL
+    cap_add:
+      # Reads root-owned /var/log + /var/lib/docker/containers logs; DAC_READ_SEARCH lets
+      # root bypass DAC to read non-root-owned log files. Verify logs still ship on deploy
+      # (Grafana Explore → Loki). It writes only its own positions file (owner-writable).
+      - DAC_READ_SEARCH
     security_opt:
       - no-new-privileges:true
     environment:
@@ -87,7 +94,7 @@ services:
     labels:
       {{ kuma('promtail') }}
       # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
+      - "com.centurylinklabs.watchtower.depends-on=docker-proxy"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '256M', '0.05', '32M') }}
 
