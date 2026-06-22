@@ -31,7 +31,7 @@ services:
       {{ kuma(container_item.name) }}
 
       # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
+      - "com.centurylinklabs.watchtower.depends-on=docker-proxy"
 {{ web_ui_ports_block('61208') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '256M', '0.05', '32M') }}

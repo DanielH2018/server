@@ -87,3 +87,38 @@ def test_walks_all_services_and_attributes_the_right_one():
 
 def test_tolerates_non_service_docs():
     assert vct.find_dollar_escape_bugs([None, {"version": "3"}, "junk", {"services": "x"}]) == []
+
+
+# --- watchtower label `=` guard ----------------------------------------------
+# Docker splits a LIST-form label on the first `=` only. A `:`-separated watchtower
+# label (e.g. `...depends-on:docker-proxy`) parses as a key with an EMPTY value, so the
+# directive silently no-ops. Renders cleanly + passes YAML lint, so nothing else caught it.
+
+def test_watchtower_labels_with_equals_are_clean():
+    docs = _docs({"labels": ["com.centurylinklabs.watchtower.enable=false",
+                             "com.centurylinklabs.watchtower.depends-on=docker-proxy"]})
+    assert vct.find_watchtower_label_bugs(docs) == []
+
+
+def test_watchtower_label_with_colon_is_flagged():
+    docs = _docs({"labels": ["com.centurylinklabs.watchtower.depends-on:docker-proxy"]})
+    assert vct.find_watchtower_label_bugs(docs) == [
+        ("svc", "com.centurylinklabs.watchtower.depends-on:docker-proxy")
+    ]
+
+
+def test_watchtower_label_with_space_colon_is_flagged():
+    # the grafana ': prometheus' variant
+    docs = _docs({"labels": ["com.centurylinklabs.watchtower.depends-on: prometheus"]})
+    assert len(vct.find_watchtower_label_bugs(docs)) == 1
+
+
+def test_dict_form_watchtower_labels_not_flagged():
+    # mapping-form labels are inherently key:value — no `=` needed
+    docs = _docs({"labels": {"com.centurylinklabs.watchtower.enable": "false"}})
+    assert vct.find_watchtower_label_bugs(docs) == []
+
+
+def test_non_watchtower_label_without_equals_is_ignored():
+    docs = _docs({"labels": ["some.other.label:value"]})
+    assert vct.find_watchtower_label_bugs(docs) == []

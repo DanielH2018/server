@@ -126,6 +126,33 @@ def find_dollar_escape_bugs(docs) -> list[tuple[str, str, str]]:
     return bugs
 
 
+def find_watchtower_label_bugs(docs) -> list[tuple[str, str]]:
+    """Return (service, label) for every LIST-form ``com.centurylinklabs.watchtower.*``
+    label written without an ``=``. Docker splits a list-item label on the first ``=``
+    only, so a ``:``-separated watchtower label (e.g. ``...depends-on:docker-proxy``)
+    parses as a key with an EMPTY value — the directive (``enable`` / ``depends-on``)
+    silently becomes a no-op. The plain-YAML validator and ansible-lint both miss this
+    because the document still renders and parses cleanly. Mapping-form labels are
+    inherently ``key: value`` so they need no ``=`` and are skipped."""
+    bugs: list[tuple[str, str]] = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if not isinstance(spec, dict):
+                continue
+            labels = spec.get("labels")
+            if not isinstance(labels, list):
+                continue
+            for label in labels:
+                if (isinstance(label, str)
+                        and label.startswith("com.centurylinklabs.watchtower.")
+                        and "=" not in label):
+                    bugs.append((svc, label))
+    return bugs
+
+
 def check_container(host_ctx: dict, ci: dict) -> str | None:
     """Render one container template; return an error string or None on success."""
     name = ci.get("name")
@@ -154,6 +181,12 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
     if bugs:
         detail = "; ".join(f"{svc}.{key}: {snippet.strip()[:80]}" for svc, key, snippet in bugs)
         return (f"un-escaped '$' (Compose will interpolate it — double it to '$$'): {detail}")
+
+    wt_bugs = find_watchtower_label_bugs(docs)
+    if wt_bugs:
+        detail = "; ".join(f"{svc}: {label}" for svc, label in wt_bugs)
+        return ("watchtower label missing '=' (Docker stores it as a key with an empty value, "
+                f"so the directive is a silent no-op — use '='): {detail}")
     return None
 
 
