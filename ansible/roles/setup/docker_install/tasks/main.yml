@@ -14,12 +14,22 @@
       - python3-debian  # required by ansible.builtin.deb822_repository (below)
   become: true
 
+- name: Check for the existing Docker GPG keyring
+  tags: [docker-repo]
+  # get_url has no `creates`, so without this it re-downloads to /tmp and reports "changed"
+  # every run. Gate the download on the dearmored keyring's absence so the GPG fetch is
+  # genuinely run-once. (Pinning the key to a published checksum is a separate follow-up.)
+  ansible.builtin.stat:
+    path: /usr/share/keyrings/docker-archive-keyring.gpg
+  register: docker_install_keyring
+
 - name: Download Docker GPG key
   tags: [docker-repo]
   ansible.builtin.get_url:
     url: https://download.docker.com/linux/ubuntu/gpg
     dest: /tmp/docker.gpg
     mode: "0644"
+  when: not docker_install_keyring.stat.exists
 
 - name: Dearmor Docker GPG key
   tags: [docker-repo]
