@@ -284,9 +284,9 @@
       to: "off"
       for: "00:05:00"
   action:
-    - service: light.turn_off
-      target:
-        entity_id: light.bedroom_lights
+    - service: script.bedroom_lights_set
+      data:
+        reason: "off"
 
 # Manual light DETECT: make a hand/voice/dashboard light change set the SAME manual-off override the
 # Tap Dial's power button does — so an external "off" STICKS instead of being re-lit by
@@ -379,7 +379,9 @@
     # which automation.bedroom_wake_ramp then drives per-minute. The 09:00 fallback never forces lights.
     - if: "{{ trigger.id == 'alarm' and is_state('person.daniel', 'home') }}"
       then:
-        - service: script.bedroom_apply_natural
+        - service: script.bedroom_lights_set
+          data:
+            reason: natural
         # Sleep-quality note: "you slept N h" (gentler wake if <6h — apply_natural already softened
         # the ramp peak to 30%). Skipped if sleep_duration is unknown/0 (Google Sleep API may lag).
         - variables:
@@ -419,11 +421,15 @@
     - choose:
         - conditions: "{{ in_window }}"
           sequence:
-            - service: script.bedroom_apply_wake
+            - service: script.bedroom_lights_set
+              data:
+                reason: wake
         # Window just ended this minute -> release to Adaptive Lighting (ambient-fill) for the day.
         - conditions: "{{ elapsed >= 30 and elapsed < 31 }}"
           sequence:
-            - service: script.bedroom_apply_natural
+            - service: script.bedroom_lights_set
+              data:
+                reason: natural
 
 # Slow color tracking: while the lights are in AUTO mode, drift their color every 5 min toward
 # Adaptive Lighting's CURRENT sun-curve color (read off the AL switch attribute — AL computes it even
@@ -918,9 +924,9 @@
         # unless it caught something the 10-min leave missed (or that came on since).
         - conditions: "{{ on_items | length > 0 }}"
           sequence:
-            - service: light.turn_off
-              target:
-                entity_id: light.bedroom_lights
+            - service: script.bedroom_lights_set
+              data:
+                reason: "off"
             - service: fan.turn_off
               target:
                 entity_id: fan.tower_fan
@@ -957,7 +963,9 @@
            and is_state('input_boolean.bedroom_manual_off', 'off')
            and is_state('light.bedroom_lights', 'off') }}
       then:
-        - service: script.bedroom_apply_natural
+        - service: script.bedroom_lights_set
+          data:
+            reason: natural
 
 # Flush held notifications on arrival: when you re-enter the home geofence, any alerts that were
 # parked while you were away (persistent_notification ids starting with hold_) and did NOT resolve
@@ -1050,7 +1058,9 @@
         # the home-gates (you're tapping because the tracker is wrong / you're actually home).
         - conditions: "{{ trigger.event.data.action == 'BEDROOM_AWAY_TURN_ON' }}"
           sequence:
-            - service: script.bedroom_apply_natural
+            - service: script.bedroom_lights_set
+              data:
+                reason: natural
             - service: script.bedroom_apply_fan
 
 # Bedtime prompt: at 22:00, if you're in the bedroom and haven't started bedtime, send a nudge with
@@ -1309,9 +1319,9 @@
         {{ is_state('binary_sensor.aqara_fp300_presence', 'off')
            and states('sensor.bedroom_wake_start') in ['unknown', 'unavailable'] }}
       then:
-        - service: light.turn_off
-          target:
-            entity_id: light.bedroom_lights
+        - service: script.bedroom_lights_set
+          data:
+            reason: "off"
 
 # HA automation-engine heartbeat: stamp input_datetime.ha_heartbeat with now() every minute so its
 # last_changed stays fresh ONLY while the automation scheduler is executing. monitor-bridge polls it
