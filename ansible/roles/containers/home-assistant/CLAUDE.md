@@ -519,6 +519,12 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `wake_brightness` (morning ramp, used by `bedroom_apply_natural` + `bedroom_apply_wake`;
   `wake_transition` was removed — transition is now a fixed 60 s per ramp step), and
   `auto_light_allowed` (lux gate, used by `templates.yaml`'s `bedroom_auto_light_allowed`).
+- **Decision-macro convention:** an automation/script's gating *selection* logic belongs in a pure
+  `custom_templates/*.jinja` macro — plain values in (no `states()`/`now()`/`is_state()` inside),
+  an action token out — with a truth-table test, exactly like `light_decision` and
+  `natural_exception` (the `bedroom_apply_natural` nightlight↔wake selection). The YAML caller reads
+  entities and `choose:`-es on the returned token. This is *guidance*; what's *enforced* is that
+  the references resolve (service/entity checks) and that every macro has a test (Component 3).
 - The harness `tests/jinja_harness.py` renders macros in a bare Jinja2 env that mirrors the handful
   of HA filter overrides the macros use — most importantly HA's `round` is **banker's** rounding
   (`forgiving_round`, round-half-to-even, int at precision 0), NOT Jinja's stock half-away-from-zero

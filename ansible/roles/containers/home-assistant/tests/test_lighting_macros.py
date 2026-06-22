@@ -99,3 +99,22 @@ def test_light_decision_passthrough_reasons_are_ungated():
 
 def test_light_decision_unknown_reason_is_noop():
     assert _decision("bogus") == "noop"
+
+
+def _exception(sleep_mode, hour, in_window):
+    return render_macro(LIGHT, "natural_exception", sleep_mode, hour, in_window)
+
+
+def test_natural_exception_selection():
+    assert _exception(True, 23, False) == "nightlight"   # sleep mode, outside window
+    assert _exception(False, 3, False) == "nightlight"   # deep night 00:00-05:00
+    assert _exception(False, 12, False) == "default"     # daytime, no exception
+    assert _exception(False, 7, True) == "wake"          # morning ramp window
+
+
+def test_natural_exception_early_alarm_yields_to_wake():
+    # The documented trap: an early alarm puts hour<5 INSIDE the window -> must be `wake`, not the
+    # 3% nightlight (which would mask the ramp).
+    assert _exception(False, 4, True) == "wake"
+    assert _exception(True, 4, True) == "wake"           # even in sleep mode, the window wins
+    assert _exception(False, 5, False) == "default"      # strict hour < 5 boundary

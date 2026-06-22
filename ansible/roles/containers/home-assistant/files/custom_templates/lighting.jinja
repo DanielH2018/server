@@ -57,6 +57,25 @@
 {{ [(base * factor) | round(0) | int, 5] | max }}
 {%- endmacro -%}
 
+{# Natural-lighting exception selector. Given sleep_mode + the hour + whether we're in the wake
+   window, decide WHICH exception bedroom_apply_natural applies: the night-time dim `nightlight`
+   (sleep mode OR 00:00-05:00) which YIELDS to the wake window, the morning `wake` ramp, or the
+   ambient-fill `default`. Mirrors the choose: ladder in scripts.yaml so the nightlight<->wake
+   mutual exclusion at an early alarm (hour<5 INSIDE the window must be `wake`) is unit-tested,
+   not just commented. Bools arrive as strings from rendered macro output -> `| bool`. #}
+{%- macro natural_exception(sleep_mode, hour, in_window) -%}
+{%- set sm = sleep_mode | bool -%}
+{%- set iw = in_window | bool -%}
+{%- set h = hour | int(12) -%}
+{%- if (sm or h < 5) and not iw -%}
+nightlight
+{%- elif iw -%}
+wake
+{%- else -%}
+default
+{%- endif -%}
+{%- endmacro -%}
+
 {# Mediator gate policy. Given the action's `reason` + the live flags, decide what the bedroom
    lights should do. Only `presence` is gated here (it is the one AUTO caller whose SOLE action is
    the light, so its conditions live in one tested place); `natural`/`wake`/`off` are pass-through

@@ -132,45 +132,31 @@ bedroom_apply_natural:
     exception's brightness on AL's natural color, or full Adaptive Lighting outside every window.
   mode: restart
   sequence:
+    # Pick the active exception ONCE via the tested natural_exception macro (nightlight vs wake vs
+    # default). in_window is computed here (entity reads stay in the caller) and passed in; the
+    # macro encodes the nightlight<->wake mutual exclusion (tested in test_lighting_macros.py).
+    - variables:
+        exception: >-
+          {% set ws = states('sensor.bedroom_wake_start') %}
+          {% from 'lighting.jinja' import in_wake_window, natural_exception %}
+          {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) %}
+          {{ natural_exception(is_state('input_boolean.bedroom_sleep_mode', 'on'), now().hour, in_window) }}
     - choose:
-        # Exception: night-time "got up" dim nightlight. While in sleep mode (set at bedtime) OR
-        # deep night (00:00-05:00), a presence re-trigger gives the warm dim scene.bedroom_nightlight
-        # instead of full lighting — so walking back into a dark room at night doesn't blast you.
-        # FIRST (above the wake ramp) so it wins overnight — BUT it must YIELD to the wake window:
-        # an early alarm (e.g. 05:00 → window starts 04:45) has now().hour < 5 during the ramp, which
-        # would otherwise mask the wake with the 3% nightlight. `and not in_window` lets the ramp below
-        # run inside its window even before 05:00. Uses the SAME in_window expression as the wake
-        # exception so the two branches stay provably mutually exclusive at the boundary.
-        - conditions:
-            - condition: template
-              value_template: >-
-                {% set ws = states('sensor.bedroom_wake_start') %}
-                {% from 'lighting.jinja' import in_wake_window %}
-                {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool %}
-                {{ (is_state('input_boolean.bedroom_sleep_mode', 'on') or now().hour < 5) and not in_window }}
+        # Exception: night-time "got up" dim nightlight (sleep mode OR 00:00-05:00, yielding to the
+        # wake window) — a presence re-trigger gives the warm dim scene instead of full lighting.
+        - conditions: "{{ exception == 'nightlight' }}"
           sequence:
             - service: scene.turn_on
               target:
                 entity_id: scene.bedroom_nightlight
-        # Exception: morning wake ramp — 30-min window CENTERED on the alarm (alarm−15 → alarm+15),
-        # gentle-then-steep 1% → ~12% at alarm → 40% at alarm+15. Delegated to
-        # script.bedroom_apply_wake (warm 2200K, no AL flash), driven per-minute by
-        # automation.bedroom_wake_ramp. Short night (<6h) scales mid/peak to ~7/24%.
-        # sensor.bedroom_wake_start = alarm − 15 min (morning-only — see configuration.yaml).
-        # When no morning alarm is set the sensor is unavailable -> this exception is false and the
-        # default applies. SINGLE source of truth for the wake window — bedroom_presence_on's window
-        # reads the same sensor.
-        - conditions:
-            - condition: template
-              value_template: >-
-                {% set ws = states('sensor.bedroom_wake_start') %}
-                {% from 'lighting.jinja' import in_wake_window %}
-                {{ in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool }}
+        # Exception: morning wake ramp (30-min window centered on the alarm). Delegated to
+        # script.bedroom_apply_wake (warm 2200K), driven per-minute by automation.bedroom_wake_ramp.
+        - conditions: "{{ exception == 'wake' }}"
           sequence:
             - service: script.bedroom_apply_wake
       # Default: ambient-fill brightness (time of day + current ambient lux) on AL's natural color.
-      # Read illuminance while the lights are off -> true ambient. set_natural_brightness applies the
-      # color and arms the color tracker; bedroom_color_track then drifts color with the sun.
+      # Read illuminance while the lights are off -> true ambient. set_natural_brightness applies
+      # the color and arms the color tracker; bedroom_color_track then drifts color with the sun.
       default:
         - service: script.bedroom_set_natural_brightness
           data:
