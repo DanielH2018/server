@@ -47,6 +47,16 @@ SECRETS_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "ansible", "vars", "secrets.yml")
 
+# Git-managed automation source (repo-root relative to this file) — the "expected" set for
+# the verify-automations post-deploy gate. The deployed config is copied from here verbatim.
+AUTOMATIONS_YAML = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "ansible", "roles", "containers", "home-assistant", "files", "automations.yaml")
+
+# Top-level automation list items only: `- id: <slug>` anchored at column 0. A trigger/condition
+# `id:` is always indented, so it can never be mistaken for an automation id.
+_AUTOMATION_ID_RE = re.compile(r"^- id:\s*(\S+)", re.MULTILINE)
+
 # --- URL builders (pure) ----------------------------------------------------
 
 
@@ -184,6 +194,33 @@ def format_trace(trace) -> str:
     if trace.get("error"):
         lines.append(f"error: {trace['error']}")
     return "\n".join(lines)
+
+
+def expected_automation_ids(text: str) -> set[str]:
+    """The `id:` of every top-level automation in automations.yaml text. Regex over the raw
+    text (no YAML parse) — robust to the HA Jinja inside the file; ids are simple slugs."""
+    return set(_AUTOMATION_ID_RE.findall(text))
+
+
+def automation_load_errors(expected_ids, live_automations):
+    """expected_ids = ids from automations.yaml; live_automations = the automation.* entries
+    from /api/states. A defined id with no live automation carrying that attributes.id did NOT
+    load (dropped). A defined id whose live automation is `unavailable` errored at load. A
+    disabled automation (state 'off') is fine. Live ids not in the file (UI/.storage cruft) are
+    ignored — this gate is file-driven so cruft can't make it red."""
+    by_id = {}
+    for a in live_automations:
+        aid = (a.get("attributes") or {}).get("id")
+        if aid is not None:
+            by_id[aid] = a
+    errs = []
+    for aid in sorted(expected_ids):
+        live = by_id.get(aid)
+        if live is None:
+            errs.append(f"automation {aid} is defined in automations.yaml but did not load")
+        elif live.get("state") == "unavailable":
+            errs.append(f"automation {aid} loaded but is unavailable (config error at load)")
+    return errs
 
 
 def _ws_send(sock, msg):

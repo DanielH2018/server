@@ -340,3 +340,43 @@ def test_format_trace_none_is_explained():
 def test_format_trace_reports_error():
     out = probe.format_trace({"trigger": {}, "trace": {}, "error": "boom"})
     assert "boom" in out
+
+
+def test_expected_automation_ids_matches_top_level_only():
+    from probe import expected_automation_ids
+    text = (
+        "- id: bedroom_presence_on\n"
+        "  alias: Presence on\n"
+        "  trigger:\n"
+        "    - id: co2_bad\n"          # indented trigger id must NOT be captured
+        "      platform: state\n"
+        "- id: ha_heartbeat\n"
+        "  alias: HA heartbeat\n"
+    )
+    assert expected_automation_ids(text) == {"bedroom_presence_on", "ha_heartbeat"}
+
+
+def test_automation_load_errors_flags_missing_and_unavailable():
+    from probe import automation_load_errors
+    expected = {"a_loaded", "b_missing", "c_unavailable", "d_disabled"}
+    live = [
+        {"entity_id": "automation.a", "state": "on", "attributes": {"id": "a_loaded"}},
+        {"entity_id": "automation.c", "state": "unavailable", "attributes": {"id": "c_unavailable"}},
+        {"entity_id": "automation.d", "state": "off", "attributes": {"id": "d_disabled"}},
+        {"entity_id": "automation.x", "state": "on", "attributes": {"id": "cruft_not_in_file"}},
+    ]
+    errs = automation_load_errors(expected, live)
+    assert errs == [
+        "automation b_missing is defined in automations.yaml but did not load",
+        "automation c_unavailable loaded but is unavailable (config error at load)",
+    ]
+
+
+def test_automation_load_errors_clean_when_all_loaded():
+    from probe import automation_load_errors
+    expected = {"a", "b"}
+    live = [
+        {"entity_id": "automation.a", "state": "on", "attributes": {"id": "a"}},
+        {"entity_id": "automation.b", "state": "off", "attributes": {"id": "b"}},
+    ]
+    assert automation_load_errors(expected, live) == []
