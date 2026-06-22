@@ -32,7 +32,7 @@
 - `ansible/roles/containers/home-assistant/state/STATE.md` — **new, generated, committed.**
 - `ansible/roles/containers/home-assistant/state/external_entities.yml` — **new, generated (from live HA), committed.**
 - `ansible/roles/containers/home-assistant/state/expected_override_writers.yml` — **new, hand-maintained tripwire.**
-- `ansible/roles/containers/home-assistant/CLAUDE.md` — **modify.** Pointer to `STATE.md`; fix the `:70` AL-switch entity_id typo.
+- `ansible/roles/containers/home-assistant/CLAUDE.md` — **modify.** Pointer to `STATE.md` (the `:70` entity_id typo in an earlier draft does not exist — verified; no fix needed).
 
 ---
 
@@ -1269,19 +1269,21 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-### Task 9: CLAUDE.md pointer + the `:70` fix + full green
+### Task 9: CLAUDE.md pointer + full green
 
 **Files:**
 - Modify: `ansible/roles/containers/home-assistant/CLAUDE.md`
 
 **Interfaces:** none (docs + final verification).
 
-- [ ] **Step 1: Fix the AL-switch entity_id typo**
+- [ ] **Step 1: (no entity_id typo to fix — verified)**
 
-In `ansible/roles/containers/home-assistant/CLAUDE.md`, find the line that names
-`switch.bedroom_adaptive_lighting_sleep_mode_bedroom` (the AL sleep-mode switch) and replace that
-entity_id with the one that actually resolves live:
-`switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom`.
+An earlier draft of this plan called for fixing a `CLAUDE.md:70` AL-switch entity_id typo
+(`switch.bedroom_adaptive_lighting_sleep_mode_bedroom`). On verification, **no such typo exists**:
+the role `CLAUDE.md` does not reference that entity_id, and the code uses the correct spelling
+(`switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom`) in all three call sites.
+The resolution check confirms 0 unresolved references on the real role. No fix needed — skip to
+Step 2.
 
 - [ ] **Step 2: Add a pointer to the generated model**
 
@@ -1333,7 +1335,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Single-writer + override-consistency **report** mode → Task 6. ✅
 - One validator/one hook → Task 7. ✅
 - Live `probe.py ha-state` + `--inventory` → Task 8. ✅
-- CLAUDE.md kept + `:70` fix → Task 9. ✅
+- CLAUDE.md kept + `STATE.md` pointer → Task 9 (the `:70` typo turned out not to exist — verified). ✅
 - Hermetic tests wired via `pyproject.toml testpaths` (already includes `scripts`) → every task. ✅
 
 **Deliberate scope trims (noted, not gaps):**

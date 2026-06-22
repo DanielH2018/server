@@ -16,11 +16,20 @@ manual surfaces (Tap Dial, dashboard, Google Assistant, the DREO remote, AL's ow
 
 The knowledge of how these pieces interact — who writes which cell, which automations
 respect it, the restart-survival rules, the feedback-loop traps — exists **only as prose**
-(the role `CLAUDE.md`) and operator memory. That representation **drifts**: confirmed live
-on 2026-06-21, `CLAUDE.md:70` names a non-existent AL sleep-mode switch entity_id
-(`switch.bedroom_adaptive_lighting_sleep_mode_bedroom` — "Entity not found") while the code
-correctly uses `switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom`. The
-hand-written doc was wrong while the code was right.
+(the role `CLAUDE.md`) and operator memory, which is laborious to keep in sync with 1500+
+lines of automation. The bug class this guards against is concrete and easy to hit by hand:
+a mistyped or renamed entity reference (e.g. the gnarly AL sleep-mode switch,
+`switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom`, vs. the *master*
+`switch.bedroom_adaptive_lighting_bedroom`) becomes a **silent no-op** in HA — no error, the
+automation just quietly stops working. The entity-reference resolution check makes that a
+build failure instead.
+
+> Implementation note (2026-06-22): the resolution check was run against the real role and
+> found **0 unresolved references** — the live config has no such typo today. (An earlier draft
+> of this spec cited a specific `CLAUDE.md:70` typo as a live example; that citation was
+> unverified and incorrect — the role `CLAUDE.md` does not reference that entity_id at all, and
+> the code uses the correct spelling in all three call sites. The tool's value is preventing
+> this class of bug going forward, which it now does, not a bug it found at authoring time.)
 
 ## Goals
 
@@ -185,8 +194,9 @@ New subcommand in the existing `ha` group (read-only GET, allow-listed, no promp
 
 - Keep the role `CLAUDE.md` as the home of the non-derivable "why"; add a pointer to `STATE.md`
   for the derived/structural facts.
-- **Fix `CLAUDE.md:70`**: `switch.bedroom_adaptive_lighting_sleep_mode_bedroom` →
-  `switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom`.
+- (An earlier draft listed a `CLAUDE.md:70` entity_id typo to fix; on verification no such typo
+  exists — the role `CLAUDE.md` does not reference that entity_id and the code is correct. No fix
+  needed; see the Problem-section note.)
 
 ## Files touched
 
@@ -203,7 +213,8 @@ New subcommand in the existing `ha` group (read-only GET, allow-listed, no promp
   `CLAUDE.md` prose aside).
 - `prek.toml` — wire freshness+checks into the existing `validate-ha-config` hook (or a sibling that
   shares the slot).
-- `ansible/roles/containers/home-assistant/CLAUDE.md` — pointer to `STATE.md` + the `:70` fix.
+- `ansible/roles/containers/home-assistant/CLAUDE.md` — pointer to `STATE.md` (no entity_id typo
+  to fix; see the Problem-section note).
 - `pyproject.toml` — `testpaths` already includes `scripts/`; confirm the new test is collected.
 
 ## Testing (hermetic — no live HA)
@@ -225,8 +236,8 @@ New subcommand in the existing `ha` group (read-only GET, allow-listed, no promp
    recorder checks (hard) and the override-consistency + single-writer reports.
 3. Add the `expected_override_writers.yml` tripwire (seed from the current derived writers).
 4. Add `probe.py ha-state`.
-5. Run the full validator; fix the `CLAUDE.md:70` typo; capture the single-writer/override-consistency
-   reports as the documented **Phase 2 baseline**.
+5. Run the full validator; add the `STATE.md` pointer to the role `CLAUDE.md`; capture the
+   single-writer/override-consistency reports as the documented **Phase 2 baseline**.
 
 ## Defaults chosen (easy to change)
 
