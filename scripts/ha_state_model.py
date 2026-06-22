@@ -8,7 +8,9 @@ for any of that — `refresh` (snapshot integration entities) is the only live p
 """
 from __future__ import annotations
 
+import argparse
 import re
+import sys
 import tempfile
 from collections import defaultdict
 from collections.abc import Iterator
@@ -486,3 +488,56 @@ def cmd_generate(role_dir: Path = ROLE_DIR) -> int:
     STATE_MD.write_text(render_state_md(model))
     print(f"generated {DERIVED_YAML.name} + {STATE_MD.name}")
     return 0
+
+
+def freshness_errors(role_dir: Path = ROLE_DIR) -> list[str]:
+    model = build_model(load_role(role_dir))
+    errs = []
+    for path, want in ((DERIVED_YAML, render_derived_yaml(model)),
+                       (STATE_MD, render_state_md(model))):
+        have = path.read_text() if path.is_file() else ""
+        if have != want:
+            errs.append(f"{path.name} is stale — run `ha_state_model.py generate` and commit")
+    return errs
+
+
+def check_errors(role_dir: Path = ROLE_DIR) -> list[str]:
+    """All HARD checks, aggregated. Report-mode invariants are printed (stderr), not failed on."""
+    config = load_role(role_dir)
+    model = build_model(config)
+    known = config_entities(config, config.get("scene") or []) | load_external_entities()
+    errs: list[str] = []
+    errs += freshness_errors(role_dir)
+    errs += resolution_errors(config, known)
+    errs += override_writer_errors(model["writes"], load_expected_override_writers())
+    errs += threshold_pairing_errors(config)
+    errs += alias_collision_errors(config)
+    for line in (single_writer_report(model["writes"], SANCTIONED_WRITERS)
+                 + override_consistency_report(model["writes"])):
+        print(f"[state-model report] {line}", file=sys.stderr)
+    return errs
+
+
+def main(argv=None) -> int:
+    p = argparse.ArgumentParser(prog="ha_state_model.py", description=__doc__)
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("generate", help="regenerate derived_state.yml + STATE.md")
+    sub.add_parser("refresh", help="snapshot live external entities (needs HA + SOPS key)")
+    sub.add_parser("check", help="run the guardrail checks (exit 1 on hard error)")
+    ns = p.parse_args(argv)
+    if ns.cmd == "generate":
+        return cmd_generate()
+    if ns.cmd == "refresh":
+        return cmd_refresh()
+    errs = check_errors()
+    if errs:
+        print("HA state-model checks FAILED:")
+        for e in errs:
+            print(f"  - {e}")
+        return 1
+    print("HA state-model OK")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

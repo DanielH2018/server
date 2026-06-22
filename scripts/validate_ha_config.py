@@ -192,6 +192,12 @@ def validate(role_dir: Path = ROLE_DIR) -> list[str]:
         # Jinja-check whatever loaded (a structural failure drops that tree but the macro files
         # are checked independently).
         errors += jinja_errors(trees, dest / "custom_templates")
+        # State-model guardrails (freshness, entity-resolution, override tripwire, structural).
+        try:
+            import ha_state_model
+            errors += ha_state_model.check_errors(role_dir)
+        except Exception as exc:  # never let the state-model check mask a config error
+            errors.append(f"state-model check crashed: {exc}")
         return errors
 
 

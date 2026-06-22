@@ -270,3 +270,19 @@ def test_single_writer_report_lists_extra_writers():
     sanctioned = {"light.bedroom_lights": "script.bedroom_lights_set"}
     rep = hsm.single_writer_report(writes, sanctioned)
     assert any("automation.bedroom_away" in r for r in rep)
+
+
+def test_freshness_errors_flag_stale_committed_file(tmp_path, monkeypatch):
+    # point the artifact paths at a temp dir with deliberately-wrong content
+    monkeypatch.setattr(hsm, "DERIVED_YAML", tmp_path / "derived_state.yml")
+    monkeypatch.setattr(hsm, "STATE_MD", tmp_path / "STATE.md")
+    (tmp_path / "derived_state.yml").write_text("stale: true\n")
+    (tmp_path / "STATE.md").write_text("stale\n")
+    errs = hsm.freshness_errors()
+    assert any("derived_state.yml" in e for e in errs)
+
+
+def test_check_errors_on_real_role_is_clean_after_generate(tmp_path):
+    # After Task 4/5/6 produced fresh artifacts + snapshot, the real role must validate clean.
+    errs = hsm.check_errors()
+    assert errs == [], "real role failed state-model checks:\n" + "\n".join(errs)
