@@ -120,6 +120,14 @@ def test_config_entities_includes_helpers_scenes_thresholds():
     assert "scene.bedroom_nightlight" in ents
 
 
+def test_config_entities_includes_runtime_created_scenes():
+    # scene.create builds scene.bedroom_pre_alert at runtime; a later scene.turn_on references it.
+    config = {"script": {"alert": {"sequence": [
+        {"service": "scene.create",
+         "data": {"scene_id": "bedroom_pre_alert", "snapshot_entities": ["light.bedroom_lights"]}}]}}}
+    assert "scene.bedroom_pre_alert" in hsm.config_entities(config, [])
+
+
 def test_load_role_returns_real_automation_list():
     config = hsm.load_role()
     aliases = {a.get("alias") for a in config.get("automation", [])}
@@ -162,3 +170,33 @@ def test_render_state_md_lists_actuator_writers():
     md = hsm.render_state_md(model)
     assert "light.bedroom_lights" in md
     assert "automation.bedroom_away" in md
+
+
+def test_referenced_entities_collects_write_and_trigger_targets():
+    config = {"automation": [
+        {"id": "a", "alias": "A", "trigger": [
+            {"platform": "state", "entity_id": "binary_sensor.aqara_fp300_presence"}],
+         "condition": [{"condition": "state", "entity_id": "person.daniel", "state": "home"}],
+         "action": [{"service": "light.turn_on", "target": {"entity_id": "light.bedroom_lights"}}]}],
+        "script": {}, "scene": []}
+    refs = hsm.referenced_entities(config)
+    assert {"binary_sensor.aqara_fp300_presence", "person.daniel", "light.bedroom_lights"} <= refs
+
+
+def test_resolution_errors_flags_unknown_managed_entity():
+    config = {"automation": [
+        {"id": "a", "alias": "A", "action": [
+            {"service": "switch.turn_on", "target": {"entity_id": "switch.typo_does_not_exist"}}]}],
+        "script": {}, "scene": []}
+    known = {"light.bedroom_lights"}  # switch.typo... absent
+    errs = hsm.resolution_errors(config, known)
+    assert any("switch.typo_does_not_exist" in e for e in errs)
+
+
+def test_resolution_ignores_unmanaged_domains_and_templated():
+    config = {"automation": [
+        {"id": "a", "alias": "A", "action": [
+            {"service": "notify.mobile_app_x", "data": {"message": "hi"}},
+            {"service": "light.turn_on", "target": {"entity_id": "{{ x }}"}}]}],
+        "script": {}, "scene": []}
+    assert hsm.resolution_errors(config, set()) == []

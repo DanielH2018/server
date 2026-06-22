@@ -183,12 +183,35 @@ def _template_sensor_entities(config: dict) -> set[str]:
     return ents
 
 
+def _all_service_calls(config: dict):
+    """Every service call in the config's automations + scripts."""
+    for auto in config.get("automation") or []:
+        yield from iter_service_calls(auto.get("action", []))
+    for body in (config.get("script") or {}).values():
+        yield from iter_service_calls((body or {}).get("sequence", []))
+
+
+def created_scenes(config: dict) -> set[str]:
+    """`scene.<scene_id>` for every `scene.create` call — transient scenes built at runtime
+    (e.g. bedroom_pre_alert from script.bedroom_alert_pulse) that are legitimately referenced
+    by a later `scene.turn_on` but exist in no scenes.yaml entry and no live snapshot."""
+    out: set[str] = set()
+    for call in _all_service_calls(config):
+        if call_service(call) == "scene.create":
+            sid = (call.get("data") or {}).get("scene_id")
+            if sid:
+                out.add(f"scene.{sid}")
+    return out
+
+
 def config_entities(config: dict, scenes: list) -> set[str]:
-    """Every entity id derivable from the repo config — helpers, scenes, threshold sensors,
-    template sensors. The resolution check unions this with the live external-entity snapshot."""
+    """Every entity id derivable from the repo config — helpers, scenes (static + runtime-created),
+    threshold sensors, template sensors. The resolution check unions this with the live
+    external-entity snapshot."""
     ents = {c["entity"] for c in extract_cells(config).values()}
     ents |= {t["entity"] for t in extract_thresholds(config)}
     ents |= set(scene_entity_map(scenes).keys())
+    ents |= created_scenes(config)
     ents |= _template_sensor_entities(config)
     return ents
 
@@ -257,6 +280,78 @@ def render_state_md(model: dict) -> str:
         for writer, targets in model["dynamic_writes"].items():
             lines.append(f"- `{writer}`: {', '.join('`%s`' % t for t in targets)}")
     return "\n".join(lines) + "\n"
+
+
+EXTERNAL_YAML = STATE_DIR / "external_entities.yml"
+
+# Domains the resolution check is responsible for (entity references we author + control). Other
+# domains (notify, persistent_notification, tts, media_player, device_tracker, weather, zone, sun,
+# person, sensor) come from integrations and are only checked if present in `known`.
+_MANAGED_DOMAINS = ("input_boolean", "input_number", "input_datetime", "timer",
+                    "switch", "light", "fan", "scene", "binary_sensor")
+
+
+def _walk_entity_id_fields(node) -> Iterator[str]:
+    """Yield every value of an `entity_id:` key anywhere in `node` (scalar or list)."""
+    if isinstance(node, dict):
+        ent = node.get("entity_id")
+        if isinstance(ent, str):
+            yield ent
+        elif isinstance(ent, list):
+            yield from (e for e in ent if isinstance(e, str))
+        for value in node.values():
+            yield from _walk_entity_id_fields(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _walk_entity_id_fields(value)
+
+
+def referenced_entities(config: dict) -> set[str]:
+    """Write targets + every `entity_id:` field (triggers/conditions/actions) across automations
+    and scripts. Templated values are dropped (can't be resolved statically)."""
+    refs: set[str] = set()
+    for auto in config.get("automation") or []:
+        refs |= set(_walk_entity_id_fields(auto))
+    for body in (config.get("script") or {}).values():
+        refs |= set(_walk_entity_id_fields(body))
+    return {r for r in refs if not _is_templated(r)}
+
+
+def resolution_errors(config: dict, known: set[str]) -> list[str]:
+    """A managed-domain entity referenced but absent from `known` (= a typo or a stale external
+    snapshot — run `refresh`)."""
+    errs = []
+    for ref in sorted(referenced_entities(config)):
+        if ref.split(".")[0] in _MANAGED_DOMAINS and ref not in known:
+            errs.append(f"unresolved entity reference: {ref} "
+                        f"(typo, or run `ha_state_model.py refresh` if it is a new device)")
+    return errs
+
+
+def load_external_entities() -> set[str]:
+    if not EXTERNAL_YAML.is_file():
+        return set()
+    return set(yaml.safe_load(EXTERNAL_YAML.read_text()).get("entities", []))
+
+
+def cmd_refresh(get_states=None) -> int:
+    """Snapshot live entity ids that are NOT config-derivable into external_entities.yml. Injects
+    get_states for tests; defaults to the live HA GET /api/states via probe.py."""
+    if get_states is None:
+        import json
+        import probe
+        body = probe.ha_get(probe.ha_get_url(probe.resolve_ip(probe.HA_CONTAINER), "states"),
+                            probe.ha_token())
+        live = [s["entity_id"] for s in json.loads(body)]
+    else:
+        live = list(get_states())
+    config = load_role()
+    derived = config_entities(config, config.get("scene") or [])
+    external = sorted(e for e in live if e not in derived)
+    STATE_DIR.mkdir(exist_ok=True)
+    EXTERNAL_YAML.write_text(_GENERATED_BANNER + _dump_yaml({"entities": external}))
+    print(f"snapshotted {len(external)} external entities")
+    return 0
 
 
 def cmd_generate(role_dir: Path = ROLE_DIR) -> int:
