@@ -125,3 +125,40 @@ def test_load_role_returns_real_automation_list():
     aliases = {a.get("alias") for a in config.get("automation", [])}
     assert "Bedroom away" in aliases          # sanity: the real role loaded
     assert isinstance(config.get("script"), dict)
+
+
+def test_build_model_is_deterministic_and_sorted():
+    config = {**CONFIG, "automation": [
+        {"id": "a", "alias": "Bedroom away", "action": [
+            {"service": "light.turn_off", "target": {"entity_id": "light.bedroom_lights"}}]}],
+        "script": {}, "scene": SCENES}
+    m1 = hsm.build_model(config)
+    m2 = hsm.build_model(config)
+    assert m1 == m2
+    assert m1["writes"]["light.bedroom_lights"] == ["automation.bedroom_away"]
+    assert "light.bedroom_lights" in m1["actuators"]
+
+
+def test_render_derived_yaml_roundtrips():
+    import yaml as y
+    model = {"cells": {}, "actuators": ["light.bedroom_lights"],
+             "writes": {"light.bedroom_lights": ["automation.x"]}, "dynamic_writes": {}}
+    text = hsm.render_derived_yaml(model)
+    assert y.safe_load(text)["writes"]["light.bedroom_lights"] == ["automation.x"]
+
+
+def test_dump_yaml_indents_sequences_for_ansible_lint():
+    # ansible-lint/yamllint `indent-sequences`: list items indented UNDER their key.
+    out = hsm._dump_yaml({"writes": {"light.x": ["automation.a", "automation.b"]}})
+    assert "\n    - automation.a" in out
+
+
+def test_render_state_md_lists_actuator_writers():
+    model = {"cells": {"bedroom_manual_off": {"entity": "input_boolean.bedroom_manual_off",
+             "name": "Bedroom manual off override"}},
+             "actuators": ["light.bedroom_lights"],
+             "writes": {"light.bedroom_lights": ["automation.bedroom_away"]},
+             "dynamic_writes": {}}
+    md = hsm.render_state_md(model)
+    assert "light.bedroom_lights" in md
+    assert "automation.bedroom_away" in md
