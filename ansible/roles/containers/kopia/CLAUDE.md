@@ -32,8 +32,14 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
 - **Backup assurance is three-tier:** snapshots (daily 19:00, in-container policy) →
   weekly `kopia snapshot verify --verify-files-percent=1` cron (blobs readable) →
   **monthly restore drill** (`files/restore-drill.sh` → `/usr/local/bin/`, cron 1st
-  05:00): restores one rotating service dir from the latest snapshot inside the
-  container, asserts sanity (compose-file sentinel + file-count floor), writes
+  05:00): restores one rotating service dir (rotation folds in the year — `(month+year) %
+  len` — so the singly-covered slot, incl. authelia the SSO root of trust, moves year over
+  year) inside the container and asserts a **service-specific state-file sentinel** (e.g.
+  `grafana/data/grafana.db`, `authelia/config/configuration.yml` — proves the right tree
+  with real data, not just any compose file) plus a file-count floor. Two extra integrity
+  guards: it fails if the **latest snapshot is >48 h old** (catches a stalled scheduler,
+  independent of which snapshot it restores), and **quarterly restores the OLDEST retained
+  snapshot** instead of the newest to exercise the retention tail (the real DR case). Writes
   `/var/lib/kopia-restore-drill/state.json` — monitor-bridge's `restore_drill` check
   alerts on failure, >35 d staleness, or missing state. Run it manually anytime:
   `/usr/local/bin/kopia-restore-drill.sh`.
