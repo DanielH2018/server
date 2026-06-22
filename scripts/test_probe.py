@@ -275,3 +275,38 @@ def test_format_ha_automation_includes_id_and_last_triggered():
     assert "presence_1" in out
     assert "last_triggered=2026-06-20T12:00:00+00:00" in out
     assert "Bedroom Presence On" in out
+
+
+# --- WebSocket frame codec --------------------------------------------------
+
+def test_ws_encode_is_masked_client_text_frame():
+    frame = probe._ws_encode("hello")
+    assert frame[0] == 0x81                 # FIN + text opcode
+    assert frame[1] == 0x80 | 5             # mask bit + 5-byte length
+    mask, body = frame[2:6], frame[6:]
+    assert bytes(b ^ mask[i % 4] for i, b in enumerate(body)) == b"hello"
+
+
+def test_ws_encode_extended_length_126():
+    payload = "x" * 200
+    frame = probe._ws_encode(payload)
+    assert frame[1] == 0x80 | 126           # 126 sentinel -> 16-bit length follows
+    assert frame[2:4] == (200).to_bytes(2, "big")
+
+
+def test_ws_read_frame_decodes_unmasked_text():
+    payload = b'{"type":"auth_ok"}'
+    raw = bytes([0x81, len(payload)]) + payload
+    pos = [0]
+    def recv_exact(n):
+        chunk = raw[pos[0]:pos[0] + n]; pos[0] += n; return chunk
+    assert probe._ws_read_frame(recv_exact) == '{"type":"auth_ok"}'
+
+
+def test_ws_read_frame_decodes_extended_length():
+    payload = b"y" * 300
+    raw = bytes([0x81, 126]) + (300).to_bytes(2, "big") + payload
+    pos = [0]
+    def recv_exact(n):
+        chunk = raw[pos[0]:pos[0] + n]; pos[0] += n; return chunk
+    assert probe._ws_read_frame(recv_exact) == "y" * 300

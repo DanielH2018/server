@@ -101,6 +101,61 @@ def ha_curl_config(token):
     return f'header = "Authorization: Bearer {token}"\n'
 
 
+# --- Minimal synchronous WebSocket client (stdlib only — no `websockets` dep) -----------------
+# Used ONLY for the read-only automation-trace API (Task: ha trace/why). A client text frame MUST
+# be masked (RFC 6455); server frames are unmasked. We assume one JSON message per unfragmented
+# frame, which is how HA sends WS responses.
+
+
+def _ws_encode(payload: str) -> bytes:
+    """A single masked client text frame (FIN=1, opcode=0x1)."""
+    import os
+    import struct
+    data = payload.encode()
+    n = len(data)
+    header = bytearray([0x81])
+    if n < 126:
+        header.append(0x80 | n)
+    elif n < 65536:
+        header.append(0x80 | 126)
+        header += struct.pack(">H", n)
+    else:
+        header.append(0x80 | 127)
+        header += struct.pack(">Q", n)
+    mask = os.urandom(4)
+    header += mask
+    return bytes(header) + bytes(b ^ mask[i % 4] for i, b in enumerate(data))
+
+
+def _ws_read_frame(recv_exact) -> str:
+    """Decode one unmasked server text frame, reading exact byte counts via recv_exact(n)->bytes."""
+    import struct
+    recv_exact(1)  # b0: FIN+opcode (text, unfragmented — not inspected)
+    length = recv_exact(1)[0] & 0x7F
+    if length == 126:
+        length = struct.unpack(">H", recv_exact(2))[0]
+    elif length == 127:
+        length = struct.unpack(">Q", recv_exact(8))[0]
+    return recv_exact(length).decode()
+
+
+def _recv_exact_from(sock):
+    """Return a recv_exact(n)->bytes reader over a socket, buffering across recv() boundaries."""
+    buf = bytearray()
+
+    def recv_exact(n: int) -> bytes:
+        while len(buf) < n:
+            chunk = sock.recv(4096)
+            if not chunk:
+                raise SystemExit("HA websocket closed unexpectedly")
+            buf.extend(chunk)
+        out = bytes(buf[:n])
+        del buf[:n]
+        return out
+
+    return recv_exact
+
+
 def _slug(name):
     """HA-style slug: lowercase, non-alphanumerics collapsed to single `_`."""
     return re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
