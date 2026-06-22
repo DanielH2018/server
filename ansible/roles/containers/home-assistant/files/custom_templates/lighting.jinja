@@ -56,3 +56,20 @@
 {%- set factor = [[1.0 - 0.8 * lux / 75, 1.0] | min, 0.2] | max -%}
 {{ [(base * factor) | round(0) | int, 5] | max }}
 {%- endmacro -%}
+
+{# Mediator gate policy. Given the action's `reason` + the live flags, decide what the bedroom
+   lights should do. Only `presence` is gated here (it is the one AUTO caller whose SOLE action is
+   the light, so its conditions live in one tested place); `natural`/`wake`/`off` are pass-through
+   (their caller keeps its own gate, which also guards its non-light side effects). Bools arrive as
+   real booleans from is_state() in the caller; `| bool` coerces defensively (and for the test
+   harness). Returns: natural | wake | off | noop. #}
+{%- macro light_decision(reason, manual_off, sleep_mode, person_home, presence, lux_allowed, light_on) -%}
+{%- if reason == 'presence' -%}
+{{ 'natural' if (not (manual_off | bool) and not (sleep_mode | bool) and (person_home | bool)
+   and (presence | bool) and (lux_allowed | bool) and not (light_on | bool)) else 'noop' }}
+{%- elif reason in ['natural', 'wake', 'off'] -%}
+{{ reason }}
+{%- else -%}
+noop
+{%- endif -%}
+{%- endmacro -%}

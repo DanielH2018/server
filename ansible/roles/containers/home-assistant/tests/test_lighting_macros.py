@@ -69,3 +69,33 @@ def test_natural_brightness_dims_with_ambient():
 
 def test_natural_brightness_deep_night_falls_back_low():
     assert _natural(3, 0) == 35     # 00:00-05:00 is the nightlight path; fallback base
+
+
+def _decision(reason, manual_off=False, sleep_mode=False, person_home=True,
+              presence=True, lux_allowed=True, light_on=False):
+    return render_macro(LIGHT, "light_decision", reason, manual_off, sleep_mode,
+                        person_home, presence, lux_allowed, light_on)
+
+
+def test_light_decision_presence_all_gates_pass():
+    assert _decision("presence") == "natural"
+
+
+def test_light_decision_presence_each_gate_blocks():
+    assert _decision("presence", manual_off=True) == "noop"
+    assert _decision("presence", sleep_mode=True) == "noop"
+    assert _decision("presence", person_home=False) == "noop"
+    assert _decision("presence", presence=False) == "noop"
+    assert _decision("presence", lux_allowed=False) == "noop"
+    assert _decision("presence", light_on=True) == "noop"   # never re-stomp an on light
+
+
+def test_light_decision_passthrough_reasons_are_ungated():
+    # natural/wake/off ignore the flags (the caller already gated).
+    assert _decision("natural", manual_off=True, person_home=False) == "natural"
+    assert _decision("wake", lux_allowed=False) == "wake"
+    assert _decision("off", light_on=True) == "off"
+
+
+def test_light_decision_unknown_reason_is_noop():
+    assert _decision("bogus") == "noop"
