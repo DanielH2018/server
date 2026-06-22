@@ -437,6 +437,8 @@ def _build_parser():
     htr = hasub.add_parser("trace", aliases=["why"],
                            help="why an automation last ran/no-op'd (per-condition WS trace)")
     htr.add_argument("query", help="automation id, alias-slug, or full automation.<slug>")
+    hasub.add_parser("verify-automations",
+                     help="assert every automation in automations.yaml loaded (exit 0 = all loaded)")
     hst = sub.add_parser("ha-state", help="live view of the derived state model")
     hst.add_argument("--inventory", action="store_true",
                      help="also dump every live entity grouped by domain")
@@ -560,6 +562,23 @@ def run_ha(ns):
             print(f"{m['entity_id']}: no config id (cannot fetch trace)")
             return 1
         print(format_trace(ha_trace(ip, token, automation_id)))
+        return 0
+    if ns.ha_cmd == "verify-automations":
+        if ns.dry_run:
+            print(" ".join(ha_curl_argv(ha_get_url("<ha-ip>", "states")))
+                  + f"   # + Bearer; compare attributes.id against ids in {AUTOMATIONS_YAML}")
+            return 0
+        ip = resolve_ip(HA_CONTAINER)
+        states = json.loads(ha_get(ha_get_url(ip, "states"), ha_token()))
+        live = [s for s in states if s["entity_id"].startswith("automation.")]
+        with open(AUTOMATIONS_YAML) as f:
+            expected = expected_automation_ids(f.read())
+        errs = automation_load_errors(expected, live)
+        if errs:
+            for e in errs:
+                print(e)
+            return 1
+        print(f"all {len(expected)} automations loaded")
         return 0
     if ns.dry_run:
         argv = ha_curl_argv(_ha_url("<ha-ip>", ns))

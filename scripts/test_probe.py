@@ -380,3 +380,9 @@ def test_automation_load_errors_clean_when_all_loaded():
         {"entity_id": "automation.b", "state": "off", "attributes": {"id": "b"}},
     ]
     assert automation_load_errors(expected, live) == []
+
+
+def test_verify_automations_subcommand_parses():
+    from probe import _build_parser
+    ns = _build_parser().parse_args(["ha", "verify-automations"])
+    assert ns.cmd == "ha" and ns.ha_cmd == "verify-automations"
