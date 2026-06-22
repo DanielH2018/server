@@ -107,8 +107,11 @@ For every call site of the actuator mediators (`script.bedroom_lights_set`,
 `script.bedroom_fan_set`), assert the `reason`:
 - **is present**,
 - **is in the mediator's valid vocabulary** — `lights: {presence, natural, wake, off}`,
-  `fan: {auto, boost, off}`. The vocabulary is derived from the mediator's own `choose:` branches
-  where feasible (single source of truth), else a small declared constant kept next to the mediator,
+  `fan: {auto, boost, off}`. NB the lights mediator's `choose:` branches dispatch on the decision
+  *output* (`action == 'natural'`), not the `reason` *input*, so the input vocabulary is taken from
+  the mediator's `reason` dispatch — i.e. the reasons `light_decision` accepts (`presence` +
+  the pass-through set) and `bedroom_fan_set`'s reason branches — or a small declared constant kept
+  beside the mediator, NOT from the `choose:` blocks,
 - **is a string, not a YAML-coerced bool** — i.e. the loaded value must not be Python `True`/`False`
   (catches the unquoted `reason: off`/`on` → silent no-op trap).
 
@@ -236,9 +239,10 @@ purely additive to the validation surface (Components 1–3) plus one diagnostic
   `{{ templated }}`, inside `choose:`/`if`/`repeat`, `parallel`). The extractor must walk the action
   tree the way `ha_state_model.py` already walks for writers; templated names are skipped. Verify
   coverage against the real corpus during implementation.
-- **Mediator vocabulary source of truth:** prefer deriving the valid `reason` set from the
-  mediator's `choose:` branches so it cannot drift; fall back to a declared constant beside the
-  mediator only if derivation is brittle.
+- **Mediator vocabulary source of truth:** derive the valid `reason` set from the mediator's
+  `reason` dispatch (the reasons `light_decision` accepts / `bedroom_fan_set`'s branches), NOT the
+  `choose:` output blocks; fall back to a declared constant beside the mediator only if derivation
+  is brittle.
 - **Snapshot drift:** the service snapshot shares the entity snapshot's failure mode — a stale
   snapshot can mask a real typo (false pass) or flag a just-added service (false fail until
   `refresh`). Accepted, identical to the existing entity check; the freshness gate surfaces drift.
