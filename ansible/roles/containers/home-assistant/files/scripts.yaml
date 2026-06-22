@@ -50,6 +50,46 @@ bedroom_set_natural_brightness:
       data:
         value: "{{ al_ct }}"
 
+# Phase-2 mediator: THE single sanctioned writer for the bedroom lights' HELD state. AUTO callers
+# pass a `reason`; light_decision (lighting.jinja) applies the gate for that reason and this
+# delegates to the existing primitive. The manual Tap Dial is exempt (it writes the lights directly
+# by design). Reasons: presence (gated: manual_off/sleep/home/presence/lux/light-off), natural &
+# wake (ungated — the caller pre-gated), off.
+bedroom_lights_set:
+  alias: "Bedroom — lights mediator (single guarded writer)"
+  description: >-
+    Single sanctioned writer for the bedroom lights' held state. Applies the per-reason gate via the
+    light_decision macro, then delegates to apply_natural / apply_wake / light.turn_off.
+  mode: restart
+  fields:
+    reason:
+      description: "presence | natural | wake | off"
+      required: true
+      example: presence
+  sequence:
+    - variables:
+        action: >-
+          {% from 'lighting.jinja' import light_decision %}{{ light_decision(reason,
+            is_state('input_boolean.bedroom_manual_off', 'on'),
+            is_state('input_boolean.bedroom_sleep_mode', 'on'),
+            is_state('person.daniel', 'home'),
+            is_state('binary_sensor.aqara_fp300_presence', 'on'),
+            is_state('binary_sensor.bedroom_auto_light_allowed', 'on'),
+            is_state('light.bedroom_lights', 'on')) }}
+    - choose:
+        - conditions: "{{ action == 'natural' }}"
+          sequence:
+            - service: script.bedroom_apply_natural
+        - conditions: "{{ action == 'wake' }}"
+          sequence:
+            - service: script.bedroom_apply_wake
+        - conditions: "{{ action == 'off' }}"
+          sequence:
+            - service: light.turn_off
+              target:
+                entity_id: light.bedroom_lights
+      # action == 'noop' (gated out, or unknown reason): do nothing.
+
 # Wake frame: set the lights to the current sunrise-ramp brightness for NOW (warm 2200K), computed
 # from sensor.bedroom_wake_start via the wake_brightness macro. bedroom_wake_ramp calls this every
 # minute through the 30-min window; bedroom_apply_natural's wake exception also calls it so a mid-ramp
