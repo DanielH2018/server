@@ -1,0 +1,19 @@
+# HAND-MAINTAINED tripwire — the ONLY hand-declared state-model file.
+# CI fails if an automation/script writes one of these 3 override booleans without
+# being listed here (forces a conscious 'touching shared coordination state' ack).
+input_boolean.bedroom_fan_manual:
+  - automation.bedroom_fan_manual_override_detect
+  - automation.bedroom_fan_startup_reconcile
+  - automation.bedroom_morning_reset_and_wake
+  - automation.bedroom_notification_action
+  - automation.bedroom_tap_dial_control
+  - script.bedroom_fan_nudge
+input_boolean.bedroom_manual_off:
+  - automation.bedroom_manual_light_detect
+  - automation.bedroom_morning_reset_and_wake
+  - automation.bedroom_tap_dial_control
+input_boolean.bedroom_sleep_mode:
+  - automation.bedroom_morning_reset_and_wake
+  - automation.bedroom_tap_dial_control
+  - script.bedroom_bedtime
+  - script.bedroom_exit_sleep

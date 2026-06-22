@@ -200,3 +200,73 @@ def test_resolution_ignores_unmanaged_domains_and_templated():
             {"service": "light.turn_on", "target": {"entity_id": "{{ x }}"}}]}],
         "script": {}, "scene": []}
     assert hsm.resolution_errors(config, set()) == []
+
+
+def test_override_writer_errors_flags_undeclared_writer():
+    writes = {"input_boolean.bedroom_sleep_mode": ["script.bedroom_bedtime", "automation.new_thing"]}
+    expected = {"input_boolean.bedroom_sleep_mode": ["script.bedroom_bedtime"]}
+    errs = hsm.override_writer_errors(writes, expected)
+    assert any("automation.new_thing" in e for e in errs)
+
+
+def test_override_writer_errors_clean_when_match():
+    writes = {"input_boolean.bedroom_sleep_mode": ["script.bedroom_bedtime"]}
+    expected = {"input_boolean.bedroom_sleep_mode": ["script.bedroom_bedtime"]}
+    assert hsm.override_writer_errors(writes, expected) == []
+
+
+# The real bedroom_threshold_alert groups each category's sensors into ONE bad + ONE ok trigger
+# with a LIST entity_id (verified against files/automations.yaml), so the tests model lists.
+def _threshold_config(declared, triggers):
+    return {"binary_sensor": declared, "script": {},
+            "automation": [{"id": "bedroom_threshold_alert", "alias": "Bedroom threshold alert",
+                            "trigger": triggers, "action": []}]}
+
+_CO2 = {"platform": "threshold", "name": "Bedroom CO2 high", "entity_id": "sensor.x", "upper": 1}
+_VOC = {"platform": "threshold", "name": "Bedroom VOC high", "entity_id": "sensor.y", "upper": 1}
+_AQ_PAIR = [
+    {"platform": "state", "entity_id": ["binary_sensor.bedroom_co2_high"],
+     "to": "on", "id": "airquality_bad"},
+    {"platform": "state", "entity_id": ["binary_sensor.bedroom_co2_high"],
+     "to": "off", "id": "airquality_ok"}]
+
+
+def test_threshold_pairing_clean_when_wired_both_directions():
+    assert hsm.threshold_pairing_errors(_threshold_config([_CO2], _AQ_PAIR)) == []
+
+
+def test_threshold_pairing_flags_declared_but_unwired_sensor():
+    # VOC declared but not added to any trigger list -> flagged (the half-added-metric case).
+    errs = hsm.threshold_pairing_errors(_threshold_config([_CO2, _VOC], _AQ_PAIR))
+    assert any("bedroom_voc_high" in e for e in errs)
+
+
+def test_threshold_pairing_flags_missing_ok_category():
+    # A category with a _bad trigger but no _ok (the half-added-category case).
+    triggers = [{"platform": "state", "entity_id": ["binary_sensor.bedroom_co2_high"],
+                 "to": "on", "id": "airquality_bad"}]
+    errs = hsm.threshold_pairing_errors(_threshold_config([_CO2], triggers))
+    assert any("missing its _ok" in e for e in errs)
+
+
+def test_threshold_pairing_flags_one_direction_only():
+    # CO2 wired in the _bad (on) list but absent from the _ok (off) list -> direction gap.
+    triggers = [
+        {"platform": "state", "entity_id": ["binary_sensor.bedroom_co2_high"],
+         "to": "on", "id": "airquality_bad"},
+        {"platform": "state", "entity_id": [], "to": "off", "id": "airquality_ok"}]
+    errs = hsm.threshold_pairing_errors(_threshold_config([_CO2], triggers))
+    assert any("off trigger direction" in e for e in errs)
+
+
+def test_alias_collision_flags_duplicate_slug():
+    config = {"automation": [{"id": "a", "alias": "Bedroom away"},
+                             {"id": "b", "alias": "Bedroom  away"}], "script": {}}
+    assert hsm.alias_collision_errors(config) != []
+
+
+def test_single_writer_report_lists_extra_writers():
+    writes = {"light.bedroom_lights": ["script.bedroom_lights_set", "automation.bedroom_away"]}
+    sanctioned = {"light.bedroom_lights": "script.bedroom_lights_set"}
+    rep = hsm.single_writer_report(writes, sanctioned)
+    assert any("automation.bedroom_away" in r for r in rep)

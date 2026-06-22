@@ -354,6 +354,131 @@ def cmd_refresh(get_states=None) -> int:
     return 0
 
 
+EXPECTED_OVERRIDE_WRITERS = STATE_DIR / "expected_override_writers.yml"
+OVERRIDE_CELLS = ("input_boolean.bedroom_manual_off",
+                  "input_boolean.bedroom_fan_manual",
+                  "input_boolean.bedroom_sleep_mode")
+# Phase 2 will flip these report checks to hard; the sanctioned writer per actuator:
+SANCTIONED_WRITERS = {"light.bedroom_lights": "script.bedroom_lights_set",
+                      "fan.tower_fan": "script.bedroom_apply_fan"}
+
+
+def load_expected_override_writers() -> dict:
+    if not EXPECTED_OVERRIDE_WRITERS.is_file():
+        return {}
+    return yaml.safe_load(EXPECTED_OVERRIDE_WRITERS.read_text()) or {}
+
+
+def override_writer_errors(writes: dict, expected: dict) -> list[str]:
+    """HARD: the derived writer set of each override boolean must equal the declared list."""
+    errs = []
+    for cell in OVERRIDE_CELLS:
+        got = set(writes.get(cell, []))
+        want = set(expected.get(cell, []))
+        for extra in sorted(got - want):
+            errs.append(f"{cell}: undeclared writer {extra} — add it to "
+                        f"state/expected_override_writers.yml (shared coordination state)")
+        for missing in sorted(want - got):
+            errs.append(f"{cell}: declared writer {missing} no longer writes it — remove it")
+    return errs
+
+
+def _threshold_automation(config: dict) -> dict | None:
+    for auto in config.get("automation") or []:
+        if auto.get("id") == "bedroom_threshold_alert":
+            return auto
+    return None
+
+
+def _trigger_entity_directions(trig: dict):
+    """Yield (entity_id, to_value) for a state trigger. The real bedroom_threshold_alert groups
+    each category's sensors into ONE bad + ONE ok trigger with a LIST entity_id, so this must
+    handle both list and scalar forms (a scalar-only collector leaves trig_entities empty and
+    false-flags every declared threshold as unwired)."""
+    ent = trig.get("entity_id")
+    to_val = trig.get("to")
+    ids = [ent] if isinstance(ent, str) else (ent if isinstance(ent, list) else [])
+    for e in ids:
+        if isinstance(e, str):
+            yield e, to_val
+
+
+def threshold_pairing_errors(config: dict) -> list[str]:
+    """HARD: every `<cat>_bad` trigger id has a `<cat>_ok`; every declared threshold sensor is
+    wired into the automation in BOTH directions (on via a _bad list, off via a _ok list); and no
+    triggered threshold-looking sensor is undeclared. Catches a half-added metric (declared but
+    not wired, or wired in only one direction) and a half-added category (a _bad with no _ok)."""
+    auto = _threshold_automation(config)
+    if not auto:
+        return []
+    errs = []
+    cats = defaultdict(set)
+    trig_entities: set[str] = set()
+    entity_directions: dict[str, set] = defaultdict(set)
+    for trig in auto.get("trigger", []) or []:
+        tid = trig.get("id", "")
+        if tid.endswith("_bad"):
+            cats[tid[:-4]].add("bad")
+        elif tid.endswith("_ok"):
+            cats[tid[:-3]].add("ok")
+        for ent, to_val in _trigger_entity_directions(trig):
+            trig_entities.add(ent)
+            if to_val is not None:
+                entity_directions[ent].add(to_val)
+    for cat, sides in sorted(cats.items()):
+        if sides != {"bad", "ok"}:
+            missing = ({"bad", "ok"} - sides).pop()
+            errs.append(f"threshold category '{cat}' is missing its _{missing} trigger")
+    declared = {t["entity"] for t in extract_thresholds(config)}
+    for ent in sorted(declared - trig_entities):
+        errs.append(f"declared threshold {ent} is not wired into bedroom_threshold_alert triggers")
+    for ent in sorted(declared & trig_entities):
+        missing = {"on", "off"} - entity_directions.get(ent, set())
+        if missing:
+            errs.append(f"declared threshold {ent} is wired but missing the "
+                        f"{'/'.join(sorted(missing))} trigger direction")
+    for ent in sorted(trig_entities - declared):
+        if ent.startswith("binary_sensor."):
+            errs.append(f"threshold trigger {ent} has no matching declared threshold sensor")
+    return errs
+
+
+def alias_collision_errors(config: dict) -> list[str]:
+    seen: dict[str, str] = {}
+    errs = []
+    for auto in config.get("automation") or []:
+        name = automation_writer(auto)
+        alias = auto.get("alias") or auto.get("id")
+        if name in seen:
+            errs.append(f"alias-slug collision: {name!r} from {seen[name]!r} and {alias!r}")
+        seen[name] = alias
+    return errs
+
+
+def single_writer_report(writes: dict, sanctioned: dict) -> list[str]:
+    rep = []
+    for act, owner in sanctioned.items():
+        extras = [w for w in writes.get(act, []) if w != owner]
+        if extras:
+            rep.append(f"{act}: {len(extras)} writer(s) besides {owner}: {', '.join(extras)}")
+    return rep
+
+
+def override_consistency_report(writes: dict) -> list[str]:
+    """REPORT: surfaces actuators whose manual-detect override isn't engaged by every manual
+    surface. Phase 1 emits the lights<->manual_off relationship as a starting datapoint."""
+    rep = []
+    light_writers = set(writes.get("light.bedroom_lights", []))
+    override_writers = set(writes.get("input_boolean.bedroom_manual_off", []))
+    # automations that write the light but never the override are candidate gaps (advisory).
+    gap = sorted(w for w in light_writers if w not in override_writers
+                 and w.startswith("automation."))
+    if gap:
+        rep.append("lights written without touching manual_off (review for Phase 2): "
+                   + ", ".join(gap))
+    return rep
+
+
 def cmd_generate(role_dir: Path = ROLE_DIR) -> int:
     model = build_model(load_role(role_dir))
     (role_dir / "state").mkdir(exist_ok=True)
