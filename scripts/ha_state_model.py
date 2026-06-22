@@ -553,14 +553,21 @@ def load_sanctioned_writers() -> dict:
 
 
 def single_writer_errors(writes: dict, sanctioned: dict) -> list[str]:
-    """HARD: every derived writer of a sanctioned actuator must be in module ∪ exemptions."""
+    """HARD + symmetric: the derived writer set of each sanctioned actuator must equal
+    module ∪ exemptions. An unsanctioned writer fails; a sanctioned entry that no longer
+    writes the actuator fails too (a stale entry silently widens the allowed set — remove it).
+    Mirrors override_writer_errors."""
     errs = []
     for actuator, spec in sorted(sanctioned.items()):
         allowed = set(spec.get("module", [])) | set(spec.get("exemptions", []))
-        for writer in sorted(set(writes.get(actuator, [])) - allowed):
+        got = set(writes.get(actuator, []))
+        for writer in sorted(got - allowed):
             errs.append(f"{actuator}: unsanctioned writer {writer} — route it through the mediator "
                         f"(script.bedroom_lights_set / bedroom_fan_set) or declare it in "
                         f"state/sanctioned_writers.yml")
+        for stale in sorted(allowed - got):
+            errs.append(f"{actuator}: sanctioned writer {stale} no longer writes it — "
+                        f"remove it from state/sanctioned_writers.yml")
     return errs
 
 

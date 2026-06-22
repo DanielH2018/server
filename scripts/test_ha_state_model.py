@@ -280,6 +280,29 @@ def test_single_writer_errors_clean_when_all_sanctioned():
     assert hsm.single_writer_errors(writes, sanctioned) == []
 
 
+def test_single_writer_flags_stale_sanctioned_entry():
+    # A sanctioned entry (module or exemption) that no longer writes the actuator is stale.
+    writes = {"light.x": ["script.live_writer"]}
+    sanctioned = {"light.x": {"module": ["script.live_writer"],
+                              "exemptions": ["script.dead_writer"]}}
+    errs = hsm.single_writer_errors(writes, sanctioned)
+    assert errs == ["light.x: sanctioned writer script.dead_writer no longer writes it — "
+                    "remove it from state/sanctioned_writers.yml"]
+
+
+def test_single_writer_clean_when_derived_equals_allowed():
+    writes = {"light.x": ["script.a", "script.b"]}
+    sanctioned = {"light.x": {"module": ["script.a"], "exemptions": ["script.b"]}}
+    assert hsm.single_writer_errors(writes, sanctioned) == []
+
+
+def test_single_writer_still_flags_unsanctioned_writer():
+    writes = {"light.x": ["script.a", "script.rogue"]}
+    sanctioned = {"light.x": {"module": ["script.a"], "exemptions": []}}
+    errs = hsm.single_writer_errors(writes, sanctioned)
+    assert len(errs) == 1 and "unsanctioned writer script.rogue" in errs[0]
+
+
 def test_freshness_errors_flag_stale_committed_file(tmp_path, monkeypatch):
     # point the artifact paths at a temp dir with deliberately-wrong content
     monkeypatch.setattr(hsm, "DERIVED_YAML", tmp_path / "derived_state.yml")
