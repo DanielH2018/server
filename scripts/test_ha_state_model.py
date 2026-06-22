@@ -1,4 +1,5 @@
 """Hermetic tests for the HA state-model extractor + checks (no live HA / Docker / network)."""
+import yaml
 import ha_state_model as hsm
 import validate_ha_config as vhc
 
@@ -293,6 +294,31 @@ def test_check_errors_on_real_role_is_clean_after_generate(tmp_path):
     # After Task 4/5/6 produced fresh artifacts + snapshot, the real role must validate clean.
     errs = hsm.check_errors()
     assert errs == [], "real role failed state-model checks:\n" + "\n".join(errs)
+
+
+def test_parse_services_flattens_domains():
+    api = [{"domain": "notify", "services": {"mobile_app_x": {}, "persistent_notification": {}}},
+           {"domain": "light", "services": {"turn_on": {}, "turn_off": {}}}]
+    assert hsm.parse_services(api) == {
+        "notify.mobile_app_x", "notify.persistent_notification",
+        "light.turn_on", "light.turn_off"}
+
+
+def test_config_services_registers_each_script():
+    config = {"script": {"bedroom_lights_set": {}, "bedroom_blip": {}}}
+    assert hsm.config_services(config) == {"script.bedroom_lights_set", "script.bedroom_blip"}
+
+
+def test_cmd_refresh_writes_both_snapshots(tmp_path, monkeypatch):
+    monkeypatch.setattr(hsm, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(hsm, "EXTERNAL_YAML", tmp_path / "external_entities.yml")
+    monkeypatch.setattr(hsm, "EXTERNAL_SERVICES_YAML", tmp_path / "external_services.yml")
+    rc = hsm.cmd_refresh(
+        get_states=lambda: ["light.bedroom_lights", "sensor.outdoor_pm2_5"],
+        get_services=lambda: {"notify.mobile_app_pixel_watch_3", "light.turn_on"})
+    assert rc == 0
+    saved = yaml.safe_load((tmp_path / "external_services.yml").read_text())
+    assert "notify.mobile_app_pixel_watch_3" in saved["services"]
 
 
 import probe

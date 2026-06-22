@@ -290,6 +290,33 @@ def render_state_md(model: dict) -> str:
 
 
 EXTERNAL_YAML = STATE_DIR / "external_entities.yml"
+EXTERNAL_SERVICES_YAML = STATE_DIR / "external_services.yml"
+
+
+def parse_services(api_services: list) -> set[str]:
+    """Flatten HA's GET /api/services (a list of {domain, services: {name: ...}}) into a flat
+    {f"{domain}.{name}"} set."""
+    out: set[str] = set()
+    for block in api_services or []:
+        domain = block.get("domain")
+        if not domain:
+            continue
+        for name in (block.get("services") or {}):
+            out.add(f"{domain}.{name}")
+    return out
+
+
+def config_services(config: dict) -> set[str]:
+    """Services the config itself defines: every script registers `script.<name>`. This is the
+    freshness escape-hatch so a brand-new script (not yet in the committed snapshot) resolves."""
+    return {f"script.{name}" for name in (config.get("script") or {})}
+
+
+def load_external_services() -> set[str]:
+    if not EXTERNAL_SERVICES_YAML.is_file():
+        return set()
+    return set(yaml.safe_load(EXTERNAL_SERVICES_YAML.read_text()).get("services", []))
+
 
 # Domains the resolution check is responsible for (entity references we author + control). Other
 # domains (notify, persistent_notification, tts, media_player, device_tracker, weather, zone, sun,
@@ -341,23 +368,34 @@ def load_external_entities() -> set[str]:
     return set(yaml.safe_load(EXTERNAL_YAML.read_text()).get("entities", []))
 
 
-def cmd_refresh(get_states=None) -> int:
-    """Snapshot live entity ids that are NOT config-derivable into external_entities.yml. Injects
-    get_states for tests; defaults to the live HA GET /api/states via probe.py."""
-    if get_states is None:
+def cmd_refresh(get_states=None, get_services=None) -> int:
+    """Snapshot live external entity ids + the live service registry into external_entities.yml /
+    external_services.yml. get_states/get_services are injected for tests; both default to live HA
+    (needs the host age key + a running HA, present on daniel-server)."""
+    if get_states is None or get_services is None:
         import json
         import probe
-        body = probe.ha_get(probe.ha_get_url(probe.resolve_ip(probe.HA_CONTAINER), "states"),
-                            probe.ha_token())
-        live = [s["entity_id"] for s in json.loads(body)]
+        ip = probe.resolve_ip(probe.HA_CONTAINER)
+        token = probe.ha_token()
+    if get_states is None:
+        live = [s["entity_id"] for s in json.loads(
+            probe.ha_get(probe.ha_get_url(ip, "states"), token))]
     else:
         live = list(get_states())
+    if get_services is None:
+        services = parse_services(json.loads(
+            probe.ha_get(probe.ha_get_url(ip, "services"), token)))
+    else:
+        services = set(get_services())
     config = load_role()
     derived = config_entities(config, config.get("scene") or [])
     external = sorted(e for e in live if e not in derived)
+    external_services = sorted(services - config_services(config))
     STATE_DIR.mkdir(exist_ok=True)
     EXTERNAL_YAML.write_text(_GENERATED_BANNER + _dump_yaml({"entities": external}))
-    print(f"snapshotted {len(external)} external entities")
+    EXTERNAL_SERVICES_YAML.write_text(
+        _GENERATED_BANNER + _dump_yaml({"services": external_services}))
+    print(f"snapshotted {len(external)} external entities + {len(external_services)} services")
     return 0
 
 

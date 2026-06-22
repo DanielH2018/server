@@ -85,6 +85,8 @@ entities:
   - script.bedroom_blip
   - script.bedroom_exit_sleep
   - script.bedroom_fan_nudge
+  - script.bedroom_fan_set
+  - script.bedroom_lights_set
   - script.bedroom_notify
   - script.bedroom_set_natural_brightness
   - select.0x001788010ff46108_power_on_behavior
