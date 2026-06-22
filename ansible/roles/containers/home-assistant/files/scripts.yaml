@@ -371,6 +371,10 @@ bedroom_fan_set:
             - service: input_boolean.turn_on
               target:
                 entity_id: input_boolean.bedroom_fan_manual
+            # Arm the accumulator to the level 100% maps to (9 = L9, the top of the DREO's 9 levels —
+            # see pct_to_level in fan.jinja) BEFORE commanding, so bedroom_fan_manual_detect treats the
+            # parent-less cloud echo as expected, not an external manual change. If the fan is ever
+            # swapped for a different level count, this 9 must track that count.
             - service: input_number.set_value
               target:
                 entity_id: input_number.bedroom_fan_expected_level
