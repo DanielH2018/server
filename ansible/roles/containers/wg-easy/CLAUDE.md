@@ -10,7 +10,7 @@ WireGuard VPN with the wg-easy web admin, for remote access into the homelab.
 - **UI port:** 51821 · **URL:** `wg-easy.<domain>` (server, behind Authelia) / `http://<pi-lan-ip>:51821` (Pi)
 - **WireGuard UDP port:** `udp_port` per host — **51820 on daniel-server, 51822 on daniel-pi**
   (both sit behind one public IP/router, so the listen ports must differ).
-- **Networks:** apps (server) / proxy (Pi)
+- **Networks:** monitoring (server) / proxy (Pi)
 - **Config in:** each `ansible/inventory/host_vars/<host>.yml` → `containers_list`
 
 ## Notable

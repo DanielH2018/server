@@ -90,16 +90,17 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `brightness_step_*` no-ops. Presence
   (FP300) + an `input_boolean` manual-off override + an alarm-driven morning reset live in the
   same file; `bedroom_presence_on` and the morning reset BOTH call `script.bedroom_apply_natural`.
-  The lux gate is window-aware (`in morning window OR illuminance < 50` — wake regardless of ambient
+  The lux gate is window-aware (`in morning window OR illuminance < 75` — wake regardless of ambient
   light during the 15-min window, gate on darkness afterwards) and lives in ONE place:
   `binary_sensor.bedroom_auto_light_allowed` (templates.yaml). `bedroom_presence_on` (its darkness
-  condition) and `bedroom_apply_natural_gated` reference that sensor — tune the 50-lux threshold / window
+  condition) and `bedroom_apply_natural_gated` reference that sensor — tune the 75-lux threshold / window
   there, once. The window reads `sensor.bedroom_wake_start` (the shared dynamic-wake source — see below),
   the SAME sensor the dispatcher's morning exception uses, so the two are inherently in sync (no duplicated
   formula). **Feedback-loop caveat (tuning):** `sensor.aqara_fp300_illuminance` is dominated by the
   bedroom lights themselves (~640 lux with them on, ~48 off), so the gate is partly circular — turning the
-  lights off makes the room read "dark," which can have `presence_on` re-light it ~30 s later. The 50-lux
-  threshold sits right in this room's lights-off ambient (~48), so it's borderline; pick a value clearly
+  lights off makes the room read "dark," which can have `presence_on` re-light it ~30 s later. The 75-lux
+  threshold sits ABOVE this room's lights-off ambient (~48), so with the lights off the room always reads
+  "dark" at night and the gate is effectively always-allow then; pick a value clearly
   below the lights-off daytime ambient if you want to stop daytime auto-lighting (this is why the fan
   button stays out of light control entirely). The illuminance also **LAGS** (sleepy battery sensor on
   `light_sampling: low`, ~100 s to reflect a lights-off drop) — see the sun-aware button-1 HOLD note below.
@@ -110,8 +111,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   auto-light, it calls `script.bedroom_blip` (off -> 15% warm 2700K ~1s -> off) so you get an
   acknowledgement instead of silence. `bedroom_blip` is the inverse of `bedroom_alert_pulse` — it
   needs NO `scene.create` snapshot because it only runs with the lights already off, so a plain
-  `turn_off` restores the known state. No feedback loop: it fires only at illuminance >= 50 (bright
-  ambient), and a ~1s blip can't satisfy `presence_on`'s `below: 50 for: 30s`. No cooldown initially;
+  `turn_off` restores the known state. No feedback loop: it fires only at illuminance >= 75 (bright
+  ambient), and a ~1s blip can't satisfy `presence_on`'s `below: 75 for: 30s`. No cooldown initially;
   add a trigger `for:` debounce if presence flapping makes it chatty.
   **Tap Dial button-1 HOLD blips too (since 2026-06-20).** The "reset to auto" branch in
   `bedroom_tap_dial_control` calls the SAME `script.bedroom_blip` when its lux-gated apply
