@@ -1,7 +1,7 @@
 # HA Testing & Interaction Hardening — Design
 
 - **Date:** 2026-06-22
-- **Status:** Approved (brainstorming) — pending spec review
+- **Status:** Approved (brainstorming, revised post-review) — pending spec re-review
 - **Related:** [`2026-06-19-ha-jinja-unit-testing-design.md`](2026-06-19-ha-jinja-unit-testing-design.md),
   [`2026-06-20-ha-config-validation-design.md`](2026-06-20-ha-config-validation-design.md),
   [`2026-06-21-ha-state-model-phase1-representation-design.md`](2026-06-21-ha-state-model-phase1-representation-design.md),
@@ -9,204 +9,238 @@
 
 ## Context & Problem
 
-Home Assistant testing in this repo is **barbell-shaped**: very fast pure-function tests at one
-end (the `custom_templates/*.jinja` macro unit tests), and slow live-deploy verification at the
-other (`ha-deploy` → `probe.py ha`), with almost nothing in the middle. Three classes of error
-therefore cost a full ~120 s container recreate to discover, or are never tested at all:
+Home Assistant testing in this repo is **barbell-shaped**: fast pure-function tests at one end
+(the `custom_templates/*.jinja` macro unit tests), slow live-deploy verification at the other
+(`ha-deploy` → `probe.py ha`). The existing *deterministic* validation covers two property classes:
 
-1. **Schema / integration-option errors** — the structural `validate-ha-config` hook
-   (`scripts/validate_ha_config.py`) deliberately does *not* do HA schema validation
-   (unknown keys, bad integration options, bad service refs). Its own docstring and `prek.toml`
-   flag `hass --script check_config` as the out-of-scope next rung. Today the live deploy is the
-   first thing that catches these.
-2. **Automation *decision* logic** — the gating `condition:`/`choose:` blocks that decide what an
-   automation does. Only `light_decision` (the Phase-2 mediator gate) has been extracted into a
-   pure, truth-table-tested macro; the rest of the compound gates live inline in YAML, untestable
-   except by deploying.
-3. **Runtime "why did/didn't it fire"** — there is no tooling to pull *why* an automation no-op'd
-   (which condition blocked it). `probe.py ha` reads state but not execution traces.
+- **Structure** — `validate_ha_config.py` (YAML syntax, duplicate keys, broken `!include`, inline
+  Jinja *syntax*).
+- **Write-ownership** — `ha_state_model.py` + `state/*.yml` (single-writer hard check via
+  `sanctioned_writers.yml`, the override-writer tripwire, and **entity-reference resolution**
+  against `external_entities.yml`).
 
-The Phase-1/Phase-2 state-model work created the substrate to close the middle: the codebase now
-thinks in terms of **cells → writers → decisions**, and `light_decision` proves the
-decision-macro pattern works.
+Three failure classes are **not** validated deterministically today and surface only at runtime or
+by observing wrong behavior:
+
+1. **Service/action calls** — a typo'd `service: notify.pixel_watch_3` is unchecked (the documented
+   `service_not_found` Repair class — the repo's actual historical bug shape).
+2. **Mediator `reason` contract** — an unquoted `reason: off` (→ YAML `false` → silent no-op) or a
+   typo'd reason is unchecked (documented CLAUDE.md trap).
+3. **The most-edited decision logic** — `bedroom_apply_natural`'s nightlight-vs-wake selection: the
+   mutual-exclusion boundary is protected only by a comment (`scripts.yaml:139-143`), not a test.
+
+Plus two ergonomic gaps: nothing enforces that a new macro has a test, and there is no tooling to
+answer "the automation ran but no-op'd — which condition blocked it."
+
+The Phase-1/2 state-model work makes closing #1–#3 cheap and reliable: the codebase thinks in
+**cells → writers → decisions**, the mediator gives a single state-change chokepoint to validate,
+and the `refresh`-snapshot pattern already validates entity references against a live-HA snapshot.
+
+### Design principle (from the operator)
+
+> Deterministic validation = **testing properties** (a single correct answer), with **clearly
+> defined, well-managed state changes**. **No flaky/fragile testing** — if it cannot be made
+> reliable, do not rely on it. Fill gaps that can be closed **reliably and lightweight**; do not
+> chase every bug with a heavy test suite. Enforcement should not live in CLAUDE.md alone.
+
+This principle drove the revision: the work below is purely additive, deterministic, lightweight,
+and validated against the **live, running HA** (the authoritative oracle — it has every
+integration/entity/service loaded), so it has none of a cold `check_config`'s blindness.
 
 ## Goals
 
-- Catch HA **schema** errors before deploy, locally, with zero ongoing maintenance.
-- Make automation **decision logic** unit-testable, and *enforce* that new compound gates are
-  extracted into tested macros (mirroring the `sanctioned_writers.yml` enforcement style).
-- Give `probe.py` / `ha-verify-state` a **canonical, reliable** way to answer "why did/didn't this
-  automation fire" using HA's own trace API.
+- Deterministically validate **reference integrity** (entities + services resolve) and **contract
+  integrity** (mediator state-change calls are well-formed) — the two property classes that map to
+  the repo's actual bugs.
+- Make the most-edited decision logic **testable** (extract one macro with a real boundary bug
+  surface) and **enforce** that macros carry tests.
+- Give `probe.py` / `ha-verify-state` a reliable way to answer "why did this run no-op."
 
 ## Non-Goals
 
-- **No heavy CI in GitHub.** The Docker-based schema check runs **locally only**. CI keeps running
-  only the existing *fast* (sub-second, no-Docker) suite.
-- **No big-bang rewrite** of working automations. The decision-macro pattern is enforced going
-  forward + piloted on 2 high-value automations; the long tail is burned down opportunistically.
-- **No full HA integration harness** (ephemeral HA driven via API to assert service calls). Out of
-  scope; revisit only if Components 1–3 prove insufficient.
-- **No new write path to HA.** Git/Ansible remains the write path; the trace tooling is read-only.
+- **No Docker `check_config` gate.** Its harness is fragile (exits 0 on errors in some HA versions;
+  output-string parsing against monthly reword) and it is blind to the `.storage`/HACS-configured
+  half of HA. It cannot be made cleanly reliable without disproportionate effort, so per the
+  operator's principle it is **cut**. HA *schema* errors remain caught by the live deploy. (Earlier
+  draft proposed it; removed after review.)
+- **No automated "decision complexity" guard.** "Is this condition too complex / should it be a
+  macro" is a taste judgment — not a property with one correct answer — so any check for it is
+  either flaky (a naive operator-count heuristic flags even the reference-pattern macro callers,
+  e.g. `automations.yaml:1385`) or a high-maintenance AST linter. Cut. The decision-macro pattern is
+  *documented* as guidance; the things that actually matter (references resolve, logic is tested)
+  are enforced deterministically below.
+- **No `bedroom_notify` macro pilot.** Its hard part is side-effecting control flow (the away-hold
+  vs push orchestration with `persistent_notification.create`/`dismiss`/`stop`), which cannot be a
+  pure value→token macro; the extractable part is four trivial ternaries. Low ROI. Cut.
+- **No `websockets` async dependency.** The trace puller uses the existing sync/`requests`/stdlib
+  style of `probe.py`.
+- **No ephemeral-HA integration harness.** Too heavy; deferred indefinitely.
+- **No new write path to HA.** Git/Ansible stays the write path; the trace tool is read-only.
 
 ---
 
-## Component 1 — `check_config` schema gate (local-only)
+## Component 1 — Reference & Contract Integrity gate (headline)
 
-### What
-A new `scripts/check_ha_config.py` that runs HA's own `hass --script check_config` against the
-assembled config in a Docker HA image, and reports any schema/integration-option error before a
-deploy recreates the container.
+A single pure-Python gate, extending `scripts/ha_state_model.py` and its `refresh` snapshot, that
+validates three deterministic properties against a **live-HA snapshot** and fails CI on violation.
+Runs inside the existing fast `validate-ha-config` prek hook + CI (no Docker, <1 s).
 
-### How
-1. **Assemble** the deployed `/config` layout into a tempdir by **reusing
-   `validate_ha_config.assemble_config()`** — no second copy of the assembly logic.
-2. **Dummy secrets:** scan the assembled config for `!secret <key>` tokens and emit a
-   `secrets.yaml` mapping each referenced key to a typed placeholder (string by default; numeric
-   for the few keys that require a number). Deriving from what is *actually referenced* means the
-   dummy file cannot drift from `secrets.yaml.j2`.
-3. **Version-matched image:** read the LSIO tag from
-   `ansible/roles/containers/home-assistant/templates/docker-compose.yml.j2`
-   (`lscr.io/linuxserver/homeassistant:<X.Y.Z>-lsNN`), strip the `-lsNN` suffix, and run:
-   ```
-   docker run --rm -v <tmp>:/config ghcr.io/home-assistant/home-assistant:<X.Y.Z> \
-     python -m homeassistant --script check_config -c /config
-   ```
-   Renovate bumps the prod LSIO pin; the check image version tracks it automatically (single
-   source of version truth).
-4. **Allow-list filter:** parse the output and discard **only** the known
-   `Integration 'adaptive_lighting' not found` / `dreo` not-found lines (these are HACS-installed,
-   not in git). Any **other** error → non-zero exit. The allow-list is a small, named constant with
-   a comment explaining why each entry is tolerated.
+### 1a. Entity references resolve (strengthen existing)
+The state model already resolves entity references against `config refs ∪ external_entities.yml`.
+Audit and close any coverage gaps (trigger entities, `target.entity_id`, `state_attr`/`states('…')`
+reads). Statically un-resolvable templated entity ids remain skipped (documented limitation, as
+today).
 
-### Placement (local-only)
-- **Hard pre-deploy gate in the `ha-deploy` skill:** run `check_ha_config.py` before
-  `ansible-playbook`; block the deploy on a real error. A `--skip-check` escape exists for
-  emergencies. Docker is already present on daniel-server, so the image is available locally; the
-  first run pulls the official image once.
-- **Standalone:** `uv run python scripts/check_ha_config.py` for ad-hoc runs.
-- **NOT** a GitHub CI job and **NOT** a per-commit prek hook (Docker pull/run is too slow next to
-  the <1 s structural hook).
+### 1b. Service/action calls resolve (new)
+- Extend `refresh` to also `GET /api/services` from live HA and snapshot the registered service
+  list into a tracked file (e.g. `state/external_services.yml`), exactly like `external_entities.yml`
+  (services from HACS/custom integrations — `adaptive_lighting.apply`, `dreo.*` — are present in the
+  live snapshot, so there is no custom-integration blindness).
+- Validate every `service:`/`action:` call in `automations.yaml`/`scripts.yaml`/`scenes.yaml`
+  against `config-defined services (every script.<name>) ∪ snapshot`.
+- Templated service names (`service: "{{ … }}"`) are skipped (cannot resolve statically) — a named,
+  documented limitation, consistent with the entity-id handling.
+- This catches the `notify.pixel_watch_3` `service_not_found` class.
 
-### Tests (fast, in existing CI)
-- Unit-test the **output parser** (allow-list filtering) against fixture `check_config` outputs
-  (a clean run, an AL/dreo-only run that must pass, a run with a real error that must fail).
-- Unit-test the **dummy-secrets generator** (correct keys extracted, typed placeholders).
-- The Docker invocation itself is local integration only — not unit-tested.
+### 1c. Mediator `reason` contract (new)
+For every call site of the actuator mediators (`script.bedroom_lights_set`,
+`script.bedroom_fan_set`), assert the `reason`:
+- **is present**,
+- **is in the mediator's valid vocabulary** — `lights: {presence, natural, wake, off}`,
+  `fan: {auto, boost, off}`. The vocabulary is derived from the mediator's own `choose:` branches
+  where feasible (single source of truth), else a small declared constant kept next to the mediator,
+- **is a string, not a YAML-coerced bool** — i.e. the loaded value must not be Python `True`/`False`
+  (catches the unquoted `reason: off`/`on` → silent no-op trap).
 
----
+This is the deterministic expression of "well-managed state changes": single-writer already
+guarantees actuator writes flow *through* the mediator; 1c guarantees the calls *into* it are
+well-formed.
 
-## Component 2 — decision-macro pattern + guard + pilot
+### Snapshot freshness
+The service snapshot (1b) is committed and refreshed via `ha_state_model.py refresh`, identical to
+the existing entity snapshot — the gate is only as current as the last `refresh`; adding an
+integration means re-running `refresh` and committing. A new committed snapshot that differs from a
+re-derivation is freshness-gated like `derived_state.yml` today.
 
-### The contract (documented convention)
-A *decision macro* is a pure function in `custom_templates/*.jinja`:
-- **Inputs:** entity states / time as plain values (numbers, bools, strings). No `states()` /
-  `now()` / `is_state()` inside — those stay in the YAML caller, which passes plain values in.
-- **Output:** an **action token** — e.g. `natural|wake|off|noop`, a level int, an advice string.
-- **Tested:** a truth-table test in `tests/test_*_macros.py` via the existing `jinja_harness`.
-
-`light_decision` is the reference implementation; `fan_target_level`, `auto_light_allowed`,
-`ventilation_advice`, and the wake macros already conform. The automation YAML becomes a thin
-**trigger → compute decision via macro → dispatch on the token → service call** shell (ideally the
-service call routes through the Phase-2 mediator script).
-
-This convention is documented in the HA-role `CLAUDE.md` "Testing" section with a worked example.
-
-### The guard (mirrors `sanctioned_writers.yml`)
-A lint added to `scripts/ha_state_model.py` (it already parses the automation/script YAML):
-- **Flags** any `condition:` / `choose:`-condition template whose logic **exceeds a complexity
-  threshold** (≥3 boolean/comparison operators: `and`/`or`/`not`/`==`/`!=`/`<`/`>`/`<=`/`>=`)
-  **and** is not a single macro call. This targets the "compound gate inline in YAML" smell, not
-  simple one-liners like `{{ is_state('x','on') }}`.
-- **Escape hatch:** a hand-maintained `state/inline_decision_exemptions.yml` (automation/script id
-  → reason) lists accepted inline gates. New compound inline gating **fails** until refactored into
-  a macro **or** exempted-with-reason.
-- Runs inside the existing fast `validate-ha-config` prek hook + CI (pure-Python, no Docker).
-- **Rollout:** the existing automations that trip the threshold and are *not* being piloted are
-  seeded into `inline_decision_exemptions.yml` with a `# burn down opportunistically` note, so the
-  guard goes green immediately and only *new* inline complexity is blocked.
-
-### Pilot conversions (2 now)
-1. **`bedroom_apply_natural` exception selector** — extract the `choose:` ladder's *selection*
-   (nightlight vs wake vs default, given `sleep_mode` / `hour` / wake-window state) into
-   `natural_exception(...) -> token`. The single most-edited, most-gotcha-laden piece. (The
-   brightness math is already in macros; this extracts the *which-exception-wins* logic.)
-2. **`script.bedroom_notify` routing** — extract the channel/importance/hold-vs-push decision
-   (`pierce` + quiet state + away → route + channel + importance) into `notify_routing(...)`.
-   High-traffic, pure logic, currently inline and untested.
-
-### Tests (fast, in existing CI)
-Truth-table tests for `natural_exception` and `notify_routing` via the `jinja_harness`, plus tests
-for the guard's complexity detector (a known-simple condition passes, a known-compound one is
-flagged, an exempted one passes).
+### Tests
+Unit tests (pure-Python, fast, in CI) for: the service-call extractor + resolver (a known-good
+config passes; a deliberately typo'd service fails; a config-defined `script.*` resolves; a
+templated name is skipped), and the mediator-reason checker (valid reason passes; out-of-vocabulary
+fails; YAML-coerced-bool `off` fails; quoted `"off"` passes).
 
 ---
 
-## Component 3 — WS trace diagnosis in `probe.py`
+## Component 2 — `natural_exception` macro + truth-table test
 
-### What
-A new **read-only** subcommand `probe.py ha trace <automation>` (alias `ha why <automation>`) that
-answers "why did / didn't this automation fire" at per-condition fidelity, using HA's own
-WebSocket trace API — the exact mechanism the HA UI trace timeline uses.
+Extract the **selection** logic from `bedroom_apply_natural`'s `choose:` ladder (`scripts.yaml:135-178`)
+— nightlight vs wake vs default, given `sleep_mode` / `hour` / wake-window state — into a pure
+`natural_exception(sleep_mode, hour, in_window) -> 'nightlight'|'wake'|'default'` macro in
+`custom_templates/lighting.jinja`. The YAML caller computes `in_window` (already an
+`in_wake_window` macro call), `hour`, and `sleep_mode`, passes plain values in, and `choose:`-es on
+the returned token. The brightness math already lives in macros; this extracts only the
+which-exception-wins logic.
 
-### How
-1. Resolve the automation id via the existing `match_automation` alias-slug logic (handles the
-   `alias`-slug ≠ `id` trap).
-2. Open a WebSocket to `/api/websocket`, complete the `auth` handshake with `ha_token()`.
-3. Call `trace/list` for `{domain: automation, item_id: <id>}` → recent run ids; then `trace/get`
-   for the latest run → the full trace dict.
-4. Format a human timeline: trigger → each condition with **pass/fail** → the chosen `choose:`
-   branch → the actions called → any error. Mirrors the HA UI trace.
+**Value:** the nightlight↔wake mutual exclusion at the boundary — including the documented
+early-alarm trap (`(sleep_mode or hour < 5) and not in_window`, `scripts.yaml:139-143`) — becomes a
+**truth-table test** instead of a load-bearing comment.
 
-### Dependency & safety
-- Adds a WS client (`websockets`) to the uv dev deps — consistent with the "managed, pinned in
-  `uv.lock`" preference. The subcommand only ever sends `trace/*` reads, so it remains read-only
-  and stays **allow-listed** (the auto-approve hook keys on the `probe.py` command line, not the
-  network).
+The decision-macro contract (pure values in → action token out; no `states()`/`now()` inside; a
+truth-table test) is documented in the HA-role `CLAUDE.md` "Testing" section, with `light_decision`
+and `natural_exception` as the reference examples. This is *guidance*; enforcement of what matters
+comes from Components 1 and 3, not from the doc.
 
-### Wiring
-Update the `ha-verify-state` skill so the "why didn't it fire" diagnosis routes through
-`ha trace` / `ha why`.
+**Tests:** truth-table test for `natural_exception` via `jinja_harness`, covering the boundary
+(early alarm with `hour < 5` inside the window must select `wake`, not `nightlight`).
 
-### Tests (fast, in existing CI)
-Unit-test the trace **parser** against a fixture trace JSON (a run blocked at a condition; a run
-that completed; a run with an error). The live WS round-trip is local integration only — exercised
-against live HA via the subcommand, not unit-tested.
+---
+
+## Component 3 — Macro-test guard
+
+A lightweight CI check (rides the existing `validate-ha-config` hook, or a small standalone checked
+by pytest) asserting **every macro defined in `custom_templates/*.jinja` is referenced by at least
+one test** under `tests/`. Grep/parse-based — no AST, no complexity threshold, no exemption file.
+
+This is the deterministic replacement for the cut complexity guard: it enforces the *testability*
+property (a single correct answer — "is this macro referenced by a test: yes/no") rather than a
+taste judgment, so you cannot add an untested decision macro. It honors "enforcement not in
+CLAUDE.md alone."
+
+**Tests:** the guard's own check (a macro with a test passes; an unreferenced macro fails),
+fixture-based.
+
+---
+
+## Component 4 — WS trace diagnosis in `probe.py`
+
+A read-only `probe.py ha trace <automation>` (alias `ha why <automation>`) that pulls HA's own
+execution trace and prints a per-condition timeline (trigger → each condition pass/fail → chosen
+`choose:` branch → actions → error). Resolves the automation id via the existing `match_automation`
+alias-slug logic.
+
+### Mechanism & dependency
+HA traces are a **WebSocket** API (`trace/list` + `trace/get`). Implement a **minimal synchronous**
+WS handshake (`auth` → command) using the stdlib / existing `requests`-era style of `probe.py` —
+**no async `websockets` dependency** (a sync diagnostic subprocess script must not drag in an event
+loop). The subcommand only ever sends `trace/*` reads, so it stays read-only and allow-listed (the
+auto-approve hook keys on the `probe.py` command line).
+
+### Honest scope (this is diagnosis, not validation)
+- Traces are **in-memory**, capped (`stored_traces` default 5), and **wiped on every HA restart /
+  deploy** — so immediately after a deploy the buffer is empty.
+- An automation that **never triggered** produces **no trace** (`trace/get` only captures runs). A
+  run blocked by a *condition* IS traced (the useful case); a trigger that never matched is not.
+- Therefore `ha why` answers "it ran but no-op'd — which condition blocked it," **not** "nothing
+  happened." For the no-run case, pair with `probe.py ha get logbook/<entity>` + `last_triggered`.
+  The subcommand's help text states this boundary explicitly.
+
+### Wiring & tests
+Wire `ha-verify-state` to route "why didn't it fire" through `ha trace`/`ha why`. Unit-test the
+trace **parser** against fixture trace JSON (a condition-blocked run; a completed run; an errored
+run); the live WS round-trip is local integration only.
 
 ---
 
 ## Testing strategy (summary)
 
-| Layer | What it covers | Where it runs |
+| Layer | Covers | Where it runs |
 |---|---|---|
-| Macro truth-table tests (incl. new `natural_exception`, `notify_routing`) | Decision logic | CI + prek (fast) |
-| Guard complexity-detector tests | The lint itself | CI + prek (fast) |
-| `check_config` parser + dummy-secrets tests | Component 1 logic | CI + prek (fast) |
-| Trace parser tests | Component 3 logic | CI + prek (fast) |
-| `check_config` Docker run | Real HA schema validation | **Local only** (ha-deploy gate + standalone) |
-| WS trace round-trip | Real trace fetch | **Local only** (against live HA) |
+| Reference & contract integrity tests (extractor/resolver, mediator-reason) | Component 1 logic | CI + prek (fast, no Docker) |
+| `natural_exception` truth-table test | Component 2 boundary logic | CI + prek (fast) |
+| Macro-test-guard self-test | Component 3 | CI + prek (fast) |
+| Trace parser test | Component 4 logic | CI + prek (fast) |
+| `refresh` live snapshot | Keeps the gate's oracle current | Local (operator-run, committed) |
+| WS trace round-trip | Real trace fetch | Local only (against live HA) |
 | `ha-deploy` → `probe.py` | End-to-end live verification | Local (unchanged) |
 
 ## Rollout / phasing
 
-One spec, three **independently shippable** components. Suggested plan phasing:
+One spec, four **independently shippable** components, one focused commit each (minimizes the
+prek-auto-stash concurrent-session hazard). Suggested order by value/independence:
 
-1. **Component 1** — `check_config` script + tests + `ha-deploy` gate.
-2. **Component 3** — WS trace subcommand + parser tests + `ha-verify-state` wiring.
-3. **Component 2** — decision-macro convention + guard + exemptions seed + 2 pilot conversions
-   (largest; touches working automations last).
+1. **Component 1** — reference & contract integrity gate (+ `refresh` service snapshot). Headline.
+2. **Component 2** — `natural_exception` macro + test + convention doc.
+3. **Component 3** — macro-test guard.
+4. **Component 4** — WS trace subcommand + `ha-verify-state` wiring.
 
-Each phase is independently mergeable and testable. The HA-role `CLAUDE.md` "Testing" section is
-updated per phase.
+The HA-role `CLAUDE.md` "Testing" section is updated per phase.
+
+## What is explicitly NOT changing
+
+The five existing layers stay as-is: macro unit tests, the structural validator, single-writer +
+override-writer enforcement, the derived state model, and the deploy/verify skills. The plan is
+purely additive to the validation surface (Components 1–3) plus one diagnostic tool (Component 4).
 
 ## Risks & open questions
 
-- **`check_config` exit-code behavior:** some HA versions print errors but exit 0 — the parser must
-  decide pass/fail by scanning output markers, not solely the exit code. Verify against the pinned
-  version during implementation.
-- **Dummy-secrets typing:** a `!secret` key consumed where a number/list is required needs a typed
-  placeholder, not a bare string, or `check_config` will false-fail. Enumerate the referenced keys
-  during implementation and type the few that need it.
-- **Guard threshold tuning:** ≥3 operators is a starting point; tune against the real automation
-  corpus so the initial exemption seed is small and the signal stays high.
-- **`websockets` version:** pin in `uv.lock`; HA's WS auth/`trace` API is stable but confirm the
-  message shapes against the pinned HA version.
+- **Service-name extraction robustness:** `service:`/`action:` appear in several shapes (string,
+  `{{ templated }}`, inside `choose:`/`if`/`repeat`, `parallel`). The extractor must walk the action
+  tree the way `ha_state_model.py` already walks for writers; templated names are skipped. Verify
+  coverage against the real corpus during implementation.
+- **Mediator vocabulary source of truth:** prefer deriving the valid `reason` set from the
+  mediator's `choose:` branches so it cannot drift; fall back to a declared constant beside the
+  mediator only if derivation is brittle.
+- **Snapshot drift:** the service snapshot shares the entity snapshot's failure mode — a stale
+  snapshot can mask a real typo (false pass) or flag a just-added service (false fail until
+  `refresh`). Accepted, identical to the existing entity check; the freshness gate surfaces drift.
+- **WS message shapes:** HA's `trace/list`/`trace/get` payloads are stable but version-sensitive;
+  pin the parser against the running `2026.6.x` shapes and keep the parser tolerant of unknown keys.
