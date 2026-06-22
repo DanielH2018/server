@@ -1480,3 +1480,32 @@
     - service: media_player.turn_off
       target:
         entity_id: media_player.bedroom_display
+# HA runtime-error alert (homelab-wide, no bedroom_ prefix). Actively notifies when OUR code
+# (automations/scripts/template sensors/template helpers) logs an ERROR/CRITICAL at runtime — the
+# runtime complement to the static validation (a macro that throws on an edge case, a template that
+# errors at render). Scope is the pure, tested error_in_scope(level, logger) macro
+# (custom_templates/diagnostics.jinja); third-party/HACS chatter and WARNINGs are excluded there.
+# Routine via bedroom_notify (silent while DND/sleep, held-then-digested while away). The per-source
+# tag coalesces a repeating error into one updating notification. Self-exclusion (its own logger) is
+# the loop-guard: if the notify action itself errors, that ERROR must not re-trigger this automation.
+# Spec: docs/superpowers/specs/2026-06-22-ha-runtime-error-alert-design.md.
+- id: ha_runtime_error_alert
+  alias: HA runtime error alert
+  description: Notify when one of our automations/scripts/templates logs an ERROR/CRITICAL at runtime.
+  mode: queued
+  max: 10
+  trigger:
+    - platform: event
+      event_type: system_log_event
+  condition:
+    - condition: template
+      value_template: >-
+        {% from 'diagnostics.jinja' import error_in_scope %}
+        {{ error_in_scope(trigger.event.data.level, trigger.event.data.name)
+           and trigger.event.data.name != 'homeassistant.components.automation.ha_runtime_error_alert' }}
+  action:
+    - service: script.bedroom_notify
+      data:
+        title: "⚠️ HA error: {{ trigger.event.data.name.split('.')[-1] }}"
+        message: "{{ (trigger.event.data.message | join(' '))[:200] }}"
+        tag: "ha_error_{{ trigger.event.data.name | replace('.', '_') }}"
