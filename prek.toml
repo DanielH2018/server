@@ -69,6 +69,17 @@ language = "system"
 pass_filenames = false
 files = "^(ansible/roles/containers/home-assistant/(templates|files)/.*|scripts/validate_ha_config\\.py)$"
 
+# Validate that every provisioned Grafana dashboard's datasource references resolve to a
+# datasource declared in datasources.yml.j2 (uid or name) or a Grafana built-in. Catches the
+# silent "No data" / stale-uid class (e.g. a lingering hand-imported uid) before deploy.
+[[repos.hooks]]
+id = "validate-grafana-dashboards"
+name = "Validate Grafana dashboard datasource uids"
+entry = "uv run python scripts/validate_grafana_dashboards.py"
+language = "system"
+pass_filenames = false
+files = "^(ansible/roles/containers/grafana/files/dashboards/.*\\.json|ansible/roles/containers/grafana/templates/provisioning/datasources\\.yml\\.j2|scripts/validate_grafana_dashboards\\.py)$"
+
 # Run the repo's Python unit tests via uv: the toposort dependency-resolution filters
 # (gate every deploy's ordering/scope), the monitor-bridge check logic, the
 # auto-approve-readonly Bash classifier (a permission security boundary), and the
