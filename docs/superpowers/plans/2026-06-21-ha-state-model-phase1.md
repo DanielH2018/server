@@ -1341,6 +1341,8 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 **Deliberate scope trims (noted, not gaps):**
 - The threshold **category↔`cfg`-map** cross-check from the spec is NOT implemented (the `cfg` map is a Jinja literal; parsing it is brittle). The two robust structural checks (bad/ok pairing + declared-vs-wired threshold sets) cover the same "half-added metric" failure mode. Revisit if a clean `cfg`-key extraction proves easy.
 - Recorder-`exclude` reference check deferred — low value, and `ha_heartbeat` is the only excluded helper today.
+- **Call-graph attribution** (annotating which automation *triggers* a given script) is NOT implemented — writes are correctly owned by `script.X`; the doc just doesn't trace the triggering automation. Advisory in the spec; dropped here as a derivation nicety, not a guardrail.
+- **Writer attribution is entity_id-static-only** — `device_id`/`area_id`/`label_id`/templated targets are not attributed (the real config uses none). Documented in the generated `STATE.md` preamble; revisit if such targeting is ever introduced.
 
 **Placeholder scan:** none — every step has runnable code/commands.
 

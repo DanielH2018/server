@@ -270,6 +270,11 @@ def render_state_md(model: dict) -> str:
              "# Bedroom HA — Derived State Model", "",
              "Generated from the real automations/scripts/config. The *why* (runtime traps, "
              "feedback loops) lives in this role's `CLAUDE.md`.", "",
+             "> Writer lists are **entity_id-static-only**: they attribute writes by the literal "
+             "`entity_id` of each service call. A write that targets a cell/actuator by `device_id`, "
+             "`area_id`, `label_id`, or a templated `{{ }}` entity is NOT attributed here (the real "
+             "config uses none today). The override-writer tripwire's guarantee holds for "
+             "entity_id-targeted writes — which is every write in this config.", "",
              "## Cells (coordination state)", "", "| Cell | Entity | Purpose |", "|---|---|---|"]
     for name, c in model["cells"].items():
         lines.append(f"| {name} | `{c['entity']}` | {c.get('name', '')} |")
