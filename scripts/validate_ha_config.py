@@ -23,7 +23,7 @@ import tempfile
 from pathlib import Path
 
 import yaml
-from jinja2 import Environment
+from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -179,6 +179,69 @@ def jinja_errors(trees: list, custom_templates_dir: Path) -> list[str]:
     return errors
 
 
+def _macro_names(custom_templates_dir: Path, env: Environment) -> set[str]:
+    """Names of every macro defined in custom_templates/*.jinja, via the AST (nodes.Macro) —
+    not regex, so comment prose like 'macro argument' is never miscaptured."""
+    names: set[str] = set()
+    for jinja_file in sorted(custom_templates_dir.glob("*.jinja")):
+        try:
+            ast = env.parse(jinja_file.read_text())
+        except TemplateSyntaxError:
+            continue  # syntax errors are reported by jinja_errors
+        names |= {m.name for m in ast.find_all(nodes.Macro)}
+    return names
+
+
+def uncoerced_macro_bool_uses(template: str, macro_names: set[str],
+                              env: Environment | None = None) -> list[str]:
+    """Sorted names of known macros used as a BARE and/or/not operand (no `| bool`) in `template`.
+    A `| bool`-wrapped call is a nodes.Filter (not a Call) -> not flagged; a Compare (`== 'x'`) or a
+    standalone `{{ macro() }}` is not an and/or/not operand -> not flagged. find_all recurses, so
+    nested/chained boolean expressions and operands inside call-args are covered."""
+    env = env or Environment()
+    ast = env.parse(template)
+
+    def bare_macro_call(node):
+        if (isinstance(node, nodes.Call) and isinstance(node.node, nodes.Name)
+                and node.node.name in macro_names):
+            return node.node.name
+        return None
+
+    bad: list[str] = []
+    for op in list(ast.find_all(nodes.And)) + list(ast.find_all(nodes.Or)):
+        for operand in (op.left, op.right):
+            name = bare_macro_call(operand)
+            if name:
+                bad.append(name)
+    for neg in ast.find_all(nodes.Not):
+        name = bare_macro_call(neg.node)
+        if name:
+            bad.append(name)
+    return sorted(bad)
+
+
+def macro_bool_coercion_errors(trees: list, custom_templates_dir: Path) -> list[str]:
+    """Flag every known-macro call used as a bare and/or/not operand across the inline templates
+    (from `trees`) and the custom_templates/*.jinja files. AST-based; deterministic."""
+    env = Environment()
+    macro_names = _macro_names(custom_templates_dir, env)
+    if not macro_names:
+        return []
+    sources = [t for tree in trees for t in _iter_template_strings(tree)]
+    sources += [f.read_text() for f in sorted(custom_templates_dir.glob("*.jinja"))]
+    errs: list[str] = []
+    for template in sources:
+        try:
+            for name in uncoerced_macro_bool_uses(template, macro_names, env):
+                snippet = template.strip().splitlines()[0][:80]
+                errs.append(f"macro {name}() used as a boolean and/or/not operand without "
+                            f"`| bool` — a macro renders a STRING (always truthy), so coerce it: "
+                            f"in: {snippet!r}")
+        except TemplateSyntaxError:
+            continue  # reported by jinja_errors
+    return errs
+
+
 def validate(role_dir: Path = ROLE_DIR) -> list[str]:
     """Assemble + structurally load + Jinja-syntax-check the HA config. Returns error strings
     ([] = clean)."""
@@ -192,6 +255,7 @@ def validate(role_dir: Path = ROLE_DIR) -> list[str]:
         # Jinja-check whatever loaded (a structural failure drops that tree but the macro files
         # are checked independently).
         errors += jinja_errors(trees, dest / "custom_templates")
+        errors += macro_bool_coercion_errors(trees, dest / "custom_templates")
         # State-model guardrails (freshness, entity-resolution, override tripwire, structural).
         try:
             import ha_state_model
