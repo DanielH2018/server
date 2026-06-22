@@ -86,34 +86,56 @@ validates three deterministic properties against a **live-HA snapshot** and fail
 Runs inside the existing fast `validate-ha-config` prek hook + CI (no Docker, <1 s).
 
 ### 1a. Entity references resolve (strengthen existing)
-The state model already resolves entity references against `config refs ∪ external_entities.yml`.
-Audit and close any coverage gaps (trigger entities, `target.entity_id`, `state_attr`/`states('…')`
-reads). Statically un-resolvable templated entity ids remain skipped (documented limitation, as
-today).
+The state model already resolves **structural** entity references (`entity_id:` fields, write
+targets) against `config refs ∪ external_entities.yml`, gated to `_MANAGED_DOMAINS`
+(`ha_state_model.py:297`). Audit and close gaps in the **structural** coverage only (trigger
+entities, `target.entity_id`). **Explicitly out of scope (named non-goal):** extracting entity ids
+from inside `{{ }}` template bodies (`states('sensor.…')`/`state_attr(...)`) — that is regex-fragile
+and risks false-positives on dynamically-built ids, i.e. exactly the flakiness the operator forbids.
+Statically un-resolvable templated ids remain skipped, as today. (Note: a typo'd `scene.<id>` is
+*already* caught here — `scene` is in `_MANAGED_DOMAINS` and `config_entities` includes the
+scene-name map ∪ runtime `created_scenes`; no new work needed for scene-name typos.)
 
 ### 1b. Service/action calls resolve (new)
-- Extend `refresh` to also `GET /api/services` from live HA and snapshot the registered service
-  list into a tracked file (e.g. `state/external_services.yml`), exactly like `external_entities.yml`
-  (services from HACS/custom integrations — `adaptive_lighting.apply`, `dreo.*` — are present in the
-  live snapshot, so there is no custom-integration blindness).
-- Validate every `service:`/`action:` call in `automations.yaml`/`scripts.yaml`/`scenes.yaml`
-  against `config-defined services (every script.<name>) ∪ snapshot`.
-- Templated service names (`service: "{{ … }}"`) are skipped (cannot resolve statically) — a named,
-  documented limitation, consistent with the entity-id handling.
-- This catches the `notify.pixel_watch_3` `service_not_found` class.
+- Extend `refresh` to also `GET /api/services` from live HA and snapshot the registered services as
+  a **full flat `{domain.service}` set** into a tracked file (e.g. `state/external_services.yml`).
+  The live snapshot is **complete** — it already includes every config-defined script (registered
+  under the `script` domain) and every HACS/custom-integration service (`adaptive_lighting.apply`,
+  `dreo.*`), so there is no custom-integration blindness.
+- **The service resolver must check ALL domains unconditionally — it must NOT inherit the entity
+  resolver's `_MANAGED_DOMAINS` gate.** This is the critical difference from 1a: the entity resolver
+  skips un-enumerable domains (`notify`, `media_player`, … — see the exclusion comment at
+  `ha_state_model.py:295`), so cloning it would let `notify.pixel_watch_3` slip through and defeat
+  the headline goal. Because the service snapshot is *complete*, every `domain.service` can be
+  checked — so it is. Build a parallel checker, do not reuse `resolution_errors`.
+- Resolution universe: **the snapshot is the authority.** The only config-side term is a freshness
+  escape-hatch — `{script.<name> for every config-defined script}` — which exists *solely* to avoid
+  a false-fail on a brand-new script added but not yet `refresh`ed (the snapshot already contains
+  every *previously-refreshed* script).
+- Templated service names (a service string containing `{{`) are skipped (cannot resolve
+  statically) — a named, documented limitation, consistent with the entity-id handling. The current
+  corpus has **zero** templated service names and 36 literal ones, so today's false-positive risk is
+  ~nil.
+- This catches the `notify.pixel_watch_3` `service_not_found` class — the repo's actual bug shape.
 
 ### 1c. Mediator `reason` contract (new)
 For every call site of the actuator mediators (`script.bedroom_lights_set`,
 `script.bedroom_fan_set`), assert the `reason`:
-- **is present**,
-- **is in the mediator's valid vocabulary** — `lights: {presence, natural, wake, off}`,
-  `fan: {auto, boost, off}`. NB the lights mediator's `choose:` branches dispatch on the decision
-  *output* (`action == 'natural'`), not the `reason` *input*, so the input vocabulary is taken from
-  the mediator's `reason` dispatch — i.e. the reasons `light_decision` accepts (`presence` +
-  the pass-through set) and `bedroom_fan_set`'s reason branches — or a small declared constant kept
-  beside the mediator, NOT from the `choose:` blocks,
-- **is a string, not a YAML-coerced bool** — i.e. the loaded value must not be Python `True`/`False`
-  (catches the unquoted `reason: off`/`on` → silent no-op trap).
+- **is present** — a call with **no `data:` block at all** (`- service: script.bedroom_lights_set`
+  with nothing else) is treated as *reason absent → fail*, not skipped. This is the most likely
+  authoring slip and is trivially catchable.
+- **is a string in the mediator's valid vocabulary** — `lights: {presence, natural, wake, off}`,
+  `fan: {auto, boost, off}`. The vocabulary is a **small declared constant beside the checker**
+  (`MEDIATOR_REASONS = {"script.bedroom_lights_set": {...}, "script.bedroom_fan_set": {...}}`), with
+  a comment pointing at the macro/`choose:`. **Do NOT derive it by regex** over `light_decision`'s
+  Jinja or `bedroom_fan_set`'s `choose:` — that is two brittle extraction paths (the lights vocab
+  is a Jinja literal, the fan has no macro at all), exactly the fragile coupling to avoid. A drifted
+  constant fails *safe* (a newly-added valid reason false-fails until the constant is updated, which
+  surfaces loudly) rather than false-passing.
+- The single assertion `isinstance(reason, str) and reason in VOCAB` subsumes the YAML-bool trap:
+  the config is loaded through `HAConfigLoader(yaml.SafeLoader)` (YAML 1.1), so an unquoted
+  `reason: off`/`on` is already a Python `bool` by the time the checker sees it → `isinstance(...,
+  str)` is `False` → fail; `reason: "off"` stays a string and passes.
 
 This is the deterministic expression of "well-managed state changes": single-writer already
 guarantees actuator writes flow *through* the mediator; 1c guarantees the calls *into* it are
@@ -127,9 +149,10 @@ re-derivation is freshness-gated like `derived_state.yml` today.
 
 ### Tests
 Unit tests (pure-Python, fast, in CI) for: the service-call extractor + resolver (a known-good
-config passes; a deliberately typo'd service fails; a config-defined `script.*` resolves; a
-templated name is skipped), and the mediator-reason checker (valid reason passes; out-of-vocabulary
-fails; YAML-coerced-bool `off` fails; quoted `"off"` passes).
+config passes; a typo'd service in an **unmanaged domain** like `notify.pixel_watch_3` fails —
+proving the no-domain-gate behavior; a config-defined `script.*` resolves; a templated name is
+skipped), and the mediator-reason checker (valid reason passes; out-of-vocabulary fails;
+YAML-coerced-bool `off` fails; quoted `"off"` passes; a call with **no `data:` block** fails).
 
 ---
 
@@ -152,8 +175,15 @@ truth-table test) is documented in the HA-role `CLAUDE.md` "Testing" section, wi
 and `natural_exception` as the reference examples. This is *guidance*; enforcement of what matters
 comes from Components 1 and 3, not from the doc.
 
-**Tests:** truth-table test for `natural_exception` via `jinja_harness`, covering the boundary
-(early alarm with `hour < 5` inside the window must select `wake`, not `nightlight`).
+**Implementation note:** the macro must `| bool`-coerce `sleep_mode` and `in_window` (macro args
+arrive as *strings* from rendered macro output — the same pattern as `auto_light_allowed`'s
+`in_window | bool` at `lighting.jinja:40`), or any non-empty string is always truthy and the gate
+breaks.
+
+**Tests:** truth-table test for `natural_exception` via `jinja_harness`, covering the boundary —
+`hour=4` (in), `hour=5` (out, the strict `< 5`), the early-alarm case (`sleep_mode=False, hour=4,
+in_window=True` → must be `wake`, not `nightlight`), and both string and bool forms of the bool
+args.
 
 ---
 
@@ -168,8 +198,13 @@ property (a single correct answer — "is this macro referenced by a test: yes/n
 taste judgment, so you cannot add an untested decision macro. It honors "enforcement not in
 CLAUDE.md alone."
 
-**Tests:** the guard's own check (a macro with a test passes; an unreferenced macro fails),
-fixture-based.
+**"Referenced by a test" is defined precisely** as the macro name appearing as the macro-name
+argument to a `render_macro(<FILE>, "<name>", …)` call (the one true invocation path —
+`jinja_harness.py:82`), **not** a bare substring match (which a comment, docstring, or an unrelated
+assertion message could spoof). This keeps the guard's "single correct answer" property intact.
+
+**Tests:** the guard's own check (a macro invoked via `render_macro(...)` passes; an unreferenced
+macro fails; a macro whose name appears only in a comment fails), fixture-based.
 
 ---
 
@@ -181,11 +216,28 @@ execution trace and prints a per-condition timeline (trigger → each condition 
 alias-slug logic.
 
 ### Mechanism & dependency
-HA traces are a **WebSocket** API (`trace/list` + `trace/get`). Implement a **minimal synchronous**
-WS handshake (`auth` → command) using the stdlib / existing `requests`-era style of `probe.py` —
-**no async `websockets` dependency** (a sync diagnostic subprocess script must not drag in an event
-loop). The subcommand only ever sends `trace/*` reads, so it stays read-only and allow-listed (the
-auto-approve hook keys on the `probe.py` command line).
+HA traces are **WebSocket-only** — verified on live 2026.6.3 that both
+`GET /api/config/automation/trace/<id>` and `/api/trace/automation` return 404. So WS is mandatory;
+there is no REST shortcut.
+
+**This is genuinely new plumbing, not an extension of existing code — the spec must budget for it.**
+`probe.py`'s entire HA surface is `curl` *subprocess* calls (`ha_curl_argv:93`, `ha_get:358`) — there
+is no Python HTTP-client object to extend, and `requests` is not even used (it's a transitive dep of
+`community.docker`). `requests` cannot do a WS upgrade, and stdlib `http.client`/`urllib` do not
+implement WS framing. So "no async `websockets` dep" means a **hand-rolled, synchronous stdlib WS
+client** (~40–60 lines: `socket` + the `Sec-WebSocket-Key` handshake + a single RFC-6455 masked text
+frame + read-until-response + close, via `base64`/`hashlib`). This is doable and genuinely sync, but
+it is NOT "minimal" and NOT the existing curl style — the plan allocates a dedicated WS-client
+function **with its own fixture-backed unit test of the frame encoder/decoder**, kept separate from
+the trace parser.
+
+Auth flow: `connect → recv auth_required → send {type:auth, access_token} → recv auth_ok →
+send {id, type:trace/list|trace/get}`. The `claude_ha_token` is the same bearer.
+
+The subcommand must **only ever send `trace/list`/`trace/get`** (never a free-form WS command from an
+argument), so it stays provably read-only. It remains allow-listed because the auto-approve hook
+keys on the `probe.py` command line — note the hook cannot see the raw socket traffic, which is why
+the only-trace-reads constraint is load-bearing, not cosmetic.
 
 ### Honest scope (this is diagnosis, not validation)
 - Traces are **in-memory**, capped (`stored_traces` default 5), and **wiped on every HA restart /
@@ -221,11 +273,15 @@ One spec, four **independently shippable** components, one focused commit each (
 prek-auto-stash concurrent-session hazard). Suggested order by value/independence:
 
 1. **Component 1** — reference & contract integrity gate (+ `refresh` service snapshot). Headline.
+   **Intra-component ordering constraint:** the first commit must land the `refresh` extension AND
+   the committed initial `state/external_services.yml` together with the 1b check, or CI fails with
+   no snapshot to resolve against.
 2. **Component 2** — `natural_exception` macro + test + convention doc.
 3. **Component 3** — macro-test guard.
 4. **Component 4** — WS trace subcommand + `ha-verify-state` wiring.
 
-The HA-role `CLAUDE.md` "Testing" section is updated per phase.
+Components 2, 3, 4 are fully independent; Component 1 has the internal ordering noted above. The
+HA-role `CLAUDE.md` "Testing" section is updated per phase.
 
 ## What is explicitly NOT changing
 
@@ -236,13 +292,15 @@ purely additive to the validation surface (Components 1–3) plus one diagnostic
 ## Risks & open questions
 
 - **Service-name extraction robustness:** `service:`/`action:` appear in several shapes (string,
-  `{{ templated }}`, inside `choose:`/`if`/`repeat`, `parallel`). The extractor must walk the action
-  tree the way `ha_state_model.py` already walks for writers; templated names are skipped. Verify
-  coverage against the real corpus during implementation.
-- **Mediator vocabulary source of truth:** derive the valid `reason` set from the mediator's
-  `reason` dispatch (the reasons `light_decision` accepts / `bedroom_fan_set`'s branches), NOT the
-  `choose:` output blocks; fall back to a declared constant beside the mediator only if derivation
-  is brittle.
+  `{{ templated }}`, inside `choose:`/`if`/`repeat`/`parallel`). Good news, verified: the existing
+  `iter_service_calls`/`call_service` (`ha_state_model.py:56`,`:32`) already does this universal
+  recursive action-tree walk and returns `None` for non-`domain.service` strings — so the extractor
+  is reused, not rebuilt. Templated names (string contains `{{`) are skipped. Re-verify coverage if
+  the corpus gains a templated service name (none today).
+- **Mediator vocabulary source of truth:** a **declared constant** beside the checker is the
+  primary (not fallback) mechanism — deriving by regex from `light_decision`'s Jinja and
+  `bedroom_fan_set`'s `choose:` is two brittle paths and is rejected. A drifted constant fails safe
+  (false-fail, surfaces loudly), never false-passes.
 - **Snapshot drift:** the service snapshot shares the entity snapshot's failure mode — a stale
   snapshot can mask a real typo (false pass) or flag a just-added service (false fail until
   `refresh`). Accepted, identical to the existing entity check; the freshness gate surfaces drift.
