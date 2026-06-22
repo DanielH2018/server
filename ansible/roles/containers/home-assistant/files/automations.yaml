@@ -227,42 +227,13 @@
       entity_id: sensor.aqara_fp300_illuminance
       below: 75
       for: "00:00:30"
-  condition:
-    - condition: state
-      entity_id: input_boolean.bedroom_manual_off
-      state: "off"
-    # Once you're asleep (sleep mode engaged), do NOT auto-light on a presence edge or the dusk lux
-    # crossing — getting up leaves the room dark; tap Tap Dial button 3 for the nightlight. This is
-    # what removes the automatic "got up overnight" nightlight, and it also defuses the mmWave radar
-    # blip relight (a motionless sleeper the radar briefly drops then re-acquires fires the same
-    # off->on edge). SAFE vs. the morning wake: bedroom_morning_reset clears sleep_mode at wake_start
-    # BEFORE the ramp, so presence-driven waking still works once the alarm window opens.
-    - condition: state
-      entity_id: input_boolean.bedroom_sleep_mode
-      state: "off"
-    # Only auto-light when someone is actually home — an FP300 radar false-positive must not
-    # light an empty house while away. The arrive nudge re-checks lights on return.
-    - condition: state
-      entity_id: person.daniel
-      state: "home"
-    # Require the room to actually be occupied — the lux trigger can fire as dusk falls on an
-    # EMPTY room, and presence-based lighting must never light a room nobody's in. (No-op for the
-    # arrival edge, where presence is on by definition.)
-    - condition: state
-      entity_id: binary_sensor.aqara_fp300_presence
-      state: "on"
-    # Dark enough — or in the morning wake window — to auto-light (shared gate, templates.yaml).
-    - condition: state
-      entity_id: binary_sensor.bedroom_auto_light_allowed
-      state: "on"
-    # Only ever turn lights from off -> on. Never re-stomp an already-on light: that's what lets a
-    # manual dim stick (the dusk-lux trigger used to fire apply_natural and slam back to AL ~100%),
-    # and it preserves the "light a dark room as dusk falls" purpose (lights are off in that case).
-    - condition: state
-      entity_id: light.bedroom_lights
-      state: "off"
+  # Gating moved into script.bedroom_lights_set / light_decision (the 'presence' reason applies
+  # exactly these checks: manual_off off, sleep off, person home, presence on, lux gate on, light
+  # off). presence_on's sole action is the light, so it routes straight through the mediator.
   action:
-    - service: script.bedroom_apply_natural
+    - service: script.bedroom_lights_set
+      data:
+        reason: presence
 
 # Presence BLIP: you arrived but the room is too bright for auto-on (the lux gate is OFF), so the
 # lights won't come on. Flash them softly to acknowledge the detection. Sibling of bedroom_presence_on,
