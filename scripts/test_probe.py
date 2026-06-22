@@ -310,3 +310,33 @@ def test_ws_read_frame_decodes_extended_length():
     def recv_exact(n):
         chunk = raw[pos[0]:pos[0] + n]; pos[0] += n; return chunk
     assert probe._ws_read_frame(recv_exact) == "y" * 300
+
+
+# --- ha why / ha trace: format_trace parser ----------------------------------
+
+_TRACE_BLOCKED = {
+    # Real HA trace/get shape (confirmed against live daniel-server 2026-06-22):
+    # `trigger` is a plain string description, NOT a dict.
+    "trigger": "state of binary_sensor.aqara_fp300_presence",
+    "trace": {
+        "trigger/0": [{"path": "trigger/0", "result": {}}],
+        "condition/0": [{"path": "condition/0", "result": {"result": False}}],
+    },
+    "error": None,
+}
+
+
+def test_format_trace_marks_failed_condition():
+    out = probe.format_trace(_TRACE_BLOCKED)
+    assert "binary_sensor.aqara_fp300_presence" in out
+    assert "condition/0" in out
+    assert "FAIL" in out
+
+
+def test_format_trace_none_is_explained():
+    assert "no stored trace" in probe.format_trace(None)
+
+
+def test_format_trace_reports_error():
+    out = probe.format_trace({"trigger": {}, "trace": {}, "error": "boom"})
+    assert "boom" in out

@@ -156,6 +156,81 @@ def _recv_exact_from(sock):
     return recv_exact
 
 
+def format_trace(trace) -> str:
+    """Human timeline from a trace/get result: trigger -> each step path (+ PASS/FAIL for a
+    condition step, whose result is {"result": bool}) -> error.
+
+    HA's trace/get payload has `trigger` as a plain string description (e.g.
+    "state of binary_sensor.aqara_fp300_presence"); older/nested shapes may be a dict
+    with a `description` key — both are handled."""
+    if not trace:
+        return ("no stored trace (the automation hasn't run since the last HA restart/deploy; "
+                "an automation whose trigger never matched leaves no trace — check `ha get "
+                "logbook/<entity>` and the automation's last_triggered for that case)")
+    lines = []
+    trig = trace.get("trigger") or {}
+    if isinstance(trig, dict):
+        trig_desc = trig.get("description", trig)
+    else:
+        trig_desc = trig
+    lines.append(f"trigger: {trig_desc}")
+    for path, steps in (trace.get("trace") or {}).items():
+        for step in steps:
+            res = step.get("result")
+            verdict = ""
+            if isinstance(res, dict) and isinstance(res.get("result"), bool):
+                verdict = "  -> PASS" if res["result"] else "  -> FAIL (blocked here)"
+            lines.append(f"  {path}{verdict}")
+    if trace.get("error"):
+        lines.append(f"error: {trace['error']}")
+    return "\n".join(lines)
+
+
+def _ws_send(sock, msg):
+    import json
+    sock.sendall(_ws_encode(json.dumps(msg)))
+
+
+def _ws_recv_json(recv_exact):
+    import json
+    return json.loads(_ws_read_frame(recv_exact))
+
+
+def ha_trace(ip, token, automation_id, timeout=DEFAULT_TIMEOUT):
+    """Fetch the latest execution trace for an automation via the HA WebSocket API. Read-only:
+    sends ONLY auth + trace/list + trace/get. Returns the trace dict, or None if no stored trace."""
+    import base64
+    import os
+    import socket
+    sock = socket.create_connection((ip, HA_PORT), timeout=timeout)
+    try:
+        key = base64.b64encode(os.urandom(16)).decode()
+        sock.sendall((
+            f"GET /api/websocket HTTP/1.1\r\nHost: {ip}:{HA_PORT}\r\n"
+            f"Upgrade: websocket\r\nConnection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n").encode())
+        recv_exact = _recv_exact_from(sock)
+        # consume the HTTP 101 upgrade response (headers end with a blank line)
+        header = b""
+        while b"\r\n\r\n" not in header:
+            header += recv_exact(1)
+        _ws_recv_json(recv_exact)                                   # auth_required
+        _ws_send(sock, {"type": "auth", "access_token": token})
+        if _ws_recv_json(recv_exact).get("type") != "auth_ok":
+            raise SystemExit("HA websocket auth failed (check claude_ha_token)")
+        _ws_send(sock, {"id": 1, "type": "trace/list",
+                        "domain": "automation", "item_id": automation_id})
+        listed = _ws_recv_json(recv_exact).get("result") or []
+        if not listed:
+            return None
+        run_id = listed[-1]["run_id"]
+        _ws_send(sock, {"id": 2, "type": "trace/get", "domain": "automation",
+                        "item_id": automation_id, "run_id": run_id})
+        return _ws_recv_json(recv_exact).get("result")
+    finally:
+        sock.close()
+
+
 def _slug(name):
     """HA-style slug: lowercase, non-alphanumerics collapsed to single `_`."""
     return re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
@@ -322,6 +397,9 @@ def _build_parser():
     hauto.add_argument("--json", action="store_true", help="print raw JSON")
     hg = hasub.add_parser("get", help="raw GET /api/<path>, e.g. error_log")
     hg.add_argument("path")
+    htr = hasub.add_parser("trace", aliases=["why"],
+                           help="why an automation last ran/no-op'd (per-condition WS trace)")
+    htr.add_argument("query", help="automation id, alias-slug, or full automation.<slug>")
     hst = sub.add_parser("ha-state", help="live view of the derived state model")
     hst.add_argument("--inventory", action="store_true",
                      help="also dump every live entity grouped by domain")
@@ -428,6 +506,24 @@ def _ha_url(ip, ns):
 
 
 def run_ha(ns):
+    if ns.ha_cmd in ("trace", "why"):
+        if ns.dry_run:
+            print(f"ws://<ha-ip>:{HA_PORT}/api/websocket  trace/list+trace/get for {ns.query!r} "
+                  f"# + auth Bearer <redacted>")
+            return 0
+        ip = resolve_ip(HA_CONTAINER)
+        token = ha_token()
+        states = json.loads(ha_get(ha_get_url(ip, "states"), token))
+        m = match_automation(states, ns.query)
+        if m is None:
+            print(f"automation '{ns.query}' not found (by entity_id, id, or alias-slug)")
+            return 1
+        automation_id = m.get("attributes", {}).get("id")
+        if not automation_id:
+            print(f"{m['entity_id']}: no config id (cannot fetch trace)")
+            return 1
+        print(format_trace(ha_trace(ip, token, automation_id)))
+        return 0
     if ns.dry_run:
         argv = ha_curl_argv(_ha_url("<ha-ip>", ns))
         print(" ".join(argv) + "   # + Authorization: Bearer <redacted> (via --config stdin)")
