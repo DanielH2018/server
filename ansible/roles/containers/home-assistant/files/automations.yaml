@@ -927,9 +927,9 @@
             - service: script.bedroom_lights_set
               data:
                 reason: "off"
-            - service: fan.turn_off
-              target:
-                entity_id: fan.tower_fan
+            - service: script.bedroom_fan_set
+              data:
+                reason: "off"
             # Routine notify (you're not quiet when leaving) — one notify path for the whole system.
             - service: script.bedroom_notify
               data:
@@ -1040,17 +1040,9 @@
         # button 3 or the morning reset). Honest caveat: moves air, doesn't lower CO2.
         - conditions: "{{ trigger.event.data.action == 'BEDROOM_BOOST_FAN' }}"
           sequence:
-            - service: input_boolean.turn_on
-              target:
-                entity_id: input_boolean.bedroom_fan_manual
-            - service: fan.turn_on
-              target:
-                entity_id: fan.tower_fan
-            - service: fan.set_percentage
-              target:
-                entity_id: fan.tower_fan
+            - service: script.bedroom_fan_set
               data:
-                percentage: 100
+                reason: boost
         - conditions: "{{ trigger.event.data.action == 'BEDROOM_START_BEDTIME' }}"
           sequence:
             - service: script.bedroom_bedtime
@@ -1061,7 +1053,9 @@
             - service: script.bedroom_lights_set
               data:
                 reason: natural
-            - service: script.bedroom_apply_fan
+            - service: script.bedroom_fan_set
+              data:
+                reason: auto
 
 # Bedtime prompt: at 22:00, if you're in the bedroom and haven't started bedtime, send a nudge with
 # a "Start now" button (-> BEDROOM_START_BEDTIME -> script.bedroom_bedtime). Gated on present + not

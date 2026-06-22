@@ -347,6 +347,49 @@ bedroom_apply_fan:
               data:
                 percentage: "{{ send_pct }}"
 
+# Phase-2 fan mediator: front door for the fan's non-temperature writes. `auto` delegates the
+# temperature curve + caps (apply_fan); `boost` is the notification "Boost fan" action (max, engages
+# the manual override + arms the expected-level accumulator so the cloud echo isn't re-flagged);
+# `off` is the away turn-off. The Tap Dial + the temperature automations call apply_fan/fan_nudge
+# directly (sanctioned module members), so they are unchanged.
+bedroom_fan_set:
+  alias: "Bedroom — fan mediator"
+  description: "auto -> temperature band (apply_fan); boost -> max + manual override; off -> turn off."
+  mode: restart
+  fields:
+    reason:
+      description: "auto | boost | off"
+      required: true
+      example: auto
+  sequence:
+    - choose:
+        - conditions: "{{ reason == 'auto' }}"
+          sequence:
+            - service: script.bedroom_apply_fan
+        - conditions: "{{ reason == 'boost' }}"
+          sequence:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.bedroom_fan_manual
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.bedroom_fan_expected_level
+              data:
+                value: 9
+            - service: fan.turn_on
+              target:
+                entity_id: fan.tower_fan
+            - service: fan.set_percentage
+              target:
+                entity_id: fan.tower_fan
+              data:
+                percentage: 100
+        - conditions: "{{ reason == 'off' }}"
+          sequence:
+            - service: fan.turn_off
+              target:
+                entity_id: fan.tower_fan
+
 # Nudge the fan one DREO level (Tap Dial fan-dial mode: dial = +/-1 level). Driven off the
 # input_number.bedroom_fan_expected_level ACCUMULATOR (instant + server-side) rather than the fan's
 # laggy cloud-pushed percentage, so rapid dial turns accumulate correctly. Engages the manual

@@ -34,18 +34,17 @@ cells:
 dynamic_writes: {}
 writes:
   fan.tower_fan:
-    - automation.bedroom_away
     - automation.bedroom_fan_startup_reconcile
-    - automation.bedroom_notification_action
     - script.bedroom_apply_fan
     - script.bedroom_fan_nudge
+    - script.bedroom_fan_set
   input_boolean.bedroom_fan_manual:
     - automation.bedroom_fan_manual_override_detect
     - automation.bedroom_fan_startup_reconcile
     - automation.bedroom_morning_reset_and_wake
-    - automation.bedroom_notification_action
     - automation.bedroom_tap_dial_control
     - script.bedroom_fan_nudge
+    - script.bedroom_fan_set
   input_boolean.bedroom_manual_off:
     - automation.bedroom_manual_light_detect
     - automation.bedroom_morning_reset_and_wake
@@ -62,6 +61,7 @@ writes:
     - automation.bedroom_tap_dial_control
     - script.bedroom_apply_fan
     - script.bedroom_fan_nudge
+    - script.bedroom_fan_set
   input_number.bedroom_light_expected_color_temp:
     - automation.bedroom_color_tracking
     - script.bedroom_set_natural_brightness
