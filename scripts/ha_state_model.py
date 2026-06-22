@@ -384,6 +384,32 @@ def service_resolution_errors(config: dict, known_services: set[str]) -> list[st
     return errs
 
 
+# Valid `reason` vocabulary per actuator mediator. Declared here (NOT regex-derived from
+# light_decision's Jinja / bedroom_fan_set's choose:) — a drifted constant fails SAFE (a newly
+# added valid reason false-fails loudly until added here), never silently passes. Mirror any
+# change to lighting.jinja's light_decision / files/scripts.yaml's bedroom_fan_set.
+MEDIATOR_REASONS = {
+    "script.bedroom_lights_set": {"presence", "natural", "wake", "off"},
+    "script.bedroom_fan_set": {"auto", "boost", "off"},
+}
+
+
+def mediator_reason_errors(config: dict) -> list[str]:
+    """HARD: every call to an actuator mediator passes a `reason` that is a STRING in the mediator's
+    vocabulary. Catches a missing data:/reason, a typo, and the unquoted `reason: off` -> YAML
+    `false` -> silent no-op trap (the config is loaded YAML-1.1, so `off` is already a bool here)."""
+    errs = []
+    for call in _all_service_calls(config):
+        svc = call_service(call)
+        if svc not in MEDIATOR_REASONS:
+            continue
+        reason = (call.get("data") or {}).get("reason")
+        if not isinstance(reason, str) or reason not in MEDIATOR_REASONS[svc]:
+            errs.append(f"{svc}: invalid reason {reason!r} — must be a quoted string in "
+                        f"{sorted(MEDIATOR_REASONS[svc])} (unquoted off/on becomes a YAML bool)")
+    return errs
+
+
 def load_external_entities() -> set[str]:
     if not EXTERNAL_YAML.is_file():
         return set()
@@ -583,6 +609,7 @@ def check_errors(role_dir: Path = ROLE_DIR) -> list[str]:
     errs += freshness_errors(role_dir)
     errs += resolution_errors(config, known)
     errs += service_resolution_errors(config, known_services)
+    errs += mediator_reason_errors(config)
     errs += override_writer_errors(model["writes"], load_expected_override_writers())
     errs += threshold_pairing_errors(config)
     errs += alias_collision_errors(config)

@@ -346,6 +346,38 @@ def test_service_resolution_resolves_config_script_via_known():
     assert hsm.service_resolution_errors(config, known) == []
 
 
+def _lights_set_call(extra):
+    # `extra` is merged into the service-call dict, e.g. {"data": {"reason": "presence"}}
+    return {"automation": [{"id": "a", "alias": "A", "action": [
+        {"service": "script.bedroom_lights_set", **extra}]}], "script": {}}
+
+
+def test_mediator_reason_valid_passes():
+    assert hsm.mediator_reason_errors(_lights_set_call({"data": {"reason": "presence"}})) == []
+
+
+def test_mediator_reason_out_of_vocab_fails():
+    errs = hsm.mediator_reason_errors(_lights_set_call({"data": {"reason": "naturl"}}))
+    assert any("naturl" in e for e in errs)
+
+
+def test_mediator_reason_missing_data_block_fails():
+    errs = hsm.mediator_reason_errors(_lights_set_call({}))
+    assert any("script.bedroom_lights_set" in e for e in errs)
+
+
+def test_mediator_reason_yaml_bool_off_fails():
+    # unquoted `off` in YAML 1.1 loads as Python False -> caught as not-a-string.
+    errs = hsm.mediator_reason_errors(_lights_set_call({"data": {"reason": False}}))
+    assert any("invalid reason" in e for e in errs)
+
+
+def test_mediator_reason_fan_quoted_off_passes():
+    config = {"automation": [], "script": {"s": {"sequence": [
+        {"service": "script.bedroom_fan_set", "data": {"reason": "off"}}]}}}
+    assert hsm.mediator_reason_errors(config) == []
+
+
 import probe
 
 

@@ -180,6 +180,11 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   that writes an actuator directly fails CI. **Add a writer = route it through the mediator, or
   declare it in `sanctioned_writers.yml`.** `reason: "off"` MUST stay quoted (unquoted `off` is YAML
   `false` → silent no-op). Design: `docs/superpowers/specs/2026-06-21-ha-state-model-phase2-mediator-design.md`.
+  The mediator's `reason` is contract-checked by `validate-ha-config` (`mediator_reason_errors`
+  in `ha_state_model.py`): every `bedroom_lights_set`/`bedroom_fan_set` call must pass a quoted
+  `reason` from the declared vocabulary (`MEDIATOR_REASONS`) — a missing/typo'd reason or the
+  unquoted-`off`→YAML-`false` no-op fails CI. Add a new reason to `MEDIATOR_REASONS` when you add
+  one to the mediator.
 - **`files/scripts.yaml` — the "natural lighting state" dispatcher (templated via `copy`, like
   automations/scenes; wired via `script: !include scripts.yaml`; feeds `common_config_changed`).**
   `script.bedroom_apply_natural` sets the bedroom group to what it would be with no manual
