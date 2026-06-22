@@ -1501,7 +1501,7 @@
     - condition: template
       value_template: >-
         {% from 'diagnostics.jinja' import error_in_scope %}
-        {{ error_in_scope(trigger.event.data.level, trigger.event.data.name)
+        {{ (error_in_scope(trigger.event.data.level, trigger.event.data.name) | bool)
            and trigger.event.data.name != 'homeassistant.components.automation.ha_runtime_error_alert' }}
   action:
     - service: script.bedroom_notify
