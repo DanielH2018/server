@@ -36,22 +36,25 @@ a small declared exemption list**:
 1. Reads the live flags: `manual_off`, `sleep_mode`, `person home`, `presence`,
    `binary_sensor.bedroom_auto_light_allowed` (the lux gate), `light_on`, `sun below horizon`.
 2. Calls a new **unit-tested macro** `light_decision(reason, flags…) -> 'natural' | 'wake' |
-   'nightlight' | 'scene_bright' | 'scene_relax' | 'off' | 'noop'` (in
-   `custom_templates/lighting.jinja`, numbers/bools in → string out, like the existing fan/lighting
-   macros). Gated reasons (`presence`/`auto`/`reset`) return their action or `noop`/`off` per the
-   flags; ungated reasons (`manual`→`natural`, `nightlight`, `scene_bright`, `scene_relax`) map 1:1.
+   'off' | 'noop'` (in `custom_templates/lighting.jinja`, numbers/bools in → string out, like the
+   existing fan/lighting macros). The one **gated** reason is `presence` (returns `natural` or
+   `noop` per the flags); the rest map 1:1 (`natural`, `wake`, `off`).
 3. **Delegates to the existing, already-tested primitives** (no rewrite of the computation):
    `natural` → `script.bedroom_apply_natural` (which internally picks its nightlight/wake/default
-   exception); `wake` → `script.bedroom_apply_wake`; `nightlight` → `scene.turn_on
-   bedroom_nightlight`; `scene_bright`/`scene_relax` → `scene.turn_on bedroom_bright`/`bedroom_relax`;
-   `off` → `light.turn_off`; `noop` → nothing.
+   exception); `wake` → `script.bedroom_apply_wake`; `off` → `light.turn_off`; `noop` → nothing.
+
+**Scope (decided): the mediator covers the AUTO/programmatic paths only.** The manual **Tap Dial**
+is a declared exemption — its writes are intentional and ungated by design, its brightness dial is a
+latency-sensitive relative step, and the single-writer invariant is all-or-nothing per automation,
+so funnelling it buys little safety at real cost. The Tap Dial is **not modified** in Phase 2
+(`apply_natural_gated`, the B1-HOLD lux-or-sun helper, therefore stays).
 
 **Sanctioned light module** = `bedroom_lights_set` + its internal primitives `apply_natural`,
 `apply_wake`, `set_natural_brightness`, plus `bedroom_bedtime` (the 15-min fade routine — its own
-script because its transition differs). **`apply_natural_gated` is ELIMINATED** — its lux-or-sun
-gate becomes the macro's `reset` branch.
+script because its transition differs).
 
-**Declared light exemptions** = `bedroom_blip`, `bedroom_alert_pulse`, `bedroom_color_tracking`.
+**Declared light exemptions** = `bedroom_tap_dial_control` (manual surface), `apply_natural_gated`
+(Tap-Dial B1-HOLD helper), `bedroom_blip`, `bedroom_alert_pulse`, `bedroom_color_tracking`.
 
 **AL handshake**: no new logic — `set_natural_brightness` already marks AL taken-over (explicit
 brightness) and `bedtime` already owns the `set_manual_control` dance; the mediator inherits both
@@ -64,20 +67,17 @@ The macro encodes exactly today's gating:
 | `reason` | called by (after migration) | macro gate | action |
 |---|---|---|---|
 | `presence` | `bedroom_presence_on` | manual_off off **&** sleep off **&** person home **&** presence on **&** lux-gate on **&** light off | `natural` else `noop` |
-| `auto` | `bedroom_arrive_home`, `bedroom_morning_reset` (alarm) | person home (arrive adds: presence on, manual_off off, light off) | `natural` else `noop` |
-| `wake` | `bedroom_wake_ramp`, `bedroom_morning_reset` | (caller already in-window) | `wake` |
-| `reset` | Tap-Dial B1 HOLD | lux-gate on **OR** sun below horizon | `natural` else `off` |
-| `manual` | Tap-Dial B1 press | ungated (caller runs `exit_sleep` first) | `natural` |
-| `nightlight` | Tap-Dial B3, overnight presence | ungated | `nightlight` |
-| `scene_bright` / `scene_relax` | Tap-Dial B2 press/hold | ungated (manual pick) | `scene.turn_on bright`/`relax` |
+| `natural` | `bedroom_arrive_home`, `bedroom_morning_reset` (alarm), `bedroom_wake_ramp` (window-end hand-back) | **ungated** — the caller keeps its own gate, which also guards its non-light side effects | `natural` |
+| `wake` | `bedroom_wake_ramp` (in-window) | ungated (caller is already in-window) | `wake` |
 | `off` | `bedroom_away`, `bedroom_absence_off`, `bedroom_suppress_al_self_on_at_startup` | unconditional (caller decides when) | `off` |
 
-`presence_on` loses its 6 conditions (they move into the macro) and becomes
-`trigger → bedroom_lights_set('presence')`. `presence_blip` stays a separate sibling automation
-(it calls the exempt `bedroom_blip`). `exit_sleep` stays in the Tap-Dial caller (a side effect, not
-a light write). Scenes `bright`/`relax`/`nightlight` are invoked *by the mediator*, so they need no
-separate exemption; the only scene-using exemption is `alert_pulse` (its internal
-`scene.create`/`scene.turn_on` of `bedroom_pre_alert`).
+Only `presence` carries gates in the macro — `presence_on` is the one caller whose *sole* action is
+the light, so its 6 conditions move into the macro and it becomes
+`trigger → bedroom_lights_set('presence')`. `arrive_home` and `morning_reset` keep their existing
+`if` (which also guards their fan/notify side effects) and pass the **ungated** `natural`; this
+preserves their exact behavior (which differs from each other and from `presence`, so a shared gated
+`auto` reason would not be faithful). `presence_blip` stays a separate sibling automation (calls the
+exempt `bedroom_blip`).
 
 ## Fan consolidation (the simpler half)
 
@@ -124,13 +124,13 @@ unit tests → **deploy (`ha-deploy`)** → **verify live** (`probe.py ha-state`
 1. **Macro + mediator, no caller migration.** TDD `light_decision` (exhaustive reason × flag table)
    + build `bedroom_lights_set`; deploy (mediator present but unused).
 2. **Presence path** — `presence_on` → `bedroom_lights_set('presence')`.
-3. **Auto/wake** — `arrive_home`, `morning_reset`, `wake_ramp`.
-4. **Tap-Dial light branches** — `manual`/`reset`/`nightlight`/`scene_*`; remove `apply_natural_gated`.
-5. **Off-paths** — `away`, `absence_off`, `suppress_al_self_on_at_startup`.
-6. **Fan** — build `bedroom_fan_set`; migrate `fan_temperature`, arrive, morning_reset, the boost
-   action, away.
-7. **Lock it** — write `state/sanctioned_writers.yml`; flip single-writer to hard; regenerate →
-   report empty → green.
+3. **Auto/wake** — `arrive_home`, `morning_reset`, `wake_ramp` (the Tap Dial is NOT touched).
+4. **Off-paths** — `away`, `absence_off`, `suppress_al_self_on_at_startup`.
+5. **Fan** — build `bedroom_fan_set`; migrate `fan_temperature`, arrive, morning_reset, the boost
+   action, away (the Tap Dial fan branches already call the module scripts `apply_fan`/`fan_nudge`,
+   so they need no change).
+6. **Lock it** — write `state/sanctioned_writers.yml` (module + the declared exemptions incl. the
+   Tap Dial); flip single-writer to hard; regenerate → report empty → green.
 
 ## Testing
 
@@ -150,9 +150,10 @@ unit tests → **deploy (`ha-deploy`)** → **verify live** (`probe.py ha-state`
   `light_decision`.
 - `ansible/roles/containers/home-assistant/tests/test_lighting_macros.py` — add `light_decision` tests.
 - `ansible/roles/containers/home-assistant/files/scripts.yaml` — add `bedroom_lights_set` +
-  `bedroom_fan_set`; remove `apply_natural_gated`.
-- `ansible/roles/containers/home-assistant/files/automations.yaml` — migrate each caller to the
-  mediator (groups 2–6).
+  `bedroom_fan_set` (`apply_natural_gated` stays — it's the exempt Tap-Dial's helper).
+- `ansible/roles/containers/home-assistant/files/automations.yaml` — migrate the AUTO callers to the
+  mediator (groups 2–5: presence_on, arrive_home, morning_reset, wake_ramp, away, absence_off,
+  suppress_al, and the fan callers). The Tap Dial automation is NOT modified.
 - `ansible/roles/containers/home-assistant/state/sanctioned_writers.yml` — **new, hand-maintained**
   (per-actuator module + exemptions; the second small hand-declared file after the override tripwire).
 - `scripts/ha_state_model.py` — flip `single_writer` to a hard check reading `sanctioned_writers.yml`;
@@ -168,12 +169,13 @@ unit tests → **deploy (`ha-deploy`)** → **verify live** (`probe.py ha-state`
 
 ## Open questions from the forward spec — now resolved
 
-- *Writer inventory + which are ungated* → the gate-matrix tables above (manual/scene/nightlight
-  ungated; presence/auto/reset gated; off unconditional).
+- *Writer inventory + which are ungated* → the gate matrix above. Only `presence` is gated in the
+  macro; `natural`/`wake` are ungated (callers keep their own gate); `off` is unconditional. The
+  manual Tap Dial is exempt (intentional/ungated by design).
 - *Gate matrix as a `choose:` script vs tested macro* → **tested macro** (`light_decision`) + thin
   dispatcher.
-- *How the three scenes are re-expressed* → `nightlight` via the mediator's `nightlight` action;
-  `bright`/`relax` via `scene_bright`/`scene_relax` reasons; `bedtime`'s 900s fade stays its own
-  module script.
+- *How the three scenes are re-expressed* → they stay in the **exempt** Tap Dial (manual surface),
+  unchanged. The mediator delegates to `apply_natural` (which uses the nightlight scene internally);
+  `bedtime`'s 900s fade stays its own module script.
 - *AL handshake* → inherited from the delegated primitives (`set_natural_brightness` /
   `bedtime`); no new handshake in the mediator.
