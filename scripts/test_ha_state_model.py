@@ -401,6 +401,38 @@ def test_mediator_reason_fan_quoted_off_passes():
     assert hsm.mediator_reason_errors(config) == []
 
 
+def test_system_log_fire_event_required_when_triggered_and_missing():
+    config = {"automation": [{"id": "ha_runtime_error_alert",
+                              "trigger": [{"platform": "event", "event_type": "system_log_event"}]}]}
+    errs = hsm.system_log_fire_event_errors(config)
+    assert len(errs) == 1
+    assert "ha_runtime_error_alert" in errs[0] and "fire_event" in errs[0]
+
+
+def test_system_log_fire_event_clean_when_enabled():
+    config = {"system_log": {"fire_event": True},
+              "automation": [{"id": "a",
+                              "trigger": [{"platform": "event", "event_type": "system_log_event"}]}]}
+    assert hsm.system_log_fire_event_errors(config) == []
+
+
+def test_system_log_fire_event_flags_when_false():
+    config = {"system_log": {"fire_event": False},
+              "automation": [{"id": "a", "trigger": [{"event_type": "system_log_event"}]}]}
+    assert len(hsm.system_log_fire_event_errors(config)) == 1
+
+
+def test_system_log_fire_event_clean_without_trigger():
+    config = {"automation": [{"id": "a", "trigger": [{"platform": "state", "entity_id": "x"}]}]}
+    assert hsm.system_log_fire_event_errors(config) == []
+
+
+def test_system_log_fire_event_handles_list_event_type():
+    config = {"system_log": {"fire_event": True},
+              "automation": [{"id": "a", "trigger": [{"event_type": ["other", "system_log_event"]}]}]}
+    assert hsm.system_log_fire_event_errors(config) == []
+
+
 import probe
 
 

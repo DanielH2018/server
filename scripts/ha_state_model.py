@@ -571,6 +571,35 @@ def single_writer_errors(writes: dict, sanctioned: dict) -> list[str]:
     return errs
 
 
+def system_log_fire_event_errors(config: dict) -> list[str]:
+    """HARD: an automation that triggers on `system_log_event` requires `system_log: fire_event:
+    true` in configuration.yaml. default_config enables system_log WITHOUT it, so the event never
+    fires by default and the trigger never matches (the automation is silently dead). Structured-
+    data check — no Jinja/string parsing. (Found the hard way via the ha_runtime_error_alert
+    live-fire; this turns it into a pre-deploy gate.)"""
+    offenders = []
+    for auto in config.get("automation") or []:
+        trig = auto.get("trigger") or auto.get("triggers") or []
+        if isinstance(trig, dict):
+            trig = [trig]
+        for t in trig:
+            if not isinstance(t, dict):
+                continue
+            et = t.get("event_type")
+            ets = [et] if isinstance(et, str) else (et if isinstance(et, list) else [])
+            if "system_log_event" in ets:
+                offenders.append(auto.get("id") or auto.get("alias") or "<unknown>")
+                break
+    if not offenders:
+        return []
+    if ((config.get("system_log") or {}).get("fire_event")) is True:
+        return []
+    return [f"automation(s) {sorted(set(offenders))} trigger on system_log_event but "
+            f"configuration.yaml does not set `system_log: fire_event: true` — system_log does not "
+            f"fire that event by default, so the trigger never matches (silently dead). Add a "
+            f"top-level `system_log:` block with `fire_event: true`."]
+
+
 def override_consistency_report(writes: dict) -> list[str]:
     """REPORT: surfaces actuators whose manual-detect override isn't engaged by every manual
     surface. Phase 1 emits the lights<->manual_off relationship as a starting datapoint."""
@@ -621,6 +650,7 @@ def check_errors(role_dir: Path = ROLE_DIR) -> list[str]:
     errs += threshold_pairing_errors(config)
     errs += alias_collision_errors(config)
     errs += single_writer_errors(model["writes"], load_sanctioned_writers())
+    errs += system_log_fire_event_errors(config)
     for line in override_consistency_report(model["writes"]):
         print(f"[state-model report] {line}", file=sys.stderr)
     return errs
