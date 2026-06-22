@@ -341,8 +341,10 @@ def _walk_entity_id_fields(node) -> Iterator[str]:
 
 
 def referenced_entities(config: dict) -> set[str]:
-    """Write targets + every `entity_id:` field (triggers/conditions/actions) across automations
-    and scripts. Templated values are dropped (can't be resolved statically)."""
+    """Write targets + every structural `entity_id:` field (triggers/conditions/actions) across
+    automations and scripts. Templated values are dropped (can't be resolved statically).
+    NON-GOAL (deliberate): entity ids inside `{{ }}` template bodies (states('sensor.x')) are NOT
+    extracted — that is regex-fragile and would make this the flaky part of the gate."""
     refs: set[str] = set()
     for auto in config.get("automation") or []:
         refs |= set(_walk_entity_id_fields(auto))
@@ -359,6 +361,26 @@ def resolution_errors(config: dict, known: set[str]) -> list[str]:
         if ref.split(".")[0] in _MANAGED_DOMAINS and ref not in known:
             errs.append(f"unresolved entity reference: {ref} "
                         f"(typo, or run `ha_state_model.py refresh` if it is a new device)")
+    return errs
+
+
+def referenced_services(config: dict) -> set[str]:
+    """Every literal service id called in automations + scripts. Skips templated names (no dot ->
+    call_service already returns None; a `domain.{{ }}` form is caught by the _is_templated guard)."""
+    return {svc for call in _all_service_calls(config)
+            if (svc := call_service(call)) and not _is_templated(svc)}
+
+
+def service_resolution_errors(config: dict, known_services: set[str]) -> list[str]:
+    """A called service absent from `known_services` (= a typo or a stale snapshot — run `refresh`).
+    Unlike resolution_errors (entities), this checks EVERY domain unconditionally — there is no
+    _MANAGED_DOMAINS gate. The live /api/services snapshot is complete, so an un-enumerable domain
+    like `notify` no longer has to be exempted; that is exactly how `notify.<typo>` is caught."""
+    errs = []
+    for svc in sorted(referenced_services(config)):
+        if svc not in known_services:
+            errs.append(f"unresolved service call: {svc} "
+                        f"(typo, or run `ha_state_model.py refresh` if it is a new integration)")
     return errs
 
 
@@ -556,9 +578,11 @@ def check_errors(role_dir: Path = ROLE_DIR) -> list[str]:
     config = load_role(role_dir)
     model = build_model(config)
     known = config_entities(config, config.get("scene") or []) | load_external_entities()
+    known_services = config_services(config) | load_external_services()
     errs: list[str] = []
     errs += freshness_errors(role_dir)
     errs += resolution_errors(config, known)
+    errs += service_resolution_errors(config, known_services)
     errs += override_writer_errors(model["writes"], load_expected_override_writers())
     errs += threshold_pairing_errors(config)
     errs += alias_collision_errors(config)
