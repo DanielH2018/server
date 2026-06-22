@@ -151,6 +151,27 @@ def format_ha_automation(obj):
             f"  id={attrs.get('id')}  last_triggered={attrs.get('last_triggered')}")
 
 
+def ha_state_rows(states, model):
+    """Render the derived cells/automations annotated with live values from a /api/states list."""
+    by_id = {s["entity_id"]: s for s in states}
+    lines = ["Cells:"]
+    for name, cell in model["cells"].items():
+        s = by_id.get(cell["entity"])
+        val = s["state"] if s else "—(absent)"
+        when = s.get("last_changed", "") if s else ""
+        lines.append(f"  {cell['entity']:<52} = {val:<12} {when}")
+    anomalies = []
+    sleep = by_id.get("input_boolean.bedroom_sleep_mode", {}).get("state")
+    if sleep == "on":
+        anomalies.append("sleep_mode is on (verify expected at this hour)")
+    moff = by_id.get("input_boolean.bedroom_manual_off", {}).get("state")
+    if moff == "on":
+        anomalies.append("manual_off is on (presence will NOT auto-light)")
+    if anomalies:
+        lines = [f"⚠ {len(anomalies)} anomaly(ies): " + "; ".join(anomalies), ""] + lines
+    return "\n".join(lines)
+
+
 # --- low-level argv / parsing helpers (pure) --------------------------------
 
 
@@ -246,6 +267,9 @@ def _build_parser():
     hauto.add_argument("--json", action="store_true", help="print raw JSON")
     hg = hasub.add_parser("get", help="raw GET /api/<path>, e.g. error_log")
     hg.add_argument("path")
+    hst = sub.add_parser("ha-state", help="live view of the derived state model")
+    hst.add_argument("--inventory", action="store_true",
+                     help="also dump every live entity grouped by domain")
     return p
 
 
@@ -382,6 +406,23 @@ def run_ha(ns):
     return 0
 
 
+def run_ha_state(ns):
+    import json
+    import ha_state_model
+    if ns.dry_run:
+        print(" ".join(ha_curl_argv(ha_get_url("<ha-ip>", "states"))) + "   # + Bearer (stdin)")
+        return 0
+    body = ha_get(ha_get_url(resolve_ip(HA_CONTAINER), "states"), ha_token())
+    states = json.loads(body)
+    model = ha_state_model.build_model(ha_state_model.load_role())
+    print(ha_state_rows(states, model))
+    if ns.inventory:
+        print("\nInventory:")
+        for s in sorted(states, key=lambda x: x["entity_id"]):
+            print(f"  {s['entity_id']:<55} {s['state']}")
+    return 0
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     ns = _build_parser().parse_args(argv)
@@ -394,6 +435,8 @@ def main(argv=None):
     # `ha` resolves a token + talks to the HA REST API rather than streaming a pipeline.
     if ns.cmd == "ha":
         return run_ha(ns)
+    if ns.cmd == "ha-state":
+        return run_ha_state(ns)
     stages = plan(argv, resolve_ip)
     if ns.dry_run:
         for stage in stages:

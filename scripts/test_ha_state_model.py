@@ -286,3 +286,16 @@ def test_check_errors_on_real_role_is_clean_after_generate(tmp_path):
     # After Task 4/5/6 produced fresh artifacts + snapshot, the real role must validate clean.
     errs = hsm.check_errors()
     assert errs == [], "real role failed state-model checks:\n" + "\n".join(errs)
+
+
+import probe
+
+
+def test_ha_state_rows_renders_cell_values_and_anomaly():
+    model = {"cells": {"bedroom_sleep_mode": {"entity": "input_boolean.bedroom_sleep_mode",
+             "name": "Bedroom sleep mode"}}, "actuators": [], "writes": {}, "dynamic_writes": {}}
+    states = [{"entity_id": "input_boolean.bedroom_sleep_mode", "state": "on",
+               "last_changed": "2026-06-21T12:00:00+00:00"}]
+    out = probe.ha_state_rows(states, model)
+    assert "input_boolean.bedroom_sleep_mode" in out
+    assert "on" in out
