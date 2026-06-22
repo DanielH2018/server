@@ -382,6 +382,19 @@ def test_automation_load_errors_clean_when_all_loaded():
     assert automation_load_errors(expected, live) == []
 
 
+def test_automation_load_errors_tolerates_missing_attributes():
+    # A live entity with attributes null or absent must be skipped, not raise — exercises the
+    # `(a.get("attributes") or {})` guard. (No expected id matches them, so they're ignored.)
+    from probe import automation_load_errors
+    expected = {"a"}
+    live = [
+        {"entity_id": "automation.weird", "state": "on", "attributes": None},
+        {"entity_id": "automation.nope", "state": "on"},  # no attributes key
+        {"entity_id": "automation.a", "state": "on", "attributes": {"id": "a"}},
+    ]
+    assert automation_load_errors(expected, live) == []
+
+
 def test_verify_automations_subcommand_parses():
     from probe import _build_parser
     ns = _build_parser().parse_args(["ha", "verify-automations"])

@@ -570,8 +570,8 @@ def run_ha(ns):
             return 0
         ip = resolve_ip(HA_CONTAINER)
         states = json.loads(ha_get(ha_get_url(ip, "states"), ha_token()))
-        live = [s for s in states if s["entity_id"].startswith("automation.")]
-        with open(AUTOMATIONS_YAML) as f:
+        live = [s for s in states if s.get("entity_id", "").startswith("automation.")]
+        with open(AUTOMATIONS_YAML, encoding="utf-8") as f:
             expected = expected_automation_ids(f.read())
         errs = automation_load_errors(expected, live)
         if errs:
