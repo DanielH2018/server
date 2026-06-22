@@ -277,6 +277,14 @@ recorder:
       - sensor.*_linkquality
       - sensor.*_last_seen
 
+# Fire `system_log_event` on the event bus for every WARNING+ log record. default_config enables
+# system_log WITHOUT this, so the event never fires by default — and `automation.ha_runtime_error_alert`
+# (files/automations.yaml) triggers on system_log_event, so without fire_event it is silently DEAD
+# (trigger never matches). Required for that automation. Spec:
+# docs/superpowers/specs/2026-06-22-ha-runtime-error-alert-design.md.
+system_log:
+  fire_event: true
+
 http:
   use_x_forwarded_for: true
   # Trust the whole Docker bridge range (RFC1918 172.16/12) so HA honors
