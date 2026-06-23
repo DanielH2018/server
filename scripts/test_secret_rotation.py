@@ -134,3 +134,31 @@ def test_sync_preserves_a_manual_tier_override():
     reg = _reg(("special_push_token", "ignore", None))
     sr.sync(reg, ["special_push_token"], today)
     assert reg["secrets"]["special_push_token"]["tier"] == "ignore"
+
+
+# --- registry persistence round-trip ----------------------------------------
+# The registry is the single plaintext source of names/tiers/dates. A save/load
+# corruption is SILENT (the next sync/audit reads garbage), so pin the contract:
+# round-trips losslessly, keeps the MANAGED header, and sorts keys deterministically
+# (sort_keys=True keeps the committed file diff-stable as secrets are added).
+
+def test_registry_round_trips_losslessly(tmp_path):
+    reg = {"secrets": {
+        "b_token": {"tier": "auto", "last_rotated": "2026-06-01"},
+        "a_token": {"tier": "assisted", "last_rotated": "2026-05-15"},
+    }}
+    path = str(tmp_path / "reg.yml")
+    sr.save_registry(reg, path)
+    assert sr.load_registry(path) == reg
+
+
+def test_saved_registry_keeps_managed_header_and_sorts_keys(tmp_path):
+    path = str(tmp_path / "reg.yml")
+    sr.save_registry({"secrets": {"z_tok": {"tier": "auto"}, "a_tok": {"tier": "auto"}}}, path)
+    text = (tmp_path / "reg.yml").read_text()
+    assert text.startswith("# Secret rotation registry — MANAGED")
+    assert text.index("\n  a_tok:") < text.index("\n  z_tok:")  # sort_keys=True
+
+
+def test_load_registry_missing_file_returns_empty_skeleton(tmp_path):
+    assert sr.load_registry(str(tmp_path / "does-not-exist.yml")) == {"secrets": {}}
