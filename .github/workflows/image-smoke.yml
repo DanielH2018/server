@@ -8,6 +8,12 @@ name: image-smoke
 on:
   pull_request:
 
+# Cancel a superseded run when new commits land on the same PR (force-push / Renovate
+# rebases) — image-smoke pulls + boots images, so superseded runs waste real runner minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

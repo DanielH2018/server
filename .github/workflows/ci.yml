@@ -5,6 +5,12 @@ on:
   push:
     branches: [master]
 
+# Cancel a superseded run when new commits land on the same ref (PR force-push / stacked
+# pushes) so redundant lint/test runs don't pile up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
