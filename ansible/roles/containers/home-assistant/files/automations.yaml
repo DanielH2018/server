@@ -233,7 +233,7 @@
   action:
     - service: script.bedroom_lights_set
       data:
-        reason: presence
+        reason: "presence"
 
 # Presence BLIP: you arrived but the room is too bright for auto-on (the lux gate is OFF), so the
 # lights won't come on. Flash them softly to acknowledge the detection. Sibling of bedroom_presence_on,
@@ -374,7 +374,7 @@
       then:
         - service: script.bedroom_lights_set
           data:
-            reason: natural
+            reason: "natural"
         # Sleep-quality note: "you slept N h" (gentler wake if <6h — apply_natural already softened
         # the ramp peak to 30%). Skipped if sleep_duration is unknown/0 (Google Sleep API may lag).
         - variables:
@@ -416,13 +416,13 @@
           sequence:
             - service: script.bedroom_lights_set
               data:
-                reason: wake
+                reason: "wake"
         # Window just ended this minute -> release to Adaptive Lighting (ambient-fill) for the day.
         - conditions: "{{ elapsed >= 30 and elapsed < 31 }}"
           sequence:
             - service: script.bedroom_lights_set
               data:
-                reason: natural
+                reason: "natural"
 
 # Slow color tracking: while the lights are in AUTO mode, drift their color every 5 min toward
 # Adaptive Lighting's CURRENT sun-curve color (read off the AL switch attribute — AL computes it even
@@ -958,7 +958,7 @@
       then:
         - service: script.bedroom_lights_set
           data:
-            reason: natural
+            reason: "natural"
 
 # Flush held notifications on arrival: when you re-enter the home geofence, any alerts that were
 # parked while you were away (persistent_notification ids starting with hold_) and did NOT resolve
@@ -1035,7 +1035,7 @@
           sequence:
             - service: script.bedroom_fan_set
               data:
-                reason: boost
+                reason: "boost"
         - conditions: "{{ trigger.event.data.action == 'BEDROOM_START_BEDTIME' }}"
           sequence:
             - service: script.bedroom_bedtime
@@ -1045,10 +1045,10 @@
           sequence:
             - service: script.bedroom_lights_set
               data:
-                reason: natural
+                reason: "natural"
             - service: script.bedroom_fan_set
               data:
-                reason: auto
+                reason: "auto"
 
 # Bedtime prompt: at 22:00, if you're in the bedroom and haven't started bedtime, send a nudge with
 # a "Start now" button (-> BEDROOM_START_BEDTIME -> script.bedroom_bedtime). Gated on present + not
