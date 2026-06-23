@@ -4,3 +4,7 @@ role_deps:
   - authelia
   - sonarr
   - radarr
+  # jellyfin client is enabled in application.yml (Leaving Soon collection sync); declare it
+  # so a cold full deploy orders janitorr after jellyfin. delete:false there keeps it read-only,
+  # so this is ordering-correctness, not a hard runtime dependency.
+  - jellyfin

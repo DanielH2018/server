@@ -1383,7 +1383,7 @@
     # the fan.jinja use elsewhere in this file.
     - variables:
         verdict: "{% from 'ventilation.jinja' import ventilation_advice %}{{ ventilation_advice(states('sensor.bedroom_airgradient_one_temperature'), state_attr('weather.forecast_home', 'temperature'), states('sensor.bedroom_airgradient_one_pm2_5'), states('sensor.outdoor_pm2_5'), is_state('binary_sensor.bedroom_co2_high', 'on') or is_state('binary_sensor.bedroom_voc_high', 'on')) }}"
-        out_temp: "{{ state_attr('weather.forecast_home', 'temperature') | round }}"
+        out_temp: "{{ state_attr('weather.forecast_home', 'temperature') | float(0) | round }}"
         in_temp: "{{ states('sensor.bedroom_airgradient_one_temperature') | round }}"
         co2: "{{ states('sensor.bedroom_airgradient_one_carbon_dioxide') }}"
     - choose:
