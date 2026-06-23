@@ -468,6 +468,11 @@ bedroom_bedtime:
     Engage sleep mode (quiet fan cap), Adaptive Lighting sleep mode, and fade to the warm nightlight
     scene over 30 min. Keeps the fan temperature-responsive but quiet; does not freeze it.
   mode: single
+  fields:
+    fade:
+      description: Nightlight fade duration in seconds (default 1800 = 30 min).
+      required: false
+      example: 1800
   sequence:
     - service: input_boolean.turn_on
       target:
@@ -485,7 +490,7 @@ bedroom_bedtime:
       target:
         entity_id: scene.bedroom_nightlight
       data:
-        transition: 1800
+        transition: "{{ fade | default(1800) | int }}"
     # Set AL's sleep target (warm/dim) for after the morning reset releases control. Harmless now —
     # AL is already hands-off, so this can't move the lights.
     - service: switch.turn_on
