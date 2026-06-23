@@ -116,6 +116,13 @@ services:
       - RENOVATE_STATE_DIR=/renovate-state
       - RENOVATE_MAX_AGE_MIN=2160
       - KUMA_PUSH_RENOVATE_ALIVE={{ monitor_bridge_renovate_alive_push_token }}
+      # Loki log-ingestion freshness: Loki's /ready Kuma probe stays green even when promtail
+      # stops shipping (docker-proxy break, positions corruption). Count lines on an always-active
+      # file-tailed stream (syslog) over 10m and `down` at zero — reached at loki:3100 over `monitoring`.
+      - LOKI_URL=http://loki:3100
+      - LOKI_STREAM={job="syslog"}
+      - LOKI_WINDOW=10m
+      - KUMA_PUSH_LOKI={{ monitor_bridge_loki_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
@@ -154,6 +161,9 @@ services:
          over `apps`. interval 600s (2× the 300s loop), max_retries=0 like every bridge push monitor. -#}
       {{ kuma('monitor-bridge-ha', monitor_type='push', name='Home Assistant Automations', interval=600, max_retries=0, push_token=monitor_bridge_ha_push_token) }}
       {{ kuma('renovate-notify-alive', monitor_type='push', name='Renovate Notifier — Alive', interval=600, max_retries=0, push_token=monitor_bridge_renovate_alive_push_token) }}
+      {# Loki log-ingestion freshness: check_loki_ingestion counts lines on the syslog stream over
+         10m and `down` at zero — catches a dead promtail/Loki pipeline that /ready can't see. -#}
+      {{ kuma('monitor-bridge-loki', monitor_type='push', name='Loki Log Ingestion', interval=600, max_retries=0, push_token=monitor_bridge_loki_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 

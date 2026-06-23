@@ -31,6 +31,7 @@ HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
 PROM_URL = _env("PROMETHEUS_URL", "http://prometheus:9090").rstrip("/")
 KOPIA_URL = _env("KOPIA_URL", "http://kopia:51515").rstrip("/")
 KUMA_URL = _env("KUMA_URL", "http://uptime-kuma:3001").rstrip("/")
+LOKI_URL = _env("LOKI_URL", "http://loki:3100").rstrip("/")
 
 BACKUP_PATH = _env("BACKUP_SOURCE_PATH", "/data/home/ubuntu/server/containers")
 BACKUP_MAX_AGE_H = float(_env("BACKUP_MAX_AGE_H", "30"))
@@ -79,6 +80,16 @@ B2_USAGE_MAX_PCT = float(_env("B2_USAGE_MAX_PCT", "85"))
 # aging collector_date values in the web API. 26h allows one run + slack.
 SCRUTINY_URL = _env("SCRUTINY_URL", "http://scrutiny:8080").rstrip("/")
 SCRUTINY_MAX_AGE_H = float(_env("SCRUTINY_MAX_AGE_H", "26"))
+
+# Loki log-ingestion freshness: Loki's Kuma /ready probe stays green even when promtail
+# stops SHIPPING (DOCKER_HOST/docker-proxy break, positions-file corruption, relabel
+# regression) — a silently-dead log pipeline that quietly blinds the log dashboards and
+# any future log forensics. We count ingested lines for an always-active, FILE-TAILED
+# stream (job=syslog: host cron/systemd/kernel never go quiet over 10m, and it stops only
+# if promtail itself dies or its positions file corrupts — exactly the failures /ready
+# can't see) and go down at zero. Reached at loki:3100 over the shared `monitoring` net.
+LOKI_STREAM = _env("LOKI_STREAM", '{job="syslog"}')
+LOKI_WINDOW = _env("LOKI_WINDOW", "10m")
 
 # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
 # 2026-06-11 (fwupd): hourly load5/core >1.7 episodes with healthcheck-timeout storms
@@ -695,6 +706,35 @@ def check_ha_heartbeat():
     return False, "%s (%d cycles)" % (msg, _ha_down_streak)
 
 
+def loki_count(selector, window):
+    """Instant LogQL query: total log lines for `selector` over `window`. None if no series.
+
+    Loki's instant-query endpoint evaluates a metric query — here
+    sum(count_over_time(SELECTOR[WINDOW])) — and returns a vector with the same
+    [ts, value] shape prom_scalar parses, so we read result[0].value[1].
+    """
+    query = "sum(count_over_time(%s[%s]))" % (selector, window)
+    url = LOKI_URL + "/loki/api/v1/query?" + urllib.parse.urlencode({"query": query})
+    data = _get_json(url)
+    if data.get("status") != "success":
+        raise RuntimeError("loki query status=%s" % data.get("status"))
+    result = data.get("data", {}).get("result", [])
+    if not result:
+        return None
+    return float(result[0]["value"][1])
+
+
+def loki_ingestion_fresh(count, window):
+    """Decide log-pipeline freshness from the line count over `window` (None = no series)."""
+    if not count:  # None or 0 — nothing shipped: promtail dead, positions corrupt, etc.
+        return False, "no log lines ingested in %s — promtail/Loki pipeline silent" % window
+    return True, "%d log lines in %s" % (int(count), window)
+
+
+def check_loki_ingestion():
+    return loki_ingestion_fresh(loki_count(LOKI_STREAM, LOKI_WINDOW), LOKI_WINDOW)
+
+
 CHECKS = [
     ("backup", _env("KUMA_PUSH_KOPIA", ""), check_backup),
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
@@ -714,6 +754,7 @@ CHECKS = [
     ("pi_pressure",   _env("KUMA_PUSH_PI",            ""), check_pi_pressure),
     ("ha_heartbeat",  _env("KUMA_PUSH_HA",            ""), check_ha_heartbeat),
     ("renovate_alive", _env("KUMA_PUSH_RENOVATE_ALIVE", ""), check_renovate_alive),
+    ("loki_ingestion", _env("KUMA_PUSH_LOKI",         ""), check_loki_ingestion),
 ]
 
 

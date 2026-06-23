@@ -1072,3 +1072,63 @@ def test_check_renovate_alive_fresh_file_is_up(tmp_path, monkeypatch):
     (tmp_path / "last_run").write_text(str(_t.time()))
     ok, _ = check.check_renovate_alive()
     assert ok
+
+
+# --- loki ingestion freshness -----------------------------------------------
+# Loki's Kuma /ready probe stays green even if promtail stops shipping (DOCKER_HOST
+# break, positions-file corruption, label regression) — a silently-dead log pipeline.
+# This check counts ingested log lines for an always-active stream over a window and
+# goes down when zero: a freshness watchdog analogous to the SMART/restore-drill ones.
+
+def _loki_scalar(val):
+    """A Loki instant-query response for `sum(count_over_time(...))`. None -> empty result."""
+    if val is None:
+        return {"status": "success", "data": {"resultType": "vector", "result": []}}
+    return {"status": "success", "data": {"resultType": "vector",
+            "result": [{"metric": {}, "value": [1700000000, str(val)]}]}}
+
+
+def test_loki_ingestion_with_lines_is_ok():
+    ok, msg = check.loki_ingestion_fresh(1234, "10m")
+    assert ok
+    assert "1234" in msg
+
+
+def test_loki_ingestion_zero_lines_is_down():
+    ok, msg = check.loki_ingestion_fresh(0, "10m")
+    assert not ok
+    assert "silent" in msg
+
+
+def test_loki_ingestion_no_series_is_down():
+    # an empty query result (no matching stream at all) is also a silent pipeline
+    ok, msg = check.loki_ingestion_fresh(None, "10m")
+    assert not ok
+
+
+def test_loki_count_parses_value(monkeypatch):
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _loki_scalar(42))
+    assert check.loki_count('{job="syslog"}', "10m") == 42.0
+
+
+def test_loki_count_empty_result_is_none(monkeypatch):
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _loki_scalar(None))
+    assert check.loki_count('{job="syslog"}', "10m") is None
+
+
+def test_loki_count_non_success_raises(monkeypatch):
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"status": "error"})
+    with pytest.raises(RuntimeError):
+        check.loki_count('{job="syslog"}', "10m")
+
+
+def test_check_loki_ingestion_fresh_is_up(monkeypatch):
+    monkeypatch.setattr(check, "loki_count", lambda *a, **k: 500)
+    ok, _ = check.check_loki_ingestion()
+    assert ok
+
+
+def test_check_loki_ingestion_silent_is_down(monkeypatch):
+    monkeypatch.setattr(check, "loki_count", lambda *a, **k: 0)
+    ok, msg = check.check_loki_ingestion()
+    assert not ok
