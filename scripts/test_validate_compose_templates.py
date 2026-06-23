@@ -122,3 +122,17 @@ def test_dict_form_watchtower_labels_not_flagged():
 def test_non_watchtower_label_without_equals_is_ignored():
     docs = _docs({"labels": ["some.other.label:value"]})
     assert vct.find_watchtower_label_bugs(docs) == []
+
+
+# --- real-render regression guard --------------------------------------------
+# The synthetic tests above only exercise the two detector functions. This is the
+# ONLY pytest coverage of the *real* render path (every service in both hosts'
+# containers_list, through ALL the shared macros: networks/resources/healthcheck/
+# traefik/autokuma/expose). It mirrors the sibling validators' live-config guards
+# (validate_ha_config.test_validate_real_config_is_clean, validate_grafana
+# .test_real_role_passes). Without it, a Jinja-indent regression in a macro that
+# the prek `validate-compose-templates` hook's file filter doesn't match (e.g.
+# networks.yml.j2) would slip past CI entirely.
+
+def test_real_templates_render_clean():
+    assert vct.main() == 0
