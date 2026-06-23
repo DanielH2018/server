@@ -23,6 +23,14 @@ the held SHA and the hold clears automatically.
   edit session would re-page every 30-min tick. State: `/var/lib/gitops-deploy/dirty_alerted_date`.
 - **Broad changes** (shared `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`)
   are NOT auto-scoped — the deployer alerts and defers to a manual full deploy.
+- Acts **only when origin is strictly ahead of local** (`is_ancestor(local, origin)` →
+  `next_action(..., origin_ahead=…)`). Un-pushed local commits make origin an *ancestor* of
+  local; that's a no-op, not a deploy — otherwise the tick would diff `local..origin` (the
+  *reverse* of those commits) and mis-fire a redeploy + false rollback. Push to clear it.
+- Health-gates **only services deployed on THIS host** (daniel-server). A changed template for
+  an other-host-only service (e.g. `dozzle` is daniel-pi-only) renders no compose here, so
+  `containers_for()` returns `[]` and it's skipped — without this the gate polls a phantom
+  container until `HEALTH_TIMEOUT_S` and false-rollbacks (`deploy_logic.containers_to_gate`).
 
 ## Config / secrets
 `/etc/gitops-deploy/config.env` (0600) is templated from the SOPS var

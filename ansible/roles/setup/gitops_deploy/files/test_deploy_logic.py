@@ -5,6 +5,7 @@ from deploy_logic import (
     services_from_changed_paths,
     next_action,
     container_names,
+    containers_to_gate,
     should_alert_dirty,
 )
 
@@ -85,6 +86,43 @@ def test_next_action_dirty_tree_never_deploys():
 def test_next_action_clean_tree_still_deploys():
     # Regression: a clean tree (the default) behaves exactly as before.
     assert next_action("aaa", "bbb", None, dirty=False) == "deploy"
+
+
+# The deployer is pull-based and only ever fast-forwards: it must act ONLY when
+# origin is strictly ahead of local. When the operator has committed locally but
+# not pushed, origin is an *ancestor* of local (origin_ahead=False). The old code
+# saw origin != local and returned "deploy", then diffed local..origin (the reverse
+# of the un-pushed commits) and mis-fired a deploy + false rollback. Must be a no-op.
+def test_next_action_noop_when_local_ahead_of_origin():
+    assert next_action("localnew", "originold", None, origin_ahead=False) == "noop"
+
+
+def test_next_action_deploy_requires_origin_ahead():
+    # The normal pull path: origin strictly ahead (the default) still deploys.
+    assert next_action("aaa", "bbb", None, origin_ahead=True) == "deploy"
+
+
+def test_next_action_dirty_precedes_origin_ahead_check():
+    # dirty still short-circuits even when origin isn't ahead.
+    assert next_action("localnew", "originold", None, dirty=True, origin_ahead=False) == "dirty"
+
+
+# The health gate must only check services actually deployed on THIS host. A
+# changed template for an other-host-only service (dozzle is daniel-pi-only)
+# renders no compose here, so containers_for() reads no file and passes None.
+# Gating it would poll a phantom container until timeout and false-rollback.
+def test_containers_to_gate_skips_service_not_on_this_host():
+    assert containers_to_gate(None, "dozzle") == []
+
+
+def test_containers_to_gate_uses_rendered_container_names():
+    compose = "    container_name: scrutiny-influxdb\n    container_name: scrutiny\n"
+    assert containers_to_gate(compose, "scrutiny") == ["scrutiny-influxdb", "scrutiny"]
+
+
+def test_containers_to_gate_falls_back_to_service_when_compose_names_none():
+    # Present compose that declares no container_name -> gate the role/service name.
+    assert containers_to_gate("    image: foo\n", "freshrss") == ["freshrss"]
 
 
 # A role may run several containers; the bumped image's container is often NOT

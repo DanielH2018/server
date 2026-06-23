@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from deploy_logic import (  # noqa: E402
-    container_names,
+    containers_to_gate,
     next_action,
     services_from_changed_paths,
     should_alert_dirty,
@@ -72,6 +72,17 @@ def run(args: list[str], cwd: str | None = REPO, check: bool = True,
 
 def log(msg: str) -> None:
     print(msg, flush=True)
+
+
+def is_ancestor(ancestor: str, descendant: str) -> bool:
+    """True if `ancestor` is an ancestor of (or equal to) `descendant`. Used to
+    decide whether origin is strictly ahead of local — only then is there
+    anything to fast-forward and deploy (see next_action's origin_ahead). A git
+    error (bad object, etc.) is a non-zero exit and conservatively reads False,
+    so the tick degrades into a no-op rather than a mis-fired deploy."""
+    r = subprocess.run(["git", "merge-base", "--is-ancestor", ancestor, descendant],
+                       cwd=REPO, capture_output=True)
+    return r.returncode == 0
 
 
 def _read_marker(path: str) -> str | None:
@@ -153,15 +164,19 @@ def health_ok(container: str, settle_checks: int = 3) -> bool:
 
 
 def containers_for(service: str) -> list[str]:
-    """Container names declared by a deployed service's rendered compose file.
-    Falls back to the service name if the file is missing or names none."""
+    """Container names to health-gate for a deployed service, from its rendered
+    compose. Empty when the service isn't deployed on THIS host — its rendered
+    file doesn't exist (dozzle is daniel-pi-only; the deployer runs on
+    daniel-server) — so the caller skips it instead of gating a phantom container
+    (see deploy_logic.containers_to_gate). A present compose that declares no
+    container_name falls back to [service]."""
     path = os.path.join(REPO, "containers", service, "docker-compose.yml")
     try:
         with open(path) as fh:
-            names = container_names(fh.read())
+            text: str | None = fh.read()
     except FileNotFoundError:
-        names = []
-    return names or [service]
+        text = None
+    return containers_to_gate(text, service)
 
 
 def service_healthy(service: str) -> bool:
@@ -190,7 +205,12 @@ def main() -> int:
     origin = run(["git", "rev-parse", f"origin/{BRANCH}"])
     hold = read_hold()
 
-    action = next_action(local, origin, hold, dirty)
+    # origin is "ahead" only if local is an ancestor of it — i.e. it carries
+    # commits we don't have. If origin is behind (the operator committed locally
+    # but hasn't pushed) or the two diverged, there is nothing to fast-forward and
+    # next_action() makes this a no-op instead of mis-firing on the reverse diff.
+    origin_ahead = is_ancestor(local, origin)
+    action = next_action(local, origin, hold, dirty, origin_ahead)
     if action == "dirty":
         # Healthy skip (operator mid-edit). Throttle the page to once a day at
         # ~07:00 CT instead of every 30-min tick (see DIRTY_ALERT_FILE).
@@ -224,6 +244,14 @@ def main() -> int:
     run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])
     deploy(cs.services)
 
+    # Health-gate only services actually deployed on THIS host. A changed template
+    # for an other-host-only service (dozzle is daniel-pi-only) renders no compose
+    # here, so containers_for() returns [] and service_healthy() is vacuously true —
+    # without this the gate would poll a phantom container to timeout and trigger a
+    # false rollback. (deploy(cs.services) above is a harmless no-op for those tags.)
+    skipped = sorted(s for s in cs.services if not containers_for(s))
+    if skipped:
+        log(f"not deployed on this host; skipping health gate: {skipped}")
     failed = [s for s in sorted(cs.services) if not service_healthy(s)]
     if not failed:
         write_hold(None)
