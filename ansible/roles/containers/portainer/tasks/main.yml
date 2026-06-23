@@ -8,14 +8,6 @@
     common_dirs_to_create:
       - "{{ container_item.name }}/data"
 
-- name: Add apache2-utils
-  tags: [config]
-  ansible.builtin.apt:
-    name: apache2-utils
-    state: present
-  become: true
-  become_method: ansible.builtin.sudo
-
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:
