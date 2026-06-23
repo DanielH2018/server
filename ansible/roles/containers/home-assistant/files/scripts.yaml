@@ -629,12 +629,15 @@ bedroom_notify:
             message: "{{ message }}"
 
 # Test harness: run the selected scenario (input_select.bedroom_test_scenario) at the selected speed
-# (input_select.bedroom_test_speed = fast -> compressed ~30s, real -> production timing). Drives the REAL
-# scripts/automations so what you see is what fires for real — never a reimplementation. Narrates each
-# run as a persistent_notification (id test_scenario, updates in place). `reset` returns the room to a
-# clean daytime baseline. Invoked by the dashboard Run button (ui-lovelace.yaml.j2). Its only DIRECT
-# actuator write is the nightlight scene.turn_on (hence the sanctioned_writers exemption); every other
-# branch goes through a mediator/module script or automation.trigger.
+# (input_select.bedroom_test_speed = fast -> compressed ~30s + EPHEMERAL, real -> production timing + kept).
+# Drives the REAL scripts/automations so what you see is what fires for real — never a reimplementation.
+# FAST mode is a PREVIEW: it snapshots the room (sticky flags + light/fan via scene.create), runs the
+# scenario, then restores the exact prior state after an observe window — so e.g. bedtime's sleep_mode
+# doesn't stick. `reset` (the baseline) and real mode are NOT wrapped. Narrates as a persistent_notification
+# (id test_scenario, updates in place). Invoked by the dashboard Run button (ui-lovelace.yaml.j2). DIRECT
+# light write = the nightlight branch's scene.turn_on (sanctioned_writers light exemption); the restore
+# writes the 3 override booleans (declared in expected_override_writers.yml). The bedroom_pre_test
+# scene.turn_on restores the fan at runtime but is NOT a tracked write (runtime scene, not in scene_map).
 bedroom_run_scenario:
   alias: "Bedroom — run test scenario"
   description: >-
@@ -646,6 +649,28 @@ bedroom_run_scenario:
     - variables:
         scenario: "{{ states('input_select.bedroom_test_scenario') }}"
         fast: "{{ is_state('input_select.bedroom_test_speed', 'fast') }}"
+        # Fast = ephemeral preview: snapshot the room, run the scenario, then restore the exact prior
+        # state. `reset` is the baseline (never wrapped); off/none never ran a scenario.
+        wrap: "{{ fast and scenario in ['bedtime', 'wake', 'nightlight', 'away', 'arrive'] }}"
+        # Observe window (s) before restore: bedtime's fade is async on the bulb (wait 30s);
+        # preview_wake already blocks ~30s while it sweeps (1s buffer); the instant ones get a few.
+        observe: "{{ 30 if scenario == 'bedtime' else (1 if scenario == 'wake' else 4) }}"
+    # Snapshot (fast preview only): capture the four sticky flags as sequence variables (in scope for
+    # the whole sequence) + the visible light/fan state via scene.create, so the restore below returns
+    # the room EXACTLY to its pre-test state. Same scene.create trick as bedroom_alert_pulse.
+    - if: "{{ wrap }}"
+      then:
+        - variables:
+            snap_sleep: "{{ states('input_boolean.bedroom_sleep_mode') }}"
+            snap_manual_off: "{{ states('input_boolean.bedroom_manual_off') }}"
+            snap_fan_manual: "{{ states('input_boolean.bedroom_fan_manual') }}"
+            snap_al_sleep: "{{ states('switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom') }}"
+        - service: scene.create
+          data:
+            scene_id: bedroom_pre_test
+            snapshot_entities:
+              - light.bedroom_lights
+              - fan.tower_fan
     - choose:
         # Bedtime fade — fast passes a 30s fade; real uses the production 30-min fade.
         - conditions: "{{ scenario == 'bedtime' }}"
@@ -747,3 +772,55 @@ bedroom_run_scenario:
             notification_id: test_scenario
             title: "🧪 Scenario: none"
             message: "Pick a scenario (not 'off') in the picker, then press Run."
+    # Restore (fast preview only): after the observe window, put the room back EXACTLY as it was — the
+    # visible light/fan state (from the snapshot scene) + the four sticky flags. This is what makes fast
+    # mode ephemeral (e.g. bedtime's sleep_mode no longer sticks). Real mode skips this entirely.
+    - if: "{{ wrap }}"
+      then:
+        - delay: "{{ observe }}"
+        - service: scene.turn_on
+          target:
+            entity_id: scene.bedroom_pre_test
+          data:
+            transition: 1
+        - if: "{{ snap_sleep == 'on' }}"
+          then:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.bedroom_sleep_mode
+          else:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_sleep_mode
+        - if: "{{ snap_manual_off == 'on' }}"
+          then:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.bedroom_manual_off
+          else:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_manual_off
+        - if: "{{ snap_fan_manual == 'on' }}"
+          then:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.bedroom_fan_manual
+          else:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_fan_manual
+        - if: "{{ snap_al_sleep == 'on' }}"
+          then:
+            - service: switch.turn_on
+              target:
+                entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+          else:
+            - service: switch.turn_off
+              target:
+                entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+        - service: persistent_notification.create
+          data:
+            notification_id: test_scenario
+            title: "↩️ Preview restored"
+            message: "Fast preview complete — restored the room to its pre-test state."

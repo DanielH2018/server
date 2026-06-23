@@ -49,15 +49,18 @@ writes:
     - script.bedroom_clear_overrides
     - script.bedroom_fan_nudge
     - script.bedroom_fan_set
+    - script.bedroom_run_scenario
   input_boolean.bedroom_manual_off:
     - automation.bedroom_manual_light_detect
     - automation.bedroom_tap_dial_control
     - script.bedroom_clear_overrides
+    - script.bedroom_run_scenario
   input_boolean.bedroom_sleep_mode:
     - automation.bedroom_tap_dial_control
     - script.bedroom_bedtime
     - script.bedroom_clear_overrides
     - script.bedroom_exit_sleep
+    - script.bedroom_run_scenario
   input_datetime.ha_heartbeat:
     - automation.ha_heartbeat
   input_number.bedroom_fan_expected_level:
@@ -89,6 +92,7 @@ writes:
     - script.bedroom_bedtime
     - script.bedroom_clear_overrides
     - script.bedroom_exit_sleep
+    - script.bedroom_run_scenario
   switch.bedroom_adaptive_lighting_bedroom:
     - script.bedroom_bedtime
   timer.bedroom_fan_dial:

@@ -8,12 +8,15 @@ input_boolean.bedroom_fan_manual:
   - script.bedroom_clear_overrides
   - script.bedroom_fan_nudge
   - script.bedroom_fan_set
+  - script.bedroom_run_scenario
 input_boolean.bedroom_manual_off:
   - automation.bedroom_manual_light_detect
   - automation.bedroom_tap_dial_control
   - script.bedroom_clear_overrides
+  - script.bedroom_run_scenario
 input_boolean.bedroom_sleep_mode:
   - automation.bedroom_tap_dial_control
   - script.bedroom_bedtime
   - script.bedroom_clear_overrides
   - script.bedroom_exit_sleep
+  - script.bedroom_run_scenario
