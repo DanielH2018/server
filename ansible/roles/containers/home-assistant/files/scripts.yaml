@@ -629,7 +629,7 @@ bedroom_notify:
             message: "{{ message }}"
 
 # Test harness: run the selected scenario (input_select.bedroom_test_scenario) at the selected speed
-# (input_boolean.bedroom_test_fast on = compressed ~30s). Drives the REAL production
+# (input_select.bedroom_test_speed = fast -> compressed ~30s, real -> production timing). Drives the REAL
 # scripts/automations so what you see is what fires for real — never a reimplementation. Narrates each
 # run as a persistent_notification (id test_scenario, updates in place). `reset` returns the room to a
 # clean daytime baseline. Invoked by the dashboard Run button (ui-lovelace.yaml.j2). Its only DIRECT
@@ -645,7 +645,7 @@ bedroom_run_scenario:
   sequence:
     - variables:
         scenario: "{{ states('input_select.bedroom_test_scenario') }}"
-        fast: "{{ is_state('input_boolean.bedroom_test_fast', 'on') }}"
+        fast: "{{ is_state('input_select.bedroom_test_speed', 'fast') }}"
     - choose:
         # Bedtime fade — fast passes a 30s fade; real uses the production 30-min fade.
         - conditions: "{{ scenario == 'bedtime' }}"
