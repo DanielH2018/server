@@ -68,12 +68,17 @@ services:
       - apps
       - kopia
     ports:
-      - 80:80
-      - 443:443
+      # Bind v4-only (0.0.0.0). Docker does NOT manage ip6tables here (daemon
+      # Experimental:false, no ip6tables key), so a bare "80:80" makes docker-proxy
+      # also listen on [::] — and that v6 path bypasses the DOCKER-USER "Cloudflare-only
+      # origin" allowlist (which is iptables/v4-only). LAN *.local is already forced to
+      # v4 (dnsmasq AAAA=::) and no AAAA is published, so v4-only publish loses nothing.
+      - 0.0.0.0:80:80
+      - 0.0.0.0:443:443
       # Raw-TCP game-server entrypoints bypass the CrowdSec + rate-limit chain
       # (no HTTP middleware on TCP routers) — only publish when the server is live.
-      - 7777:7777/tcp  # terraria
-      # - 25565:25565/tcp  # minecraft (still archived)
+      - 0.0.0.0:7777:7777/tcp  # terraria
+      # - 0.0.0.0:25565:25565/tcp  # minecraft (still archived)
     environment:
       - CF_API_EMAIL={{ email }}
       - CF_DNS_API_TOKEN={{ cloudflare_dns_token }}
