@@ -114,6 +114,32 @@ bedroom_apply_wake:
         color_temp_kelvin: 2200
         transition: 60
 
+# Test-only: preview the morning wake ramp on demand, COMPRESSED. Sweeps the 30-min window's frames
+# (elapsed 0 -> 15 -> 30 = window start -> alarm -> alarm+15) using the SAME tested wake_brightness
+# macro the production ramp uses, applying each with a short fade so you watch 1% -> ~12% -> 40% in
+# ~30s — without waiting for a real alarm or touching automation.bedroom_wake_ramp. Warm 2200K, like
+# bedroom_apply_wake. Driven only by script.bedroom_run_scenario (the test harness).
+bedroom_preview_wake:
+  alias: "Bedroom — preview wake ramp (test, compressed)"
+  description: >-
+    Sweep the wake ramp's brightness frames in ~30s for testing, reusing the wake_brightness macro.
+    Not part of the production wake path; invoked by the scenario test harness only.
+  mode: restart
+  sequence:
+    - repeat:
+        for_each: [0, 7.5, 15, 22.5, 30]
+        sequence:
+          - variables:
+              target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(repeat.item, states('sensor.pixel_9_pro_sleep_duration') | float(0)) | int }}"
+          - service: light.turn_on
+            target:
+              entity_id: light.bedroom_lights
+            data:
+              brightness_pct: "{{ target }}"
+              color_temp_kelvin: 2200
+              transition: 5
+          - delay: "00:00:06"
+
 # Dispatcher: set the bedroom lights to their natural state for RIGHT NOW. Ordered choose: of
 # time-based exceptions, with full Adaptive Lighting (color + brightness) as the default.
 # This is the single source of truth for "what is natural".
