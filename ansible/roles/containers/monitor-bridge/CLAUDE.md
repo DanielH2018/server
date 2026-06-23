@@ -96,11 +96,14 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     older than `RENOVATE_MAX_AGE_MIN` (2160 = 36 h, one missed daily run + slack) — i.e. the
     notifier stalled / host down. Same state-file dead-man's-switch pattern as the GitOps
     monitors. Spec: `docs/superpowers/specs/2026-06-19-renovate-manual-action-notifier-design.md`.)
-  - **Loki Log Ingestion** (instant LogQL `sum(count_over_time({job="syslog"}[10m]))` against
+  - **Loki Log Ingestion** (instant LogQL `sum(count_over_time({job=~".+"}[30m]))` against
     `loki:3100` over `monitoring`: `down` at zero lines — a silently-dead promtail→Loki pipeline
     (docker-proxy break, positions-file corruption, relabel regression) that Loki's `/ready` Kuma
-    probe stays green through. `syslog` is FILE-tailed and host cron/systemd/kernel keep it active
-    every 10m, so zero means promtail itself died or its positions file corrupted. Stream/window
+    probe stays green through. Counts ALL file-tailed streams (`authlog`+`syslog`+`traefik`), not one:
+    if promtail dies they ALL fall silent together, while no single low-volume file going quiet can
+    trip it. **Originally `{job="syslog"}` over 10m — false-paged 2026-06-23 because this debloated
+    host routinely idles >15m between syslog writes (a 15m35s gap was observed), so a normal quiet
+    spell read as a dead pipeline; the broadened selector + 30m window is the fix.** Stream/window
     tunable via `LOKI_STREAM`/`LOKI_WINDOW`. Pure `loki_ingestion_fresh()` + `loki_count()` are
     unit-tested. A freshness watchdog in the same idiom as the SMART/restore-drill checks.)
 - The restart/OOM/cpu/target/5xx checks use `prom_vector()` (keeps series labels) so the alert

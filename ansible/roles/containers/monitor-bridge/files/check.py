@@ -84,12 +84,14 @@ SCRUTINY_MAX_AGE_H = float(_env("SCRUTINY_MAX_AGE_H", "26"))
 # Loki log-ingestion freshness: Loki's Kuma /ready probe stays green even when promtail
 # stops SHIPPING (DOCKER_HOST/docker-proxy break, positions-file corruption, relabel
 # regression) — a silently-dead log pipeline that quietly blinds the log dashboards and
-# any future log forensics. We count ingested lines for an always-active, FILE-TAILED
-# stream (job=syslog: host cron/systemd/kernel never go quiet over 10m, and it stops only
-# if promtail itself dies or its positions file corrupts — exactly the failures /ready
-# can't see) and go down at zero. Reached at loki:3100 over the shared `monitoring` net.
-LOKI_STREAM = _env("LOKI_STREAM", '{job="syslog"}')
-LOKI_WINDOW = _env("LOKI_WINDOW", "10m")
+# any future log forensics. We count ingested lines across ALL file-tailed streams
+# ({job=~".+"} = authlog+syslog+traefik) over a 30m window and go down at zero: if promtail
+# itself dies (or its positions file corrupts — exactly the failures /ready can't see) they
+# ALL fall silent together, while no single low-volume file going quiet can trip it. (A single
+# syslog stream over 10m false-paged — this debloated host routinely idles >15m between syslog
+# writes, so a normal quiet spell read as a dead pipeline.) Reached at loki:3100 over `monitoring`.
+LOKI_STREAM = _env("LOKI_STREAM", '{job=~".+"}')
+LOKI_WINDOW = _env("LOKI_WINDOW", "30m")
 
 # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
 # 2026-06-11 (fwupd): hourly load5/core >1.7 episodes with healthcheck-timeout storms
