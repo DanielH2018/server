@@ -164,3 +164,19 @@ views:
             name: Illuminance
           - entity: sensor.aqara_fp300_battery
             name: Battery
+      # ── 🧪 Test scenarios (dev harness — script.bedroom_run_scenario) ─────
+      - type: entities
+        title: 🧪 Test scenarios
+        icon: mdi:test-tube
+        entities:
+          - entity: input_select.bedroom_test_scenario
+            name: Scenario
+          - entity: input_boolean.bedroom_test_fast
+            name: Fast (compressed)
+          - type: button
+            name: Run scenario
+            icon: mdi:play
+            action_name: Run
+            tap_action:
+              action: perform-action
+              perform_action: script.bedroom_run_scenario
