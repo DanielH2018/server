@@ -65,15 +65,25 @@ final "↩️ restored to pre-test state" `persistent_notification` (id `test_sc
 
 ## Validator-gate impacts (state model)
 
-The restore makes `bedroom_run_scenario` write entities it didn't before — update the guards or CI fails:
+The restore makes `bedroom_run_scenario` write the override booleans it didn't before — update the
+guard or CI fails:
 - **`state/expected_override_writers.yml`:** add `script.bedroom_run_scenario` to ALL THREE override
-  booleans (`bedroom_sleep_mode`/`bedroom_manual_off`/`bedroom_fan_manual`) — the restore writes them.
-- **`state/sanctioned_writers.yml`:** add `script.bedroom_run_scenario` to the `fan.tower_fan`
-  `exemptions:` (the snapshot-restore `scene.turn_on` writes the fan). It already has the
-  `light.bedroom_lights` exemption.
-- `scene.bedroom_pre_test` is a `scene.create` runtime scene — the model's `created_scenes` already
-  tracks it, so it resolves; `scene.turn_on` of it counts as a light+fan write (covered above).
-- Regenerate `state/derived_state.yml` + `state/STATE.md`.
+  booleans (`bedroom_sleep_mode`/`bedroom_manual_off`/`bedroom_fan_manual`) — the restore writes them
+  via static `input_boolean.turn_on/off` calls (the `else` branch of `record()` → tracked writes).
+- **No `fan.tower_fan` exemption is needed** (corrected from an earlier draft). The fan IS restored at
+  RUNTIME by `scene.turn_on scene.bedroom_pre_test`, but the static model does NOT count it as a device
+  write: `extract_writes`' `record()` resolves `scene.turn_on` to actuator writes ONLY for scenes in
+  the static `scene_map` (from `scenes.yaml`); a runtime `scene.create` scene like `bedroom_pre_test`
+  is not in `scene_map`, so it hits the `elif svc.startswith("scene."): continue` branch and records no
+  write. Adding a fan exemption would be a STALE entry → the symmetric `single_writer_errors` check
+  would FAIL. The existing `light.bedroom_lights` exemption STAYS — it's still needed for the
+  `nightlight` branch's `scene.turn_on scene.bedroom_nightlight` (a static `scenes.yaml` scene that
+  DOES resolve to a light write).
+- The AL sleep switch restore (`switch.turn_on/off`) writes a `switch.` entity, which is not a tracked
+  actuator (only light/fan are sanctioned) — no guard change.
+- Regenerate `state/derived_state.yml` + `state/STATE.md`; then run `validate_ha_config.py` and
+  reconcile the state files to EXACTLY what it reports (symmetric: add any missing writer it names,
+  remove any stale one).
 
 ## Error handling / safety
 
@@ -86,6 +96,7 @@ The restore makes `bedroom_run_scenario` write entities it didn't before — upd
 ## Boundaries
 
 One script restructured (`bedroom_run_scenario`: a `wrap` gate + snapshot block + restore block around
-the untouched `choose:`) + two state-file declarations + a regen. Reuses the existing `scene.create`
+the untouched `choose:`) + one state-file declaration (`expected_override_writers.yml`; sanctioned_writers
+is unchanged) + a regen. Reuses the existing `scene.create`
 snapshot pattern; no new helpers, no new unit test. Closes the "fast tests leave sleep_mode (and the
 rest) stuck" gap.
