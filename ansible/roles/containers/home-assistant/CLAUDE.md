@@ -546,6 +546,24 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   validation (unknown keys, bad integration options) or entity-existence checks — that needs
   `hass --script check_config` in a Docker HA image (out of scope); the deploy still catches schema
   errors live.
+- **Scenario test harness (since 2026-06-23).** Exercise the bedroom automations ON DEMAND instead of
+  waiting for the real trigger (night / leaving home). The dashboard "🧪 Test scenarios" card +
+  `input_select.bedroom_test_scenario` (off/bedtime/wake/nightlight/away/arrive/reset) +
+  `input_select.bedroom_test_speed` (fast/real — **fast is the default because an `input_select`'s
+  first option is its creation default, which an `input_boolean` can't do: it has no `initial:`
+  field, only restores**) drive `script.bedroom_run_scenario`. It DRIVES the real scripts/automations,
+  never reimplements them: bedtime→`bedroom_bedtime` (gained an optional `fade`, default 1800; fast
+  passes 30), wake→`bedroom_preview_wake` (test-only **compressed frame-sweep reusing the tested
+  `wake_brightness` macro** — does NOT touch the production `bedroom_wake_ramp`/`bedroom_apply_wake`),
+  nightlight→`scene.bedroom_nightlight`, away/arrive→`automation.trigger` (skip_condition),
+  reset→`bedroom_clear_overrides` (a DRY extraction shared with the morning reset). **Away is
+  response-only:** it tests the lights/fan-off + "Left on" notify; the away notification-HOLD path
+  needs a real `person.daniel != home` (set it in Developer Tools → States — no service sets arbitrary
+  entity state). Inert until you press Run; the test-only direct light writers (`bedroom_preview_wake`,
+  `bedroom_run_scenario` via the nightlight `scene.turn_on`) are declared in
+  `state/sanctioned_writers.yml`. Phase 2 also extracted the away/arrive selection into tested macros
+  (`away_items_label`/`arrive_relight_allowed`). Spec+plan:
+  `docs/superpowers/specs|plans/2026-06-23-ha-scenario-test-harness*`.
 
 ## Claude tooling for this role
 - **`home-assistant-engineer` agent** (`.claude/agents/`) — read+write HA engineer that knows
