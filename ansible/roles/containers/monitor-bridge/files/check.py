@@ -221,8 +221,11 @@ def check_disk():
     breaching = []
     for mp in DISK_MOUNTPOINTS:
         sel = '{mountpoint="%s"}' % mp
-        avail = prom_scalar("node_filesystem_avail_bytes" + sel)
-        size = prom_scalar("node_filesystem_size_bytes" + sel)
+        # max() collapses any duplicate device/fstype series for the same mountpoint to one
+        # deterministic value (duplicates share the value), so prom_scalar's result[0] order
+        # can't matter.
+        avail = prom_scalar("max(node_filesystem_avail_bytes" + sel + ")")
+        size = prom_scalar("max(node_filesystem_size_bytes" + sel + ")")
         if avail is None or size is None or size == 0:
             return False, "metric unavailable for %s" % mp
         used_pct = 100.0 * (1 - avail / size)
