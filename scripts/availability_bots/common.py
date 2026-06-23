@@ -22,6 +22,11 @@ import requests
 # bot indefinitely (the originals passed no timeout — a hung host would block forever).
 REQUEST_TIMEOUT = 30  # seconds
 
+# Explicit UA on the Discord POST. requests' default `python-requests/*` already works, but
+# Cloudflare (Discord's edge) has 1010-blocked header-light clients before, so send a real
+# UA as defense-in-depth and to keep every Discord POST in this repo uniformly UA'd.
+DISCORD_USER_AGENT = "homelab-availability-bot/1.0"
+
 
 def configure_logging(name: str) -> logging.Logger:
     """Configure console logging once and return a named logger.
@@ -70,7 +75,8 @@ def send_discord_notification(
     """
     try:
         response = requests.post(
-            webhook_url, json={"content": message}, timeout=REQUEST_TIMEOUT
+            webhook_url, json={"content": message},
+            headers={"User-Agent": DISCORD_USER_AGENT}, timeout=REQUEST_TIMEOUT
         )
         response.raise_for_status()  # Discord replies 204 No Content on success
         logger.info("Discord notification sent.")
