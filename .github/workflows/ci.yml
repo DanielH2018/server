@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0  # gitleaks needs full history
+          fetch-depth: 0  # full clone; prek --all-files scans the worktree, so history isn't strictly required here — kept as belt-and-suspenders
 
       - uses: actions/setup-python@v6
         with:
