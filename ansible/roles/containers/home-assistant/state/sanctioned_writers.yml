@@ -16,6 +16,7 @@ light.bedroom_lights:
     - script.bedroom_alert_pulse
     - automation.bedroom_color_tracking
     - script.bedroom_preview_wake
+    - script.bedroom_run_scenario
 fan.tower_fan:
   module:
     - script.bedroom_fan_set

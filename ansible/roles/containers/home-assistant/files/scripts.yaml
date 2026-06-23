@@ -627,3 +627,123 @@ bedroom_notify:
             notification_id: "{{ tag }}"
             title: "{{ title }}"
             message: "{{ message }}"
+
+# Test harness: run the selected scenario (input_select.bedroom_test_scenario) at the selected speed
+# (input_boolean.bedroom_test_fast on = compressed ~30s). Drives the REAL production
+# scripts/automations so what you see is what fires for real — never a reimplementation. Narrates each
+# run as a persistent_notification (id test_scenario, updates in place). `reset` returns the room to a
+# clean daytime baseline. Invoked by the dashboard Run button (ui-lovelace.yaml.j2). Its only DIRECT
+# actuator write is the nightlight scene.turn_on (hence the sanctioned_writers exemption); every other
+# branch goes through a mediator/module script or automation.trigger.
+bedroom_run_scenario:
+  alias: "Bedroom — run test scenario"
+  description: >-
+    Exercise a bedroom scenario on demand (bedtime/wake/nightlight/away/arrive/reset) at compressed or
+    real speed, driving the real scripts/automations — for testing without waiting for night or
+    leaving home.
+  mode: restart
+  sequence:
+    - variables:
+        scenario: "{{ states('input_select.bedroom_test_scenario') }}"
+        fast: "{{ is_state('input_boolean.bedroom_test_fast', 'on') }}"
+    - choose:
+        # Bedtime fade — fast passes a 30s fade; real uses the production 30-min fade.
+        - conditions: "{{ scenario == 'bedtime' }}"
+          sequence:
+            - service: script.bedroom_bedtime
+              data:
+                fade: "{{ 30 if fast else 1800 }}"
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: bedtime ({{ 'fast' if fast else 'real' }})"
+                message: >-
+                  Engaged sleep mode + AL sleep; fading to amber 3% over
+                  {{ '30s' if fast else '30 min' }}; fan capped to Low. Run `reset` to clear.
+        # Wake ramp — fast sweeps the frames in ~30s; real applies the current frame only (the
+        # production per-minute ramp is alarm-driven — set a morning watch alarm to see it live).
+        - conditions: "{{ scenario == 'wake' }}"
+          sequence:
+            - if: "{{ fast }}"
+              then:
+                - service: script.bedroom_preview_wake
+              else:
+                - service: script.bedroom_apply_wake
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: wake ({{ 'fast' if fast else 'real' }})"
+                message: >-
+                  {{ 'Swept the wake ramp 1% to 12% to 40% in ~30s (warm 2200K).' if fast
+                     else 'Applied the current wake frame. The real ramp is alarm-driven — set a
+                     morning watch alarm to see it live.' }}
+        # Nightlight — the dim amber "got up overnight" scene, instantly.
+        - conditions: "{{ scenario == 'nightlight' }}"
+          sequence:
+            - service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_nightlight
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: nightlight"
+                message: "Applied scene.bedroom_nightlight (amber 3%). Run `reset` to return to normal."
+        # Away — ensure the lights are on (so there's something to turn off), then trigger the REAL
+        # away automation (skip_condition: its 10-min person trigger can't be faked).
+        - conditions: "{{ scenario == 'away' }}"
+          sequence:
+            - if: "{{ is_state('light.bedroom_lights', 'off') }}"
+              then:
+                - service: script.bedroom_lights_set
+                  data:
+                    reason: "natural"
+                - delay: "00:00:02"
+            - service: automation.trigger
+              target:
+                entity_id: automation.bedroom_away
+              data:
+                skip_condition: true
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: away"
+                message: >-
+                  Triggered the away response: bedroom lights + fan off, "Left on" notification sent.
+                  (The away notification-HOLD path needs a real away state — set person.daniel to
+                  not_home in Developer Tools then Set State to test that.)
+        # Arrive home — trigger the real arrive automation (its inline conditions still run).
+        - conditions: "{{ scenario == 'arrive' }}"
+          sequence:
+            - service: automation.trigger
+              target:
+                entity_id: automation.bedroom_arrive_home
+              data:
+                skip_condition: true
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: arrive"
+                message: >-
+                  Triggered arrive-home: fan resumes per temperature; lights re-check only if FP300
+                  present, not manual-off, and currently off.
+        # Reset — clear every override and return to a clean daytime baseline.
+        - conditions: "{{ scenario == 'reset' }}"
+          sequence:
+            - service: script.bedroom_clear_overrides
+            - service: script.bedroom_lights_set
+              data:
+                reason: "natural"
+            - service: script.bedroom_fan_set
+              data:
+                reason: "auto"
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: reset"
+                message: "Cleared overrides + AL sleep; re-applied natural lighting + temperature fan."
+      default:
+        - service: persistent_notification.create
+          data:
+            notification_id: test_scenario
+            title: "🧪 Scenario: none"
+            message: "Pick a scenario (not 'off') in the picker, then press Run."

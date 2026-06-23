@@ -37,6 +37,10 @@ cells:
     name: HA heartbeat
 dynamic_writes: {}
 writes:
+  automation.bedroom_arrive_home:
+    - script.bedroom_run_scenario
+  automation.bedroom_away:
+    - script.bedroom_run_scenario
   fan.tower_fan:
     - automation.bedroom_fan_startup_reconcile
     - script.bedroom_apply_fan
@@ -80,6 +84,7 @@ writes:
     - script.bedroom_blip
     - script.bedroom_lights_set
     - script.bedroom_preview_wake
+    - script.bedroom_run_scenario
     - script.bedroom_set_natural_brightness
   media_player.bedroom_display:
     - automation.bedroom_display_go_ambient_when_dark_or_sleeping
