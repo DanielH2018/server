@@ -9,6 +9,9 @@ labels:
   type: syslog
 ---
 filenames:
-  - /var/log/authelia/*
+  # *.log (not *) so a future rotated authelia.log.1 / .gz in this dir is NOT fed to the
+  # authelia parser (which would error on compressed/rotated content). Today only
+  # authelia.log exists, so this is behaviour-preserving + future-proof.
+  - /var/log/authelia/*.log
 labels:
   type: authelia
