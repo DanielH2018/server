@@ -4,6 +4,10 @@
     src: docker-compose.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/docker-compose.yml"
     mode: "0600"
+  # Rendered compose files embed secrets inline (admin passwords, API/push tokens,
+  # SMTP creds). Without no_log, a `-v`/`--diff` run prints them to the console/CI log.
+  # The on-disk file is 0600 + SOPS-encrypted at rest; this closes the transit-to-stdout leak.
+  no_log: true
 
 - name: Deploy Container {{ container_item.name }}
   community.docker.docker_compose_v2:
