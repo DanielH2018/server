@@ -353,17 +353,10 @@
       at: "09:00:00"
       id: fallback
   action:
-    # Daily hygiene (BOTH triggers): clear every overnight override so sleep state / manual-off can't
-    # persist into the day. One turn_off over the list covers all three input_booleans.
-    - service: input_boolean.turn_off
-      target:
-        entity_id:
-          - input_boolean.bedroom_manual_off
-          - input_boolean.bedroom_fan_manual
-          - input_boolean.bedroom_sleep_mode
-    - service: switch.turn_off
-      target:
-        entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+    # Daily hygiene (BOTH triggers): clear every overnight override (3 booleans + AL sleep) via the
+    # shared script so sleep state / manual-off can't persist into the day. Single source of truth
+    # with the test-harness reset (script.bedroom_clear_overrides).
+    - service: script.bedroom_clear_overrides
     # Re-apply the fan now the sleep cap is cleared — only when home (this calls the fan script
     # DIRECTLY, bypassing bedroom_fan_temperature's home gate).
     - if: "{{ is_state('person.daniel', 'home') }}"

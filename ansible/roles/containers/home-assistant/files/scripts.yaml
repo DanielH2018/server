@@ -205,6 +205,29 @@ bedroom_exit_sleep:
       target:
         entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
 
+# Clear every overnight override: the three coordination booleans (manual-off, fan-manual, sleep
+# mode) + Adaptive Lighting's sleep mode. SINGLE source of truth shared by
+# automation.bedroom_morning_reset (daily hygiene) and the test harness's `reset` scenario
+# (script.bedroom_run_scenario), so "return the room to a clean baseline" lives in ONE place. Does
+# NOT re-apply lights/fan — each caller does that itself (the morning reset relights only on the
+# alarm trigger; the test reset re-applies both).
+bedroom_clear_overrides:
+  alias: "Bedroom — clear overnight overrides"
+  description: >-
+    Turn off the three override booleans (bedroom_manual_off, bedroom_fan_manual, bedroom_sleep_mode)
+    and Adaptive Lighting's sleep mode. Shared by the morning reset and the test-harness reset.
+  mode: single
+  sequence:
+    - service: input_boolean.turn_off
+      target:
+        entity_id:
+          - input_boolean.bedroom_manual_off
+          - input_boolean.bedroom_fan_manual
+          - input_boolean.bedroom_sleep_mode
+    - service: switch.turn_off
+      target:
+        entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+
 # Air-quality alert pulse: a brief red flash to flag bad air, then restore EXACTLY what was
 # showing. Snapshots the current light state into a throwaway scene, flashes red, and restores
 # the snapshot — so a manual scene / the morning ramp / Adaptive Lighting all come back intact

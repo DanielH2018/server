@@ -41,18 +41,18 @@ writes:
   input_boolean.bedroom_fan_manual:
     - automation.bedroom_fan_manual_override_detect
     - automation.bedroom_fan_startup_reconcile
-    - automation.bedroom_morning_reset_and_wake
     - automation.bedroom_tap_dial_control
+    - script.bedroom_clear_overrides
     - script.bedroom_fan_nudge
     - script.bedroom_fan_set
   input_boolean.bedroom_manual_off:
     - automation.bedroom_manual_light_detect
-    - automation.bedroom_morning_reset_and_wake
     - automation.bedroom_tap_dial_control
+    - script.bedroom_clear_overrides
   input_boolean.bedroom_sleep_mode:
-    - automation.bedroom_morning_reset_and_wake
     - automation.bedroom_tap_dial_control
     - script.bedroom_bedtime
+    - script.bedroom_clear_overrides
     - script.bedroom_exit_sleep
   input_datetime.ha_heartbeat:
     - automation.ha_heartbeat
@@ -80,8 +80,8 @@ writes:
     - automation.bedroom_display_go_ambient_when_dark_or_sleeping
     - automation.bedroom_display_keep_dashboard_up
   switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom:
-    - automation.bedroom_morning_reset_and_wake
     - script.bedroom_bedtime
+    - script.bedroom_clear_overrides
     - script.bedroom_exit_sleep
   switch.bedroom_adaptive_lighting_bedroom:
     - script.bedroom_bedtime
