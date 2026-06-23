@@ -92,3 +92,17 @@ default
 noop
 {%- endif -%}
 {%- endmacro -%}
+
+{# Away shut-off label: the human-readable list of what's on — used BOTH as the bedroom_away gate
+   (empty string = nothing on = stay silent) and as the "Left on" message body. Pure (bools in,
+   joined string out) so the selection is truth-tabled, not just inline. #}
+{%- macro away_items_label(light_on, fan_on) -%}
+{%- set items = (['lights'] if (light_on | bool) else []) + (['fan'] if (fan_on | bool) else []) -%}
+{{ items | join(' + ') }}
+{%- endmacro -%}
+
+{# Arrive-home relight gate: relight only if you're physically in the room (FP300 present), have NOT
+   engaged manual-off, and the lights are currently off (never re-stomp an on light). Pure bool. #}
+{%- macro arrive_relight_allowed(presence, manual_off, light_on) -%}
+{{ (presence | bool) and not (manual_off | bool) and not (light_on | bool) }}
+{%- endmacro -%}

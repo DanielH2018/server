@@ -118,3 +118,25 @@ def test_natural_exception_early_alarm_yields_to_wake():
     assert _exception(False, 4, True) == "wake"
     assert _exception(True, 4, True) == "wake"           # even in sleep mode, the window wins
     assert _exception(False, 5, False) == "default"      # strict hour < 5 boundary
+
+
+def _away_label(light_on, fan_on):
+    return render_macro(LIGHT, "away_items_label", light_on, fan_on)
+
+
+def test_away_items_label_truth_table():
+    assert _away_label(True, True) == "lights + fan"
+    assert _away_label(True, False) == "lights"
+    assert _away_label(False, True) == "fan"
+    assert _away_label(False, False) == ""   # nothing on -> gate stays silent
+
+
+def _arrive(presence, manual_off, light_on):
+    return render_macro(LIGHT, "arrive_relight_allowed", presence, manual_off, light_on)
+
+
+def test_arrive_relight_allowed_truth_table():
+    assert _arrive(True, False, False) == "True"    # present, not blocked, lights off -> relight
+    assert _arrive(False, False, False) == "False"  # not in the room
+    assert _arrive(True, True, False) == "False"    # manual-off engaged
+    assert _arrive(True, False, True) == "False"    # already on -> never re-stomp

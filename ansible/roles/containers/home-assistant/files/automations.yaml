@@ -909,13 +909,12 @@
       id: failsafe
   action:
     - variables:
-        on_items: >-
-          {{ (['lights'] if is_state('light.bedroom_lights', 'on') else [])
-           + (['fan'] if is_state('fan.tower_fan', 'on') else []) }}
+        on_label: >-
+          {% from 'lighting.jinja' import away_items_label %}{{ away_items_label(is_state('light.bedroom_lights', 'on'), is_state('fan.tower_fan', 'on')) }}
     - choose:
         # Only act + notify when something is actually on — so the 30-min failsafe stays silent
         # unless it caught something the 10-min leave missed (or that came on since).
-        - conditions: "{{ on_items | length > 0 }}"
+        - conditions: "{{ on_label != '' }}"
           sequence:
             - service: script.bedroom_lights_set
               data:
@@ -927,7 +926,7 @@
             - service: script.bedroom_notify
               data:
                 title: "🏠 Left on"
-                message: "Turned off bedroom {{ on_items | join(' + ') }} (you're away)"
+                message: "Turned off bedroom {{ on_label }} (you're away)"
                 tag: bedroom_away
                 # One-tap undo for a false-away (GPS jitter while you're actually home).
                 actions:
@@ -952,9 +951,10 @@
       then:
         - service: script.bedroom_apply_fan
     - if: >-
-        {{ is_state('binary_sensor.aqara_fp300_presence', 'on')
-           and is_state('input_boolean.bedroom_manual_off', 'off')
-           and is_state('light.bedroom_lights', 'off') }}
+        {% from 'lighting.jinja' import arrive_relight_allowed %}{{ arrive_relight_allowed(
+           is_state('binary_sensor.aqara_fp300_presence', 'on'),
+           is_state('input_boolean.bedroom_manual_off', 'on'),
+           is_state('light.bedroom_lights', 'on')) | bool }}
       then:
         - service: script.bedroom_lights_set
           data:
