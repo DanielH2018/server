@@ -18,6 +18,12 @@ WireGuard VPN with the wg-easy web admin, for remote access into the homelab.
   (`expose_mode: traefik`) the UI is routed through Traefik behind Authelia and no host
   port is published; on the Pi (`expose_mode: lan`) the UI is published bound to the Pi's
   LAN IP and emits no Traefik labels. The WireGuard UDP port is always published on the host.
+- **Pi UI is unauthenticated on the trusted LAN (accepted risk, 2026-06-23).** The Pi instance
+  has no Authelia (LAN-only host) AND wg-easy sets no `PASSWORD`/`PASSWORD_HASH`, so anyone on the
+  Pi's LAN can open `http://<pi-lan-ip>:51821` and mint WireGuard client configs (i.e. VPN access
+  into the homelab). **Accepted:** the Pi is never internet-exposed and the UI is bound to the Pi's
+  LAN IP (not 0.0.0.0, not the tunnel — see the exposure bullet). To gate it later, add a
+  `PASSWORD_HASH` env sourced from SOPS to the Pi's `containers_list` wg-easy entry.
 - **Built-in healthcheck:** the `wg-easy/wg-easy` image ships its own Docker `HEALTHCHECK`
   (`wg show | grep -q interface` — verifies the WireGuard *interface* is up, not just the
   UI), so there is no compose `healthcheck:` block. `autoheal` and uptime-kuma rely on this
