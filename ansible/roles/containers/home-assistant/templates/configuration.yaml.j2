@@ -62,6 +62,25 @@ input_boolean:
   bedroom_sleep_mode:
     name: Bedroom sleep mode
     icon: mdi:power-sleep
+  # Test-harness speed toggle (script.bedroom_run_scenario): on = compressed (~30s), off = real timing.
+  bedroom_test_fast:
+    name: Bedroom test fast mode
+    icon: mdi:fast-forward
+
+# Test-harness scenario picker (script.bedroom_run_scenario): pick a scenario, then press the
+# dashboard Run button. `reset` returns the room to a clean daytime baseline. `off` does nothing.
+input_select:
+  bedroom_test_scenario:
+    name: Bedroom test scenario
+    icon: mdi:test-tube
+    options:
+      - "off"
+      - bedtime
+      - wake
+      - nightlight
+      - away
+      - arrive
+      - reset
 
 # Helper: the fan LEVEL script.bedroom_apply_fan last commanded (0-9). bedroom_fan_manual_detect
 # ignores a fan change whose level matches this (= our own command's cloud echo) and only flags a

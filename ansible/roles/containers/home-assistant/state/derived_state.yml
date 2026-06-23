@@ -27,6 +27,10 @@ cells:
     domain: input_boolean
     entity: input_boolean.bedroom_sleep_mode
     name: Bedroom sleep mode
+  bedroom_test_fast:
+    domain: input_boolean
+    entity: input_boolean.bedroom_test_fast
+    name: Bedroom test fast mode
   ha_heartbeat:
     domain: input_datetime
     entity: input_datetime.ha_heartbeat
