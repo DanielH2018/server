@@ -56,7 +56,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   via `bedroom_apply_natural_gated` + fan]; B2 = Brightness: press = `scene.bedroom_relax`,
   hold = `scene.bedroom_bright`; B3 = Sleep: press = sleep TOGGLE [in sleep mode + lights on → lights
   off (stay in sleep mode, fan quiet); else → `scene.bedroom_nightlight` + clear manual-off], hold =
-  `script.bedroom_bedtime` (15-min fade); B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`
+  `script.bedroom_bedtime` (30-min fade); B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`
   + cancel fan-dial mode], hold = toggle fan-dial mode [`timer.bedroom_fan_dial`, 5-min sliding window:
   the dial then steps the fan ±1 level via `script.bedroom_fan_nudge`; auto-reverts to light dial on
   expiry — replaces the old hold-to-boost-100%, max fan still reachable by dialing to L9]). Manual taps
@@ -371,10 +371,11 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   sleep" action) engages `input_boolean.bedroom_sleep_mode` (a quiet fan cap), then — **critically
   reordered** — calls `adaptive_lighting.set_manual_control: true` BEFORE flipping AL into sleep
   mode, so AL can't fire its own ~45s pre-dim before the fade begins; then fades to
-  `scene.bedroom_nightlight` (amber 3%) over 15 min; then enables AL sleep mode (warm/dim target for
-  after morning reset). The fade is a per-call `transition: 900` on `scene.turn_on` (NOT baked into
+  `scene.bedroom_nightlight` (amber 3%) over 30 min; then enables AL sleep mode (warm/dim target for
+  after morning reset). The fade is a per-call `transition: 1800` on `scene.turn_on` (NOT baked into
   the scene), so only bedtime ramps — the B3-press and overnight "got up" nightlight stay instant.
-  This reorder is what makes the 15-min nightlight fade genuinely gradual: without it, enabling AL
+  (Lengthened 900 -> 1800 on 2026-06-23 — the 15-min descent felt too fast.)
+  This reorder is what makes the 30-min nightlight fade genuinely gradual: without it, enabling AL
   sleep mode FIRST caused AL to immediately pre-dim to its sleep_brightness before the fade started.
   `take_over_control: true` + `detect_non_ha_changes: false` keep AL from re-stomping the group
   mid-fade. The bulb does the

@@ -436,14 +436,14 @@ bedroom_fan_nudge:
 # Bedtime / sleep routine: the single "going to sleep" action, shared by the bedroom_bedtime
 # automation (phone Bedtime mode) and the Tap Dial button-3 (Sleep) hold. Engages sleep mode (which caps the
 # fan to Low via bedroom_apply_fan — quiet but still temperature-responsive, NOT frozen), flips
-# Adaptive Lighting into sleep mode (warm/dim), and fades to the warm nightlight scene over 15 min. The morning reset
+# Adaptive Lighting into sleep mode (warm/dim), and fades to the warm nightlight scene over 30 min. The morning reset
 # unwinds sleep mode + AL sleep mode. NOT gated on presence (sets the room up for sleep even if you're
 # brushing teeth); the caller gates on person==home so it never runs while away.
 bedroom_bedtime:
   alias: "Bedroom — bedtime / sleep routine"
   description: >-
     Engage sleep mode (quiet fan cap), Adaptive Lighting sleep mode, and fade to the warm nightlight
-    scene over 15 min. Keeps the fan temperature-responsive but quiet; does not freeze it.
+    scene over 30 min. Keeps the fan temperature-responsive but quiet; does not freeze it.
   mode: single
   sequence:
     - service: input_boolean.turn_on
@@ -455,13 +455,14 @@ bedroom_bedtime:
       data:
         entity_id: switch.bedroom_adaptive_lighting_bedroom
         manual_control: true
-    # The ONLY brightness change: a smooth 15-min fade from the current level to amber 3%. The bulb
-    # ramps internally (single Zigbee command), so an HA/Z2M restart mid-fade doesn't abort it.
+    # The ONLY brightness change: a smooth 30-min fade from the current level to amber 3%. The bulb
+    # ramps internally (single Zigbee command, ZCL caps ~6553s), so an HA/Z2M restart mid-fade
+    # doesn't abort it. Lengthened 900 -> 1800 (2026-06-23): the 15-min descent felt too fast.
     - service: scene.turn_on
       target:
         entity_id: scene.bedroom_nightlight
       data:
-        transition: 900
+        transition: 1800
     # Set AL's sleep target (warm/dim) for after the morning reset releases control. Harmless now —
     # AL is already hands-off, so this can't move the lights.
     - service: switch.turn_on
