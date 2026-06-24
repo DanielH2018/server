@@ -25,6 +25,38 @@
             "command": "~/server/.claude/hooks/block-protected-edits.sh"
           }
         ]
+      },
+      {
+        "matcher": "^(Bash|Write|Edit|WebFetch|WebSearch|Task|Agent|Skill|mcp__.*)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/log-permission.sh",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/log-permission.sh",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/log-permission.sh",
+            "async": true
+          }
+        ]
       }
     ],
     "PostToolUse": [

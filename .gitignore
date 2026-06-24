@@ -45,3 +45,6 @@ id_ed25519
 # in-repo too so a fresh clone is protected without relying on each machine's git config.
 .claude/*.local.json
 .claude/*.local.md
+# Permission-audit hook store — per-host runtime state written by
+# .claude/hooks/log-permission.py; counts are machine-local by design.
+.claude/logs/

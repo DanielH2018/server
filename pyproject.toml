@@ -23,6 +23,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/containers/monitor-bridge/files",
   "ansible/roles/containers/terraria-stats/files",
   ".claude/hooks",
+  ".claude/scripts",                 # audit-permissions report/suggester logic tests
   "scripts",                         # closes the smoke_extract CI gap
   "ansible/roles/setup/gitops_deploy/files",   # deploy_logic decision tests
   "ansible/roles/setup/renovate_notify/files", # notifier decision tests
