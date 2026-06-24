@@ -28,12 +28,14 @@ fi
 
 # Set snapshot schedule and retention (idempotent — safe to run on every start).
 # Exclusions are handled by .kopiaignore in the snapshot source directory.
-# Operator-chosen (2026-06-12): 7 dailies + 4 weeklies (incl. current week), nothing
-# older — no monthly/annual tiers. hourly/monthly/annual/latest are pinned explicitly:
-# unset tiers inherit kopia's global defaults (hourly 48, monthly 24, annual 3,
-# latest 10), which silently widened retention before. latest 3 (not 0) briefly
-# protects manual/verification snapshots that would otherwise be reaped at the next
-# maintenance for fitting no calendar bucket.
+# Retention: 7 dailies + 4 weeklies + 3 monthlies, nothing annual. hourly/annual/latest
+# are pinned explicitly because unset tiers inherit kopia's global defaults (hourly 48,
+# monthly 24, annual 3, latest 10), which silently widened retention before. latest 3
+# (not 0) briefly protects manual/verification snapshots that fit no calendar bucket.
+# keep-monthly 3 (added 2026-06-24, supersedes the 2026-06-12 no-monthly choice): 4 weeklies
+# gave only a ~28d recovery horizon, so a slow corruption / unnoticed-for-a-month event was
+# unrecoverable. The snapshot source is config-only (media is excluded), which dedupes
+# heavily, so a few monthlies cost little on the B2 free tier; the b2_usage monitor backstops.
 if /usr/bin/kopia repository status 2>/dev/null; then
     /usr/bin/kopia policy set /data/home/ubuntu/server/containers \
         --snapshot-interval 24h \
@@ -41,8 +43,18 @@ if /usr/bin/kopia repository status 2>/dev/null; then
         --keep-hourly 0 \
         --keep-daily 7 \
         --keep-weekly 4 \
-        --keep-monthly 0 \
+        --keep-monthly 3 \
         --keep-annual 0
+
+    # Maintenance (blob GC) explicitly owned + enabled. Without an owner running FULL
+    # maintenance, expired snapshots are dropped only logically while their blobs linger
+    # in B2 — the bucket grows unbounded and the b2_usage monitor only catches the symptom
+    # weeks later. Idempotent and matches kopia's create-time defaults, so it's a no-op on
+    # this install but pins the intent and re-claims ownership after a fresh-host reconnect.
+    /usr/bin/kopia maintenance set \
+        --owner me \
+        --enable-full true --full-interval 24h \
+        --enable-quick true --quick-interval 1h
 fi
 
 exec /usr/bin/kopia server start \

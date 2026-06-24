@@ -42,7 +42,17 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
   snapshot** instead of the newest to exercise the retention tail (the real DR case). Writes
   `/var/lib/kopia-restore-drill/state.json` — monitor-bridge's `restore_drill` check
   alerts on failure, >35 d staleness, or missing state. Run it manually anytime:
-  `/usr/local/bin/kopia-restore-drill.sh`.
+  `/usr/local/bin/kopia-restore-drill.sh`. The drill also header-magic-checks `*.db`
+  sentinels (karakeep/grafana) — the image has no `sqlite3`, so it asserts the
+  `SQLite format 3` magic rather than a full `PRAGMA integrity_check`.
+- **Retention (entrypoint policy):** 7 daily + 4 weekly + **3 monthly** (monthlies added
+  2026-06-24 for a >28 d DR horizon; config-only source dedupes, so the B2 cost is small).
+  The entrypoint also re-asserts `kopia maintenance set --owner me --enable-full true`
+  idempotently — full maintenance is what actually GCs expired blobs from B2; without an
+  owner running it the bucket grows unbounded (the `b2_usage` monitor only sees the symptom).
+- **Bare-metal disaster recovery** (server gone — reconnect to B2 from a fresh host and
+  restore everything): [`docs/kopia-disaster-recovery.md`](../../../../../docs/kopia-disaster-recovery.md).
+  All five repo creds are in SOPS, which is DR-closed, so the capability survives a total loss.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Entry/ignore: `templates/entrypoint.sh.j2`, `kopiaignore.j2`

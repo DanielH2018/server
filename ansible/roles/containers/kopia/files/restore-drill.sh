@@ -77,6 +77,20 @@ docker exec kopia kopia restore "$ROOT/$SVC" "$DEST" >/dev/null 2>&1 \
 
 docker exec kopia sh -c "test -f '$DEST/$SENT'" \
   || fail "$SVC restore missing service-specific sentinel '$SENT' (from $WHICH snapshot)"
+
+# For SQLite sentinels (karakeep db.db, grafana grafana.db) confirm the restored file is a
+# structurally valid database, not just present — guards against a wrong/empty/truncated file
+# landing at the sentinel path. The image has no sqlite3 for a PRAGMA integrity_check, so
+# check the 16-byte header magic ("SQLite format 3\0"); the restore already re-decrypts every
+# blob, so byte-level corruption would have failed the restore above.
+case "$SENT" in
+  *.db)
+    MAGIC=$(docker exec kopia sh -c "head -c 15 '$DEST/$SENT'" 2>/dev/null)
+    [ "$MAGIC" = "SQLite format 3" ] \
+      || fail "$SVC sentinel '$SENT' restored but is not a valid SQLite database (header: '$MAGIC')"
+    ;;
+esac
+
 FILES=$(docker exec kopia sh -c "find $DEST -type f | wc -l" | tr -d '[:space:]')
 [ "${FILES:-0}" -ge 3 ] || fail "$SVC restore implausibly small ($FILES files)"
 BYTES=$(docker exec kopia sh -c "du -sk $DEST | cut -f1" | tr -d '[:space:]')
