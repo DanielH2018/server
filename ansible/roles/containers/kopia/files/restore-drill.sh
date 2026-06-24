@@ -24,7 +24,7 @@ set -uo pipefail
 
 # Stateful services worth proving restorable, each paired with a service-SPECIFIC state
 # file that must reappear after restore. All verified present in the snapshot.
-SVCS=(authelia traefik n8n karakeep freshrss grafana pihole)
+SVCS=(authelia traefik n8n karakeep freshrss grafana pihole home-assistant)
 declare -A SENTINEL=(
   [authelia]=config/configuration.yml
   [traefik]=data/acme.json
@@ -33,6 +33,10 @@ declare -A SENTINEL=(
   [freshrss]=config/www/freshrss/data/config.php
   [grafana]=data/grafana.db
   [pihole]=data/etc-pihole/pihole.toml
+  # HA's .storage registry (device/entity/Z2M pairings) is the highest-value, hardest-to-
+  # rebuild tree in the homelab — prove it restores, not just that it's backed up. The
+  # registry is a JSON file (not *.db), so it skips the SQLite-magic branch below.
+  [home-assistant]=config/.storage/core.device_registry
 )
 # Rotation: + year term so the singly-covered slot moves year over year. With a bare
 # month % len, the services in the wrap-around (months > len) are drilled only once a year

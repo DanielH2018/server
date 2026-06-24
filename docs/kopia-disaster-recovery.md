@@ -17,6 +17,12 @@ survives a total loss; this runbook is the procedure.
    [secret-rotation.md](secret-rotation.md) and the bootstrap flow in
    `ansible/bootstrap.yml`).
 2. A checkout of this repo (`git clone`), so you can `sops -d ansible/vars/secrets.yml`.
+   **GitHub is the third independent leg of recovery** (alongside B2 for the data and the
+   out-of-band age key to decrypt): it holds the *only* off-site copy of the encrypted
+   `secrets.yml` + all the Ansible. The age key alone can't reconstruct `secrets.yml`, so a
+   *simultaneous* loss of both the hosts and the GitHub repo would strand the B2 credentials.
+   Cheap insurance: keep an occasional `git bundle create homelab.bundle --all` stored
+   alongside the out-of-band age-key backup, or push to a second git remote.
 3. Docker (or a local `kopia` binary).
 
 ## The five repository credentials (all in `ansible/vars/secrets.yml`)
