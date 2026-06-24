@@ -54,6 +54,10 @@ services:
       - karakeep-chrome
       - karakeep-meilisearch
     labels:
+      # Manual/Renovate-managed: karakeep:release is coupled to the pinned meili
+      # version (see the meilisearch VERSION POLICY), so watchtower (monitor-all mode)
+      # must not auto-bump any service in this stack and desync the pair.
+      - "com.centurylinklabs.watchtower.enable=false"
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),
@@ -101,6 +105,8 @@ services:
     networks:
       - internal
     labels:
+      # Manual/Renovate-managed stack (see karakeep service) — no watchtower auto-bump.
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('karakeep-chrome') }}
     # Resource caps for blast-radius containment (M1). Headless Chrome can spike
     # memory, so size generously and tune from cAdvisor/Grafana.
@@ -137,6 +143,9 @@ services:
       timeout: 10s
       retries: 3
     labels:
+      # Pinned + manual-upgrade-only (see VERSION POLICY above) — watchtower must never
+      # touch it; an unsupervised minor bump changes the on-disk DB and refuses to boot.
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('karakeep-meilisearch') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('1.0', '1024M', '0.10', '128M') }}
@@ -175,6 +184,8 @@ services:
       karakeep:
         condition: service_healthy
     labels:
+      # Manual/Renovate-managed stack (see karakeep service) — no watchtower auto-bump.
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('karakeep-time-tagger') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '512M', '0.05', '64M') }}
