@@ -37,6 +37,10 @@ containers_list:
   - name: homepage
     port: 3000
     use_authelia: true
+    # `proxy` is REQUIRED: the Portainer service widget queries portainer:9000 directly
+    # (roles/containers/homepage/templates/services.yaml.j2), and portainer only lives on the
+    # `proxy` net — homepage must share it to reach the widget endpoint. Do NOT strip `proxy`
+    # as "over-connected" (a 2026-06-24 attempt to do so broke the Portainer widget).
     networks:
       - apps
       - proxy
