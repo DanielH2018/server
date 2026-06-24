@@ -183,5 +183,7 @@ volumes:
   karakeep_meili:
 
 {{ external_networks() }}
+  # Despite the name, NOT a true-internal net: karakeep-chrome must reach the
+  # internet to fetch bookmarked URLs, so `internal: true` would break crawling.
   internal:
     internal: false

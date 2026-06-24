@@ -34,7 +34,6 @@
     that:
       - authelia_oidc_hmac_secret is defined
       - authelia_client_password_hash is defined
-      - authelia_beszel_password_hash is defined
       - authelia_oidc_rsa_key_content is defined
     fail_msg: >-
       Missing Authelia OIDC secrets in ansible/vars/secrets.yml. On a fresh install,

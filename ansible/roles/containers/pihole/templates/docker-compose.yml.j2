@@ -99,5 +99,7 @@ services:
     {{ resources('1.0', '512M', '0.10', '64M') }}
 
 {{ external_networks() }}
+  # Not internal: Unbound performs recursive resolution and must reach the root
+  # nameservers (outbound UDP/TCP :53). Don't flip to true — it breaks recursion.
   pihole_internal:
     internal: false

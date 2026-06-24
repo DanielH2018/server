@@ -121,7 +121,10 @@ ntp:
   version: 3
   max_desync: 3s
   disable_startup_check: false
-  disable_failure: false
+  # Warn (don't refuse to start) if the NTP probe fails at boot: the host already runs
+  # systemd-timesyncd, so a transient time.cloudflare.com hiccup shouldn't hard-gate
+  # Authelia startup and cascade 502s across every Authelia-protected service.
+  disable_failure: true
 
 identity_providers:
   oidc:
@@ -166,15 +169,7 @@ identity_providers:
         userinfo_signed_response_alg: 'none'
         token_endpoint_auth_method: 'client_secret_post'
 
-      - client_id: beszel
-        client_name: Beszel
-        client_secret: '{{ authelia_beszel_password_hash }}'
-        public: false
-        authorization_policy: two_factor
-        redirect_uris:
-          - https://beszel.{{ domain }}/api/oauth2-redirect
-        scopes:
-          - openid
-          - profile
-          - email
-        userinfo_signed_response_alg: none
+      # NOTE: the Beszel OIDC client was removed — Beszel is archived, so the client +
+      # its redirect URI were dead config (startup noise for a non-existent service).
+      # The authelia_beszel_password_hash secret is kept in SOPS + the rotation registry
+      # so reactivation only needs the client block re-added here.
