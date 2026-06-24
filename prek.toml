@@ -31,7 +31,9 @@ rev = "v26.4.0"
 [[repos.hooks]]
 id = "ansible-lint"
 files = "\\.(yaml|yml)$"
-additional_dependencies = ["ansible-core>=2.18", "jmespath"]
+# Cap ansible-core <3 so a surprise upstream major can't silently change lint behavior
+# or break this hook on a day nothing in the repo changed (these deps aren't lock-pinned).
+additional_dependencies = ["ansible-core>=2.18,<3.0", "jmespath"]
 entry = "bash -c 'ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint'"
 pass_filenames = false
 
@@ -93,3 +95,15 @@ entry = "uv run python -m pytest"
 language = "system"
 pass_filenames = false
 files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/containers/monitor-bridge/files/.*\\.py|ansible/roles/setup/gitops_deploy/files/.*\\.py|\\.claude/hooks/.*\\.py|scripts/.*\\.py|pyproject\\.toml)$"
+
+# Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
+# syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]; vendored
+# collections excluded there). ruff is pinned in uv.lock (dev group) so the gate is
+# reproducible and lockFileMaintenance refreshes it weekly. Runs once when any .py is staged.
+[[repos.hooks]]
+id = "ruff"
+name = "Lint first-party Python (ruff)"
+entry = "uv run ruff check"
+language = "system"
+pass_filenames = false
+files = "\\.py$"

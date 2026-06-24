@@ -14,6 +14,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "jinja2>=3",                      # validate_compose_templates
   "requests",                       # community.docker modules (docker_container_info dependency check)
   "docker",                         # community.docker SDK-backed modules
+  "ruff>=0.10",                     # first-party Python lint gate (prek hook); pinned via uv.lock
 ]
 
 [tool.pytest.ini_options]
@@ -29,3 +30,13 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 ]
 addopts = "-q"
 pythonpath = ["ansible/filter_plugins"]   # lets test_toposort import toposort (replaces conftest.py)
+
+[tool.ruff]
+extend-exclude = ["ansible/collections"]  # never lint the vendored third-party collections
+
+[tool.ruff.lint]
+# Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
+# syntax errors E9, bare-except E722, and ==None/==True comparisons E711/E712. Stylistic
+# checks (E7 one-liners, ambiguous names) are deliberately OFF: the test suites use
+# intentional semicolon one-liners and short names that aren't worth churning.
+select = ["F", "E9", "E711", "E712", "E722"]

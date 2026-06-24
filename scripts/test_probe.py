@@ -12,7 +12,6 @@ Run: uv run pytest scripts/test_probe.py
 import importlib.util
 import os
 
-import pytest
 
 _MOD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "probe.py")
 _spec = importlib.util.spec_from_file_location("probe", _MOD)

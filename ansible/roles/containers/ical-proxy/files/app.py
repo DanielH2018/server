@@ -1,4 +1,3 @@
-import logging
 from flask import Flask, Response
 import requests, threading, time, os, re
 

@@ -31,7 +31,7 @@ jobs:
         uses: astral-sh/setup-uv@v8.2.0  # no floating v8 tag is published; pin the exact release
 
       - name: Install prek
-        run: pip install prek
+        run: pip install prek==0.4.4  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
       - name: Run all hooks
         run: prek run --all-files --color always

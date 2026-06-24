@@ -1,7 +1,6 @@
 """Hermetic tests for the HA state-model extractor + checks (no live HA / Docker / network)."""
 import yaml
 import ha_state_model as hsm
-import validate_ha_config as vhc
 
 
 def test_call_service_handles_service_and_action_keys():

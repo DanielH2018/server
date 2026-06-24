@@ -35,6 +35,29 @@
         "repo\\s*=\\s*\"https://github\\.com/(?<depName>[^\"]+?)(?:\\.git)?\"\\s+rev\\s*=\\s*\"(?<currentValue>[^\"]+)\""
       ],
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Ansible Galaxy collection pins in ansible/requirements.yml. The built-in ansible-galaxy manager isn't reliably matching this path here, so pin them explicitly — otherwise the collections age silently (silence != up-to-date, the same failure mode as the lockFileMaintenance note). Each name/version pair maps to the galaxy-collection datasource.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/requirements\\.yml$/"
+      ],
+      "matchStrings": [
+        "name:\\s*(?<depName>[\\w.]+)\\s+version:\\s*(?<currentValue>[\\d.]+)"
+      ],
+      "datasourceTemplate": "galaxy-collection"
+    },
+    {
+      "customType": "regex",
+      "description": "Pinned prek version in the CI workflow (`pip install prek==X`). The pin keeps the hook toolchain reproducible; track it on PyPI so the pin doesn't age silently.",
+      "managerFilePatterns": [
+        "/(^|/)\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "pip install prek==(?<currentValue>[\\d.]+)"
+      ],
+      "depNameTemplate": "prek",
+      "datasourceTemplate": "pypi"
     }
   ],
   "packageRules": [
@@ -68,6 +91,13 @@
       "matchDatasources": ["docker"],
       "matchPackageNames": ["getmeili/meilisearch"],
       "groupName": "meilisearch (manual upgrade — DB format migration)",
+      "automerge": false
+    },
+    {
+      "description": "Ansible Galaxy collections (requirements.yml). The in-file comment requires bumping them in lockstep with ansible-core, so these need a deliberate look — own group, no automerge (overrides the custom.regex non-major automerge rule above).",
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["galaxy-collection"],
+      "groupName": "ansible galaxy collections (manual — lockstep with ansible-core)",
       "automerge": false
     }
   ]
