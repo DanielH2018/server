@@ -330,9 +330,14 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   (a real ≥5-min outage still notifies).
   Watched (one representative entity per device — Z2M flips all of a device's entities together):
   `sensor.bedroom_airgradient_one_carbon_dioxide`, `binary_sensor.aqara_fp300_presence`,
-  `sensor.0x001788010f0ccda4_battery` (Tap Dial), `fan.tower_fan`. **Required dependency: Z2M
+  `fan.tower_fan`. **Required dependency: Z2M
   availability must be ON** (enabled 2026-06-18 in the zigbee2mqtt role) — without it the battery
-  Zigbee devices (FP300, Tap Dial) never go `unavailable` and this automation can't see them fail.
+  Zigbee FP300 never goes `unavailable` and this automation can't see it fail.
+  **The Tap Dial (RDM002) is deliberately NOT watched (removed 2026-06-24).** It's a passive INPUT
+  device, so going quiet from disuse trips Z2M's 60-min passive timeout as a routine false positive —
+  nothing depends on the dial *reporting* (unlike the FP300/fan/AirGradient, which feed live
+  automations). A truly dead dial is still caught by `binary_sensor.bedroom_tap_dial_battery_low`
+  (the threshold engine) and is obvious on the next press, so offline detection added only noise.
   Two reusable gotchas: (1) the 5-min `for:` rides out HA/Z2M restarts + the ~120s deploy recreate;
   (2) an entity's `friendly_name` attribute is EMPTY while `unavailable`, so the human name is read
   from the AVAILABLE side of the transition (`from_state` for offline, `to_state` for recovery,
