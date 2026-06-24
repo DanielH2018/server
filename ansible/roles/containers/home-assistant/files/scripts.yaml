@@ -190,7 +190,7 @@ bedroom_apply_natural:
             transition: 2
 
 # Gated dispatcher: apply the natural lighting state if the shared darkness gate allows
-# (binary_sensor.bedroom_auto_light_allowed = wake window OR illuminance < 50, defined in
+# (binary_sensor.bedroom_auto_light_allowed = wake window OR illuminance < 75, defined in
 # templates.yaml) OR the sun is below the horizon — otherwise turn the lights OFF, i.e. produce the
 # same outcome the automatic presence path would in a bright room. Used ONLY by the Tap Dial button-1
 # HOLD ("reset to auto"); the manual taps call the ungated bedroom_apply_natural directly.
@@ -644,6 +644,10 @@ bedroom_run_scenario:
     Exercise a bedroom scenario on demand (bedtime/wake/nightlight/away/arrive/reset) at compressed or
     real speed, driving the real scripts/automations — for testing without waiting for night or
     leaving home.
+  # CAVEAT (test-only tool): mode:restart + an in-sequence restore means pressing Run again DURING
+  # the observe window aborts the in-flight restore, leaving the snapshotted sticky flags
+  # (sleep_mode/manual_off/...) as the scenario set them. Recover with the `reset` scenario (or a
+  # Tap Dial reset). Acceptable for a manual test card; let one preview finish before starting the next.
   mode: restart
   sequence:
     - variables:

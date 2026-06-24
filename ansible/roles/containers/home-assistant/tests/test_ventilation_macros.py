@@ -19,6 +19,20 @@ def test_blocks_when_outdoor_dirtier_than_indoor_even_if_under_cap():
     assert _advice(80, 65, 5, 10, True) == "none"
 
 
+def test_smoke_guard_blocks_when_outdoor_pm10_unsafe():
+    # PM2.5 is clean + comfortable, but coarse PM10 (dust/pollen) is over its cap -> never
+    # advise ventilating. Baseline (no PM10) for these inputs is 'stale'.
+    assert _advice(75, 65, 8, 6, True) == "stale"   # baseline without PM10
+    assert render_macro(VENT, "ventilation_advice", 75, 65, 8, 6, True,
+                        outdoor_pm10=80) == "none"
+
+
+def test_pm10_under_cap_does_not_block():
+    # PM10 present but under the 50 cap -> still advises (stale air, clean PM2.5).
+    assert render_macro(VENT, "ventilation_advice", 75, 65, 8, 6, True,
+                        outdoor_pm10=40) == "stale"
+
+
 def test_stale_air_when_clean_and_comfortable():
     assert _advice(75, 65, 8, 6, True) == "stale"
 

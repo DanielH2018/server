@@ -577,6 +577,22 @@
       id: humidity_ok
     - platform: state
       entity_id:
+        - binary_sensor.bedroom_temp_high
+        - binary_sensor.bedroom_temp_low
+      from: "off"
+      to: "on"
+      for: "00:05:00"
+      id: temperature_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_temp_high
+        - binary_sensor.bedroom_temp_low
+      from: "on"
+      to: "off"
+      for: "00:05:00"
+      id: temperature_ok
+    - platform: state
+      entity_id:
         - binary_sensor.outdoor_pm2_5_high
       from: "off"
       to: "on"
@@ -627,6 +643,7 @@
               'airqualitysevere': {'bad': '🚨 Air quality HIGH', 'ok': '✅ Air quality', 'pulse': true, 'watch': true, 'pierce': true, 'recovery': false},
               'battery':          {'bad': '🔋 Battery low', 'ok': '🔋 Battery OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
               'humidity':         {'bad': '💧 Humidity', 'ok': '💧 Humidity OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
+              'temperature':      {'bad': '🌡️ Temperature', 'ok': '🌡️ Temperature OK', 'pulse': false, 'watch': true,  'pierce': false, 'recovery': true},
               'airqualityoutdoor':       {'bad': '🌫️ Outdoor air', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true,  'pierce': false, 'recovery': true},
               'airqualityoutdoorsevere': {'bad': '🚨 Outdoor air HIGH', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true, 'pierce': true, 'recovery': false}}[category] }}
         # Air-quality bad alerts get a "Boost fan" action button (circulate the air); other
@@ -1380,7 +1397,7 @@
     # whitespace) so verdict is exactly 'stale'/'cool'/'none' — same single-line import pattern as
     # the fan.jinja use elsewhere in this file.
     - variables:
-        verdict: "{% from 'ventilation.jinja' import ventilation_advice %}{{ ventilation_advice(states('sensor.bedroom_airgradient_one_temperature'), state_attr('weather.forecast_home', 'temperature'), states('sensor.bedroom_airgradient_one_pm2_5'), states('sensor.outdoor_pm2_5'), is_state('binary_sensor.bedroom_co2_high', 'on') or is_state('binary_sensor.bedroom_voc_high', 'on')) }}"
+        verdict: "{% from 'ventilation.jinja' import ventilation_advice %}{{ ventilation_advice(states('sensor.bedroom_airgradient_one_temperature'), state_attr('weather.forecast_home', 'temperature'), states('sensor.bedroom_airgradient_one_pm2_5'), states('sensor.outdoor_pm2_5'), is_state('binary_sensor.bedroom_co2_high', 'on') or is_state('binary_sensor.bedroom_voc_high', 'on'), states('sensor.outdoor_pm10')) }}"
         out_temp: "{{ state_attr('weather.forecast_home', 'temperature') | float(0) | round }}"
         in_temp: "{{ states('sensor.bedroom_airgradient_one_temperature') | round }}"
         co2: "{{ states('sensor.bedroom_airgradient_one_carbon_dioxide') }}"

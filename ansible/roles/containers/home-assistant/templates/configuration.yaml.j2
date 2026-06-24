@@ -234,6 +234,21 @@ binary_sensor:
     entity_id: sensor.bedroom_airgradient_one_humidity
     lower: 30                          # alerts <= 27%, clears >= 33% (winter-dry)
     hysteresis: 3
+  # Indoor temperature extremes — a safety net for when nobody's home to notice. Both the fan
+  # curve and the window advisor go SILENT while away (the fan is off; the advisor is gated on
+  # person home), so an AC/HVAC failure or heatwave (high) — or a heating failure / freeze risk
+  # (low) — would otherwise raise no alert at all. Two-sided, so two one-sided sensors; feed the
+  # `temperature` category of bedroom_threshold_alert. Starting points — tune in the ~2026-06-25 pass.
+  - platform: threshold
+    name: "Bedroom temp high"         # -> binary_sensor.bedroom_temp_high
+    entity_id: sensor.bedroom_airgradient_one_temperature
+    upper: 86                          # alerts >= 88 °F, clears <= 84 (AC/HVAC failure, heatwave)
+    hysteresis: 2
+  - platform: threshold
+    name: "Bedroom temp low"          # -> binary_sensor.bedroom_temp_low
+    entity_id: sensor.bedroom_airgradient_one_temperature
+    lower: 50                          # alerts <= 48 °F, clears >= 52 (heating failure / freeze risk)
+    hysteresis: 2
   # Outdoor air quality (source = Open-Meteo sensor.outdoor_pm2_5, files/rest.yaml). Two tiers like
   # the indoor air-quality sensors: moderate (high) and the wildfire/"unhealthy" cutoff (severe).
   # Feed the airqualityoutdoor / airqualityoutdoorsevere categories of bedroom_threshold_alert AND

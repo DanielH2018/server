@@ -7,13 +7,17 @@
    Unit-tested in tests/test_ventilation_macros.py. Tune the comfort band / cool delta / PM cap here.
    'stale' outranks 'cool' when both apply. #}
 {%- macro ventilation_advice(indoor_temp, outdoor_temp, indoor_pm, outdoor_pm, air_stale,
-                             comfort_lo=55, comfort_hi=78, cool_delta=5, pm_safe=25) -%}
+                             outdoor_pm10=0, comfort_lo=55, comfort_hi=78, cool_delta=5,
+                             pm_safe=25, pm10_safe=50) -%}
 {%- set it = indoor_temp | float(0) -%}
 {%- set ot = outdoor_temp | float(999) -%}
 {%- set ip = indoor_pm | float(0) -%}
 {%- set op = outdoor_pm | float(999) -%}
+{%- set op10 = outdoor_pm10 | float(999) -%}
 {%- set stale = air_stale | bool -%}
-{%- if op > pm_safe or op > ip -%}none
+{# Smoke guard: block on PM2.5 over its cap OR dirtier-than-indoors, AND on coarse PM10 over its
+   own (higher) cap — a dust/pollen event can spike PM10 while PM2.5 stays moderate. #}
+{%- if op > pm_safe or op > ip or op10 > pm10_safe -%}none
 {%- elif stale and comfort_lo <= ot <= comfort_hi -%}stale
 {%- elif it > comfort_hi and (it - ot) >= cool_delta -%}cool
 {%- else -%}none
