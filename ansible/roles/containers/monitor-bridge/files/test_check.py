@@ -1132,3 +1132,15 @@ def test_check_loki_ingestion_silent_is_down(monkeypatch):
     monkeypatch.setattr(check, "loki_count", lambda *a, **k: 0)
     ok, msg = check.check_loki_ingestion()
     assert not ok
+
+
+def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch):
+    # docker_sd-specific failure: the static file-tail union ({job=~".+"}) keeps flowing,
+    # but the highest-volume container-log stream ({container=~".+"}) went silent. The
+    # union count alone stays non-zero and would hide it — the docker-specific arm must page.
+    def fake_count(selector, window):
+        return 0 if "container" in selector else 500
+    monkeypatch.setattr(check, "loki_count", fake_count)
+    ok, msg = check.check_loki_ingestion()
+    assert not ok
+    assert "container" in msg

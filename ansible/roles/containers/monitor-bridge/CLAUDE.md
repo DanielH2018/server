@@ -101,7 +101,12 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     (docker-proxy break, positions-file corruption, relabel regression) that Loki's `/ready` Kuma
     probe stays green through. Counts ALL file-tailed streams (`authlog`+`syslog`+`traefik`), not one:
     if promtail dies they ALL fall silent together, while no single low-volume file going quiet can
-    trip it. **Originally `{job="syslog"}` over 10m — false-paged 2026-06-23 because this debloated
+    trip it. **Second arm (added after the docker stream blind-spot review): also counts
+    `{container=~".+"}` (`LOKI_DOCKER_STREAM`) — the docker_sd stream carries a `container`
+    label, no `job`, so it's outside `{job=~".+"}`; a docker_sd-specific break (docker-proxy
+    down, the docker relabel regressing) would silence every container log while the file-tail
+    union keeps flowing. `down` if EITHER arm is silent. Promtail also now stamps the docker
+    stream `job: docker` so it's filterable + falls under the union too.** **Originally `{job="syslog"}` over 10m — false-paged 2026-06-23 because this debloated
     host routinely idles >15m between syslog writes (a 15m35s gap was observed), so a normal quiet
     spell read as a dead pipeline; the broadened selector + 30m window is the fix.** Stream/window
     tunable via `LOKI_STREAM`/`LOKI_WINDOW`. Pure `loki_ingestion_fresh()` + `loki_count()` are

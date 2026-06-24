@@ -91,6 +91,12 @@ SCRUTINY_MAX_AGE_H = float(_env("SCRUTINY_MAX_AGE_H", "26"))
 # syslog stream over 10m false-paged — this debloated host routinely idles >15m between syslog
 # writes, so a normal quiet spell read as a dead pipeline.) Reached at loki:3100 over `monitoring`.
 LOKI_STREAM = _env("LOKI_STREAM", '{job=~".+"}')
+# The static file-tail union above does NOT include the docker_sd stream (it carries a
+# `container` label, no `job`), which is the highest-volume source — all ~44 containers'
+# stdout/stderr. A docker_sd-specific break (docker-proxy down, the docker relabel block
+# regressing) would silence every container log while authlog/syslog/traefik keep flowing,
+# so the union count stays non-zero and hides it. Check the container stream separately.
+LOKI_DOCKER_STREAM = _env("LOKI_DOCKER_STREAM", '{container=~".+"}')
 LOKI_WINDOW = _env("LOKI_WINDOW", "30m")
 
 # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
@@ -734,7 +740,17 @@ def loki_ingestion_fresh(count, window):
 
 
 def check_loki_ingestion():
-    return loki_ingestion_fresh(loki_count(LOKI_STREAM, LOKI_WINDOW), LOKI_WINDOW)
+    # Two arms, down if EITHER pipeline is silent: the file-tail union catches a total
+    # promtail death; the container-stream arm catches a docker_sd-specific break the
+    # union would hide (see LOKI_DOCKER_STREAM). Both share the same quiet-tolerant window.
+    ok_all, msg_all = loki_ingestion_fresh(loki_count(LOKI_STREAM, LOKI_WINDOW), LOKI_WINDOW)
+    if not ok_all:
+        return False, msg_all
+    ok_docker, msg_docker = loki_ingestion_fresh(
+        loki_count(LOKI_DOCKER_STREAM, LOKI_WINDOW), LOKI_WINDOW)
+    if not ok_docker:
+        return False, "container log stream silent — " + msg_docker
+    return True, "%s (+ container stream)" % msg_all
 
 
 CHECKS = [
