@@ -136,3 +136,78 @@ def test_non_watchtower_label_without_equals_is_ignored():
 
 def test_real_templates_render_clean():
     assert vct.main() == 0
+
+
+# --- cap_drop policy guard ---------------------------------------------------
+# Every service should drop ALL capabilities (defense in depth), adding back only what it
+# proves it needs. New services kept silently drifting out of this (n8n-runners/nut/unbound
+# post-dated the hardening sprints), so enforce it; documented exceptions go in CAP_DROP_EXEMPT.
+
+def test_cap_drop_all_is_clean():
+    assert vct.find_missing_cap_drop(_docs({"cap_drop": ["ALL"]})) == []
+
+
+def test_cap_drop_all_lowercase_is_clean():
+    assert vct.find_missing_cap_drop(_docs({"cap_drop": ["all"]})) == []
+
+
+def test_missing_cap_drop_is_flagged():
+    assert vct.find_missing_cap_drop(_docs({"image": "nginx"})) == ["svc"]
+
+
+def test_partial_cap_drop_without_all_is_flagged():
+    # dropping a single cap is NOT the policy (drop ALL, add back minimal)
+    assert vct.find_missing_cap_drop(_docs({"cap_drop": ["NET_RAW"]})) == ["svc"]
+
+
+def test_cap_drop_exempt_service_is_skipped():
+    assert vct.find_missing_cap_drop(_docs({"image": "x"}), exempt={"svc"}) == []
+
+
+def test_cap_drop_walks_all_services():
+    docs = [{"services": {"a": {"cap_drop": ["ALL"]}, "b": {"image": "x"}}}]
+    assert vct.find_missing_cap_drop(docs) == ["b"]
+
+
+# --- watchtower update-policy guard ------------------------------------------
+# Watchtower runs monitor-all, so a mutable-tag service WITHOUT an opt-out is auto-updated.
+# That's fine for the disposable pool but silently swept up karakeep/janitorr (stateful,
+# coupled). Force an explicit decision: a mutable tag must EITHER opt out (enable=false) OR
+# be listed in WATCHTOWER_AUTOUPDATE (intentionally auto-updated). Version-pinned tags are exempt.
+
+def test_pinned_tag_is_clean():
+    assert vct.find_undeclared_update_policy(_docs({"image": "pihole/pihole:2026.05.0"})) == []
+
+
+def test_mutable_tag_without_decision_is_flagged():
+    assert vct.find_undeclared_update_policy(_docs({"image": "x:latest"})) == ["svc"]
+
+
+def test_mutable_tag_with_optout_is_clean():
+    docs = _docs({"image": "x:latest",
+                  "labels": ["com.centurylinklabs.watchtower.enable=false"]})
+    assert vct.find_undeclared_update_policy(docs) == []
+
+
+def test_mutable_tag_with_mapping_optout_is_clean():
+    docs = _docs({"image": "x:latest",
+                  "labels": {"com.centurylinklabs.watchtower.enable": "false"}})
+    assert vct.find_undeclared_update_policy(docs) == []
+
+
+def test_mutable_tag_on_autoupdate_allowlist_is_clean():
+    assert vct.find_undeclared_update_policy(_docs({"image": "x:latest"}),
+                                             autoupdate={"svc"}) == []
+
+
+def test_jvm_stable_channel_tag_is_mutable():
+    assert vct.find_undeclared_update_policy(_docs({"image": "schaka/janitorr:jvm-stable"})) == ["svc"]
+
+
+def test_untagged_image_is_mutable():
+    assert vct.find_undeclared_update_policy(_docs({"image": "nginx"})) == ["svc"]
+
+
+def test_build_only_service_without_image_is_clean():
+    # a `build:`-only service (no image: key) has no tag to police
+    assert vct.find_undeclared_update_policy(_docs({"build": {"context": "."}})) == []
