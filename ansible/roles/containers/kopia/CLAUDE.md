@@ -53,6 +53,10 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
 - **Bare-metal disaster recovery** (server gone — reconnect to B2 from a fresh host and
   restore everything): [`docs/kopia-disaster-recovery.md`](../../../../../docs/kopia-disaster-recovery.md).
   All five repo creds are in SOPS, which is DR-closed, so the capability survives a total loss.
+- **The Pi is intentionally NOT in Kopia scope.** The snapshot source is only the server's
+  `containers/`. daniel-pi runs stateless / Ansible-reconstructible services (docker-proxy,
+  wg-easy, glances, dozzle, autoheal) — its wg-easy keys/peers re-template and clients re-enroll,
+  so there's nothing to back up that a redeploy doesn't rebuild. Not an oversight.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Entry/ignore: `templates/entrypoint.sh.j2`, `kopiaignore.j2`

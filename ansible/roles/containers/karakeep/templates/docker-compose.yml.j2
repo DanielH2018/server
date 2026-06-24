@@ -81,6 +81,8 @@ services:
     {{ resources('2.0', '2048M', '0.10', '128M') }}
 
   karakeep-chrome:
+    # Major-pinned to a known-good Chromium (124) — bump deliberately, not on every push.
+    # The watchtower opt-out (in labels below) keeps it manual regardless.
     image: gcr.io/zenika-hub/alpine-chrome:124
     container_name: karakeep-chrome
     restart: unless-stopped
@@ -151,6 +153,8 @@ services:
     {{ resources('1.0', '1024M', '0.10', '128M') }}
 
   karakeep-time-tagger:
+    # Rolling uv base (bookworm-slim): the tagger reinstalls its Python deps each cycle, so a
+    # fresh base is harmless. The watchtower opt-out (in labels below) keeps the bump manual anyway.
     image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
     container_name: karakeep-time-tagger
     restart: unless-stopped
