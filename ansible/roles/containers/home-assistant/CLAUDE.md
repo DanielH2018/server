@@ -258,13 +258,21 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `persistent_notification.create`s id `hold_<tag>` (so a re-fire with the same tag updates in place),
   then `stop`s before the push path. A recovery (`recovery: true`, same tag) `dismiss`es `hold_<tag>`
   and sends nothing — so a condition that self-resolves before you return is never seen. `pierce`
-  alerts and the at-home path are unchanged. On arrival (`automation.bedroom_flush_held_notifications`,
+  alerts and the at-home path are unchanged. **`critical_away` (since 2026-06-24) also bypasses the
+  hold** — it pushes WHILE away (at normal importance; unlike `pierce` it does NOT sound through DND
+  at home) for damage-class alerts whose whole purpose is to reach you when nobody's home. Only the
+  `temperature` threshold category sets it: the extreme-temperature alert is the away safety net for
+  an AC/heating failure, so holding-then-digesting it (you'd see "92 °F" only after getting home,
+  too late) defeats the point. A `critical_away` recovery pushes its all-clear too (no `hold_<tag>`
+  to cancel). On arrival (`automation.bedroom_flush_held_notifications`,
   `person.daniel -> home`), all still-held `hold_*` notifications are delivered as ONE "While you were
   out (N)" digest (bulleted messages; phone-only, so per-alert action buttons like Boost fan are lost —
   tap into HA to act) and then dismissed; arriving with nothing held is silent. Recovery call-sites
   carrying `recovery: true`: threshold-ok, sensor-online, UPS-restored, zigbee-bridge-online.
   **Known limitation:** persistent notifications are in-memory, so an HA restart (e.g. a deploy) while
-  away loses the held queue — accepted, since held items are non-critical and the overlap is rare.
+  away loses the held queue — accepted, since held items are non-critical and the overlap is rare (the
+  one damage-class away alert, extreme temperature, is `critical_away` so it's pushed not held — it's
+  not in the fragile queue).
   `match` filtering is start-anchored, so `hold_` never catches the pierce path's bare-`tag`
   persistent notifications.
 - **Actionable notifications (since 2026-06-18).** `bedroom_notify` takes an optional `actions` list
@@ -413,10 +421,12 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   reliable "you're here to be woken" signal and still won't ramp an empty bedroom while away (an FP300
   dog/false-positive can't trigger the wake either). **Uses the WATCH alarm** (`pixel_watch_3`), not the
   phone's (unreliable). Watch caveat moot now — set alarms anywhere; only morning ones wake.
-- **Sleep-quality-aware morning (since 2026-06-18).** The wake ramp adapts to how you slept: in
-  `bedroom_apply_natural`'s morning exception, `wake_peak` = 30% (gentler) if
-  `sensor.pixel_9_pro_sleep_duration` is `0 < x < 360` min (under 6h), else 50% — unknown/0 falls
-  back to 50%. `bedroom_morning_reset`'s alarm+present block also sends a routine "you slept N h"
+- **Sleep-quality-aware morning (since 2026-06-18).** The wake ramp adapts to how you slept: the
+  `wake_brightness` macro (`custom_templates/lighting.jinja`, the tested source of the ramp —
+  `bedroom_apply_natural` now delegates the morning exception to `bedroom_apply_wake`) scales the
+  mid/peak down on a short night — peak **24%** (mid 7%) when `sensor.pixel_9_pro_sleep_duration`
+  is `0 < x < 360` min (under 6h), else peak **40%** (mid 12%); unknown/0 falls
+  back to the normal 40%. `bedroom_morning_reset`'s alarm+present block also sends a routine "you slept N h"
   note (😴 short night / ☀️ good morning), skipped if sleep_duration is 0/unknown. **Caveat:** the
   Google Sleep API finalizes `sleep_duration` around wake, so at alarm−15min it can be stale —
   best-effort (graceful fallback to a normal wake). Only the peak changes; the window/transition and

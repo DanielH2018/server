@@ -557,6 +557,13 @@ bedroom_notify:
       description: Sound even while quiet (DND/sleep) via the high-importance channel.
       required: false
       example: true
+    critical_away:
+      description: >-
+        Deliver to the phone even while AWAY (bypass the away-hold) instead of parking it for the
+        arrival digest — for damage-class alerts (e.g. extreme temperature) whose whole point is to
+        reach you when nobody's home. Does NOT pierce DND at home (lower tier than `pierce`).
+      required: false
+      example: true
     recovery:
       description: This is an "all clear" — while away it cancels the held alert with the same tag instead of being delivered.
       required: false
@@ -575,12 +582,15 @@ bedroom_notify:
         importance: "{{ 'high' if (pierce | default(false)) else ('low' if quiet else 'default') }}"
         channel: "{{ 'Bedroom critical' if (pierce | default(false)) else 'Bedroom alerts' }}"
         away: "{{ states('person.daniel') not in ['home', 'unknown', 'unavailable'] }}"
-    # Away-aware hold: while you're outside the home geofence, non-critical (non-pierce) alerts are
-    # parked as a persistent_notification (id hold_<tag>) instead of pushed — then either cancelled by
-    # their recovery (same tag) or flushed as a digest on arrival (bedroom_flush_held_notifications).
-    # pierce alerts and the at-home path fall straight through to the normal push below. `away` fails
-    # open (unknown/unavailable -> deliver) so a tracker glitch over-notifies rather than swallowing.
-    - if: "{{ away and not (pierce | default(false)) }}"
+    # Away-aware hold: while you're outside the home geofence, non-critical alerts are parked as a
+    # persistent_notification (id hold_<tag>) instead of pushed — then either cancelled by their
+    # recovery (same tag) or flushed as a digest on arrival (bedroom_flush_held_notifications).
+    # Two flags fall straight through to the normal push instead of being held: `pierce` (the
+    # can't-miss tier) and `critical_away` (damage-class alerts like extreme temperature whose
+    # entire purpose is to reach you WHILE away — held-then-digested would defeat them; unlike
+    # pierce they don't also sound through DND at home). `away` fails open (unknown/unavailable ->
+    # deliver) so a tracker glitch over-notifies rather than swallowing.
+    - if: "{{ away and not (pierce | default(false)) and not (critical_away | default(false)) }}"
       then:
         - if: "{{ recovery | default(false) }}"
           then:

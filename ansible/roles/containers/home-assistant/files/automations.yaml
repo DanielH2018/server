@@ -636,14 +636,17 @@
         tag: "threshold_alert_{{ trigger.entity_id }}"
         # Per-category routing flags. `pulse` = brief red light flash (air quality only). `watch` =
         # also buzz the wrist (glanceable). `pierce` = sound even while quiet/DND (severe air quality
-        # only — the can't-miss tier). `recovery` = send a "back to normal" notice (severe skips it;
-        # the moderate recovery covers it). All notify goes through script.bedroom_notify (DND-aware).
+        # only — the can't-miss tier). `critical_away` = push while AWAY instead of holding for the
+        # arrival digest (temperature only — it's the damage-class safety net for when nobody's home;
+        # it does NOT pierce DND at home, so it's a tier below `pierce`). `recovery` = send a "back to
+        # normal" notice (severe skips it; the moderate recovery covers it). All notify goes through
+        # script.bedroom_notify (DND-aware).
         cfg: >-
           {{ {'airquality':       {'bad': '⚠️ Air quality', 'ok': '✅ Air quality', 'pulse': true,  'watch': true,  'pierce': false, 'recovery': true},
               'airqualitysevere': {'bad': '🚨 Air quality HIGH', 'ok': '✅ Air quality', 'pulse': true, 'watch': true, 'pierce': true, 'recovery': false},
               'battery':          {'bad': '🔋 Battery low', 'ok': '🔋 Battery OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
               'humidity':         {'bad': '💧 Humidity', 'ok': '💧 Humidity OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
-              'temperature':      {'bad': '🌡️ Temperature', 'ok': '🌡️ Temperature OK', 'pulse': false, 'watch': true,  'pierce': false, 'recovery': true},
+              'temperature':      {'bad': '🌡️ Temperature', 'ok': '🌡️ Temperature OK', 'pulse': false, 'watch': true,  'pierce': false, 'critical_away': true, 'recovery': true},
               'airqualityoutdoor':       {'bad': '🌫️ Outdoor air', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true,  'pierce': false, 'recovery': true},
               'airqualityoutdoorsevere': {'bad': '🚨 Outdoor air HIGH', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true, 'pierce': true, 'recovery': false}}[category] }}
         # Air-quality bad alerts get a "Boost fan" action button (circulate the air); other
@@ -659,6 +662,7 @@
                 tag: "{{ tag }}"
                 watch: "{{ cfg.watch }}"
                 pierce: "{{ cfg.pierce }}"
+                critical_away: "{{ cfg.critical_away | default(false) }}"
                 actions: "{{ boost_actions }}"
             # Light pulse only for air quality (cfg.pulse) and only when the lights are already on —
             # never wakes you, never fights Adaptive Lighting / the manual-off override at night.
@@ -676,6 +680,9 @@
                 message: "{{ label }} back to normal ({{ value }}{{ unit_sp }})"
                 tag: "{{ tag }}"
                 recovery: true
+                # A critical_away category (temperature) pushed its bad alert while away rather than
+                # holding it, so its all-clear should push too (there's no hold_<tag> to cancel).
+                critical_away: "{{ cfg.critical_away | default(false) }}"
 
 # Temperature → fan: drive fan.tower_fan from the AirGradient temperature via script.bedroom_apply_fan
 # (off <72 / Low 72-74 / Medium 74-76 / High >=76 °F; Medium cap 22:00-06:00; 0.5°F deadband).
@@ -1501,9 +1508,12 @@
 # errors at render). Scope is the pure, tested error_in_scope(level, logger) macro
 # (custom_templates/diagnostics.jinja); third-party/HACS chatter and WARNINGs are excluded there.
 # Routine via bedroom_notify (silent while DND/sleep, held-then-digested while away). The per-source
-# tag coalesces a repeating error into one updating notification. Self-exclusion (its own logger) is
-# the loop-guard: if the notify action itself errors, that ERROR must not re-trigger this automation.
-# Spec: docs/superpowers/specs/2026-06-22-ha-runtime-error-alert-design.md.
+# tag coalesces a repeating error into one updating notification. Loop-guard: this automation must
+# not re-trigger on an ERROR it (directly or indirectly) caused — so the condition excludes BOTH its
+# own logger AND the notify script's. A failing notify path (e.g. a lapsed FCM token raising
+# service_not_found, logged under homeassistant.components.script.bedroom_notify) would otherwise
+# re-fire this alert -> call bedroom_notify -> error again: a self-sustaining loop exactly when
+# notifications are already broken. Spec: docs/superpowers/specs/2026-06-22-ha-runtime-error-alert-design.md.
 - id: ha_runtime_error_alert
   alias: HA runtime error alert
   description: Notify when one of our automations/scripts/templates logs an ERROR/CRITICAL at runtime.
@@ -1517,7 +1527,8 @@
       value_template: >-
         {% from 'diagnostics.jinja' import error_in_scope %}
         {{ (error_in_scope(trigger.event.data.level, trigger.event.data.name) | bool)
-           and trigger.event.data.name != 'homeassistant.components.automation.ha_runtime_error_alert' }}
+           and trigger.event.data.name != 'homeassistant.components.automation.ha_runtime_error_alert'
+           and not (trigger.event.data.name | string).startswith('homeassistant.components.script.bedroom_notify') }}
   action:
     - service: script.bedroom_notify
       data:
