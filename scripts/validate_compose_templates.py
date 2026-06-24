@@ -207,8 +207,10 @@ def find_missing_cap_drop(docs, exempt=frozenset()) -> list:
 
 def _is_mutable_tag(image: str) -> bool:
     """True if the image reference uses a mutable channel tag (content can change under the same
-    string): untagged (implicit :latest), latest/release/stable/main/..., or a ``-stable``/
-    ``-dev``/... suffix. A version-bearing tag (1.2.3, v1.41.0, 2026.05.0, ...-lsNN, 124) is not."""
+    string): untagged (implicit :latest), latest/release/stable/main/..., or a channel word joined
+    to a component by a hyphen on EITHER side — a ``-stable`` suffix (jvm-stable) OR a ``master-``
+    prefix (master-web/master-collector). A version-bearing tag (1.2.3, v1.41.0, 2026.05.0,
+    ...-lsNN, 124) is not."""
     ref = image.split("@", 1)[0]  # drop any digest
     # repo:tag split on the LAST colon, unless that colon is a registry port (has a '/' after)
     if ":" in ref and "/" not in ref.rsplit(":", 1)[1]:
@@ -218,7 +220,9 @@ def _is_mutable_tag(image: str) -> bool:
     if tag == "":
         return True
     low = tag.lower()
-    return low in _MUTABLE_TAGS or any(low.endswith("-" + m) for m in _MUTABLE_TAGS)
+    return (low in _MUTABLE_TAGS
+            or any(low.endswith("-" + m) for m in _MUTABLE_TAGS)
+            or any(low.startswith(m + "-") for m in _MUTABLE_TAGS))
 
 
 def _has_watchtower_optout(spec: dict) -> bool:

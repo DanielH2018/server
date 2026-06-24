@@ -79,6 +79,11 @@ services:
       timeout: 10s
       retries: 3
     labels:
+      # Pinned/manual-update tier: scrutiny ships rolling `master-web`/`master-collector` branch
+      # builds, so it must NOT ride watchtower's auto-update pool — a stateful monitoring service
+      # (the influxdb sidecar holds the SMART history) on unsupervised upstream `master` commits.
+      # Update deliberately via `deploy -t scrutiny`.
+      - "com.centurylinklabs.watchtower.enable=false"
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),
@@ -124,6 +129,8 @@ services:
     networks:
       - scrutiny_internal
     labels:
+      # Pinned/manual-update tier — see scrutiny-web. No unsupervised `master` pulls.
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('scrutiny-collector') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '256M', '0.05', '32M') }}

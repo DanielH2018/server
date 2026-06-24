@@ -204,6 +204,14 @@ def test_jvm_stable_channel_tag_is_mutable():
     assert vct.find_undeclared_update_policy(_docs({"image": "schaka/janitorr:jvm-stable"})) == ["svc"]
 
 
+def test_channel_prefix_variant_tag_is_mutable():
+    # scrutiny ships ghcr.io/analogj/scrutiny:master-web / :master-collector — a rolling
+    # `master` branch build with a component suffix. The channel word is the PREFIX here,
+    # not a `-stable` suffix, so it must still force an explicit update-policy decision.
+    assert vct.find_undeclared_update_policy(_docs({"image": "ghcr.io/analogj/scrutiny:master-web"})) == ["svc"]
+    assert vct.find_undeclared_update_policy(_docs({"image": "ghcr.io/analogj/scrutiny:master-collector"})) == ["svc"]
+
+
 def test_untagged_image_is_mutable():
     assert vct.find_undeclared_update_policy(_docs({"image": "nginx"})) == ["svc"]
 
