@@ -12,6 +12,15 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    # Starts as root to bind :53, then drops to the `unbound` user (username: "unbound"
+    # in the image's unbound.conf). chroot is "" and so-rcv/sndbuf are 0, so it needs no
+    # SYS_CHROOT/NET_ADMIN — only the bind cap plus the privilege-drop caps.
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - SETUID
+      - SETGID
     volumes:
       - './data/unbound/:/etc/unbound/custom.conf.d/'
     healthcheck:

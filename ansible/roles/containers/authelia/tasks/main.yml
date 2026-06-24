@@ -86,6 +86,9 @@
         dest: "{{ authelia_config_dir }}/users_database.yml"
         mode: "0600"
       register: authelia_cfg_users
+      # Renders the argon2 password hash into the file; without this a --diff run
+      # prints the digest to the console/CI log (matches the sibling hash tasks above).
+      no_log: true
 
 - name: Enforce secure permissions on Authelia config files
   tags: [config]

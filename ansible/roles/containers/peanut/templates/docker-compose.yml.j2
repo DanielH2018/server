@@ -14,6 +14,18 @@ services:
     # (99-nut-apc.rules, MODE=0666) installed by the role — no privileged/pid:host needed.
     security_opt:
       - no-new-privileges:true
+    # entrypoint chowns /var/run/nut (CHOWN), then upsdrvctl/upsd/upsmon start as root
+    # and drop to the `nut` user (SETUID/SETGID). USB node is MODE=0666 so no extra cap
+    # is needed to open it. DAC_OVERRIDE: upsmon's root parent (kept root to raise FSD)
+    # must write its pidfile into the nut-owned 0770 /run/nut — without it `upsmon -c fsd`
+    # can't find the process and the on-battery shutdown chain silently breaks.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
     devices:
       - /dev/bus/usb:/dev/bus/usb
     environment:

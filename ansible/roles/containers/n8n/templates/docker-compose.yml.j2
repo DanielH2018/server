@@ -84,6 +84,11 @@ services:
     container_name: n8n-runners
     security_opt:
       - no-new-privileges:true
+    # Executes arbitrary workflow code — the most code-exposed container in the fleet,
+    # so drop all caps (the image ends `USER runner`, talks only to the broker over
+    # `internal`, and binds no privileged port, so it needs none).
+    cap_drop:
+      - ALL
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "task-runner-launcher"]
