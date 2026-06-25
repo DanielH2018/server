@@ -118,3 +118,52 @@ def containers_to_gate(compose_text: str | None, service: str) -> list[str]:
     if compose_text is None:
         return []
     return container_names(compose_text) or [service]
+
+
+def health_decision(health_status: str, running: bool, running_streak: int,
+                    settle_checks: int = 3) -> tuple[str, int]:
+    """Pure transition for ONE health poll of a just-deployed container.
+
+    This is the pass-or-keep-waiting decision the deployer's poll loop (`health_ok`
+    in gitops_deploy.py) makes on each sample, lifted out of the I/O so it can be
+    unit-tested without Docker/sleep/wall-clock. Inputs:
+      - health_status: docker `.State.Health.Status` — 'healthy' / 'starting' /
+        'unhealthy', or '' for an image with NO HEALTHCHECK (also '' if the
+        container is already gone).
+      - running: docker `.State.Running` (only consulted in the no-healthcheck
+        case; pass False otherwise).
+      - running_streak: count of consecutive prior no-healthcheck 'running' samples.
+    Returns (verdict, new_running_streak); verdict is 'healthy' (gate passes — stop
+    polling) or 'wait' (keep polling until the deadline).
+
+    The settle streak is the boot-then-crash guard: a no-healthcheck image must stay
+    'running' across `settle_checks` consecutive polls before it counts as healthy,
+    so a container that boots then crash-loops can't slip the gate the way a single
+    'running' sample would.
+    """
+    if health_status == "healthy":
+        return "healthy", running_streak
+    if health_status == "":  # no healthcheck -> require sustained running
+        new_streak = running_streak + 1 if running else 0
+        if new_streak >= settle_checks:
+            return "healthy", new_streak
+        return "wait", new_streak
+    # 'starting' / 'unhealthy' -> not yet; reset the streak and keep waiting.
+    return "wait", 0
+
+
+def health_settles(samples: list[tuple[str, bool]], settle_checks: int = 3) -> bool:
+    """Fold `health_decision` over a sequence of (health_status, running) polls.
+
+    True if the container would reach 'healthy' before the samples run out (the poll
+    loop returns True and the deploy stands); False if it never settles within them
+    (the loop hits HEALTH_TIMEOUT_S and the deployer rolls back to the prior HEAD).
+    A pure mirror of `health_ok`'s loop with the I/O (docker inspect + sleep + the
+    deadline) removed, so the streak/crash-loop logic is exercised in tests.
+    """
+    streak = 0
+    for health_status, running in samples:
+        verdict, streak = health_decision(health_status, running, streak, settle_checks)
+        if verdict == "healthy":
+            return True
+    return False

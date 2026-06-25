@@ -7,6 +7,8 @@ from deploy_logic import (
     container_names,
     containers_to_gate,
     should_alert_dirty,
+    health_decision,
+    health_settles,
 )
 
 
@@ -200,3 +202,70 @@ def test_dirty_alert_newly_dirtied_after_7am_alerts_once():
 def test_dirty_alert_custom_hour():
     assert should_alert_dirty(datetime(2026, 6, 20, 8, 0), None, alert_hour=9) is False
     assert should_alert_dirty(datetime(2026, 6, 20, 9, 0), None, alert_hour=9) is True
+
+
+# The health gate is the deployer's rollback decision: health_ok() polls docker and,
+# for an image with no HEALTHCHECK, requires `settle_checks` consecutive 'running'
+# samples (the boot-then-crash guard) before passing. health_ok()'s I/O loop now
+# delegates the per-sample pass/wait + streak transition to the pure health_decision();
+# health_settles() folds it over a sample sequence (what the live poll loop would
+# conclude). These were previously the one untested piece of safety-critical pipeline.
+def test_health_decision_healthy_passes_immediately():
+    # 'healthy' passes the gate on the first sample; streak left untouched.
+    assert health_decision("healthy", False, 0) == ("healthy", 0)
+
+
+def test_health_decision_unhealthy_waits_and_resets_streak():
+    # 'unhealthy' is never a pass and clears any running streak built up so far.
+    assert health_decision("unhealthy", False, 2) == ("wait", 0)
+
+
+def test_health_decision_starting_waits_and_resets_streak():
+    assert health_decision("starting", False, 2) == ("wait", 0)
+
+
+def test_health_decision_no_healthcheck_builds_running_streak():
+    # No HEALTHCHECK (status ''): each 'running' sample increments the streak; it
+    # only passes once it reaches settle_checks consecutive samples.
+    assert health_decision("", True, 0, settle_checks=3) == ("wait", 1)
+    assert health_decision("", True, 1, settle_checks=3) == ("wait", 2)
+    assert health_decision("", True, 2, settle_checks=3) == ("healthy", 3)
+
+
+def test_health_decision_no_healthcheck_not_running_resets_streak():
+    # A container that stops 'running' mid-settle resets the streak to 0.
+    assert health_decision("", False, 2, settle_checks=3) == ("wait", 0)
+
+
+def test_health_settles_healthy_first_sample():
+    assert health_settles([("healthy", False)]) is True
+
+
+def test_health_settles_no_healthcheck_sustained_running():
+    # Three consecutive 'running' samples (no healthcheck) settle the gate.
+    assert health_settles([("", True), ("", True), ("", True)], settle_checks=3) is True
+
+
+def test_health_settles_no_healthcheck_two_running_not_enough():
+    # Only two 'running' samples before polls run out -> never settles (would time out).
+    assert health_settles([("", True), ("", True)], settle_checks=3) is False
+
+
+def test_health_settles_boot_then_crash_loop_never_settles():
+    # Boots 'running' twice, crashes (not running), repeats — the streak resets and
+    # never reaches 3 consecutive, so the gate times out and rolls back. This is the
+    # exact case a single 'running' sample would have wrongly passed.
+    samples = [("", True), ("", True), ("", False),
+               ("", True), ("", True), ("", False)]
+    assert health_settles(samples, settle_checks=3) is False
+
+
+def test_health_settles_unhealthy_then_recovers():
+    # 'starting'/'unhealthy' while booting, then 'healthy' -> passes.
+    samples = [("starting", False), ("unhealthy", False), ("healthy", False)]
+    assert health_settles(samples) is True
+
+
+def test_health_settles_never_healthy_times_out():
+    # Perpetually 'unhealthy' -> the gate fails (rollback).
+    assert health_settles([("unhealthy", False)] * 5) is False

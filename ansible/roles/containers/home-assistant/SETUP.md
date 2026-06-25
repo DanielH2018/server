@@ -72,9 +72,9 @@ These are **not** captured by `deploy.yml` — they're device/app/UI state:
 
 | File | What it holds | Deployed via |
 |---|---|---|
-| `templates/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 12 `threshold` sensors, `template: !include`, `recorder:` excludes, http/trusted-proxy, Lovelace | `template` (Ansible-rendered) |
-| `files/automations.yaml` | the 18 automations | `copy` (verbatim — HA Jinja) |
-| `files/scripts.yaml` | the 6 scripts | `copy` |
+| `templates/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 16 `threshold` sensors, `template: !include`, `recorder:` excludes, http/trusted-proxy, Lovelace | `template` (Ansible-rendered) |
+| `files/automations.yaml` | the 31 automations | `copy` (verbatim — HA Jinja) |
+| `files/scripts.yaml` | the 16 scripts | `copy` |
 | `files/scenes.yaml` | `bedroom_bright` / `bedroom_nightlight` | `copy` |
 | `files/templates.yaml` | `sensor.bedroom_wake_start` template sensor | `copy` |
 | `files/custom_templates/fan.jinja` | shared `pct_to_level` / `level_to_pct` fan macros | `copy` |
@@ -104,15 +104,21 @@ These are **not** captured by `deploy.yml` — they're device/app/UI state:
   (03:00–11:00). The single source of truth for the wake-ramp window.
 
 **`threshold` binary-sensors** (`configuration.yaml.j2`) — native hysteresis = "alert once +
-recovery, no bounce". Twelve, feeding `bedroom_threshold_alert`:
-- Air quality (moderate): `bedroom_{co2,pm2_5,voc,nox}_high`
-- Air quality (severe, pierces DND): `bedroom_{co2,pm2_5,voc,nox}_severe`
+recovery, no bounce". Sixteen, feeding `bedroom_threshold_alert`:
+- Air quality indoor (moderate): `bedroom_{co2,pm2_5,voc,nox}_high`
+- Air quality indoor (severe, pierces DND): `bedroom_{co2,pm2_5,voc,nox}_severe`
+- Air quality outdoor: `outdoor_pm2_5_high` (moderate, watch) / `outdoor_pm2_5_severe` (wildfire tier, pierces DND)
+- Temperature: `bedroom_temp_high` / `_low` — the away safety net (`critical_away`: pushes even while you're out)
 - Battery: `bedroom_{fp300,tap_dial}_battery_low`
 - Humidity: `bedroom_humidity_high` / `_low`
 
 ---
 
 ## 6. Scripts (the reusable building blocks)
+
+> The **core** building blocks below; the suite has **16** scripts in total.
+> [`CLAUDE.md`](CLAUDE.md) is the authoritative, exhaustive per-feature reference — this section
+> is a curated walkthrough, not a full inventory (keeping it one keeps it from drifting).
 
 - **`bedroom_apply_natural`** — sets the lights to their "natural" state *right now*: an ordered
   `choose:` of time-based exceptions over **full Adaptive Lighting** (the default). Exceptions, in
@@ -134,9 +140,13 @@ recovery, no bounce". Twelve, feeding `bedroom_threshold_alert`:
 
 ## 7. Automations (what each does)
 
+> The **core** automations below; the suite has **31** in total (the cast/display, heartbeat,
+> runtime-error, color-track, AL-startup-suppress, air-purifier-presence, wake-ramp, held-notification
+> flush, and others are documented per-feature in [`CLAUDE.md`](CLAUDE.md), the authoritative reference).
+
 **Presence & lighting**
 - `bedroom_presence_on` — FP300 occupied (+ home, + dark-or-in-wake-window) → `apply_natural`.
-- `bedroom_absence_off` — room empty 1 min → lights off.
+- `bedroom_absence_off` — room empty 5 min → lights off (5 min, not 1, for FP300 false-absence de-flap).
 - `bedroom_morning_reset` — at `sensor.bedroom_wake_start` (the alarm) + a 09:00 fallback: clear the
   overnight overrides, re-apply the fan, and (if present, alarm trigger) run the wake ramp + a
   "you slept N h" note (gentler ramp if you slept < 6 h).
@@ -182,8 +192,8 @@ recovery, no bounce". Twelve, feeding `bedroom_threshold_alert`:
 |---------|----------------|------|
 | **Button 1 — Power** | toggle: on → natural (Adaptive Lighting, ungated); off → off + stay-off | reset to auto (clear overrides, re-sync lights lux-gated + fan) |
 | **Button 2 — Brightness** | Relax / cozy scene (warm ~30%) | Bright scene (full) |
-| **Button 3 — Sleep** | sleep toggle: in sleep mode + lights on → all off (room dark, fan stays quiet); otherwise → nightlight (warm ~3%) | Bedtime routine (15-min fade to nightlight) |
-| **Button 4 — Fan** | fan → auto | boost 100% |
+| **Button 3 — Sleep** | sleep toggle: in sleep mode + lights on → all off (room dark, fan stays quiet); otherwise → nightlight (warm ~3%) | Bedtime routine (30-min fade to nightlight) |
+| **Button 4 — Fan** | fan → auto (clear manual override, re-apply curve) | toggle **fan-dial mode** (5-min window: the dial then steps the fan ±1 level; max fan still reachable by dialing to L9) |
 | **Dial** | brightness ±12% | — |
 
 **Phone / watch:**
@@ -215,7 +225,7 @@ All set per-category in `bedroom_threshold_alert`'s `cfg` map or per-call to `be
 | Fan curve (start temp / slope / caps) | `bedroom_apply_fan` in `scripts.yaml` (the `ideal`/`cap` lines) |
 | Wake ramp peak / short-night softening | `bedroom_apply_natural` morning exception (`wake_peak`) |
 | Nightlight window | `bedroom_apply_natural` first exception (`sleep_mode` or 00:00–05:00) |
-| Bedtime fade length (15 min) | `transition:` on the `scene.turn_on` in `bedroom_bedtime` (`scripts.yaml`) |
+| Bedtime fade length (30 min) | `transition:` on the `scene.turn_on` in `bedroom_bedtime` (`scripts.yaml`) |
 | Away timings (10 / 30 min) | `bedroom_away` trigger `for:` |
 | Bedtime prompt time (22:00) | `bedroom_bedtime_prompt` trigger |
 | FP300 presence drop-out (desk-sitting) | Z2M **device settings** (not git): `motion_sensitivity`, `absence_delay_timer`, `presence_detection_options` — set via `mosquitto_pub -t 'zigbee2mqtt/Aqara FP300/set'` (current: mmwave / high / 60 s) |

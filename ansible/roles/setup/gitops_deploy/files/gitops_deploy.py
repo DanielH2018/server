@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from deploy_logic import (  # noqa: E402
     containers_to_gate,
+    health_decision,
     next_action,
     services_from_changed_paths,
     should_alert_dirty,
@@ -145,20 +146,20 @@ def health_ok(container: str, settle_checks: int = 3) -> bool:
     """True if `container` reaches 'healthy', or — for an image with no
     HEALTHCHECK — stays 'running' across `settle_checks` consecutive polls
     (~20s) so a boot-then-crash loop doesn't slip the gate the way a single
-    'running' sample would. Polls until HEALTH_TIMEOUT_S, then fails."""
+    'running' sample would. Polls until HEALTH_TIMEOUT_S, then fails.
+
+    The per-sample pass/wait + streak transition is the pure, unit-tested
+    `deploy_logic.health_decision`; this function is just its I/O shell (docker
+    inspect, the 10s poll, and the wall-clock deadline). `.State.Running` is only
+    inspected in the no-healthcheck case (st == ''), matching the decision's use."""
     deadline = time.time() + TIMEOUT
     running_streak = 0
     while time.time() < deadline:
         st = _inspect("{{.State.Health.Status}}", container)
-        if st == "healthy":
+        running = st == "" and _inspect("{{.State.Running}}", container) == "true"
+        verdict, running_streak = health_decision(st, running, running_streak, settle_checks)
+        if verdict == "healthy":
             return True
-        if st == "":  # no healthcheck (or container gone) -> require sustained running
-            run_st = _inspect("{{.State.Running}}", container)
-            running_streak = running_streak + 1 if run_st == "true" else 0
-            if running_streak >= settle_checks:
-                return True
-        else:  # 'starting' / 'unhealthy' -> reset the streak, keep waiting
-            running_streak = 0
         time.sleep(10)
     return False
 
