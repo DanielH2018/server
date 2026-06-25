@@ -288,6 +288,66 @@
       data:
         reason: "off"
 
+# Air-purifier presence control: the "Air Purifier" smart plug (switch.0xffffb40e06088788 — raw Z2M
+# IEEE id; friendly_name "Air Purifier") auto-starts the purifier whenever it gets power, so toggling
+# the plug = toggling the purifier. Run it while the room is occupied, cut it after 5 min empty —
+# EXCEPT hold it on from bedtime through the end of the morning wake ramp (binary_sensor.bedroom_
+# purifier_hold), because the FP300 drops a motionless sleeper and would otherwise kill it at 2am.
+#   present  -> turn on (edge-triggered on arrival; a manual off therefore "sticks" until you next
+#               leave-and-return — same property bedroom_manual_light_detect gives the lights).
+#   absent   -> turn off after 5 min empty, UNLESS the overnight hold is active.
+#   hold_end -> the wake routine just finished; if the room is already empty, turn off NOW. Catches
+#               the case where the FP300 dropped you overnight and never re-detected you, so the
+#               5-min absent trigger fired-but-was-blocked and won't re-fire (no fresh off-edge).
+# Not a sanctioned-writer actuator (state/sanctioned_writers.yml governs only the lights + fan), so
+# this drives switch.turn_on/off directly — no mediator script.
+- id: bedroom_air_purifier_presence
+  alias: Bedroom air purifier presence
+  description: >-
+    Run the air purifier while the room is occupied; cut power after 5 min empty — but hold it on
+    from bedtime through the end of the morning wake ramp, since the FP300 can drop a motionless sleeper.
+  mode: queued
+  max: 3
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.aqara_fp300_presence
+      to: "on"
+      id: present
+    - platform: state
+      entity_id: binary_sensor.aqara_fp300_presence
+      to: "off"
+      for: "00:05:00"
+      id: absent
+    - platform: state
+      entity_id: binary_sensor.bedroom_purifier_hold
+      from: "on"
+      to: "off"
+      id: hold_end
+  action:
+    - choose:
+        # Arrived (or FP300 re-detected you) -> make sure the purifier is powered.
+        - conditions: "{{ trigger.id == 'present' }}"
+          sequence:
+            - service: switch.turn_on
+              target:
+                entity_id: switch.0xffffb40e06088788
+        # Empty for 5 min -> power off, UNLESS we're holding it through sleep/wake.
+        - conditions:
+            - "{{ trigger.id == 'absent' }}"
+            - "{{ is_state('binary_sensor.bedroom_purifier_hold', 'off') }}"
+          sequence:
+            - service: switch.turn_off
+              target:
+                entity_id: switch.0xffffb40e06088788
+        # Wake routine ended -> if the room is already empty, power off now.
+        - conditions:
+            - "{{ trigger.id == 'hold_end' }}"
+            - "{{ is_state('binary_sensor.aqara_fp300_presence', 'off') }}"
+          sequence:
+            - service: switch.turn_off
+              target:
+                entity_id: switch.0xffffb40e06088788
+
 # Manual light DETECT: make a hand/voice/dashboard light change set the SAME manual-off override the
 # Tap Dial's power button does — so an external "off" STICKS instead of being re-lit by
 # bedroom_presence_on's dusk-lux trigger. Turning the bulbs off drops sensor.aqara_fp300_illuminance

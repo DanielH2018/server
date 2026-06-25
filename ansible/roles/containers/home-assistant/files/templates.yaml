@@ -68,3 +68,19 @@
         {% from 'lighting.jinja' import in_wake_window, auto_light_allowed %}
         {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool %}
         {{ auto_light_allowed(in_window, states('sensor.aqara_fp300_illuminance')) }}
+
+# Air-purifier overnight HOLD: "on" from bedtime through the END of the morning wake ramp, so the
+# air-purifier plug (automation.bedroom_air_purifier_presence) is NOT cut by the FP300 dropping a
+# motionless sleeper (the documented false-absence — see role CLAUDE.md / [[ha-fp300-fan-false-hold]]).
+# sleep_mode (set by script.bedroom_bedtime, cleared by the morning reset) covers bedtime -> wake_start;
+# in_wake_window covers wake_start -> +30 min. The two are gap-free, so this is one continuous hold from
+# lights-out until the wake routine finishes. Composes the SAME pieces as bedroom_auto_light_allowed
+# above. now() => HA re-renders this ~every minute, so it flips off within ~1 min of the window ending.
+- binary_sensor:
+    - name: "Bedroom purifier hold"
+      unique_id: bedroom_purifier_hold
+      state: >-
+        {% set ws = states('sensor.bedroom_wake_start') %}
+        {% from 'lighting.jinja' import in_wake_window %}
+        {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool %}
+        {{ is_state('input_boolean.bedroom_sleep_mode', 'on') or in_window }}
