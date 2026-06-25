@@ -1,6 +1,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 services:
   recyclarr:
     # Pinned + Renovate-managed (was :latest/watchtower — the unsupervised v8 major
@@ -9,12 +10,7 @@ services:
     container_name: recyclarr
     user: {{ puid }}:{{ pgid }}
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "supercronic"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
+    {{ healthcheck('["CMD", "pgrep", "-f", "supercronic"]', timeout='5s', start_period='15s') }}
     cap_drop:
       - ALL
     security_opt:

@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 
 services:
@@ -45,12 +46,7 @@ services:
       - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8265/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+    {{ healthcheck('["CMD", "curl", "-f", "http://localhost:8265/"]', start_period='60s') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(

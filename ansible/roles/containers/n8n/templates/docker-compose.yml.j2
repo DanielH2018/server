@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 services:
   n8n:
@@ -44,12 +45,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5678/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+    {{ healthcheck('["CMD", "wget", "-q", "--spider", "http://localhost:5678/healthz"]', start_period='60s') }}
     {{ service_networks() }}
       - internal
     labels:
@@ -90,12 +86,7 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "task-runner-launcher"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+    {{ healthcheck('["CMD", "pgrep", "-f", "task-runner-launcher"]', timeout='5s') }}
     environment:
       - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
       - N8N_RUNNERS_AUTH_TOKEN={{ n8n_runner_auth_token }}

@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 
 services:
@@ -9,12 +10,7 @@ services:
     image: ghcr.io/alam00000/bentopdf:latest
     container_name: bento-pdf
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+    {{ healthcheck('["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]', start_period='15s') }}
     cap_drop:
       - ALL
     security_opt:

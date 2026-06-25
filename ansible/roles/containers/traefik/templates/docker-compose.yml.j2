@@ -1,5 +1,6 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 services:
   crowdsec:
     image: crowdsecurity/crowdsec:latest
@@ -27,12 +28,7 @@ services:
       - /var/log/traefik:/var/log/traefik/:ro
       - /var/log/auth.log:/var/log/auth.log:ro
       - /var/log/authelia:/var/log/authelia/:ro
-    healthcheck:
-      test: ["CMD", "cscli", "version"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
+    {{ healthcheck('["CMD", "cscli", "version"]', start_period='20s') }}
     networks:
       - {{ (container_item.networks | default([docker_network]))[0] }}
       # Join monitoring so Prometheus can scrape the CrowdSec metrics endpoint
@@ -88,11 +84,7 @@ services:
       - ./data/acme.json:/acme.json
       - ./data/config.yml:/config.yml:ro
       - /var/log/traefik:/var/log/traefik
-    healthcheck:
-      test: ["CMD", "traefik", "healthcheck"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ healthcheck('["CMD", "traefik", "healthcheck"]') }}
     labels:
       # Disable watchtower update — pinned + Renovate-managed
       - "com.centurylinklabs.watchtower.enable=false"

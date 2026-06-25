@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 services:
   couchdb:
@@ -26,12 +27,7 @@ services:
       - ./couchdb-etc:/opt/couchdb/etc/local.d
     {{ service_networks() }}
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-s", "--max-time", "5", "http://localhost:5984/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    {{ healthcheck('["CMD", "curl", "-s", "--max-time", "5", "http://localhost:5984/"]') }}
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network={{ (container_item.networks | default([docker_network]))[0] }}"

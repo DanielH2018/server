@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 services:
   # Dedicated socket proxy for Portainer only. Portainer needs write (POST) and
@@ -85,11 +86,7 @@ services:
     depends_on:
       docker-proxy-portainer:
         condition: service_healthy
-    healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:9000/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:9000/ || exit 1') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
