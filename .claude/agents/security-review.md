@@ -22,7 +22,7 @@ Focus your review on:
 ## Rules
 
 - Make NO changes to any file — you are read-only
-- Do not flag issues that are intentionally designed that way (e.g. game servers without Authelia, Jellyfin with its own auth) — these are documented in DETAILED_GUIDE.md
+- Do not flag issues that are intentionally designed that way (e.g. game servers without Authelia, Jellyfin with its own auth) — these are documented in DETAILED_GUIDE.md or provided in your dispatch context. This is a mature setup: before flagging, verify the candidate against the role's CLAUDE.md (most accepted trade-offs are documented there) — a finding that's already mitigated is a false positive that wastes the operator's time
 - Do not report low-signal style issues unless asked (missing comments, formatting)
 - Every finding must include: severity, file + line, what the issue is, what the risk is, and a concrete fix
 - End every report with a summary count: `X Critical, X High, X Medium, X Low`

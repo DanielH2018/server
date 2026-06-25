@@ -77,8 +77,10 @@ they are the *encyclopedia* of the bedroom suite. Repo-root `CLAUDE.md` has shar
 - A new/renamed entity (and any Zigbee/Z2M entity) sits `unknown`/`unavailable` until its first
   report — don't read that as broken right after a deploy.
 - **Don't re-flag intentional designs:** Authelia-off on HA (companion app/webhooks need it),
-  `ip_ban`+TOTP as the compensating control, Adaptive Lighting self-on at startup (known, deprioritized),
-  the lux gate's feedback-loop caveat, the FP300 fan-interference tuning, bridge (not host) networking.
+  `ip_ban`+TOTP as the compensating control, Adaptive Lighting self-on at startup (FIXED —
+  `automation.bedroom_al_startup_suppress`), the lux gate's feedback-loop caveat, the FP300
+  fan-interference tuning, bridge (not host) networking. Plus any "don't re-flag" items provided in
+  your dispatch context.
 - Z2M **device** settings (FP300/Hue tuning) are NOT templated — they're set via `mosquitto_pub`
   and must be re-applied after a re-pair. Use `z2m-device-setting`; note them in the role `CLAUDE.md`.
 - Make changes only in `ansible/roles/containers/home-assistant/` (and `scripts/`/`.claude/` for
