@@ -42,6 +42,15 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   own config via the UI, but this file is the Ansible source of truth and is
   overwritten on deploy — keep UI-managed config (integrations, etc.) in the areas HA
   stores separately (`.storage/`, the recorder DB…), which are NOT templated.
+  - **Smart-plug entity_id renames (2026-06-25, NOT templated — survives deploy, NOT a Z2M re-pair).**
+    The 3 room plugs paired with raw Z2M IEEE entity_ids (e.g. `switch.0xffffb40e06088788`); renamed
+    in the **HA entity registry** to `switch.air_purifier` / `switch.airgradient_lamp` /
+    `switch.behind_bed` (+ all their sub-entities `<domain>.<slug>_<suffix>`). Entity-id renames are
+    **WebSocket-only** (`config/entity_registry/update` with `new_entity_id`) — the REST API / probe
+    can't. The registry lives in `.storage`, so this persists across deploys but a **Zigbee re-pair
+    re-mints the IEEE ids** → re-apply (the one-off WS loop reuses `probe.py`'s token/IP/WS helpers).
+    `switch.desk_surge_protector_strip` already had a clean id. `automation.bedroom_air_purifier_presence`
+    references the renamed `switch.air_purifier`.
 - **Automations + scenes + scripts + template sensors + shared Jinja macros ARE copy'd (since 2026-06-18).**
   `files/automations.yaml`, `files/scenes.yaml`, `files/scripts.yaml`, `files/templates.yaml`, and
   `files/custom_templates/fan.jinja`

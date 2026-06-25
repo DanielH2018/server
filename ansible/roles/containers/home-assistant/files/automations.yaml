@@ -288,9 +288,10 @@
       data:
         reason: "off"
 
-# Air-purifier presence control: the "Air Purifier" smart plug (switch.0xffffb40e06088788 — raw Z2M
-# IEEE id; friendly_name "Air Purifier") auto-starts the purifier whenever it gets power, so toggling
-# the plug = toggling the purifier. Run it while the room is occupied, cut it after 5 min empty —
+# Air-purifier presence control: the "Air Purifier" smart plug (switch.air_purifier) auto-starts the
+# purifier whenever it gets power, so toggling the plug = toggling the purifier. (entity_id renamed
+# from its raw Z2M IEEE address in the HA registry — see role CLAUDE.md.) Run it while the room is
+# occupied, cut it after 5 min empty —
 # EXCEPT hold it on from bedtime through the end of the morning wake ramp (binary_sensor.bedroom_
 # purifier_hold), because the FP300 drops a motionless sleeper and would otherwise kill it at 2am.
 #   present  -> turn on (edge-triggered on arrival; a manual off therefore "sticks" until you next
@@ -330,7 +331,7 @@
           sequence:
             - service: switch.turn_on
               target:
-                entity_id: switch.0xffffb40e06088788
+                entity_id: switch.air_purifier
         # Empty for 5 min -> power off, UNLESS we're holding it through sleep/wake.
         - conditions:
             - "{{ trigger.id == 'absent' }}"
@@ -338,7 +339,7 @@
           sequence:
             - service: switch.turn_off
               target:
-                entity_id: switch.0xffffb40e06088788
+                entity_id: switch.air_purifier
         # Wake routine ended -> if the room is already empty, power off now.
         - conditions:
             - "{{ trigger.id == 'hold_end' }}"
@@ -346,7 +347,7 @@
           sequence:
             - service: switch.turn_off
               target:
-                entity_id: switch.0xffffb40e06088788
+                entity_id: switch.air_purifier
 
 # Manual light DETECT: make a hand/voice/dashboard light change set the SAME manual-off override the
 # Tap Dial's power button does — so an external "off" STICKS instead of being re-lit by

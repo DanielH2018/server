@@ -88,13 +88,13 @@ writes:
   media_player.bedroom_display:
     - automation.bedroom_display_go_ambient_when_dark_or_sleeping
     - automation.bedroom_display_keep_dashboard_up
-  switch.0xffffb40e06088788:
-    - automation.bedroom_air_purifier_presence
   switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom:
     - script.bedroom_bedtime
     - script.bedroom_clear_overrides
     - script.bedroom_exit_sleep
     - script.bedroom_run_scenario
+  switch.air_purifier:
+    - automation.bedroom_air_purifier_presence
   switch.bedroom_adaptive_lighting_bedroom:
     - script.bedroom_bedtime
   timer.bedroom_fan_dial:
