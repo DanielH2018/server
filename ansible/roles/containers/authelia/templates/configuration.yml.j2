@@ -103,9 +103,12 @@ session:
       default_redirection_url: 'https://www.{{ domain }}'
 
 regulation:
+  # Defense-in-depth behind CrowdSec (the primary online-guessing control on the public
+  # auth.<domain> portal): a longer ban raises the cost of password spraying without much
+  # self-impact — a password-manager login rarely fails 3x in 2 min. ban_time 5m -> 15m.
   max_retries: 3
   find_time: 120
-  ban_time: 300
+  ban_time: 900
 
 storage:
   encryption_key: {{ authelia_storage }} # Now required

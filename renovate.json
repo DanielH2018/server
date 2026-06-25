@@ -8,6 +8,13 @@
   "labels": ["dependencies"],
   "schedule": ["before 6am on monday"],
   "prHourlyLimit": 4,
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "description": "CVE-driven bumps bypass the Monday-only window so security fixes land ASAP. osvVulnerabilityAlerts adds OSV-database scanning for the version-pinned Docker images (GitHub-native Dependabot doesn't cover Docker), closing the one dependency axis without a 'silence != up-to-date' backstop. Requires repo Dependabot *alerts* (not PRs) enabled so Renovate can read the advisory feed.",
+    "enabled": true,
+    "schedule": ["at any time"],
+    "labels": ["dependencies", "security"]
+  },
   "lockFileMaintenance": {
     "description": "pyproject.toml uses unbounded ranges (ansible-core >=2.18 etc.), so Renovate sees nothing to bump while uv.lock keeps exact pins frozen forever — silence ≠ up-to-date. A weekly lock refresh PR rides the same CI gate. NO automerge: >= ranges mean a refresh can contain major jumps (ansible-core 3.x one day); those deserve a deliberate look.",
     "enabled": true,
