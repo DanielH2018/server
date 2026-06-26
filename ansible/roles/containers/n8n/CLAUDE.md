@@ -5,7 +5,9 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 ## At a glance
 - **Images:** built from `templates/Dockerfile.j2` (`n8n`) + `Dockerfile-runners.j2` (`n8n-runners`)
 - **Host:** daniel-server · **Port:** 5678 · **URL:** `n8n.<domain>` (Authelia: yes)
-- **Networks:** apps + `internal` (runner↔broker traffic stays on `internal`)
+- **Networks:** apps + `internal` (the runner connects to the broker over `internal`, but the
+  broker binds `0.0.0.0:5679` so it's ALSO reachable from `apps` siblings — the gate is
+  `n8n_runner_auth_token`, NOT network isolation; see the broker note below)
 - **Depends on:** traefik, authelia
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 

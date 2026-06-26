@@ -26,6 +26,10 @@ kill-switch. See repo-root `CLAUDE.md` for shared conventions.
   (or VPN-down) container goes `unhealthy` and `autoheal` restarts it automatically. A plain
   loopback healthcheck would stay green and hide the outage. Manual fix if ever needed:
   `docker restart qbittorrent`.
+- **DNS name for other `media` containers is `wireguard:8080`, NOT `qbittorrent:8080`.** Sharing
+  the wireguard netns means qBittorrent has no Docker network record of its own — only `wireguard`
+  resolves on `media`. Sonarr/Radarr are already wired this way; use `wireguard:8080` for any new
+  download-client consumer (the natural-looking `qbittorrent:8080` silently fails to resolve).
 - **UDP-leak-blocked failure mode (zero download progress):** qBittorrent must bind its
   listen interface to **`wg0`**. If it doesn't, libtorrent follows the netns main-table
   default route (`eth0`) and binds its torrent UDP socket there; the Mullvad kill-switch
