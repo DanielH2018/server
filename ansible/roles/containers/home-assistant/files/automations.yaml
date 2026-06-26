@@ -1018,6 +1018,12 @@
                 title: "🏠 Left on"
                 message: "Turned off bedroom {{ on_label }} (you're away)"
                 tag: bedroom_away
+                # Deliver NOW, don't hold for the arrival digest: bedroom_away only ever fires while
+                # away, so without this the message + its "Turn back on" button are parked as a held
+                # persistent_notification (flushed phone-only on arrival, actions stripped) and the
+                # button can never be tapped — defeating the false-away undo it exists for.
+                # critical_away pushes while away without piercing DND at home.
+                critical_away: true
                 # One-tap undo for a false-away (GPS jitter while you're actually home).
                 actions:
                   - action: BEDROOM_AWAY_TURN_ON
@@ -1139,6 +1145,11 @@
             - service: script.bedroom_fan_set
               data:
                 reason: "auto"
+            # Clear the "Left on" HA persistent note (the critical_away visibility fallback) now that
+            # you've acted on it — the bedroom_away tag has no recovery path of its own.
+            - service: persistent_notification.dismiss
+              data:
+                notification_id: bedroom_away
 
 # Bedtime prompt: at 22:00, if you're in the bedroom and haven't started bedtime, send a nudge with
 # a "Start now" button (-> BEDROOM_START_BEDTIME -> script.bedroom_bedtime). Gated on present + not

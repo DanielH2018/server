@@ -625,18 +625,30 @@ bedroom_notify:
             message: "{{ message }}"
             data:
               tag: "{{ tag }}"
-    # Fallback for the can't-miss tier only: a `pierce` alert ALSO lands in the HA UI as a persistent
-    # notification, so a critical event is still visible even if the mobile push silently fails (lapsed
-    # FCM token, phone re-paired → the notify.mobile_app_* service name changed). notification_id = tag
-    # so a repeat replaces in place; it lingers until acknowledged (intended for a critical event — the
-    # routine recovery is non-pierce and deliberately does NOT clear it). Zero change to the normal path.
-    - if: "{{ pierce | default(false) }}"
-      then:
-        - service: persistent_notification.create
-          data:
-            notification_id: "{{ tag }}"
-            title: "{{ title }}"
-            message: "{{ message }}"
+    # Visibility fallback for the ELEVATED tiers (pierce / watch / critical_away): the alert ALSO lands
+    # in the HA UI as a persistent notification, so a critical/elevated event stays visible even if the
+    # mobile push silently fails (lapsed FCM token, or a re-paired phone → the notify.mobile_app_*
+    # service renamed → a swallowed service_not_found). This is the backstop the runtime-error alert
+    # can't be: it deliberately ignores script.bedroom_notify's OWN logger to avoid a loop, so a broken
+    # notify service is otherwise invisible for these tiers (sensor-offline, air quality, extreme-temp
+    # away, UPS). notification_id = tag (a repeat replaces in place); a recovery — every recovery
+    # call-site passes recovery: true with the SAME tag — DISMISSES it once the condition clears.
+    # Severe air quality sets `pierce` but sends NO recovery (cfg.recovery false), so its note lingers
+    # until acknowledged — the original can't-miss behavior, preserved. Routine phone-only alerts
+    # (battery/humidity, and most recoveries) create no note; a stray dismiss of an absent id no-ops.
+    - choose:
+        - conditions: "{{ recovery | default(false) }}"
+          sequence:
+            - service: persistent_notification.dismiss
+              data:
+                notification_id: "{{ tag }}"
+        - conditions: "{{ (pierce | default(false)) or (watch | default(false)) or (critical_away | default(false)) }}"
+          sequence:
+            - service: persistent_notification.create
+              data:
+                notification_id: "{{ tag }}"
+                title: "{{ title }}"
+                message: "{{ message }}"
 
 # Test harness: run the selected scenario (input_select.bedroom_test_scenario) at the selected speed
 # (input_select.bedroom_test_speed = fast -> compressed ~30s + EPHEMERAL, real -> production timing + kept).
