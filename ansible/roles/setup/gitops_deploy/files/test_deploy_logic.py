@@ -55,6 +55,47 @@ def test_unrelated_path_ignored():
     assert cs.broad is False
 
 
+# A secrets-only push (e.g. a manual rotation of an assisted/external secret from another
+# machine) maps to no service and isn't broad, so it used to fall into the silent
+# `git merge --ff-only; return` path — the rotated value then sat stale in the running
+# container with no redeploy and no alert. It must instead be flagged so the deployer
+# defers-and-alerts. (Adding ansible/vars/ to _BROAD_PREFIXES was rejected: that would also
+# force the /add-secret flow — secrets.yml + the consuming template together — into a manual
+# full deploy instead of the correct single-service deploy.)
+def test_secrets_only_change_flags_secrets_not_broad():
+    cs = services_from_changed_paths(["ansible/vars/secrets.yml"])
+    assert cs.secrets is True
+    assert cs.services == set()
+    assert cs.broad is False
+
+
+def test_secrets_with_service_template_still_deploys_that_service():
+    # The /add-secret flow commits secrets.yml + the consuming template together — the
+    # service maps, so it deploys normally (applying the secret); the flag is also set.
+    cs = services_from_changed_paths([
+        "ansible/vars/secrets.yml",
+        "ansible/roles/containers/karakeep/templates/docker-compose.yml.j2",
+    ])
+    assert cs.services == {"karakeep"}
+    assert cs.secrets is True
+    assert cs.broad is False
+
+
+def test_no_secrets_change_leaves_flag_false():
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/cadvisor/templates/docker-compose.yml.j2"])
+    assert cs.secrets is False
+
+
+def test_secret_rotation_registry_only_is_not_secrets():
+    # The plaintext registry (names/dates, no value change) needs no redeploy — a silent
+    # ff is correct, so it must NOT trip the secrets flag.
+    cs = services_from_changed_paths(["ansible/secret_rotation.yml"])
+    assert cs.secrets is False
+    assert cs.services == set()
+    assert cs.broad is False
+
+
 def test_next_action_noop_when_in_sync():
     assert next_action("aaa", "aaa", None) == "noop"
 

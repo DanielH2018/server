@@ -23,6 +23,12 @@ the held SHA and the hold clears automatically.
   edit session would re-page every 30-min tick. State: `/var/lib/gitops-deploy/dirty_alerted_date`.
 - **Broad changes** (shared `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`)
   are NOT auto-scoped — the deployer alerts and defers to a manual full deploy.
+- **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
+  rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
+  value only reaches a container on its next deploy, so the deployer alerts (once per SHA,
+  `secrets_alerted_sha` marker) to redeploy the consumer(s). `secrets.yml` is deliberately
+  NOT in the broad list — the `/add-secret` flow ships it WITH the consuming template, which
+  stays a scoped single-service deploy (`deploy_logic.ChangeSet.secrets`).
 - Acts **only when origin is strictly ahead of local** (`is_ancestor(local, origin)` →
   `next_action(..., origin_ahead=…)`). Un-pushed local commits make origin an *ancestor* of
   local; that's a no-op, not a deploy — otherwise the tick would diff `local..origin` (the

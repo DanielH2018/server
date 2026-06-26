@@ -28,17 +28,27 @@ _BROAD_PREFIXES = (
     "ansible/deploy.yml",
     "ansible/filter_plugins/",            # toposort
 )
+# The SOPS-encrypted secrets file. A change here maps to no service template, but the new
+# value only reaches a container on its next deploy — so a secrets-ONLY push must NOT be
+# silently fast-forwarded; the deployer defers-and-alerts (see gitops_deploy.py). NOT in
+# _BROAD_PREFIXES on purpose: the /add-secret flow ships secrets.yml WITH the consuming
+# template, and that should stay a scoped single-service deploy, not a manual full deploy.
+_SECRETS_FILE = "ansible/vars/secrets.yml"
 
 
 @dataclass
 class ChangeSet:
     services: set[str] = field(default_factory=set)
     broad: bool = False
+    secrets: bool = False
 
 
 def services_from_changed_paths(paths: list[str]) -> ChangeSet:
     cs = ChangeSet()
     for p in paths:
+        if p == _SECRETS_FILE:
+            cs.secrets = True
+            continue
         if any(p.startswith(prefix) for prefix in _BROAD_PREFIXES):
             cs.broad = True
             continue

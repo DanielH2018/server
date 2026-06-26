@@ -35,6 +35,9 @@ LAST_RUN = "/var/lib/gitops-deploy/last_run"
 # Last origin SHA we've already alerted on for a broad change, so a deferred
 # broad change doesn't re-page Discord every 30-min tick until it's resolved.
 BROAD_FILE = "/var/lib/gitops-deploy/broad_alerted_sha"
+# Same throttle for a secrets-only push (rotated value with no service template change):
+# alert once per SHA so the operator redeploys the consumer(s), don't re-page every tick.
+SECRETS_ALERT_FILE = "/var/lib/gitops-deploy/secrets_alerted_sha"
 # Last CT date (YYYY-MM-DD) we paged for a dirty working tree. The tick runs every
 # 30 min, so without this an open edit session would re-alert all day; we throttle
 # to one alert per day, fired on the first tick at/after DIRTY_ALERT_HOUR (07:00 CT).
@@ -240,6 +243,16 @@ def main() -> int:
         return 0
     if not cs.services:
         run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])  # docs-only etc.
+        # A secrets-only push (rotated value, no service template changed) maps to nothing,
+        # so the ff-merge above is all we can do automatically — but the new value only
+        # reaches a container on its next deploy. Defer-and-alert (once per SHA) so the
+        # operator redeploys the consumer(s); without this the rotated secret sits stale.
+        if cs.secrets and _read_marker(SECRETS_ALERT_FILE) != origin:
+            discord(f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
+                    f"service template — fast-forwarded but **nothing was redeployed**. The "
+                    f"rotated secret won't reach its container(s) until you redeploy them "
+                    f"(`ansible-playbook ansible/deploy.yml --tags <svc>`).")
+            _write_marker(SECRETS_ALERT_FILE, origin)
         return 0
 
     run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])
