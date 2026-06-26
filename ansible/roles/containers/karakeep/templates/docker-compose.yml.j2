@@ -44,12 +44,7 @@ services:
       - no-new-privileges:true
     {{ service_networks() }}
       - internal
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    {{ healthcheck('["CMD", "wget", "--spider", "-q", "http://localhost:3000"]') }}
     depends_on:
       - karakeep-chrome
       - karakeep-meilisearch
@@ -86,12 +81,7 @@ services:
     image: gcr.io/zenika-hub/alpine-chrome:124
     container_name: karakeep-chrome
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9222/json/version"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+    {{ healthcheck('["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9222/json/version"]', start_period='15s') }}
     command:
       - --no-sandbox
       - --disable-gpu
@@ -139,11 +129,7 @@ services:
       - no-new-privileges:true
     networks:
       - internal
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:7700/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ healthcheck('["CMD", "wget", "--spider", "-q", "http://127.0.0.1:7700/health"]') }}
     labels:
       # Pinned + manual-upgrade-only (see VERSION POLICY above) — watchtower must never
       # touch it; an unsupervised minor bump changes the on-disk DB and refuses to boot.
