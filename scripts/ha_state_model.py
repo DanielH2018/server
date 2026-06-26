@@ -534,6 +534,46 @@ def threshold_pairing_errors(config: dict) -> list[str]:
     return errs
 
 
+def _threshold_cfg_text(auto: dict) -> str:
+    """Raw text of bedroom_threshold_alert's inline Jinja `cfg` routing map, or '' if absent.
+    Used only for a literal key-presence check — never parsed as a dict."""
+    for step in auto.get("action", []) or []:
+        if isinstance(step, dict):
+            cfg = (step.get("variables") or {}).get("cfg")
+            if isinstance(cfg, str):
+                return cfg
+    return ""
+
+
+def threshold_cfg_coverage_errors(config: dict) -> list[str]:
+    """HARD: every category with _bad/_ok triggers must have a key in the inline `cfg` routing map.
+    A category wired into triggers but missing from cfg KeyErrors at runtime on its first crossing
+    (the pairing check can't see it — it only checks trigger pairing, not the cfg map). Non-brittle:
+    checks the category name appears as a quoted key literal ('cat' or "cat") — no dict parse, and a
+    prefix like 'airquality' can't satisfy 'airqualitysevere' because the closing quote anchors it.
+    Skipped when there's no cfg block (a structurally different automation)."""
+    auto = _threshold_automation(config)
+    if not auto:
+        return []
+    cfg_text = _threshold_cfg_text(auto)
+    if not cfg_text:
+        return []
+    cats = set()
+    for trig in auto.get("trigger", []) or []:
+        tid = trig.get("id", "")
+        if tid.endswith("_bad"):
+            cats.add(tid[:-4])
+        elif tid.endswith("_ok"):
+            cats.add(tid[:-3])
+    errs = []
+    for cat in sorted(cats):
+        if f"'{cat}'" not in cfg_text and f'"{cat}"' not in cfg_text:
+            errs.append(f"threshold category '{cat}' has triggers but no key in the inline cfg map "
+                        f"of bedroom_threshold_alert — it would KeyError at runtime on the first "
+                        f"crossing; add a '{cat}' entry to the cfg dict")
+    return errs
+
+
 def alias_collision_errors(config: dict) -> list[str]:
     seen: dict[str, str] = {}
     errs = []
@@ -648,6 +688,7 @@ def check_errors(role_dir: Path = ROLE_DIR) -> list[str]:
     errs += mediator_reason_errors(config)
     errs += override_writer_errors(model["writes"], load_expected_override_writers())
     errs += threshold_pairing_errors(config)
+    errs += threshold_cfg_coverage_errors(config)
     errs += alias_collision_errors(config)
     errs += single_writer_errors(model["writes"], load_sanctioned_writers())
     errs += system_log_fire_event_errors(config)

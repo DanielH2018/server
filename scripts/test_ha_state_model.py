@@ -217,10 +217,13 @@ def test_override_writer_errors_clean_when_match():
 
 # The real bedroom_threshold_alert groups each category's sensors into ONE bad + ONE ok trigger
 # with a LIST entity_id (verified against files/automations.yaml), so the tests model lists.
-def _threshold_config(declared, triggers):
+def _threshold_config(declared, triggers, cfg=None):
+    # cfg=None -> no variables/cfg block (action: []), so the cfg-coverage check is skipped and the
+    # pre-existing pairing tests are unaffected. Pass a string to exercise threshold_cfg_coverage_errors.
+    action = [{"variables": {"cfg": cfg}}] if cfg is not None else []
     return {"binary_sensor": declared, "script": {},
             "automation": [{"id": "bedroom_threshold_alert", "alias": "Bedroom threshold alert",
-                            "trigger": triggers, "action": []}]}
+                            "trigger": triggers, "action": action}]}
 
 _CO2 = {"platform": "threshold", "name": "Bedroom CO2 high", "entity_id": "sensor.x", "upper": 1}
 _VOC = {"platform": "threshold", "name": "Bedroom VOC high", "entity_id": "sensor.y", "upper": 1}
@@ -257,6 +260,45 @@ def test_threshold_pairing_flags_one_direction_only():
         {"platform": "state", "entity_id": [], "to": "off", "id": "airquality_ok"}]
     errs = hsm.threshold_pairing_errors(_threshold_config([_CO2], triggers))
     assert any("off trigger direction" in e for e in errs)
+
+
+# cfg-coverage: a category wired into triggers but missing from the inline Jinja `cfg` routing map
+# KeyErrors at runtime on its first crossing (the pairing check alone can't see it). Literal
+# key-presence check only — the cfg map is never parsed as a dict.
+_BATTERY_PAIR = [
+    {"platform": "state", "entity_id": ["binary_sensor.bedroom_tap_dial_battery_low"],
+     "to": "on", "id": "battery_bad"},
+    {"platform": "state", "entity_id": ["binary_sensor.bedroom_tap_dial_battery_low"],
+     "to": "off", "id": "battery_ok"}]
+
+
+def test_threshold_cfg_coverage_flags_category_missing_from_cfg():
+    cfg = "{{ {'airquality': {'bad': 'x', 'ok': 'y'}}[category] }}"  # has airquality, NOT battery
+    config = _threshold_config([_CO2], _AQ_PAIR + _BATTERY_PAIR, cfg=cfg)
+    errs = hsm.threshold_cfg_coverage_errors(config)
+    assert any("battery" in e for e in errs)
+    assert not any("'airquality'" in e for e in errs)  # airquality IS in cfg -> not flagged
+
+
+def test_threshold_cfg_coverage_clean_when_all_present():
+    cfg = "{{ {'airquality': {'bad': 'x'}, 'battery': {'bad': 'z'}}[category] }}"
+    assert hsm.threshold_cfg_coverage_errors(
+        _threshold_config([_CO2], _AQ_PAIR + _BATTERY_PAIR, cfg=cfg)) == []
+
+
+def test_threshold_cfg_coverage_skips_when_no_cfg():
+    # action: [] (no cfg block) -> can't check, must not false-flag (keeps existing tests valid).
+    assert hsm.threshold_cfg_coverage_errors(_threshold_config([_CO2], _AQ_PAIR)) == []
+
+
+def test_threshold_cfg_coverage_no_prefix_false_match():
+    # The non-brittleness guarantee: 'airquality' present must NOT satisfy 'airqualitysevere'.
+    cfg = "{{ {'airquality': {'bad': 'x'}}[category] }}"
+    severe = [
+        {"platform": "state", "entity_id": ["binary_sensor.s"], "to": "on", "id": "airqualitysevere_bad"},
+        {"platform": "state", "entity_id": ["binary_sensor.s"], "to": "off", "id": "airqualitysevere_ok"}]
+    errs = hsm.threshold_cfg_coverage_errors(_threshold_config([_CO2], _AQ_PAIR + severe, cfg=cfg))
+    assert any("airqualitysevere" in e for e in errs)
 
 
 def test_alias_collision_flags_duplicate_slug():
