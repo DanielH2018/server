@@ -26,6 +26,10 @@ Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md
     - **Custom boards** — upstream is the live Grafana DB: the CrowdSec set
       (`Crowdsec/`), the Loki log views (`system-logs`, `docker-app-logs`),
       `docker-and-system-monitoring`, `traefik-custom`, and `HomeAssistant/home-assistant.json`.
+      Also `Uptime-Kuma/uptime-kuma.json` (per-monitor up/down, response time, cert-days from
+      Kuma's `/metrics`) and `Loki/loki-internals.json` (Loki's own ingestion/request/flush
+      metrics) — hand-authored seeds for the loki + uptime-kuma scrape jobs; edit-in-UI then
+      `export_grafana_dashboards.py` to round-trip like the rest.
     - All datasource references are **pinned to the provisioned uids** (`EGdsQqhVk`
       Prometheus / `bf4q19tuivta8e` Loki) so they resolve without the import prompt that
       file-provisioning skips. A stale Prometheus uid (`IH0jqv6nz`) that lingered in a

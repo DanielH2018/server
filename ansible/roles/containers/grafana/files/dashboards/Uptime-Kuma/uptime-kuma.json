@@ -1,0 +1,71 @@
+{
+  "uid": "homelab-uptime-kuma",
+  "title": "Uptime-Kuma — Monitors",
+  "description": "Per-monitor up/down, response times and TLS cert-days from Uptime-Kuma's /metrics (scraped into Prometheus). Trend history the point-in-time Kuma push monitors don't retain.",
+  "tags": ["uptime-kuma", "homelab"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Monitors Up",
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(monitor_status == bool 1)", "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" } }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Monitors Down",
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(monitor_status == bool 0)", "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" } }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Monitor Status (0=down 1=up 2=pending 3=maint)",
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10 }, "min": 0, "max": 3 }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "monitor_status", "legendFormat": "{{monitor_name}}", "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" } }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Response Time",
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "monitor_response_time", "legendFormat": "{{monitor_name}}", "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" } }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "bargauge",
+      "title": "TLS Cert — Days Remaining",
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "d", "thresholds": { "mode": "absolute", "steps": [
+        { "color": "red", "value": null }, { "color": "yellow", "value": 14 }, { "color": "green", "value": 30 } ] } }, "overrides": [] },
+      "options": { "orientation": "horizontal", "displayMode": "gradient" },
+      "targets": [
+        { "refId": "A", "expr": "monitor_cert_days_remaining", "legendFormat": "{{monitor_name}}", "instant": true, "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" } }
+      ]
+    }
+  ]
+}
