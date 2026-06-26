@@ -312,6 +312,12 @@ recorder:
       # Heartbeat helper — rewritten every minute by the ha_heartbeat automation; the live
       # last_changed is all monitor-bridge reads, so its history is pure churn.
       - input_datetime.ha_heartbeat
+      # Expected-value coordination helpers — written on every fan apply / 5-min color-track tick
+      # (the mediator's DREO echo-suppression + the color tracker's auto baseline). Read LIVE only;
+      # their history is pure churn. Safe to drop from history — they restore via restore_state,
+      # which is independent of the recorder (the manual-fan-survives-restart logic is unaffected).
+      - input_number.bedroom_fan_expected_level
+      - input_number.bedroom_light_expected_color_temp
     entity_globs:
       - sensor.*_linkquality
       - sensor.*_last_seen

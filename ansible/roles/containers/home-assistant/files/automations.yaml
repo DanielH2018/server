@@ -1056,6 +1056,42 @@
           data:
             reason: "natural"
 
+# Sleep-mode fan reapply: when bedroom_sleep_mode is toggled DIRECTLY (dashboard tile / voice), the
+# fan's level cap (L2 in sleep mode) should engage/release immediately — otherwise it waits for the
+# next temperature report. The bedtime / Tap-Dial / morning-reset callers flip sleep_mode
+# programmatically and re-apply the fan themselves; those writes are parented, so the parent_id gate
+# skips them and only a genuine manual toggle reaches the mediator.
+- id: bedroom_sleep_mode_fan
+  alias: Bedroom sleep mode fan reapply
+  description: Re-apply the fan (via the bedroom_fan_set mediator) when sleep_mode is toggled directly, so its level cap engages/releases at once.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: input_boolean.bedroom_sleep_mode
+      from: "off"
+      to: "on"
+    - platform: state
+      entity_id: input_boolean.bedroom_sleep_mode
+      from: "on"
+      to: "off"
+  condition:
+    # Direct/external toggle only — our own automations' parented turn_on/off carry a parent_id
+    # (same discriminator as bedroom_manual_light_detect / bedroom_fan_manual_detect).
+    - condition: template
+      value_template: "{{ trigger.to_state.context.parent_id is none }}"
+    # Respect a manual fan override, and don't spin the fan in an empty house (same gates as
+    # bedroom_fan_temperature).
+    - condition: state
+      entity_id: input_boolean.bedroom_fan_manual
+      state: "off"
+    - condition: state
+      entity_id: person.daniel
+      state: "home"
+  action:
+    - service: script.bedroom_fan_set
+      data:
+        reason: "auto"
+
 # Flush held notifications on arrival: when you re-enter the home geofence, any alerts that were
 # parked while you were away (persistent_notification ids starting with hold_) and did NOT resolve
 # meanwhile are delivered as ONE "While you were out" digest, then cleared. Anything that resolved

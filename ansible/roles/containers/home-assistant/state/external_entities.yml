@@ -55,7 +55,6 @@ entities:
   - device_tracker.pixel_watch_3
   - event.backup_automatic_backup
   - fan.tower_fan
-  - input_boolean.bedroom_test_fast
   - input_select.bedroom_test_scenario
   - input_select.bedroom_test_speed
   - light.0x001788010ff46108
