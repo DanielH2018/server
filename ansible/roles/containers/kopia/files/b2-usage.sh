@@ -41,4 +41,4 @@ BYTES=$(docker exec \
 [ -n "$BYTES" ] || fail "rclone size query against b2:$BUCKET failed"
 
 write_state true "$BYTES" \
-  "$(awk -v b="$BYTES" 'BEGIN{printf "%.2fGB billable in B2 (incl. hidden versions)", b/1073741824}')"
+  "$(awk -v b="$BYTES" 'BEGIN{printf "%.2fGB billable in B2 (incl. hidden versions)", b/1e9}')"
