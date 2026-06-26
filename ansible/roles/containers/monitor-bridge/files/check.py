@@ -63,6 +63,16 @@ RENOVATE_MAX_AGE_S = float(_env("RENOVATE_MAX_AGE_MIN", "2160")) * 60
 RESTORE_DRILL_STATE = _env("RESTORE_DRILL_STATE", "/restore-drill/state.json")
 RESTORE_DRILL_MAX_AGE_S = float(_env("RESTORE_DRILL_MAX_AGE_D", "35")) * 86400
 
+# Weekly kopia snapshot verify: the host cron (kopia-verify.sh, kopia role) writes
+# {"ts": epoch, "ok": bool, "msg": str} after each run; we alert on a FAILED verify
+# (detected bit-rot / an unreadable blob — failures the old `| logger` cron silently
+# swallowed), staleness (cron broken / never ran), or a missing/corrupt state file.
+# This is the verify TIER of the three-tier backup assurance (snapshot freshness →
+# weekly verify → monthly restore drill) — the only one that previously had no monitor.
+# 10d staleness = one missed weekly run + slack.
+VERIFY_STATE = _env("VERIFY_STATE", "/verify/state.json")
+VERIFY_MAX_AGE_S = float(_env("VERIFY_MAX_AGE_D", "10")) * 86400
+
 # B2 storage usage: the daily host cron (kopia-b2-usage.sh, kopia role) writes
 # {"ts": epoch, "ok": bool, "bytes": int, "msg": str} with the bucket's BILLABLE
 # bytes (incl. hidden versions — what counts against the free tier). We alert when
@@ -625,6 +635,34 @@ def check_restore_drill():
     return restore_drill(state, age_s, RESTORE_DRILL_MAX_AGE_S)
 
 
+def verify(state, age_s, max_age_s):
+    """Pure: did the last weekly `kopia snapshot verify` pass, and recently? (ok, msg).
+
+    Same state-file idiom as restore_drill/b2_usage. The verify proves stored blobs are
+    READABLE across all snapshots (the restore drill proves one service's tree restores);
+    a failure here is detected B2 bit-rot / repo corruption — the weakest link in the
+    single offsite copy's integrity chain, and previously un-alerted.
+    """
+    if not state.get("ok"):
+        return False, "last snapshot verify FAILED: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return False, "last successful verify %.1fd ago (max %dd)" % (
+            age_s / 86400, max_age_s / 86400)
+    return True, "verify ok %.1fd ago: %s" % (age_s / 86400, state.get("msg", ""))
+
+
+def check_verify():
+    try:
+        with open(VERIFY_STATE) as fh:
+            state = json.load(fh)
+        age_s = time.time() - float(state.get("ts", 0))
+    except FileNotFoundError:
+        return False, "no verify state (verify never ran?)"
+    except (ValueError, TypeError):
+        return False, "verify state unparseable"
+    return verify(state, age_s, VERIFY_MAX_AGE_S)
+
+
 def b2_usage(state, age_s, max_age_s, cap_bytes, max_pct):
     """Pure: billable B2 bytes vs the plan cap, plus probe-failure/staleness.
 
@@ -767,6 +805,7 @@ CHECKS = [
     ("gitops_alive",  _env("KUMA_PUSH_GITOPS_ALIVE",  ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
     ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
+    ("verify",        _env("KUMA_PUSH_VERIFY",        ""), check_verify),
     ("b2_usage",      _env("KUMA_PUSH_B2",            ""), check_b2_usage),
     ("scrutiny",      _env("KUMA_PUSH_SCRUTINY",      ""), check_scrutiny),
     ("pi_pressure",   _env("KUMA_PUSH_PI",            ""), check_pi_pressure),

@@ -76,6 +76,13 @@ services:
       - RESTORE_DRILL_STATE=/restore-drill/state.json
       - RESTORE_DRILL_MAX_AGE_D=35
       - KUMA_PUSH_RESTORE_DRILL={{ kopia_restore_drill_push_token }}
+      # Weekly kopia snapshot verify: the host cron (kopia role) writes state.json; we
+      # alert on a FAILED verify (bit-rot / unreadable blob the old `| logger` cron
+      # swallowed), >10d staleness, or a missing/corrupt file. The verify tier of the
+      # three-tier backup assurance — previously the only un-monitored one.
+      - VERIFY_STATE=/verify/state.json
+      - VERIFY_MAX_AGE_D=10
+      - KUMA_PUSH_VERIFY={{ monitor_bridge_verify_push_token }}
       # B2 free tier is 10GB; alert at 85% so there's runway to prune/upgrade
       # before the bucket fills and nightly snapshots start failing.
       - B2_USAGE_STATE=/b2-usage/state.json
@@ -130,6 +137,7 @@ services:
       - /var/lib/gitops-deploy:/gitops-state:ro
       - /var/lib/renovate-notify:/renovate-state:ro
       - /var/lib/kopia-restore-drill:/restore-drill:ro
+      - /var/lib/kopia-verify:/verify:ro
       - /var/lib/kopia-b2-usage:/b2-usage:ro
     {{ service_networks() }}
     labels:
@@ -156,6 +164,7 @@ services:
       {{ kuma('gitops-deploy-alive', monitor_type='push', name='GitOps Deploy — Alive', interval=600, max_retries=0, push_token=monitor_bridge_gitops_alive_push_token) }}
       {{ kuma('gitops-deploy-status', monitor_type='push', name='GitOps Deploy — Status', interval=600, max_retries=0, push_token=monitor_bridge_gitops_status_push_token) }}
       {{ kuma('kopia-restore-drill', monitor_type='push', name='Backup Restore Drill', interval=600, max_retries=0, push_token=kopia_restore_drill_push_token) }}
+      {{ kuma('kopia-verify', monitor_type='push', name='Backup Verify', interval=600, max_retries=0, push_token=monitor_bridge_verify_push_token) }}
       {{ kuma('monitor-bridge-b2', monitor_type='push', name='B2 Storage Usage', interval=600, max_retries=0, push_token=monitor_bridge_b2_push_token) }}
       {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data Freshness', interval=600, max_retries=0, push_token=monitor_bridge_scrutiny_push_token) }}
       {{ kuma('monitor-bridge-pi', monitor_type='push', name='Pi Pressure', interval=600, max_retries=0, push_token=monitor_bridge_pi_push_token) }}

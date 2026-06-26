@@ -707,6 +707,56 @@ def test_restore_drill_unparseable_is_down(tmp_path, monkeypatch):
     assert "unparseable" in msg
 
 
+# ── weekly kopia snapshot verify (weekly host cron writes state.json; we alert on it) ──
+
+
+def _verify_state(tmp_path, monkeypatch, ts, ok, msg):
+    p = tmp_path / "state.json"
+    p.write_text('{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg))
+    monkeypatch.setattr(check, "VERIFY_STATE", str(p))
+
+
+def test_verify_fresh_success_is_up(tmp_path, monkeypatch):
+    _verify_state(tmp_path, monkeypatch, time.time() - 86400, True,
+                  "verified 142 snapshots, 0 errors")
+    ok, msg = check.check_verify()
+    assert ok
+    assert "142 snapshots" in msg
+
+
+def test_verify_failure_is_down(tmp_path, monkeypatch):
+    # A non-zero `kopia snapshot verify` (detected bit-rot / unreadable blob) must page —
+    # this is the exact failure the old `| logger` cron swallowed.
+    _verify_state(tmp_path, monkeypatch, time.time(), False, "verify found 2 unreadable objects")
+    ok, msg = check.check_verify()
+    assert not ok
+    assert "unreadable" in msg
+
+
+def test_verify_stale_success_is_down(tmp_path, monkeypatch):
+    # Weekly cadence; a 12d-old success means the verify cron stopped running.
+    _verify_state(tmp_path, monkeypatch, time.time() - 12 * 86400, True, "ok")
+    ok, msg = check.check_verify()
+    assert not ok
+    assert "ago" in msg
+
+
+def test_verify_missing_state_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "VERIFY_STATE", str(tmp_path / "nope.json"))
+    ok, msg = check.check_verify()
+    assert not ok
+    assert "never ran" in msg
+
+
+def test_verify_unparseable_is_down(tmp_path, monkeypatch):
+    p = tmp_path / "state.json"
+    p.write_text("not json")
+    monkeypatch.setattr(check, "VERIFY_STATE", str(p))
+    ok, msg = check.check_verify()
+    assert not ok
+    assert "unparseable" in msg
+
+
 # ── B2 storage usage (daily host cron writes billable bytes; we alert on it) ──
 
 

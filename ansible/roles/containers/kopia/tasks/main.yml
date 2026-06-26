@@ -113,25 +113,46 @@
     user: "{{ sys_user }}"
   become: true
 
+- name: Create verify state directory
+  tags: [cron]
+  # monitor-bridge bind-mounts this read-only and alerts on a failed/stale/missing
+  # verify — created here (not by Docker) so it's sys_user-writable for the cron.
+  ansible.builtin.file:
+    path: /var/lib/kopia-verify
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Deploy the weekly verify script
+  tags: [cron]
+  # Companion to the restore-drill above: verify proves stored blobs are READABLE across
+  # ALL snapshots, the drill proves one service's tree restores. See files/verify.sh.
+  ansible.builtin.copy:
+    src: verify.sh
+    dest: /usr/local/bin/kopia-verify.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
 - name: Schedule weekly Kopia backup integrity verification
   tags: [cron]
   # "A backup you've never restored isn't a backup." snapshot scheduling and retention
   # are handled inside the container (entrypoint.sh policy); this closes the remaining
-  # gap — confirming the stored data is actually RESTORABLE, not merely present.
+  # gap — confirming the stored data is actually READABLE, not merely present.
   # `kopia snapshot verify` re-reads snapshot metadata/index from B2 and, via
   # --verify-files-percent, downloads a sample of file contents and checks their hashes.
-  # It runs against the already-connected repo inside the running container (reusing its
-  # B2 connection + KOPIA_PASSWORD) and is read-only, so it's safe alongside the live
-  # server. Output goes to syslog -> Promtail -> Loki, so a failure shows up in Grafana
-  # just like the host rkhunter/aide integrity scans. The backup source is containers/
-  # (config + app data, not media), so a 1% content sample is cheap on B2 egress.
+  # The wrapper script captures the verify's OWN exit code and writes
+  # /var/lib/kopia-verify/state.json -> monitor-bridge's `verify` check -> the
+  # "Backup Verify" Kuma monitor. (The old `... | logger` form made cron see logger's
+  # always-zero exit and silently swallow a non-zero verify — the gap this closes.)
   ansible.builtin.cron:
     name: "Weekly Kopia snapshot verify"
     minute: "0"
     hour: "4"
     weekday: "3"  # Wednesday — off the Monday rkhunter/aide slot to spread load
-    job: >-
-      /usr/bin/docker exec kopia /usr/bin/kopia snapshot verify
-      --verify-files-percent=1 2>&1 | /usr/bin/logger -t kopia-verify
+    job: "/usr/local/bin/kopia-verify.sh"
     user: "{{ sys_user }}"
   become: true
