@@ -6,6 +6,15 @@ the I/O shell (renovate_notify.py) only fetches, persists, and posts.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+
+# Renovate rewrites its Dependency Dashboard issue on every run (~daily on this repo's
+# Monday schedule + at-any-time security/lockfile runs). If the dashboard goes stale or
+# vanishes, the Renovate App or renovate.json is broken and dependency updates have
+# silently stopped — and because there are then NO PRs, the PR digest reads as a healthy
+# "backlog cleared". 8 days = comfortably past the weekly cadence without false-firing.
+DASHBOARD_STALE_DAYS = 8
+DASHBOARD_TITLE = "Dependency Dashboard"
 
 # check-run conclusions that mean "this will not merge" (besides success/neutral/skipped).
 _FAIL_CONCLUSIONS = {
@@ -21,6 +30,37 @@ class PR:
     automerge: bool          # Renovate body says Automerge Enabled
     ci: str                  # "success" | "pending" | "failure"
     conflicting: bool
+
+
+def find_dashboard(issues: list[dict]) -> str | None:
+    """Return the Renovate Dependency Dashboard issue's `updated_at`, or None if absent.
+
+    Fed GitHub's `/issues` payload (which also lists PRs — those carry a `pull_request`
+    key and are skipped). Matches the dashboard by title AND a renovate-bot author, so a
+    human-created look-alike issue can't be mistaken for it. Pure — unit-tested without HTTP.
+    """
+    for it in issues:
+        if it.get("pull_request"):
+            continue
+        login = (it.get("user") or {}).get("login", "")
+        if it.get("title") == DASHBOARD_TITLE and login.startswith("renovate"):
+            return it.get("updated_at")
+    return None
+
+
+def dashboard_stale(updated_at: str | None, now: datetime | None = None,
+                    max_age_days: int = DASHBOARD_STALE_DAYS) -> bool:
+    """True if the dependency dashboard is absent or older than `max_age_days`.
+
+    `updated_at` is the issue's ISO-8601 timestamp (GitHub uses a trailing 'Z'), or None
+    when no dashboard issue exists. A stale/absent dashboard is the fail-loud signal that
+    Renovate itself stopped — the case the 'Renovate Notifier — Alive' monitor (which
+    watches the *notifier*, not Renovate) can't see."""
+    if not updated_at:
+        return True
+    now = now or datetime.now(timezone.utc)
+    age_days = (now - datetime.fromisoformat(updated_at.replace("Z", "+00:00"))).total_seconds() / 86400
+    return age_days > max_age_days
 
 
 def parse_automerge(body: str) -> bool:

@@ -18,13 +18,19 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from notify_logic import (  # noqa: E402
-    PR, actionable, ci_rollup, fingerprint, parse_automerge,
-    render_digest, should_notify, CLEARED_MSG,
+    PR, actionable, ci_rollup, dashboard_stale, find_dashboard, fingerprint,
+    parse_automerge, render_digest, should_notify, CLEARED_MSG,
 )
 
 CONFIG = "/etc/renovate-notify/config.env"
 API = "https://api.github.com"
 HEADERS = {"User-Agent": "renovate-notify", "Accept": "application/vnd.github+json"}
+DASHBOARD_STALE_MSG = (
+    "⚠️ Renovate looks DOWN — its Dependency Dashboard is stale or missing. The Renovate "
+    "App or renovate.json may be broken, so dependency/security updates have silently "
+    "stopped (the 'Renovate Notifier — Alive' monitor only watches this notifier, not "
+    "Renovate itself). Check https://github.com/%s/issues"
+)
 
 
 def cfg() -> dict[str, str]:
@@ -110,13 +116,28 @@ def main() -> int:
     pulls = get("%s/repos/%s/pulls?state=open&per_page=100" % (API, repo))
     prs = [build_pr(repo, p) for p in pulls if is_renovate(p)]
     items = actionable(prs)
-    cur_fp = fingerprint(items)
+
+    # Fail-loud backstop: Renovate rewrites its Dependency Dashboard issue every run, so a
+    # stale/missing dashboard means Renovate itself stopped (broken App or renovate.json) —
+    # a state with NO PRs, which the digest alone would read as a healthy "backlog cleared".
+    # Fold it into the fingerprint so it notifies on transition, not every daily tick.
+    issues = get("%s/repos/%s/issues?state=open&per_page=100" % (API, repo))
+    stale = dashboard_stale(find_dashboard(issues))
+    cur_fp = fingerprint(items) + ("|dashboard-stale" if stale else "")
     prev_fp = read_state(state_file)
     notify, kind = should_notify(prev_fp, cur_fp)
-    log("actionable=%d fp=%r prev=%r -> %s" % (len(items), cur_fp, prev_fp, kind))
+    log("actionable=%d dashboard_stale=%s fp=%r prev=%r -> %s" % (
+        len(items), stale, cur_fp, prev_fp, kind))
 
     if notify:
-        content = CLEARED_MSG if kind == "cleared" else render_digest(items)
+        if stale:
+            content = DASHBOARD_STALE_MSG % repo
+            if items:
+                content += "\n\n" + render_digest(items)
+        elif kind == "cleared":
+            content = CLEARED_MSG
+        else:
+            content = render_digest(items)
         if dry:
             log("--- DRY RUN, would post ---\n%s" % content)
         else:

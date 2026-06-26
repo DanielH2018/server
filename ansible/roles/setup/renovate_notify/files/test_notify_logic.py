@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import notify_logic as nl
 
 
@@ -151,3 +153,56 @@ def test_render_digest_truncates_and_counts_overflow():
     msg = nl.render_digest(items, limit=600)
     assert len(msg) <= 600
     assert "more" in msg
+
+
+# --- dashboard_stale (Renovate fail-loud backstop) ---
+# Renovate rewrites its Dependency Dashboard issue every run (~daily here). A stale or
+# absent dashboard means the Renovate App/config is broken — and in that state there are
+# no PRs, so the PR digest alone reads as a healthy "backlog cleared". This is the gap.
+def test_dashboard_stale_fresh_is_false():
+    now = datetime(2026, 6, 26, tzinfo=timezone.utc)
+    assert nl.dashboard_stale("2026-06-25T12:00:00Z", now=now) is False
+
+
+def test_dashboard_stale_old_is_true():
+    now = datetime(2026, 6, 26, tzinfo=timezone.utc)
+    assert nl.dashboard_stale("2026-06-15T12:00:00Z", now=now) is True
+
+
+def test_dashboard_stale_absent_is_true():
+    # No dashboard issue at all (Renovate App uninstalled / never created it).
+    assert nl.dashboard_stale(None) is True
+
+
+def test_dashboard_stale_boundary_not_yet_stale():
+    # Exactly the threshold age (8d): age_days > max is False, so not yet stale.
+    now = datetime(2026, 6, 26, tzinfo=timezone.utc)
+    assert nl.dashboard_stale("2026-06-18T00:00:00Z", now=now) is False
+
+
+# --- find_dashboard ---
+def _issue(title, login="renovate[bot]", updated="2026-06-25T00:00:00Z", pr=False):
+    d = {"title": title, "user": {"login": login}, "updated_at": updated}
+    if pr:
+        d["pull_request"] = {"url": "x"}
+    return d
+
+
+def test_find_dashboard_returns_updated_at():
+    issues = [_issue("Some other issue"),
+              _issue("Dependency Dashboard", updated="2026-06-24T09:00:00Z")]
+    assert nl.find_dashboard(issues) == "2026-06-24T09:00:00Z"
+
+
+def test_find_dashboard_skips_prs():
+    # GitHub's issues endpoint also returns PRs; a PR titled like the dashboard is ignored.
+    assert nl.find_dashboard([_issue("Dependency Dashboard", pr=True)]) is None
+
+
+def test_find_dashboard_absent_returns_none():
+    assert nl.find_dashboard([_issue("random")]) is None
+
+
+def test_find_dashboard_ignores_non_renovate_author():
+    # A human-created issue titled "Dependency Dashboard" must not be trusted as the dashboard.
+    assert nl.find_dashboard([_issue("Dependency Dashboard", login="someuser")]) is None

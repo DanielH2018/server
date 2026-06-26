@@ -17,6 +17,11 @@ id = "end-of-file-fixer"
 id = "check-yaml"
 
 [[repos.hooks]]
+# Guards renovate.json (a syntax error there silently disables ALL dependency management)
+# and every other JSON in the repo (Grafana dashboards, settings).
+id = "check-json"
+
+[[repos.hooks]]
 id = "check-added-large-files"
 
 [[repos.hooks]]
@@ -94,7 +99,9 @@ name = "Run Python unit tests (toposort + monitor-bridge + readonly-hook + smoke
 entry = "uv run python -m pytest"
 language = "system"
 pass_filenames = false
-files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/containers/monitor-bridge/files/.*\\.py|ansible/roles/setup/gitops_deploy/files/.*\\.py|\\.claude/hooks/.*\\.py|scripts/.*\\.py|pyproject\\.toml)$"
+# Mirror pyproject.toml [tool.pytest.ini_options] testpaths so a LOCAL commit touching only
+# one suite still runs pytest (CI runs --all-files regardless; this keeps the two in sync).
+files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/containers/(monitor-bridge|terraria-stats)/files/.*\\.py|ansible/roles/containers/home-assistant/tests/.*\\.py|ansible/roles/setup/(gitops_deploy|renovate_notify)/files/.*\\.py|\\.claude/(hooks|scripts)/.*\\.py|scripts/.*\\.py|pyproject\\.toml)$"
 
 # Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
 # syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]; vendored
