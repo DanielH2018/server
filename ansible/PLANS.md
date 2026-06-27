@@ -8,6 +8,8 @@ the Renovate dependency dashboard.
 ## Backlog
 
 - Turn off Air Purifier smartly with Air Quality Monitor.
+- Trigger notification/sound when Claude's waiting?
+- Fix Claude Code connection to Phone
 - Tune bedroom air-quality alert thresholds (revisit ~2026-06-25, after ~1 week of baseline) —
   the four moderate + four SEVERE `threshold` binary-sensors in
   `home-assistant/templates/configuration.yaml.j2` (`binary_sensor.bedroom_{co2,pm2_5,voc,nox}_high`
