@@ -75,9 +75,24 @@
           }
         ]
       }
+    ],
+    "InstructionsLoaded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/log-instructions.sh"
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "~/server/.claude/statusline.sh",
+    "padding": 0
   }
 }

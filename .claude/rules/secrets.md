@@ -4,11 +4,15 @@ paths:
   - "ansible/inventory/**"
 ---
 
-# Secrets Handling Rules
+# Secrets Rules
 
-- NEVER suggest editing `ansible/vars/secrets.yml` directly — it is SOPS-encrypted
-- Always edit secrets with: `sops ansible/vars/secrets.yml`
-- New secrets go in `ansible/vars/secrets.yml` and are referenced in templates as `{{ secret_name }}`
-- The `community.sops.sops_decrypt` lookup decrypts values at playbook runtime
-- Per `.sops.yaml`, any `.yml`/`.yaml` inside a `vars/` or `secrets/` directory is automatically encrypted on save
-- Never log or print secret values — use `no_log: true` on sensitive tasks
+CLAUDE.md covers the SOPS/age secrets workflow (edit `ansible/vars/secrets.yml` via `sops` or the
+`/add-secret` skill; reference values as `{{ name }}` through the `sops_decrypt` lookup). This file
+only adds the path-specific enforcement detail not spelled out there:
+
+- A direct Edit/Write to `secrets.yml` is **denied by the block-protected-edits hook** (content-based
+  detection of the SOPS markers) — there's no way to "just quickly edit" it; use `sops` / `/add-secret`.
+- `.sops.yaml` auto-encrypts on save only inside a `vars/` or `secrets/` directory. **`inventory/` is
+  NOT auto-encrypted and NOT hook-guarded** — a secret pasted into `host_vars`/`group_vars` would be
+  committed in plaintext (gitleaks may catch it, but don't rely on that). Keep secrets in
+  `vars/secrets.yml` and reference them from inventory, never inline them.

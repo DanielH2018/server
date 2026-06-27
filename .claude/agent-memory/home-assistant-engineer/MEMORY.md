@@ -1,0 +1,13 @@
+# home-assistant-engineer — persistent memory
+
+Index of cross-session learnings for the HA engineer subagent (scope: `project`, so this is
+version-controlled). The agent reads the first ~200 lines of this file at the start of every run and
+curates it over time. Keep THIS file a concise index; move detail into sibling topic files.
+
+Record only what you *learned the hard way* — device quirks, entity-naming traps, validate/deploy
+gotchas, fixes that didn't stick. Do NOT duplicate the role's `CLAUDE.md`/`SETUP.md` (those are the
+encyclopedia); link to them instead.
+
+## Learnings
+<!-- e.g. - FP300 running-fan presence false-hold → set ai_interference_source_selfidentification ON -->
+_(none yet — the agent appends here as it works)_
