@@ -13,10 +13,14 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-# Active container template: roles/containers/<svc>/templates/docker-compose.yml.j2
-# (the negative lookahead excludes archive/<svc>/...).
-_ACTIVE_TPL = re.compile(
-    r"^ansible/roles/containers/(?!archive/)([^/]+)/templates/docker-compose\.yml\.j2$"
+# A bind-mounted file under an active container role's templates/ or files/ dir — the
+# docker-compose.yml.j2 OR any config template / files/ asset (e.g. prometheus.yml.j2,
+# authelia configuration.yml.j2, monitor-bridge/files/check.py). A change here only reaches the
+# container on its next deploy, so it maps to a scoped, health-gated redeploy — closing the GitOps
+# loop instead of a silent ff-merge. tasks/ and the role CLAUDE.md are deliberately NOT matched
+# (structural / docs — deploy those manually). The negative lookahead excludes archive/<svc>/...
+_ACTIVE_CONFIG = re.compile(
+    r"^ansible/roles/containers/(?!archive/)([^/]+)/(?:templates|files)/"
 )
 # A `container_name:` line in a rendered docker-compose.yml.
 _CONTAINER_NAME = re.compile(r'^\s*container_name:\s*["\']?([^\s"\']+)["\']?\s*$')
@@ -52,7 +56,7 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         if any(p.startswith(prefix) for prefix in _BROAD_PREFIXES):
             cs.broad = True
             continue
-        m = _ACTIVE_TPL.match(p)
+        m = _ACTIVE_CONFIG.match(p)
         if m:
             cs.services.add(m.group(1))
     return cs

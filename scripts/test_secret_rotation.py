@@ -112,6 +112,17 @@ def test_sync_reports_stale_registry_entries():
     assert stale == ["gone_push_token"]
 
 
+# ── registry drift (the `audit --check` CI gate) ─────────────────────────────
+def test_registry_drift_detects_missing_and_stale():
+    missing, stale = sr.registry_drift({"a", "b"}, {"b", "c"})
+    assert missing == ["c"]   # in secrets.yml, not the registry (forgot `sync`)
+    assert stale == ["a"]     # in the registry, secret removed from secrets.yml
+
+
+def test_registry_drift_clean_when_in_sync():
+    assert sr.registry_drift({"a", "b"}, {"a", "b"}) == ([], [])
+
+
 # ── consumer mapping (which redeploy applies a rotated token) ────────────────
 def test_consumer_tag_monitor_bridge_tokens():
     assert sr.consumer_tag("monitor_bridge_cpu_push_token") == "monitor-bridge"

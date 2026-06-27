@@ -96,6 +96,59 @@ def test_secret_rotation_registry_only_is_not_secrets():
     assert cs.broad is False
 
 
+# M2: a service-scoped change to a bind-mounted CONFIG template or files/ asset (not just the
+# compose) must map to that service for a scoped, health-gated redeploy — closing the GitOps loop
+# so live config matches master. Previously these fell into the silent ff-merge "docs-only" path
+# (the config sat stale in the running container with no redeploy and no alert).
+def test_config_template_change_maps_to_service():
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/prometheus/templates/prometheus.yml.j2"])
+    assert cs.services == {"prometheus"}
+    assert cs.broad is False
+
+
+def test_files_asset_change_maps_to_service():
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/monitor-bridge/files/check.py"])
+    assert cs.services == {"monitor-bridge"}
+    assert cs.broad is False
+
+
+def test_archived_config_change_is_ignored():
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/archive/duplicati/templates/foo.yml.j2"])
+    assert cs.services == set()
+    assert cs.broad is False
+
+
+def test_common_role_change_stays_broad_not_scoped():
+    # common/ is the shared deploy path — it must remain BROAD (manual full deploy), so the
+    # broad-prefix check must win over the new service-scoped config match.
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/common/templates/healthcheck.yml.j2"])
+    assert cs.broad is True
+    assert cs.services == set()
+
+
+def test_role_tasks_and_docs_do_not_trigger_deploy():
+    # Scope is templates/ + files/ only (the deployed config/assets). A tasks/main.yml or
+    # CLAUDE.md change does NOT auto-deploy (manual, as before) — avoids redeploying on a doc edit.
+    cs = services_from_changed_paths([
+        "ansible/roles/containers/prometheus/tasks/main.yml",
+        "ansible/roles/containers/prometheus/CLAUDE.md",
+    ])
+    assert cs.services == set()
+    assert cs.broad is False
+
+
+def test_config_change_with_compose_change_dedupes_to_one_service():
+    cs = services_from_changed_paths([
+        "ansible/roles/containers/traefik/templates/config.yml.j2",
+        "ansible/roles/containers/traefik/templates/docker-compose.yml.j2",
+    ])
+    assert cs.services == {"traefik"}
+
+
 def test_next_action_noop_when_in_sync():
     assert next_action("aaa", "aaa", None) == "noop"
 

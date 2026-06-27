@@ -87,6 +87,33 @@ language = "system"
 pass_filenames = false
 files = "^(ansible/roles/containers/grafana/files/dashboards/.*\\.json|ansible/roles/containers/grafana/templates/provisioning/datasources\\.yml\\.j2|scripts/validate_grafana_dashboards\\.py)$"
 
+# Render the high-value NON-compose YAML config templates (authelia/traefik/prometheus/grafana)
+# with stubbed vars and assert each parses — the render-then-parse guard the compose templates
+# already get (validate-compose-templates), extended to the bind-mounted config templates that
+# re-render every deploy. Catches a Jinja indentation bug that check-yaml/ansible-lint miss (they
+# don't render .j2) BEFORE it reaches an auth-critical deploy (a config-only push is health-gated
+# but auth-critical — a bad place to first find a broken authelia/traefik config).
+[[repos.hooks]]
+id = "validate-config-templates"
+name = "Validate rendered config templates (authelia/traefik/prometheus/grafana)"
+entry = "uv run python scripts/validate_config_templates.py"
+language = "system"
+pass_filenames = false
+files = "^(ansible/roles/containers/(authelia/templates/configuration|traefik/templates/(config|traefik)|prometheus/templates/prometheus|grafana/templates/(loki-config|promtail-config))\\.yml\\.j2|scripts/validate_config_templates\\.py)$"
+
+# Gate that the secret-rotation registry (ansible/secret_rotation.yml) stays in sync with the
+# encrypted secrets.yml — fails the commit if a secret was added/removed without running
+# `secret_rotation.py sync`. Read-only: reads plaintext key NAMES only, never decrypts a value
+# (no age key needed), so it's CI-safe. Catches the drift at commit time instead of a day later
+# when the daily "Secret Rotation" Kuma monitor goes down.
+[[repos.hooks]]
+id = "secret-rotation-registry-sync"
+name = "Secret-rotation registry in sync with secrets.yml"
+entry = "uv run python scripts/secret_rotation.py audit --check"
+language = "system"
+pass_filenames = false
+files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secret_rotation\\.py)$"
+
 # Run the repo's Python unit tests via uv: the toposort dependency-resolution filters
 # (gate every deploy's ordering/scope), the monitor-bridge check logic, the
 # auto-approve-readonly Bash classifier (a permission security boundary), and the

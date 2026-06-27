@@ -1,10 +1,14 @@
 # gitops_deploy — pull-based deploy on master change (daniel-server only)
 
 Installs a systemd **timer** (every 30 min) that runs `/opt/gitops-deploy/gitops_deploy.py`
-as `{{ sys_user }}`. The script fetches `origin/master`; if it advanced, maps changed
-`roles/containers/<svc>/templates/docker-compose.yml.j2` files to service tags, `--ff-only`
-merges, and deploys each via `uv run --frozen ansible-playbook ansible/deploy.yml --tags <svc>`
-(the repo-pinned env, same as the operator — needs `uv` on the unit's PATH).
+as `{{ sys_user }}`. The script fetches `origin/master`; if it advanced, maps each changed file
+under `roles/containers/<svc>/{templates,files}/` (the compose template OR a bind-mounted config
+template / `files/` asset) to its service tag, `--ff-only` merges, and deploys each via
+`uv run --frozen ansible-playbook ansible/deploy.yml --tags <svc>` (the repo-pinned env, same as
+the operator — needs `uv` on the unit's PATH). A config-only change therefore triggers a scoped,
+health-gated redeploy too (closing the loop so live config matches master), not a silent ff-merge;
+`tasks/` and the role `CLAUDE.md` are deliberately NOT auto-deployed (structural/docs — deploy
+those manually).
 
 ## Health gate + rollback
 After deploy it polls each container's health (`max(5min)` default, see HEALTH_TIMEOUT_S).

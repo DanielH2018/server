@@ -256,7 +256,31 @@ def main() -> int:
         return 0
 
     run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])
-    deploy(cs.services)
+    try:
+        deploy(cs.services)
+    except Exception as exc:  # noqa: BLE001 — any ansible-playbook failure
+        # Deploy-EXECUTION failure (ansible-playbook itself errored: bad image manifest, a failed
+        # task) — distinct from the health gate below. Without this the exception propagates to
+        # __main__, which alerts but re-raises WITHOUT writing last_run AND leaves the repo
+        # ff-merged at the bad commit with no hold + no rollback — so the next tick (local==origin)
+        # noops and the deployer silently parks on the broken commit. Mirror the health-gate
+        # rollback: reset to the prior HEAD, redeploy the prior (known-good) version (ansible is
+        # idempotent, so re-applying old after a partial run is safe), hold the bad SHA, and alert.
+        log(f"deploy execution failed for {sorted(cs.services)}: {exc}; rolling back to {local[:8]}")
+        run(["git", "reset", "--hard", local])
+        try:
+            deploy(cs.services)
+        except Exception as exc2:  # noqa: BLE001 — best-effort restore; we still hold + alert
+            log(f"rollback redeploy of the prior version also failed: {exc2}")
+        write_hold(origin)
+        discord(
+            f"🚨 gitops-deploy: **deploy failed** on daniel-server.\n"
+            f"`ansible-playbook` errored deploying `{', '.join(sorted(cs.services))}` from "
+            f"`{origin[:8]}`:\n`{exc}`\n"
+            f"Rolled back to `{local[:8]}`; the bad commit is held until origin advances past it.\n"
+            f"**Action:** fix or revert the offending commit."
+        )
+        return 1
 
     # Health-gate only services actually deployed on THIS host. A changed template
     # for an other-host-only service (dozzle is daniel-pi-only) renders no compose
