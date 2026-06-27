@@ -65,6 +65,17 @@
       ],
       "depNameTemplate": "prek",
       "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "description": "CrowdSec bouncer Traefik plugin pin in traefik.yml.j2 (Traefik static config). None of the other custom managers match this file, so this WAF-enforcement plugin would age silently — a stale version can lag Traefik API changes or miss plugin security fixes. depName is read from the moduleName line; track GitHub releases.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/containers/traefik/templates/traefik\\.yml\\.j2$/"
+      ],
+      "matchStrings": [
+        "moduleName:\\s*\"github\\.com/(?<depName>[^\"]+?)\"\\s+version:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases"
     }
   ],
   "packageRules": [
@@ -105,6 +116,13 @@
       "matchManagers": ["custom.regex"],
       "matchDatasources": ["galaxy-collection"],
       "groupName": "ansible galaxy collections (manual — lockstep with ansible-core)",
+      "automerge": false
+    },
+    {
+      "description": "CrowdSec bouncer Traefik plugin — a WAF-enforcement component whose bump requires a deliberate traefik redeploy (CI can't prove the plugin loads). Own group, no automerge, so it overrides the custom.regex non-major automerge rule above and gets an operator review.",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": ["maxlerebourg/crowdsec-bouncer-traefik-plugin"],
+      "groupName": "crowdsec bouncer plugin (manual — needs traefik redeploy)",
       "automerge": false
     }
   ]

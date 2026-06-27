@@ -59,7 +59,10 @@ services:
     image: brandawg93/peanut:latest
     restart: unless-stopped
     depends_on:
-      - nut
+      # nut has a healthcheck (upsc battery.charge); gate on it so peanut doesn't start
+      # before upsd is serving and show "no data" until its next poll on a recreate deploy.
+      nut:
+        condition: service_healthy
     volumes:
       - ./peanut-config:/config
     environment:

@@ -29,7 +29,9 @@ http:
         customResponseHeaders:
           Permissions-Policy: "geolocation=(self), microphone=(), camera=(), fullscreen=*, usb=()"
         referrerPolicy: "strict-origin-when-cross-origin"
-        frameDeny: true
+        # No frameDeny: customFrameOptionsValue (SAMEORIGIN, below) takes precedence in Traefik,
+        # so frameDeny:true was dead config that misrepresented the effective policy as DENY.
+        # SAMEORIGIN is intentional (allows same-origin iframes).
         browserXssFilter: true
         contentTypeNosniff: true
         forceSTSHeader: true
