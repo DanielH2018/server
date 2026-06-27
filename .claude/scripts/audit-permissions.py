@@ -14,7 +14,8 @@ Usage:
   uv run python .claude/scripts/audit-permissions.py            # full report
   uv run python .claude/scripts/audit-permissions.py --since 2026-06-01
   uv run python .claude/scripts/audit-permissions.py --json
-  uv run python .claude/scripts/audit-permissions.py --prune 180
+  uv run python .claude/scripts/audit-permissions.py --prune 180        # prune the counts store
+  uv run python .claude/scripts/audit-permissions.py --prune-dead       # remove dead allow-rules
 
 Pure stdlib. Loads the hook module by path for the shared store/lock helpers.
 """
@@ -43,12 +44,14 @@ except Exception:
 
 
 def parse_args(argv):
-    out = {"since": None, "prune": None, "json": False, "error": None}
+    out = {"since": None, "prune": None, "prune_dead": False, "json": False, "error": None}
     i = 0
     while i < len(argv):
         a = argv[i]
         if a == "--json":
             out["json"] = True
+        elif a == "--prune-dead":
+            out["prune_dead"] = True
         elif a == "--since":
             if i + 1 >= len(argv):
                 out["error"] = "--since requires a date value"
@@ -325,6 +328,28 @@ def dead_allow_rules(perms):
     return dead
 
 
+def compute_dead_local_prune(committed_allow, local_allow):
+    """Decide which rules to remove from the machine-local allow list.
+
+    `committed_allow` (settings.json) is treated as fixed context — never edited — so a
+    local rule that merely duplicates a committed one is removed from local (the committed
+    copy stays). Returns (new_local_allow, removed) where removed is [{rule, reason}].
+    Pure function (no IO) for testability.
+    """
+    dead = dead_allow_rules({"allow": list(committed_allow) + list(local_allow)})
+    queue = {}
+    for d in dead:
+        queue.setdefault(d["rule"], []).append(d["reason"])
+    new_local, removed = [], []
+    for rule in local_allow:
+        reasons = queue.get(rule)
+        if reasons:
+            removed.append({"rule": rule, "reason": reasons.pop(0)})
+            continue
+        new_local.append(rule)
+    return new_local, removed
+
+
 def collect_permissions(objs):
     allow, deny, ask = [], [], []
     for o in objs or []:
@@ -360,6 +385,38 @@ def do_prune(store, days, now_ms):
             del store["entries"][k]
             removed += 1
     return removed
+
+
+def do_prune_dead(base_dir):
+    """Remove provably-dead allow-rules from settings.local.json (machine-local), backing
+    it up first. settings.json (committed) is read-only context. Returns (removed, kept)."""
+    committed = []
+    try:
+        with open(os.path.join(base_dir, "settings.json"), encoding="utf-8") as fh:
+            committed = ((json.load(fh) or {}).get("permissions") or {}).get("allow") or []
+    except Exception:
+        pass
+    local_path = os.path.join(base_dir, "settings.local.json")
+    try:
+        with open(local_path, encoding="utf-8") as fh:
+            local_obj = json.load(fh)
+    except Exception:
+        return None, None                       # no local file -> nothing to do
+    local_allow = ((local_obj.get("permissions") or {}).get("allow")) or []
+    new_local, removed = compute_dead_local_prune(committed, local_allow)
+    if not removed:
+        return [], local_allow
+    try:                                        # backup before writing
+        with open(local_path + ".bak", "w", encoding="utf-8") as bf:
+            json.dump(local_obj, bf, indent=2)
+            bf.write("\n")
+    except Exception:
+        pass
+    local_obj.setdefault("permissions", {})["allow"] = new_local
+    with open(local_path, "w", encoding="utf-8") as fh:
+        json.dump(local_obj, fh, indent=2)
+        fh.write("\n")
+    return removed, new_local
 
 
 def pct(n, d):
@@ -428,6 +485,19 @@ def main():
             print("Pruned {} entries not seen in {} days.".format(removed, args["prune"]))
         finally:
             lib.release_lock(fd)
+        return
+    if args["prune_dead"]:
+        base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+        removed, kept = do_prune_dead(base)
+        if removed is None:
+            print("No settings.local.json to prune.")
+        elif not removed:
+            print("No redundant allow-rules to prune.")
+        else:
+            print("Pruned {} redundant allow-rule(s) from settings.local.json "
+                  "(backup: settings.local.json.bak), kept {}:".format(len(removed), len(kept)))
+            for r in removed:
+                print("  - {}   ({})".format(r["rule"], r["reason"]))
         return
     store = lib.load_store()
     if "entries" not in store:

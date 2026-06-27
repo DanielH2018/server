@@ -249,3 +249,32 @@ def test_dead_allow_rules_flags_exact_duplicate_once_keeping_first():
     dead = a.dead_allow_rules(perms)
     dups = [d for d in dead if "duplicate" in d["reason"]]
     assert len(dups) == 1 and dups[0]["rule"] == "Bash(weird-tool)"
+
+
+def test_compute_dead_local_prune_removes_dead_keeps_needed_and_committed_context():
+    committed = ["Bash(ansible-lint *)"]              # fixed context, never edited
+    local = [
+        "Bash(ansible-lint *)",                       # duplicate of committed -> remove
+        "Bash(ansible-lint)",                         # subsumed by ansible-lint * -> remove
+        "Bash(uv run *)",                             # wildcard, keep
+        "Bash(uv run pytest)",                        # subsumed by uv run * -> remove
+        "Bash(sops -d ansible/vars/secrets.yml)",     # genuinely needed -> keep
+        "Skill(security-review)",                     # non-Bash -> keep
+    ]
+    new_local, removed = a.compute_dead_local_prune(committed, local)
+    assert new_local == [
+        "Bash(uv run *)",
+        "Bash(sops -d ansible/vars/secrets.yml)",
+        "Skill(security-review)",
+    ]
+    assert {r["rule"] for r in removed} == {
+        "Bash(ansible-lint *)", "Bash(ansible-lint)", "Bash(uv run pytest)"}
+    # committed list is never returned for editing
+    assert "Bash(ansible-lint *)" in committed
+
+
+def test_compute_dead_local_prune_noop_when_nothing_dead():
+    committed = []
+    local = ["Bash(uv run *)", "Bash(docker exec *)", "Skill(deploy)"]
+    new_local, removed = a.compute_dead_local_prune(committed, local)
+    assert removed == [] and new_local == local
