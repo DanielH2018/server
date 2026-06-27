@@ -115,12 +115,12 @@ Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hook
   `$VAR`/`$(…)` at parse time — shell `$` must be doubled `$$`; legit `${VAR-…}` in
   `environment:` is not flagged).
 - **log-permission** (PreToolUse / PermissionRequest / Notification, `async`) — observability-only.
-  Aggregates per-host tool-call + permission-prompt *counts* into `.claude/logs/permissions.json`
-  (gitignored). `uv run python .claude/scripts/audit-permissions.py` reports the prompt rate,
-  per-tool split, **suggested allowlist rules**, and **redundant existing rules** (already covered
-  by the hook / subsumed by a broader rule / duplicated — safe to prune); the `/audit-permissions`
-  skill turns that into proposed `settings.local.json` edits. Pairs with `auto-approve-readonly.py`
-  (it *decides* auto-approvals; this *measures*). Pure stdlib; never blocks.
+  Aggregates per-host tool-call + prompt *counts* → `.claude/logs/permissions.json` (gitignored).
+  `audit-permissions.py` reports prompt rate, per-tool split, **suggested allowlist rules** +
+  **redundant existing rules** (hook-covered / subsumed / dup — safe to prune); `/audit-permissions`
+  turns that into `settings.local.json` edits. Pairs w/ `auto-approve-readonly.py` (decides vs measures).
+- **session-health** (SessionStart) — on opening a session here, prints a banner of any unhealthy/
+  restarting containers + down Prometheus targets (silent when all-green; read-only, timeout-bounded).
 - **homelab-network-diagnostician** agent — connectivity/DNS/Traefik/WireGuard/CrowdSec triage (read-only).
 - **home-assistant-engineer** agent — read+write HA engineer (automations/scenes/scripts/macros)
   that knows the copy-not-template + tested-macro conventions and the verification traps; pairs
