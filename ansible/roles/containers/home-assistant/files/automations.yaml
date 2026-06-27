@@ -294,21 +294,30 @@
 # occupied, cut it after 5 min empty —
 # EXCEPT hold it on from bedtime through the end of the morning wake ramp (binary_sensor.bedroom_
 # purifier_hold), because the FP300 drops a motionless sleeper and would otherwise kill it at 2am.
-#   present  -> turn on (edge-triggered on arrival; a manual off therefore "sticks" until you next
-#               leave-and-return — same property bedroom_manual_light_detect gives the lights).
-#   absent   -> turn off after 5 min empty, UNLESS the overnight hold is active.
-#   hold_end -> the wake routine just finished; if the room is already empty, turn off NOW. Catches
-#               the case where the FP300 dropped you overnight and never re-detected you, so the
-#               5-min absent trigger fired-but-was-blocked and won't re-fire (no fresh off-edge).
-# Not a sanctioned-writer actuator (state/sanctioned_writers.yml governs only the lights + fan), so
-# this drives switch.turn_on/off directly — no mediator script.
+# ALSO run it regardless of presence while the Air Quality Monitor reads dirty (the AirGradient's
+# PM2.5/VOC threshold sensors), since a HEPA+carbon purifier clears exactly those — so a pollution
+# event with nobody home still gets filtered, and it stops once the air clears AND the room is empty.
+#   present   -> turn on (edge-triggered on arrival; a manual off therefore "sticks" until you next
+#                leave-and-return — same property bedroom_manual_light_detect gives the lights).
+#   aqi_bad   -> indoor PM2.5 or VOC went high -> turn on regardless of presence (dirty air overrides
+#                the manual-off-sticks property, by design — health wins).
+#   absent    -> turn off after 5 min empty, UNLESS the overnight hold is active OR the air is dirty.
+#   hold_end  -> the wake routine just finished; if the room is already empty AND the air is clean,
+#                turn off NOW. Catches the case where the FP300 dropped you overnight and never
+#                re-detected you, so the 5-min absent trigger fired-but-was-blocked and won't
+#                re-fire (no fresh off-edge).
+#   aqi_clear -> the air recovered; if the room is empty and we're not holding, the dirty-air reason
+#                is gone, so stop (presence-occupied keeps it on via the normal path).
+# AQI gates on PM2.5/VOC, NOT CO2 — a filter does nothing for CO2 (that's the window-advisor /
+# Boost-fan job). Not a sanctioned-writer actuator (state/sanctioned_writers.yml governs only the
+# lights + fan), so this drives switch.turn_on/off directly — no mediator script.
 - id: bedroom_air_purifier_presence
   alias: Bedroom air purifier presence
   description: >-
     Run the air purifier while the room is occupied; cut power after 5 min empty — but hold it on
     from bedtime through the end of the morning wake ramp, since the FP300 can drop a motionless sleeper.
   mode: queued
-  max: 3
+  max: 5
   trigger:
     - platform: state
       entity_id: binary_sensor.aqara_fp300_presence
@@ -324,6 +333,18 @@
       from: "on"
       to: "off"
       id: hold_end
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_pm2_5_high
+        - binary_sensor.bedroom_voc_high
+      to: "on"
+      id: aqi_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_pm2_5_high
+        - binary_sensor.bedroom_voc_high
+      to: "off"
+      id: aqi_clear
   action:
     - choose:
         # Arrived (or FP300 re-detected you) -> make sure the purifier is powered.
@@ -332,18 +353,36 @@
             - service: switch.turn_on
               target:
                 entity_id: switch.air_purifier
-        # Empty for 5 min -> power off, UNLESS we're holding it through sleep/wake.
+        # Indoor PM2.5/VOC went high -> run it regardless of presence (filters particulates + VOCs).
+        - conditions: "{{ trigger.id == 'aqi_bad' }}"
+          sequence:
+            - service: switch.turn_on
+              target:
+                entity_id: switch.air_purifier
+        # Empty for 5 min -> power off, UNLESS holding through sleep/wake OR the air is still dirty.
         - conditions:
             - "{{ trigger.id == 'absent' }}"
             - "{{ is_state('binary_sensor.bedroom_purifier_hold', 'off') }}"
+            - "{{ is_state('binary_sensor.bedroom_pm2_5_high', 'off') and is_state('binary_sensor.bedroom_voc_high', 'off') }}"
           sequence:
             - service: switch.turn_off
               target:
                 entity_id: switch.air_purifier
-        # Wake routine ended -> if the room is already empty, power off now.
+        # Wake routine ended -> if the room is empty AND the air is clean, power off now.
         - conditions:
             - "{{ trigger.id == 'hold_end' }}"
             - "{{ is_state('binary_sensor.aqara_fp300_presence', 'off') }}"
+            - "{{ is_state('binary_sensor.bedroom_pm2_5_high', 'off') and is_state('binary_sensor.bedroom_voc_high', 'off') }}"
+          sequence:
+            - service: switch.turn_off
+              target:
+                entity_id: switch.air_purifier
+        # Air cleared -> if the room is empty and we're not holding, the dirty-air reason is gone, stop.
+        - conditions:
+            - "{{ trigger.id == 'aqi_clear' }}"
+            - "{{ is_state('binary_sensor.bedroom_pm2_5_high', 'off') and is_state('binary_sensor.bedroom_voc_high', 'off') }}"
+            - "{{ is_state('binary_sensor.aqara_fp300_presence', 'off') }}"
+            - "{{ is_state('binary_sensor.bedroom_purifier_hold', 'off') }}"
           sequence:
             - service: switch.turn_off
               target:

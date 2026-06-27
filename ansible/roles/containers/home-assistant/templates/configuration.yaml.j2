@@ -174,7 +174,10 @@ binary_sensor:
   - platform: threshold
     name: "Bedroom VOC high"          # -> binary_sensor.bedroom_voc_high
     entity_id: sensor.bedroom_airgradient_one_voc_index
-    upper: 250                         # alerts >= 275, clears <= 225 (index)
+    # Tuned 2026-06-27 to this room's observed baseline (7-day recorder: median 124,
+    # p95 171, spikes ~290). upper 250 only caught near-max events; 200 sits just above
+    # the room's normal band so a genuine VOC elevation alerts. Severe (400) unchanged.
+    upper: 200                         # alerts >= 225, clears <= 175 (index)
     hysteresis: 25
   - platform: threshold
     name: "Bedroom NOx high"          # -> binary_sensor.bedroom_nox_high
