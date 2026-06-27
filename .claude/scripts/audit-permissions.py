@@ -5,8 +5,10 @@ Reads the per-host counts store written by .claude/hooks/log-permission.py and
 reports: overall prompt rate, per-tool auto-approved vs. prompted counts, the
 most-prompted commands, segment-aware suggested Bash allowlist rules (splits
 compound `a && b | c` commands, ignores quoted/heredoc bodies and env prefixes,
-cross-references the live allow/deny/ask tiers), and a "left to prompt by design"
-list of heads that are unsafe to blanket-allow.
+cross-references the live allow/deny/ask tiers), a "left to prompt by design"
+list of heads that are unsafe to blanket-allow, and a "redundant allow-rules" list of
+existing allow entries that are provably dead (the auto-approve hook already covers
+them, a broader rule subsumes them, or they're exact duplicates) and safe to prune.
 
 Usage:
   uv run python .claude/scripts/audit-permissions.py            # full report
@@ -27,6 +29,17 @@ _HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "hooks", 
 _spec = importlib.util.spec_from_file_location("log_permission", _HOOK)
 lib = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(lib)
+
+# The auto-approve hook's read-only classifier, loaded by path (optional). Lets the
+# audit flag concrete allow-rules the hook ALREADY covers — they never fire, so they're
+# dead weight. If it can't load, hook-covered detection is simply skipped.
+_AAR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "hooks", "auto-approve-readonly.py")
+try:
+    _aar_spec = importlib.util.spec_from_file_location("auto_approve_readonly", _AAR)
+    aar = importlib.util.module_from_spec(_aar_spec)
+    _aar_spec.loader.exec_module(aar)
+except Exception:
+    aar = None
 
 
 def parse_args(argv):
@@ -269,6 +282,49 @@ def blocked_by_policy(prompted):
     return sorted(groups.values(), key=lambda g: g["asks"], reverse=True)
 
 
+def dead_allow_rules(perms):
+    """Allow-rules that are provably inert — safe to remove. Three classes:
+
+      - covered:   a concrete `Bash(cmd)` the auto-approve hook already classifies
+                   read-only. The hook auto-approves before the allow-rule is ever
+                   consulted, so the rule never fires.
+      - subsumed:  a rule a BROADER allow rule already covers (e.g. `Bash(uv run *)`
+                   subsumes `Bash(uv run pytest)`).
+      - duplicate: the exact rule string appears more than once across the merged tiers
+                   (e.g. listed in both settings.json and settings.local.json).
+
+    Wildcard rules (`Bash(foo *)`, `…:*`) are patterns deliberately broader than the
+    hook, so they are never reported as covered. The audit only SUGGESTS removal; it
+    never edits settings — the operator reviews and prunes.
+    """
+    allow = (perms or {}).get("allow", []) or []
+    dead = []
+    seen = set()
+    for rule in allow:
+        if rule in seen:
+            dead.append({"rule": rule, "reason": "duplicate (already listed)"})
+            continue
+        seen.add(rule)
+        m = _BASH_RULE.match(rule)
+        if not m:
+            continue                                   # only Bash rules analyzed here
+        inner = m.group(1)
+        if inner.endswith("*") or ":*" in inner:
+            continue                                   # a wildcard pattern, not concrete
+        others = [r for r in allow if r != rule]
+        cp = candidate_prefix(inner)
+        if cp and is_covered(cp["prefix"], others):
+            dead.append({"rule": rule, "reason": "subsumed by a broader allow rule"})
+            continue
+        if aar is not None:
+            try:
+                if aar.classify(inner) is not None:
+                    dead.append({"rule": rule, "reason": "auto-approve hook already covers it"})
+            except Exception:
+                pass
+    return dead
+
+
 def collect_permissions(objs):
     allow, deny, ask = [], [], []
     for o in objs or []:
@@ -341,6 +397,15 @@ def render(rep, perms=None):
                     b["prefix"], b["asks"], b["commands"]))
     else:
         lines.append("No prompted commands recorded yet.")
+    dead = dead_allow_rules(perms)
+    if dead:
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.append("Redundant allow-rules (safe to remove — {}):".format(len(dead)))
+        for d in dead[:30]:
+            lines.append("  {}   — {}".format(d["rule"], d["reason"]))
+        if len(dead) > 30:
+            lines.append("  … and {} more".format(len(dead) - 30))
     return "\n".join(lines)
 
 
@@ -375,6 +440,7 @@ def main():
             "byTool": rep["byTool"], "prompted": rep["prompted"],
             "suggestions": suggest_rules(rep["prompted"], perms),
             "blockedByPolicy": blocked_by_policy(rep["prompted"]),
+            "deadAllowRules": dead_allow_rules(perms),
         }, indent=2))
     else:
         print(render(rep, perms))

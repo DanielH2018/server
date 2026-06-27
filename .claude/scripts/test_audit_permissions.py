@@ -215,3 +215,37 @@ def test_suggest_rules_does_not_propose_a_rule_set_to_prompt_ask_tier():
     assert len(a.suggest_rules(prompted)) == 1
     rules = a.suggest_rules(prompted, {"ask": ["Bash(sketchy *)"]})
     assert len(rules) == 0
+
+
+def test_dead_allow_rules_flags_hook_covered_but_keeps_wildcards_and_non_bash():
+    perms = {"allow": [
+        "Bash(sensors)",                            # hook auto-approves -> dead
+        "Bash(docker exec *)",                      # wildcard, broader than hook -> keep
+        "Bash(sops -d ansible/vars/secrets.yml)",   # not read-only -> keep
+        "Skill(security-review)",                   # non-Bash -> keep
+        "WebFetch(domain:github.com)",              # non-Bash -> keep
+    ]}
+    dead = a.dead_allow_rules(perms)
+    flagged = {d["rule"] for d in dead}
+    if a.aar is not None:  # hook classifier loaded by path; present in-repo
+        assert "Bash(sensors)" in flagged
+        assert any("hook already covers" in d["reason"]
+                   for d in dead if d["rule"] == "Bash(sensors)")
+    for keep in ("Bash(docker exec *)", "Bash(sops -d ansible/vars/secrets.yml)",
+                 "Skill(security-review)", "WebFetch(domain:github.com)"):
+        assert keep not in flagged
+
+
+def test_dead_allow_rules_flags_rule_subsumed_by_broader_wildcard():
+    perms = {"allow": ["Bash(uv run *)", "Bash(uv run pytest)"]}
+    dead = a.dead_allow_rules(perms)
+    assert {d["rule"] for d in dead} == {"Bash(uv run pytest)"}
+    assert "subsumed" in dead[0]["reason"]
+
+
+def test_dead_allow_rules_flags_exact_duplicate_once_keeping_first():
+    # "weird-tool" isn't a known read-only command, so only the duplicate is dead.
+    perms = {"allow": ["Bash(weird-tool)", "Bash(weird-tool)"]}
+    dead = a.dead_allow_rules(perms)
+    dups = [d for d in dead if "duplicate" in d["reason"]]
+    assert len(dups) == 1 and dups[0]["rule"] == "Bash(weird-tool)"
