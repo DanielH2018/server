@@ -96,6 +96,7 @@ writes:
   switch.air_purifier:
     - automation.bedroom_air_purifier_presence
   switch.bedroom_adaptive_lighting_bedroom:
+    - automation.bedroom_wake_ramp
     - script.bedroom_bedtime
   timer.bedroom_fan_dial:
     - automation.bedroom_tap_dial_control

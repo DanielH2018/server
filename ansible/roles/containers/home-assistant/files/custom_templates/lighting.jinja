@@ -33,9 +33,10 @@
 {%- endmacro -%}
 
 {# Auto-light gate: dark enough OR inside the wake window. illuminance < 75 lux is "dark"; in_window
-   forces allow for the morning ramp regardless of ambient. SINGLE source of truth for the 75-lux
-   threshold. in_window is coerced with `| bool` because a macro argument arrives as a string when
-   passed a macro's rendered output. #}
+   forces allow for the morning ramp regardless of ambient. The 75-lux literal is ALSO inlined in
+   bedroom_presence_on's numeric_state trigger (a trigger can't call a macro) — test_lux_gate_sync.py
+   asserts the two stay equal. in_window is coerced with `| bool` because a macro argument arrives as
+   a string when passed a macro's rendered output. #}
 {%- macro auto_light_allowed(in_window, illuminance) -%}
 {%- set iw = in_window | bool -%}
 {%- set lux = illuminance | float(9999) -%}

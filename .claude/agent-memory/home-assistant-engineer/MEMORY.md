@@ -10,4 +10,4 @@ encyclopedia); link to them instead.
 
 ## Learnings
 <!-- e.g. - FP300 running-fan presence false-hold → set ai_interference_source_selfidentification ON -->
-_(none yet — the agent appends here as it works)_
+- [2026-06-27 review findings](ha-review-2026-06-27-findings.md) — wake-ramp end over-dims (contaminated lux); window advisor disabled by purifier keeping indoor PM low (op>ip guard). Both unfixed (review-only).

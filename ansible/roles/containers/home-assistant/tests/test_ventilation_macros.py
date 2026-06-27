@@ -14,9 +14,22 @@ def test_smoke_guard_blocks_when_outdoor_pm_unsafe():
     assert _advice(80, 65, 5, 50, True) == "none"
 
 
-def test_blocks_when_outdoor_dirtier_than_indoor_even_if_under_cap():
-    # Both under the 25 cap, but outside (10) is dirtier than inside (5).
-    assert _advice(80, 65, 5, 10, True) == "none"
+def test_small_outdoor_excess_within_margin_does_not_block():
+    # Purifier keeps indoor very low (4); outdoor (12) is higher but within pm_dirty_margin (10) and
+    # clean+comfortable -> still advise. (Was wrongly 'none' before the margin — the bare op>ip term
+    # vetoed CO2/cooling ventilation whenever the purifier scrubbed indoor below outdoor.)
+    assert _advice(75, 65, 4, 12, True) == "stale"
+
+
+def test_large_outdoor_excess_over_indoor_still_blocks():
+    # Outdoor (20) exceeds indoor (5) by more than the 10 margin -> still block (would worsen indoor).
+    assert _advice(75, 65, 5, 20, True) == "none"
+
+
+def test_dirty_margin_boundary_is_strict():
+    # At exactly ip + margin it's allowed (strict >); one above blocks.
+    assert _advice(75, 65, 5, 15, True) == "stale"   # 15 == 5 + 10, not > -> allowed
+    assert _advice(75, 65, 5, 16, True) == "none"    # 16 > 15 -> blocked
 
 
 def test_smoke_guard_blocks_when_outdoor_pm10_unsafe():

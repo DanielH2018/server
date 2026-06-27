@@ -1,23 +1,25 @@
 {# Ventilation advisor — should you open a window? Pure decision math; entity reads (states/now)
    stay in the caller (bedroom_window_advisor, files/automations.yaml). Returns 'stale' (indoor air
    is stale, ventilate), 'cool' (free cooling available), or 'none' (don't suggest). Every non-'none'
-   verdict REQUIRES outdoor air to be both under the safe cap AND no dirtier than indoors — the
-   system can never advise ventilating into worse/unsafe air (the smoke guard). Args coerce inside
+   verdict REQUIRES outdoor air to be both under the safe cap AND not MUCH dirtier than indoors
+   (within pm_dirty_margin — a small excess over a purifier-scrubbed indoor is fine) — the system
+   can never advise ventilating into worse/unsafe air (the smoke guard). Args coerce inside
    (like lighting.jinja) so a caller may pass strings or numbers. Unavailable -> safe 'none'.
    Unit-tested in tests/test_ventilation_macros.py. Tune the comfort band / cool delta / PM cap here.
    'stale' outranks 'cool' when both apply. #}
 {%- macro ventilation_advice(indoor_temp, outdoor_temp, indoor_pm, outdoor_pm, air_stale,
                              outdoor_pm10=0, comfort_lo=55, comfort_hi=78, cool_delta=5,
-                             pm_safe=25, pm10_safe=50) -%}
+                             pm_safe=25, pm10_safe=50, pm_dirty_margin=10) -%}
 {%- set it = indoor_temp | float(0) -%}
 {%- set ot = outdoor_temp | float(999) -%}
 {%- set ip = indoor_pm | float(0) -%}
 {%- set op = outdoor_pm | float(999) -%}
 {%- set op10 = outdoor_pm10 | float(999) -%}
 {%- set stale = air_stale | bool -%}
-{# Smoke guard: block on PM2.5 over its cap OR dirtier-than-indoors, AND on coarse PM10 over its
-   own (higher) cap — a dust/pollen event can spike PM10 while PM2.5 stays moderate. #}
-{%- if op > pm_safe or op > ip or op10 > pm10_safe -%}none
+{# Smoke guard: block on PM2.5 over its cap OR MORE THAN pm_dirty_margin µg/m³ dirtier than indoors
+   (a small excess over a purifier-scrubbed indoor shouldn't veto CO2/cooling ventilation), AND on
+   coarse PM10 over its own (higher) cap — a dust/pollen event can spike PM10 while PM2.5 stays moderate. #}
+{%- if op > pm_safe or op > ip + pm_dirty_margin or op10 > pm10_safe -%}none
 {%- elif stale and comfort_lo <= ot <= comfort_hi -%}stale
 {%- elif it > comfort_hi and (it - ot) >= cool_delta -%}cool
 {%- else -%}none

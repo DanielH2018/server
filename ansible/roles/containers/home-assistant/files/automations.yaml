@@ -219,7 +219,8 @@
     # already here (illuminance crossing below 75). The latter closes an edge-vs-level gap —
     # entering while it was still bright used to leave you in the dark as dusk fell, since the
     # only trigger was the arrival edge. The `for:` rides out transient lux dips (a passing shadow).
-    # Keep this edge in sync with the auto_light_allowed gate threshold (lighting.jinja).
+    # Keep this `below:` in sync with the auto_light_allowed gate threshold (lighting.jinja's
+    # `lux < N`) — test_lux_gate_sync.py asserts they stay equal.
     - platform: state
       entity_id: binary_sensor.aqara_fp300_presence
       to: "on"
@@ -517,12 +518,22 @@
             - service: script.bedroom_lights_set
               data:
                 reason: "wake"
-        # Window just ended this minute -> release to Adaptive Lighting (ambient-fill) for the day.
+        # Window just ended this minute -> hand the room back to Adaptive Lighting for the day.
+        # Release manual control + apply so AL drives the natural daylight brightness/color curve.
+        # NOT reason:"natural" (ambient-fill): at window-end the lights are still on (~38% from the
+        # ramp), so natural_brightness would read the lights-DOMINATED FP300 illuminance (violating
+        # its "read while OFF" precondition) and floor the room to ~11%, stranding AL paused until
+        # the next leave+return. turn_on_lights:false so a mid-ramp manual-off is never re-lit.
         - conditions: "{{ elapsed >= 30 and elapsed < 31 }}"
           sequence:
-            - service: script.bedroom_lights_set
+            - service: adaptive_lighting.set_manual_control
               data:
-                reason: "natural"
+                entity_id: switch.bedroom_adaptive_lighting_bedroom
+                manual_control: false
+            - service: adaptive_lighting.apply
+              data:
+                entity_id: switch.bedroom_adaptive_lighting_bedroom
+                turn_on_lights: false
 
 # Slow color tracking: while the lights are in AUTO mode, drift their color every 5 min toward
 # Adaptive Lighting's CURRENT sun-curve color (read off the AL switch attribute — AL computes it even
@@ -752,23 +763,35 @@
         # Air-quality bad alerts get a "Boost fan" action button (circulate the air); other
         # categories get none. Handled by bedroom_notification_action.
         boost_actions: "{{ [{'action': 'BEDROOM_BOOST_FAN', 'title': 'Boost fan'}] if category in ['airquality', 'airqualitysevere'] else [] }}"
+        # A sudden spike can cross BOTH the moderate (_high) and severe (_severe) thresholds within
+        # the same 30s window, firing two bad alerts at once. Flag a moderate whose matching severe
+        # sensor is already on so we can suppress it (the severe alert, which pierces, supersedes it).
+        # Only the indoor/outdoor air-quality categories have a severe counterpart (_high -> _severe).
+        severe_shadowed: >-
+          {{ category in ['airquality', 'airqualityoutdoor']
+             and is_state(trigger.entity_id | replace('_high', '_severe'), 'on') }}
     - choose:
         - conditions: "{{ edge == 'bad' }}"
           sequence:
-            - service: script.bedroom_notify
-              data:
-                title: "{{ cfg.bad }}"
-                message: "{{ label }} is {{ value }}{{ unit_sp }}"
-                tag: "{{ tag }}"
-                watch: "{{ cfg.watch }}"
-                pierce: "{{ cfg.pierce }}"
-                critical_away: "{{ cfg.critical_away | default(false) }}"
-                actions: "{{ boost_actions }}"
-            # Light pulse only for air quality (cfg.pulse) and only when the lights are already on —
-            # never wakes you, never fights Adaptive Lighting / the manual-off override at night.
-            - if: "{{ cfg.pulse and is_state('light.bedroom_lights', 'on') }}"
+            # Suppress a moderate air-quality bad that an already-on severe sensor covers. Gate INSIDE
+            # the bad branch (not via the choose condition) so a shadowed moderate can't fall through
+            # to the recovery default below.
+            - if: "{{ not severe_shadowed }}"
               then:
-                - service: script.bedroom_alert_pulse
+                - service: script.bedroom_notify
+                  data:
+                    title: "{{ cfg.bad }}"
+                    message: "{{ label }} is {{ value }}{{ unit_sp }}"
+                    tag: "{{ tag }}"
+                    watch: "{{ cfg.watch }}"
+                    pierce: "{{ cfg.pierce }}"
+                    critical_away: "{{ cfg.critical_away | default(false) }}"
+                    actions: "{{ boost_actions }}"
+                # Light pulse only for air quality (cfg.pulse) and only when the lights are already on
+                # — never wakes you, never fights Adaptive Lighting / the manual-off override at night.
+                - if: "{{ cfg.pulse and is_state('light.bedroom_lights', 'on') }}"
+                  then:
+                    - service: script.bedroom_alert_pulse
       # off<->on edges only, so the remaining case (edge == 'ok') is the default. Recovery is always
       # routine (no watch/pierce); the severe tier skips it (cfg.recovery false).
       default:

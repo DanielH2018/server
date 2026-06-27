@@ -517,7 +517,9 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   & comfortable (55–78 °F); **`cool`** = indoor > 78 °F AND outdoor ≥ 5 °F cooler (`cool_delta`) AND
   outdoor air safe; `stale` outranks `cool`; the `choose:` no-ops on `none`. **Smoke guard (load-
   bearing):** the macro returns `none` whenever `outdoor_pm > 25` (`pm_safe`) OR
-  `outdoor_pm > indoor_pm`, so it can never advise ventilating into worse/unsafe air. Notify is
+  `outdoor_pm > indoor_pm + pm_dirty_margin` (default 10 µg/m³ — a small excess over a
+  purifier-scrubbed indoor no longer vetoes CO₂/cooling ventilation; tune the margin in the macro),
+  so it can never advise ventilating into worse/unsafe air. Notify is
   routine via `script.bedroom_notify` (`tag: window_advice`). Macro math unit-tested in
   `tests/test_ventilation_macros.py`; the HA `round` returns an int at precision 0
   (`forgiving_round`), so the "N° cooler" message renders cleanly. Dashboard:
