@@ -83,6 +83,14 @@ uv run ansible-playbook ansible/deploy.yml             # all containers
 Bring up infra first if doing it piecemeal: **traefik → authelia → pihole/unbound →
 the rest**. Verify DNS (`pihole`), SSO (`authelia`), then app data.
 
+**Re-create the Uptime-Kuma admin user.** `uptime-kuma`'s data dir is deliberately *excluded*
+from Kopia (`kopiaignore.j2`), so a bare-metal restore brings up a **fresh** Kuma with an empty
+DB. AutoKuma authenticates with `uptime_kuma_username`/`uptime_kuma_password` from `secrets.yml`
+but **cannot create the initial admin** — so until you set up that admin through Kuma's first-run
+UI (`kuma.<domain>`, using exactly those secret values), AutoKuma provisions **zero** monitors and
+no Discord notification, leaving the whole fleet unmonitored during the recovery window. Do this
+right after the deploy; AutoKuma then backfills every monitor + the notification automatically.
+
 ## Notes / gotchas
 - **`kopia repository connect` ≠ `create`.** Never run `create` against the existing bucket
   in a recovery — `connect` attaches to the existing repo; `create` would try to initialize

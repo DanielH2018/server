@@ -8,6 +8,20 @@
     common_dirs_to_create:
       - "{{ container_item.name }}"
 
+- name: Create the node-exporter textfile-collector directory
+  tags: [config]
+  # Host cron scripts drop Prometheus *.prom gauges here (e.g. kopia-b2-usage.sh writes
+  # kopia_b2_billable_bytes for the B2-usage trend graph). node-exporter bind-mounts it read-only
+  # at /textfile (--collector.textfile.directory). sys_user-owned so the cron (sys_user) can write;
+  # node-exporter reads it as root regardless.
+  ansible.builtin.file:
+    path: /var/lib/node-exporter-textfile
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
 - name: Create prometheus.yml from template
   tags: [config]
   # Embeds the HA long-lived bearer token (prometheus_ha_token) for the /api/prometheus

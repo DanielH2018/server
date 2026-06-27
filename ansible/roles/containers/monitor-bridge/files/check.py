@@ -73,6 +73,16 @@ RESTORE_DRILL_MAX_AGE_S = float(_env("RESTORE_DRILL_MAX_AGE_D", "35")) * 86400
 VERIFY_STATE = _env("VERIFY_STATE", "/verify/state.json")
 VERIFY_MAX_AGE_S = float(_env("VERIFY_MAX_AGE_D", "10")) * 86400
 
+# Daily kopia FULL-maintenance freshness: the host cron (kopia-maintenance-check.sh, kopia role)
+# queries `kopia maintenance info --json` and writes {"ts": epoch, "ok": bool, "msg": str} after
+# deciding whether full maintenance is healthy (enabled + owned + next full run not overdue +
+# newest run succeeded). Full maintenance is what GCs expired blobs from B2, so a stall is the
+# upstream CAUSE the b2_usage check only catches weeks later as a downstream symptom. We alert on
+# an UNHEALTHY/stalled maintenance, staleness (cron broken / never ran), or a missing/corrupt
+# state file. 2.5d staleness = two missed daily runs + slack.
+MAINTENANCE_STATE = _env("MAINTENANCE_STATE", "/maintenance/state.json")
+MAINTENANCE_MAX_AGE_S = float(_env("MAINTENANCE_MAX_AGE_D", "2.5")) * 86400
+
 # B2 storage usage: the daily host cron (kopia-b2-usage.sh, kopia role) writes
 # {"ts": epoch, "ok": bool, "bytes": int, "msg": str} with the bucket's BILLABLE
 # bytes (incl. hidden versions — what counts against the free tier). We alert when
@@ -699,6 +709,34 @@ def check_b2_usage():
     return b2_usage(state, age_s, B2_USAGE_MAX_AGE_S, B2_CAP_BYTES, B2_USAGE_MAX_PCT)
 
 
+def maintenance(state, age_s, max_age_s):
+    """Pure: is kopia FULL maintenance healthy, and the check recent? (ok, msg).
+
+    Same state-file idiom as verify/b2_usage. The host cron decides `ok` from `kopia maintenance
+    info --json` (full enabled, owner set, next full run not overdue, newest run succeeded); here
+    we add staleness. Full maintenance GCs expired blobs from B2, so a stall is the upstream CAUSE
+    the b2_usage check only catches later as a downstream symptom (and B2 headroom is thin).
+    """
+    if not state.get("ok"):
+        return False, "kopia full maintenance UNHEALTHY: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return False, "maintenance check %.1fd old (max %.1fd)" % (
+            age_s / 86400, max_age_s / 86400)
+    return True, "maintenance ok %.1fd ago: %s" % (age_s / 86400, state.get("msg", ""))
+
+
+def check_maintenance():
+    try:
+        with open(MAINTENANCE_STATE) as fh:
+            state = json.load(fh)
+        age_s = time.time() - float(state.get("ts", 0))
+    except FileNotFoundError:
+        return False, "no maintenance state (check never ran?)"
+    except (ValueError, TypeError):
+        return False, "maintenance state unparseable"
+    return maintenance(state, age_s, MAINTENANCE_MAX_AGE_S)
+
+
 def ha_heartbeat_fresh(state, max_age_s, now=None):
     """`state` is HA's /api/states/input_datetime.ha_heartbeat payload.
 
@@ -806,6 +844,7 @@ CHECKS = [
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
     ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
     ("verify",        _env("KUMA_PUSH_VERIFY",        ""), check_verify),
+    ("maintenance",   _env("KUMA_PUSH_MAINTENANCE",   ""), check_maintenance),
     ("b2_usage",      _env("KUMA_PUSH_B2",            ""), check_b2_usage),
     ("scrutiny",      _env("KUMA_PUSH_SCRUTINY",      ""), check_scrutiny),
     ("pi_pressure",   _env("KUMA_PUSH_PI",            ""), check_pi_pressure),

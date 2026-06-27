@@ -757,6 +757,52 @@ def test_verify_unparseable_is_down(tmp_path, monkeypatch):
     assert "unparseable" in msg
 
 
+def _maintenance_state(tmp_path, monkeypatch, ts, ok, msg):
+    p = tmp_path / "maint.json"
+    p.write_text('{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg))
+    monkeypatch.setattr(check, "MAINTENANCE_STATE", str(p))
+
+
+def test_maintenance_fresh_success_is_up(tmp_path, monkeypatch):
+    _maintenance_state(tmp_path, monkeypatch, time.time() - 3600, True,
+                       "full maint enabled, owner root@kopia, next in 18.0h, last run snapshot-gc ok")
+    ok, msg = check.check_maintenance()
+    assert ok
+    assert "owner root@kopia" in msg
+
+
+def test_maintenance_unhealthy_is_down(tmp_path, monkeypatch):
+    # A stalled/disabled full cycle (the upstream cause b2_usage only catches weeks later) must page.
+    _maintenance_state(tmp_path, monkeypatch, time.time(), False, "full maintenance overdue 50.0h")
+    ok, msg = check.check_maintenance()
+    assert not ok
+    assert "overdue" in msg
+
+
+def test_maintenance_stale_success_is_down(tmp_path, monkeypatch):
+    # Daily cadence; a 3d-old success means the maintenance-check cron stopped running.
+    _maintenance_state(tmp_path, monkeypatch, time.time() - 3 * 86400, True, "ok")
+    ok, msg = check.check_maintenance()
+    assert not ok
+    assert "old" in msg
+
+
+def test_maintenance_missing_state_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "MAINTENANCE_STATE", str(tmp_path / "nope.json"))
+    ok, msg = check.check_maintenance()
+    assert not ok
+    assert "never ran" in msg
+
+
+def test_maintenance_unparseable_is_down(tmp_path, monkeypatch):
+    p = tmp_path / "maint.json"
+    p.write_text("not json")
+    monkeypatch.setattr(check, "MAINTENANCE_STATE", str(p))
+    ok, msg = check.check_maintenance()
+    assert not ok
+    assert "unparseable" in msg
+
+
 # ── B2 storage usage (daily host cron writes billable bytes; we alert on it) ──
 
 
