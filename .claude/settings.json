@@ -99,7 +99,8 @@
     ]
   },
   "enabledPlugins": {
-    "superpowers@claude-plugins-official": true
+    "superpowers@claude-plugins-official": true,
+    "claude-permission-audit@daniel-tools": false
   },
   "statusLine": {
     "type": "command",
