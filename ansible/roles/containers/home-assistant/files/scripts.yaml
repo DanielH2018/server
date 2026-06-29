@@ -92,7 +92,7 @@ bedroom_lights_set:
 
 # Wake frame: set the lights to the current sunrise-ramp brightness for NOW (warm 2200K), computed
 # from sensor.bedroom_wake_start via the wake_brightness macro. bedroom_wake_ramp calls this every
-# minute through the 30-min window; bedroom_apply_natural's wake exception also calls it so a mid-ramp
+# minute through the 45-min window; bedroom_apply_natural's wake exception also calls it so a mid-ramp
 # resume (a presence re-trigger) recomputes the right frame. No-op when no morning alarm is set.
 bedroom_apply_wake:
   alias: "Bedroom — apply wake ramp frame"
@@ -114,11 +114,12 @@ bedroom_apply_wake:
         color_temp_kelvin: 2200
         transition: 60
 
-# Test-only: preview the morning wake ramp on demand, COMPRESSED. Sweeps the 30-min window's frames
-# (elapsed 0 -> 15 -> 30 = window start -> alarm -> alarm+15) using the SAME tested wake_brightness
-# macro the production ramp uses, applying each with a short fade so you watch 1% -> ~12% -> 40% in
-# ~30s — without waiting for a real alarm or touching automation.bedroom_wake_ramp. Warm 2200K, like
-# bedroom_apply_wake. Driven only by script.bedroom_run_scenario (the test harness).
+# Test-only: preview the morning wake ramp on demand, COMPRESSED. Sweeps the 45-min window's frames
+# (elapsed 0 -> 15 -> 30 -> 45 = window start -> alarm -> alarm+15 -> alarm+30) using the SAME tested
+# wake_brightness macro the production ramp uses, applying each with a short fade so you watch
+# 1% -> ~12% -> 40% -> 100% in ~40s — without waiting for a real alarm or touching
+# automation.bedroom_wake_ramp. Warm 2200K, like bedroom_apply_wake. Driven only by
+# script.bedroom_run_scenario (the test harness).
 bedroom_preview_wake:
   alias: "Bedroom — preview wake ramp (test, compressed)"
   description: >-
@@ -127,7 +128,7 @@ bedroom_preview_wake:
   mode: restart
   sequence:
     - repeat:
-        for_each: [0, 7.5, 15, 22.5, 30]
+        for_each: [0, 7.5, 15, 22.5, 30, 37.5, 45]
         sequence:
           - variables:
               target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(repeat.item, states('sensor.pixel_9_pro_sleep_duration') | float(0)) | int }}"
@@ -175,7 +176,7 @@ bedroom_apply_natural:
             - service: scene.turn_on
               target:
                 entity_id: scene.bedroom_nightlight
-        # Exception: morning wake ramp (30-min window centered on the alarm). Delegated to
+        # Exception: morning wake ramp (45-min window, alarm-15 to alarm+30). Delegated to
         # script.bedroom_apply_wake (warm 2200K), driven per-minute by automation.bedroom_wake_ramp.
         - conditions: "{{ exception == 'wake' }}"
           sequence:
@@ -725,7 +726,7 @@ bedroom_run_scenario:
                 notification_id: test_scenario
                 title: "🧪 Scenario: wake ({{ 'fast' if fast else 'real' }})"
                 message: >-
-                  {{ 'Swept the wake ramp 1% to 12% to 40% in ~30s (warm 2200K).' if fast
+                  {{ 'Swept the wake ramp 1% to 12% to 40% to 100% in ~40s (warm 2200K).' if fast
                      else 'Applied the current wake frame. The real ramp is alarm-driven — set a
                      morning watch alarm to see it live.' }}
         # Nightlight — the dim amber "got up overnight" scene, instantly.
