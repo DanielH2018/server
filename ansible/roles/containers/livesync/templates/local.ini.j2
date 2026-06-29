@@ -1,2 +1,14 @@
 [chttpd]
 require_valid_user = true
+
+# Auto-compaction tuning (smoosh). CouchDB is append-only/MVCC: every Obsidian
+# LiveSync edit appends a new revision, so the .couch file bloats far beyond the
+# logical vault size. Smoosh's ratio channel only auto-compacts once the file is
+# min_priority× the data size; the default 5.0 lets a 25 MB vault grow past
+# ~125 MB on disk. Drop to 2.0 so compaction reclaims space when the file is 2×
+# the data — keeps the file (and the resulting B2 churn) in check.
+[smoosh.ratio_dbs]
+min_priority = 2.0
+
+[smoosh.ratio_views]
+min_priority = 2.0
