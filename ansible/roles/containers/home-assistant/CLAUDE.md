@@ -596,8 +596,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   entity state). Inert until you press Run; the test-only direct light writers (`bedroom_preview_wake`,
   `bedroom_run_scenario` via the nightlight `scene.turn_on`) are declared in
   `state/sanctioned_writers.yml`. Phase 2 also extracted the away/arrive selection into tested macros
-  (`away_items_label`/`arrive_relight_allowed`). Spec+plan:
-  `docs/superpowers/specs|plans/2026-06-23-ha-scenario-test-harness*`.
+  (`away_items_label`/`arrive_relight_allowed`). Spec:
+  `docs/superpowers/specs/2026-06-23-ha-scenario-test-harness-design.md`.
 
 ## Claude tooling for this role
 - **`home-assistant-engineer` agent** (`.claude/agents/`) — read+write HA engineer that knows
