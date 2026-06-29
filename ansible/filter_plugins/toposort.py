@@ -8,7 +8,7 @@ from ansible.errors import AnsibleFilterError
 def _tags(container):
     """Effective deploy tags for a containers_list entry: defaults to [name] so
     host_vars don't have to repeat `tags: [<name>]`; an explicit `tags:` overrides."""
-    return container.get('tags', [container['name']])
+    return container.get("tags", [container["name"]])
 
 
 def build_dep_map(containers_list, playbook_dir, requested_tags):
@@ -20,24 +20,25 @@ def build_dep_map(containers_list, playbook_dir, requested_tags):
     Non-closure containers are initialised with an empty dep list so the
     toposort still receives a complete map.
     """
-    name_to_container = {c['name']: c for c in containers_list}
-    dep_map = {c['name']: [] for c in containers_list}
+    name_to_container = {c["name"]: c for c in containers_list}
+    dep_map = {c["name"]: [] for c in containers_list}
 
     def _load(name):
-        path = os.path.join(playbook_dir, 'roles', 'containers', name, 'meta', 'deps.yml')
+        path = os.path.join(
+            playbook_dir, "roles", "containers", name, "meta", "deps.yml"
+        )
         try:
             with open(path) as fh:
-                return (yaml.safe_load(fh) or {}).get('role_deps', [])
-        except (OSError, yaml.YAMLError):
+                return (yaml.safe_load(fh) or {}).get("role_deps", [])
+        except OSError, yaml.YAMLError:
             return []
 
-    if 'all' in requested_tags or not requested_tags:
+    if "all" in requested_tags or not requested_tags:
         for name in name_to_container:
             dep_map[name] = _load(name)
     else:
         requested = {
-            c['name'] for c in containers_list
-            if set(_tags(c)) & set(requested_tags)
+            c["name"] for c in containers_list if set(_tags(c)) & set(requested_tags)
         }
         frontier = list(requested)
         loaded = set()
@@ -60,8 +61,8 @@ def toposort_containers(containers_list, deps_map):
     Deps not present in containers_list are silently ignored.
     Raises AnsibleFilterError if a dependency cycle is detected.
     """
-    name_to_idx = {c['name']: i for i, c in enumerate(containers_list)}
-    name_to_obj = {c['name']: c for c in containers_list}
+    name_to_idx = {c["name"]: i for i, c in enumerate(containers_list)}
+    name_to_obj = {c["name"]: c for c in containers_list}
     names = list(name_to_idx)
 
     in_degree = {n: 0 for n in names}
@@ -95,10 +96,9 @@ def dep_closure(containers_list, deps_map, requested_tags):
     Excludes the directly-requested containers themselves.
     Used to narrow the running-state check to only the relevant deps.
     """
-    name_to_obj = {c['name']: c for c in containers_list}
+    name_to_obj = {c["name"]: c for c in containers_list}
     requested = {
-        c['name'] for c in containers_list
-        if set(_tags(c)) & set(requested_tags)
+        c["name"] for c in containers_list if set(_tags(c)) & set(requested_tags)
     }
     all_deps = set()
     frontier = list(requested)
@@ -107,7 +107,7 @@ def dep_closure(containers_list, deps_map, requested_tags):
             if dep in name_to_obj and dep not in all_deps and dep not in requested:
                 all_deps.add(dep)
                 frontier.append(dep)
-    return [c for c in containers_list if c['name'] in all_deps]
+    return [c for c in containers_list if c["name"] in all_deps]
 
 
 def expand_with_deps(containers_list, deps_map, requested_tags, running_names):
@@ -118,12 +118,11 @@ def expand_with_deps(containers_list, deps_map, requested_tags, running_names):
     The originally-requested containers are always included regardless of
     running state. Returns the effective subset in topological order.
     """
-    name_to_obj = {c['name']: c for c in containers_list}
+    name_to_obj = {c["name"]: c for c in containers_list}
     running = set(running_names)
 
     requested = {
-        c['name'] for c in containers_list
-        if set(_tags(c)) & set(requested_tags)
+        c["name"] for c in containers_list if set(_tags(c)) & set(requested_tags)
     }
 
     all_needed = set(requested)
@@ -135,14 +134,14 @@ def expand_with_deps(containers_list, deps_map, requested_tags, running_names):
                 frontier.append(dep)
 
     effective = {n for n in all_needed if n in requested or n not in running}
-    return [c for c in containers_list if c['name'] in effective]
+    return [c for c in containers_list if c["name"] in effective]
 
 
 class FilterModule:
     def filters(self):
         return {
-            'build_dep_map': build_dep_map,
-            'toposort_containers': toposort_containers,
-            'dep_closure': dep_closure,
-            'expand_with_deps': expand_with_deps,
+            "build_dep_map": build_dep_map,
+            "toposort_containers": toposort_containers,
+            "dep_closure": dep_closure,
+            "expand_with_deps": expand_with_deps,
         }

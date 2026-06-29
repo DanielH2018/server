@@ -141,3 +141,14 @@ entry = "uv run ruff check"
 language = "system"
 pass_filenames = false
 files = "\\.py$"
+
+# Enforce `ruff format` on first-party Python (config in pyproject.toml [tool.ruff], same
+# extend-exclude as the linter so vendored collections are untouched). --check fails the commit
+# on an unformatted file instead of rewriting it, so a stray editor save can't sneak past CI.
+[[repos.hooks]]
+id = "ruff-format"
+name = "Format first-party Python (ruff format)"
+entry = "uv run ruff format --check"
+language = "system"
+pass_filenames = false
+files = "\\.py$"

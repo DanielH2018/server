@@ -9,6 +9,7 @@ uid). This guard is deterministic over all provisioned dashboards.
 Run directly (`python3 scripts/validate_grafana_dashboards.py`) or via the
 `validate-grafana-dashboards` prek hook. Exits non-zero on any unresolved datasource uid.
 """
+
 from __future__ import annotations
 
 import json
@@ -26,7 +27,9 @@ DATASOURCES_TEMPLATE = GRAFANA_ROLE / "templates/provisioning/datasources.yml.j2
 BUILTIN_DATASOURCE_UIDS = {"-- Grafana --", "-- Mixed --", "-- Dashboard --", "grafana"}
 
 
-def provisioned_datasource_ids(datasources_template: Path = DATASOURCES_TEMPLATE) -> set[str]:
+def provisioned_datasource_ids(
+    datasources_template: Path = DATASOURCES_TEMPLATE,
+) -> set[str]:
     """uids AND names of every provisioned datasource. datasources.yml.j2 carries no Jinja
     (it is pure YAML despite the .j2 extension), so we parse it directly. Including names as
     well as uids means a legacy name-form datasource ref ("datasource": "Prometheus") also
@@ -89,8 +92,10 @@ def _display(path: Path) -> str:
         return path.name
 
 
-def validate(dashboards_dir: Path = DASHBOARDS_DIR,
-             datasources_template: Path = DATASOURCES_TEMPLATE) -> list[str]:
+def validate(
+    dashboards_dir: Path = DASHBOARDS_DIR,
+    datasources_template: Path = DATASOURCES_TEMPLATE,
+) -> list[str]:
     """Return a list of error strings ([] = clean): every dashboard JSON whose datasource
     refs all resolve to a provisioned datasource (or a built-in) passes."""
     valid = provisioned_datasource_ids(datasources_template) | BUILTIN_DATASOURCE_UIDS
@@ -107,7 +112,9 @@ def validate(dashboards_dir: Path = DASHBOARDS_DIR,
                 continue
             seen.add((uid, title))
             where = f" (panel {title!r})" if title else ""
-            errors.append(f"{_display(path)}: datasource uid {uid!r} is not provisioned{where}")
+            errors.append(
+                f"{_display(path)}: datasource uid {uid!r} is not provisioned{where}"
+            )
     return errors
 
 

@@ -8,6 +8,7 @@ helpers directly and stub `_run` so the suite needs no live docker/Prometheus.
 
 Run: uv run pytest .claude/hooks
 """
+
 import importlib.util
 import io
 import os
@@ -25,6 +26,7 @@ def _result(stdout):
 
 # --- format_banner -----------------------------------------------------------
 
+
 def test_banner_empty_when_no_problems():
     assert _mod.format_banner([]) == ""
 
@@ -38,11 +40,16 @@ def test_banner_lists_problems_and_triage():
 
 # --- docker_problems ---------------------------------------------------------
 
+
 def test_docker_problems_parses_unhealthy_and_restarting(monkeypatch):
-    calls = iter([
-        _result("jellyfin\tUp 2 hours (unhealthy)\n"),     # health=unhealthy filter
-        _result("sonarr\tRestarting (1) 3 seconds ago\n"),  # status=restarting filter
-    ])
+    calls = iter(
+        [
+            _result("jellyfin\tUp 2 hours (unhealthy)\n"),  # health=unhealthy filter
+            _result(
+                "sonarr\tRestarting (1) 3 seconds ago\n"
+            ),  # status=restarting filter
+        ]
+    )
     monkeypatch.setattr(_mod, "_run", lambda *a, **k: next(calls))
     lines, ok = _mod.docker_problems()
     assert ok is True
@@ -60,6 +67,7 @@ def test_docker_problems_all_green(monkeypatch):
 def test_docker_unreachable_is_reported_not_raised(monkeypatch):
     def boom(*a, **k):
         raise FileNotFoundError("docker")
+
     monkeypatch.setattr(_mod, "_run", boom)
     lines, ok = _mod.docker_problems()
     assert ok is False
@@ -73,7 +81,7 @@ _TARGETS_ONE_DOWN = (
     '{"health":"up","labels":{"job":"traefik","instance":"traefik:8080"}},'
     '{"health":"down","labels":{"job":"loki","instance":"loki:3100"},'
     '"lastError":"connection refused"}'
-    ']}}'
+    "]}}"
 )
 
 
@@ -97,18 +105,23 @@ def test_target_problems_swallows_bad_json(monkeypatch):
 
 # --- main orchestration ------------------------------------------------------
 
+
 def _run_main(monkeypatch, stdin, *, dock=None, ok=True, targets=None, env=None):
     monkeypatch.setattr(_mod.sys, "stdin", io.StringIO(stdin))
     monkeypatch.setattr(_mod, "docker_problems", lambda: (dock or [], ok))
-    monkeypatch.setattr(_mod, "target_problems", lambda: (targets or []))
+    monkeypatch.setattr(_mod, "target_problems", lambda: targets or [])
     if env:
         for k, v in env.items():
             monkeypatch.setenv(k, v)
 
 
 def test_main_silent_on_compact(monkeypatch, capsys):
-    _run_main(monkeypatch, '{"source":"compact"}', dock=["  ✗ x — unhealthy (y)"],
-              env={"SESSION_HEALTH_VERBOSE": "1"})
+    _run_main(
+        monkeypatch,
+        '{"source":"compact"}',
+        dock=["  ✗ x — unhealthy (y)"],
+        env={"SESSION_HEALTH_VERBOSE": "1"},
+    )
     assert _mod.main() == 0
     assert capsys.readouterr().out == ""  # no re-banner mid-session
 
@@ -120,7 +133,9 @@ def test_main_silent_when_green(monkeypatch, capsys):
 
 
 def test_main_prints_banner_on_problem(monkeypatch, capsys):
-    _run_main(monkeypatch, '{"source":"startup"}', dock=["  ✗ jellyfin — unhealthy (x)"])
+    _run_main(
+        monkeypatch, '{"source":"startup"}', dock=["  ✗ jellyfin — unhealthy (x)"]
+    )
     assert _mod.main() == 0
     assert "jellyfin" in capsys.readouterr().out
 
@@ -132,8 +147,11 @@ def test_main_skips_targets_when_docker_down(monkeypatch, capsys):
     def tp():
         called["targets"] = True
         return []
+
     monkeypatch.setattr(_mod.sys, "stdin", io.StringIO('{"source":"startup"}'))
-    monkeypatch.setattr(_mod, "docker_problems", lambda: (["  ✗ docker unreachable"], False))
+    monkeypatch.setattr(
+        _mod, "docker_problems", lambda: (["  ✗ docker unreachable"], False)
+    )
     monkeypatch.setattr(_mod, "target_problems", tp)
     assert _mod.main() == 0
     assert called["targets"] is False

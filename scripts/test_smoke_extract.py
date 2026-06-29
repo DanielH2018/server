@@ -2,6 +2,7 @@
 
 Run: uv run pytest scripts
 """
+
 from smoke_extract import extract_changed_images
 
 

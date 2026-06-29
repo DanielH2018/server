@@ -10,6 +10,7 @@ If they drift, the dusk trigger fires at one threshold while light_decision no-o
 dead-band where the room dims but the lights don't come on). This test fails on that drift — it
 asserts the two literals match WITHOUT pinning the value, so a deliberate retune of both passes.
 """
+
 import re
 from pathlib import Path
 
@@ -28,8 +29,11 @@ def _macro_lux_threshold() -> int:
 def _presence_on_trigger_threshold() -> int:
     autos = yaml.safe_load((FILES / "automations.yaml").read_text())
     presence_on = next(a for a in autos if a.get("id") == "bedroom_presence_on")
-    illum = next(t for t in presence_on["trigger"]
-                 if t.get("entity_id") == "sensor.aqara_fp300_illuminance" and "below" in t)
+    illum = next(
+        t
+        for t in presence_on["trigger"]
+        if t.get("entity_id") == "sensor.aqara_fp300_illuminance" and "below" in t
+    )
     return int(illum["below"])
 
 

@@ -8,6 +8,7 @@ Writes a last_run timestamp for the monitor-bridge "Renovate Notifier — Alive"
 Config from /etc/renovate-notify/config.env (KEY=VALUE): REPO, DISCORD_WEBHOOK, STATE_DIR.
 Stdlib only.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,8 +19,16 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from notify_logic import (  # noqa: E402
-    PR, actionable, ci_rollup, dashboard_stale, find_dashboard, fingerprint,
-    parse_automerge, render_digest, should_notify, CLEARED_MSG,
+    PR,
+    actionable,
+    ci_rollup,
+    dashboard_stale,
+    find_dashboard,
+    fingerprint,
+    parse_automerge,
+    render_digest,
+    should_notify,
+    CLEARED_MSG,
 )
 
 CONFIG = "/etc/renovate-notify/config.env"
@@ -55,18 +64,25 @@ def get(url: str):
 
 
 def is_renovate(pr: dict) -> bool:
-    return ((pr.get("user") or {}).get("login") == "renovate[bot]"
-            or (pr.get("head") or {}).get("ref", "").startswith("renovate/"))
+    return (pr.get("user") or {}).get("login") == "renovate[bot]" or (
+        pr.get("head") or {}
+    ).get("ref", "").startswith("renovate/")
 
 
 def build_pr(repo: str, pr: dict) -> PR:
     n = pr["number"]
     detail = get("%s/repos/%s/pulls/%d" % (API, repo, n))
     # mergeable_state "dirty" = conflicting; mergeable False likewise. null = unknown -> not conflicting.
-    conflicting = detail.get("mergeable_state") == "dirty" or detail.get("mergeable") is False
+    conflicting = (
+        detail.get("mergeable_state") == "dirty" or detail.get("mergeable") is False
+    )
     sha = pr["head"]["sha"]
-    runs = get("%s/repos/%s/commits/%s/check-runs" % (API, repo, sha)).get("check_runs", [])
-    statuses = get("%s/repos/%s/commits/%s/status" % (API, repo, sha)).get("statuses", [])
+    runs = get("%s/repos/%s/commits/%s/check-runs" % (API, repo, sha)).get(
+        "check_runs", []
+    )
+    statuses = get("%s/repos/%s/commits/%s/status" % (API, repo, sha)).get(
+        "statuses", []
+    )
     return PR(
         number=n,
         title=pr.get("title", "").strip(),
@@ -89,8 +105,10 @@ def discord(webhook: str, content: str) -> bool:
     # User-Agent is required: Discord is behind Cloudflare, which 403s the default
     # Python-urllib UA (error code 1010) — without this the post silently fails.
     req = urllib.request.Request(
-        webhook, data=data,
-        headers={"Content-Type": "application/json", "User-Agent": "renovate-notify"})
+        webhook,
+        data=data,
+        headers={"Content-Type": "application/json", "User-Agent": "renovate-notify"},
+    )
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return 200 <= resp.status < 300
@@ -132,8 +150,10 @@ def main() -> int:
     cur_fp = fingerprint(items) + ("|dashboard-stale" if stale else "")
     prev_fp = read_state(state_file)
     notify, kind = should_notify(prev_fp, cur_fp)
-    log("actionable=%d dashboard_stale=%s fp=%r prev=%r -> %s" % (
-        len(items), stale, cur_fp, prev_fp, kind))
+    log(
+        "actionable=%d dashboard_stale=%s fp=%r prev=%r -> %s"
+        % (len(items), stale, cur_fp, prev_fp, kind)
+    )
 
     if notify:
         if stale:

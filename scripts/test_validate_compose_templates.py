@@ -11,10 +11,13 @@ flagged.
 
 Run: uv run pytest scripts/test_validate_compose_templates.py
 """
+
 import importlib.util
 import os
 
-_MOD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "validate_compose_templates.py")
+_MOD = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "validate_compose_templates.py"
+)
 _spec = importlib.util.spec_from_file_location("validate_compose_templates", _MOD)
 vct = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(vct)
@@ -27,14 +30,19 @@ def _docs(spec):
 
 # --- clean: $ correctly doubled, or no relevant key --------------------------
 
+
 def test_doubled_dollar_in_healthcheck_is_clean():
-    docs = _docs({"healthcheck": {"test": ["CMD-SHELL", 'x=$$(date) && [ "$${x:-0}" ]']}})
+    docs = _docs(
+        {"healthcheck": {"test": ["CMD-SHELL", 'x=$$(date) && [ "$${x:-0}" ]']}}
+    )
     assert vct.find_dollar_escape_bugs(docs) == []
 
 
 def test_doubled_dollar_in_command_list_is_clean():
     # prometheus-style node-exporter arg with an escaped regex anchor
-    docs = _docs({"command": ["--collector.filesystem.mount-points-exclude=^/(sys|proc)($$|/)"]})
+    docs = _docs(
+        {"command": ["--collector.filesystem.mount-points-exclude=^/(sys|proc)($$|/)"]}
+    )
     assert vct.find_dollar_escape_bugs(docs) == []
 
 
@@ -51,8 +59,11 @@ def test_environment_interpolation_is_not_flagged():
 
 # --- buggy: a lone (un-doubled) $ in a shell context -------------------------
 
+
 def test_lone_dollar_in_healthcheck_is_flagged():
-    docs = _docs({"healthcheck": {"test": ["CMD-SHELL", "curl http://$HOSTNAME/ || exit 1"]}})
+    docs = _docs(
+        {"healthcheck": {"test": ["CMD-SHELL", "curl http://$HOSTNAME/ || exit 1"]}}
+    )
     bugs = vct.find_dollar_escape_bugs(docs)
     assert len(bugs) == 1
     svc, key, snippet = bugs[0]
@@ -79,6 +90,7 @@ def test_triple_dollar_still_flags_the_interpolated_remainder():
 
 # --- structure walking / robustness -----------------------------------------
 
+
 def test_walks_all_services_and_attributes_the_right_one():
     docs = [{"services": {"a": {"command": "ok"}, "b": {"command": "echo $X"}}}]
     bugs = vct.find_dollar_escape_bugs(docs)
@@ -86,7 +98,10 @@ def test_walks_all_services_and_attributes_the_right_one():
 
 
 def test_tolerates_non_service_docs():
-    assert vct.find_dollar_escape_bugs([None, {"version": "3"}, "junk", {"services": "x"}]) == []
+    assert (
+        vct.find_dollar_escape_bugs([None, {"version": "3"}, "junk", {"services": "x"}])
+        == []
+    )
 
 
 # --- watchtower label `=` guard ----------------------------------------------
@@ -94,9 +109,16 @@ def test_tolerates_non_service_docs():
 # label (e.g. `...depends-on:docker-proxy`) parses as a key with an EMPTY value, so the
 # directive silently no-ops. Renders cleanly + passes YAML lint, so nothing else caught it.
 
+
 def test_watchtower_labels_with_equals_are_clean():
-    docs = _docs({"labels": ["com.centurylinklabs.watchtower.enable=false",
-                             "com.centurylinklabs.watchtower.depends-on=docker-proxy"]})
+    docs = _docs(
+        {
+            "labels": [
+                "com.centurylinklabs.watchtower.enable=false",
+                "com.centurylinklabs.watchtower.depends-on=docker-proxy",
+            ]
+        }
+    )
     assert vct.find_watchtower_label_bugs(docs) == []
 
 
@@ -134,6 +156,7 @@ def test_non_watchtower_label_without_equals_is_ignored():
 # the prek `validate-compose-templates` hook's file filter doesn't match (e.g.
 # networks.yml.j2) would slip past CI entirely.
 
+
 def test_real_templates_render_clean():
     assert vct.main() == 0
 
@@ -142,6 +165,7 @@ def test_real_templates_render_clean():
 # Every service should drop ALL capabilities (defense in depth), adding back only what it
 # proves it needs. New services kept silently drifting out of this (n8n-runners/nut/unbound
 # post-dated the hardening sprints), so enforce it; documented exceptions go in CAP_DROP_EXEMPT.
+
 
 def test_cap_drop_all_is_clean():
     assert vct.find_missing_cap_drop(_docs({"cap_drop": ["ALL"]})) == []
@@ -175,8 +199,12 @@ def test_cap_drop_walks_all_services():
 # coupled). Force an explicit decision: a mutable tag must EITHER opt out (enable=false) OR
 # be listed in WATCHTOWER_AUTOUPDATE (intentionally auto-updated). Version-pinned tags are exempt.
 
+
 def test_pinned_tag_is_clean():
-    assert vct.find_undeclared_update_policy(_docs({"image": "pihole/pihole:2026.05.0"})) == []
+    assert (
+        vct.find_undeclared_update_policy(_docs({"image": "pihole/pihole:2026.05.0"}))
+        == []
+    )
 
 
 def test_mutable_tag_without_decision_is_flagged():
@@ -184,32 +212,47 @@ def test_mutable_tag_without_decision_is_flagged():
 
 
 def test_mutable_tag_with_optout_is_clean():
-    docs = _docs({"image": "x:latest",
-                  "labels": ["com.centurylinklabs.watchtower.enable=false"]})
+    docs = _docs(
+        {"image": "x:latest", "labels": ["com.centurylinklabs.watchtower.enable=false"]}
+    )
     assert vct.find_undeclared_update_policy(docs) == []
 
 
 def test_mutable_tag_with_mapping_optout_is_clean():
-    docs = _docs({"image": "x:latest",
-                  "labels": {"com.centurylinklabs.watchtower.enable": "false"}})
+    docs = _docs(
+        {
+            "image": "x:latest",
+            "labels": {"com.centurylinklabs.watchtower.enable": "false"},
+        }
+    )
     assert vct.find_undeclared_update_policy(docs) == []
 
 
 def test_mutable_tag_on_autoupdate_allowlist_is_clean():
-    assert vct.find_undeclared_update_policy(_docs({"image": "x:latest"}),
-                                             autoupdate={"svc"}) == []
+    assert (
+        vct.find_undeclared_update_policy(
+            _docs({"image": "x:latest"}), autoupdate={"svc"}
+        )
+        == []
+    )
 
 
 def test_jvm_stable_channel_tag_is_mutable():
-    assert vct.find_undeclared_update_policy(_docs({"image": "schaka/janitorr:jvm-stable"})) == ["svc"]
+    assert vct.find_undeclared_update_policy(
+        _docs({"image": "schaka/janitorr:jvm-stable"})
+    ) == ["svc"]
 
 
 def test_channel_prefix_variant_tag_is_mutable():
     # scrutiny ships ghcr.io/analogj/scrutiny:master-web / :master-collector — a rolling
     # `master` branch build with a component suffix. The channel word is the PREFIX here,
     # not a `-stable` suffix, so it must still force an explicit update-policy decision.
-    assert vct.find_undeclared_update_policy(_docs({"image": "ghcr.io/analogj/scrutiny:master-web"})) == ["svc"]
-    assert vct.find_undeclared_update_policy(_docs({"image": "ghcr.io/analogj/scrutiny:master-collector"})) == ["svc"]
+    assert vct.find_undeclared_update_policy(
+        _docs({"image": "ghcr.io/analogj/scrutiny:master-web"})
+    ) == ["svc"]
+    assert vct.find_undeclared_update_policy(
+        _docs({"image": "ghcr.io/analogj/scrutiny:master-collector"})
+    ) == ["svc"]
 
 
 def test_untagged_image_is_mutable():

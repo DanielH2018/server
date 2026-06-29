@@ -18,6 +18,7 @@ Design contract (mirrors the other hooks here):
 Wired via .claude/settings.json -> hooks.SessionStart. Stdout is injected as
 session context by Claude Code (same mechanism the remember plugin uses).
 """
+
 import json
 import os
 import subprocess
@@ -29,18 +30,38 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 def _run(cmd, timeout):
     """Run cmd in the repo dir, capturing output. Raises on timeout/missing binary."""
     return subprocess.run(
-        cmd, capture_output=True, text=True, timeout=timeout, cwd=REPO, check=False)
+        cmd, capture_output=True, text=True, timeout=timeout, cwd=REPO, check=False
+    )
 
 
 def docker_problems():
     """(lines, docker_ok): one line per unhealthy/restarting container.
     docker_ok=False (with a warning line) if dockerd is unreachable."""
     try:
-        unhealthy = _run(["docker", "ps", "--filter", "health=unhealthy",
-                          "--format", "{{.Names}}\t{{.Status}}"], 5)
-        restarting = _run(["docker", "ps", "-a", "--filter", "status=restarting",
-                           "--format", "{{.Names}}\t{{.Status}}"], 5)
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        unhealthy = _run(
+            [
+                "docker",
+                "ps",
+                "--filter",
+                "health=unhealthy",
+                "--format",
+                "{{.Names}}\t{{.Status}}",
+            ],
+            5,
+        )
+        restarting = _run(
+            [
+                "docker",
+                "ps",
+                "-a",
+                "--filter",
+                "status=restarting",
+                "--format",
+                "{{.Names}}\t{{.Status}}",
+            ],
+            5,
+        )
+    except subprocess.TimeoutExpired, FileNotFoundError, OSError:
         return ["  ✗ docker unreachable (dockerd wedged or not installed)"], False
     lines = []
     for label, res in (("unhealthy", unhealthy), ("restarting", restarting)):
@@ -68,8 +89,9 @@ def target_problems():
         job = labels.get("job", "?")
         inst = labels.get("instance", "?")
         err = (t.get("lastError") or "").strip()[:70]
-        bad.append("  ✗ target {} [{}] {}".format(
-            job, inst, "— " + err if err else "down"))
+        bad.append(
+            "  ✗ target {} [{}] {}".format(job, inst, "— " + err if err else "down")
+        )
     return bad
 
 
@@ -79,8 +101,10 @@ def format_banner(problems):
         return ""
     out = ["\U0001f3e0 Homelab health check — issues detected:"]
     out.extend(problems)
-    out.append("  → triage: uv run python scripts/probe.py targets | "
-               "probe.py health <svc> | docker ps --filter health=unhealthy")
+    out.append(
+        "  → triage: uv run python scripts/probe.py targets | "
+        "probe.py health <svc> | docker ps --filter health=unhealthy"
+    )
     return "\n".join(out)
 
 
@@ -102,7 +126,9 @@ def main():
     if banner:
         print(banner)
     elif os.environ.get("SESSION_HEALTH_VERBOSE"):
-        print("\U0001f3e0 Homelab health: all containers healthy, all scrape targets up.")
+        print(
+            "\U0001f3e0 Homelab health: all containers healthy, all scrape targets up."
+        )
     return 0
 
 

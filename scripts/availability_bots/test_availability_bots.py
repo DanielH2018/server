@@ -9,13 +9,16 @@ endpoint (else the healthcheck stays green through a broken run).
 
 Run: uv run pytest scripts/availability_bots/test_availability_bots.py
 """
+
 import importlib.util
 import logging
 import os
 
 import common
 
-_BOT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "osteria-francescana-bot.py")
+_BOT_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "osteria-francescana-bot.py"
+)
 _spec = importlib.util.spec_from_file_location("osteria_bot", _BOT_PATH)
 osteria = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(osteria)
@@ -30,8 +33,12 @@ class _Resp:
 
 # --- parse_availability (pure) ----------------------------------------------
 
+
 def test_parse_availability_returns_party_sizes_when_time_offered():
-    payload = {"people_box": "Table for 2 people or 4 people", "hour_box": "12:30 13:00"}
+    payload = {
+        "people_box": "Table for 2 people or 4 people",
+        "hour_box": "12:30 13:00",
+    }
     assert osteria.parse_availability(payload, "12:30") == ["2", "4"]
 
 
@@ -50,6 +57,7 @@ def test_parse_availability_tolerates_missing_keys():
 
 
 # --- Discord notification carries the homelab UA (Cloudflare 1010 guard) -----
+
 
 def test_discord_notification_sets_user_agent(monkeypatch):
     captured = {}
@@ -74,6 +82,7 @@ def test_discord_notification_never_raises_on_failure(monkeypatch):
 
 
 # --- ping_healthcheck /fail routing -----------------------------------------
+
 
 def test_ping_healthcheck_success_hits_base_url(monkeypatch):
     seen = {}

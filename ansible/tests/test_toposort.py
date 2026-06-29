@@ -11,6 +11,7 @@ filter_plugins/ on sys.path so `import toposort` resolves.
 
 Run: uv run pytest ansible/tests
 """
+
 import pytest
 from ansible.errors import AnsibleFilterError
 
@@ -39,6 +40,7 @@ def _names(containers):
 
 
 # --- toposort_containers ----------------------------------------------------
+
 
 class TestToposort:
     def test_linear_chain_orders_deps_first(self):
@@ -84,11 +86,16 @@ class TestToposort:
 
 # --- build_dep_map ----------------------------------------------------------
 
+
 class TestBuildDepMap:
     def _write_deps(self, root, name, role_deps):
         meta = root / "roles" / "containers" / name / "meta"
         meta.mkdir(parents=True, exist_ok=True)
-        body = "role_deps:\n" + "".join(f"  - {d}\n" for d in role_deps) if role_deps else "role_deps: []\n"
+        body = (
+            "role_deps:\n" + "".join(f"  - {d}\n" for d in role_deps)
+            if role_deps
+            else "role_deps: []\n"
+        )
         (meta / "deps.yml").write_text(body)
 
     def test_full_deploy_reads_every_deps_file(self, tmp_path):
@@ -132,6 +139,7 @@ class TestBuildDepMap:
 
 # --- dep_closure ------------------------------------------------------------
 
+
 class TestDepClosure:
     def test_returns_transitive_deps_excluding_requested(self):
         # request 'a' (tag a); a -> b -> c. closure = {b, c}, NOT a.
@@ -150,6 +158,7 @@ class TestDepClosure:
 
 
 # --- expand_with_deps -------------------------------------------------------
+
 
 class TestExpandWithDeps:
     def test_includes_unmet_deps(self):
@@ -180,6 +189,7 @@ class TestExpandWithDeps:
 
 
 # --- implicit tags (no `tags:` key => acts as [name]) ------------------------
+
 
 class TestImplicitTags:
     """host_vars entries no longer carry `tags:` — every tag-matching filter must

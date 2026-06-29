@@ -15,13 +15,17 @@ deps), so the wrapper runs system python3 directly — no uv overhead on the sta
 Log: .claude/logs/instructions.log (gitignored), bounded by single-backup rotation.
 Inspect: tail -n 40 .claude/logs/instructions.log
 """
+
 import json
 import os
 import sys
 from datetime import datetime, timezone
 
 LOG = os.path.normpath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs", "instructions.log"))
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "logs", "instructions.log"
+    )
+)
 MAX_BYTES = 256 * 1024
 
 
@@ -55,7 +59,7 @@ def main():
     line = "{} [{:8}] {:16} {:8} {}{}\n".format(ts, sid, reason, mtype, fp, extra)
 
     os.makedirs(os.path.dirname(LOG), exist_ok=True)
-    try:                                            # rotate (single backup) when large
+    try:  # rotate (single backup) when large
         if os.path.getsize(LOG) > MAX_BYTES:
             os.replace(LOG, LOG + ".1")
     except OSError:

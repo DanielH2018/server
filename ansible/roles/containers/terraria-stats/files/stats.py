@@ -10,6 +10,7 @@ console (verified Phase 0, 2026-06-15) and are out of scope.
 
 Design: docs/superpowers/specs/2026-06-15-terraria-player-stats-design.md
 """
+
 import json
 import os
 import re
@@ -77,18 +78,21 @@ class StatsState:
     """In-memory all-time stats. Timestamps are unix seconds (float)."""
 
     def __init__(self):
-        self.players = {}        # name -> dict
+        self.players = {}  # name -> dict
         self.last_event_ts = 0.0
         self.unmatched = 0
 
     def _player(self, name):
-        return self.players.setdefault(name, {
-            "total_playtime": 0.0,
-            "sessions": 0,
-            "first_seen": None,
-            "last_seen": None,
-            "open_start": None,
-        })
+        return self.players.setdefault(
+            name,
+            {
+                "total_playtime": 0.0,
+                "sessions": 0,
+                "first_seen": None,
+                "last_seen": None,
+                "open_start": None,
+            },
+        )
 
     def _close(self, name, ts):
         p = self.players.get(name)
@@ -101,7 +105,7 @@ class StatsState:
     def apply(self, kind, name, ts):
         self.last_event_ts = max(self.last_event_ts, ts)
         if kind == "join":
-            self._close(name, ts)          # defensive: a rejoin with no leave line
+            self._close(name, ts)  # defensive: a rejoin with no leave line
             p = self._player(name)
             p["open_start"] = ts
             if p["first_seen"] is None:
@@ -132,23 +136,33 @@ def escape_label_value(v):
 
 def render_metrics(state, now):
     out = []
-    out.append("# HELP terraria_player_playtime_seconds_total Total seconds a player has been connected.")
+    out.append(
+        "# HELP terraria_player_playtime_seconds_total Total seconds a player has been connected."
+    )
     out.append("# TYPE terraria_player_playtime_seconds_total counter")
     for name in sorted(state.players):
-        out.append('terraria_player_playtime_seconds_total{player="%s"} %d'
-                   % (escape_label_value(name), int(state.playtime(name, now))))
+        out.append(
+            'terraria_player_playtime_seconds_total{player="%s"} %d'
+            % (escape_label_value(name), int(state.playtime(name, now)))
+        )
     out.append("# HELP terraria_player_sessions_total Completed play sessions.")
     out.append("# TYPE terraria_player_sessions_total counter")
     for name in sorted(state.players):
-        out.append('terraria_player_sessions_total{player="%s"} %d'
-                   % (escape_label_value(name), state.players[name]["sessions"]))
+        out.append(
+            'terraria_player_sessions_total{player="%s"} %d'
+            % (escape_label_value(name), state.players[name]["sessions"])
+        )
     out.append("# HELP terraria_players_online Currently connected players.")
     out.append("# TYPE terraria_players_online gauge")
     out.append("terraria_players_online %d" % state.online_count())
-    out.append("# HELP terraria_stats_last_event_timestamp Unix time of the last processed event.")
+    out.append(
+        "# HELP terraria_stats_last_event_timestamp Unix time of the last processed event."
+    )
     out.append("# TYPE terraria_stats_last_event_timestamp gauge")
     out.append("terraria_stats_last_event_timestamp %d" % int(state.last_event_ts))
-    out.append("# HELP terraria_stats_unmatched_player_lines_total Player-shaped lines that did not parse.")
+    out.append(
+        "# HELP terraria_stats_unmatched_player_lines_total Player-shaped lines that did not parse."
+    )
     out.append("# TYPE terraria_stats_unmatched_player_lines_total counter")
     out.append("terraria_stats_unmatched_player_lines_total %d" % state.unmatched)
     return "\n".join(out) + "\n"
@@ -214,8 +228,12 @@ class Store:
             "last_seen,current_session_start FROM players"
         ):
             st.players[name] = {
-                "total_playtime": float(tot), "sessions": int(sess),
-                "first_seen": fs, "last_seen": ls, "open_start": css}
+                "total_playtime": float(tot),
+                "sessions": int(sess),
+                "first_seen": fs,
+                "last_seen": ls,
+                "open_start": css,
+            }
             # NOTE: last_event_ts is approximated from player last_seen on reload. It can
             # lag the true last-event time if the last event was a server restart with no
             # one online. Only the observability gauge is affected; the cursor drives all
@@ -233,7 +251,8 @@ class Store:
         c = self.conn
         if events:
             c.executemany(
-                "INSERT INTO events(ts_ns,player,kind,raw) VALUES(?,?,?,?)", events)
+                "INSERT INTO events(ts_ns,player,kind,raw) VALUES(?,?,?,?)", events
+            )
         for name, p in state.players.items():
             c.execute(
                 "INSERT INTO players(name,total_playtime_seconds,session_count,"
@@ -243,11 +262,20 @@ class Store:
                 "session_count=excluded.session_count,first_seen=excluded.first_seen,"
                 "last_seen=excluded.last_seen,"
                 "current_session_start=excluded.current_session_start",
-                (name, p["total_playtime"], p["sessions"], p["first_seen"],
-                 p["last_seen"], p["open_start"]))
+                (
+                    name,
+                    p["total_playtime"],
+                    p["sessions"],
+                    p["first_seen"],
+                    p["last_seen"],
+                    p["open_start"],
+                ),
+            )
         c.execute(
             "INSERT INTO cursor(id,last_ts_ns) VALUES(1,?) "
-            "ON CONFLICT(id) DO UPDATE SET last_ts_ns=excluded.last_ts_ns", (cursor_ns,))
+            "ON CONFLICT(id) DO UPDATE SET last_ts_ns=excluded.last_ts_ns",
+            (cursor_ns,),
+        )
         c.commit()
 
 
@@ -260,9 +288,15 @@ def http_get_json(url):
 
 def loki_fetch(start_ns, end_ns):
     """Fetch entries in (start_ns, end_ns] as [(ts_ns, line)] (one page)."""
-    qs = urllib.parse.urlencode({
-        "query": LOKI_QUERY, "start": start_ns + 1, "end": end_ns,
-        "limit": LOKI_PAGE_LIMIT, "direction": "forward"})
+    qs = urllib.parse.urlencode(
+        {
+            "query": LOKI_QUERY,
+            "start": start_ns + 1,
+            "end": end_ns,
+            "limit": LOKI_PAGE_LIMIT,
+            "direction": "forward",
+        }
+    )
     return extract_entries(http_get_json(LOKI_URL + "/loki/api/v1/query_range?" + qs))
 
 
@@ -319,6 +353,7 @@ def _make_handler():
             else:
                 self.send_response(404)
                 self.end_headers()
+
     return Handler
 
 
@@ -343,21 +378,29 @@ def main():
     with _lock:
         _state = store.load_state()
     cursor = initial_cursor(store.get_cursor(), backfill, time.time(), BACKFILL_DAYS)
-    log("terraria-stats starting (loki=%s once=%s backfill=%s players=%d)"
-        % (LOKI_URL, once, backfill, len(_state.players)))
+    log(
+        "terraria-stats starting (loki=%s once=%s backfill=%s players=%d)"
+        % (LOKI_URL, once, backfill, len(_state.players))
+    )
     if not (once or backfill):
         # Threading server so a slow /metrics render can't head-of-line-block the /healthz
         # probe (and trip autoheal). Handler reads in-memory _state under _lock, no SQLite.
-        threading.Thread(target=lambda: ThreadingHTTPServer(
-            ("0.0.0.0", METRICS_PORT), _make_handler()).serve_forever(),
-            daemon=True).start()
+        threading.Thread(
+            target=lambda: ThreadingHTTPServer(
+                ("0.0.0.0", METRICS_PORT), _make_handler()
+            ).serve_forever(),
+            daemon=True,
+        ).start()
     while True:
         try:
             end_ns = int(time.time() * 1e9)
             with _lock:
                 cursor = run_cycle(_state, store, cursor, end_ns, loki_fetch)
             _last_poll_ok = time.time()
-            log("poll ok: %d players, %d online" % (len(_state.players), _state.online_count()))
+            log(
+                "poll ok: %d players, %d online"
+                % (len(_state.players), _state.online_count())
+            )
         except Exception as e:  # an unreachable Loki must not kill the loop
             log("poll error:", e)
         if once or backfill:

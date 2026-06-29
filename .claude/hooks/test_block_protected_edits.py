@@ -12,10 +12,13 @@ editable, so the guard keys off the file's actual `ENC[AES256_GCM` markers.
 
 Run: uv run pytest .claude/hooks
 """
+
 import importlib.util
 import os
 
-_HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "block-protected-edits.py")
+_HOOK = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "block-protected-edits.py"
+)
 _spec = importlib.util.spec_from_file_location("block_protected_edits", _HOOK)
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
@@ -38,7 +41,10 @@ BLOCK_CONTAINERS = [
 ]
 
 ALLOW_NONCONTAINERS = [
-    ("ansible/roles/containers/jellyfin/templates/docker-compose.yml.j2", "the template"),
+    (
+        "ansible/roles/containers/jellyfin/templates/docker-compose.yml.j2",
+        "the template",
+    ),
     ("scripts/probe.py", "a script"),
     ("CLAUDE.md", "repo root file"),
     ("containers-notes/readme.md", "sibling that only shares a prefix"),
@@ -76,7 +82,9 @@ SOPS_TEXT = (
 PLAINTEXT_HOST_VARS = "server_ip: 10.0.0.161\ncontainers_list:\n  - name: jellyfin\n"
 # A doc/log that merely *mentions* the marker in prose — must NOT be flagged. This is
 # the iteration-3 regression: the bare-substring check wrongly blocked such files.
-PROSE_MENTIONING_MARKER = "Detection keys off the file's " + "ENC[" + "AES256_GCM markers.\n"
+PROSE_MENTIONING_MARKER = (
+    "Detection keys off the file's " + "ENC[" + "AES256_GCM markers.\n"
+)
 
 
 def test_is_sops_encrypted_true_on_real_sops_metadata():
@@ -94,6 +102,7 @@ def test_is_sops_encrypted_false_on_prose_mention():
 
 
 # --- SOPS guard via classify (content-based, hermetic via tmp files) --------
+
 
 def test_blocks_edit_of_encrypted_file(tmp_path):
     f = tmp_path / "secrets.yml"

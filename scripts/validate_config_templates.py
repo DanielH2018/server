@@ -13,6 +13,7 @@ Structural check only: secrets and host vars are stubbed (StubUndefined), so no 
 needed. Run directly or via the ``validate-config-templates`` prek hook. Exits non-zero on any
 render failure or invalid YAML.
 """
+
 from __future__ import annotations
 
 import sys
@@ -23,7 +24,9 @@ from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
 REPO = Path(__file__).resolve().parent.parent
 ANSIBLE = REPO / "ansible"
-SHARED_TPL = ANSIBLE / "templates"  # shared macros (and the labels-macro traefik.yml.j2)
+SHARED_TPL = (
+    ANSIBLE / "templates"
+)  # shared macros (and the labels-macro traefik.yml.j2)
 ROLES = ANSIBLE / "roles" / "containers"
 ALL_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 
@@ -133,7 +136,9 @@ def main() -> int:
             print(f"  [FAIL] {rel}: {err}", file=sys.stderr)
         else:
             print(f"  [ok]   {rel}")
-    print(f"\n{len(CONFIG_TEMPLATES)} config template(s) checked, {failures} failure(s).")
+    print(
+        f"\n{len(CONFIG_TEMPLATES)} config template(s) checked, {failures} failure(s)."
+    )
     return 1 if failures else 0
 
 

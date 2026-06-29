@@ -28,6 +28,7 @@ Tiers (and default rotation cadence):
                  encryption key) — needs a dedicated migration command or backups/DB break
   ignore   —     not a rotatable secret (domain, usernames, static interface addresses)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -46,7 +47,13 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRETS_FILE = os.path.join(REPO, "ansible", "vars", "secrets.yml")
 REGISTRY_FILE = os.path.join(REPO, "ansible", "secret_rotation.yml")
 
-TIER_DAYS = {"auto": 180, "assisted": 365, "external": 365, "pinned": 730, "ignore": None}
+TIER_DAYS = {
+    "auto": 180,
+    "assisted": 365,
+    "external": 365,
+    "pinned": 730,
+    "ignore": None,
+}
 
 # Classification by name. First matching rule wins; default is `assisted` (the safe,
 # reminds-but-doesn't-touch tier). Override per-secret by editing `tier` in the registry —
@@ -55,11 +62,20 @@ _IGNORE = {"domain"}
 _IGNORE_SUFFIX = ("_user", "_username")
 _PINNED = {"kopia_password", "authelia_storage"}
 _EXTERNAL = {
-    "cloudflare_dns_token", "monitor_discord_webhook_url", "crowdsec_discord_webhook_url",
-    "gitops_deploy_discord_webhook", "coinmarket_api_key", "karakeep_gemini_api_key",
-    "weather_api_key", "crowdsec_mapquest_api_key", "mullvad_account", "email",
-    "healthchecks_smtp_password", "wireguard_interface_private_key",
-    "wireguard_peer_endpoint", "wireguard_peer_public_key",
+    "cloudflare_dns_token",
+    "monitor_discord_webhook_url",
+    "crowdsec_discord_webhook_url",
+    "gitops_deploy_discord_webhook",
+    "coinmarket_api_key",
+    "karakeep_gemini_api_key",
+    "weather_api_key",
+    "crowdsec_mapquest_api_key",
+    "mullvad_account",
+    "email",
+    "healthchecks_smtp_password",
+    "wireguard_interface_private_key",
+    "wireguard_peer_endpoint",
+    "wireguard_peer_public_key",
 }
 _IGNORE_EXACT = {"wireguard_interface_address", "wireguard_interface_dns"}
 
@@ -85,7 +101,9 @@ def consumer_tag(name: str) -> str | None:
         return "monitor-bridge"
     if name.startswith("cloudflare_ddns_"):
         return "cloudflare-ddns"
-    return None  # pi_sd_health (Pi cron + server label), secret_rotation (self) -> manual
+    return (
+        None  # pi_sd_health (Pi cron + server label), secret_rotation (self) -> manual
+    )
 
 
 def _stable_offset(name: str, span: int) -> int:
@@ -143,7 +161,10 @@ def sync(reg: dict, names: list[str], today: dt.date) -> tuple[list[str], list[s
     for name in names:
         if name not in entries:
             tier = classify(name)
-            entries[name] = {"tier": tier, "last_rotated": seed_last_rotated(name, tier, today)}
+            entries[name] = {
+                "tier": tier,
+                "last_rotated": seed_last_rotated(name, tier, today),
+            }
             added.append(name)
     live = set(names)
     stale = sorted(n for n in entries if n not in live)
@@ -178,7 +199,11 @@ def audit(reg: dict, today: dt.date) -> dict:
 
 
 def _push(url: str, ok: bool, msg: str) -> None:
-    full = "%s?status=%s&msg=%s" % (url, "up" if ok else "down", urllib.parse.quote(msg))
+    full = "%s?status=%s&msg=%s" % (
+        url,
+        "up" if ok else "down",
+        urllib.parse.quote(msg),
+    )
     urllib.request.urlopen(full, timeout=10).read()
 
 
@@ -212,13 +237,18 @@ def cmd_audit(args) -> int:
         flag = "OVERDUE" if days_left < 0 else ("soon" if days_left <= 14 else "ok")
         print("  %-7s %-40s %-9s due %s (%+d d)" % (flag, name, tier, d, days_left))
     parts = ["%d %s" % (c, t) for t, c in sorted(res["by_tier"].items())]
-    summary = ("%d secret(s) overdue (%s)" % (n_over, ", ".join(parts))) if n_over else \
-              "all secrets within rotation window"
+    summary = (
+        ("%d secret(s) overdue (%s)" % (n_over, ", ".join(parts)))
+        if n_over
+        else "all secrets within rotation window"
+    )
     if missing:
         summary += "; %d unregistered (run sync)" % len(missing)
     if stale:
         summary += "; %d stale registry entr%s (run sync)" % (
-            len(stale), "y" if len(stale) == 1 else "ies")
+            len(stale),
+            "y" if len(stale) == 1 else "ies",
+        )
     print("audit:", summary)
     if args.push:
         url = os.environ.get("SECRET_ROTATION_KUMA")
@@ -230,8 +260,11 @@ def cmd_audit(args) -> int:
     # NOT on overdue (a time-based runtime state the daily Kuma push owns — blocking an unrelated
     # commit on a due-for-rotation secret would be wrong). Read-only (no decrypt), CI-safe.
     if getattr(args, "check", False) and (missing or stale):
-        print("secret_rotation: registry out of sync with secrets.yml — run "
-              "`uv run python scripts/secret_rotation.py sync` and commit.", file=sys.stderr)
+        print(
+            "secret_rotation: registry out of sync with secrets.yml — run "
+            "`uv run python scripts/secret_rotation.py sync` and commit.",
+            file=sys.stderr,
+        )
         return 1
     return 0
 
@@ -243,8 +276,11 @@ def cmd_rotate(args) -> int:
     if args.name:
         targets = [r for r in res["all"] if r[0] == args.name]
         if targets and targets[0][1] != "auto":
-            print("refusing: %s is tier '%s', not auto-rotatable" % (args.name, targets[0][1]),
-                  file=sys.stderr)
+            print(
+                "refusing: %s is tier '%s', not auto-rotatable"
+                % (args.name, targets[0][1]),
+                file=sys.stderr,
+            )
             return 2
     else:
         # Unattended path: auto-tier, due (unless --all), AND with a single-redeploy consumer.
@@ -255,18 +291,28 @@ def cmd_rotate(args) -> int:
             if not consumer_tag(name):
                 print("  skip (manual: cross-host consumer) %s" % name)
     if not targets:
-        print("rotate: nothing to rotate in the auto tier" + ("" if args.all else " today"))
+        print(
+            "rotate: nothing to rotate in the auto tier"
+            + ("" if args.all else " today")
+        )
         return 0
 
     tags = set()
     for name, _tier, _d, days_left in targets:
         if not args.commit:
-            print("  DRY-RUN would rotate %-40s -> %s (due %+d d)"
-                  % (name, consumer_tag(name) or "?", days_left))
+            print(
+                "  DRY-RUN would rotate %-40s -> %s (due %+d d)"
+                % (name, consumer_tag(name) or "?", days_left)
+            )
             continue
-        new = pysecrets.token_hex(16)  # 32 hex chars — the format Kuma push tokens require
-        subprocess.run(["sops", "set", SECRETS_FILE, '["%s"]' % name, '"%s"' % new],
-                       check=True, cwd=REPO)
+        new = pysecrets.token_hex(
+            16
+        )  # 32 hex chars — the format Kuma push tokens require
+        subprocess.run(
+            ["sops", "set", SECRETS_FILE, '["%s"]' % name, '"%s"' % new],
+            check=True,
+            cwd=REPO,
+        )
         reg["secrets"][name]["last_rotated"] = today.isoformat()
         if consumer_tag(name):
             tags.add(consumer_tag(name))
@@ -276,34 +322,55 @@ def cmd_rotate(args) -> int:
 
     save_registry(reg)
     if args.deploy and tags:
-        cmd = ["uv", "run", "ansible-playbook", "ansible/deploy.yml", "--tags", ",".join(sorted(tags))]
+        cmd = [
+            "uv",
+            "run",
+            "ansible-playbook",
+            "ansible/deploy.yml",
+            "--tags",
+            ",".join(sorted(tags)),
+        ]
         print("  deploying:", " ".join(cmd))
         r = subprocess.run(cmd, cwd=REPO)
         if r.returncode != 0:
-            print("DEPLOY FAILED — new tokens written to secrets.yml but consumers NOT updated; "
-                  "the caller should revert the working tree", file=sys.stderr)
+            print(
+                "DEPLOY FAILED — new tokens written to secrets.yml but consumers NOT updated; "
+                "the caller should revert the working tree",
+                file=sys.stderr,
+            )
             return 1
     elif not args.deploy:
-        print("\nNext: redeploy the consumer(s): "
-              "uv run ansible-playbook ansible/deploy.yml --tags %s" % ",".join(sorted(tags)))
+        print(
+            "\nNext: redeploy the consumer(s): "
+            "uv run ansible-playbook ansible/deploy.yml --tags %s"
+            % ",".join(sorted(tags))
+        )
     return 0
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("sync").set_defaults(func=cmd_sync)
     pa = sub.add_parser("audit")
     pa.add_argument("--push", action="store_true", help="post status to Uptime Kuma")
-    pa.add_argument("--check", action="store_true",
-                    help="exit non-zero if the registry is out of sync with secrets.yml (CI gate)")
+    pa.add_argument(
+        "--check",
+        action="store_true",
+        help="exit non-zero if the registry is out of sync with secrets.yml (CI gate)",
+    )
     pa.set_defaults(func=cmd_audit)
     pr = sub.add_parser("rotate")
-    pr.add_argument("--commit", action="store_true", help="actually write (default: dry-run)")
+    pr.add_argument(
+        "--commit", action="store_true", help="actually write (default: dry-run)"
+    )
     pr.add_argument("--all", action="store_true", help="all auto secrets, not only due")
     pr.add_argument("--name", help="rotate one named auto secret")
-    pr.add_argument("--deploy", action="store_true", help="redeploy consumers after rotating")
+    pr.add_argument(
+        "--deploy", action="store_true", help="redeploy consumers after rotating"
+    )
     pr.set_defaults(func=cmd_rotate)
     args = p.parse_args(argv)
     return args.func(args)

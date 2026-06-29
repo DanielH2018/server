@@ -21,6 +21,7 @@ wget`` against ``localhost:3000`` with the admin password read from the containe
 special characters in the password never have to survive URL/shell quoting). Idempotent;
 overwrites the JSON in the role.
 """
+
 import base64
 import json
 import os
@@ -35,9 +36,9 @@ PROM_UID, LOKI_UID = "EGdsQqhVk", "bf4q19tuivta8e"
 # Dashboards managed by fetch_grafana_dashboards.py (upstream = grafana.com). Skip them
 # here so the two scripts own disjoint files and never clobber each other.
 SKIP_UIDS = {
-    "rYdddlPWk",   # Node Exporter Full  -> node-exporter-full.json
-    "pMEd7m0Mz",   # Cadvisor exporter   -> cadvisor.json
-    "n5bu_kv45",   # Traefik 17346       -> traefik.json
+    "rYdddlPWk",  # Node Exporter Full  -> node-exporter-full.json
+    "pMEd7m0Mz",  # Cadvisor exporter   -> cadvisor.json
+    "n5bu_kv45",  # Traefik 17346       -> traefik.json
 }
 
 # Stale/foreign datasource uids found in hand-imported boards, remapped onto the canonical
@@ -53,13 +54,25 @@ def gapi(path):
     """GET a Grafana API path via the container, authenticated as admin."""
     pw = subprocess.run(
         ["docker", "exec", "grafana", "printenv", "GF_SECURITY_ADMIN_PASSWORD"],
-        capture_output=True, text=True, timeout=15).stdout.strip()
+        capture_output=True,
+        text=True,
+        timeout=15,
+    ).stdout.strip()
     auth = base64.b64encode(("admin:%s" % pw).encode()).decode()
     out = subprocess.run(
-        ["docker", "exec", "grafana", "wget", "-qO-",
-         "--header=Authorization: Basic " + auth,
-         "http://localhost:3000" + path],
-        capture_output=True, text=True, timeout=30).stdout
+        [
+            "docker",
+            "exec",
+            "grafana",
+            "wget",
+            "-qO-",
+            "--header=Authorization: Basic " + auth,
+            "http://localhost:3000" + path,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    ).stdout
     return json.loads(out)
 
 
@@ -70,10 +83,10 @@ def slug(title):
 def normalize(obj):
     """Recursively clean a dashboard model in place:
 
-      * rewrite stale datasource uids onto the canonical ones, and
-      * drop the ephemeral ``key`` on query targets — it's a Grafana query-editor React
-        key (a random UUID Grafana regenerates), not config. Keeping it adds churn and
-        trips secret scanners (high-entropy string assigned to ``key``).
+    * rewrite stale datasource uids onto the canonical ones, and
+    * drop the ephemeral ``key`` on query targets — it's a Grafana query-editor React
+      key (a random UUID Grafana regenerates), not config. Keeping it adds churn and
+      trips secret scanners (high-entropy string assigned to ``key``).
     """
     if isinstance(obj, dict):
         ds = obj.get("datasource")
@@ -117,8 +130,10 @@ def main():
         untracked.append(uid)
 
     # Surface anything live that this run captured, plus a sanity count.
-    print("\nExported %d dashboard(s); skipped %d community board(s)."
-          % (len(untracked), len(SKIP_UIDS)))
+    print(
+        "\nExported %d dashboard(s); skipped %d community board(s)."
+        % (len(untracked), len(SKIP_UIDS))
+    )
 
 
 if __name__ == "__main__":

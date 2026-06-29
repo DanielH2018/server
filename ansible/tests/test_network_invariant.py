@@ -10,6 +10,7 @@ Mirrors validate_compose_templates' host_vars-driven model.
 
 Run: uv run pytest ansible/tests/test_network_invariant.py
 """
+
 import pathlib
 
 import yaml
@@ -20,10 +21,15 @@ _ANSIBLE = pathlib.Path(__file__).resolve().parents[1]
 def _created_networks() -> set[str]:
     all_vars = yaml.safe_load((_ANSIBLE / "inventory/group_vars/all.yml").read_text())
     docker_network = all_vars["docker_network"]
-    tasks = yaml.safe_load((_ANSIBLE / "roles/setup/docker_install/tasks/main.yml").read_text())
+    tasks = yaml.safe_load(
+        (_ANSIBLE / "roles/setup/docker_install/tasks/main.yml").read_text()
+    )
     loop = next(t["loop"] for t in tasks if t.get("name") == "Create Docker networks")
     # the loop's first item is the Jinja "{{ docker_network }}"; the rest are literals
-    return {docker_network if i.strip() == "{{ docker_network }}" else i.strip() for i in loop}
+    return {
+        docker_network if i.strip() == "{{ docker_network }}" else i.strip()
+        for i in loop
+    }
 
 
 def _referenced_networks() -> dict[str, str]:
@@ -38,7 +44,11 @@ def _referenced_networks() -> dict[str, str]:
 
 def test_every_referenced_network_is_created_by_docker_install():
     created = _created_networks()
-    missing = {net: where for net, where in _referenced_networks().items() if net not in created}
+    missing = {
+        net: where
+        for net, where in _referenced_networks().items()
+        if net not in created
+    }
     assert not missing, (
         "networks referenced in host_vars but NOT created by docker_install's loop "
         "(would fail only on a fresh-host deploy): %s" % missing

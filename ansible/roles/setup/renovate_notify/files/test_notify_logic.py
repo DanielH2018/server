@@ -4,8 +4,14 @@ import notify_logic as nl
 
 
 def _pr(number=1, title="t", url="u", automerge=True, ci="success", conflicting=False):
-    return nl.PR(number=number, title=title, url=url, automerge=automerge,
-                 ci=ci, conflicting=conflicting)
+    return nl.PR(
+        number=number,
+        title=title,
+        url=url,
+        automerge=automerge,
+        ci=ci,
+        conflicting=conflicting,
+    )
 
 
 # --- parse_automerge ---
@@ -52,14 +58,18 @@ def test_ci_rollup_pending_status_is_pending():
 
 
 def test_ci_rollup_failure_beats_pending():
-    runs = [{"status": "in_progress", "conclusion": None},
-            {"status": "completed", "conclusion": "failure"}]
+    runs = [
+        {"status": "in_progress", "conclusion": None},
+        {"status": "completed", "conclusion": "failure"},
+    ]
     assert nl.ci_rollup(runs, []) == "failure"
 
 
 def test_ci_rollup_neutral_and_skipped_are_ok():
-    runs = [{"status": "completed", "conclusion": "neutral"},
-            {"status": "completed", "conclusion": "skipped"}]
+    runs = [
+        {"status": "completed", "conclusion": "neutral"},
+        {"status": "completed", "conclusion": "skipped"},
+    ]
     assert nl.ci_rollup(runs, []) == "success"
 
 
@@ -77,7 +87,9 @@ def test_classify_stuck_automerge_but_failing():
 
 
 def test_classify_stuck_automerge_but_conflicting():
-    assert nl.classify_pr(_pr(automerge=True, ci="success", conflicting=True)) == "stuck"
+    assert (
+        nl.classify_pr(_pr(automerge=True, ci="success", conflicting=True)) == "stuck"
+    )
 
 
 def test_classify_on_track_automerge_healthy():
@@ -91,9 +103,9 @@ def test_classify_on_track_automerge_pending():
 # --- actionable ---
 def test_actionable_keeps_stuck_and_manual_drops_ontrack():
     prs = [
-        _pr(number=8, automerge=True, ci="failure"),         # stuck
-        _pr(number=9, automerge=False, ci="success"),        # manual
-        _pr(number=12, automerge=True, ci="success"),        # on-track -> dropped
+        _pr(number=8, automerge=True, ci="failure"),  # stuck
+        _pr(number=9, automerge=False, ci="success"),  # manual
+        _pr(number=12, automerge=True, ci="success"),  # on-track -> dropped
     ]
     out = nl.actionable(prs)
     assert [(pr.number, b) for pr, b in out] == [(8, "stuck"), (9, "manual")]
@@ -134,10 +146,26 @@ def test_should_notify_empty_to_empty_is_silent():
 # --- render_digest ---
 def test_render_digest_groups_and_links():
     items = [
-        (_pr(number=8, title="container images", url="http://x/8",
-             automerge=True, ci="failure"), "stuck"),
-        (_pr(number=9, title="community.sops", url="http://x/9",
-             automerge=False, ci="success"), "manual"),
+        (
+            _pr(
+                number=8,
+                title="container images",
+                url="http://x/8",
+                automerge=True,
+                ci="failure",
+            ),
+            "stuck",
+        ),
+        (
+            _pr(
+                number=9,
+                title="community.sops",
+                url="http://x/9",
+                automerge=False,
+                ci="success",
+            ),
+            "manual",
+        ),
     ]
     msg = nl.render_digest(items)
     assert "2 PR(s) need attention" in msg
@@ -148,8 +176,19 @@ def test_render_digest_groups_and_links():
 
 
 def test_render_digest_truncates_and_counts_overflow():
-    items = [(_pr(number=i, title="x" * 80, url="http://x/%d" % i,
-                  automerge=False, ci="success"), "manual") for i in range(60)]
+    items = [
+        (
+            _pr(
+                number=i,
+                title="x" * 80,
+                url="http://x/%d" % i,
+                automerge=False,
+                ci="success",
+            ),
+            "manual",
+        )
+        for i in range(60)
+    ]
     msg = nl.render_digest(items, limit=600)
     assert len(msg) <= 600
     assert "more" in msg
@@ -189,8 +228,10 @@ def _issue(title, login="renovate[bot]", updated="2026-06-25T00:00:00Z", pr=Fals
 
 
 def test_find_dashboard_returns_updated_at():
-    issues = [_issue("Some other issue"),
-              _issue("Dependency Dashboard", updated="2026-06-24T09:00:00Z")]
+    issues = [
+        _issue("Some other issue"),
+        _issue("Dependency Dashboard", updated="2026-06-24T09:00:00Z"),
+    ]
     assert nl.find_dashboard(issues) == "2026-06-24T09:00:00Z"
 
 

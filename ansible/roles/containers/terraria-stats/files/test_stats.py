@@ -87,7 +87,7 @@ def test_restart_closes_open_sessions():
 def test_rejoin_without_leave_closes_prior_session():
     st = stats.StatsState()
     st.apply("join", "DBoy", 1000.0)
-    st.apply("join", "DBoy", 1050.0)   # crash/rejoin, no leave
+    st.apply("join", "DBoy", 1050.0)  # crash/rejoin, no leave
     assert st.players["DBoy"]["sessions"] == 1
     assert st.players["DBoy"]["total_playtime"] == 50.0
     assert st.players["DBoy"]["open_start"] == 1050.0
@@ -97,7 +97,7 @@ def test_rejoin_without_leave_closes_prior_session():
 def test_live_playtime_includes_open_session():
     st = stats.StatsState()
     st.apply("join", "DBoy", 1000.0)
-    assert st.playtime("DBoy", now=1040.0) == 40.0   # 0 closed + 40 live
+    assert st.playtime("DBoy", now=1040.0) == 40.0  # 0 closed + 40 live
     st.apply("leave", "DBoy", 1100.0)
     assert st.playtime("DBoy", now=9999.0) == 100.0  # closed, no live delta
 
@@ -123,10 +123,16 @@ def test_render_metrics_contains_expected_series():
 
 def _loki_response(entries):
     # entries: list of (ts_ns_int, line). Mimics Loki query_range JSON.
-    return {"data": {"result": [
-        {"stream": {"container": "terraria"},
-         "values": [[str(ts), line] for ts, line in entries]}
-    ]}}
+    return {
+        "data": {
+            "result": [
+                {
+                    "stream": {"container": "terraria"},
+                    "values": [[str(ts), line] for ts, line in entries],
+                }
+            ]
+        }
+    }
 
 
 def test_extract_entries_sorts_ascending():
@@ -142,9 +148,9 @@ def test_apply_entries_folds_and_counts_unmatched():
     st = stats.StatsState()
     entries = [
         (1_000_000_000, "DBoy has joined."),
-        (5_000_000_000, "DBoy has left."),          # +4s
+        (5_000_000_000, "DBoy has left."),  # +4s
         (6_000_000_000, "DBoy has joined the game"),  # drift -> unmatched
-        (7_000_000_000, "Saving world data: 5%"),     # noise -> ignored
+        (7_000_000_000, "Saving world data: 5%"),  # noise -> ignored
     ]
     evs, maxts = stats.apply_entries(st, entries)
     assert st.players["DBoy"]["total_playtime"] == 4.0
@@ -165,7 +171,11 @@ def test_store_roundtrip_and_cursor(tmp_path):
     st = stats.StatsState()
     st.apply("join", "DBoy", 1000.0)
     st.apply("leave", "DBoy", 1100.0)
-    store.save(st, cursor_ns=1_100_000_000_000, events=[(1_100_000_000_000, "DBoy", "leave", "DBoy has left.")])
+    store.save(
+        st,
+        cursor_ns=1_100_000_000_000,
+        events=[(1_100_000_000_000, "DBoy", "leave", "DBoy has left.")],
+    )
 
     # Reopen: state + cursor survive (durable source of truth).
     store2 = stats.Store(db)
@@ -179,7 +189,7 @@ def test_store_preserves_open_session(tmp_path):
     db = str(tmp_path / "stats.db")
     store = stats.Store(db)
     st = stats.StatsState()
-    st.apply("join", "DBoy", 2000.0)     # still online
+    st.apply("join", "DBoy", 2000.0)  # still online
     store.save(st, cursor_ns=2_000_000_000_000)
     loaded = stats.Store(db).load_state()
     assert loaded.players["DBoy"]["open_start"] == 2000.0
@@ -190,17 +200,20 @@ def test_run_cycle_end_to_end(tmp_path):
     db = str(tmp_path / "stats.db")
     store = stats.Store(db)
     state = store.load_state()
-    pages = [[
-        (1_000_000_000, "DBoy has joined."),
-        (4_000_000_000, "DBoy has left."),
-    ]]
+    pages = [
+        [
+            (1_000_000_000, "DBoy has joined."),
+            (4_000_000_000, "DBoy has left."),
+        ]
+    ]
 
     def fake_fetch(start_ns, end_ns):
         # one page then empty (mimics pagination end)
         return pages.pop(0) if pages else []
 
-    cursor = stats.run_cycle(state, store, cursor=0,
-                             end_ns=9_000_000_000, fetch=fake_fetch)
+    cursor = stats.run_cycle(
+        state, store, cursor=0, end_ns=9_000_000_000, fetch=fake_fetch
+    )
     assert cursor == 4_000_000_000
     assert state.players["DBoy"]["total_playtime"] == 3.0
     # persisted

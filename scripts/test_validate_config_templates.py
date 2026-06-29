@@ -1,4 +1,5 @@
 """Tests for validate_config_templates — the non-compose config-template render guard."""
+
 import validate_config_templates as v
 
 

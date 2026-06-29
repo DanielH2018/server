@@ -30,7 +30,9 @@ def test_multiple_services():
 
 
 def test_archived_service_is_ignored():
-    paths = ["ansible/roles/containers/archive/duplicati/templates/docker-compose.yml.j2"]
+    paths = [
+        "ansible/roles/containers/archive/duplicati/templates/docker-compose.yml.j2"
+    ]
     cs = services_from_changed_paths(paths)
     assert cs.services == set()
     assert cs.broad is False
@@ -72,10 +74,12 @@ def test_secrets_only_change_flags_secrets_not_broad():
 def test_secrets_with_service_template_still_deploys_that_service():
     # The /add-secret flow commits secrets.yml + the consuming template together — the
     # service maps, so it deploys normally (applying the secret); the flag is also set.
-    cs = services_from_changed_paths([
-        "ansible/vars/secrets.yml",
-        "ansible/roles/containers/karakeep/templates/docker-compose.yml.j2",
-    ])
+    cs = services_from_changed_paths(
+        [
+            "ansible/vars/secrets.yml",
+            "ansible/roles/containers/karakeep/templates/docker-compose.yml.j2",
+        ]
+    )
     assert cs.services == {"karakeep"}
     assert cs.secrets is True
     assert cs.broad is False
@@ -83,7 +87,8 @@ def test_secrets_with_service_template_still_deploys_that_service():
 
 def test_no_secrets_change_leaves_flag_false():
     cs = services_from_changed_paths(
-        ["ansible/roles/containers/cadvisor/templates/docker-compose.yml.j2"])
+        ["ansible/roles/containers/cadvisor/templates/docker-compose.yml.j2"]
+    )
     assert cs.secrets is False
 
 
@@ -102,21 +107,24 @@ def test_secret_rotation_registry_only_is_not_secrets():
 # (the config sat stale in the running container with no redeploy and no alert).
 def test_config_template_change_maps_to_service():
     cs = services_from_changed_paths(
-        ["ansible/roles/containers/prometheus/templates/prometheus.yml.j2"])
+        ["ansible/roles/containers/prometheus/templates/prometheus.yml.j2"]
+    )
     assert cs.services == {"prometheus"}
     assert cs.broad is False
 
 
 def test_files_asset_change_maps_to_service():
     cs = services_from_changed_paths(
-        ["ansible/roles/containers/monitor-bridge/files/check.py"])
+        ["ansible/roles/containers/monitor-bridge/files/check.py"]
+    )
     assert cs.services == {"monitor-bridge"}
     assert cs.broad is False
 
 
 def test_archived_config_change_is_ignored():
     cs = services_from_changed_paths(
-        ["ansible/roles/containers/archive/duplicati/templates/foo.yml.j2"])
+        ["ansible/roles/containers/archive/duplicati/templates/foo.yml.j2"]
+    )
     assert cs.services == set()
     assert cs.broad is False
 
@@ -125,7 +133,8 @@ def test_common_role_change_stays_broad_not_scoped():
     # common/ is the shared deploy path — it must remain BROAD (manual full deploy), so the
     # broad-prefix check must win over the new service-scoped config match.
     cs = services_from_changed_paths(
-        ["ansible/roles/containers/common/templates/healthcheck.yml.j2"])
+        ["ansible/roles/containers/common/templates/healthcheck.yml.j2"]
+    )
     assert cs.broad is True
     assert cs.services == set()
 
@@ -133,19 +142,23 @@ def test_common_role_change_stays_broad_not_scoped():
 def test_role_tasks_and_docs_do_not_trigger_deploy():
     # Scope is templates/ + files/ only (the deployed config/assets). A tasks/main.yml or
     # CLAUDE.md change does NOT auto-deploy (manual, as before) — avoids redeploying on a doc edit.
-    cs = services_from_changed_paths([
-        "ansible/roles/containers/prometheus/tasks/main.yml",
-        "ansible/roles/containers/prometheus/CLAUDE.md",
-    ])
+    cs = services_from_changed_paths(
+        [
+            "ansible/roles/containers/prometheus/tasks/main.yml",
+            "ansible/roles/containers/prometheus/CLAUDE.md",
+        ]
+    )
     assert cs.services == set()
     assert cs.broad is False
 
 
 def test_config_change_with_compose_change_dedupes_to_one_service():
-    cs = services_from_changed_paths([
-        "ansible/roles/containers/traefik/templates/config.yml.j2",
-        "ansible/roles/containers/traefik/templates/docker-compose.yml.j2",
-    ])
+    cs = services_from_changed_paths(
+        [
+            "ansible/roles/containers/traefik/templates/config.yml.j2",
+            "ansible/roles/containers/traefik/templates/docker-compose.yml.j2",
+        ]
+    )
     assert cs.services == {"traefik"}
 
 
@@ -200,7 +213,10 @@ def test_next_action_deploy_requires_origin_ahead():
 
 def test_next_action_dirty_precedes_origin_ahead_check():
     # dirty still short-circuits even when origin isn't ahead.
-    assert next_action("localnew", "originold", None, dirty=True, origin_ahead=False) == "dirty"
+    assert (
+        next_action("localnew", "originold", None, dirty=True, origin_ahead=False)
+        == "dirty"
+    )
 
 
 # The health gate must only check services actually deployed on THIS host. A
@@ -234,7 +250,11 @@ def test_container_names_multi_container():
         "  collector:\n"
         "    container_name: scrutiny-collector\n"
     )
-    assert container_names(compose) == ["scrutiny-influxdb", "scrutiny", "scrutiny-collector"]
+    assert container_names(compose) == [
+        "scrutiny-influxdb",
+        "scrutiny",
+        "scrutiny-collector",
+    ]
 
 
 def test_container_names_strips_quotes():
@@ -242,7 +262,9 @@ def test_container_names_strips_quotes():
 
 
 def test_container_names_ignores_other_keys():
-    compose = "    image: ghcr.io/google/cadvisor:v0.53.0\n    restart: unless-stopped\n"
+    compose = (
+        "    image: ghcr.io/google/cadvisor:v0.53.0\n    restart: unless-stopped\n"
+    )
     assert container_names(compose) == []
 
 
@@ -349,8 +371,7 @@ def test_health_settles_boot_then_crash_loop_never_settles():
     # Boots 'running' twice, crashes (not running), repeats — the streak resets and
     # never reaches 3 consecutive, so the gate times out and rolls back. This is the
     # exact case a single 'running' sample would have wrongly passed.
-    samples = [("", True), ("", True), ("", False),
-               ("", True), ("", True), ("", False)]
+    samples = [("", True), ("", True), ("", False), ("", True), ("", True), ("", False)]
     assert health_settles(samples, settle_checks=3) is False
 
 

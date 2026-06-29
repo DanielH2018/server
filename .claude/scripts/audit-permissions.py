@@ -19,6 +19,7 @@ Usage:
 
 Pure stdlib. Loads the hook module by path for the shared store/lock helpers.
 """
+
 import importlib.util
 import json
 import os
@@ -26,7 +27,9 @@ import re
 import sys
 import time
 
-_HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "hooks", "log-permission.py")
+_HOOK = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "hooks", "log-permission.py"
+)
 _spec = importlib.util.spec_from_file_location("log_permission", _HOOK)
 lib = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(lib)
@@ -34,7 +37,12 @@ _spec.loader.exec_module(lib)
 # The auto-approve hook's read-only classifier, loaded by path (optional). Lets the
 # audit flag concrete allow-rules the hook ALREADY covers — they never fire, so they're
 # dead weight. If it can't load, hook-covered detection is simply skipped.
-_AAR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "hooks", "auto-approve-readonly.py")
+_AAR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..",
+    "hooks",
+    "auto-approve-readonly.py",
+)
 try:
     _aar_spec = importlib.util.spec_from_file_location("auto_approve_readonly", _AAR)
     aar = importlib.util.module_from_spec(_aar_spec)
@@ -44,7 +52,13 @@ except Exception:
 
 
 def parse_args(argv):
-    out = {"since": None, "prune": None, "prune_dead": False, "json": False, "error": None}
+    out = {
+        "since": None,
+        "prune": None,
+        "prune_dead": False,
+        "json": False,
+        "error": None,
+    }
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -75,7 +89,11 @@ def parse_args(argv):
             except ValueError:
                 n = None
             if n is None or n < 1:
-                out["error"] = "--prune requires a positive integer of days (1 or more, got '" + v + "')"
+                out["error"] = (
+                    "--prune requires a positive integer of days (1 or more, got '"
+                    + v
+                    + "')"
+                )
                 break
             out["prune"] = n
         else:
@@ -102,21 +120,50 @@ def summarize_report(store, opts=None):
         total_asks += e["asks"]
         t = by_tool.get(e["tool"])
         if t is None:
-            t = by_tool[e["tool"]] = {"tool": e["tool"], "calls": 0, "asks": 0, "auto": 0}
+            t = by_tool[e["tool"]] = {
+                "tool": e["tool"],
+                "calls": 0,
+                "asks": 0,
+                "auto": 0,
+            }
         t["calls"] += e["calls"]
         t["asks"] += e["asks"]
         t["auto"] += max(0, e["calls"] - e["asks"])
-    prompted = sorted([e for e in rows if e["asks"] > 0], key=lambda e: e["asks"], reverse=True)
-    return {"totalCalls": total_calls, "totalAsks": total_asks,
-            "byTool": by_tool, "prompted": prompted, "list": rows}
+    prompted = sorted(
+        [e for e in rows if e["asks"] > 0], key=lambda e: e["asks"], reverse=True
+    )
+    return {
+        "totalCalls": total_calls,
+        "totalAsks": total_asks,
+        "byTool": by_tool,
+        "prompted": prompted,
+        "list": rows,
+    }
 
 
 # Multi-verb tools where the second token is a meaningful subcommand worth
 # scoping the rule to (Bash(git push *)) rather than the whole tool (Bash(git *)).
 SUBCOMMAND_TOOLS = {
-    "git", "gh", "npm", "npx", "yarn", "pnpm", "cargo", "docker", "kubectl",
-    "pip", "pip3", "go", "dotnet", "brew", "apt", "systemctl", "mullvad", "netsh",
-    "uv", "ansible-playbook",
+    "git",
+    "gh",
+    "npm",
+    "npx",
+    "yarn",
+    "pnpm",
+    "cargo",
+    "docker",
+    "kubectl",
+    "pip",
+    "pip3",
+    "go",
+    "dotnet",
+    "brew",
+    "apt",
+    "systemctl",
+    "mullvad",
+    "netsh",
+    "uv",
+    "ansible-playbook",
 }
 
 # Segment heads we must never propose blanket-allowing: arbitrary exec / deletion /
@@ -125,17 +172,65 @@ SUBCOMMAND_TOOLS = {
 # these is, by design, left to prompt each time — blocked_by_policy() surfaces it
 # instead of suggest_rules().
 UNSAFE_PREFIXES = {
-    "cd", "rm", "rmdir", "mv", "dd", "cat", "sudo", "eval", "exec", "source", ".",
-    "bash", "sh", "zsh", "pwsh", "powershell", "powershell.exe", "cmd", "cmd.exe",
-    "find", "awk", "xargs", "chmod", "chown", "kill", "curl", "wget", "scp", "ssh",
+    "cd",
+    "rm",
+    "rmdir",
+    "mv",
+    "dd",
+    "cat",
+    "sudo",
+    "eval",
+    "exec",
+    "source",
+    ".",
+    "bash",
+    "sh",
+    "zsh",
+    "pwsh",
+    "powershell",
+    "powershell.exe",
+    "cmd",
+    "cmd.exe",
+    "find",
+    "awk",
+    "xargs",
+    "chmod",
+    "chown",
+    "kill",
+    "curl",
+    "wget",
+    "scp",
+    "ssh",
 }
 
 # Segment heads that are meaningless to write a specific allow rule for: shell
 # control words and pure-output builtins.
 NOISE_PREFIXES = {
-    "for", "if", "while", "until", "do", "done", "then", "else", "elif", "fi",
-    "case", "esac", "function", "select", "time", "[", "[[", "{", "(", ":",
-    "test", "echo", "printf", "true", "false",
+    "for",
+    "if",
+    "while",
+    "until",
+    "do",
+    "done",
+    "then",
+    "else",
+    "elif",
+    "fi",
+    "case",
+    "esac",
+    "function",
+    "select",
+    "time",
+    "[",
+    "[[",
+    "{",
+    "(",
+    ":",
+    "test",
+    "echo",
+    "printf",
+    "true",
+    "false",
 }
 
 _ENV_ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
@@ -201,7 +296,11 @@ def candidate_prefix(segment):
     tokens = [t for t in re.split(r"\s+", seg) if t]
     # Skip leading env-assignment prefixes (FOO=bar cmd …) to reach the real
     # command, but leave command-substitution assignments (T=$(…)) alone.
-    while len(tokens) > 1 and _ENV_ASSIGN.match(tokens[0]) and not re.search(r"\$\(|`", tokens[0]):
+    while (
+        len(tokens) > 1
+        and _ENV_ASSIGN.match(tokens[0])
+        and not re.search(r"\$\(|`", tokens[0])
+    ):
         tokens.pop(0)
     if not tokens:
         return None
@@ -248,20 +347,35 @@ def suggest_rules(prompted, opts=None):
             if cp["head"] in UNSAFE_PREFIXES or cp["head"] in NOISE_PREFIXES:
                 continue
             # skip if already allowed (redundant) or deliberately set to prompt/block
-            if is_covered(cp["prefix"], allow) or is_covered(cp["prefix"], deny) or is_covered(cp["prefix"], ask):
+            if (
+                is_covered(cp["prefix"], allow)
+                or is_covered(cp["prefix"], deny)
+                or is_covered(cp["prefix"], ask)
+            ):
                 continue
-            rule = "Bash(" + cp["prefix"] + ")" if cp["exact"] else "Bash(" + cp["prefix"] + " *)"
+            rule = (
+                "Bash(" + cp["prefix"] + ")"
+                if cp["exact"]
+                else "Bash(" + cp["prefix"] + " *)"
+            )
             if rule in seen:  # credit a prefix at most once per command
                 continue
             seen.add(rule)
             g = groups.get(rule)
             if g is None:
-                g = groups[rule] = {"rule": rule, "asks": 0, "commands": 0, "examples": []}
+                g = groups[rule] = {
+                    "rule": rule,
+                    "asks": 0,
+                    "commands": 0,
+                    "examples": [],
+                }
             g["asks"] += e["asks"]
             g["commands"] += 1
             if len(g["examples"]) < 3:
                 g["examples"].append(e["sum"])
-    return sorted(groups.values(), key=lambda g: (g["asks"], g["commands"]), reverse=True)
+    return sorted(
+        groups.values(), key=lambda g: (g["asks"], g["commands"]), reverse=True
+    )
 
 
 def blocked_by_policy(prompted):
@@ -279,7 +393,11 @@ def blocked_by_policy(prompted):
             seen.add(cp["head"])
             g = groups.get(cp["head"])
             if g is None:
-                g = groups[cp["head"]] = {"prefix": cp["head"], "asks": 0, "commands": 0}
+                g = groups[cp["head"]] = {
+                    "prefix": cp["head"],
+                    "asks": 0,
+                    "commands": 0,
+                }
             g["asks"] += e["asks"]
             g["commands"] += 1
     return sorted(groups.values(), key=lambda g: g["asks"], reverse=True)
@@ -310,10 +428,10 @@ def dead_allow_rules(perms):
         seen.add(rule)
         m = _BASH_RULE.match(rule)
         if not m:
-            continue                                   # only Bash rules analyzed here
+            continue  # only Bash rules analyzed here
         inner = m.group(1)
         if inner.endswith("*") or ":*" in inner:
-            continue                                   # a wildcard pattern, not concrete
+            continue  # a wildcard pattern, not concrete
         others = [r for r in allow if r != rule]
         cp = candidate_prefix(inner)
         if cp and is_covered(cp["prefix"], others):
@@ -322,7 +440,9 @@ def dead_allow_rules(perms):
         if aar is not None:
             try:
                 if aar.classify(inner) is not None:
-                    dead.append({"rule": rule, "reason": "auto-approve hook already covers it"})
+                    dead.append(
+                        {"rule": rule, "reason": "auto-approve hook already covers it"}
+                    )
             except Exception:
                 pass
     return dead
@@ -393,7 +513,9 @@ def do_prune_dead(base_dir):
     committed = []
     try:
         with open(os.path.join(base_dir, "settings.json"), encoding="utf-8") as fh:
-            committed = ((json.load(fh) or {}).get("permissions") or {}).get("allow") or []
+            committed = ((json.load(fh) or {}).get("permissions") or {}).get(
+                "allow"
+            ) or []
     except Exception:
         pass
     local_path = os.path.join(base_dir, "settings.local.json")
@@ -401,12 +523,12 @@ def do_prune_dead(base_dir):
         with open(local_path, encoding="utf-8") as fh:
             local_obj = json.load(fh)
     except Exception:
-        return None, None                       # no local file -> nothing to do
+        return None, None  # no local file -> nothing to do
     local_allow = ((local_obj.get("permissions") or {}).get("allow")) or []
     new_local, removed = compute_dead_local_prune(committed, local_allow)
     if not removed:
         return [], local_allow
-    try:                                        # backup before writing
+    try:  # backup before writing
         with open(local_path + ".bak", "w", encoding="utf-8") as bf:
             json.dump(local_obj, bf, indent=2)
             bf.write("\n")
@@ -426,13 +548,21 @@ def pct(n, d):
 def render(rep, perms=None):
     perms = perms or {"allow": [], "deny": []}
     lines = []
-    lines.append("Permission audit — {} calls, {} prompts ({}% prompt rate)".format(
-        rep["totalCalls"], rep["totalAsks"], pct(rep["totalAsks"], rep["totalCalls"])))
+    lines.append(
+        "Permission audit — {} calls, {} prompts ({}% prompt rate)".format(
+            rep["totalCalls"],
+            rep["totalAsks"],
+            pct(rep["totalAsks"], rep["totalCalls"]),
+        )
+    )
     lines.append("")
     lines.append("By tool:")
     for t in sorted(rep["byTool"].values(), key=lambda t: t["calls"], reverse=True):
-        lines.append("  {}: {} calls, {} auto, {} prompted".format(
-            t["tool"], t["calls"], t["auto"], t["asks"]))
+        lines.append(
+            "  {}: {} calls, {} auto, {} prompted".format(
+                t["tool"], t["calls"], t["auto"], t["asks"]
+            )
+        )
     lines.append("")
     if rep["prompted"]:
         lines.append("Most-prompted commands (allowlist gaps):")
@@ -441,17 +571,25 @@ def render(rep, perms=None):
         lines.append("")
         sugg = suggest_rules(rep["prompted"], perms)
         if sugg:
-            lines.append("Suggested Bash allowlist rules (segment-aware, excludes already-allowed):")
+            lines.append(
+                "Suggested Bash allowlist rules (segment-aware, excludes already-allowed):"
+            )
             for s in sugg[:15]:
-                lines.append("  {}   ({} prompts across {} cmds; e.g. {})".format(
-                    s["rule"], s["asks"], s["commands"], s["examples"][0]))
+                lines.append(
+                    "  {}   ({} prompts across {} cmds; e.g. {})".format(
+                        s["rule"], s["asks"], s["commands"], s["examples"][0]
+                    )
+                )
             lines.append("")
         blocked = blocked_by_policy(rep["prompted"])
         if blocked:
             lines.append("Left to prompt by design (unsafe to blanket-allow):")
             for b in blocked[:10]:
-                lines.append("  {}   ({} prompts across {} cmds)".format(
-                    b["prefix"], b["asks"], b["commands"]))
+                lines.append(
+                    "  {}   ({} prompts across {} cmds)".format(
+                        b["prefix"], b["asks"], b["commands"]
+                    )
+                )
     else:
         lines.append("No prompted commands recorded yet.")
     dead = dead_allow_rules(perms)
@@ -474,7 +612,9 @@ def main():
     if args["prune"] is not None:
         fd = lib.acquire_lock()
         if fd is None:
-            sys.stderr.write("audit-permissions: could not acquire store lock; try again.\n")
+            sys.stderr.write(
+                "audit-permissions: could not acquire store lock; try again.\n"
+            )
             sys.exit(1)
         try:
             store = lib.load_store()
@@ -482,7 +622,9 @@ def main():
                 store["entries"] = {}
             removed = do_prune(store, args["prune"], int(time.time() * 1000))
             lib.save_store(store)
-            print("Pruned {} entries not seen in {} days.".format(removed, args["prune"]))
+            print(
+                "Pruned {} entries not seen in {} days.".format(removed, args["prune"])
+            )
         finally:
             lib.release_lock(fd)
         return
@@ -494,8 +636,12 @@ def main():
         elif not removed:
             print("No redundant allow-rules to prune.")
         else:
-            print("Pruned {} redundant allow-rule(s) from settings.local.json "
-                  "(backup: settings.local.json.bak), kept {}:".format(len(removed), len(kept)))
+            print(
+                "Pruned {} redundant allow-rule(s) from settings.local.json "
+                "(backup: settings.local.json.bak), kept {}:".format(
+                    len(removed), len(kept)
+                )
+            )
             for r in removed:
                 print("  - {}   ({})".format(r["rule"], r["reason"]))
         return
@@ -505,13 +651,20 @@ def main():
     rep = summarize_report(store, {"since": args["since"]})
     perms = load_perms()
     if args["json"]:
-        print(json.dumps({
-            "totalCalls": rep["totalCalls"], "totalAsks": rep["totalAsks"],
-            "byTool": rep["byTool"], "prompted": rep["prompted"],
-            "suggestions": suggest_rules(rep["prompted"], perms),
-            "blockedByPolicy": blocked_by_policy(rep["prompted"]),
-            "deadAllowRules": dead_allow_rules(perms),
-        }, indent=2))
+        print(
+            json.dumps(
+                {
+                    "totalCalls": rep["totalCalls"],
+                    "totalAsks": rep["totalAsks"],
+                    "byTool": rep["byTool"],
+                    "prompted": rep["prompted"],
+                    "suggestions": suggest_rules(rep["prompted"], perms),
+                    "blockedByPolicy": blocked_by_policy(rep["prompted"]),
+                    "deadAllowRules": dead_allow_rules(perms),
+                },
+                indent=2,
+            )
+        )
     else:
         print(render(rep, perms))
 

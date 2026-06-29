@@ -27,14 +27,16 @@ def test_discord_post_sends_user_agent(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     rn.discord("https://discord.com/api/webhooks/1/abc", "hello")
     assert captured.get("req") is not None, "discord() never issued a request"
-    assert captured["req"].get_header("User-agent"), \
+    assert captured["req"].get_header("User-agent"), (
         "discord() POST must set a User-Agent (Cloudflare 403s the urllib default)"
+    )
 
 
 def test_discord_returns_true_on_2xx(monkeypatch):
     # A confirmed delivery returns True so the caller persists the dedupe fingerprint.
-    monkeypatch.setattr(urllib.request, "urlopen",
-                        lambda req, timeout=None: _FakeResp(204))
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda req, timeout=None: _FakeResp(204)
+    )
     assert rn.discord("https://discord.com/api/webhooks/1/abc", "hi") is True
 
 

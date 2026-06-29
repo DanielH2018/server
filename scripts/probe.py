@@ -31,6 +31,7 @@ Subcommands:
 (server-only — needs the host age key). The token is fed to curl via stdin, never argv.
 Add `--dry-run` to print the command(s) instead of running them.
 """
+
 import argparse
 import json
 import os
@@ -45,13 +46,22 @@ HA_CONTAINER = "home-assistant"
 # claude_ha_token lives in the SOPS-encrypted secrets file (repo-root relative).
 SECRETS_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "ansible", "vars", "secrets.yml")
+    "ansible",
+    "vars",
+    "secrets.yml",
+)
 
 # Git-managed automation source (repo-root relative to this file) — the "expected" set for
 # the verify-automations post-deploy gate. The deployed config is copied from here verbatim.
 AUTOMATIONS_YAML = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "ansible", "roles", "containers", "home-assistant", "files", "automations.yaml")
+    "ansible",
+    "roles",
+    "containers",
+    "home-assistant",
+    "files",
+    "automations.yaml",
+)
 
 # Top-level automation list items only: `- id: <slug>` anchored at column 0. A trigger/condition
 # `id:` is always indented, so it can never be mistaken for an automation id.
@@ -73,7 +83,9 @@ def loki_labels_url(ip):
 
 
 def loki_query_url(ip, logql, limit):
-    return f"http://{ip}:3100/loki/api/v1/query_range?" + urlencode({"query": logql, "limit": limit})
+    return f"http://{ip}:3100/loki/api/v1/query_range?" + urlencode(
+        {"query": logql, "limit": limit}
+    )
 
 
 def scrutiny_url(ip):
@@ -96,7 +108,7 @@ def ha_get_url(ip, path):
     `api/` prefix so `error_log`, `/error_log`, and `/api/error_log` all work."""
     path = path.lstrip("/")
     if path.startswith("api/"):
-        path = path[len("api/"):]
+        path = path[len("api/") :]
     return f"http://{ip}:{HA_PORT}/api/{path}"
 
 
@@ -121,6 +133,7 @@ def _ws_encode(payload: str) -> bytes:
     """A single masked client text frame (FIN=1, opcode=0x1)."""
     import os
     import struct
+
     data = payload.encode()
     n = len(data)
     header = bytearray([0x81])
@@ -140,6 +153,7 @@ def _ws_encode(payload: str) -> bytes:
 def _ws_read_frame(recv_exact) -> str:
     """Decode one unmasked server text frame, reading exact byte counts via recv_exact(n)->bytes."""
     import struct
+
     recv_exact(1)  # b0: FIN+opcode (text, unfragmented — not inspected)
     length = recv_exact(1)[0] & 0x7F
     if length == 126:
@@ -174,9 +188,11 @@ def format_trace(trace) -> str:
     "state of binary_sensor.aqara_fp300_presence"); older/nested shapes may be a dict
     with a `description` key — both are handled."""
     if not trace:
-        return ("no stored trace (the automation hasn't run since the last HA restart/deploy; "
-                "an automation whose trigger never matched leaves no trace — check `ha get "
-                "logbook/<entity>` and the automation's last_triggered for that case)")
+        return (
+            "no stored trace (the automation hasn't run since the last HA restart/deploy; "
+            "an automation whose trigger never matched leaves no trace — check `ha get "
+            "logbook/<entity>` and the automation's last_triggered for that case)"
+        )
     lines = []
     trig = trace.get("trigger") or {}
     if isinstance(trig, dict):
@@ -217,19 +233,25 @@ def automation_load_errors(expected_ids, live_automations):
     for aid in sorted(expected_ids):
         live = by_id.get(aid)
         if live is None:
-            errs.append(f"automation {aid} is defined in automations.yaml but did not load")
+            errs.append(
+                f"automation {aid} is defined in automations.yaml but did not load"
+            )
         elif live.get("state") == "unavailable":
-            errs.append(f"automation {aid} loaded but is unavailable (config error at load)")
+            errs.append(
+                f"automation {aid} loaded but is unavailable (config error at load)"
+            )
     return errs
 
 
 def _ws_send(sock, msg):
     import json
+
     sock.sendall(_ws_encode(json.dumps(msg)))
 
 
 def _ws_recv_json(recv_exact):
     import json
+
     return json.loads(_ws_read_frame(recv_exact))
 
 
@@ -239,30 +261,49 @@ def ha_trace(ip, token, automation_id, timeout=DEFAULT_TIMEOUT):
     import base64
     import os
     import socket
+
     sock = socket.create_connection((ip, HA_PORT), timeout=timeout)
     try:
         key = base64.b64encode(os.urandom(16)).decode()
-        sock.sendall((
-            f"GET /api/websocket HTTP/1.1\r\nHost: {ip}:{HA_PORT}\r\n"
-            f"Upgrade: websocket\r\nConnection: Upgrade\r\n"
-            f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n").encode())
+        sock.sendall(
+            (
+                f"GET /api/websocket HTTP/1.1\r\nHost: {ip}:{HA_PORT}\r\n"
+                f"Upgrade: websocket\r\nConnection: Upgrade\r\n"
+                f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+            ).encode()
+        )
         recv_exact = _recv_exact_from(sock)
         # consume the HTTP 101 upgrade response (headers end with a blank line)
         header = b""
         while b"\r\n\r\n" not in header:
             header += recv_exact(1)
-        _ws_recv_json(recv_exact)                                   # auth_required
+        _ws_recv_json(recv_exact)  # auth_required
         _ws_send(sock, {"type": "auth", "access_token": token})
         if _ws_recv_json(recv_exact).get("type") != "auth_ok":
             raise SystemExit("HA websocket auth failed (check claude_ha_token)")
-        _ws_send(sock, {"id": 1, "type": "trace/list",
-                        "domain": "automation", "item_id": automation_id})
+        _ws_send(
+            sock,
+            {
+                "id": 1,
+                "type": "trace/list",
+                "domain": "automation",
+                "item_id": automation_id,
+            },
+        )
         listed = _ws_recv_json(recv_exact).get("result") or []
         if not listed:
             return None
         run_id = listed[-1]["run_id"]
-        _ws_send(sock, {"id": 2, "type": "trace/get", "domain": "automation",
-                        "item_id": automation_id, "run_id": run_id})
+        _ws_send(
+            sock,
+            {
+                "id": 2,
+                "type": "trace/get",
+                "domain": "automation",
+                "item_id": automation_id,
+                "run_id": run_id,
+            },
+        )
         return _ws_recv_json(recv_exact).get("result")
     finally:
         sock.close()
@@ -313,9 +354,11 @@ def format_ha_state(obj):
 def format_ha_automation(obj):
     """Human summary of an automation state — on/off + id + last_triggered."""
     attrs = obj.get("attributes") or {}
-    return (f"{obj.get('entity_id', '?')} = {obj.get('state')}  "
-            f"({attrs.get('friendly_name', '?')})\n"
-            f"  id={attrs.get('id')}  last_triggered={attrs.get('last_triggered')}")
+    return (
+        f"{obj.get('entity_id', '?')} = {obj.get('state')}  "
+        f"({attrs.get('friendly_name', '?')})\n"
+        f"  id={attrs.get('id')}  last_triggered={attrs.get('last_triggered')}"
+    )
 
 
 def ha_state_rows(states, model):
@@ -335,7 +378,10 @@ def ha_state_rows(states, model):
     if moff == "on":
         anomalies.append("manual_off is on (presence will NOT auto-light)")
     if anomalies:
-        lines = [f"⚠ {len(anomalies)} anomaly(ies): " + "; ".join(anomalies), ""] + lines
+        lines = [
+            f"⚠ {len(anomalies)} anomaly(ies): " + "; ".join(anomalies),
+            "",
+        ] + lines
     return "\n".join(lines)
 
 
@@ -347,8 +393,13 @@ def curl_argv(url, timeout=DEFAULT_TIMEOUT):
 
 
 def inspect_ip_argv(container):
-    return ["docker", "inspect", "-f",
-            "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", container]
+    return [
+        "docker",
+        "inspect",
+        "-f",
+        "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
+        container,
+    ]
 
 
 def parse_ip(inspect_output):
@@ -372,7 +423,10 @@ def format_health(data, container):
     `probe.py health <svc>` is usable as a post-deploy gate.
     """
     if not data:
-        return (f"{container}: not found (not created — wrong name, or deploy failed?)", 1)
+        return (
+            f"{container}: not found (not created — wrong name, or deploy failed?)",
+            1,
+        )
     state = data[0].get("State") or {}
     status = state.get("Status", "unknown")
     restarts = data[0].get("RestartCount", 0)
@@ -387,17 +441,35 @@ def format_health(data, container):
             if last:
                 line += f"; last check: {last[-1][:160]}"
         return (line, 0 if status == "running" and hstatus == "healthy" else 1)
-    return (f"{container}: {status} (no healthcheck), restarts={restarts}",
-            0 if status == "running" else 1)
+    return (
+        f"{container}: {status} (no healthcheck), restarts={restarts}",
+        0 if status == "running" else 1,
+    )
 
 
 def cert_stages(host, port, sni):
     """Two-stage pipeline: open a TLS session (with SNI) and decode the served
     leaf cert's subject/issuer/validity. Read-only — no data is sent."""
-    s_client = ["openssl", "s_client", "-connect", f"{host}:{port}",
-                "-servername", sni, "-verify_hostname", sni]
-    x509 = ["openssl", "x509", "-noout", "-subject", "-issuer", "-dates",
-            "-fingerprint", "-sha256"]
+    s_client = [
+        "openssl",
+        "s_client",
+        "-connect",
+        f"{host}:{port}",
+        "-servername",
+        sni,
+        "-verify_hostname",
+        sni,
+    ]
+    x509 = [
+        "openssl",
+        "x509",
+        "-noout",
+        "-subject",
+        "-issuer",
+        "-dates",
+        "-fingerprint",
+        "-sha256",
+    ]
     return [s_client, x509]
 
 
@@ -405,8 +477,12 @@ def cert_stages(host, port, sni):
 
 
 def _build_parser():
-    p = argparse.ArgumentParser(prog="probe.py", description="read-only homelab diagnostics")
-    p.add_argument("--dry-run", action="store_true", help="print the command(s) instead of running")
+    p = argparse.ArgumentParser(
+        prog="probe.py", description="read-only homelab diagnostics"
+    )
+    p.add_argument(
+        "--dry-run", action="store_true", help="print the command(s) instead of running"
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
 
     m = sub.add_parser("metric", help="Prometheus instant query")
@@ -422,26 +498,42 @@ def _build_parser():
     ct = sub.add_parser("cert", help="served TLS cert details")
     ct.add_argument("target", help="host or host:port")
     ct.add_argument("--sni", help="SNI servername (defaults to host)")
-    hl = sub.add_parser("health", help="container state + healthcheck rollup (exit 0 = healthy)")
+    hl = sub.add_parser(
+        "health", help="container state + healthcheck rollup (exit 0 = healthy)"
+    )
     hl.add_argument("container", help="container name, e.g. jellyfin")
     ha = sub.add_parser("ha", help="Home Assistant live state (read-only, GET)")
     hasub = ha.add_subparsers(dest="ha_cmd", required=True)
     hs = hasub.add_parser("state", help="GET /api/states/<entity_id>")
     hs.add_argument("entity_id", help="e.g. fan.tower_fan")
     hs.add_argument("--json", action="store_true", help="print raw JSON")
-    hauto = hasub.add_parser("automation", help="one automation by id, alias-slug, or entity_id")
-    hauto.add_argument("query", help="automation id, alias-slug, or full automation.<slug>")
+    hauto = hasub.add_parser(
+        "automation", help="one automation by id, alias-slug, or entity_id"
+    )
+    hauto.add_argument(
+        "query", help="automation id, alias-slug, or full automation.<slug>"
+    )
     hauto.add_argument("--json", action="store_true", help="print raw JSON")
     hg = hasub.add_parser("get", help="raw GET /api/<path>, e.g. error_log")
     hg.add_argument("path")
-    htr = hasub.add_parser("trace", aliases=["why"],
-                           help="why an automation last ran/no-op'd (per-condition WS trace)")
-    htr.add_argument("query", help="automation id, alias-slug, or full automation.<slug>")
-    hasub.add_parser("verify-automations",
-                     help="assert every automation in automations.yaml loaded (exit 0 = all loaded)")
+    htr = hasub.add_parser(
+        "trace",
+        aliases=["why"],
+        help="why an automation last ran/no-op'd (per-condition WS trace)",
+    )
+    htr.add_argument(
+        "query", help="automation id, alias-slug, or full automation.<slug>"
+    )
+    hasub.add_parser(
+        "verify-automations",
+        help="assert every automation in automations.yaml loaded (exit 0 = all loaded)",
+    )
     hst = sub.add_parser("ha-state", help="live view of the derived state model")
-    hst.add_argument("--inventory", action="store_true",
-                     help="also dump every live entity grouped by domain")
+    hst.add_argument(
+        "--inventory",
+        action="store_true",
+        help="also dump every live entity grouped by domain",
+    )
     return p
 
 
@@ -493,7 +585,8 @@ def run_pipeline(stages):
     for i, stage in enumerate(stages):
         last = i == len(stages) - 1
         proc = subprocess.Popen(
-            stage, stdin=prev,
+            stage,
+            stdin=prev,
             stdout=None if last else subprocess.PIPE,
             stderr=subprocess.DEVNULL if not last else None,
         )
@@ -520,17 +613,21 @@ def ha_token():
     key (present on daniel-server, where HA runs)."""
     out = subprocess.run(
         ["sops", "-d", "--extract", '["claude_ha_token"]', SECRETS_PATH],
-        capture_output=True, text=True)
+        capture_output=True,
+        text=True,
+    )
     if out.returncode != 0:
         raise SystemExit(
-            f"could not decrypt claude_ha_token from {SECRETS_PATH}: {out.stderr.strip()}")
+            f"could not decrypt claude_ha_token from {SECRETS_PATH}: {out.stderr.strip()}"
+        )
     return out.stdout.strip()
 
 
 def ha_get(url, token):
     """Authenticated HA GET; returns the response body. Token is passed via stdin."""
-    out = subprocess.run(ha_curl_argv(url), input=ha_curl_config(token),
-                         capture_output=True, text=True)
+    out = subprocess.run(
+        ha_curl_argv(url), input=ha_curl_config(token), capture_output=True, text=True
+    )
     if out.returncode != 0:
         raise SystemExit(f"curl {url} failed: {out.stderr.strip()}")
     return out.stdout
@@ -541,21 +638,25 @@ def _ha_url(ip, ns):
         return ha_state_url(ip, ns.entity_id)
     if ns.ha_cmd == "automation":
         return ha_get_url(ip, "states")  # fetch all, then match locally
-    return ha_get_url(ip, ns.path)        # get
+    return ha_get_url(ip, ns.path)  # get
 
 
 def run_ha(ns):
     if ns.ha_cmd in ("trace", "why"):
         if ns.dry_run:
-            print(f"ws://<ha-ip>:{HA_PORT}/api/websocket  trace/list+trace/get for {ns.query!r} "
-                  f"# + auth Bearer <redacted>")
+            print(
+                f"ws://<ha-ip>:{HA_PORT}/api/websocket  trace/list+trace/get for {ns.query!r} "
+                f"# + auth Bearer <redacted>"
+            )
             return 0
         ip = resolve_ip(HA_CONTAINER)
         token = ha_token()
         states = json.loads(ha_get(ha_get_url(ip, "states"), token))
         m = match_automation(states, ns.query)
         if m is None:
-            print(f"automation '{ns.query}' not found (by entity_id, id, or alias-slug)")
+            print(
+                f"automation '{ns.query}' not found (by entity_id, id, or alias-slug)"
+            )
             return 1
         automation_id = m.get("attributes", {}).get("id")
         if not automation_id:
@@ -565,8 +666,10 @@ def run_ha(ns):
         return 0
     if ns.ha_cmd == "verify-automations":
         if ns.dry_run:
-            print(" ".join(ha_curl_argv(ha_get_url("<ha-ip>", "states")))
-                  + f"   # + Bearer; compare attributes.id against ids in {AUTOMATIONS_YAML}")
+            print(
+                " ".join(ha_curl_argv(ha_get_url("<ha-ip>", "states")))
+                + f"   # + Bearer; compare attributes.id against ids in {AUTOMATIONS_YAML}"
+            )
             return 0
         ip = resolve_ip(HA_CONTAINER)
         states = json.loads(ha_get(ha_get_url(ip, "states"), ha_token()))
@@ -582,7 +685,10 @@ def run_ha(ns):
         return 0
     if ns.dry_run:
         argv = ha_curl_argv(_ha_url("<ha-ip>", ns))
-        print(" ".join(argv) + "   # + Authorization: Bearer <redacted> (via --config stdin)")
+        print(
+            " ".join(argv)
+            + "   # + Authorization: Bearer <redacted> (via --config stdin)"
+        )
         return 0
     body = ha_get(_ha_url(resolve_ip(HA_CONTAINER), ns), ha_token())
     if ns.ha_cmd == "get":
@@ -616,8 +722,12 @@ def run_ha(ns):
 def run_ha_state(ns):
     import json
     import ha_state_model
+
     if ns.dry_run:
-        print(" ".join(ha_curl_argv(ha_get_url("<ha-ip>", "states"))) + "   # + Bearer (stdin)")
+        print(
+            " ".join(ha_curl_argv(ha_get_url("<ha-ip>", "states")))
+            + "   # + Bearer (stdin)"
+        )
         return 0
     body = ha_get(ha_get_url(resolve_ip(HA_CONTAINER), "states"), ha_token())
     states = json.loads(body)

@@ -25,6 +25,7 @@ Re-run to regenerate (e.g. after a Grafana upgrade or to refresh defaults):
 Requires a running ``grafana`` container — it's used to reach Prometheus on the monitoring
 network for the ``label_values`` lookups. Idempotent; overwrites the JSON in the role.
 """
+
 import json
 import re
 import subprocess
@@ -45,9 +46,13 @@ OUTDIR = "ansible/roles/containers/grafana/files/dashboards"
 # free of permanently-"No data" panels.
 DROP_PANELS = {
     "node-exporter-full": {
-        "Network Saturation", "Power Supply", "Hardware Fan Speed",
-        "Systemd Units State", "Systemd Sockets Current",
-        "Systemd Sockets Accepted", "Systemd Sockets Refused",
+        "Network Saturation",
+        "Power Supply",
+        "Hardware Fan Speed",
+        "Systemd Units State",
+        "Systemd Sockets Current",
+        "Systemd Sockets Accepted",
+        "Systemd Sockets Refused",
     },
 }
 
@@ -75,18 +80,27 @@ def prom_label_values(query, resolved):
         if not m:
             return []
         label = m.group(1)
-        promql = "group by (%s)({__name__!=\"\"})" % label  # rarely used; broad fallback
+        promql = 'group by (%s)({__name__!=""})' % label  # rarely used; broad fallback
     out = subprocess.run(
-        ["docker", "exec", "grafana", "wget", "-qO-",
-         "http://prometheus:9090/api/v1/query?query=" + urllib.parse.quote(promql)],
-        capture_output=True, text=True, timeout=30).stdout
+        [
+            "docker",
+            "exec",
+            "grafana",
+            "wget",
+            "-qO-",
+            "http://prometheus:9090/api/v1/query?query=" + urllib.parse.quote(promql),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    ).stdout
     result = json.loads(out)["data"]["result"]
     return sorted({s["metric"].get(label) for s in result if s["metric"].get(label)})
 
 
 def adapt(name, d):
     placeholders = {}  # ${NAME} -> uid string
-    resolved = {}      # var name -> chosen single value (for chaining)
+    resolved = {}  # var name -> chosen single value (for chaining)
 
     for v in d.get("templating", {}).get("list", []):
         vtype = v.get("type")

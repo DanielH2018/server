@@ -3,6 +3,7 @@
 Maps open Renovate PRs to an actionable bucket and decides when to (re)notify, so
 the I/O shell (renovate_notify.py) only fetches, persists, and posts.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -18,7 +19,12 @@ DASHBOARD_TITLE = "Dependency Dashboard"
 
 # check-run conclusions that mean "this will not merge" (besides success/neutral/skipped).
 _FAIL_CONCLUSIONS = {
-    "failure", "cancelled", "timed_out", "action_required", "stale", "startup_failure",
+    "failure",
+    "cancelled",
+    "timed_out",
+    "action_required",
+    "stale",
+    "startup_failure",
 }
 
 
@@ -27,8 +33,8 @@ class PR:
     number: int
     title: str
     url: str
-    automerge: bool          # Renovate body says Automerge Enabled
-    ci: str                  # "success" | "pending" | "failure"
+    automerge: bool  # Renovate body says Automerge Enabled
+    ci: str  # "success" | "pending" | "failure"
     conflicting: bool
 
 
@@ -48,8 +54,11 @@ def find_dashboard(issues: list[dict]) -> str | None:
     return None
 
 
-def dashboard_stale(updated_at: str | None, now: datetime | None = None,
-                    max_age_days: int = DASHBOARD_STALE_DAYS) -> bool:
+def dashboard_stale(
+    updated_at: str | None,
+    now: datetime | None = None,
+    max_age_days: int = DASHBOARD_STALE_DAYS,
+) -> bool:
     """True if the dependency dashboard is absent or older than `max_age_days`.
 
     `updated_at` is the issue's ISO-8601 timestamp (GitHub uses a trailing 'Z'), or None
@@ -59,7 +68,9 @@ def dashboard_stale(updated_at: str | None, now: datetime | None = None,
     if not updated_at:
         return True
     now = now or datetime.now(timezone.utc)
-    age_days = (now - datetime.fromisoformat(updated_at.replace("Z", "+00:00"))).total_seconds() / 86400
+    age_days = (
+        now - datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+    ).total_seconds() / 86400
     return age_days > max_age_days
 
 

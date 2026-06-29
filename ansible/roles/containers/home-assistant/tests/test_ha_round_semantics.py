@@ -1,5 +1,6 @@
 """Pin HA's banker's-rounding semantics so the Jinja harness can never silently drift from
 Home Assistant's forgiving_round (which fan.jinja's .5-midpoint level math depends on)."""
+
 from jinja_harness import _forgiving_round
 
 

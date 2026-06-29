@@ -13,6 +13,7 @@ checked out (local `/home/ubuntu/server` vs CI `/home/runner/work/...`).
 
 Run: uv run pytest .claude/scripts
 """
+
 import json
 import os
 import re
@@ -53,7 +54,9 @@ def test_settings_hook_scripts_exist():
         rel = m.group(0)
         if not os.path.isfile(os.path.join(REPO, rel)):
             missing.append((rel, cmd))
-    assert not missing, f"settings.json references hook scripts that don't exist: {missing}"
+    assert not missing, (
+        f"settings.json references hook scripts that don't exist: {missing}"
+    )
 
 
 _PRUNE = {".git", ".venv", "node_modules", "__pycache__", "collections"}
@@ -79,8 +82,9 @@ def test_statusline_script_exists_if_configured():
     cmd = sl.get("command", "")
     m = _SCRIPT_RE.search(cmd)
     assert m, f"statusLine command has no recognizable .claude/ script path: {cmd!r}"
-    assert os.path.isfile(os.path.join(REPO, m.group(0))), \
+    assert os.path.isfile(os.path.join(REPO, m.group(0))), (
         f"statusLine references a script that doesn't exist: {m.group(0)}"
+    )
 
 
 def test_hook_wrappers_reference_existing_python():
@@ -99,7 +103,7 @@ def test_hook_wrappers_reference_existing_python():
         if not fn.endswith(".sh"):
             continue
         for line in _read(os.path.join(hooks_dir, fn)).splitlines():
-            if line.lstrip().startswith("#"):       # skip comments / doc mentions
+            if line.lstrip().startswith("#"):  # skip comments / doc mentions
                 continue
             for pyref in re.findall(r"[\w./-]+\.py", line):
                 if os.path.basename(pyref) not in py_names:
@@ -115,17 +119,23 @@ def _probe_subcommands():
 def test_probe_subcommands_referenced_in_skills_and_agents_exist():
     """Every `probe.py <sub>` mentioned in a skill or agent is a real probe.py subparser."""
     valid = _probe_subcommands()
-    assert "health" in valid and "ha" in valid, f"probe.py subparser scan looks wrong: {valid}"
+    assert "health" in valid and "ha" in valid, (
+        f"probe.py subparser scan looks wrong: {valid}"
+    )
     referenced = set()
     for sub in ("skills", "agents"):
         root = os.path.join(CLAUDE, sub)
         for dirpath, _, files in os.walk(root):
             for fn in files:
                 if fn.endswith(".md"):
-                    for name in re.findall(r"probe\.py\s+([\w-]+)", _read(os.path.join(dirpath, fn))):
+                    for name in re.findall(
+                        r"probe\.py\s+([\w-]+)", _read(os.path.join(dirpath, fn))
+                    ):
                         referenced.add(name)
     unknown = referenced - valid
-    assert not unknown, f"skills/agents reference unknown probe.py subcommands: {sorted(unknown)}"
+    assert not unknown, (
+        f"skills/agents reference unknown probe.py subcommands: {sorted(unknown)}"
+    )
 
 
 def _frontmatter_keys(path):
@@ -158,7 +168,9 @@ def test_skills_and_agents_have_required_frontmatter():
         keys = _frontmatter_keys(path)
         if keys is None or "name" not in keys or "description" not in keys:
             bad.append(os.path.relpath(path, REPO))
-    assert not bad, f"skills/agents missing required name/description frontmatter: {bad}"
+    assert not bad, (
+        f"skills/agents missing required name/description frontmatter: {bad}"
+    )
 
 
 def test_rules_have_paths_frontmatter():
@@ -171,4 +183,6 @@ def test_rules_have_paths_frontmatter():
         keys = _frontmatter_keys(os.path.join(rules_dir, fn))
         if keys is None or "paths" not in keys:
             bad.append(fn)
-    assert not bad, f"rules missing `paths:` frontmatter (would load globally every session): {bad}"
+    assert not bad, (
+        f"rules missing `paths:` frontmatter (would load globally every session): {bad}"
+    )

@@ -1,4 +1,5 @@
 """Tests for the secret rotation registry tool (classification, staggering, audit, sync)."""
+
 import datetime as dt
 
 import secret_rotation as sr
@@ -36,18 +37,26 @@ def test_unknown_app_secret_defaults_to_assisted():
 # ── staggered seeding ───────────────────────────────────────────────────────
 def test_seed_is_deterministic():
     today = dt.date(2026, 6, 11)
-    assert sr.seed_last_rotated("x_push_token", "auto", today) == \
-           sr.seed_last_rotated("x_push_token", "auto", today)
+    assert sr.seed_last_rotated("x_push_token", "auto", today) == sr.seed_last_rotated(
+        "x_push_token", "auto", today
+    )
 
 
 def test_seed_never_immediately_overdue_and_within_window():
     today = dt.date(2026, 6, 11)
-    for name in ("a_push_token", "b_push_token", "grafana_admin_password", "cloudflare_dns_token"):
+    for name in (
+        "a_push_token",
+        "b_push_token",
+        "grafana_admin_password",
+        "cloudflare_dns_token",
+    ):
         tier = sr.classify(name)
         seed = dt.date.fromisoformat(sr.seed_last_rotated(name, tier, today))
         due = seed + dt.timedelta(days=sr.TIER_DAYS[tier])
-        assert due > today                          # not overdue at registration
-        assert due <= today + dt.timedelta(days=sr.TIER_DAYS[tier])  # within one cadence
+        assert due > today  # not overdue at registration
+        assert due <= today + dt.timedelta(
+            days=sr.TIER_DAYS[tier]
+        )  # within one cadence
 
 
 def test_ignore_and_no_date_tiers_have_no_seed():
@@ -67,14 +76,18 @@ def test_seeds_spread_due_dates_no_single_day_pileup():
 
 # ── audit ───────────────────────────────────────────────────────────────────
 def _reg(*entries):
-    return {"secrets": {name: {"tier": tier, "last_rotated": lr} for name, tier, lr in entries}}
+    return {
+        "secrets": {
+            name: {"tier": tier, "last_rotated": lr} for name, tier, lr in entries
+        }
+    }
 
 
 def test_audit_flags_overdue():
     today = dt.date(2026, 6, 11)
     reg = _reg(
-        ("old_push_token", "auto", "2025-01-01"),       # long overdue
-        ("fresh_push_token", "auto", "2026-06-01"),      # fine
+        ("old_push_token", "auto", "2025-01-01"),  # long overdue
+        ("fresh_push_token", "auto", "2026-06-01"),  # fine
     )
     res = sr.audit(reg, today)
     overdue_names = [r[0] for r in res["overdue"]]
@@ -101,7 +114,9 @@ def test_sync_adds_missing_and_preserves_existing():
     reg = _reg(("kept_push_token", "auto", "2026-05-05"))
     added, stale = sr.sync(reg, ["kept_push_token", "new_push_token"], today)
     assert added == ["new_push_token"]
-    assert reg["secrets"]["kept_push_token"]["last_rotated"] == "2026-05-05"  # untouched
+    assert (
+        reg["secrets"]["kept_push_token"]["last_rotated"] == "2026-05-05"
+    )  # untouched
     assert reg["secrets"]["new_push_token"]["tier"] == "auto"
 
 
@@ -115,8 +130,8 @@ def test_sync_reports_stale_registry_entries():
 # ── registry drift (the `audit --check` CI gate) ─────────────────────────────
 def test_registry_drift_detects_missing_and_stale():
     missing, stale = sr.registry_drift({"a", "b"}, {"b", "c"})
-    assert missing == ["c"]   # in secrets.yml, not the registry (forgot `sync`)
-    assert stale == ["a"]     # in the registry, secret removed from secrets.yml
+    assert missing == ["c"]  # in secrets.yml, not the registry (forgot `sync`)
+    assert stale == ["a"]  # in the registry, secret removed from secrets.yml
 
 
 def test_registry_drift_clean_when_in_sync():
@@ -153,11 +168,14 @@ def test_sync_preserves_a_manual_tier_override():
 # round-trips losslessly, keeps the MANAGED header, and sorts keys deterministically
 # (sort_keys=True keeps the committed file diff-stable as secrets are added).
 
+
 def test_registry_round_trips_losslessly(tmp_path):
-    reg = {"secrets": {
-        "b_token": {"tier": "auto", "last_rotated": "2026-06-01"},
-        "a_token": {"tier": "assisted", "last_rotated": "2026-05-15"},
-    }}
+    reg = {
+        "secrets": {
+            "b_token": {"tier": "auto", "last_rotated": "2026-06-01"},
+            "a_token": {"tier": "assisted", "last_rotated": "2026-05-15"},
+        }
+    }
     path = str(tmp_path / "reg.yml")
     sr.save_registry(reg, path)
     assert sr.load_registry(path) == reg
@@ -165,7 +183,9 @@ def test_registry_round_trips_losslessly(tmp_path):
 
 def test_saved_registry_keeps_managed_header_and_sorts_keys(tmp_path):
     path = str(tmp_path / "reg.yml")
-    sr.save_registry({"secrets": {"z_tok": {"tier": "auto"}, "a_tok": {"tier": "auto"}}}, path)
+    sr.save_registry(
+        {"secrets": {"z_tok": {"tier": "auto"}, "a_tok": {"tier": "auto"}}}, path
+    )
     text = (tmp_path / "reg.yml").read_text()
     assert text.startswith("# Secret rotation registry — MANAGED")
     assert text.index("\n  a_tok:") < text.index("\n  z_tok:")  # sort_keys=True

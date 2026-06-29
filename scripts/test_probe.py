@@ -9,6 +9,7 @@ these tests are hermetic.
 
 Run: uv run pytest scripts/test_probe.py
 """
+
 import importlib.util
 import os
 
@@ -26,6 +27,7 @@ fake_resolve = IPS.__getitem__
 
 # --- URL builders -----------------------------------------------------------
 
+
 def test_prom_query_url_encodes_promql():
     url = probe.prom_query_url("10.0.0.1", "up == 0")
     assert url == "http://10.0.0.1:9090/api/v1/query?query=up+%3D%3D+0"
@@ -36,12 +38,17 @@ def test_prom_targets_url():
 
 
 def test_loki_labels_url():
-    assert probe.loki_labels_url("10.0.0.2") == "http://10.0.0.2:3100/loki/api/v1/labels"
+    assert (
+        probe.loki_labels_url("10.0.0.2") == "http://10.0.0.2:3100/loki/api/v1/labels"
+    )
 
 
 def test_loki_query_url_encodes_logql_and_limit():
     url = probe.loki_query_url("10.0.0.2", '{job="x"}', 50)
-    assert url == "http://10.0.0.2:3100/loki/api/v1/query_range?query=%7Bjob%3D%22x%22%7D&limit=50"
+    assert (
+        url
+        == "http://10.0.0.2:3100/loki/api/v1/query_range?query=%7Bjob%3D%22x%22%7D&limit=50"
+    )
 
 
 def test_scrutiny_url():
@@ -54,8 +61,15 @@ def test_pi_url():
 
 # --- low-level argv / parsing helpers ---------------------------------------
 
+
 def test_curl_argv():
-    assert probe.curl_argv("http://x") == ["curl", "-sS", "--max-time", "10", "http://x"]
+    assert probe.curl_argv("http://x") == [
+        "curl",
+        "-sS",
+        "--max-time",
+        "10",
+        "http://x",
+    ]
 
 
 def test_inspect_ip_argv_targets_the_container():
@@ -75,9 +89,12 @@ def test_parse_ip_returns_none_when_no_ip():
 
 # --- plan(): routing for each subcommand ------------------------------------
 
+
 def test_plan_metric_resolves_prometheus():
     stages = probe.plan(["metric", "up == 0"], fake_resolve)
-    assert stages == [probe.curl_argv("http://10.0.0.1:9090/api/v1/query?query=up+%3D%3D+0")]
+    assert stages == [
+        probe.curl_argv("http://10.0.0.1:9090/api/v1/query?query=up+%3D%3D+0")
+    ]
 
 
 def test_plan_targets_resolves_prometheus():
@@ -92,7 +109,9 @@ def test_plan_loki_labels_resolves_loki():
 
 def test_plan_loki_query_with_limit():
     stages = probe.plan(["loki-query", '{job="x"}', "--limit", "50"], fake_resolve)
-    assert stages == [probe.curl_argv(probe.loki_query_url("10.0.0.2", '{job="x"}', 50))]
+    assert stages == [
+        probe.curl_argv(probe.loki_query_url("10.0.0.2", '{job="x"}', 50))
+    ]
 
 
 def test_plan_scrutiny_resolves_scrutiny():
@@ -104,17 +123,22 @@ def test_plan_pi_does_not_resolve_docker():
     # Pi glances is reached by hostname, so the resolver must NOT be consulted.
     def boom(_):
         raise AssertionError("pi must not resolve a container IP")
+
     stages = probe.plan(["pi", "fs"], boom)
     assert stages == [probe.curl_argv("http://daniel-pi.lan:61208/api/4/fs")]
 
 
 def test_plan_cert_defaults_port_and_sni_to_host():
     stages = probe.plan(["cert", "homepage.daniel-hunter.com"], fake_resolve)
-    assert stages == probe.cert_stages("homepage.daniel-hunter.com", 443, "homepage.daniel-hunter.com")
+    assert stages == probe.cert_stages(
+        "homepage.daniel-hunter.com", 443, "homepage.daniel-hunter.com"
+    )
 
 
 def test_plan_cert_explicit_port_and_sni():
-    stages = probe.plan(["cert", "10.0.0.161:443", "--sni", "homepage.daniel-hunter.com"], fake_resolve)
+    stages = probe.plan(
+        ["cert", "10.0.0.161:443", "--sni", "homepage.daniel-hunter.com"], fake_resolve
+    )
     assert stages == probe.cert_stages("10.0.0.161", 443, "homepage.daniel-hunter.com")
 
 
@@ -127,6 +151,7 @@ def test_cert_stages_is_a_two_stage_pipeline():
 
 # --- health: container state + healthcheck rollup ---------------------------
 
+
 def _inspect(state, restarts=0):
     return [{"State": state, "RestartCount": restarts}]
 
@@ -136,18 +161,32 @@ def test_inspect_argv():
 
 
 def test_health_running_and_healthy_exits_zero():
-    data = _inspect({"Status": "running",
-                     "Health": {"Status": "healthy", "FailingStreak": 0,
-                                "Log": [{"Output": "ok\n"}]}})
+    data = _inspect(
+        {
+            "Status": "running",
+            "Health": {
+                "Status": "healthy",
+                "FailingStreak": 0,
+                "Log": [{"Output": "ok\n"}],
+            },
+        }
+    )
     text, code = probe.format_health(data, "jellyfin")
     assert code == 0
     assert "healthy" in text and "running" in text
 
 
 def test_health_unhealthy_exits_one_and_shows_streak_and_last_log():
-    data = _inspect({"Status": "running",
-                     "Health": {"Status": "unhealthy", "FailingStreak": 3,
-                                "Log": [{"Output": "connection refused\n"}]}})
+    data = _inspect(
+        {
+            "Status": "running",
+            "Health": {
+                "Status": "unhealthy",
+                "FailingStreak": 3,
+                "Log": [{"Output": "connection refused\n"}],
+            },
+        }
+    )
     text, code = probe.format_health(data, "qbittorrent")
     assert code == 1
     assert "unhealthy" in text and "3" in text and "connection refused" in text
@@ -173,13 +212,19 @@ def test_health_not_found_exits_one():
 
 # --- ha subcommand: URL builders --------------------------------------------
 
+
 def test_ha_state_url():
-    assert probe.ha_state_url("10.1.2.3", "fan.tower_fan") == \
-        "http://10.1.2.3:8123/api/states/fan.tower_fan"
+    assert (
+        probe.ha_state_url("10.1.2.3", "fan.tower_fan")
+        == "http://10.1.2.3:8123/api/states/fan.tower_fan"
+    )
 
 
 def test_ha_get_url_bare_path():
-    assert probe.ha_get_url("10.1.2.3", "error_log") == "http://10.1.2.3:8123/api/error_log"
+    assert (
+        probe.ha_get_url("10.1.2.3", "error_log")
+        == "http://10.1.2.3:8123/api/error_log"
+    )
 
 
 def test_ha_get_url_normalizes_leading_slash_and_api_prefix():
@@ -190,10 +235,19 @@ def test_ha_get_url_normalizes_leading_slash_and_api_prefix():
 
 # --- ha subcommand: match_automation (the alias-slug-vs-id trap) -------------
 
-def _auto(entity_id, _id, friendly, state="on", last_triggered="2026-06-20T12:00:00+00:00"):
-    return {"entity_id": entity_id, "state": state,
-            "attributes": {"id": _id, "friendly_name": friendly,
-                           "last_triggered": last_triggered}}
+
+def _auto(
+    entity_id, _id, friendly, state="on", last_triggered="2026-06-20T12:00:00+00:00"
+):
+    return {
+        "entity_id": entity_id,
+        "state": state,
+        "attributes": {
+            "id": _id,
+            "friendly_name": friendly,
+            "last_triggered": last_triggered,
+        },
+    }
 
 
 _HA_STATES = [
@@ -201,8 +255,11 @@ _HA_STATES = [
     _auto("automation.bedroom_presence_on", "presence_1", "Bedroom Presence On"),
     # The CLAUDE.md trap: alias-slug != id. The id is bedroom_fan_temperature,
     # but the entity_id (derived from the alias) is ..._control.
-    _auto("automation.bedroom_fan_temperature_control", "bedroom_fan_temperature",
-          "Bedroom Fan Temperature Control"),
+    _auto(
+        "automation.bedroom_fan_temperature_control",
+        "bedroom_fan_temperature",
+        "Bedroom Fan Temperature Control",
+    ),
 ]
 
 
@@ -238,6 +295,7 @@ def test_match_automation_ignores_non_automation_domain():
 
 # --- ha subcommand: curl argv must never carry the token ---------------------
 
+
 def test_ha_curl_argv_reads_header_from_stdin_config():
     argv = probe.ha_curl_argv("http://h:8123/api/states/x")
     assert "--config" in argv and "-" in argv
@@ -257,11 +315,15 @@ def test_ha_curl_config_has_bearer_header():
 
 # --- ha subcommand: output formatters ---------------------------------------
 
+
 def test_format_ha_state_shows_entity_state_and_name():
-    obj = {"entity_id": "fan.tower_fan", "state": "on",
-           "attributes": {"friendly_name": "Tower Fan"},
-           "last_changed": "2026-06-20T12:00:00+00:00",
-           "last_updated": "2026-06-20T12:00:00+00:00"}
+    obj = {
+        "entity_id": "fan.tower_fan",
+        "state": "on",
+        "attributes": {"friendly_name": "Tower Fan"},
+        "last_changed": "2026-06-20T12:00:00+00:00",
+        "last_updated": "2026-06-20T12:00:00+00:00",
+    }
     out = probe.format_ha_state(obj)
     assert "fan.tower_fan" in out and "on" in out and "Tower Fan" in out
     assert "last_changed=2026-06-20T12:00:00+00:00" in out
@@ -278,10 +340,11 @@ def test_format_ha_automation_includes_id_and_last_triggered():
 
 # --- WebSocket frame codec --------------------------------------------------
 
+
 def test_ws_encode_is_masked_client_text_frame():
     frame = probe._ws_encode("hello")
-    assert frame[0] == 0x81                 # FIN + text opcode
-    assert frame[1] == 0x80 | 5             # mask bit + 5-byte length
+    assert frame[0] == 0x81  # FIN + text opcode
+    assert frame[1] == 0x80 | 5  # mask bit + 5-byte length
     mask, body = frame[2:6], frame[6:]
     assert bytes(b ^ mask[i % 4] for i, b in enumerate(body)) == b"hello"
 
@@ -289,7 +352,7 @@ def test_ws_encode_is_masked_client_text_frame():
 def test_ws_encode_extended_length_126():
     payload = "x" * 200
     frame = probe._ws_encode(payload)
-    assert frame[1] == 0x80 | 126           # 126 sentinel -> 16-bit length follows
+    assert frame[1] == 0x80 | 126  # 126 sentinel -> 16-bit length follows
     assert frame[2:4] == (200).to_bytes(2, "big")
 
 
@@ -297,8 +360,12 @@ def test_ws_read_frame_decodes_unmasked_text():
     payload = b'{"type":"auth_ok"}'
     raw = bytes([0x81, len(payload)]) + payload
     pos = [0]
+
     def recv_exact(n):
-        chunk = raw[pos[0]:pos[0] + n]; pos[0] += n; return chunk
+        chunk = raw[pos[0] : pos[0] + n]
+        pos[0] += n
+        return chunk
+
     assert probe._ws_read_frame(recv_exact) == '{"type":"auth_ok"}'
 
 
@@ -306,8 +373,12 @@ def test_ws_read_frame_decodes_extended_length():
     payload = b"y" * 300
     raw = bytes([0x81, 126]) + (300).to_bytes(2, "big") + payload
     pos = [0]
+
     def recv_exact(n):
-        chunk = raw[pos[0]:pos[0] + n]; pos[0] += n; return chunk
+        chunk = raw[pos[0] : pos[0] + n]
+        pos[0] += n
+        return chunk
+
     assert probe._ws_read_frame(recv_exact) == "y" * 300
 
 
@@ -343,11 +414,12 @@ def test_format_trace_reports_error():
 
 def test_expected_automation_ids_matches_top_level_only():
     from probe import expected_automation_ids
+
     text = (
         "- id: bedroom_presence_on\n"
         "  alias: Presence on\n"
         "  trigger:\n"
-        "    - id: co2_bad\n"          # indented trigger id must NOT be captured
+        "    - id: co2_bad\n"  # indented trigger id must NOT be captured
         "      platform: state\n"
         "- id: ha_heartbeat\n"
         "  alias: HA heartbeat\n"
@@ -357,12 +429,25 @@ def test_expected_automation_ids_matches_top_level_only():
 
 def test_automation_load_errors_flags_missing_and_unavailable():
     from probe import automation_load_errors
+
     expected = {"a_loaded", "b_missing", "c_unavailable", "d_disabled"}
     live = [
         {"entity_id": "automation.a", "state": "on", "attributes": {"id": "a_loaded"}},
-        {"entity_id": "automation.c", "state": "unavailable", "attributes": {"id": "c_unavailable"}},
-        {"entity_id": "automation.d", "state": "off", "attributes": {"id": "d_disabled"}},
-        {"entity_id": "automation.x", "state": "on", "attributes": {"id": "cruft_not_in_file"}},
+        {
+            "entity_id": "automation.c",
+            "state": "unavailable",
+            "attributes": {"id": "c_unavailable"},
+        },
+        {
+            "entity_id": "automation.d",
+            "state": "off",
+            "attributes": {"id": "d_disabled"},
+        },
+        {
+            "entity_id": "automation.x",
+            "state": "on",
+            "attributes": {"id": "cruft_not_in_file"},
+        },
     ]
     errs = automation_load_errors(expected, live)
     assert errs == [
@@ -373,6 +458,7 @@ def test_automation_load_errors_flags_missing_and_unavailable():
 
 def test_automation_load_errors_clean_when_all_loaded():
     from probe import automation_load_errors
+
     expected = {"a", "b"}
     live = [
         {"entity_id": "automation.a", "state": "on", "attributes": {"id": "a"}},
@@ -385,6 +471,7 @@ def test_automation_load_errors_tolerates_missing_attributes():
     # A live entity with attributes null or absent must be skipped, not raise — exercises the
     # `(a.get("attributes") or {})` guard. (No expected id matches them, so they're ignored.)
     from probe import automation_load_errors
+
     expected = {"a"}
     live = [
         {"entity_id": "automation.weird", "state": "on", "attributes": None},
@@ -396,5 +483,6 @@ def test_automation_load_errors_tolerates_missing_attributes():
 
 def test_verify_automations_subcommand_parses():
     from probe import _build_parser
+
     ns = _build_parser().parse_args(["ha", "verify-automations"])
     assert ns.cmd == "ha" and ns.ha_cmd == "verify-automations"

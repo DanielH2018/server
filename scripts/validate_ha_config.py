@@ -15,6 +15,7 @@ It does NOT do HA schema validation (unknown keys, integration options) — that
 Run directly (`python3 scripts/validate_ha_config.py`) or via the `validate-ha-config` prek hook.
 Exits non-zero if any error is found.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -32,7 +33,13 @@ ROLE_DIR = REPO_ROOT / "ansible/roles/containers/home-assistant"
 # templates/*.j2 render verbatim (no Ansible vars) -> copied to <name>.yaml.
 _TEMPLATE_FILES = ["configuration.yaml.j2", "customize.yaml.j2", "ui-lovelace.yaml.j2"]
 # files/* copied as-is into the config dir root.
-_STATIC_FILES = ["automations.yaml", "scenes.yaml", "scripts.yaml", "templates.yaml", "rest.yaml"]
+_STATIC_FILES = [
+    "automations.yaml",
+    "scenes.yaml",
+    "scripts.yaml",
+    "templates.yaml",
+    "rest.yaml",
+]
 _ANSIBLE_MARKERS = ("{{", "{%")
 # Entry files to structurally load. configuration.yaml pulls in customize/automations/scenes/
 # scripts/templates via !include; ui-lovelace.yaml is referenced by filename (not !include), so
@@ -69,7 +76,9 @@ class HAConfigLoader(yaml.SafeLoader):
             key = self.construct_object(key_node, deep=True)
             if key in seen:
                 mark = key_node.start_mark
-                raise HAConfigError(f"duplicate key {key!r} at {mark.name}:{mark.line + 1}")
+                raise HAConfigError(
+                    f"duplicate key {key!r} at {mark.name}:{mark.line + 1}"
+                )
             seen.add(key)
         return super().construct_mapping(node, deep=deep)
 
@@ -87,7 +96,9 @@ def _construct_include(loader: HAConfigLoader, node: yaml.Node):
             f"!include target not found: {target} (at {mark.name}:{mark.line + 1})"
         )
     if target in _INCLUDE_STACK:
-        raise HAConfigError(f"circular !include: {target} (at {mark.name}:{mark.line + 1})")
+        raise HAConfigError(
+            f"circular !include: {target} (at {mark.name}:{mark.line + 1})"
+        )
     _INCLUDE_STACK.add(target)
     try:
         with target.open() as f:
@@ -175,7 +186,9 @@ def jinja_errors(trees: list, custom_templates_dir: Path) -> list[str]:
         try:
             env.parse(jinja_file.read_text())
         except TemplateSyntaxError as exc:
-            errors.append(f"Jinja syntax error in {jinja_file.name}:{exc.lineno}: {exc.message}")
+            errors.append(
+                f"Jinja syntax error in {jinja_file.name}:{exc.lineno}: {exc.message}"
+            )
     return errors
 
 
@@ -192,8 +205,9 @@ def _macro_names(custom_templates_dir: Path, env: Environment) -> set[str]:
     return names
 
 
-def uncoerced_macro_bool_uses(template: str, macro_names: set[str],
-                              env: Environment | None = None) -> list[str]:
+def uncoerced_macro_bool_uses(
+    template: str, macro_names: set[str], env: Environment | None = None
+) -> list[str]:
     """Sorted names of known macros used as a BARE and/or/not operand (no `| bool`) in `template`.
     A `| bool`-wrapped call is a nodes.Filter (not a Call) -> not flagged; a Compare (`== 'x'`) or a
     standalone `{{ macro() }}` is not an and/or/not operand -> not flagged. find_all recurses, so
@@ -202,8 +216,11 @@ def uncoerced_macro_bool_uses(template: str, macro_names: set[str],
     ast = env.parse(template)
 
     def bare_macro_call(node):
-        if (isinstance(node, nodes.Call) and isinstance(node.node, nodes.Name)
-                and node.node.name in macro_names):
+        if (
+            isinstance(node, nodes.Call)
+            and isinstance(node.node, nodes.Name)
+            and node.node.name in macro_names
+        ):
             return node.node.name
         return None
 
@@ -234,9 +251,11 @@ def macro_bool_coercion_errors(trees: list, custom_templates_dir: Path) -> list[
         try:
             for name in uncoerced_macro_bool_uses(template, macro_names, env):
                 snippet = template.strip().splitlines()[0][:80]
-                errs.append(f"macro {name}() used as a boolean and/or/not operand without "
-                            f"`| bool` — a macro renders a STRING (always truthy), so coerce it: "
-                            f"in: {snippet!r}")
+                errs.append(
+                    f"macro {name}() used as a boolean and/or/not operand without "
+                    f"`| bool` — a macro renders a STRING (always truthy), so coerce it: "
+                    f"in: {snippet!r}"
+                )
         except TemplateSyntaxError:
             continue  # reported by jinja_errors
     return errs
@@ -259,6 +278,7 @@ def validate(role_dir: Path = ROLE_DIR) -> list[str]:
         # State-model guardrails (freshness, entity-resolution, override tripwire, structural).
         try:
             import ha_state_model
+
             errors += ha_state_model.check_errors(role_dir)
         except Exception as exc:  # never let the state-model check mask a config error
             errors.append(f"state-model check crashed: {exc}")

@@ -33,11 +33,10 @@ addopts = "-q"
 pythonpath = ["ansible/filter_plugins"]   # lets test_toposort import toposort (replaces conftest.py)
 
 [tool.ruff]
-extend-exclude = ["ansible/collections"]  # never lint the vendored third-party collections
+extend-exclude = ["ansible/collections"]  # never lint or format the vendored third-party collections
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
 # syntax errors E9, bare-except E722, and ==None/==True comparisons E711/E712. Stylistic
-# checks (E7 one-liners, ambiguous names) are deliberately OFF: the test suites use
-# intentional semicolon one-liners and short names that aren't worth churning.
+# checks (E7 one-liners, ambiguous names) stay OFF — formatting is owned by `ruff format`.
 select = ["F", "E9", "E711", "E712", "E722"]

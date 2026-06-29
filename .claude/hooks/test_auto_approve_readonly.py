@@ -8,10 +8,13 @@ command that can write, delete, or execute. These tables lock that contract.
 Run: uv run pytest .claude/hooks
 (Still importable standalone — it loads the hook by path, no third-party deps.)
 """
+
 import importlib.util
 import os
 
-_HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "auto-approve-readonly.py")
+_HOOK = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "auto-approve-readonly.py"
+)
 _spec = importlib.util.spec_from_file_location("auto_approve_readonly", _HOOK)
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
@@ -33,51 +36,47 @@ APPROVE = [
     ("find . -name '*.yml'", "find without write actions"),
     ("cat a.txt | grep foo | head -5", "pure read-only pipeline"),
     ("pwd", "pwd builtin"),
-
     # --- NEW: cd is read-only ---
     ("cd /home/ubuntu/server", "cd changes cwd only"),
     ("cd /srv && ls", "cd then ls"),
-
     # --- NEW: sequential operators ; && || ---
     ("cat a; cat b", "two reads joined by ;"),
     ("echo hi; ls; pwd", "three reads joined by ;"),
     ("ls && cat foo", "&& sequence"),
     ("false || ls", "|| sequence"),
-
     # --- NEW: newline-separated statements ---
     ("cat a\ncat b", "two reads on separate lines"),
     ("echo '=== a ==='\ncat a\necho '=== b ==='\ncat b", "header/cat blocks"),
-
     # --- NEW: write-free redirects ---
     ("cat .yamllint 2>/dev/null", "stderr to /dev/null"),
     ("ls >/dev/null", "stdout to /dev/null"),
     ("docker ps 2>&1", "fd duplication 2>&1"),
     ("grep -r foo . 2>/dev/null | head", "redirect inside pipeline"),
-
     # --- NEW: awk read-only programs ---
     ("awk '{ print length, FILENAME }' file", "awk print length"),
     ("awk -F: '{print $1}' /etc/passwd", "awk with -F field sep"),
     ("ls | awk '{print $9}'", "awk in a pipeline"),
     ("awk 'NR==1' file", "awk line selection"),
-
     # --- NEW: sed read-only scripts ---
     ("sed -n '1,5p' file", "sed print range"),
     ("sed 's/foo/bar/' file", "sed substitution to stdout"),
     ("echo x | sed 's/x/y/'", "sed in a pipeline"),
-    (r"sed -E 's/(public key:|private key:).*/\1 [redacted]/'", "the wireguard redaction sed"),
-
+    (
+        r"sed -E 's/(public key:|private key:).*/\1 [redacted]/'",
+        "the wireguard redaction sed",
+    ),
     # --- adversarial edge cases that are genuinely read-only ---
     ("grep foo file >/dev/null 2>&1", "combined >/dev/null 2>&1"),
     ('echo "a; rm b"', "operators inside quotes are data, not syntax"),
     ('echo "x && y | z"', "quoted pipe/and is data"),
-
     # --- NEW: the original motivating command ---
-    ("cd /home/ubuntu/server\n"
-     'echo "=== .ansible-lint ==="; cat .ansible-lint\n'
-     'echo ""; cat .yamllint 2>/dev/null\n'
-     "awk '{ print length, FILENAME }' ansible/roles/containers/x/tasks/main.yml",
-     "full multi-line exploration command"),
-
+    (
+        "cd /home/ubuntu/server\n"
+        'echo "=== .ansible-lint ==="; cat .ansible-lint\n'
+        'echo ""; cat .yamllint 2>/dev/null\n'
+        "awk '{ print length, FILENAME }' ansible/roles/containers/x/tasks/main.yml",
+        "full multi-line exploration command",
+    ),
     # --- NEW: host package / diagnostic queries (each was a one-off allow entry) ---
     ("lsb_release -d", "lsb_release describe"),
     ("lsb_release -a", "lsb_release all"),
@@ -118,7 +117,6 @@ REJECT = [
     ("dd if=/dev/zero of=f", "dd writes"),
     ("mv a b", "mv renames"),
     ("python3 script.py", "interpreter executes arbitrary code"),
-
     # --- NEW-feature dangerous forms must still reject ---
     ("ls > out.txt", "redirect writes a real file"),
     ("cat a >> log.txt", "append writes a real file"),
@@ -129,15 +127,13 @@ REJECT = [
     ("cat a | tee out", "tee write inside pipeline"),
     ("cat a && echo $(rm x)", "substitution hidden after &&"),
     ("cat a\nrm b", "bad stage on a second line"),
-
     # --- awk dangerous forms ---
-    ('awk \'BEGIN{system("rm -rf x")}\'', "awk system() executes"),
-    ('awk \'{print > "out.txt"}\' file', "awk redirects to a file"),
-    ('awk \'{print | "sh"}\' file', "awk pipes to a command"),
-    ('awk \'BEGIN{while(("ls"|getline l)>0) print l}\'', "awk getline from command"),
+    ("awk 'BEGIN{system(\"rm -rf x\")}'", "awk system() executes"),
+    ("awk '{print > \"out.txt\"}' file", "awk redirects to a file"),
+    ("awk '{print | \"sh\"}' file", "awk pipes to a command"),
+    ("awk 'BEGIN{while((\"ls\"|getline l)>0) print l}'", "awk getline from command"),
     ("awk -f prog.awk file", "awk -f program file (uninspectable)"),
     ("gawk -i inplace '{print}' file", "gawk -i inplace edits files"),
-
     # --- adversarial false-approve guards (the dangerous direction) ---
     ("awk '{print}' > out.txt", "shell redirect to file after a safe awk"),
     ("diff <(ls) <(ls)", "process substitution"),
@@ -145,7 +141,6 @@ REJECT = [
     (">/dev/null", "redirect with no command"),
     ("sed '/foo/w out' file", "sed w command reached via address"),
     ("cat a > b 2>/dev/null", "real-file write alongside a safe redirect"),
-
     # --- sed dangerous forms ---
     ("sed -i 's/a/b/' file", "sed -i edits in place"),
     ("sed 's/a/b/w out.txt' file", "sed s///w writes a file"),
@@ -153,7 +148,6 @@ REJECT = [
     ("sed -n 'w out.txt' file", "sed w command writes"),
     ("sed '1e cat /etc/shadow' file", "sed e command executes"),
     ("sed -f script.sed file", "sed -f program file (uninspectable)"),
-
     # --- package-query guards must reject the WRITE mode of the same binary ---
     ("dpkg", "bare dpkg has no read action -> not provably read-only"),
     ("dpkg -i pkg.deb", "dpkg -i installs"),
@@ -197,17 +191,20 @@ def _failures_reject():
 def test_approves_read_only_commands():
     bad = _failures_approve()
     assert not bad, "Expected APPROVE but got a prompt:\n" + "\n".join(
-        f"  [{l}] {c!r}" for c, l in bad)
+        f"  [{l}] {c!r}" for c, l in bad
+    )
 
 
 def test_rejects_unsafe_commands():
     bad = _failures_reject()
     assert not bad, "Expected REJECT but got auto-approve:\n" + "\n".join(
-        f"  [{l}] {c!r} -> {classify(c)!r}" for c, l in bad)
+        f"  [{l}] {c!r} -> {classify(c)!r}" for c, l in bad
+    )
 
 
 if __name__ == "__main__":
     import sys
+
     fa, fr = _failures_approve(), _failures_reject()
     print(f"APPROVE cases: {len(APPROVE) - len(fa)}/{len(APPROVE)} passed")
     for c, l in fa:

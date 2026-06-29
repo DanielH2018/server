@@ -1,4 +1,5 @@
 """Tests for scripts/validate_ha_config.py — the lightweight HA config validator."""
+
 import yaml
 import pytest
 
@@ -55,7 +56,10 @@ def test_loader_malformed_yaml_raises(tmp_path):
 
 def test_assemble_rejects_ansible_markers(tmp_path):
     role = tmp_path / "role"
-    _write(role / "templates/configuration.yaml.j2", "homeassistant:\n  name: {{ ha_name }}\n")
+    _write(
+        role / "templates/configuration.yaml.j2",
+        "homeassistant:\n  name: {{ ha_name }}\n",
+    )
     _write(role / "templates/customize.yaml.j2", "{}\n")
     _write(role / "templates/ui-lovelace.yaml.j2", "{}\n")
     with pytest.raises(HAConfigError, match="Ansible templating"):
@@ -128,10 +132,19 @@ def test_validate_real_config_is_clean():
 
 def test_validate_reports_structural_error(tmp_path):
     role = tmp_path / "role"
-    _write(role / "templates/configuration.yaml.j2", "recorder:\n  x: 1\nrecorder:\n  y: 2\n")
+    _write(
+        role / "templates/configuration.yaml.j2",
+        "recorder:\n  x: 1\nrecorder:\n  y: 2\n",
+    )
     _write(role / "templates/customize.yaml.j2", "{}\n")
     _write(role / "templates/ui-lovelace.yaml.j2", "{}\n")
-    for s in ("automations.yaml", "scenes.yaml", "scripts.yaml", "templates.yaml", "rest.yaml"):
+    for s in (
+        "automations.yaml",
+        "scenes.yaml",
+        "scripts.yaml",
+        "templates.yaml",
+        "rest.yaml",
+    ):
         _write(role / "files" / s, "[]\n")
     (role / "files/custom_templates").mkdir(parents=True)
     errors = validate(role)
@@ -140,15 +153,20 @@ def test_validate_reports_structural_error(tmp_path):
 
 def test_uncoerced_macro_bool_uses_truth_table():
     from validate_ha_config import uncoerced_macro_bool_uses as u
+
     names = {"m", "n"}
     assert u("{{ m() and x }}", names) == ["m"]
     assert u("{{ x or m() }}", names) == ["m"]
     assert u("{{ not m() }}", names) == ["m"]
     assert u("{{ (m() | bool) and x }}", names) == []
-    assert u("{{ m() | bool and x }}", names) == []     # filter binds tighter than `and` -> Filter operand
+    assert (
+        u("{{ m() | bool and x }}", names) == []
+    )  # filter binds tighter than `and` -> Filter operand
     assert u("{{ m() == 'wake' }}", names) == []
     assert u("{{ m() }}", names) == []
-    assert u("{{ states('x') and y }}", names) == []   # unknown name, not a tracked macro
+    assert (
+        u("{{ states('x') and y }}", names) == []
+    )  # unknown name, not a tracked macro
     assert u("{{ m() and n() }}", names) == ["m", "n"]  # both operands, sorted
 
 
@@ -156,5 +174,6 @@ def test_macro_bool_coercion_clean_on_real_role():
     # The real role must pass — no current macro is a raw boolean operand (error_in_scope is
     # `| bool`-coerced). Pure future-tightening; this guards against a false-positive regression.
     import validate_ha_config
+
     errors = validate_ha_config.validate()
     assert all("boolean and/or/not operand" not in e for e in errors), errors

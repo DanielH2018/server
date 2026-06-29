@@ -11,6 +11,7 @@ from zero and returns a float. fan.jinja's level math lands on .5 midpoints by d
 difference would silently corrupt the tests if we used a bare Jinja2 env. Pinned by
 test_ha_round_semantics.py.
 """
+
 import math
 from pathlib import Path
 
@@ -23,17 +24,17 @@ _SENTINEL = object()
 def _forgiving_float(value, default=0.0):
     try:
         return float(value)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return default
 
 
 def _forgiving_int(value, default=0, base=10):
     try:
         return int(value)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         try:
             return int(str(value), base)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return default
 
 
@@ -41,15 +42,15 @@ def _forgiving_round(value, precision=0, method="common", default=_SENTINEL):
     try:
         value = float(value)
         if method == "ceil":
-            value = math.ceil(value * 10 ** precision) / 10 ** precision
+            value = math.ceil(value * 10**precision) / 10**precision
         elif method == "floor":
-            value = math.floor(value * 10 ** precision) / 10 ** precision
+            value = math.floor(value * 10**precision) / 10**precision
         elif method == "half":
             value = round(value * 2) / 2
         else:  # "common" -> Python round = banker's rounding, matching HA
             value = round(value, precision)
         return int(value) if precision == 0 else value
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return value if default is _SENTINEL else default
 
 

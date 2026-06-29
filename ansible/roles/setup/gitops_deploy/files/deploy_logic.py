@@ -8,6 +8,7 @@ inventory) that the deployer must defer to a manual full deploy.
 `next_action` decides what a poll tick should do given the local/origin HEADs
 and any recorded known-bad (hold) SHA.
 """
+
 from __future__ import annotations
 
 import re
@@ -26,11 +27,11 @@ _ACTIVE_CONFIG = re.compile(
 _CONTAINER_NAME = re.compile(r'^\s*container_name:\s*["\']?([^\s"\']+)["\']?\s*$')
 # Changes whose blast radius we don't try to scope automatically.
 _BROAD_PREFIXES = (
-    "ansible/templates/",                 # shared macros (traefik/networks/resources/...)
-    "ansible/inventory/",                 # host_vars / group_vars
-    "ansible/roles/containers/common/",   # shared deploy path
+    "ansible/templates/",  # shared macros (traefik/networks/resources/...)
+    "ansible/inventory/",  # host_vars / group_vars
+    "ansible/roles/containers/common/",  # shared deploy path
     "ansible/deploy.yml",
-    "ansible/filter_plugins/",            # toposort
+    "ansible/filter_plugins/",  # toposort
 )
 # The SOPS-encrypted secrets file. A change here maps to no service template, but the new
 # value only reaches a container on its next deploy — so a secrets-ONLY push must NOT be
@@ -62,8 +63,13 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
     return cs
 
 
-def next_action(local_head: str, origin_head: str, hold_sha: str | None,
-                dirty: bool = False, origin_ahead: bool = True) -> str:
+def next_action(
+    local_head: str,
+    origin_head: str,
+    hold_sha: str | None,
+    dirty: bool = False,
+    origin_ahead: bool = True,
+) -> str:
     # A dirty working tree (operator mid-edit) is a healthy skip, not an outage,
     # and must never be deployed from — so it short-circuits every other outcome.
     if dirty:
@@ -83,8 +89,7 @@ def next_action(local_head: str, origin_head: str, hold_sha: str | None,
     return "deploy"
 
 
-def should_alert_dirty(now, last_alert_date: str | None,
-                       alert_hour: int = 7) -> bool:
+def should_alert_dirty(now, last_alert_date: str | None, alert_hour: int = 7) -> bool:
     """Whether this tick should send the dirty-working-tree Discord alert.
 
     The deploy timer fires every 30 min, so an unthrottled dirty alert pages the
@@ -134,8 +139,9 @@ def containers_to_gate(compose_text: str | None, service: str) -> list[str]:
     return container_names(compose_text) or [service]
 
 
-def health_decision(health_status: str, running: bool, running_streak: int,
-                    settle_checks: int = 3) -> tuple[str, int]:
+def health_decision(
+    health_status: str, running: bool, running_streak: int, settle_checks: int = 3
+) -> tuple[str, int]:
     """Pure transition for ONE health poll of a just-deployed container.
 
     This is the pass-or-keep-waiting decision the deployer's poll loop (`health_ok`

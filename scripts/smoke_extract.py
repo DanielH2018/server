@@ -4,6 +4,7 @@
 Used by the image-smoke workflow: a Renovate bump changes the literal
 `image: name:tag` line in a docker-compose.yml.j2; we pull+run just the new ref.
 """
+
 import re
 import sys
 

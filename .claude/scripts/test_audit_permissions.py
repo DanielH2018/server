@@ -10,10 +10,13 @@ or deliberately-prompting rules are filtered out.
 Run: uv run pytest .claude/scripts
 (Loads the script by path; it in turn loads the log-permission hook by path.)
 """
+
 import importlib.util
 import os
 
-_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audit-permissions.py")
+_SCRIPT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "audit-permissions.py"
+)
 _spec = importlib.util.spec_from_file_location("audit_permissions", _SCRIPT)
 a = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(a)
@@ -24,10 +27,38 @@ def fixture():
         "version": 1,
         "updated": "2026-06-17T10:00:00.000Z",
         "entries": {
-            "k1": {"tool": "Bash", "sum": "git status", "calls": 50, "asks": 0, "first": "2026-06-01T00:00:00.000Z", "last": "2026-06-17T00:00:00.000Z"},
-            "k2": {"tool": "Bash", "sum": "git push origin main", "calls": 6, "asks": 6, "first": "2026-06-02T00:00:00.000Z", "last": "2026-06-16T00:00:00.000Z"},
-            "k3": {"tool": "Bash", "sum": "git pull", "calls": 3, "asks": 2, "first": "2026-06-03T00:00:00.000Z", "last": "2026-06-10T00:00:00.000Z"},
-            "k4": {"tool": "Write", "sum": "/x/y.md", "calls": 10, "asks": 0, "first": "2026-06-04T00:00:00.000Z", "last": "2026-06-15T00:00:00.000Z"},
+            "k1": {
+                "tool": "Bash",
+                "sum": "git status",
+                "calls": 50,
+                "asks": 0,
+                "first": "2026-06-01T00:00:00.000Z",
+                "last": "2026-06-17T00:00:00.000Z",
+            },
+            "k2": {
+                "tool": "Bash",
+                "sum": "git push origin main",
+                "calls": 6,
+                "asks": 6,
+                "first": "2026-06-02T00:00:00.000Z",
+                "last": "2026-06-16T00:00:00.000Z",
+            },
+            "k3": {
+                "tool": "Bash",
+                "sum": "git pull",
+                "calls": 3,
+                "asks": 2,
+                "first": "2026-06-03T00:00:00.000Z",
+                "last": "2026-06-10T00:00:00.000Z",
+            },
+            "k4": {
+                "tool": "Write",
+                "sum": "/x/y.md",
+                "calls": 10,
+                "asks": 0,
+                "first": "2026-06-04T00:00:00.000Z",
+                "last": "2026-06-15T00:00:00.000Z",
+            },
         },
     }
 
@@ -53,10 +84,28 @@ def test_summarize_report_since_filters_by_last_seen():
 
 
 def test_summarize_report_per_tool_auto_sums_per_entry_max():
-    store = {"version": 1, "updated": None, "entries": {
-        "e1": {"tool": "Bash", "sum": "a", "calls": 3, "asks": 5, "first": "2026-06-01T00:00:00.000Z", "last": "2026-06-10T00:00:00.000Z"},
-        "e2": {"tool": "Bash", "sum": "b", "calls": 10, "asks": 0, "first": "2026-06-01T00:00:00.000Z", "last": "2026-06-10T00:00:00.000Z"},
-    }}
+    store = {
+        "version": 1,
+        "updated": None,
+        "entries": {
+            "e1": {
+                "tool": "Bash",
+                "sum": "a",
+                "calls": 3,
+                "asks": 5,
+                "first": "2026-06-01T00:00:00.000Z",
+                "last": "2026-06-10T00:00:00.000Z",
+            },
+            "e2": {
+                "tool": "Bash",
+                "sum": "b",
+                "calls": 10,
+                "asks": 0,
+                "first": "2026-06-01T00:00:00.000Z",
+                "last": "2026-06-10T00:00:00.000Z",
+            },
+        },
+    }
     rep = a.summarize_report(store, {})
     assert rep["byTool"]["Bash"]["auto"] == 10
 
@@ -97,7 +146,9 @@ def test_parse_args_rejects_prune_zero():
 
 
 def test_render_handles_empty_and_populated_reports():
-    out0 = a.render(a.summarize_report({"version": 1, "updated": None, "entries": {}}, {}))
+    out0 = a.render(
+        a.summarize_report({"version": 1, "updated": None, "entries": {}}, {})
+    )
     assert "0 calls" in out0
     assert "No prompted commands" in out0
     out = a.render(a.summarize_report(fixture(), {}))
@@ -106,14 +157,22 @@ def test_render_handles_empty_and_populated_reports():
 
 
 def test_split_segments_breaks_compound_commands():
-    assert a.split_segments("echo hi && grep foo bar | head -5") == ["echo hi", "grep foo bar", "head -5"]
+    assert a.split_segments("echo hi && grep foo bar | head -5") == [
+        "echo hi",
+        "grep foo bar",
+        "head -5",
+    ]
     assert a.split_segments("a ; b || c") == ["a", "b", "c"]
     assert a.split_segments("solo") == ["solo"]
 
 
 def test_split_segments_does_not_split_inside_quotes():
-    assert a.split_segments('powershell.exe -Command "Get-Process | Where-Object { $_.x }" 2>&1 | head -5') == \
-        ['powershell.exe -Command "Get-Process | Where-Object { $_.x }" 2>&1', 'head -5']
+    assert a.split_segments(
+        'powershell.exe -Command "Get-Process | Where-Object { $_.x }" 2>&1 | head -5'
+    ) == [
+        'powershell.exe -Command "Get-Process | Where-Object { $_.x }" 2>&1',
+        "head -5",
+    ]
     assert a.split_segments("grep 'a;b' file") == ["grep 'a;b' file"]
 
 
@@ -125,16 +184,24 @@ def test_split_segments_treats_heredoc_body_as_data():
 
 
 def test_suggest_rules_does_not_mine_cmdlets_from_powershell_command_string():
-    rules = a.suggest_rules([
-        {"tool": "Bash", "sum": 'powershell.exe -NoProfile -Command "Get-Process | Where-Object { $_.x } | ForEach-Object { $_ }"', "asks": 9}
-    ])
+    rules = a.suggest_rules(
+        [
+            {
+                "tool": "Bash",
+                "sum": 'powershell.exe -NoProfile -Command "Get-Process | Where-Object { $_.x } | ForEach-Object { $_ }"',
+                "asks": 9,
+            }
+        ]
+    )
     assert len(rules) == 0
 
 
 def test_candidate_prefix_uses_subcommand_for_multi_verb_tools():
     assert a.candidate_prefix("git push origin main")["prefix"] == "git push"
     assert a.candidate_prefix("gh api repos/x")["prefix"] == "gh api"
-    assert a.candidate_prefix("head -40 file")["prefix"] == "head"  # flag arg, not a subcommand
+    assert (
+        a.candidate_prefix("head -40 file")["prefix"] == "head"
+    )  # flag arg, not a subcommand
     assert a.candidate_prefix("ls -la /c")["prefix"] == "ls"
     assert a.candidate_prefix('node "C:/x.js"')["prefix"] == "node"
     assert a.candidate_prefix("htop")["exact"] is True
@@ -156,9 +223,15 @@ def test_is_covered_matches_wildcard_and_exact_respects_boundaries():
 
 
 def test_suggest_rules_splits_compound_and_skips_unsafe_noise_heads():
-    rules = a.suggest_rules([
-        {"tool": "Bash", "sum": 'cd "C:/x" && echo "=== hi ===" && grep foo bar.txt && head -5 bar.txt', "asks": 3}
-    ])
+    rules = a.suggest_rules(
+        [
+            {
+                "tool": "Bash",
+                "sum": 'cd "C:/x" && echo "=== hi ===" && grep foo bar.txt && head -5 bar.txt',
+                "asks": 3,
+            }
+        ]
+    )
     names = [r["rule"] for r in rules]
     assert "Bash(grep *)" in names
     assert "Bash(head *)" in names
@@ -182,17 +255,29 @@ def test_cat_left_to_prompt_by_design():
 
 
 def test_suggest_rules_never_suggests_powershell_or_unsafe_shells():
-    rules = a.suggest_rules([
-        {"tool": "Bash", "sum": 'powershell.exe -NoProfile -Command "Get-Process"', "asks": 31}
-    ])
+    rules = a.suggest_rules(
+        [
+            {
+                "tool": "Bash",
+                "sum": 'powershell.exe -NoProfile -Command "Get-Process"',
+                "asks": 31,
+            }
+        ]
+    )
     assert len(rules) == 0
 
 
 def test_blocked_by_policy_reports_unsafe_segment_heads():
-    blocked = a.blocked_by_policy([
-        {"tool": "Bash", "sum": 'cd "C:/x" && powershell.exe -Command "x"', "asks": 5},
-        {"tool": "Bash", "sum": "rm -f /tmp/x", "asks": 2},
-    ])
+    blocked = a.blocked_by_policy(
+        [
+            {
+                "tool": "Bash",
+                "sum": 'cd "C:/x" && powershell.exe -Command "x"',
+                "asks": 5,
+            },
+            {"tool": "Bash", "sum": "rm -f /tmp/x", "asks": 2},
+        ]
+    )
     by_prefix = {b["prefix"]: b["asks"] for b in blocked}
     assert by_prefix["powershell.exe"] == 5
     assert by_prefix["cd"] == 5
@@ -200,11 +285,19 @@ def test_blocked_by_policy_reports_unsafe_segment_heads():
 
 
 def test_collect_permissions_merges_allow_deny_ask():
-    merged = a.collect_permissions([
-        {"permissions": {"allow": ["Bash(git *)"], "deny": ["Bash(rm -rf *)"], "ask": ["Bash(git reset --hard*)"]}},
-        {"permissions": {"allow": ["Bash(node *)"]}},
-        {"nothing": True},
-    ])
+    merged = a.collect_permissions(
+        [
+            {
+                "permissions": {
+                    "allow": ["Bash(git *)"],
+                    "deny": ["Bash(rm -rf *)"],
+                    "ask": ["Bash(git reset --hard*)"],
+                }
+            },
+            {"permissions": {"allow": ["Bash(node *)"]}},
+            {"nothing": True},
+        ]
+    )
     assert merged["allow"] == ["Bash(git *)", "Bash(node *)"]
     assert merged["deny"] == ["Bash(rm -rf *)"]
     assert merged["ask"] == ["Bash(git reset --hard*)"]
@@ -218,21 +311,30 @@ def test_suggest_rules_does_not_propose_a_rule_set_to_prompt_ask_tier():
 
 
 def test_dead_allow_rules_flags_hook_covered_but_keeps_wildcards_and_non_bash():
-    perms = {"allow": [
-        "Bash(sensors)",                            # hook auto-approves -> dead
-        "Bash(docker exec *)",                      # wildcard, broader than hook -> keep
-        "Bash(sops -d ansible/vars/secrets.yml)",   # not read-only -> keep
-        "Skill(security-review)",                   # non-Bash -> keep
-        "WebFetch(domain:github.com)",              # non-Bash -> keep
-    ]}
+    perms = {
+        "allow": [
+            "Bash(sensors)",  # hook auto-approves -> dead
+            "Bash(docker exec *)",  # wildcard, broader than hook -> keep
+            "Bash(sops -d ansible/vars/secrets.yml)",  # not read-only -> keep
+            "Skill(security-review)",  # non-Bash -> keep
+            "WebFetch(domain:github.com)",  # non-Bash -> keep
+        ]
+    }
     dead = a.dead_allow_rules(perms)
     flagged = {d["rule"] for d in dead}
     if a.aar is not None:  # hook classifier loaded by path; present in-repo
         assert "Bash(sensors)" in flagged
-        assert any("hook already covers" in d["reason"]
-                   for d in dead if d["rule"] == "Bash(sensors)")
-    for keep in ("Bash(docker exec *)", "Bash(sops -d ansible/vars/secrets.yml)",
-                 "Skill(security-review)", "WebFetch(domain:github.com)"):
+        assert any(
+            "hook already covers" in d["reason"]
+            for d in dead
+            if d["rule"] == "Bash(sensors)"
+        )
+    for keep in (
+        "Bash(docker exec *)",
+        "Bash(sops -d ansible/vars/secrets.yml)",
+        "Skill(security-review)",
+        "WebFetch(domain:github.com)",
+    ):
         assert keep not in flagged
 
 
@@ -252,14 +354,14 @@ def test_dead_allow_rules_flags_exact_duplicate_once_keeping_first():
 
 
 def test_compute_dead_local_prune_removes_dead_keeps_needed_and_committed_context():
-    committed = ["Bash(ansible-lint *)"]              # fixed context, never edited
+    committed = ["Bash(ansible-lint *)"]  # fixed context, never edited
     local = [
-        "Bash(ansible-lint *)",                       # duplicate of committed -> remove
-        "Bash(ansible-lint)",                         # subsumed by ansible-lint * -> remove
-        "Bash(uv run *)",                             # wildcard, keep
-        "Bash(uv run pytest)",                        # subsumed by uv run * -> remove
-        "Bash(sops -d ansible/vars/secrets.yml)",     # genuinely needed -> keep
-        "Skill(security-review)",                     # non-Bash -> keep
+        "Bash(ansible-lint *)",  # duplicate of committed -> remove
+        "Bash(ansible-lint)",  # subsumed by ansible-lint * -> remove
+        "Bash(uv run *)",  # wildcard, keep
+        "Bash(uv run pytest)",  # subsumed by uv run * -> remove
+        "Bash(sops -d ansible/vars/secrets.yml)",  # genuinely needed -> keep
+        "Skill(security-review)",  # non-Bash -> keep
     ]
     new_local, removed = a.compute_dead_local_prune(committed, local)
     assert new_local == [
@@ -268,7 +370,10 @@ def test_compute_dead_local_prune_removes_dead_keeps_needed_and_committed_contex
         "Skill(security-review)",
     ]
     assert {r["rule"] for r in removed} == {
-        "Bash(ansible-lint *)", "Bash(ansible-lint)", "Bash(uv run pytest)"}
+        "Bash(ansible-lint *)",
+        "Bash(ansible-lint)",
+        "Bash(uv run pytest)",
+    }
     # committed list is never returned for editing
     assert "Bash(ansible-lint *)" in committed
 

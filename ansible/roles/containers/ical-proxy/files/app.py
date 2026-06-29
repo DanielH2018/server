@@ -16,24 +16,25 @@ cached_ics = {"1": "", "2": "", "4": ""}
 
 EMOJI_RE = re.compile(
     "["
-    "\U00002600-\U000027BF"   # misc symbols & dingbats
-    "\U0001F300-\U0001FAFF"   # all major emoji blocks
-    "\U00002B00-\U00002BFF"   # misc symbols and arrows (⬆)
-    "\U000023E0-\U000023FF"   # misc technical (⏫)
-    "\uFE00-\uFE0F"           # variation selectors
-    "\u200D"                   # zero-width joiner
+    "\U00002600-\U000027bf"  # misc symbols & dingbats
+    "\U0001f300-\U0001faff"  # all major emoji blocks
+    "\U00002b00-\U00002bff"  # misc symbols and arrows (⬆)
+    "\U000023e0-\U000023ff"  # misc technical (⏫)
+    "\ufe00-\ufe0f"  # variation selectors
+    "\u200d"  # zero-width joiner
     "]+",
-    flags=re.UNICODE
+    flags=re.UNICODE,
 )
+
 
 def parse_vevent_blocks(ics_text):
     """Split ICS into header, list of VEVENT strings, and footer."""
-    blocks = re.split(r'(?=BEGIN:VEVENT)', ics_text)
+    blocks = re.split(r"(?=BEGIN:VEVENT)", ics_text)
     header = blocks[0]
     footer = ""
     events = []
     for block in blocks[1:]:
-        match = re.search(r'(BEGIN:VEVENT.*?END:VEVENT)(.*)', block, re.DOTALL)
+        match = re.search(r"(BEGIN:VEVENT.*?END:VEVENT)(.*)", block, re.DOTALL)
         if match:
             events.append(match.group(1))
             trailing = match.group(2).strip()
@@ -43,33 +44,36 @@ def parse_vevent_blocks(ics_text):
         footer = "END:VCALENDAR"
     return header, events, footer
 
+
 def get_prop(vevent, prop):
     """Extract a property value from a VEVENT block, handling folded lines."""
-    unfolded = re.sub(r'\r?\n[ \t]', '', vevent)
-    match = re.search(rf'^{prop}(?:;[^:\n]*)?:(.+)$', unfolded, re.MULTILINE)
+    unfolded = re.sub(r"\r?\n[ \t]", "", vevent)
+    match = re.search(rf"^{prop}(?:;[^:\n]*)?:(.+)$", unfolded, re.MULTILINE)
     return match.group(1).strip() if match else None
+
 
 def normalize_dt(dt_value):
     """Strip timezone prefix if present, e.g. 'America/New_York:20210120T113000' -> '20210120T113000'"""
-    if dt_value and ':' in dt_value:
-        return dt_value.split(':')[-1]
+    if dt_value and ":" in dt_value:
+        return dt_value.split(":")[-1]
     return dt_value
+
 
 def filter_superseded_occurrences(events):
     """Remove occurrences of recurring events that have been overridden."""
     overrides = {}
     for vevent in events:
-        uid = get_prop(vevent, 'UID')
-        recurrence_id = get_prop(vevent, 'RECURRENCE-ID')
+        uid = get_prop(vevent, "UID")
+        recurrence_id = get_prop(vevent, "RECURRENCE-ID")
         if uid and recurrence_id:
             normalized = normalize_dt(recurrence_id)
             overrides.setdefault(uid, set()).add(normalized)
 
     filtered = []
     for vevent in events:
-        uid = get_prop(vevent, 'UID')
-        recurrence_id = get_prop(vevent, 'RECURRENCE-ID')
-        dtstart = get_prop(vevent, 'DTSTART')
+        uid = get_prop(vevent, "UID")
+        recurrence_id = get_prop(vevent, "RECURRENCE-ID")
+        dtstart = get_prop(vevent, "DTSTART")
 
         if recurrence_id:
             filtered.append(vevent)
@@ -83,6 +87,7 @@ def filter_superseded_occurrences(events):
         filtered.append(vevent)
     return filtered
 
+
 def dedup_overlapping_recurrences(events):
     """
     For recurring events sharing the same SUMMARY and RRULE, cap the earlier
@@ -91,8 +96,8 @@ def dedup_overlapping_recurrences(events):
     # Group recurring events by (SUMMARY, RRULE)
     groups = {}
     for vevent in events:
-        rrule = get_prop(vevent, 'RRULE')
-        summary = get_prop(vevent, 'SUMMARY')
+        rrule = get_prop(vevent, "RRULE")
+        summary = get_prop(vevent, "SUMMARY")
         if not rrule or not summary:
             continue
         key = (summary, rrule)
@@ -103,33 +108,39 @@ def dedup_overlapping_recurrences(events):
     for key, group in groups.items():
         if len(group) < 2:
             continue
+
         # Sort by DTSTART
         def get_dtstart(v):
-            raw = normalize_dt(get_prop(v, 'DTSTART'))
-            return raw or ''
+            raw = normalize_dt(get_prop(v, "DTSTART"))
+            return raw or ""
+
         group.sort(key=get_dtstart)
         # Cap each earlier series at the day before the next one starts
         for i in range(len(group) - 1):
-            later_dtstart = normalize_dt(get_prop(group[i + 1], 'DTSTART'))
-            dt = datetime.strptime(later_dtstart[:8], '%Y%m%d')
-            until = (dt - timedelta(days=1)).strftime('%Y%m%dT235959Z')
+            later_dtstart = normalize_dt(get_prop(group[i + 1], "DTSTART"))
+            dt = datetime.strptime(later_dtstart[:8], "%Y%m%d")
+            until = (dt - timedelta(days=1)).strftime("%Y%m%dT235959Z")
             to_cap[id(group[i])] = until
 
     patched = []
     for vevent in events:
         if id(vevent) in to_cap:
             until = to_cap[id(vevent)]
-            vevent = re.sub(r'(RRULE:[^\r\n]+)', rf'\1;UNTIL={until}', vevent)
-            print(f"Capped recurring event UNTIL={until}: SUMMARY={get_prop(vevent, 'SUMMARY')}")
+            vevent = re.sub(r"(RRULE:[^\r\n]+)", rf"\1;UNTIL={until}", vevent)
+            print(
+                f"Capped recurring event UNTIL={until}: SUMMARY={get_prop(vevent, 'SUMMARY')}"
+            )
         patched.append(vevent)
     return patched
+
 
 def process_ics(raw_ics):
     """Parse, filter, and reassemble the ICS."""
     header, events, footer = parse_vevent_blocks(raw_ics)
     filtered = filter_superseded_occurrences(events)
     filtered = dedup_overlapping_recurrences(filtered)
-    return header + '\r\n'.join(filtered) + '\r\n' + footer
+    return header + "\r\n".join(filtered) + "\r\n" + footer
+
 
 def process_obsidian_ics(raw_ics):
     """Fix date-only DTSTART/DTSTAMP, strip Habits events, clean up output."""
@@ -137,41 +148,51 @@ def process_obsidian_ics(raw_ics):
     fixed = []
     for vevent in events:
         # Filter out Habits.md events
-        location = get_prop(vevent, 'LOCATION')
-        if location and 'Habits.md' in location:
+        location = get_prop(vevent, "LOCATION")
+        if location and "Habits.md" in location:
             continue
         # Fix date-only DTSTART → VALUE=DATE
-        vevent = re.sub(r'^(DTSTART):(\d{8})\r?$', r'\1;VALUE=DATE:\2', vevent, flags=re.MULTILINE)
+        vevent = re.sub(
+            r"^(DTSTART):(\d{8})\r?$", r"\1;VALUE=DATE:\2", vevent, flags=re.MULTILINE
+        )
         # Fix date-only DTSTAMP → datetime
-        vevent = re.sub(r'^(DTSTAMP):(\d{8})\r?$', r'\1:\2T000000Z', vevent, flags=re.MULTILINE)
+        vevent = re.sub(
+            r"^(DTSTAMP):(\d{8})\r?$", r"\1:\2T000000Z", vevent, flags=re.MULTILINE
+        )
         # Remove LOCATION lines entirely
-        vevent = re.sub(r'^LOCATION:[^\r\n]*\r?\n', '', vevent, flags=re.MULTILINE)
+        vevent = re.sub(r"^LOCATION:[^\r\n]*\r?\n", "", vevent, flags=re.MULTILINE)
         # Strip emojis from SUMMARY and collapse extra spaces
         vevent = re.sub(
-            r'^(SUMMARY:)(.+)$',
-            lambda m: m.group(1) + ' '.join(EMOJI_RE.sub('', m.group(2)).split()),
+            r"^(SUMMARY:)(.+)$",
+            lambda m: m.group(1) + " ".join(EMOJI_RE.sub("", m.group(2)).split()),
             vevent,
-            flags=re.MULTILINE
+            flags=re.MULTILINE,
         )
         fixed.append(vevent)
-    return header + '\r\n'.join(fixed) + '\r\n' + footer
+    return header + "\r\n".join(fixed) + "\r\n" + footer
+
 
 # Ceiling on a fetched ICS feed read into memory. Real calendars are KBs-to-low-MBs; the
 # cap stops a hostile/broken upstream from ballooning the parse past the 128M container cap.
 MAX_FEED_BYTES = 10 * 1024 * 1024  # 10 MB
+
 
 def refresh_feed(key, url, processor=None):
     if processor is None:
         processor = process_ics
     try:
         # stream=True + a byte ceiling so we never read an unbounded body into memory.
-        with requests.get(url, timeout=(10, 30), stream=True) as r:  # 10s connect, 30s read
+        with requests.get(
+            url, timeout=(10, 30), stream=True
+        ) as r:  # 10s connect, 30s read
             if r.status_code == 200:
                 chunks, total = [], 0
                 for chunk in r.iter_content(chunk_size=65536):
                     total += len(chunk)
                     if total > MAX_FEED_BYTES:
-                        raise ValueError(f"feed exceeded {MAX_FEED_BYTES // (1024 * 1024)}MB cap")
+                        raise ValueError(
+                            f"feed exceeded {MAX_FEED_BYTES // (1024 * 1024)}MB cap"
+                        )
                     chunks.append(chunk)
                 text = b"".join(chunks).decode(r.encoding or "utf-8", "replace")
                 cached_ics[key] = processor(text)
@@ -181,12 +202,17 @@ def refresh_feed(key, url, processor=None):
     except Exception as e:
         print(f"Calendar {key}: error fetching — {e}")
 
+
 def refresh_loop():
-    feeds = [(k, u, p) for k, u, p in [
-        ("1", GOOGLE_ICS_URL, process_ics),
-        ("2", GOOGLE_ICS_URL_2, process_ics),
-        ("4", OBSIDIAN_GIST_URL, process_obsidian_ics),
-    ] if u]
+    feeds = [
+        (k, u, p)
+        for k, u, p in [
+            ("1", GOOGLE_ICS_URL, process_ics),
+            ("2", GOOGLE_ICS_URL_2, process_ics),
+            ("4", OBSIDIAN_GIST_URL, process_obsidian_ics),
+        ]
+        if u
+    ]
     if not feeds:
         print("No ICS URLs configured.")
         initial_fetch_done.set()
@@ -203,17 +229,21 @@ def refresh_loop():
         print("All feeds done, sleeping until next refresh...")
         time.sleep(REFRESH_INTERVAL)
 
+
 @app.route("/calendar1.ics")
 def serve_ics_1():
     return Response(cached_ics["1"], mimetype="text/calendar")
+
 
 @app.route("/calendar2.ics")
 def serve_ics_2():
     return Response(cached_ics["2"], mimetype="text/calendar")
 
+
 @app.route("/calendar4.ics")
 def serve_ics_4():
     return Response(cached_ics["4"], mimetype="text/calendar")
+
 
 if __name__ == "__main__":
     t = threading.Thread(target=refresh_loop, daemon=True)

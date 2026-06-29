@@ -9,6 +9,7 @@ the Kuma push monitor's heartbeat interval is the backstop for "the bridge itsel
 
 Design: docs/superpowers/specs/2026-06-06-monitor-bridge-alerting-design.md
 """
+
 import json
 import os
 import sys
@@ -36,7 +37,9 @@ LOKI_URL = _env("LOKI_URL", "http://loki:3100").rstrip("/")
 
 BACKUP_PATH = _env("BACKUP_SOURCE_PATH", "/data/home/ubuntu/server/containers")
 BACKUP_MAX_AGE_H = float(_env("BACKUP_MAX_AGE_H", "30"))
-DISK_MOUNTPOINTS = [m.strip() for m in _env("DISK_MOUNTPOINTS", "/").split(",") if m.strip()]
+DISK_MOUNTPOINTS = [
+    m.strip() for m in _env("DISK_MOUNTPOINTS", "/").split(",") if m.strip()
+]
 DISK_MAX_PCT = float(_env("DISK_MAX_PCT", "90"))
 CERT_MIN_DAYS = float(_env("CERT_MIN_DAYS", "14"))
 MEM_MAX_PCT = float(_env("MEM_MAX_PCT", "90"))
@@ -162,6 +165,7 @@ DISCORD_CONSECUTIVE = int(_env("DISCORD_CONSECUTIVE", "2"))
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
 
+
 def _get_json(url, headers=None):
     hdrs = {"User-Agent": "monitor-bridge"}
     if headers is not None:
@@ -242,7 +246,11 @@ def backup_age_hours(sources_json, path, now=None):
     Raises LookupError if the source or its lastSnapshot is missing.
     """
     now = now or datetime.now(timezone.utc)
-    srcs = [s for s in sources_json.get("sources", []) if s.get("source", {}).get("path") == path]
+    srcs = [
+        s
+        for s in sources_json.get("sources", [])
+        if s.get("source", {}).get("path") == path
+    ]
     if not srcs:
         raise LookupError("no Kopia source for %s" % path)
     last = srcs[0].get("lastSnapshot")
@@ -255,6 +263,7 @@ def backup_age_hours(sources_json, path, now=None):
 
 
 # --- checks: each returns (ok, msg) -----------------------------------------
+
 
 def check_backup():
     data = _get_json(KOPIA_URL + "/api/v1/sources")
@@ -322,12 +331,18 @@ def check_restarts():
 
     Catches crash-loops that an intermittent up-check can miss.
     """
-    vec = prom_vector('changes(container_start_time_seconds{name!=""}[%s])' % RESTART_WINDOW)
+    vec = prom_vector(
+        'changes(container_start_time_seconds{name!=""}[%s])' % RESTART_WINDOW
+    )
     offenders = _top_offenders(vec, "name", lambda v: v > RESTART_MAX)
     if offenders:
         desc = ", ".join("%s (%.0f)" % (n, v) for n, v in offenders[:5])
         return False, "%d container(s) restarting >%.0fx in %s: %s" % (
-            len(offenders), RESTART_MAX, RESTART_WINDOW, desc)
+            len(offenders),
+            RESTART_MAX,
+            RESTART_WINDOW,
+            desc,
+        )
     return True, "no restart loops in %s" % RESTART_WINDOW
 
 
@@ -338,11 +353,16 @@ def check_oom():
     doesn't expose container_oom_events_total the query is empty and this stays green.
     """
     vec = prom_vector(
-        'sum(increase(container_oom_events_total{name!=""}[%s])) by (name)' % OOM_WINDOW)
+        'sum(increase(container_oom_events_total{name!=""}[%s])) by (name)' % OOM_WINDOW
+    )
     offenders = _top_offenders(vec, "name", lambda v: v > 0)
     if offenders:
         desc = ", ".join("%s (%.0f)" % (n, v) for n, v in offenders[:5])
-        return False, "%d container(s) OOM-killed in %s: %s" % (len(offenders), OOM_WINDOW, desc)
+        return False, "%d container(s) OOM-killed in %s: %s" % (
+            len(offenders),
+            OOM_WINDOW,
+            desc,
+        )
     return True, "no OOM kills in %s" % OOM_WINDOW
 
 
@@ -379,11 +399,15 @@ def check_cpu_throttle():
     ratio_vec = prom_vector(
         'sum(rate(container_cpu_cfs_throttled_periods_total{name!=""}[%s])) by (name) '
         '/ sum(rate(container_cpu_cfs_periods_total{name!=""}[%s])) by (name)'
-        % (CPU_WINDOW, CPU_WINDOW))
+        % (CPU_WINDOW, CPU_WINDOW)
+    )
     lost_cores = dict(
-        (m.get("name", "?"), v) for m, v in prom_vector(
+        (m.get("name", "?"), v)
+        for m, v in prom_vector(
             'sum(rate(container_cpu_cfs_throttled_seconds_total{name!=""}[%s])) by (name)'
-            % CPU_WINDOW))
+            % CPU_WINDOW
+        )
+    )
     threshold = CPU_THROTTLE_PCT / 100.0
     offenders = []
     for m, ratio in ratio_vec:
@@ -397,12 +421,25 @@ def check_cpu_throttle():
         return True, "no sustained CPU throttling in %s" % CPU_WINDOW
     _cpu_breach_streak += 1
     desc = ", ".join(
-        "%s (%.0f%%, %.2f cores)" % (n, r * 100, lc) for n, r, lc in offenders[:5])
+        "%s (%.0f%%, %.2f cores)" % (n, r * 100, lc) for n, r, lc in offenders[:5]
+    )
     if _cpu_breach_streak < CPU_CONSECUTIVE:
         return True, "throttling streak %d/%d (not alerting yet): %s" % (
-            _cpu_breach_streak, CPU_CONSECUTIVE, desc)
-    return False, "%d container(s) CPU-throttled >%.0f%% & >%.2f cores for %d cycles: %s" % (
-        len(offenders), CPU_THROTTLE_PCT, CPU_MIN_THROTTLED_CORES, _cpu_breach_streak, desc)
+            _cpu_breach_streak,
+            CPU_CONSECUTIVE,
+            desc,
+        )
+    return (
+        False,
+        "%d container(s) CPU-throttled >%.0f%% & >%.2f cores for %d cycles: %s"
+        % (
+            len(offenders),
+            CPU_THROTTLE_PCT,
+            CPU_MIN_THROTTLED_CORES,
+            _cpu_breach_streak,
+            desc,
+        ),
+    )
 
 
 def check_targets_down():
@@ -423,10 +460,14 @@ def check_traefik_5xx():
     as before, a single error on a near-idle route is not a 100%-error-ratio alarm.
     """
     total_vec = prom_vector(
-        "sum(rate(traefik_service_requests_total[5m])) by (service)")
+        "sum(rate(traefik_service_requests_total[5m])) by (service)"
+    )
     err_rps = dict(
-        (m.get("service", "?"), v) for m, v in prom_vector(
-            'sum(rate(traefik_service_requests_total{code=~"5.."}[5m])) by (service)'))
+        (m.get("service", "?"), v)
+        for m, v in prom_vector(
+            'sum(rate(traefik_service_requests_total{code=~"5.."}[5m])) by (service)'
+        )
+    )
     offenders = []
     total_rps = 0.0
     eligible = 0
@@ -443,8 +484,14 @@ def check_traefik_5xx():
     if offenders:
         desc = ", ".join("%s (%.0f%% of %.2f rps)" % o for o in offenders[:5])
         return False, "%d service(s) over %.0f%% 5xx: %s" % (
-            len(offenders), TRAEFIK_5XX_PCT, desc)
-    return True, "5xx ok: %d service(s) above floor, %.2f rps total" % (eligible, total_rps)
+            len(offenders),
+            TRAEFIK_5XX_PCT,
+            desc,
+        )
+    return True, "5xx ok: %d service(s) above floor, %.2f rps total" % (
+        eligible,
+        total_rps,
+    )
 
 
 def n8n_failures(workflows_json, executions_json, window_s, now=None):
@@ -471,7 +518,9 @@ def n8n_failures(workflows_json, executions_json, window_s, now=None):
         if not ts:
             continue
         dt = parse_rfc3339(ts)
-        if dt.tzinfo is None:  # n8n normally emits UTC 'Z'; assume UTC if a naive ts slips through
+        if (
+            dt.tzinfo is None
+        ):  # n8n normally emits UTC 'Z'; assume UTC if a naive ts slips through
             dt = dt.replace(tzinfo=timezone.utc)
         if dt < cutoff:
             continue
@@ -506,14 +555,21 @@ def check_n8n():
     if not N8N_API_KEY:
         return True, "n8n monitoring disabled (no API key)"
     headers = {"X-N8N-API-KEY": N8N_API_KEY}
-    workflows = _get_json(N8N_URL + "/api/v1/workflows?active=true&limit=250", headers=headers)
-    executions = _get_json(N8N_URL + "/api/v1/executions?status=error&limit=100", headers=headers)
+    workflows = _get_json(
+        N8N_URL + "/api/v1/workflows?active=true&limit=250", headers=headers
+    )
+    executions = _get_json(
+        N8N_URL + "/api/v1/executions?status=error&limit=100", headers=headers
+    )
     offenders = n8n_failures(workflows, executions, parse_duration(N8N_FAIL_WINDOW))
     total = sum(c for _, c in offenders)
     if total > N8N_FAIL_MAX:
         desc = ", ".join("%s (%d)" % (n, c) for n, c in offenders[:5])
         return False, "%d active workflow(s) failed in %s: %s" % (
-            len(offenders), N8N_FAIL_WINDOW, desc)
+            len(offenders),
+            N8N_FAIL_WINDOW,
+            desc,
+        )
     return True, "no active-workflow failures in %s" % N8N_FAIL_WINDOW
 
 
@@ -581,7 +637,9 @@ def scrutiny_freshness(summary, max_age_h, now=None):
 
 def check_scrutiny():
     data = _get_json(SCRUTINY_URL + "/api/summary")
-    return scrutiny_freshness((data.get("data") or {}).get("summary"), SCRUTINY_MAX_AGE_H)
+    return scrutiny_freshness(
+        (data.get("data") or {}).get("summary"), SCRUTINY_MAX_AGE_H
+    )
 
 
 def pi_pressure(load_json, mem_json, fs_json, load_max, mem_min_mb, disk_max_pct):
@@ -620,7 +678,10 @@ def pi_pressure(load_json, mem_json, fs_json, load_max, mem_min_mb, disk_max_pct
     if problems:
         return False, "; ".join(problems)
     return True, "load5 %.2f/core, %.0fMB available, disk %.0f%%" % (
-        per_core, avail_mb, max(devices.values()))
+        per_core,
+        avail_mb,
+        max(devices.values()),
+    )
 
 
 def check_pi_pressure():
@@ -642,8 +703,13 @@ def restore_drill(state, age_s, max_age_s):
         return False, "last restore drill FAILED: %s" % state.get("msg", "?")
     if age_s > max_age_s:
         return False, "last successful restore drill %.1fd ago (max %dd)" % (
-            age_s / 86400, max_age_s / 86400)
-    return True, "restore drill ok %.1fd ago: %s" % (age_s / 86400, state.get("msg", ""))
+            age_s / 86400,
+            max_age_s / 86400,
+        )
+    return True, "restore drill ok %.1fd ago: %s" % (
+        age_s / 86400,
+        state.get("msg", ""),
+    )
 
 
 def check_restore_drill():
@@ -653,7 +719,7 @@ def check_restore_drill():
         age_s = time.time() - float(state.get("ts", 0))
     except FileNotFoundError:
         return False, "no restore-drill state (drill never ran?)"
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return False, "restore-drill state unparseable"
     return restore_drill(state, age_s, RESTORE_DRILL_MAX_AGE_S)
 
@@ -670,7 +736,9 @@ def verify(state, age_s, max_age_s):
         return False, "last snapshot verify FAILED: %s" % state.get("msg", "?")
     if age_s > max_age_s:
         return False, "last successful verify %.1fd ago (max %dd)" % (
-            age_s / 86400, max_age_s / 86400)
+            age_s / 86400,
+            max_age_s / 86400,
+        )
     return True, "verify ok %.1fd ago: %s" % (age_s / 86400, state.get("msg", ""))
 
 
@@ -681,7 +749,7 @@ def check_verify():
         age_s = time.time() - float(state.get("ts", 0))
     except FileNotFoundError:
         return False, "no verify state (verify never ran?)"
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return False, "verify state unparseable"
     return verify(state, age_s, VERIFY_MAX_AGE_S)
 
@@ -697,14 +765,19 @@ def b2_usage(state, age_s, max_age_s, cap_bytes, max_pct):
         return False, "B2 usage probe FAILED: %s" % state.get("msg", "?")
     if age_s > max_age_s:
         return False, "B2 usage data %.1fd old (max %.1fd)" % (
-            age_s / 86400, max_age_s / 86400)
+            age_s / 86400,
+            max_age_s / 86400,
+        )
     try:
         used = float(state["bytes"])
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return False, "B2 usage state missing/invalid bytes"
     pct = used / cap_bytes * 100
     msg = "B2 %.2f/%.0fGB billable (%.0f%% of plan)" % (
-        used / 1e9, cap_bytes / 1e9, pct)
+        used / 1e9,
+        cap_bytes / 1e9,
+        pct,
+    )
     if pct > max_pct:
         return False, msg + " — over %g%% threshold" % max_pct
     return True, msg
@@ -717,7 +790,7 @@ def check_b2_usage():
         age_s = time.time() - float(state.get("ts", 0))
     except FileNotFoundError:
         return False, "no B2-usage state (probe never ran?)"
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return False, "B2-usage state unparseable"
     return b2_usage(state, age_s, B2_USAGE_MAX_AGE_S, B2_CAP_BYTES, B2_USAGE_MAX_PCT)
 
@@ -734,7 +807,9 @@ def maintenance(state, age_s, max_age_s):
         return False, "kopia full maintenance UNHEALTHY: %s" % state.get("msg", "?")
     if age_s > max_age_s:
         return False, "maintenance check %.1fd old (max %.1fd)" % (
-            age_s / 86400, max_age_s / 86400)
+            age_s / 86400,
+            max_age_s / 86400,
+        )
     return True, "maintenance ok %.1fd ago: %s" % (age_s / 86400, state.get("msg", ""))
 
 
@@ -745,7 +820,7 @@ def check_maintenance():
         age_s = time.time() - float(state.get("ts", 0))
     except FileNotFoundError:
         return False, "no maintenance state (check never ran?)"
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return False, "maintenance state unparseable"
     return maintenance(state, age_s, MAINTENANCE_MAX_AGE_S)
 
@@ -763,7 +838,10 @@ def ha_heartbeat_fresh(state, max_age_s, now=None):
         return False, "no heartbeat state (entity missing or never set)"
     age = (now - parse_rfc3339(lc)).total_seconds()
     if age > max_age_s:
-        return False, "stale — automations last ran %.0fs ago (> %gs)" % (age, max_age_s)
+        return False, "stale — automations last ran %.0fs ago (> %gs)" % (
+            age,
+            max_age_s,
+        )
     return True, "fresh — automations ran %.0fs ago" % age
 
 
@@ -788,10 +866,14 @@ def check_ha_heartbeat():
     if not HA_URL or not HA_TOKEN:
         return True, "HA heartbeat monitoring disabled (no URL/token)"
     try:
-        state = _get_json(HA_URL + "/api/states/" + HA_HEARTBEAT_ENTITY,
-                          headers={"Authorization": "Bearer " + HA_TOKEN})
+        state = _get_json(
+            HA_URL + "/api/states/" + HA_HEARTBEAT_ENTITY,
+            headers={"Authorization": "Bearer " + HA_TOKEN},
+        )
         ok, msg = ha_heartbeat_fresh(state, HA_HEARTBEAT_MAX_AGE_S)
-    except Exception as e:  # unreachable/auth -> route through the streak, don't page yet
+    except (
+        Exception
+    ) as e:  # unreachable/auth -> route through the streak, don't page yet
         ok, msg = False, "HA API unreachable: %s" % e
     if ok:
         _ha_down_streak = 0
@@ -799,7 +881,10 @@ def check_ha_heartbeat():
     _ha_down_streak += 1
     if _ha_down_streak < HA_CONSECUTIVE:
         return True, "down streak %d/%d (deploy/restart grace): %s" % (
-            _ha_down_streak, HA_CONSECUTIVE, msg)
+            _ha_down_streak,
+            HA_CONSECUTIVE,
+            msg,
+        )
     return False, "%s (%d cycles)" % (msg, _ha_down_streak)
 
 
@@ -824,7 +909,10 @@ def loki_count(selector, window):
 def loki_ingestion_fresh(count, window):
     """Decide log-pipeline freshness from the line count over `window` (None = no series)."""
     if not count:  # None or 0 — nothing shipped: promtail dead, positions corrupt, etc.
-        return False, "no log lines ingested in %s — promtail/Loki pipeline silent" % window
+        return (
+            False,
+            "no log lines ingested in %s — promtail/Loki pipeline silent" % window,
+        )
     return True, "%d log lines in %s" % (int(count), window)
 
 
@@ -832,11 +920,14 @@ def check_loki_ingestion():
     # Two arms, down if EITHER pipeline is silent: the file-tail union catches a total
     # promtail death; the container-stream arm catches a docker_sd-specific break the
     # union would hide (see LOKI_DOCKER_STREAM). Both share the same quiet-tolerant window.
-    ok_all, msg_all = loki_ingestion_fresh(loki_count(LOKI_STREAM, LOKI_WINDOW), LOKI_WINDOW)
+    ok_all, msg_all = loki_ingestion_fresh(
+        loki_count(LOKI_STREAM, LOKI_WINDOW), LOKI_WINDOW
+    )
     if not ok_all:
         return False, msg_all
     ok_docker, msg_docker = loki_ingestion_fresh(
-        loki_count(LOKI_DOCKER_STREAM, LOKI_WINDOW), LOKI_WINDOW)
+        loki_count(LOKI_DOCKER_STREAM, LOKI_WINDOW), LOKI_WINDOW
+    )
     if not ok_docker:
         return False, "container log stream silent — " + msg_docker
     return True, "%s (+ container stream)" % msg_all
@@ -851,7 +942,10 @@ def discord_webhook_ok(status_code, name=None):
     """
     if status_code == 200:
         return True, "Discord webhook valid%s" % (" (%s)" % name if name else "")
-    return False, "Discord webhook returned HTTP %s — Kuma alerts won't deliver" % status_code
+    return (
+        False,
+        "Discord webhook returned HTTP %s — Kuma alerts won't deliver" % status_code,
+    )
 
 
 _discord_down_streak = 0
@@ -873,7 +967,9 @@ def check_discord():
         ok, msg = discord_webhook_ok(200, (data or {}).get("name"))
     except urllib.error.HTTPError as e:
         ok, msg = discord_webhook_ok(e.code)
-    except Exception as e:  # network/DNS blip -> ride the streak, don't page on one cycle
+    except (
+        Exception
+    ) as e:  # network/DNS blip -> ride the streak, don't page on one cycle
         ok, msg = False, "Discord webhook unreachable: %s" % e
     if ok:
         _discord_down_streak = 0
@@ -881,7 +977,10 @@ def check_discord():
     _discord_down_streak += 1
     if _discord_down_streak < DISCORD_CONSECUTIVE:
         return True, "down streak %d/%d (transient grace): %s" % (
-            _discord_down_streak, DISCORD_CONSECUTIVE, msg)
+            _discord_down_streak,
+            DISCORD_CONSECUTIVE,
+            msg,
+        )
     return False, "%s (%d cycles)" % (msg, _discord_down_streak)
 
 
@@ -896,18 +995,18 @@ CHECKS = [
     ("targets", _env("KUMA_PUSH_TARGETS", ""), check_targets_down),
     ("traefik5xx", _env("KUMA_PUSH_TRAEFIK", ""), check_traefik_5xx),
     ("n8n", _env("KUMA_PUSH_N8N", ""), check_n8n),
-    ("gitops_alive",  _env("KUMA_PUSH_GITOPS_ALIVE",  ""), check_gitops_alive),
+    ("gitops_alive", _env("KUMA_PUSH_GITOPS_ALIVE", ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
     ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
-    ("verify",        _env("KUMA_PUSH_VERIFY",        ""), check_verify),
-    ("maintenance",   _env("KUMA_PUSH_MAINTENANCE",   ""), check_maintenance),
-    ("b2_usage",      _env("KUMA_PUSH_B2",            ""), check_b2_usage),
-    ("scrutiny",      _env("KUMA_PUSH_SCRUTINY",      ""), check_scrutiny),
-    ("pi_pressure",   _env("KUMA_PUSH_PI",            ""), check_pi_pressure),
-    ("ha_heartbeat",  _env("KUMA_PUSH_HA",            ""), check_ha_heartbeat),
+    ("verify", _env("KUMA_PUSH_VERIFY", ""), check_verify),
+    ("maintenance", _env("KUMA_PUSH_MAINTENANCE", ""), check_maintenance),
+    ("b2_usage", _env("KUMA_PUSH_B2", ""), check_b2_usage),
+    ("scrutiny", _env("KUMA_PUSH_SCRUTINY", ""), check_scrutiny),
+    ("pi_pressure", _env("KUMA_PUSH_PI", ""), check_pi_pressure),
+    ("ha_heartbeat", _env("KUMA_PUSH_HA", ""), check_ha_heartbeat),
     ("renovate_alive", _env("KUMA_PUSH_RENOVATE_ALIVE", ""), check_renovate_alive),
-    ("loki_ingestion", _env("KUMA_PUSH_LOKI",         ""), check_loki_ingestion),
-    ("discord",        _env("KUMA_PUSH_DISCORD",      ""), check_discord),
+    ("loki_ingestion", _env("KUMA_PUSH_LOKI", ""), check_loki_ingestion),
+    ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
 ]
 
 

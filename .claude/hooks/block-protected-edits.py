@@ -19,6 +19,7 @@ Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision when the target
 one of the above; otherwise no output -> normal permission flow. The hook can only
 ever BLOCK; it never approves.
 """
+
 import json
 import os
 import re
@@ -55,7 +56,9 @@ def classify(file_path, repo_root):
     """
     if not file_path:
         return None
-    target = file_path if os.path.isabs(file_path) else os.path.join(repo_root, file_path)
+    target = (
+        file_path if os.path.isabs(file_path) else os.path.join(repo_root, file_path)
+    )
     target = os.path.normpath(target)
 
     # 1. generated containers/ tree
@@ -72,7 +75,11 @@ def classify(file_path, repo_root):
 
     # 2. SOPS-encrypted file (content-based)
     if is_sops_encrypted(_read_file(target)):
-        rel = os.path.relpath(target, repo_root) if target.startswith(repo_root + os.sep) else target
+        rel = (
+            os.path.relpath(target, repo_root)
+            if target.startswith(repo_root + os.sep)
+            else target
+        )
         return (
             f"`{rel}` is SOPS-encrypted — don't edit it directly (you'd corrupt the "
             f"ciphertext or commit a plaintext secret). Edit it via `sops {rel}`, or use "
@@ -88,16 +95,22 @@ def main():
         return 0
     file_path = ((data.get("tool_input") or {}).get("file_path")) or ""
     # repo_root = two levels up from .claude/hooks/
-    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    repo_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
     reason = classify(file_path, repo_root)
     if reason:
-        print(json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        }))
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": reason,
+                    }
+                }
+            )
+        )
     return 0
 
 

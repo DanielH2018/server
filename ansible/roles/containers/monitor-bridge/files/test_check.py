@@ -9,6 +9,7 @@ nanosecond RFC3339 parsing (Kopia emits 9 fractional digits; fromisoformat caps 
 and the Kopia /api/v1/sources age/error extraction. The HTTP glue is exercised live
 via `check.py --once` at deploy time.
 """
+
 import os
 import time
 import urllib.error
@@ -26,6 +27,7 @@ def _seq(*values):
 
 
 # --- parse_rfc3339 ----------------------------------------------------------
+
 
 def test_nanosecond_precision_with_z():
     # Real Kopia value: 9 fractional digits + trailing Z
@@ -54,7 +56,10 @@ NOW = datetime(2026, 6, 6, 12, 0, 0, tzinfo=timezone.utc)
 def _sources(last):
     return {
         "sources": [
-            {"source": {"path": "/other"}, "lastSnapshot": {"startTime": "2020-01-01T00:00:00Z"}},
+            {
+                "source": {"path": "/other"},
+                "lastSnapshot": {"startTime": "2020-01-01T00:00:00Z"},
+            },
             {"source": {"path": "/data/containers"}, "lastSnapshot": last},
         ]
     }
@@ -91,6 +96,7 @@ def test_no_snapshot_raises():
 
 # --- prom_vector ------------------------------------------------------------
 
+
 def _vector(*pairs):
     """Build a Prometheus instant-query JSON from (labels, value) pairs."""
     return {
@@ -125,6 +131,7 @@ def test_prom_vector_non_success_raises(monkeypatch):
 
 # --- check_restarts ---------------------------------------------------------
 
+
 def test_restarts_names_containers_over_threshold(monkeypatch):
     vec = [({"name": "sonarr"}, 5.0), ({"name": "radarr"}, 1.0)]
     monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vec)
@@ -150,6 +157,7 @@ def test_restarts_none_is_ok(monkeypatch):
 
 # --- check_oom --------------------------------------------------------------
 
+
 def test_oom_names_killed_container(monkeypatch):
     vec = [({"name": "n8n"}, 2.0)]
     monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vec)
@@ -165,6 +173,7 @@ def test_oom_none_is_ok(monkeypatch):
 
 
 # --- check_cpu_throttle -----------------------------------------------------
+
 
 def _cpu_cycle(monkeypatch, ratio, lost):
     """Feed one loop iteration's two prom_vector calls and run the check."""
@@ -250,6 +259,7 @@ def test_cpu_throttle_below_cores_floor_is_ok(monkeypatch):
 
 # --- check_targets_down -----------------------------------------------------
 
+
 def test_targets_names_down_target(monkeypatch):
     vec = [({"job": "node"}, 1.0), ({"job": "cadvisor"}, 0.0)]
     monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vec)
@@ -268,6 +278,7 @@ def test_targets_all_up_is_ok(monkeypatch):
 
 # --- check_traefik_5xx ------------------------------------------------------
 # Per-service: 1st prom_vector call = total rps by service, 2nd = 5xx rps by service.
+
 
 def test_traefik_names_erroring_service(monkeypatch):
     # sonarr: 0.2 of 1.0 rps = 20% 5xx -> named. jellyfin: clean -> not named.
@@ -316,6 +327,7 @@ def test_traefik_no_traffic_is_ok(monkeypatch):
 
 # --- check_mem --------------------------------------------------------------
 
+
 def test_mem_reports_pct_without_oom(monkeypatch):
     # avail 2GB of 10GB -> 80% used, under default 90% -> ok, and no OOM wording
     calls = []
@@ -341,14 +353,21 @@ def test_mem_high_alerts(monkeypatch):
 
 # --- check_backup -----------------------------------------------------------
 
+
 def _iso_ago(hours):
     """RFC3339 'Z' timestamp `hours` in the past. check_backup() (unlike the
     backup_age_hours unit tests) calls now() itself, so snapshots are relative to real now."""
-    return (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat().replace("+00:00", "Z")
+    return (
+        (datetime.now(timezone.utc) - timedelta(hours=hours))
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def test_backup_fresh_is_ok(monkeypatch):
-    monkeypatch.setattr(check, "BACKUP_PATH", "/data/containers")  # match _sources()'s path
+    monkeypatch.setattr(
+        check, "BACKUP_PATH", "/data/containers"
+    )  # match _sources()'s path
     last = {"endTime": _iso_ago(1), "stats": {"errorCount": 0}}
     monkeypatch.setattr(check, "_get_json", lambda *a, **k: _sources(last))
     ok, msg = check.check_backup()
@@ -386,6 +405,7 @@ def test_backup_missing_source_alerts(monkeypatch):
 
 # --- check_disk -------------------------------------------------------------
 
+
 def test_disk_under_threshold_is_ok(monkeypatch):
     monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
     # avail 0.5GB of 1GB -> 50% used, under default 90%
@@ -416,6 +436,7 @@ def test_disk_metric_unavailable_alerts(monkeypatch):
 
 # --- check_cert -------------------------------------------------------------
 
+
 def test_cert_valid_is_ok(monkeypatch):
     # default CERT_MIN_DAYS=14; 30 days left -> ok
     monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: 30.0)
@@ -441,6 +462,7 @@ def test_cert_metric_unavailable_alerts(monkeypatch):
 
 # --- parse_duration ---------------------------------------------------------
 
+
 def test_parse_duration_units():
     assert check.parse_duration("900s") == 900
     assert check.parse_duration("15m") == 900
@@ -465,7 +487,9 @@ def _workflows(*items):
 
 def _executions(*items):
     """items: (workflowId, stoppedAt) tuples -> n8n /executions payload (all status=error)."""
-    return {"data": [{"workflowId": w, "status": "error", "stoppedAt": s} for w, s in items]}
+    return {
+        "data": [{"workflowId": w, "status": "error", "stoppedAt": s} for w, s in items]
+    }
 
 
 def test_n8n_failure_within_window_named():
@@ -490,10 +514,15 @@ def test_n8n_multiple_failures_counted_and_sorted():
     wf = _workflows(("1", "A Flow", True), ("2", "B Flow", True))
     ex = _executions(
         ("1", _n8n_ago(2)),
-        ("2", _n8n_ago(3)), ("2", _n8n_ago(4)), ("2", _n8n_ago(5)),
+        ("2", _n8n_ago(3)),
+        ("2", _n8n_ago(4)),
+        ("2", _n8n_ago(5)),
     )
     # B has 3 failures, A has 1 -> sorted by count desc
-    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("B Flow", 3), ("A Flow", 1)]
+    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [
+        ("B Flow", 3),
+        ("A Flow", 1),
+    ]
 
 
 def test_n8n_empty_inputs():
@@ -509,12 +538,15 @@ def test_n8n_missing_stoppedat_falls_back_to_startedat():
 def test_n8n_naive_timestamp_treated_as_utc():
     # n8n normally emits UTC 'Z'; a naive timestamp must not raise on the tz-aware compare
     wf = _workflows(("1", "Prod Flow", True))
-    naive = (N8N_NOW - timedelta(minutes=5)).replace(tzinfo=None).isoformat()  # no offset/Z
+    naive = (
+        (N8N_NOW - timedelta(minutes=5)).replace(tzinfo=None).isoformat()
+    )  # no offset/Z
     ex = {"data": [{"workflowId": "1", "status": "error", "stoppedAt": naive}]}
     assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("Prod Flow", 1)]
 
 
 # --- check_n8n --------------------------------------------------------------
+
 
 def test_n8n_disabled_without_key():
     # N8N_API_KEY defaults to "" in tests -> monitoring disabled, never a false page
@@ -558,6 +590,7 @@ def test_n8n_check_at_threshold_is_ok(monkeypatch):
 
 # --- gitops_alive / gitops_status (pure) ------------------------------------
 
+
 def test_gitops_alive_fresh():
     ok, msg = check.gitops_alive(60, 5400)
     assert ok
@@ -594,6 +627,7 @@ def test_gitops_status_held_names_sha():
 
 
 # --- check_gitops_alive / check_gitops_status (file I/O) ---------------------
+
 
 def _gw(tmp_path, name, content):
     (tmp_path / name).write_text(content)
@@ -667,12 +701,16 @@ def test_touch_heartbeat_never_raises(monkeypatch):
 
 def _drill_state(tmp_path, monkeypatch, ts, ok, msg):
     p = tmp_path / "state.json"
-    p.write_text('{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg))
+    p.write_text(
+        '{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg)
+    )
     monkeypatch.setattr(check, "RESTORE_DRILL_STATE", str(p))
 
 
 def test_restore_drill_fresh_success_is_up(tmp_path, monkeypatch):
-    _drill_state(tmp_path, monkeypatch, time.time() - 86400, True, "restored pihole: 23 files")
+    _drill_state(
+        tmp_path, monkeypatch, time.time() - 86400, True, "restored pihole: 23 files"
+    )
     ok, msg = check.check_restore_drill()
     assert ok
     assert "pihole" in msg
@@ -686,7 +724,9 @@ def test_restore_drill_failure_is_down(tmp_path, monkeypatch):
 
 
 def test_restore_drill_stale_success_is_down(tmp_path, monkeypatch):
-    _drill_state(tmp_path, monkeypatch, time.time() - 40 * 86400, True, "restored grafana")
+    _drill_state(
+        tmp_path, monkeypatch, time.time() - 40 * 86400, True, "restored grafana"
+    )
     ok, msg = check.check_restore_drill()
     assert not ok
     assert "ago" in msg
@@ -713,13 +753,20 @@ def test_restore_drill_unparseable_is_down(tmp_path, monkeypatch):
 
 def _verify_state(tmp_path, monkeypatch, ts, ok, msg):
     p = tmp_path / "state.json"
-    p.write_text('{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg))
+    p.write_text(
+        '{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg)
+    )
     monkeypatch.setattr(check, "VERIFY_STATE", str(p))
 
 
 def test_verify_fresh_success_is_up(tmp_path, monkeypatch):
-    _verify_state(tmp_path, monkeypatch, time.time() - 86400, True,
-                  "verified 142 snapshots, 0 errors")
+    _verify_state(
+        tmp_path,
+        monkeypatch,
+        time.time() - 86400,
+        True,
+        "verified 142 snapshots, 0 errors",
+    )
     ok, msg = check.check_verify()
     assert ok
     assert "142 snapshots" in msg
@@ -728,7 +775,9 @@ def test_verify_fresh_success_is_up(tmp_path, monkeypatch):
 def test_verify_failure_is_down(tmp_path, monkeypatch):
     # A non-zero `kopia snapshot verify` (detected bit-rot / unreadable blob) must page —
     # this is the exact failure the old `| logger` cron swallowed.
-    _verify_state(tmp_path, monkeypatch, time.time(), False, "verify found 2 unreadable objects")
+    _verify_state(
+        tmp_path, monkeypatch, time.time(), False, "verify found 2 unreadable objects"
+    )
     ok, msg = check.check_verify()
     assert not ok
     assert "unreadable" in msg
@@ -760,13 +809,20 @@ def test_verify_unparseable_is_down(tmp_path, monkeypatch):
 
 def _maintenance_state(tmp_path, monkeypatch, ts, ok, msg):
     p = tmp_path / "maint.json"
-    p.write_text('{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg))
+    p.write_text(
+        '{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg)
+    )
     monkeypatch.setattr(check, "MAINTENANCE_STATE", str(p))
 
 
 def test_maintenance_fresh_success_is_up(tmp_path, monkeypatch):
-    _maintenance_state(tmp_path, monkeypatch, time.time() - 3600, True,
-                       "full maint enabled, owner root@kopia, next in 18.0h, last run snapshot-gc ok")
+    _maintenance_state(
+        tmp_path,
+        monkeypatch,
+        time.time() - 3600,
+        True,
+        "full maint enabled, owner root@kopia, next in 18.0h, last run snapshot-gc ok",
+    )
     ok, msg = check.check_maintenance()
     assert ok
     assert "owner root@kopia" in msg
@@ -774,7 +830,9 @@ def test_maintenance_fresh_success_is_up(tmp_path, monkeypatch):
 
 def test_maintenance_unhealthy_is_down(tmp_path, monkeypatch):
     # A stalled/disabled full cycle (the upstream cause b2_usage only catches weeks later) must page.
-    _maintenance_state(tmp_path, monkeypatch, time.time(), False, "full maintenance overdue 50.0h")
+    _maintenance_state(
+        tmp_path, monkeypatch, time.time(), False, "full maintenance overdue 50.0h"
+    )
     ok, msg = check.check_maintenance()
     assert not ok
     assert "overdue" in msg
@@ -809,8 +867,10 @@ def test_maintenance_unparseable_is_down(tmp_path, monkeypatch):
 
 def _b2_state(tmp_path, monkeypatch, ts, ok, bytes_, msg="probe"):
     p = tmp_path / "state.json"
-    p.write_text('{"ts": %s, "ok": %s, "bytes": %s, "msg": "%s"}'
-                 % (ts, "true" if ok else "false", bytes_, msg))
+    p.write_text(
+        '{"ts": %s, "ok": %s, "bytes": %s, "msg": "%s"}'
+        % (ts, "true" if ok else "false", bytes_, msg)
+    )
     monkeypatch.setattr(check, "B2_USAGE_STATE", str(p))
 
 
@@ -877,30 +937,42 @@ def _dev(wwn, name, collector_date=None, archived=False):
 
 def test_scrutiny_fresh_device_is_ok():
     s = _summary(_dev("w1", "nvme0", "2026-06-06T06:00:00Z"))
-    ok, msg = check.scrutiny_freshness(s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc))
+    ok, msg = check.scrutiny_freshness(
+        s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
+    )
     assert ok
     assert "1 device" in msg
 
 
 def test_scrutiny_stale_device_is_named():
-    s = _summary(_dev("w1", "nvme0", "2026-06-04T06:00:00Z"),
-                 _dev("w2", "sda", "2026-06-06T06:00:00Z"))
-    ok, msg = check.scrutiny_freshness(s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc))
+    s = _summary(
+        _dev("w1", "nvme0", "2026-06-04T06:00:00Z"),
+        _dev("w2", "sda", "2026-06-06T06:00:00Z"),
+    )
+    ok, msg = check.scrutiny_freshness(
+        s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
+    )
     assert not ok
     assert "nvme0" in msg and "sda" not in msg
 
 
 def test_scrutiny_no_smart_data_is_down():
     s = _summary(_dev("w1", "nvme0"))
-    ok, msg = check.scrutiny_freshness(s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc))
+    ok, msg = check.scrutiny_freshness(
+        s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
+    )
     assert not ok
     assert "no SMART data" in msg
 
 
 def test_scrutiny_archived_device_is_skipped():
-    s = _summary(_dev("w1", "nvme0", "2026-06-06T06:00:00Z"),
-                 _dev("w2", "old-disk", "2020-01-01T00:00:00Z", archived=True))
-    ok, _ = check.scrutiny_freshness(s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc))
+    s = _summary(
+        _dev("w1", "nvme0", "2026-06-06T06:00:00Z"),
+        _dev("w2", "old-disk", "2020-01-01T00:00:00Z", archived=True),
+    )
+    ok, _ = check.scrutiny_freshness(
+        s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
+    )
     assert ok
 
 
@@ -941,13 +1013,17 @@ def test_pi_pressure_high_load_alerts():
 
 
 def test_pi_pressure_low_mem_alerts():
-    ok, msg = check.pi_pressure({"min5": 0.4, "cpucore": 4}, {"available": 13 * MB}, FS_OK, 1.5, 50, 90)
+    ok, msg = check.pi_pressure(
+        {"min5": 0.4, "cpucore": 4}, {"available": 13 * MB}, FS_OK, 1.5, 50, 90
+    )
     assert not ok
     assert "13MB" in msg
 
 
 def test_pi_pressure_full_disk_alerts_naming_device():
-    fs = [{"device_name": "/dev/mmcblk0p2", "mnt_point": "/etc/hostname", "percent": 94.0}]
+    fs = [
+        {"device_name": "/dev/mmcblk0p2", "mnt_point": "/etc/hostname", "percent": 94.0}
+    ]
     ok, msg = check.pi_pressure(LOAD_OK, MEM_OK, fs, 1.5, 50, 90)
     assert not ok
     assert "/dev/mmcblk0p2" in msg and "94" in msg
@@ -955,8 +1031,16 @@ def test_pi_pressure_full_disk_alerts_naming_device():
 
 def test_pi_pressure_duplicate_device_entries_alert_once():
     fs = [
-        {"device_name": "/dev/mmcblk0p2", "mnt_point": "/etc/resolv.conf", "percent": 94.0},
-        {"device_name": "/dev/mmcblk0p2", "mnt_point": "/etc/hostname", "percent": 94.0},
+        {
+            "device_name": "/dev/mmcblk0p2",
+            "mnt_point": "/etc/resolv.conf",
+            "percent": 94.0,
+        },
+        {
+            "device_name": "/dev/mmcblk0p2",
+            "mnt_point": "/etc/hostname",
+            "percent": 94.0,
+        },
     ]
     ok, msg = check.pi_pressure(LOAD_OK, MEM_OK, fs, 1.5, 50, 90)
     assert not ok
@@ -964,7 +1048,9 @@ def test_pi_pressure_duplicate_device_entries_alert_once():
 
 
 def test_pi_pressure_both_breaches_named():
-    ok, msg = check.pi_pressure({"min5": 8.0, "cpucore": 4}, {"available": 10 * MB}, FS_OK, 1.5, 50, 90)
+    ok, msg = check.pi_pressure(
+        {"min5": 8.0, "cpucore": 4}, {"available": 10 * MB}, FS_OK, 1.5, 50, 90
+    )
     assert not ok
     assert "load5" in msg and "available" in msg
 
@@ -972,7 +1058,9 @@ def test_pi_pressure_both_breaches_named():
 def test_pi_pressure_at_threshold_is_ok():
     # strictly greater / strictly less, like the other checks' threshold semantics
     fs = [{"device_name": "/dev/mmcblk0p2", "mnt_point": "/", "percent": 90.0}]
-    ok, _ = check.pi_pressure({"min5": 6.0, "cpucore": 4}, {"available": 50 * MB}, fs, 1.5, 50, 90)
+    ok, _ = check.pi_pressure(
+        {"min5": 6.0, "cpucore": 4}, {"available": 50 * MB}, fs, 1.5, 50, 90
+    )
     assert ok
 
 
@@ -1009,7 +1097,8 @@ def test_pi_check_disabled_without_url():
 def test_pi_check_down_on_pressure(monkeypatch):
     monkeypatch.setattr(check, "PI_GLANCES_URL", "http://pi:61208")
     monkeypatch.setattr(
-        check, "_get_json", _seq({"min5": 7.2, "cpucore": 4}, MEM_OK, FS_OK))
+        check, "_get_json", _seq({"min5": 7.2, "cpucore": 4}, MEM_OK, FS_OK)
+    )
     ok, msg = check.check_pi_pressure()
     assert not ok
     assert "load5" in msg
@@ -1018,7 +1107,8 @@ def test_pi_check_down_on_pressure(monkeypatch):
 def test_pi_check_up_when_quiet(monkeypatch):
     monkeypatch.setattr(check, "PI_GLANCES_URL", "http://pi:61208")
     monkeypatch.setattr(
-        check, "_get_json", _seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK))
+        check, "_get_json", _seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
+    )
     ok, _ = check.check_pi_pressure()
     assert ok
 
@@ -1040,19 +1130,25 @@ def _ha_state(last_changed, state="2026-06-06 11:59:00"):
 
 
 def test_ha_heartbeat_fresh_is_ok():
-    ok, msg = check.ha_heartbeat_fresh(_ha_state("2026-06-06T11:59:00Z"), 300, now=HB_NOW)  # 60s old
+    ok, msg = check.ha_heartbeat_fresh(
+        _ha_state("2026-06-06T11:59:00Z"), 300, now=HB_NOW
+    )  # 60s old
     assert ok
     assert "fresh" in msg
 
 
 def test_ha_heartbeat_stale_is_down():
-    ok, msg = check.ha_heartbeat_fresh(_ha_state("2026-06-06T11:50:00Z"), 300, now=HB_NOW)  # 600s old
+    ok, msg = check.ha_heartbeat_fresh(
+        _ha_state("2026-06-06T11:50:00Z"), 300, now=HB_NOW
+    )  # 600s old
     assert not ok
     assert "stale" in msg
 
 
 def test_ha_heartbeat_at_threshold_is_ok():
-    ok, _ = check.ha_heartbeat_fresh(_ha_state("2026-06-06T11:55:00Z"), 300, now=HB_NOW)  # exactly 300s
+    ok, _ = check.ha_heartbeat_fresh(
+        _ha_state("2026-06-06T11:55:00Z"), 300, now=HB_NOW
+    )  # exactly 300s
     assert ok
 
 
@@ -1081,8 +1177,10 @@ def _ha_cycle(monkeypatch, age_s=600, raises=False):
     monkeypatch.setattr(check, "HA_URL", "http://home-assistant:8123")
     monkeypatch.setattr(check, "HA_TOKEN", "tok")
     if raises:
+
         def boom(*a, **k):
             raise OSError("connection refused")
+
         monkeypatch.setattr(check, "_get_json", boom)
     else:
         monkeypatch.setattr(check, "_get_json", lambda *a, **k: _ha_payload(age_s))
@@ -1138,6 +1236,7 @@ def test_ha_heartbeat_disabled_when_no_url_token(monkeypatch):
 
 # --- renovate_alive / check_renovate_alive ---------------------------------
 
+
 def test_renovate_alive_fresh():
     ok, msg = check.renovate_alive(60, 129600)  # 36h = 129600s
     assert ok
@@ -1164,6 +1263,7 @@ def test_check_renovate_alive_missing_marker_is_down(tmp_path, monkeypatch):
 
 def test_check_renovate_alive_fresh_file_is_up(tmp_path, monkeypatch):
     import time as _t
+
     monkeypatch.setattr(check, "RENOVATE_STATE_DIR", str(tmp_path))
     monkeypatch.setattr(check, "RENOVATE_MAX_AGE_S", 129600)
     (tmp_path / "last_run").write_text(str(_t.time()))
@@ -1177,12 +1277,18 @@ def test_check_renovate_alive_fresh_file_is_up(tmp_path, monkeypatch):
 # This check counts ingested log lines for an always-active stream over a window and
 # goes down when zero: a freshness watchdog analogous to the SMART/restore-drill ones.
 
+
 def _loki_scalar(val):
     """A Loki instant-query response for `sum(count_over_time(...))`. None -> empty result."""
     if val is None:
         return {"status": "success", "data": {"resultType": "vector", "result": []}}
-    return {"status": "success", "data": {"resultType": "vector",
-            "result": [{"metric": {}, "value": [1700000000, str(val)]}]}}
+    return {
+        "status": "success",
+        "data": {
+            "resultType": "vector",
+            "result": [{"metric": {}, "value": [1700000000, str(val)]}],
+        },
+    }
 
 
 def test_loki_ingestion_with_lines_is_ok():
@@ -1237,6 +1343,7 @@ def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch):
     # union count alone stays non-zero and would hide it — the docker-specific arm must page.
     def fake_count(selector, window):
         return 0 if "container" in selector else 500
+
     monkeypatch.setattr(check, "loki_count", fake_count)
     ok, msg = check.check_loki_ingestion()
     assert not ok
@@ -1244,6 +1351,7 @@ def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch):
 
 
 # --- discord_webhook_ok / check_discord -------------------------------------
+
 
 def test_discord_webhook_ok_200_is_up():
     ok, msg = check.discord_webhook_ok(200, "Homelab Alerts")
@@ -1258,16 +1366,24 @@ def test_discord_webhook_404_is_down():
 
 
 def _discord_cycle(monkeypatch, status=200, raises=None):
-    monkeypatch.setattr(check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/abc")
+    monkeypatch.setattr(
+        check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/abc"
+    )
     if raises is not None:
+
         def boom(*a, **k):
             raise raises
+
         monkeypatch.setattr(check, "_get_json", boom)
     elif status == 200:
-        monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"name": "Homelab Alerts"})
+        monkeypatch.setattr(
+            check, "_get_json", lambda *a, **k: {"name": "Homelab Alerts"}
+        )
     else:
+
         def http_err(*a, **k):
             raise urllib.error.HTTPError("u", status, "err", {}, None)
+
         monkeypatch.setattr(check, "_get_json", http_err)
     return check.check_discord()
 

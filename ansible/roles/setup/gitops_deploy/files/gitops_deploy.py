@@ -10,6 +10,7 @@ Config comes from /etc/gitops-deploy/config.env (KEY=VALUE), written by Ansible:
   REPO_DIR, BRANCH, DISCORD_WEBHOOK, HEALTH_TIMEOUT_S
 Stdlib only.
 """
+
 from __future__ import annotations
 
 import json
@@ -64,8 +65,12 @@ BRANCH = C.get("BRANCH", "master")
 TIMEOUT = int(C.get("HEALTH_TIMEOUT_S", "300"))
 
 
-def run(args: list[str], cwd: str | None = REPO, check: bool = True,
-        timeout: float | None = None) -> str:
+def run(
+    args: list[str],
+    cwd: str | None = REPO,
+    check: bool = True,
+    timeout: float | None = None,
+) -> str:
     # timeout defaults to None so the long deploy/git calls are unbounded as before;
     # only the health-gate's docker inspects pass a short bound (see health_ok).
     r = subprocess.run(args, cwd=cwd, text=True, capture_output=True, timeout=timeout)
@@ -84,8 +89,11 @@ def is_ancestor(ancestor: str, descendant: str) -> bool:
     anything to fast-forward and deploy (see next_action's origin_ahead). A git
     error (bad object, etc.) is a non-zero exit and conservatively reads False,
     so the tick degrades into a no-op rather than a mis-fired deploy."""
-    r = subprocess.run(["git", "merge-base", "--is-ancestor", ancestor, descendant],
-                       cwd=REPO, capture_output=True)
+    r = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+        cwd=REPO,
+        capture_output=True,
+    )
     return r.returncode == 0
 
 
@@ -130,8 +138,10 @@ def discord(content: str) -> bool:
     # User-Agent required: Discord is behind Cloudflare, which 403s the default Python-urllib
     # UA (error code 1010) — without this the alert silently fails (the except below swallows it).
     req = urllib.request.Request(
-        url, data=data,
-        headers={"Content-Type": "application/json", "User-Agent": "gitops-deploy"})
+        url,
+        data=data,
+        headers={"Content-Type": "application/json", "User-Agent": "gitops-deploy"},
+    )
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return 200 <= resp.status < 300
@@ -146,8 +156,12 @@ def _inspect(fmt: str, container: str, timeout: float = 15.0) -> str:
     daemon on an unbounded inspect would block the whole deployer forever; bounding each
     inspect lets a hang degrade into a failed gate instead."""
     try:
-        return run(["docker", "inspect", "-f", fmt, container],
-                   cwd=None, check=False, timeout=timeout)
+        return run(
+            ["docker", "inspect", "-f", fmt, container],
+            cwd=None,
+            check=False,
+            timeout=timeout,
+        )
     except subprocess.TimeoutExpired:
         return ""
 
@@ -167,7 +181,9 @@ def health_ok(container: str, settle_checks: int = 3) -> bool:
     while time.time() < deadline:
         st = _inspect("{{.State.Health.Status}}", container)
         running = st == "" and _inspect("{{.State.Running}}", container) == "true"
-        verdict, running_streak = health_decision(st, running, running_streak, settle_checks)
+        verdict, running_streak = health_decision(
+            st, running, running_streak, settle_checks
+        )
         if verdict == "healthy":
             return True
         time.sleep(10)
@@ -201,7 +217,17 @@ def deploy(services: set[str]) -> None:
     # Run via `uv run` so the deploy uses the repo's pinned env (ansible-core plus
     # the community.docker deps requests/docker) — the same toolchain the operator
     # uses. --frozen: install from the committed uv.lock, never mutate it on the host.
-    run(["uv", "run", "--frozen", "ansible-playbook", "ansible/deploy.yml", "--tags", tags])
+    run(
+        [
+            "uv",
+            "run",
+            "--frozen",
+            "ansible-playbook",
+            "ansible/deploy.yml",
+            "--tags",
+            tags,
+        ]
+    )
 
 
 def main() -> int:
@@ -228,8 +254,10 @@ def main() -> int:
         now_ct = datetime.now(CHICAGO)
         if should_alert_dirty(now_ct, _read_marker(DIRTY_ALERT_FILE), DIRTY_ALERT_HOUR):
             # Mark as alerted only on confirmed delivery, else retry next tick (see discord()).
-            if discord("⚠️ gitops-deploy: working tree dirty on daniel-server — skipping. "
-                       "Resolve manually."):
+            if discord(
+                "⚠️ gitops-deploy: working tree dirty on daniel-server — skipping. "
+                "Resolve manually."
+            ):
                 _write_marker(DIRTY_ALERT_FILE, now_ct.date().isoformat())
         return 0
     if action == "noop":
@@ -242,12 +270,16 @@ def main() -> int:
     cs = services_from_changed_paths(paths)
 
     if cs.broad:
-        if _read_marker(BROAD_FILE) != origin:  # alert once per broad SHA, not every tick
+        if (
+            _read_marker(BROAD_FILE) != origin
+        ):  # alert once per broad SHA, not every tick
             # Mark only on confirmed delivery, else retry next tick (see discord()).
-            if discord(f"⚠️ gitops-deploy: shared template / inventory changed in "
-                       f"`{origin[:8]}` — deferring to a manual full deploy "
-                       f"(`ansible-playbook ansible/deploy.yml`), then `git merge --ff-only "
-                       f"origin/{BRANCH}` on the host to clear it."):
+            if discord(
+                f"⚠️ gitops-deploy: shared template / inventory changed in "
+                f"`{origin[:8]}` — deferring to a manual full deploy "
+                f"(`ansible-playbook ansible/deploy.yml`), then `git merge --ff-only "
+                f"origin/{BRANCH}` on the host to clear it."
+            ):
                 _write_marker(BROAD_FILE, origin)
         return 0
     if not cs.services:
@@ -258,10 +290,12 @@ def main() -> int:
         # operator redeploys the consumer(s); without this the rotated secret sits stale.
         if cs.secrets and _read_marker(SECRETS_ALERT_FILE) != origin:
             # Mark only on confirmed delivery, else retry next tick (see discord()).
-            if discord(f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
-                       f"service template — fast-forwarded but **nothing was redeployed**. The "
-                       f"rotated secret won't reach its container(s) until you redeploy them "
-                       f"(`ansible-playbook ansible/deploy.yml --tags <svc>`)."):
+            if discord(
+                f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
+                f"service template — fast-forwarded but **nothing was redeployed**. The "
+                f"rotated secret won't reach its container(s) until you redeploy them "
+                f"(`ansible-playbook ansible/deploy.yml --tags <svc>`)."
+            ):
                 _write_marker(SECRETS_ALERT_FILE, origin)
         return 0
 
@@ -276,7 +310,9 @@ def main() -> int:
         # noops and the deployer silently parks on the broken commit. Mirror the health-gate
         # rollback: reset to the prior HEAD, redeploy the prior (known-good) version (ansible is
         # idempotent, so re-applying old after a partial run is safe), hold the bad SHA, and alert.
-        log(f"deploy execution failed for {sorted(cs.services)}: {exc}; rolling back to {local[:8]}")
+        log(
+            f"deploy execution failed for {sorted(cs.services)}: {exc}; rolling back to {local[:8]}"
+        )
         run(["git", "reset", "--hard", local])
         try:
             deploy(cs.services)

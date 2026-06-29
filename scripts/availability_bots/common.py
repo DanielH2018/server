@@ -11,6 +11,7 @@ environment so they never live in the repo. See ``.env.example`` for the variabl
 names; export them via your shell, a cron ``EnvironmentFile``, or a systemd unit's
 ``Environment=`` directive.
 """
+
 from __future__ import annotations
 
 import logging
@@ -75,8 +76,10 @@ def send_discord_notification(
     """
     try:
         response = requests.post(
-            webhook_url, json={"content": message},
-            headers={"User-Agent": DISCORD_USER_AGENT}, timeout=REQUEST_TIMEOUT
+            webhook_url,
+            json={"content": message},
+            headers={"User-Agent": DISCORD_USER_AGENT},
+            timeout=REQUEST_TIMEOUT,
         )
         response.raise_for_status()  # Discord replies 204 No Content on success
         logger.info("Discord notification sent.")

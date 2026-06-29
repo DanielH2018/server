@@ -12,6 +12,7 @@ the store bounded.
 Companion report/suggester: .claude/scripts/audit-permissions.py (and the
 /audit-permissions skill). Pure stdlib, no third-party deps.
 """
+
 import json
 import os
 import re
@@ -29,11 +30,15 @@ LOCK_RETRIES = 10
 LOCK_DELAY_MS = 20
 
 STORE_PATH = os.environ.get("PERMLOG_STORE") or os.path.normpath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs", "permissions.json"))
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "logs", "permissions.json"
+    )
+)
 LOCK_PATH = STORE_PATH + ".lock"
 
 
 # --- time helpers -----------------------------------------------------------
+
 
 def parse_ms(iso):
     """Parse an ISO-8601 timestamp to epoch milliseconds. A trailing 'Z' and a
@@ -58,6 +63,7 @@ def now_iso():
 
 # --- classification / summarization -----------------------------------------
 
+
 def in_scope(tool):
     return isinstance(tool, str) and SCOPE.match(tool) is not None
 
@@ -75,7 +81,8 @@ def cap(s):
 # format is portable across hosts.
 _WIN_TEMP = re.compile(
     r"[A-Za-z]:[\\/]Users[\\/][^\\/\s\"']+[\\/]AppData[\\/]Local[\\/]Temp[\\/][^\s\"')]+",
-    re.IGNORECASE)
+    re.IGNORECASE,
+)
 _MAC_TEMP = re.compile(r"/var/folders/[^\s\"')]+")
 _NIX_TEMP = re.compile(r"/tmp/[^\s\"')]+")
 
@@ -99,7 +106,11 @@ def summarize(tool, tool_input):
     if tool == "WebSearch":
         return cap(tool_input.get("query"))
     if tool in ("Task", "Agent"):
-        parts = [p for p in (tool_input.get("subagent_type"), tool_input.get("description")) if p]
+        parts = [
+            p
+            for p in (tool_input.get("subagent_type"), tool_input.get("description"))
+            if p
+        ]
         return cap(": ".join(parts))
     if tool == "Skill":
         return cap(tool_input.get("skill") or tool_input.get("command"))
@@ -119,18 +130,30 @@ def classify(d):
     if evt == "PreToolUse":
         if not in_scope(tool):
             return None
-        return {"kind": "call", "tool": tool, "sum": summarize(tool, d.get("tool_input"))}
+        return {
+            "kind": "call",
+            "tool": tool,
+            "sum": summarize(tool, d.get("tool_input")),
+        }
     if evt == "PermissionRequest":
         if not in_scope(tool):
             return None
-        return {"kind": "ask", "tool": tool, "sum": summarize(tool, d.get("tool_input"))}
+        return {
+            "kind": "ask",
+            "tool": tool,
+            "sum": summarize(tool, d.get("tool_input")),
+        }
     if evt == "Notification" and d.get("notification_type") == "permission_prompt":
         # If tool_name is absent, in_scope() is false and the event is dropped.
         # The "(unattributed)" fallback only applies when the tool is known but
         # tool_input is missing.
         if not in_scope(tool):
             return None
-        summ = summarize(tool, d.get("tool_input")) if d.get("tool_input") else "(unattributed)"
+        summ = (
+            summarize(tool, d.get("tool_input"))
+            if d.get("tool_input")
+            else "(unattributed)"
+        )
         return {"kind": "ask", "tool": tool, "sum": summ}
     return None
 
@@ -155,7 +178,13 @@ def apply_event(store, e, now):
     ent = store["entries"].get(key)
     if ent is None:
         ent = store["entries"][key] = {
-            "tool": e["tool"], "sum": e["sum"], "calls": 0, "asks": 0, "first": now, "last": now}
+            "tool": e["tool"],
+            "sum": e["sum"],
+            "calls": 0,
+            "asks": 0,
+            "first": now,
+            "last": now,
+        }
     if e["kind"] == "call":
         ent["calls"] += 1
         ent["last"] = now
@@ -182,7 +211,7 @@ def prune_if_needed(store, now_ms):
     remaining = list(store["entries"].keys())
     if len(remaining) > MAX_ENTRIES:
         remaining.sort(key=lambda k: parse_ms(store["entries"][k]["last"]))
-        for k in remaining[:len(remaining) - MAX_ENTRIES]:
+        for k in remaining[: len(remaining) - MAX_ENTRIES]:
             del store["entries"][k]
     return store
 
@@ -191,6 +220,7 @@ def prune_if_needed(store, now_ms):
 # fcntl.flock auto-releases on process death, so there is no stale-lock to reap
 # (unlike a presence-based lockfile). The store is replaced via atomic rename, so
 # the lock is held on a stable sidecar file, not on the store inode itself.
+
 
 def acquire_lock():
     try:
@@ -216,6 +246,7 @@ def release_lock(fd):
         return
     try:
         import fcntl
+
         fcntl.flock(fd, fcntl.LOCK_UN)
     except Exception:
         pass

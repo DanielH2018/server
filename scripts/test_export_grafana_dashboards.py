@@ -8,10 +8,12 @@ The network/docker-exec path (gapi/main) is intentionally not exercised here.
 
 Run: uv run pytest scripts/test_export_grafana_dashboards.py
 """
+
 import export_grafana_dashboards as eg
 
 
 # --- slug -------------------------------------------------------------------
+
 
 def test_slug_lowercases_and_hyphenates():
     assert eg.slug("My Dashboard") == "my-dashboard"
@@ -26,6 +28,7 @@ def test_slug_collapses_separator_runs():
 
 
 # --- normalize: datasource uid remap ----------------------------------------
+
 
 def test_normalize_remaps_stale_string_datasource():
     obj = {"datasource": "IH0jqv6nz"}  # the known stale Prometheus uid
@@ -47,6 +50,7 @@ def test_normalize_leaves_canonical_datasource_untouched():
 
 # --- normalize: ephemeral query `key` ---------------------------------------
 
+
 def test_normalize_drops_key_on_query_target():
     obj = {"refId": "A", "key": "random-uuid", "expr": "up"}
     eg.normalize(obj)
@@ -60,7 +64,9 @@ def test_normalize_keeps_key_on_non_target_dict():
 
 
 def test_normalize_recurses_into_nested_panels_and_lists():
-    obj = {"panels": [{"targets": [{"refId": "A", "key": "x", "datasource": "IH0jqv6nz"}]}]}
+    obj = {
+        "panels": [{"targets": [{"refId": "A", "key": "x", "datasource": "IH0jqv6nz"}]}]
+    }
     eg.normalize(obj)
     target = obj["panels"][0]["targets"][0]
     assert "key" not in target and target["datasource"] == eg.PROM_UID
