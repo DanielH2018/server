@@ -7,6 +7,10 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
+- Move PLANS.md to root
+- Check if .gitattributes is tracked
+- Cleanup/out old claude docs/specs/etc.
+
 _(empty — the air-purifier AQI control, "Claude is waiting" notification, phone access, and
 air-quality threshold tuning all shipped 2026-06-27. Completed work lives in git history:
 `git log -- ansible/PLANS.md` and the home-assistant role's `CLAUDE.md`.)_
