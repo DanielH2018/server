@@ -123,7 +123,8 @@ recovery, no bounce". Sixteen, feeding `bedroom_threshold_alert`:
 - **`bedroom_apply_natural`** — sets the lights to their "natural" state *right now*: an ordered
   `choose:` of time-based exceptions over **full Adaptive Lighting** (the default). Exceptions, in
   order: (1) **night nightlight** (`scene.bedroom_nightlight`) when sleep mode is on OR 00:00–05:00;
-  (2) **morning wake ramp** (1%→peak over 15 min ending at the alarm). Uses
+  (2) **morning wake ramp** (a gradual 1%→100% sunrise over a 45-min window, `alarm−15`→`alarm+30`,
+  that keeps climbing to full brightness so the hand-off to Adaptive Lighting has no sudden pop). Uses
   `bedroom_set_natural_brightness` (a helper that releases AL, applies its natural color, then sets
   a brightness). Called by presence-on, the morning reset, Tap Dial button 4, and arrive-home.
 - **`bedroom_apply_fan`** — smooth temperature→fan curve (~1 DREO level/°F, off below ~72°F, up to
@@ -223,7 +224,7 @@ All set per-category in `bedroom_threshold_alert`'s `cfg` map or per-call to `be
 |---|---|
 | Air-quality / humidity / battery / severe thresholds | the `threshold` sensors in `configuration.yaml.j2` (`upper`/`lower`/`hysteresis`) |
 | Fan curve (start temp / slope / caps) | `bedroom_apply_fan` in `scripts.yaml` (the `ideal`/`cap` lines) |
-| Wake ramp peak / short-night softening | `bedroom_apply_natural` morning exception (`wake_peak`) |
+| Wake ramp curve (knees / final brightness / short-night softening) | `wake_brightness` macro in `custom_templates/lighting.jinja` (`mid`/`knee`/`full`); window length in `in_wake_window` |
 | Nightlight window | `bedroom_apply_natural` first exception (`sleep_mode` or 00:00–05:00) |
 | Bedtime fade length (30 min) | `transition:` on the `scene.turn_on` in `bedroom_bedtime` (`scripts.yaml`) |
 | Away timings (10 / 30 min) | `bedroom_away` trigger `for:` |

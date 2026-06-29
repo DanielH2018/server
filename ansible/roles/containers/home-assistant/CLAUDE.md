@@ -211,12 +211,17 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   the room dark and a B3 tap brings the nightlight back. The sleep-mode arm of this exception is thus
   reached via `presence_on` only in the 00:00–05:00 *no-sleep-mode* case (up late, not yet in bed);
   it still protects the B3-tap nightlight and any other direct caller of the dispatcher.
-  The morning wake ramp is the next exception. It spans a **30-min window centered on the alarm**
-  (`alarm−15` → `alarm+15`), with a gentle-then-steep curve: 1% at window start → ~12% at the alarm
-  → 40% at `alarm+15`. `sensor.bedroom_wake_start` = alarm−15 min (the window open edge; dynamic —
-  see the dynamic-wake bullet below). Delegated entirely to `script.bedroom_apply_wake` (fixed warm
-  2200K, no `adaptive_lighting.apply` turn-on flash), driven per-minute by
-  `automation.bedroom_wake_ramp`. Short night (<6h) scales mid/peak to ~7/24% (the sleep-quality
+  The morning wake ramp is the next exception. It spans a **45-min window** (`alarm−15` →
+  `alarm+30`, so the alarm sits 1/3 in — NOT centered), with a gentle-then-steep three-segment curve:
+  1% at window start → ~12% at the alarm → 40% at `alarm+15` (the knee) → **100% at `alarm+30`**.
+  Ramping all the way to 100% by window end is deliberate (since 2026-06-29): the old curve stopped
+  at 40% then `bedroom_wake_ramp`'s hand-off to Adaptive Lighting popped the room to its full daytime
+  target all at once. Now AL takes over at 100%, so the hand-off has no upward jump — it just keeps
+  getting gradually brighter. `sensor.bedroom_wake_start` = alarm−15 min (the window open edge;
+  dynamic — see the dynamic-wake bullet below). Delegated entirely to `script.bedroom_apply_wake`
+  (fixed warm 2200K, no `adaptive_lighting.apply` turn-on flash), driven per-minute by
+  `automation.bedroom_wake_ramp`. Short night (<6h) scales the EARLY mid/knee down to ~7/24% but still
+  reaches 100% by `alarm+30` (else the hand-off pop returns on short nights — see the sleep-quality
   bullet). Pressing button 4 mid-window resumes the ramp from the current point (`bedroom_apply_wake`
   recomputes the right frame for now()). When no morning alarm is set the sensor is `unavailable` →
   this exception is false and the default applies. `wake_transition` macro is gone — transition is
@@ -433,13 +438,16 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 - **Sleep-quality-aware morning (since 2026-06-18).** The wake ramp adapts to how you slept: the
   `wake_brightness` macro (`custom_templates/lighting.jinja`, the tested source of the ramp —
   `bedroom_apply_natural` now delegates the morning exception to `bedroom_apply_wake`) scales the
-  mid/peak down on a short night — peak **24%** (mid 7%) when `sensor.pixel_9_pro_sleep_duration`
-  is `0 < x < 360` min (under 6h), else peak **40%** (mid 12%); unknown/0 falls
-  back to the normal 40%. `bedroom_morning_reset`'s alarm+present block also sends a routine "you slept N h"
-  note (😴 short night / ☀️ good morning), skipped if sleep_duration is 0/unknown. **Caveat:** the
-  Google Sleep API finalizes `sleep_duration` around wake, so at alarm−15min it can be stale —
-  best-effort (graceful fallback to a normal wake). Only the peak changes; the window/transition and
-  `presence_on` are untouched.
+  EARLY mid/knee down on a short night — knee **24%** (mid 7%) at `alarm+15` when
+  `sensor.pixel_9_pro_sleep_duration` is `0 < x < 360` min (under 6h), else knee **40%** (mid 12%);
+  unknown/0 falls back to the normal curve. The final segment STILL climbs to **100% by `alarm+30`**
+  on a short night — only the early (most-asleep) part softens; ending below 100% would reintroduce
+  the AL hand-off pop the ramp-to-100 design removes. `bedroom_morning_reset`'s alarm+present block
+  also sends a routine "you slept N h" note (😴 short night / ☀️ good morning), skipped if
+  sleep_duration is 0/unknown. **Caveat:** the Google Sleep API finalizes `sleep_duration` around
+  wake, so at alarm−15min it can be stale — best-effort (graceful fallback to a normal wake). Only
+  the early mid/knee change with sleep; the window/transition/final-100% and `presence_on` are
+  untouched.
 - **Temperature → fan control (since 2026-06-18; smoothed 2026-06-18).** `script.bedroom_apply_fan`
   (in `files/scripts.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
   `sensor.bedroom_airgradient_one_temperature` (°F) on a **smooth ~0.8-level-per-°F curve**: off below
@@ -588,8 +596,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   entity state). Inert until you press Run; the test-only direct light writers (`bedroom_preview_wake`,
   `bedroom_run_scenario` via the nightlight `scene.turn_on`) are declared in
   `state/sanctioned_writers.yml`. Phase 2 also extracted the away/arrive selection into tested macros
-  (`away_items_label`/`arrive_relight_allowed`). Spec+plan:
-  `docs/superpowers/specs|plans/2026-06-23-ha-scenario-test-harness*`.
+  (`away_items_label`/`arrive_relight_allowed`). Spec:
+  `docs/superpowers/specs/2026-06-23-ha-scenario-test-harness-design.md`.
 
 ## Claude tooling for this role
 - **`home-assistant-engineer` agent** (`.claude/agents/`) — read+write HA engineer that knows
