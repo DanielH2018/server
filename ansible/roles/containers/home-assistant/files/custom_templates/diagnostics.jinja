@@ -1,0 +1,13 @@
+{# Runtime-error alert scope. Given a log entry's level + logger name, decide whether it is one of
+   OUR-code ERRORs worth alerting on (the runtime complement to the static tests). Pure (values in,
+   bool out) so it is unit-tested in tests/test_diagnostics_macros.py. Used by
+   automation.ha_runtime_error_alert. `str.startswith(tuple)` and tuple literals behave identically
+   in HA's sandboxed Jinja and the bare test harness; `| string` coerces a missing/None value so it
+   can never raise. #}
+{%- macro error_in_scope(level, logger) -%}
+{%- set lv = (level | string | upper) -%}
+{%- set lg = (logger | string) -%}
+{%- set scoped = ('homeassistant.components.automation', 'homeassistant.components.script',
+                  'homeassistant.components.template', 'homeassistant.helpers.template') -%}
+{{ lv in ['ERROR', 'CRITICAL'] and lg.startswith(scoped) }}
+{%- endmacro -%}

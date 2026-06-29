@@ -3,39 +3,48 @@
    HA loads custom_templates/*.jinja at startup; this deploy recreates the container, so edits take
    effect on deploy. Live edit: Developer Tools -> Actions -> homeassistant.reload_custom_templates. #}
 
-{# Wake window: the ramp runs 30 minutes total, CENTERED on the alarm — it starts at
-   sensor.bedroom_wake_start (alarm - 15 min) and ends 15 min after the alarm. The 30 below (and the
-   15s in wake_brightness, which split it pre/post-alarm) are hardcoded literals that MUST stay equal
-   to 2x the 15-min offset baked into templates.yaml's bedroom_wake_start state expression — change
-   the window length in all three places together. The caller passes minutes since wake_start (or a
-   negative sentinel when unavailable). #}
+{# Wake window: the ramp runs 45 minutes total — it starts at sensor.bedroom_wake_start (alarm - 15
+   min) and ends 30 min AFTER the alarm, so the alarm sits 1/3 of the way through (NOT centered). The
+   window length (45 below) and the two internal knees in wake_brightness (15 = the alarm, 30 =
+   alarm+15) define the 3-segment curve; the 15-min PRE-alarm lead MUST stay equal to the 15-min
+   offset baked into templates.yaml's bedroom_wake_start state expression — change the pre-alarm lead
+   in both places together. The caller passes minutes since wake_start (or a negative sentinel when
+   unavailable). #}
 {%- macro in_wake_window(elapsed_min) -%}
 {%- set e = elapsed_min | float(-1) -%}
-{{ 0 <= e < 30 }}
+{{ 0 <= e < 45 }}
 {%- endmacro -%}
 
-{# Wake-ramp brightness %: a gentle-then-steep sunrise. 1% at window start (e=0) rises to a mid
-   point at the alarm (e=15), then climbs steeper to the peak at e=30 (alarm+15) to actually get you
-   up. Sleep-aware: a short night (0 < sleep_min < 360) scales the mid/peak down. Re-evaluated once a
-   minute by bedroom_wake_ramp, so a single call returns the level for the current elapsed. #}
+{# Wake-ramp brightness %: a gentle-then-steep sunrise that keeps climbing to FULL brightness so the
+   hand-off to Adaptive Lighting at window end is seamless (no sudden jump — the old curve stopped at
+   40% then AL popped the room to its daytime target). Three segments: 1% at window start (e=0) ->
+   a mid point at the alarm (e=15) -> a knee at alarm+15 (e=30) -> 100% at alarm+30 (e=45). Sleep-aware:
+   a short night (0 < sleep_min < 360) scales the early mid/knee down to wake you more gently, but
+   STILL reaches 100% by e=45 — ending below full would reintroduce the AL hand-off pop, which is
+   exactly what ramping to 100% removes. Re-evaluated once a minute by bedroom_wake_ramp, so a single
+   call returns the level for the current elapsed. #}
 {%- macro wake_brightness(elapsed_min, sleep_min) -%}
 {%- set e = elapsed_min | float(0) -%}
 {%- set s = sleep_min | float(0) -%}
 {%- set short = (0 < s < 360) -%}
 {%- set start = 1 -%}
 {%- set mid = 7 if short else 12 -%}
-{%- set peak = 24 if short else 40 -%}
+{%- set knee = 24 if short else 40 -%}
+{%- set full = 100 -%}
 {%- if e <= 15 -%}
 {{ (start + (mid - start) * e / 15) | round(0) | int }}
+{%- elif e <= 30 -%}
+{{ (mid + (knee - mid) * (e - 15) / 15) | round(0) | int }}
 {%- else -%}
-{{ (mid + (peak - mid) * (e - 15) / 15) | round(0) | int }}
+{{ (knee + (full - knee) * (e - 30) / 15) | round(0) | int }}
 {%- endif -%}
 {%- endmacro -%}
 
 {# Auto-light gate: dark enough OR inside the wake window. illuminance < 75 lux is "dark"; in_window
-   forces allow for the morning ramp regardless of ambient. SINGLE source of truth for the 75-lux
-   threshold. in_window is coerced with `| bool` because a macro argument arrives as a string when
-   passed a macro's rendered output. #}
+   forces allow for the morning ramp regardless of ambient. The 75-lux literal is ALSO inlined in
+   bedroom_presence_on's numeric_state trigger (a trigger can't call a macro) — test_lux_gate_sync.py
+   asserts the two stay equal. in_window is coerced with `| bool` because a macro argument arrives as
+   a string when passed a macro's rendered output. #}
 {%- macro auto_light_allowed(in_window, illuminance) -%}
 {%- set iw = in_window | bool -%}
 {%- set lux = illuminance | float(9999) -%}
@@ -55,4 +64,54 @@
 {%- set base = 55 if (5 <= h < 9) else (45 if (9 <= h < 17) else 35) -%}
 {%- set factor = [[1.0 - 0.8 * lux / 75, 1.0] | min, 0.2] | max -%}
 {{ [(base * factor) | round(0) | int, 5] | max }}
+{%- endmacro -%}
+
+{# Natural-lighting exception selector. Given sleep_mode + the hour + whether we're in the wake
+   window, decide WHICH exception bedroom_apply_natural applies: the night-time dim `nightlight`
+   (sleep mode OR 00:00-05:00) which YIELDS to the wake window, the morning `wake` ramp, or the
+   ambient-fill `default`. Mirrors the choose: ladder in scripts.yaml so the nightlight<->wake
+   mutual exclusion at an early alarm (hour<5 INSIDE the window must be `wake`) is unit-tested,
+   not just commented. Bools arrive as strings from rendered macro output -> `| bool`. #}
+{%- macro natural_exception(sleep_mode, hour, in_window) -%}
+{%- set sm = sleep_mode | bool -%}
+{%- set iw = in_window | bool -%}
+{%- set h = hour | int(12) -%}
+{%- if (sm or h < 5) and not iw -%}
+nightlight
+{%- elif iw -%}
+wake
+{%- else -%}
+default
+{%- endif -%}
+{%- endmacro -%}
+
+{# Mediator gate policy. Given the action's `reason` + the live flags, decide what the bedroom
+   lights should do. Only `presence` is gated here (it is the one AUTO caller whose SOLE action is
+   the light, so its conditions live in one tested place); `natural`/`wake`/`off` are pass-through
+   (their caller keeps its own gate, which also guards its non-light side effects). Bools arrive as
+   real booleans from is_state() in the caller; `| bool` coerces defensively (and for the test
+   harness). Returns: natural | wake | off | noop. #}
+{%- macro light_decision(reason, manual_off, sleep_mode, person_home, presence, lux_allowed, light_on) -%}
+{%- if reason == 'presence' -%}
+{{ 'natural' if (not (manual_off | bool) and not (sleep_mode | bool) and (person_home | bool)
+   and (presence | bool) and (lux_allowed | bool) and not (light_on | bool)) else 'noop' }}
+{%- elif reason in ['natural', 'wake', 'off'] -%}
+{{ reason }}
+{%- else -%}
+noop
+{%- endif -%}
+{%- endmacro -%}
+
+{# Away shut-off label: the human-readable list of what's on — used BOTH as the bedroom_away gate
+   (empty string = nothing on = stay silent) and as the "Left on" message body. Pure (bools in,
+   joined string out) so the selection is truth-tabled, not just inline. #}
+{%- macro away_items_label(light_on, fan_on) -%}
+{%- set items = (['lights'] if (light_on | bool) else []) + (['fan'] if (fan_on | bool) else []) -%}
+{{ items | join(' + ') }}
+{%- endmacro -%}
+
+{# Arrive-home relight gate: relight only if you're physically in the room (FP300 present), have NOT
+   engaged manual-off, and the lights are currently off (never re-stomp an on light). Pure bool. #}
+{%- macro arrive_relight_allowed(presence, manual_off, light_on) -%}
+{{ (presence | bool) and not (manual_off | bool) and not (light_on | bool) }}
 {%- endmacro -%}

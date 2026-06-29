@@ -14,12 +14,22 @@
       - python3-debian  # required by ansible.builtin.deb822_repository (below)
   become: true
 
+- name: Check for the existing Docker GPG keyring
+  tags: [docker-repo]
+  # get_url has no `creates`, so without this it re-downloads to /tmp and reports "changed"
+  # every run. Gate the download on the dearmored keyring's absence so the GPG fetch is
+  # genuinely run-once. (Pinning the key to a published checksum is a separate follow-up.)
+  ansible.builtin.stat:
+    path: /usr/share/keyrings/docker-archive-keyring.gpg
+  register: docker_install_keyring
+
 - name: Download Docker GPG key
   tags: [docker-repo]
   ansible.builtin.get_url:
     url: https://download.docker.com/linux/ubuntu/gpg
     dest: /tmp/docker.gpg
     mode: "0644"
+  when: not docker_install_keyring.stat.exists
 
 - name: Dearmor Docker GPG key
   tags: [docker-repo]
@@ -28,6 +38,19 @@
   args:
     creates: /usr/share/keyrings/docker-archive-keyring.gpg
   become: true
+
+- name: Verify the Docker GPG key fingerprint
+  tags: [docker-repo]
+  # Fail the play closed if the imported keyring is NOT Docker's published signing key
+  # (fingerprint 9DC85822 9FC7DD38 854AE2D8 8D81803C 0EBFCD88, per docs.docker.com). Without
+  # this, a swapped/MITM'd key fetched over the network would be silently dearmored and then
+  # trusted by apt. Runs every play (changed_when: false), so a tampered keyring is also caught
+  # on re-runs, not just first install.
+  ansible.builtin.command:
+    cmd: gpg --show-keys --with-colons /usr/share/keyrings/docker-archive-keyring.gpg
+  register: docker_install_key_fpr
+  changed_when: false
+  failed_when: "'9DC858229FC7DD38854AE2D88D81803C0EBFCD88' not in docker_install_key_fpr.stdout"
 
 - name: Add Docker APT repository
   tags: [docker-repo]

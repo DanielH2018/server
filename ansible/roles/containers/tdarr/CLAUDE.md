@@ -4,7 +4,10 @@ Tdarr server + node for automated library transcoding/health checks.
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `ghcr.io/haveagitgat/tdarr:latest`
+- **Image:** `ghcr.io/haveagitgat/tdarr@sha256:…` — **digest-pinned + `watchtower.enable=false`**
+  (currently `dev_2.78.01`). tdarr ships dev-tagged builds Renovate can't version AND rewrites
+  library files in place, so it must NOT auto-update unvetted. **Manual update:**
+  `docker pull ghcr.io/haveagitgat/tdarr:latest`, take the new digest, redeploy.
 - **Host:** daniel-server · **Port:** 8265 · **URL:** `tdarr.<domain>` (Authelia: yes)
 - **Networks:** media
 - **Depends on:** traefik, authelia

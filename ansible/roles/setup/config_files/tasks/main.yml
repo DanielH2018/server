@@ -1,19 +1,12 @@
 ---
-- name: Resolve the deploy user's home directory
-  # The play (initial_setup.yml) runs become:true, so facts were gathered escalated and
-  # ansible_facts.env.HOME is /root — using it for dest sent these dotfiles to root's
-  # home instead of the deploy user's. Same fix class as initial_setup's resolver task;
-  # this role runs first in the play, so it needs its own copy of the pattern.
-  ansible.builtin.shell: echo "$HOME"
-  become: false
-  changed_when: false
-  register: config_files_user_home
-  tags: [git, bash]
-
+# The play (initial_setup.yml) runs become:true, so a become:false `echo $HOME` used to be
+# needed to avoid shipping these dotfiles to /root. The deploy user's home is just
+# /home/{{ sys_user }} (also hardcoded in sops_setup's .bashrc path), so hardcode it directly
+# and drop the extra shell task.
 - name: Copy .gitconfig to home directory
   ansible.builtin.copy:
     src: .gitconfig
-    dest: "{{ config_files_user_home.stdout }}/.gitconfig"
+    dest: "/home/{{ sys_user }}/.gitconfig"
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0644"
@@ -23,7 +16,7 @@
 - name: Copy .bashrc to home directory
   ansible.builtin.copy:
     src: .bashrc
-    dest: "{{ config_files_user_home.stdout }}/.bashrc"
+    dest: "/home/{{ sys_user }}/.bashrc"
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0644"

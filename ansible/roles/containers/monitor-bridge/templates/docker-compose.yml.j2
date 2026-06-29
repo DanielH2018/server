@@ -76,6 +76,20 @@ services:
       - RESTORE_DRILL_STATE=/restore-drill/state.json
       - RESTORE_DRILL_MAX_AGE_D=35
       - KUMA_PUSH_RESTORE_DRILL={{ kopia_restore_drill_push_token }}
+      # Weekly kopia snapshot verify: the host cron (kopia role) writes state.json; we
+      # alert on a FAILED verify (bit-rot / unreadable blob the old `| logger` cron
+      # swallowed), >10d staleness, or a missing/corrupt file. The verify tier of the
+      # three-tier backup assurance — previously the only un-monitored one.
+      - VERIFY_STATE=/verify/state.json
+      - VERIFY_MAX_AGE_D=10
+      - KUMA_PUSH_VERIFY={{ monitor_bridge_verify_push_token }}
+      # Daily kopia FULL-maintenance freshness: the host cron (kopia role) queries `kopia
+      # maintenance info --json` and writes state.json. Full maintenance GCs expired blobs from
+      # B2, so a stall is the upstream CAUSE the b2_usage check only catches weeks later as the
+      # symptom. Alert on a stalled/disabled/failed cycle, >2.5d staleness, or a missing file.
+      - MAINTENANCE_STATE=/maintenance/state.json
+      - MAINTENANCE_MAX_AGE_D=2.5
+      - KUMA_PUSH_MAINTENANCE={{ monitor_bridge_maintenance_push_token }}
       # B2 free tier is 10GB; alert at 85% so there's runway to prune/upgrade
       # before the bucket fills and nightly snapshots start failing.
       - B2_USAGE_STATE=/b2-usage/state.json
@@ -116,11 +130,22 @@ services:
       - RENOVATE_STATE_DIR=/renovate-state
       - RENOVATE_MAX_AGE_MIN=2160
       - KUMA_PUSH_RENOVATE_ALIVE={{ monitor_bridge_renovate_alive_push_token }}
+      # Loki log-ingestion freshness: Loki's /ready Kuma probe stays green even when promtail
+      # stops shipping (docker-proxy break, positions corruption). Count lines across ALL file-tailed
+      # streams ({job=~".+"} = authlog+syslog+traefik) over 30m and `down` at zero — if promtail dies
+      # they all fall silent together, while no single quiet file can trip it (syslog alone over 10m
+      # false-paged: this debloated host idles >15m between syslog writes). Reached at loki:3100 over `monitoring`.
+      - LOKI_URL=http://loki:3100
+      - LOKI_STREAM={job=~".+"}
+      - LOKI_WINDOW=30m
+      - KUMA_PUSH_LOKI={{ monitor_bridge_loki_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
       - /var/lib/renovate-notify:/renovate-state:ro
       - /var/lib/kopia-restore-drill:/restore-drill:ro
+      - /var/lib/kopia-verify:/verify:ro
+      - /var/lib/kopia-maintenance:/maintenance:ro
       - /var/lib/kopia-b2-usage:/b2-usage:ro
     {{ service_networks() }}
     labels:
@@ -147,6 +172,8 @@ services:
       {{ kuma('gitops-deploy-alive', monitor_type='push', name='GitOps Deploy — Alive', interval=600, max_retries=0, push_token=monitor_bridge_gitops_alive_push_token) }}
       {{ kuma('gitops-deploy-status', monitor_type='push', name='GitOps Deploy — Status', interval=600, max_retries=0, push_token=monitor_bridge_gitops_status_push_token) }}
       {{ kuma('kopia-restore-drill', monitor_type='push', name='Backup Restore Drill', interval=600, max_retries=0, push_token=kopia_restore_drill_push_token) }}
+      {{ kuma('kopia-verify', monitor_type='push', name='Backup Verify', interval=600, max_retries=0, push_token=monitor_bridge_verify_push_token) }}
+      {{ kuma('kopia-maintenance', monitor_type='push', name='Backup Maintenance', interval=600, max_retries=0, push_token=monitor_bridge_maintenance_push_token) }}
       {{ kuma('monitor-bridge-b2', monitor_type='push', name='B2 Storage Usage', interval=600, max_retries=0, push_token=monitor_bridge_b2_push_token) }}
       {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data Freshness', interval=600, max_retries=0, push_token=monitor_bridge_scrutiny_push_token) }}
       {{ kuma('monitor-bridge-pi', monitor_type='push', name='Pi Pressure', interval=600, max_retries=0, push_token=monitor_bridge_pi_push_token) }}
@@ -154,6 +181,9 @@ services:
          over `apps`. interval 600s (2× the 300s loop), max_retries=0 like every bridge push monitor. -#}
       {{ kuma('monitor-bridge-ha', monitor_type='push', name='Home Assistant Automations', interval=600, max_retries=0, push_token=monitor_bridge_ha_push_token) }}
       {{ kuma('renovate-notify-alive', monitor_type='push', name='Renovate Notifier — Alive', interval=600, max_retries=0, push_token=monitor_bridge_renovate_alive_push_token) }}
+      {# Loki log-ingestion freshness: check_loki_ingestion counts lines across all file-tailed
+         streams over 30m and `down` at zero — catches a dead promtail/Loki pipeline that /ready can't see. -#}
+      {{ kuma('monitor-bridge-loki', monitor_type='push', name='Loki Log Ingestion', interval=600, max_retries=0, push_token=monitor_bridge_loki_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 

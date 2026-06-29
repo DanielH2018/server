@@ -15,7 +15,9 @@ See repo-root `CLAUDE.md` for shared conventions.
 - Pairs with Traefik's Cloudflare DNS-01 challenge for public TLS.
 - **Heartbeat monitoring:** each updater pings an Uptime Kuma **push** monitor
   (`UPTIMEKUMA` env) after every successful update — a dead-man's-switch for silent
-  failures, since favonia is distroless and can't carry a Docker healthcheck. The
+  failures, since favonia is distroless and can't carry a Docker healthcheck. Detection
+  is not instant: a stalled/failing updater only trips the monitor once its Kuma push
+  heartbeat window lapses (no success ping arrives), not on the first failed update. The
   push monitors are created by AutoKuma via the `kuma(..., monitor_type='push',
   push_token=...)` macro branch; tokens are `cloudflare_ddns_{proxied,direct}_push_token`
   in `secrets.yml` (we set them — Kuma honors client-supplied tokens). Uses the

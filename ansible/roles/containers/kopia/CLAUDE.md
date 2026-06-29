@@ -30,13 +30,36 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
   `/var/lib/kopia-b2-usage/state.json` — monitor-bridge's `b2_usage` check alerts at 85%
   of the cap, on probe failure, or staleness. Was 6.56 GB (66%) when added.
 - **Backup assurance is three-tier:** snapshots (daily 19:00, in-container policy) →
-  weekly `kopia snapshot verify --verify-files-percent=1` cron (blobs readable) →
+  weekly `kopia snapshot verify --verify-files-percent=1` cron (blobs readable; `files/verify.sh`
+  → `/var/lib/kopia-verify/state.json` → monitor-bridge's `verify` check → the "Backup Verify"
+  Kuma monitor, which alerts on a failed/stale verify — the wrapper captures the verify's own
+  exit code, which the old `... | logger` cron silently swallowed) →
   **monthly restore drill** (`files/restore-drill.sh` → `/usr/local/bin/`, cron 1st
-  05:00): restores one rotating service dir from the latest snapshot inside the
-  container, asserts sanity (compose-file sentinel + file-count floor), writes
+  05:00): restores one rotating service dir (rotation folds in the year — `(month+year) %
+  len` — so the singly-covered slot, incl. authelia the SSO root of trust, moves year over
+  year) inside the container and asserts a **service-specific state-file sentinel** (e.g.
+  `grafana/data/grafana.db`, `authelia/config/configuration.yml` — proves the right tree
+  with real data, not just any compose file) plus a file-count floor. Two extra integrity
+  guards: it fails if the **latest snapshot is >48 h old** (catches a stalled scheduler,
+  independent of which snapshot it restores), and **quarterly restores the OLDEST retained
+  snapshot** instead of the newest to exercise the retention tail (the real DR case). Writes
   `/var/lib/kopia-restore-drill/state.json` — monitor-bridge's `restore_drill` check
   alerts on failure, >35 d staleness, or missing state. Run it manually anytime:
-  `/usr/local/bin/kopia-restore-drill.sh`.
+  `/usr/local/bin/kopia-restore-drill.sh`. The drill also header-magic-checks `*.db`
+  sentinels (karakeep/grafana) — the image has no `sqlite3`, so it asserts the
+  `SQLite format 3` magic rather than a full `PRAGMA integrity_check`.
+- **Retention (entrypoint policy):** 7 daily + 4 weekly + **3 monthly** (monthlies added
+  2026-06-24 for a >28 d DR horizon; config-only source dedupes, so the B2 cost is small).
+  The entrypoint also re-asserts `kopia maintenance set --owner me --enable-full true`
+  idempotently — full maintenance is what actually GCs expired blobs from B2; without an
+  owner running it the bucket grows unbounded (the `b2_usage` monitor only sees the symptom).
+- **Bare-metal disaster recovery** (server gone — reconnect to B2 from a fresh host and
+  restore everything): [`docs/kopia-disaster-recovery.md`](../../../../../docs/kopia-disaster-recovery.md).
+  All five repo creds are in SOPS, which is DR-closed, so the capability survives a total loss.
+- **The Pi is intentionally NOT in Kopia scope.** The snapshot source is only the server's
+  `containers/`. daniel-pi runs stateless / Ansible-reconstructible services (docker-proxy,
+  wg-easy, glances, dozzle, autoheal) — its wg-easy keys/peers re-template and clients re-enroll,
+  so there's nothing to back up that a redeploy doesn't rebuild. Not an oversight.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Entry/ignore: `templates/entrypoint.sh.j2`, `kopiaignore.j2`

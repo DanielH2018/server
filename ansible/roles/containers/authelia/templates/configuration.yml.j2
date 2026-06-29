@@ -103,9 +103,12 @@ session:
       default_redirection_url: 'https://www.{{ domain }}'
 
 regulation:
+  # Defense-in-depth behind CrowdSec (the primary online-guessing control on the public
+  # auth.<domain> portal): a longer ban raises the cost of password spraying without much
+  # self-impact — a password-manager login rarely fails 3x in 2 min. ban_time 5m -> 15m.
   max_retries: 3
   find_time: 120
-  ban_time: 300
+  ban_time: 900
 
 storage:
   encryption_key: {{ authelia_storage }} # Now required
@@ -121,7 +124,10 @@ ntp:
   version: 3
   max_desync: 3s
   disable_startup_check: false
-  disable_failure: false
+  # Warn (don't refuse to start) if the NTP probe fails at boot: the host already runs
+  # systemd-timesyncd, so a transient time.cloudflare.com hiccup shouldn't hard-gate
+  # Authelia startup and cascade 502s across every Authelia-protected service.
+  disable_failure: true
 
 identity_providers:
   oidc:
@@ -166,15 +172,7 @@ identity_providers:
         userinfo_signed_response_alg: 'none'
         token_endpoint_auth_method: 'client_secret_post'
 
-      - client_id: beszel
-        client_name: Beszel
-        client_secret: '{{ authelia_beszel_password_hash }}'
-        public: false
-        authorization_policy: two_factor
-        redirect_uris:
-          - https://beszel.{{ domain }}/api/oauth2-redirect
-        scopes:
-          - openid
-          - profile
-          - email
-        userinfo_signed_response_alg: none
+      # NOTE: the Beszel OIDC client was removed — Beszel is archived, so the client +
+      # its redirect URI were dead config (startup noise for a non-existent service).
+      # The authelia_beszel_password_hash secret is kept in SOPS + the rotation registry
+      # so reactivation only needs the client block re-added here.

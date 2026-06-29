@@ -2,6 +2,12 @@
 
 This repository contains Ansible playbooks and roles for server management.
 
+> **Source of truth:** this file is a summary. The repo-root `CLAUDE.md` and the per-role
+> `CLAUDE.md` files are authoritative — in particular, always run Ansible via `uv run
+> ansible-playbook` (the repo's pinned env), edit secrets only with `sops`, and run
+> `prek run --all-files` for lint/validation. If anything here disagrees with `CLAUDE.md`,
+> follow `CLAUDE.md`.
+
 ## Repository Structure
 - **Playbooks**: Located in `ansible/` (e.g., `ansible/initial_setup.yml`, `ansible/deploy.yml`).
 - **Roles**: Located in `ansible/roles/`. New container services should be added as roles in `ansible/roles/containers/`.

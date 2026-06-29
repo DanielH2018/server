@@ -136,3 +136,25 @@ def test_validate_reports_structural_error(tmp_path):
     (role / "files/custom_templates").mkdir(parents=True)
     errors = validate(role)
     assert any("duplicate key" in e for e in errors)
+
+
+def test_uncoerced_macro_bool_uses_truth_table():
+    from validate_ha_config import uncoerced_macro_bool_uses as u
+    names = {"m", "n"}
+    assert u("{{ m() and x }}", names) == ["m"]
+    assert u("{{ x or m() }}", names) == ["m"]
+    assert u("{{ not m() }}", names) == ["m"]
+    assert u("{{ (m() | bool) and x }}", names) == []
+    assert u("{{ m() | bool and x }}", names) == []     # filter binds tighter than `and` -> Filter operand
+    assert u("{{ m() == 'wake' }}", names) == []
+    assert u("{{ m() }}", names) == []
+    assert u("{{ states('x') and y }}", names) == []   # unknown name, not a tracked macro
+    assert u("{{ m() and n() }}", names) == ["m", "n"]  # both operands, sorted
+
+
+def test_macro_bool_coercion_clean_on_real_role():
+    # The real role must pass — no current macro is a raw boolean operand (error_in_scope is
+    # `| bool`-coerced). Pure future-tightening; this guards against a false-positive regression.
+    import validate_ha_config
+    errors = validate_ha_config.validate()
+    assert all("boolean and/or/not operand" not in e for e in errors), errors

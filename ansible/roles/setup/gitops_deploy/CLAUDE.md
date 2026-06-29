@@ -1,10 +1,14 @@
 # gitops_deploy — pull-based deploy on master change (daniel-server only)
 
 Installs a systemd **timer** (every 30 min) that runs `/opt/gitops-deploy/gitops_deploy.py`
-as `{{ sys_user }}`. The script fetches `origin/master`; if it advanced, maps changed
-`roles/containers/<svc>/templates/docker-compose.yml.j2` files to service tags, `--ff-only`
-merges, and deploys each via `uv run --frozen ansible-playbook ansible/deploy.yml --tags <svc>`
-(the repo-pinned env, same as the operator — needs `uv` on the unit's PATH).
+as `{{ sys_user }}`. The script fetches `origin/master`; if it advanced, maps each changed file
+under `roles/containers/<svc>/{templates,files}/` (the compose template OR a bind-mounted config
+template / `files/` asset) to its service tag, `--ff-only` merges, and deploys each via
+`uv run --frozen ansible-playbook ansible/deploy.yml --tags <svc>` (the repo-pinned env, same as
+the operator — needs `uv` on the unit's PATH). A config-only change therefore triggers a scoped,
+health-gated redeploy too (closing the loop so live config matches master), not a silent ff-merge;
+`tasks/` and the role `CLAUDE.md` are deliberately NOT auto-deployed (structural/docs — deploy
+those manually).
 
 ## Health gate + rollback
 After deploy it polls each container's health (`max(5min)` default, see HEALTH_TIMEOUT_S).
@@ -23,6 +27,20 @@ the held SHA and the hold clears automatically.
   edit session would re-page every 30-min tick. State: `/var/lib/gitops-deploy/dirty_alerted_date`.
 - **Broad changes** (shared `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`)
   are NOT auto-scoped — the deployer alerts and defers to a manual full deploy.
+- **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
+  rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
+  value only reaches a container on its next deploy, so the deployer alerts (once per SHA,
+  `secrets_alerted_sha` marker) to redeploy the consumer(s). `secrets.yml` is deliberately
+  NOT in the broad list — the `/add-secret` flow ships it WITH the consuming template, which
+  stays a scoped single-service deploy (`deploy_logic.ChangeSet.secrets`).
+- Acts **only when origin is strictly ahead of local** (`is_ancestor(local, origin)` →
+  `next_action(..., origin_ahead=…)`). Un-pushed local commits make origin an *ancestor* of
+  local; that's a no-op, not a deploy — otherwise the tick would diff `local..origin` (the
+  *reverse* of those commits) and mis-fire a redeploy + false rollback. Push to clear it.
+- Health-gates **only services deployed on THIS host** (daniel-server). A changed template for
+  an other-host-only service (e.g. `dozzle` is daniel-pi-only) renders no compose here, so
+  `containers_for()` returns `[]` and it's skipped — without this the gate polls a phantom
+  container until `HEALTH_TIMEOUT_S` and false-rollbacks (`deploy_logic.containers_to_gate`).
 
 ## Config / secrets
 `/etc/gitops-deploy/config.env` (0600) is templated from the SOPS var

@@ -25,7 +25,11 @@ Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md
       grafana.com (1860 / 14282 / 17346).
     - **Custom boards** — upstream is the live Grafana DB: the CrowdSec set
       (`Crowdsec/`), the Loki log views (`system-logs`, `docker-app-logs`),
-      `docker-and-system-monitoring`, and `traefik-custom`.
+      `docker-and-system-monitoring`, `traefik-custom`, and `HomeAssistant/home-assistant.json`.
+      Also `Uptime-Kuma/uptime-kuma.json` (per-monitor up/down, response time, cert-days from
+      Kuma's `/metrics`) and `Loki/loki-internals.json` (Loki's own ingestion/request/flush
+      metrics) — hand-authored seeds for the loki + uptime-kuma scrape jobs; edit-in-UI then
+      `export_grafana_dashboards.py` to round-trip like the rest.
     - All datasource references are **pinned to the provisioned uids** (`EGdsQqhVk`
       Prometheus / `bf4q19tuivta8e` Loki) so they resolve without the import prompt that
       file-provisioning skips. A stale Prometheus uid (`IH0jqv6nz`) that lingered in a
@@ -52,6 +56,12 @@ Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md
     dashboard **except** the community ones (`SKIP_UIDS`), preserving the live folder
     structure as subdirectories and remapping stale datasource uids. **Run this after
     editing a custom board in the UI** to capture the change back into version control.
+- **Datasource-uid guard:** `scripts/validate_grafana_dashboards.py` (prek hook
+  `validate-grafana-dashboards`, + `scripts/test_validate_grafana_dashboards.py`) asserts every
+  `files/dashboards/**/*.json` datasource ref resolves to a uid/name declared in
+  `datasources.yml.j2` (or a Grafana built-in). A wrong/empty uid → silent "No data"; this
+  catches it before deploy. The valid set is parsed from the template, so adding a datasource
+  there is enough — no edit to the guard.
 - To add your own dashboard: build it in the UI, then run `export_grafana_dashboards.py`
   (it will be captured into the matching folder), **or** drop its JSON in `files/dashboards/`
   manually (pin datasource refs to uid `EGdsQqhVk` for Prometheus / `bf4q19tuivta8e` for

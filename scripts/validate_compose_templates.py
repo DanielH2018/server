@@ -126,6 +126,133 @@ def find_dollar_escape_bugs(docs) -> list[tuple[str, str, str]]:
     return bugs
 
 
+def find_watchtower_label_bugs(docs) -> list[tuple[str, str]]:
+    """Return (service, label) for every LIST-form ``com.centurylinklabs.watchtower.*``
+    label written without an ``=``. Docker splits a list-item label on the first ``=``
+    only, so a ``:``-separated watchtower label (e.g. ``...depends-on:docker-proxy``)
+    parses as a key with an EMPTY value — the directive (``enable`` / ``depends-on``)
+    silently becomes a no-op. The plain-YAML validator and ansible-lint both miss this
+    because the document still renders and parses cleanly. Mapping-form labels are
+    inherently ``key: value`` so they need no ``=`` and are skipped."""
+    bugs: list[tuple[str, str]] = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if not isinstance(spec, dict):
+                continue
+            labels = spec.get("labels")
+            if not isinstance(labels, list):
+                continue
+            for label in labels:
+                if (isinstance(label, str)
+                        and label.startswith("com.centurylinklabs.watchtower.")
+                        and "=" not in label):
+                    bugs.append((svc, label))
+    return bugs
+
+
+# Documented exceptions to the cap_drop: [ALL] policy (service -> why). Keep SMALL and
+# justified — the baseline expectation is that EVERY service drops all caps and adds back only
+# what it proves it needs. These three need broad host/device access by design (verified in the
+# security reviews); everything else drops ALL.
+CAP_DROP_EXEMPT: dict = {
+    "cadvisor": "needs host-wide introspection (cgroups/proc, SYS_PTRACE) to read every container's stats",
+    "scrutiny-web": "LSIO web UI verified to need its default caps; no-cap_drop is accepted/documented",
+    "scrutiny-collector": "SMART collector runs smartctl against raw block devices (needs SYS_RAWIO/SYS_ADMIN)",
+}
+
+# The INTENTIONAL watchtower auto-update pool: mutable-tag services deliberately left for
+# watchtower to update unattended (disposable / stateless / trivially rolled back). A new
+# mutable-tag service is flagged until it either opts out (watchtower.enable=false) or is added
+# here on purpose — so the karakeep/janitorr "stateful service silently swept into auto-update"
+# drift can't recur. Version-pinned tags need no entry. Curated from the real render.
+WATCHTOWER_AUTOUPDATE: frozenset = frozenset({
+    # Infra/monitoring sidecars + stateless/disposable services on rolling tags, intentionally
+    # kept current by watchtower (the critical/stateful tier is version-pinned + Renovate-managed
+    # instead — those use immutable tags so they don't appear here).
+    "autoheal", "autokuma", "watchtower", "dozzle", "glances",
+    "ddns-direct", "ddns-proxied", "wg-easy", "unbound",
+    "crowdsec", "flaresolverr", "peanut",
+    "grafana", "loki", "promtail", "prometheus", "node-exporter",
+    "homepage", "healthchecks", "bento-pdf", "littlelink", "speedtest",
+    "code-server", "freshrss", "terraria",
+})
+
+# Channel tags whose content changes under the same string (vs a version-bearing tag).
+_MUTABLE_TAGS = {"latest", "release", "stable", "main", "master", "dev", "edge", "nightly", "rolling"}
+
+
+def _cap_drops_all(spec: dict) -> bool:
+    caps = spec.get("cap_drop")
+    return isinstance(caps, list) and any(
+        isinstance(c, str) and c.upper() == "ALL" for c in caps)
+
+
+def find_missing_cap_drop(docs, exempt=frozenset()) -> list:
+    """Return service names that do NOT ``cap_drop: [ALL]`` and aren't in ``exempt``. Drop-all
+    is the hardening baseline (then add back minimal caps); a service that drops nothing — or
+    only a subset — keeps Docker's default capability set."""
+    missing = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if isinstance(spec, dict) and svc not in exempt and not _cap_drops_all(spec):
+                missing.append(svc)
+    return missing
+
+
+def _is_mutable_tag(image: str) -> bool:
+    """True if the image reference uses a mutable channel tag (content can change under the same
+    string): untagged (implicit :latest), latest/release/stable/main/..., or a channel word joined
+    to a component by a hyphen on EITHER side — a ``-stable`` suffix (jvm-stable) OR a ``master-``
+    prefix (master-web/master-collector). A version-bearing tag (1.2.3, v1.41.0, 2026.05.0,
+    ...-lsNN, 124) is not."""
+    ref = image.split("@", 1)[0]  # drop any digest
+    # repo:tag split on the LAST colon, unless that colon is a registry port (has a '/' after)
+    if ":" in ref and "/" not in ref.rsplit(":", 1)[1]:
+        tag = ref.rsplit(":", 1)[1]
+    else:
+        tag = ""  # no tag -> implicit :latest
+    if tag == "":
+        return True
+    low = tag.lower()
+    return (low in _MUTABLE_TAGS
+            or any(low.endswith("-" + m) for m in _MUTABLE_TAGS)
+            or any(low.startswith(m + "-") for m in _MUTABLE_TAGS))
+
+
+def _has_watchtower_optout(spec: dict) -> bool:
+    labels = spec.get("labels")
+    key = "com.centurylinklabs.watchtower.enable"
+    if isinstance(labels, list):
+        return any(isinstance(lbl, str) and lbl.replace(" ", "") == key + "=false" for lbl in labels)
+    if isinstance(labels, dict):
+        return str(labels.get(key, "")).strip().lower() == "false"
+    return False
+
+
+def find_undeclared_update_policy(docs, autoupdate=frozenset()) -> list:
+    """Return service names on a MUTABLE image tag that have neither opted out of watchtower
+    (enable=false) nor been declared in ``autoupdate`` — forcing an explicit update-policy
+    choice so a stateful service can't be silently swept into watchtower's auto-update pool."""
+    undeclared = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if not isinstance(spec, dict) or svc in autoupdate:
+                continue
+            image = spec.get("image")
+            if isinstance(image, str) and _is_mutable_tag(image) and not _has_watchtower_optout(spec):
+                undeclared.append(svc)
+    return undeclared
+
+
 def check_container(host_ctx: dict, ci: dict) -> str | None:
     """Render one container template; return an error string or None on success."""
     name = ci.get("name")
@@ -154,6 +281,24 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
     if bugs:
         detail = "; ".join(f"{svc}.{key}: {snippet.strip()[:80]}" for svc, key, snippet in bugs)
         return (f"un-escaped '$' (Compose will interpolate it — double it to '$$'): {detail}")
+
+    wt_bugs = find_watchtower_label_bugs(docs)
+    if wt_bugs:
+        detail = "; ".join(f"{svc}: {label}" for svc, label in wt_bugs)
+        return ("watchtower label missing '=' (Docker stores it as a key with an empty value, "
+                f"so the directive is a silent no-op — use '='): {detail}")
+
+    cap_missing = find_missing_cap_drop(docs, CAP_DROP_EXEMPT)
+    if cap_missing:
+        return ("missing `cap_drop: [ALL]` (drop all caps, add back only what's needed — or "
+                f"allowlist in CAP_DROP_EXEMPT with a reason): {', '.join(cap_missing)}")
+
+    undeclared = find_undeclared_update_policy(docs, WATCHTOWER_AUTOUPDATE)
+    if undeclared:
+        return ("mutable image tag with no update-policy decision — add "
+                "`com.centurylinklabs.watchtower.enable=false` to opt out (pinned/Renovate tier), "
+                "or add the service to WATCHTOWER_AUTOUPDATE if it's intentionally auto-updated: "
+                f"{', '.join(undeclared)}")
     return None
 
 

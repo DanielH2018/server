@@ -23,7 +23,8 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from deploy_logic import (  # noqa: E402
-    container_names,
+    containers_to_gate,
+    health_decision,
     next_action,
     services_from_changed_paths,
     should_alert_dirty,
@@ -34,6 +35,9 @@ LAST_RUN = "/var/lib/gitops-deploy/last_run"
 # Last origin SHA we've already alerted on for a broad change, so a deferred
 # broad change doesn't re-page Discord every 30-min tick until it's resolved.
 BROAD_FILE = "/var/lib/gitops-deploy/broad_alerted_sha"
+# Same throttle for a secrets-only push (rotated value with no service template change):
+# alert once per SHA so the operator redeploys the consumer(s), don't re-page every tick.
+SECRETS_ALERT_FILE = "/var/lib/gitops-deploy/secrets_alerted_sha"
 # Last CT date (YYYY-MM-DD) we paged for a dirty working tree. The tick runs every
 # 30 min, so without this an open edit session would re-alert all day; we throttle
 # to one alert per day, fired on the first tick at/after DIRTY_ALERT_HOUR (07:00 CT).
@@ -72,6 +76,17 @@ def run(args: list[str], cwd: str | None = REPO, check: bool = True,
 
 def log(msg: str) -> None:
     print(msg, flush=True)
+
+
+def is_ancestor(ancestor: str, descendant: str) -> bool:
+    """True if `ancestor` is an ancestor of (or equal to) `descendant`. Used to
+    decide whether origin is strictly ahead of local — only then is there
+    anything to fast-forward and deploy (see next_action's origin_ahead). A git
+    error (bad object, etc.) is a non-zero exit and conservatively reads False,
+    so the tick degrades into a no-op rather than a mis-fired deploy."""
+    r = subprocess.run(["git", "merge-base", "--is-ancestor", ancestor, descendant],
+                       cwd=REPO, capture_output=True)
+    return r.returncode == 0
 
 
 def _read_marker(path: str) -> str | None:
@@ -134,34 +149,38 @@ def health_ok(container: str, settle_checks: int = 3) -> bool:
     """True if `container` reaches 'healthy', or — for an image with no
     HEALTHCHECK — stays 'running' across `settle_checks` consecutive polls
     (~20s) so a boot-then-crash loop doesn't slip the gate the way a single
-    'running' sample would. Polls until HEALTH_TIMEOUT_S, then fails."""
+    'running' sample would. Polls until HEALTH_TIMEOUT_S, then fails.
+
+    The per-sample pass/wait + streak transition is the pure, unit-tested
+    `deploy_logic.health_decision`; this function is just its I/O shell (docker
+    inspect, the 10s poll, and the wall-clock deadline). `.State.Running` is only
+    inspected in the no-healthcheck case (st == ''), matching the decision's use."""
     deadline = time.time() + TIMEOUT
     running_streak = 0
     while time.time() < deadline:
         st = _inspect("{{.State.Health.Status}}", container)
-        if st == "healthy":
+        running = st == "" and _inspect("{{.State.Running}}", container) == "true"
+        verdict, running_streak = health_decision(st, running, running_streak, settle_checks)
+        if verdict == "healthy":
             return True
-        if st == "":  # no healthcheck (or container gone) -> require sustained running
-            run_st = _inspect("{{.State.Running}}", container)
-            running_streak = running_streak + 1 if run_st == "true" else 0
-            if running_streak >= settle_checks:
-                return True
-        else:  # 'starting' / 'unhealthy' -> reset the streak, keep waiting
-            running_streak = 0
         time.sleep(10)
     return False
 
 
 def containers_for(service: str) -> list[str]:
-    """Container names declared by a deployed service's rendered compose file.
-    Falls back to the service name if the file is missing or names none."""
+    """Container names to health-gate for a deployed service, from its rendered
+    compose. Empty when the service isn't deployed on THIS host — its rendered
+    file doesn't exist (dozzle is daniel-pi-only; the deployer runs on
+    daniel-server) — so the caller skips it instead of gating a phantom container
+    (see deploy_logic.containers_to_gate). A present compose that declares no
+    container_name falls back to [service]."""
     path = os.path.join(REPO, "containers", service, "docker-compose.yml")
     try:
         with open(path) as fh:
-            names = container_names(fh.read())
+            text: str | None = fh.read()
     except FileNotFoundError:
-        names = []
-    return names or [service]
+        text = None
+    return containers_to_gate(text, service)
 
 
 def service_healthy(service: str) -> bool:
@@ -190,7 +209,12 @@ def main() -> int:
     origin = run(["git", "rev-parse", f"origin/{BRANCH}"])
     hold = read_hold()
 
-    action = next_action(local, origin, hold, dirty)
+    # origin is "ahead" only if local is an ancestor of it — i.e. it carries
+    # commits we don't have. If origin is behind (the operator committed locally
+    # but hasn't pushed) or the two diverged, there is nothing to fast-forward and
+    # next_action() makes this a no-op instead of mis-firing on the reverse diff.
+    origin_ahead = is_ancestor(local, origin)
+    action = next_action(local, origin, hold, dirty, origin_ahead)
     if action == "dirty":
         # Healthy skip (operator mid-edit). Throttle the page to once a day at
         # ~07:00 CT instead of every 30-min tick (see DIRTY_ALERT_FILE).
@@ -219,11 +243,53 @@ def main() -> int:
         return 0
     if not cs.services:
         run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])  # docs-only etc.
+        # A secrets-only push (rotated value, no service template changed) maps to nothing,
+        # so the ff-merge above is all we can do automatically — but the new value only
+        # reaches a container on its next deploy. Defer-and-alert (once per SHA) so the
+        # operator redeploys the consumer(s); without this the rotated secret sits stale.
+        if cs.secrets and _read_marker(SECRETS_ALERT_FILE) != origin:
+            discord(f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
+                    f"service template — fast-forwarded but **nothing was redeployed**. The "
+                    f"rotated secret won't reach its container(s) until you redeploy them "
+                    f"(`ansible-playbook ansible/deploy.yml --tags <svc>`).")
+            _write_marker(SECRETS_ALERT_FILE, origin)
         return 0
 
     run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])
-    deploy(cs.services)
+    try:
+        deploy(cs.services)
+    except Exception as exc:  # noqa: BLE001 — any ansible-playbook failure
+        # Deploy-EXECUTION failure (ansible-playbook itself errored: bad image manifest, a failed
+        # task) — distinct from the health gate below. Without this the exception propagates to
+        # __main__, which alerts but re-raises WITHOUT writing last_run AND leaves the repo
+        # ff-merged at the bad commit with no hold + no rollback — so the next tick (local==origin)
+        # noops and the deployer silently parks on the broken commit. Mirror the health-gate
+        # rollback: reset to the prior HEAD, redeploy the prior (known-good) version (ansible is
+        # idempotent, so re-applying old after a partial run is safe), hold the bad SHA, and alert.
+        log(f"deploy execution failed for {sorted(cs.services)}: {exc}; rolling back to {local[:8]}")
+        run(["git", "reset", "--hard", local])
+        try:
+            deploy(cs.services)
+        except Exception as exc2:  # noqa: BLE001 — best-effort restore; we still hold + alert
+            log(f"rollback redeploy of the prior version also failed: {exc2}")
+        write_hold(origin)
+        discord(
+            f"🚨 gitops-deploy: **deploy failed** on daniel-server.\n"
+            f"`ansible-playbook` errored deploying `{', '.join(sorted(cs.services))}` from "
+            f"`{origin[:8]}`:\n`{exc}`\n"
+            f"Rolled back to `{local[:8]}`; the bad commit is held until origin advances past it.\n"
+            f"**Action:** fix or revert the offending commit."
+        )
+        return 1
 
+    # Health-gate only services actually deployed on THIS host. A changed template
+    # for an other-host-only service (dozzle is daniel-pi-only) renders no compose
+    # here, so containers_for() returns [] and service_healthy() is vacuously true —
+    # without this the gate would poll a phantom container to timeout and trigger a
+    # false rollback. (deploy(cs.services) above is a harmless no-op for those tags.)
+    skipped = sorted(s for s in cs.services if not containers_for(s))
+    if skipped:
+        log(f"not deployed on this host; skipping health gate: {skipped}")
     failed = [s for s in sorted(cs.services) if not service_healthy(s)]
     if not failed:
         write_hold(None)

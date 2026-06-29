@@ -25,6 +25,38 @@
             "command": "~/server/.claude/hooks/block-protected-edits.sh"
           }
         ]
+      },
+      {
+        "matcher": "^(Bash|Write|Edit|WebFetch|WebSearch|Task|Agent|Skill|mcp__.*)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/log-permission.sh",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/log-permission.sh",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/log-permission.sh",
+            "async": true
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -43,9 +75,36 @@
           }
         ]
       }
+    ],
+    "InstructionsLoaded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/log-instructions.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/session-health.sh",
+            "timeout": 15
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
-    "superpowers@claude-plugins-official": true
+    "superpowers@claude-plugins-official": true,
+    "claude-permission-audit@daniel-tools": false
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "~/server/.claude/statusline.sh",
+    "padding": 0
   }
 }

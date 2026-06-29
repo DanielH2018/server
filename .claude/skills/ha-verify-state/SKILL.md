@@ -18,6 +18,10 @@ with the `claude_ha_token`:
   → on/off + `last_triggered`. **Pass the automation's `id` OR its alias-slug OR full
   `automation.<slug>` — the matcher resolves all three.** A non-zero exit + "not found" means it
   did NOT load (wrong file, validation skipped it, or it never deployed).
+- **Why did it run but no-op?** `uv run python scripts/probe.py ha why <id-or-alias>` (alias `ha
+  trace`) pulls the live per-condition trace — which condition blocked the last run. Caveat: traces
+  are in-memory and wiped on every HA restart/deploy, and an automation whose trigger NEVER matched
+  leaves no trace — for the "nothing happened" case use `ha get logbook/<entity>` + `last_triggered`.
 - **Live error log:** `uv run python scripts/probe.py ha get error_log` — catches a template that
   parsed structurally but throws at render time, or an integration that failed to set up.
 

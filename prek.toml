@@ -17,6 +17,11 @@ id = "end-of-file-fixer"
 id = "check-yaml"
 
 [[repos.hooks]]
+# Guards renovate.json (a syntax error there silently disables ALL dependency management)
+# and every other JSON in the repo (Grafana dashboards, settings).
+id = "check-json"
+
+[[repos.hooks]]
 id = "check-added-large-files"
 
 [[repos.hooks]]
@@ -31,7 +36,9 @@ rev = "v26.4.0"
 [[repos.hooks]]
 id = "ansible-lint"
 files = "\\.(yaml|yml)$"
-additional_dependencies = ["ansible-core>=2.18", "jmespath"]
+# Cap ansible-core <3 so a surprise upstream major can't silently change lint behavior
+# or break this hook on a day nothing in the repo changed (these deps aren't lock-pinned).
+additional_dependencies = ["ansible-core>=2.18,<3.0", "jmespath"]
 entry = "bash -c 'ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint'"
 pass_filenames = false
 
@@ -55,7 +62,7 @@ name = "Validate rendered docker-compose templates"
 entry = "uv run python scripts/validate_compose_templates.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/templates/(traefik|autokuma|expose)\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate_compose_templates\\.py)$"
+files = "^(ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/templates/[^/]+\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate_compose_templates\\.py)$"
 
 # Structurally validate the Home Assistant config (pure Python, no Docker): YAML syntax,
 # duplicate keys, broken !include targets, and a syntax parse-check of inline + custom_templates
@@ -69,6 +76,44 @@ language = "system"
 pass_filenames = false
 files = "^(ansible/roles/containers/home-assistant/(templates|files)/.*|scripts/validate_ha_config\\.py)$"
 
+# Validate that every provisioned Grafana dashboard's datasource references resolve to a
+# datasource declared in datasources.yml.j2 (uid or name) or a Grafana built-in. Catches the
+# silent "No data" / stale-uid class (e.g. a lingering hand-imported uid) before deploy.
+[[repos.hooks]]
+id = "validate-grafana-dashboards"
+name = "Validate Grafana dashboard datasource uids"
+entry = "uv run python scripts/validate_grafana_dashboards.py"
+language = "system"
+pass_filenames = false
+files = "^(ansible/roles/containers/grafana/files/dashboards/.*\\.json|ansible/roles/containers/grafana/templates/provisioning/datasources\\.yml\\.j2|scripts/validate_grafana_dashboards\\.py)$"
+
+# Render the high-value NON-compose YAML config templates (authelia/traefik/prometheus/grafana)
+# with stubbed vars and assert each parses — the render-then-parse guard the compose templates
+# already get (validate-compose-templates), extended to the bind-mounted config templates that
+# re-render every deploy. Catches a Jinja indentation bug that check-yaml/ansible-lint miss (they
+# don't render .j2) BEFORE it reaches an auth-critical deploy (a config-only push is health-gated
+# but auth-critical — a bad place to first find a broken authelia/traefik config).
+[[repos.hooks]]
+id = "validate-config-templates"
+name = "Validate rendered config templates (authelia/traefik/prometheus/grafana)"
+entry = "uv run python scripts/validate_config_templates.py"
+language = "system"
+pass_filenames = false
+files = "^(ansible/roles/containers/(authelia/templates/configuration|traefik/templates/(config|traefik)|prometheus/templates/prometheus|grafana/templates/(loki-config|promtail-config))\\.yml\\.j2|scripts/validate_config_templates\\.py)$"
+
+# Gate that the secret-rotation registry (ansible/secret_rotation.yml) stays in sync with the
+# encrypted secrets.yml — fails the commit if a secret was added/removed without running
+# `secret_rotation.py sync`. Read-only: reads plaintext key NAMES only, never decrypts a value
+# (no age key needed), so it's CI-safe. Catches the drift at commit time instead of a day later
+# when the daily "Secret Rotation" Kuma monitor goes down.
+[[repos.hooks]]
+id = "secret-rotation-registry-sync"
+name = "Secret-rotation registry in sync with secrets.yml"
+entry = "uv run python scripts/secret_rotation.py audit --check"
+language = "system"
+pass_filenames = false
+files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secret_rotation\\.py)$"
+
 # Run the repo's Python unit tests via uv: the toposort dependency-resolution filters
 # (gate every deploy's ordering/scope), the monitor-bridge check logic, the
 # auto-approve-readonly Bash classifier (a permission security boundary), and the
@@ -81,4 +126,18 @@ name = "Run Python unit tests (toposort + monitor-bridge + readonly-hook + smoke
 entry = "uv run python -m pytest"
 language = "system"
 pass_filenames = false
-files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/containers/monitor-bridge/files/.*\\.py|ansible/roles/setup/gitops_deploy/files/.*\\.py|\\.claude/hooks/.*\\.py|scripts/.*\\.py|pyproject\\.toml)$"
+# Mirror pyproject.toml [tool.pytest.ini_options] testpaths so a LOCAL commit touching only
+# one suite still runs pytest (CI runs --all-files regardless; this keeps the two in sync).
+files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/containers/(monitor-bridge|terraria-stats)/files/.*\\.py|ansible/roles/containers/home-assistant/tests/.*\\.py|ansible/roles/setup/(gitops_deploy|renovate_notify)/files/.*\\.py|\\.claude/(hooks|scripts)/.*\\.py|scripts/.*\\.py|pyproject\\.toml)$"
+
+# Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
+# syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]; vendored
+# collections excluded there). ruff is pinned in uv.lock (dev group) so the gate is
+# reproducible and lockFileMaintenance refreshes it weekly. Runs once when any .py is staged.
+[[repos.hooks]]
+id = "ruff"
+name = "Lint first-party Python (ruff)"
+entry = "uv run ruff check"
+language = "system"
+pass_filenames = false
+files = "\\.py$"

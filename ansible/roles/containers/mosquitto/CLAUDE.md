@@ -23,6 +23,12 @@ Eclipse Mosquitto 2.x. Internal-only broker for the Zigbee2MQTT stack. See repo-
   (Mosquitto's default uid is 1883, which can't write deploy-user-owned dirs).
 - **Healthcheck** subscribes to `$$SYS/broker/uptime` with the broker creds — the `$$`
   escaping is required (Compose interpolates a lone `$SYS`).
+- **Rotating `mqtt_password`? Avoid `$` in the value.** The healthcheck runs
+  `mosquitto_sub -P {{ mqtt_password }}` (and Z2M's `configuration.yaml` renders it too); a
+  literal `$` in the password is interpolated by Compose at parse time and silently corrupts
+  the healthcheck → it can't auth → the container flaps `unhealthy`. The validate-compose hook
+  only catches a literal `$` in the *template*, not in a rendered secret, so this won't be
+  flagged — pick a rotation value with no `$`.
 - **Persistence** (`./data`) is regenerable retained-message state; bind-mounted so Kopia
   backs it up, but losing it is harmless.
 - **Ad-hoc publish/subscribe (admin/debug)** — from the host, `docker exec mosquitto mosquitto_pub

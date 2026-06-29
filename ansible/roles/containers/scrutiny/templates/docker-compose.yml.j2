@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 services:
   # Time-series store for SMART history. Internal-only (no host port, not routed by
@@ -36,12 +37,7 @@ services:
       - ./influxdb2-config:/etc/influxdb2
     networks:
       - scrutiny_internal
-    healthcheck:
-      test: ["CMD", "influx", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+    {{ healthcheck('["CMD", "influx", "ping"]', retries=5) }}
     labels:
       {{ kuma('scrutiny-influxdb') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
@@ -73,12 +69,13 @@ services:
       - ./config:/opt/scrutiny/config
     {{ service_networks() }}
       - scrutiny_internal
-    healthcheck:
-      test: curl --fail -s http://localhost:8080/api/health || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ healthcheck('curl --fail -s http://localhost:8080/api/health || exit 1') }}
     labels:
+      # Pinned/manual-update tier: scrutiny ships rolling `master-web`/`master-collector` branch
+      # builds, so it must NOT ride watchtower's auto-update pool — a stateful monitoring service
+      # (the influxdb sidecar holds the SMART history) on unsupervised upstream `master` commits.
+      # Update deliberately via `deploy -t scrutiny`.
+      - "com.centurylinklabs.watchtower.enable=false"
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),
@@ -112,6 +109,11 @@ services:
     environment:
       - COLLECTOR_API_ENDPOINT=http://scrutiny:8080
       - TZ={{ tz }}
+      # Pin the collector cadence (image default is daily 00:00) so the monitor-bridge
+      # "SMART Data Freshness" window (SCRUTINY_MAX_AGE_H=26 = one daily run + slack) is
+      # decoupled from the upstream default — a future image changing the default can't
+      # silently make the freshness window too tight (false down) or too loose (missed death).
+      - COLLECTOR_CRON_SCHEDULE=0 0 * * *
     volumes:
       - /run/udev:/run/udev:ro
     devices:
@@ -119,6 +121,8 @@ services:
     networks:
       - scrutiny_internal
     labels:
+      # Pinned/manual-update tier — see scrutiny-web. No unsupervised `master` pulls.
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('scrutiny-collector') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '256M', '0.05', '32M') }}

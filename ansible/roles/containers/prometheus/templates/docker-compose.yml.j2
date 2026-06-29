@@ -11,17 +11,25 @@ services:
     container_name: node-exporter
     hostname: node-exporter
     restart: unless-stopped
+    # Read-only host exporter: runs root but only reads world-readable /host/proc + /host/sys,
+    # so it needs no capabilities. Verify metrics still populate on deploy (probe metric 'node_load1').
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
+      # Textfile collector: cron scripts drop *.prom gauges here (e.g. kopia-b2-usage.sh writes
+      # kopia_b2_billable_bytes for the B2-usage trend graph). Dir is created by this role's tasks.
+      - /var/lib/node-exporter-textfile:/textfile:ro
     command:
       - '--path.procfs=/host/proc'
       - '--path.rootfs=/rootfs'
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--collector.textfile.directory=/textfile'
       # Collectors that are off by default but read the already-mounted /host/proc.
       # Back the Node Exporter Full panels for processes (PIDs/threads/states),
       # interrupts (IRQ) and TCP connection stats — empty otherwise.
@@ -59,6 +67,8 @@ services:
     {{ service_networks() }}
     restart: unless-stopped
     labels:
+      # Disable watchtower update — version-pinned (immutable tag)
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('cadvisor', name='cAdvisor') }}
     {{ resources('0.30', '1000M', '0.10', '100M') }}
 

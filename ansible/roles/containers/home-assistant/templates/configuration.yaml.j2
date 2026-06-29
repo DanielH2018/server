@@ -12,6 +12,31 @@ homeassistant:
   external_url: !secret external_url
   internal_url: !secret internal_url
 
+# Frontend theme — a compact dark theme PINNED to the Bedroom dashboard (ui-lovelace.yaml.j2 sets
+# `theme: nest_dark` on the view) so it renders dark when cast to the Nest Hub. The cast receiver
+# runs with NO logged-in user, so it ignores the app/browser dark-mode profile and would otherwise
+# show light; pinning an explicit theme to the view forces dark regardless of device/user. Static
+# color values only (no HA Jinja), so it is safe in this verbatim-copied file; one `frontend:` key,
+# compatible with default_config. Tune the hex values to taste.
+frontend:
+  themes:
+    nest_dark:
+      primary-color: "#2196f3"
+      accent-color: "#ff9800"
+      primary-background-color: "#0f0f0f"
+      secondary-background-color: "#1a1a1a"
+      card-background-color: "#1e1e1e"
+      ha-card-background: "#1e1e1e"
+      divider-color: "rgba(255, 255, 255, 0.10)"
+      primary-text-color: "#e8e8e8"
+      secondary-text-color: "#9aa0a6"
+      text-primary-color: "#e8e8e8"
+      disabled-text-color: "#6b6b6b"
+      app-header-background-color: "#1e1e1e"
+      app-header-text-color: "#e8e8e8"
+      state-icon-color: "#c4c8cc"
+      paper-item-icon-color: "#c4c8cc"
+
 # Automations + scenes are Ansible-managed static files (role files/automations.yaml,
 # files/scenes.yaml), copied to ./config and version-controlled. The HA UI editors still
 # open, but edits are NOT persistent — git is the source of truth; redeploy to change.
@@ -37,6 +62,30 @@ input_boolean:
   bedroom_sleep_mode:
     name: Bedroom sleep mode
     icon: mdi:power-sleep
+
+# Test-harness scenario picker (script.bedroom_run_scenario): pick a scenario, then press the
+# dashboard Run button. `reset` returns the room to a clean daytime baseline. `off` does nothing.
+input_select:
+  bedroom_test_scenario:
+    name: Bedroom test scenario
+    icon: mdi:test-tube
+    options:
+      - "off"
+      - bedtime
+      - wake
+      - nightlight
+      - away
+      - arrive
+      - reset
+  # Test-harness speed (script.bedroom_run_scenario): `fast` (~30s, the first option = default) or
+  # `real` (production timing). An input_select's first option is its creation default, so this
+  # realizes the "fast by default" intent that an input_boolean (no `initial:` field) cannot.
+  bedroom_test_speed:
+    name: Bedroom test speed
+    icon: mdi:fast-forward
+    options:
+      - fast
+      - real
 
 # Helper: the fan LEVEL script.bedroom_apply_fan last commanded (0-9). bedroom_fan_manual_detect
 # ignores a fan change whose level matches this (= our own command's cloud echo) and only flags a
@@ -125,7 +174,10 @@ binary_sensor:
   - platform: threshold
     name: "Bedroom VOC high"          # -> binary_sensor.bedroom_voc_high
     entity_id: sensor.bedroom_airgradient_one_voc_index
-    upper: 250                         # alerts >= 275, clears <= 225 (index)
+    # Tuned 2026-06-27 to this room's observed baseline (7-day recorder: median 124,
+    # p95 171, spikes ~290). upper 250 only caught near-max events; 200 sits just above
+    # the room's normal band so a genuine VOC elevation alerts. Severe (400) unchanged.
+    upper: 200                         # alerts >= 225, clears <= 175 (index)
     hysteresis: 25
   - platform: threshold
     name: "Bedroom NOx high"          # -> binary_sensor.bedroom_nox_high
@@ -185,6 +237,21 @@ binary_sensor:
     entity_id: sensor.bedroom_airgradient_one_humidity
     lower: 30                          # alerts <= 27%, clears >= 33% (winter-dry)
     hysteresis: 3
+  # Indoor temperature extremes — a safety net for when nobody's home to notice. Both the fan
+  # curve and the window advisor go SILENT while away (the fan is off; the advisor is gated on
+  # person home), so an AC/HVAC failure or heatwave (high) — or a heating failure / freeze risk
+  # (low) — would otherwise raise no alert at all. Two-sided, so two one-sided sensors; feed the
+  # `temperature` category of bedroom_threshold_alert. Starting points — tune in the ~2026-06-25 pass.
+  - platform: threshold
+    name: "Bedroom temp high"         # -> binary_sensor.bedroom_temp_high
+    entity_id: sensor.bedroom_airgradient_one_temperature
+    upper: 86                          # alerts >= 88 °F, clears <= 84 (AC/HVAC failure, heatwave)
+    hysteresis: 2
+  - platform: threshold
+    name: "Bedroom temp low"          # -> binary_sensor.bedroom_temp_low
+    entity_id: sensor.bedroom_airgradient_one_temperature
+    lower: 50                          # alerts <= 48 °F, clears >= 52 (heating failure / freeze risk)
+    hysteresis: 2
   # Outdoor air quality (source = Open-Meteo sensor.outdoor_pm2_5, files/rest.yaml). Two tiers like
   # the indoor air-quality sensors: moderate (high) and the wildfire/"unhealthy" cutoff (severe).
   # Feed the airqualityoutdoor / airqualityoutdoorsevere categories of bedroom_threshold_alert AND
@@ -248,9 +315,30 @@ recorder:
       # Heartbeat helper — rewritten every minute by the ha_heartbeat automation; the live
       # last_changed is all monitor-bridge reads, so its history is pure churn.
       - input_datetime.ha_heartbeat
+      # Expected-value coordination helpers — written on every fan apply / 5-min color-track tick
+      # (the mediator's DREO echo-suppression + the color tracker's auto baseline). Read LIVE only;
+      # their history is pure churn. Safe to drop from history — they restore via restore_state,
+      # which is independent of the recorder (the manual-fan-survives-restart logic is unaffected).
+      - input_number.bedroom_fan_expected_level
+      - input_number.bedroom_light_expected_color_temp
     entity_globs:
       - sensor.*_linkquality
       - sensor.*_last_seen
+
+# Fire `system_log_event` on the event bus for every WARNING+ log record. default_config enables
+# system_log WITHOUT this, so the event never fires by default — and `automation.ha_runtime_error_alert`
+# (files/automations.yaml) triggers on system_log_event, so without fire_event it is silently DEAD
+# (trigger never matches). Required for that automation. Spec:
+# docs/superpowers/specs/2026-06-22-ha-runtime-error-alert-design.md.
+system_log:
+  fire_event: true
+
+# Expose HA metrics to the homelab Prometheus at /api/prometheus (core integration, bearer-auth).
+# Scraped by the `home-assistant` job in the prometheus role; metrics are prefixed `hass_`. No
+# `filter` — HA's default curated metric set (tune later only if cardinality is noisy).
+# Spec: docs/superpowers/specs/2026-06-22-ha-prometheus-design.md.
+prometheus:
+  namespace: hass
 
 http:
   use_x_forwarded_for: true
@@ -307,6 +395,16 @@ google_assistant:
       expose: true
     fan.tower_fan:
       name: Bedroom Fan
+      expose: true
+    # Scenes are activate-only to Google ("Hey Google, activate Bedroom Bright").
+    scene.bedroom_bright:
+      name: Bedroom Bright
+      expose: true
+    scene.bedroom_relax:
+      name: Bedroom Relax
+      expose: true
+    scene.bedroom_nightlight:
+      name: Bedroom Nightlight
       expose: true
 
 # Google Cast (Nest Hub Max) is intentionally NOT configured here. The `cast` integration is

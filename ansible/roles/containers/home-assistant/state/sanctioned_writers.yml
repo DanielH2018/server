@@ -1,0 +1,33 @@
+# HAND-MAINTAINED — per-actuator sanctioned writers for the Phase-2 single-writer invariant.
+# `module` = the mediator + its delegated primitives; `exemptions` = declared special-purpose
+# writers (manual surface / transient effects / narrow drift / boot recovery). CI fails if the
+# DERIVED writer set of an actuator (from derived_state.yml) is not a subset of module ∪ exemptions.
+light.bedroom_lights:
+  module:
+    - script.bedroom_lights_set
+    - script.bedroom_apply_natural
+    - script.bedroom_apply_wake
+    - script.bedroom_set_natural_brightness
+    - script.bedroom_bedtime
+  exemptions:
+    - automation.bedroom_tap_dial_control
+    - script.bedroom_apply_natural_gated
+    - script.bedroom_blip
+    - script.bedroom_alert_pulse
+    - automation.bedroom_color_tracking
+    - script.bedroom_preview_wake
+    - script.bedroom_run_scenario
+fan.tower_fan:
+  module:
+    - script.bedroom_fan_set
+    - script.bedroom_apply_fan
+    - script.bedroom_fan_nudge
+  exemptions:
+    - automation.bedroom_fan_startup_reconcile
+# The air-purifier plug has no mediator script — bedroom_air_purifier_presence drives switch.turn_on/
+# off directly by design (its own comment says so). Listed here so the single-writer CI tripwire still
+# fails if a SECOND automation/script later writes it, the same guard lights/fan get.
+switch.air_purifier:
+  module:
+    - automation.bedroom_air_purifier_presence
+  exemptions: []

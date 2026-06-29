@@ -23,7 +23,9 @@ entryPoints:
           scheme: https
       middlewares:
         - crowdsec@file
-        - rate-limit@file
+        # No rate-limit here: this entrypoint only 301s to https, and rate-limit is a single
+        # per-IP bucket — counting the redirect too would double-charge each initial page load
+        # against the per-router limiter on https. crowdsec@file still guards port 80.
   https:
     address: ":443"
     forwardedHeaders:

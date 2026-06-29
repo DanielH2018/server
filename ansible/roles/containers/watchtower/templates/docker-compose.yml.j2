@@ -33,7 +33,7 @@ services:
     {{ service_networks() }}
     labels:
       # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on:docker-proxy-lifecycle"
+      - "com.centurylinklabs.watchtower.depends-on=docker-proxy-lifecycle"
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '256M', '0.05', '16M') }}

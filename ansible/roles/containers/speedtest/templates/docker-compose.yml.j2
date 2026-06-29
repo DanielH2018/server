@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 
 services:
@@ -30,12 +31,7 @@ services:
     # Log rotation is set globally in the Docker daemon (daemon.json: json-file,
     # max-size 10m × 3) by the docker_install role — no per-service logging block needed.
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    {{ healthcheck('["CMD", "wget", "-q", "--spider", "http://localhost:80/"]') }}
     # LSIO image: cap_drop ALL plus the s6 privilege-drop set and NET_BIND_SERVICE for :80.
     # Verify on deploy (docker logs speedtest) — add back caps if it fails to start.
     cap_drop:

@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 
 services:
@@ -32,12 +33,7 @@ services:
     security_opt:
       - no-new-privileges:true
     {{ service_networks() }}
-    healthcheck:
-      test: curl --fail -s http://localhost:8443/healthz/ || exit 1
-      start_period: 1m
-      interval: 30s
-      timeout: 10s
-      retries: 6
+    {{ healthcheck('curl --fail -s http://localhost:8443/healthz/ || exit 1', start_period='1m', retries=6) }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
@@ -49,7 +45,7 @@ services:
       }}
       {{ kuma(container_item.name) }}
       # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on:docker-proxy"
+      - "com.centurylinklabs.watchtower.depends-on=docker-proxy"
     # Resource caps for blast-radius containment (M1). Dev env can run builds, so
     # size generously and tune from cAdvisor/Grafana.
     {{ resources('4.0', '4096M', '0.10', '256M') }}

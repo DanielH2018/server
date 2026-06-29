@@ -71,6 +71,8 @@ services:
     {{ resources('0.50', '128M', '0.05', '16M') }}
 
 {{ external_networks() }}
+  # Despite the name, NOT a true-internal net: the feed-cache nginx proxies
+  # rachelbythebay.com outbound, so `internal: true` would break it.
   internal:
     internal: false
 

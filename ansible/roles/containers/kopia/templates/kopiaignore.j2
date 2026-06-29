@@ -84,6 +84,17 @@ recyclarr/recyclarr/config/resources/
 # (home-assistant_v2.db) itself stays backed up; its .db-wal/.db-shm churn is dropped above.
 home-assistant/config/custom_components/hacs/hacs_frontend/
 
+# ── Obsidian LiveSync: CouchDB sync relay — keep config, drop the bulky DB ─────
+# couchdb-data/ is a CouchDB B-tree REWRITTEN daily — a new content-defined OID
+# every snapshot (poor dedup), and the engine behind the B2 hidden-version churn
+# that tripped the 85% usage alert: 1.1G, exploded ~17x (66M→1.1G) after a
+# 2026-06-23 DB rebuild, deleted blobs lingering as billable hidden versions for
+# the 7-day lifecycle window. Same anti-pattern as the n8n WAL / pihole-FTL.db
+# above. The vault's source of truth is the markdown on each Obsidian client;
+# LiveSync "Rebuild everything" re-uploads the DB from a device, so the server
+# copy is regeneratable. couchdb-etc/ (config) + the compose file stay backed up.
+livesync/couchdb-data/
+
 # ── Pi-hole: keep config (pihole.toml, custom lists, *_backups), drop the bulk ──
 # pihole-FTL.db is DNS query HISTORY (432M, rewritten constantly — poor dedup);
 # gravity*.db + listsCache are rebuilt from config by `pihole -g`.

@@ -44,16 +44,15 @@ services:
       - no-new-privileges:true
     {{ service_networks() }}
       - internal
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    {{ healthcheck('["CMD", "wget", "--spider", "-q", "http://localhost:3000"]') }}
     depends_on:
       - karakeep-chrome
       - karakeep-meilisearch
     labels:
+      # Manual/Renovate-managed: karakeep:release is coupled to the pinned meili
+      # version (see the meilisearch VERSION POLICY), so watchtower (monitor-all mode)
+      # must not auto-bump any service in this stack and desync the pair.
+      - "com.centurylinklabs.watchtower.enable=false"
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),
@@ -77,15 +76,12 @@ services:
     {{ resources('2.0', '2048M', '0.10', '128M') }}
 
   karakeep-chrome:
+    # Major-pinned to a known-good Chromium (124) — bump deliberately, not on every push.
+    # The watchtower opt-out (in labels below) keeps it manual regardless.
     image: gcr.io/zenika-hub/alpine-chrome:124
     container_name: karakeep-chrome
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9222/json/version"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+    {{ healthcheck('["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9222/json/version"]', start_period='15s') }}
     command:
       - --no-sandbox
       - --disable-gpu
@@ -101,6 +97,8 @@ services:
     networks:
       - internal
     labels:
+      # Manual/Renovate-managed stack (see karakeep service) — no watchtower auto-bump.
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('karakeep-chrome') }}
     # Resource caps for blast-radius containment (M1). Headless Chrome can spike
     # memory, so size generously and tune from cAdvisor/Grafana.
@@ -131,17 +129,18 @@ services:
       - no-new-privileges:true
     networks:
       - internal
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:7700/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    {{ healthcheck('["CMD", "wget", "--spider", "-q", "http://127.0.0.1:7700/health"]') }}
     labels:
+      # Pinned + manual-upgrade-only (see VERSION POLICY above) — watchtower must never
+      # touch it; an unsupervised minor bump changes the on-disk DB and refuses to boot.
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('karakeep-meilisearch') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('1.0', '1024M', '0.10', '128M') }}
 
   karakeep-time-tagger:
+    # Rolling uv base (bookworm-slim): the tagger reinstalls its Python deps each cycle, so a
+    # fresh base is harmless. The watchtower opt-out (in labels below) keeps the bump manual anyway.
     image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
     container_name: karakeep-time-tagger
     restart: unless-stopped
@@ -175,6 +174,8 @@ services:
       karakeep:
         condition: service_healthy
     labels:
+      # Manual/Renovate-managed stack (see karakeep service) — no watchtower auto-bump.
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('karakeep-time-tagger') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '512M', '0.05', '64M') }}
@@ -183,5 +184,7 @@ volumes:
   karakeep_meili:
 
 {{ external_networks() }}
+  # Despite the name, NOT a true-internal net: karakeep-chrome must reach the
+  # internet to fetch bookmarked URLs, so `internal: true` would break crawling.
   internal:
     internal: false

@@ -23,6 +23,11 @@
       unit_of_measurement: "µg/m³"
       device_class: pm10
       state_class: measurement
+    # US AQI + Ozone are dashboard-INFORMATIONAL by design (no standalone threshold alert):
+    # US AQI already folds ozone into its sub-index, and the ventilation safety net (the window
+    # advisor's smoke guard) gates on particulates (PM2.5 + PM10), the pollutants closing a window
+    # actually controls. If a dedicated high-ozone alert is ever wanted, add an outdoor_ozone
+    # threshold binary_sensor + a category to bedroom_threshold_alert (same pattern as outdoor PM2.5).
     - name: "Outdoor US AQI"
       unique_id: outdoor_us_aqi
       value_template: "{{ value_json.current.us_aqi }}"

@@ -13,6 +13,9 @@ services:
       - PUID={{ puid }}
       - PGID={{ pgid }}
       - TZ={{ tz }}
+      # radarr-striptracks is INTENTIONAL here: TheCaptain989's striptracks mod auto-detects
+      # Sonarr vs Radarr at runtime, and there is NO separate `sonarr-striptracks` LSIO mod —
+      # the radarr-named image is the single published variant used by both apps.
       - DOCKER_MODS=linuxserver/mods:radarr-striptracks
     volumes:
       - /etc/localtime:/etc/localtime:ro
@@ -29,7 +32,7 @@ services:
       - SETUID
       - CHOWN
     {{ service_networks() }}
-    {{ healthcheck('curl --fail -s http://localhost:8989/ || exit 1') }}
+    {{ healthcheck('curl --fail -s http://localhost:8989/ping || exit 1') }}
     labels:
       # Disable watchtower update — pinned + Renovate-managed
       - "com.centurylinklabs.watchtower.enable=false"

@@ -1,4 +1,3 @@
-import logging
 from flask import Flask, Response
 import requests, threading, time, os, re
 
@@ -157,16 +156,28 @@ def process_obsidian_ics(raw_ics):
         fixed.append(vevent)
     return header + '\r\n'.join(fixed) + '\r\n' + footer
 
+# Ceiling on a fetched ICS feed read into memory. Real calendars are KBs-to-low-MBs; the
+# cap stops a hostile/broken upstream from ballooning the parse past the 128M container cap.
+MAX_FEED_BYTES = 10 * 1024 * 1024  # 10 MB
+
 def refresh_feed(key, url, processor=None):
     if processor is None:
         processor = process_ics
     try:
-        r = requests.get(url, timeout=(10, 30))  # 10s to connect, 30s to read
-        if r.status_code == 200:
-            cached_ics[key] = processor(r.text)
-            print(f"Calendar {key} refreshed successfully")
-        else:
-            print(f"Calendar {key}: failed to fetch, HTTP {r.status_code}")
+        # stream=True + a byte ceiling so we never read an unbounded body into memory.
+        with requests.get(url, timeout=(10, 30), stream=True) as r:  # 10s connect, 30s read
+            if r.status_code == 200:
+                chunks, total = [], 0
+                for chunk in r.iter_content(chunk_size=65536):
+                    total += len(chunk)
+                    if total > MAX_FEED_BYTES:
+                        raise ValueError(f"feed exceeded {MAX_FEED_BYTES // (1024 * 1024)}MB cap")
+                    chunks.append(chunk)
+                text = b"".join(chunks).decode(r.encoding or "utf-8", "replace")
+                cached_ics[key] = processor(text)
+                print(f"Calendar {key} refreshed successfully")
+            else:
+                print(f"Calendar {key}: failed to fetch, HTTP {r.status_code}")
     except Exception as e:
         print(f"Calendar {key}: error fetching — {e}")
 

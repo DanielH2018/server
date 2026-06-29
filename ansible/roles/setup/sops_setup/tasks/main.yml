@@ -15,11 +15,18 @@
     url: "{{ sops_binary_url }}"
     dest: /usr/local/bin/sops
     mode: "0755"
+    # SOPS is the root of the whole secret-decryption trust chain (every deploy's
+    # community.sops decrypt runs through it), so the download is checksum-pinned —
+    # an unverified binary here is a supply-chain hole. Bump BOTH the version and the
+    # per-arch sha256 in lockstep from the release's sops-<ver>.checksums.txt.
+    checksum: "sha256:{{ sops_sha256 }}"
   vars:
     # You can check https://github.com/getsops/sops/releases for the latest
     sops_version: "v3.9.2"
     sops_arch: "{{ 'amd64' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
     sops_binary_url: "https://github.com/getsops/sops/releases/download/{{ sops_version }}/sops-{{ sops_version }}.linux.{{ sops_arch }}"
+    # sha256 of sops-v3.9.2.linux.{amd64,arm64} from the upstream checksums.txt.
+    sops_sha256: "{{ '8d939bb53fe3f05b12ba4bec85c562e843b7fccba9a867cbfa626caa06a39eed' if ansible_facts.architecture == 'x86_64' else '07ff67d6ec28b2660c6bc2b065fa8f949dd51f15522e0770ebea781a0df00faf' }}"
 
 - name: Install pinned Ansible collections from requirements.yml
   tags: [collections]

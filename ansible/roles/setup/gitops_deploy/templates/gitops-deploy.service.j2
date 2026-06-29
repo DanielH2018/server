@@ -6,6 +6,10 @@ OnFailure=gitops-deploy-alert.service
 
 [Service]
 Type=oneshot
+# Kill a wedged run (hung ansible/docker) so it can't hold the unit "active" forever and starve
+# the 30-min timer (OnUnitActiveSec) — without this a hang stalls the whole pipeline until manual
+# intervention. 25min keeps it under the 30-min interval so the next tick still fires.
+TimeoutStartSec=25min
 User={{ sys_user }}
 WorkingDirectory=/home/{{ sys_user }}/server
 # Need ~/.local/bin on PATH for `uv` (the deployer runs `uv run ansible-playbook`,

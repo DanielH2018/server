@@ -22,13 +22,17 @@ _spec.loader.exec_module(_mod)
 classify = _mod.classify
 is_sops_encrypted = _mod.is_sops_encrypted
 
-REPO = "/home/ubuntu/server"
+# Repo root derived from THIS file's location (.claude/hooks/), NOT hardcoded — the test must
+# work in any checkout, incl. CI's /home/runner/work/... A hardcoded /home/ubuntu/server made
+# classify() read a nonexistent secrets.yml in CI -> None -> a false `test_blocks_the_real_secrets_file`
+# failure. Mirrors the hook's own repo_root computation in block-protected-edits.py.
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # --- containers guard (regression — unchanged behavior) ---------------------
 
 BLOCK_CONTAINERS = [
     ("containers/jellyfin/docker-compose.yml", "relative path in containers"),
-    ("/home/ubuntu/server/containers/jellyfin/docker-compose.yml", "absolute path"),
+    (os.path.join(REPO, "containers/jellyfin/docker-compose.yml"), "absolute path"),
     ("containers", "the containers dir itself"),
     ("ansible/../containers/foo.yml", "path that normalizes into containers"),
 ]
@@ -108,7 +112,7 @@ def test_allows_edit_of_plaintext_yaml_that_path_pattern_would_catch(tmp_path):
 
 
 def test_nonexistent_file_does_not_crash():
-    assert classify("/home/ubuntu/server/does/not/exist.yml", REPO) is None
+    assert classify(os.path.join(REPO, "does/not/exist.yml"), REPO) is None
 
 
 def test_blocks_the_real_secrets_file():

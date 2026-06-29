@@ -37,6 +37,10 @@ containers_list:
   - name: homepage
     port: 3000
     use_authelia: true
+    # `proxy` is REQUIRED: the Portainer service widget queries portainer:9000 directly
+    # (roles/containers/homepage/templates/services.yaml.j2), and portainer only lives on the
+    # `proxy` net — homepage must share it to reach the widget endpoint. Do NOT strip `proxy`
+    # as "over-connected" (a 2026-06-24 attempt to do so broke the Portainer widget).
     networks:
       - apps
       - proxy
@@ -189,6 +193,7 @@ containers_list:
     use_authelia: true
     networks:
       - monitoring
+      - apps  # reach home-assistant:8123 for the /api/prometheus scrape (mirrors monitor-bridge)
   - name: grafana
     port: 3000
     use_authelia: true
@@ -215,8 +220,8 @@ containers_list:
     networks:
       # monitoring: reach prometheus + uptime-kuma. kopia: query the backup source's
       # status without putting kopia on the broad monitoring net (trusted-infra access,
-      # like traefik). apps: reach the n8n public API at n8n:5678 for the workflow-failure
-      # check. No web UI, so no port / Authelia.
+      # like traefik). apps: reach the n8n public API at n8n:5678 (workflow-failure check)
+      # AND home-assistant:8123 (HA automation-heartbeat check). No web UI, so no port / Authelia.
       - monitoring
       - kopia
       - apps

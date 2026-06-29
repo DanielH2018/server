@@ -110,6 +110,19 @@
     dest: /usr/share/keyrings/azlux-archive-keyring.gpg
     mode: "0644"
 
+- name: Verify the Azlux GPG key fingerprint
+  tags: [log2ram]
+  # Fail the play closed if the fetched key is not Azlux's signing key (fingerprint
+  # 98B824A5 FA7D3A10 FDB225B7 CA548A0A 0312D8E6, uid "Azlux <github@azlux.fr>"). Azlux is a
+  # third-party repo with no prominently-published checksum, so this pins the fingerprint of
+  # the key currently trusted on the Pi — a swapped/MITM'd key on a later fetch then fails the
+  # play before deb822 trusts it. Runs every play (changed_when: false).
+  ansible.builtin.command:
+    cmd: gpg --show-keys --with-colons /usr/share/keyrings/azlux-archive-keyring.gpg
+  register: optimize_pi_azlux_key_fpr
+  changed_when: false
+  failed_when: "'98B824A5FA7D3A10FDB225B7CA548A0A0312D8E6' not in optimize_pi_azlux_key_fpr.stdout"
+
 - name: Add Log2Ram repository
   tags: [log2ram]
   # deb822 format (.sources) — the one-line "deb [...] ..." apt_repository form is deprecated.

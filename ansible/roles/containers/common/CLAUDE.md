@@ -28,10 +28,12 @@ Utility role (not a container). Every container role calls into it via
 > config changed → `recreate: always` picks it up; otherwise `recreate: auto`. `auto` alone
 > would silently *not* apply a config-file-only edit (the compose config-hash is unchanged),
 > but it *does* handle image changes (`build: always` rebuilds; identical rebuild = no-op)
-> and `docker-compose.yml` edits. Wired roles: authelia, traefik, homepage, grafana,
-> prometheus, janitorr, livesync, peanut, recyclarr, kopia (entrypoint.sh), pihole
+> and `docker-compose.yml` edits. Wired roles (current set:
+> `grep -rl common_config_changed roles/containers/*/tasks/`): authelia, traefik, homepage,
+> grafana, prometheus, janitorr, livesync, peanut, recyclarr, kopia (entrypoint.sh), pihole
 > (resolver configs; its former `absent`→`present` exemption was removed 2026-06-09),
-> freshrss (nginx feed-cache conf, wired 2026-06-10). Design:
+> freshrss (nginx feed-cache conf), home-assistant, monitor-bridge, mosquitto, terraria,
+> terraria-stats, zigbee2mqtt. Design:
 > `docs/superpowers/specs/2026-06-07-idempotent-deploys-conditional-recreate-design.md`.
 >
 > **New config-mounting role?** `register:` each bind-mounted config task with a

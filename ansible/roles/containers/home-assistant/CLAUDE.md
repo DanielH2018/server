@@ -42,6 +42,15 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   own config via the UI, but this file is the Ansible source of truth and is
   overwritten on deploy — keep UI-managed config (integrations, etc.) in the areas HA
   stores separately (`.storage/`, the recorder DB…), which are NOT templated.
+  - **Smart-plug entity_id renames (2026-06-25, NOT templated — survives deploy, NOT a Z2M re-pair).**
+    The 3 room plugs paired with raw Z2M IEEE entity_ids (e.g. `switch.0xffffb40e06088788`); renamed
+    in the **HA entity registry** to `switch.air_purifier` / `switch.airgradient_lamp` /
+    `switch.behind_bed` (+ all their sub-entities `<domain>.<slug>_<suffix>`). Entity-id renames are
+    **WebSocket-only** (`config/entity_registry/update` with `new_entity_id`) — the REST API / probe
+    can't. The registry lives in `.storage`, so this persists across deploys but a **Zigbee re-pair
+    re-mints the IEEE ids** → re-apply (the one-off WS loop reuses `probe.py`'s token/IP/WS helpers).
+    `switch.desk_surge_protector_strip` already had a clean id. `automation.bedroom_air_purifier_presence`
+    references the renamed `switch.air_purifier`.
 - **Automations + scenes + scripts + template sensors + shared Jinja macros ARE copy'd (since 2026-06-18).**
   `files/automations.yaml`, `files/scenes.yaml`, `files/scripts.yaml`, `files/templates.yaml`, and
   `files/custom_templates/fan.jinja`
@@ -56,7 +65,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   via `bedroom_apply_natural_gated` + fan]; B2 = Brightness: press = `scene.bedroom_relax`,
   hold = `scene.bedroom_bright`; B3 = Sleep: press = sleep TOGGLE [in sleep mode + lights on → lights
   off (stay in sleep mode, fan quiet); else → `scene.bedroom_nightlight` + clear manual-off], hold =
-  `script.bedroom_bedtime` (15-min fade); B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`
+  `script.bedroom_bedtime` (30-min fade); B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`
   + cancel fan-dial mode], hold = toggle fan-dial mode [`timer.bedroom_fan_dial`, 5-min sliding window:
   the dial then steps the fan ±1 level via `script.bedroom_fan_nudge`; auto-reverts to light dial on
   expiry — replaces the old hold-to-boost-100%, max fan still reachable by dialing to L9]). Manual taps
@@ -90,18 +99,20 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `brightness_step_*` no-ops. Presence
   (FP300) + an `input_boolean` manual-off override + an alarm-driven morning reset live in the
   same file; `bedroom_presence_on` and the morning reset BOTH call `script.bedroom_apply_natural`.
-  The lux gate is window-aware (`in morning window OR illuminance < 50` — wake regardless of ambient
+  The lux gate is window-aware (`in morning window OR illuminance < 75` — wake regardless of ambient
   light during the 15-min window, gate on darkness afterwards) and lives in ONE place:
   `binary_sensor.bedroom_auto_light_allowed` (templates.yaml). `bedroom_presence_on` (its darkness
-  condition) and `bedroom_apply_natural_gated` reference that sensor — tune the 50-lux threshold / window
+  condition) and `bedroom_apply_natural_gated` reference that sensor — tune the 75-lux threshold / window
   there, once. The window reads `sensor.bedroom_wake_start` (the shared dynamic-wake source — see below),
   the SAME sensor the dispatcher's morning exception uses, so the two are inherently in sync (no duplicated
   formula). **Feedback-loop caveat (tuning):** `sensor.aqara_fp300_illuminance` is dominated by the
   bedroom lights themselves (~640 lux with them on, ~48 off), so the gate is partly circular — turning the
-  lights off makes the room read "dark," which can have `presence_on` re-light it ~30 s later. The 50-lux
-  threshold sits right in this room's lights-off ambient (~48), so it's borderline; pick a value clearly
+  lights off makes the room read "dark," which can have `presence_on` re-light it ~30 s later. The 75-lux
+  threshold sits ABOVE this room's lights-off ambient (~48), so with the lights off the room always reads
+  "dark" at night and the gate is effectively always-allow then; pick a value clearly
   below the lights-off daytime ambient if you want to stop daytime auto-lighting (this is why the fan
-  button stays out of light control entirely).
+  button stays out of light control entirely). The illuminance also **LAGS** (sleepy battery sensor on
+  `light_sampling: low`, ~100 s to reflect a lights-off drop) — see the sun-aware button-1 HOLD note below.
 - **Too-bright arrival blip (since 2026-06-19).** `automation.bedroom_presence_blip_too_bright` is a
   sibling of `bedroom_presence_on`: same arrival edge (`binary_sensor.aqara_fp300_presence` -> on),
   but the lux gate is **inverted** (`binary_sensor.bedroom_auto_light_allowed` == off) plus
@@ -109,16 +120,28 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   auto-light, it calls `script.bedroom_blip` (off -> 15% warm 2700K ~1s -> off) so you get an
   acknowledgement instead of silence. `bedroom_blip` is the inverse of `bedroom_alert_pulse` — it
   needs NO `scene.create` snapshot because it only runs with the lights already off, so a plain
-  `turn_off` restores the known state. No feedback loop: it fires only at illuminance >= 50 (bright
-  ambient), and a ~1s blip can't satisfy `presence_on`'s `below: 50 for: 30s`. No cooldown initially;
+  `turn_off` restores the known state. No feedback loop: it fires only at illuminance >= 75 (bright
+  ambient), and a ~1s blip can't satisfy `presence_on`'s `below: 75 for: 30s`. No cooldown initially;
   add a trigger `for:` debounce if presence flapping makes it chatty.
   **Tap Dial button-1 HOLD blips too (since 2026-06-20).** The "reset to auto" branch in
   `bedroom_tap_dial_control` calls the SAME `script.bedroom_blip` when its lux-gated apply
   (`script.bedroom_apply_natural_gated`) leaves the lights off — i.e. `bedroom_auto_light_allowed` ==
-  off (too bright) AND the lights were already off before the reset (a `was_off` snapshot taken before
-  the apply, so a reset that turns an already-on light off doesn't double-up the visible feedback with
-  a blip). Same too-bright acknowledgement as the arrival blip, but button-driven (not lux-driven), so
-  there is no feedback-loop concern at all.
+  off (too bright) AND the sun is up AND the lights were already off before the reset (a `was_off` snapshot
+  taken before the apply, so a reset that turns an already-on light off doesn't double-up the visible
+  feedback with a blip). Same too-bright acknowledgement as the arrival blip, but button-driven (not
+  lux-driven), so there is no feedback-loop concern at all.
+  **Sun-aware HOLD reset (since 2026-06-21).** `script.bedroom_apply_natural_gated` now lights when the
+  lux gate allows **OR `sun.sun` is `below_horizon`** (no longer lux-only). Root cause it fixes: the FP300
+  illuminance LAGS ~100 s after the bulbs switch off (sleepy `light_sampling: low` sensor — see the
+  feedback-loop caveat above), so right after a manual/voice off the gate read "bright" and the HOLD reset
+  just blipped; you had to HOLD a SECOND time once the sensor caught up (confirmed live via history:
+  illuminance held 553 for ~100 s, lights came on only once it dropped < 50). At night a stale-bright
+  reading is physically impossible, so sun-below-horizon makes one HOLD light reliably; by day live lux
+  still rules (bright room stays off). Scoped to the HOLD path ONLY — the automatic `presence_on` gate is
+  unchanged — and the HOLD blip condition above carries the EXACT complement (`... and sun above_horizon`)
+  so the reset can't both light and blip. A `light_sampling: high` write to shrink the lag was attempted
+  but did NOT land (sleepy-device downlink not accepted — the FP300 kept reporting `low`); the sun term is
+  the deterministic, git-managed fix and doesn't depend on it.
   **`script.bedroom_blip` is the SINGLE source of truth for the blip flash** (off -> 15% warm 2700K ->
   off). Both the arrival automation AND this Button 1 HOLD branch reference that one script — never
   re-roll an inline flash — so the acknowledgement is identical by construction and can't drift. Any
@@ -151,6 +174,27 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `custom_components/adaptive_lighting/` (Kopia-backed, not templated — like `dreo`). Install it
   via HACS BEFORE deploying, or HA logs "integration not found" and skips the block. The deploy's
   full restart loads a newly added custom component (a YAML "Quick Reload" does not).
+- **Light/fan mediator — single guarded writer (Phase 2, since 2026-06-22).** AUTO/programmatic
+  writes of `light.bedroom_lights` go through `script.bedroom_lights_set(reason)` and of
+  `fan.tower_fan` through `script.bedroom_fan_set(reason)`. The light gate is the tested
+  `light_decision(reason, …)` macro in `lighting.jinja`: `presence` is GATED (manual_off/sleep/home/
+  presence/lux/light-off — the conditions that used to live on `bedroom_presence_on`); `natural`/
+  `wake`/`off` are pass-through (the caller pre-gates). The mediator DELEGATES to the existing
+  primitives (`apply_natural`/`apply_wake`/`light.turn_off`) — it does not reimplement them.
+  `bedroom_fan_set` is `auto`→`apply_fan` / `boost`→max+override (arms `expected_level=9`) /
+  `off`→`fan.turn_off`. **The manual Tap Dial is a DECLARED EXEMPTION** (writes directly, by design —
+  intentional/ungated, and its brightness dial is a latency-sensitive relative step), as are
+  `apply_natural_gated`, `bedroom_blip`, `bedroom_alert_pulse`, `bedroom_color_tracking`, and
+  `bedroom_fan_startup_reconcile`. The allowed writer set is enforced **HARD** by the
+  `validate-ha-config` hook via `state/sanctioned_writers.yml` (module ∪ exemptions): a new automation
+  that writes an actuator directly fails CI. **Add a writer = route it through the mediator, or
+  declare it in `sanctioned_writers.yml`.** `reason: "off"` MUST stay quoted (unquoted `off` is YAML
+  `false` → silent no-op). Design: `docs/superpowers/specs/2026-06-21-ha-state-model-phase2-mediator-design.md`.
+  The mediator's `reason` is contract-checked by `validate-ha-config` (`mediator_reason_errors`
+  in `ha_state_model.py`): every `bedroom_lights_set`/`bedroom_fan_set` call must pass a quoted
+  `reason` from the declared vocabulary (`MEDIATOR_REASONS`) — a missing/typo'd reason or the
+  unquoted-`off`→YAML-`false` no-op fails CI. Add a new reason to `MEDIATOR_REASONS` when you add
+  one to the mediator.
 - **`files/scripts.yaml` — the "natural lighting state" dispatcher (templated via `copy`, like
   automations/scenes; wired via `script: !include scripts.yaml`; feeds `common_config_changed`).**
   `script.bedroom_apply_natural` sets the bedroom group to what it would be with no manual
@@ -167,12 +211,17 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   the room dark and a B3 tap brings the nightlight back. The sleep-mode arm of this exception is thus
   reached via `presence_on` only in the 00:00–05:00 *no-sleep-mode* case (up late, not yet in bed);
   it still protects the B3-tap nightlight and any other direct caller of the dispatcher.
-  The morning wake ramp is the next exception. It spans a **30-min window centered on the alarm**
-  (`alarm−15` → `alarm+15`), with a gentle-then-steep curve: 1% at window start → ~12% at the alarm
-  → 40% at `alarm+15`. `sensor.bedroom_wake_start` = alarm−15 min (the window open edge; dynamic —
-  see the dynamic-wake bullet below). Delegated entirely to `script.bedroom_apply_wake` (fixed warm
-  2200K, no `adaptive_lighting.apply` turn-on flash), driven per-minute by
-  `automation.bedroom_wake_ramp`. Short night (<6h) scales mid/peak to ~7/24% (the sleep-quality
+  The morning wake ramp is the next exception. It spans a **45-min window** (`alarm−15` →
+  `alarm+30`, so the alarm sits 1/3 in — NOT centered), with a gentle-then-steep three-segment curve:
+  1% at window start → ~12% at the alarm → 40% at `alarm+15` (the knee) → **100% at `alarm+30`**.
+  Ramping all the way to 100% by window end is deliberate (since 2026-06-29): the old curve stopped
+  at 40% then `bedroom_wake_ramp`'s hand-off to Adaptive Lighting popped the room to its full daytime
+  target all at once. Now AL takes over at 100%, so the hand-off has no upward jump — it just keeps
+  getting gradually brighter. `sensor.bedroom_wake_start` = alarm−15 min (the window open edge;
+  dynamic — see the dynamic-wake bullet below). Delegated entirely to `script.bedroom_apply_wake`
+  (fixed warm 2200K, no `adaptive_lighting.apply` turn-on flash), driven per-minute by
+  `automation.bedroom_wake_ramp`. Short night (<6h) scales the EARLY mid/knee down to ~7/24% but still
+  reaches 100% by `alarm+30` (else the hand-off pop returns on short nights — see the sleep-quality
   bullet). Pressing button 4 mid-window resumes the ramp from the current point (`bedroom_apply_wake`
   recomputes the right frame for now()). When no morning alarm is set the sensor is `unavailable` →
   this exception is false and the default applies. `wake_transition` macro is gone — transition is
@@ -223,13 +272,21 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `persistent_notification.create`s id `hold_<tag>` (so a re-fire with the same tag updates in place),
   then `stop`s before the push path. A recovery (`recovery: true`, same tag) `dismiss`es `hold_<tag>`
   and sends nothing — so a condition that self-resolves before you return is never seen. `pierce`
-  alerts and the at-home path are unchanged. On arrival (`automation.bedroom_flush_held_notifications`,
+  alerts and the at-home path are unchanged. **`critical_away` (since 2026-06-24) also bypasses the
+  hold** — it pushes WHILE away (at normal importance; unlike `pierce` it does NOT sound through DND
+  at home) for damage-class alerts whose whole purpose is to reach you when nobody's home. Only the
+  `temperature` threshold category sets it: the extreme-temperature alert is the away safety net for
+  an AC/heating failure, so holding-then-digesting it (you'd see "92 °F" only after getting home,
+  too late) defeats the point. A `critical_away` recovery pushes its all-clear too (no `hold_<tag>`
+  to cancel). On arrival (`automation.bedroom_flush_held_notifications`,
   `person.daniel -> home`), all still-held `hold_*` notifications are delivered as ONE "While you were
   out (N)" digest (bulleted messages; phone-only, so per-alert action buttons like Boost fan are lost —
   tap into HA to act) and then dismissed; arriving with nothing held is silent. Recovery call-sites
   carrying `recovery: true`: threshold-ok, sensor-online, UPS-restored, zigbee-bridge-online.
   **Known limitation:** persistent notifications are in-memory, so an HA restart (e.g. a deploy) while
-  away loses the held queue — accepted, since held items are non-critical and the overlap is rare.
+  away loses the held queue — accepted, since held items are non-critical and the overlap is rare (the
+  one damage-class away alert, extreme temperature, is `critical_away` so it's pushed not held — it's
+  not in the fragile queue).
   `match` filtering is start-anchored, so `hold_` never catches the pierce path's bare-`tag`
   persistent notifications.
 - **Actionable notifications (since 2026-06-18).** `bedroom_notify` takes an optional `actions` list
@@ -295,9 +352,14 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   (a real ≥5-min outage still notifies).
   Watched (one representative entity per device — Z2M flips all of a device's entities together):
   `sensor.bedroom_airgradient_one_carbon_dioxide`, `binary_sensor.aqara_fp300_presence`,
-  `sensor.0x001788010f0ccda4_battery` (Tap Dial), `fan.tower_fan`. **Required dependency: Z2M
+  `fan.tower_fan`. **Required dependency: Z2M
   availability must be ON** (enabled 2026-06-18 in the zigbee2mqtt role) — without it the battery
-  Zigbee devices (FP300, Tap Dial) never go `unavailable` and this automation can't see them fail.
+  Zigbee FP300 never goes `unavailable` and this automation can't see it fail.
+  **The Tap Dial (RDM002) is deliberately NOT watched (removed 2026-06-24).** It's a passive INPUT
+  device, so going quiet from disuse trips Z2M's 60-min passive timeout as a routine false positive —
+  nothing depends on the dial *reporting* (unlike the FP300/fan/AirGradient, which feed live
+  automations). A truly dead dial is still caught by `binary_sensor.bedroom_tap_dial_battery_low`
+  (the threshold engine) and is obvious on the next press, so offline detection added only noise.
   Two reusable gotchas: (1) the 5-min `for:` rides out HA/Z2M restarts + the ~120s deploy recreate;
   (2) an entity's `friendly_name` attribute is EMPTY while `unavailable`, so the human name is read
   from the AVAILABLE side of the transition (`from_state` for offline, `to_state` for recovery,
@@ -320,14 +382,27 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   read the overrides. Known gap: an HA restart while already away misses the `from:"home"` triggers
   (no live transition); the gates still prevent away-on so it self-corrects. Prereq for the
   unexpected-occupancy tripwire backlog item.
+- **Manual light detect (since 2026-06-21).** `automation.bedroom_manual_light_detect` makes a
+  hand/voice/dashboard turn-off of `light.bedroom_lights` engage `input_boolean.bedroom_manual_off`
+  (and a manual turn-on clear it) — the SAME override the Tap Dial's power button sets. Without it, an
+  external "off" was re-lit ~30s later by `bedroom_presence_on`'s dusk-lux trigger: the bulbs going
+  dark drop the FP300 illuminance below the gate (the documented lights-dominate-illuminance feedback
+  loop), and only the Tap Dial — not Google Assistant / the dashboard tile / the app — had been
+  engaging manual-off. Confirmed live via the logbook (voice `google_assistant_command` OnOff-off →
+  `presence_on` numeric-state relight 36s later). Discriminates a genuine external action from our own
+  automations' parented service calls via **`trigger.to_state.context.parent_id is none`** (same trick
+  as `bedroom_fan_manual_detect`), so absence_off / away / bedtime / apply_natural / the Tap Dial never
+  reach its action; a `from_state` unavailable/unknown guard stops an HA-restart group recompute from
+  clearing the override. Symmetric with button 1 (off→engage, on→clear).
 - **Bedtime / sleep routine (since 2026-06-18).** `script.bedroom_bedtime` (the shared "going to
   sleep" action) engages `input_boolean.bedroom_sleep_mode` (a quiet fan cap), then — **critically
   reordered** — calls `adaptive_lighting.set_manual_control: true` BEFORE flipping AL into sleep
   mode, so AL can't fire its own ~45s pre-dim before the fade begins; then fades to
-  `scene.bedroom_nightlight` (amber 3%) over 15 min; then enables AL sleep mode (warm/dim target for
-  after morning reset). The fade is a per-call `transition: 900` on `scene.turn_on` (NOT baked into
+  `scene.bedroom_nightlight` (amber 3%) over 30 min; then enables AL sleep mode (warm/dim target for
+  after morning reset). The fade is a per-call `transition: 1800` on `scene.turn_on` (NOT baked into
   the scene), so only bedtime ramps — the B3-press and overnight "got up" nightlight stay instant.
-  This reorder is what makes the 15-min nightlight fade genuinely gradual: without it, enabling AL
+  (Lengthened 900 -> 1800 on 2026-06-23 — the 15-min descent felt too fast.)
+  This reorder is what makes the 30-min nightlight fade genuinely gradual: without it, enabling AL
   sleep mode FIRST caused AL to immediately pre-dim to its sleep_brightness before the fade started.
   `take_over_control: true` + `detect_non_ha_changes: false` keep AL from re-stomping the group
   mid-fade. The bulb does the
@@ -360,14 +435,19 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   reliable "you're here to be woken" signal and still won't ramp an empty bedroom while away (an FP300
   dog/false-positive can't trigger the wake either). **Uses the WATCH alarm** (`pixel_watch_3`), not the
   phone's (unreliable). Watch caveat moot now — set alarms anywhere; only morning ones wake.
-- **Sleep-quality-aware morning (since 2026-06-18).** The wake ramp adapts to how you slept: in
-  `bedroom_apply_natural`'s morning exception, `wake_peak` = 30% (gentler) if
-  `sensor.pixel_9_pro_sleep_duration` is `0 < x < 360` min (under 6h), else 50% — unknown/0 falls
-  back to 50%. `bedroom_morning_reset`'s alarm+present block also sends a routine "you slept N h"
-  note (😴 short night / ☀️ good morning), skipped if sleep_duration is 0/unknown. **Caveat:** the
-  Google Sleep API finalizes `sleep_duration` around wake, so at alarm−15min it can be stale —
-  best-effort (graceful fallback to a normal wake). Only the peak changes; the window/transition and
-  `presence_on` are untouched.
+- **Sleep-quality-aware morning (since 2026-06-18).** The wake ramp adapts to how you slept: the
+  `wake_brightness` macro (`custom_templates/lighting.jinja`, the tested source of the ramp —
+  `bedroom_apply_natural` now delegates the morning exception to `bedroom_apply_wake`) scales the
+  EARLY mid/knee down on a short night — knee **24%** (mid 7%) at `alarm+15` when
+  `sensor.pixel_9_pro_sleep_duration` is `0 < x < 360` min (under 6h), else knee **40%** (mid 12%);
+  unknown/0 falls back to the normal curve. The final segment STILL climbs to **100% by `alarm+30`**
+  on a short night — only the early (most-asleep) part softens; ending below 100% would reintroduce
+  the AL hand-off pop the ramp-to-100 design removes. `bedroom_morning_reset`'s alarm+present block
+  also sends a routine "you slept N h" note (😴 short night / ☀️ good morning), skipped if
+  sleep_duration is 0/unknown. **Caveat:** the Google Sleep API finalizes `sleep_duration` around
+  wake, so at alarm−15min it can be stale — best-effort (graceful fallback to a normal wake). Only
+  the early mid/knee change with sleep; the window/transition/final-100% and `presence_on` are
+  untouched.
 - **Temperature → fan control (since 2026-06-18; smoothed 2026-06-18).** `script.bedroom_apply_fan`
   (in `files/scripts.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
   `sensor.bedroom_airgradient_one_temperature` (°F) on a **smooth ~0.8-level-per-°F curve**: off below
@@ -392,6 +472,21 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   **Tap Dial button 3 = reset the fan to automatic** (clear `bedroom_fan_manual` + apply, night-cap
   aware); the morning reset clears it too. Tune the fan curve (start offset / slope / caps) in
   `bedroom_apply_fan` only.
+  **Manual fan survives a restart (since 2026-06-21).** A hand-set fan speed used to be undone by a
+  deploy/restart: HA's unclean shutdown (SIGKILL) can drop the `bedroom_fan_manual` +
+  `bedroom_fan_expected_level` helpers when they changed within ~15 min of the restart (the
+  `restore_state` dump cycle), so they restore STALE (override off, old level) and
+  `bedroom_fan_temperature` re-applies the auto level on the first post-boot temp report (observed live:
+  a hand-set L3 bumped to L5 after a deploy — the documented [[ha-stale-override-restore-on-deploy]]
+  trap, in the "lost my change" direction). Two coordinated fixes: (1) `bedroom_fan_temperature` now
+  skips a temp **state** trigger whose `from_state` is `unknown`/`unavailable` (the boot re-report), so
+  the restart can't drive the fan and the reconcile gets a clean window; (2) `bedroom_fan_startup_reconcile`
+  (on `homeassistant` start) captures the fan's restored level FIRST (the DREO cloud keeps the physical
+  speed across the restart), then once temp is known compares it to the **hysteresis-free** auto ideal
+  (`fan_target_level` with `cur_level=0`) — under auto control the fan tracks within ~1 level of ideal,
+  so a fan >1 level off was hand-set: it re-engages the override, re-arms `expected_level`, and
+  re-asserts the level. Only when home + fan on + temp known; the `>1` tolerance means a legit auto level
+  never trips it. Does NOT recover a manual speed within 1 level of the auto ideal (accepted).
 - **YAML dashboard + entity customization (templated).** `configuration.yaml` registers a YAML
   dashboard via `lovelace: dashboards:` (NOT the legacy top-level `mode: yaml` — deprecated,
   removed in HA 2026.8) pointing at `config/ui-lovelace.yaml` (`templates/ui-lovelace.yaml.j2`),
@@ -430,7 +525,9 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   & comfortable (55–78 °F); **`cool`** = indoor > 78 °F AND outdoor ≥ 5 °F cooler (`cool_delta`) AND
   outdoor air safe; `stale` outranks `cool`; the `choose:` no-ops on `none`. **Smoke guard (load-
   bearing):** the macro returns `none` whenever `outdoor_pm > 25` (`pm_safe`) OR
-  `outdoor_pm > indoor_pm`, so it can never advise ventilating into worse/unsafe air. Notify is
+  `outdoor_pm > indoor_pm + pm_dirty_margin` (default 10 µg/m³ — a small excess over a
+  purifier-scrubbed indoor no longer vetoes CO₂/cooling ventilation; tune the margin in the macro),
+  so it can never advise ventilating into worse/unsafe air. Notify is
   routine via `script.bedroom_notify` (`tag: window_advice`). Macro math unit-tested in
   `tests/test_ventilation_macros.py`; the HA `round` returns an int at precision 0
   (`forgiving_round`), so the "N° cooler" message renders cleanly. Dashboard:
@@ -458,6 +555,12 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `wake_brightness` (morning ramp, used by `bedroom_apply_natural` + `bedroom_apply_wake`;
   `wake_transition` was removed — transition is now a fixed 60 s per ramp step), and
   `auto_light_allowed` (lux gate, used by `templates.yaml`'s `bedroom_auto_light_allowed`).
+- **Decision-macro convention:** an automation/script's gating *selection* logic belongs in a pure
+  `custom_templates/*.jinja` macro — plain values in (no `states()`/`now()`/`is_state()` inside),
+  an action token out — with a truth-table test, exactly like `light_decision` and
+  `natural_exception` (the `bedroom_apply_natural` nightlight↔wake selection). The YAML caller reads
+  entities and `choose:`-es on the returned token. This is *guidance*; what's *enforced* is that
+  the references resolve (service/entity checks) and that every macro has a test (Component 3).
 - The harness `tests/jinja_harness.py` renders macros in a bare Jinja2 env that mirrors the handful
   of HA filter overrides the macros use — most importantly HA's `round` is **banker's** rounding
   (`forgiving_round`, round-half-to-even, int at precision 0), NOT Jinja's stock half-away-from-zero
@@ -477,6 +580,24 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   validation (unknown keys, bad integration options) or entity-existence checks — that needs
   `hass --script check_config` in a Docker HA image (out of scope); the deploy still catches schema
   errors live.
+- **Scenario test harness (since 2026-06-23).** Exercise the bedroom automations ON DEMAND instead of
+  waiting for the real trigger (night / leaving home). The dashboard "🧪 Test scenarios" card +
+  `input_select.bedroom_test_scenario` (off/bedtime/wake/nightlight/away/arrive/reset) +
+  `input_select.bedroom_test_speed` (fast/real — **fast is the default because an `input_select`'s
+  first option is its creation default, which an `input_boolean` can't do: it has no `initial:`
+  field, only restores**) drive `script.bedroom_run_scenario`. It DRIVES the real scripts/automations,
+  never reimplements them: bedtime→`bedroom_bedtime` (gained an optional `fade`, default 1800; fast
+  passes 30), wake→`bedroom_preview_wake` (test-only **compressed frame-sweep reusing the tested
+  `wake_brightness` macro** — does NOT touch the production `bedroom_wake_ramp`/`bedroom_apply_wake`),
+  nightlight→`scene.bedroom_nightlight`, away/arrive→`automation.trigger` (skip_condition),
+  reset→`bedroom_clear_overrides` (a DRY extraction shared with the morning reset). **Away is
+  response-only:** it tests the lights/fan-off + "Left on" notify; the away notification-HOLD path
+  needs a real `person.daniel != home` (set it in Developer Tools → States — no service sets arbitrary
+  entity state). Inert until you press Run; the test-only direct light writers (`bedroom_preview_wake`,
+  `bedroom_run_scenario` via the nightlight `scene.turn_on`) are declared in
+  `state/sanctioned_writers.yml`. Phase 2 also extracted the away/arrive selection into tested macros
+  (`away_items_label`/`arrive_relight_allowed`). Spec:
+  `docs/superpowers/specs/2026-06-23-ha-scenario-test-harness-design.md`.
 
 ## Claude tooling for this role
 - **`home-assistant-engineer` agent** (`.claude/agents/`) — read+write HA engineer that knows
@@ -488,6 +609,23 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 - **`scripts/probe.py ha`** — read-only live HA state (allow-listed, no prompt), authed with the
   SOPS `claude_ha_token`: `probe.py ha state <entity>` · `ha automation <id-or-alias>` (resolves
   the alias-slug≠id trap) · `ha get <api-path>` (e.g. `error_log`). Prefer it over recorder-DB reads.
+ · `ha why <id-or-alias>` (alias `ha trace`) pulls the live per-condition automation trace over the
+ WS API — answers "it ran but which condition blocked it" (not "it never fired"; traces are
+ in-memory, wiped on restart).
+ · `ha verify-automations` (post-deploy gate: exit 0 = every automation in files/automations.yaml
+ loaded + not unavailable; matches git id ↔ live attributes.id; file-driven so .storage/UI cruft
+ is ignored).
+- **Derived state model** (`state/STATE.md` + `state/derived_state.yml`, generated by
+  `scripts/ha_state_model.py generate`): the machine-derived map of cells/actuators and who
+  writes them. Regenerated + freshness-gated by the `validate-ha-config` hook — never hand-edit
+  (a stale committed copy fails CI). The single hand-maintained file is
+  `state/expected_override_writers.yml` (the 3-boolean write tripwire: CI fails if an
+  automation/script writes `bedroom_manual_off`/`bedroom_fan_manual`/`bedroom_sleep_mode` without
+  being listed). The resolution check (config refs ∪ `state/external_entities.yml`, snapshotted by
+  `ha_state_model.py refresh`) catches a mistyped/renamed entity before it becomes a silent no-op.
+  Live view: `scripts/probe.py ha-state` (current cell values + anomalies; `--inventory` for the
+  full catalog). This file (CLAUDE.md) remains the home of the runtime/physical *why* the model
+  can't derive. Design + Phase-2 plan: `docs/superpowers/specs/2026-06-21-ha-state-model-phase*`.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · HA cfg: `templates/configuration.yaml.j2`

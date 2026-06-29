@@ -17,6 +17,11 @@
 !/pyproject.toml
 !/uv.lock
 !/.python-version
+!/PLANS.md
+# Track the SOPS-aware diff-driver attribute for secrets.yml. NB: rendering the
+# decrypted diff also requires a per-machine `git config diff.sops.textconv`,
+# which isn't set here yet — so this attribute is currently a no-op.
+!/.gitattributes
 # Make sure these are ignored
 ansible/.env
 scripts/availability_bots/.env
@@ -45,3 +50,8 @@ id_ed25519
 # in-repo too so a fresh clone is protected without relying on each machine's git config.
 .claude/*.local.json
 .claude/*.local.md
+# Backup written by `audit-permissions.py --prune-dead` before it rewrites the local allowlist.
+.claude/*.local.json.bak
+# Permission-audit hook store — per-host runtime state written by
+# .claude/hooks/log-permission.py; counts are machine-local by design.
+.claude/logs/
