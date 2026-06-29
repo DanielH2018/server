@@ -111,8 +111,9 @@ First-host bring-up (uv → SOPS onboarding → `initial_setup.yml`) is ordered 
 
 ## Quality gates (pre-commit)
 
-The repo uses [`prek`](https://prek.j178.dev) (`prek.toml`): YAML lint, `ansible-lint`,
-`gitleaks`, rendered-compose validation, and the `pytest` suite.
+The repo uses [`prek`](https://prek.j178.dev) (`prek.toml`): YAML/JSON lint, `ansible-lint`,
+`gitleaks`, rendered-template validation (compose + config + Home Assistant + Grafana),
+secret-rotation-registry sync, `ruff` (lint + format), and the `pytest` suite.
 
 ```bash
 prek run --all-files

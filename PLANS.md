@@ -6,12 +6,16 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- Organize Tests in scripts/ directory
-- Add ruff.toml, and run ruff format and add to prek
-- Review and update(and maybe consolidate) the READMEs
-_(empty — PLANS.md moved to repo root, `.gitattributes` is now tracked with a working
-`diff=sops` driver, and the ephemeral `docs/superpowers/plans/` + orphaned design specs were
-pruned, all 2026-06-29. Completed work lives in git history.)_
+_(empty)_
+
+_Recently cleared (2026-06-29): adopted `ruff format` + a `ruff format --check` prek hook
+(config kept in `pyproject.toml [tool.ruff]`, not a separate `ruff.toml`). "Organize tests in
+scripts/" closed as already-satisfied — every `scripts/` test sits beside the module it tests
+and none test role code, so they already follow the repo's co-location convention; a
+`scripts/tests/` subdir would only de-colocate them from their bare-name imports. READMEs
+reviewed (root / `ansible/` bring-up runbook / `availability_bots`) — current and purpose-distinct,
+already cross-linked with no-duplication notes, so no consolidation; refreshed the root README's
+stale "Quality gates" list (ruff lint+format, the template validators, secret-rotation sync)._
 
 ## Superseded
 
