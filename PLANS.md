@@ -6,6 +6,9 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
+- Organize Tests in scripts/ directory
+- Add ruff.toml, and run ruff format and add to prek
+- Review and update(and maybe consolidate) the READMEs
 _(empty — PLANS.md moved to repo root, `.gitattributes` is now tracked with a working
 `diff=sops` driver, and the ephemeral `docs/superpowers/plans/` + orphaned design specs were
 pruned, all 2026-06-29. Completed work lives in git history.)_
