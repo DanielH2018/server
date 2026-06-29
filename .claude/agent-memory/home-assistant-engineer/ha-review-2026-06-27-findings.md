@@ -5,11 +5,27 @@ metadata:
   type: project
 ---
 
+UPDATE 2026-06-29 (re-review): **Finding #1 (wake-ramp end over-dim) is now RESOLVED** — the
+2026-06-29 ramp-to-100 redesign changed `bedroom_wake_ramp`'s window-end branch (elapsed 45..46) to
+release AL (`adaptive_lighting.set_manual_control:false` + `apply turn_on_lights:false`) instead of
+`reason:"natural"`; the ramp now climbs to 100% so AL takes over at full brightness. **Finding #2
+(window advisor disabled by purifier) is STILL LIVE** — the pm_dirty_margin=10 fix does NOT durably
+hold: confirmed 2026-06-29 indoor PM2.5=1.66 vs outdoor=12.1, so `op > ip + 10` (12.1 > 11.66) = true
+→ verdict 'none'. A HEPA purifier drives indoor near-zero, so any normal/safe outdoor air (10-15)
+exceeds ip+10. Fix: gate the relative guard behind an absolute floor (e.g. only block on op>ip+margin
+when op also > ~20), or drop the relative guard entirely since pm_safe=25/pm10_safe=50 already cover
+bad air. New low-confidence watch-item: the window-end AL handoff is a SINGLE-shot tick (one tick in
+elapsed∈[45,46)); a missed tick (HA restart / scheduler hiccup spanning that minute, or a watch
+next_alarm rollover at fire-time pushing elapsed negative mid-window) strands AL in manual_control for
+the day (self-heals only on next leave+return). The in-window frames are idempotent; the handoff isn't.
+
+---
+
 Read-only review of the bedroom HA suite on 2026-06-27. The suite is very mature; config validates
 clean, all macro tests pass, every automation loads. Two genuine cross-feature issues found (NOT yet
 fixed — review-only task):
 
-**1. Wake-ramp end over-dims the room (Medium).** `automation.bedroom_wake_ramp`'s window-end
+**1. Wake-ramp end over-dims the room (Medium). [RESOLVED 2026-06-29 — see update above.]** `automation.bedroom_wake_ramp`'s window-end
 branch (elapsed 30..31) calls `script.bedroom_lights_set reason: "natural"` → `bedroom_apply_natural`
 default → `natural_brightness(hour, illuminance)`. At that instant the lights are still ON (~38% from
 the ramp), so `sensor.aqara_fp300_illuminance` is contaminated by the bulbs (the documented
