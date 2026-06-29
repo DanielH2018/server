@@ -19,7 +19,7 @@ jobs:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # full clone; prek --all-files scans the worktree, so history isn't strictly required here — kept as belt-and-suspenders
 
