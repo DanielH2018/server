@@ -8,6 +8,12 @@ name: image-smoke
 on:
   pull_request:
 
+# Cancel a superseded run when new commits land on the same PR (force-push / Renovate
+# rebases) — image-smoke pulls + boots images, so superseded runs waste real runner minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -53,7 +59,17 @@ jobs:
             docker pull "$img"
             # No --rm: an exited container must survive so its exit code and logs
             # are still inspectable below.
-            cid="$(docker run -d "$img" || true)"
+            # Sandbox the untrusted PR-supplied image: cap CPU/memory/PIDs and block
+            # privilege escalation, so a malicious ref (e.g. a crypto-miner) is bounded to
+            # negligible work for the ~60s boot rather than getting a full runner. Caps don't
+            # affect a legitimate image's ability to start. Deliberately NOT using --network
+            # none / --read-only / --cap-drop ALL: those false-fail legit images that need the
+            # network, a writable FS, or caps at boot — and this is a required check that runs
+            # on every Renovate image bump, so a false failure would block real PRs.
+            cid="$(docker run -d \
+              --memory=2g --cpus=2 --pids-limit=1024 \
+              --security-opt=no-new-privileges \
+              "$img" || true)"
             if [ -z "$cid" ]; then echo "FAIL: $img did not start"; fail=1; echo "::endgroup::"; continue; fi
             # If the image declares a HEALTHCHECK, wait up to 60s for healthy.
             has_hc="$(docker inspect -f '{{if .Config.Healthcheck}}yes{{end}}' "$cid")"

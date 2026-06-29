@@ -12,7 +12,6 @@ Run: uv run pytest scripts/test_probe.py
 import importlib.util
 import os
 
-import pytest
 
 _MOD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "probe.py")
 _spec = importlib.util.spec_from_file_location("probe", _MOD)
@@ -275,3 +274,127 @@ def test_format_ha_automation_includes_id_and_last_triggered():
     assert "presence_1" in out
     assert "last_triggered=2026-06-20T12:00:00+00:00" in out
     assert "Bedroom Presence On" in out
+
+
+# --- WebSocket frame codec --------------------------------------------------
+
+def test_ws_encode_is_masked_client_text_frame():
+    frame = probe._ws_encode("hello")
+    assert frame[0] == 0x81                 # FIN + text opcode
+    assert frame[1] == 0x80 | 5             # mask bit + 5-byte length
+    mask, body = frame[2:6], frame[6:]
+    assert bytes(b ^ mask[i % 4] for i, b in enumerate(body)) == b"hello"
+
+
+def test_ws_encode_extended_length_126():
+    payload = "x" * 200
+    frame = probe._ws_encode(payload)
+    assert frame[1] == 0x80 | 126           # 126 sentinel -> 16-bit length follows
+    assert frame[2:4] == (200).to_bytes(2, "big")
+
+
+def test_ws_read_frame_decodes_unmasked_text():
+    payload = b'{"type":"auth_ok"}'
+    raw = bytes([0x81, len(payload)]) + payload
+    pos = [0]
+    def recv_exact(n):
+        chunk = raw[pos[0]:pos[0] + n]; pos[0] += n; return chunk
+    assert probe._ws_read_frame(recv_exact) == '{"type":"auth_ok"}'
+
+
+def test_ws_read_frame_decodes_extended_length():
+    payload = b"y" * 300
+    raw = bytes([0x81, 126]) + (300).to_bytes(2, "big") + payload
+    pos = [0]
+    def recv_exact(n):
+        chunk = raw[pos[0]:pos[0] + n]; pos[0] += n; return chunk
+    assert probe._ws_read_frame(recv_exact) == "y" * 300
+
+
+# --- ha why / ha trace: format_trace parser ----------------------------------
+
+_TRACE_BLOCKED = {
+    # Real HA trace/get shape (confirmed against live daniel-server 2026-06-22):
+    # `trigger` is a plain string description, NOT a dict.
+    "trigger": "state of binary_sensor.aqara_fp300_presence",
+    "trace": {
+        "trigger/0": [{"path": "trigger/0", "result": {}}],
+        "condition/0": [{"path": "condition/0", "result": {"result": False}}],
+    },
+    "error": None,
+}
+
+
+def test_format_trace_marks_failed_condition():
+    out = probe.format_trace(_TRACE_BLOCKED)
+    assert "binary_sensor.aqara_fp300_presence" in out
+    assert "condition/0" in out
+    assert "FAIL" in out
+
+
+def test_format_trace_none_is_explained():
+    assert "no stored trace" in probe.format_trace(None)
+
+
+def test_format_trace_reports_error():
+    out = probe.format_trace({"trigger": {}, "trace": {}, "error": "boom"})
+    assert "boom" in out
+
+
+def test_expected_automation_ids_matches_top_level_only():
+    from probe import expected_automation_ids
+    text = (
+        "- id: bedroom_presence_on\n"
+        "  alias: Presence on\n"
+        "  trigger:\n"
+        "    - id: co2_bad\n"          # indented trigger id must NOT be captured
+        "      platform: state\n"
+        "- id: ha_heartbeat\n"
+        "  alias: HA heartbeat\n"
+    )
+    assert expected_automation_ids(text) == {"bedroom_presence_on", "ha_heartbeat"}
+
+
+def test_automation_load_errors_flags_missing_and_unavailable():
+    from probe import automation_load_errors
+    expected = {"a_loaded", "b_missing", "c_unavailable", "d_disabled"}
+    live = [
+        {"entity_id": "automation.a", "state": "on", "attributes": {"id": "a_loaded"}},
+        {"entity_id": "automation.c", "state": "unavailable", "attributes": {"id": "c_unavailable"}},
+        {"entity_id": "automation.d", "state": "off", "attributes": {"id": "d_disabled"}},
+        {"entity_id": "automation.x", "state": "on", "attributes": {"id": "cruft_not_in_file"}},
+    ]
+    errs = automation_load_errors(expected, live)
+    assert errs == [
+        "automation b_missing is defined in automations.yaml but did not load",
+        "automation c_unavailable loaded but is unavailable (config error at load)",
+    ]
+
+
+def test_automation_load_errors_clean_when_all_loaded():
+    from probe import automation_load_errors
+    expected = {"a", "b"}
+    live = [
+        {"entity_id": "automation.a", "state": "on", "attributes": {"id": "a"}},
+        {"entity_id": "automation.b", "state": "off", "attributes": {"id": "b"}},
+    ]
+    assert automation_load_errors(expected, live) == []
+
+
+def test_automation_load_errors_tolerates_missing_attributes():
+    # A live entity with attributes null or absent must be skipped, not raise — exercises the
+    # `(a.get("attributes") or {})` guard. (No expected id matches them, so they're ignored.)
+    from probe import automation_load_errors
+    expected = {"a"}
+    live = [
+        {"entity_id": "automation.weird", "state": "on", "attributes": None},
+        {"entity_id": "automation.nope", "state": "on"},  # no attributes key
+        {"entity_id": "automation.a", "state": "on", "attributes": {"id": "a"}},
+    ]
+    assert automation_load_errors(expected, live) == []
+
+
+def test_verify_automations_subcommand_parses():
+    from probe import _build_parser
+    ns = _build_parser().parse_args(["ha", "verify-automations"])
+    assert ns.cmd == "ha" and ns.ha_cmd == "verify-automations"

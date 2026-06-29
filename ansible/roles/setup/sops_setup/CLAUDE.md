@@ -15,7 +15,9 @@ role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup
 
 ## What it does (`tasks/main.yml`)
 1. **Install** `age` (apt) and the `sops` binary (pinned `v3.9.2`, arch-mapped amd64/arm64)
-   to `/usr/local/bin`.
+   to `/usr/local/bin`. The `get_url` is **sha256-checksum-pinned** (SOPS is the root of the
+   secret-decryption trust chain — an unverified binary would be a supply-chain hole). Bump
+   the version and the per-arch sha256 **together** from the release's `sops-<ver>.checksums.txt`.
 2. **Install pinned collections** from `requirements.yml` into `ansible/collections` (the
    path `ansible.cfg` loads from, matching the prek lint hook) — run as the repo owner
    (`become: false`) so `community.sops` etc. land for the user who runs deploys.

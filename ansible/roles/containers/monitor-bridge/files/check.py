@@ -31,6 +31,7 @@ HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
 PROM_URL = _env("PROMETHEUS_URL", "http://prometheus:9090").rstrip("/")
 KOPIA_URL = _env("KOPIA_URL", "http://kopia:51515").rstrip("/")
 KUMA_URL = _env("KUMA_URL", "http://uptime-kuma:3001").rstrip("/")
+LOKI_URL = _env("LOKI_URL", "http://loki:3100").rstrip("/")
 
 BACKUP_PATH = _env("BACKUP_SOURCE_PATH", "/data/home/ubuntu/server/containers")
 BACKUP_MAX_AGE_H = float(_env("BACKUP_MAX_AGE_H", "30"))
@@ -62,6 +63,26 @@ RENOVATE_MAX_AGE_S = float(_env("RENOVATE_MAX_AGE_MIN", "2160")) * 60
 RESTORE_DRILL_STATE = _env("RESTORE_DRILL_STATE", "/restore-drill/state.json")
 RESTORE_DRILL_MAX_AGE_S = float(_env("RESTORE_DRILL_MAX_AGE_D", "35")) * 86400
 
+# Weekly kopia snapshot verify: the host cron (kopia-verify.sh, kopia role) writes
+# {"ts": epoch, "ok": bool, "msg": str} after each run; we alert on a FAILED verify
+# (detected bit-rot / an unreadable blob — failures the old `| logger` cron silently
+# swallowed), staleness (cron broken / never ran), or a missing/corrupt state file.
+# This is the verify TIER of the three-tier backup assurance (snapshot freshness →
+# weekly verify → monthly restore drill) — the only one that previously had no monitor.
+# 10d staleness = one missed weekly run + slack.
+VERIFY_STATE = _env("VERIFY_STATE", "/verify/state.json")
+VERIFY_MAX_AGE_S = float(_env("VERIFY_MAX_AGE_D", "10")) * 86400
+
+# Daily kopia FULL-maintenance freshness: the host cron (kopia-maintenance-check.sh, kopia role)
+# queries `kopia maintenance info --json` and writes {"ts": epoch, "ok": bool, "msg": str} after
+# deciding whether full maintenance is healthy (enabled + owned + next full run not overdue +
+# newest run succeeded). Full maintenance is what GCs expired blobs from B2, so a stall is the
+# upstream CAUSE the b2_usage check only catches weeks later as a downstream symptom. We alert on
+# an UNHEALTHY/stalled maintenance, staleness (cron broken / never ran), or a missing/corrupt
+# state file. 2.5d staleness = two missed daily runs + slack.
+MAINTENANCE_STATE = _env("MAINTENANCE_STATE", "/maintenance/state.json")
+MAINTENANCE_MAX_AGE_S = float(_env("MAINTENANCE_MAX_AGE_D", "2.5")) * 86400
+
 # B2 storage usage: the daily host cron (kopia-b2-usage.sh, kopia role) writes
 # {"ts": epoch, "ok": bool, "bytes": int, "msg": str} with the bucket's BILLABLE
 # bytes (incl. hidden versions — what counts against the free tier). We alert when
@@ -79,6 +100,24 @@ B2_USAGE_MAX_PCT = float(_env("B2_USAGE_MAX_PCT", "85"))
 # aging collector_date values in the web API. 26h allows one run + slack.
 SCRUTINY_URL = _env("SCRUTINY_URL", "http://scrutiny:8080").rstrip("/")
 SCRUTINY_MAX_AGE_H = float(_env("SCRUTINY_MAX_AGE_H", "26"))
+
+# Loki log-ingestion freshness: Loki's Kuma /ready probe stays green even when promtail
+# stops SHIPPING (DOCKER_HOST/docker-proxy break, positions-file corruption, relabel
+# regression) — a silently-dead log pipeline that quietly blinds the log dashboards and
+# any future log forensics. We count ingested lines across ALL file-tailed streams
+# ({job=~".+"} = authlog+syslog+traefik) over a 30m window and go down at zero: if promtail
+# itself dies (or its positions file corrupts — exactly the failures /ready can't see) they
+# ALL fall silent together, while no single low-volume file going quiet can trip it. (A single
+# syslog stream over 10m false-paged — this debloated host routinely idles >15m between syslog
+# writes, so a normal quiet spell read as a dead pipeline.) Reached at loki:3100 over `monitoring`.
+LOKI_STREAM = _env("LOKI_STREAM", '{job=~".+"}')
+# The static file-tail union above does NOT include the docker_sd stream (it carries a
+# `container` label, no `job`), which is the highest-volume source — all ~44 containers'
+# stdout/stderr. A docker_sd-specific break (docker-proxy down, the docker relabel block
+# regressing) would silence every container log while authlog/syslog/traefik keep flowing,
+# so the union count stays non-zero and hides it. Check the container stream separately.
+LOKI_DOCKER_STREAM = _env("LOKI_DOCKER_STREAM", '{container=~".+"}')
+LOKI_WINDOW = _env("LOKI_WINDOW", "30m")
 
 # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
 # 2026-06-11 (fwupd): hourly load5/core >1.7 episodes with healthcheck-timeout storms
@@ -221,8 +260,11 @@ def check_disk():
     breaching = []
     for mp in DISK_MOUNTPOINTS:
         sel = '{mountpoint="%s"}' % mp
-        avail = prom_scalar("node_filesystem_avail_bytes" + sel)
-        size = prom_scalar("node_filesystem_size_bytes" + sel)
+        # max() collapses any duplicate device/fstype series for the same mountpoint to one
+        # deterministic value (duplicates share the value), so prom_scalar's result[0] order
+        # can't matter.
+        avail = prom_scalar("max(node_filesystem_avail_bytes" + sel + ")")
+        size = prom_scalar("max(node_filesystem_size_bytes" + sel + ")")
         if avail is None or size is None or size == 0:
             return False, "metric unavailable for %s" % mp
         used_pct = 100.0 * (1 - avail / size)
@@ -603,6 +645,34 @@ def check_restore_drill():
     return restore_drill(state, age_s, RESTORE_DRILL_MAX_AGE_S)
 
 
+def verify(state, age_s, max_age_s):
+    """Pure: did the last weekly `kopia snapshot verify` pass, and recently? (ok, msg).
+
+    Same state-file idiom as restore_drill/b2_usage. The verify proves stored blobs are
+    READABLE across all snapshots (the restore drill proves one service's tree restores);
+    a failure here is detected B2 bit-rot / repo corruption — the weakest link in the
+    single offsite copy's integrity chain, and previously un-alerted.
+    """
+    if not state.get("ok"):
+        return False, "last snapshot verify FAILED: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return False, "last successful verify %.1fd ago (max %dd)" % (
+            age_s / 86400, max_age_s / 86400)
+    return True, "verify ok %.1fd ago: %s" % (age_s / 86400, state.get("msg", ""))
+
+
+def check_verify():
+    try:
+        with open(VERIFY_STATE) as fh:
+            state = json.load(fh)
+        age_s = time.time() - float(state.get("ts", 0))
+    except FileNotFoundError:
+        return False, "no verify state (verify never ran?)"
+    except (ValueError, TypeError):
+        return False, "verify state unparseable"
+    return verify(state, age_s, VERIFY_MAX_AGE_S)
+
+
 def b2_usage(state, age_s, max_age_s, cap_bytes, max_pct):
     """Pure: billable B2 bytes vs the plan cap, plus probe-failure/staleness.
 
@@ -637,6 +707,34 @@ def check_b2_usage():
     except (ValueError, TypeError):
         return False, "B2-usage state unparseable"
     return b2_usage(state, age_s, B2_USAGE_MAX_AGE_S, B2_CAP_BYTES, B2_USAGE_MAX_PCT)
+
+
+def maintenance(state, age_s, max_age_s):
+    """Pure: is kopia FULL maintenance healthy, and the check recent? (ok, msg).
+
+    Same state-file idiom as verify/b2_usage. The host cron decides `ok` from `kopia maintenance
+    info --json` (full enabled, owner set, next full run not overdue, newest run succeeded); here
+    we add staleness. Full maintenance GCs expired blobs from B2, so a stall is the upstream CAUSE
+    the b2_usage check only catches later as a downstream symptom (and B2 headroom is thin).
+    """
+    if not state.get("ok"):
+        return False, "kopia full maintenance UNHEALTHY: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return False, "maintenance check %.1fd old (max %.1fd)" % (
+            age_s / 86400, max_age_s / 86400)
+    return True, "maintenance ok %.1fd ago: %s" % (age_s / 86400, state.get("msg", ""))
+
+
+def check_maintenance():
+    try:
+        with open(MAINTENANCE_STATE) as fh:
+            state = json.load(fh)
+        age_s = time.time() - float(state.get("ts", 0))
+    except FileNotFoundError:
+        return False, "no maintenance state (check never ran?)"
+    except (ValueError, TypeError):
+        return False, "maintenance state unparseable"
+    return maintenance(state, age_s, MAINTENANCE_MAX_AGE_S)
 
 
 def ha_heartbeat_fresh(state, max_age_s, now=None):
@@ -692,6 +790,45 @@ def check_ha_heartbeat():
     return False, "%s (%d cycles)" % (msg, _ha_down_streak)
 
 
+def loki_count(selector, window):
+    """Instant LogQL query: total log lines for `selector` over `window`. None if no series.
+
+    Loki's instant-query endpoint evaluates a metric query — here
+    sum(count_over_time(SELECTOR[WINDOW])) — and returns a vector with the same
+    [ts, value] shape prom_scalar parses, so we read result[0].value[1].
+    """
+    query = "sum(count_over_time(%s[%s]))" % (selector, window)
+    url = LOKI_URL + "/loki/api/v1/query?" + urllib.parse.urlencode({"query": query})
+    data = _get_json(url)
+    if data.get("status") != "success":
+        raise RuntimeError("loki query status=%s" % data.get("status"))
+    result = data.get("data", {}).get("result", [])
+    if not result:
+        return None
+    return float(result[0]["value"][1])
+
+
+def loki_ingestion_fresh(count, window):
+    """Decide log-pipeline freshness from the line count over `window` (None = no series)."""
+    if not count:  # None or 0 — nothing shipped: promtail dead, positions corrupt, etc.
+        return False, "no log lines ingested in %s — promtail/Loki pipeline silent" % window
+    return True, "%d log lines in %s" % (int(count), window)
+
+
+def check_loki_ingestion():
+    # Two arms, down if EITHER pipeline is silent: the file-tail union catches a total
+    # promtail death; the container-stream arm catches a docker_sd-specific break the
+    # union would hide (see LOKI_DOCKER_STREAM). Both share the same quiet-tolerant window.
+    ok_all, msg_all = loki_ingestion_fresh(loki_count(LOKI_STREAM, LOKI_WINDOW), LOKI_WINDOW)
+    if not ok_all:
+        return False, msg_all
+    ok_docker, msg_docker = loki_ingestion_fresh(
+        loki_count(LOKI_DOCKER_STREAM, LOKI_WINDOW), LOKI_WINDOW)
+    if not ok_docker:
+        return False, "container log stream silent — " + msg_docker
+    return True, "%s (+ container stream)" % msg_all
+
+
 CHECKS = [
     ("backup", _env("KUMA_PUSH_KOPIA", ""), check_backup),
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
@@ -706,11 +843,14 @@ CHECKS = [
     ("gitops_alive",  _env("KUMA_PUSH_GITOPS_ALIVE",  ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
     ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
+    ("verify",        _env("KUMA_PUSH_VERIFY",        ""), check_verify),
+    ("maintenance",   _env("KUMA_PUSH_MAINTENANCE",   ""), check_maintenance),
     ("b2_usage",      _env("KUMA_PUSH_B2",            ""), check_b2_usage),
     ("scrutiny",      _env("KUMA_PUSH_SCRUTINY",      ""), check_scrutiny),
     ("pi_pressure",   _env("KUMA_PUSH_PI",            ""), check_pi_pressure),
     ("ha_heartbeat",  _env("KUMA_PUSH_HA",            ""), check_ha_heartbeat),
     ("renovate_alive", _env("KUMA_PUSH_RENOVATE_ALIVE", ""), check_renovate_alive),
+    ("loki_ingestion", _env("KUMA_PUSH_LOKI",         ""), check_loki_ingestion),
 ]
 
 

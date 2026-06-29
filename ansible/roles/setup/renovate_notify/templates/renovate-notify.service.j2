@@ -2,6 +2,7 @@
 Description=Renovate manual-action notifier (query open PRs, alert on change)
 After=network-online.target
 Wants=network-online.target
+OnFailure=renovate-notify-alert.service
 
 [Service]
 Type=oneshot

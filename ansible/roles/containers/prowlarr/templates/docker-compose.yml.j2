@@ -7,7 +7,7 @@
 
 services:
   prowlarr:
-    image: linuxserver/prowlarr:2.4.0.5397-ls150
+    image: lscr.io/linuxserver/prowlarr:2.4.0.5397-ls150
     container_name: prowlarr
     environment:
       - PUID={{ puid }}
@@ -25,7 +25,7 @@ services:
       - SETUID
       - CHOWN
     {{ service_networks() }}
-    {{ healthcheck('curl --fail -s http://localhost:9696/ || exit 1') }}
+    {{ healthcheck('curl --fail -s http://localhost:9696/ping || exit 1') }}
     labels:
       # Disable watchtower update — pinned + Renovate-managed
       - "com.centurylinklabs.watchtower.enable=false"

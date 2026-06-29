@@ -1,6 +1,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 services:
   ical-proxy:
@@ -9,12 +10,7 @@ services:
       pull: true  # rebuilds must fetch the newest python base
     container_name: ical-proxy
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/5000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    {{ healthcheck('["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/5000"]', start_period='10s') }}
     environment:
         - GOOGLE_ICS_URL={{ calendar_1 }}
         - GOOGLE_ICS_URL_2={{ calendar_2 }}

@@ -15,7 +15,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **eighteen checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **twenty checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Backup Freshness** (Kopia `/api/v1/sources` last-snapshot age + errorCount)
   - **Root Disk** (`node_filesystem_*` for `/` **and `/boot`** — old kernels filling /boot
@@ -55,6 +55,13 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   - **Backup Restore Drill** (reads `/restore-drill/state.json`, written monthly by the kopia
     role's `kopia-restore-drill.sh` host cron — `down` on a failed drill, >35 d staleness, or a
     missing/corrupt state file. Same state-file pattern as the GitOps monitors.)
+  - **Backup Verify** (reads `/verify/state.json`, written weekly by the kopia role's
+    `kopia-verify.sh` host cron — `down` on a FAILED `kopia snapshot verify` (detected
+    bit-rot / an unreadable blob), >10 d staleness, or a missing/corrupt state file. The
+    verify tier of the three-tier backup assurance: it proves stored blobs are READABLE
+    across ALL snapshots, where the restore drill proves ONE service's tree restores. The
+    script captures the verify's own exit code — the old `... | logger` cron made cron see
+    logger's always-zero exit and silently swallowed a non-zero verify.)
   - **B2 Storage Usage** (reads `/b2-usage/state.json`, written daily by the kopia role's
     `kopia-b2-usage.sh` host cron with the bucket's **billable** bytes — `rclone size
     --b2-versions`, which counts hidden versions the way B2 bills them, NOT `kopia blob
@@ -96,6 +103,21 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     older than `RENOVATE_MAX_AGE_MIN` (2160 = 36 h, one missed daily run + slack) — i.e. the
     notifier stalled / host down. Same state-file dead-man's-switch pattern as the GitOps
     monitors. Spec: `docs/superpowers/specs/2026-06-19-renovate-manual-action-notifier-design.md`.)
+  - **Loki Log Ingestion** (instant LogQL `sum(count_over_time({job=~".+"}[30m]))` against
+    `loki:3100` over `monitoring`: `down` at zero lines — a silently-dead promtail→Loki pipeline
+    (docker-proxy break, positions-file corruption, relabel regression) that Loki's `/ready` Kuma
+    probe stays green through. Counts ALL file-tailed streams (`authlog`+`syslog`+`traefik`), not one:
+    if promtail dies they ALL fall silent together, while no single low-volume file going quiet can
+    trip it. **Second arm (added after the docker stream blind-spot review): also counts
+    `{container=~".+"}` (`LOKI_DOCKER_STREAM`) — the docker_sd stream carries a `container`
+    label, no `job`, so it's outside `{job=~".+"}`; a docker_sd-specific break (docker-proxy
+    down, the docker relabel regressing) would silence every container log while the file-tail
+    union keeps flowing. `down` if EITHER arm is silent. Promtail also now stamps the docker
+    stream `job: docker` so it's filterable + falls under the union too.** **Originally `{job="syslog"}` over 10m — false-paged 2026-06-23 because this debloated
+    host routinely idles >15m between syslog writes (a 15m35s gap was observed), so a normal quiet
+    spell read as a dead pipeline; the broadened selector + 30m window is the fix.** Stream/window
+    tunable via `LOKI_STREAM`/`LOKI_WINDOW`. Pure `loki_ingestion_fresh()` + `loki_count()` are
+    unit-tested. A freshness watchdog in the same idiom as the SMART/restore-drill checks.)
 - The restart/OOM/cpu/target/5xx checks use `prom_vector()` (keeps series labels) so the alert
   names *which* container / target / route is failing; the others use `prom_scalar()`.
 - Explicit `down` = fast, descriptive alert; the push monitor's heartbeat interval (600 s,
@@ -112,7 +134,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,n8n,gitops_alive,gitops_status,scrutiny,pi,b2,ha,renovate_alive}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,n8n,gitops_alive,gitops_status,scrutiny,pi,b2,ha,renovate_alive,loki,verify}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -138,7 +160,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the eighteen push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the nineteen push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI

@@ -6,7 +6,12 @@
     tasks_from: setup_dirs.yml
   vars:
     common_dirs_to_create:
-      - "{{ container_item.name }}/config"
+      # The bind-mounted state dirs from compose (./data, ./local-files) — pre-create them
+      # owned by the deploy user so n8n (runs as node/uid 1000) can write, instead of letting
+      # Docker auto-create ./local-files root-owned (→ EACCES on /files). NB: the real n8n
+      # config lives at ./data/config, not a top-level ./config (the old, unused entry).
+      - "{{ container_item.name }}/data"
+      - "{{ container_item.name }}/local-files"
 
 - name: Create n8n-task-runners.json from template
   tags: [config]

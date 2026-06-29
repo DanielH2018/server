@@ -34,6 +34,9 @@
     - docker.yaml
     - custom.css
   register: homepage_cfg
+  # services.yaml/widgets.yaml render ~12 live service API keys + passwords; without
+  # this a -v/--diff run prints them all to the console/CI log. register still works.
+  no_log: true
 
 - name: Deploy Container
   tags: [deploy]

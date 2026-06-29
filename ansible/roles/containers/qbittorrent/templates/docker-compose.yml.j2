@@ -130,6 +130,12 @@ services:
       start_period: 150s
     labels:
       {{ kuma('qbittorrent') }}
+      # Disable Watchtower — a recreate loses the wg0 listen-interface bind (applied
+      # post-deploy by tasks/main.yml, NOT on container start), which silently kills the
+      # UDP/DHT path → zero download progress + an autoheal loop a plain restart can't fix.
+      # Update deliberately via an Ansible redeploy (which re-applies the bind), like the
+      # wireguard sidecar — never via watchtower.
+      - "com.centurylinklabs.watchtower.enable=false"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('2.0', '2048M', '0.10', '128M') }}
 

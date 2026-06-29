@@ -1,7 +1,11 @@
+# REDUNDANT-BY-DESIGN: the built-in `crowdsecurity/whitelists` collection already exempts
+# 10.0.0.0/8 (⊃ this /24) plus the other RFC1918 ranges. This file is kept as cheap, explicit
+# insurance — removing it would silently rely on that collection staying installed. Verify with:
+#   docker exec crowdsec cscli parsers list | grep whitelists
+# (Distinct from the Mullvad-exit trusted-remote whitelist — don't conflate the two.)
 name: local/home-whitelist
 description: "Whitelist home network"
 whitelist:
   reason: "Home LAN"
   cidr:
     - "10.0.0.0/24"
-    - "2601:246:c301:df20::/64"

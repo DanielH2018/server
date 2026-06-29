@@ -5,6 +5,12 @@ on:
   push:
     branches: [master]
 
+# Cancel a superseded run when new commits land on the same ref (PR force-push / stacked
+# pushes) so redundant lint/test runs don't pile up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -15,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0  # gitleaks needs full history
+          fetch-depth: 0  # full clone; prek --all-files scans the worktree, so history isn't strictly required here — kept as belt-and-suspenders
 
       - uses: actions/setup-python@v6
         with:
@@ -25,7 +31,7 @@ jobs:
         uses: astral-sh/setup-uv@v8.2.0  # no floating v8 tag is published; pin the exact release
 
       - name: Install prek
-        run: pip install prek
+        run: pip install prek==0.4.4  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
       - name: Run all hooks
         run: prek run --all-files --color always

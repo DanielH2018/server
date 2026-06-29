@@ -2,12 +2,17 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 
 services:
   tdarr:
     container_name: tdarr
-    image: ghcr.io/haveagitgat/tdarr:latest
+    # Pinned by digest + watchtower-disabled (label below): tdarr is stateful AND rewrites
+    # library files in place, so it must NOT auto-update unvetted. tdarr ships dev-tagged
+    # builds (this digest = dev_2.78.01, 2026-06-12) that Renovate can't track, so updates
+    # are manual: `docker pull ghcr.io/haveagitgat/tdarr:latest`, take the new digest, redeploy.
+    image: ghcr.io/haveagitgat/tdarr@sha256:e5163f305367b47baacee761aa98f420fb4e46a8e5db22b197f23a550f96dd6b
     restart: unless-stopped
     {{ service_networks() }}
     environment:
@@ -41,12 +46,7 @@ services:
       - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8265/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+    {{ healthcheck('["CMD", "curl", "-f", "http://localhost:8265/"]', start_period='60s') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
@@ -57,6 +57,9 @@ services:
         )
       }}
       {{ kuma(container_item.name) }}
+
+      # Watchtower — pinned + manually updated; opt out of auto-update (rewrites media in place)
+      - "com.centurylinklabs.watchtower.enable=false"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('6.0', '4096M', '0.25', '256M') }}
 

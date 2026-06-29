@@ -9,8 +9,9 @@ http:
       middlewares:
         # rate-limit is now applied per-router (it was removed from the https
         # entrypoint so the livesync router can opt into a higher ceiling).
+        # default-headers is NOT repeated here — it's already applied globally on the
+        # https entrypoint (traefik.yml.j2), so listing it again was a redundant no-op.
         - rate-limit
-        - default-headers
         - authelia
       tls: {}
 
@@ -28,7 +29,9 @@ http:
         customResponseHeaders:
           Permissions-Policy: "geolocation=(self), microphone=(), camera=(), fullscreen=*, usb=()"
         referrerPolicy: "strict-origin-when-cross-origin"
-        frameDeny: true
+        # No frameDeny: customFrameOptionsValue (SAMEORIGIN, below) takes precedence in Traefik,
+        # so frameDeny:true was dead config that misrepresented the effective policy as DENY.
+        # SAMEORIGIN is intentional (allows same-origin iframes).
         browserXssFilter: true
         contentTypeNosniff: true
         forceSTSHeader: true

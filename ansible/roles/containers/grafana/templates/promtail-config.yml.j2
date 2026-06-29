@@ -45,3 +45,8 @@ scrape_configs:
     # This grabs the "log stream" (stdout or stderr)
     - source_labels: ['__meta_docker_container_log_stream']
       target_label: 'stream'
+    # Constant `job: docker` so the container-log stream is filterable in Grafana and
+    # falls under the {job=~".+"} ingestion watchdog (the monitor-bridge Loki check also
+    # counts {container=~".+"} directly to catch a docker_sd-specific outage).
+    - target_label: 'job'
+      replacement: 'docker'

@@ -19,7 +19,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 def _env(name, default):
@@ -346,7 +346,9 @@ def main():
     log("terraria-stats starting (loki=%s once=%s backfill=%s players=%d)"
         % (LOKI_URL, once, backfill, len(_state.players)))
     if not (once or backfill):
-        threading.Thread(target=lambda: HTTPServer(
+        # Threading server so a slow /metrics render can't head-of-line-block the /healthz
+        # probe (and trip autoheal). Handler reads in-memory _state under _lock, no SQLite.
+        threading.Thread(target=lambda: ThreadingHTTPServer(
             ("0.0.0.0", METRICS_PORT), _make_handler()).serve_forever(),
             daemon=True).start()
     while True:

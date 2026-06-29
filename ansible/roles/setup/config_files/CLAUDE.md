@@ -11,11 +11,13 @@ See repo-root `CLAUDE.md` for conventions.
   (sub-tags `git`, `bash` select one file).
 
 ## What it does (`tasks/main.yml`)
-- Resolves the **deploy user's** home (become:false `echo $HOME` — the play runs
-  become:true, so `ansible_facts.env.HOME` is /root; using it shipped these dotfiles to
-  root's home until 2026-06-10), then `copy`s the tracked static `files/.gitconfig` and
-  `files/.bashrc` there (`owner`/`group` `sys_user`, `mode 0644`, `backup: true` → an
-  existing file is preserved as a timestamped `.bak` when content changes).
+- `copy`s the tracked static `files/.gitconfig` and `files/.bashrc` to the deploy user's
+  home, **hardcoded to `/home/{{ sys_user }}`** (`owner`/`group` `sys_user`, `mode 0644`,
+  `backup: true` → an existing file is preserved as a timestamped `.bak` when content
+  changes). The play runs become:true, so a former become:false `echo $HOME` task resolved
+  the home (to avoid shipping these dotfiles to /root); that was dropped 2026-06-10
+  (commit 6f49a152) — the home is just `/home/{{ sys_user }}`, hardcoded directly to match
+  [[sops_setup]]'s `.bashrc` path.
 
 ## Notable
 - **Run-order coupling with SOPS:** [[sops_setup]] later *appends*

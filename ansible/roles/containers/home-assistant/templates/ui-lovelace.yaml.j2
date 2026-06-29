@@ -8,6 +8,12 @@ views:
   - title: Bedroom
     path: bedroom
     icon: mdi:bed
+    # Pin this view to the dark theme (defined in configuration.yaml.j2 frontend:) so it renders
+    # dark when cast to the Nest Hub — the cast receiver has no logged-in user, so it ignores the
+    # app/browser dark-mode profile and would otherwise show light. A view-level theme is forced
+    # regardless of device/user, so it also makes this dashboard dark on the phone/browser (already
+    # dark there, so no change). Remove this line to fall back to the per-user/default theme.
+    theme: nest_dark
     cards:
       # ── APC UPS ──────────────────────────────────────────────────────────
       - type: vertical-stack
@@ -158,3 +164,19 @@ views:
             name: Illuminance
           - entity: sensor.aqara_fp300_battery
             name: Battery
+      # ── 🧪 Test scenarios (dev harness — script.bedroom_run_scenario) ─────
+      - type: entities
+        title: 🧪 Test scenarios
+        icon: mdi:test-tube
+        entities:
+          - entity: input_select.bedroom_test_scenario
+            name: Scenario
+          - entity: input_select.bedroom_test_speed
+            name: Speed
+          - type: button
+            name: Run scenario
+            icon: mdi:play
+            action_name: Run
+            tap_action:
+              action: perform-action
+              perform_action: script.bedroom_run_scenario

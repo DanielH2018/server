@@ -33,7 +33,10 @@ services:
     security_opt: [no-new-privileges:true]
     environment:
       - CF_API_TOKEN={{ cloudflare_dns_token }}
-      - DOMAINS=valheim.{{ domain }},minecraft.{{ domain }},terraria.{{ domain }}
+      # Only terraria is live. valheim/minecraft are archived — publishing their A
+      # records pointed unproxied home IP at nothing, needlessly exposing the raw IP.
+      # Re-add a domain here when its game server is reactivated.
+      - DOMAINS=terraria.{{ domain }}
       - PROXIED=false
       - IP6_PROVIDER=none
       # Dead-man's-switch: ping a Kuma push monitor after each successful update.

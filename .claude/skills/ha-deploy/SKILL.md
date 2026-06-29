@@ -36,6 +36,11 @@ HA is on `daniel-server`; a recreate is ~120s.
 
 5. **Prove it loaded** (this is the step the generic `deploy` skill can't do). Use
    `ha-verify-state`:
+   - **Assert ALL automations loaded** (not just one): `uv run python scripts/probe.py ha
+     verify-automations` — exit 0 = every automation in `files/automations.yaml` is present in
+     the live instance and not `unavailable`. A non-zero exit lists the dropped/errored ids
+     (a schema error HA silently skipped at load). File-driven, so live `.storage`/UI cruft is
+     ignored.
    - Edited an automation → `uv run python scripts/probe.py ha automation <id-or-alias>` —
      it must exist (resolves the alias-slug-vs-id trap) and, after you trigger it, `last_triggered`
      must advance.

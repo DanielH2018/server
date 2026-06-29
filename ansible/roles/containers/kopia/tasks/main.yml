@@ -113,25 +113,107 @@
     user: "{{ sys_user }}"
   become: true
 
+- name: Create verify state directory
+  tags: [cron]
+  # monitor-bridge bind-mounts this read-only and alerts on a failed/stale/missing
+  # verify — created here (not by Docker) so it's sys_user-writable for the cron.
+  ansible.builtin.file:
+    path: /var/lib/kopia-verify
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Deploy the weekly verify script
+  tags: [cron]
+  # Companion to the restore-drill above: verify proves stored blobs are READABLE across
+  # ALL snapshots, the drill proves one service's tree restores. See files/verify.sh.
+  ansible.builtin.copy:
+    src: verify.sh
+    dest: /usr/local/bin/kopia-verify.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
 - name: Schedule weekly Kopia backup integrity verification
   tags: [cron]
   # "A backup you've never restored isn't a backup." snapshot scheduling and retention
   # are handled inside the container (entrypoint.sh policy); this closes the remaining
-  # gap — confirming the stored data is actually RESTORABLE, not merely present.
+  # gap — confirming the stored data is actually READABLE, not merely present.
   # `kopia snapshot verify` re-reads snapshot metadata/index from B2 and, via
   # --verify-files-percent, downloads a sample of file contents and checks their hashes.
-  # It runs against the already-connected repo inside the running container (reusing its
-  # B2 connection + KOPIA_PASSWORD) and is read-only, so it's safe alongside the live
-  # server. Output goes to syslog -> Promtail -> Loki, so a failure shows up in Grafana
-  # just like the host rkhunter/aide integrity scans. The backup source is containers/
-  # (config + app data, not media), so a 1% content sample is cheap on B2 egress.
+  # The wrapper script captures the verify's OWN exit code and writes
+  # /var/lib/kopia-verify/state.json -> monitor-bridge's `verify` check -> the
+  # "Backup Verify" Kuma monitor. (The old `... | logger` form made cron see logger's
+  # always-zero exit and silently swallow a non-zero verify — the gap this closes.)
   ansible.builtin.cron:
     name: "Weekly Kopia snapshot verify"
     minute: "0"
     hour: "4"
     weekday: "3"  # Wednesday — off the Monday rkhunter/aide slot to spread load
-    job: >-
-      /usr/bin/docker exec kopia /usr/bin/kopia snapshot verify
-      --verify-files-percent=1 2>&1 | /usr/bin/logger -t kopia-verify
+    job: "/usr/local/bin/kopia-verify.sh"
     user: "{{ sys_user }}"
   become: true
+
+- name: Create maintenance-check state directory
+  tags: [cron]
+  # monitor-bridge bind-mounts this read-only and alerts on an unhealthy/stale/missing
+  # state — created here (not by Docker) so it's sys_user-writable for the cron.
+  ansible.builtin.file:
+    path: /var/lib/kopia-maintenance
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Deploy the daily full-maintenance check script
+  tags: [cron]
+  # Full maintenance GCs expired blobs from B2; the entrypoint asserts it's enabled+owned, but
+  # nothing monitored that it keeps SUCCEEDING — a stall only surfaced weeks later as the b2_usage
+  # symptom. See files/maintenance-check.sh.
+  ansible.builtin.copy:
+    src: maintenance-check.sh
+    dest: /usr/local/bin/kopia-maintenance-check.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Schedule daily Kopia full-maintenance check
+  tags: [cron]
+  # 03:30 daily — clear of the 02:30 b2-usage probe and 04:00 verify. Result lands in
+  # /var/lib/kopia-maintenance/state.json -> monitor-bridge's `maintenance` check -> the
+  # "Backup Maintenance" Kuma monitor.
+  ansible.builtin.cron:
+    name: "Daily Kopia full-maintenance check"
+    minute: "30"
+    hour: "3"
+    job: "/usr/local/bin/kopia-maintenance-check.sh"
+    user: "{{ sys_user }}"
+  become: true
+
+- name: Seed backup-monitor state files on first deploy (idempotent)
+  tags: [cron]
+  # monitor-bridge reports a backup monitor DOWN when its state file is MISSING ("never ran?").
+  # The crons write these on weekly/monthly/daily cadences, so a fresh host / bare-metal DR would
+  # false-DOWN Backup Verify / Restore Drill / B2 / Maintenance for up to their full cadence —
+  # precisely during recovery, when real backup signal matters most. Run each script ONCE now to
+  # seed its state file; `creates:` makes every reseed a no-op (the crons own ongoing refresh), and
+  # failed_when:false means a probe that can't run yet (repo still reconnecting) doesn't fail the
+  # deploy — it self-corrects on the next cron. Runs as the cron user (sys_user); on the live host
+  # the existing state files mean all but a newly-added monitor skip.
+  ansible.builtin.command:
+    cmd: "{{ item.script }}"
+    creates: "{{ item.state }}"
+  loop:
+    - {script: /usr/local/bin/kopia-verify.sh, state: /var/lib/kopia-verify/state.json}
+    - {script: /usr/local/bin/kopia-restore-drill.sh, state: /var/lib/kopia-restore-drill/state.json}
+    - {script: /usr/local/bin/kopia-b2-usage.sh, state: /var/lib/kopia-b2-usage/state.json}
+    - {script: /usr/local/bin/kopia-maintenance-check.sh, state: /var/lib/kopia-maintenance/state.json}
+  loop_control:
+    label: "{{ item.script | basename }}"
+  changed_when: false
+  failed_when: false

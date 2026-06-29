@@ -15,7 +15,8 @@ services:
       - SITE_ROOT=https://healthchecks.{{ domain }}
       - SITE_NAME=Home Server healthchecks
       - DEFAULT_FROM_EMAIL={{ email }}
-      - ALLOWED_HOSTS=localhost,healthchecks.{{ domain }} #optional
+      # Include the .local. host so WireGuard access (Traefik routes both) doesn't 400.
+      - ALLOWED_HOSTS=localhost,healthchecks.{{ domain }},healthchecks.local.{{ domain }} #optional
       - EMAIL_HOST=smtp.gmail.com
       - EMAIL_PORT=587
       - EMAIL_HOST_USER={{ healthchecks_smtp_user }}

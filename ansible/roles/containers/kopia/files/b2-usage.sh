@@ -40,5 +40,22 @@ BYTES=$(docker exec \
   kopia rclone size "b2:$BUCKET" --b2-versions --json 2>/dev/null | jq -r '.bytes // empty')
 [ -n "$BYTES" ] || fail "rclone size query against b2:$BUCKET failed"
 
+# Also expose the billable bytes as a Prometheus gauge via the node-exporter textfile collector,
+# so Grafana can graph the B2 usage TREND (the Kuma monitor is a binary 85% alert with no runway
+# curve). Written atomically (temp + mv in the same dir) so a scrape can't read a half-written
+# file; the temp suffix isn't `.prom` so the collector ignores it mid-write. The dir is created +
+# bind-mounted ro into node-exporter by the prometheus role — guard on its existence so a host
+# without it (or before prometheus is deployed) just skips silently.
+TEXTFILE_DIR=/var/lib/node-exporter-textfile
+if [ -d "$TEXTFILE_DIR" ]; then
+  TMP=$(mktemp "$TEXTFILE_DIR/kopia_b2.prom.XXXXXX") && {
+    printf '# HELP kopia_b2_billable_bytes Billable bytes in the Kopia B2 bucket (incl. hidden versions).\n'
+    printf '# TYPE kopia_b2_billable_bytes gauge\n'
+    printf 'kopia_b2_billable_bytes %s\n' "$BYTES"
+  } > "$TMP" && chmod 0644 "$TMP" && mv "$TMP" "$TEXTFILE_DIR/kopia_b2.prom"
+  # 0644: node-exporter runs as `nobody`, and mktemp creates 0600 — without this the collector
+  # gets "permission denied" (node_textfile_scrape_error 1) and the gauge never appears.
+fi
+
 write_state true "$BYTES" \
-  "$(awk -v b="$BYTES" 'BEGIN{printf "%.2fGB billable in B2 (incl. hidden versions)", b/1073741824}')"
+  "$(awk -v b="$BYTES" 'BEGIN{printf "%.2fGB billable in B2 (incl. hidden versions)", b/1e9}')"

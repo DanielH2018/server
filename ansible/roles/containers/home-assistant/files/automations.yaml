@@ -64,12 +64,14 @@
             - variables:
                 was_off: "{{ is_state('light.bedroom_lights', 'off') }}"
             - service: script.bedroom_apply_natural_gated
-            # Too-bright acknowledgement: if the lux gate blocked auto-on (room too bright) and the
-            # lights were off, the gated apply left them off — soft-flash to confirm the reset
-            # registered, exactly like bedroom_presence_blip does on a too-bright arrival. The blip
-            # needs the lights already off (it takes no snapshot); the blocked gate guarantees that.
-            # No feedback loop: this is button-driven, not lux-driven, so the ~1s flash can't retrigger.
-            - if: "{{ was_off and is_state('binary_sensor.bedroom_auto_light_allowed', 'off') }}"
+            # Too-bright acknowledgement: if the reset left the lights off (room genuinely bright by
+            # DAY: lux gate blocked AND the sun is up) and the lights were already off, soft-flash to
+            # confirm the reset registered, exactly like bedroom_presence_blip does on a too-bright
+            # arrival. The `sun above_horizon` term makes this the EXACT complement of the sun-aware gate
+            # in bedroom_apply_natural_gated — at night the reset lights the room (sun term), so we must
+            # NOT also blip. The blip needs the lights already off (it takes no snapshot); the blocked
+            # daytime gate guarantees that. No feedback loop: button-driven, so the ~1s flash can't retrigger.
+            - if: "{{ was_off and is_state('binary_sensor.bedroom_auto_light_allowed', 'off') and is_state('sun.sun', 'above_horizon') }}"
               then:
                 - service: script.bedroom_blip
             - if: "{{ is_state('person.daniel', 'home') }}"
@@ -204,8 +206,8 @@
 
 # Presence ON: occupied + not overridden → set the lights to their NATURAL state via the
 # dispatcher (morning ramp in-window, else full Adaptive Lighting). The lux gate applies OUTSIDE
-# the morning wake window only: during the window (the 30 min centered on the alarm — alarm-15 to
-# alarm+15) we wake regardless of ambient light; afterwards we only turn on when the room is dim. The
+# the morning wake window only: during the window (45 min — alarm-15 to alarm+30) we wake regardless
+# of ambient light; afterwards we only turn on when the room is dim. The
 # window reads sensor.bedroom_wake_start — the SAME source the dispatcher's wake exception uses
 # (inherently in sync, no duplicated formula).
 - id: bedroom_presence_on
@@ -217,7 +219,8 @@
     # already here (illuminance crossing below 75). The latter closes an edge-vs-level gap —
     # entering while it was still bright used to leave you in the dark as dusk fell, since the
     # only trigger was the arrival edge. The `for:` rides out transient lux dips (a passing shadow).
-    # Keep this edge in sync with the auto_light_allowed gate threshold (lighting.jinja).
+    # Keep this `below:` in sync with the auto_light_allowed gate threshold (lighting.jinja's
+    # `lux < N`) — test_lux_gate_sync.py asserts they stay equal.
     - platform: state
       entity_id: binary_sensor.aqara_fp300_presence
       to: "on"
@@ -225,42 +228,13 @@
       entity_id: sensor.aqara_fp300_illuminance
       below: 75
       for: "00:00:30"
-  condition:
-    - condition: state
-      entity_id: input_boolean.bedroom_manual_off
-      state: "off"
-    # Once you're asleep (sleep mode engaged), do NOT auto-light on a presence edge or the dusk lux
-    # crossing — getting up leaves the room dark; tap Tap Dial button 3 for the nightlight. This is
-    # what removes the automatic "got up overnight" nightlight, and it also defuses the mmWave radar
-    # blip relight (a motionless sleeper the radar briefly drops then re-acquires fires the same
-    # off->on edge). SAFE vs. the morning wake: bedroom_morning_reset clears sleep_mode at wake_start
-    # BEFORE the ramp, so presence-driven waking still works once the alarm window opens.
-    - condition: state
-      entity_id: input_boolean.bedroom_sleep_mode
-      state: "off"
-    # Only auto-light when someone is actually home — an FP300 radar false-positive must not
-    # light an empty house while away. The arrive nudge re-checks lights on return.
-    - condition: state
-      entity_id: person.daniel
-      state: "home"
-    # Require the room to actually be occupied — the lux trigger can fire as dusk falls on an
-    # EMPTY room, and presence-based lighting must never light a room nobody's in. (No-op for the
-    # arrival edge, where presence is on by definition.)
-    - condition: state
-      entity_id: binary_sensor.aqara_fp300_presence
-      state: "on"
-    # Dark enough — or in the morning wake window — to auto-light (shared gate, templates.yaml).
-    - condition: state
-      entity_id: binary_sensor.bedroom_auto_light_allowed
-      state: "on"
-    # Only ever turn lights from off -> on. Never re-stomp an already-on light: that's what lets a
-    # manual dim stick (the dusk-lux trigger used to fire apply_natural and slam back to AL ~100%),
-    # and it preserves the "light a dark room as dusk falls" purpose (lights are off in that case).
-    - condition: state
-      entity_id: light.bedroom_lights
-      state: "off"
+  # Gating moved into script.bedroom_lights_set / light_decision (the 'presence' reason applies
+  # exactly these checks: manual_off off, sleep off, person home, presence on, lux gate on, light
+  # off). presence_on's sole action is the light, so it routes straight through the mediator.
   action:
-    - service: script.bedroom_apply_natural
+    - service: script.bedroom_lights_set
+      data:
+        reason: "presence"
 
 # Presence BLIP: you arrived but the room is too bright for auto-on (the lux gate is OFF), so the
 # lights won't come on. Flash them softly to acknowledge the detection. Sibling of bedroom_presence_on,
@@ -311,9 +285,156 @@
       to: "off"
       for: "00:05:00"
   action:
-    - service: light.turn_off
-      target:
-        entity_id: light.bedroom_lights
+    - service: script.bedroom_lights_set
+      data:
+        reason: "off"
+
+# Air-purifier presence control: the "Air Purifier" smart plug (switch.air_purifier) auto-starts the
+# purifier whenever it gets power, so toggling the plug = toggling the purifier. (entity_id renamed
+# from its raw Z2M IEEE address in the HA registry — see role CLAUDE.md.) Run it while the room is
+# occupied, cut it after 5 min empty —
+# EXCEPT hold it on from bedtime through the end of the morning wake ramp (binary_sensor.bedroom_
+# purifier_hold), because the FP300 drops a motionless sleeper and would otherwise kill it at 2am.
+# ALSO run it regardless of presence while the Air Quality Monitor reads dirty (the AirGradient's
+# PM2.5/VOC threshold sensors), since a HEPA+carbon purifier clears exactly those — so a pollution
+# event with nobody home still gets filtered, and it stops once the air clears AND the room is empty.
+#   present   -> turn on (edge-triggered on arrival; a manual off therefore "sticks" until you next
+#                leave-and-return — same property bedroom_manual_light_detect gives the lights).
+#   aqi_bad   -> indoor PM2.5 or VOC went high -> turn on regardless of presence (dirty air overrides
+#                the manual-off-sticks property, by design — health wins).
+#   absent    -> turn off after 5 min empty, UNLESS the overnight hold is active OR the air is dirty.
+#   hold_end  -> the wake routine just finished; if the room is already empty AND the air is clean,
+#                turn off NOW. Catches the case where the FP300 dropped you overnight and never
+#                re-detected you, so the 5-min absent trigger fired-but-was-blocked and won't
+#                re-fire (no fresh off-edge).
+#   aqi_clear -> the air recovered; if the room is empty and we're not holding, the dirty-air reason
+#                is gone, so stop (presence-occupied keeps it on via the normal path).
+# AQI gates on PM2.5/VOC, NOT CO2 — a filter does nothing for CO2 (that's the window-advisor /
+# Boost-fan job). Not a sanctioned-writer actuator (state/sanctioned_writers.yml governs only the
+# lights + fan), so this drives switch.turn_on/off directly — no mediator script.
+- id: bedroom_air_purifier_presence
+  alias: Bedroom air purifier presence
+  description: >-
+    Run the air purifier while the room is occupied; cut power after 5 min empty — but hold it on
+    from bedtime through the end of the morning wake ramp, since the FP300 can drop a motionless sleeper.
+  mode: queued
+  max: 5
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.aqara_fp300_presence
+      to: "on"
+      id: present
+    - platform: state
+      entity_id: binary_sensor.aqara_fp300_presence
+      to: "off"
+      for: "00:05:00"
+      id: absent
+    - platform: state
+      entity_id: binary_sensor.bedroom_purifier_hold
+      from: "on"
+      to: "off"
+      id: hold_end
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_pm2_5_high
+        - binary_sensor.bedroom_voc_high
+      to: "on"
+      id: aqi_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_pm2_5_high
+        - binary_sensor.bedroom_voc_high
+      to: "off"
+      id: aqi_clear
+  action:
+    - choose:
+        # Arrived (or FP300 re-detected you) -> make sure the purifier is powered.
+        - conditions: "{{ trigger.id == 'present' }}"
+          sequence:
+            - service: switch.turn_on
+              target:
+                entity_id: switch.air_purifier
+        # Indoor PM2.5/VOC went high -> run it regardless of presence (filters particulates + VOCs).
+        - conditions: "{{ trigger.id == 'aqi_bad' }}"
+          sequence:
+            - service: switch.turn_on
+              target:
+                entity_id: switch.air_purifier
+        # Empty for 5 min -> power off, UNLESS holding through sleep/wake OR the air is still dirty.
+        - conditions:
+            - "{{ trigger.id == 'absent' }}"
+            - "{{ is_state('binary_sensor.bedroom_purifier_hold', 'off') }}"
+            - "{{ is_state('binary_sensor.bedroom_pm2_5_high', 'off') and is_state('binary_sensor.bedroom_voc_high', 'off') }}"
+          sequence:
+            - service: switch.turn_off
+              target:
+                entity_id: switch.air_purifier
+        # Wake routine ended -> if the room is empty AND the air is clean, power off now.
+        - conditions:
+            - "{{ trigger.id == 'hold_end' }}"
+            - "{{ is_state('binary_sensor.aqara_fp300_presence', 'off') }}"
+            - "{{ is_state('binary_sensor.bedroom_pm2_5_high', 'off') and is_state('binary_sensor.bedroom_voc_high', 'off') }}"
+          sequence:
+            - service: switch.turn_off
+              target:
+                entity_id: switch.air_purifier
+        # Air cleared -> if the room is empty and we're not holding, the dirty-air reason is gone, stop.
+        - conditions:
+            - "{{ trigger.id == 'aqi_clear' }}"
+            - "{{ is_state('binary_sensor.bedroom_pm2_5_high', 'off') and is_state('binary_sensor.bedroom_voc_high', 'off') }}"
+            - "{{ is_state('binary_sensor.aqara_fp300_presence', 'off') }}"
+            - "{{ is_state('binary_sensor.bedroom_purifier_hold', 'off') }}"
+          sequence:
+            - service: switch.turn_off
+              target:
+                entity_id: switch.air_purifier
+
+# Manual light DETECT: make a hand/voice/dashboard light change set the SAME manual-off override the
+# Tap Dial's power button does — so an external "off" STICKS instead of being re-lit by
+# bedroom_presence_on's dusk-lux trigger. Turning the bulbs off drops sensor.aqara_fp300_illuminance
+# (dominated by the lights themselves, ~550 on / ~48 off) below the gate, which otherwise re-fires
+# presence_on ~30s later (the documented lights-dominate-illuminance feedback loop — see role CLAUDE.md).
+# The Tap Dial already engaged manual-off on its off-press; voice (Google Assistant), the dashboard
+# tile, and the companion app did not — this closes that gap for every control surface at once.
+# Mirrors bedroom_fan_manual_detect: trigger.to_state.context.parent_id is none means the change came
+# from a person/integration, NOT one of our own automations/scripts (whose service calls are parented),
+# so absence_off / away / bedtime / apply_natural / the Tap Dial never reach the action here. Symmetric
+# with button 1: OFF -> engage manual-off; ON -> clear it (a deliberate turn-on resumes presence auto).
+- id: bedroom_manual_light_detect
+  alias: Bedroom manual light detect
+  description: A hand/voice/dashboard turn-off of the bedroom lights engages the manual-off override (so presence won't re-light it); a manual turn-on clears it.
+  mode: queued
+  max: 10
+  trigger:
+    - platform: state
+      entity_id: light.bedroom_lights
+      to: "on"
+    - platform: state
+      entity_id: light.bedroom_lights
+      to: "off"
+  condition:
+    # Act ONLY on a genuine external/manual change. parent_id is none isolates person/voice/integration
+    # actions (our automations' service calls are parented — same discriminator as the fan detector).
+    # Guarding from_state against unavailable/unknown stops an HA restart / deploy recreate (the group
+    # comes back unknown->on) from clearing the override.
+    - condition: template
+      value_template: >-
+        {% set ts = trigger.to_state %}
+        {% set fs = trigger.from_state %}
+        {{ ts is not none
+           and ts.state in ['on', 'off']
+           and (fs is none or fs.state not in ['unavailable', 'unknown'])
+           and ts.context.parent_id is none }}
+  action:
+    - if: "{{ trigger.to_state.state == 'off' }}"
+      then:
+        - service: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.bedroom_manual_off
+      else:
+        - service: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.bedroom_manual_off
 
 # Morning reset + gentle wake, driven by the REAL alarm. The `alarm` trigger fires at
 # sensor.bedroom_wake_start (watch alarm - 15 min, morning-only — see configuration.yaml); the
@@ -333,17 +454,10 @@
       at: "09:00:00"
       id: fallback
   action:
-    # Daily hygiene (BOTH triggers): clear every overnight override so sleep state / manual-off can't
-    # persist into the day. One turn_off over the list covers all three input_booleans.
-    - service: input_boolean.turn_off
-      target:
-        entity_id:
-          - input_boolean.bedroom_manual_off
-          - input_boolean.bedroom_fan_manual
-          - input_boolean.bedroom_sleep_mode
-    - service: switch.turn_off
-      target:
-        entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+    # Daily hygiene (BOTH triggers): clear every overnight override (3 booleans + AL sleep) via the
+    # shared script so sleep state / manual-off can't persist into the day. Single source of truth
+    # with the test-harness reset (script.bedroom_clear_overrides).
+    - service: script.bedroom_clear_overrides
     # Re-apply the fan now the sleep cap is cleared — only when home (this calls the fan script
     # DIRECTLY, bypassing bedroom_fan_temperature's home gate).
     - if: "{{ is_state('person.daniel', 'home') }}"
@@ -359,9 +473,12 @@
     # which automation.bedroom_wake_ramp then drives per-minute. The 09:00 fallback never forces lights.
     - if: "{{ trigger.id == 'alarm' and is_state('person.daniel', 'home') }}"
       then:
-        - service: script.bedroom_apply_natural
-        # Sleep-quality note: "you slept N h" (gentler wake if <6h — apply_natural already softened
-        # the ramp peak to 30%). Skipped if sleep_duration is unknown/0 (Google Sleep API may lag).
+        - service: script.bedroom_lights_set
+          data:
+            reason: "natural"
+        # Sleep-quality note: "you slept N h" (gentler wake if <6h — apply_wake softens the EARLY
+        # curve, knee ~24% at alarm+15, though it still reaches 100% by alarm+30). Skipped if
+        # sleep_duration is unknown/0 (Google Sleep API may lag).
         - variables:
             slept_h: "{{ (states('sensor.pixel_9_pro_sleep_duration') | float(0) / 60) | round(1) }}"
         - if: "{{ slept_h > 0 }}"
@@ -372,11 +489,12 @@
                 message: "You slept {{ slept_h }}h{{ ' — gentler wake.' if slept_h < 6 else '.' }}"
                 tag: sleep_morning
 
-# Per-minute sunrise ramp. While inside the 30-min wake window, set the current ramp frame
+# Per-minute sunrise ramp. While inside the 45-min wake window, set the current ramp frame
 # (script.bedroom_apply_wake) each minute — stateless ticks resume cleanly after an HA restart. On
-# the tick where the window just ended (elapsed 30..31), hand the lights back to Adaptive Lighting
-# for the day (apply_natural default = ambient-fill). Gated on home + not manual-off; the wake math
-# (window + curve) lives in lighting.jinja.
+# the tick where the window just ended (elapsed 45..46), hand the lights back to Adaptive Lighting
+# for the day (apply_natural default = ambient-fill). The ramp climbs all the way to 100% by window
+# end, so AL takes over at full brightness — no sudden pop. Gated on home + not manual-off; the wake
+# math (window + curve) lives in lighting.jinja.
 - id: bedroom_wake_ramp
   alias: Bedroom wake ramp
   description: Drive the sunrise ramp once a minute through the wake window; hand back to AL at window end.
@@ -399,11 +517,27 @@
     - choose:
         - conditions: "{{ in_window }}"
           sequence:
-            - service: script.bedroom_apply_wake
-        # Window just ended this minute -> release to Adaptive Lighting (ambient-fill) for the day.
-        - conditions: "{{ elapsed >= 30 and elapsed < 31 }}"
+            - service: script.bedroom_lights_set
+              data:
+                reason: "wake"
+        # Window just ended this minute -> hand the room back to Adaptive Lighting for the day.
+        # Release manual control + apply so AL drives the natural daylight brightness/color curve.
+        # The ramp has reached 100% by now, so AL takes over at full brightness (its 45s transition
+        # then settles color/brightness to the daytime target) — the seamless hand-off this curve
+        # was designed for. NOT reason:"natural" (ambient-fill): at window-end the lights are on at
+        # ~100%, so natural_brightness would read the lights-DOMINATED FP300 illuminance (violating
+        # its "read while OFF" precondition) and floor the room to ~11%, stranding AL paused until
+        # the next leave+return. turn_on_lights:false so a mid-ramp manual-off is never re-lit.
+        - conditions: "{{ elapsed >= 45 and elapsed < 46 }}"
           sequence:
-            - service: script.bedroom_apply_natural
+            - service: adaptive_lighting.set_manual_control
+              data:
+                entity_id: switch.bedroom_adaptive_lighting_bedroom
+                manual_control: false
+            - service: adaptive_lighting.apply
+              data:
+                entity_id: switch.bedroom_adaptive_lighting_bedroom
+                turn_on_lights: false
 
 # Slow color tracking: while the lights are in AUTO mode, drift their color every 5 min toward
 # Adaptive Lighting's CURRENT sun-curve color (read off the AL switch attribute — AL computes it even
@@ -558,6 +692,22 @@
       id: humidity_ok
     - platform: state
       entity_id:
+        - binary_sensor.bedroom_temp_high
+        - binary_sensor.bedroom_temp_low
+      from: "off"
+      to: "on"
+      for: "00:05:00"
+      id: temperature_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_temp_high
+        - binary_sensor.bedroom_temp_low
+      from: "on"
+      to: "off"
+      for: "00:05:00"
+      id: temperature_ok
+    - platform: state
+      entity_id:
         - binary_sensor.outdoor_pm2_5_high
       from: "off"
       to: "on"
@@ -601,34 +751,51 @@
         tag: "threshold_alert_{{ trigger.entity_id }}"
         # Per-category routing flags. `pulse` = brief red light flash (air quality only). `watch` =
         # also buzz the wrist (glanceable). `pierce` = sound even while quiet/DND (severe air quality
-        # only — the can't-miss tier). `recovery` = send a "back to normal" notice (severe skips it;
-        # the moderate recovery covers it). All notify goes through script.bedroom_notify (DND-aware).
+        # only — the can't-miss tier). `critical_away` = push while AWAY instead of holding for the
+        # arrival digest (temperature only — it's the damage-class safety net for when nobody's home;
+        # it does NOT pierce DND at home, so it's a tier below `pierce`). `recovery` = send a "back to
+        # normal" notice (severe skips it; the moderate recovery covers it). All notify goes through
+        # script.bedroom_notify (DND-aware).
         cfg: >-
           {{ {'airquality':       {'bad': '⚠️ Air quality', 'ok': '✅ Air quality', 'pulse': true,  'watch': true,  'pierce': false, 'recovery': true},
               'airqualitysevere': {'bad': '🚨 Air quality HIGH', 'ok': '✅ Air quality', 'pulse': true, 'watch': true, 'pierce': true, 'recovery': false},
               'battery':          {'bad': '🔋 Battery low', 'ok': '🔋 Battery OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
               'humidity':         {'bad': '💧 Humidity', 'ok': '💧 Humidity OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
+              'temperature':      {'bad': '🌡️ Temperature', 'ok': '🌡️ Temperature OK', 'pulse': false, 'watch': true,  'pierce': false, 'critical_away': true, 'recovery': true},
               'airqualityoutdoor':       {'bad': '🌫️ Outdoor air', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true,  'pierce': false, 'recovery': true},
               'airqualityoutdoorsevere': {'bad': '🚨 Outdoor air HIGH', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true, 'pierce': true, 'recovery': false}}[category] }}
         # Air-quality bad alerts get a "Boost fan" action button (circulate the air); other
         # categories get none. Handled by bedroom_notification_action.
         boost_actions: "{{ [{'action': 'BEDROOM_BOOST_FAN', 'title': 'Boost fan'}] if category in ['airquality', 'airqualitysevere'] else [] }}"
+        # A sudden spike can cross BOTH the moderate (_high) and severe (_severe) thresholds within
+        # the same 30s window, firing two bad alerts at once. Flag a moderate whose matching severe
+        # sensor is already on so we can suppress it (the severe alert, which pierces, supersedes it).
+        # Only the indoor/outdoor air-quality categories have a severe counterpart (_high -> _severe).
+        severe_shadowed: >-
+          {{ category in ['airquality', 'airqualityoutdoor']
+             and is_state(trigger.entity_id | replace('_high', '_severe'), 'on') }}
     - choose:
         - conditions: "{{ edge == 'bad' }}"
           sequence:
-            - service: script.bedroom_notify
-              data:
-                title: "{{ cfg.bad }}"
-                message: "{{ label }} is {{ value }}{{ unit_sp }}"
-                tag: "{{ tag }}"
-                watch: "{{ cfg.watch }}"
-                pierce: "{{ cfg.pierce }}"
-                actions: "{{ boost_actions }}"
-            # Light pulse only for air quality (cfg.pulse) and only when the lights are already on —
-            # never wakes you, never fights Adaptive Lighting / the manual-off override at night.
-            - if: "{{ cfg.pulse and is_state('light.bedroom_lights', 'on') }}"
+            # Suppress a moderate air-quality bad that an already-on severe sensor covers. Gate INSIDE
+            # the bad branch (not via the choose condition) so a shadowed moderate can't fall through
+            # to the recovery default below.
+            - if: "{{ not severe_shadowed }}"
               then:
-                - service: script.bedroom_alert_pulse
+                - service: script.bedroom_notify
+                  data:
+                    title: "{{ cfg.bad }}"
+                    message: "{{ label }} is {{ value }}{{ unit_sp }}"
+                    tag: "{{ tag }}"
+                    watch: "{{ cfg.watch }}"
+                    pierce: "{{ cfg.pierce }}"
+                    critical_away: "{{ cfg.critical_away | default(false) }}"
+                    actions: "{{ boost_actions }}"
+                # Light pulse only for air quality (cfg.pulse) and only when the lights are already on
+                # — never wakes you, never fights Adaptive Lighting / the manual-off override at night.
+                - if: "{{ cfg.pulse and is_state('light.bedroom_lights', 'on') }}"
+                  then:
+                    - service: script.bedroom_alert_pulse
       # off<->on edges only, so the remaining case (edge == 'ok') is the default. Recovery is always
       # routine (no watch/pierce); the severe tier skips it (cfg.recovery false).
       default:
@@ -640,6 +807,9 @@
                 message: "{{ label }} back to normal ({{ value }}{{ unit_sp }})"
                 tag: "{{ tag }}"
                 recovery: true
+                # A critical_away category (temperature) pushed its bad alert while away rather than
+                # holding it, so its all-clear should push too (there's no hold_<tag> to cancel).
+                critical_away: "{{ cfg.critical_away | default(false) }}"
 
 # Temperature → fan: drive fan.tower_fan from the AirGradient temperature via script.bedroom_apply_fan
 # (off <72 / Low 72-74 / Medium 74-76 / High >=76 °F; Medium cap 22:00-06:00; 0.5°F deadband).
@@ -665,6 +835,17 @@
     - condition: state
       entity_id: person.daniel
       state: "home"
+    # Ignore the boot-time temperature re-report: at HA start the AirGradient sensor comes up
+    # unavailable/unknown then its first reading fires this state trigger, which would re-apply the auto
+    # level while the manual override is still STALE-restored off (HA's unclean shutdown can drop a fan
+    # speed you set in the ~15 min before a deploy — see bedroom_fan_startup_reconcile). Time triggers
+    # (22:00/06:00) have no from_state and always pass. This first-reading skip also gives the reconcile
+    # automation a clean window to rebuild the override before the second reading can drive the fan.
+    - condition: template
+      value_template: >-
+        {{ trigger.platform != 'state'
+           or (trigger.from_state is not none
+               and trigger.from_state.state not in ['unknown', 'unavailable']) }}
   action:
     - service: script.bedroom_apply_fan
 
@@ -712,20 +893,95 @@
       target:
         entity_id: input_boolean.bedroom_fan_manual
 
+# Fan override RECONCILE on restart. HA's unclean shutdown (SIGKILL on every deploy) can drop the
+# input_boolean.bedroom_fan_manual + input_number.bedroom_fan_expected_level helpers when they changed
+# within ~15 min of the restart (the restore_state dump cycle) — so a fan speed you just dialed by hand
+# is restored STALE (override off, old expected level) and bedroom_fan_temperature re-applies the auto
+# level on the first post-boot temp report (observed: a hand-set L3 bumped back to L5 after a deploy).
+# This rebuilds the override from the PHYSICAL fan, whose speed the DREO cloud keeps across an HA
+# restart. It captures the restored level BEFORE the temp sensor reports (so the capture can't be
+# polluted by an auto re-apply racing in), then once temp is known compares it to the hysteresis-free
+# auto ideal (fan_target_level with cur_level=0): under auto control the fan always tracks within ~1
+# level of ideal, so a fan running MORE than 1 level off was hand-set — re-engage the override, re-arm
+# expected_level, and re-assert the level (undoing any auto nudge that slipped in). Pairs with the
+# from_state guard on bedroom_fan_temperature, which skips the first reading so this wins the race.
+- id: bedroom_fan_startup_reconcile
+  alias: Bedroom fan startup reconcile
+  description: After an HA restart, rebuild the fan manual override from the physical fan so a hand-set speed survives the unclean-shutdown loss of the override helpers.
+  mode: single
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    # Capture the device's restored level FIRST — the DREO cloud holds the physical speed across the
+    # restart, and the fan reconnects well before the AirGradient temp sensor's first poll.
+    - wait_template: "{{ states('fan.tower_fan') in ['on', 'off'] }}"
+      timeout: "00:01:30"
+      continue_on_timeout: true
+    - variables:
+        boot_level: "{% from 'fan.jinja' import pct_to_level %}{{ (pct_to_level(state_attr('fan.tower_fan', 'percentage')) | int) if is_state('fan.tower_fan', 'on') else 0 }}"
+    # Wait for the temperature so we can compute what auto WOULD pick.
+    - wait_template: "{{ states('sensor.bedroom_airgradient_one_temperature') not in ['unknown', 'unavailable'] }}"
+      timeout: "00:03:00"
+      continue_on_timeout: true
+    - variables:
+        t: "{{ states('sensor.bedroom_airgradient_one_temperature') | float(-1) }}"
+        is_night: "{{ now().hour >= 22 or now().hour < 6 }}"
+        sleep: "{{ is_state('input_boolean.bedroom_sleep_mode', 'on') }}"
+        # Hysteresis-free auto ideal — cur_level=0 bypasses fan_target_level's ±0.7-level deadband.
+        ideal: "{% from 'fan.jinja' import fan_target_level %}{{ fan_target_level(t, 0, is_night, sleep) | int }}"
+    # Hand-set fan? Home, fan on, temp known, running >1 level from auto's pick, and the override wasn't
+    # restored (still off). The >1 tolerance absorbs the curve's hysteresis so a legit auto level never
+    # trips this — only a deliberate manual speed sits that far from ideal.
+    - condition: template
+      value_template: >-
+        {{ is_state('person.daniel', 'home')
+           and (boot_level | int) > 0
+           and t >= 0
+           and ((boot_level | int) - (ideal | int)) | abs > 1
+           and is_state('input_boolean.bedroom_fan_manual', 'off') }}
+    - service: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.bedroom_fan_manual
+    # Arm expected_level BEFORE re-asserting, so our own cloud echo matches and bedroom_fan_manual_detect
+    # doesn't re-flag it.
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.bedroom_fan_expected_level
+      data:
+        value: "{{ boot_level | int }}"
+    # Re-assert the hand-set level last (level -> midpoint % via the shared macro, same DREO ceil
+    # handling as bedroom_apply_fan), undoing any auto nudge that slipped in during boot.
+    - service: fan.turn_on
+      target:
+        entity_id: fan.tower_fan
+    - service: fan.set_percentage
+      target:
+        entity_id: fan.tower_fan
+      data:
+        percentage: "{% from 'fan.jinja' import level_to_pct %}{{ level_to_pct(boot_level | int) | int }}"
+
 # Sensor-offline alert: any bedroom-automation dependency going `unavailable` for 5 min sends a
 # phone notification; a recovery notice fires when it returns (same tag, so it replaces the alert).
 # The 5-min `for:` rides out HA restarts and the ~120s deploy recreate (entities go briefly
 # unavailable, then back). Detection latency differs by device class and that's inherent: the
-# AirGradient ONE and DREO fan (polled integrations) go unavailable within minutes; the FP300 and
-# Tap Dial (battery Zigbee) only after Z2M's passive availability timeout (60 min — see the
-# zigbee2mqtt config), because a sleeping radio can't be actively pinged. Z2M availability MUST be
-# enabled for the two Zigbee entities to ever go unavailable. Adding a watched device = add its
-# representative entity to BOTH trigger lists below (one entity per device suffices — Z2M flips all
-# of a device's entities together). Brief flaps can emit a lone recovery with no prior alert (the
-# offline edge needs a full 5 min down) — rare and low-harm, accepted like the air-quality engine.
+# AirGradient ONE and DREO fan (polled integrations) go unavailable within minutes; the FP300
+# (battery Zigbee) only after Z2M's passive availability timeout (60 min — see the zigbee2mqtt
+# config), because a sleeping radio can't be actively pinged. Z2M availability MUST be enabled for
+# the FP300 to ever go unavailable.
+# The Tap Dial (RDM002) is deliberately NOT watched here: it's a passive INPUT device, so going
+# quiet from disuse trips Z2M's 60-min passive timeout as a routine false positive — nothing depends
+# on the dial reporting (unlike the FP300/fan/AirGradient, which feed live automations and whose
+# silence actually breaks things). A genuinely dead dial is still caught by
+# binary_sensor.bedroom_tap_dial_battery_low (the threshold engine) and is obvious on the next press.
+# (Removed from this alert 2026-06-24 to cut idle-dial noise.)
+# Adding a watched device = add its representative entity to BOTH trigger lists below (one entity
+# per device suffices — Z2M flips all of a device's entities together). Brief flaps can emit a lone
+# recovery with no prior alert (the offline edge needs a full 5 min down) — rare and low-harm,
+# accepted like the air-quality engine.
 - id: bedroom_sensor_offline_alert
   alias: Bedroom sensor offline alert
-  description: Notify when a bedroom-automation dependency (AirGradient/FP300/Tap Dial/fan) goes unavailable; recovery notice when it returns.
+  description: Notify when a bedroom-automation dependency (AirGradient/FP300/fan) goes unavailable; recovery notice when it returns.
   mode: queued
   max: 10
   trigger:
@@ -733,7 +989,6 @@
       entity_id:
         - sensor.bedroom_airgradient_one_carbon_dioxide
         - binary_sensor.aqara_fp300_presence
-        - sensor.0x001788010f0ccda4_battery
         - fan.tower_fan
       to: "unavailable"
       for: "00:05:00"
@@ -742,7 +997,6 @@
       entity_id:
         - sensor.bedroom_airgradient_one_carbon_dioxide
         - binary_sensor.aqara_fp300_presence
-        - sensor.0x001788010f0ccda4_battery
         - fan.tower_fan
       from: "unavailable"
       id: recovery
@@ -811,26 +1065,31 @@
       id: failsafe
   action:
     - variables:
-        on_items: >-
-          {{ (['lights'] if is_state('light.bedroom_lights', 'on') else [])
-           + (['fan'] if is_state('fan.tower_fan', 'on') else []) }}
+        on_label: >-
+          {% from 'lighting.jinja' import away_items_label %}{{ away_items_label(is_state('light.bedroom_lights', 'on'), is_state('fan.tower_fan', 'on')) }}
     - choose:
         # Only act + notify when something is actually on — so the 30-min failsafe stays silent
         # unless it caught something the 10-min leave missed (or that came on since).
-        - conditions: "{{ on_items | length > 0 }}"
+        - conditions: "{{ on_label != '' }}"
           sequence:
-            - service: light.turn_off
-              target:
-                entity_id: light.bedroom_lights
-            - service: fan.turn_off
-              target:
-                entity_id: fan.tower_fan
+            - service: script.bedroom_lights_set
+              data:
+                reason: "off"
+            - service: script.bedroom_fan_set
+              data:
+                reason: "off"
             # Routine notify (you're not quiet when leaving) — one notify path for the whole system.
             - service: script.bedroom_notify
               data:
                 title: "🏠 Left on"
-                message: "Turned off bedroom {{ on_items | join(' + ') }} (you're away)"
+                message: "Turned off bedroom {{ on_label }} (you're away)"
                 tag: bedroom_away
+                # Deliver NOW, don't hold for the arrival digest: bedroom_away only ever fires while
+                # away, so without this the message + its "Turn back on" button are parked as a held
+                # persistent_notification (flushed phone-only on arrival, actions stripped) and the
+                # button can never be tapped — defeating the false-away undo it exists for.
+                # critical_away pushes while away without piercing DND at home.
+                critical_away: true
                 # One-tap undo for a false-away (GPS jitter while you're actually home).
                 actions:
                   - action: BEDROOM_AWAY_TURN_ON
@@ -854,11 +1113,50 @@
       then:
         - service: script.bedroom_apply_fan
     - if: >-
-        {{ is_state('binary_sensor.aqara_fp300_presence', 'on')
-           and is_state('input_boolean.bedroom_manual_off', 'off')
-           and is_state('light.bedroom_lights', 'off') }}
+        {% from 'lighting.jinja' import arrive_relight_allowed %}{{ arrive_relight_allowed(
+           is_state('binary_sensor.aqara_fp300_presence', 'on'),
+           is_state('input_boolean.bedroom_manual_off', 'on'),
+           is_state('light.bedroom_lights', 'on')) | bool }}
       then:
-        - service: script.bedroom_apply_natural
+        - service: script.bedroom_lights_set
+          data:
+            reason: "natural"
+
+# Sleep-mode fan reapply: when bedroom_sleep_mode is toggled DIRECTLY (dashboard tile / voice), the
+# fan's level cap (L2 in sleep mode) should engage/release immediately — otherwise it waits for the
+# next temperature report. The bedtime / Tap-Dial / morning-reset callers flip sleep_mode
+# programmatically and re-apply the fan themselves; those writes are parented, so the parent_id gate
+# skips them and only a genuine manual toggle reaches the mediator.
+- id: bedroom_sleep_mode_fan
+  alias: Bedroom sleep mode fan reapply
+  description: Re-apply the fan (via the bedroom_fan_set mediator) when sleep_mode is toggled directly, so its level cap engages/releases at once.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: input_boolean.bedroom_sleep_mode
+      from: "off"
+      to: "on"
+    - platform: state
+      entity_id: input_boolean.bedroom_sleep_mode
+      from: "on"
+      to: "off"
+  condition:
+    # Direct/external toggle only — our own automations' parented turn_on/off carry a parent_id
+    # (same discriminator as bedroom_manual_light_detect / bedroom_fan_manual_detect).
+    - condition: template
+      value_template: "{{ trigger.to_state.context.parent_id is none }}"
+    # Respect a manual fan override, and don't spin the fan in an empty house (same gates as
+    # bedroom_fan_temperature).
+    - condition: state
+      entity_id: input_boolean.bedroom_fan_manual
+      state: "off"
+    - condition: state
+      entity_id: person.daniel
+      state: "home"
+  action:
+    - service: script.bedroom_fan_set
+      data:
+        reason: "auto"
 
 # Flush held notifications on arrival: when you re-enter the home geofence, any alerts that were
 # parked while you were away (persistent_notification ids starting with hold_) and did NOT resolve
@@ -933,17 +1231,9 @@
         # button 3 or the morning reset). Honest caveat: moves air, doesn't lower CO2.
         - conditions: "{{ trigger.event.data.action == 'BEDROOM_BOOST_FAN' }}"
           sequence:
-            - service: input_boolean.turn_on
-              target:
-                entity_id: input_boolean.bedroom_fan_manual
-            - service: fan.turn_on
-              target:
-                entity_id: fan.tower_fan
-            - service: fan.set_percentage
-              target:
-                entity_id: fan.tower_fan
+            - service: script.bedroom_fan_set
               data:
-                percentage: 100
+                reason: "boost"
         - conditions: "{{ trigger.event.data.action == 'BEDROOM_START_BEDTIME' }}"
           sequence:
             - service: script.bedroom_bedtime
@@ -951,8 +1241,17 @@
         # the home-gates (you're tapping because the tracker is wrong / you're actually home).
         - conditions: "{{ trigger.event.data.action == 'BEDROOM_AWAY_TURN_ON' }}"
           sequence:
-            - service: script.bedroom_apply_natural
-            - service: script.bedroom_apply_fan
+            - service: script.bedroom_lights_set
+              data:
+                reason: "natural"
+            - service: script.bedroom_fan_set
+              data:
+                reason: "auto"
+            # Clear the "Left on" HA persistent note (the critical_away visibility fallback) now that
+            # you've acted on it — the bedroom_away tag has no recovery path of its own.
+            - service: persistent_notification.dismiss
+              data:
+                notification_id: bedroom_away
 
 # Bedtime prompt: at 22:00, if you're in the bedroom and haven't started bedtime, send a nudge with
 # a "Start now" button (-> BEDROOM_START_BEDTIME -> script.bedroom_bedtime). Gated on present + not
@@ -1210,9 +1509,9 @@
         {{ is_state('binary_sensor.aqara_fp300_presence', 'off')
            and states('sensor.bedroom_wake_start') in ['unknown', 'unavailable'] }}
       then:
-        - service: light.turn_off
-          target:
-            entity_id: light.bedroom_lights
+        - service: script.bedroom_lights_set
+          data:
+            reason: "off"
 
 # HA automation-engine heartbeat: stamp input_datetime.ha_heartbeat with now() every minute so its
 # last_changed stays fresh ONLY while the automation scheduler is executing. monitor-bridge polls it
@@ -1279,8 +1578,8 @@
     # whitespace) so verdict is exactly 'stale'/'cool'/'none' — same single-line import pattern as
     # the fan.jinja use elsewhere in this file.
     - variables:
-        verdict: "{% from 'ventilation.jinja' import ventilation_advice %}{{ ventilation_advice(states('sensor.bedroom_airgradient_one_temperature'), state_attr('weather.forecast_home', 'temperature'), states('sensor.bedroom_airgradient_one_pm2_5'), states('sensor.outdoor_pm2_5'), is_state('binary_sensor.bedroom_co2_high', 'on') or is_state('binary_sensor.bedroom_voc_high', 'on')) }}"
-        out_temp: "{{ state_attr('weather.forecast_home', 'temperature') | round }}"
+        verdict: "{% from 'ventilation.jinja' import ventilation_advice %}{{ ventilation_advice(states('sensor.bedroom_airgradient_one_temperature'), state_attr('weather.forecast_home', 'temperature'), states('sensor.bedroom_airgradient_one_pm2_5'), states('sensor.outdoor_pm2_5'), is_state('binary_sensor.bedroom_co2_high', 'on') or is_state('binary_sensor.bedroom_voc_high', 'on'), states('sensor.outdoor_pm10')) }}"
+        out_temp: "{{ state_attr('weather.forecast_home', 'temperature') | float(0) | round }}"
         in_temp: "{{ states('sensor.bedroom_airgradient_one_temperature') | round }}"
         co2: "{{ states('sensor.bedroom_airgradient_one_carbon_dioxide') }}"
     - choose:
@@ -1377,3 +1676,36 @@
     - service: media_player.turn_off
       target:
         entity_id: media_player.bedroom_display
+# HA runtime-error alert (homelab-wide, no bedroom_ prefix). Actively notifies when OUR code
+# (automations/scripts/template sensors/template helpers) logs an ERROR/CRITICAL at runtime — the
+# runtime complement to the static validation (a macro that throws on an edge case, a template that
+# errors at render). Scope is the pure, tested error_in_scope(level, logger) macro
+# (custom_templates/diagnostics.jinja); third-party/HACS chatter and WARNINGs are excluded there.
+# Routine via bedroom_notify (silent while DND/sleep, held-then-digested while away). The per-source
+# tag coalesces a repeating error into one updating notification. Loop-guard: this automation must
+# not re-trigger on an ERROR it (directly or indirectly) caused — so the condition excludes BOTH its
+# own logger AND the notify script's. A failing notify path (e.g. a lapsed FCM token raising
+# service_not_found, logged under homeassistant.components.script.bedroom_notify) would otherwise
+# re-fire this alert -> call bedroom_notify -> error again: a self-sustaining loop exactly when
+# notifications are already broken. Spec: docs/superpowers/specs/2026-06-22-ha-runtime-error-alert-design.md.
+- id: ha_runtime_error_alert
+  alias: HA runtime error alert
+  description: Notify when one of our automations/scripts/templates logs an ERROR/CRITICAL at runtime.
+  mode: queued
+  max: 10
+  trigger:
+    - platform: event
+      event_type: system_log_event
+  condition:
+    - condition: template
+      value_template: >-
+        {% from 'diagnostics.jinja' import error_in_scope %}
+        {{ (error_in_scope(trigger.event.data.level, trigger.event.data.name) | bool)
+           and trigger.event.data.name != 'homeassistant.components.automation.ha_runtime_error_alert'
+           and not (trigger.event.data.name | string).startswith('homeassistant.components.script.bedroom_notify') }}
+  action:
+    - service: script.bedroom_notify
+      data:
+        title: "⚠️ HA error: {{ trigger.event.data.name.split('.')[-1] }}"
+        message: "{{ (trigger.event.data.message | join(' '))[:200] }}"
+        tag: "ha_error_{{ trigger.event.data.name | replace('.', '_') }}"

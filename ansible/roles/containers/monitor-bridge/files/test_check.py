@@ -707,6 +707,102 @@ def test_restore_drill_unparseable_is_down(tmp_path, monkeypatch):
     assert "unparseable" in msg
 
 
+# ── weekly kopia snapshot verify (weekly host cron writes state.json; we alert on it) ──
+
+
+def _verify_state(tmp_path, monkeypatch, ts, ok, msg):
+    p = tmp_path / "state.json"
+    p.write_text('{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg))
+    monkeypatch.setattr(check, "VERIFY_STATE", str(p))
+
+
+def test_verify_fresh_success_is_up(tmp_path, monkeypatch):
+    _verify_state(tmp_path, monkeypatch, time.time() - 86400, True,
+                  "verified 142 snapshots, 0 errors")
+    ok, msg = check.check_verify()
+    assert ok
+    assert "142 snapshots" in msg
+
+
+def test_verify_failure_is_down(tmp_path, monkeypatch):
+    # A non-zero `kopia snapshot verify` (detected bit-rot / unreadable blob) must page —
+    # this is the exact failure the old `| logger` cron swallowed.
+    _verify_state(tmp_path, monkeypatch, time.time(), False, "verify found 2 unreadable objects")
+    ok, msg = check.check_verify()
+    assert not ok
+    assert "unreadable" in msg
+
+
+def test_verify_stale_success_is_down(tmp_path, monkeypatch):
+    # Weekly cadence; a 12d-old success means the verify cron stopped running.
+    _verify_state(tmp_path, monkeypatch, time.time() - 12 * 86400, True, "ok")
+    ok, msg = check.check_verify()
+    assert not ok
+    assert "ago" in msg
+
+
+def test_verify_missing_state_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "VERIFY_STATE", str(tmp_path / "nope.json"))
+    ok, msg = check.check_verify()
+    assert not ok
+    assert "never ran" in msg
+
+
+def test_verify_unparseable_is_down(tmp_path, monkeypatch):
+    p = tmp_path / "state.json"
+    p.write_text("not json")
+    monkeypatch.setattr(check, "VERIFY_STATE", str(p))
+    ok, msg = check.check_verify()
+    assert not ok
+    assert "unparseable" in msg
+
+
+def _maintenance_state(tmp_path, monkeypatch, ts, ok, msg):
+    p = tmp_path / "maint.json"
+    p.write_text('{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg))
+    monkeypatch.setattr(check, "MAINTENANCE_STATE", str(p))
+
+
+def test_maintenance_fresh_success_is_up(tmp_path, monkeypatch):
+    _maintenance_state(tmp_path, monkeypatch, time.time() - 3600, True,
+                       "full maint enabled, owner root@kopia, next in 18.0h, last run snapshot-gc ok")
+    ok, msg = check.check_maintenance()
+    assert ok
+    assert "owner root@kopia" in msg
+
+
+def test_maintenance_unhealthy_is_down(tmp_path, monkeypatch):
+    # A stalled/disabled full cycle (the upstream cause b2_usage only catches weeks later) must page.
+    _maintenance_state(tmp_path, monkeypatch, time.time(), False, "full maintenance overdue 50.0h")
+    ok, msg = check.check_maintenance()
+    assert not ok
+    assert "overdue" in msg
+
+
+def test_maintenance_stale_success_is_down(tmp_path, monkeypatch):
+    # Daily cadence; a 3d-old success means the maintenance-check cron stopped running.
+    _maintenance_state(tmp_path, monkeypatch, time.time() - 3 * 86400, True, "ok")
+    ok, msg = check.check_maintenance()
+    assert not ok
+    assert "old" in msg
+
+
+def test_maintenance_missing_state_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "MAINTENANCE_STATE", str(tmp_path / "nope.json"))
+    ok, msg = check.check_maintenance()
+    assert not ok
+    assert "never ran" in msg
+
+
+def test_maintenance_unparseable_is_down(tmp_path, monkeypatch):
+    p = tmp_path / "maint.json"
+    p.write_text("not json")
+    monkeypatch.setattr(check, "MAINTENANCE_STATE", str(p))
+    ok, msg = check.check_maintenance()
+    assert not ok
+    assert "unparseable" in msg
+
+
 # ── B2 storage usage (daily host cron writes billable bytes; we alert on it) ──
 
 
@@ -1072,3 +1168,75 @@ def test_check_renovate_alive_fresh_file_is_up(tmp_path, monkeypatch):
     (tmp_path / "last_run").write_text(str(_t.time()))
     ok, _ = check.check_renovate_alive()
     assert ok
+
+
+# --- loki ingestion freshness -----------------------------------------------
+# Loki's Kuma /ready probe stays green even if promtail stops shipping (DOCKER_HOST
+# break, positions-file corruption, label regression) — a silently-dead log pipeline.
+# This check counts ingested log lines for an always-active stream over a window and
+# goes down when zero: a freshness watchdog analogous to the SMART/restore-drill ones.
+
+def _loki_scalar(val):
+    """A Loki instant-query response for `sum(count_over_time(...))`. None -> empty result."""
+    if val is None:
+        return {"status": "success", "data": {"resultType": "vector", "result": []}}
+    return {"status": "success", "data": {"resultType": "vector",
+            "result": [{"metric": {}, "value": [1700000000, str(val)]}]}}
+
+
+def test_loki_ingestion_with_lines_is_ok():
+    ok, msg = check.loki_ingestion_fresh(1234, "10m")
+    assert ok
+    assert "1234" in msg
+
+
+def test_loki_ingestion_zero_lines_is_down():
+    ok, msg = check.loki_ingestion_fresh(0, "10m")
+    assert not ok
+    assert "silent" in msg
+
+
+def test_loki_ingestion_no_series_is_down():
+    # an empty query result (no matching stream at all) is also a silent pipeline
+    ok, msg = check.loki_ingestion_fresh(None, "10m")
+    assert not ok
+
+
+def test_loki_count_parses_value(monkeypatch):
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _loki_scalar(42))
+    assert check.loki_count('{job="syslog"}', "10m") == 42.0
+
+
+def test_loki_count_empty_result_is_none(monkeypatch):
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _loki_scalar(None))
+    assert check.loki_count('{job="syslog"}', "10m") is None
+
+
+def test_loki_count_non_success_raises(monkeypatch):
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"status": "error"})
+    with pytest.raises(RuntimeError):
+        check.loki_count('{job="syslog"}', "10m")
+
+
+def test_check_loki_ingestion_fresh_is_up(monkeypatch):
+    monkeypatch.setattr(check, "loki_count", lambda *a, **k: 500)
+    ok, _ = check.check_loki_ingestion()
+    assert ok
+
+
+def test_check_loki_ingestion_silent_is_down(monkeypatch):
+    monkeypatch.setattr(check, "loki_count", lambda *a, **k: 0)
+    ok, msg = check.check_loki_ingestion()
+    assert not ok
+
+
+def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch):
+    # docker_sd-specific failure: the static file-tail union ({job=~".+"}) keeps flowing,
+    # but the highest-volume container-log stream ({container=~".+"}) went silent. The
+    # union count alone stays non-zero and would hide it — the docker-specific arm must page.
+    def fake_count(selector, window):
+        return 0 if "container" in selector else 500
+    monkeypatch.setattr(check, "loki_count", fake_count)
+    ok, msg = check.check_loki_ingestion()
+    assert not ok
+    assert "container" in msg

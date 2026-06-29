@@ -29,7 +29,7 @@ services:
       - SETUID
       - CHOWN
     {{ service_networks() }}
-    {{ healthcheck('curl --fail -s http://localhost:6767/ || exit 1') }}
+    {{ healthcheck('curl --fail -s http://localhost:6767/ping || exit 1') }}
     labels:
       # Disable watchtower update — pinned + Renovate-managed
       - "com.centurylinklabs.watchtower.enable=false"

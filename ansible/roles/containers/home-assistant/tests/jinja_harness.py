@@ -79,15 +79,19 @@ def _env():
     return env
 
 
-def render_macro(file: str, macro: str, *args) -> str:
-    """Render `{% from file import macro %}{{ macro(*args) }}` and return the stripped result.
+def render_macro(file: str, macro: str, *args, **kwargs) -> str:
+    """Render `{% from file import macro %}{{ macro(*args, **kwargs) }}` and return the stripped result.
 
     Python scalars are passed as native Jinja context variables (so floats stay floats and bools
-    stay bools), and the macro is invoked positionally.
+    stay bools). Positional args are passed positionally; keyword args let a test set one of the
+    macro's keyword-default parameters (e.g. outdoor_pm10=80) without listing the ones before it.
     """
     env = _env()
     ctx = {f"a{i}": v for i, v in enumerate(args)}
-    call = ", ".join(f"a{i}" for i in range(len(args)))
+    ctx.update({f"k_{k}": v for k, v in kwargs.items()})
+    pos = ", ".join(f"a{i}" for i in range(len(args)))
+    kw = ", ".join(f"{k}=k_{k}" for k in kwargs)
+    call = ", ".join(p for p in (pos, kw) if p)
     template = env.from_string(
         "{%% from '%s' import %s %%}{{ %s(%s) }}" % (file, macro, macro, call)
     )

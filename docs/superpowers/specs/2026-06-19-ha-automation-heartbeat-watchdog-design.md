@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-19
 **Status:** approved (design), pre-implementation
-**Origin:** item 4.1 of `docs/home-assistant-review-2026-06-19.md`
+**Origin:** item 4.1 of the 2026-06-19 Home Assistant review (since pruned; see git history)
 
 ## Problem
 

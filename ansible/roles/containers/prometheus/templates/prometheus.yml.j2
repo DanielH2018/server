@@ -44,6 +44,32 @@ scrape_configs:
 
 #################################################################################################
 
+  # Loki's own /metrics (ingestion rate, chunk-flush errors, request latencies) on its HTTP
+  # port — Loki and Prometheus share the `monitoring` net. The failure CASES are already
+  # caught out-of-band (monitor-bridge's loki_ingestion check + the Kuma /ready probe); this
+  # adds the trendable HISTORY (ingestion/error graphs in Grafana) those point-in-time checks
+  # don't retain.
+  - job_name: "loki"
+    scrape_interval: 1m
+    static_configs:
+    - targets: ["loki:3100"]
+
+#################################################################################################
+
+  # Uptime-Kuma's own /metrics (per-monitor up/down, response times, cert-days-remaining) —
+  # Kuma and Prometheus share the `monitoring` net. The endpoint is API-key protected, sent as
+  # HTTP Basic auth: blank username, password = the key (prometheus_kuma_api_key in SOPS).
+  - job_name: "uptime-kuma"
+    scrape_interval: 1m
+    metrics_path: /metrics
+    basic_auth:
+      username: ""
+      password: "{{ prometheus_kuma_api_key }}"
+    static_configs:
+    - targets: ["uptime-kuma:3001"]
+
+#################################################################################################
+
   {# - job_name: 'netdata-scrape'
     scrape_interval: 1m
     metrics_path: '/api/v1/allmetrics'
@@ -67,5 +93,13 @@ scrape_configs:
     scrape_interval: 1m
     static_configs:
     - targets: ["terraria-stats:9420"]
+
+  - job_name: "home-assistant"
+    scrape_interval: 1m
+    metrics_path: /api/prometheus
+    authorization:
+      credentials: "{{ prometheus_ha_token }}"
+    static_configs:
+      - targets: ["home-assistant:8123"]
 
 #################################################################################################

@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 
 services:
@@ -19,14 +20,13 @@ services:
       - ./config/application.yml:/config/application.yml
       - /home/{{ sys_user }}/server/containers/data:/data
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "bash", "-c", "cat /proc/1/comm | grep -q java"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+    {{ healthcheck('["CMD", "bash", "-c", "cat /proc/1/comm | grep -q java"]', start_period='60s') }}
     {{ service_networks() }}
     labels:
+      # Manual/Renovate-managed: janitorr DELETES media for real (dry-run off), so the
+      # :jvm-stable rolling tag must not be auto-bumped by watchtower (monitor-all mode)
+      # — an unsupervised change to retention/expiration semantics is high-consequence.
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1). JVM app, so size memory
     # generously and tune from cAdvisor/Grafana.

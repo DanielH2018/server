@@ -43,6 +43,7 @@
     mode: "0644"
   loop:
     - renovate-notify.service
+    - renovate-notify-alert.service   # OnFailure target — pages Discord if the notifier crashes
     - renovate-notify.timer
   become: true
   notify:

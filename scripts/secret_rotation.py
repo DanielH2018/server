@@ -194,10 +194,18 @@ def cmd_sync(args) -> int:
     return 0
 
 
+def registry_drift(registered: set, present: set) -> tuple[list, list]:
+    """Pure registry-vs-secrets.yml drift. Returns (missing, stale):
+      missing = in secrets.yml but NOT in the registry (a `sync` was forgotten after /add-secret);
+      stale   = a registry row whose secret was removed from secrets.yml.
+    Reads plaintext key NAMES only — never decrypts a value, so it's CI-safe."""
+    return sorted(present - registered), sorted(registered - present)
+
+
 def cmd_audit(args) -> int:
     reg = load_registry()
-    # Warn (don't fail) if the registry is out of sync, so a forgotten `sync` is visible.
-    missing = sorted(set(secret_names()) - set(reg.get("secrets", {})))
+    # Registry drift: warn by default (so a forgotten `sync` is visible); --check fails on it.
+    missing, stale = registry_drift(set(reg.get("secrets", {})), set(secret_names()))
     res = audit(reg, dt.date.today())
     n_over = len(res["overdue"])
     for name, tier, d, days_left in res["all"]:
@@ -208,6 +216,9 @@ def cmd_audit(args) -> int:
               "all secrets within rotation window"
     if missing:
         summary += "; %d unregistered (run sync)" % len(missing)
+    if stale:
+        summary += "; %d stale registry entr%s (run sync)" % (
+            len(stale), "y" if len(stale) == 1 else "ies")
     print("audit:", summary)
     if args.push:
         url = os.environ.get("SECRET_ROTATION_KUMA")
@@ -215,6 +226,13 @@ def cmd_audit(args) -> int:
             print("--push set but SECRET_ROTATION_KUMA env missing", file=sys.stderr)
             return 2
         _push(url, ok=(n_over == 0 and not missing), msg=summary)
+    # --check: a CI/PR gate that the registry is in sync with secrets.yml. Fails ONLY on drift,
+    # NOT on overdue (a time-based runtime state the daily Kuma push owns — blocking an unrelated
+    # commit on a due-for-rotation secret would be wrong). Read-only (no decrypt), CI-safe.
+    if getattr(args, "check", False) and (missing or stale):
+        print("secret_rotation: registry out of sync with secrets.yml — run "
+              "`uv run python scripts/secret_rotation.py sync` and commit.", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -278,6 +296,8 @@ def main(argv=None) -> int:
     sub.add_parser("sync").set_defaults(func=cmd_sync)
     pa = sub.add_parser("audit")
     pa.add_argument("--push", action="store_true", help="post status to Uptime Kuma")
+    pa.add_argument("--check", action="store_true",
+                    help="exit non-zero if the registry is out of sync with secrets.yml (CI gate)")
     pa.set_defaults(func=cmd_audit)
     pr = sub.add_parser("rotate")
     pr.add_argument("--commit", action="store_true", help="actually write (default: dry-run)")

@@ -8,6 +8,13 @@
   "labels": ["dependencies"],
   "schedule": ["before 6am on monday"],
   "prHourlyLimit": 4,
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "description": "CVE-driven bumps bypass the Monday-only window so security fixes land ASAP. osvVulnerabilityAlerts adds OSV-database scanning for the version-pinned Docker images (GitHub-native Dependabot doesn't cover Docker), closing the one dependency axis without a 'silence != up-to-date' backstop. Requires repo Dependabot *alerts* (not PRs) enabled so Renovate can read the advisory feed.",
+    "enabled": true,
+    "schedule": ["at any time"],
+    "labels": ["dependencies", "security"]
+  },
   "lockFileMaintenance": {
     "description": "pyproject.toml uses unbounded ranges (ansible-core >=2.18 etc.), so Renovate sees nothing to bump while uv.lock keeps exact pins frozen forever — silence ≠ up-to-date. A weekly lock refresh PR rides the same CI gate. NO automerge: >= ranges mean a refresh can contain major jumps (ansible-core 3.x one day); those deserve a deliberate look.",
     "enabled": true,
@@ -33,6 +40,40 @@
       ],
       "matchStrings": [
         "repo\\s*=\\s*\"https://github\\.com/(?<depName>[^\"]+?)(?:\\.git)?\"\\s+rev\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Ansible Galaxy collection pins in ansible/requirements.yml. The built-in ansible-galaxy manager isn't reliably matching this path here, so pin them explicitly — otherwise the collections age silently (silence != up-to-date, the same failure mode as the lockFileMaintenance note). Each name/version pair maps to the galaxy-collection datasource.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/requirements\\.yml$/"
+      ],
+      "matchStrings": [
+        "name:\\s*(?<depName>[\\w.]+)\\s+version:\\s*(?<currentValue>[\\d.]+)"
+      ],
+      "datasourceTemplate": "galaxy-collection"
+    },
+    {
+      "customType": "regex",
+      "description": "Pinned prek version in the CI workflow (`pip install prek==X`). The pin keeps the hook toolchain reproducible; track it on PyPI so the pin doesn't age silently.",
+      "managerFilePatterns": [
+        "/(^|/)\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "pip install prek==(?<currentValue>[\\d.]+)"
+      ],
+      "depNameTemplate": "prek",
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "description": "CrowdSec bouncer Traefik plugin pin in traefik.yml.j2 (Traefik static config). None of the other custom managers match this file, so this WAF-enforcement plugin would age silently — a stale version can lag Traefik API changes or miss plugin security fixes. depName is read from the moduleName line; track GitHub releases.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/containers/traefik/templates/traefik\\.yml\\.j2$/"
+      ],
+      "matchStrings": [
+        "moduleName:\\s*\"github\\.com/(?<depName>[^\"]+?)\"\\s+version:\\s*\"(?<currentValue>[^\"]+)\""
       ],
       "datasourceTemplate": "github-releases"
     }
@@ -68,6 +109,20 @@
       "matchDatasources": ["docker"],
       "matchPackageNames": ["getmeili/meilisearch"],
       "groupName": "meilisearch (manual upgrade — DB format migration)",
+      "automerge": false
+    },
+    {
+      "description": "Ansible Galaxy collections (requirements.yml). The in-file comment requires bumping them in lockstep with ansible-core, so these need a deliberate look — own group, no automerge (overrides the custom.regex non-major automerge rule above).",
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["galaxy-collection"],
+      "groupName": "ansible galaxy collections (manual — lockstep with ansible-core)",
+      "automerge": false
+    },
+    {
+      "description": "CrowdSec bouncer Traefik plugin — a WAF-enforcement component whose bump requires a deliberate traefik redeploy (CI can't prove the plugin loads). Own group, no automerge, so it overrides the custom.regex non-major automerge rule above and gets an operator review.",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": ["maxlerebourg/crowdsec-bouncer-traefik-plugin"],
+      "groupName": "crowdsec bouncer plugin (manual — needs traefik redeploy)",
       "automerge": false
     }
   ]

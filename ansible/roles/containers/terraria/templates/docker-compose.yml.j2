@@ -8,6 +8,10 @@ services:
   terraria:
     image: beardedio/terraria:vanilla-latest
     container_name: terraria
+    cap_drop:
+      # beardedio image runs the .NET server as a normal process — needs no Linux caps.
+      # Verify on deploy (docker logs terraria); add back incrementally only if startup fails.
+      - ALL
     security_opt:
       - no-new-privileges:true
     ports:
