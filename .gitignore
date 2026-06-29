@@ -17,6 +17,11 @@
 !/pyproject.toml
 !/uv.lock
 !/.python-version
+!/PLANS.md
+# Track the SOPS-aware diff-driver attribute for secrets.yml. NB: rendering the
+# decrypted diff also requires a per-machine `git config diff.sops.textconv`,
+# which isn't set here yet — so this attribute is currently a no-op.
+!/.gitattributes
 # Make sure these are ignored
 ansible/.env
 scripts/availability_bots/.env

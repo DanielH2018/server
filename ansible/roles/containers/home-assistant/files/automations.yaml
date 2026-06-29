@@ -206,8 +206,8 @@
 
 # Presence ON: occupied + not overridden → set the lights to their NATURAL state via the
 # dispatcher (morning ramp in-window, else full Adaptive Lighting). The lux gate applies OUTSIDE
-# the morning wake window only: during the window (the 30 min centered on the alarm — alarm-15 to
-# alarm+15) we wake regardless of ambient light; afterwards we only turn on when the room is dim. The
+# the morning wake window only: during the window (45 min — alarm-15 to alarm+30) we wake regardless
+# of ambient light; afterwards we only turn on when the room is dim. The
 # window reads sensor.bedroom_wake_start — the SAME source the dispatcher's wake exception uses
 # (inherently in sync, no duplicated formula).
 - id: bedroom_presence_on
@@ -476,8 +476,9 @@
         - service: script.bedroom_lights_set
           data:
             reason: "natural"
-        # Sleep-quality note: "you slept N h" (gentler wake if <6h — apply_natural already softened
-        # the ramp peak to 30%). Skipped if sleep_duration is unknown/0 (Google Sleep API may lag).
+        # Sleep-quality note: "you slept N h" (gentler wake if <6h — apply_wake softens the EARLY
+        # curve, knee ~24% at alarm+15, though it still reaches 100% by alarm+30). Skipped if
+        # sleep_duration is unknown/0 (Google Sleep API may lag).
         - variables:
             slept_h: "{{ (states('sensor.pixel_9_pro_sleep_duration') | float(0) / 60) | round(1) }}"
         - if: "{{ slept_h > 0 }}"
@@ -488,11 +489,12 @@
                 message: "You slept {{ slept_h }}h{{ ' — gentler wake.' if slept_h < 6 else '.' }}"
                 tag: sleep_morning
 
-# Per-minute sunrise ramp. While inside the 30-min wake window, set the current ramp frame
+# Per-minute sunrise ramp. While inside the 45-min wake window, set the current ramp frame
 # (script.bedroom_apply_wake) each minute — stateless ticks resume cleanly after an HA restart. On
-# the tick where the window just ended (elapsed 30..31), hand the lights back to Adaptive Lighting
-# for the day (apply_natural default = ambient-fill). Gated on home + not manual-off; the wake math
-# (window + curve) lives in lighting.jinja.
+# the tick where the window just ended (elapsed 45..46), hand the lights back to Adaptive Lighting
+# for the day (apply_natural default = ambient-fill). The ramp climbs all the way to 100% by window
+# end, so AL takes over at full brightness — no sudden pop. Gated on home + not manual-off; the wake
+# math (window + curve) lives in lighting.jinja.
 - id: bedroom_wake_ramp
   alias: Bedroom wake ramp
   description: Drive the sunrise ramp once a minute through the wake window; hand back to AL at window end.
@@ -520,11 +522,13 @@
                 reason: "wake"
         # Window just ended this minute -> hand the room back to Adaptive Lighting for the day.
         # Release manual control + apply so AL drives the natural daylight brightness/color curve.
-        # NOT reason:"natural" (ambient-fill): at window-end the lights are still on (~38% from the
-        # ramp), so natural_brightness would read the lights-DOMINATED FP300 illuminance (violating
+        # The ramp has reached 100% by now, so AL takes over at full brightness (its 45s transition
+        # then settles color/brightness to the daytime target) — the seamless hand-off this curve
+        # was designed for. NOT reason:"natural" (ambient-fill): at window-end the lights are on at
+        # ~100%, so natural_brightness would read the lights-DOMINATED FP300 illuminance (violating
         # its "read while OFF" precondition) and floor the room to ~11%, stranding AL paused until
         # the next leave+return. turn_on_lights:false so a mid-ramp manual-off is never re-lit.
-        - conditions: "{{ elapsed >= 30 and elapsed < 31 }}"
+        - conditions: "{{ elapsed >= 45 and elapsed < 46 }}"
           sequence:
             - service: adaptive_lighting.set_manual_control
               data:

@@ -18,27 +18,32 @@ def _allowed(in_window, illuminance):
 
 def test_in_wake_window_boundaries():
     assert _window(0) == "True"
-    assert _window(15) == "True"       # the alarm is now mid-window, not the end
-    assert _window(29.99) == "True"
-    assert _window(30) == "False"      # window ends 15 min AFTER the alarm
+    assert _window(15) == "True"       # the alarm is 1/3 in, not the end
+    assert _window(30) == "True"       # alarm+15 knee is still mid-window now
+    assert _window(44.99) == "True"
+    assert _window(45) == "False"      # window ends 30 min AFTER the alarm
     assert _window(-1) == "False"      # unavailable-sensor sentinel
 
 
 def test_wake_brightness_curve_endpoints():
     assert _brightness(0, 0) == 1      # 1% at window start (alarm-15)
     assert _brightness(15, 0) == 12    # ~12% at the alarm (gentle pre-alarm)
-    assert _brightness(30, 0) == 40    # 40% peak at alarm+15 (the "get up" push)
+    assert _brightness(30, 0) == 40    # 40% knee at alarm+15
+    assert _brightness(45, 0) == 100   # 100% at alarm+30 -> seamless AL hand-off, no pop
 
 
 def test_wake_brightness_is_gentle_then_steep():
-    # Post-alarm slope (28% over 15 min) is steeper than pre-alarm (11% over 15 min).
-    assert _brightness(22.5, 0) == 26  # 12 + (40-12)*0.5
+    # Each segment is steeper than the last: pre-alarm 11%/15min, alarm->knee 28%/15min,
+    # knee->full 60%/15min.
     assert _brightness(7.5, 0) == 6    # 1 + (12-1)*0.5 = 6.5 -> banker's round -> 6
+    assert _brightness(22.5, 0) == 26  # 12 + (40-12)*0.5
+    assert _brightness(37.5, 0) == 70  # 40 + (100-40)*0.5 -> the new tail keeps climbing
 
 
 def test_wake_brightness_short_night_lowers_curve():
     assert _brightness(15, 300) == 7   # 0 < 300 < 360 -> gentler ~7% at the alarm
-    assert _brightness(30, 300) == 24  # ...and ~24% peak
+    assert _brightness(30, 300) == 24  # ...and ~24% knee
+    assert _brightness(45, 300) == 100  # ...but STILL reaches 100% (else the AL pop returns)
     assert _brightness(15, 0) == 12    # unknown/0 sleep -> normal
     assert _brightness(15, 400) == 12  # long night -> normal
 
