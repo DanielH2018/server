@@ -117,10 +117,15 @@ def write_hold(sha: str | None) -> None:
     _write_marker(HOLD_FILE, sha)
 
 
-def discord(content: str) -> None:
+def discord(content: str) -> bool:
+    """Post to the alert webhook. Returns True only on a confirmed delivery (a 2xx), so a
+    caller can gate its per-SHA dedupe marker on it -- otherwise a transient webhook failure
+    (timeout, 5xx, momentary Cloudflare block) would advance the marker and permanently
+    suppress that alert (the next tick would see marker==SHA and stay silent). A missing
+    webhook or any error returns False, so the alert is retried on the next tick."""
     url = C.get("DISCORD_WEBHOOK", "")
     if not url:
-        return
+        return False
     data = json.dumps({"content": content[:1900]}).encode()
     # User-Agent required: Discord is behind Cloudflare, which 403s the default Python-urllib
     # UA (error code 1010) — without this the alert silently fails (the except below swallows it).
@@ -128,9 +133,11 @@ def discord(content: str) -> None:
         url, data=data,
         headers={"Content-Type": "application/json", "User-Agent": "gitops-deploy"})
     try:
-        urllib.request.urlopen(req, timeout=10)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return 200 <= resp.status < 300
     except Exception as e:  # alerting must never crash the deployer
         log(f"discord alert failed: {e}")
+        return False
 
 
 def _inspect(fmt: str, container: str, timeout: float = 15.0) -> str:
@@ -220,9 +227,10 @@ def main() -> int:
         # ~07:00 CT instead of every 30-min tick (see DIRTY_ALERT_FILE).
         now_ct = datetime.now(CHICAGO)
         if should_alert_dirty(now_ct, _read_marker(DIRTY_ALERT_FILE), DIRTY_ALERT_HOUR):
-            discord("⚠️ gitops-deploy: working tree dirty on daniel-server — skipping. "
-                    "Resolve manually.")
-            _write_marker(DIRTY_ALERT_FILE, now_ct.date().isoformat())
+            # Mark as alerted only on confirmed delivery, else retry next tick (see discord()).
+            if discord("⚠️ gitops-deploy: working tree dirty on daniel-server — skipping. "
+                       "Resolve manually."):
+                _write_marker(DIRTY_ALERT_FILE, now_ct.date().isoformat())
         return 0
     if action == "noop":
         return 0
@@ -235,11 +243,12 @@ def main() -> int:
 
     if cs.broad:
         if _read_marker(BROAD_FILE) != origin:  # alert once per broad SHA, not every tick
-            discord(f"⚠️ gitops-deploy: shared template / inventory changed in "
-                    f"`{origin[:8]}` — deferring to a manual full deploy "
-                    f"(`ansible-playbook ansible/deploy.yml`), then `git merge --ff-only "
-                    f"origin/{BRANCH}` on the host to clear it.")
-            _write_marker(BROAD_FILE, origin)
+            # Mark only on confirmed delivery, else retry next tick (see discord()).
+            if discord(f"⚠️ gitops-deploy: shared template / inventory changed in "
+                       f"`{origin[:8]}` — deferring to a manual full deploy "
+                       f"(`ansible-playbook ansible/deploy.yml`), then `git merge --ff-only "
+                       f"origin/{BRANCH}` on the host to clear it."):
+                _write_marker(BROAD_FILE, origin)
         return 0
     if not cs.services:
         run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])  # docs-only etc.
@@ -248,11 +257,12 @@ def main() -> int:
         # reaches a container on its next deploy. Defer-and-alert (once per SHA) so the
         # operator redeploys the consumer(s); without this the rotated secret sits stale.
         if cs.secrets and _read_marker(SECRETS_ALERT_FILE) != origin:
-            discord(f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
-                    f"service template — fast-forwarded but **nothing was redeployed**. The "
-                    f"rotated secret won't reach its container(s) until you redeploy them "
-                    f"(`ansible-playbook ansible/deploy.yml --tags <svc>`).")
-            _write_marker(SECRETS_ALERT_FILE, origin)
+            # Mark only on confirmed delivery, else retry next tick (see discord()).
+            if discord(f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
+                       f"service template — fast-forwarded but **nothing was redeployed**. The "
+                       f"rotated secret won't reach its container(s) until you redeploy them "
+                       f"(`ansible-playbook ansible/deploy.yml --tags <svc>`)."):
+                _write_marker(SECRETS_ALERT_FILE, origin)
         return 0
 
     run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])

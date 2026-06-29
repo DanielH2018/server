@@ -77,10 +77,14 @@ def build_pr(repo: str, pr: dict) -> PR:
     )
 
 
-def discord(webhook: str, content: str) -> None:
+def discord(webhook: str, content: str) -> bool:
+    """Post the digest. Returns True only on a confirmed delivery (a 2xx), so the caller can
+    persist the dedupe fingerprint only when the message actually landed -- otherwise a transient
+    webhook failure would advance the fingerprint and permanently suppress that digest (the next
+    daily run sees fingerprint unchanged and stays silent). Failure returns False -> retry next run."""
     if not webhook:
         log("no DISCORD_WEBHOOK set; skipping post")
-        return
+        return False
     data = json.dumps({"content": content[:1900]}).encode()
     # User-Agent is required: Discord is behind Cloudflare, which 403s the default
     # Python-urllib UA (error code 1010) — without this the post silently fails.
@@ -88,9 +92,11 @@ def discord(webhook: str, content: str) -> None:
         webhook, data=data,
         headers={"Content-Type": "application/json", "User-Agent": "renovate-notify"})
     try:
-        urllib.request.urlopen(req, timeout=10)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return 200 <= resp.status < 300
     except Exception as e:  # alerting must never crash the notifier
         log("discord post failed: %s" % e)
+        return False
 
 
 def read_state(path: str) -> str:
@@ -141,8 +147,9 @@ def main() -> int:
         if dry:
             log("--- DRY RUN, would post ---\n%s" % content)
         else:
-            discord(c.get("DISCORD_WEBHOOK", ""), content)
-            write_state(state_file, cur_fp)
+            # Persist the dedupe fingerprint only on confirmed delivery, else retry next run.
+            if discord(c.get("DISCORD_WEBHOOK", ""), content):
+                write_state(state_file, cur_fp)
 
     if not dry:
         # Liveness marker for monitor-bridge — only on a clean completion (a fetch
