@@ -11,6 +11,7 @@ via `check.py --once` at deploy time.
 """
 import os
 import time
+import urllib.error
 from datetime import datetime, timezone, timedelta
 
 import pytest
@@ -1240,3 +1241,74 @@ def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch):
     ok, msg = check.check_loki_ingestion()
     assert not ok
     assert "container" in msg
+
+
+# --- discord_webhook_ok / check_discord -------------------------------------
+
+def test_discord_webhook_ok_200_is_up():
+    ok, msg = check.discord_webhook_ok(200, "Homelab Alerts")
+    assert ok
+    assert "Homelab Alerts" in msg
+
+
+def test_discord_webhook_404_is_down():
+    ok, msg = check.discord_webhook_ok(404)
+    assert not ok
+    assert "404" in msg
+
+
+def _discord_cycle(monkeypatch, status=200, raises=None):
+    monkeypatch.setattr(check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/abc")
+    if raises is not None:
+        def boom(*a, **k):
+            raise raises
+        monkeypatch.setattr(check, "_get_json", boom)
+    elif status == 200:
+        monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"name": "Homelab Alerts"})
+    else:
+        def http_err(*a, **k):
+            raise urllib.error.HTTPError("u", status, "err", {}, None)
+        monkeypatch.setattr(check, "_get_json", http_err)
+    return check.check_discord()
+
+
+def test_discord_single_failure_is_suppressed(monkeypatch):
+    # One non-200 (a transient blip on the internet-facing check) must NOT page.
+    monkeypatch.setattr(check, "_discord_down_streak", 0)
+    ok, msg = _discord_cycle(monkeypatch, status=404)
+    assert ok
+    assert "1/2" in msg
+
+
+def test_discord_two_consecutive_failures_alert(monkeypatch):
+    # The 2nd straight failure is a genuinely dead webhook -> down.
+    monkeypatch.setattr(check, "_discord_down_streak", 0)
+    assert _discord_cycle(monkeypatch, status=404)[0]
+    ok, msg = _discord_cycle(monkeypatch, status=404)
+    assert not ok
+    assert "404" in msg
+
+
+def test_discord_valid_read_resets_streak(monkeypatch):
+    monkeypatch.setattr(check, "_discord_down_streak", 0)
+    assert _discord_cycle(monkeypatch, status=404)[0]  # streak 1
+    ok, msg = _discord_cycle(monkeypatch, status=200)  # webhook recovered
+    assert ok
+    assert "valid" in msg
+    ok, msg = _discord_cycle(monkeypatch, status=404)  # new streak, suppressed again
+    assert ok
+    assert "1/2" in msg
+
+
+def test_discord_unreachable_rides_grace(monkeypatch):
+    monkeypatch.setattr(check, "_discord_down_streak", 0)
+    ok, msg = _discord_cycle(monkeypatch, raises=OSError("dns fail"))
+    assert ok
+    assert "1/2" in msg
+
+
+def test_discord_disabled_without_url(monkeypatch):
+    monkeypatch.setattr(check, "DISCORD_WEBHOOK_URL", "")
+    ok, msg = check.check_discord()
+    assert ok
+    assert "disabled" in msg

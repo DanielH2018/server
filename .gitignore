@@ -9,6 +9,7 @@
 !/.gitmodules
 !prek.toml
 !.ansible-lint
+!/.gitleaks.toml
 !ansible.cfg
 !/.vscode
 !/.github

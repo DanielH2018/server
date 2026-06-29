@@ -1,0 +1,21 @@
+# gitleaks config — extends the bundled default ruleset (does NOT replace it).
+#
+# Sole customization: an allowlist for the SOPS-encrypted secrets file. Every value in
+# ansible/vars/secrets.yml is AES256-GCM ciphertext — `ENC[AES256_GCM,data:...]`. The default
+# rules occasionally false-positive on that random base64 when it sits next to a suggestive key
+# name (e.g. `monitor_bridge_discord_push_token` tripped `discord-client-secret`). Scanning
+# ciphertext only ever yields false positives.
+#
+# This is path-scoped to the SOPS file ONLY — every other file in the repo is scanned unchanged,
+# so a plaintext secret committed anywhere else still trips. A plaintext secret can't realistically
+# land in secrets.yml itself: `.sops.yaml` auto-encrypts everything in vars/, and the
+# block-protected-edits hook denies direct edits (it's only ever written via `sops`).
+# (A line/match-target regex on `ENC[AES256_GCM` works in `gitleaks detect` but not in the
+# pre-commit `gitleaks git --staged` diff-scan mode, hence the path scope.)
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "ansible/vars/secrets.yml is wholly SOPS (AES256-GCM) ciphertext — not plaintext secrets"
+paths = ['''ansible/vars/secrets\.yml''']

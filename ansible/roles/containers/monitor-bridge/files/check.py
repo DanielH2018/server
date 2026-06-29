@@ -13,6 +13,7 @@ import json
 import os
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -145,6 +146,18 @@ HA_HEARTBEAT_ENTITY = "input_datetime.ha_heartbeat"
 # the API unreachable for ~120s and then leaves the scheduler a beat behind — doesn't page.
 # 2 straight down cycles (~one full INTERVAL of continuous badness) before `down`.
 HA_CONSECUTIVE = int(_env("HA_CONSECUTIVE", "2"))
+
+# Discord delivery: Kuma fires every alert by POSTing to its Discord webhook
+# (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every monitor
+# green-in-UI while Discord goes silent — the one link in the alert chain no other monitor
+# (not even the off-box UptimeRobot host dead-man) verifies. We GET-verify the webhook is
+# still valid: Discord answers a webhook GET with its JSON metadata + HTTP 200 while it
+# exists and 404s once it's gone — a GET, not a POST, so this never puts a test message in
+# the channel. Empty URL = disabled (stays up), like N8N_API_KEY. The streak hysteresis
+# (like HA_CONSECUTIVE) rides out a transient blip on the one check that reaches the public
+# internet.
+DISCORD_WEBHOOK_URL = _env("DISCORD_WEBHOOK_URL", "")
+DISCORD_CONSECUTIVE = int(_env("DISCORD_CONSECUTIVE", "2"))
 
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
@@ -829,6 +842,49 @@ def check_loki_ingestion():
     return True, "%s (+ container stream)" % msg_all
 
 
+def discord_webhook_ok(status_code, name=None):
+    """Pure: does a GET on the Kuma Discord webhook return 200 (still valid)? (ok, msg).
+
+    Discord answers a webhook GET with its JSON metadata (id/name) and HTTP 200 while the
+    webhook exists, and 404 once it's been rotated/revoked/deleted — so a non-200 means
+    Kuma's alert POSTs won't deliver. (A GET never posts a message, so this can't spam.)
+    """
+    if status_code == 200:
+        return True, "Discord webhook valid%s" % (" (%s)" % name if name else "")
+    return False, "Discord webhook returned HTTP %s — Kuma alerts won't deliver" % status_code
+
+
+_discord_down_streak = 0
+
+
+def check_discord():
+    """GET-verify the Kuma Discord notification webhook still delivers.
+
+    Empty DISCORD_WEBHOOK_URL -> disabled (stays up), like check_n8n. Streak hysteresis
+    (DISCORD_CONSECUTIVE, like check_ha_heartbeat): this is the only check that reaches the
+    public internet, so a single transient non-200 / network blip pushes `up` with a streak
+    msg and only the Nth straight failure pages — a genuinely dead webhook stays bad and pages.
+    """
+    global _discord_down_streak
+    if not DISCORD_WEBHOOK_URL:
+        return True, "Discord webhook check disabled (no URL)"
+    try:
+        data = _get_json(DISCORD_WEBHOOK_URL)
+        ok, msg = discord_webhook_ok(200, (data or {}).get("name"))
+    except urllib.error.HTTPError as e:
+        ok, msg = discord_webhook_ok(e.code)
+    except Exception as e:  # network/DNS blip -> ride the streak, don't page on one cycle
+        ok, msg = False, "Discord webhook unreachable: %s" % e
+    if ok:
+        _discord_down_streak = 0
+        return True, msg
+    _discord_down_streak += 1
+    if _discord_down_streak < DISCORD_CONSECUTIVE:
+        return True, "down streak %d/%d (transient grace): %s" % (
+            _discord_down_streak, DISCORD_CONSECUTIVE, msg)
+    return False, "%s (%d cycles)" % (msg, _discord_down_streak)
+
+
 CHECKS = [
     ("backup", _env("KUMA_PUSH_KOPIA", ""), check_backup),
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
@@ -851,6 +907,7 @@ CHECKS = [
     ("ha_heartbeat",  _env("KUMA_PUSH_HA",            ""), check_ha_heartbeat),
     ("renovate_alive", _env("KUMA_PUSH_RENOVATE_ALIVE", ""), check_renovate_alive),
     ("loki_ingestion", _env("KUMA_PUSH_LOKI",         ""), check_loki_ingestion),
+    ("discord",        _env("KUMA_PUSH_DISCORD",      ""), check_discord),
 ]
 
 

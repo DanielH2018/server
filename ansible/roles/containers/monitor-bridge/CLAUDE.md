@@ -15,7 +15,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **twenty checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **twenty-two checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Backup Freshness** (Kopia `/api/v1/sources` last-snapshot age + errorCount)
   - **Root Disk** (`node_filesystem_*` for `/` **and `/boot`** — old kernels filling /boot
@@ -118,6 +118,19 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     spell read as a dead pipeline; the broadened selector + 30m window is the fix.** Stream/window
     tunable via `LOKI_STREAM`/`LOKI_WINDOW`. Pure `loki_ingestion_fresh()` + `loki_count()` are
     unit-tested. A freshness watchdog in the same idiom as the SMART/restore-drill checks.)
+  - **Discord Delivery** (GET-verifies Kuma's own Discord notification webhook
+    `monitor_discord_webhook_url` — the one Kuma POSTs every alert to. A rotated/revoked/deleted
+    webhook makes every alert silently fail to deliver while every monitor stays GREEN in the Kuma
+    UI; this is the alert chain's delivery hop that NO other monitor — not even the off-box
+    UptimeRobot host dead-man — exercises. A webhook GET returns Discord's metadata (200) when valid
+    and 404 once gone, and never posts a message (no channel spam) — unlike a test POST. The only
+    check that reaches the PUBLIC internet, so `DISCORD_CONSECUTIVE` (2) adds the same streak
+    hysteresis as the HA heartbeat: a single transient non-200/network blip pushes `up` with a
+    "down streak n/N" msg and only the 2nd straight failure pages. Empty `DISCORD_WEBHOOK_URL` =
+    disabled (stays up), like `N8N_API_KEY`. Pure `discord_webhook_ok()` + the streak wrapper are
+    unit-tested. NOTE: it verifies the webhook is DELIVERABLE (catches a rotated/revoked URL); it
+    does NOT assert Kuma still has the notification *attached* to each monitor — AutoKuma re-applies
+    that on every deploy via the `kuma()` macro's `notification_name_list`.)
 - The restart/OOM/cpu/target/5xx checks use `prom_vector()` (keeps series labels) so the alert
   names *which* container / target / route is failing; the others use `prom_scalar()`.
 - Explicit `down` = fast, descriptive alert; the push monitor's heartbeat interval (600 s,
@@ -134,7 +147,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,n8n,gitops_alive,gitops_status,scrutiny,pi,b2,ha,renovate_alive,loki,verify}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,n8n,gitops_alive,gitops_status,scrutiny,pi,b2,ha,renovate_alive,loki,verify,discord}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA

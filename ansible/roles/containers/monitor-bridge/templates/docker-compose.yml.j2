@@ -139,6 +139,15 @@ services:
       - LOKI_STREAM={job=~".+"}
       - LOKI_WINDOW=30m
       - KUMA_PUSH_LOKI={{ monitor_bridge_loki_push_token }}
+      # Discord delivery: GET-verify Kuma's own notification webhook is still valid — a
+      # rotated/revoked/deleted webhook makes Kuma's alert POSTs silently fail while every
+      # monitor stays green-in-UI (the alert chain's delivery hop no other monitor, not even
+      # the off-box UptimeRobot host dead-man, exercises). Same webhook the kuma() notification
+      # posts to. A GET (not POST) never spams the channel; DISCORD_CONSECUTIVE adds streak
+      # hysteresis so a transient blip on this internet-facing check doesn't false-page.
+      - DISCORD_WEBHOOK_URL={{ monitor_discord_webhook_url }}
+      - DISCORD_CONSECUTIVE=2
+      - KUMA_PUSH_DISCORD={{ monitor_bridge_discord_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
@@ -184,6 +193,9 @@ services:
       {# Loki log-ingestion freshness: check_loki_ingestion counts lines across all file-tailed
          streams over 30m and `down` at zero — catches a dead promtail/Loki pipeline that /ready can't see. -#}
       {{ kuma('monitor-bridge-loki', monitor_type='push', name='Loki Log Ingestion', interval=600, max_retries=0, push_token=monitor_bridge_loki_push_token) }}
+      {# Discord delivery: check_discord GET-verifies Kuma's notification webhook is still valid —
+         the alert chain's delivery hop that no other monitor (incl. UptimeRobot) exercises. -#}
+      {{ kuma('monitor-bridge-discord', monitor_type='push', name='Discord Delivery', interval=600, max_retries=0, push_token=monitor_bridge_discord_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 
