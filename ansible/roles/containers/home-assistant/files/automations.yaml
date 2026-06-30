@@ -1667,6 +1667,17 @@
     - condition: numeric_state
       entity_id: sensor.aqara_fp300_illuminance
       above: 60
+    # The Hub must actually be reachable. When it's unavailable/unknown (powered off, off the
+    # network, or its cast connection to HA is down), every re-cast fails — flooding the log with
+    # pychromecast NotConnected errors AND logging the cast user's refresh_token in plaintext on
+    # each attempt. Gate those states out so we only (re)cast a Hub that can receive it.
+    - condition: not
+      conditions:
+        - condition: state
+          entity_id: media_player.bedroom_display
+          state:
+            - unavailable
+            - unknown
     # Only (re)cast when the Hub isn't actively showing something — avoids flicker on an already-cast
     # dashboard and never clobbers user-started media (both report media_player state 'playing').
     - condition: not
