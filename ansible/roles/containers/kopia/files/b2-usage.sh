@@ -18,7 +18,10 @@ STATE=/var/lib/kopia-b2-usage/state.json
 CFG=/app/config/repository.config
 
 write_state() { # ok bytes msg
-  printf '{"ts": %s, "ok": %s, "bytes": %s, "msg": "%s"}\n' "$(date +%s)" "$1" "$2" "$3" > "$STATE"
+  # jq, not printf: a stray backslash/control char in the msg would make a hand-built
+  # string invalid JSON -> monitor-bridge reads "state unparseable" (false DOWN).
+  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --argjson bytes "$2" --arg msg "$3" \
+    '{ts: $ts, ok: $ok, bytes: $bytes, msg: $msg}' > "$STATE"
   logger -t kopia-b2-usage "$1: $3"
 }
 fail() { write_state false 0 "$1"; exit 1; }

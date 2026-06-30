@@ -17,7 +17,10 @@ STATE=/var/lib/kopia-maintenance/state.json
 GRACE_S=$((36 * 3600))   # next full run overdue by > this = a real stall (interval ~24h + slack)
 
 write_state() { # ok msg
-  printf '{"ts": %s, "ok": %s, "msg": "%s"}\n' "$(date +%s)" "$1" "$2" > "$STATE"
+  # jq, not printf: a stray backslash/control char in the kopia-derived msg would make a
+  # hand-built string invalid JSON -> monitor-bridge reads "state unparseable" (false DOWN).
+  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
+    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE"
   logger -t kopia-maintenance "$1: $2"
 }
 

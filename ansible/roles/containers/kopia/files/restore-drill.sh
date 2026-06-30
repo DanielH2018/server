@@ -49,7 +49,10 @@ DEST=/tmp/restore-drill
 STATE=/var/lib/kopia-restore-drill/state.json
 
 write_state() { # ok msg
-  printf '{"ts": %s, "ok": %s, "msg": "%s"}\n' "$(date +%s)" "$1" "$2" > "$STATE"
+  # jq, not printf: a stray backslash/control char in the msg would make a hand-built
+  # string invalid JSON -> monitor-bridge reads "state unparseable" (false DOWN).
+  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
+    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE"
   logger -t kopia-restore-drill "$1: $2"
 }
 fail() {

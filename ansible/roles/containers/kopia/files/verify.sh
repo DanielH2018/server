@@ -19,7 +19,11 @@ set -uo pipefail
 STATE=/var/lib/kopia-verify/state.json
 
 write_state() { # ok msg
-  printf '{"ts": %s, "ok": %s, "msg": "%s"}\n' "$(date +%s)" "$1" "$2" > "$STATE"
+  # Build the JSON with jq, not printf: a stray backslash or control char in the
+  # kopia-derived msg would make a hand-built string invalid JSON, which monitor-bridge's
+  # `verify` check reads as "state unparseable" -> a false DOWN. jq escapes it correctly.
+  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
+    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE"
   logger -t kopia-verify "$1: $2"
 }
 
