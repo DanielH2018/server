@@ -1455,3 +1455,134 @@ def test_discord_disabled_without_url(monkeypatch):
     ok, msg = check.check_discord()
     assert ok
     assert "disabled" in msg
+
+
+# ── Prometheus reachability gate + alert-storm suppression (L1) ──────────────
+
+GB = 10**9
+
+
+def test_check_prometheus_reachable(monkeypatch):
+    monkeypatch.setattr(check, "prom_scalar", lambda q: 1.0)
+    ok, msg = check.check_prometheus()
+    assert ok
+    assert "reachable" in msg.lower()
+
+
+def test_check_prometheus_no_data_is_down(monkeypatch):
+    monkeypatch.setattr(check, "prom_scalar", lambda q: None)
+    ok, msg = check.check_prometheus()
+    assert not ok
+
+
+def _wire_run_once(monkeypatch, prom_result):
+    """Drive run_once with a tiny CHECKS list (one prom-dependent, one not) and capture pushes.
+
+    Returns (ran, pushes): `ran` is the names of checks actually executed, `pushes` is
+    [(token, ok, msg), ...] in push order (incl. the leading `prometheus` push).
+    """
+    ran, pushes = [], []
+    monkeypatch.setattr(
+        check, "push", lambda token, ok, msg: pushes.append((token, ok, msg))
+    )
+    if isinstance(prom_result, Exception):
+
+        def _prom():
+            raise prom_result
+    else:
+
+        def _prom():
+            return prom_result
+
+    monkeypatch.setattr(check, "check_prometheus", _prom)
+    monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset({"disk"}))
+
+    def _mk(name):
+        def fn():
+            ran.append(name)
+            return True, "%s ok" % name
+
+        return fn
+
+    monkeypatch.setattr(
+        check,
+        "CHECKS",
+        [("disk", "tok_disk", _mk("disk")), ("backup", "tok_backup", _mk("backup"))],
+    )
+    check.run_once()
+    return ran, pushes
+
+
+def test_run_once_suppresses_prom_dependent_when_prometheus_down(monkeypatch):
+    ran, pushes = _wire_run_once(monkeypatch, (False, "prom is down"))
+    # the prom-dependent check is suppressed: never executed, pushed `up` with a skip msg
+    assert "disk" not in ran
+    assert "backup" in ran  # non-prom check still runs
+    by_tok = {tok: (ok, msg) for tok, ok, msg in pushes}
+    assert by_tok["tok_disk"][0] is True
+    assert "skipped" in by_tok["tok_disk"][1].lower()
+    # the Prometheus monitor itself pushed down with its message
+    assert any(ok is False and "prom is down" in msg for _, ok, msg in pushes)
+
+
+def test_run_once_unreachable_prometheus_exception_suppresses(monkeypatch):
+    # prom_scalar raising (the real outage path) -> _evaluate renders it down -> suppression
+    ran, pushes = _wire_run_once(monkeypatch, RuntimeError("connection refused"))
+    assert "disk" not in ran
+    assert "backup" in ran
+    assert any(ok is False and "connection refused" in msg for _, ok, msg in pushes)
+
+
+def test_run_once_runs_all_when_prometheus_up(monkeypatch):
+    ran, pushes = _wire_run_once(monkeypatch, (True, "ok"))
+    assert ran == ["disk", "backup"]  # nothing suppressed
+    by_tok = {tok: (ok, msg) for tok, ok, msg in pushes}
+    assert "skipped" not in by_tok["tok_disk"][1].lower()
+
+
+def test_prom_dependent_set_matches_real_checks():
+    # Guard: every name in PROM_DEPENDENT is a real check, so the gate can't silently drift.
+    names = {name for name, _, _ in check.CHECKS}
+    assert check.PROM_DEPENDENT <= names
+
+
+# ── B2 usage growth trend (L3) ──────────────────────────────────────────────
+
+
+def test_b2_trend_flat_is_ok():
+    ok, msg = check.b2_trend(5 * GB, 5 * GB, 10 * GB, 7)
+    assert ok
+    assert "flat" in msg.lower() or "shrink" in msg.lower()
+
+
+def test_b2_trend_growing_under_cap_is_ok():
+    # 5GB now, projected 5.7GB in 7d -> cap is ~50d out, well past the horizon
+    ok, msg = check.b2_trend(5 * GB, int(5.7 * GB), 10 * GB, 7)
+    assert ok
+    assert "horizon" in msg
+
+
+def test_b2_trend_cap_within_horizon_is_down():
+    # 8GB now, projected 11GB in 7d (over the 10GB cap) -> ~5d runway -> down
+    ok, msg = check.b2_trend(8 * GB, 11 * GB, 10 * GB, 7)
+    assert not ok
+    assert "cap" in msg.lower()
+
+
+def test_b2_trend_missing_metric_is_down():
+    ok, msg = check.b2_trend(None, None, 10 * GB, 7)
+    assert not ok
+    assert "unavailable" in msg.lower()
+
+
+def test_check_b2_trend_uses_predict_linear(monkeypatch):
+    queries = []
+
+    def fake_scalar(q):
+        queries.append(q)
+        return 11 * GB if "predict_linear" in q else 8 * GB
+
+    monkeypatch.setattr(check, "prom_scalar", fake_scalar)
+    ok, msg = check.check_b2_trend()
+    assert not ok  # 8GB now, predicted 11GB -> over cap within horizon
+    assert any("predict_linear" in q for q in queries)

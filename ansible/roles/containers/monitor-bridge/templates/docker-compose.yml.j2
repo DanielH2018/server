@@ -59,6 +59,10 @@ services:
       - KUMA_PUSH_CPU={{ monitor_bridge_cpu_push_token }}
       - KUMA_PUSH_TARGETS={{ monitor_bridge_targets_push_token }}
       - KUMA_PUSH_TRAEFIK={{ monitor_bridge_traefik_push_token }}
+      # Prometheus reachability gate: probed once per cycle BEFORE the prom-dependent metric
+      # checks. When Prometheus is unreachable they're suppressed (pushed `up` w/ a skip msg,
+      # heartbeat kept alive) and only THIS monitor pages — one outage is one alert, not a storm.
+      - KUMA_PUSH_PROMETHEUS={{ monitor_bridge_prometheus_push_token }}
       # n8n Prod-workflow failure monitoring (active workflows via the n8n public API).
       - N8N_URL=http://n8n:5678
       - N8N_API_KEY={{ n8n_api_key }}
@@ -97,6 +101,13 @@ services:
       - B2_CAP_GB=10
       - B2_USAGE_MAX_PCT=85
       - KUMA_PUSH_B2={{ monitor_bridge_b2_push_token }}
+      # B2 growth TREND: predict_linear over the kopia_b2_billable_bytes gauge (exported by the
+      # same b2-usage cron via node-exporter textfile) — `down` when on track to hit the cap
+      # within B2_TREND_HORIZON_D days, the runway warning the absolute-85% B2 monitor can't give.
+      # Prom-dependent (suppressed under the Prometheus gate); a missing gauge reads as down.
+      - B2_TREND_WINDOW=7d
+      - B2_TREND_HORIZON_D=7
+      - KUMA_PUSH_B2_TREND={{ monitor_bridge_b2_trend_push_token }}
       # Scrutiny SMART freshness: the collector (cron-as-PID1, daily 00:00, no usable
       # healthcheck) only shows death as aging collector_date in the web API.
       - SCRUTINY_URL=http://scrutiny:8080
@@ -181,6 +192,9 @@ services:
       {{ kuma('monitor-bridge-restarts', monitor_type='push', name='Container Restarts', interval=600, max_retries=0, push_token=monitor_bridge_restarts_push_token) }}
       {{ kuma('monitor-bridge-oom', monitor_type='push', name='Container OOM', interval=600, max_retries=0, push_token=monitor_bridge_oom_push_token) }}
       {{ kuma('monitor-bridge-cpu', monitor_type='push', name='CPU Throttling', interval=600, max_retries=0, push_token=monitor_bridge_cpu_push_token) }}
+      {# Prometheus reachability — the root-cause monitor that gates the prom-dependent checks:
+         when it's down they're suppressed and only this one pages (no 9-monitor storm). -#}
+      {{ kuma('monitor-bridge-prometheus', monitor_type='push', name='Prometheus Reachable', interval=600, max_retries=0, push_token=monitor_bridge_prometheus_push_token) }}
       {{ kuma('monitor-bridge-targets', monitor_type='push', name='Scrape Targets', interval=600, max_retries=0, push_token=monitor_bridge_targets_push_token) }}
       {{ kuma('monitor-bridge-traefik', monitor_type='push', name='Traefik 5xx', interval=600, max_retries=0, push_token=monitor_bridge_traefik_push_token) }}
       {{ kuma('monitor-bridge-n8n', monitor_type='push', name='n8n Prod Workflows', interval=600, max_retries=0, push_token=monitor_bridge_n8n_push_token) }}
@@ -192,6 +206,9 @@ services:
       {{ kuma('kopia-verify', monitor_type='push', name='Backup Verify', interval=600, max_retries=0, push_token=monitor_bridge_verify_push_token) }}
       {{ kuma('kopia-maintenance', monitor_type='push', name='Backup Maintenance', interval=600, max_retries=0, push_token=monitor_bridge_maintenance_push_token) }}
       {{ kuma('monitor-bridge-b2', monitor_type='push', name='B2 Storage Usage', interval=600, max_retries=0, push_token=monitor_bridge_b2_push_token) }}
+      {# B2 growth trend: predict_linear projection of the billable-bytes gauge — runway warning
+         before the absolute 85% B2 Storage Usage monitor fires. Prom-dependent. -#}
+      {{ kuma('monitor-bridge-b2-trend', monitor_type='push', name='B2 Usage Trend', interval=600, max_retries=0, push_token=monitor_bridge_b2_trend_push_token) }}
       {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data Freshness', interval=600, max_retries=0, push_token=monitor_bridge_scrutiny_push_token) }}
       {{ kuma('monitor-bridge-pi', monitor_type='push', name='Pi Pressure', interval=600, max_retries=0, push_token=monitor_bridge_pi_push_token) }}
       {# HA automation-engine liveness: check_ha_heartbeat polls the HA heartbeat helper's freshness

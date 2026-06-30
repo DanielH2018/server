@@ -99,6 +99,19 @@ B2_USAGE_MAX_AGE_S = float(_env("B2_USAGE_MAX_AGE_D", "2.5")) * 86400
 B2_CAP_BYTES = float(_env("B2_CAP_GB", "10")) * 1e9
 B2_USAGE_MAX_PCT = float(_env("B2_USAGE_MAX_PCT", "85"))
 
+# B2 usage growth TREND. The same daily host cron (kopia-b2-usage / b2-usage.sh) also exports
+# the billable bytes as the Prometheus gauge `kopia_b2_billable_bytes` (node-exporter textfile).
+# The B2_USAGE check above fires only at an ABSOLUTE 85% of the cap — no runway warning for fast
+# growth still under that line (the recurring hidden-version / LiveSync-churn incidents that ate
+# the headroom in days). We fit a linear trend over B2_TREND_WINDOW and project it forward with
+# predict_linear: `down` when the bucket is on track to hit the cap within B2_TREND_HORIZON_D
+# days. Prom-dependent (so it's suppressed under the Prometheus-reachability gate, below). A
+# missing gauge (cron not exporting / textfile collector broken) reads as unavailable -> down,
+# distinct from B2_USAGE's state.json staleness.
+B2_TREND_METRIC = _env("B2_TREND_METRIC", "kopia_b2_billable_bytes")
+B2_TREND_WINDOW = _env("B2_TREND_WINDOW", "7d")
+B2_TREND_HORIZON_D = float(_env("B2_TREND_HORIZON_D", "7"))
+
 # Scrutiny SMART freshness: the collector cron runs daily (00:00) and has no usable
 # container healthcheck (cron is PID 1) — a silently-dead collector only shows as
 # aging collector_date values in the web API. 26h allows one run + slack.
@@ -449,6 +462,23 @@ def check_cpu_throttle():
             desc,
         ),
     )
+
+
+def check_prometheus():
+    """Is Prometheus itself reachable and answering queries?
+
+    A trivial `vector(1)` instant query returns 1.0 whenever Prometheus is up; if it's
+    down/unreachable prom_scalar raises (connection error) and run_once renders this monitor
+    `down` with the error. This is the single root-cause signal for the prom-dependent checks:
+    run_once probes it FIRST each cycle and, when it's down, SUPPRESSES the metric checks (which
+    would otherwise all fail at once — one outage, a storm of identical pages) so only this
+    monitor alerts. A single scrape target being down (Prometheus up, one exporter gone) still
+    surfaces separately on the Scrape Targets monitor — a distinct condition from this one.
+    """
+    val = prom_scalar("vector(1)")
+    if val is None:
+        return False, "Prometheus answered but returned no data for vector(1)"
+    return True, "Prometheus reachable"
 
 
 def check_targets_down():
@@ -804,6 +834,59 @@ def check_b2_usage():
     return b2_usage(state, age_s, B2_USAGE_MAX_AGE_S, B2_CAP_BYTES, B2_USAGE_MAX_PCT)
 
 
+def b2_trend(current, predicted, cap_bytes, horizon_d):
+    """Pure: project B2 billable bytes forward and decide if the cap is imminent. (ok, msg).
+
+    `current` = the gauge now; `predicted` = predict_linear(metric[window], horizon) — the
+    fitted value horizon_d days out. Either being None (gauge absent/never scraped) -> down
+    (fail-stale). A flat or falling trend (predicted <= current) -> ok. Otherwise derive the
+    per-day slope from the same projection: `down` when the cap is reached within the horizon
+    (predicted >= cap), naming the runway; ok with the runway noted when it's further out.
+    """
+    if current is None or predicted is None:
+        return False, "B2 trend metric unavailable (%s not exported?)" % B2_TREND_METRIC
+    cur_gb, cap_gb = current / 1e9, cap_bytes / 1e9
+    if predicted <= current:
+        return True, "B2 flat/shrinking (%.2f/%.0fGB, %.0fd projection %.2fGB)" % (
+            cur_gb,
+            cap_gb,
+            horizon_d,
+            predicted / 1e9,
+        )
+    per_day_gb = (predicted - current) / horizon_d / 1e9
+    days_to_cap = (cap_bytes - current) / ((predicted - current) / horizon_d)
+    if predicted >= cap_bytes:
+        return False, (
+            "B2 on track to hit the %.0fGB cap in ~%.0fd (now %.2fGB, +%.2fGB/day) "
+            "— prune/upgrade before snapshots fail"
+            % (cap_gb, days_to_cap, cur_gb, per_day_gb)
+        )
+    return True, "B2 %.2f/%.0fGB, +%.2fGB/day, cap ~%.0fd out (> %.0fd horizon)" % (
+        cur_gb,
+        cap_gb,
+        per_day_gb,
+        days_to_cap,
+        horizon_d,
+    )
+
+
+def check_b2_trend():
+    """Project the kopia_b2_billable_bytes gauge to warn of a filling bucket before the 85% cap.
+
+    Prom-dependent (suppressed under the Prometheus-reachability gate). The gauge is exported
+    by the daily b2-usage host cron via the node-exporter textfile collector; node-exporter
+    serves the last written value continuously, so predict_linear has a dense series even
+    between the cron's daily writes (a stalled cron reads flat — its own staleness is the
+    B2_USAGE check's job, off the state.json).
+    """
+    current = prom_scalar(B2_TREND_METRIC)
+    predicted = prom_scalar(
+        "predict_linear(%s[%s], %d)"
+        % (B2_TREND_METRIC, B2_TREND_WINDOW, int(B2_TREND_HORIZON_D * 86400))
+    )
+    return b2_trend(current, predicted, B2_CAP_BYTES, B2_TREND_HORIZON_D)
+
+
 def maintenance(state, age_s, max_age_s):
     """Pure: is kopia FULL maintenance healthy, and the check recent? (ok, msg).
 
@@ -1049,6 +1132,7 @@ CHECKS = [
     ("verify", _env("KUMA_PUSH_VERIFY", ""), check_verify),
     ("maintenance", _env("KUMA_PUSH_MAINTENANCE", ""), check_maintenance),
     ("b2_usage", _env("KUMA_PUSH_B2", ""), check_b2_usage),
+    ("b2_trend", _env("KUMA_PUSH_B2_TREND", ""), check_b2_trend),
     ("scrutiny", _env("KUMA_PUSH_SCRUTINY", ""), check_scrutiny),
     ("pi_pressure", _env("KUMA_PUSH_PI", ""), check_pi_pressure),
     ("ha_heartbeat", _env("KUMA_PUSH_HA", ""), check_ha_heartbeat),
@@ -1057,6 +1141,25 @@ CHECKS = [
     ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
     ("recyclarr", _env("KUMA_PUSH_RECYCLARR", ""), check_recyclarr),
 ]
+
+# Checks that query Prometheus. A single Prometheus outage would fail every one of them at once
+# — one root cause, a storm of identical pages. run_once probes Prometheus first (check_prometheus
+# -> its own monitor) and, when it's unreachable, SUPPRESSES these (pushes `up` with a skip msg so
+# their push-monitor heartbeat stays alive and the dead-bridge watchdog isn't tripped) so only the
+# Prometheus monitor pages. Keep this in sync with the prom_scalar/prom_vector callers above.
+PROM_DEPENDENT = frozenset(
+    {
+        "disk",
+        "cert",
+        "memory",
+        "restarts",
+        "oom",
+        "cpu",
+        "targets",
+        "traefik5xx",
+        "b2_trend",
+    }
+)
 
 
 def log(*args):
@@ -1074,13 +1177,32 @@ def push(token, ok, msg):
         log("push failed (%s):" % msg, e)
 
 
+def _evaluate(name, fn):
+    """Run one check; convert an unreachable source/metric into a descriptive `down` instead
+    of letting it kill the loop. Returns (ok, msg)."""
+    try:
+        return fn()
+    except Exception as e:  # an unreachable source/metric must not kill the loop
+        return False, "%s check error: %s" % (name, e)
+
+
 def run_once():
+    # Prometheus reachability is evaluated FIRST and gates the prom-dependent checks: a single
+    # Prometheus outage would otherwise page all of them at once (one root cause, an alert storm).
+    # When it's down they're suppressed (pushed `up` with a skip msg, keeping each push monitor's
+    # heartbeat alive) so only the Prometheus monitor pages; a real per-metric problem still alerts
+    # whenever Prometheus is up.
+    prom_ok, prom_msg = _evaluate("prometheus", check_prometheus)
+    log("OK  " if prom_ok else "DOWN", "prometheus", "-", prom_msg)
+    push(_env("KUMA_PUSH_PROMETHEUS", ""), prom_ok, prom_msg)
+
     for name, token, fn in CHECKS:
-        try:
-            ok, msg = fn()
-        except Exception as e:  # an unreachable source/metric must not kill the loop
-            ok, msg = False, "%s check error: %s" % (name, e)
-        log("OK  " if ok else "DOWN", name, "-", msg)
+        if not prom_ok and name in PROM_DEPENDENT:
+            ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
+            log("SKIP", name, "-", msg)
+        else:
+            ok, msg = _evaluate(name, fn)
+            log("OK  " if ok else "DOWN", name, "-", msg)
         push(token, ok, msg)
 
 

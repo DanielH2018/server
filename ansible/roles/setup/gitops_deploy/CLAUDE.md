@@ -41,6 +41,16 @@ the held SHA and the hold clears automatically.
   an other-host-only service (e.g. `dozzle` is daniel-pi-only) renders no compose here, so
   `containers_for()` returns `[]` and it's skipped — without this the gate polls a phantom
   container until `HEALTH_TIMEOUT_S` and false-rollbacks (`deploy_logic.containers_to_gate`).
+  - **By design: Pi-only services are NOT auto-deployed by GitOps (accepted, 2026-06-30).** The
+    deployer runs on daniel-server only; there is deliberately **no GitOps/CI deploy path to
+    daniel-pi**. A change to a Pi-only service (e.g. `wg-easy`/`dozzle` on the Pi) ff-merges and
+    "deploys" as a local no-op, then skips the health gate per the rule above — so the tick reports
+    success while the Pi never actually redeploys ("cross-host phantom-success", review CI-L2). This
+    is intentional, not a gap: the Pi is a memory-constrained Zero 2 W driven manually over SSH (see
+    [[daniel-pi-zero2w-memory-constrained]]), and a Renovate image bump to a Pi service is rare. Push
+    deploys to the Pi by hand: `uv run ansible-playbook ansible/deploy.yml --tags <svc> -e target=daniel-pi`.
+    Revisit (a Pi-side deployer / a CI cross-host gate) only if Pi-service churn ever makes the manual
+    step a real miss.
 
 ## Config / secrets
 `/etc/gitops-deploy/config.env` (0600) is templated from the SOPS var

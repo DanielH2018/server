@@ -15,8 +15,16 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **twenty-three checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **twenty-five checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
+  - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
+    prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the nine
+    prom-dependent checks (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/b2_trend) are
+    **suppressed** — pushed `up` with a "skipped — Prometheus unreachable" msg so their push-monitor
+    heartbeats stay alive — and only THIS monitor pages. Without the gate one Prometheus outage
+    fired all nine at once: one root cause, a nine-monitor alert storm. A single scrape target down
+    (Prometheus up, one exporter gone) still surfaces separately on Scrape Targets. The
+    `PROM_DEPENDENT` set is guarded by a test against the live `CHECKS` so it can't drift.)
   - **Backup Freshness** (Kopia `/api/v1/sources` last-snapshot age + errorCount)
   - **Root Disk** (`node_filesystem_*` for `/` **and `/boot`** — old kernels filling /boot
     quietly breaks upgrades; server-only, the Pi's disk lives in the Pi Pressure check)
@@ -68,6 +76,17 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     stats`. The repo lives on B2's 10 GB free tier; `down` above `B2_USAGE_MAX_PCT` (85%)
     of `B2_CAP_GB`, on probe failure, >2.5 d staleness, or missing state — runway to
     prune/upgrade before a full bucket silently kills the nightly snapshots.)
+  - **B2 Usage Trend** (`predict_linear(kopia_b2_billable_bytes[7d], 7d)` — the runway warning the
+    absolute-85% **B2 Storage Usage** monitor can't give. The daily `b2-usage.sh` cron already
+    exports billable bytes as the `kopia_b2_billable_bytes` Prometheus gauge (node-exporter
+    textfile); this fits a linear trend over `B2_TREND_WINDOW` and goes `down` when the bucket is on
+    track to cross the cap within `B2_TREND_HORIZON_D` days (default 7) — catching the recurring
+    fast-growth incidents (hidden-version / LiveSync churn) while there's still headroom to act.
+    Flat/shrinking usage → up; a missing gauge (cron not exporting / textfile collector broken) →
+    down (fail-stale), distinct from B2 Storage Usage's state.json staleness. **Prom-dependent** —
+    suppressed under the Prometheus Reachable gate. Pure `b2_trend()` is unit-tested. node-exporter
+    serves the last textfile value every scrape, so predict_linear has a dense series even between
+    the cron's daily writes — a stalled cron reads flat here (its staleness is B2 Storage Usage's job).)
   - **SMART Data Freshness** (scrutiny web API `/api/summary` over `monitoring`: every
     non-archived device must have a `collector_date` within 26 h — the collector is
     cron-as-PID1 with no usable healthcheck, so a silently-dead collector only shows up as
@@ -156,7 +175,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,n8n,gitops_alive,gitops_status,scrutiny,pi,b2,ha,renovate_alive,loki,verify,maintenance,discord,recyclarr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,gitops_alive,gitops_status,scrutiny,pi,b2,b2_trend,ha,renovate_alive,loki,verify,maintenance,discord,recyclarr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -177,12 +196,13 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   `N8N_FAIL_WINDOW`/`N8N_FAIL_MAX`; n8n connection config: `N8N_URL`/`N8N_API_KEY`; GitOps
   liveness: `GITOPS_MAX_AGE_MIN`/`GITOPS_STATE_DIR`; Pi pressure:
   `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`; HA heartbeat:
-  `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`). A failed
+  `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`; B2 trend:
+  `B2_TREND_METRIC`/`B2_TREND_WINDOW`/`B2_TREND_HORIZON_D`). A failed
   query/unreachable source makes that monitor `down` with an explanatory msg — a broken
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the twenty-three push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the twenty-five push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI
