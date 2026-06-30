@@ -40,7 +40,9 @@ services:
       - SETUID
       - CHOWN
     {{ service_networks() }}
-    {{ healthcheck('curl --fail -s http://localhost:8096/health || exit 1') }}
+    # start_period 60s: a library scan + plugin/HW-transcode init on a slow (esp. post-update)
+    # boot can exceed the macro's 30s default and trip a needless autoheal restart mid-boot.
+    {{ healthcheck('curl --fail -s http://localhost:8096/health || exit 1', start_period='60s') }}
     labels:
       # Disable watchtower update — pinned + Renovate-managed
       - "com.centurylinklabs.watchtower.enable=false"
