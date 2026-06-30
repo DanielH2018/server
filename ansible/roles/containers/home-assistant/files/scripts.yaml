@@ -104,7 +104,9 @@ bedroom_apply_wake:
       value_template: "{{ ws not in ['unknown', 'unavailable'] }}"
     - variables:
         wake_elapsed_min: "{{ (now() - as_datetime(ws)).total_seconds() / 60 }}"
-        sleep_min: "{{ states('sensor.pixel_9_pro_sleep_duration') | float(0) }}"
+        # Latched at the wake-window open by bedroom_morning_reset (NOT the live sensor) so the curve
+        # shape stays fixed for the whole window — see that automation + the input_number comment.
+        sleep_min: "{{ states('input_number.bedroom_wake_sleep_min_latched') | float(0) }}"
         target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(wake_elapsed_min, sleep_min) | int }}"
     - service: light.turn_on
       target:
@@ -634,9 +636,11 @@ bedroom_notify:
     # notify service is otherwise invisible for these tiers (sensor-offline, air quality, extreme-temp
     # away, UPS). notification_id = tag (a repeat replaces in place); a recovery — every recovery
     # call-site passes recovery: true with the SAME tag — DISMISSES it once the condition clears.
-    # Severe air quality sets `pierce` but sends NO recovery (cfg.recovery false), so its note lingers
-    # until acknowledged — the original can't-miss behavior, preserved. Routine phone-only alerts
-    # (battery/humidity, and most recoveries) create no note; a stray dismiss of an absent id no-ops.
+    # Severe air quality sets `pierce` but sends NO recovery push (cfg.recovery false) — the moderate
+    # recovery covers the all-clear; its persistent note is instead dismissed directly by the threshold
+    # automation's recovery else-branch (bedroom_threshold_alert) so the UI doesn't keep showing HIGH
+    # after recovery. Routine phone-only alerts (battery/humidity, and most recoveries) create no note;
+    # a stray dismiss of an absent id no-ops.
     - choose:
         - conditions: "{{ recovery | default(false) }}"
           sequence:

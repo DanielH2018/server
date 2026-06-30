@@ -15,6 +15,7 @@ Generated from the real automations/scripts/config. The *why* (runtime traps, fe
 | bedroom_light_expected_color_temp | `input_number.bedroom_light_expected_color_temp` | Bedroom light expected color temp |
 | bedroom_manual_off | `input_boolean.bedroom_manual_off` | Bedroom manual off override |
 | bedroom_sleep_mode | `input_boolean.bedroom_sleep_mode` | Bedroom sleep mode |
+| bedroom_wake_sleep_min_latched | `input_number.bedroom_wake_sleep_min_latched` | Bedroom wake sleep minutes (latched) |
 | ha_heartbeat | `input_datetime.ha_heartbeat` | HA heartbeat |
 
 ## Actuators — writers

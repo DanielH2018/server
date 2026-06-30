@@ -109,6 +109,16 @@ input_number:
     step: 1
     unit_of_measurement: K
     mode: box
+  # Sleep duration (min) latched ONCE at the wake-window open so the ramp's curve shape stays fixed
+  # for the whole window — bedroom_apply_wake reads this, not the live sensor (which the Google Sleep
+  # API can finalize mid-window, changing the curve under the ramp and stepping brightness DOWN).
+  bedroom_wake_sleep_min_latched:
+    name: Bedroom wake sleep minutes (latched)
+    min: 0
+    max: 1440
+    step: 1
+    unit_of_measurement: min
+    mode: box
 
 # Heartbeat helper — the `ha_heartbeat` automation (files/automations.yaml) stamps this with now()
 # every minute, so its last_changed is fresh ONLY while the automation scheduler is executing.

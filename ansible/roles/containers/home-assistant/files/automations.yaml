@@ -454,6 +454,20 @@
       at: "09:00:00"
       id: fallback
   action:
+    # Latch the sleep duration ONCE at the wake-window open (alarm trigger only) so the ramp's curve
+    # shape is fixed for the whole window. bedroom_apply_wake reads this latched value, not the live
+    # sensor: the Google Sleep API can finalize sleep_duration mid-window, and re-reading it live each
+    # minute let the curve shape change under the ramp — a short-night value crossing the 360-min knee
+    # mid-ramp could step brightness DOWN (a wake light visibly dimming). Latching at open keeps it
+    # monotonic; a still-stale 0 here yields the normal curve, consistent with the documented
+    # best-effort/stale-at-alarm-15 fallback. Not gated on home, so a mid-window arrival uses today's value.
+    - if: "{{ trigger.id == 'alarm' }}"
+      then:
+        - service: input_number.set_value
+          target:
+            entity_id: input_number.bedroom_wake_sleep_min_latched
+          data:
+            value: "{{ states('sensor.pixel_9_pro_sleep_duration') | float(0) }}"
     # Daily hygiene (BOTH triggers): clear every overnight override (3 booleans + AL sleep) via the
     # shared script so sleep state / manual-off can't persist into the day. Single source of truth
     # with the test-harness reset (script.bedroom_clear_overrides).
@@ -810,6 +824,15 @@
                 # A critical_away category (temperature) pushed its bad alert while away rather than
                 # holding it, so its all-clear should push too (there's no hold_<tag> to cancel).
                 critical_away: "{{ cfg.critical_away | default(false) }}"
+          else:
+            # Severe air quality (the only recovery:false categories) sends NO recovery PUSH by
+            # design — the moderate recovery covers the all-clear — but its bad alert pierced and so
+            # left a persistent "HIGH" note (id = tag) in the HA UI. Without this it lingered after
+            # the air recovered, contradicting the live state. Dismiss the note directly (no push):
+            # clears the stale HIGH while keeping the deliberate no-redundant-push behavior.
+            - service: persistent_notification.dismiss
+              data:
+                notification_id: "{{ tag }}"
 
 # Temperature → fan: drive fan.tower_fan from the AirGradient temperature via script.bedroom_apply_fan
 # (off <72 / Low 72-74 / Medium 74-76 / High >=76 °F; Medium cap 22:00-06:00; 0.5°F deadband).
@@ -1109,6 +1132,13 @@
       entity_id: person.daniel
       to: "home"
   action:
+    # Clear the away "Left on" note if it's still up — arriving home makes its false-away undo moot
+    # (created by bedroom_away with notification_id: bedroom_away; only the BEDROOM_AWAY_TURN_ON tap
+    # dismissed it before, and the hold_-prefixed arrival flush doesn't match it). A stray dismiss
+    # of an absent id no-ops, so this is safe when nothing was left on.
+    - service: persistent_notification.dismiss
+      data:
+        notification_id: bedroom_away
     - if: "{{ is_state('input_boolean.bedroom_fan_manual', 'off') }}"
       then:
         - service: script.bedroom_apply_fan
