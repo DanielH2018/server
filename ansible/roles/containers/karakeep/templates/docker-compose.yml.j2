@@ -46,8 +46,13 @@ services:
       - internal
     {{ healthcheck('["CMD", "wget", "--spider", "-q", "http://localhost:3000"]') }}
     depends_on:
-      - karakeep-chrome
-      - karakeep-meilisearch
+      # Gate on health, not just start order: meili's index must be ready or karakeep
+      # logs search errors on a cold `up` until it catches up. Both deps define a
+      # healthcheck, so the gate is free (matches karakeep-time-tagger below).
+      karakeep-chrome:
+        condition: service_healthy
+      karakeep-meilisearch:
+        condition: service_healthy
     labels:
       # Manual/Renovate-managed: karakeep:release is coupled to the pinned meili
       # version (see the meilisearch VERSION POLICY), so watchtower (monitor-all mode)
@@ -65,7 +70,10 @@ services:
 
       ## API Bypass (browser extension, mobile app, programmatic clients)
       # /api/v1 is protected by Bearer token (API key) so Authelia is not needed
-      - "traefik.http.routers.karakeep-api.rule=Host(`karakeep.{{ domain }}`) && PathPrefix(`/api`)"
+      # Match both the public and the *.local (WireGuard/LAN) host — else internal Bearer-token
+      # API clients resolve karakeep.local.<domain>, miss this rule, fall through to the
+      # Authelia-protected router, and get 2FA-challenged (see other bypass routers).
+      - "traefik.http.routers.karakeep-api.rule=(Host(`karakeep.{{ domain }}`) || Host(`karakeep.local.{{ domain }}`)) && PathPrefix(`/api`)"
       - "traefik.http.routers.karakeep-api.entrypoints=https"
       - "traefik.http.routers.karakeep-api.tls=true"
       - "traefik.http.routers.karakeep-api.service=karakeep"
