@@ -12,7 +12,10 @@ entryPoints:
 {% for ip in cloudflare_ips %}
         - "{{ ip }}"
 {% endfor %}
-        - "10.0.0.0/8"
+        # server LAN only — deliberately NOT 10.0.0.0/8: that wider range trusts
+        # wg-easy's 10.8.0.0/24 clients as upstream proxies, letting a WG client spoof
+        # X-Forwarded-For (forged client IP into CrowdSec/Authelia, wrong forensic attribution).
+        - "10.0.0.0/24"
         - "192.168.0.0/16"
         - "172.16.0.0/12"
         - "127.0.0.1/32"
@@ -33,7 +36,10 @@ entryPoints:
 {% for ip in cloudflare_ips %}
         - "{{ ip }}"
 {% endfor %}
-        - "10.0.0.0/8"
+        # server LAN only — deliberately NOT 10.0.0.0/8: that wider range trusts
+        # wg-easy's 10.8.0.0/24 clients as upstream proxies, letting a WG client spoof
+        # X-Forwarded-For (forged client IP into CrowdSec/Authelia, wrong forensic attribution).
+        - "10.0.0.0/24"
         - "192.168.0.0/16"
         - "172.16.0.0/12"
         - "127.0.0.1/32"
