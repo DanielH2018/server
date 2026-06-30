@@ -1575,14 +1575,52 @@ def test_b2_trend_missing_metric_is_down():
     assert "unavailable" in msg.lower()
 
 
+def test_b2_trend_stale_textfile_is_down():
+    # Gauge present + flat (would read ok), but the textfile mtime is older than the max age ->
+    # the frozen-gauge blind spot must page instead of reading flat-ok.
+    ok, msg = check.b2_trend(
+        5 * GB, 5 * GB, 10 * GB, 7, age_s=3 * 86400, max_age_s=2.5 * 86400
+    )
+    assert not ok
+    assert "stale" in msg.lower()
+
+
+def test_b2_trend_fresh_textfile_passes_through():
+    # A fresh mtime must not interfere with the normal flat/ok verdict.
+    ok, msg = check.b2_trend(
+        5 * GB, 5 * GB, 10 * GB, 7, age_s=3600, max_age_s=2.5 * 86400
+    )
+    assert ok
+    assert "flat" in msg.lower() or "shrink" in msg.lower()
+
+
 def test_check_b2_trend_uses_predict_linear(monkeypatch):
     queries = []
 
     def fake_scalar(q):
         queries.append(q)
-        return 11 * GB if "predict_linear" in q else 8 * GB
+        if "predict_linear" in q:
+            return 11 * GB
+        if "mtime" in q:
+            return time.time()  # fresh textfile
+        return 8 * GB
 
     monkeypatch.setattr(check, "prom_scalar", fake_scalar)
     ok, msg = check.check_b2_trend()
     assert not ok  # 8GB now, predicted 11GB -> over cap within horizon
     assert any("predict_linear" in q for q in queries)
+    assert any("mtime" in q for q in queries)
+
+
+def test_check_b2_trend_stale_textfile_is_down(monkeypatch):
+    def fake_scalar(q):
+        if "predict_linear" in q:
+            return 5 * GB  # flat
+        if "mtime" in q:
+            return time.time() - 3 * 86400  # 3d-old textfile, past the 2.5d guard
+        return 5 * GB
+
+    monkeypatch.setattr(check, "prom_scalar", fake_scalar)
+    ok, msg = check.check_b2_trend()
+    assert not ok
+    assert "stale" in msg.lower()

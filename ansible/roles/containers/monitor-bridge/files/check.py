@@ -111,6 +111,18 @@ B2_USAGE_MAX_PCT = float(_env("B2_USAGE_MAX_PCT", "85"))
 B2_TREND_METRIC = _env("B2_TREND_METRIC", "kopia_b2_billable_bytes")
 B2_TREND_WINDOW = _env("B2_TREND_WINDOW", "7d")
 B2_TREND_HORIZON_D = float(_env("B2_TREND_HORIZON_D", "7"))
+# Textfile-freshness guard for the trend gauge. node-exporter serves the last written textfile
+# value on EVERY scrape, so if b2-usage.sh's atomic .prom write fails (mv into a re-rooted/full
+# textfile dir) while write_state still writes state.json fresh, the gauge FREEZES: B2 Storage
+# Usage stays green (state.json fresh) AND the frozen gauge reads flat -> this trend check reads
+# up — a silent blind spot. The collector's per-file `node_textfile_mtime_seconds` catches exactly
+# that: go `down` (fail-stale) once the kopia_b2 textfile's mtime is older than this. 2.5 d mirrors
+# B2_USAGE's daily-cron staleness. A missing mtime metric (textfile collector absent) skips the
+# guard — the `current` gauge would already be None -> "unavailable" above — so it never false-pages.
+B2_TREND_MTIME_QUERY = _env(
+    "B2_TREND_MTIME_QUERY", 'node_textfile_mtime_seconds{file=~".*kopia_b2.*"}'
+)
+B2_TREND_MAX_AGE_S = float(_env("B2_TREND_MAX_AGE_D", "2.5")) * 86400
 
 # Scrutiny SMART freshness: the collector cron runs daily (00:00) and has no usable
 # container healthcheck (cron is PID 1) — a silently-dead collector only shows as
@@ -834,17 +846,30 @@ def check_b2_usage():
     return b2_usage(state, age_s, B2_USAGE_MAX_AGE_S, B2_CAP_BYTES, B2_USAGE_MAX_PCT)
 
 
-def b2_trend(current, predicted, cap_bytes, horizon_d):
+def b2_trend(current, predicted, cap_bytes, horizon_d, age_s=None, max_age_s=None):
     """Pure: project B2 billable bytes forward and decide if the cap is imminent. (ok, msg).
 
     `current` = the gauge now; `predicted` = predict_linear(metric[window], horizon) — the
     fitted value horizon_d days out. Either being None (gauge absent/never scraped) -> down
-    (fail-stale). A flat or falling trend (predicted <= current) -> ok. Otherwise derive the
-    per-day slope from the same projection: `down` when the cap is reached within the horizon
-    (predicted >= cap), naming the runway; ok with the runway noted when it's further out.
+    (fail-stale). `age_s` (the textfile's mtime age, None to skip the guard) -> down when older
+    than `max_age_s`: node-exporter keeps serving a frozen gauge after a failed .prom write, so
+    without this a stuck textfile reads flat -> false ok. A flat or falling trend
+    (predicted <= current) -> ok. Otherwise derive the per-day slope from the same projection:
+    `down` when the cap is reached within the horizon (predicted >= cap), naming the runway; ok
+    with the runway noted when it's further out.
     """
     if current is None or predicted is None:
         return False, "B2 trend metric unavailable (%s not exported?)" % B2_TREND_METRIC
+    if age_s is not None and max_age_s is not None and age_s > max_age_s:
+        return False, (
+            "B2 trend gauge STALE: %s textfile %.1fd old (max %.1fd) — cron wrote state.json "
+            "but the .prom export is frozen, so the trend is blind"
+            % (
+                B2_TREND_METRIC,
+                age_s / 86400,
+                max_age_s / 86400,
+            )
+        )
     cur_gb, cap_gb = current / 1e9, cap_bytes / 1e9
     if predicted <= current:
         return True, "B2 flat/shrinking (%.2f/%.0fGB, %.0fd projection %.2fGB)" % (
@@ -877,14 +902,20 @@ def check_b2_trend():
     by the daily b2-usage host cron via the node-exporter textfile collector; node-exporter
     serves the last written value continuously, so predict_linear has a dense series even
     between the cron's daily writes (a stalled cron reads flat — its own staleness is the
-    B2_USAGE check's job, off the state.json).
+    B2_USAGE check's job, off the state.json). The textfile-mtime guard catches the narrower
+    case where the cron runs but ONLY its .prom write fails: state.json stays fresh (B2_USAGE
+    green) while the gauge freezes here.
     """
     current = prom_scalar(B2_TREND_METRIC)
     predicted = prom_scalar(
         "predict_linear(%s[%s], %d)"
         % (B2_TREND_METRIC, B2_TREND_WINDOW, int(B2_TREND_HORIZON_D * 86400))
     )
-    return b2_trend(current, predicted, B2_CAP_BYTES, B2_TREND_HORIZON_D)
+    mtime = prom_scalar(B2_TREND_MTIME_QUERY)
+    age_s = (time.time() - mtime) if mtime is not None else None
+    return b2_trend(
+        current, predicted, B2_CAP_BYTES, B2_TREND_HORIZON_D, age_s, B2_TREND_MAX_AGE_S
+    )
 
 
 def maintenance(state, age_s, max_age_s):
