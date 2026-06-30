@@ -15,6 +15,10 @@ services:
     security_opt:
       - no-new-privileges:true
     ports:
+      # Deliberately published on 0.0.0.0 (NOT scoped to {{ server_ip }} like the
+      # pihole/jellyfin LAN-discovery ports): this is the game server's join port and
+      # is meant to be reachable from every interface (LAN + any router forward). A
+      # raw-TCP game protocol can't use the HTTP CrowdSec/rate-limit chain anyway.
       - "7778:7777/tcp"
     volumes:
       # Worlds + config + banlist all live in /config (run.sh symlinks Terraria's
