@@ -85,6 +85,11 @@ services:
       - DOCKER_HOST=tcp://docker-proxy:2375
     volumes:
       - ./promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      # Persist the tailing positions cursor (positions.filename: /tmp/positions.yaml) across
+      # recreates — without this every deploy re-reads all tailed sources from the start, which
+      # can exceed Loki's ingestion rate limit and silently drop logs mid-deploy. Regenerable
+      # cursor state → a named volume (out of Kopia scope), same pattern as loki's volume below.
+      - promtail_positions:/tmp
       # Access to mounted log files
       - /var/log/:/logs
       # Access to the host log files
@@ -102,3 +107,5 @@ services:
 
 volumes:
     loki:
+    # Promtail's positions cursor — regenerable, deliberately out of Kopia's bind-mount scope.
+    promtail_positions:
