@@ -15,7 +15,6 @@ services:
       - TZ={{ tz }}
       - DOCKER_MODS=linuxserver/mods:radarr-striptracks
     volumes:
-      - /etc/localtime:/etc/localtime:ro
       - ./config:/config
       - /home/{{ sys_user }}/server/containers/data/media/movies:/movies
       - /home/{{ sys_user }}/server/containers/data/downloads:/downloads

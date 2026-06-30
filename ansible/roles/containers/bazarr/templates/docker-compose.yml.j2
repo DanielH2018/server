@@ -14,7 +14,6 @@ services:
       - PGID={{ pgid }}
       - TZ={{ tz }}
     volumes:
-      - /etc/localtime:/etc/localtime:ro
       - ./config:/config
       - /home/{{ sys_user }}/server/containers/data/media/tv:/tv
       - /home/{{ sys_user }}/server/containers/data/media/movies:/movies

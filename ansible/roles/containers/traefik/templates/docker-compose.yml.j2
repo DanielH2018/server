@@ -83,8 +83,12 @@ services:
     environment:
       - CF_API_EMAIL={{ email }}
       - CF_DNS_API_TOKEN={{ cloudflare_dns_token }}
+      # TZ (not an /etc/localtime mount): the image ships zoneinfo, so this gives access logs +
+      # CrowdSec decision logs the homelab's America/Chicago like every other container (host is
+      # UTC). Downstream-safe — promtail ships traefik lines on ingestion time (no timestamp
+      # stage) and CrowdSec parses the RFC3339-with-offset `time` field in absolute terms.
+      - TZ={{ tz }}
     volumes:
-      - /etc/localtime:/etc/localtime:ro
       - ./data/traefik.yml:/traefik.yml:ro
       - ./data/acme.json:/acme.json
       - ./data/config.yml:/config.yml:ro

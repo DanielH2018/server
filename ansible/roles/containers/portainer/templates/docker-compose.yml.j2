@@ -78,6 +78,11 @@ services:
     {{ service_networks() }}
       - portainer_internal
     volumes:
+      # Portainer's clock stays UTC by design (not the homelab's America/Chicago): the
+      # portainer-ce:alpine image ships NO zoneinfo, so a TZ env can't resolve a zone, and the
+      # host's /etc/localtime is itself UTC — so this mount yields UTC too. Reaching CDT would need
+      # a custom tzdata build, not worth it for an admin UI's timestamps. Left explicit + documented
+      # so the localtime-vs-TZ review doesn't re-flag it (see traefik, which DOES have zoneinfo).
       - /etc/localtime:/etc/localtime:ro
       - ./data:/data
     environment:

@@ -18,7 +18,6 @@ services:
       # the radarr-named image is the single published variant used by both apps.
       - DOCKER_MODS=linuxserver/mods:radarr-striptracks
     volumes:
-      - /etc/localtime:/etc/localtime:ro
       - ./config:/config
       - /home/{{ sys_user }}/server/containers/data/media/tv:/tv
       - /home/{{ sys_user }}/server/containers/data/downloads:/downloads
