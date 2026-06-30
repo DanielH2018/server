@@ -341,10 +341,18 @@ def main() -> int:
         write_hold(None)
         return 0
 
-    # Rollback: reset to prior HEAD, redeploy the failed service(s) on old version.
+    # Rollback: reset to prior HEAD, redeploy the prior version. Redeploy the WHOLE batch
+    # (cs.services), not just `failed`: in a multi-service tick the services that DID pass
+    # were recreated on the new images, so after the git reset they'd otherwise stay on the
+    # new images while the tree points at old — partial-batch drift. Mirror the exec-failure
+    # path (above): guard the redeploy and write the hold regardless, else a raise here skips
+    # write_hold and the next tick re-merges the bad commit and loops every 30 min.
     log(f"health gate failed for {failed}; rolling back to {local[:8]}")
     run(["git", "reset", "--hard", local])
-    deploy(set(failed))
+    try:
+        deploy(cs.services)
+    except Exception as exc:  # noqa: BLE001 — best-effort restore; we still hold + alert
+        log(f"rollback redeploy of the prior version also failed: {exc}")
     write_hold(origin)
     discord(
         f"🚨 gitops-deploy: **rollback** on daniel-server.\n"

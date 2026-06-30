@@ -36,6 +36,16 @@ _BROAD_PREFIXES = (
     # bump here maps to no service, so without this it would silently ff-merge and sit
     # unapplied until a manual `initial_setup.yml --tags collections`. Defer-and-alert instead.
     "ansible/requirements.yml",
+    # Setup roles (gitops_deploy itself, renovate_notify, sops_setup, …): wired into
+    # initial_setup.yml, NOT deploy.yml — a change here maps to no container service, so
+    # without this it falls into the silent "docs-only" ff-merge and sits unapplied until a
+    # manual `initial_setup.yml --tags <role>`. Worst case is a fix to gitops_deploy.py
+    # itself: it ff-merges, the host keeps running the OLD code forever, and last_run still
+    # updates (old code writes it) so no monitor catches it. Defer-and-alert instead. The
+    # bring-up playbooks share this fate — they only run by hand — so flag them too.
+    "ansible/roles/setup/",
+    "ansible/initial_setup.yml",
+    "ansible/bootstrap.yml",
 )
 # The SOPS-encrypted secrets file. A change here maps to no service template, but the new
 # value only reaches a container on its next deploy — so a secrets-ONLY push must NOT be

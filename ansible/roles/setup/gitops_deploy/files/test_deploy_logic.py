@@ -59,6 +59,34 @@ def test_requirements_yml_is_broad():
     assert cs.services == set()
 
 
+# Setup roles are wired into initial_setup.yml, not deploy.yml — a change maps to no container
+# service. Without the _BROAD_PREFIXES entry it would fall into the silent "docs-only" ff-merge
+# and sit unapplied (worst case: a fix to gitops_deploy.py itself never takes effect). Must be
+# flagged broad (defer-and-alert). Covers the deployer's own code, the notifier, and the
+# by-hand bring-up playbooks.
+def test_setup_role_change_is_broad():
+    cs = services_from_changed_paths(
+        ["ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"]
+    )
+    assert cs.broad is True
+    assert cs.services == set()
+
+
+def test_renovate_notify_role_change_is_broad():
+    cs = services_from_changed_paths(
+        ["ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2"]
+    )
+    assert cs.broad is True
+    assert cs.services == set()
+
+
+def test_bringup_playbooks_are_broad():
+    for p in ("ansible/initial_setup.yml", "ansible/bootstrap.yml"):
+        cs = services_from_changed_paths([p])
+        assert cs.broad is True, p
+        assert cs.services == set()
+
+
 def test_unrelated_path_ignored():
     paths = ["docs/superpowers/specs/x.md", "README.md"]
     cs = services_from_changed_paths(paths)
