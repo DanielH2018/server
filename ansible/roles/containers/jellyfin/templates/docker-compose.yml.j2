@@ -25,6 +25,10 @@ services:
       # protocols and shouldn't listen on every interface.
       - "{{ server_ip }}:7359:7359/udp"
       - "{{ server_ip }}:1900:1900/udp"
+      # Direct LAN access by IP, bound to the host LAN IP (not 0.0.0.0) so it
+      # never listens on the WAN/other interfaces — Traefik still fronts the
+      # public jellyfin.<domain> route.
+      - "{{ server_ip }}:8096:8096"
     devices:
       - /dev/dri:/dev/dri
     security_opt:
