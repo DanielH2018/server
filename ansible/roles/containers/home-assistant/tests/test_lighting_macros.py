@@ -9,6 +9,10 @@ def _window(elapsed):
     return render_macro(LIGHT, "in_wake_window", elapsed)
 
 
+def _release_window(elapsed):
+    return render_macro(LIGHT, "in_wake_release_window", elapsed)
+
+
 def _brightness(elapsed, sleep_min):
     return int(render_macro(LIGHT, "wake_brightness", elapsed, sleep_min))
 
@@ -24,6 +28,21 @@ def test_in_wake_window_boundaries():
     assert _window(44.99) == "True"
     assert _window(45) == "False"  # window ends 30 min AFTER the alarm
     assert _window(-1) == "False"  # unavailable-sensor sentinel
+
+
+def test_in_wake_release_window_is_a_bounded_catchup():
+    # The release catch-up starts exactly where in_wake_window ends (45) so there's no gap or overlap,
+    # and runs for 45 more min so a missed single-tick hand-off self-heals after a restart/deploy.
+    assert (
+        _release_window(44.99) == "False"
+    )  # still inside the ramp -> not releasing yet
+    assert _release_window(45) == "True"  # window end: hand-off becomes due
+    assert _release_window(60) == "True"  # mid catch-up (covers a long boot)
+    assert _release_window(89.99) == "True"
+    # Past the catch-up it stops policing AL, so a deliberate daytime manual pick is never stomped.
+    assert _release_window(90) == "False"
+    assert _release_window(300) == "False"  # hours later
+    assert _release_window(-1) == "False"  # no morning alarm / sensor unavailable
 
 
 def test_wake_brightness_curve_endpoints():

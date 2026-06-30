@@ -15,6 +15,19 @@
 {{ 0 <= e < 45 }}
 {%- endmacro -%}
 
+{# Wake-ramp RELEASE catch-up window: [45, 90) minutes since wake_start. The hand-off back to
+   Adaptive Lighting (set_manual_control:false + apply at window end) used to fire on a SINGLE tick
+   (elapsed in [45,46)); an HA restart/deploy or a gated-off minute spanning that one tick stranded AL
+   paused for the rest of the day. This widens it to a 45-min catch-up window so a missed release
+   self-heals on a later tick. The caller ALSO gates on AL actually still being paused, so once the
+   release lands, re-running is a no-op (idempotent). Upper bound 90 = 45 min after window end: covers
+   a long deploy/boot yet ends well before any plausible daytime manual control, so the ramp can't
+   stomp a hand-set scene later in the day. Keep the 45 lower bound equal to in_wake_window's end. #}
+{%- macro in_wake_release_window(elapsed_min) -%}
+{%- set e = elapsed_min | float(-1) -%}
+{{ 45 <= e < 90 }}
+{%- endmacro -%}
+
 {# Wake-ramp brightness %: a gentle-then-steep sunrise that keeps climbing to FULL brightness so the
    hand-off to Adaptive Lighting at window end is seamless (no sudden jump — the old curve stopped at
    40% then AL popped the room to its daytime target). Three segments: 1% at window start (e=0) ->

@@ -528,21 +528,29 @@
         ws: "{{ states('sensor.bedroom_wake_start') }}"
         elapsed: "{{ (now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1 }}"
         in_window: "{% from 'lighting.jinja' import in_wake_window %}{{ in_wake_window(elapsed) | bool }}"
+        # AL is "still paused for this room" when its manual_control list is non-empty. NB: AL lists
+        # the individual member BULBS (light.0x0017...), not the group light.bedroom_lights, so test
+        # the list length, never membership of the group id.
+        al_still_manual: "{{ (state_attr('switch.bedroom_adaptive_lighting_bedroom', 'manual_control') or []) | count > 0 }}"
+        release_due: "{% from 'lighting.jinja' import in_wake_release_window %}{{ in_wake_release_window(elapsed) | bool and al_still_manual }}"
     - choose:
         - conditions: "{{ in_window }}"
           sequence:
             - service: script.bedroom_lights_set
               data:
                 reason: "wake"
-        # Window just ended this minute -> hand the room back to Adaptive Lighting for the day.
-        # Release manual control + apply so AL drives the natural daylight brightness/color curve.
-        # The ramp has reached 100% by now, so AL takes over at full brightness (its 45s transition
-        # then settles color/brightness to the daytime target) — the seamless hand-off this curve
-        # was designed for. NOT reason:"natural" (ambient-fill): at window-end the lights are on at
-        # ~100%, so natural_brightness would read the lights-DOMINATED FP300 illuminance (violating
-        # its "read while OFF" precondition) and floor the room to ~11%, stranding AL paused until
-        # the next leave+return. turn_on_lights:false so a mid-ramp manual-off is never re-lit.
-        - conditions: "{{ elapsed >= 45 and elapsed < 46 }}"
+        # Past the ramp (catch-up window [45,90) min) AND AL still paused -> hand the room back to
+        # Adaptive Lighting for the day: release manual control + apply so AL drives the natural
+        # daylight brightness/color curve. The ramp has reached 100% by now, so AL takes over at full
+        # brightness (its 45s transition then settles to the daytime target) — the seamless hand-off
+        # this curve was designed for. NOT reason:"natural" (ambient-fill): at window-end the lights
+        # are on at ~100%, so natural_brightness would read the lights-DOMINATED FP300 illuminance
+        # (violating its "read while OFF" precondition) and floor the room to ~11%. turn_on_lights:false
+        # so a mid-ramp manual-off is never re-lit. release_due is a BOUNDED + idempotent gate (see
+        # in_wake_release_window): the old single-tick [45,46) release was lost for the day if an HA
+        # restart/deploy or a gated-off minute spanned it; this self-heals on a later tick, and the
+        # al_still_manual guard makes a repeat run a no-op so it can't stomp a later daytime manual pick.
+        - conditions: "{{ release_due }}"
           sequence:
             - service: adaptive_lighting.set_manual_control
               data:
