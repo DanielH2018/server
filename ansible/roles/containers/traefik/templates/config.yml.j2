@@ -28,15 +28,11 @@ http:
       headers:
         customResponseHeaders:
           Permissions-Policy: "geolocation=(self), microphone=(), camera=(), fullscreen=*, usb=()"
-          # Defense-in-depth CSP, deliberately PERMISSIVE: it sets only directives that are
-          # safe to apply globally across heterogeneous self-hosted apps. No `default-src`/
-          # `script-src`/`style-src` — those would break the many apps that inline scripts/styles
-          # (the reason a blanket CSP isn't already here). `frame-ancestors 'self'` is the modern,
-          # non-deprecated clickjacking control (mirrors the X-Frame-Options SAMEORIGIN above and
-          # is honoured where XFO isn't); `base-uri 'self'` blocks <base>-tag injection; `object-src
-          # 'none'` kills legacy plugin/Flash vectors. Tighten per-app via a dedicated headers
-          # middleware where an app's script/style origins are known-good.
-          Content-Security-Policy: "frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
+          # No global Content-Security-Policy here: Traefik's customResponseHeaders REPLACES the
+          # backend's header, so a blanket CSP clobbers the stricter, per-app CSPs that apps like
+          # FreshRSS and Homepage set themselves (FreshRSS even self-detects the weakened header and
+          # warns of XSS exposure). Clickjacking is already covered by X-Frame-Options SAMEORIGIN
+          # below. Set CSP per-app via a dedicated headers middleware where origins are known-good.
         referrerPolicy: "strict-origin-when-cross-origin"
         # No frameDeny: customFrameOptionsValue (SAMEORIGIN, below) takes precedence in Traefik,
         # so frameDeny:true was dead config that misrepresented the effective policy as DENY.
