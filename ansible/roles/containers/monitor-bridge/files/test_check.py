@@ -1319,6 +1319,33 @@ def test_loki_count_empty_result_is_none(monkeypatch):
     assert check.loki_count('{job="syslog"}', "10m") is None
 
 
+def test_recyclarr_sync_succeeded_is_ok():
+    ok, msg = check.recyclarr_sync_ok(0, 1, "26h")
+    assert ok
+    assert "1 succeeded" in msg
+
+
+def test_recyclarr_sync_failed_is_down():
+    # A `job failed` line means recyclarr exited non-zero — down even if an earlier run succeeded.
+    ok, msg = check.recyclarr_sync_ok(1, 1, "26h")
+    assert not ok
+    assert "failed" in msg
+
+
+def test_recyclarr_no_successful_run_is_down():
+    # No `job succeeded` in the window: the supercronic scheduler stalled (the healthcheck only
+    # proves supercronic is alive, not that the sync ran) — a silent gap the old setup couldn't see.
+    ok, msg = check.recyclarr_sync_ok(0, 0, "26h")
+    assert not ok
+    assert "no successful" in msg
+
+
+def test_recyclarr_none_counts_treated_as_zero_is_down():
+    # No matching Loki series (recyclarr not shipping, or never ran) -> None -> 0 -> down.
+    ok, _ = check.recyclarr_sync_ok(None, None, "26h")
+    assert not ok
+
+
 def test_loki_count_non_success_raises(monkeypatch):
     monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"status": "error"})
     with pytest.raises(RuntimeError):

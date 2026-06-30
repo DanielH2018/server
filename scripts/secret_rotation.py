@@ -60,7 +60,7 @@ TIER_DAYS = {
 # `sync` preserves overrides.
 _IGNORE = {"domain"}
 _IGNORE_SUFFIX = ("_user", "_username")
-_PINNED = {"kopia_password", "authelia_storage"}
+_PINNED = {"kopia_password", "authelia_storage", "zigbee_network_key"}
 _EXTERNAL = {
     "cloudflare_dns_token",
     "monitor_discord_webhook_url",

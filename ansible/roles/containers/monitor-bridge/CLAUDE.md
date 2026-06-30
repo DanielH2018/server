@@ -15,7 +15,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **twenty-two checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **twenty-three checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Backup Freshness** (Kopia `/api/v1/sources` last-snapshot age + errorCount)
   - **Root Disk** (`node_filesystem_*` for `/` **and `/boot`** — old kernels filling /boot
@@ -131,6 +131,15 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     unit-tested. NOTE: it verifies the webhook is DELIVERABLE (catches a rotated/revoked URL); it
     does NOT assert Kuma still has the notification *attached* to each monitor — AutoKuma re-applies
     that on every deploy via the `kuma()` macro's `notification_name_list`.)
+  - **Recyclarr Sync** (instant LogQL counts of supercronic's `job succeeded` / `job failed` lines
+    for `{container="recyclarr"}` over `RECYCLARR_WINDOW` (26 h = one `@daily` run + slack), reached
+    at `loki:3100`: recyclarr runs `recyclarr sync` under supercronic and `/cron.sh` ends with the
+    sync, so its exit code propagates — supercronic logs `job succeeded` on exit 0, `job failed` on
+    non-zero. `down` on any `job failed` (a sync errored) OR zero `job succeeded` (the scheduler
+    stalled / every run failing). The container healthcheck only watches supercronic, so an ERRORING
+    sync was previously invisible — the silent 2026-06-10 v8-major breakage that failed every nightly
+    sync with the healthcheck staying green. Pure `recyclarr_sync_ok()` is unit-tested; selector/window
+    tunable via `RECYCLARR_LOKI_SELECTOR`/`RECYCLARR_WINDOW`. Same Loki-query path as Loki Log Ingestion.)
 - The restart/OOM/cpu/target/5xx checks use `prom_vector()` (keeps series labels) so the alert
   names *which* container / target / route is failing; the others use `prom_scalar()`.
 - Explicit `down` = fast, descriptive alert; the push monitor's heartbeat interval (600 s,
@@ -147,7 +156,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,n8n,gitops_alive,gitops_status,scrutiny,pi,b2,ha,renovate_alive,loki,verify,discord}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,n8n,gitops_alive,gitops_status,scrutiny,pi,b2,ha,renovate_alive,loki,verify,maintenance,discord,recyclarr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -173,7 +182,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the nineteen push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the twenty-three push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI

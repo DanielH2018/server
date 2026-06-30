@@ -148,6 +148,14 @@ services:
       - DISCORD_WEBHOOK_URL={{ monitor_discord_webhook_url }}
       - DISCORD_CONSECUTIVE=2
       - KUMA_PUSH_DISCORD={{ monitor_bridge_discord_push_token }}
+      # Recyclarr sync health via Loki: recyclarr runs `recyclarr sync` under supercronic (@daily);
+      # the container healthcheck only proves the scheduler is alive, so an ERRORING sync (the silent
+      # 2026-06-10 v8-major breakage) shows up nowhere but the logs. /cron.sh ends with the sync so
+      # its exit code propagates -> supercronic logs `job succeeded`/`job failed`; we count both over
+      # 26h (one @daily run + slack) and `down` on any failure or no successful run. Reached via loki:3100.
+      - RECYCLARR_LOKI_SELECTOR={container="recyclarr"}
+      - RECYCLARR_WINDOW=26h
+      - KUMA_PUSH_RECYCLARR={{ monitor_bridge_recyclarr_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
@@ -196,6 +204,10 @@ services:
       {# Discord delivery: check_discord GET-verifies Kuma's notification webhook is still valid —
          the alert chain's delivery hop that no other monitor (incl. UptimeRobot) exercises. -#}
       {{ kuma('monitor-bridge-discord', monitor_type='push', name='Discord Delivery', interval=600, max_retries=0, push_token=monitor_bridge_discord_push_token) }}
+      {# Recyclarr sync health: check_recyclarr counts supercronic `job succeeded`/`job failed`
+         lines in Loki over 26h — catches an erroring nightly sync the supercronic-only
+         healthcheck stays green through (the silent 2026-06-10 v8 breakage class). -#}
+      {{ kuma('monitor-bridge-recyclarr', monitor_type='push', name='Recyclarr Sync', interval=600, max_retries=0, push_token=monitor_bridge_recyclarr_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 

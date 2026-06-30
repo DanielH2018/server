@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """monitor-bridge — evaluate homelab health checks and push results to Uptime Kuma.
 
-Stdlib only (runs on python:3.12-alpine with no extra deps). Each check returns
+Stdlib only (runs on python:3.14-alpine with no extra deps). Each check returns
 (ok: bool, msg: str) and maps to one Kuma *push* monitor. Every loop iteration pushes
 the result (status=up|down): an explicit `down` gives fast, descriptive alerts, while
 the Kuma push monitor's heartbeat interval is the backstop for "the bridge itself died"
@@ -161,6 +161,15 @@ HA_CONSECUTIVE = int(_env("HA_CONSECUTIVE", "2"))
 # internet.
 DISCORD_WEBHOOK_URL = _env("DISCORD_WEBHOOK_URL", "")
 DISCORD_CONSECUTIVE = int(_env("DISCORD_CONSECUTIVE", "2"))
+
+# Recyclarr sync health: recyclarr runs `recyclarr sync` via supercronic on an @daily schedule;
+# the container healthcheck only proves supercronic (the scheduler) is alive, so a sync that
+# ERRORS shows up nowhere but the logs (the silent 2026-06-10 v8-major breakage class). /cron.sh
+# ends with `recyclarr sync`, so its exit code is recyclarr's and supercronic logs `job succeeded`
+# (exit 0) / `job failed` (non-zero). We count both in Loki over a window covering one daily run
+# + slack: any `job failed` OR zero `job succeeded` -> down. Reuses the existing Loki query path.
+RECYCLARR_LOKI_SELECTOR = _env("RECYCLARR_LOKI_SELECTOR", '{container="recyclarr"}')
+RECYCLARR_WINDOW = _env("RECYCLARR_WINDOW", "26h")
 
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
@@ -984,6 +993,45 @@ def check_discord():
     return False, "%s (%d cycles)" % (msg, _discord_down_streak)
 
 
+def recyclarr_sync_ok(failed_count, succeeded_count, window):
+    """Decide recyclarr sync health from supercronic's structured job lines over `window`.
+
+    Counts of `job failed` / `job succeeded` log lines (None = no matching Loki series -> 0):
+      - any `job failed`  -> a sync exited non-zero (the silent v8-breakage class).
+      - zero `job succeeded` -> no successful run in the window: the scheduler stalled or every
+        run is failing (the container healthcheck only proves supercronic itself is alive).
+    """
+    failed = int(failed_count or 0)
+    succeeded = int(succeeded_count or 0)
+    if failed:
+        return (
+            False,
+            "recyclarr sync failed %d time(s) in %s (see `docker logs recyclarr`)"
+            % (
+                failed,
+                window,
+            ),
+        )
+    if succeeded == 0:
+        return (
+            False,
+            "no successful recyclarr sync in %s — scheduler stalled or sync failing"
+            % window,
+        )
+    return True, "recyclarr sync ok (%d succeeded in %s)" % (succeeded, window)
+
+
+def check_recyclarr():
+    """Loki-based recyclarr sync watchdog (the healthcheck only watches supercronic, not sync)."""
+    failed = loki_count(
+        "%s |= `job failed`" % RECYCLARR_LOKI_SELECTOR, RECYCLARR_WINDOW
+    )
+    succeeded = loki_count(
+        "%s |= `job succeeded`" % RECYCLARR_LOKI_SELECTOR, RECYCLARR_WINDOW
+    )
+    return recyclarr_sync_ok(failed, succeeded, RECYCLARR_WINDOW)
+
+
 CHECKS = [
     ("backup", _env("KUMA_PUSH_KOPIA", ""), check_backup),
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
@@ -1007,6 +1055,7 @@ CHECKS = [
     ("renovate_alive", _env("KUMA_PUSH_RENOVATE_ALIVE", ""), check_renovate_alive),
     ("loki_ingestion", _env("KUMA_PUSH_LOKI", ""), check_loki_ingestion),
     ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
+    ("recyclarr", _env("KUMA_PUSH_RECYCLARR", ""), check_recyclarr),
 ]
 
 
