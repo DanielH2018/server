@@ -50,6 +50,15 @@ def test_host_vars_is_broad():
     assert cs.broad is True
 
 
+def test_requirements_yml_is_broad():
+    # Galaxy collection bumps (Renovate) are installed by sops_setup, not deploy.yml — they
+    # map to no service, so they must be flagged broad (defer-and-alert) rather than silently
+    # ff-merged and left unapplied on the host.
+    cs = services_from_changed_paths(["ansible/requirements.yml"])
+    assert cs.broad is True
+    assert cs.services == set()
+
+
 def test_unrelated_path_ignored():
     paths = ["docs/superpowers/specs/x.md", "README.md"]
     cs = services_from_changed_paths(paths)

@@ -32,6 +32,10 @@ _BROAD_PREFIXES = (
     "ansible/roles/containers/common/",  # shared deploy path
     "ansible/deploy.yml",
     "ansible/filter_plugins/",  # toposort
+    # Galaxy collections: installed by sops_setup (initial_setup.yml), NOT deploy.yml — a
+    # bump here maps to no service, so without this it would silently ff-merge and sit
+    # unapplied until a manual `initial_setup.yml --tags collections`. Defer-and-alert instead.
+    "ansible/requirements.yml",
 )
 # The SOPS-encrypted secrets file. A change here maps to no service template, but the new
 # value only reaches a container on its next deploy — so a secrets-ONLY push must NOT be
