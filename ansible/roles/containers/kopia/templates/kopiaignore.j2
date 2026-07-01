@@ -67,6 +67,10 @@ scrutiny/influxdb2/
 # auto-update churn then bled ~0.8GB/day of unique content into B2. Keep both lines.
 code-server/config/extensions/
 code-server/config/.local/share/code-server/extensions/
+# Uptime-Kuma's SQLite DB: deliberately excluded — AutoKuma reconstitutes every monitor + the
+# Discord notification from container labels on deploy, so it's regeneratable. Caveat (in the DR
+# runbook, docs/kopia-disaster-recovery.md): a bare-metal restore needs the Kuma first-run admin
+# recreated by hand before AutoKuma can authenticate and backfill.
 uptime-kuma/data*/
 freshrss/config/www/freshrss/data/cache/
 karakeep/time-tagger/uv-cache/

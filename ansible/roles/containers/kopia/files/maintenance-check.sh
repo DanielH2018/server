@@ -37,28 +37,33 @@ RESULT=$(printf '%s' "$OUT" | GRACE_S="$GRACE_S" python3 -c '
 import json, os, sys
 from datetime import datetime, timezone
 GRACE_S = float(os.environ.get("GRACE_S", 129600))
+# Wrap the WHOLE body, not just json.load: datetime.fromisoformat() on kopia's nanosecond+offset
+# timestamp (and the runs iteration) could raise on an older-Python DR host or a future kopia
+# format change. An unguarded raise exits with EMPTY stdout, and the bash wrapper reads that as
+# RESULT != "OK" -> write_state false -> a FALSE Backup-Maintenance DOWN/page. Degrade any error
+# to a descriptive FAIL (exit 0) instead — mirrors the old json.load handler.
 try:
     d = json.load(sys.stdin)
+    now = datetime.now(timezone.utc)
+    problems = []
+    full = d.get("full", {}); owner = d.get("owner", ""); sched = d.get("schedule", {})
+    if not full.get("enabled"): problems.append("full maintenance DISABLED")
+    if not owner: problems.append("no maintenance owner")
+    nxt = sched.get("nextFullMaintenance"); overdue_h = 0.0
+    if nxt:
+        overdue_h = (now - datetime.fromisoformat(nxt)).total_seconds() / 3600
+        if overdue_h * 3600 > GRACE_S: problems.append("full maintenance overdue %.1fh" % overdue_h)
+    last_end = last_task = None; last_ok = True
+    for task, recs in (sched.get("runs") or {}).items():
+        for r in recs or []:
+            e = r.get("end")
+            if e and (last_end is None or e > last_end):
+                last_end, last_ok, last_task = e, bool(r.get("success", False)), task
+    if last_end and not last_ok: problems.append("most recent run (%s) FAILED" % last_task)
+    print(("FAIL|" + "; ".join(problems)) if problems else
+          ("OK|full maint enabled, owner %s, next in %.1fh, last run %s ok" % (owner, -overdue_h, last_task or "?")))
 except Exception as e:
-    print("FAIL|unparseable maintenance info: %s" % e); sys.exit(0)
-now = datetime.now(timezone.utc)
-problems = []
-full = d.get("full", {}); owner = d.get("owner", ""); sched = d.get("schedule", {})
-if not full.get("enabled"): problems.append("full maintenance DISABLED")
-if not owner: problems.append("no maintenance owner")
-nxt = sched.get("nextFullMaintenance"); overdue_h = 0.0
-if nxt:
-    overdue_h = (now - datetime.fromisoformat(nxt)).total_seconds() / 3600
-    if overdue_h * 3600 > GRACE_S: problems.append("full maintenance overdue %.1fh" % overdue_h)
-last_end = last_task = None; last_ok = True
-for task, recs in (sched.get("runs") or {}).items():
-    for r in recs or []:
-        e = r.get("end")
-        if e and (last_end is None or e > last_end):
-            last_end, last_ok, last_task = e, bool(r.get("success", False)), task
-if last_end and not last_ok: problems.append("most recent run (%s) FAILED" % last_task)
-print(("FAIL|" + "; ".join(problems)) if problems else
-      ("OK|full maint enabled, owner %s, next in %.1fh, last run %s ok" % (owner, -overdue_h, last_task or "?")))
+    print("FAIL|maintenance info check error: %s" % e); sys.exit(0)
 ')
 
 MSG=$(printf '%s' "$RESULT" | cut -d'|' -f2- | tr -d '"' | tr '\n' ' ')
