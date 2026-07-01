@@ -850,6 +850,13 @@ bedroom_run_scenario:
             - service: switch.turn_off
               target:
                 entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+        # The 'away' preview fires bedroom_away, which (person home during a test -> not held)
+        # pushes + leaves the "🏠 Left on" persistent note (id bedroom_away). Clear it so a fast
+        # preview cleans up after itself; a stray dismiss of an absent id no-ops for every other
+        # scenario, matching bedroom_arrive_home's own dismiss of this id.
+        - service: persistent_notification.dismiss
+          data:
+            notification_id: bedroom_away
         - service: persistent_notification.create
           data:
             notification_id: test_scenario

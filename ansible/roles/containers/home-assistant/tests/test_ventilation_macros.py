@@ -22,44 +22,27 @@ def test_smoke_guard_blocks_when_outdoor_pm_unsafe():
     assert _advice(80, 65, 5, 50, True) == "none"
 
 
-def test_small_outdoor_excess_within_margin_does_not_block():
-    # Purifier keeps indoor very low (4); outdoor (12) is higher but within pm_dirty_margin (10) and
-    # clean+comfortable -> still advise. (Was wrongly 'none' before the margin — the bare op>ip term
-    # vetoed CO2/cooling ventilation whenever the purifier scrubbed indoor below outdoor.)
+def test_scrubbed_indoor_does_not_veto_safe_outdoor():
+    # A HEPA purifier keeps indoor PM very low (4); outdoor (12) is higher but under pm_safe and
+    # clean+comfortable -> still advise. There is NO relative "dirtier than indoors" veto: the bare
+    # op>ip term used to falsely block CO2/cooling ventilation whenever the purifier scrubbed indoor
+    # below outdoor. The absolute pm_safe/pm10_safe caps are the only air-quality gate now.
     assert _advice(75, 65, 4, 12, True) == "stale"
 
 
-def test_large_outdoor_excess_over_indoor_still_blocks():
-    # Outdoor (20) exceeds indoor (5) by more than the 10 margin -> still block (would worsen indoor).
-    assert _advice(75, 65, 5, 20, True) == "none"
-
-
-def test_dirty_margin_boundary_is_strict():
-    # At exactly ip + margin it's allowed (strict >); one above blocks. (ip=5, margin=10 -> 15;
-    # both 15 and 16 are at/above pm_relative_floor=15, so the relative term is in play here.)
-    assert _advice(75, 65, 5, 15, True) == "stale"  # 15 == 5 + 10, not > -> allowed
-    assert (
-        _advice(75, 65, 5, 16, True) == "none"
-    )  # 16 > 15 (margin) and 16 > 15 (floor) -> blocked
+def test_safe_but_moderate_outdoor_ventilates_over_scrubbed_indoor():
+    # The recurring purifier regression (3rd fix): outdoor PM 18 is safe-but-moderate (< pm_safe 25)
+    # while a scrubbed indoor sits at 2. The old relative floor (15) still vetoed the whole [15, 25)
+    # band; with the relative term dropped, safe-but-moderate air now ventilates for both stale-air ...
+    assert _advice(75, 65, 2, 18, True) == "stale"
+    # ... and free-cooling advice (warm inside, cooler + safe outside).
+    assert _advice(82, 70, 2, 18, False) == "cool"
 
 
 def test_safe_outdoor_above_scrubbed_indoor_still_ventilates():
-    # Real 2026-06-29 incident: HEPA purifier scrubs indoor to ~0.5, outdoor 12 is objectively
-    # safe (well under pm_safe and below pm_relative_floor=15) yet > ip + margin (0.5 + 10 = 10.5).
-    # The floor gate must keep it advising instead of vetoing all CO2/free-cooling advice;
-    # without pm_relative_floor this regresses to 'none'.
+    # Real 2026-06-29 incident: HEPA purifier scrubs indoor to ~0.5, outdoor 12 is objectively safe
+    # (well under pm_safe). Must keep advising instead of vetoing all CO2/free-cooling advice.
     assert _advice(75, 65, 0.5, 12, True) == "stale"
-
-
-def test_relative_floor_gates_the_dirtier_than_indoor_veto():
-    # indoor scrubbed to 1 so the relative term (op > ip + 10 = 11) is true from op=12 up.
-    # At/below the floor (15) the veto is suppressed; above it the veto applies.
-    assert (
-        _advice(75, 65, 1, 15, True) == "stale"
-    )  # 15 not > floor 15 -> relative veto suppressed
-    assert (
-        _advice(75, 65, 1, 16, True) == "none"
-    )  # 16 > floor 15 and 16 > 11 -> blocked
 
 
 def test_smoke_guard_blocks_when_outdoor_pm10_unsafe():

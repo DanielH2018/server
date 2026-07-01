@@ -1669,6 +1669,12 @@
       above: 60
       for: "00:00:30"
   condition:
+    # Only keep the dashboard up while you're actually home — otherwise a bright away-day (sun
+    # pushes FP300 illuminance > 60 in an empty room) re-casts to the Hub every 10 min for nobody.
+    # Mirrors the person-home gate every other bedroom on-path carries.
+    - condition: state
+      entity_id: person.daniel
+      state: "home"
     - condition: state
       entity_id: input_boolean.bedroom_sleep_mode
       state: "off"
