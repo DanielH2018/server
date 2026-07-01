@@ -5,7 +5,17 @@ metadata:
   type: project
 ---
 
-UPDATE 2026-07-01 (re-review): Finding #2 is now PARTIALLY fixed (commit d25641fb): `ventilation.jinja`
+UPDATE 2026-07-01 (2nd re-review, review-only): BOTH original findings now CLOSED — do NOT re-flag.
+Finding #1 (wake-end over-dim) RESOLVED by ramp-to-100 + bounded AL-release. Finding #2 (advisor
+disabled by purifier) RESOLVED by commit 3dd603c6 dropping the relative PM veto ENTIRELY (the
+`pm_relative_floor` half-fix below was superseded the same day) — macro gates on absolute
+pm_safe/pm10_safe only. This was the 3rd/final fix; NEVER re-propose any relative/margin/floor term.
+2nd review found no new High/Medium; suite validates clean, macro tests pass. AL-stuck-manual edge
+(leave mid-wake-window) self-heals (AL clears manual_control on light-off via the away-sweep). Only
+nit: `bedroom_window_advisor` 'cool' message computes delta from rounded temps → can read ±1° off the
+raw 5°F trigger (cosmetic).
+
+SUPERSEDED — UPDATE 2026-07-01 (1st re-review): Finding #2 is now PARTIALLY fixed (commit d25641fb): `ventilation.jinja`
 gained `pm_relative_floor=15`, so the relative `op > ip + margin` veto only bites once outdoor PM is
 itself > 15. Residual GAP: floor 15 < pm_safe 25, so on safe-but-moderate outdoor days (PM 15–25) a
 purifier-scrubbed indoor still vetoes CO2/cooling advice. Cleanest per prior fix direction: raise
