@@ -15,6 +15,31 @@ http:
         - authelia
       tls: {}
 
+    livesync:
+      # Obsidian LiveSync sync API — defined HERE (traefik file provider, mode 0600, so only
+      # the traefik process reads it) instead of as a Docker label on the couchdb container,
+      # so the secret X-Sync-Token stays OUT of container metadata. Any container on the shared
+      # `apps` network can read every container's labels via the docker-proxy (CONTAINERS=1),
+      # which would have leaked the token from the old label form. A request must carry the
+      # matching token or it matches NO router for the host and 404s before reaching CouchDB;
+      # CouchDB's own require_valid_user is the second layer (defence in depth). The couchdb
+      # service is referenced cross-provider (livesync@docker) — the role still publishes it via
+      # its one remaining service label. Default (rule-length) priority is preserved from the old
+      # label, so the priority=200 livesync-utils router still wins for /_utils.
+      entryPoints:
+        - https
+      rule: "(Host(`livesync.{{ domain }}`) || Host(`livesync.local.{{ domain }}`)) && Header(`X-Sync-Token`, `{{ livesync_sync_token }}`)"
+      service: livesync@docker
+      middlewares:
+        - rate-limit-livesync
+      tls:
+        certResolver: cloudflare
+        domains:
+          - main: "{{ domain }}"
+            sans:
+              - "*.{{ domain }}"
+              - "*.local.{{ domain }}"
+
 #endregion
 #region services
   services:

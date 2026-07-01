@@ -31,25 +31,17 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network={{ (container_item.networks | default([docker_network]))[0] }}"
-      # Sync API: gated by a secret request header instead of Authelia. The Obsidian
-      # LiveSync client uses non-interactive basic auth and can't pass 2FA, so we
-      # require an X-Sync-Token header (set in the plugin's custom-headers field on
-      # each device). Only requests carrying the matching token match this router;
-      # anything else matches NO router for this host and gets a 404 before reaching
-      # CouchDB. The token lives in SOPS (livesync_sync_token); CouchDB's own
-      # require_valid_user is the second layer (defence in depth). NOTE: this is a
-      # shared secret, not per-device identity — rotate the token if a device is lost.
-      - "traefik.http.routers.livesync.rule=(Host(`livesync.{{ domain }}`) || Host(`livesync.local.{{ domain }}`)) && Header(`X-Sync-Token`, `{{ livesync_sync_token }}`)"
-      - "traefik.http.routers.livesync.entrypoints=https"
-      - "traefik.http.routers.livesync.tls=true"
-      - "traefik.http.routers.livesync.tls.certresolver=cloudflare"
-      - "traefik.http.routers.livesync.tls.domains[0].main={{ domain }}"
-      - "traefik.http.routers.livesync.tls.domains[0].sans=*.{{ domain }},*.local.{{ domain }}"
-      - "traefik.http.routers.livesync.service=livesync"
-      # High rate-limit ceiling for chatty CouchDB replication (rate-limit-livesync@file,
-      # defined in traefik's config.yml.j2). The shared `rate-limit` default (300/min) was
-      # too low for LiveSync and produced HTTP 429s. Other services keep the default.
-      - "traefik.http.routers.livesync.middlewares=rate-limit-livesync@file"
+      # Sync API: gated by a secret X-Sync-Token request header instead of Authelia (the
+      # Obsidian LiveSync client uses non-interactive basic auth and can't pass 2FA). The
+      # token-matching sync router is defined in traefik's config.yml.j2 (file provider,
+      # mode 0600 — only the traefik process reads it), NOT as a label here, so the secret
+      # stays OUT of Docker metadata: any container on the shared `apps` net can read every
+      # container's labels via the docker-proxy (CONTAINERS=1), which would leak the token
+      # from a label. This block only PUBLISHES the couchdb service (the file-provider sync
+      # router references it cross-provider as livesync@docker) plus the public /_utils admin
+      # router below; the high-ceiling rate-limit-livesync middleware is applied there too.
+      # NOTE: livesync_sync_token is a shared secret, not per-device identity — rotate it if
+      # a device is lost.
       - "traefik.http.services.livesync.loadbalancer.server.port={{ container_item.port }}"
 
       ## Fauxton admin UI — human access via Authelia 2FA (no token header needed).
