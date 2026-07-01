@@ -76,3 +76,40 @@ def test_custom_manager_matches_live_targets(mgr: dict, tracked: list[str]) -> N
         f"Renovate manager {mgr['description'][:60]!r} matched {len(matched_files)} file(s) but "
         f"its matchStrings found ZERO dependency lines — the regex has drifted from the file format."
     )
+
+
+def _docker_manager() -> dict:
+    for m in _MANAGERS:
+        if m.get("datasourceTemplate") == "docker":
+            return m
+    raise AssertionError("no docker customManager in renovate.json")
+
+
+def test_every_deployed_image_is_renovate_tracked() -> None:
+    """Every `image:` line in an ACTIVE compose template must be captured by the docker manager.
+
+    The aggregate test above only proves the manager matches SOMETHING — it passes even if one
+    service's image slips the regex. A future image added untagged (implicit :latest), digest-only,
+    or Jinja-templated in place of a literal tag would then age with no signal (the docker
+    matchString requires an explicit :tag). This asserts per-image coverage so that gap fails CI
+    at commit time. `latest`-tagged images ARE matched (then filtered by the packageRule), so they
+    pass; a build-only service has no `image:` line and is skipped. archive/ is excluded by the
+    single-level glob (mirrors the manager's own managerFilePatterns)."""
+    match_res = [
+        re.compile(_to_python_regex(ms)) for ms in _docker_manager()["matchStrings"]
+    ]
+    templates = sorted(
+        (_REPO / "ansible/roles/containers").glob("*/templates/docker-compose.yml.j2")
+    )
+    assert templates, "no active compose templates found"
+    untracked = []
+    for t in templates:
+        for line in t.read_text().splitlines():
+            if not re.match(r"\s*image:\s*\S", line):
+                continue
+            if not any(r.search(line) for r in match_res):
+                untracked.append(f"{t.relative_to(_REPO)}: {line.strip()}")
+    assert not untracked, (
+        "Deployed image line(s) NOT matched by the Renovate docker manager (untagged / digest-only "
+        "/ templated) — they will age silently:\n" + "\n".join(untracked)
+    )
