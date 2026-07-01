@@ -624,10 +624,16 @@
       then:
         - service: script.bedroom_apply_fan
     # Per-minute warm ramp across the 45-min window. `while` re-checks each minute so a manual
-    # lights-off (bedroom_manual_off) stops it — mirrors bedroom_wake_ramp's manual_off gate. Anchor is
-    # the last_wake we just stamped; elapsed drives the shared, tested wake_brightness curve.
+    # lights-off (bedroom_manual_off) OR leaving home stops it — mirrors bedroom_wake_ramp's
+    # person-home + manual_off gate. The home gate is load-bearing: bedroom_away turns the lights off
+    # WITHOUT setting manual_off, so without re-checking person-home this loop would re-light an empty
+    # room every minute for the rest of the window (defeating the away sweep). Anchor is the last_wake
+    # we just stamped; elapsed drives the shared, tested wake_brightness curve.
     - repeat:
         while:
+          - condition: state
+            entity_id: person.daniel
+            state: "home"
           - condition: state
             entity_id: input_boolean.bedroom_manual_off
             state: "off"
@@ -646,21 +652,25 @@
               reason: "wake_fallback"
               brightness_pct: "{{ target }}"
           - delay: "00:01:00"
-    # Window done -> hand the room back to Adaptive Lighting for the day (mirror bedroom_wake_ramp's
-    # release): the ramp has reached 100%, so AL takes over at full brightness and settles to daytime.
-    - service: adaptive_lighting.set_manual_control
-      data:
-        entity_id: switch.bedroom_adaptive_lighting_bedroom
-        manual_control: false
-    - service: adaptive_lighting.apply
-      data:
-        entity_id: switch.bedroom_adaptive_lighting_bedroom
-        turn_on_lights: false
-    - service: script.bedroom_notify
-      data:
-        title: "☀️ Good morning"
-        message: "Wake ramp ran on the 06:00 fallback (no watch alarm detected)."
-        tag: sleep_morning
+    # Window done (or you left / manual-off) -> only if still home, hand the room back to Adaptive
+    # Lighting for the day (mirror bedroom_wake_ramp, which gates its whole run on person-home) and
+    # send the good-morning note. If you left mid-ramp, bedroom_away already turned the lights off —
+    # skip the release + notify so we neither re-touch an empty room nor greet an absent sleeper.
+    - if: "{{ is_state('person.daniel', 'home') }}"
+      then:
+        - service: adaptive_lighting.set_manual_control
+          data:
+            entity_id: switch.bedroom_adaptive_lighting_bedroom
+            manual_control: false
+        - service: adaptive_lighting.apply
+          data:
+            entity_id: switch.bedroom_adaptive_lighting_bedroom
+            turn_on_lights: false
+        - service: script.bedroom_notify
+          data:
+            title: "☀️ Good morning"
+            message: "Wake ramp ran on the 06:00 fallback (no watch alarm detected)."
+            tag: sleep_morning
 
 # Slow color tracking: while the lights are in AUTO mode, drift their color every 5 min toward
 # Adaptive Lighting's CURRENT sun-curve color (read off the AL switch attribute — AL computes it even
