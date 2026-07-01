@@ -5,6 +5,14 @@ metadata:
   type: project
 ---
 
+UPDATE 2026-07-01 (re-review): Finding #2 is now PARTIALLY fixed (commit d25641fb): `ventilation.jinja`
+gained `pm_relative_floor=15`, so the relative `op > ip + margin` veto only bites once outdoor PM is
+itself > 15. Residual GAP: floor 15 < pm_safe 25, so on safe-but-moderate outdoor days (PM 15–25) a
+purifier-scrubbed indoor still vetoes CO2/cooling advice. Cleanest per prior fix direction: raise
+`pm_relative_floor` to 25 (== pm_safe → relative term never independently bites) or drop it entirely
+(the absolute pm_safe/pm10_safe caps already cover genuinely bad air). Wake-ramp handoff single-tick
+watch-item is RESOLVED (bounded [45,90) catch-up window `in_wake_release_window` + `al_still_manual`).
+
 UPDATE 2026-06-29 (re-review): **Finding #1 (wake-ramp end over-dim) is now RESOLVED** — the
 2026-06-29 ramp-to-100 redesign changed `bedroom_wake_ramp`'s window-end branch (elapsed 45..46) to
 release AL (`adaptive_lighting.set_manual_control:false` + `apply turn_on_lights:false`) instead of
