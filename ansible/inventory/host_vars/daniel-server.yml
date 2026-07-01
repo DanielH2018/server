@@ -30,10 +30,17 @@ containers_list:
       - proxy
   - name: docker-proxy
     use_authelia: false
+    # NOT on `apps` (Security M1, 2026-07-01): this read-only proxy runs CONTAINERS=1, and
+    # `GET /containers/{id}/json` returns EVERY container's Env (secrets). haproxy can't
+    # body-filter, so the only lever is who can reach it — keeping it off `apps` stops the
+    # internet-facing app fleet (n8n/karakeep/freshrss/livesync/…) from enumerating every
+    # service's secrets. code-server (the lone apps-side consumer) gets its own dedicated
+    # `docker-proxy-codeserver` on the private `codeserver` net instead. proxy/monitoring
+    # consumers (traefik provider, homepage, grafana, autokuma, prometheus/cadvisor, glances)
+    # are unaffected — they reach it over those nets.
     networks:
       - proxy
       - monitoring
-      - apps
   - name: homepage
     port: 3000
     use_authelia: true
@@ -126,8 +133,12 @@ containers_list:
   - name: code-server
     port: 8443
     use_authelia: true
+    # `apps` stays networks[0] (the Traefik route binds to it). `codeserver` is the private
+    # isolation net to its OWN read-only docker-proxy (docker-proxy-codeserver) — so it keeps
+    # its in-IDE `docker` CLI without the shared docker-proxy having to sit on `apps` (Security M1).
     networks:
       - apps
+      - codeserver
   - name: n8n
     port: 5678
     use_authelia: true

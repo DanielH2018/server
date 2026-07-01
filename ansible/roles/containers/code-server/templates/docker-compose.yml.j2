@@ -19,7 +19,7 @@ services:
       PASSWORD: {{ code_server_password }}
       SUDO_PASSWORD: {{ code_server_sudo_password }}
       EXTENSIONS_GALLERY: '{"serviceUrl": "https://open-vsx.org/vscode/gallery", "itemUrl": "https://open-vsx.org/vscode/item"}'
-      DOCKER_HOST: tcp://docker-proxy:2375
+      DOCKER_HOST: tcp://docker-proxy-codeserver:2375  # dedicated read proxy on the private `codeserver` net (Security M1)
     volumes:
       - ./config:/config
     restart: unless-stopped
@@ -45,7 +45,7 @@ services:
       }}
       {{ kuma(container_item.name) }}
       # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on=docker-proxy"
+      - "com.centurylinklabs.watchtower.depends-on=docker-proxy-codeserver"
     # Resource caps for blast-radius containment (M1). Dev env can run builds, so
     # size generously and tune from cAdvisor/Grafana.
     {{ resources('4.0', '4096M', '0.10', '256M') }}

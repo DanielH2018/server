@@ -173,6 +173,7 @@
     - apps
     - homepage_private
     - lifecycle  # private net: Watchtower + Autoheal <-> docker-proxy-lifecycle only
+    - codeserver # isolation net: code-server <-> docker-proxy-codeserver only (keeps the shared docker-proxy off apps — Security M1)
     - kopia      # isolation net: Kopia <-> Traefik only (unauthenticated repo not reachable by other apps)
     - ups        # isolation net: NUT <-> Home Assistant only (UPS state, kept off apps)
     - mqtt       # isolation net: Mosquitto <-> Zigbee2MQTT <-> Home Assistant only (MQTT off apps)

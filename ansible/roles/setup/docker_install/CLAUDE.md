@@ -26,9 +26,11 @@ repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
    `live-restore: true` so a daemon restart (e.g. a `docker-ce` upgrade) doesn't bounce all
    ~58 containers. Restarts Docker only when the file changes.
 5. **Networks:** creates `proxy` (`{{ docker_network }}`), `monitoring`, `media`, `apps`,
-   `homepage_private`, `lifecycle` (Watchtower/Autoheal ↔ docker-proxy only), `kopia`
-   (Kopia ↔ Traefik only — keeps the unauthenticated repo off other apps), `ups`
-   (NUT ↔ Home Assistant only), and `mqtt` (Mosquitto ↔ Zigbee2MQTT ↔ Home Assistant only).
+   `homepage_private`, `lifecycle` (Watchtower/Autoheal ↔ docker-proxy-lifecycle only),
+   `codeserver` (code-server ↔ docker-proxy-codeserver only — lets the shared docker-proxy stay
+   off `apps`, Security M1), `kopia` (Kopia ↔ Traefik only — keeps the unauthenticated repo off
+   other apps), `ups` (NUT ↔ Home Assistant only), and `mqtt` (Mosquitto ↔ Zigbee2MQTT ↔ Home
+   Assistant only).
 
 ## Notable
 - **`become: false` user resolution (task 3) is deliberate** — under the play's `become: true`,

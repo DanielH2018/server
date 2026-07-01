@@ -2,6 +2,12 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{# Only stand up the code-server read proxy on the host that runs code-server (daniel-server; NOT
+   the memory-constrained Pi, which has docker-proxy for autoheal but no code-server). Gated on the
+   HOST, not containers_list: a tagged `deploy.yml --tags docker-proxy` set_facts containers_list to
+   the filtered dependency closure (docker-proxy + deps, no code-server), so a containers_list probe
+   renders False and drops the service. inventory_hostname is stable across that filtering. -#}
+{% set has_code_server = (inventory_hostname | default('')) == 'daniel-server' %}
 ---
 
 services:
@@ -99,6 +105,59 @@ services:
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '128M', '0.05', '16M') }}
 
+{% if has_code_server %}
+  # Read-only proxy dedicated to code-server's in-IDE `docker` CLI (Security M1). Same
+  # least-privilege env as the main docker-proxy (POST=0/EXEC=0), but it lives SOLELY on the
+  # private `codeserver` network shared only with code-server — so the shared docker-proxy can
+  # stay off `apps` and the internet-facing app fleet can no longer read every container's Env
+  # (secrets) via CONTAINERS=1. code-server is the only apps-side consumer, hence its own proxy.
+  docker-proxy-codeserver:
+    image: lscr.io/linuxserver/socket-proxy:latest
+    container_name: docker-proxy-codeserver
+    environment:
+      - CONTAINERS=1
+      - SERVICES=1
+      - TASKS=1
+      - POST=0        # Read-only: no write/lifecycle ops
+      - EXEC=0        # Read-only: no container exec
+      - INFO=1
+      - VERSION=1
+      - PING=1
+      - IMAGES=1
+      - VOLUMES=1
+      - NETWORKS=1
+      - EVENTS=1
+    networks:
+      - codeserver
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run
+    # LSIO socket-proxy is haproxy on a high port — already read_only + tmpfs.
+    # Empty add; if haproxy can't drop to its user, add [SETUID, SETGID]. Verify on deploy.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:2375/version || exit 1"]
+      interval: {{ container_healthcheck_interval | default('10s') }}
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+      {{ kuma('docker-proxy-codeserver') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('0.50', '128M', '0.05', '16M') }}
+{% endif %}
+
 {{ external_networks() }}
   lifecycle:
     external: true
+{% if has_code_server %}
+  codeserver:
+    external: true
+{% endif %}
