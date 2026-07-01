@@ -35,3 +35,24 @@ jobs:
 
       - name: Run all hooks
         run: prek run --all-files --color always
+
+  renovate-config:
+    name: renovate config validator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      # Semantic validation of renovate.json — the one dependency-management axis with no
+      # fail-at-commit backstop. prek's `check-json` only proves the file is well-formed JSON;
+      # a typo'd packageRule field (e.g. matchPackageName vs matchPackageNames) is silently
+      # IGNORED by Renovate (logged as a config warning, kept running), which would quietly
+      # re-enable auto-merge of the stateful/DB-breaking bumps the automerge:false overrides
+      # (getmeili/meilisearch, the crowdsec bouncer plugin, galaxy collections) exist to block.
+      # `--strict` makes those warnings fail the build. Validates against the latest Renovate —
+      # the same hosted Mend app version that actually consumes the config.
+      - name: Validate renovate.json
+        run: npx --yes --package renovate renovate-config-validator --strict renovate.json
