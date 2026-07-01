@@ -11,3 +11,4 @@ encyclopedia); link to them instead.
 ## Learnings
 <!-- e.g. - FP300 running-fan presence false-hold → set ai_interference_source_selfidentification ON -->
 - [2026-06-27 review findings](ha-review-2026-06-27-findings.md) — wake-ramp end over-dims (contaminated lux); window advisor disabled by purifier keeping indoor PM low (op>ip guard). Both unfixed (review-only).
+- [2026-07-01 review findings](ha-review-2026-07-01-findings.md) — winddown_start missing wake_start's stale-past-alarm `>now()` guard (bedtime prompt silently suppressed on stale Wear OS alarm); 06:00 fallback wake not protected from color-track. Both unfixed (review-only).
