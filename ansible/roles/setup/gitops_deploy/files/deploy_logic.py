@@ -23,6 +23,12 @@ from dataclasses import dataclass, field
 _ACTIVE_CONFIG = re.compile(
     r"^ansible/roles/containers/(?!archive/)([^/]+)/(?:templates|files)/"
 )
+# A change under an active container role's tasks/ dir. tasks/ is deliberately NOT auto-deployed
+# (structural — deploy manually), but unlike a CLAUDE.md/doc edit it DOES change what a deploy would
+# do, so a tasks-only push must be flagged (defer-and-alert), not silently ff-merged and left
+# unapplied with no signal — the same asymmetry the secrets / requirements.yml paths already close.
+# Same archive/ exclusion; common/tasks is caught earlier by the _BROAD_PREFIXES check.
+_ACTIVE_TASKS = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/tasks/")
 # A `container_name:` line in a rendered docker-compose.yml.
 _CONTAINER_NAME = re.compile(r'^\s*container_name:\s*["\']?([^\s"\']+)["\']?\s*$')
 # Changes whose blast radius we don't try to scope automatically.
@@ -60,6 +66,7 @@ class ChangeSet:
     services: set[str] = field(default_factory=set)
     broad: bool = False
     secrets: bool = False
+    tasks: set[str] = field(default_factory=set)
 
 
 def services_from_changed_paths(paths: list[str]) -> ChangeSet:
@@ -74,6 +81,10 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         m = _ACTIVE_CONFIG.match(p)
         if m:
             cs.services.add(m.group(1))
+            continue
+        t = _ACTIVE_TASKS.match(p)
+        if t:
+            cs.tasks.add(t.group(1))
     return cs
 
 

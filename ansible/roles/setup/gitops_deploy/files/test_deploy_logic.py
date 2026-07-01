@@ -176,17 +176,59 @@ def test_common_role_change_stays_broad_not_scoped():
     assert cs.services == set()
 
 
-def test_role_tasks_and_docs_do_not_trigger_deploy():
-    # Scope is templates/ + files/ only (the deployed config/assets). A tasks/main.yml or
-    # CLAUDE.md change does NOT auto-deploy (manual, as before) — avoids redeploying on a doc edit.
+def test_role_tasks_change_flags_tasks_not_deploy():
+    # tasks/ isn't auto-deployed (structural — manual), but it must be FLAGGED so the deployer
+    # defers-and-alerts instead of silently ff-merging: a tasks/ change alters what a deploy does,
+    # so left unapplied with no signal it's the exact silent-drift the secrets/requirements paths
+    # already close. It maps to cs.tasks (for the alert), NOT cs.services (no scoped redeploy).
     cs = services_from_changed_paths(
-        [
-            "ansible/roles/containers/prometheus/tasks/main.yml",
-            "ansible/roles/containers/prometheus/CLAUDE.md",
-        ]
+        ["ansible/roles/containers/prometheus/tasks/main.yml"]
     )
+    assert cs.tasks == {"prometheus"}
     assert cs.services == set()
     assert cs.broad is False
+    assert cs.secrets is False
+
+
+def test_role_docs_do_not_trigger_deploy_or_flag():
+    # A CLAUDE.md / doc edit is genuinely no-op (manual, as before) — not even flagged.
+    cs = services_from_changed_paths(["ansible/roles/containers/prometheus/CLAUDE.md"])
+    assert cs.services == set()
+    assert cs.tasks == set()
+    assert cs.broad is False
+
+
+def test_common_tasks_change_stays_broad_not_tasks():
+    # common/ is the shared deploy path — a tasks change there is BROAD (manual full deploy); the
+    # broad-prefix check must win over the new tasks match.
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/common/tasks/docker_deploy.yml"]
+    )
+    assert cs.broad is True
+    assert cs.tasks == set()
+    assert cs.services == set()
+
+
+def test_archived_tasks_change_is_ignored():
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/archive/duplicati/tasks/main.yml"]
+    )
+    assert cs.tasks == set()
+    assert cs.services == set()
+    assert cs.broad is False
+
+
+def test_template_and_tasks_same_service_deploys_and_flags_tasks():
+    # A push that changes both a template and tasks/ for the same service deploys it (the scoped
+    # --tags redeploy reruns the whole role incl. tasks), and also records the tasks flag.
+    cs = services_from_changed_paths(
+        [
+            "ansible/roles/containers/prometheus/templates/prometheus.yml.j2",
+            "ansible/roles/containers/prometheus/tasks/main.yml",
+        ]
+    )
+    assert cs.services == {"prometheus"}
+    assert cs.tasks == {"prometheus"}
 
 
 def test_config_change_with_compose_change_dedupes_to_one_service():

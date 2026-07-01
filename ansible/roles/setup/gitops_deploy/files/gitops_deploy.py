@@ -39,6 +39,9 @@ BROAD_FILE = "/var/lib/gitops-deploy/broad_alerted_sha"
 # Same throttle for a secrets-only push (rotated value with no service template change):
 # alert once per SHA so the operator redeploys the consumer(s), don't re-page every tick.
 SECRETS_ALERT_FILE = "/var/lib/gitops-deploy/secrets_alerted_sha"
+# Same throttle for a tasks-only push (a role tasks/ change, which isn't auto-deployed): alert once
+# per SHA so the operator redeploys the role by hand, don't re-page every tick.
+TASKS_ALERT_FILE = "/var/lib/gitops-deploy/tasks_alerted_sha"
 # Last CT date (YYYY-MM-DD) we paged for a dirty working tree. The tick runs every
 # 30 min, so without this an open edit session would re-alert all day; we throttle
 # to one alert per day, fired on the first tick at/after DIRTY_ALERT_HOUR (07:00 CT).
@@ -297,6 +300,19 @@ def main() -> int:
                 f"(`ansible-playbook ansible/deploy.yml --tags <svc>`)."
             ):
                 _write_marker(SECRETS_ALERT_FILE, origin)
+        # A tasks-only push (a role's tasks/main.yml changed with no template/files change) maps to
+        # no scoped deploy — tasks/ isn't auto-deployed (structural, deploy by hand) — but unlike a
+        # doc edit it changes what a deploy does, so it must not sit silently unapplied. Defer-and-
+        # alert (once per SHA); mirrors the secrets path above.
+        if cs.tasks and _read_marker(TASKS_ALERT_FILE) != origin:
+            # Mark only on confirmed delivery, else retry next tick (see discord()).
+            if discord(
+                f"⚠️ gitops-deploy: only `tasks/` changed for "
+                f"`{', '.join(sorted(cs.tasks))}` in `{origin[:8]}` — fast-forwarded but "
+                f"**nothing was redeployed** (tasks/ isn't auto-deployed). Redeploy by hand: "
+                f"`ansible-playbook ansible/deploy.yml --tags <svc>`."
+            ):
+                _write_marker(TASKS_ALERT_FILE, origin)
         return 0
 
     run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])
