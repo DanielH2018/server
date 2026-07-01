@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 services:
   nut:
@@ -43,12 +44,7 @@ services:
     # the host secondary is what actually runs `systemctl poweroff` when FSD is raised.
     ports:
       - "127.0.0.1:3493:3493"
-    healthcheck:
-      test: ["CMD-SHELL", "upsc {{ nut_ups_name | default('apc-ups') }}@localhost battery.charge 2>/dev/null || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    {{ healthcheck("[\"CMD-SHELL\", \"upsc " ~ (nut_ups_name | default('apc-ups')) ~ "@localhost battery.charge 2>/dev/null || exit 1\"]") }}
     labels:
       {{ kuma('nut', name='NUT') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.

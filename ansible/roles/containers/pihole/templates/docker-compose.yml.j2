@@ -2,6 +2,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 
 
@@ -23,13 +24,8 @@ services:
       - SETGID
     volumes:
       - './data/unbound/:/etc/unbound/custom.conf.d/'
-    healthcheck:
-      # Use the drill wrapper binary to reduce the exit codes to 0 or 1 for healthchecks
-      test: ['CMD', 'drill-hc', '@127.0.0.1', 'dnssec.works']
-      interval: 30s
-      timeout: 30s
-      retries: 3
-      start_period: 30s
+    # drill-hc wrapper reduces exit codes to 0/1; timeout 30s — DNSSEC validation can be slow.
+    {{ healthcheck("['CMD', 'drill-hc', '@127.0.0.1', 'dnssec.works']", timeout='30s') }}
     networks:
       - pihole_internal
     labels:
