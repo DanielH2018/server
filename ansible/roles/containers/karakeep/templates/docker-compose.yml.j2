@@ -73,7 +73,10 @@ services:
       # Match both the public and the *.local (WireGuard/LAN) host — else internal Bearer-token
       # API clients resolve karakeep.local.<domain>, miss this rule, fall through to the
       # Authelia-protected router, and get 2FA-challenged (see other bypass routers).
-      - "traefik.http.routers.karakeep-api.rule=(Host(`karakeep.{{ domain }}`) || Host(`karakeep.local.{{ domain }}`)) && PathPrefix(`/api`)"
+      # Trailing slash anchors the prefix to the /api/ path SEGMENT (calls are /api/v1/…): a bare
+      # PathPrefix(`/api`) also matches sibling paths like /api-docs, silently extending this
+      # no-Authelia bypass to them.
+      - "traefik.http.routers.karakeep-api.rule=(Host(`karakeep.{{ domain }}`) || Host(`karakeep.local.{{ domain }}`)) && PathPrefix(`/api/`)"
       - "traefik.http.routers.karakeep-api.entrypoints=https"
       - "traefik.http.routers.karakeep-api.tls=true"
       - "traefik.http.routers.karakeep-api.service=karakeep"

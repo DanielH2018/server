@@ -50,8 +50,10 @@ services:
       {{ kuma(container_item.name) }}
 
       ## Ping Bypass (Public)
-      # We use PathPrefix to catch /ping and everything after it
-      - "traefik.http.routers.healthchecks-ping.rule=(Host(`healthchecks.{{ domain }}`) || Host(`healthchecks.local.{{ domain }}`)) && PathPrefix(`/ping`)"
+      # Trailing slash anchors to the /ping/ path SEGMENT (pings are /ping/<uuid>): a bare
+      # PathPrefix(`/ping`) also matches sibling paths like /pingXYZ, extending this public
+      # no-Authelia bypass to them.
+      - "traefik.http.routers.healthchecks-ping.rule=(Host(`healthchecks.{{ domain }}`) || Host(`healthchecks.local.{{ domain }}`)) && PathPrefix(`/ping/`)"
       - "traefik.http.routers.healthchecks-ping.entrypoints=https"
       - "traefik.http.routers.healthchecks-ping.tls=true"
       - "traefik.http.routers.healthchecks-ping.service=healthchecks"
