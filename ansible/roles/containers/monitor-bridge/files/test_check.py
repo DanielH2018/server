@@ -1453,13 +1453,14 @@ def test_discord_unreachable_rides_grace(monkeypatch):
 def test_discord_disabled_without_url(monkeypatch):
     monkeypatch.setattr(check, "DISCORD_WEBHOOK_URL", "")
     monkeypatch.setattr(check, "DISCORD_CROWDSEC_WEBHOOK_URL", "")
+    monkeypatch.setattr(check, "DISCORD_GITOPS_WEBHOOK_URL", "")
     ok, msg = check.check_discord()
     assert ok
     assert "disabled" in msg
 
 
 def test_discord_verifies_all_configured_webhooks(monkeypatch):
-    # Both webhooks valid -> up, naming each verified hop.
+    # All three webhooks valid -> up, naming each verified hop.
     monkeypatch.setattr(
         check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
     )
@@ -1468,11 +1469,43 @@ def test_discord_verifies_all_configured_webhooks(monkeypatch):
         "DISCORD_CROWDSEC_WEBHOOK_URL",
         "https://discord.com/api/webhooks/2/crowdsec",
     )
+    monkeypatch.setattr(
+        check,
+        "DISCORD_GITOPS_WEBHOOK_URL",
+        "https://discord.com/api/webhooks/3/gitops",
+    )
     monkeypatch.setattr(check, "_discord_down_streak", 0)
     monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"name": "Homelab Alerts"})
     ok, msg = check.check_discord()
     assert ok
-    assert "Kuma" in msg and "CrowdSec" in msg
+    assert "Kuma" in msg and "CrowdSec" in msg and "GitOps/Renovate" in msg
+
+
+def test_discord_gitops_webhook_failure_pages(monkeypatch):
+    # A revoked GitOps/Renovate webhook (delivers rollback + Renovate digests, whose "alive"
+    # marker greens regardless of delivery — no Kuma backstop) pages, naming it, even though
+    # Kuma's own webhook is fine.
+    monkeypatch.setattr(
+        check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
+    )
+    monkeypatch.setattr(check, "DISCORD_CROWDSEC_WEBHOOK_URL", "")
+    monkeypatch.setattr(
+        check,
+        "DISCORD_GITOPS_WEBHOOK_URL",
+        "https://discord.com/api/webhooks/3/gitops",
+    )
+    monkeypatch.setattr(check, "_discord_down_streak", 0)
+
+    def get(url, *a, **k):
+        if "gitops" in url:
+            raise urllib.error.HTTPError(url, 404, "gone", {}, None)
+        return {"name": "Homelab Alerts"}
+
+    monkeypatch.setattr(check, "_get_json", get)
+    assert check.check_discord()[0]  # streak 1, suppressed
+    ok, msg = check.check_discord()  # streak 2, pages
+    assert not ok
+    assert "GitOps/Renovate" in msg and "404" in msg
 
 
 def test_discord_crowdsec_webhook_failure_pages(monkeypatch):

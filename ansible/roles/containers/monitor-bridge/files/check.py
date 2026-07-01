@@ -189,6 +189,12 @@ DISCORD_WEBHOOK_URL = _env("DISCORD_WEBHOOK_URL", "")
 # directly to it (not via Kuma), so a rotated/revoked CrowdSec webhook silently drops security-ban
 # notifications with NO Kuma backstop. Verify it alongside the Kuma webhook. Empty = not checked.
 DISCORD_CROWDSEC_WEBHOOK_URL = _env("DISCORD_CROWDSEC_WEBHOOK_URL", "")
+# The GitOps/Renovate webhook is a THIRD independent hop: it delivers both the gitops-deploy
+# rollback alert AND every renovate_notify manual-action digest, neither via Kuma. renovate_notify
+# writes its "alive" liveness marker on every clean run regardless of whether the Discord POST
+# succeeded, so a rotated/revoked webhook here leaves the Renovate Notifier — Alive monitor GREEN
+# while every digest silently drops. Verify it too. Empty = not checked.
+DISCORD_GITOPS_WEBHOOK_URL = _env("DISCORD_GITOPS_WEBHOOK_URL", "")
 DISCORD_CONSECUTIVE = int(_env("DISCORD_CONSECUTIVE", "2"))
 
 # Recyclarr sync health: recyclarr runs `recyclarr sync` via supercronic on an @daily schedule;
@@ -1079,13 +1085,16 @@ def _discord_webhooks():
     """(label, url) pairs for each configured Discord webhook to verify (skips empties).
 
     Kuma's is the alert-chain delivery hop for every monitor; CrowdSec's is the independent
-    security-ban delivery hop with no other backstop. Both are verified together.
+    security-ban delivery hop with no other backstop; GitOps/Renovate's carries the gitops-deploy
+    rollback alert AND the renovate_notify digests (whose "alive" marker greens regardless of
+    delivery). None has a Kuma backstop, so all three are verified together.
     """
     return [
         (label, url)
         for label, url in (
             ("Kuma", DISCORD_WEBHOOK_URL),
             ("CrowdSec", DISCORD_CROWDSEC_WEBHOOK_URL),
+            ("GitOps/Renovate", DISCORD_GITOPS_WEBHOOK_URL),
         )
         if url
     ]
@@ -1097,8 +1106,9 @@ _discord_down_streak = 0
 def check_discord():
     """GET-verify EVERY configured Discord notification webhook still delivers.
 
-    Verifies the Kuma alert webhook AND the CrowdSec ban-alert webhook (the latter has no Kuma
-    backstop). `down` if ANY is invalid, naming which. No URLs -> disabled (stays up), like
+    Verifies the Kuma alert webhook, the CrowdSec ban-alert webhook, AND the GitOps/Renovate
+    webhook (the latter two have no Kuma backstop). `down` if ANY is invalid, naming which. Each
+    empty URL is skipped; all empty -> disabled (stays up), like
     check_n8n. Streak hysteresis (DISCORD_CONSECUTIVE, like check_ha_heartbeat): this is the only
     check that reaches the public internet, so a single transient non-200 / network blip pushes
     `up` with a streak msg and only the Nth straight failure pages — a genuinely dead webhook

@@ -160,6 +160,10 @@ services:
       # Also GET-verify the CrowdSec ban-alert webhook — CrowdSec POSTs to it directly (not via
       # Kuma), so a rotated/revoked URL silently drops security-ban alerts with no Kuma backstop.
       - DISCORD_CROWDSEC_WEBHOOK_URL={{ crowdsec_discord_webhook_url }}
+      # And the GitOps/Renovate webhook — it delivers the gitops-deploy rollback alert AND every
+      # renovate_notify digest, neither via Kuma. renovate_notify greens its liveness marker even
+      # when the POST fails, so a dead webhook here drops digests while its monitor stays green.
+      - DISCORD_GITOPS_WEBHOOK_URL={{ gitops_deploy_discord_webhook }}
       - DISCORD_CONSECUTIVE=2
       - KUMA_PUSH_DISCORD={{ monitor_bridge_discord_push_token }}
       # Recyclarr sync health via Loki: recyclarr runs `recyclarr sync` under supercronic (@daily);

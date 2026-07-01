@@ -137,10 +137,13 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     spell read as a dead pipeline; the broadened selector + 30m window is the fix.** Stream/window
     tunable via `LOKI_STREAM`/`LOKI_WINDOW`. Pure `loki_ingestion_fresh()` + `loki_count()` are
     unit-tested. A freshness watchdog in the same idiom as the SMART/restore-drill checks.)
-  - **Discord Delivery** (GET-verifies **both** Discord notification webhooks: Kuma's own
-    `monitor_discord_webhook_url` — the one Kuma POSTs every alert to — AND CrowdSec's
-    `crowdsec_discord_webhook_url`, which CrowdSec POSTs ban alerts to *directly* (not via Kuma), so
-    it has NO Kuma backstop of its own. `down` if EITHER is invalid, naming which. A
+  - **Discord Delivery** (GET-verifies **all three** Discord notification webhooks: Kuma's own
+    `monitor_discord_webhook_url` — the one Kuma POSTs every alert to — CrowdSec's
+    `crowdsec_discord_webhook_url`, which CrowdSec POSTs ban alerts to *directly* (not via Kuma), and
+    the `gitops_deploy_discord_webhook`, which delivers the gitops-deploy rollback alert AND every
+    `renovate_notify` digest (its Renovate Notifier — Alive marker greens even when the POST fails —
+    no Kuma backstop). The latter two have NO Kuma backstop of their own. `down` if ANY is invalid,
+    naming which; each empty URL is skipped. A
     rotated/revoked/deleted webhook makes those alerts silently fail to deliver while every monitor
     stays GREEN in the Kuma UI; this is the alert chain's delivery hop that NO other monitor — not
     even the off-box UptimeRobot host dead-man — exercises. A webhook GET returns Discord's metadata (200) when valid
