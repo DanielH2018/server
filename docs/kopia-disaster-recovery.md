@@ -91,6 +91,15 @@ UI (`kuma.<domain>`, using exactly those secret values), AutoKuma provisions **z
 no Discord notification, leaving the whole fleet unmonitored during the recovery window. Do this
 right after the deploy; AutoKuma then backfills every monitor + the notification automatically.
 
+**Regenerate the Kuma API key for the Prometheus scrape.** Prometheus' `uptime-kuma` scrape job
+authenticates with `prometheus_kuma_api_key` (an HTTP-basic password) that Kuma **issues and stores
+only in its own SQLite DB** — which is excluded from Kopia, so a fresh Kuma invalidates the old key.
+The SOPS value is now stale, so the `uptime-kuma` scrape target comes up **DOWN (401)** — during the
+recovery, exactly when monitoring matters. After recreating the admin user, mint a new key in
+Kuma (**Settings → API Keys**), `sops ansible/vars/secrets.yml` to set `prometheus_kuma_api_key` to it,
+then redeploy prometheus (`uv run ansible-playbook ansible/deploy.yml --tags prometheus`). The
+Scrape-Targets monitor flags this if you miss it.
+
 ## Notes / gotchas
 - **`kopia repository connect` ≠ `create`.** Never run `create` against the existing bucket
   in a recovery — `connect` attaches to the existing repo; `create` would try to initialize

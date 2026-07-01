@@ -101,7 +101,7 @@
 
 - name: Schedule daily B2-usage probe
   tags: [cron]
-  # 02:30 daily — clear of the 19:00 snapshot, Wed-04:00 verify, Sun-06:00 rebuild
+  # 02:30 daily — clear of the 00:00 snapshot, Wed-04:00 verify, Sun-06:00 rebuild
   # and 1st-05:00 restore drill. One version-listing call against B2 (~450 blobs ≈
   # one page); negligible API usage. Result lands in
   # /var/lib/kopia-b2-usage/state.json -> monitor-bridge -> Kuma + syslog.

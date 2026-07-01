@@ -29,7 +29,7 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
   stats` undercounts) with creds read at runtime from `repository.config`, and writes
   `/var/lib/kopia-b2-usage/state.json` — monitor-bridge's `b2_usage` check alerts at 85%
   of the cap, on probe failure, or staleness. Was 6.56 GB (66%) when added.
-- **Backup assurance is three-tier:** snapshots (daily 19:00, in-container policy) →
+- **Backup assurance is three-tier:** snapshots (daily 00:00, in-container policy) →
   weekly `kopia snapshot verify --verify-files-percent=1` cron (blobs readable; `files/verify.sh`
   → `/var/lib/kopia-verify/state.json` → monitor-bridge's `verify` check → the "Backup Verify"
   Kuma monitor, which alerts on a failed/stale verify — the wrapper captures the verify's own

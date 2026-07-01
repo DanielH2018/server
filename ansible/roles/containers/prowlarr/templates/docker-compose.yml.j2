@@ -25,6 +25,13 @@ services:
       - SETUID
       - CHOWN
     {{ service_networks() }}
+    # Gate startup on the flaresolverr sidecar being healthy — on a cold `up` prowlarr would
+    # otherwise start first and log challenge-solve failures until flaresolverr caught up (parity
+    # with the karakeep -> karakeep-chrome gate). flaresolverr is only called on-demand during
+    # indexer searches, so this is a boot-ordering nicety, not a hard runtime dependency.
+    depends_on:
+      flaresolverr:
+        condition: service_healthy
     {{ healthcheck('curl --fail -s http://localhost:9696/ping || exit 1') }}
     labels:
       # Disable watchtower update — pinned + Renovate-managed
