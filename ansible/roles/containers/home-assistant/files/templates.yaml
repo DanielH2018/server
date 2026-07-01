@@ -17,9 +17,14 @@
     - name: "Bedroom wake start"
       unique_id: bedroom_wake_start
       device_class: timestamp
+      # `> now()` rejects a STALE past alarm: a Wear OS next_alarm can hold an already-fired
+      # alarm for hours (seen 2026-07-01 — the watch held the prior morning's 06:00 all night,
+      # so this sensor pointed at a PAST time and the `at:` wake trigger had nothing to fire on).
+      # The hour guard alone (3-11) passed that stale value; require it to be in the future too so
+      # a lagging watch makes this `unavailable` (fallback handles it) instead of masquerading.
       availability: >-
         {% set na = states('sensor.pixel_watch_3_next_alarm') %}
-        {{ na not in ['unknown', 'unavailable', 'none', ''] and 3 <= (as_datetime(na) | as_local).hour < 11 }}
+        {{ na not in ['unknown', 'unavailable', 'none', ''] and as_datetime(na) > now() and 3 <= (as_datetime(na) | as_local).hour < 11 }}
       state: >-
         {{ (as_datetime(states('sensor.pixel_watch_3_next_alarm')) - timedelta(minutes=15)).isoformat() }}
 
