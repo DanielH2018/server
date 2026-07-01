@@ -185,6 +185,10 @@ HA_CONSECUTIVE = int(_env("HA_CONSECUTIVE", "2"))
 # (like HA_CONSECUTIVE) rides out a transient blip on the one check that reaches the public
 # internet.
 DISCORD_WEBHOOK_URL = _env("DISCORD_WEBHOOK_URL", "")
+# The CrowdSec ban-alert webhook is a SECOND, independent Discord delivery hop: CrowdSec POSTs
+# directly to it (not via Kuma), so a rotated/revoked CrowdSec webhook silently drops security-ban
+# notifications with NO Kuma backstop. Verify it alongside the Kuma webhook. Empty = not checked.
+DISCORD_CROWDSEC_WEBHOOK_URL = _env("DISCORD_CROWDSEC_WEBHOOK_URL", "")
 DISCORD_CONSECUTIVE = int(_env("DISCORD_CONSECUTIVE", "2"))
 
 # Recyclarr sync health: recyclarr runs `recyclarr sync` via supercronic on an @daily schedule;
@@ -1057,46 +1061,71 @@ def check_loki_ingestion():
 
 
 def discord_webhook_ok(status_code, name=None):
-    """Pure: does a GET on the Kuma Discord webhook return 200 (still valid)? (ok, msg).
+    """Pure: does a GET on a Discord webhook return 200 (still valid)? (ok, msg).
 
     Discord answers a webhook GET with its JSON metadata (id/name) and HTTP 200 while the
-    webhook exists, and 404 once it's been rotated/revoked/deleted — so a non-200 means
-    Kuma's alert POSTs won't deliver. (A GET never posts a message, so this can't spam.)
+    webhook exists, and 404 once it's been rotated/revoked/deleted — so a non-200 means the
+    alert POSTs won't deliver. (A GET never posts a message, so this can't spam.)
     """
     if status_code == 200:
         return True, "Discord webhook valid%s" % (" (%s)" % name if name else "")
     return (
         False,
-        "Discord webhook returned HTTP %s — Kuma alerts won't deliver" % status_code,
+        "Discord webhook returned HTTP %s — alerts won't deliver" % status_code,
     )
+
+
+def _discord_webhooks():
+    """(label, url) pairs for each configured Discord webhook to verify (skips empties).
+
+    Kuma's is the alert-chain delivery hop for every monitor; CrowdSec's is the independent
+    security-ban delivery hop with no other backstop. Both are verified together.
+    """
+    return [
+        (label, url)
+        for label, url in (
+            ("Kuma", DISCORD_WEBHOOK_URL),
+            ("CrowdSec", DISCORD_CROWDSEC_WEBHOOK_URL),
+        )
+        if url
+    ]
 
 
 _discord_down_streak = 0
 
 
 def check_discord():
-    """GET-verify the Kuma Discord notification webhook still delivers.
+    """GET-verify EVERY configured Discord notification webhook still delivers.
 
-    Empty DISCORD_WEBHOOK_URL -> disabled (stays up), like check_n8n. Streak hysteresis
-    (DISCORD_CONSECUTIVE, like check_ha_heartbeat): this is the only check that reaches the
-    public internet, so a single transient non-200 / network blip pushes `up` with a streak
-    msg and only the Nth straight failure pages — a genuinely dead webhook stays bad and pages.
+    Verifies the Kuma alert webhook AND the CrowdSec ban-alert webhook (the latter has no Kuma
+    backstop). `down` if ANY is invalid, naming which. No URLs -> disabled (stays up), like
+    check_n8n. Streak hysteresis (DISCORD_CONSECUTIVE, like check_ha_heartbeat): this is the only
+    check that reaches the public internet, so a single transient non-200 / network blip pushes
+    `up` with a streak msg and only the Nth straight failure pages — a genuinely dead webhook
+    stays bad and pages.
     """
     global _discord_down_streak
-    if not DISCORD_WEBHOOK_URL:
+    webhooks = _discord_webhooks()
+    if not webhooks:
         return True, "Discord webhook check disabled (no URL)"
-    try:
-        data = _get_json(DISCORD_WEBHOOK_URL)
-        ok, msg = discord_webhook_ok(200, (data or {}).get("name"))
-    except urllib.error.HTTPError as e:
-        ok, msg = discord_webhook_ok(e.code)
-    except (
-        Exception
-    ) as e:  # network/DNS blip -> ride the streak, don't page on one cycle
-        ok, msg = False, "Discord webhook unreachable: %s" % e
+    ok, msg, valid = True, "", []
+    for label, url in webhooks:
+        try:
+            data = _get_json(url)
+            w_ok, w_msg = discord_webhook_ok(200, (data or {}).get("name"))
+        except urllib.error.HTTPError as e:
+            w_ok, w_msg = discord_webhook_ok(e.code)
+        except (
+            Exception
+        ) as e:  # network/DNS blip -> ride the streak, don't page on one cycle
+            w_ok, w_msg = False, "unreachable: %s" % e
+        if not w_ok:
+            ok, msg = False, "%s webhook: %s" % (label, w_msg)
+            break
+        valid.append(label)
     if ok:
         _discord_down_streak = 0
-        return True, msg
+        return True, "Discord webhooks valid (%s)" % ", ".join(valid)
     _discord_down_streak += 1
     if _discord_down_streak < DISCORD_CONSECUTIVE:
         return True, "down streak %d/%d (transient grace): %s" % (
@@ -1192,6 +1221,30 @@ PROM_DEPENDENT = frozenset(
     }
 )
 
+# One level BELOW the Prometheus gate: a single exporter down while Prometheus is UP fails every
+# check reading its metrics at once. node-exporter death false-pages Root Disk + Memory + B2 Usage
+# Trend (node_* / the kopia_b2 textfile gauge go unavailable -> down) on top of the legitimate Scrape
+# Targets page; cadvisor death makes restarts/oom/cpu read an empty vector -> silently green. Scrape
+# Targets already names the dead `up{job=...}==0`, so run_once suppresses each dead exporter's
+# dependents (pushes `up` with a skip msg, heartbeat kept alive) and lets Scrape Targets be the single
+# page — the same one-root-cause-one-alert shape as the Prometheus gate, keyed by the Prometheus `job`
+# label. Guarded by a test against CHECKS. (`cert`/`traefik5xx` read Traefik's own metrics, not these
+# two exporters, so they're not mapped here.)
+EXPORTER_DEPENDENT = {
+    "node": frozenset({"disk", "memory", "b2_trend"}),
+    "cadvisor": frozenset({"restarts", "oom", "cpu"}),
+}
+
+
+def down_exporters(up_vector):
+    """Pure: which EXPORTER_DEPENDENT jobs report up==0 in a Prometheus `up` vector.
+
+    Fed prom_vector("up") — [(labels, value), ...]. Returns the subset of EXPORTER_DEPENDENT keys
+    whose Prometheus job is down, so run_once can suppress their dependents. Unit-tested.
+    """
+    down_jobs = {m.get("job") for m, v in up_vector if v == 0}
+    return {job for job in EXPORTER_DEPENDENT if job in down_jobs}
+
 
 def log(*args):
     print("[%s]" % datetime.now().isoformat(timespec="seconds"), *args, flush=True)
@@ -1227,9 +1280,24 @@ def run_once():
     log("OK  " if prom_ok else "DOWN", "prometheus", "-", prom_msg)
     push(_env("KUMA_PUSH_PROMETHEUS", ""), prom_ok, prom_msg)
 
+    # Exporter-reachability gate (one level below the Prometheus gate): when Prometheus is up, probe
+    # `up` once and suppress each dead exporter's dependents so a node-exporter/cadvisor death is one
+    # page (Scrape Targets), not a 3-monitor false-page storm / silent-green split. A failure to
+    # DETERMINE exporter health leaves `suppressed` empty (fail toward alerting, never masking).
+    suppressed = set()
+    if prom_ok:
+        try:
+            for job in down_exporters(prom_vector("up")):
+                suppressed |= EXPORTER_DEPENDENT[job]
+        except Exception as e:
+            log("WARN: exporter-health probe failed:", e)
+
     for name, token, fn in CHECKS:
         if not prom_ok and name in PROM_DEPENDENT:
             ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
+            log("SKIP", name, "-", msg)
+        elif name in suppressed:
+            ok, msg = True, "skipped — exporter down (see Scrape Targets)"
             log("SKIP", name, "-", msg)
         else:
             ok, msg = _evaluate(name, fn)

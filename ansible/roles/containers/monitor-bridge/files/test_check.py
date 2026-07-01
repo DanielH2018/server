@@ -1452,9 +1452,52 @@ def test_discord_unreachable_rides_grace(monkeypatch):
 
 def test_discord_disabled_without_url(monkeypatch):
     monkeypatch.setattr(check, "DISCORD_WEBHOOK_URL", "")
+    monkeypatch.setattr(check, "DISCORD_CROWDSEC_WEBHOOK_URL", "")
     ok, msg = check.check_discord()
     assert ok
     assert "disabled" in msg
+
+
+def test_discord_verifies_all_configured_webhooks(monkeypatch):
+    # Both webhooks valid -> up, naming each verified hop.
+    monkeypatch.setattr(
+        check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
+    )
+    monkeypatch.setattr(
+        check,
+        "DISCORD_CROWDSEC_WEBHOOK_URL",
+        "https://discord.com/api/webhooks/2/crowdsec",
+    )
+    monkeypatch.setattr(check, "_discord_down_streak", 0)
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"name": "Homelab Alerts"})
+    ok, msg = check.check_discord()
+    assert ok
+    assert "Kuma" in msg and "CrowdSec" in msg
+
+
+def test_discord_crowdsec_webhook_failure_pages(monkeypatch):
+    # A revoked CrowdSec webhook (the one with no Kuma backstop) pages, naming it — even though
+    # Kuma's own webhook is fine.
+    monkeypatch.setattr(
+        check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
+    )
+    monkeypatch.setattr(
+        check,
+        "DISCORD_CROWDSEC_WEBHOOK_URL",
+        "https://discord.com/api/webhooks/2/crowdsec",
+    )
+    monkeypatch.setattr(check, "_discord_down_streak", 0)
+
+    def get(url, *a, **k):
+        if "crowdsec" in url:
+            raise urllib.error.HTTPError(url, 404, "gone", {}, None)
+        return {"name": "Homelab Alerts"}
+
+    monkeypatch.setattr(check, "_get_json", get)
+    assert check.check_discord()[0]  # streak 1, suppressed
+    ok, msg = check.check_discord()  # streak 2, pages
+    assert not ok
+    assert "CrowdSec" in msg and "404" in msg
 
 
 # ── Prometheus reachability gate + alert-storm suppression (L1) ──────────────
@@ -1495,6 +1538,8 @@ def _wire_run_once(monkeypatch, prom_result):
             return prom_result
 
     monkeypatch.setattr(check, "check_prometheus", _prom)
+    # No exporters down by default, so the prom-up path doesn't hit the network probing `up`.
+    monkeypatch.setattr(check, "prom_vector", lambda q: [])
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset({"disk"}))
 
     def _mk(name):
@@ -1544,6 +1589,122 @@ def test_prom_dependent_set_matches_real_checks():
     # Guard: every name in PROM_DEPENDENT is a real check, so the gate can't silently drift.
     names = {name for name, _, _ in check.CHECKS}
     assert check.PROM_DEPENDENT <= names
+
+
+# ── Exporter-reachability gate (node-exporter / cadvisor) — Backups M3 ───────
+
+
+def test_down_exporters_flags_node_when_node_up_is_zero():
+    up = [
+        ({"job": "node"}, 0.0),
+        ({"job": "cadvisor"}, 1.0),
+        ({"job": "prometheus"}, 1.0),
+    ]
+    assert check.down_exporters(up) == {"node"}
+
+
+def test_down_exporters_flags_both_when_both_down():
+    up = [({"job": "node"}, 0.0), ({"job": "cadvisor"}, 0.0)]
+    assert check.down_exporters(up) == {"node", "cadvisor"}
+
+
+def test_down_exporters_empty_when_all_up():
+    up = [({"job": "node"}, 1.0), ({"job": "cadvisor"}, 1.0)]
+    assert check.down_exporters(up) == set()
+
+
+def test_down_exporters_ignores_non_exporter_jobs():
+    # A non-exporter target down (e.g. loki) is Scrape Targets' concern, not a suppression trigger.
+    up = [({"job": "loki"}, 0.0), ({"job": "node"}, 1.0), ({"job": "cadvisor"}, 1.0)]
+    assert check.down_exporters(up) == set()
+
+
+def test_exporter_dependent_values_are_real_checks():
+    # Guard (mirrors PROM_DEPENDENT): every suppressed dependent is a real check name, so the
+    # exporter gate can't silently drift, and every dependent is also prom-dependent.
+    names = {name for name, _, _ in check.CHECKS}
+    for deps in check.EXPORTER_DEPENDENT.values():
+        assert deps <= names
+        assert deps <= check.PROM_DEPENDENT
+
+
+def _wire_run_once_prom_up(monkeypatch, up_vector, checks, prom_dependent):
+    """Drive run_once with Prometheus UP and a stubbed `up` vector; capture what ran + pushed."""
+    ran, pushes = [], []
+    monkeypatch.setattr(check, "push", lambda t, ok, m: pushes.append((t, ok, m)))
+    monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
+    monkeypatch.setattr(check, "prom_vector", lambda q: up_vector if q == "up" else [])
+    monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset(prom_dependent))
+
+    def _mk(name):
+        def fn():
+            ran.append(name)
+            return True, "%s ok" % name
+
+        return fn
+
+    monkeypatch.setattr(check, "CHECKS", [(n, "tok_%s" % n, _mk(n)) for n in checks])
+    check.run_once()
+    return ran, pushes
+
+
+def test_run_once_suppresses_node_dependents_when_node_exporter_down(monkeypatch):
+    up = [({"job": "node"}, 0.0), ({"job": "cadvisor"}, 1.0)]
+    ran, pushes = _wire_run_once_prom_up(
+        monkeypatch,
+        up,
+        ["disk", "memory", "b2_trend", "targets"],
+        {"disk", "memory", "b2_trend", "targets"},
+    )
+    # node-dependents suppressed (never run, pushed up with a skip msg); Scrape Targets still pages
+    assert not ({"disk", "memory", "b2_trend"} & set(ran))
+    assert "targets" in ran
+    by_tok = {t: (ok, m) for t, ok, m in pushes}
+    assert by_tok["tok_disk"][0] is True
+    assert "exporter" in by_tok["tok_disk"][1].lower()
+
+
+def test_run_once_suppresses_cadvisor_dependents_when_cadvisor_down(monkeypatch):
+    up = [({"job": "node"}, 1.0), ({"job": "cadvisor"}, 0.0)]
+    ran, _ = _wire_run_once_prom_up(
+        monkeypatch,
+        up,
+        ["restarts", "oom", "cpu", "targets"],
+        {"restarts", "oom", "cpu", "targets"},
+    )
+    assert not ({"restarts", "oom", "cpu"} & set(ran))
+    assert "targets" in ran
+
+
+def test_run_once_no_suppression_when_exporters_up(monkeypatch):
+    up = [({"job": "node"}, 1.0), ({"job": "cadvisor"}, 1.0)]
+    ran, _ = _wire_run_once_prom_up(
+        monkeypatch, up, ["disk", "restarts"], {"disk", "restarts"}
+    )
+    assert "disk" in ran and "restarts" in ran
+
+
+def test_run_once_up_probe_failure_does_not_suppress(monkeypatch):
+    # If the `up` probe itself errors, fail toward alerting: run the checks, don't mask them.
+    def boom(q):
+        raise RuntimeError("prom hiccup")
+
+    ran, pushes = [], []
+    monkeypatch.setattr(check, "push", lambda t, ok, m: pushes.append((t, ok, m)))
+    monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
+    monkeypatch.setattr(check, "prom_vector", boom)
+    monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset({"disk"}))
+
+    def _mk(name):
+        def fn():
+            ran.append(name)
+            return True, "%s ok" % name
+
+        return fn
+
+    monkeypatch.setattr(check, "CHECKS", [("disk", "tok_disk", _mk("disk"))])
+    check.run_once()
+    assert "disk" in ran  # not suppressed
 
 
 # ── B2 usage growth trend (L3) ──────────────────────────────────────────────

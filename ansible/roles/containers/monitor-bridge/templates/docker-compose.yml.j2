@@ -157,6 +157,9 @@ services:
       # posts to. A GET (not POST) never spams the channel; DISCORD_CONSECUTIVE adds streak
       # hysteresis so a transient blip on this internet-facing check doesn't false-page.
       - DISCORD_WEBHOOK_URL={{ monitor_discord_webhook_url }}
+      # Also GET-verify the CrowdSec ban-alert webhook — CrowdSec POSTs to it directly (not via
+      # Kuma), so a rotated/revoked URL silently drops security-ban alerts with no Kuma backstop.
+      - DISCORD_CROWDSEC_WEBHOOK_URL={{ crowdsec_discord_webhook_url }}
       - DISCORD_CONSECUTIVE=2
       - KUMA_PUSH_DISCORD={{ monitor_bridge_discord_push_token }}
       # Recyclarr sync health via Loki: recyclarr runs `recyclarr sync` under supercronic (@daily);
