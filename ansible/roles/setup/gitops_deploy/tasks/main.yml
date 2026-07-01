@@ -44,8 +44,18 @@
   loop:
     - gitops-deploy.service
     - gitops-deploy.timer
-    - gitops-deploy-alert.service
   become: true
+  notify:
+    - Reload systemd
+    - Run gitops-deploy once
+
+- name: Install the alert unit (0600 — embeds the SOPS Discord webhook)
+  ansible.builtin.template:
+    src: gitops-deploy-alert.service.j2
+    dest: /etc/systemd/system/gitops-deploy-alert.service
+    mode: "0600"
+  become: true
+  no_log: true
   notify:
     - Reload systemd
     - Run gitops-deploy once

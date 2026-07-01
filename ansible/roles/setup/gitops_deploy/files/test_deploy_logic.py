@@ -9,6 +9,7 @@ from deploy_logic import (
     should_alert_dirty,
     health_decision,
     health_settles,
+    gate_services,
 )
 
 
@@ -463,3 +464,57 @@ def test_health_settles_unhealthy_then_recovers():
 def test_health_settles_never_healthy_times_out():
     # Perpetually 'unhealthy' -> the gate fails (rollback).
     assert health_settles([("unhealthy", False)] * 5) is False
+
+
+# gate_services bounds the TOTAL wall-clock spent health-gating a deploy batch so the gate +
+# rollback finishes inside the unit's TimeoutStartSec. Without the cap, a batch with several
+# containers each polling to HEALTH_TIMEOUT_S could overrun the timeout; systemd would then
+# SIGTERM the deployer before the rollback + hold ran, leaving the bad commit live. Clock + health
+# probe are injected so the budget logic is testable with no docker / sleep / wall-clock.
+def test_gate_services_all_healthy_returns_empty():
+    # Every service healthy, budget never reached -> nothing to roll back.
+    assert gate_services({"a", "b", "c"}, lambda s, dl: True, 100.0, lambda: 0.0) == []
+
+
+def test_gate_services_reports_only_unhealthy():
+    assert gate_services(
+        {"a", "b", "c"}, lambda s, dl: s != "b", 100.0, lambda: 0.0
+    ) == ["b"]
+
+
+def test_gate_services_gates_in_sorted_deterministic_order():
+    assert gate_services({"c", "a", "b"}, lambda s, dl: False, 100.0, lambda: 0.0) == [
+        "a",
+        "b",
+        "c",
+    ]
+
+
+def test_gate_services_budget_exhausted_midway_fails_the_rest():
+    # Clock: 0 before 'a' (gated, healthy), then 100 (>= deadline) before 'b' -> 'b' and 'c' are
+    # marked failed without polling them, so the rollback fires while there's still time.
+    ticks = iter([0.0, 100.0, 100.0])
+    assert gate_services(
+        {"a", "b", "c"}, lambda s, dl: True, 100.0, lambda: next(ticks)
+    ) == ["b", "c"]
+
+
+def test_gate_services_budget_exhausted_before_first_fails_all():
+    # Deploy ate the whole budget: the clock is already past the deadline on the first check, so
+    # every service is failed (health unverifiable -> roll back to be safe).
+    assert gate_services({"a", "b"}, lambda s, dl: True, 100.0, lambda: 999.0) == [
+        "a",
+        "b",
+    ]
+
+
+def test_gate_services_threads_deadline_into_health_fn():
+    # Each health check receives the gate deadline so one slow container's own poll can't overrun it.
+    seen = []
+
+    def health(s, dl):
+        seen.append(dl)
+        return True
+
+    gate_services({"a"}, health, 55.0, lambda: 0.0)
+    assert seen == [55.0]

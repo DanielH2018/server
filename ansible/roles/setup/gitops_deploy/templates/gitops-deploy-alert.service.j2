@@ -3,8 +3,12 @@ Description=Alert when gitops-deploy fails
 
 [Service]
 Type=oneshot
-# Webhook comes from the 0600 config (not embedded — this unit is world-readable).
-EnvironmentFile=/etc/gitops-deploy/config.env
+# Webhook is EMBEDDED (rendered from SOPS at deploy) rather than sourced from
+# /etc/gitops-deploy/config.env: config.env is exactly what can be broken/unreadable when the
+# deployer fails (its cfg() parse runs at import, before the crash-handler), and sourcing the
+# webhook from that same file would leave THIS alert unable to page. curl's own UA is fine —
+# Cloudflare only 1010-blocks python-urllib, not curl. This unit is therefore installed mode 0600
+# (see tasks/main.yml) so the embedded webhook isn't world-readable.
 ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
   -d '{"content":"🚨 gitops-deploy unit failed on daniel-server — check `journalctl -u gitops-deploy`."}' \
-  "${DISCORD_WEBHOOK}"
+  "{{ gitops_deploy_discord_webhook }}"

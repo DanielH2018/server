@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from deploy_logic import (  # noqa: E402
     containers_to_gate,
+    gate_services,
     health_decision,
     next_action,
     services_from_changed_paths,
@@ -66,6 +67,13 @@ C = cfg()
 REPO = C["REPO_DIR"]
 BRANCH = C.get("BRANCH", "master")
 TIMEOUT = int(C.get("HEALTH_TIMEOUT_S", "300"))
+# Wall-clock budget (measured from process start, RUN_START) for the whole run's health-gating
+# phase. Once spent, the gate stops and rolls back so the rollback (git reset + one redeploy)
+# still finishes inside the unit's TimeoutStartSec (25min) — otherwise systemd SIGTERMs the
+# deployer mid-gate, before write_hold()/rollback, and the bad commit is left live. Default
+# 1200s (20min) leaves ~5min of the 25min timeout for the rollback. See gitops-deploy.service.j2.
+RUN_BUDGET_S = int(C.get("RUN_BUDGET_S", "1200"))
+RUN_START = time.time()
 
 
 def run(
@@ -169,19 +177,25 @@ def _inspect(fmt: str, container: str, timeout: float = 15.0) -> str:
         return ""
 
 
-def health_ok(container: str, settle_checks: int = 3) -> bool:
+def health_ok(
+    container: str, settle_checks: int = 3, deadline: float | None = None
+) -> bool:
     """True if `container` reaches 'healthy', or — for an image with no
     HEALTHCHECK — stays 'running' across `settle_checks` consecutive polls
     (~20s) so a boot-then-crash loop doesn't slip the gate the way a single
-    'running' sample would. Polls until HEALTH_TIMEOUT_S, then fails.
+    'running' sample would. Polls until HEALTH_TIMEOUT_S — or the earlier
+    `deadline` (the run-wide gate budget), so one slow container can't blow the
+    whole gate past the unit timeout — then fails.
 
     The per-sample pass/wait + streak transition is the pure, unit-tested
     `deploy_logic.health_decision`; this function is just its I/O shell (docker
     inspect, the 10s poll, and the wall-clock deadline). `.State.Running` is only
     inspected in the no-healthcheck case (st == ''), matching the decision's use."""
-    deadline = time.time() + TIMEOUT
+    per_deadline = time.time() + TIMEOUT
+    if deadline is not None:
+        per_deadline = min(per_deadline, deadline)
     running_streak = 0
-    while time.time() < deadline:
+    while time.time() < per_deadline:
         st = _inspect("{{.State.Health.Status}}", container)
         running = st == "" and _inspect("{{.State.Running}}", container) == "true"
         verdict, running_streak = health_decision(
@@ -209,10 +223,11 @@ def containers_for(service: str) -> list[str]:
     return containers_to_gate(text, service)
 
 
-def service_healthy(service: str) -> bool:
+def service_healthy(service: str, deadline: float | None = None) -> bool:
     # A role may run several containers; gate every one (the bumped image's
-    # container is often not the role-named one).
-    return all(health_ok(c) for c in containers_for(service))
+    # container is often not the role-named one). `deadline` (the run-wide gate
+    # budget) is threaded to each container's poll loop.
+    return all(health_ok(c, deadline=deadline) for c in containers_for(service))
 
 
 def deploy(services: set[str]) -> None:
@@ -352,10 +367,17 @@ def main() -> int:
     skipped = sorted(s for s in cs.services if not containers_for(s))
     if skipped:
         log(f"not deployed on this host; skipping health gate: {skipped}")
-    failed = [s for s in sorted(cs.services) if not service_healthy(s)]
+    # Budget the gate so gate+rollback finishes inside the unit's TimeoutStartSec (see
+    # RUN_BUDGET_S): once the deadline passes, gate_services marks the rest failed and we roll
+    # back, rather than polling to HEALTH_TIMEOUT_S per container and getting SIGTERMed mid-gate
+    # (which would strand the bad commit live). RUN_START is measured from process start.
+    gate_deadline = RUN_START + RUN_BUDGET_S
+    failed = gate_services(cs.services, service_healthy, gate_deadline, time.time)
     if not failed:
         write_hold(None)
         return 0
+    if time.time() >= gate_deadline:
+        log(f"health-gate budget ({RUN_BUDGET_S}s) exhausted before gating completed")
 
     # Rollback: reset to prior HEAD, redeploy the prior version. Redeploy the WHOLE batch
     # (cs.services), not just `failed`: in a multi-service tick the services that DID pass

@@ -212,3 +212,29 @@ def health_settles(samples: list[tuple[str, bool]], settle_checks: int = 3) -> b
         if verdict == "healthy":
             return True
     return False
+
+
+def gate_services(services, health_fn, gate_deadline, now_fn) -> list[str]:
+    """Health-gate `services` (sorted, deterministic) and return those that FAILED.
+
+    Bounds the TOTAL wall-clock spent gating: once `now_fn()` reaches `gate_deadline`, it
+    stops polling and marks the current service AND every still-ungated one as failed, so the
+    gate + rollback (git reset + one redeploy) finishes inside the unit's TimeoutStartSec.
+    Without this cap a multi-service batch with several containers each polling to
+    HEALTH_TIMEOUT_S can overrun the timeout; systemd then SIGTERMs the deployer before the
+    rollback + hold run and the bad commit is left live (next tick sees local==origin -> noop).
+
+    `health_fn(service, gate_deadline)` returns True when healthy; it also receives the deadline
+    so one slow container's own poll loop can't block past it. A service not deployed on this
+    host is vacuously healthy (health_fn returns True — see containers_to_gate). `now_fn` is the
+    injected clock (the deployer passes `time.time`; tests pass a fake) — keeps this module I/O-free.
+    """
+    failed: list[str] = []
+    ordered = sorted(services)
+    for i, service in enumerate(ordered):
+        if now_fn() >= gate_deadline:
+            failed.extend(ordered[i:])
+            break
+        if not health_fn(service, gate_deadline):
+            failed.append(service)
+    return failed

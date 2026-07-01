@@ -8,7 +8,9 @@ OnFailure=gitops-deploy-alert.service
 Type=oneshot
 # Kill a wedged run (hung ansible/docker) so it can't hold the unit "active" forever and starve
 # the 30-min timer (OnUnitActiveSec) — without this a hang stalls the whole pipeline until manual
-# intervention. 25min keeps it under the 30-min interval so the next tick still fires.
+# intervention. 25min keeps it under the 30-min interval so the next tick still fires. The deployer
+# also self-budgets its health-gate phase (RUN_BUDGET_S, default 20min) to leave ~5min here for the
+# rollback redeploy — so a slow multi-service gate can't get SIGTERMed before the rollback + hold run.
 TimeoutStartSec=25min
 User={{ sys_user }}
 WorkingDirectory=/home/{{ sys_user }}/server
