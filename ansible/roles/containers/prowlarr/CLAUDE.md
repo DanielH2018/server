@@ -3,7 +3,9 @@
 Central indexer/tracker manager that feeds Sonarr & Radarr. See repo-root `CLAUDE.md`.
 
 ## At a glance
-- **Images:** `linuxserver/prowlarr` (version-pinned, Renovate-managed) + `ghcr.io/flaresolverr/flaresolverr:latest` (watchtower)
+- **Images:** `linuxserver/prowlarr` (version-pinned, Renovate-managed) + `ghcr.io/flaresolverr/flaresolverr:latest`
+  (`:latest` but `watchtower.enable=false` — prowlarr `depends_on` it `service_healthy` at boot, so it's
+  pinned against unsupervised auto-updates like crowdsec/unbound, the other health-gating sidecars)
 - **Host:** daniel-server · **Port:** 9696 · **URL:** `prowlarr.<domain>` (Authelia: yes)
 - **Networks:** media
 - **Depends on:** traefik, authelia

@@ -65,6 +65,10 @@ services:
     {{ service_networks() }}
     {{ healthcheck('curl --fail -s http://localhost:8191/ || exit 1') }}
     labels:
+      # Keep :latest but pin against watchtower auto-updates — prowlarr depends_on this sidecar
+      # (service_healthy) at cold boot, so an unsupervised pull that breaks flaresolverr would block
+      # prowlarr's next start (matches crowdsec/unbound, the other health-gating :latest sidecars).
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('flaresolverr') }}
     # Resource caps for blast-radius containment (M1). Runs headless Chrome, so
     # size generously and tune from cAdvisor/Grafana.
