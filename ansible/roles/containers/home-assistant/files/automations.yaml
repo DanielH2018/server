@@ -1619,6 +1619,9 @@
         verdict: "{% from 'ventilation.jinja' import ventilation_advice %}{{ ventilation_advice(states('sensor.bedroom_airgradient_one_temperature'), state_attr('weather.forecast_home', 'temperature'), states('sensor.bedroom_airgradient_one_pm2_5'), states('sensor.outdoor_pm2_5'), is_state('binary_sensor.bedroom_co2_high', 'on') or is_state('binary_sensor.bedroom_voc_high', 'on'), states('sensor.outdoor_pm10')) }}"
         out_temp: "{{ state_attr('weather.forecast_home', 'temperature') | float(0) | round }}"
         in_temp: "{{ states('sensor.bedroom_airgradient_one_temperature') | round }}"
+        # Delta from the UNROUNDED temps (rounded once) so the displayed "N° cooler" can't drift
+        # ±1° from the raw ≥5°F cool trigger the way separately-rounded in_temp − out_temp did.
+        temp_delta: "{{ (states('sensor.bedroom_airgradient_one_temperature') | float(0) - (state_attr('weather.forecast_home', 'temperature') | float(0))) | round }}"
         co2: "{{ states('sensor.bedroom_airgradient_one_carbon_dioxide') }}"
     - choose:
         - conditions: "{{ verdict == 'stale' }}"
@@ -1633,7 +1636,7 @@
             - service: script.bedroom_notify
               data:
                 title: "🪟 Free cooling"
-                message: "It's {{ out_temp }}°F outside ({{ in_temp - out_temp }}° cooler) & clean — open up instead of the fan."
+                message: "It's {{ out_temp }}°F outside ({{ temp_delta }}° cooler) & clean — open up instead of the fan."
                 tag: window_advice
 
 # ── Nest Hub Max dashboard (cast to media_player.bedroom_display) ─────────────────────────────────
