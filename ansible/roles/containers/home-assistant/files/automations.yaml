@@ -487,6 +487,12 @@
     # which automation.bedroom_wake_ramp then drives per-minute. The 09:00 fallback never forces lights.
     - if: "{{ trigger.id == 'alarm' and is_state('person.daniel', 'home') }}"
       then:
+        # Record the wake so bedroom_fallback_wake knows today is handled (never double-wake).
+        - service: input_datetime.set_datetime
+          target:
+            entity_id: input_datetime.bedroom_last_wake
+          data:
+            datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
         - service: script.bedroom_lights_set
           data:
             reason: "natural"
@@ -560,6 +566,101 @@
               data:
                 entity_id: switch.bedroom_adaptive_lighting_bedroom
                 turn_on_lights: false
+
+# Fallback wake — safety net for when the WATCH alarm sensor lagged/absent (a Wear OS next_alarm can
+# hold an already-fired alarm for hours; seen 2026-07-01) so sensor.bedroom_wake_start never held a
+# valid future time and the real wake ramp never armed. Weekday 06:00: a gentle warm ramp over the
+# 45-min window using the SAME tested wake_brightness curve, driven per-minute HERE (bedroom_wake_ramp
+# keys off sensor.bedroom_wake_start, which is unavailable in this case). Gated so it can NEVER
+# double-wake: skipped if a wake already ran today (input_datetime.bedroom_last_wake) OR a real alarm
+# is dated today (sensor.bedroom_wake_start). templates.yaml's wake_start availability now rejects a
+# stale PAST watch alarm, so a lagging watch -> unavailable -> this fires. (Accepted: a no-alarm
+# weekday still wakes at 06:00 — see the /homelab wake-debug decision.)
+- id: bedroom_fallback_wake
+  alias: Bedroom fallback wake (no watch alarm)
+  description: Weekday 06:00 safety-net wake ramp when the watch alarm didn't arm the real wake.
+  mode: single
+  trigger:
+    - platform: time
+      at: "06:00:00"
+  condition:
+    - condition: state
+      entity_id: person.daniel
+      state: "home"
+    - condition: state
+      entity_id: input_boolean.bedroom_manual_off
+      state: "off"
+    # Mon-Fri only (weekday() 0=Mon .. 4=Fri).
+    - condition: template
+      value_template: "{{ now().weekday() < 5 }}"
+    # No wake already ran today — catches a real alarm that FIRED earlier then advanced the watch.
+    # input_datetime state is a NAIVE local string, so compare .date() directly (no as_local, which
+    # would treat it as UTC and shift the day).
+    - condition: template
+      value_template: >-
+        {% set lw = states('input_datetime.bedroom_last_wake') %}
+        {{ lw in ['unknown', 'unavailable', ''] or as_datetime(lw).date() != now().date() }}
+    # No real wake pending LATER today — a valid watch alarm dated today owns the wake, so defer.
+    - condition: template
+      value_template: >-
+        {% set ws = states('sensor.bedroom_wake_start') %}
+        {{ ws in ['unknown', 'unavailable'] or (as_datetime(ws) | as_local).date() != now().date() }}
+  action:
+    # Stamp the wake FIRST (double-wake guard + the ramp's anchor), latch the sleep duration once so
+    # the curve shape is fixed for the window (mirrors bedroom_morning_reset), clear overnight
+    # overrides, and re-apply the fan if home.
+    - service: input_datetime.set_datetime
+      target:
+        entity_id: input_datetime.bedroom_last_wake
+      data:
+        datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.bedroom_wake_sleep_min_latched
+      data:
+        value: "{{ states('sensor.pixel_9_pro_sleep_duration') | float(0) }}"
+    - service: script.bedroom_clear_overrides
+    - if: "{{ is_state('person.daniel', 'home') }}"
+      then:
+        - service: script.bedroom_apply_fan
+    # Per-minute warm ramp across the 45-min window. `while` re-checks each minute so a manual
+    # lights-off (bedroom_manual_off) stops it — mirrors bedroom_wake_ramp's manual_off gate. Anchor is
+    # the last_wake we just stamped; elapsed drives the shared, tested wake_brightness curve.
+    - repeat:
+        while:
+          - condition: state
+            entity_id: input_boolean.bedroom_manual_off
+            state: "off"
+          - condition: template
+            value_template: >-
+              {{ (now().timestamp() - state_attr('input_datetime.bedroom_last_wake', 'timestamp')) / 60 < 45 }}
+        sequence:
+          - variables:
+              # input_datetime exposes a `timestamp` attr (epoch) — use it so the arithmetic can't
+              # mix now()'s aware datetime with the naive input_datetime state (a TypeError at 06:00).
+              elapsed: "{{ (now().timestamp() - state_attr('input_datetime.bedroom_last_wake', 'timestamp')) / 60 }}"
+              sleep_min: "{{ states('input_number.bedroom_wake_sleep_min_latched') | float(0) }}"
+              target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(elapsed, sleep_min) | int }}"
+          - service: script.bedroom_lights_set
+            data:
+              reason: "wake_fallback"
+              brightness_pct: "{{ target }}"
+          - delay: "00:01:00"
+    # Window done -> hand the room back to Adaptive Lighting for the day (mirror bedroom_wake_ramp's
+    # release): the ramp has reached 100%, so AL takes over at full brightness and settles to daytime.
+    - service: adaptive_lighting.set_manual_control
+      data:
+        entity_id: switch.bedroom_adaptive_lighting_bedroom
+        manual_control: false
+    - service: adaptive_lighting.apply
+      data:
+        entity_id: switch.bedroom_adaptive_lighting_bedroom
+        turn_on_lights: false
+    - service: script.bedroom_notify
+      data:
+        title: "☀️ Good morning"
+        message: "Wake ramp ran on the 06:00 fallback (no watch alarm detected)."
+        tag: sleep_morning
 
 # Slow color tracking: while the lights are in AUTO mode, drift their color every 5 min toward
 # Adaptive Lighting's CURRENT sun-curve color (read off the AL switch attribute — AL computes it even

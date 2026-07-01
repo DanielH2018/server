@@ -136,10 +136,19 @@ def test_light_decision_presence_each_gate_blocks():
 
 
 def test_light_decision_passthrough_reasons_are_ungated():
-    # natural/wake/off ignore the flags (the caller already gated).
+    # natural/wake/wake_fallback/off ignore the flags (the caller already gated).
     assert _decision("natural", manual_off=True, person_home=False) == "natural"
     assert _decision("wake", lux_allowed=False) == "wake"
     assert _decision("off", light_on=True) == "off"
+
+
+def test_light_decision_wake_fallback_is_passthrough():
+    # The 06:00 safety-net ramp routes through the single writer as its own ungated reason
+    # (bedroom_fallback_wake pre-gates); it must pass through, not fall into the noop bucket.
+    assert _decision("wake_fallback") == "wake_fallback"
+    assert (
+        _decision("wake_fallback", manual_off=True, presence=False) == "wake_fallback"
+    )
 
 
 def test_light_decision_unknown_reason_is_noop():

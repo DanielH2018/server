@@ -424,7 +424,13 @@ def service_resolution_errors(config: dict, known_services: set[str]) -> list[st
 # added valid reason false-fails loudly until added here), never silently passes. Mirror any
 # change to lighting.jinja's light_decision / files/scripts.yaml's bedroom_fan_set.
 MEDIATOR_REASONS = {
-    "script.bedroom_lights_set": {"presence", "natural", "wake", "off"},
+    "script.bedroom_lights_set": {
+        "presence",
+        "natural",
+        "wake",
+        "wake_fallback",
+        "off",
+    },
     "script.bedroom_fan_set": {"auto", "boost", "off"},
 }
 

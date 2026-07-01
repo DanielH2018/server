@@ -12,6 +12,7 @@ Generated from the real automations/scripts/config. The *why* (runtime traps, fe
 | bedroom_fan_dial | `timer.bedroom_fan_dial` | Bedroom fan-dial mode |
 | bedroom_fan_expected_level | `input_number.bedroom_fan_expected_level` | Bedroom fan expected level |
 | bedroom_fan_manual | `input_boolean.bedroom_fan_manual` | Bedroom fan manual override |
+| bedroom_last_wake | `input_datetime.bedroom_last_wake` | Bedroom last wake |
 | bedroom_light_expected_color_temp | `input_number.bedroom_light_expected_color_temp` | Bedroom light expected color temp |
 | bedroom_manual_off | `input_boolean.bedroom_manual_off` | Bedroom manual off override |
 | bedroom_sleep_mode | `input_boolean.bedroom_sleep_mode` | Bedroom sleep mode |

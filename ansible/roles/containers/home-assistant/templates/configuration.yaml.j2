@@ -132,6 +132,15 @@ input_datetime:
     has_date: true
     has_time: true
     icon: mdi:heart-pulse
+  # Timestamp of the last morning wake ramp START (real alarm OR the 06:00 fallback). Written by
+  # bedroom_morning_reset (alarm branch) and bedroom_fallback_wake; the fallback reads it to know
+  # a wake already happened today, so a lagging watch alarm that fires then advances can't
+  # double-wake. Survives restarts (no restore: needed — a real datetime, not a boot-transient flag).
+  bedroom_last_wake:
+    name: Bedroom last wake
+    has_date: true
+    has_time: true
+    icon: mdi:weather-sunset-up
 
 # Fan-dial mode timer — its `active` state IS "the dial controls the fan" (Tap Dial button-4 hold
 # toggles it; bedroom_tap_dial_control's dial_rotate branches read it). 5-min SLIDING window: each

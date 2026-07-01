@@ -103,12 +103,13 @@ default
    the light, so its conditions live in one tested place); `natural`/`wake`/`off` are pass-through
    (their caller keeps its own gate, which also guards its non-light side effects). Bools arrive as
    real booleans from is_state() in the caller; `| bool` coerces defensively (and for the test
-   harness). Returns: natural | wake | off | noop. #}
+   harness). Returns: natural | wake | wake_fallback | off | noop. (wake_fallback is the 06:00
+   safety-net ramp when the watch alarm lagged — pass-through like wake; the caller pre-gates.) #}
 {%- macro light_decision(reason, manual_off, sleep_mode, person_home, presence, lux_allowed, light_on) -%}
 {%- if reason == 'presence' -%}
 {{ 'natural' if (not (manual_off | bool) and not (sleep_mode | bool) and (person_home | bool)
    and (presence | bool) and (lux_allowed | bool) and not (light_on | bool)) else 'noop' }}
-{%- elif reason in ['natural', 'wake', 'off'] -%}
+{%- elif reason in ['natural', 'wake', 'wake_fallback', 'off'] -%}
 {{ reason }}
 {%- else -%}
 noop

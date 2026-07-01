@@ -63,9 +63,13 @@ bedroom_lights_set:
   mode: restart
   fields:
     reason:
-      description: "presence | natural | wake | off"
+      description: "presence | natural | wake | wake_fallback | off"
       required: true
       example: presence
+    brightness_pct:
+      description: "wake_fallback only: the ramp-frame brightness for THIS minute (the caller computes it from the wake_brightness curve)"
+      required: false
+      example: 12
   sequence:
     - variables:
         action: >-
@@ -83,6 +87,18 @@ bedroom_lights_set:
         - conditions: "{{ action == 'wake' }}"
           sequence:
             - service: script.bedroom_apply_wake
+        # Fallback wake frame: the real wake ramp (apply_wake) reads sensor.bedroom_wake_start, which
+        # is unavailable when no watch alarm fired — so the fallback passes the precomputed frame
+        # brightness (same wake_brightness curve) directly. Warm 2200K like apply_wake.
+        - conditions: "{{ action == 'wake_fallback' }}"
+          sequence:
+            - service: light.turn_on
+              target:
+                entity_id: light.bedroom_lights
+              data:
+                brightness_pct: "{{ brightness_pct | int }}"
+                color_temp_kelvin: 2200
+                transition: 60
         - conditions: "{{ action == 'off' }}"
           sequence:
             - service: light.turn_off
