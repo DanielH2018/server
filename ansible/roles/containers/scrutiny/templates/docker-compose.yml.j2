@@ -96,6 +96,13 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    # Drop the default cap set (previously retained implicitly) and add back only the two the
+    # SMART read needs — matches scrutiny-influxdb above and the rest of the hardened fleet. The
+    # collector runs as root but reads /dev/nvme0 as its owner (root:disk, rw for owner), so it
+    # needs no DAC_OVERRIDE; if a future drive's node isn't root-owned, add just DAC_OVERRIDE.
+    # Verify SMART still reports after deploy (monitor-bridge "SMART Data Freshness").
+    cap_drop:
+      - ALL
     cap_add:
       - SYS_RAWIO
       # SYS_ADMIN is required for NVMe drives: reading the SMART/Health Information
