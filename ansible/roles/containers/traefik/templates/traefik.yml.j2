@@ -74,8 +74,12 @@ providers:
     endpoint: "tcp://docker-proxy:2375"
     exposedByDefault: false
   file:
-    filename: /config.yml
-    watch: true  # Added watch: true so you can edit config.yml without restarting Traefik
+    # Directory (not `filename:`) — a single-file bind mount stays pinned to the OLD
+    # inode after ansible re-renders config.yml (tmp+rename), so `watch: true` never
+    # fires. The directory bind mount follows directory entries, so renames within it
+    # ARE visible and watch actually works. See traefik/CLAUDE.md.
+    directory: /dynamic
+    watch: true
 
 certificatesResolvers:
   cloudflare:

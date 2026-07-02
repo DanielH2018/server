@@ -29,11 +29,32 @@
     group: root
   become: true
 
+- name: Create dynamic config directory
+  # Directory mount (not the old single-file bind mount): ansible's template module
+  # writes via tmp+rename, so a re-render swaps in a new inode. A single-file bind
+  # mount stays pinned to the OLD inode — Traefik's file-provider `watch: true` never
+  # fires and even a full re-render is invisible until the container is recreated.
+  # Bind-mounting the parent directory instead means the container follows the
+  # directory entry, not a specific inode, so renames within it ARE visible and
+  # watch actually works. 0700: traefik reads it as root via DAC_OVERRIDE (same as
+  # acme.json), so this only needs to keep other local users out.
+  tags: [config]
+  ansible.builtin.file:
+    path: "/home/{{ sys_user }}/server/containers/traefik/data/dynamic"
+    state: directory
+    mode: "0700"
+
+- name: Remove old single-file dynamic config (superseded by data/dynamic/config.yml)
+  tags: [config]
+  ansible.builtin.file:
+    path: "/home/{{ sys_user }}/server/containers/traefik/data/config.yml"
+    state: absent
+
 - name: Create config.yml from template
   tags: [config]
   ansible.builtin.template:
     src: config.yml.j2
-    dest: "/home/{{ sys_user }}/server/containers/traefik/data/config.yml"
+    dest: "/home/{{ sys_user }}/server/containers/traefik/data/dynamic/config.yml"
     # 0600: embeds the CrowdSec LAPI bouncer key — keep it off other local users.
     mode: "0600"
   register: traefik_cfg_config
@@ -140,8 +161,12 @@
   vars:
     # Recreate traefik+crowdsec only when a bind-mounted config changed. Excludes the
     # host-level docker-user-rules/systemd units (handled by their own restart tasks).
+    # traefik_cfg_config (dynamic config.yml) is deliberately NOT in this OR: it's now
+    # bind-mounted via its parent directory (data/dynamic/), so Traefik's file-provider
+    # `watch: true` picks up edits live — no recreate needed. traefik_cfg_static
+    # (traefik.yml) stays in the OR since Traefik only reads its static config at boot.
     common_config_changed: >-
-      {{ (traefik_cfg_config is changed) or (traefik_cfg_static is changed)
+      {{ (traefik_cfg_static is changed)
          or (traefik_cfg_whitelist is changed) or (traefik_cfg_trusted_remote_whitelist is changed)
          or (traefik_cfg_acquis is changed)
          or (traefik_cfg_profiles is changed) or (traefik_cfg_discord is changed) }}

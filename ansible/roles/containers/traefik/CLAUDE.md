@@ -31,6 +31,16 @@ Metabase dashboard.
   Encrypt). Adding `certresolver` to them would only trigger redundant per-host ACME requests for
   zero gain. A NEW hand-rolled router on a NEW host not under the wildcard would still need one.
 
+- **Dynamic config (`config.yml.j2`) is bind-mounted via its PARENT DIRECTORY
+  (`./data/dynamic:/dynamic:ro`, `providers.file.directory: /dynamic`), not as a single
+  file.** Ansible's `template` module writes via tmp+rename, so a re-render swaps in a
+  new inode; a single-file bind mount (the old `./data/config.yml:/config.yml:ro` +
+  `filename:`) stays pinned to the OLD inode, so Traefik's file-provider `watch: true`
+  never fires and even a full re-render is invisible until the container is recreated.
+  A directory mount follows directory entries, so renames within it are visible and
+  watch actually works — config.yml edits now apply live, no recreate needed (unlike
+  `traefik.yml`, still read only at boot, still in the `common_config_changed` OR).
+
 ## Editing
-- Compose: `templates/docker-compose.yml.j2` · Static/dynamic cfg: `templates/config.yml.j2`, `templates/traefik.yml.j2`
+- Compose: `templates/docker-compose.yml.j2` · Static cfg: `templates/traefik.yml.j2` · Dynamic cfg: `templates/config.yml.j2` (renders to `data/dynamic/config.yml`)
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "traefik"`

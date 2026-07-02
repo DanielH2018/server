@@ -96,7 +96,7 @@ services:
     volumes:
       - ./data/traefik.yml:/traefik.yml:ro
       - ./data/acme.json:/acme.json
-      - ./data/config.yml:/config.yml:ro
+      - ./data/dynamic:/dynamic:ro
       - /var/log/traefik:/var/log/traefik
     {{ healthcheck('["CMD", "traefik", "healthcheck"]') }}
     labels:
