@@ -37,7 +37,7 @@ RESULT=$(printf '%s' "$OUT" | GRACE_S="$GRACE_S" python3 -c '
 import json, os, sys
 from datetime import datetime, timezone
 GRACE_S = float(os.environ.get("GRACE_S", 129600))
-# Wrap the WHOLE body, not just json.load: datetime.fromisoformat() on kopia's nanosecond+offset
+# Wrap the WHOLE body, not just json.load: datetime.fromisoformat() on the kopia nanosecond+offset
 # timestamp (and the runs iteration) could raise on an older-Python DR host or a future kopia
 # format change. An unguarded raise exits with EMPTY stdout, and the bash wrapper reads that as
 # RESULT != "OK" -> write_state false -> a FALSE Backup-Maintenance DOWN/page. Degrade any error
