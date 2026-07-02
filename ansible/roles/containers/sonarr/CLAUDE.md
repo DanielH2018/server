@@ -11,7 +11,12 @@ Part of the *arr media stack. See repo-root `CLAUDE.md` for shared conventions.
 
 ## Notable
 - Gets indexers from Prowlarr, sends downloads to qBittorrent, and is consumed by
-  Bazarr / Recyclarr / Janitorr. Shares the `media` network and the `data/media` tree.
+  Bazarr / Recyclarr / Janitorr. Shares the `media` network.
+- **Mounts the whole `containers/data` tree at `/data`** (not a separate `/tv` +
+  `/downloads`), same as qBittorrent/Radarr/Bazarr — a single shared bind mount is
+  required for `copyUsingHardlinks` imports: `link()` returns `EXDEV` across separate
+  bind mounts even when they're on the same filesystem. Root folder is `/data/media/tv`;
+  qBittorrent lands downloads under `/data/torrents/`.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`

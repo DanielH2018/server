@@ -16,8 +16,7 @@ services:
       - DOCKER_MODS=linuxserver/mods:radarr-striptracks
     volumes:
       - ./config:/config
-      - /home/{{ sys_user }}/server/containers/data/media/movies:/movies
-      - /home/{{ sys_user }}/server/containers/data/downloads:/downloads
+      - /home/{{ sys_user }}/server/containers/data:/data
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

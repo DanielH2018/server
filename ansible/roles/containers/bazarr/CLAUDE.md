@@ -12,6 +12,9 @@ See repo-root `CLAUDE.md` for shared conventions.
 ## Notable
 - Pulls the library lists from Sonarr/Radarr (deploys after them) and writes subtitle
   files alongside media in the shared `data/media` tree.
+- **Mounts the whole `containers/data` tree at `/data`** (not separate `/tv` + `/movies`
+  + `/downloads`), same as qBittorrent/Sonarr/Radarr, for mount-layout consistency across
+  the four services (Bazarr itself only reads/writes subtitles, no hardlinking).
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`

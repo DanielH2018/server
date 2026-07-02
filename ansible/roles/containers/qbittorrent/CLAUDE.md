@@ -18,6 +18,13 @@ kill-switch. See repo-root `CLAUDE.md` for shared conventions.
 - Mullvad creds (`mullvad_account`, `wireguard_interface_private_key`) come from secrets;
   location pinned `us-qas`. WireGuard needs `NET_ADMIN`/`NET_RAW`; qBittorrent does not.
 - Watchtower disabled on the wireguard container.
+- **Mounts the whole `containers/data` tree at `/data`** (not a standalone `/downloads`),
+  same as Sonarr/Radarr/Bazarr. Torrents land in `data/torrents/{tv-sonarr,radarr,incomplete}`
+  (qBittorrent categories `tv-sonarr`/`radarr`). A single shared bind mount across all four
+  services is required for the *arrs' `copyUsingHardlinks` imports to actually hardlink:
+  `link()` returns `EXDEV` across separate bind mounts even when both are on the same
+  underlying filesystem, so the old split `/downloads` + `/tv` + `/movies` mounts silently
+  forced a copy instead.
 - **Orphaned-netns failure mode:** because the namespace is resolved only at *start*,
   recreating/restarting the wireguard sidecar without also restarting qBittorrent leaves
   qBittorrent serving 8080 in a dead netns — unreachable at `wireguard:8080` (Sonarr/Radarr

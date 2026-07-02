@@ -78,7 +78,7 @@ services:
     depends_on:
       wireguard:
         condition: service_healthy
-    # Standard LSIO s6 set to chown /config + /downloads and drop to PUID/PGID. No
+    # Standard LSIO s6 set to chown /config + /data and drop to PUID/PGID. No
     # NET_ADMIN — networking is owned by the wireguard sidecar (shared netns), not here.
     cap_drop:
       - ALL
@@ -99,7 +99,12 @@ services:
       - TORRENTING_PORT=6881
     volumes:
       - ./config:/config
-      - /home/{{ sys_user }}/server/containers/data/downloads:/downloads
+      # Single mount (replacing separate /downloads + /tv + /movies binds across
+      # qbittorrent/sonarr/radarr/bazarr) so Sonarr/Radarr can hardlink imports out of
+      # here instead of copying: link() returns EXDEV across separate bind mounts even
+      # when both live on the same underlying filesystem, so a split mount silently
+      # forces copyUsingHardlinks to fall back to a copy.
+      - /home/{{ sys_user }}/server/containers/data:/data
     restart: unless-stopped
     healthcheck:
       # Three signals, because each catches a failure the others miss:
