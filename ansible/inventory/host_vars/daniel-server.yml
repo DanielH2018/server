@@ -240,8 +240,16 @@ containers_list:
   - name: healthchecks
     port: 8000
     use_authelia: true
+    # `apps`, not `monitoring` (Security finding, 2026-07-02): docker-proxy sits on
+    # `proxy` + `monitoring` (env API, secrets in every container's Env). healthchecks is
+    # internet-reachable unauthed on its /ping/ path (Traefik bypass), so it shouldn't
+    # share a net with docker-proxy. All real pings to it are public HTTPS
+    # (healthchecks.<domain>/ping/<uuid>) via Traefik, never in-cluster by container name,
+    # and its Uptime-Kuma monitor is `docker`-type (queried via the docker socket, not the
+    # network) — so it needs no `monitoring` access. Traefik is also on `apps`, so routing
+    # is unaffected.
     networks:
-      - monitoring
+      - apps
   - name: bento-pdf
     port: 8080
     use_authelia: true

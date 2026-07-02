@@ -6,7 +6,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 ## At a glance
 - **Image:** `lscr.io/linuxserver/healthchecks:latest`
 - **Host:** daniel-server · **Port:** 8000 · **URL:** `healthchecks.<domain>` (Authelia: yes)
-- **Networks:** monitoring
+- **Networks:** apps (off `monitoring` since 2026-07-02 — docker-proxy sits there; see host_vars comment)
 - **Depends on:** traefik, authelia
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 
