@@ -24,7 +24,7 @@ set -uo pipefail
 
 # Stateful services worth proving restorable, each paired with a service-SPECIFIC state
 # file that must reappear after restore. All verified present in the snapshot.
-SVCS=(authelia traefik n8n karakeep freshrss grafana pihole home-assistant)
+SVCS=(authelia traefik n8n karakeep freshrss grafana pihole home-assistant zigbee2mqtt)
 declare -A SENTINEL=(
   [authelia]=config/configuration.yml
   [traefik]=data/acme.json
@@ -37,6 +37,11 @@ declare -A SENTINEL=(
   # rebuild tree in the homelab — prove it restores, not just that it's backed up. The
   # registry is a JSON file (not *.db), so it skips the SQLite-magic branch below.
   [home-assistant]=config/.storage/core.device_registry
+  # Z2M's OWN database.db is NDJSON (newline-delimited JSON), not SQLite — the *.db
+  # SQLite-magic branch below would false-fail against its header. coordinator_backup.json
+  # (the Zigbee network's radio-side backup, re-pair-critical) is a real JSON file and
+  # skips that branch the same way home-assistant's registry does.
+  [zigbee2mqtt]=data/coordinator_backup.json
 )
 # Rotation: + year term so the singly-covered slot moves year over year. With a bare
 # month % len, the services in the wrap-around (months > len) are drilled only once a year
