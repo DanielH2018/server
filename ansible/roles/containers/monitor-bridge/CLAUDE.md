@@ -9,13 +9,15 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 - **Networks:** `monitoring` (reach `prometheus:9090`, `uptime-kuma:3001`) + `kopia`
   (reach `kopia:51515`) + `apps` (reach the n8n public API at `n8n:5678`). Joins the `kopia`
   net as trusted infra — like Traefik — so Kopia stays off `monitoring` and apps still can't
-  reach the unauthenticated `kopia:51515`.
+  reach the unauthenticated `kopia:51515`. **NOT currently on `media`** (where sonarr/radarr
+  live) — `check_arr_queue`'s `SONARR_URL`/`RADARR_URL` (`http://sonarr:8989`/`http://radarr:7878`)
+  can't resolve until monitor-bridge joins that network too; see Operator prerequisites.
 - **Depends on:** prometheus, uptime-kuma, kopia (`meta/deps.yml`)
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **twenty-five checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **twenty-six checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the nine
@@ -54,6 +56,17 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     (stays up); an unreachable API surfaces as `down`. Reached at `n8n:5678` over `apps`,
     bypassing Authelia via the `X-N8N-API-KEY` header. Caps the workflow page at 250 and the
     error-execution page at 100 — ample for a homelab window.)
+  - **Arr Queue Warnings** (sonarr's + radarr's own `/api/v3/queue`: `down` on any item with
+    `trackedDownloadStatus == "warning"`, `trackedDownloadState == "importBlocked"`, or
+    `importPending` carrying `statusMessages` — naming the release title + app. Added after the
+    2026-07-01 incident: an indexer served a poisoned fake-episode `.exe`; sonarr blocked the
+    import itself and flagged the queue item `warning` ("Caution: Found executable file with
+    extension: '.exe'"), but nothing paged, so the release sat seeding for a full day before a
+    manual review caught it. `SONARR_API_KEY`/`RADARR_API_KEY` are independent — an empty one
+    skips that app, both empty disables the whole check (stays up), like `N8N_API_KEY`. An
+    unreachable *arr API is NOT given grace/hysteresis — it surfaces as `down` immediately via
+    the same `_evaluate` path as `check_n8n`/`check_scrutiny` (no shared root cause here to
+    gate, unlike the Prometheus/exporter checks). Pure `queue_warnings()` is unit-tested.)
   - **GitOps Deploy — Alive** (reads `/gitops-state/last_run`, a bind-mounted host timestamp the
     `gitops_deploy` deployer rewrites each non-crashing tick; `down` once it's older than
     `GITOPS_MAX_AGE_MIN` — i.e. the deployer stalled / host down. The deployer no longer pushes
@@ -180,7 +193,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,gitops_alive,gitops_status,scrutiny,pi,b2,b2_trend,ha,renovate_alive,loki,verify,maintenance,discord,recyclarr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,gitops_alive,gitops_status,scrutiny,pi,b2,b2_trend,ha,renovate_alive,loki,verify,maintenance,discord,recyclarr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -198,7 +211,8 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 - Thresholds are env-tunable in the compose template (`BACKUP_MAX_AGE_H`, `DISK_MAX_PCT`,
   `CERT_MIN_DAYS`, `MEM_MAX_PCT`, `RESTART_WINDOW`/`RESTART_MAX`, `OOM_WINDOW`,
   `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`/`CPU_CONSECUTIVE`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`,
-  `N8N_FAIL_WINDOW`/`N8N_FAIL_MAX`; n8n connection config: `N8N_URL`/`N8N_API_KEY`; GitOps
+  `N8N_FAIL_WINDOW`/`N8N_FAIL_MAX`; n8n connection config: `N8N_URL`/`N8N_API_KEY`; arr queue
+  connection config: `SONARR_URL`/`SONARR_API_KEY`/`RADARR_URL`/`RADARR_API_KEY`; GitOps
   liveness: `GITOPS_MAX_AGE_MIN`/`GITOPS_STATE_DIR`; Pi pressure:
   `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`; HA heartbeat:
   `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`; B2 trend:
@@ -207,12 +221,21 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the twenty-five push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the twenty-six push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI
    (**Settings → n8n API**), scoped to read **Workflow** + **Execution** permissions.
-3. Notifications attach **automatically** — the `kuma()` macro tags every monitor with
+3. For the Arr Queue Warnings monitor: `sonarr_api_key`/`radarr_api_key` already exist in
+   `secrets.yml` (recyclarr/janitorr/homepage reference them too — get the plaintext from
+   `docker exec sonarr cat /config/config.xml` / `docker exec radarr cat /config/config.xml`
+   if you need to re-derive them). **monitor-bridge is not yet on the `media` network** that
+   sonarr/radarr live on (it's on `monitoring`+`kopia`+`apps`) — add `media` to its
+   `containers_list` entry in `ansible/inventory/host_vars/daniel-server.yml` (mirrors how
+   `homepage` reaches the same two containers by name) before deploying, or the check will
+   page `down` on every cycle (unresolvable host), which is worse than the silence it's meant
+   to fix.
+4. Notifications attach **automatically** — the `kuma()` macro tags every monitor with
    `notification_name_list=["{{ kuma_notification_id }}"]`, linking it to the AutoKuma-managed
    Discord notification defined on the `uptime-kuma` container. No per-monitor UI clicking.
 

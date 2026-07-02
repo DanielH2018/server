@@ -56,6 +56,17 @@ N8N_URL = _env("N8N_URL", "http://n8n:5678").rstrip("/")
 N8N_API_KEY = _env("N8N_API_KEY", "")
 N8N_FAIL_WINDOW = _env("N8N_FAIL_WINDOW", "15m")
 N8N_FAIL_MAX = float(_env("N8N_FAIL_MAX", "0"))
+
+# Sonarr/Radarr queue warnings: the 2026-07-01 incident — an indexer served a poisoned
+# fake-episode .exe, sonarr itself blocked the import and flagged the queue item
+# trackedDownloadStatus "warning" (message: "Caution: Found executable file with
+# extension: '.exe'") — but nothing paged, so the release sat seeding for a full day
+# before a manual review caught it. Polled directly (X-Api-Key header), same "internal
+# REST API, empty key disables" idiom as N8N_API_KEY.
+SONARR_URL = _env("SONARR_URL", "http://sonarr:8989").rstrip("/")
+SONARR_API_KEY = _env("SONARR_API_KEY", "")
+RADARR_URL = _env("RADARR_URL", "http://radarr:7878").rstrip("/")
+RADARR_API_KEY = _env("RADARR_API_KEY", "")
 GITOPS_STATE_DIR = _env("GITOPS_STATE_DIR", "/gitops-state")
 GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
 RENOVATE_STATE_DIR = _env("RENOVATE_STATE_DIR", "/renovate-state")
@@ -634,6 +645,66 @@ def check_n8n():
     return True, "no active-workflow failures in %s" % N8N_FAIL_WINDOW
 
 
+def queue_warnings(queue_json, app_name):
+    """Pure: (app_name, title, reason) for each queue item needing an operator's eyes.
+
+    Fed a sonarr/radarr /api/v3/queue payload. trackedDownloadStatus == "warning" is the
+    2026-07-01 incident's signal — the *arr blocked the import itself but only flagged the
+    queue item, so it kept seeding for a day with nothing paging. trackedDownloadState ==
+    "importBlocked" is the harder-blocked sibling state; "importPending" WITH
+    statusMessages covers the case where the block reason shows up under the pending state
+    instead. Plain "importPending" with no messages is the ordinary just-finished-download
+    queue waiting its turn — not a problem, so it's left alone.
+    """
+    offenders = []
+    for item in queue_json.get("records", []):
+        status = item.get("trackedDownloadStatus")
+        state = item.get("trackedDownloadState")
+        messages = item.get("statusMessages") or []
+        if (
+            status != "warning"
+            and state != "importBlocked"
+            and not (state == "importPending" and messages)
+        ):
+            continue
+        title = item.get("title") or "?"
+        reasons = [m for sm in messages for m in sm.get("messages", [])]
+        reason = "; ".join(reasons) or status or state or "warning"
+        offenders.append((app_name, title, reason))
+    return offenders
+
+
+def check_arr_queue():
+    """Sonarr/Radarr queue warning/blocked-import watchdog (see queue_warnings).
+
+    Empty SONARR_API_KEY/RADARR_API_KEY independently skip that app (like the multi-webhook
+    Discord check); both empty -> disabled (stays up), like check_n8n. An unreachable *arr
+    API is NOT caught here — it bubbles up and _evaluate renders it `down` with the error,
+    the same convention as check_n8n/check_scrutiny (a dead dependency pages; there's no
+    shared root cause here the way Prometheus/exporter outages have, so nothing to gate).
+    pageSize=250 mirrors n8n's page cap — ample for a homelab queue.
+    """
+    apps = [
+        (
+            "Sonarr",
+            SONARR_URL + "/api/v3/queue?includeUnknownSeriesItems=true&pageSize=250",
+            SONARR_API_KEY,
+        ),
+        ("Radarr", RADARR_URL + "/api/v3/queue?pageSize=250", RADARR_API_KEY),
+    ]
+    configured = [a for a in apps if a[2]]
+    if not configured:
+        return True, "arr queue monitoring disabled (no API keys)"
+    offenders = []
+    for app_name, url, api_key in configured:
+        data = _get_json(url, headers={"X-Api-Key": api_key})
+        offenders.extend(queue_warnings(data, app_name))
+    if offenders:
+        desc = "; ".join("[%s] %s — %s" % o for o in offenders[:5])
+        return False, "%d queue item(s) need review: %s" % (len(offenders), desc)
+    return True, "queue clean (%s)" % ", ".join(a[0] for a in configured)
+
+
 def check_gitops_alive():
     try:
         with open(os.path.join(GITOPS_STATE_DIR, "last_run")) as fh:
@@ -1196,6 +1267,7 @@ CHECKS = [
     ("targets", _env("KUMA_PUSH_TARGETS", ""), check_targets_down),
     ("traefik5xx", _env("KUMA_PUSH_TRAEFIK", ""), check_traefik_5xx),
     ("n8n", _env("KUMA_PUSH_N8N", ""), check_n8n),
+    ("arr_queue", _env("KUMA_PUSH_ARR_QUEUE", ""), check_arr_queue),
     ("gitops_alive", _env("KUMA_PUSH_GITOPS_ALIVE", ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
     ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),

@@ -588,6 +588,184 @@ def test_n8n_check_at_threshold_is_ok(monkeypatch):
     assert ok
 
 
+# --- queue_warnings (pure) ---------------------------------------------------
+
+
+def _queue(*records):
+    return {"records": list(records)}
+
+
+def test_queue_warnings_flags_warning_status():
+    # The 2026-07-01 incident shape: warning status, importPending state, a statusMessage
+    # naming the executable.
+    q = _queue(
+        {
+            "title": "Poisoned.Episode.S01E01.exe",
+            "trackedDownloadStatus": "warning",
+            "trackedDownloadState": "importPending",
+            "statusMessages": [
+                {
+                    "title": "Poisoned.Episode.S01E01.exe",
+                    "messages": [
+                        "Caution: Found executable file with extension: '.exe'"
+                    ],
+                }
+            ],
+        }
+    )
+    offenders = check.queue_warnings(q, "Sonarr")
+    assert len(offenders) == 1
+    app, title, reason = offenders[0]
+    assert app == "Sonarr"
+    assert title == "Poisoned.Episode.S01E01.exe"
+    assert "executable" in reason
+
+
+def test_queue_warnings_empty_queue_is_clean():
+    assert check.queue_warnings(_queue(), "Radarr") == []
+
+
+def test_queue_warnings_ignores_normal_downloading_item():
+    q = _queue(
+        {
+            "title": "Some.Movie.2026",
+            "trackedDownloadStatus": "ok",
+            "trackedDownloadState": "downloading",
+        }
+    )
+    assert check.queue_warnings(q, "Radarr") == []
+
+
+def test_queue_warnings_flags_import_blocked_state():
+    q = _queue(
+        {
+            "title": "Blocked.Release",
+            "trackedDownloadStatus": "ok",
+            "trackedDownloadState": "importBlocked",
+        }
+    )
+    offenders = check.queue_warnings(q, "Sonarr")
+    assert len(offenders) == 1
+    assert offenders[0][1] == "Blocked.Release"
+
+
+def test_queue_warnings_import_pending_without_messages_is_ok():
+    # Ordinary just-finished-downloading queue item — not a problem.
+    q = _queue(
+        {
+            "title": "Fine.Release",
+            "trackedDownloadStatus": "ok",
+            "trackedDownloadState": "importPending",
+        }
+    )
+    assert check.queue_warnings(q, "Sonarr") == []
+
+
+def test_queue_warnings_import_pending_with_messages_is_flagged():
+    q = _queue(
+        {
+            "title": "Ambiguous.Release",
+            "trackedDownloadStatus": "ok",
+            "trackedDownloadState": "importPending",
+            "statusMessages": [{"title": "x", "messages": ["Not a valid video file"]}],
+        }
+    )
+    offenders = check.queue_warnings(q, "Radarr")
+    assert len(offenders) == 1
+    assert "Not a valid video file" in offenders[0][2]
+
+
+def test_queue_warnings_multiple_records_all_named():
+    q = _queue(
+        {
+            "title": "Bad One",
+            "trackedDownloadStatus": "warning",
+            "trackedDownloadState": "importPending",
+        },
+        {
+            "title": "Good One",
+            "trackedDownloadStatus": "ok",
+            "trackedDownloadState": "downloading",
+        },
+        {
+            "title": "Bad Two",
+            "trackedDownloadStatus": "warning",
+            "trackedDownloadState": "importPending",
+        },
+    )
+    offenders = check.queue_warnings(q, "Sonarr")
+    titles = {t for _, t, _ in offenders}
+    assert titles == {"Bad One", "Bad Two"}
+
+
+# --- check_arr_queue ---------------------------------------------------------
+
+
+def test_arr_queue_disabled_without_keys():
+    # SONARR_API_KEY/RADARR_API_KEY default to "" in tests -> monitoring disabled
+    ok, msg = check.check_arr_queue()
+    assert ok
+    assert "disabled" in msg.lower()
+
+
+def test_arr_queue_down_on_sonarr_warning(monkeypatch):
+    monkeypatch.setattr(check, "SONARR_API_KEY", "x")
+    q = _queue(
+        {
+            "title": "Poisoned.Episode.S01E01.exe",
+            "trackedDownloadStatus": "warning",
+            "trackedDownloadState": "importPending",
+            "statusMessages": [{"title": "x", "messages": ["Found executable file"]}],
+        }
+    )
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: q)
+    ok, msg = check.check_arr_queue()
+    assert not ok
+    assert "Sonarr" in msg
+    assert "Poisoned.Episode.S01E01.exe" in msg
+
+
+def test_arr_queue_down_on_radarr_warning(monkeypatch):
+    monkeypatch.setattr(check, "RADARR_API_KEY", "x")
+    q = _queue(
+        {
+            "title": "Bad.Movie.2026",
+            "trackedDownloadStatus": "warning",
+            "trackedDownloadState": "importPending",
+        }
+    )
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: q)
+    ok, msg = check.check_arr_queue()
+    assert not ok
+    assert "Radarr" in msg
+    assert "Bad.Movie.2026" in msg
+
+
+def test_arr_queue_ok_when_both_clean(monkeypatch):
+    monkeypatch.setattr(check, "SONARR_API_KEY", "x")
+    monkeypatch.setattr(check, "RADARR_API_KEY", "x")
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _queue())
+    ok, msg = check.check_arr_queue()
+    assert ok
+    assert "Sonarr" in msg and "Radarr" in msg
+
+
+def test_arr_queue_only_checks_configured_app(monkeypatch):
+    # Only Sonarr has a key; Radarr must not be queried at all.
+    monkeypatch.setattr(check, "SONARR_API_KEY", "x")
+    calls = []
+
+    def fake_get_json(url, headers=None):
+        calls.append(url)
+        return _queue()
+
+    monkeypatch.setattr(check, "_get_json", fake_get_json)
+    ok, msg = check.check_arr_queue()
+    assert ok
+    assert len(calls) == 1
+    assert "sonarr" in calls[0]
+
+
 # --- gitops_alive / gitops_status (pure) ------------------------------------
 
 

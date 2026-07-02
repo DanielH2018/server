@@ -232,10 +232,13 @@ containers_list:
       # monitoring: reach prometheus + uptime-kuma. kopia: query the backup source's
       # status without putting kopia on the broad monitoring net (trusted-infra access,
       # like traefik). apps: reach the n8n public API at n8n:5678 (workflow-failure check)
-      # AND home-assistant:8123 (HA automation-heartbeat check). No web UI, so no port / Authelia.
+      # AND home-assistant:8123 (HA automation-heartbeat check). media: reach sonarr:8989 +
+      # radarr:7878 for the queue-warning check (2026-07-02; same precedent as homepage
+      # joining media). No web UI, so no port / Authelia.
       - monitoring
       - kopia
       - apps
+      - media
   # Organization: Miscellaneous (apps network)
   - name: healthchecks
     port: 8000
