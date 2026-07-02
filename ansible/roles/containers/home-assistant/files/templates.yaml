@@ -17,14 +17,22 @@
     - name: "Bedroom wake start"
       unique_id: bedroom_wake_start
       device_class: timestamp
-      # `> now()` rejects a STALE past alarm: a Wear OS next_alarm can hold an already-fired
+      # `> now() - 2h` rejects a STALE past alarm: a Wear OS next_alarm can hold an already-fired
       # alarm for hours (seen 2026-07-01 — the watch held the prior morning's 06:00 all night,
       # so this sensor pointed at a PAST time and the `at:` wake trigger had nothing to fire on).
-      # The hour guard alone (3-11) passed that stale value; require it to be in the future too so
-      # a lagging watch makes this `unavailable` (fallback handles it) instead of masquerading.
+      # The hour guard alone (3-11) passed that stale value; require it to be recent too so a
+      # lagging watch makes this `unavailable` (fallback handles it) instead of masquerading.
+      # BUG (2026-07-02, fixed same day): a bare `> now()` rejects the CURRENT morning's own alarm
+      # the instant it rings — i.e. 15 min into every 45-min ramp window (window = alarm-15 to
+      # alarm+30, so `now() > na` becomes true at exactly elapsed=15, not at window close). That
+      # broke bedroom_wake_ramp (elapsed fell back to the -1 sentinel, so in_window/release_due were
+      # both permanently false for the rest of the window) and stranded Adaptive Lighting's
+      # manual_control (the hand-off release never ran). The 2-hour grace comfortably covers the
+      # ramp + its bounded [45,90)-min catch-up release window (in_wake_release_window in
+      # lighting.jinja) while still catching a genuinely stale (many-hours/overnight) alarm.
       availability: >-
         {% set na = states('sensor.pixel_watch_3_next_alarm') %}
-        {{ na not in ['unknown', 'unavailable', 'none', ''] and as_datetime(na) > now() and 3 <= (as_datetime(na) | as_local).hour < 11 }}
+        {{ na not in ['unknown', 'unavailable', 'none', ''] and as_datetime(na) > now() - timedelta(hours=2) and 3 <= (as_datetime(na) | as_local).hour < 11 }}
       state: >-
         {{ (as_datetime(states('sensor.pixel_watch_3_next_alarm')) - timedelta(minutes=15)).isoformat() }}
 
