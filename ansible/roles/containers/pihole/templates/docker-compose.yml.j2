@@ -29,6 +29,10 @@ services:
     networks:
       - pihole_internal
     labels:
+      # Keep :latest but pin against watchtower auto-updates — pihole depends_on this resolver
+      # (service_healthy) and it's the LAN's only DNS upstream, so an unsupervised pull that
+      # breaks unbound kills all resolution immediately (matches flaresolverr/crowdsec).
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('unbound') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '256M', '0.05', '32M') }}

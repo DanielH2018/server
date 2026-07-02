@@ -174,6 +174,7 @@ CAP_DROP_EXEMPT: dict = {
 # mutable-tag service is flagged until it either opts out (watchtower.enable=false) or is added
 # here on purpose — so the karakeep/janitorr "stateful service silently swept into auto-update"
 # drift can't recur. Version-pinned tags need no entry. Curated from the real render.
+# A service may not be BOTH here and opted out — find_autoupdate_optout_conflicts fails that.
 WATCHTOWER_AUTOUPDATE: frozenset = frozenset(
     {
         # Infra/monitoring sidecars + stateless/disposable services on rolling tags, intentionally
@@ -187,9 +188,6 @@ WATCHTOWER_AUTOUPDATE: frozenset = frozenset(
         "ddns-direct",
         "ddns-proxied",
         "wg-easy",
-        "unbound",
-        "crowdsec",
-        "flaresolverr",
         "peanut",
         "grafana",
         "loki",
@@ -304,6 +302,26 @@ def find_undeclared_update_policy(docs, autoupdate=frozenset()) -> list:
     return undeclared
 
 
+def find_autoupdate_optout_conflicts(docs, autoupdate=frozenset()) -> list:
+    """Return service names BOTH declared in ``autoupdate`` AND carrying the watchtower opt-out
+    label. The two contradict (the label wins at runtime), and the stale allowlist entry
+    short-circuits ``find_undeclared_update_policy`` — so if the label is ever dropped in a
+    refactor the service silently rejoins the auto-update pool with no CI signal."""
+    conflicts = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if (
+                isinstance(spec, dict)
+                and svc in autoupdate
+                and _has_watchtower_optout(spec)
+            ):
+                conflicts.append(svc)
+    return conflicts
+
+
 def check_container(host_ctx: dict, ci: dict) -> str | None:
     """Render one container template; return an error string or None on success."""
     name = ci.get("name")
@@ -357,6 +375,14 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
             "`com.centurylinklabs.watchtower.enable=false` to opt out (pinned/Renovate tier), "
             "or add the service to WATCHTOWER_AUTOUPDATE if it's intentionally auto-updated: "
             f"{', '.join(undeclared)}"
+        )
+
+    conflicts = find_autoupdate_optout_conflicts(docs, WATCHTOWER_AUTOUPDATE)
+    if conflicts:
+        return (
+            "in WATCHTOWER_AUTOUPDATE but ALSO carries watchtower.enable=false — the label "
+            "wins, so the allowlist entry is stale and would mask a later-dropped label; "
+            f"remove from WATCHTOWER_AUTOUPDATE: {', '.join(conflicts)}"
         )
     return None
 

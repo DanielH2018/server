@@ -41,6 +41,11 @@ services:
       # is permanently down and the Grafana CrowdSec dashboards have no data.
       - monitoring
     labels:
+      # Keep :latest but pin against watchtower auto-updates — traefik depends_on this agent
+      # (service_healthy) and traefik-init gates the boot restart on its health, so an
+      # unsupervised pull that breaks crowdsec would block the edge's next start
+      # (matches flaresolverr/unbound, the other health-gating :latest sidecars).
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('crowdsec') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('1.0', '1024M', '0.10', '128M') }}

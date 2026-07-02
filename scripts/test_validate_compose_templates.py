@@ -262,3 +262,35 @@ def test_untagged_image_is_mutable():
 def test_build_only_service_without_image_is_clean():
     # a `build:`-only service (no image: key) has no tag to police
     assert vct.find_undeclared_update_policy(_docs({"build": {"context": "."}})) == []
+
+
+# --- autoupdate-vs-optout contradiction guard ---------------------------------
+# A service in WATCHTOWER_AUTOUPDATE that ALSO carries enable=false is contradictory: the label
+# wins at runtime, and the stale allowlist entry short-circuits find_undeclared_update_policy —
+# so if the label is later dropped the service silently rejoins the auto-update pool (the exact
+# drift the policy guard exists to prevent). Surfaced by 734ac198's flaresolverr opt-out, which
+# left its allowlist entry behind.
+
+
+def test_allowlisted_service_with_optout_is_flagged():
+    docs = _docs(
+        {"image": "x:latest", "labels": ["com.centurylinklabs.watchtower.enable=false"]}
+    )
+    assert vct.find_autoupdate_optout_conflicts(docs, autoupdate={"svc"}) == ["svc"]
+
+
+def test_allowlisted_service_without_optout_is_clean():
+    assert (
+        vct.find_autoupdate_optout_conflicts(
+            _docs({"image": "x:latest"}), autoupdate={"svc"}
+        )
+        == []
+    )
+
+
+def test_optout_service_not_on_allowlist_is_clean():
+    # pinned+opted-out services (traefik, pihole, prowlarr, ...) are the normal case
+    docs = _docs(
+        {"image": "x:latest", "labels": ["com.centurylinklabs.watchtower.enable=false"]}
+    )
+    assert vct.find_autoupdate_optout_conflicts(docs) == []
