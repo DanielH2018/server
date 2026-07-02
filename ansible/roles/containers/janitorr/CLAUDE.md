@@ -20,6 +20,13 @@ See repo-root `CLAUDE.md` for shared conventions.
   path-mapping config exists or is needed: janitorr acts on media via the Sonarr/Radarr
   APIs, not by resolving arr-reported filesystem paths itself, and its own direct
   filesystem use (`leaving-soon-dir`, `free-space-check-dir`) is already `/data`-relative.
+- **A RestartCount of ~4 right after a host reboot is EXPECTED, not a fault** (diagnosed
+  2026-07-02): Spring fails fast when sonarr/radarr aren't up yet, and `restart:
+  unless-stopped` retries every ~10s until they are (~40s on the 06-28 boot). It crashes
+  during context init, *before* any cleanup job — zero deletion risk. This can't be fixed
+  with `depends_on`: sonarr/radarr are separate compose projects, and `depends_on` only
+  orders services within one project. Don't re-flag; only investigate restarts that are
+  NOT clustered in a post-boot window (check `last reboot` + log timestamps first).
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Rules: `templates/application.yml.j2`

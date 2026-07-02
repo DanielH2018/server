@@ -16,8 +16,9 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config:/config
-      - /home/{{ sys_user }}/server/containers/data/media/books:/books
-      - /home/{{ sys_user }}/server/containers/data/downloads:/downloads
+      # Single shared /data mount (not split /books + /downloads): avoids the EXDEV
+      # hardlink bug on import — see sonarr's template/CLAUDE.md.
+      - /home/{{ sys_user }}/server/containers/data:/data
     restart: unless-stopped
     {{ service_networks() }}
     {{ healthcheck('curl --fail -s http://localhost:8787/ || exit 1') }}

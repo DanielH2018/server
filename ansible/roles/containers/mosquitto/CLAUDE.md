@@ -13,7 +13,7 @@ Eclipse Mosquitto 2.x. Internal-only broker for the Zigbee2MQTT stack. See repo-
 - **Authenticated, not anonymous.** `allow_anonymous false` + `password_file`. Creds come
   from SOPS: `mqtt_username` / `mqtt_password` (clients) and `mqtt_password_hash` (the hash).
   Regenerate the hash with
-  `docker run --rm eclipse-mosquitto:2 sh -c 'mosquitto_passwd -b -c /tmp/pw x PASS; cat /tmp/pw'`
+  `docker run --rm eclipse-mosquitto:2.1.2-alpine sh -c 'mosquitto_passwd -b -c /tmp/pw x PASS; cat /tmp/pw'`
   — the `passwordfile` template prepends `{{ mqtt_username }}:` and strips any `user:` prefix
   from the stored hash, so the username in the hash command is irrelevant (mosquitto's PBKDF2
   hash is salt+password only, not username). This is the single-source-of-truth fix for the
