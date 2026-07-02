@@ -53,15 +53,28 @@ try:
     if nxt:
         overdue_h = (now - datetime.fromisoformat(nxt)).total_seconds() / 3600
         if overdue_h * 3600 > GRACE_S: problems.append("full maintenance overdue %.1fh" % overdue_h)
-    last_end = last_task = None; last_ok = True
-    for task, recs in (sched.get("runs") or {}).items():
-        for r in recs or []:
-            e = r.get("end")
-            if e and (last_end is None or e > last_end):
-                last_end, last_ok, last_task = e, bool(r.get("success", False)), task
-    if last_end and not last_ok: problems.append("most recent run (%s) FAILED" % last_task)
+    # Evaluate the full and quick task families SEPARATELY. Kopia names every full-cycle
+    # subtask with a "full-" prefix (full-delete-blobs, full-drop-deleted-content,
+    # full-rewrite-contents); everything else (snapshot-gc, advance-epoch, ...) runs on
+    # the quick cycle. Taking the single newest run across ALL tasks (the old logic)
+    # masked a FAILED full run whenever a newer quick run then succeeded -- the watchdog
+    # stayed green while blob GC silently stopped.
+    def latest_run(keys):
+        end = task = None; ok = True
+        for k in keys:
+            for r in (sched.get("runs") or {}).get(k) or []:
+                e = r.get("end")
+                if e and (end is None or e > end):
+                    end, ok, task = e, bool(r.get("success", False)), k
+        return end, ok, task
+    all_tasks = list((sched.get("runs") or {}).keys())
+    full_end, full_ok, full_task = latest_run([k for k in all_tasks if k.startswith("full-")])
+    quick_end, quick_ok, quick_task = latest_run([k for k in all_tasks if not k.startswith("full-")])
+    if full_end and not full_ok: problems.append("most recent FULL task (%s) FAILED" % full_task)
+    if quick_end and not quick_ok: problems.append("most recent quick task (%s) FAILED" % quick_task)
     print(("FAIL|" + "; ".join(problems)) if problems else
-          ("OK|full maint enabled, owner %s, next in %.1fh, last run %s ok" % (owner, -overdue_h, last_task or "?")))
+          ("OK|full maint enabled, owner %s, next in %.1fh, last full %s ok, last quick %s ok"
+           % (owner, -overdue_h, full_task or "?", quick_task or "?")))
 except Exception as e:
     print("FAIL|maintenance info check error: %s" % e); sys.exit(0)
 ')
