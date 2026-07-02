@@ -19,9 +19,14 @@ WorkingDirectory=/home/{{ sys_user }}/server
 Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 # flock serializes against the weekly secret-rotate cron (secret-rotate.sh) — both mutate
 # this same git working tree, and this deployer's `git reset --hard` on a failed health gate
-# could silently discard a half-rotated secret. -w 1200 waits up to 20min (secret-rotate is
-# short — 0-2 tokens) then fails the unit (OnFailure alerts) rather than racing. /run/lock is
-# world-writable+sticky, so the unprivileged {{ sys_user }} can create the lockfile.
-ExecStart=/usr/bin/flock -w 1200 /var/lock/server-git-tree.lock /usr/bin/python3 /opt/gitops-deploy/gitops_deploy.py
+# could silently discard a half-rotated secret. RUN_START (and so RUN_BUDGET_S, see
+# gitops_deploy.py) is measured from process start, AFTER flock acquires — so time spent
+# waiting here is pure overhead against this unit's 25min TimeoutStartSec, uncounted by that
+# budget. -w 180 outlasts any normal deploy-step contention (secret-rotate is short — 0-2
+# tokens) but fails fast enough to leave the health-gate/rollback budget intact; on timeout
+# flock exits 1, failing the unit cleanly (OnFailure alerts) and the next 30-min timer tick
+# retries rather than racing. /run/lock is world-writable+sticky, so the unprivileged
+# {{ sys_user }} can create the lockfile.
+ExecStart=/usr/bin/flock -w 180 /var/lock/server-git-tree.lock /usr/bin/python3 /opt/gitops-deploy/gitops_deploy.py
 # SOPS age key is already in the user's home; filter plugins auto-load next to
 # ansible/deploy.yml, so no ANSIBLE_CONFIG is needed.
