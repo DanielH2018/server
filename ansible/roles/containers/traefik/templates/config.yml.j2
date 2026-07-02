@@ -4,7 +4,7 @@ http:
     dashboard:
       entryPoints:
         - https
-      rule: "Host(`traefik.{{ domain }}`)"
+      rule: "Host(`traefik.{{ domain }}`) || Host(`traefik.local.{{ domain }}`)"
       service: api@internal
       middlewares:
         # rate-limit is now applied per-router (it was removed from the https
