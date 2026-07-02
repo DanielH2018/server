@@ -4,7 +4,7 @@ Uptime Kuma with an AutoKuma sidecar that auto-creates monitors from container l
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Images:** `louislam/uptime-kuma:2` + `ghcr.io/bigboot/autokuma:latest`
+- **Images:** `louislam/uptime-kuma:2.4.0` (pinned + Renovate-managed, watchtower opts out) + `ghcr.io/bigboot/autokuma:latest` (watchtower-managed)
 - **Host:** daniel-server · **Port:** 3001 · **URL:** `uptime-kuma.<domain>` (Authelia: yes)
 - **Networks:** monitoring
 - **Depends on:** traefik, authelia, **docker-proxy**

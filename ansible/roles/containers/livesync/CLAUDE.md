@@ -3,7 +3,7 @@
 CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLAUDE.md`.
 
 ## At a glance
-- **Image:** `couchdb:3`
+- **Image:** `couchdb:3.5.2` (pinned + Renovate-managed, watchtower opts out)
 - **Host:** daniel-server · **Port:** 5984 · **URL:** `livesync.<domain>`
 - **Authelia:** **no** — CouchDB enforces its own auth (`require_valid_user = true`);
   the LiveSync client uses basic auth and can't pass Authelia 2FA

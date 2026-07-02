@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import sys
 import hashlib
+import re
 from pathlib import Path
 
 import yaml
@@ -202,6 +203,10 @@ WATCHTOWER_AUTOUPDATE: frozenset = frozenset(
         "code-server",
         "freshrss",
         "terraria",
+        # influxdb:2.9 — non-critical SMART-history time-series store (scrutiny role);
+        # documented to stay on a pinned-major tag with watchtower patching within 2.9
+        # (see scrutiny/CLAUDE.md), unlike the critical/stateful tier above it.
+        "scrutiny-influxdb",
     }
 )
 
@@ -245,12 +250,17 @@ def find_missing_cap_drop(docs, exempt=frozenset()) -> list:
     return missing
 
 
+_BARE_MAJOR_TAG = re.compile(r"^v?\d+(\.\d+)?$")
+
+
 def _is_mutable_tag(image: str) -> bool:
     """True if the image reference uses a mutable channel tag (content can change under the same
-    string): untagged (implicit :latest), latest/release/stable/main/..., or a channel word joined
+    string): untagged (implicit :latest), latest/release/stable/main/..., a channel word joined
     to a component by a hyphen on EITHER side — a ``-stable`` suffix (jvm-stable) OR a ``master-``
-    prefix (master-web/master-collector). A version-bearing tag (1.2.3, v1.41.0, 2026.05.0,
-    ...-lsNN, 124) is not."""
+    prefix (master-web/master-collector) — or a bare-major/major.minor numeric tag (``2``, ``3``,
+    ``3.5``) that upstream re-points at every new release under the same string (e.g. couchdb:3,
+    eclipse-mosquitto:2). A fully version-bearing tag (1.2.3, v1.41.0, 2026.05.0, ...-lsNN) is
+    not — three-plus numeric components pin an exact release."""
     ref = image.split("@", 1)[0]  # drop any digest
     # repo:tag split on the LAST colon, unless that colon is a registry port (has a '/' after)
     if ":" in ref and "/" not in ref.rsplit(":", 1)[1]:
@@ -264,6 +274,7 @@ def _is_mutable_tag(image: str) -> bool:
         low in _MUTABLE_TAGS
         or any(low.endswith("-" + m) for m in _MUTABLE_TAGS)
         or any(low.startswith(m + "-") for m in _MUTABLE_TAGS)
+        or bool(_BARE_MAJOR_TAG.match(low))
     )
 
 

@@ -4,7 +4,7 @@ Eclipse Mosquitto 2.x. Internal-only broker for the Zigbee2MQTT stack. See repo-
 `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `eclipse-mosquitto:2`
+- **Image:** `eclipse-mosquitto:2.1.2-alpine` (pinned + Renovate-managed, watchtower opts out)
 - **Host:** daniel-server · **Networks:** `mqtt` only · **Web/Authelia:** none (no Traefik route)
 - **Reached by:** zigbee2mqtt + home-assistant on the `mqtt` isolation net, at `mosquitto:1883`
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`

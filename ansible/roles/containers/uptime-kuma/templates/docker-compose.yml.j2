@@ -7,7 +7,7 @@
 
 services:
   uptime-kuma:
-    image: louislam/uptime-kuma:2
+    image: louislam/uptime-kuma:2.4.0
     container_name: uptime-kuma
     volumes:
       - ./data:/app/data
@@ -31,6 +31,8 @@ services:
           container_item.use_authelia
         )
       }}
+      # Disable watchtower update — pinned + Renovate-managed
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma(container_item.name) }}
       # AutoKuma-managed Discord notification (id: discord == kuma_notification_id); the kuma()
       # macro links every monitor to it via notification_name_list. Webhook in secrets.yml.

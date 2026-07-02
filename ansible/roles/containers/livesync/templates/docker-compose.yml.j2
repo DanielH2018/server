@@ -6,7 +6,7 @@
 ---
 services:
   couchdb:
-    image: couchdb:3
+    image: couchdb:3.5.2
     # CouchDB entrypoint chowns /opt/couchdb/data then drops to the couchdb user via
     # su-exec — the standard DB-image privilege-drop set. Add FOWNER if it complains.
     cap_drop:
@@ -52,6 +52,8 @@ services:
       - "traefik.http.routers.livesync-utils.service=livesync"
       - "traefik.http.routers.livesync-utils.middlewares=rate-limit@file,authelia@docker"
       - "traefik.http.routers.livesync-utils.priority=200"
+      # Disable watchtower update — pinned + Renovate-managed
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('1.0', '1024M', '0.10', '128M') }}

@@ -15,8 +15,9 @@ services:
       - no-new-privileges:true
     # SCOPE: watchtower auto-updates the `:latest` long tail (mostly stateless leaf services).
     # The critical/stateful tier — traefik, authelia, kopia, pihole, the *arr suite
-    # (sonarr/radarr/bazarr/prowlarr) and jellyfin — is pinned to explicit version tags and
-    # carries `com.centurylinklabs.watchtower.enable=false`, so Renovate manages it instead:
+    # (sonarr/radarr/bazarr/prowlarr), jellyfin, livesync (couchdb), uptime-kuma, and
+    # mosquitto — is pinned to explicit version tags and carries
+    # `com.centurylinklabs.watchtower.enable=false`, so Renovate manages it instead:
     # updates land as PRs through CI + the host health gate (version-diffed and revertable),
     # with majors held for manual review. The COOLDOWN_DELAY soak below still filters fresh
     # breakage on everything watchtower does pull, and Renovate mirrors it with a 7-day

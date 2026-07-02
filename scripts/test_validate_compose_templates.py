@@ -259,6 +259,24 @@ def test_untagged_image_is_mutable():
     assert vct.find_undeclared_update_policy(_docs({"image": "nginx"})) == ["svc"]
 
 
+def test_bare_major_tag_is_mutable():
+    # couchdb:3 / eclipse-mosquitto:2 / louislam/uptime-kuma:2 — upstream re-points the
+    # digit at every release, so it's mutable even though it looks version-like.
+    assert vct.find_undeclared_update_policy(_docs({"image": "couchdb:3"})) == ["svc"]
+
+
+def test_major_minor_tag_is_mutable():
+    assert vct.find_undeclared_update_policy(_docs({"image": "influxdb:2.9"})) == [
+        "svc"
+    ]
+
+
+def test_fully_pinned_tag_is_not_flagged_as_bare_major():
+    # three-plus numeric components pin an exact release (couchdb:3.5.2), unlike the
+    # bare-major/major.minor case above.
+    assert vct.find_undeclared_update_policy(_docs({"image": "couchdb:3.5.2"})) == []
+
+
 def test_build_only_service_without_image_is_clean():
     # a `build:`-only service (no image: key) has no tag to police
     assert vct.find_undeclared_update_policy(_docs({"build": {"context": "."}})) == []

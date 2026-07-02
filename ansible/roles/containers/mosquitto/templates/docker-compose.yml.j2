@@ -6,7 +6,9 @@
 
 services:
   mosquitto:
-    image: eclipse-mosquitto:2
+    # 2.1.x publishes ONLY -alpine variant tags (bare 2.1.2 does not exist — pull fails
+    # "manifest unknown"); 2.1.2-alpine is digest-identical to the :2 channel tag it replaced.
+    image: eclipse-mosquitto:2.1.2-alpine
     container_name: mosquitto
     user: "{{ puid }}:{{ pgid }}"
     environment:
@@ -23,6 +25,8 @@ services:
     # $$SYS stays doubled so Compose passes a literal $SYS to the broker (validate-hook won't catch it).
     {{ healthcheck("[\"CMD-SHELL\", \"mosquitto_sub -h localhost -p 1883 -u " ~ mqtt_username ~ " -P " ~ mqtt_password ~ " -t '$$SYS/broker/uptime' -C 1 -W 3 >/dev/null 2>&1 || exit 1\"]") }}
     labels:
+      # Disable watchtower update — pinned + Renovate-managed
+      - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma(container_item.name, name='Mosquitto') }}
     # Resource caps for blast-radius containment (M1); broker is tiny — tune from Grafana.
     {{ resources('0.25', '64M', '0.02', '16M') }}
