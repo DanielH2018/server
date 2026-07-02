@@ -15,6 +15,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "requests",                       # community.docker modules (docker_container_info dependency check)
   "docker",                         # community.docker SDK-backed modules
   "ruff>=0.10",                     # first-party Python lint gate (prek hook); pinned via uv.lock
+  "shellcheck-py==0.11.0.1",        # validate_shell_templates; pinned to match prek.toml's shellcheck-py rev
 ]
 
 [tool.pytest.ini_options]

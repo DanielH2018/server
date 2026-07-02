@@ -121,6 +121,21 @@ language = "system"
 pass_filenames = false
 files = "^(ansible/roles/containers/(authelia/templates/configuration|traefik/templates/(config|traefik)|prometheus/templates/prometheus|grafana/templates/(loki-config|promtail-config))\\.yml\\.j2|scripts/validate_config_templates\\.py)$"
 
+# Render every Jinja-templated shell script (*.sh.j2) with stubbed vars and lint the OUTPUT
+# (bash -n + shellcheck) — the same render-then-lint pattern as validate-compose-templates /
+# validate-config-templates, but for shell instead of YAML. identify tags a `.sh.j2` file as
+# {jinja, text}, never `shell`, so the bash-syntax-check / shellcheck hooks above never see these
+# templates no matter how broken the rendered script is. shellcheck comes via the `shellcheck-py`
+# dev dependency (pyproject.toml) so `uv run` can reach it; the script fails closed (not skips) if
+# shellcheck isn't on PATH, so this can't silently degrade to bash -n alone.
+[[repos.hooks]]
+id = "validate-shell-templates"
+name = "Validate rendered shell templates (bash -n + shellcheck)"
+entry = "uv run python scripts/validate_shell_templates.py"
+language = "system"
+pass_filenames = false
+files = "^(ansible/roles/.*\\.sh\\.j2|scripts/validate_shell_templates\\.py)$"
+
 # Gate that the secret-rotation registry (ansible/secret_rotation.yml) stays in sync with the
 # encrypted secrets.yml — fails the commit if a secret was added/removed without running
 # `secret_rotation.py sync`. Read-only: reads plaintext key NAMES only, never decrypts a value
