@@ -101,10 +101,5 @@
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
     "claude-permission-audit@daniel-tools": false
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "~/server/.claude/statusline.sh",
-    "padding": 0
   }
 }
