@@ -1654,9 +1654,16 @@
       event: start
   action:
     - delay: "00:00:20"
+    # Bounded on the true 45-min ramp (in_wake_window), NOT on sensor.bedroom_wake_start's own
+    # availability — that sensor now stays available through an alarm+2h grace (36b46123, for the
+    # wake-ramp's own availability guard), so gating suppression on "wake_start unavailable" would
+    # silently widen this automation's skip-span to match and leave an empty-room AL self-on
+    # un-suppressed for up to 2h after the alarm. Same pattern as bedroom_color_track's wake-ramp guard.
     - if: >-
+        {% set ws = states('sensor.bedroom_wake_start') %}
+        {% from 'lighting.jinja' import in_wake_window %}
         {{ is_state('binary_sensor.aqara_fp300_presence', 'off')
-           and states('sensor.bedroom_wake_start') in ['unknown', 'unavailable'] }}
+           and not (in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool) }}
       then:
         - service: script.bedroom_lights_set
           data:
