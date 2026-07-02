@@ -50,6 +50,26 @@ rev = "v8.30.1"
 [[repos.hooks]]
 id = "gitleaks"
 
+# Shell script linting. shellcheck-py ships a precompiled shellcheck binary via pip
+# (language = python) — no host apt package and no Docker, so it works unmodified on the
+# ubuntu-latest CI runner via prek's own hook-env bootstrap. All severities are on by
+# default (not just --severity=error): the repo's shell scripts are currently
+# shellcheck-clean, so there's nothing to suppress yet.
+[[repos]]
+repo = "https://github.com/shellcheck-py/shellcheck-py"
+rev = "v0.11.0.1"
+
+[[repos.hooks]]
+id = "shellcheck"
+# .bashrc is a SOURCED dotfile (no shebang by design — `shell(1)` sources it, never execs it) and
+# is the stock Debian/Ubuntu skeleton .bashrc plus one guarded nvm block, not a script this gate
+# is meant to police. Excluded rather than annotated so the near-stock file stays diffable against
+# upstream. The findings it trips are all expected for that class of file: SC2148 (no shebang —
+# correct, it's sourced), SC1090/SC1091 (can't follow `~/.bash_aliases` / nvm's dynamic path —
+# intentionally conditional/per-host), SC2015 (`test ... && eval || eval` fallback idiom, not
+# if/then/else — deliberate here).
+exclude = "^ansible/roles/setup/config_files/files/\\.bashrc$"
+
 # Render container docker-compose.yml.j2 templates with stubbed vars and assert
 # the output is valid YAML — catches broken indentation / label-macro edits that
 # ansible-lint and check-yaml miss (they don't render .j2 files).
@@ -152,3 +172,23 @@ entry = "uv run ruff format --check"
 language = "system"
 pass_filenames = false
 files = "\\.py$"
+
+# Fast syntax-only gate: `bash -n` parses (doesn't run) every shell script. Catches the exact
+# bug class that killed the kopia backup-maintenance watchdog cron for a day (2026-07-01,
+# ansible/roles/containers/kopia/files/maintenance-check.sh): an apostrophe ("kopia's") landed
+# inside a single-quoted `python3 -c '...'` block, breaking bash's own quote parsing. shellcheck
+# above would also catch this, but `bash -n` is near-free and independent of it — a belt-and-
+# suspenders backstop if the shellcheck-py hook is ever skipped/broken.
+# `types = ["shell"]` (identify's shebang-aware detection, same as the shellcheck hook above)
+# rather than a `.sh$` files regex — the NUT role's upssched-cmd (files/upssched-cmd, no
+# extension: the filename is fixed by upssched's own config) is a real bash script and would be
+# silently skipped by an extension-only match.
+# NB: `entry` loops over "$@" itself — pre-commit/prek batch every matched filename into ONE
+# invocation, and a bare `bash -n "$1" "$2"` silently only checks "$1" ($2+ become that
+# script's own positional params, not additional files to parse).
+[[repos.hooks]]
+id = "bash-syntax-check"
+name = "bash -n (shell syntax check)"
+entry = "bash -c 'for f in \"$@\"; do bash -n \"$f\" || exit 1; done' --"
+language = "system"
+types = ["shell"]
