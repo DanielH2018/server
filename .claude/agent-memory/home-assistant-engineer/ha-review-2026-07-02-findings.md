@@ -18,12 +18,13 @@ that anchors an in-flight window must outlive the WINDOW, not the anchor event**
 killed the ramp at elapsed=15 the first real morning (2026-07-02). End-to-end proof deferred to the
 next real alarm morning (check AL manual_control empties within [45,90) after the alarm).
 
-Findings (UNFIXED — review-only):
-1. (Med) `bedroom_al_startup_suppress` gates on `wake_start in [unknown,unavailable]` — an
-   availability proxy for "wake context". The grace widens the skip-span to alarm+2h (was already
-   over-broad pre-alarm: skipped from alarm-set evening onward). A deploy <2h post-alarm with the
-   room empty now leaves AL's startup self-on burning with NO off-path (absence_off needs a fresh
-   presence off-edge). Fix: compose `in_wake_window(elapsed)` like bedroom_auto_light_allowed.
+Findings (status as of the same-day follow-up review):
+1. (Med) `bedroom_al_startup_suppress` availability-proxy gate — **FIXED same day (128015a6)**:
+   now composes `in_wake_window(elapsed)` exactly as recommended. Verified in the follow-up run:
+   deployed copy byte-matches git, all 33 automations loaded, it fired on the 18:48Z deploy restart,
+   error_log clean. Residual (accepted, FP300-false-absence class): suppression now also runs on
+   alarm-set evenings, so a deploy mid-sleep with the nightlight on + a dropped motionless sleeper
+   turns the nightlight off — same risk absence_off already carries.
 2. (Low) Bedtime prompt: an alarm set AFTER its own winddown time (alarm−8h already past, e.g.
    tomorrow-06:00 alarm created at 22:10) → dynamic `at:` unfireable AND the 22:30 fallback
    suppressed (sensor available) → no prompt that night. Fix direction: fallback also fires when
@@ -37,6 +38,15 @@ Findings (UNFIXED — review-only):
 templates.yaml:41-44 comment drift: winddown still says "Same ... guard as bedroom_wake_start
 (`> now()`)" — no longer true; the asymmetry is CORRECT (winddown is consumed 8h before the alarm,
 needs no grace) but undocumented, inviting a future "fix" in either direction.
+
+Follow-up run (same day, post-128015a6) added: (Low) the 2h grace also shifts
+`bedroom_fallback_wake`'s date-compare defer (automations.yaml ~:604) — a today-dated FIRED alarm now
+stays available until alarm+2h, so an 04:00–06:00 alarm that rang while away suppresses the 06:00
+fallback for someone who arrived home after it; pre-grace the fallback fired. Narrow + arguably the
+better behavior — reported Low, likely accept. (Low) SETUP.md count/time drift: "31 automations"
+(actual 33), bedtime prompt described as fixed "22:00" (SETUP.md §7 + automations.yaml:1405 comment)
+vs the winddown-anchored trigger. Tomorrow's wake is armed (wake_start 2026-07-03T10:45Z) — the
+end-to-end [45,90) AL-release proof is still pending that morning.
 
 Non-finding worth remembering: **AL manual_control being non-empty is the NORMAL post-apply state**
 (set_natural_brightness's explicit brightness marks take-over) — it only signals a stranded hand-off
