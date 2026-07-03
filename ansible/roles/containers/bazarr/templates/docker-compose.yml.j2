@@ -15,7 +15,11 @@ services:
       - TZ={{ tz }}
     volumes:
       - ./config:/config
-      - /home/{{ sys_user }}/server/containers/data:/data
+      # media/ ONLY, at the same in-container path Sonarr/Radarr report (/data/media/…):
+      # bazarr writes subtitles next to library files and never touches torrents/, so it
+      # doesn't need the download dir. It does no hardlinking either — the EXDEV
+      # single-mount requirement is Sonarr/Radarr's import path, not this (2026-07-02 M2).
+      - /home/{{ sys_user }}/server/containers/data/media:/data/media
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

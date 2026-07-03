@@ -99,12 +99,14 @@ services:
       - TORRENTING_PORT=6881
     volumes:
       - ./config:/config
-      # Single mount (replacing separate /downloads + /tv + /movies binds across
-      # qbittorrent/sonarr/radarr/bazarr) so Sonarr/Radarr can hardlink imports out of
-      # here instead of copying: link() returns EXDEV across separate bind mounts even
-      # when both live on the same underlying filesystem, so a split mount silently
-      # forces copyUsingHardlinks to fall back to a copy.
-      - /home/{{ sys_user }}/server/containers/data:/data
+      # torrents/ ONLY, mounted at the same in-container path as Sonarr/Radarr see it
+      # (/data/torrents — they mount the whole data/ tree at /data, so paths agree).
+      # qBittorrent only ever writes downloads here; the hardlink-import EXDEV concern
+      # that unified the *arr mounts is theirs alone (link() happens inside sonarr/radarr,
+      # whose single mount spans torrents/ AND media/). Scoping this mount keeps the
+      # fleet's largest untrusted-input surface (arbitrary torrent payloads) from having
+      # rw over the whole media/book library (2026-07-02 review M2).
+      - /home/{{ sys_user }}/server/containers/data/torrents:/data/torrents
     restart: unless-stopped
     healthcheck:
       # Three signals, because each catches a failure the others miss:
@@ -138,8 +140,10 @@ services:
       # Disable Watchtower — a recreate loses the wg0 listen-interface bind (applied
       # post-deploy by tasks/main.yml, NOT on container start), which silently kills the
       # UDP/DHT path → zero download progress + an autoheal loop a plain restart can't fix.
-      # Update deliberately via an Ansible redeploy (which re-applies the bind), like the
-      # wireguard sidecar — never via watchtower.
+      # Update deliberately via `deploy.yml --tags qbittorrent -e common_pull=always`
+      # (re-pulls the :latest images AND re-applies the bind), like the wireguard sidecar —
+      # never via watchtower. A plain redeploy does NOT pull: with the tag already present
+      # locally, docker_compose_v2's default pull policy leaves it untouched.
       - "com.centurylinklabs.watchtower.enable=false"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('2.0', '2048M', '0.10', '128M') }}

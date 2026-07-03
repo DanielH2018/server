@@ -12,9 +12,11 @@ See repo-root `CLAUDE.md` for shared conventions.
 ## Notable
 - Pulls the library lists from Sonarr/Radarr (deploys after them) and writes subtitle
   files alongside media in the shared `data/media` tree.
-- **Mounts the whole `containers/data` tree at `/data`** (not separate `/tv` + `/movies`
-  + `/downloads`), same as qBittorrent/Sonarr/Radarr, for mount-layout consistency across
-  the four services (Bazarr itself only reads/writes subtitles, no hardlinking).
+- **Mounts `containers/data/media` at `/data/media`** (scoped from the whole-tree `/data`
+  mount, 2026-07-02 security review): the in-container paths Sonarr/Radarr report still
+  resolve identically, but Bazarr no longer sees `torrents/`, which it never needs. Bazarr
+  itself only reads/writes subtitles (no hardlinking) — the single-whole-tree-mount EXDEV
+  requirement applies to Sonarr/Radarr's import path only.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
