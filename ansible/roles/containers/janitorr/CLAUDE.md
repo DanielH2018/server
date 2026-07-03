@@ -4,7 +4,10 @@ Deletes watched/old media and cleans up Sonarr/Radarr based on disk-usage rules.
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `ghcr.io/schaka/janitorr:jvm-stable`
+- **Image:** `ghcr.io/schaka/janitorr@sha256:…` — **digest-pinned + `watchtower.enable=false`**
+  (currently the `jvm-stable` build pulled 2026-06-28). `jvm-stable` is a floating non-semver
+  alias Renovate can't version-track, and janitorr deletes real media, so updates are deliberate.
+  **Manual update:** `docker pull ghcr.io/schaka/janitorr:jvm-stable`, take the new digest, redeploy.
 - **Host:** daniel-server · **No web UI**, no Authelia (background service)
 - **Networks:** media
 - **Depends on:** traefik, authelia, **sonarr, radarr**

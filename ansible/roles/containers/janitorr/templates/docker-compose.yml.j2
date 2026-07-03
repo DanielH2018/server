@@ -6,7 +6,13 @@
 
 services:
   janitorr:
-    image: ghcr.io/schaka/janitorr:jvm-stable
+    # Digest-pinned + watchtower-disabled (label below): janitorr DELETES media for real
+    # (dry-run off), so it must not change unsupervised — and `jvm-stable` is a floating
+    # non-semver alias Renovate can't version-track, so a bare tag here would never update
+    # at all (the untracked-escape-hatch trap; this digest = the jvm-stable build pulled
+    # 2026-06-28). Manual update: `docker pull ghcr.io/schaka/janitorr:jvm-stable`, take
+    # the new digest, redeploy.
+    image: ghcr.io/schaka/janitorr@sha256:6becfbed9098d27e6bf81a114976394a091d095ee5aba3ae8d86a4fd94af8e7a
     user: {{ puid }}:{{ pgid }}
     container_name: janitorr
     cap_drop:
@@ -22,9 +28,7 @@ services:
     {{ healthcheck('["CMD", "bash", "-c", "cat /proc/1/comm | grep -q java"]', start_period='60s') }}
     {{ service_networks() }}
     labels:
-      # Manual/Renovate-managed: janitorr DELETES media for real (dry-run off), so the
-      # :jvm-stable rolling tag must not be auto-bumped by watchtower (monitor-all mode)
-      # — an unsupervised change to retention/expiration semantics is high-consequence.
+      # Watchtower — digest-pinned + manually updated; opt out of auto-update (deletes real media)
       - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1). JVM app, so size memory
