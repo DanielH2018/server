@@ -73,7 +73,9 @@ services:
       - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('flaresolverr') }}
     # Resource caps for blast-radius containment (M1). Runs headless Chrome, so
-    # size generously and tune from cAdvisor/Grafana.
-    {{ resources('1.0', '1024M', '0.10', '128M') }}
+    # size generously and tune from cAdvisor/Grafana. 1.0 CPU throttled 11% of
+    # periods once EZTV joined 1337x behind it (2026-07-03) — solves burst for
+    # seconds while the 2-min average stays ~0.2, so the cap must fit the burst.
+    {{ resources('2.0', '1024M', '0.10', '128M') }}
 
 {{ external_networks() }}
