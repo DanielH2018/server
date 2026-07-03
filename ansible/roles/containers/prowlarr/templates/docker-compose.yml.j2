@@ -24,6 +24,8 @@ services:
       - SETGID
       - SETUID
       - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
     {{ service_networks() }}
     # Gate startup on the flaresolverr sidecar being healthy — on a cold `up` prowlarr would
     # otherwise start first and log challenge-solve failures until flaresolverr caught up (parity

@@ -26,6 +26,8 @@ services:
       - SETGID
       - SETUID
       - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
     {{ service_networks() }}
     {{ healthcheck('curl --fail -s http://localhost:7878/ping || exit 1') }}
     labels:
