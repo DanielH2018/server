@@ -650,22 +650,26 @@ def queue_warnings(queue_json, app_name):
 
     Fed a sonarr/radarr /api/v3/queue payload. trackedDownloadStatus == "warning" is the
     2026-07-01 incident's signal — the *arr blocked the import itself but only flagged the
-    queue item, so it kept seeding for a day with nothing paging. trackedDownloadState ==
-    "importBlocked" is the harder-blocked sibling state; "importPending" WITH
-    statusMessages covers the case where the block reason shows up under the pending state
-    instead. Plain "importPending" with no messages is the ordinary just-finished-download
-    queue waiting its turn — not a problem, so it's left alone.
+    queue item, so it kept seeding for a day with nothing paging. "error" is the harder
+    sibling status (upstream enum: ok/warning/error) — at least as actionable, previously
+    skipped. trackedDownloadState == "importBlocked" is the harder-blocked sibling state,
+    "importFailed" its attempted-and-failed counterpart (both from the upstream
+    TrackedDownloadState enum); "importPending" WITH statusMessages covers the case where
+    the block reason shows up under the pending state instead. Plain "importPending" with
+    no messages is the ordinary just-finished-download queue waiting its turn — not a
+    problem, so it's left alone.
     """
     offenders = []
     for item in queue_json.get("records", []):
         status = item.get("trackedDownloadStatus")
         state = item.get("trackedDownloadState")
         messages = item.get("statusMessages") or []
-        if (
-            status != "warning"
-            and state != "importBlocked"
-            and not (state == "importPending" and messages)
-        ):
+        flagged = (
+            status in ("warning", "error")
+            or state in ("importBlocked", "importFailed")
+            or (state == "importPending" and messages)
+        )
+        if not flagged:
             continue
         title = item.get("title") or "?"
         reasons = [m for sm in messages for m in sm.get("messages", [])]
@@ -690,7 +694,14 @@ def check_arr_queue():
             SONARR_URL + "/api/v3/queue?includeUnknownSeriesItems=true&pageSize=250",
             SONARR_API_KEY,
         ),
-        ("Radarr", RADARR_URL + "/api/v3/queue?pageSize=250", RADARR_API_KEY),
+        (
+            "Radarr",
+            # includeUnknownMovieItems is Radarr's spelling of Sonarr's
+            # includeUnknownSeriesItems — both default FALSE, hiding exactly the unmapped/
+            # poisoned-release queue items this check exists for (2026-07-01 incident class).
+            RADARR_URL + "/api/v3/queue?includeUnknownMovieItems=true&pageSize=250",
+            RADARR_API_KEY,
+        ),
     ]
     configured = [a for a in apps if a[2]]
     if not configured:

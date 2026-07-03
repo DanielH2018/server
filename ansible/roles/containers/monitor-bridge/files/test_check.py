@@ -649,6 +649,35 @@ def test_queue_warnings_flags_import_blocked_state():
     assert offenders[0][1] == "Blocked.Release"
 
 
+def test_queue_warnings_flags_error_status():
+    # Upstream trackedDownloadStatus enum is ok/warning/error — "error" is at least as
+    # actionable as "warning" and was previously skipped (2026-07-02 review L2).
+    q = _queue(
+        {
+            "title": "Errored.Release",
+            "trackedDownloadStatus": "error",
+            "trackedDownloadState": "downloading",
+        }
+    )
+    offenders = check.queue_warnings(q, "Radarr")
+    assert len(offenders) == 1
+    assert offenders[0][1] == "Errored.Release"
+    assert offenders[0][2] == "error"
+
+
+def test_queue_warnings_flags_import_failed_state():
+    q = _queue(
+        {
+            "title": "Failed.Import",
+            "trackedDownloadStatus": "ok",
+            "trackedDownloadState": "importFailed",
+        }
+    )
+    offenders = check.queue_warnings(q, "Sonarr")
+    assert len(offenders) == 1
+    assert offenders[0][1] == "Failed.Import"
+
+
 def test_queue_warnings_import_pending_without_messages_is_ok():
     # Ordinary just-finished-downloading queue item — not a problem.
     q = _queue(
@@ -748,6 +777,27 @@ def test_arr_queue_ok_when_both_clean(monkeypatch):
     ok, msg = check.check_arr_queue()
     assert ok
     assert "Sonarr" in msg and "Radarr" in msg
+
+
+def test_arr_queue_urls_include_unknown_items_flags(monkeypatch):
+    # Both flags default FALSE upstream, hiding exactly the unmapped/poisoned queue items
+    # this check exists for. Sonarr got its flag on day one; Radarr's twin was missed
+    # (2026-07-02 review M1) — pin BOTH spellings so neither regresses again.
+    monkeypatch.setattr(check, "SONARR_API_KEY", "x")
+    monkeypatch.setattr(check, "RADARR_API_KEY", "x")
+    calls = []
+
+    def fake_get_json(url, headers=None):
+        calls.append(url)
+        return _queue()
+
+    monkeypatch.setattr(check, "_get_json", fake_get_json)
+    ok, _ = check.check_arr_queue()
+    assert ok
+    sonarr_url = next(u for u in calls if "sonarr" in u)
+    radarr_url = next(u for u in calls if "radarr" in u)
+    assert "includeUnknownSeriesItems=true" in sonarr_url
+    assert "includeUnknownMovieItems=true" in radarr_url
 
 
 def test_arr_queue_only_checks_configured_app(monkeypatch):
