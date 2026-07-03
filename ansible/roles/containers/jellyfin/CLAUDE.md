@@ -15,7 +15,10 @@ See repo-root `CLAUDE.md` for shared conventions.
   `linuxserver/mods:jellyfin-opencl-intel` mod.
 - Publishes UDP `7359` (auto-discovery) and `1900` (DLNA/SSDP), bound to the
   host's LAN IP (`{{ server_ip }}`) rather than `0.0.0.0`.
-- Reads from the shared `data/media` library tree, mounted TWICE: at `/data` (the original
+- Reads from the shared `data/media` library tree — **both mounts read-only since
+  2026-07-03** (SaveLocalMetadata is off everywhere, artwork/trickplay live in `/config`,
+  and every writer has its own mount; trade-off: deleting media from the Jellyfin UI
+  fails — delete via the *arrs) — mounted TWICE: at `/data` (the original
   mount the configured libraries point at — `/data/tv`, `/data/movies`) and at `/data/media`
   (janitorr-congruent view, 2026-07-02): janitorr's "Leaving Soon" collection dir and the
   symlink targets it writes are `/data/media/...` paths (janitorr's namespace), which only

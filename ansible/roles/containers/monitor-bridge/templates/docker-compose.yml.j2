@@ -33,8 +33,9 @@ services:
       - KUMA_URL=http://uptime-kuma:3001
       - BACKUP_SOURCE_PATH=/data/home/{{ sys_user }}/server/containers
       - BACKUP_MAX_AGE_H=30
-      # /boot: old kernels filling it quietly breaks upgrades (node-exporter exposes it)
-      - DISK_MOUNTPOINTS=/,/boot
+      # /boot: old kernels filling it quietly breaks upgrades; /boot/efi (vfat ESP):
+      # same failure class for firmware/bootloader updates (node-exporter exposes both)
+      - DISK_MOUNTPOINTS=/,/boot,/boot/efi
       - DISK_MAX_PCT=90
       - CERT_MIN_DAYS=14
       - MEM_MAX_PCT=90

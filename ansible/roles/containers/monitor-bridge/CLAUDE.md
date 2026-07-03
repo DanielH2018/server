@@ -27,8 +27,9 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     (Prometheus up, one exporter gone) still surfaces separately on Scrape Targets. The
     `PROM_DEPENDENT` set is guarded by a test against the live `CHECKS` so it can't drift.)
   - **Backup Freshness** (Kopia `/api/v1/sources` last-snapshot age + errorCount)
-  - **Root Disk** (`node_filesystem_*` for `/` **and `/boot`** — old kernels filling /boot
-    quietly breaks upgrades; server-only, the Pi's disk lives in the Pi Pressure check)
+  - **Root Disk** (`node_filesystem_*` for `/`, `/boot` **and `/boot/efi`** — old kernels
+    filling /boot quietly breaks upgrades, and a full ESP breaks firmware/bootloader
+    updates the same way; server-only, the Pi's disk lives in the Pi Pressure check)
   - **TLS Cert Expiry** (`traefik_tls_certs_not_after`)
   - **Memory** (host `node_memory_*` pressure only)
   - **Container Restarts** (`changes(container_start_time_seconds[15m]) > RESTART_MAX`)

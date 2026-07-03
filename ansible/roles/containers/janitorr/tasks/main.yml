@@ -17,6 +17,7 @@
     # 0600: embeds Sonarr/Radarr/Jellyfin API keys. Owned by the PUID the
     # container runs as (user: 1000:1000), so it stays readable.
     mode: "0600"
+  no_log: true
   register: janitorr_cfg
 
 - name: Deploy Container
