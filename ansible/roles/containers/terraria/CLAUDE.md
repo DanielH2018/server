@@ -4,7 +4,9 @@ Vanilla Terraria dedicated server. See repo-root `CLAUDE.md` for shared conventi
 
 ## At a glance
 - **Image:** `beardedio/terraria:vanilla-latest`
-- **Host:** daniel-server · **Networks:** apps · **Authelia:** no (raw-TCP game server)
+- **Host:** daniel-server · **Networks:** `terraria` (dedicated isolation net shared only
+  with traefik — the raw-TCP route bypasses CrowdSec, so the container is kept off the
+  shared `apps` net; kopia pattern) · **Authelia:** no (raw-TCP game server)
 - **Depends on:** traefik
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 

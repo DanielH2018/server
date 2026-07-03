@@ -288,8 +288,13 @@ containers_list:
     # No HTTP port — exposed over a dedicated raw-TCP Traefik entrypoint (terraria,
     # :7777) plus a direct 7778->7777 host publish; can't carry Authelia forward-auth.
     use_authelia: false
+    # Dedicated isolation net (2026-07-02 review M3, kopia pattern): terraria is the only
+    # internet entry point with NO CrowdSec/rate-limit chain (raw TCP), so it must not sit
+    # on the shared `apps` net where a game-protocol exploit could reach ~15 services'
+    # unauthenticated container ports. Only traefik joins `terraria` alongside it; it
+    # needs to reach nothing (terraria-stats reads its console via Loki, not the net).
     networks:
-      - apps
+      - terraria
   - name: terraria-stats
     # Headless sidecar: reads terraria console lines from Loki, serves Prometheus
     # metrics on :9420. No web UI -> no port/Authelia. monitoring net = reach Loki

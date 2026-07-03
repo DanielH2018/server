@@ -73,6 +73,11 @@ services:
       - media
       - apps
       - kopia
+      # terraria isolation net: traefik must reach terraria:7777 for the raw-TCP router,
+      # but terraria (the only CrowdSec-less internet entry point) stays off the shared
+      # `apps` net so a game-protocol exploit can't reach ~15 other services' container
+      # ports (2026-07-02 review M3; same pattern as `kopia`).
+      - terraria
     ports:
       # Bind v4-only (0.0.0.0). Docker does NOT manage ip6tables here (daemon
       # Experimental:false, no ip6tables key), so a bare "80:80" makes docker-proxy
@@ -117,6 +122,8 @@ networks:
   apps:
     external: true
   kopia:
+    external: true
+  terraria:
     external: true
 
 volumes:
