@@ -15,11 +15,15 @@ See repo-root `CLAUDE.md` for shared conventions.
   `templates/application.yml.j2`. **It deletes files** — `dry-run` was flipped off
   2026-06-10 (operator decision after the initial trial period), so it now cleans for
   real. Tag media `janitorr_keep` in the *arrs to exempt it.
-- Mounts the whole `containers/data` tree at `/data` (same as qBittorrent/Sonarr/Radarr/
-  Bazarr since the 2026-07-02 hardlink-mount unification). No `application.yml.j2`
-  path-mapping config exists or is needed: janitorr acts on media via the Sonarr/Radarr
-  APIs, not by resolving arr-reported filesystem paths itself, and its own direct
-  filesystem use (`leaving-soon-dir`, `free-space-check-dir`) is already `/data`-relative.
+- Mounts the whole `containers/data` tree at `/data` (same as Sonarr/Radarr since the
+  2026-07-02 hardlink-mount unification). Janitorr acts on media via the Sonarr/Radarr
+  APIs; its direct filesystem use is `leaving-soon-dir` (where it writes the symlinks) and
+  `free-space-check-dir`, both `/data`-relative. **Path-namespace trap:**
+  `media-server-leaving-soon-dir` and the symlink targets are `/data/media/...` strings
+  that JELLYFIN must resolve — jellyfin's primary mount puts the media tree at `/data`,
+  so it carries a second `data/media:/data/media` mount specifically to make janitorr's
+  namespace resolve there (2026-07-02 review M4; see the jellyfin role CLAUDE.md). If
+  either side's mounts change, re-check both configs together.
 - **A RestartCount of ~4 right after a host reboot is EXPECTED, not a fault** (diagnosed
   2026-07-02): Spring fails fast when sonarr/radarr aren't up yet, and `restart:
   unless-stopped` retries every ~10s until they are (~40s on the 06-28 boot). It crashes

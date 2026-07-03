@@ -18,6 +18,14 @@ services:
     volumes:
       - ./config:/config
       - /home/{{ sys_user }}/server/containers/data/media:/data
+      # Same tree AGAIN at /data/media (janitorr-congruent view, 2026-07-02 review M4):
+      # janitorr mounts containers/data at /data, so the leaving-soon dir it hands
+      # Jellyfin (media-server-leaving-soon-dir: /data/media/leaving-soon) and the
+      # symlink TARGETS it writes inside it (/data/media/tv/..., as reported by the
+      # *arrs) only resolve here if /data/media/* exists in THIS namespace too. The
+      # existing libraries stay at /data/tv + /data/movies via the mount above —
+      # migrating them instead would mean editing library paths in Jellyfin's own DB.
+      - /home/{{ sys_user }}/server/containers/data/media:/data/media
     restart: unless-stopped
     ports:
       # Bind LAN discovery to the host's LAN IP (not 0.0.0.0), matching the
