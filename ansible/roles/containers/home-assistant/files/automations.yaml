@@ -1402,9 +1402,10 @@
               data:
                 notification_id: bedroom_away
 
-# Bedtime prompt: at 22:00, if you're in the bedroom and haven't started bedtime, send a nudge with
-# a "Start now" button (-> BEDROOM_START_BEDTIME -> script.bedroom_bedtime). Gated on present + not
-# already in sleep mode + home, so it only nudges when you're actually around and haven't gone to bed.
+# Bedtime prompt: at wind-down time (alarm − 8h, or the 22:30 fallback on no-alarm nights — see
+# sensor.bedroom_winddown_start), if you're in the bedroom and haven't started bedtime, send a nudge
+# with a "Start now" button (-> BEDROOM_START_BEDTIME -> script.bedroom_bedtime). Gated on present +
+# not already in sleep mode + home, so it only nudges when you're around and haven't gone to bed.
 - id: bedroom_bedtime_prompt
   alias: Bedroom bedtime prompt
   description: At wind-down time (alarm − 8h, or 22:30 fallback on no-alarm nights), if present and not yet in sleep mode, prompt to start the bedtime routine.

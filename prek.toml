@@ -119,7 +119,9 @@ name = "Validate rendered config templates (authelia/traefik/prometheus/grafana)
 entry = "uv run python scripts/validate_config_templates.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/containers/(authelia/templates/configuration|traefik/templates/(config|traefik)|prometheus/templates/prometheus|grafana/templates/(loki-config|promtail-config))\\.yml\\.j2|scripts/validate_config_templates\\.py)$"
+# group_vars/all.yml is in scope because the validator renders with it (ALL_VARS) — an
+# edit there can change what these templates render to, same as the compose hook's scope.
+files = "^(ansible/roles/containers/(authelia/templates/configuration|traefik/templates/(config|traefik)|prometheus/templates/prometheus|grafana/templates/(loki-config|promtail-config))\\.yml\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate_config_templates\\.py)$"
 
 # Render every Jinja-templated shell script (*.sh.j2) with stubbed vars and lint the OUTPUT
 # (bash -n + shellcheck) — the same render-then-lint pattern as validate-compose-templates /
@@ -134,7 +136,9 @@ name = "Validate rendered shell templates (bash -n + shellcheck)"
 entry = "uv run python scripts/validate_shell_templates.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/.*\\.sh\\.j2|scripts/validate_shell_templates\\.py)$"
+# group_vars/all.yml is in scope because the validator renders with it (ALL_VARS) — an
+# edit there can change what the rendered scripts contain.
+files = "^(ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate_shell_templates\\.py)$"
 
 # Gate that the secret-rotation registry (ansible/secret_rotation.yml) stays in sync with the
 # encrypted secrets.yml — fails the commit if a secret was added/removed without running

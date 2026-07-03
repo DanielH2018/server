@@ -73,7 +73,7 @@ These are **not** captured by `deploy.yml` — they're device/app/UI state:
 | File | What it holds | Deployed via |
 |---|---|---|
 | `templates/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 16 `threshold` sensors, `template: !include`, `recorder:` excludes, http/trusted-proxy, Lovelace | `template` (Ansible-rendered) |
-| `files/automations.yaml` | the 31 automations | `copy` (verbatim — HA Jinja) |
+| `files/automations.yaml` | the 33 automations | `copy` (verbatim — HA Jinja) |
 | `files/scripts.yaml` | the 16 scripts | `copy` |
 | `files/scenes.yaml` | `bedroom_bright` / `bedroom_nightlight` | `copy` |
 | `files/templates.yaml` | `sensor.bedroom_wake_start` template sensor | `copy` |
@@ -159,8 +159,9 @@ recovery, no bounce". Sixteen, feeding `bedroom_threshold_alert`:
 
 **Bedtime & controls**
 - `bedroom_bedtime` — phone Bedtime mode on (while home) → `bedroom_bedtime` script.
-- `bedroom_bedtime_prompt` — 22:00, if present + not in sleep mode + home → a "Ready for bed?" notify
-  with a **Start now** button.
+- `bedroom_bedtime_prompt` — at wind-down time (alarm − 8h, or the 22:30 fallback on no-alarm
+  nights — `sensor.bedroom_winddown_start`), if present + not in sleep mode + home → a "Ready for
+  bed?" notify with a **Start now** button.
 - `bedroom_tap_dial_control` — the Tap Dial (see §8).
 
 **Home / away & security**
@@ -228,7 +229,7 @@ All set per-category in `bedroom_threshold_alert`'s `cfg` map or per-call to `be
 | Nightlight window | `bedroom_apply_natural` first exception (`sleep_mode` or 00:00–05:00) |
 | Bedtime fade length (30 min) | `transition:` on the `scene.turn_on` in `bedroom_bedtime` (`scripts.yaml`) |
 | Away timings (10 / 30 min) | `bedroom_away` trigger `for:` |
-| Bedtime prompt time (22:00) | `bedroom_bedtime_prompt` trigger |
+| Bedtime prompt time (wind-down: alarm − 8h / 22:30 fallback) | `sensor.bedroom_winddown_start` (`templates.yaml`), consumed by `bedroom_bedtime_prompt` |
 | FP300 presence drop-out (desk-sitting) | Z2M **device settings** (not git): `motion_sensitivity`, `absence_delay_timer`, `presence_detection_options` — set via `mosquitto_pub -t 'zigbee2mqtt/Aqara FP300/set'` (current: mmwave / high / 60 s) |
 | Which alerts are critical / watch | `cfg` map in `bedroom_threshold_alert`; flags on `bedroom_notify` calls |
 

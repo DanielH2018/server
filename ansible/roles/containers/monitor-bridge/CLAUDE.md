@@ -7,11 +7,10 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 - **Image:** `python:3.14-alpine` (stdlib only — no build, no extra deps)
 - **Host:** daniel-server · **No web UI**, no Authelia
 - **Networks:** `monitoring` (reach `prometheus:9090`, `uptime-kuma:3001`) + `kopia`
-  (reach `kopia:51515`) + `apps` (reach the n8n public API at `n8n:5678`). Joins the `kopia`
-  net as trusted infra — like Traefik — so Kopia stays off `monitoring` and apps still can't
-  reach the unauthenticated `kopia:51515`. **NOT currently on `media`** (where sonarr/radarr
-  live) — `check_arr_queue`'s `SONARR_URL`/`RADARR_URL` (`http://sonarr:8989`/`http://radarr:7878`)
-  can't resolve until monitor-bridge joins that network too; see Operator prerequisites.
+  (reach `kopia:51515`) + `apps` (reach the n8n public API at `n8n:5678`) + `media`
+  (since 2026-07-02: reach `sonarr:8989`/`radarr:7878` for `check_arr_queue`, same
+  precedent as homepage). Joins the `kopia` net as trusted infra — like Traefik — so Kopia
+  stays off `monitoring` and apps still can't reach the unauthenticated `kopia:51515`.
 - **Depends on:** prometheus, uptime-kuma, kopia (`meta/deps.yml`)
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 
@@ -229,12 +228,10 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 3. For the Arr Queue Warnings monitor: `sonarr_api_key`/`radarr_api_key` already exist in
    `secrets.yml` (recyclarr/janitorr/homepage reference them too — get the plaintext from
    `docker exec sonarr cat /config/config.xml` / `docker exec radarr cat /config/config.xml`
-   if you need to re-derive them). **monitor-bridge is not yet on the `media` network** that
-   sonarr/radarr live on (it's on `monitoring`+`kopia`+`apps`) — add `media` to its
-   `containers_list` entry in `ansible/inventory/host_vars/daniel-server.yml` (mirrors how
-   `homepage` reaches the same two containers by name) before deploying, or the check will
-   page `down` on every cycle (unresolvable host), which is worse than the silence it's meant
-   to fix.
+   if you need to re-derive them). monitor-bridge joined the `media` network for this on
+   2026-07-02 (its `containers_list` entry in `ansible/inventory/host_vars/daniel-server.yml`);
+   if `media` is ever dropped from that entry, the check pages `down` every cycle
+   (unresolvable host) rather than failing silent.
 4. Notifications attach **automatically** — the `kuma()` macro tags every monitor with
    `notification_name_list=["{{ kuma_notification_id }}"]`, linking it to the AutoKuma-managed
    Discord notification defined on the `uptime-kuma` container. No per-monitor UI clicking.
