@@ -26,7 +26,6 @@ def test_usernames_and_config_are_ignored():
     assert sr.classify("authelia_user") == "ignore"
     assert sr.classify("freshrss_username") == "ignore"
     assert sr.classify("domain") == "ignore"
-    assert sr.classify("wireguard_interface_address") == "ignore"
 
 
 def test_unknown_app_secret_defaults_to_assisted():

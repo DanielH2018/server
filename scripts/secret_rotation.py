@@ -74,14 +74,11 @@ _EXTERNAL = {
     "email",
     "healthchecks_smtp_password",
     "wireguard_interface_private_key",
-    "wireguard_peer_endpoint",
-    "wireguard_peer_public_key",
 }
-_IGNORE_EXACT = {"wireguard_interface_address", "wireguard_interface_dns"}
 
 
 def classify(name: str) -> str:
-    if name in _IGNORE or name in _IGNORE_EXACT or name.endswith(_IGNORE_SUFFIX):
+    if name in _IGNORE or name.endswith(_IGNORE_SUFFIX):
         return "ignore"
     if name in _PINNED:
         return "pinned"
