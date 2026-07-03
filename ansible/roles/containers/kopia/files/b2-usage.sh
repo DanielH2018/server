@@ -12,6 +12,7 @@
 # Reporting: writes {"ts","ok","bytes","msg"} to STATE; monitor-bridge's b2_usage
 # check reads it (read-only bind mount) and pushes the "B2 Storage Usage" Kuma
 # monitor every cycle — over-threshold, staleness, or a missing state file all alert.
+# Also asserts the bucket's daysFromHidingToDeleting lifecycle rule (see below).
 set -uo pipefail
 
 STATE=/var/lib/kopia-b2-usage/state.json
@@ -58,6 +59,26 @@ if [ -d "$TEXTFILE_DIR" ]; then
   } > "$TMP" && chmod 0644 "$TMP" && mv "$TMP" "$TEXTFILE_DIR/kopia_b2.prom"
   # 0644: node-exporter runs as `nobody`, and mktemp creates 0600 — without this the collector
   # gets "permission denied" (node_textfile_scrape_error 1) and the gauge never appears.
+fi
+
+# Assert the bucket's lifecycle rule still holds the 7-day undelete window. It's set once
+# B2-side and nothing else reads it back — and a mis-set rule (e.g. purge-immediately) makes
+# billable bytes DROP, so this monitor and b2_trend would both go GREENER while the one-week
+# undelete window (the last defense against a wipe of the unauthenticated kopia repo — role
+# CLAUDE.md) is silently gone. Runs after the gauge write so the trend series stays fresh
+# even while this pages. A transient lifecycle-read failure also pages (fail-loud, same
+# philosophy as the size probe — the daily cadence makes a one-off cheap to tolerate).
+EXPECTED_LIFECYCLE_DAYS=7
+LIFECYCLE_DAYS=$(docker exec \
+  -e RCLONE_CONFIG_B2_TYPE=b2 \
+  -e RCLONE_CONFIG_B2_ACCOUNT="$ACCOUNT" \
+  -e RCLONE_CONFIG_B2_KEY="$KEY" \
+  kopia rclone backend lifecycle "b2:$BUCKET" --json 2>/dev/null \
+  | jq -r '.[0].daysFromHidingToDeleting // empty')
+if [ "$LIFECYCLE_DAYS" != "$EXPECTED_LIFECYCLE_DAYS" ]; then
+  write_state false "$BYTES" \
+    "B2 lifecycle daysFromHidingToDeleting=${LIFECYCLE_DAYS:-unreadable} (expected ${EXPECTED_LIFECYCLE_DAYS}) — undelete window drifted"
+  exit 1
 fi
 
 write_state true "$BYTES" \

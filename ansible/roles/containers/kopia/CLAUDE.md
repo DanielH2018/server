@@ -29,6 +29,10 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
   stats` undercounts) with creds read at runtime from `repository.config`, and writes
   `/var/lib/kopia-b2-usage/state.json` — monitor-bridge's `b2_usage` check alerts at 85%
   of the cap, on probe failure, or staleness. Was 6.56 GB (66%) when added.
+  **Since 2026-07-03 the same cron also asserts the `daysFromHidingToDeleting: 7`
+  lifecycle rule** (`rclone backend lifecycle`) and pages on drift — a purge-immediately
+  mis-set makes billable bytes DROP (this monitor and b2_trend go greener) while silently
+  destroying the undelete window above.
 - **Backup assurance is three-tier:** snapshots (daily 00:00, in-container policy) →
   weekly `kopia snapshot verify --verify-files-percent=1` cron (blobs readable; `files/verify.sh`
   → `/var/lib/kopia-verify/state.json` → monitor-bridge's `verify` check → the "Backup Verify"
