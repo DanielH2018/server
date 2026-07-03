@@ -325,6 +325,10 @@ def cmd_rotate(args) -> int:
         cmd = [
             "uv",
             "run",
+            # --frozen: never mutate uv.lock (parity with the GitOps deployer) — a lock
+            # rewrite here leaves the tree dirty and wedges the next weekly run's
+            # clean-tree check in secret-rotate.sh.
+            "--frozen",
             "ansible-playbook",
             "ansible/deploy.yml",
             "--tags",

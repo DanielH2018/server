@@ -94,6 +94,10 @@ DIGEST_PINNED_EXEMPT = {
     # tdarr only ships dev-tagged builds (dev_X.Y.Z) with no stable tag line; stateful +
     # rewrites library files in place, so unvetted auto-updates are unacceptable.
     "ghcr.io/haveagitgat/tdarr",
+    # janitorr's only stable channel is the floating non-semver alias `jvm-stable`, which
+    # Renovate can't order — and janitorr deletes real media, so updates must be deliberate:
+    # manual pull-digest-redeploy (see the compose comment / role CLAUDE.md).
+    "ghcr.io/schaka/janitorr",
 }
 
 
@@ -129,6 +133,48 @@ def test_every_deployed_image_is_renovate_tracked() -> None:
     assert not untracked, (
         "Deployed image line(s) NOT matched by the Renovate docker manager (untagged / digest-only "
         "/ templated) — they will age silently:\n" + "\n".join(untracked)
+    )
+
+
+# Renovate's BUILT-IN dockerfile manager's default filePatterns (docs.renovatebot.com/modules/
+# manager/dockerfile, verified 2026-07-03). The fleet's Dockerfile base pins (python:3.14-slim,
+# debian:bookworm-slim) are tracked ONLY by that manager — no custom manager covers them — so a
+# build file renamed/added outside these shapes drops out of update tracking with no signal.
+DOCKERFILE_MANAGER_FILE_RES = [
+    re.compile(r"(^|/|\.)([Dd]ocker|[Cc]ontain)file$"),
+    re.compile(r"(^|/)([Dd]ocker|[Cc]ontain)file[^/]*$"),
+]
+
+
+def test_every_dockerfile_is_renovate_visible(tracked: list[str]) -> None:
+    """Every FROM-bearing build file must sit where Renovate's dockerfile manager looks.
+
+    The compose-template guard above covers `image:` lines; this is its sibling for built
+    images. Discovery is by CONTENT (any tracked ansible/ file with a FROM line), not by
+    name, so the check doesn't share the blind spot it guards against. Untagged / :latest
+    FROMs are the deliberate rolling tier (build-on-recreate semantics — metabase, n8n,
+    code-server) and need no version tracking; the version-bearing ones are exactly what
+    the dockerfile manager must keep seeing."""
+    from_re = re.compile(r"^FROM\s+\S+", re.MULTILINE)
+    build_files = [
+        f
+        for f in tracked
+        if f.startswith("ansible/")
+        and not f.endswith(".md")
+        and from_re.search((_REPO / f).read_text(errors="ignore"))
+    ]
+    assert build_files, (
+        "no FROM-bearing build files found under ansible/ (discovery drifted?)"
+    )
+    escaped = [
+        f
+        for f in build_files
+        if not any(r.search(f) for r in DOCKERFILE_MANAGER_FILE_RES)
+    ]
+    assert not escaped, (
+        "Build file(s) with a FROM line that Renovate's dockerfile manager will NOT scan "
+        "(name doesn't match its filePatterns) — their base-image pins will age silently:\n"
+        + "\n".join(escaped)
     )
 
 
