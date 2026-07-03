@@ -53,9 +53,21 @@ wrong, and a concrete fix — tagged **[GAP] / [IMPROVEMENT] / [ADDITION]**. Not
 one line. End with a **3-bullet top-priorities** summary. Be specific and skeptical: 5 real findings beat
 20 speculative ones.
 
-## 5. Synthesize (your job once agents return)
+## 5. Adversarially verify High/Medium findings (before they reach the report)
+Reviews here have a misfire history (an Authelia `trusted_proxies` proposal that would have
+crash-looped it; a PEP-758 `except X, Y:` misread as a syntax bug) — a wrong finding costs the
+operator more than a missed one. So: **deduplicate first** (below), then for each surviving
+High/Medium finding dispatch one skeptic — `general-purpose`, **`model: sonnet`**, all in one
+parallel message — whose ONLY job is to try to **refute** it against: the role's CLAUDE.md
+(accepted trade-offs), the role's tasks/templates + shared macros, monitor-bridge `check.py` +
+role crons, the don't-re-flag memories, and live state via `scripts/probe.py` where relevant.
+Verdict per finding: **CONFIRMED** (refutation failed), **REFUTED** (cite the disproving
+evidence), or **UNCERTAIN**. Refuted findings drop to a one-line "refuted in verification"
+appendix; UNCERTAIN ones stay but are marked unverified. Lows skip verification.
+
+## 6. Synthesize (your job once agents return)
 - **Deduplicate** findings multiple agents surfaced (e.g. a healthcheck gap seen by both the security
-  and container reviewers — report it once).
+  and container reviewers — report it once) — this happens BEFORE step 5's verification pass.
 - **Surface cross-cutting THEMES** no single agent can see (e.g. a "co-located failure domain" spanning
   security + backups + network) — this is the main value of synthesizing over relaying.
 - Present **one consolidated report** grouped by severity, with a top-priorities shortlist and a clear
