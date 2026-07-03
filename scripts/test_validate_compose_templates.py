@@ -271,10 +271,47 @@ def test_major_minor_tag_is_mutable():
     ]
 
 
+def test_word_only_variant_tag_is_mutable():
+    # portainer-ce:alpine / nginx:alpine — a tag with no digits at all is a variant/channel
+    # name, never an exact release. This was the 2026-07-02 blind spot: portainer (stateful)
+    # sat in watchtower's auto-update pool undeclared because `alpine` matched no rule.
+    assert vct.find_undeclared_update_policy(
+        _docs({"image": "portainer/portainer-ce:alpine"})
+    ) == ["svc"]
+
+
+def test_bare_major_with_suffix_tag_is_mutable():
+    # python:3.14-alpine — major.minor plus a word suffix is still re-pointed by upstream
+    # at every 3.14.x release; the suffix must not make it read as version-pinned.
+    assert vct.find_undeclared_update_policy(
+        _docs({"image": "python:3.14-alpine"})
+    ) == ["svc"]
+    assert vct.find_undeclared_update_policy(_docs({"image": "node:22-slim"})) == [
+        "svc"
+    ]
+
+
 def test_fully_pinned_tag_is_not_flagged_as_bare_major():
     # three-plus numeric components pin an exact release (couchdb:3.5.2), unlike the
     # bare-major/major.minor case above.
     assert vct.find_undeclared_update_policy(_docs({"image": "couchdb:3.5.2"})) == []
+
+
+def test_fully_pinned_tag_with_suffix_is_not_flagged():
+    # eclipse-mosquitto:2.1.2-alpine / lsio vX.Y.Z-lsNNN — a word suffix on a THREE-component
+    # version is still an exact release, not a channel.
+    assert (
+        vct.find_undeclared_update_policy(
+            _docs({"image": "eclipse-mosquitto:2.1.2-alpine"})
+        )
+        == []
+    )
+    assert (
+        vct.find_undeclared_update_policy(
+            _docs({"image": "lscr.io/linuxserver/bazarr:v1.5.6-ls350"})
+        )
+        == []
+    )
 
 
 def test_build_only_service_without_image_is_clean():

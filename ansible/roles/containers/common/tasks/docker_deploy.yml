@@ -14,6 +14,12 @@
     project_src: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}"
     state: present
     build: always
+    # `policy` (the module default) NEVER re-pulls a mutable tag that is already present
+    # locally — so for the watchtower-opted-out mutable-tag tier (wireguard, qbittorrent,
+    # scrutiny, crowdsec, unbound, flaresolverr) a plain redeploy is NOT an update path:
+    # the wireguard:latest image had silently aged 25 months this way (2026-07-02 review).
+    # A deliberate image refresh is `deploy.yml --tags <svc> -e common_pull=always`.
+    pull: "{{ common_pull | default('policy') }}"
     # `recreate` is CONDITIONAL, not hardcoded `always` — this keeps deploys idempotent:
     #
     #   common_config_changed=true  -> recreate: always

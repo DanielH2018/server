@@ -21,7 +21,10 @@ Scrutiny web UI + collector, backed by InfluxDB. See repo-root `CLAUDE.md`.
   rolling upstream-branch tags; `scrutiny-web` + `scrutiny-collector` carry
   `com.centurylinklabs.watchtower.enable=false` so a stateful monitoring service isn't fed
   unsupervised `master` builds. Renovate can't version-track a branch tag either, so updating
-  is a deliberate `deploy -t scrutiny` (which re-pulls `master`). `influxdb:2.9` stays on the
+  is a deliberate `deploy.yml --tags scrutiny -e common_pull=always` — the `-e` is REQUIRED:
+  a plain redeploy never re-pulls a tag that's already present locally
+  (docker_compose_v2's default pull policy; see common/tasks/docker_deploy.yml), so without
+  it "update by redeploy" is a silent no-op. `influxdb:2.9` stays on the
   pinned-major non-critical tier (watchtower patches within 2.9). The compose CI guard's
   mutable-tag check catches the `master-` PREFIX form (not just `-stable` suffixes), so a
   future rolling tag here can't slip the update-policy decision again.

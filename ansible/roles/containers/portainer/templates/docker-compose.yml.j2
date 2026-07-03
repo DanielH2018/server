@@ -61,7 +61,11 @@ services:
     {{ resources('0.50', '128M', '0.05', '16M') }}
 
   portainer:
-    image: portainer/portainer-ce:alpine
+    # Pinned (was the mutable `alpine` LTS channel tag): portainer is stateful (own BoltDB
+    # under ./data) so it belongs to the Renovate-managed tier, not watchtower's auto-update
+    # pool. Pin digest-verified against the image that was actually running (the OCI version
+    # label is absent on this image — a Hub tag digest match is the only reliable check).
+    image: portainer/portainer-ce:2.39.4-alpine
     container_name: portainer
     restart: unless-stopped
     # Go binary on a high port; /data is root-owned and it performs no privileged ops.
@@ -93,6 +97,8 @@ services:
         condition: service_healthy
     {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:9000/ || exit 1') }}
     labels:
+      # Disable watchtower update — pinned + Renovate-managed
+      - "com.centurylinklabs.watchtower.enable=false"
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(
           container_item.hostname | default(container_item.name),

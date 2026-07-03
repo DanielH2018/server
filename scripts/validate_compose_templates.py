@@ -202,6 +202,14 @@ WATCHTOWER_AUTOUPDATE: frozenset = frozenset(
         "speedtest",
         "code-server",
         "freshrss",
+        # nginx:alpine feed-cache sidecar (freshrss role) — stateless cache in front of
+        # freshrss, its content lives in the regenerable feed_cache named volume.
+        "feed-cache",
+        # python:3.14-alpine stdlib-only script sidecars — no state beyond bind-mounted
+        # code, trivially rolled back; a base-image patch bump is exactly what we want
+        # applied unattended.
+        "monitor-bridge",
+        "terraria-stats",
         "terraria",
         # influxdb:2.9 — non-critical SMART-history time-series store (scrutiny role);
         # documented to stay on a pinned-major tag with watchtower patching within 2.9
@@ -250,17 +258,23 @@ def find_missing_cap_drop(docs, exempt=frozenset()) -> list:
     return missing
 
 
-_BARE_MAJOR_TAG = re.compile(r"^v?\d+(\.\d+)?$")
+# Bare-major/major.minor, optionally with word suffixes: 2, 3.5, 3.14-alpine, 2-slim.
+# Three-plus numeric components (1.2.3, 2.1.2-alpine, v1.5.6-ls350) do NOT match — those
+# pin an exact release; one or two components get re-pointed by upstream every release.
+_BARE_MAJOR_TAG = re.compile(r"^v?\d+(\.\d+)?(-[a-z][a-z0-9]*)*$")
 
 
 def _is_mutable_tag(image: str) -> bool:
     """True if the image reference uses a mutable channel tag (content can change under the same
     string): untagged (implicit :latest), latest/release/stable/main/..., a channel word joined
     to a component by a hyphen on EITHER side — a ``-stable`` suffix (jvm-stable) OR a ``master-``
-    prefix (master-web/master-collector) — or a bare-major/major.minor numeric tag (``2``, ``3``,
-    ``3.5``) that upstream re-points at every new release under the same string (e.g. couchdb:3,
-    eclipse-mosquitto:2). A fully version-bearing tag (1.2.3, v1.41.0, 2026.05.0, ...-lsNN) is
-    not — three-plus numeric components pin an exact release."""
+    prefix (master-web/master-collector) — a tag with NO digits at all (``alpine``,
+    ``vanilla-latest``: pure words are variant/channel names, never exact releases) — or a
+    bare-major/major.minor numeric tag, with or without word suffixes (``2``, ``3.5``,
+    ``3.14-alpine``), that upstream re-points at every new release under the same string
+    (e.g. couchdb:3, portainer-ce:2.39-alpine). A fully version-bearing tag (1.2.3, v1.41.0,
+    2026.05.0, 2.1.2-alpine, ...-lsNN) is not — three-plus numeric components pin an exact
+    release."""
     ref = image.split("@", 1)[0]  # drop any digest
     # repo:tag split on the LAST colon, unless that colon is a registry port (has a '/' after)
     if ":" in ref and "/" not in ref.rsplit(":", 1)[1]:
@@ -274,6 +288,7 @@ def _is_mutable_tag(image: str) -> bool:
         low in _MUTABLE_TAGS
         or any(low.endswith("-" + m) for m in _MUTABLE_TAGS)
         or any(low.startswith(m + "-") for m in _MUTABLE_TAGS)
+        or not any(c.isdigit() for c in low)
         or bool(_BARE_MAJOR_TAG.match(low))
     )
 
