@@ -1,7 +1,7 @@
 ---
 name: homelab-backup-observability-reviewer
 description: Reviews the backup + observability plane of this Docker/Ansible homelab — Kopia/Backblaze-B2 backups, Uptime-Kuma, Prometheus/Grafana/Loki, the monitor-bridge sidecar, healthchecks, and disaster recovery — for gaps, improvements, and additions. Use for a backup/monitoring audit or before relying on the alert chain. Read-only — investigates and reports, makes no changes.
-model: inherit
+model: opus
 tools: Read, Grep, Glob, Bash
 ---
 

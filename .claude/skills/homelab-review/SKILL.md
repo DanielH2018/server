@@ -1,7 +1,7 @@
 ---
 name: homelab-review
 description: Run a multi-agent review of the homelab — dispatches per-domain reviewer agents in parallel, deduplicates their findings into one prioritized report, and recommends next steps. Read-only; does NOT implement, deploy, or commit. Use when the user asks to review the server/homelab for gaps, improvements, or additions, or to audit its state.
-allowed-tools: Read, Grep, Glob, Bash, Task
+allowed-tools: Read, Grep, Glob, Bash, Agent
 ---
 
 Run a fine-grained, multi-agent review of the homelab: dispatch one read-only reviewer agent per
@@ -13,14 +13,21 @@ Stop after the report; let the operator drive any changes.
 Default: all six areas. If the user named a subset (e.g. `homelab-review security,network`), run only
 those. Map each area to its agent:
 
-| Area | Agent |
-|---|---|
-| Security & hardening | `security-review` |
-| Network & reverse proxy | `homelab-network-diagnostician` |
-| Home Assistant | `home-assistant-engineer` — **invoke REVIEW-ONLY**: it is read+write, so explicitly instruct it to make NO changes, only review |
-| Backups & observability | `homelab-backup-observability-reviewer` |
-| CI/CD & GitOps | `homelab-cicd-reviewer` |
-| Media & container infra | `homelab-container-reviewer` |
+| Area | Agent | Size |
+|---|---|---|
+| Security & hardening | `security-review` | opus (frontmatter) |
+| Network & reverse proxy | `homelab-network-diagnostician` | sonnet (frontmatter) |
+| Home Assistant | `home-assistant-engineer` — **invoke REVIEW-ONLY**: it is read+write, so explicitly instruct it to make NO changes, only review | dispatch with `model: opus` |
+| Backups & observability | `homelab-backup-observability-reviewer` | opus (frontmatter) |
+| CI/CD & GitOps | `homelab-cicd-reviewer` | opus (frontmatter) |
+| Media & container infra | `homelab-container-reviewer` | sonnet (frontmatter) |
+
+**Sizing:** reviewer tiers are pinned in each agent's frontmatter so a routine review never
+silently rides the session model. Judgment-heavy domains (security, backup/alert-chain, GitOps)
+run opus; pattern/consistency scans (container hygiene) and live-wiring triage (network) run
+sonnet. `home-assistant-engineer` keeps `model: inherit` for its real engineering work, so
+review-only dispatches must pass `model: opus` explicitly. Only when the operator asks for a
+**deep audit** should you override per-dispatch with a bigger `model` (e.g. the session model).
 
 ## 2. Prime from memory FIRST (the signal-booster — do this before dispatching)
 This is a **mature** setup: a cold agent will re-flag dozens of settled decisions. Before dispatching,

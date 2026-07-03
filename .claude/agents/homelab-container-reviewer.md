@@ -1,7 +1,7 @@
 ---
 name: homelab-container-reviewer
 description: Reviews container-infrastructure hygiene across this homelab's services — the *arr/media stack (sonarr/radarr/jellyfin/qbittorrent/tdarr/recyclarr/janitorr/karakeep) plus general hygiene (resource caps, healthchecks, image pinning, shared-macro usage, restart/volume/depends_on correctness) — for gaps, improvements, and additions. Read-only — investigates and reports, makes no changes.
-model: inherit
+model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
 
