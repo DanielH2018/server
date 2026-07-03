@@ -6,7 +6,7 @@ services:
   recyclarr:
     # Pinned + Renovate-managed (was :latest/watchtower — the unsupervised v8 major
     # jump removed include templates and silently killed the nightly sync, 2026-06-10).
-    image: ghcr.io/recyclarr/recyclarr:8.3.2
+    image: ghcr.io/recyclarr/recyclarr:8.6.0
     container_name: recyclarr
     user: {{ puid }}:{{ pgid }}
     restart: unless-stopped
