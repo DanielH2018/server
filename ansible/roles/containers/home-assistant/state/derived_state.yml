@@ -113,5 +113,6 @@ writes:
     - automation.bedroom_fallback_wake_no_watch_alarm
     - automation.bedroom_wake_ramp
     - script.bedroom_bedtime
+    - script.bedroom_run_scenario
   timer.bedroom_fan_dial:
     - automation.bedroom_tap_dial_control

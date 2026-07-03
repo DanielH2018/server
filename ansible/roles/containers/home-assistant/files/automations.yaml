@@ -1329,6 +1329,10 @@
         held: "{{ states.persistent_notification | selectattr('object_id', 'match', 'hold_') | list }}"
         count: "{{ held | count }}"
         body: "{{ held | map(attribute='attributes.message') | map('regex_replace', '^', '• ') | join('\n') }}"
+    # Deliberately NO continue_on_error here (unlike bedroom_notify's pushes): if this push
+    # fails (renamed notify service), aborting BEFORE the dismiss loop below keeps the held
+    # notes visible in the UI instead of discarding them undelivered — and this automation's
+    # logger is NOT excluded by ha_runtime_error_alert, so the failure pages on its own.
     - service: notify.mobile_app_pixel_9_pro
       data:
         title: "🏠 While you were out ({{ count }})"

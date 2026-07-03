@@ -625,7 +625,13 @@ bedroom_notify:
                 title: "{{ title }}"
                 message: "{{ message }}"
         - stop: "held while away (non-critical)"
+    # continue_on_error on both pushes: without it a renamed notify service (re-paired
+    # phone/watch → new notify.mobile_app_* slug) raises ServiceNotFound and ABORTS the
+    # script HERE — skipping the visibility fallback below, the exact failure it exists
+    # for (2026-07-03 review; the watch rename already happened once, 2026-06-20).
+    # Do not remove.
     - service: notify.mobile_app_pixel_9_pro
+      continue_on_error: true
       data:
         title: "{{ title }}"
         message: "{{ message }}"
@@ -639,6 +645,7 @@ bedroom_notify:
     - if: "{{ watch | default(false) }}"
       then:
         - service: notify.mobile_app_pixel_watch_3
+          continue_on_error: true
           data:
             title: "{{ title }}"
             message: "{{ message }}"
@@ -647,7 +654,8 @@ bedroom_notify:
     # Visibility fallback for the ELEVATED tiers (pierce / watch / critical_away): the alert ALSO lands
     # in the HA UI as a persistent notification, so a critical/elevated event stays visible even if the
     # mobile push silently fails (lapsed FCM token, or a re-paired phone → the notify.mobile_app_*
-    # service renamed → a swallowed service_not_found). This is the backstop the runtime-error alert
+    # service renamed → a service_not_found swallowed by the pushes' continue_on_error above —
+    # which is what makes this block reachable in that case). This is the backstop the runtime-error alert
     # can't be: it deliberately ignores script.bedroom_notify's OWN logger to avoid a loop, so a broken
     # notify service is otherwise invisible for these tiers (sensor-offline, air quality, extreme-temp
     # away, UPS). notification_id = tag (a repeat replaces in place); a recovery — every recovery
@@ -712,6 +720,10 @@ bedroom_run_scenario:
             snap_manual_off: "{{ states('input_boolean.bedroom_manual_off') }}"
             snap_fan_manual: "{{ states('input_boolean.bedroom_fan_manual') }}"
             snap_al_sleep: "{{ states('switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom') }}"
+            # AL pause state, by COUNT only (manual_control lists member BULBS, not the
+            # group — never test membership): the bedtime preview pauses AL via
+            # set_manual_control, which the scene/flag restores below don't touch.
+            snap_al_manual_empty: "{{ (state_attr('switch.bedroom_adaptive_lighting_bedroom', 'manual_control') or []) | count == 0 }}"
         - service: scene.create
           data:
             scene_id: bedroom_pre_test
@@ -866,6 +878,17 @@ bedroom_run_scenario:
             - service: switch.turn_off
               target:
                 entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+        # Un-pause AL when the preview paused it: bedtime marks the bulbs manual_control
+        # (hands-off) and neither the snapshot scene nor the flags above clear that — without
+        # this, a fast bedtime preview left AL not adapting until the next wake release
+        # (2026-07-03 review). Only when the pre-test list was empty — a room that was
+        # genuinely paused before the test stays paused; the clear no-ops if already clear.
+        - if: "{{ snap_al_manual_empty }}"
+          then:
+            - service: adaptive_lighting.set_manual_control
+              data:
+                entity_id: switch.bedroom_adaptive_lighting_bedroom
+                manual_control: false
         # The 'away' preview fires bedroom_away, which (person home during a test -> not held)
         # pushes + leaves the "🏠 Left on" persistent note (id bedroom_away). Clear it so a fast
         # preview cleans up after itself; a stray dismiss of an absent id no-ops for every other

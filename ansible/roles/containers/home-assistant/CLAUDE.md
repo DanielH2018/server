@@ -52,8 +52,9 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
     `switch.desk_surge_protector_strip` already had a clean id. `automation.bedroom_air_purifier_presence`
     references the renamed `switch.air_purifier`.
 - **Automations + scenes + scripts + template sensors + shared Jinja macros ARE copy'd (since 2026-06-18).**
-  `files/automations.yaml`, `files/scenes.yaml`, `files/scripts.yaml`, `files/templates.yaml`, and
-  `files/custom_templates/fan.jinja`
+  `files/automations.yaml`, `files/scenes.yaml`, `files/scripts.yaml`, `files/templates.yaml`,
+  `files/rest.yaml`, and `files/custom_templates/*.jinja` (whole-dir copy —
+  fan/lighting/ventilation/diagnostics)
   are static files deployed by `ansible.builtin.copy` (NOT `template` — they use HA `{{ }}` Jinja
   that Ansible's templater would try to render and fail; `copy` ships them verbatim, no `{% raw %}`
   needed). **This is why HA Jinja lives in copy'd files, never inline in `configuration.yaml.j2`**
