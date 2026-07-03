@@ -28,7 +28,7 @@
         "/^ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2$/"
       ],
       "matchStrings": [
-        "image:\\s*[\"']?(?<depName>[^:\\s\"']+):(?<currentValue>[^\\s\"'@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
+        "image:\\s*[\"']?(?<depName>[^:\\s\"'@]+):(?<currentValue>[^\\s\"'@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
       ],
       "datasourceTemplate": "docker"
     },
@@ -53,6 +53,18 @@
         "name:\\s*(?<depName>[\\w.]+)\\s+version:\\s*(?<currentValue>[\\d.]+)"
       ],
       "datasourceTemplate": "galaxy-collection"
+    },
+    {
+      "customType": "regex",
+      "description": "shellcheck-py pin in prek.toml, split out from the general prek.toml manager above: shellcheck-py/shellcheck-py publishes ZERO GitHub releases (tags only, 4-component vX.Y.Z.W), so under the github-releases datasource its rev could NEVER resolve an update and aged silently while the pypi-tracked pyproject.toml twin pin kept moving (2026-07-02 review M5). github-tags + loose versioning tracks + orders the v-prefixed 4-component tags; the packageRule below disables the dead github-releases duplicate and groups this with the pyproject pin so both bump in ONE PR (a lockstep test asserts they match).",
+      "managerFilePatterns": [
+        "/(^|/)prek\\.toml$/"
+      ],
+      "matchStrings": [
+        "repo\\s*=\\s*\"https://github\\.com/(?<depName>shellcheck-py/shellcheck-py)\"\\s+rev\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "loose"
     },
     {
       "customType": "regex",
@@ -103,6 +115,17 @@
       "description": "Keep prek.toml hook bumps in their own weekly group, separate from the container-image group. They match the custom.regex manager, so the non-major auto-merge + 7-day soak rule above already applies; this only overrides the group name. Majors stay manual (no automerge rule matches them).",
       "matchFileNames": ["prek.toml"],
       "groupName": "prek hooks"
+    },
+    {
+      "description": "Kill the general prek.toml manager's github-releases duplicate of shellcheck-py (that repo publishes no releases — the dedicated github-tags manager above is the live tracker). Without this the dead lookup still runs and could one day double-report.",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": ["shellcheck-py/shellcheck-py"],
+      "enabled": false
+    },
+    {
+      "description": "shellcheck-py is pinned TWICE by design — prek.toml rev (github-tags, hook env) and pyproject.toml `shellcheck-py==` (pypi, validate_shell_templates' uv env) — and the two must move in lockstep (scripts/test_renovate_managers.py asserts it). One group = one PR touching both files, so neither PR is ever blocked by the lockstep test seeing half an update. Overrides the prek-hooks group above for this package.",
+      "matchPackageNames": ["shellcheck-py/shellcheck-py", "shellcheck-py"],
+      "groupName": "shellcheck-py (lockstep: prek.toml + pyproject.toml)"
     },
     {
       "description": "Meilisearch (karakeep's search index) changes its on-disk DB format between MINOR versions and refuses to boot on an old database; the dumpless-upgrade flag is still experimental with a documented corruption risk, so upgrades are manual (snapshot first, then flag or dump/restore). Own PR + no automerge — and kept out of the non-major group so it can't block that bundle's automerge.",

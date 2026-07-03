@@ -85,6 +85,18 @@ def _docker_manager() -> dict:
     raise AssertionError("no docker customManager in renovate.json")
 
 
+# Digest-pinned (no tag) BY DESIGN — Renovate cannot version-track a bare digest, and the
+# depName charclass excludes `@` precisely so these no longer false-pass as tracked (the
+# pre-2026-07-02 charclass let `repo@sha256` slip through as a garbage depName Renovate
+# silently ignored). Updates for these are the documented manual pull-digest-redeploy flow
+# in the role's own compose comment. Anything ELSE digest-only is a mistake and still fails.
+DIGEST_PINNED_EXEMPT = {
+    # tdarr only ships dev-tagged builds (dev_X.Y.Z) with no stable tag line; stateful +
+    # rewrites library files in place, so unvetted auto-updates are unacceptable.
+    "ghcr.io/haveagitgat/tdarr",
+}
+
+
 def test_every_deployed_image_is_renovate_tracked() -> None:
     """Every `image:` line in an ACTIVE compose template must be captured by the docker manager.
 
@@ -107,9 +119,37 @@ def test_every_deployed_image_is_renovate_tracked() -> None:
         for line in t.read_text().splitlines():
             if not re.match(r"\s*image:\s*\S", line):
                 continue
+            digest_only = re.match(
+                r"\s*image:\s*[\"']?(?P<repo>[^:\s\"'@]+)@sha256:", line
+            )
+            if digest_only and digest_only.group("repo") in DIGEST_PINNED_EXEMPT:
+                continue
             if not any(r.search(line) for r in match_res):
                 untracked.append(f"{t.relative_to(_REPO)}: {line.strip()}")
     assert not untracked, (
         "Deployed image line(s) NOT matched by the Renovate docker manager (untagged / digest-only "
         "/ templated) — they will age silently:\n" + "\n".join(untracked)
+    )
+
+
+def test_shellcheck_py_pins_in_lockstep() -> None:
+    """prek.toml's shellcheck-py rev and pyproject.toml's `shellcheck-py==` pin must match.
+
+    The two pins back DIFFERENT execution paths of the same tool — the prek hook env lints
+    committed shell scripts, the pyproject dev dep lints RENDERED .sh.j2 output via
+    validate_shell_templates — so a version skew means the two gates disagree about the same
+    code. They are tracked by different Renovate datasources (github-tags vs pypi); a
+    packageRule groups them into one PR, and this asserts that coupling actually held."""
+    prek = (_REPO / "prek.toml").read_text()
+    pyproject = (_REPO / "pyproject.toml").read_text()
+    rev = re.search(
+        r'repo = "https://github\.com/shellcheck-py/shellcheck-py"\s+rev = "v([^"]+)"',
+        prek,
+    )
+    assert rev, "shellcheck-py repo/rev pin not found in prek.toml"
+    pin = re.search(r'"shellcheck-py==([^"]+)"', pyproject)
+    assert pin, "shellcheck-py== pin not found in pyproject.toml"
+    assert rev.group(1) == pin.group(1), (
+        f"shellcheck-py pins drifted: prek.toml rev v{rev.group(1)} vs "
+        f"pyproject.toml =={pin.group(1)} — bump both together (they render/lint the same shell)."
     )
