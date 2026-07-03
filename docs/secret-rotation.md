@@ -48,6 +48,14 @@ ansible/vars/secrets.yml '["<name>"]' '"<new>"'`, update the registry date (`syn
 since the value already existed — set `last_rotated` by hand or re-run after editing), then
 redeploy the app **and** every consumer (e.g. Homepage, monitor-bridge, recyclarr). Examples:
 - `*_api_key` (sonarr/radarr/jellyfin/prowlarr): Settings → General → regenerate API key.
+- `crowdsec_bouncer_api_key`: generate any new 32+ char value, `sops set` it, then redeploy
+  traefik (`--tags traefik`). The role's registration flow is rotation-safe: it probes LAPI
+  with the configured key and, on mismatch, deletes + re-adds `traefik-bouncer` (cscli has
+  no update flag), then restarts traefik. **Do NOT just `sops set` without the redeploy** —
+  traefik hot-reloads the new key from the file provider while LAPI still holds the old
+  hash, and the bouncer plugin fails OPEN (silent WAF bypass) until re-registration.
+  Verify after: `docker exec crowdsec cscli bouncers list` (fresh `last_pull` on
+  `traefik-bouncer`/its `@<ip>` row) and a `docker logs traefik` free of LAPI 403s.
 - `grafana_admin_password`, `*_password`: change in the app (or its env on first run).
 - `authelia_secret` / `authelia_jwt`: rotating forces all users to re-login (not breaking).
 - `authelia_oidc_hmac_secret` / `*_password_hash`: re-issues OIDC — re-pair jellyfin (the

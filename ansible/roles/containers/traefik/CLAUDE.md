@@ -16,6 +16,15 @@ Metabase dashboard.
 - TLS via Cloudflare DNS-01; routes services at `<hostname>.<domain>` from their labels.
 - CrowdSec bouncer/WAF: `crowdsec-acquis.yaml`, `crowdsec-profiles.yaml`,
   `crowdsec-whitelist.yaml`, Discord alerts, home-IP allowlist updater.
+- **Bouncer registration is rotation-safe (2026-07-03, exercised live):** the deploy probes
+  LAPI with the configured `crowdsec_bouncer_api_key` and deletes + re-adds `traefik-bouncer`
+  on mismatch (`cscli bouncers add` is create-only — without this, a rotated key leaves LAPI
+  on the old hash while traefik hot-reloads the new one, and the plugin fails OPEN: silent
+  WAF bypass). The auto-created `traefik-bouncer@<bridge-ip>` rows LAPI accumulates (~1 per
+  traefik recreate, sharing the parent's key hash) **cannot be pruned individually** — cscli
+  refuses, "delete parent instead" — so accumulation between rotations is cosmetic and
+  accepted; the rotation-path parent delete cascades the whole set. Rotation runbook:
+  `docs/secret-rotation.md` (`assisted`).
 - Ships **systemd units** (`traefik-init.service`, `docker-user-rules.service`) and
   logrotate — this role does more than run a container.
 - The `labels()` macro imported by every other service's compose lives in the repo-level

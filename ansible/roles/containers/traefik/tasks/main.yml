@@ -210,13 +210,40 @@
   delay: 10
   when: traefik_crowdsec_wal_config.changed
 
-- name: Register Homepage machine credentials with CrowdSec
+- name: Probe LAPI with the configured bouncer key (rotation guard)
+  # `cscli bouncers add` is create-only (no update flag) and the add task below tolerates
+  # "already exist" — so after a key rotation the LAPI would keep the OLD hash while
+  # Traefik hot-reloads the NEW key from the file provider instantly (config.yml is a
+  # directory-mounted dynamic config; no recreate gates it). Auth then fails and the
+  # bouncer plugin FAILS OPEN indefinitely — a silent WAF bypass. Probing /v1/decisions
+  # with the configured key detects that mismatch so the delete+re-add below makes the
+  # rotated key actually take effect. Rotation runbook: docs/secret-rotation.md.
   tags: [deploy]
   community.docker.docker_container_exec:
     container: crowdsec
-    command: "cscli machines add {{ crowdsec_username }} --password {{ crowdsec_password }} --force"
+    command: >-
+      wget -q -O /dev/null --header "X-Api-Key: {{ crowdsec_bouncer_api_key }}"
+      http://localhost:8080/v1/decisions?limit=1
+  register: traefik_crowdsec_bouncer_probe
+  failed_when: false
   changed_when: false
   no_log: true
+
+- name: Deregister bouncer whose stored key no longer matches
+  # Delete-then-re-add is the only rotation path cscli offers. Deleting the parent
+  # CASCADES to every auto-created `traefik-bouncer@<ip>` row (cscli refuses to delete
+  # children individually — verified live 2026-07-03), so each rotation also resets the
+  # ~1-row-per-recreate accumulation; between rotations it's cosmetic and accepted.
+  tags: [deploy]
+  community.docker.docker_container_exec:
+    container: crowdsec
+    command: "cscli bouncers delete traefik-bouncer"
+  register: traefik_crowdsec_bouncer_delete
+  failed_when:
+    - traefik_crowdsec_bouncer_delete.rc != 0
+    - "'not found' not in (traefik_crowdsec_bouncer_delete.stderr | lower)"
+  changed_when: traefik_crowdsec_bouncer_delete.rc == 0
+  when: traefik_crowdsec_bouncer_probe.rc != 0
 
 - name: Register Traefik bouncer API key with CrowdSec
   tags: [deploy]
