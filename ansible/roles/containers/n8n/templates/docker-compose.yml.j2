@@ -31,10 +31,14 @@ services:
       - N8N_NATIVE_PYTHON_RUNNER=true
       - N8N_RUNNERS_TASK_REQUEST_TIMEOUT=300
       # Keep database.sqlite small (it hit 840M of execution history — the Kopia
-      # backup only needs workflows/credentials): prune runs older than 7 days and
-      # compact the DB on startup so the space is actually returned to the FS.
+      # backup only needs workflows/credentials): don't save successful-run data at
+      # all (operator never reads it; errors still saved), prune the rest after 3
+      # days, and compact the DB on startup so the space is actually returned to
+      # the FS. At 168h + save-all the post-vacuum DB was still 214M, and its daily
+      # page churn was the biggest single driver of B2 billable growth (2026-07-03).
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=none
       - EXECUTIONS_DATA_PRUNE=true
-      - EXECUTIONS_DATA_MAX_AGE=168
+      - EXECUTIONS_DATA_MAX_AGE=72
       - DB_SQLITE_VACUUM_ON_STARTUP=true
       - WEBHOOK_URL=https://n8n.{{ domain }}/
       - GENERIC_TIMEZONE={{ tz }}
