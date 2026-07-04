@@ -2,6 +2,15 @@ server:
     verbosity: 1
     do-ip6: no
 
+    # Run 2 recursion threads instead of the image default of 1 so a burst of
+    # cache-miss lookups resolves concurrently instead of serialising through one
+    # thread and piling up in Pi-hole's dnsmasq forward queue (dns-forward-max=150,
+    # the "Maximum number of concurrent DNS queries reached" warning). so-reuseport
+    # defaults to yes, so each thread gets its own listening socket. NB: outgoing-range
+    # (8192, from the base config) is PER THREAD — 2 threads need ~16k outgoing sockets,
+    # so the compose service raises nofile to match (default ~8k only covers one thread).
+    num-threads: 2
+
     # Set to 0 to use system default and avoid startup warnings
     so-sndbuf: 0
 

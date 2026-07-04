@@ -22,6 +22,13 @@ services:
       - NET_BIND_SERVICE
       - SETUID
       - SETGID
+    # num-threads: 2 (unbound.conf) opens outgoing-range (8192) sockets PER THREAD,
+    # so ~16k outgoing fds are needed; the image's default nofile (~8k) only covers
+    # one thread. Raise it so the second thread doesn't hit fd starvation.
+    ulimits:
+      nofile:
+        soft: 32768
+        hard: 32768
     volumes:
       - './data/unbound/:/etc/unbound/custom.conf.d/'
     # drill-hc wrapper reduces exit codes to 0/1; timeout 30s — DNSSEC validation can be slow.
