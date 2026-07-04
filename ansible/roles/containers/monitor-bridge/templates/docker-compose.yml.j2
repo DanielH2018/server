@@ -80,6 +80,16 @@ services:
       - RADARR_URL=http://radarr:7878
       - RADARR_API_KEY={{ radarr_api_key }}
       - KUMA_PUSH_ARR_QUEUE={{ monitor_bridge_arr_queue_push_token }}
+      # Prowlarr sustained-indexer watchdog: Prowlarr's in-app health notification is binary
+      # (every flap pages, or — with warnings off — only the all-indexers-down red error). This
+      # polls /api/v1/indexerstatus and `down`s only when an indexer has been failing >= 30 min
+      # (age from Prowlarr's own initialFailure, so it survives a bridge redeploy), suppressing the
+      # sub-threshold flaps public trackers throw that self-clear inside Prowlarr's ~5-15min backoff.
+      # Empty key = disabled (stays up), like N8N_API_KEY. Already on `media`, reaches prowlarr:9696.
+      - PROWLARR_URL=http://prowlarr:9696
+      - PROWLARR_API_KEY={{ prowlarr_api_key }}
+      - PROWLARR_INDEXER_MIN_DOWN_MIN=30
+      - KUMA_PUSH_PROWLARR_INDEXERS={{ monitor_bridge_prowlarr_indexers_push_token }}
       # GitOps deployer liveness + deploy-status. State files are written on the host by
       # gitops_deploy.py and bind-mounted read-only at /gitops-state.
       - GITOPS_STATE_DIR=/gitops-state
@@ -224,6 +234,10 @@ services:
          trackedDownloadStatus "warning" or blocked import (2026-07-01 poisoned-.exe
          incident) and names the offending release + app. -#}
       {{ kuma('monitor-bridge-arr-queue', monitor_type='push', name='Arr Queue Warnings', interval=600, max_retries=0, push_token=monitor_bridge_arr_queue_push_token) }}
+      {# Prowlarr sustained-indexer watchdog: check_prowlarr_indexers pages only when an indexer
+         has been failing >= PROWLARR_INDEXER_MIN_DOWN_MIN (30m) per Prowlarr's initialFailure —
+         the sustained-per-indexer signal Prowlarr's binary in-app warning can't express. -#}
+      {{ kuma('monitor-bridge-prowlarr-indexers', monitor_type='push', name='Prowlarr Indexers', interval=600, max_retries=0, push_token=monitor_bridge_prowlarr_indexers_push_token) }}
       {# GitOps deployer: liveness (deployer ticking) + deploy-status (rollback hold), pushed by
          check_gitops_alive/status from the host state files. interval 600s = 2× the 5-min loop. -#}
       {{ kuma('gitops-deploy-alive', monitor_type='push', name='GitOps Deploy — Alive', interval=600, max_retries=0, push_token=monitor_bridge_gitops_alive_push_token) }}
