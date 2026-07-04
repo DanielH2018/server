@@ -171,6 +171,10 @@ services:
       - LOKI_STREAM={job=~".+"}
       - LOKI_WINDOW=30m
       - KUMA_PUSH_LOKI={{ monitor_bridge_loki_push_token }}
+      # Loki reachability GATE (peer of the Prometheus gate): probed once per cycle before the
+      # Loki-querying checks (Loki Ingestion, Recyclarr, Janitorr). When Loki is unreachable they're
+      # suppressed (pushed `up` w/ a skip msg) and only THIS monitor pages — one outage, one alert.
+      - KUMA_PUSH_LOKI_REACHABLE={{ monitor_bridge_loki_reachable_push_token }}
       # Discord delivery: GET-verify Kuma's own notification webhook is still valid — a
       # rotated/revoked/deleted webhook makes Kuma's alert POSTs silently fail while every
       # monitor stays green-in-UI (the alert chain's delivery hop no other monitor, not even
@@ -189,6 +193,10 @@ services:
       # (indexer down, download-client errors) directly to it via in-app Discord Connect (config
       # lives in the app DBs, not here); a rotated/revoked URL drops those with no Kuma backstop.
       - DISCORD_ARR_WEBHOOK_URL={{ arr_discord_webhook_url }}
+      # And the healthchecks.io app's own Discord webhook — it POSTs its check-down/up alerts to it
+      # via a "webhook" channel (config only in hc.sqlite, not templated), NOT via Kuma. A rotated/
+      # revoked URL silently drops those; it's a redundant secondary to its SMTP path, still worth GET-verifying.
+      - DISCORD_HEALTHCHECKS_WEBHOOK_URL={{ healthchecks_discord_webhook_url }}
       - DISCORD_CONSECUTIVE=2
       - KUMA_PUSH_DISCORD={{ monitor_bridge_discord_push_token }}
       # Recyclarr sync health via Loki: recyclarr runs `recyclarr sync` under supercronic (@daily);
@@ -199,6 +207,16 @@ services:
       - RECYCLARR_LOKI_SELECTOR={container="recyclarr"}
       - RECYCLARR_WINDOW=26h
       - KUMA_PUSH_RECYCLARR={{ monitor_bridge_recyclarr_push_token }}
+      # Janitorr scheduled-cleanup error watchdog: janitorr's healthcheck only proves the JVM is
+      # alive, so an internal cleanup error (failed delete, bad config, a bug) logs ERROR and is
+      # otherwise invisible — and janitorr DELETES REAL MEDIA. Gated on Prometheus container uptime
+      # to skip the documented post-boot FeignException race (an @Scheduled cleanup firing before
+      # jellyfin/sonarr/radarr are ready); counts errors only over the post-startup slice of the
+      # window. Prom-dependent (uptime) AND Loki-dependent (count) — suppressed under either gate.
+      - JANITORR_LOKI_SELECTOR={container="janitorr"}
+      - JANITORR_WINDOW=12h
+      - JANITORR_STARTUP_GRACE_S=600
+      - KUMA_PUSH_JANITORR={{ monitor_bridge_janitorr_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
@@ -258,6 +276,9 @@ services:
       {# Loki log-ingestion freshness: check_loki_ingestion counts lines across all file-tailed
          streams over 30m and `down` at zero — catches a dead promtail/Loki pipeline that /ready can't see. -#}
       {{ kuma('monitor-bridge-loki', monitor_type='push', name='Loki Log Ingestion', interval=600, max_retries=0, push_token=monitor_bridge_loki_push_token) }}
+      {# Loki reachability — the root-cause monitor that gates the Loki-querying checks: when it's
+         down they're suppressed and only this one pages (no Loki-Ingestion/Recyclarr/Janitorr storm). -#}
+      {{ kuma('monitor-bridge-loki-reachable', monitor_type='push', name='Loki Reachable', interval=600, max_retries=0, push_token=monitor_bridge_loki_reachable_push_token) }}
       {# Discord delivery: check_discord GET-verifies Kuma's notification webhook is still valid —
          the alert chain's delivery hop that no other monitor (incl. UptimeRobot) exercises. -#}
       {{ kuma('monitor-bridge-discord', monitor_type='push', name='Discord Delivery', interval=600, max_retries=0, push_token=monitor_bridge_discord_push_token) }}
@@ -265,6 +286,10 @@ services:
          lines in Loki over 26h — catches an erroring nightly sync the supercronic-only
          healthcheck stays green through (the silent 2026-06-10 v8 breakage class). -#}
       {{ kuma('monitor-bridge-recyclarr', monitor_type='push', name='Recyclarr Sync', interval=600, max_retries=0, push_token=monitor_bridge_recyclarr_push_token) }}
+      {# Janitorr scheduled-cleanup error watchdog: check_janitorr counts scheduled-task ERROR lines
+         in Loki over the post-startup window (uptime-gated to skip the documented boot race) —
+         catches an internal cleanup error the JVM-only healthcheck stays green through. -#}
+      {{ kuma('monitor-bridge-janitorr', monitor_type='push', name='Janitorr Errors', interval=600, max_retries=0, push_token=monitor_bridge_janitorr_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 

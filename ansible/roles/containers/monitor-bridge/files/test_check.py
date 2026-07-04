@@ -1605,6 +1605,112 @@ def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch):
     assert "container" in msg
 
 
+# --- loki_reachable (the Loki-dependent gate) -------------------------------
+
+
+def test_loki_reachable_ok(monkeypatch):
+    monkeypatch.setattr(
+        check, "_get_json", lambda *a, **k: {"status": "success", "data": ["job"]}
+    )
+    assert check.loki_reachable() is True
+    ok, msg = check.check_loki_reachable()
+    assert ok
+    assert "reachable" in msg.lower()
+
+
+def test_loki_reachable_non_success_raises(monkeypatch):
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"status": "error"})
+    with pytest.raises(RuntimeError):
+        check.loki_reachable()
+
+
+# --- janitorr scheduled-task error watchdog --------------------------------
+# Gated on Prometheus uptime, NOT content: the boot-race ERROR line ("Unexpected error occurred in
+# scheduled task") is generic and identical to a real failure, with the FeignException on a separate
+# Loki line — so we skip within the startup grace and count only over the post-startup window.
+
+
+def test_janitorr_uptime_unknown_is_ok():
+    # janitorr stopped/redeployed -> metric absent -> not this check's concern (Restarts/Targets is)
+    ok, msg = check.janitorr_errors_ok(5, None, 43200, 600)
+    assert ok
+    assert "uptime unknown" in msg
+
+
+def test_janitorr_within_startup_grace_is_ok():
+    # up 100s (< 600s grace): the documented post-boot FeignException race window -> never page
+    ok, msg = check.janitorr_errors_ok(3, 100, 43200, 600)
+    assert ok
+    assert "startup grace" in msg
+
+
+def test_janitorr_error_past_grace_is_down():
+    ok, msg = check.janitorr_errors_ok(2, 7200, 43200, 600)
+    assert not ok
+    assert "2 janitorr scheduled-task error" in msg
+
+
+def test_janitorr_no_error_past_grace_is_ok():
+    ok, msg = check.janitorr_errors_ok(0, 7200, 43200, 600)
+    assert ok
+    assert "no janitorr errors" in msg
+
+
+def test_janitorr_none_count_is_ok():
+    # No matching Loki series -> None -> 0 -> ok (past grace)
+    ok, _ = check.janitorr_errors_ok(None, 7200, 43200, 600)
+    assert ok
+
+
+def test_check_janitorr_uptime_none_skips_loki(monkeypatch):
+    # prom_scalar None (janitorr metric absent) -> ok, and loki_count must NOT run
+    monkeypatch.setattr(check, "prom_scalar", lambda q: None)
+
+    def boom(*a, **k):
+        raise AssertionError("loki_count must not run when uptime is unknown")
+
+    monkeypatch.setattr(check, "loki_count", boom)
+    ok, msg = check.check_janitorr()
+    assert ok
+    assert "uptime unknown" in msg
+
+
+def test_check_janitorr_within_grace_skips_loki(monkeypatch):
+    monkeypatch.setattr(check, "prom_scalar", lambda q: 120.0)  # up 2 min < 600s grace
+
+    def boom(*a, **k):
+        raise AssertionError("loki_count must not run within the startup grace")
+
+    monkeypatch.setattr(check, "loki_count", boom)
+    ok, msg = check.check_janitorr()
+    assert ok
+    assert "startup grace" in msg
+
+
+def test_check_janitorr_past_grace_pages_on_error(monkeypatch):
+    monkeypatch.setattr(check, "prom_scalar", lambda q: 100000.0)  # up ~28h
+    monkeypatch.setattr(check, "loki_count", lambda selector, window: 1)
+    ok, msg = check.check_janitorr()
+    assert not ok
+    assert "scheduled-task error" in msg
+
+
+def test_check_janitorr_caps_window_to_post_startup(monkeypatch):
+    # up 900s, grace 600s -> effective window is min(12h, 300s) = 300s, so the boot race (all in
+    # the first ~minute) can't be counted. Assert the loki_count window arg is the capped value.
+    monkeypatch.setattr(check, "prom_scalar", lambda q: 900.0)
+    seen = {}
+
+    def fake_count(selector, window):
+        seen["window"] = window
+        return 0
+
+    monkeypatch.setattr(check, "loki_count", fake_count)
+    ok, _ = check.check_janitorr()
+    assert ok
+    assert seen["window"] == "300s"
+
+
 # --- discord_webhook_ok / check_discord -------------------------------------
 
 
@@ -1761,6 +1867,31 @@ def test_discord_crowdsec_webhook_failure_pages(monkeypatch):
     assert "CrowdSec" in msg and "404" in msg
 
 
+def test_discord_healthchecks_webhook_failure_pages(monkeypatch):
+    # A revoked healthchecks.io app webhook (its own check-down alerts, no Kuma backstop) pages,
+    # naming it — even though Kuma's own webhook is fine.
+    monkeypatch.setattr(
+        check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
+    )
+    monkeypatch.setattr(
+        check,
+        "DISCORD_HEALTHCHECKS_WEBHOOK_URL",
+        "https://discord.com/api/webhooks/5/hc",
+    )
+    monkeypatch.setattr(check, "_discord_down_streak", 0)
+
+    def get(url, *a, **k):
+        if "/5/hc" in url:
+            raise urllib.error.HTTPError(url, 404, "gone", {}, None)
+        return {"name": "Homelab Alerts"}
+
+    monkeypatch.setattr(check, "_get_json", get)
+    assert check.check_discord()[0]  # streak 1, suppressed
+    ok, msg = check.check_discord()  # streak 2, pages
+    assert not ok
+    assert "Healthchecks" in msg and "404" in msg
+
+
 # ── Prometheus reachability gate + alert-storm suppression (L1) ──────────────
 
 GB = 10**9
@@ -1802,6 +1933,8 @@ def _wire_run_once(monkeypatch, prom_result):
     # No exporters down by default, so the prom-up path doesn't hit the network probing `up`.
     monkeypatch.setattr(check, "prom_vector", lambda q: [])
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset({"disk"}))
+    # Loki reachable by default so run_once's Loki gate doesn't make a real network call here.
+    monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
 
     def _mk(name):
         def fn():
@@ -1852,6 +1985,85 @@ def test_prom_dependent_set_matches_real_checks():
     assert check.PROM_DEPENDENT <= names
 
 
+# ── Loki reachability gate (peer of the Prometheus gate) ─────────────────────
+
+
+def test_loki_dependent_set_matches_real_checks():
+    # Guard (mirrors PROM_DEPENDENT): every name in LOKI_DEPENDENT is a real check.
+    names = {name for name, _, _ in check.CHECKS}
+    assert check.LOKI_DEPENDENT <= names
+
+
+def _wire_run_once_loki(monkeypatch, loki_result, checks, loki_dependent):
+    """Drive run_once with Prometheus UP and a stubbed Loki-reachability result; capture run+push."""
+    ran, pushes = [], []
+    monkeypatch.setattr(check, "push", lambda t, ok, m: pushes.append((t, ok, m)))
+    monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
+    monkeypatch.setattr(check, "prom_vector", lambda q: [])
+    monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset())
+    monkeypatch.setattr(check, "LOKI_DEPENDENT", frozenset(loki_dependent))
+    if isinstance(loki_result, Exception):
+
+        def _loki():
+            raise loki_result
+    else:
+
+        def _loki():
+            return loki_result
+
+    monkeypatch.setattr(check, "check_loki_reachable", _loki)
+
+    def _mk(name):
+        def fn():
+            ran.append(name)
+            return True, "%s ok" % name
+
+        return fn
+
+    monkeypatch.setattr(check, "CHECKS", [(n, "tok_%s" % n, _mk(n)) for n in checks])
+    check.run_once()
+    return ran, pushes
+
+
+def test_run_once_suppresses_loki_dependent_when_loki_down(monkeypatch):
+    ran, pushes = _wire_run_once_loki(
+        monkeypatch,
+        (False, "loki unreachable"),
+        ["recyclarr", "janitorr", "backup"],
+        {"recyclarr", "janitorr"},
+    )
+    # Loki-dependent checks suppressed (never run, pushed up w/ a skip msg); non-loki still runs
+    assert not ({"recyclarr", "janitorr"} & set(ran))
+    assert "backup" in ran
+    by_tok = {t: (ok, m) for t, ok, m in pushes}
+    assert by_tok["tok_recyclarr"][0] is True
+    assert "loki" in by_tok["tok_recyclarr"][1].lower()
+    # the Loki Reachable monitor itself pushed down with its message
+    assert any(ok is False and "loki unreachable" in m for _, ok, m in pushes)
+
+
+def test_run_once_unreachable_loki_exception_suppresses(monkeypatch):
+    # check_loki_reachable raising (the real outage path) -> _evaluate down -> suppression
+    ran, _ = _wire_run_once_loki(
+        monkeypatch,
+        RuntimeError("connection refused"),
+        ["recyclarr", "backup"],
+        {"recyclarr"},
+    )
+    assert "recyclarr" not in ran
+    assert "backup" in ran
+
+
+def test_run_once_runs_loki_dependent_when_loki_up(monkeypatch):
+    ran, _ = _wire_run_once_loki(
+        monkeypatch,
+        (True, "Loki reachable"),
+        ["recyclarr", "janitorr"],
+        {"recyclarr", "janitorr"},
+    )
+    assert "recyclarr" in ran and "janitorr" in ran
+
+
 # ── Exporter-reachability gate (node-exporter / cadvisor) — Backups M3 ───────
 
 
@@ -1896,6 +2108,7 @@ def _wire_run_once_prom_up(monkeypatch, up_vector, checks, prom_dependent):
     monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
     monkeypatch.setattr(check, "prom_vector", lambda q: up_vector if q == "up" else [])
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset(prom_dependent))
+    monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
 
     def _mk(name):
         def fn():
@@ -1955,6 +2168,7 @@ def test_run_once_up_probe_failure_does_not_suppress(monkeypatch):
     monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
     monkeypatch.setattr(check, "prom_vector", boom)
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset({"disk"}))
+    monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
 
     def _mk(name):
         def fn():

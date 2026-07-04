@@ -223,6 +223,12 @@ DISCORD_GITOPS_WEBHOOK_URL = _env("DISCORD_GITOPS_WEBHOOK_URL", "")
 # revoked webhook silently drops those while every container-up monitor stays green. Empty = not
 # checked. (The URL lives only in the *arr app DBs + SOPS — this GET-verify is its one watchdog.)
 DISCORD_ARR_WEBHOOK_URL = _env("DISCORD_ARR_WEBHOOK_URL", "")
+# The healthchecks.io app's own Discord webhook is a FIFTH independent hop: healthchecks POSTs its
+# own check-down/up alerts to it via a "webhook" notification channel (config lives only in
+# hc.sqlite, not templated), NOT via Kuma. A rotated/revoked URL silently drops those. It's a
+# redundant secondary path (healthchecks' primary alert route is SMTP email, and it self-logs send
+# failures in hc.sqlite), but it's still an un-Kuma'd delivery hop worth verifying. Empty = skipped.
+DISCORD_HEALTHCHECKS_WEBHOOK_URL = _env("DISCORD_HEALTHCHECKS_WEBHOOK_URL", "")
 DISCORD_CONSECUTIVE = int(_env("DISCORD_CONSECUTIVE", "2"))
 
 # Recyclarr sync health: recyclarr runs `recyclarr sync` via supercronic on an @daily schedule;
@@ -233,6 +239,24 @@ DISCORD_CONSECUTIVE = int(_env("DISCORD_CONSECUTIVE", "2"))
 # + slack: any `job failed` OR zero `job succeeded` -> down. Reuses the existing Loki query path.
 RECYCLARR_LOKI_SELECTOR = _env("RECYCLARR_LOKI_SELECTOR", '{container="recyclarr"}')
 RECYCLARR_WINDOW = _env("RECYCLARR_WINDOW", "26h")
+
+# Janitorr scheduled-cleanup error watchdog: janitorr's healthcheck only proves the JVM is alive
+# (`grep java /proc/1/comm`), so a scheduled cleanup that throws — a failed delete, a bad config, an
+# internal bug — logs ERROR and is otherwise invisible, and janitorr DELETES REAL MEDIA. The one
+# benign, recurring ERROR is the documented post-boot race: an @Scheduled cleanup fires before
+# jellyfin/sonarr/radarr finish loading -> FeignException 503, self-heals next cycle (janitorr's
+# CLAUDE.md; a RestartCount ~4 after a reboot is EXPECTED). That ERROR line is generic ("Unexpected
+# error occurred in scheduled task"), identical to a real failure and with the exception type on a
+# separate Loki line, so it can't be filtered by content — we discriminate by TIME via the
+# container's Prometheus uptime: within JANITORR_STARTUP_GRACE_S of startup we don't count, and past
+# it we count only over the post-startup slice (min(window, uptime - grace)) so the boot race can
+# never be in-window. Prom-dependent (uptime) AND Loki-dependent (count) — suppressed under either gate.
+JANITORR_LOKI_SELECTOR = _env("JANITORR_LOKI_SELECTOR", '{container="janitorr"}')
+JANITORR_ERROR_MATCH = _env(
+    "JANITORR_ERROR_MATCH", "Unexpected error occurred in scheduled task"
+)
+JANITORR_WINDOW = _env("JANITORR_WINDOW", "12h")
+JANITORR_STARTUP_GRACE_S = float(_env("JANITORR_STARTUP_GRACE_S", "600"))
 
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
@@ -1245,6 +1269,25 @@ def check_loki_ingestion():
     return True, "%s (+ container stream)" % msg_all
 
 
+def loki_reachable():
+    """Is Loki itself reachable and answering queries? (the LOKI_DEPENDENT gate).
+
+    Hits the labels endpoint — a fixed, ingestion-independent query that returns status=success
+    whenever Loki is up — so 'Loki is down' (one root cause, one page: Loki Reachable) is separated
+    from 'Loki is up but promtail stopped shipping' (Loki Log Ingestion, which still evaluates
+    whenever Loki is reachable). Raising -> _evaluate renders the Loki Reachable monitor down.
+    """
+    data = _get_json(LOKI_URL + "/loki/api/v1/labels")
+    if data.get("status") != "success":
+        raise RuntimeError("loki labels status=%s" % data.get("status"))
+    return True
+
+
+def check_loki_reachable():
+    loki_reachable()
+    return True, "Loki reachable"
+
+
 def discord_webhook_ok(status_code, name=None):
     """Pure: does a GET on a Discord webhook return 200 (still valid)? (ok, msg).
 
@@ -1267,8 +1310,9 @@ def _discord_webhooks():
     security-ban delivery hop with no other backstop; GitOps/Renovate's carries the gitops-deploy
     rollback alert AND the renovate_notify digests (whose "alive" marker greens regardless of
     delivery); Arr's carries the *arr apps' own onHealthIssue alerts (direct POST from their
-    in-app Discord Connect, config only in the app DBs). None has a Kuma backstop, so all four
-    are verified together.
+    in-app Discord Connect, config only in the app DBs); Healthchecks' is the healthchecks.io app's
+    own check-down/up webhook (config only in hc.sqlite, a redundant secondary to its SMTP path).
+    None has a Kuma backstop, so all five are verified together.
     """
     return [
         (label, url)
@@ -1277,6 +1321,7 @@ def _discord_webhooks():
             ("CrowdSec", DISCORD_CROWDSEC_WEBHOOK_URL),
             ("GitOps/Renovate", DISCORD_GITOPS_WEBHOOK_URL),
             ("Arr", DISCORD_ARR_WEBHOOK_URL),
+            ("Healthchecks", DISCORD_HEALTHCHECKS_WEBHOOK_URL),
         )
         if url
     ]
@@ -1367,6 +1412,50 @@ def check_recyclarr():
     return recyclarr_sync_ok(failed, succeeded, RECYCLARR_WINDOW)
 
 
+def janitorr_errors_ok(count, uptime_s, window_s, grace_s):
+    """Pure: decide janitorr scheduled-task health from the post-startup error count. (ok, msg).
+
+    See the JANITORR_* config block for why this gates on Prometheus uptime instead of filtering
+    the (generic, un-discriminable) ERROR line by content:
+      - uptime None (metric absent: janitorr stopped/redeployed) -> ok (a stopped janitorr is
+        Container Restarts'/Scrape Targets' concern, not this check's);
+      - within grace_s of startup -> ok (the documented boot-race window);
+      - otherwise `down` on any scheduled-task error in the post-startup window.
+    """
+    if uptime_s is None:
+        return True, "janitorr uptime unknown (metric absent) — error check skipped"
+    if uptime_s <= grace_s:
+        return True, "startup grace — up %.0fs (<= %.0fs)" % (uptime_s, grace_s)
+    n = int(count or 0)
+    if n:
+        return (
+            False,
+            "%d janitorr scheduled-task error(s) in the last %.0fm — see `docker logs janitorr`"
+            % (n, window_s / 60.0),
+        )
+    return True, "no janitorr errors (up %.1fh)" % (uptime_s / 3600.0)
+
+
+def check_janitorr():
+    """Loki+Prometheus janitorr cleanup-error watchdog (see janitorr_errors_ok / the JANITORR_*
+    config block). Prom-dependent (uptime gate) AND Loki-dependent (error count)."""
+    uptime_s = prom_scalar(
+        'time() - max(container_start_time_seconds{name="janitorr"})'
+    )
+    window_s = parse_duration(JANITORR_WINDOW)
+    grace_s = JANITORR_STARTUP_GRACE_S
+    count, eff_window_s = None, window_s
+    if uptime_s is not None and uptime_s > grace_s:
+        # Count only over the post-startup slice, so the documented boot race (all within the
+        # first ~minute) can never be in-window once we're past grace.
+        eff_window_s = min(window_s, uptime_s - grace_s)
+        count = loki_count(
+            "%s |= `%s`" % (JANITORR_LOKI_SELECTOR, JANITORR_ERROR_MATCH),
+            "%ds" % int(eff_window_s),
+        )
+    return janitorr_errors_ok(count, uptime_s, eff_window_s, grace_s)
+
+
 CHECKS = [
     ("backup", _env("KUMA_PUSH_KOPIA", ""), check_backup),
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
@@ -1398,6 +1487,7 @@ CHECKS = [
     ("loki_ingestion", _env("KUMA_PUSH_LOKI", ""), check_loki_ingestion),
     ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
     ("recyclarr", _env("KUMA_PUSH_RECYCLARR", ""), check_recyclarr),
+    ("janitorr", _env("KUMA_PUSH_JANITORR", ""), check_janitorr),
 ]
 
 # Checks that query Prometheus. A single Prometheus outage would fail every one of them at once
@@ -1416,6 +1506,7 @@ PROM_DEPENDENT = frozenset(
         "targets",
         "traefik5xx",
         "b2_trend",
+        "janitorr",  # reads container_start_time_seconds for its startup-race uptime gate
     }
 )
 
@@ -1432,6 +1523,15 @@ EXPORTER_DEPENDENT = {
     "node": frozenset({"disk", "memory", "b2_trend"}),
     "cadvisor": frozenset({"restarts", "oom", "cpu"}),
 }
+
+# Loki-reachability gate — the peer of the Prometheus gate for the Loki-querying checks. A single
+# Loki outage makes loki_count raise in ALL of them at once (Loki Log Ingestion + Recyclarr Sync +
+# Janitorr Errors) -> a 3-monitor storm for one root cause. run_once probes Loki first
+# (check_loki_reachable -> its own "Loki Reachable" monitor) and, when it's unreachable, SUPPRESSES
+# these (pushes `up` with a skip msg so their push heartbeats stay alive) so only Loki Reachable
+# pages. Loki being UP but promtail not shipping is a different signal Loki Log Ingestion still
+# surfaces (it evaluates whenever Loki is reachable). Guarded by a test against CHECKS.
+LOKI_DEPENDENT = frozenset({"loki_ingestion", "recyclarr", "janitorr"})
 
 
 def down_exporters(up_vector):
@@ -1490,9 +1590,18 @@ def run_once():
         except Exception as e:
             log("WARN: exporter-health probe failed:", e)
 
+    # Loki-reachability gate (peer of the Prometheus gate): probe Loki once so a single Loki outage
+    # is one page (Loki Reachable), not a storm across every Loki-querying check (LOKI_DEPENDENT).
+    loki_ok, loki_msg = _evaluate("loki_reachable", check_loki_reachable)
+    log("OK  " if loki_ok else "DOWN", "loki_reachable", "-", loki_msg)
+    push(_env("KUMA_PUSH_LOKI_REACHABLE", ""), loki_ok, loki_msg)
+
     for name, token, fn in CHECKS:
         if not prom_ok and name in PROM_DEPENDENT:
             ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
+            log("SKIP", name, "-", msg)
+        elif not loki_ok and name in LOKI_DEPENDENT:
+            ok, msg = True, "skipped — Loki unreachable (see Loki Reachable monitor)"
             log("SKIP", name, "-", msg)
         elif name in suppressed:
             ok, msg = True, "skipped — exporter down (see Scrape Targets)"

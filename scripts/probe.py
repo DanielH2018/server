@@ -30,6 +30,12 @@ Subcommands:
 `ha` is read-only (GET) and authenticates with the SOPS-encrypted claude_ha_token
 (server-only — needs the host age key). The token is fed to curl via stdin, never argv.
 Add `--dry-run` to print the command(s) instead of running them.
+
+NB: `cert <public-host>` shows the CLOUDFLARE EDGE cert, NOT Traefik's origin cert — public DNS
+resolves the host to Cloudflare, so the TLS handshake terminates there. To inspect the origin
+Let's Encrypt cert, point at the origin IP with the host as SNI:
+`cert <server-ip>:443 --sni <host>` (origin expiry is also independently watched by
+monitor-bridge's TLS Cert Expiry monitor).
 """
 
 import argparse
@@ -449,7 +455,11 @@ def format_health(data, container):
 
 def cert_stages(host, port, sni):
     """Two-stage pipeline: open a TLS session (with SNI) and decode the served
-    leaf cert's subject/issuer/validity. Read-only — no data is sent."""
+    leaf cert's subject/issuer/validity. Read-only — no data is sent.
+
+    NB: connects to whatever DNS resolves `host` to. For a Cloudflare-proxied public host that's
+    the CF edge (→ the Cloudflare edge cert), NOT Traefik's origin cert — pass the origin IP as the
+    target with `--sni <host>` to inspect the origin Let's Encrypt cert."""
     s_client = [
         "openssl",
         "s_client",
@@ -495,7 +505,11 @@ def _build_parser():
     sub.add_parser("scrutiny", help="disk SMART summary")
     pi = sub.add_parser("pi", help="Pi glances API")
     pi.add_argument("subpath", help="e.g. fs, quicklook, mem, cpu")
-    ct = sub.add_parser("cert", help="served TLS cert details")
+    ct = sub.add_parser(
+        "cert",
+        help="served TLS cert details (public hosts show the CF edge cert — "
+        "pass the origin IP + --sni for the origin cert)",
+    )
     ct.add_argument("target", help="host or host:port")
     ct.add_argument("--sni", help="SNI servername (defaults to host)")
     hl = sub.add_parser(
