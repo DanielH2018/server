@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Pull daniel-pi's wg-easy peer configs (wg0.conf/wg0.json — WireGuard private keys) into the
+# server's Kopia-scoped containers/ tree, so an SD-card death on the Pi doesn't mean re-enrolling
+# every VPN client. The Pi is otherwise out of Kopia scope (see the kopia role's CLAUDE.md); this
+# one directory is the deliberate exception. Managed by the wg-easy role, daniel-server ONLY.
+#
+# sudo rsync on the Pi (it has NOPASSWD sudo) is REQUIRED: the files are root:root 0600/0640,
+# unreadable to the ubuntu SSH user. BatchMode=yes so a broken key/host-key fails fast rather than
+# hanging the cron. No --delete: a peer removed on the Pi lingering in the backup is harmless, and
+# --delete would wipe the offsite copy if the source were ever momentarily empty/unreadable.
+set -euo pipefail
+
+SRC="{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}@{{ hostvars['daniel-pi'].ansible_host }}:/home/{{ sys_user }}/server/containers/wg-easy/config/"
+DEST="/home/{{ sys_user }}/server/containers/wg-easy/pi-peers/"
+
+mkdir -p "$DEST"
+# --chmod=D700 forces the dest dir to 0700 (rsync -a would otherwise stamp it with the Pi source
+# dir's own 0755+mtime, churning the role's `mode: "0700"` file task every deploy). File perms are
+# still preserved from the source (0600/0640), so the WireGuard keys stay locked down.
+rsync -a --chmod=D700 \
+  --rsync-path='sudo rsync' \
+  -e 'ssh -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new' \
+  "$SRC" "$DEST"

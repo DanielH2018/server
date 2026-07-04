@@ -91,6 +91,10 @@ containers_list:
     port: 51821
     udp_port: 51820
     use_authelia: true
+    # Server-only admin auth: bcrypt hash of the wg-easy admin password (SOPS). Closes the
+    # unauthenticated admin API otherwise reachable to every monitoring-net neighbor (Authelia
+    # only gates the Traefik ingress). The Pi's wg-easy entry omits this — accepted LAN-only risk.
+    password_hash: "{{ wg_easy_password_hash }}"
     # DNS baked into generated WireGuard client configs → Pi-hole on this host, so
     # *.local.<domain> resolves over the tunnel (private homelab path that bypasses
     # Cloudflare/CrowdSec). Mobile full-tunnel clients use it directly; desktop

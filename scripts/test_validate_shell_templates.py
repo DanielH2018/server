@@ -14,7 +14,7 @@ def test_all_real_shell_templates_render_and_lint_clean():
     assert v.main() == 0
 
 
-def test_discover_templates_finds_the_known_five_plus_kopia():
+def test_discover_templates_finds_the_known_set():
     # Pin the expected set so a template silently going missing (typo'd rename, moved role) is
     # caught, not just "fewer templates checked" sliding by unnoticed.
     names = {p.name for p in v.discover_templates()}
@@ -25,6 +25,7 @@ def test_discover_templates_finds_the_known_five_plus_kopia():
         "secret-rotate.sh.j2",
         "secret-rotation-audit.sh.j2",
         "pi-sd-health.sh.j2",
+        "pull-pi-peers.sh.j2",
     }
 
 

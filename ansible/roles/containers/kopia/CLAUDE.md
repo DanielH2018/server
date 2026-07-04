@@ -60,10 +60,14 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
 - **Bare-metal disaster recovery** (server gone — reconnect to B2 from a fresh host and
   restore everything): [`docs/kopia-disaster-recovery.md`](../../../../../docs/kopia-disaster-recovery.md).
   All five repo creds are in SOPS, which is DR-closed, so the capability survives a total loss.
-- **The Pi is intentionally NOT in Kopia scope.** The snapshot source is only the server's
-  `containers/`. daniel-pi runs stateless / Ansible-reconstructible services (docker-proxy,
-  wg-easy, glances, dozzle, autoheal) — its wg-easy keys/peers re-template and clients re-enroll,
-  so there's nothing to back up that a redeploy doesn't rebuild. Not an oversight.
+- **The Pi is (almost) intentionally NOT in Kopia scope.** The snapshot source is only the server's
+  `containers/`. daniel-pi runs stateless / Ansible-reconstructible services (docker-proxy, glances,
+  dozzle, autoheal) that re-template on a redeploy. **The one exception (2026-07-04): wg-easy's peer
+  configs** (`wg0.conf`/`wg0.json` — WireGuard private keys a redeploy can NOT rebuild). The wg-easy
+  role runs a daily **daniel-server** cron (`/usr/local/bin/wg-easy-pull-pi-peers.sh`, 23:30, before
+  the 00:00 snapshot) that `sudo rsync`-pulls the Pi's `containers/wg-easy/config/` into
+  `containers/wg-easy/pi-peers/` on the server — inside this snapshot source — so an SD-card death
+  doesn't force re-enrolling every VPN client. Everything else on the Pi stays out of scope by design.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Entry/ignore: `templates/entrypoint.sh.j2`, `kopiaignore.j2`

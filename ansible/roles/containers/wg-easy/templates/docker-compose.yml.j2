@@ -6,7 +6,11 @@
 
 services:
   wg-easy:
-    image: ghcr.io/wg-easy/wg-easy:latest
+    # Pinned to the v14 tag + digest (the bcrypt PASSWORD_HASH auth model). The `:14` keeps Renovate
+    # tracking the major so it can OFFER a v15 bump as a deliberate PR; the digest keeps it immutable
+    # within v14.x. MUST NOT float to :latest → v15, which drops PASSWORD_HASH for an interactive
+    # setup wizard and would silently reopen the server's monitoring-net-exposed admin API.
+    image: ghcr.io/wg-easy/wg-easy:14@sha256:5f26407fd2ede54df76d63304ef184576a6c1bb73f934a58a11abdd852fab549
     container_name: wg-easy
     # NET_ADMIN to create the wg interface + apply rules; NET_RAW because wg-quick runs
     # iptables (the iptables CLI opens a raw socket to init the 'nat' table — fails with
@@ -34,6 +38,14 @@ services:
       - WG_HOST=wireguard.{{ domain }}
       - WG_PORT={{ container_item.udp_port }}
       - WG_PERSISTENT_KEEPALIVE=25
+{% if container_item.password_hash is defined %}
+      # Admin UI/API auth (wg-easy v14 → bcrypt PASSWORD_HASH). The `$` in a bcrypt hash MUST be
+      # doubled or Compose interpolates it at parse time and mangles the hash (the validate-compose
+      # hook only guards command/entrypoint/healthcheck, not environment). Set on the server (its
+      # admin API is reachable to every monitoring-net neighbor); the Pi omits it (accepted LAN-only
+      # risk — see this role's CLAUDE.md). Authelia only gates the Traefik ingress, not this in-net API.
+      - PASSWORD_HASH={{ container_item.password_hash | replace('$', '$$') }}
+{% endif %}
 {% if container_item.default_dns is defined %}
       # DNS baked into generated client configs so *.local.{{ domain }} resolves via Pi-hole
       # over the tunnel (private homelab path, bypasses Cloudflare/CrowdSec). Only set where

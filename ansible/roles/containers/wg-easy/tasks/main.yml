@@ -13,3 +13,53 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+
+# --- daniel-server only: back up daniel-pi's wg-easy peer configs into Kopia scope ---
+# The Pi is otherwise out of Kopia scope (kopia role CLAUDE.md); its wg-easy peers (WireGuard
+# private keys) are the one thing a redeploy can't rebuild, so pull them into the server's
+# containers/ tree for the offsite (B2) backup. Gated on inventory_hostname (NOT containers_list —
+# a tagged deploy filters that list to the dep closure), so it lands only on the server, which
+# pulls FROM the Pi. See this role's + the kopia role's CLAUDE.md.
+- name: Create the Pi wg-easy peer-backup directory
+  tags: [cron]
+  when: inventory_hostname == 'daniel-server'
+  ansible.builtin.file:
+    path: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/pi-peers"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0700"
+
+- name: Deploy the Pi wg-easy peer-backup pull script
+  tags: [cron]
+  when: inventory_hostname == 'daniel-server'
+  ansible.builtin.template:
+    src: pull-pi-peers.sh.j2
+    dest: /usr/local/bin/wg-easy-pull-pi-peers.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Schedule the daily daniel-pi wg-easy peer backup
+  tags: [cron]
+  when: inventory_hostname == 'daniel-server'
+  # 23:30 — 30 min before the 00:00 in-container Kopia snapshot, so each night's snapshot captures
+  # the fresh pull; clear of the kopia crons (02:30 b2-usage, 03:30 maint, 04:00 verify, 05:00 drill).
+  ansible.builtin.cron:
+    name: "Daily daniel-pi wg-easy peer backup"
+    minute: "30"
+    hour: "23"
+    job: "/usr/local/bin/wg-easy-pull-pi-peers.sh"
+    user: "{{ sys_user }}"
+  become: true
+
+- name: Seed the Pi wg-easy peer backup on first deploy
+  tags: [cron]
+  when: inventory_hostname == 'daniel-server'
+  # Run once now so a copy exists immediately (the cron owns ongoing refresh). failed_when:false so
+  # an unreachable Pi at deploy time doesn't fail the play — the nightly cron self-corrects.
+  ansible.builtin.command:
+    cmd: /usr/local/bin/wg-easy-pull-pi-peers.sh
+  changed_when: false
+  failed_when: false
