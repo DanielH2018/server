@@ -16,7 +16,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **twenty-six checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **twenty-seven checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the nine
@@ -67,6 +67,17 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     unreachable *arr API is NOT given grace/hysteresis — it surfaces as `down` immediately via
     the same `_evaluate` path as `check_n8n`/`check_scrutiny` (no shared root cause here to
     gate, unlike the Prometheus/exporter checks). Pure `queue_warnings()` is unit-tested.)
+  - **Prowlarr Indexers** (Prowlarr's `/api/v1/indexerstatus` + `/api/v1/indexer` over `media`,
+    `X-Api-Key`: `down` only when an indexer has been failing ≥ `PROWLARR_INDEXER_MIN_DOWN_MIN`
+    (30 min) measured from Prowlarr's own `initialFailure` — the age-based, per-indexer SUSTAINED
+    signal Prowlarr's binary in-app health notification can't express (it's warnings-on-every-flap
+    or all-indexers-down-only). Suppresses the transient tracker flaps that self-clear inside
+    Prowlarr's ~5-15 min backoff. Age-based (not consecutive-cycle) so it survives a bridge
+    redeploy mid-outage. Empty `PROWLARR_API_KEY` = disabled (stays up); a null/unparseable
+    `initialFailure` is skipped, an unreachable Prowlarr surfaces as `down` via `_evaluate` (the
+    `check_arr_queue` convention — no grace). Pairs with Prowlarr set to
+    `includeHealthWarnings=false` (keeps `onHealthIssue` = the instant all-down red backstop). Pure
+    `indexers_down()` is unit-tested. Spec: `docs/superpowers/specs/2026-07-04-prowlarr-indexer-watchdog-design.md`.)
   - **GitOps Deploy — Alive** (reads `/gitops-state/last_run`, a bind-mounted host timestamp the
     `gitops_deploy` deployer rewrites each non-crashing tick; `down` once it's older than
     `GITOPS_MAX_AGE_MIN` — i.e. the deployer stalled / host down. The deployer no longer pushes
@@ -196,7 +207,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,gitops_alive,gitops_status,scrutiny,pi,b2,b2_trend,ha,renovate_alive,loki,verify,maintenance,discord,recyclarr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,pi,b2,b2_trend,ha,renovate_alive,loki,verify,maintenance,discord,recyclarr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -224,7 +235,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the twenty-six push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the twenty-seven push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI
