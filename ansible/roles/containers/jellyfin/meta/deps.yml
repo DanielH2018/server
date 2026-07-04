@@ -1,4 +1,6 @@
 ---
 role_deps:
+  # No authelia: jellyfin has its own auth (clients can't pass 2FA) and is not behind
+  # the Authelia forward-auth, so it needs no deploy-ordering after it (matches
+  # home-assistant/terraria, the other no-Authelia roles).
   - traefik
-  - authelia

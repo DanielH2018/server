@@ -633,6 +633,22 @@ def gitops_status(hold_sha):
     return False, "deploy held at %s — revert the offending PR" % hold_sha[:8]
 
 
+def sanitize(s, maxlen=120):
+    """Neutralize adversary-controlled text before it enters a Discord-bound alert msg.
+
+    Release titles, indexer names and n8n workflow names are attacker-influenced — a poisoned
+    indexer/release is the very thing the arr-queue/prowlarr checks exist to catch. Kuma forwards
+    the msg to Discord, which renders @mentions and markdown, so collapse newlines/whitespace,
+    defuse '@' (which forms @everyone/@here/user pings) and backticks, and cap the length.
+    """
+    s = "?" if s is None else str(s)
+    s = " ".join(s.split())
+    s = s.replace("@", "(at)").replace("`", "'")
+    if len(s) > maxlen:
+        s = s[: maxlen - 3] + "..."
+    return s
+
+
 def check_n8n():
     """Failed executions of active ("Prod") n8n workflows within N8N_FAIL_WINDOW.
 
@@ -653,7 +669,7 @@ def check_n8n():
     offenders = n8n_failures(workflows, executions, parse_duration(N8N_FAIL_WINDOW))
     total = sum(c for _, c in offenders)
     if total > N8N_FAIL_MAX:
-        desc = ", ".join("%s (%d)" % (n, c) for n, c in offenders[:5])
+        desc = ", ".join("%s (%d)" % (sanitize(n), c) for n, c in offenders[:5])
         return False, "%d active workflow(s) failed in %s: %s" % (
             len(offenders),
             N8N_FAIL_WINDOW,
@@ -728,7 +744,10 @@ def check_arr_queue():
         data = _get_json(url, headers={"X-Api-Key": api_key})
         offenders.extend(queue_warnings(data, app_name))
     if offenders:
-        desc = "; ".join("[%s] %s — %s" % o for o in offenders[:5])
+        desc = "; ".join(
+            "[%s] %s — %s" % (app, sanitize(title), sanitize(reason))
+            for app, title, reason in offenders[:5]
+        )
         return False, "%d queue item(s) need review: %s" % (len(offenders), desc)
     return True, "queue clean (%s)" % ", ".join(a[0] for a in configured)
 
@@ -782,7 +801,7 @@ def check_prowlarr_indexers():
         status, name_by_id, datetime.now(timezone.utc), PROWLARR_INDEXER_MIN_DOWN_MIN
     )
     if offenders:
-        desc = "; ".join("%s down %.0fm" % (n, m) for n, m in offenders[:5])
+        desc = "; ".join("%s down %.0fm" % (sanitize(n), m) for n, m in offenders[:5])
         return False, "%d indexer(s) failing >=%gm: %s" % (
             len(offenders),
             PROWLARR_INDEXER_MIN_DOWN_MIN,

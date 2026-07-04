@@ -94,6 +94,13 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     across ALL snapshots, where the restore drill proves ONE service's tree restores. The
     script captures the verify's own exit code — the old `... | logger` cron made cron see
     logger's always-zero exit and silently swallowed a non-zero verify.)
+  - **Backup Maintenance** (reads `/maintenance/state.json`, written daily by the kopia role's
+    `kopia-maintenance` host cron from `kopia maintenance info --json` — `down` on a
+    disabled/overdue/failed full-maintenance cycle, >2.5 d staleness, or a missing/corrupt state
+    file. Full maintenance GCs expired blobs from B2, so a stall is the upstream CAUSE that the
+    B2 Storage Usage / B2 Usage Trend checks only catch weeks later as a downstream symptom (and
+    B2 headroom is thin). Same state-file idiom as Backup Verify / B2 Storage Usage; pure
+    `maintenance()` + `check_maintenance()` are unit-tested.)
   - **B2 Storage Usage** (reads `/b2-usage/state.json`, written daily by the kopia role's
     `kopia-b2-usage.sh` host cron with the bucket's **billable** bytes — `rclone size
     --b2-versions`, which counts hidden versions the way B2 bills them, NOT `kopia blob

@@ -29,6 +29,9 @@ services:
       - SETGID
       - SETUID
       - CHOWN
+      # FOWNER: s6/DOCKER_MODS init chmods files it doesn't own (e.g. /config/.ssh
+      # to 0700) — without it that EPERMs and .ssh is left world-readable 0755.
+      - FOWNER
       - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true

@@ -285,6 +285,23 @@
     command: cscli hub upgrade
   changed_when: false
 
+- name: Ensure CrowdSec dependency collections are installed
+  # `cscli hub upgrade` refreshes installed items in place but NEVER installs a collection's
+  # newly-declared transitive dependency, so base-http-scenarios / linux sat "tainted by
+  # missing crowdsecurity/http-cve / whitelist-good-actors" indefinitely — silently dropping
+  # CVE-probe detection + good-actor false-positive suppression (2026-07-04 review M2). These
+  # are also in the crowdsec COLLECTIONS env (installed at container init), but re-asserting
+  # them here heals a deploy that doesn't recreate crowdsec and guards against a future hub
+  # bump silently regressing them. Idempotent; no --force, so a locally-modified item is never
+  # clobbered. `install` on an already-present item exits 0 ("nothing to install").
+  tags: [deploy]
+  community.docker.docker_container_exec:
+    container: crowdsec
+    command: "cscli collections install crowdsecurity/http-cve crowdsecurity/whitelist-good-actors"
+  register: traefik_crowdsec_dep_collections
+  changed_when: "'installed' in (traefik_crowdsec_dep_collections.stdout | lower)"
+  failed_when: traefik_crowdsec_dep_collections.rc != 0
+
 - name: Deploy traefik-init systemd service
   tags: [config]
   ansible.builtin.template:

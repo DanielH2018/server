@@ -14,6 +14,12 @@ Central indexer/tracker manager that feeds Sonarr & Radarr. See repo-root `CLAUD
 ## Notable
 - **FlareSolverr sidecar** solves Cloudflare/JS challenges for protected indexers;
   Prowlarr points its FlareSolverr proxy at it.
+- **FlareSolverr is isolated on a dedicated `prowlarr-flaresolverr` bridge, NOT the shared
+  `media` net (Security M3).** It executes attacker-controlled indexer JS in headless Chrome,
+  so a compromise must not reach the other ~11 `media` services' unauthenticated container
+  ports. It only needs internet egress + reachability from prowlarr; prowlarr sits on BOTH
+  `media` (Traefik + the monitor-bridge `prowlarr:9696` indexer check) and the isolation
+  bridge. Same pattern as karakeep-chrome's `internal` net — don't re-attach it to `media`.
 - Sonarr and Radarr declare Prowlarr as a dependency, so they deploy after it.
 
 ## Editing

@@ -7,7 +7,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **Host:** daniel-server · **Port:** 8096 · **URL:** `jellyfin.<domain>`
 - **Authelia:** **no** — Jellyfin has its own auth and clients/apps can't pass Authelia 2FA
 - **Networks:** media
-- **Depends on:** traefik, authelia
+- **Depends on:** traefik (no Authelia — own auth)
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 
 ## Notable

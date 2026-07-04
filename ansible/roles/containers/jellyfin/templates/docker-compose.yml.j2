@@ -53,6 +53,12 @@ services:
       - SETGID
       - SETUID
       - CHOWN
+      # FOWNER + DAC_OVERRIDE: the DOCKER_MODS opencl-intel installer runs a root
+      # dpkg unpack that chmods/chowns files it doesn't own — under cap_drop:ALL
+      # those EPERM (intel-opencl-icd-legacy1 stays unconfigured, errors every boot).
+      # Same recipe as the four *arrs (ca7d6832).
+      - FOWNER
+      - DAC_OVERRIDE
     {{ service_networks() }}
     # start_period 60s: a library scan + plugin/HW-transcode init on a slow (esp. post-update)
     # boot can exceed the macro's 30s default and trip a needless autoheal restart mid-boot.

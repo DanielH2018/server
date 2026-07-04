@@ -21,7 +21,13 @@ services:
       - no-new-privileges:true
     environment:
       GID: "${GID-{{ pgid }}}"
-      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik LePresidente/authelia"
+      # http-cve + whitelist-good-actors are transitive deps that base-http-scenarios /
+      # linux DECLARE but that `cscli hub upgrade` never auto-installs — left off this list
+      # they sit "tainted by missing collection", silently dropping CVE-probe detection +
+      # good-actor false-positive suppression (2026-07-04 review M2). The "Ensure CrowdSec
+      # dependency collections are installed" deploy task re-asserts them so a hub version
+      # bump can't silently regress them.
+      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik LePresidente/authelia crowdsecurity/http-cve crowdsecurity/whitelist-good-actors"
     volumes:
       - ./crowdsec-config:/etc/crowdsec:rw
       - crowdsec-db:/var/lib/crowdsec/data/

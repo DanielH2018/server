@@ -27,6 +27,9 @@ services:
       - FOWNER
       - DAC_OVERRIDE
     {{ service_networks() }}
+      # Reach the isolated flaresolverr sidecar on its dedicated bridge (Security M3);
+      # prowlarr stays on `media` for Traefik + the monitor-bridge prowlarr:9696 check.
+      - prowlarr-flaresolverr
     # Gate startup on the flaresolverr sidecar being healthy — on a cold `up` prowlarr would
     # otherwise start first and log challenge-solve failures until flaresolverr caught up (parity
     # with the karakeep -> karakeep-chrome gate). flaresolverr is only called on-demand during
@@ -64,7 +67,14 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    {{ service_networks() }}
+    # Isolated OFF the shared `media` net (Security M3): flaresolverr loads
+    # attacker-controlled indexer pages and runs their JS in headless Chrome, so a
+    # compromise must not reach the ~11 unauthenticated container ports on `media`.
+    # It only needs internet egress + reachability FROM prowlarr, so it shares a
+    # dedicated bridge with prowlarr instead of service_networks() — same isolation
+    # pattern as karakeep-chrome's `internal` net. NOT media.
+    networks:
+      - prowlarr-flaresolverr
     {{ healthcheck('curl --fail -s http://localhost:8191/ || exit 1') }}
     labels:
       # Keep :latest but pin against watchtower auto-updates — prowlarr depends_on this sidecar
@@ -79,3 +89,8 @@ services:
     {{ resources('2.0', '1024M', '0.10', '128M') }}
 
 {{ external_networks() }}
+  # Dedicated bridge isolating the headless-Chrome flaresolverr sidecar from the shared
+  # `media` fleet (Security M3). internal:false — flaresolverr must reach the internet to
+  # solve indexer Cloudflare/JS challenges (same as karakeep's `internal` bridge).
+  prowlarr-flaresolverr:
+    internal: false

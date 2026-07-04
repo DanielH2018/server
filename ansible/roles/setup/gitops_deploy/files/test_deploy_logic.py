@@ -232,6 +232,52 @@ def test_template_and_tasks_same_service_deploys_and_flags_tasks():
     assert cs.tasks == {"prometheus"}
 
 
+# M4: meta/deps.yml drives the cross-service toposort (deploy ORDER + dep CLOSURE via
+# filter_plugins/toposort.py). It isn't auto-deployed (structural, like tasks/), but a meta-only
+# push must be FLAGGED (defer-and-alert), not silently ff-merged as a docs edit — otherwise the
+# graph change is invisible. Maps to cs.meta (for the alert), NOT cs.services.
+def test_role_meta_change_flags_meta_not_deploy():
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/janitorr/meta/deps.yml"]
+    )
+    assert cs.meta == {"janitorr"}
+    assert cs.services == set()
+    assert cs.tasks == set()
+    assert cs.broad is False
+    assert cs.secrets is False
+
+
+def test_common_meta_change_stays_broad_not_meta():
+    # common/ is the shared deploy path — a meta change there is BROAD (manual full deploy); the
+    # broad-prefix check must win over the new meta match.
+    cs = services_from_changed_paths(["ansible/roles/containers/common/meta/main.yml"])
+    assert cs.broad is True
+    assert cs.meta == set()
+    assert cs.services == set()
+
+
+def test_archived_meta_change_is_ignored():
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/archive/duplicati/meta/deps.yml"]
+    )
+    assert cs.meta == set()
+    assert cs.services == set()
+    assert cs.broad is False
+
+
+def test_template_and_meta_same_service_deploys_and_flags_meta():
+    # A push changing both a template and meta/ for the same service deploys it (scoped --tags)
+    # and records the meta flag too — the combined-push case that used to swallow the meta change.
+    cs = services_from_changed_paths(
+        [
+            "ansible/roles/containers/janitorr/templates/docker-compose.yml.j2",
+            "ansible/roles/containers/janitorr/meta/deps.yml",
+        ]
+    )
+    assert cs.services == {"janitorr"}
+    assert cs.meta == {"janitorr"}
+
+
 def test_config_change_with_compose_change_dedupes_to_one_service():
     cs = services_from_changed_paths(
         [

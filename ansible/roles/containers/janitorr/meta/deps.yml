@@ -1,7 +1,8 @@
 ---
 role_deps:
+  # No authelia: janitorr is a background service with no web UI and isn't behind the
+  # Authelia forward-auth, so it needs no deploy-ordering after it.
   - traefik
-  - authelia
   - sonarr
   - radarr
   # jellyfin client is enabled in application.yml (Leaving Soon collection sync); declare it

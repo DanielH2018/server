@@ -43,6 +43,9 @@ SECRETS_ALERT_FILE = "/var/lib/gitops-deploy/secrets_alerted_sha"
 # Same throttle for a tasks-only push (a role tasks/ change, which isn't auto-deployed): alert once
 # per SHA so the operator redeploys the role by hand, don't re-page every tick.
 TASKS_ALERT_FILE = "/var/lib/gitops-deploy/tasks_alerted_sha"
+# Same throttle for a meta-only push (a role meta/deps.yml change — the cross-service deploy
+# graph, not auto-deployed): alert once per SHA so the operator redeploys the affected service(s).
+META_ALERT_FILE = "/var/lib/gitops-deploy/meta_alerted_sha"
 # Last CT date (YYYY-MM-DD) we paged for a dirty working tree. The tick runs every
 # 30 min, so without this an open edit session would re-alert all day; we throttle
 # to one alert per day, fired on the first tick at/after DIRTY_ALERT_HOUR (07:00 CT).
@@ -328,6 +331,20 @@ def main() -> int:
                 f"`ansible-playbook ansible/deploy.yml --tags <svc>`."
             ):
                 _write_marker(TASKS_ALERT_FILE, origin)
+        # A meta-only push (a role's meta/deps.yml changed with no template/files change) maps to no
+        # scoped deploy — meta/ isn't auto-deployed — but it changes the cross-service deploy graph
+        # (toposort order + dep closure that ansible/filter_plugins/toposort.py reads), so like tasks/
+        # it must not sit silently unapplied. Defer-and-alert (once per SHA); mirrors the tasks path.
+        if cs.meta and _read_marker(META_ALERT_FILE) != origin:
+            # Mark only on confirmed delivery, else retry next tick (see discord()).
+            if discord(
+                f"⚠️ gitops-deploy: only `meta/deps.yml` changed for "
+                f"`{', '.join(sorted(cs.meta))}` in `{origin[:8]}` — fast-forwarded but "
+                f"**nothing was redeployed** (meta/ isn't auto-deployed; it changes deploy "
+                f"ordering + dep closure). Redeploy the affected service(s) by hand: "
+                f"`ansible-playbook ansible/deploy.yml --tags <svc>`."
+            ):
+                _write_marker(META_ALERT_FILE, origin)
         return 0
 
     run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])

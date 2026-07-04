@@ -29,6 +29,15 @@ _ACTIVE_CONFIG = re.compile(
 # unapplied with no signal — the same asymmetry the secrets / requirements.yml paths already close.
 # Same archive/ exclusion; common/tasks is caught earlier by the _BROAD_PREFIXES check.
 _ACTIVE_TASKS = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/tasks/")
+# A change under an active container role's meta/ dir (meta/deps.yml). meta/ is NOT auto-deployed
+# (structural, like tasks/), but unlike a doc edit it DOES change what a deploy does:
+# `ansible/filter_plugins/toposort.py` reads meta/deps.yml to build the cross-service deploy ORDER
+# and the dep CLOSURE a scoped `--tags` deploy expands. So a meta-only push must be flagged
+# (defer-and-alert), not silently ff-merged as an invisible graph change — the same asymmetry the
+# tasks / secrets / requirements paths already close. (The toposort LOGIC in filter_plugins/ is
+# already _BROAD_PREFIXES; this is its DATA.) Same archive/ exclusion; common/meta is caught earlier
+# by the _BROAD_PREFIXES check.
+_ACTIVE_META = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/meta/")
 # A `container_name:` line in a rendered docker-compose.yml.
 _CONTAINER_NAME = re.compile(r'^\s*container_name:\s*["\']?([^\s"\']+)["\']?\s*$')
 # Changes whose blast radius we don't try to scope automatically.
@@ -67,6 +76,7 @@ class ChangeSet:
     broad: bool = False
     secrets: bool = False
     tasks: set[str] = field(default_factory=set)
+    meta: set[str] = field(default_factory=set)
 
 
 def services_from_changed_paths(paths: list[str]) -> ChangeSet:
@@ -85,6 +95,10 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         t = _ACTIVE_TASKS.match(p)
         if t:
             cs.tasks.add(t.group(1))
+            continue
+        mt = _ACTIVE_META.match(p)
+        if mt:
+            cs.meta.add(mt.group(1))
     return cs
 
 
