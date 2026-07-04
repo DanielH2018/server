@@ -102,6 +102,28 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
     return cs
 
 
+def deferred_service_alerts(
+    cs: ChangeSet, deployed: set[str]
+) -> tuple[set[str], set[str]]:
+    """The (tasks, meta) service sets that still need a defer-and-alert after a tick that
+    redeployed `deployed` (empty on the docs-only branch — no service mapped).
+
+    A `tasks/` or `meta/deps.yml` change is NOT auto-deployed, and unlike a doc edit it changes
+    what a deploy DOES — so for a service that was not itself redeployed it must be flagged, not
+    silently ff-merged. Subtracting `deployed` is the combined-push fix: a single push that
+    deploys svcA (its template changed) while also carrying svcB's `meta/deps.yml` leaves svcB's
+    deploy-graph change ff-merged but unapplied. The alert used to live only inside
+    `if not cs.services:`, so ANY push that deployed something swallowed that remainder — the exact
+    hole the meta/tasks defer-and-alert was added to close. A service whose own template changed is
+    in `deployed`, so its bundled tasks/meta change rode the scoped `--tags` redeploy — no alert.
+
+    Secrets are intentionally excluded here: the `/add-secret` flow ships `secrets.yml` WITH its
+    consuming template (that consumer is in `deployed`), so keying a secrets alert on 'any deploy
+    happened' would false-fire the happy path — the secrets alert stays on the no-services branch.
+    """
+    return cs.tasks - deployed, cs.meta - deployed
+
+
 def next_action(
     local_head: str,
     origin_head: str,

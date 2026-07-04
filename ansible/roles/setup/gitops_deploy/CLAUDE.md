@@ -33,6 +33,14 @@ the held SHA and the hold clears automatically.
   `secrets_alerted_sha` marker) to redeploy the consumer(s). `secrets.yml` is deliberately
   NOT in the broad list — the `/add-secret` flow ships it WITH the consuming template, which
   stays a scoped single-service deploy (`deploy_logic.ChangeSet.secrets`).
+- **`tasks/` and `meta/deps.yml` pushes** are ff-merged but NOT auto-deployed (structural), so the
+  deployer defers-and-alerts (once per SHA, `tasks_alerted_sha` / `meta_alerted_sha`) to redeploy
+  the affected service(s) by hand. This fires whether or not the tick deployed something else: a
+  *combined* push (svcA's template + svcB's `meta/deps.yml`) deploys svcA but still flags svcB's
+  unapplied graph change (`deploy_logic.deferred_service_alerts`, keyed on the not-deployed
+  remainder `cs.tasks|meta - deployed`, run on both branches). A service whose own template changed
+  rode its scoped `--tags` redeploy, so it's not re-flagged. Only fires on a clean deploy — a
+  health-gate rollback git-resets the whole commit, reverting the structural change too.
 - Acts **only when origin is strictly ahead of local** (`is_ancestor(local, origin)` →
   `next_action(..., origin_ahead=…)`). Un-pushed local commits make origin an *ancestor* of
   local; that's a no-op, not a deploy — otherwise the tick would diff `local..origin` (the

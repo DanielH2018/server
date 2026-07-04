@@ -2,3 +2,8 @@
 role_deps:
   - traefik
   - authelia
+  # sonarr/radarr's setup_dirs materialize the shared data/media tree tdarr bind-mounts;
+  # declare them so a cold full deploy (toposort) orders tdarr after them and the mount
+  # source exists. Ordering-correctness, not a hard runtime dependency (as with janitorr).
+  - sonarr
+  - radarr

@@ -65,6 +65,8 @@ services:
       - ./flaresolverr_config:/config
     security_opt:
       - no-new-privileges:true
+    # Python service driving a bundled headless Chrome; no privileged ops, verified healthy
+    # with zero caps (same empty-add rationale as karakeep-chrome's headless Chrome).
     cap_drop:
       - ALL
     # Isolated OFF the shared `media` net (Security M3): flaresolverr loads

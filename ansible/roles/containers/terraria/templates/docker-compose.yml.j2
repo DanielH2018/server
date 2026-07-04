@@ -9,9 +9,16 @@ services:
     image: beardedio/terraria:vanilla-latest
     container_name: terraria
     cap_drop:
-      # beardedio image runs the .NET server as a normal process — needs no Linux caps.
-      # Verify on deploy (docker logs terraria); add back incrementally only if startup fails.
       - ALL
+    cap_add:
+      # PID 1 runs as root and writes into the uid-1000-owned ./config bind mount. The main
+      # world save overwrites an existing root-owned .wld (owner bits suffice), but rotating
+      # the .wld.bak/.bak2 backups unlink+renames directory entries — which a non-owner root
+      # needs DAC_OVERRIDE for. Without it every world-save FATAL-crashed on the backup step
+      # (39 restarts / 11 days, in-app backups frozen) while startup itself looked fine — which
+      # is exactly why the earlier boot-only "add back if startup fails" check missed it. Same
+      # recipe as kopia/traefik/wireguard (root writing a uid-1000 dir it doesn't own).
+      - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
     ports:

@@ -3,6 +3,7 @@ from datetime import datetime
 
 from deploy_logic import (
     services_from_changed_paths,
+    deferred_service_alerts,
     next_action,
     container_names,
     containers_to_gate,
@@ -276,6 +277,69 @@ def test_template_and_meta_same_service_deploys_and_flags_meta():
     )
     assert cs.services == {"janitorr"}
     assert cs.meta == {"janitorr"}
+
+
+# review-M1: the deploy path used to evaluate the tasks/meta defer-and-alert ONLY inside
+# `if not cs.services:`, so a COMBINED push (svcA's template + svcB's meta/tasks) deployed svcA
+# and silently swallowed svcB's unapplied structural change. deferred_service_alerts(cs, deployed)
+# is what main() now calls on BOTH branches; it returns the (tasks, meta) remainder that was NOT
+# redeployed. deployed == cs.services on the deploy path, set() on the docs-only branch.
+def test_deferred_alerts_combined_push_flags_other_services_meta():
+    # svcA template + svcB meta: svcA deploys, but svcB's graph change is ff-merged with no
+    # redeploy — it must still be flagged (the exact combined-push hole).
+    cs = services_from_changed_paths(
+        [
+            "ansible/roles/containers/prometheus/templates/prometheus.yml.j2",
+            "ansible/roles/containers/janitorr/meta/deps.yml",
+        ]
+    )
+    assert cs.services == {"prometheus"}
+    assert deferred_service_alerts(cs, cs.services) == (set(), {"janitorr"})
+
+
+def test_deferred_alerts_combined_push_flags_other_services_tasks():
+    # Same hole, tasks/ channel: svcA template deploys svcA, svcB's tasks change is left unapplied.
+    cs = services_from_changed_paths(
+        [
+            "ansible/roles/containers/prometheus/templates/prometheus.yml.j2",
+            "ansible/roles/containers/sonarr/tasks/main.yml",
+        ]
+    )
+    assert deferred_service_alerts(cs, cs.services) == ({"sonarr"}, set())
+
+
+def test_deferred_alerts_same_service_meta_rode_the_redeploy():
+    # svcA template + svcA meta: svcA IS redeployed (scoped --tags reran its role / it's on the
+    # graph), so its bundled meta change needs no alert — the remainder is empty.
+    cs = services_from_changed_paths(
+        [
+            "ansible/roles/containers/janitorr/templates/docker-compose.yml.j2",
+            "ansible/roles/containers/janitorr/meta/deps.yml",
+        ]
+    )
+    assert deferred_service_alerts(cs, cs.services) == (set(), set())
+
+
+def test_deferred_alerts_docs_only_branch_flags_full_sets():
+    # The no-services branch passes deployed=set(): a meta-only (or tasks-only) push flags the
+    # whole set, preserving the original defer-and-alert behavior.
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/janitorr/meta/deps.yml"]
+    )
+    assert deferred_service_alerts(cs, set()) == (set(), {"janitorr"})
+
+
+def test_deferred_alerts_mixed_tasks_and_meta_remainders():
+    # A three-way push: svcA deploys; svcB tasks and svcC meta are both left unapplied and flagged
+    # on their respective channels.
+    cs = services_from_changed_paths(
+        [
+            "ansible/roles/containers/prometheus/templates/prometheus.yml.j2",
+            "ansible/roles/containers/sonarr/tasks/main.yml",
+            "ansible/roles/containers/radarr/meta/deps.yml",
+        ]
+    )
+    assert deferred_service_alerts(cs, cs.services) == ({"sonarr"}, {"radarr"})
 
 
 def test_config_change_with_compose_change_dedupes_to_one_service():

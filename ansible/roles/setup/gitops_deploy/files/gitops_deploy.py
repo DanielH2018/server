@@ -24,7 +24,9 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from deploy_logic import (  # noqa: E402
+    ChangeSet,
     containers_to_gate,
+    deferred_service_alerts,
     gate_services,
     health_decision,
     next_action,
@@ -162,6 +164,36 @@ def discord(content: str) -> bool:
     except Exception as e:  # alerting must never crash the deployer
         log(f"discord alert failed: {e}")
         return False
+
+
+def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
+    """Fire the tasks/ and meta/deps.yml defer-and-alert for services NOT redeployed this tick.
+
+    Runs on BOTH the no-services branch (deployed=set()) and after a SUCCESSFUL deploy
+    (deployed=cs.services): a combined push (svcA template + svcB meta/deps.yml) deploys svcA but
+    leaves svcB's deploy-graph change ff-merged and unapplied. The pending remainder is the pure
+    `deferred_service_alerts`; this is its I/O shell (per-SHA dedupe marker + discord). Each channel
+    alerts at most once per origin SHA and advances its marker only on a confirmed delivery."""
+    pending_tasks, pending_meta = deferred_service_alerts(cs, deployed)
+    if pending_tasks and _read_marker(TASKS_ALERT_FILE) != origin:
+        # Mark only on confirmed delivery, else retry next tick (see discord()).
+        if discord(
+            f"⚠️ gitops-deploy: `tasks/` changed for `{', '.join(sorted(pending_tasks))}` in "
+            f"`{origin[:8]}` with no redeploy of those service(s) — fast-forwarded but "
+            f"**not applied** (tasks/ isn't auto-deployed). Redeploy by hand: "
+            f"`ansible-playbook ansible/deploy.yml --tags <svc>`."
+        ):
+            _write_marker(TASKS_ALERT_FILE, origin)
+    if pending_meta and _read_marker(META_ALERT_FILE) != origin:
+        # Mark only on confirmed delivery, else retry next tick (see discord()).
+        if discord(
+            f"⚠️ gitops-deploy: `meta/deps.yml` changed for "
+            f"`{', '.join(sorted(pending_meta))}` in `{origin[:8]}` with no redeploy of those "
+            f"service(s) — fast-forwarded but **not applied** (meta/ isn't auto-deployed; it "
+            f"changes deploy ordering + dep closure). Redeploy the affected service(s) by hand: "
+            f"`ansible-playbook ansible/deploy.yml --tags <svc>`."
+        ):
+            _write_marker(META_ALERT_FILE, origin)
 
 
 def _inspect(fmt: str, container: str, timeout: float = 15.0) -> str:
@@ -318,33 +350,10 @@ def main() -> int:
                 f"(`ansible-playbook ansible/deploy.yml --tags <svc>`)."
             ):
                 _write_marker(SECRETS_ALERT_FILE, origin)
-        # A tasks-only push (a role's tasks/main.yml changed with no template/files change) maps to
-        # no scoped deploy — tasks/ isn't auto-deployed (structural, deploy by hand) — but unlike a
-        # doc edit it changes what a deploy does, so it must not sit silently unapplied. Defer-and-
-        # alert (once per SHA); mirrors the secrets path above.
-        if cs.tasks and _read_marker(TASKS_ALERT_FILE) != origin:
-            # Mark only on confirmed delivery, else retry next tick (see discord()).
-            if discord(
-                f"⚠️ gitops-deploy: only `tasks/` changed for "
-                f"`{', '.join(sorted(cs.tasks))}` in `{origin[:8]}` — fast-forwarded but "
-                f"**nothing was redeployed** (tasks/ isn't auto-deployed). Redeploy by hand: "
-                f"`ansible-playbook ansible/deploy.yml --tags <svc>`."
-            ):
-                _write_marker(TASKS_ALERT_FILE, origin)
-        # A meta-only push (a role's meta/deps.yml changed with no template/files change) maps to no
-        # scoped deploy — meta/ isn't auto-deployed — but it changes the cross-service deploy graph
-        # (toposort order + dep closure that ansible/filter_plugins/toposort.py reads), so like tasks/
-        # it must not sit silently unapplied. Defer-and-alert (once per SHA); mirrors the tasks path.
-        if cs.meta and _read_marker(META_ALERT_FILE) != origin:
-            # Mark only on confirmed delivery, else retry next tick (see discord()).
-            if discord(
-                f"⚠️ gitops-deploy: only `meta/deps.yml` changed for "
-                f"`{', '.join(sorted(cs.meta))}` in `{origin[:8]}` — fast-forwarded but "
-                f"**nothing was redeployed** (meta/ isn't auto-deployed; it changes deploy "
-                f"ordering + dep closure). Redeploy the affected service(s) by hand: "
-                f"`ansible-playbook ansible/deploy.yml --tags <svc>`."
-            ):
-                _write_marker(META_ALERT_FILE, origin)
+        # tasks/ and meta/deps.yml changes aren't auto-deployed but DO change what a deploy does,
+        # so they must not sit silently ff-merged. Nothing was deployed this tick (deployed=set()),
+        # so the full sets are flagged. Same helper runs on the deploy path for a combined push.
+        alert_deferred(origin, set(), cs)
         return 0
 
     run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])
@@ -392,6 +401,11 @@ def main() -> int:
     failed = gate_services(cs.services, service_healthy, gate_deadline, time.time)
     if not failed:
         write_hold(None)
+        # Combined-push safety: a tasks/ or meta/deps.yml change bundled for a service OTHER than
+        # the one(s) just deployed is ff-merged but unapplied — flag that remainder (a bundled
+        # change to a DEPLOYED service rode its own --tags redeploy, so it's excluded). Only on a
+        # clean deploy: a rollback below git-resets the whole commit, reverting those changes too.
+        alert_deferred(origin, cs.services, cs)
         return 0
     if time.time() >= gate_deadline:
         log(f"health-gate budget ({RUN_BUDGET_S}s) exhausted before gating completed")

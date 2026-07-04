@@ -90,6 +90,10 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - ./data:/data
     environment:
+      # Keep a BARE domain here. Portainer 2.39.4 FATAL-rejects a full scheme://host origin
+      # ("invalid url for trusted origin" → crash-loop, verified live 2026-07-04) but accepts a
+      # bare domain; the CSRF check errs closed either way. Do NOT "correct" this to
+      # https://portainer.<domain> — that's a review misfire that takes the container down.
       TRUSTED_ORIGINS: "{{ domain }}"
     command: -H tcp://docker-proxy-portainer:2375
     depends_on:
