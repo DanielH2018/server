@@ -2046,3 +2046,90 @@ def test_check_b2_trend_stale_textfile_is_down(monkeypatch):
     ok, msg = check.check_b2_trend()
     assert not ok
     assert "stale" in msg.lower()
+
+
+# --- indexers_down (pure) ---------------------------------------------------
+
+INX_NOW = datetime(2026, 7, 4, 12, 0, 0, tzinfo=timezone.utc)
+INX_NAMES = {1: "EZTV", 2: "1337x", 3: "YTS"}
+
+
+def _status(*entries):
+    """Prowlarr /api/v1/indexerstatus payload from (indexerId, initialFailure) pairs."""
+    return [{"indexerId": iid, "initialFailure": init} for iid, init in entries]
+
+
+def test_indexers_down_flags_indexer_over_threshold():
+    status = _status((1, "2026-07-04T11:20:00Z"))  # 40 min ago
+    out = check.indexers_down(status, INX_NAMES, INX_NOW, 30)
+    assert out == [("EZTV", pytest.approx(40.0, abs=0.1))]
+
+
+def test_indexers_down_ignores_sub_threshold_flap():
+    status = _status((1, "2026-07-04T11:50:00Z"))  # 10 min ago -> below gate
+    assert check.indexers_down(status, INX_NAMES, INX_NOW, 30) == []
+
+
+def test_indexers_down_empty_status_is_clean():
+    assert check.indexers_down([], INX_NAMES, INX_NOW, 30) == []
+
+
+def test_indexers_down_null_initial_failure_skipped():
+    assert check.indexers_down(_status((1, None)), INX_NAMES, INX_NOW, 30) == []
+
+
+def test_indexers_down_malformed_initial_failure_skipped():
+    assert (
+        check.indexers_down(_status((1, "not-a-timestamp")), INX_NAMES, INX_NOW, 30)
+        == []
+    )
+
+
+def test_indexers_down_multiple_sorted_worst_first():
+    status = _status(
+        (1, "2026-07-04T11:40:00Z"),  # EZTV 20m -> below gate
+        (2, "2026-07-04T11:00:00Z"),  # 1337x 60m
+        (3, "2026-07-04T11:25:00Z"),  # YTS 35m
+    )
+    out = check.indexers_down(status, INX_NAMES, INX_NOW, 30)
+    assert [n for n, _ in out] == ["1337x", "YTS"]  # 60m before 35m; EZTV excluded
+
+
+def test_indexers_down_unknown_id_falls_back_to_id_label():
+    out = check.indexers_down(
+        _status((9, "2026-07-04T11:00:00Z")), INX_NAMES, INX_NOW, 30
+    )
+    assert out == [("indexer 9", pytest.approx(60.0, abs=0.1))]
+
+
+# --- check_prowlarr_indexers (wrapper) --------------------------------------
+
+
+def test_prowlarr_indexers_disabled_without_key(monkeypatch):
+    monkeypatch.setattr(check, "PROWLARR_API_KEY", "")
+    ok, msg = check.check_prowlarr_indexers()
+    assert ok is True
+    assert "disabled" in msg
+
+
+def test_prowlarr_indexers_down_on_sustained(monkeypatch):
+    monkeypatch.setattr(check, "PROWLARR_API_KEY", "k")
+    monkeypatch.setattr(check, "PROWLARR_INDEXER_MIN_DOWN_MIN", 30.0)
+    status = _status(
+        (1, "2000-01-01T00:00:00Z")
+    )  # ancient -> definitely over threshold
+    indexers = [{"id": 1, "name": "EZTV"}]
+    monkeypatch.setattr(
+        check, "_get_json", _seq(status, indexers)
+    )  # status, then indexer list
+    ok, msg = check.check_prowlarr_indexers()
+    assert ok is False
+    assert "EZTV down" in msg
+
+
+def test_prowlarr_indexers_up_when_none_failing(monkeypatch):
+    monkeypatch.setattr(check, "PROWLARR_API_KEY", "k")
+    monkeypatch.setattr(check, "_get_json", _seq([], [{"id": 1, "name": "EZTV"}]))
+    ok, msg = check.check_prowlarr_indexers()
+    assert ok is True
+    assert "ok" in msg

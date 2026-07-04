@@ -67,6 +67,17 @@ SONARR_URL = _env("SONARR_URL", "http://sonarr:8989").rstrip("/")
 SONARR_API_KEY = _env("SONARR_API_KEY", "")
 RADARR_URL = _env("RADARR_URL", "http://radarr:7878").rstrip("/")
 RADARR_API_KEY = _env("RADARR_API_KEY", "")
+
+# Prowlarr sustained-indexer watchdog: Prowlarr's in-app health notification is binary — with
+# warnings on every indexer flap pages, with warnings off only the all-indexers-down red error
+# fires; there's no duration grace. We poll /api/v1/indexerstatus and go `down` only when an
+# indexer has been FAILING for >= PROWLARR_INDEXER_MIN_DOWN_MIN (age from Prowlarr's own
+# initialFailure, so it survives a monitor-bridge redeploy), suppressing the sub-threshold flaps
+# public trackers throw that self-clear inside Prowlarr's ~5-15min backoff. Empty key = disabled
+# (stays up), same idiom as N8N_API_KEY. Already on `media`, so prowlarr:9696 is reachable.
+PROWLARR_URL = _env("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
+PROWLARR_API_KEY = _env("PROWLARR_API_KEY", "")
+PROWLARR_INDEXER_MIN_DOWN_MIN = float(_env("PROWLARR_INDEXER_MIN_DOWN_MIN", "30"))
 GITOPS_STATE_DIR = _env("GITOPS_STATE_DIR", "/gitops-state")
 GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
 RENOVATE_STATE_DIR = _env("RENOVATE_STATE_DIR", "/renovate-state")
@@ -722,6 +733,67 @@ def check_arr_queue():
     return True, "queue clean (%s)" % ", ".join(a[0] for a in configured)
 
 
+def indexers_down(status_json, name_by_id, now, min_down_min):
+    """Pure: (name, minutes_down) for each Prowlarr indexer failing >= min_down_min minutes.
+
+    Fed /api/v1/indexerstatus (a list of {indexerId, initialFailure, disabledTill, ...}) and an
+    indexerId->name map from /api/v1/indexer. An indexer is listed in indexerstatus only while
+    Prowlarr has it disabled due to failures; initialFailure is when the CURRENT failure run
+    started, so (now - initialFailure) is the outage duration — a flap that recovers before the
+    threshold drops out of the list and never qualifies. A null/absent/unparseable initialFailure
+    is skipped (treated as just-started) rather than crashing the whole check. Sorted worst-first
+    so the longest outage leads the alert msg.
+    """
+    cutoff_s = min_down_min * 60
+    offenders = []
+    for s in status_json or []:
+        init = s.get("initialFailure")
+        if not init:
+            continue
+        try:
+            age_s = (now - parse_rfc3339(init)).total_seconds()
+        except ValueError, TypeError:
+            continue
+        if age_s >= cutoff_s:
+            iid = s.get("indexerId")
+            offenders.append((name_by_id.get(iid) or "indexer %s" % iid, age_s / 60.0))
+    offenders.sort(key=lambda nm: -nm[1])
+    return offenders
+
+
+def check_prowlarr_indexers():
+    """Prowlarr sustained-indexer watchdog (see indexers_down): page only when an indexer has been
+    failing >= PROWLARR_INDEXER_MIN_DOWN_MIN, not on the brief flaps public trackers throw that
+    self-clear inside Prowlarr's backoff.
+
+    Empty PROWLARR_API_KEY -> disabled (stays up), like check_n8n. An unreachable Prowlarr is NOT
+    caught here — it bubbles up and _evaluate renders it `down` with the error (the
+    check_arr_queue/check_n8n convention; the sustained-failure grace is about indexer flaps, not
+    the bridge's own reach). The all-indexers-down red error stays with Prowlarr's own in-app
+    onHealthIssue notification — this owns the per-indexer sustained signal Prowlarr can't express.
+    """
+    if not PROWLARR_API_KEY:
+        return True, "prowlarr indexer monitoring disabled (no API key)"
+    headers = {"X-Api-Key": PROWLARR_API_KEY}
+    status = _get_json(PROWLARR_URL + "/api/v1/indexerstatus", headers=headers)
+    indexers = _get_json(PROWLARR_URL + "/api/v1/indexer", headers=headers)
+    name_by_id = {i.get("id"): i.get("name") for i in indexers}
+    offenders = indexers_down(
+        status, name_by_id, datetime.now(timezone.utc), PROWLARR_INDEXER_MIN_DOWN_MIN
+    )
+    if offenders:
+        desc = "; ".join("%s down %.0fm" % (n, m) for n, m in offenders[:5])
+        return False, "%d indexer(s) failing >=%gm: %s" % (
+            len(offenders),
+            PROWLARR_INDEXER_MIN_DOWN_MIN,
+            desc,
+        )
+    return True, "all %d indexer(s) ok (none failing >=%gm)" % (
+        len(name_by_id),
+        PROWLARR_INDEXER_MIN_DOWN_MIN,
+    )
+
+
 def check_gitops_alive():
     try:
         with open(os.path.join(GITOPS_STATE_DIR, "last_run")) as fh:
@@ -1288,6 +1360,11 @@ CHECKS = [
     ("traefik5xx", _env("KUMA_PUSH_TRAEFIK", ""), check_traefik_5xx),
     ("n8n", _env("KUMA_PUSH_N8N", ""), check_n8n),
     ("arr_queue", _env("KUMA_PUSH_ARR_QUEUE", ""), check_arr_queue),
+    (
+        "prowlarr_indexers",
+        _env("KUMA_PUSH_PROWLARR_INDEXERS", ""),
+        check_prowlarr_indexers,
+    ),
     ("gitops_alive", _env("KUMA_PUSH_GITOPS_ALIVE", ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
     ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
