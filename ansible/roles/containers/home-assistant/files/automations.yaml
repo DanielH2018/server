@@ -1284,6 +1284,19 @@
     - service: persistent_notification.dismiss
       data:
         notification_id: bedroom_away
+    # ...and clear the DELIVERED phone push too. bedroom_away pushes via notify.mobile_app_pixel_9_pro
+    # with tag: bedroom_away, and critical_away bypasses the away-hold so it lands as a real Android
+    # push that the dismiss above can't touch. On a genuine away you (correctly) never tap "Turn back
+    # on", so this arrival clear is the tag's own recovery path — closing the "the bedroom_away tag has
+    # no recovery path of its own" gap noted at the BEDROOM_AWAY_TURN_ON handler. clear_notification is
+    # a no-op when nothing's showing; continue_on_error so a renamed notify slug can't abort the
+    # fan/light resume below (same reason bedroom_notify's pushes carry it).
+    - service: notify.mobile_app_pixel_9_pro
+      continue_on_error: true
+      data:
+        message: clear_notification
+        data:
+          tag: bedroom_away
     - if: "{{ is_state('input_boolean.bedroom_fan_manual', 'off') }}"
       then:
         - service: script.bedroom_apply_fan
