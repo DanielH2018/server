@@ -36,6 +36,11 @@ services:
     {{ service_networks() }}
     {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1') }}
     restart: unless-stopped
+    # Read-only rootfs: `docker diff` shows zero rootfs writes. tmpfs /tmp is defensive
+    # (Node's os.tmpdir) — this is the public landing page, so favor a safe margin.
+    read_only: true
+    tmpfs:
+      - /tmp
     cap_drop:
       - ALL
     security_opt:

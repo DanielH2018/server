@@ -7,6 +7,9 @@ services:
     image: willfarrell/autoheal:latest
     tty: true
     container_name: autoheal
+    # Read-only rootfs: `docker diff` shows zero writes (busybox sh polling the lifecycle
+    # proxy; jq streams in memory) — no tmpfs needed. Host-agnostic, so this covers the Pi too.
+    read_only: true
     cap_drop:
       - ALL
     security_opt:

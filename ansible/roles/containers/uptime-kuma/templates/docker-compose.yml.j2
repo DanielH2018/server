@@ -84,6 +84,9 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # Read-only rootfs: `docker diff` shows only its ./autokuma-data:/data volume (the DB),
+    # zero rootfs writes — no tmpfs needed.
+    read_only: true
     depends_on:
       uptime-kuma:
         condition: service_started

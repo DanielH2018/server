@@ -15,6 +15,11 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # Read-only rootfs: `docker diff` shows only /tmp/crontab (supercronic) — tmpfs /tmp
+    # covers it; sync config lives in the ./recyclarr/config:/config bind mount.
+    read_only: true
+    tmpfs:
+      - /tmp
     {{ service_networks() }}
     environment:
       - TZ={{ tz }}

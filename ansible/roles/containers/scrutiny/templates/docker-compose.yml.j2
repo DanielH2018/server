@@ -51,6 +51,10 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    # Read-only rootfs: `docker diff` shows zero rootfs writes — the SQLite config DB + its
+    # WAL/journal live in the ./config:/opt/scrutiny/config BIND MOUNT (writable regardless
+    # of read_only), so this doesn't fight the DAC_OVERRIDE note below. No tmpfs needed.
+    read_only: true
     # No `cap_drop: ALL` here: the web process writes its SQLite config DB at
     # /opt/scrutiny/config/scrutiny.db and needs a default cap (DAC_OVERRIDE) to
     # create the WAL/journal in the bind-mounted config dir. SYS_ADMIN / SYS_RAWIO

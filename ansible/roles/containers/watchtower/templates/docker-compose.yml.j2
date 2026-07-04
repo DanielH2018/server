@@ -8,6 +8,9 @@ services:
     container_name: watchtower
     user: {{ puid }}:{{ pgid }}
     restart: unless-stopped
+    # Read-only rootfs: `docker diff` shows zero writes (talks only to the lifecycle
+    # proxy over TCP, holds no state) — no tmpfs needed.
+    read_only: true
     # Go binary that only talks to the lifecycle socket-proxy over TCP; needs no caps.
     cap_drop:
       - ALL

@@ -17,6 +17,9 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # Read-only rootfs: `docker diff` shows only its bind mounts (/host/*, /rootfs, /textfile),
+    # zero rootfs writes — no tmpfs needed.
+    read_only: true
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -59,6 +62,9 @@ services:
       - SYS_PTRACE
     security_opt:
       - no-new-privileges:true
+    # Read-only rootfs: `docker diff` shows only its bind mounts (/rootfs, /sys, docker
+    # state) + in-memory stats (storage_duration=5m), zero rootfs writes — no tmpfs needed.
+    read_only: true
     volumes:
       - /:/rootfs:ro
       - /sys:/sys:ro
