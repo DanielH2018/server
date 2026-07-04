@@ -48,6 +48,13 @@ services:
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.53.0
     container_name: cadvisor
+    # cAdvisor is the per-container stats exporter — it reads cgroup/usage data straight off the
+    # host, so the broad access below is inherent to the job, not incidental: the read-only host
+    # mounts (rootfs, /sys, docker state, cgroup tree) are where the metrics live, and SYS_PTRACE
+    # gives per-container process/namespace visibility. That's why cadvisor is deliberately
+    # CAP_DROP_EXEMPT (compose-validator allowlist) and can't be hardened further without blinding
+    # the metrics. Docker itself is reached via the READ-ONLY docker-proxy (--docker tcp:2375 in
+    # command), never a raw /var/run/docker.sock mount.
     cap_add:
       - SYS_PTRACE
     security_opt:

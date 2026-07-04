@@ -74,6 +74,11 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
+      # Traefik must share a Docker net with EVERY backend it routes to (Docker only resolves a
+      # service name on a shared net), so this list is the UNION of all routed backends' nets — it
+      # grows whenever a service lands on a brand-new net, or that service's route 502s. (Nothing
+      # enforces this membership: test_network_invariant.py guards that a net EXISTS, not that
+      # traefik joined it.) proxy is the default; monitoring/media/apps/kopia reach those backends.
       - proxy
       - monitoring
       - media

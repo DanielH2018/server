@@ -28,6 +28,12 @@ fi
 
 # Set snapshot schedule and retention (idempotent — safe to run on every start).
 # Exclusions are handled by .kopiaignore in the snapshot source directory.
+# WHEN it fires: kopia aligns the 24h --snapshot-interval to the UTC day boundary, so the snapshot
+# runs at 00:00 UTC daily — a FIXED time, NOT drift-from-server-start (verified: held at 00:00:01
+# UTC across container recreates). Display trap: `kopia snapshot list` renders the container's local
+# TZ (America/Chicago), so it prints 19:00 for that same 00:00 UTC instant — an artifact, not a
+# different schedule. The host crons (tasks/main.yml, host TZ = UTC) are timed around this 00:00 UTC
+# boundary: wg-easy pi-peers pull 23:30, verify Wed 04:00, drill 05:00, rebuild Sun 06:00, b2 02:30.
 # Retention: 7 dailies + 4 weeklies + 3 monthlies, nothing annual. hourly/annual/latest
 # are pinned explicitly because unset tiers inherit kopia's global defaults (hourly 48,
 # monthly 24, annual 3, latest 10), which silently widened retention before. latest 3
