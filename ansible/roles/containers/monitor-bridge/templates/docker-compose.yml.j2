@@ -175,6 +175,10 @@ services:
       # renovate_notify digest, neither via Kuma. renovate_notify greens its liveness marker even
       # when the POST fails, so a dead webhook here drops digests while its monitor stays green.
       - DISCORD_GITOPS_WEBHOOK_URL={{ gitops_deploy_discord_webhook }}
+      # And the *arr health/event webhook — Sonarr/Radarr/Prowlarr POST their onHealthIssue alerts
+      # (indexer down, download-client errors) directly to it via in-app Discord Connect (config
+      # lives in the app DBs, not here); a rotated/revoked URL drops those with no Kuma backstop.
+      - DISCORD_ARR_WEBHOOK_URL={{ arr_discord_webhook_url }}
       - DISCORD_CONSECUTIVE=2
       - KUMA_PUSH_DISCORD={{ monitor_bridge_discord_push_token }}
       # Recyclarr sync health via Loki: recyclarr runs `recyclarr sync` under supercronic (@daily);

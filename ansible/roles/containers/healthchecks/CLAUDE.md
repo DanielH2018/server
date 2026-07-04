@@ -11,8 +11,10 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 
 ## Notable
-- Jobs (e.g. Kopia backups, cron tasks) ping a unique URL; a missed ping triggers an
-  alert. `SITE_ROOT`/`ALLOWED_HOSTS` must match the public URL or pings 400.
+- Scheduled jobs ping a unique URL; a missed ping triggers an alert. Here the pinging jobs are
+  the **reboot** + **docker-image-prune** host crons (Kopia backup liveness is Kuma-monitored via
+  monitor-bridge's `check_backup`, not healthchecks). `SITE_ROOT`/`ALLOWED_HOSTS` must match the
+  public URL or pings 400.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`

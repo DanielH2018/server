@@ -617,6 +617,14 @@ bedroom_notify:
             - service: persistent_notification.dismiss
               data:
                 notification_id: "hold_{{ tag }}"
+            # Also dismiss the bare-`tag` visibility note the fallback below creates when a
+            # watch/pierce-tier alert first fired WHILE HOME: this branch `stop`s before that
+            # fallback, so without this a recover-while-away strands a stale "⚠️" note (air
+            # quality / sensor-offline / UPS / zigbee-bridge) contradicting live state. Dismiss
+            # of an absent id no-ops, so it's safe for tags that never created a bare note.
+            - service: persistent_notification.dismiss
+              data:
+                notification_id: "{{ tag }}"
           else:
             # Park it (same tag updates in place) — held until you get home.
             - service: persistent_notification.create

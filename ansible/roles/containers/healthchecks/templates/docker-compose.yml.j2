@@ -36,7 +36,10 @@ services:
     security_opt:
       - no-new-privileges:true
     {{ service_networks() }}
-    {{ healthcheck('curl --fail -s http://localhost:8000/ || exit 1') }}
+    # -sL follows the "/" 302 (Django login redirect) to a real 200 — `curl --fail` treats a bare
+    # 302 as success, so without -L the check greens on an up-but-broken app that still 302s (the
+    # DB isn't even touched to serve the redirect). -o /dev/null discards the body.
+    {{ healthcheck('curl --fail -sL http://localhost:8000/ -o /dev/null || exit 1') }}
     restart: unless-stopped
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}

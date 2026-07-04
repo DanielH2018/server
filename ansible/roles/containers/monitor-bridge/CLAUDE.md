@@ -150,12 +150,15 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     spell read as a dead pipeline; the broadened selector + 30m window is the fix.** Stream/window
     tunable via `LOKI_STREAM`/`LOKI_WINDOW`. Pure `loki_ingestion_fresh()` + `loki_count()` are
     unit-tested. A freshness watchdog in the same idiom as the SMART/restore-drill checks.)
-  - **Discord Delivery** (GET-verifies **all three** Discord notification webhooks: Kuma's own
+  - **Discord Delivery** (GET-verifies **all four** Discord notification webhooks: Kuma's own
     `monitor_discord_webhook_url` — the one Kuma POSTs every alert to — CrowdSec's
-    `crowdsec_discord_webhook_url`, which CrowdSec POSTs ban alerts to *directly* (not via Kuma), and
+    `crowdsec_discord_webhook_url`, which CrowdSec POSTs ban alerts to *directly* (not via Kuma),
     the `gitops_deploy_discord_webhook`, which delivers the gitops-deploy rollback alert AND every
     `renovate_notify` digest (its Renovate Notifier — Alive marker greens even when the POST fails —
-    no Kuma backstop). The latter two have NO Kuma backstop of their own. `down` if ANY is invalid,
+    no Kuma backstop), and `arr_discord_webhook_url`, which Sonarr/Radarr/Prowlarr POST their own
+    onHealthIssue alerts to via in-app Discord Connect (config lives in the app DBs, not templated —
+    the Arr Queue check covers stuck downloads, NOT indexer/download-client health). The latter three
+    have NO Kuma backstop of their own. `down` if ANY is invalid,
     naming which; each empty URL is skipped. A
     rotated/revoked/deleted webhook makes those alerts silently fail to deliver while every monitor
     stays GREEN in the Kuma UI; this is the alert chain's delivery hop that NO other monitor — not

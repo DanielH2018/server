@@ -135,6 +135,12 @@
       "automerge": false
     },
     {
+      "description": "influxdb (scrutiny's TSDB) is watchtower-tier — it stays on the pinned 2.9 line and watchtower patches within it (scrutiny/CLAUDE.md). It's the ONE watchtower-tier image on a non-`latest` mutable tag, so the '/^latest$/' disable above doesn't cover it and Renovate's docker manager would otherwise offer 2.10+/3.x (Renovate PR #8 already walked it 2.2->2.9 once), marching a stateful DB off its pinned major.minor. Disable Renovate here so the two update planes agree — watchtower owns it.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["influxdb"],
+      "enabled": false
+    },
+    {
       "description": "Ansible Galaxy collections (requirements.yml). The in-file comment requires bumping them in lockstep with ansible-core, so these need a deliberate look — own group, no automerge (overrides the custom.regex non-major automerge rule above).",
       "matchManagers": ["custom.regex"],
       "matchDatasources": ["galaxy-collection"],

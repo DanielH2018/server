@@ -141,7 +141,7 @@ recovery, no bounce". Sixteen, feeding `bedroom_threshold_alert`:
 
 ## 7. Automations (what each does)
 
-> The **core** automations below; the suite has **31** in total (the cast/display, heartbeat,
+> The **core** automations below; the suite has **33** in total (the cast/display, heartbeat,
 > runtime-error, color-track, AL-startup-suppress, air-purifier-presence, wake-ramp, held-notification
 > flush, and others are documented per-feature in [`CLAUDE.md`](CLAUDE.md), the authoritative reference).
 

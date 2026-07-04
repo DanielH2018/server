@@ -52,6 +52,9 @@
 
 - name: Create config.yml from template
   tags: [config]
+  # Embeds the CrowdSec LAPI bouncer key + the livesync X-Sync-Token — no_log so a -v/--diff
+  # run doesn't print them to stdout/ansible.log (matches the repo-wide secret-task discipline).
+  no_log: true
   ansible.builtin.template:
     src: config.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/traefik/data/dynamic/config.yml"
@@ -105,6 +108,9 @@
 
 - name: Create CrowdSec discord.yaml from template
   tags: [config]
+  # Embeds the CrowdSec Discord webhook URL — no_log so a -v/--diff run doesn't leak it to
+  # stdout/ansible.log (matches the repo-wide secret-task discipline).
+  no_log: true
   ansible.builtin.template:
     src: crowdsec-discord.yaml.j2
     dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/notifications/discord.yaml"

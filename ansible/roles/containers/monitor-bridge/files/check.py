@@ -206,6 +206,12 @@ DISCORD_CROWDSEC_WEBHOOK_URL = _env("DISCORD_CROWDSEC_WEBHOOK_URL", "")
 # succeeded, so a rotated/revoked webhook here leaves the Renovate Notifier — Alive monitor GREEN
 # while every digest silently drops. Verify it too. Empty = not checked.
 DISCORD_GITOPS_WEBHOOK_URL = _env("DISCORD_GITOPS_WEBHOOK_URL", "")
+# The *arr health/event webhook is a FOURTH independent hop: Sonarr/Radarr/Prowlarr POST their own
+# onHealthIssue alerts (indexer down, download-client errors, app DB errors — signals the Arr Queue
+# check does NOT cover) directly to it via their in-app Discord "Connect", not via Kuma. A rotated/
+# revoked webhook silently drops those while every container-up monitor stays green. Empty = not
+# checked. (The URL lives only in the *arr app DBs + SOPS — this GET-verify is its one watchdog.)
+DISCORD_ARR_WEBHOOK_URL = _env("DISCORD_ARR_WEBHOOK_URL", "")
 DISCORD_CONSECUTIVE = int(_env("DISCORD_CONSECUTIVE", "2"))
 
 # Recyclarr sync health: recyclarr runs `recyclarr sync` via supercronic on an @daily schedule;
@@ -1169,7 +1175,9 @@ def _discord_webhooks():
     Kuma's is the alert-chain delivery hop for every monitor; CrowdSec's is the independent
     security-ban delivery hop with no other backstop; GitOps/Renovate's carries the gitops-deploy
     rollback alert AND the renovate_notify digests (whose "alive" marker greens regardless of
-    delivery). None has a Kuma backstop, so all three are verified together.
+    delivery); Arr's carries the *arr apps' own onHealthIssue alerts (direct POST from their
+    in-app Discord Connect, config only in the app DBs). None has a Kuma backstop, so all four
+    are verified together.
     """
     return [
         (label, url)
@@ -1177,6 +1185,7 @@ def _discord_webhooks():
             ("Kuma", DISCORD_WEBHOOK_URL),
             ("CrowdSec", DISCORD_CROWDSEC_WEBHOOK_URL),
             ("GitOps/Renovate", DISCORD_GITOPS_WEBHOOK_URL),
+            ("Arr", DISCORD_ARR_WEBHOOK_URL),
         )
         if url
     ]

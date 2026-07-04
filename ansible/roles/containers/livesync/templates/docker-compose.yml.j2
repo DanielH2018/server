@@ -46,7 +46,10 @@ services:
 
       ## Fauxton admin UI — human access via Authelia 2FA (no token header needed).
       ## priority=200 so /_utils always wins over the token-gated sync router.
-      - "traefik.http.routers.livesync-utils.rule=(Host(`livesync.{{ domain }}`) || Host(`livesync.local.{{ domain }}`)) && PathPrefix(`/_utils`)"
+      ## PathPrefix(`/_utils/`) segment-anchors (a future CouchDB path like /_utilsXYZ can't inherit
+      ## this router); Path(`/_utils`) keeps the bare browser entry working (CouchDB 301s it to
+      ## /_utils/) — a trailing-slash prefix alone would drop the no-slash URL to the sync router.
+      - "traefik.http.routers.livesync-utils.rule=(Host(`livesync.{{ domain }}`) || Host(`livesync.local.{{ domain }}`)) && (PathPrefix(`/_utils/`) || Path(`/_utils`))"
       - "traefik.http.routers.livesync-utils.entrypoints=https"
       - "traefik.http.routers.livesync-utils.tls=true"
       - "traefik.http.routers.livesync-utils.service=livesync"

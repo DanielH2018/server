@@ -6,7 +6,13 @@
 ---
 services:
   karakeep:
-    image: ghcr.io/karakeep-app/karakeep:release
+    # Pinned by digest: `:release` is a mutable floating tag Renovate can't version-order, and
+    # Compose's default pull policy never re-fetches a tag already present locally — so without a
+    # digest this ages silently with no update signal (was 54 days stale through a redeploy).
+    # This digest = the :release build of 2026-05-08. Manual update (same as tdarr/janitorr):
+    # `docker pull ghcr.io/karakeep-app/karakeep:release`, take the new digest, redeploy — and
+    # only bump if the meili VERSION POLICY below still holds for the new karakeep version.
+    image: ghcr.io/karakeep-app/karakeep:release@sha256:64d6a9bbf2d37b5c808cf06b5d87f1f1c7846fdd3844724145a9741aeb06fd31
     container_name: karakeep
     restart: unless-stopped
     environment:
@@ -54,8 +60,8 @@ services:
       karakeep-meilisearch:
         condition: service_healthy
     labels:
-      # Manual/Renovate-managed: karakeep:release is coupled to the pinned meili
-      # version (see the meilisearch VERSION POLICY), so watchtower (monitor-all mode)
+      # Manual, digest-pinned (see the image line above): karakeep is coupled to the pinned
+      # meili version (see the meilisearch VERSION POLICY), so watchtower (monitor-all mode)
       # must not auto-bump any service in this stack and desync the pair.
       - "com.centurylinklabs.watchtower.enable=false"
       {# Generate labels(container, port, docker_network, use_authelia) -#}
