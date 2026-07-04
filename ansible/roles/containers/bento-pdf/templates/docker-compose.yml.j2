@@ -15,6 +15,14 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # Read-only rootfs: nginx-unprivileged (UID 101) writes only its temp dirs + pidfile —
+    # tmpfs them with mode=1777 or mkdir under the root-owned default tmpfs EPERMs. The
+    # entrypoint's in-place /etc/nginx edits (ipv6-listen/noindex) fail-soft and are cosmetic
+    # for this baked-config static SPA (throwaway-verified it still serves 200); nothing to persist.
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:mode=1777
+      - /etc/nginx/tmp:mode=1777
     {{ service_networks() }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}

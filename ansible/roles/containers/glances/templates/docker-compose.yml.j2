@@ -19,6 +19,11 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # Read-only rootfs: `docker diff` shows only /tmp/glances-root.log (tmpfs) + .pyc
+    # bytecode (killed by PYTHONDONTWRITEBYTECODE below). Host-agnostic — covers the Pi too.
+    read_only: true
+    tmpfs:
+      - /tmp
     {{ service_networks() }}
     pid: host
     volumes:
@@ -26,6 +31,7 @@ services:
     environment:
       - "GLANCES_OPT=-w"
       - DOCKER_HOST=tcp://docker-proxy:2375
+      - PYTHONDONTWRITEBYTECODE=1
     labels:
 {{ web_ui_labels('61208') }}
       {{ kuma(container_item.name) }}

@@ -69,6 +69,13 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # Read-only rootfs: peanut (runs as non-root `node`) regenerates /app/config/auth.yaml
+    # from WEB_USERNAME/PASSWORD at every boot — a dir ABSENT from the image (not the
+    # ./peanut-config:/config mount), so tmpfs it (mode=1777 for the node uid). Persistent
+    # state stays in the /config bind mount; auth.yaml is env-derived, fine to be ephemeral.
+    read_only: true
+    tmpfs:
+      - /app/config:mode=1777
     {{ service_networks() }}
       - internal
     labels:
