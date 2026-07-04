@@ -76,6 +76,29 @@ http:
         customRequestHeaders:
           X-Forwarded-Proto: https
 
+    # Per-app Content-Security-Policy — the concrete case the default-headers note above points at
+    # ("Set CSP per-app via a dedicated headers middleware where origins are known-good"). There's
+    # deliberately no GLOBAL CSP because customResponseHeaders REPLACES the backend header, which
+    # would clobber apps that self-set a stricter one (freshrss, homepage). karakeep sends none of
+    # its own and renders untrusted saved web pages/snapshots into an authenticated session, so it
+    # gets one here. Permissive-but-real: it's a Next.js app that needs 'unsafe-inline'/'unsafe-eval',
+    # so inline-script INJECTION isn't blocked — but loading EXTERNAL scripts, plugin objects
+    # (object-src none), <base> hijacking, cross-origin exfil via fetch/websocket/form-post, and
+    # clickjacking (frame-ancestors) all are. Attached to karakeep's MAIN router only, via the
+    # labels() macro's extra_middlewares arg (the /api bypass router serves JSON — a CSP there does
+    # nothing). img-src allows https: so cached-page/favicon art isn't broken; tighten to
+    # `'self' data: blob:` if karakeep is confirmed to proxy all its images same-origin.
+    csp-karakeep:
+      headers:
+        customResponseHeaders:
+          Content-Security-Policy: >-
+            default-src 'self'; base-uri 'self'; object-src 'none';
+            script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';
+            img-src 'self' data: blob: https:; font-src 'self' data:;
+            connect-src 'self'; media-src 'self' data: blob:; frame-src 'self' blob:;
+            worker-src 'self' blob:; manifest-src 'self'; frame-ancestors 'self';
+            form-action 'self'
+
     crowdsec:
       plugin:
         bouncer:

@@ -1,4 +1,4 @@
-{% macro labels(container, port, docker_network, authelia) -%}
+{% macro labels(container, port, docker_network, authelia, extra_middlewares='') -%}
       - "traefik.enable=true"
       - "traefik.docker.network={{ docker_network }}"
       - "traefik.http.routers.{{ container }}.entrypoints=http"
@@ -12,8 +12,8 @@
       - "traefik.http.routers.{{ container }}-secure.service={{ container }}"
       - "traefik.http.services.{{ container }}.loadbalancer.server.port={{ port }}"
       {% if authelia -%}
-      - "traefik.http.routers.{{ container }}-secure.middlewares=rate-limit@file,authelia@docker"
+      - "traefik.http.routers.{{ container }}-secure.middlewares=rate-limit@file,authelia@docker{% if extra_middlewares %},{{ extra_middlewares }}{% endif %}"
       {%- else -%}
-      - "traefik.http.routers.{{ container }}-secure.middlewares=rate-limit@file"
+      - "traefik.http.routers.{{ container }}-secure.middlewares=rate-limit@file{% if extra_middlewares %},{{ extra_middlewares }}{% endif %}"
       {%- endif %}
 {%- endmacro %}

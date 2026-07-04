@@ -64,12 +64,14 @@ services:
       # meili version (see the meilisearch VERSION POLICY), so watchtower (monitor-all mode)
       # must not auto-bump any service in this stack and desync the pair.
       - "com.centurylinklabs.watchtower.enable=false"
-      {# Generate labels(container, port, docker_network, use_authelia) -#}
+      {# Generate labels(container, port, docker_network, use_authelia, extra_middlewares) -#}
+      {# extra_middlewares: per-app CSP on the MAIN (Authelia) router only — see csp-karakeep in traefik/config.yml.j2 -#}
       {{ labels(
           container_item.hostname | default(container_item.name),
           container_item.port | string,
           (container_item.networks | default([docker_network]))[0],
-          container_item.use_authelia
+          container_item.use_authelia,
+          extra_middlewares='csp-karakeep@file'
         )
       }}
       {{ kuma(container_item.name) }}
