@@ -37,15 +37,22 @@
         {{ (as_datetime(states('sensor.pixel_watch_3_next_alarm')) - timedelta(minutes=15)).isoformat() }}
 
 # Wind-down anchor: the bedtime PROMPT fires 8 h before the next MORNING alarm (target sleep ~8h),
-# so it tracks the real schedule instead of a fixed clock. Same morning-alarm + future-alarm
-# availability guard as bedroom_wake_start (local hour 03:00-11:00 AND `> now()`), so a nap/evening
-# alarm never arms it. For a 6:00am alarm this resolves to 10:00pm. No alarm -> unavailable, and the
-# prompt's 22:30 fallback covers it.
-# The `> now()` term is load-bearing (mirrors bedroom_wake_start, added 2026-07-01): a lagging Wear OS
-# next_alarm holding an already-fired alarm makes this resolve to a PAST time. Without the guard it
-# stays `available` with that stale value -> the prompt's dynamic `at:` trigger has nothing to fire on
-# AND the 22:30 fallback is suppressed (it only fires when this is unavailable) -> NO bedtime prompt
-# that night. Requiring the alarm to be in the future makes it `unavailable` so the fallback runs.
+# so it tracks the real schedule instead of a fixed clock. Same morning-alarm hour guard as
+# bedroom_wake_start (local hour 03:00-11:00), so a nap/evening alarm never arms it. For a 6:00am
+# alarm this resolves to 10:00pm. No alarm -> unavailable, and the prompt's 22:30 fallback covers it.
+#
+# The future-alarm guard DIFFERS from bedroom_wake_start ON PURPOSE. wake_start uses `> now() - 2h`
+# because it anchors an IN-FLIGHT 45-min ramp + [45,90)-min AL-release window, so its availability
+# must outlive the WINDOW (a bare `> now()` killed the ramp the instant the alarm rang — the
+# 2026-07-02 bug). This sensor is a ONE-SHOT anchor with NO post-fire window (the prompt fires once,
+# 8h before the alarm), so a bare `as_datetime(na) > now()` is correct: a lagging Wear OS next_alarm
+# holding an ALREADY-FIRED (past) alarm makes this `unavailable`, so the prompt's 22:30 fallback fires
+# instead of a dead dynamic `at:` on a past time (the 2026-07-01 stale-alarm case).
+# NOTE: `> now()` on the ALARM does NOT cover the "alarm is future but its winddown is ALREADY PAST"
+# case (an alarm set AFTER alarm-8h has passed, e.g. a 06:00 alarm created at 23:00 -> winddown 22:00,
+# past). The sensor stays `available` with a past value, so the dynamic `at:` can't fire on it; that
+# case is handled automation-side by bedroom_bedtime_prompt's fallback gate (its
+# `as_datetime(winddown) < now()` term), NOT here.
 - sensor:
     - name: "Bedroom winddown start"
       unique_id: bedroom_winddown_start
