@@ -34,6 +34,17 @@ from deploy_logic import (  # noqa: E402
     should_alert_dirty,
 )
 
+
+class RetryableFetchError(Exception):
+    """A transient `git fetch origin` failure (GitHub blip, momentary DNS). __main__ turns this into
+    a CLEAN skip of the tick — exit 0, NO in-script Discord crash-page, NO OnFailure — that also does
+    NOT refresh last_run. So a one-off blip is silently retried next tick, while a PERSISTENT fetch
+    failure still surfaces via GitOps-Alive going stale over several missed ticks. Distinct from a
+    real crash (unexpected exception), which still pages. Before this, a `run()`-raised fetch error
+    propagated to __main__ and double-paged (the crash Discord + the OnFailure unit) every 30-min
+    tick for the whole duration of a GitHub-side incident."""
+
+
 HOLD_FILE = "/var/lib/gitops-deploy/hold_sha"
 LAST_RUN = "/var/lib/gitops-deploy/last_run"
 # Last origin SHA we've already alerted on for a broad change, so a deferred
@@ -290,7 +301,16 @@ def main() -> int:
     # (git fetch is safe on a dirty tree — it only updates remote-tracking refs.)
     dirty = bool(run(["git", "status", "--porcelain"]))
 
-    run(["git", "fetch", "origin", BRANCH])
+    # NOT `run(...)` (which raises RuntimeError → the generic crash-page): a transient fetch failure
+    # is retryable, so raise RetryableFetchError and let __main__ skip the tick cleanly. subprocess
+    # directly (like is_ancestor) to read the returncode/stderr `run(check=False)` would discard.
+    fetch = subprocess.run(
+        ["git", "fetch", "origin", BRANCH], cwd=REPO, text=True, capture_output=True
+    )
+    if fetch.returncode != 0:
+        raise RetryableFetchError(
+            fetch.stderr.strip() or f"git fetch exited {fetch.returncode}"
+        )
     local = run(["git", "rev-parse", "HEAD"])
     origin = run(["git", "rev-parse", f"origin/{BRANCH}"])
     hold = read_hold()
@@ -435,6 +455,13 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         rc = main()
+    except RetryableFetchError as e:
+        # Transient `git fetch` failure: skip this tick without paging (no crash Discord, and exit 0
+        # so the OnFailure alert unit doesn't fire either) and WITHOUT writing last_run — a one-off
+        # blip is invisibly retried next tick, while a persistent fetch break ages last_run and trips
+        # GitOps-Alive. Must precede the generic handler below (Python matches except-clauses in order).
+        log(f"git fetch failed (retryable) — skipping tick, will retry next run: {e}")
+        sys.exit(0)
     except Exception as e:
         discord(f"🚨 gitops-deploy crashed: {e}")
         raise

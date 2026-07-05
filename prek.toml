@@ -153,6 +153,22 @@ language = "system"
 pass_filenames = false
 files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secret_rotation\\.py)$"
 
+# Assert uv.lock stays consistent with pyproject.toml. Every unattended production path
+# (gitops_deploy, secret-rotate, secret-rotation-audit) runs `uv run --frozen`, which ERRORS
+# on a stale lock — but prek/CI's plain `uv run` silently regenerates the lock in the ephemeral
+# checkout, so a pyproject edit merged WITHOUT a refreshed lock passes CI and only bites later as
+# a confusing --frozen failure on the host (a deploy rollback+hold, or the Secret Rotation Kuma
+# going stale). `uv lock --check` (read-only; exits non-zero on drift, never writes) mirrors the
+# prod invariant at commit time. Renovate's weekly lockFileMaintenance refreshes the lock but is
+# NOT a same-commit gate, so a human pyproject edit is the open escape hatch this closes.
+[[repos.hooks]]
+id = "uv-lock-check"
+name = "uv.lock in sync with pyproject.toml"
+entry = "uv lock --check"
+language = "system"
+pass_filenames = false
+files = "^(pyproject\\.toml|uv\\.lock)$"
+
 # Run the repo's Python unit tests via uv: the toposort dependency-resolution filters
 # (gate every deploy's ordering/scope), the monitor-bridge check logic, the
 # auto-approve-readonly Bash classifier (a permission security boundary), and the

@@ -18,6 +18,7 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-latest
+    timeout-minutes: 20  # cap a wedged network hook (ansible-galaxy install) so it can't burn to the 6h default
     steps:
       - uses: actions/checkout@v7
         with:
@@ -39,6 +40,7 @@ jobs:
   renovate-config:
     name: renovate config validator
     runs-on: ubuntu-latest
+    timeout-minutes: 20  # cap a wedged `npx renovate-config-validator` network fetch
     steps:
       - uses: actions/checkout@v7
 

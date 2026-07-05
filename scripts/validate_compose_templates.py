@@ -188,7 +188,6 @@ WATCHTOWER_AUTOUPDATE: frozenset = frozenset(
         "glances",
         "ddns-direct",
         "ddns-proxied",
-        "wg-easy",
         "peanut",
         "grafana",
         "loki",

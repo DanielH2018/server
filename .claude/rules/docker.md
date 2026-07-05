@@ -16,7 +16,8 @@ the path-specific detail not spelled out there:
   - **Documented exception — named volumes** are the deliberate pattern for bulky, regenerable state
     that should stay OUT of Kopia's scope: `prometheus_data` (TSDB), `loki` (logs), `feed_cache`
     (freshrss nginx), `karakeep_meili` (rebuildable search index), `crowdsec-db` (shared
-    traefik+crowdsec). Don't flag these; justify any new named volume with a comment.
+    traefik+crowdsec), `promtail_positions` (promtail's log-read cursor, regenerable). Don't flag
+    these; justify any new named volume with a comment.
 - Pin image tags or use a stable channel. `latest` is acceptable for the homelab tier, but note when
   a specific version is preferred.
 - **`read_only: true` + `tmpfs:` — the `noexec` residual is an ACCEPTED trade-off, do not re-flag.**

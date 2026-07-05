@@ -21,6 +21,7 @@ jobs:
   smoke:
     name: pull + boot changed images
     runs-on: ubuntu-latest
+    timeout-minutes: 20  # cap a hung docker pull / image that never reaches healthy (per-container boot is already bounded)
     steps:
       - uses: actions/checkout@v7
         with:

@@ -57,6 +57,10 @@ services:
     restart: unless-stopped
     {{ service_networks() }}
     labels:
+      # Disable watchtower update — pinned/Renovate tier (v14 tag+digest, MUST NOT float).
+      # The digest already blocks a float, but this keeps wg-easy out of the auto-update pool
+      # (and out of WATCHTOWER_AUTOUPDATE) so a future digest-drop can't silently re-enrol it.
+      - "com.centurylinklabs.watchtower.enable=false"
 {{ web_ui_labels('51821') }}
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.

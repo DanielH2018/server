@@ -28,6 +28,15 @@ See repo-root `CLAUDE.md` for shared conventions.
   (`address=/local.<domain>/{{ server_ip }}`) is the LAN-side twin for the documented client
   configs. **Do not "fix" the internal-IP disclosure by deleting it without first migrating those
   WireGuard/split-DNS clients** — it's intentional infrastructure, not a leak.
+- **`wireguard.<domain>` inherits DDNS via CNAME flattening (don't misread it as stale):** the
+  `wireguard.<domain>` record is a **grey-cloud (DNS-only) CNAME to the apex** — but a `dig +short
+  wireguard.<domain>` returns the home **origin** IP (e.g. `73.x.x.x`), NOT the apex's
+  Cloudflare-proxied **edge** IPs that a plain `dig <domain>` returns. That's correct Cloudflare
+  behavior: a DNS-only CNAME pointing at a *proxied* record in the same zone is flattened to that
+  record's underlying origin IP, and `ddns-proxied` (`DOMAINS={{ domain }}`, `PROXIED=true`) is what
+  keeps that origin fresh — so `wireguard.<domain>` tracks the dynamic IP without its own DDNS entry.
+  It looks like a contradiction (CNAME to a proxied name, yet resolves to a raw IP) but is working
+  as designed; recorded here so a future zone audit doesn't flag it as a broken/stale record.
 - **Heartbeat monitoring:** each updater pings an Uptime Kuma **push** monitor
   (`UPTIMEKUMA` env) after every successful update — a dead-man's-switch for silent
   failures, since favonia is distroless and can't carry a Docker healthcheck. Detection
