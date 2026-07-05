@@ -78,6 +78,12 @@ RADARR_API_KEY = _env("RADARR_API_KEY", "")
 PROWLARR_URL = _env("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
 PROWLARR_API_KEY = _env("PROWLARR_API_KEY", "")
 PROWLARR_INDEXER_MIN_DOWN_MIN = float(_env("PROWLARR_INDEXER_MIN_DOWN_MIN", "30"))
+# Comma-separated indexer names (case-insensitive) never counted as offenders. For chronically
+# flaky PUBLIC trackers whose backend routinely 503s/times-out past the 30m gate (e.g. The Pirate
+# Bay's apibay.org) — they'd page every outage though the other indexers cover the same searches.
+# Prowlarr's own all-indexers-down onHealthIssue is the backstop if every indexer, ignored or not,
+# fails at once. Empty = ignore nothing.
+PROWLARR_INDEXER_IGNORE = _env("PROWLARR_INDEXER_IGNORE", "")
 GITOPS_STATE_DIR = _env("GITOPS_STATE_DIR", "/gitops-state")
 GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
 RENOVATE_STATE_DIR = _env("RENOVATE_STATE_DIR", "/renovate-state")
@@ -787,7 +793,7 @@ def check_arr_queue():
     return True, "queue clean (%s)" % ", ".join(a[0] for a in configured)
 
 
-def indexers_down(status_json, name_by_id, now, min_down_min):
+def indexers_down(status_json, name_by_id, now, min_down_min, ignore=None):
     """Pure: (name, minutes_down) for each Prowlarr indexer failing >= min_down_min minutes.
 
     Fed /api/v1/indexerstatus (a list of {indexerId, initialFailure, disabledTill, ...}) and an
@@ -795,10 +801,13 @@ def indexers_down(status_json, name_by_id, now, min_down_min):
     Prowlarr has it disabled due to failures; initialFailure is when the CURRENT failure run
     started, so (now - initialFailure) is the outage duration — a flap that recovers before the
     threshold drops out of the list and never qualifies. A null/absent/unparseable initialFailure
-    is skipped (treated as just-started) rather than crashing the whole check. Sorted worst-first
-    so the longest outage leads the alert msg.
+    is skipped (treated as just-started) rather than crashing the whole check. `ignore` is an
+    iterable of indexer names (matched case-insensitively) that are never flagged — for
+    chronically-flaky public trackers (see PROWLARR_INDEXER_IGNORE). Sorted worst-first so the
+    longest outage leads the alert msg.
     """
     cutoff_s = min_down_min * 60
+    ignored = {n.strip().lower() for n in (ignore or ()) if n.strip()}
     offenders = []
     for s in status_json or []:
         init = s.get("initialFailure")
@@ -810,7 +819,10 @@ def indexers_down(status_json, name_by_id, now, min_down_min):
             continue
         if age_s >= cutoff_s:
             iid = s.get("indexerId")
-            offenders.append((name_by_id.get(iid) or "indexer %s" % iid, age_s / 60.0))
+            name = name_by_id.get(iid) or "indexer %s" % iid
+            if name.strip().lower() in ignored:
+                continue
+            offenders.append((name, age_s / 60.0))
     offenders.sort(key=lambda nm: -nm[1])
     return offenders
 
@@ -833,7 +845,11 @@ def check_prowlarr_indexers():
     indexers = _get_json(PROWLARR_URL + "/api/v1/indexer", headers=headers)
     name_by_id = {i.get("id"): i.get("name") for i in indexers}
     offenders = indexers_down(
-        status, name_by_id, datetime.now(timezone.utc), PROWLARR_INDEXER_MIN_DOWN_MIN
+        status,
+        name_by_id,
+        datetime.now(timezone.utc),
+        PROWLARR_INDEXER_MIN_DOWN_MIN,
+        PROWLARR_INDEXER_IGNORE.split(","),
     )
     if offenders:
         desc = "; ".join("%s down %.0fm" % (sanitize(n), m) for n, m in offenders[:5])

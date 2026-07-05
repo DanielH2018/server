@@ -76,7 +76,11 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     redeploy mid-outage. Empty `PROWLARR_API_KEY` = disabled (stays up); a null/unparseable
     `initialFailure` is skipped, an unreachable Prowlarr surfaces as `down` via `_evaluate` (the
     `check_arr_queue` convention — no grace). Pairs with Prowlarr set to
-    `includeHealthWarnings=false` (keeps `onHealthIssue` = the instant all-down red backstop). Pure
+    `includeHealthWarnings=false` (keeps `onHealthIssue` = the instant all-down red backstop).
+    `PROWLARR_INDEXER_IGNORE` (comma-separated names, case-insensitive) drops chronically-flaky
+    public trackers from the offender list — set to `The Pirate Bay` after its apibay.org backend
+    503'd/timed-out for hours and flapped this monitor up/down on 2026-07-05 (the other 7 indexers
+    cover the same searches; the all-down onHealthIssue is still the backstop). Pure
     `indexers_down()` is unit-tested. Spec: `docs/superpowers/specs/2026-07-04-prowlarr-indexer-watchdog-design.md`.)
   - **GitOps Deploy — Alive** (reads `/gitops-state/last_run`, a bind-mounted host timestamp the
     `gitops_deploy` deployer rewrites each non-crashing tick; `down` once it's older than

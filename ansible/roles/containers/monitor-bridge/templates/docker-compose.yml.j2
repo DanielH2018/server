@@ -89,6 +89,11 @@ services:
       - PROWLARR_URL=http://prowlarr:9696
       - PROWLARR_API_KEY={{ prowlarr_api_key }}
       - PROWLARR_INDEXER_MIN_DOWN_MIN=30
+      # Comma-separated indexer names never paged (case-insensitive) — chronically-flaky public
+      # trackers whose backend routinely 503s/times-out past the 30m gate while the other indexers
+      # cover the same searches. The Pirate Bay's apibay.org (503s + full timeouts) flapped this
+      # monitor up/down for hours on 2026-07-05. Prowlarr's own all-down onHealthIssue is the backstop.
+      - PROWLARR_INDEXER_IGNORE=The Pirate Bay
       - KUMA_PUSH_PROWLARR_INDEXERS={{ monitor_bridge_prowlarr_indexers_push_token }}
       # GitOps deployer liveness + deploy-status. State files are written on the host by
       # gitops_deploy.py and bind-mounted read-only at /gitops-state.

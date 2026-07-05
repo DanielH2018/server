@@ -2377,6 +2377,25 @@ def test_indexers_down_unknown_id_falls_back_to_id_label():
     assert out == [("indexer 9", pytest.approx(60.0, abs=0.1))]
 
 
+def test_indexers_down_skips_ignored_indexer():
+    status = _status((1, "2026-07-04T11:00:00Z"))  # EZTV 60m over threshold
+    assert check.indexers_down(status, INX_NAMES, INX_NOW, 30, ignore={"eztv"}) == []
+
+
+def test_indexers_down_ignore_is_case_insensitive():
+    status = _status((1, "2026-07-04T11:00:00Z"))  # EZTV 60m, ignore differently cased
+    assert check.indexers_down(status, INX_NAMES, INX_NOW, 30, ignore={"EZTV"}) == []
+
+
+def test_indexers_down_ignore_only_named_indexer():
+    status = _status(
+        (1, "2026-07-04T11:00:00Z"),  # EZTV 60m -> ignored
+        (2, "2026-07-04T11:00:00Z"),  # 1337x 60m -> still flagged
+    )
+    out = check.indexers_down(status, INX_NAMES, INX_NOW, 30, ignore={"eztv"})
+    assert [n for n, _ in out] == ["1337x"]
+
+
 # --- check_prowlarr_indexers (wrapper) --------------------------------------
 
 
@@ -2405,6 +2424,17 @@ def test_prowlarr_indexers_down_on_sustained(monkeypatch):
 def test_prowlarr_indexers_up_when_none_failing(monkeypatch):
     monkeypatch.setattr(check, "PROWLARR_API_KEY", "k")
     monkeypatch.setattr(check, "_get_json", _seq([], [{"id": 1, "name": "EZTV"}]))
+    ok, msg = check.check_prowlarr_indexers()
+    assert ok is True
+    assert "ok" in msg
+
+
+def test_prowlarr_indexers_ignore_list_suppresses_page(monkeypatch):
+    monkeypatch.setattr(check, "PROWLARR_API_KEY", "k")
+    monkeypatch.setattr(check, "PROWLARR_INDEXER_IGNORE", "The Pirate Bay")
+    status = _status((1, "2000-01-01T00:00:00Z"))  # ancient -> over threshold
+    indexers = [{"id": 1, "name": "The Pirate Bay"}]
+    monkeypatch.setattr(check, "_get_json", _seq(status, indexers))
     ok, msg = check.check_prowlarr_indexers()
     assert ok is True
     assert "ok" in msg
