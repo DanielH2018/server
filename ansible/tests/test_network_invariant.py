@@ -19,10 +19,14 @@ import yaml
 _ANSIBLE = pathlib.Path(__file__).resolve().parents[1]
 
 # Hand-rolled routers that Traefik serves but that carry NO HTTP `port` in host_vars, so the
-# truthy-`port` "is this routed?" heuristic below would miss them. terraria is exposed over a
-# dedicated raw-TCP entrypoint (:7777); its route network is still networks[0], and Traefik must
-# join it or the entrypoint can't reach the backend.
-_HANDROLLED_TCP_ROUTED = {"terraria"}
+# truthy-`port` "is this routed?" heuristic below would miss them:
+#   - terraria: exposed over a dedicated raw-TCP entrypoint (:7777).
+#   - authelia: hand-rolls its own HTTP router labels directly (doesn't call the labels() macro,
+#     so it has no `port` in host_vars) — the forward-auth portal every use_authelia service needs.
+# In both cases the route network is networks[0] and Traefik must join it or the backend is
+# unreachable. authelia sits on `proxy` today (which Traefik always joins) so this is a no-op guard
+# now — it future-proofs the check against authelia ever being moved onto a dedicated isolation net.
+_HANDROLLED_ROUTED = {"terraria", "authelia"}
 
 
 def _created_networks() -> set[str]:
@@ -105,7 +109,7 @@ def _routed_route_networks() -> dict[str, str]:
     Traefik.
 
     A service is Traefik-routed when it emits `labels()` — i.e. it has a truthy `port` (or it's a
-    hand-rolled raw-TCP router, see `_HANDROLLED_TCP_ROUTED`). The macro binds
+    hand-rolled router with no host_vars `port`, see `_HANDROLLED_ROUTED`). The macro binds
     `traefik.docker.network` to `networks[0]`, so ONLY networks[0] is the route network; the rest
     of a service's list are deliberate isolation/reach nets Traefik must NOT be forced onto
     (`mqtt`, `ups`, `codeserver`, `homepage_private`, …). Asserting the full list ⊆ traefik.nets
@@ -121,7 +125,7 @@ def _routed_route_networks() -> dict[str, str]:
         for svc in svcs:
             name = svc.get("name")
             nets = svc.get("networks") or []
-            routed = bool(svc.get("port")) or name in _HANDROLLED_TCP_ROUTED
+            routed = bool(svc.get("port")) or name in _HANDROLLED_ROUTED
             if name == "traefik" or not routed or not nets:
                 continue
             refs.setdefault(nets[0], f"{host_file.stem}/{name}")

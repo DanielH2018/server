@@ -56,6 +56,17 @@ scrape_configs:
 
 #################################################################################################
 
+  # Promtail's own /metrics (per-target send failures, promtail_dropped_entries_total,
+  # positions-file lag) on its :9080 server port — Promtail and Prometheus share `monitoring`.
+  # The loki_ingestion bridge check only trips at ZERO lines; this surfaces PARTIAL log-shipping
+  # loss (dropped/rate-limited entries) plus the trend history that point-in-time check can't retain.
+  - job_name: "promtail"
+    scrape_interval: 1m
+    static_configs:
+    - targets: ["promtail:9080"]
+
+#################################################################################################
+
   # Uptime-Kuma's own /metrics (per-monitor up/down, response times, cert-days-remaining) —
   # Kuma and Prometheus share the `monitoring` net. The endpoint is API-key protected, sent as
   # HTTP Basic auth: blank username, password = the key (prometheus_kuma_api_key in SOPS).

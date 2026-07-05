@@ -16,7 +16,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **thirty checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **thirty-one checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the nine
@@ -69,7 +69,8 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     gate, unlike the Prometheus/exporter checks). Pure `queue_warnings()` is unit-tested.)
   - **Prowlarr Indexers** (Prowlarr's `/api/v1/indexerstatus` + `/api/v1/indexer` over `media`,
     `X-Api-Key`: `down` only when an indexer has been failing ≥ `PROWLARR_INDEXER_MIN_DOWN_MIN`
-    (30 min) measured from Prowlarr's own `initialFailure` — the age-based, per-indexer SUSTAINED
+    (1 week = 10080 min — only a genuinely long outage pages; short flaps are noise) measured from
+    Prowlarr's own `initialFailure` — the age-based, per-indexer SUSTAINED
     signal Prowlarr's binary in-app health notification can't express (it's warnings-on-every-flap
     or all-indexers-down-only). Suppresses the transient tracker flaps that self-clear inside
     Prowlarr's ~5-15 min backoff. Age-based (not consecutive-cycle) so it survives a bridge
@@ -99,6 +100,15 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     snapshot still succeeds — **Backup Freshness stays green while the peers go stale**. This is the
     dedicated watchdog for that gap (added 2026-07-05 — it was the one backup cron with no monitor).
     Same state-file idiom as Backup Verify / Restore Drill; pure `pi_peers()` is unit-tested.)
+  - **CrowdSec Home Allowlist** (reads `/home-allowlist/state.json`, written **every 5 min** by the
+    **traefik** role's `crowdsec-update-home-allowlist.sh` host cron — `down` on a FAILED run (ipify
+    unreachable / malformed IP / cscli error) or >30 min staleness (cron broken / never ran), a
+    missing/corrupt state file included. That cron keeps the operator's current home public IP in
+    CrowdSec's `home-ips` allowlist so browsing the public path from home doesn't trip the WAF; it
+    writes state on EVERY run incl. the common IP-unchanged fast path, so a healthy no-op keeps the
+    monitor green and only a real failure/stall pages. It was the last self-`logger`ing cron with no
+    watchdog — the twin of the WG Pi Peer Backup gap (2026-07-05). Same state-file idiom; pure
+    `home_allowlist()` is unit-tested. `HOME_ALLOWLIST_MAX_AGE_MIN` tunes the staleness window.)
   - **Backup Verify** (reads `/verify/state.json`, written weekly by the kopia role's
     `kopia-verify.sh` host cron — `down` on a FAILED `kopia snapshot verify` (detected
     bit-rot / an unreadable blob), >10 d staleness, or a missing/corrupt state file. The
@@ -249,7 +259,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,pi,pi_peers,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,verify,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,pi,pi_peers,home_allowlist,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,verify,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -269,6 +279,10 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   sys_user-owned (and its file task re-chowns it if Docker got there first), so deploy `wg-easy`
   before `monitor-bridge` on a fresh host. Kopia's own state dirs (`/var/lib/kopia-*`) are created
   by the kopia role, which `monitor-bridge` already depends on.
+- The **CrowdSec Home Allowlist** monitor bind-mounts `/var/lib/crowdsec-home-allowlist:/home-allowlist:ro`
+  (written by the `traefik` role's every-5-min `crowdsec-update-home-allowlist.sh` cron). The `traefik`
+  role creates that dir sys_user-owned, and traefik deploys first (everything depends on it), so the
+  ordering is naturally satisfied.
 - Thresholds are env-tunable in the compose template (`BACKUP_MAX_AGE_H`, `DISK_MAX_PCT`,
   `CERT_MIN_DAYS`, `MEM_MAX_PCT`, `RESTART_WINDOW`/`RESTART_MAX`, `OOM_WINDOW`,
   `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`/`CPU_CONSECUTIVE`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`,

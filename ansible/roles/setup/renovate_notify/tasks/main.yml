@@ -43,9 +43,19 @@
     mode: "0644"
   loop:
     - renovate-notify.service
-    - renovate-notify-alert.service   # OnFailure target — pages Discord if the notifier crashes
     - renovate-notify.timer
   become: true
+  notify:
+    - Reload systemd
+    - Run renovate-notify once
+
+- name: Install the alert unit (0600 — embeds the SOPS Discord webhook)
+  ansible.builtin.template:
+    src: renovate-notify-alert.service.j2   # OnFailure target — pages Discord if the notifier crashes
+    dest: /etc/systemd/system/renovate-notify-alert.service
+    mode: "0600"
+  become: true
+  no_log: true
   notify:
     - Reload systemd
     - Run renovate-notify once

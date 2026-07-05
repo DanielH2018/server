@@ -1096,6 +1096,71 @@ def test_pi_peers_unparseable_is_down(tmp_path, monkeypatch):
     assert "unparseable" in msg
 
 
+# ── CrowdSec home-IP allowlist updater (every-5-min host cron writes state.json; we alert on it) ──
+
+
+def _home_allowlist_state(tmp_path, monkeypatch, ts, ok, msg):
+    p = tmp_path / "state.json"
+    p.write_text(
+        '{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg)
+    )
+    monkeypatch.setattr(check, "HOME_ALLOWLIST_STATE", str(p))
+
+
+def test_home_allowlist_fresh_success_is_up(tmp_path, monkeypatch):
+    _home_allowlist_state(
+        tmp_path, monkeypatch, time.time() - 120, True, "home IP unchanged (1.2.3.4)"
+    )
+    ok, msg = check.check_home_allowlist()
+    assert ok
+    assert "unchanged" in msg
+
+
+def test_home_allowlist_failure_is_down(tmp_path, monkeypatch):
+    # A failed run (ipify unreachable / cscli error) must page — the home path silently starts
+    # tripping the WAF on the next IP rotation otherwise.
+    _home_allowlist_state(
+        tmp_path,
+        monkeypatch,
+        time.time(),
+        False,
+        "failed to resolve public IP from ipify",
+    )
+    ok, msg = check.check_home_allowlist()
+    assert not ok
+    assert "FAILED" in msg
+
+
+def test_home_allowlist_stale_success_is_down(tmp_path, monkeypatch):
+    # 5-min cadence; a 40-min-old success means the every-5-min cron stopped running.
+    _home_allowlist_state(
+        tmp_path,
+        monkeypatch,
+        time.time() - 40 * 60,
+        True,
+        "home IP unchanged (1.2.3.4)",
+    )
+    ok, msg = check.check_home_allowlist()
+    assert not ok
+    assert "min ago" in msg
+
+
+def test_home_allowlist_missing_state_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "HOME_ALLOWLIST_STATE", str(tmp_path / "nope.json"))
+    ok, msg = check.check_home_allowlist()
+    assert not ok
+    assert "never ran" in msg
+
+
+def test_home_allowlist_unparseable_is_down(tmp_path, monkeypatch):
+    p = tmp_path / "state.json"
+    p.write_text("not json")
+    monkeypatch.setattr(check, "HOME_ALLOWLIST_STATE", str(p))
+    ok, msg = check.check_home_allowlist()
+    assert not ok
+    assert "unparseable" in msg
+
+
 def _maintenance_state(tmp_path, monkeypatch, ts, ok, msg):
     p = tmp_path / "maint.json"
     p.write_text(

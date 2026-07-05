@@ -21,6 +21,10 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # Read-only rootfs: `docker diff` is empty — every persisted path (database.db, state.json,
+    # coordinator_backup.json, log/) resolves under the ./data bind mount, and /app is root-owned
+    # static image assets the non-root uid can't write anyway; no tmpfs needed. Verified 2026-07-05.
+    read_only: true
     {{ service_networks() }}
     # Z2M takes a moment to connect to the coordinator before the frontend serves.
     # Use 127.0.0.1 not localhost: Z2M listens IPv4-only (0.0.0.0:8080), but busybox wget

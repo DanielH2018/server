@@ -21,6 +21,10 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # Read-only rootfs: `docker diff` is empty — runs as non-root 1000:1000 with all
+    # persistent state on the ./config + ./data bind mounts (log_dest is stdout), so no
+    # tmpfs is needed. Verified 2026-07-05.
+    read_only: true
     {{ service_networks() }}
     # $$SYS stays doubled so Compose passes a literal $SYS to the broker (validate-hook won't catch it).
     {{ healthcheck("[\"CMD-SHELL\", \"mosquitto_sub -h localhost -p 1883 -u " ~ mqtt_username ~ " -P " ~ mqtt_password ~ " -t '$$SYS/broker/uptime' -C 1 -W 3 >/dev/null 2>&1 || exit 1\"]") }}

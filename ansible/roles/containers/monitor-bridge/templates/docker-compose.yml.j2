@@ -82,15 +82,17 @@ services:
       - KUMA_PUSH_ARR_QUEUE={{ monitor_bridge_arr_queue_push_token }}
       # Prowlarr sustained-indexer watchdog: Prowlarr's in-app health notification is binary
       # (every flap pages, or — with warnings off — only the all-indexers-down red error). This
-      # polls /api/v1/indexerstatus and `down`s only when an indexer has been failing >= 30 min
+      # polls /api/v1/indexerstatus and `down`s only when an indexer has been failing >= 1 week
       # (age from Prowlarr's own initialFailure, so it survives a bridge redeploy), suppressing the
       # sub-threshold flaps public trackers throw that self-clear inside Prowlarr's ~5-15min backoff.
+      # Set to a full week (10080 min) deliberately: only a genuinely long outage should page here —
+      # short/flaky drops are noise. Prowlarr's own all-indexers-down onHealthIssue is the fast backstop.
       # Empty key = disabled (stays up), like N8N_API_KEY. Already on `media`, reaches prowlarr:9696.
       - PROWLARR_URL=http://prowlarr:9696
       - PROWLARR_API_KEY={{ prowlarr_api_key }}
-      - PROWLARR_INDEXER_MIN_DOWN_MIN=30
+      - PROWLARR_INDEXER_MIN_DOWN_MIN=10080
       # Comma-separated indexer names never paged (case-insensitive) — chronically-flaky public
-      # trackers whose backend routinely 503s/times-out past the 30m gate while the other indexers
+      # trackers whose backend routinely 503s/times-out past the sustained-down gate while the other indexers
       # cover the same searches. The Pirate Bay's apibay.org (503s + full timeouts) flapped this
       # monitor up/down for hours on 2026-07-05. Prowlarr's own all-down onHealthIssue is the backstop.
       - PROWLARR_INDEXER_IGNORE=The Pirate Bay
@@ -113,6 +115,13 @@ services:
       - PI_PEERS_STATE=/pi-peers/state.json
       - PI_PEERS_MAX_AGE_D=2.5
       - KUMA_PUSH_PI_PEERS={{ monitor_bridge_pi_peers_push_token }}
+      # Every-5-min CrowdSec home-IP allowlist updater (traefik role) writes state.json on EVERY run
+      # incl. the IP-unchanged fast path; it was the last self-loggering cron with no watchdog — a
+      # silent failure just meant occasional 403s on the next home-IP rotation. Alert on a failed run
+      # or 30-min staleness (6 missed 5-min runs).
+      - HOME_ALLOWLIST_STATE=/home-allowlist/state.json
+      - HOME_ALLOWLIST_MAX_AGE_MIN=30
+      - KUMA_PUSH_HOME_ALLOWLIST={{ monitor_bridge_home_allowlist_push_token }}
       # Weekly kopia snapshot verify: the host cron (kopia role) writes state.json; we
       # alert on a FAILED verify (bit-rot / unreadable blob the old `| logger` cron
       # swallowed), >10d staleness, or a missing/corrupt file. The verify tier of the
@@ -235,6 +244,7 @@ services:
       - /var/lib/renovate-notify:/renovate-state:ro
       - /var/lib/kopia-restore-drill:/restore-drill:ro
       - /var/lib/wg-easy-pi-peers:/pi-peers:ro
+      - /var/lib/crowdsec-home-allowlist:/home-allowlist:ro
       - /var/lib/kopia-verify:/verify:ro
       - /var/lib/kopia-maintenance:/maintenance:ro
       - /var/lib/kopia-b2-usage:/b2-usage:ro
@@ -279,6 +289,11 @@ services:
          no-delete pull keeps Backup Freshness green even when the un-rebuildable peer keys stop
          refreshing, so this is the dedicated failed/stale/missing watchdog for it. -#}
       {{ kuma('wg-easy-pi-peers', monitor_type='push', name='WG Pi Peer Backup', interval=600, max_retries=0, push_token=monitor_bridge_pi_peers_push_token) }}
+      {# CrowdSec Home Allowlist: check_home_allowlist reads /home-allowlist/state.json (written every
+         5 min by the traefik role's crowdsec-update-home-allowlist.sh) — down on a failed run (ipify
+         unreachable / cscli error) or 30-min staleness (cron broken). The updater's twin of the
+         wg-easy pull watchdog — the other self-loggering cron that had no monitor. -#}
+      {{ kuma('crowdsec-home-allowlist', monitor_type='push', name='CrowdSec Home Allowlist', interval=600, max_retries=0, push_token=monitor_bridge_home_allowlist_push_token) }}
       {{ kuma('kopia-verify', monitor_type='push', name='Backup Verify', interval=600, max_retries=0, push_token=monitor_bridge_verify_push_token) }}
       {{ kuma('kopia-maintenance', monitor_type='push', name='Backup Maintenance', interval=600, max_retries=0, push_token=monitor_bridge_maintenance_push_token) }}
       {{ kuma('monitor-bridge-b2', monitor_type='push', name='B2 Storage Usage', interval=600, max_retries=0, push_token=monitor_bridge_b2_push_token) }}

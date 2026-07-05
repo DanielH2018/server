@@ -3,10 +3,11 @@ Description=Alert when renovate-notify fails
 
 [Service]
 Type=oneshot
-# Webhook comes from the 0600 config (not embedded — this unit is world-readable). curl's default
-# User-Agent is NOT Cloudflare-blocked, so no UA header is needed here (unlike the Python urllib
-# Discord POSTs, which 403 without one). Mirrors gitops-deploy-alert.service.
-EnvironmentFile=/etc/renovate-notify/config.env
+# Webhook is EMBEDDED (rendered from SOPS at deploy), NOT sourced from /etc/renovate-notify/config.env:
+# config.env is exactly what can be broken/unreadable when the notifier fails, and a hard
+# EnvironmentFile= on that same file would leave THIS alert unable to start → no page. curl's own UA
+# is fine (Cloudflare only 1010-blocks python-urllib, not curl). This unit is therefore installed mode
+# 0600 (see tasks/main.yml) so the embedded webhook isn't world-readable. Mirrors gitops-deploy-alert.service.
 ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
   -d '{"content":"🚨 renovate-notify unit failed on daniel-server — check `journalctl -u renovate-notify`."}' \
-  "${DISCORD_WEBHOOK}"
+  "{{ gitops_deploy_discord_webhook }}"

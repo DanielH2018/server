@@ -1,25 +1,49 @@
 #!/bin/bash
-set -euo pipefail
+# Keeps the operator's current home public IP in CrowdSec's `home-ips` allowlist so browsing the
+# public path from home doesn't trip the WAF. Runs every 5 min; most runs are a no-op (IP unchanged).
+#
+# Reporting: writes {"ts","ok","msg"} to STATE on EVERY run (incl. the no-change fast path);
+# monitor-bridge's `home_allowlist` check reads it (:ro bind mount) and pushes the "CrowdSec Home
+# Allowlist" Kuma monitor — a FAILED run (ipify unreachable, malformed IP, cscli error) or staleness
+# (cron broken / never ran) alerts. Without this the updater was the last self-`logger`ing cron with no
+# watchdog: a silent failure just meant occasional 403s on the next home-IP rotation, invisible until
+# noticed. `set -uo` (not -euo) so a cscli error is captured + reported, not swallowed by an early exit
+# (same idiom as the kopia / wg-easy-pull-pi-peers crons).
+set -uo pipefail
 
 ALLOWLIST="home-ips"
 STATE_FILE="/home/{{ sys_user }}/.crowdsec-home-ip"
+STATE=/var/lib/crowdsec-home-allowlist/state.json
 
-CURRENT_IP=$(curl -sf --max-time 10 https://api4.ipify.org) || {
-  logger -t crowdsec-home-allowlist "Failed to resolve public IP"
-  exit 1
+write_state() { # ok msg
+  # jq, not printf: a stray control char in msg would make hand-built JSON invalid -> monitor-bridge
+  # reads "state unparseable" (false DOWN). Matches the kopia / wg-easy-pull-pi-peers crons.
+  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
+    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE"
+  logger -t crowdsec-home-allowlist "$1: $2"
 }
 
-# Validate the response is a well-formed IPv4 address before using it. The value
-# is already quoted and the source is HTTPS (no injection risk) — this guards
-# against a malformed/MITM'd response adding a junk or overly-broad allowlist entry.
+if ! CURRENT_IP=$(curl -sf --max-time 10 https://api4.ipify.org); then
+  write_state false "failed to resolve public IP from ipify"
+  exit 1
+fi
+
+# Validate the response is a well-formed IPv4 before using it. The value is already quoted and the
+# source is HTTPS (no injection risk) — this guards against a malformed/MITM'd response adding a junk
+# or overly-broad allowlist entry.
 if ! [[ $CURRENT_IP =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-  logger -t crowdsec-home-allowlist "Invalid IP from ipify: $CURRENT_IP"
+  write_state false "invalid IP from ipify: $CURRENT_IP"
   exit 1
 fi
 
 STORED_IP=$(cat "$STATE_FILE" 2>/dev/null || true)
 
-[ "$CURRENT_IP" = "$STORED_IP" ] && exit 0
+# Fast path: IP unchanged (the common case — the home IP rarely rotates). Still refresh the watchdog
+# heartbeat so a healthy no-op keeps the monitor green rather than aging into a false staleness alert.
+if [ "$CURRENT_IP" = "$STORED_IP" ]; then
+  write_state true "home IP unchanged ($CURRENT_IP)"
+  exit 0
+fi
 
 docker exec crowdsec cscli allowlists create "$ALLOWLIST" --description "Home IPs" 2>/dev/null || true
 
@@ -27,6 +51,11 @@ if [ -n "$STORED_IP" ]; then
   docker exec crowdsec cscli allowlists remove "$ALLOWLIST" "$STORED_IP" 2>/dev/null || true
 fi
 
-docker exec crowdsec cscli allowlists add "$ALLOWLIST" "$CURRENT_IP"
+if ! ADD_OUT=$(docker exec crowdsec cscli allowlists add "$ALLOWLIST" "$CURRENT_IP" 2>&1); then
+  SUMMARY=$(printf '%s' "$ADD_OUT" | tail -1 | tr -d '"' | tr '\n' ' ')
+  write_state false "cscli allowlists add failed: ${SUMMARY:-see crowdsec-home-allowlist syslog}"
+  exit 1
+fi
+
 echo "$CURRENT_IP" > "$STATE_FILE"
-logger -t crowdsec-home-allowlist "Updated home allowlist: ${STORED_IP:-<none>} -> $CURRENT_IP"
+write_state true "home allowlist updated: ${STORED_IP:-<none>} -> $CURRENT_IP"

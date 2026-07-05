@@ -59,6 +59,13 @@ services:
       - NET_BIND_SERVICE
     security_opt:
       - no-new-privileges:true
+    # Read-only rootfs: root nginx writes only its pidfile (/var/run) — the cache is on the
+    # feed_cache named volume (use_temp_path=off) and logs go to the image's stdout symlinks.
+    # Twin of bento-pdf; verify post-deploy (docker logs freshrss-feed-cache). Verified 2026-07-05.
+    read_only: true
+    tmpfs:
+      - /var/run
+      - /tmp
     volumes:
       - ./nginx-feed-cache.conf:/etc/nginx/conf.d/default.conf:ro
       - feed_cache:/var/cache/nginx

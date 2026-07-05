@@ -16,6 +16,10 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # Read-only rootfs: `docker diff` on the Pi is empty — dozzle is a static Go binary reaching
+    # Docker via the read-only docker-proxy (no socket mount, no bind mounts / DB per its CLAUDE.md),
+    # so nothing writes to the rootfs; no tmpfs needed. Verified live on daniel-pi 2026-07-05.
+    read_only: true
     environment:
       - DOCKER_HOST=tcp://docker-proxy:2375
       - DOZZLE_NO_ANALYTICS=true

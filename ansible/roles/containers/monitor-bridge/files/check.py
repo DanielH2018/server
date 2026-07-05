@@ -79,7 +79,7 @@ PROWLARR_URL = _env("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
 PROWLARR_API_KEY = _env("PROWLARR_API_KEY", "")
 PROWLARR_INDEXER_MIN_DOWN_MIN = float(_env("PROWLARR_INDEXER_MIN_DOWN_MIN", "30"))
 # Comma-separated indexer names (case-insensitive) never counted as offenders. For chronically
-# flaky PUBLIC trackers whose backend routinely 503s/times-out past the 30m gate (e.g. The Pirate
+# flaky PUBLIC trackers whose backend routinely 503s/times-out past the sustained-down gate (e.g. The Pirate
 # Bay's apibay.org) — they'd page every outage though the other indexers cover the same searches.
 # Prowlarr's own all-indexers-down onHealthIssue is the backstop if every indexer, ignored or not,
 # fails at once. Empty = ignore nothing.
@@ -105,6 +105,16 @@ RESTORE_DRILL_MAX_AGE_S = float(_env("RESTORE_DRILL_MAX_AGE_D", "35")) * 86400
 # missed daily runs + slack (same as the daily b2-usage / maintenance crons).
 PI_PEERS_STATE = _env("PI_PEERS_STATE", "/pi-peers/state.json")
 PI_PEERS_MAX_AGE_S = float(_env("PI_PEERS_MAX_AGE_D", "2.5")) * 86400
+
+# Every-5-min CrowdSec home-IP allowlist updater (traefik role's crowdsec-update-home-allowlist.sh):
+# keeps the operator's current home public IP in CrowdSec's `home-ips` allowlist so the public path
+# from home doesn't trip the WAF. It writes {"ts": epoch, "ok": bool, "msg": str} on EVERY run (incl.
+# the common IP-unchanged fast path). It was the last self-`logger`ing cron with no watchdog — a silent
+# failure (ipify unreachable, cscli error) just meant occasional 403s on the next IP rotation, invisible
+# until noticed. We alert on a FAILED run or staleness (cron broken / never ran). 30 min = 6 missed
+# 5-min runs; the fast-path heartbeat keeps a healthy no-op green.
+HOME_ALLOWLIST_STATE = _env("HOME_ALLOWLIST_STATE", "/home-allowlist/state.json")
+HOME_ALLOWLIST_MAX_AGE_S = float(_env("HOME_ALLOWLIST_MAX_AGE_MIN", "30")) * 60
 
 # Weekly kopia snapshot verify: the host cron (kopia-verify.sh, kopia role) writes
 # {"ts": epoch, "ok": bool, "msg": str} after each run; we alert on a FAILED verify
@@ -1075,6 +1085,39 @@ def check_pi_peers():
     return pi_peers(state, age_s, PI_PEERS_MAX_AGE_S)
 
 
+def home_allowlist(state, age_s, max_age_s):
+    """Pure: did the last CrowdSec home-IP allowlist update run succeed, and recently? (ok, msg).
+
+    Same state-file idiom as pi_peers/verify. The updater writes state on EVERY run (incl. the
+    IP-unchanged fast path), so a stale timestamp means the every-5-min cron stopped running, and
+    ok=false means ipify was unreachable or a cscli call errored — either way the home path may start
+    tripping the WAF on the next IP rotation with no other signal.
+    """
+    if not state.get("ok"):
+        return False, "last home-allowlist update FAILED: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return False, "last home-allowlist update %.0f min ago (max %.0f)" % (
+            age_s / 60,
+            max_age_s / 60,
+        )
+    return True, "home-allowlist ok %.0f min ago: %s" % (
+        age_s / 60,
+        state.get("msg", ""),
+    )
+
+
+def check_home_allowlist():
+    try:
+        with open(HOME_ALLOWLIST_STATE) as fh:
+            state = json.load(fh)
+        age_s = time.time() - float(state.get("ts", 0))
+    except FileNotFoundError:
+        return False, "no home-allowlist state (updater never ran?)"
+    except ValueError, TypeError:
+        return False, "home-allowlist state unparseable"
+    return home_allowlist(state, age_s, HOME_ALLOWLIST_MAX_AGE_S)
+
+
 def b2_usage(state, age_s, max_age_s, cap_bytes, max_pct):
     """Pure: billable B2 bytes vs the plan cap, plus probe-failure/staleness.
 
@@ -1535,6 +1578,11 @@ CHECKS = [
     ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
     ("verify", _env("KUMA_PUSH_VERIFY", ""), check_verify),
     ("pi_peers", _env("KUMA_PUSH_PI_PEERS", ""), check_pi_peers),
+    (
+        "home_allowlist",
+        _env("KUMA_PUSH_HOME_ALLOWLIST", ""),
+        check_home_allowlist,
+    ),
     ("maintenance", _env("KUMA_PUSH_MAINTENANCE", ""), check_maintenance),
     ("b2_usage", _env("KUMA_PUSH_B2", ""), check_b2_usage),
     ("b2_trend", _env("KUMA_PUSH_B2_TREND", ""), check_b2_trend),

@@ -342,6 +342,20 @@
     - "'already exist' not in (traefik_crowdsec_allowlist_create.stderr | lower)"
   changed_when: traefik_crowdsec_allowlist_create.rc == 0
 
+- name: Create the CrowdSec home-allowlist monitor state directory
+  tags: [config]
+  # monitor-bridge bind-mounts this read-only (/home-allowlist) and its `home_allowlist` check alerts
+  # on a failed/stale run. Created here sys_user-owned so the every-5-min cron can write state.json;
+  # deploy traefik before monitor-bridge on a fresh host (traefik deploys first anyway) else Docker
+  # auto-creates the mount source root-owned.
+  ansible.builtin.file:
+    path: /var/lib/crowdsec-home-allowlist
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
 - name: Deploy home allowlist updater script
   tags: [config]
   ansible.builtin.template:

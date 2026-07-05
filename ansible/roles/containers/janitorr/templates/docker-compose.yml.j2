@@ -19,6 +19,12 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # Read-only rootfs: `docker diff` shows only JVM temp writes (/tmp/hsperfdata_ubuntu,
+    # /tmp/truststore) — tmpfs /tmp covers them; config + media are bind mounts, and the
+    # leaving-soon symlinks + free-space check are /data-relative. Mirrors recyclarr. Verified 2026-07-05.
+    read_only: true
+    tmpfs:
+      - /tmp
     environment:
       - TZ={{ tz }}
     volumes:

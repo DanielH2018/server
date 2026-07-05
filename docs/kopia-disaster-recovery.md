@@ -116,3 +116,14 @@ Scrape-Targets monitor flags this if you miss it.
   the Pi still re-templates on a redeploy.
 - Test the read path any time without a real disaster: `kopia snapshot list` + a scratch
   `kopia restore <obj> /tmp/dr-test` from a host with the SOPS key.
+- **The off-box dead-man's switch — an external UptimeRobot monitor — is the ONE backstop for a
+  total daniel-server / Uptime-Kuma death.** The whole alert brain (monitor-bridge → Uptime-Kuma →
+  Discord) lives on daniel-server, so it cannot page about its own host going down. For that backstop
+  to also cover a *uptime-kuma-container* death — not just a host/network outage — it MUST probe a
+  **Uptime-Kuma-served endpoint** (a public Kuma status page, e.g. `https://<kuma-host>/status/<slug>`,
+  or the Kuma login page), **NOT** a generic Traefik-served URL: if the host + Traefik stay up while
+  only the Kuma container dies, a generic URL still returns 200 and the backstop never fires — exactly
+  when Kuma can no longer evaluate its own monitors. The monitor is deliberately out-of-repo (an
+  external SaaS can't be IaC-managed), but its target is otherwise unrecorded, making this SPOF's only
+  backstop un-auditable. **Record the configured UptimeRobot target here so it can be verified:**
+  - UptimeRobot monitor URL: `<fill in — must be a uptime-kuma-served endpoint, not a generic Traefik route>`

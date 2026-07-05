@@ -7,8 +7,10 @@ services:
     container_name: cloudflare-ddns-proxied
     restart: unless-stopped
     read_only: true
-    cap_drop: [all]
-    security_opt: [no-new-privileges:true]
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       - CF_API_TOKEN={{ cloudflare_dns_token }}
       - DOMAINS={{ domain }}
@@ -29,8 +31,10 @@ services:
     container_name: cloudflare-ddns-direct
     restart: unless-stopped
     read_only: true
-    cap_drop: [all]
-    security_opt: [no-new-privileges:true]
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       - CF_API_TOKEN={{ cloudflare_dns_token }}
       # Only terraria is live. valheim/minecraft are archived — publishing their A
