@@ -1035,6 +1035,67 @@ def test_verify_unparseable_is_down(tmp_path, monkeypatch):
     assert "unparseable" in msg
 
 
+# ── wg-easy Pi-peer backup pull (daily host cron writes state.json; we alert on it) ──
+
+
+def _pi_peers_state(tmp_path, monkeypatch, ts, ok, msg):
+    p = tmp_path / "state.json"
+    p.write_text(
+        '{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg)
+    )
+    monkeypatch.setattr(check, "PI_PEERS_STATE", str(p))
+
+
+def test_pi_peers_fresh_success_is_up(tmp_path, monkeypatch):
+    _pi_peers_state(
+        tmp_path,
+        monkeypatch,
+        time.time() - 3600,
+        True,
+        "pulled 3 peer file(s) from daniel-pi",
+    )
+    ok, msg = check.check_pi_peers()
+    assert ok
+    assert "3 peer file(s)" in msg
+
+
+def test_pi_peers_failure_is_down(tmp_path, monkeypatch):
+    # A failed pull (Pi unreachable / SSH break) must page — the whole point, since the no-delete
+    # pull otherwise leaves stale-but-present keys that keep Backup Freshness green.
+    _pi_peers_state(
+        tmp_path, monkeypatch, time.time(), False, "rsync exit 255: connection refused"
+    )
+    ok, msg = check.check_pi_peers()
+    assert not ok
+    assert "rsync exit 255" in msg
+
+
+def test_pi_peers_stale_success_is_down(tmp_path, monkeypatch):
+    # Daily cadence; a 4d-old success means the pull cron stopped running.
+    _pi_peers_state(
+        tmp_path, monkeypatch, time.time() - 4 * 86400, True, "pulled 2 peer file(s)"
+    )
+    ok, msg = check.check_pi_peers()
+    assert not ok
+    assert "ago" in msg
+
+
+def test_pi_peers_missing_state_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "PI_PEERS_STATE", str(tmp_path / "nope.json"))
+    ok, msg = check.check_pi_peers()
+    assert not ok
+    assert "never ran" in msg
+
+
+def test_pi_peers_unparseable_is_down(tmp_path, monkeypatch):
+    p = tmp_path / "state.json"
+    p.write_text("not json")
+    monkeypatch.setattr(check, "PI_PEERS_STATE", str(p))
+    ok, msg = check.check_pi_peers()
+    assert not ok
+    assert "unparseable" in msg
+
+
 def _maintenance_state(tmp_path, monkeypatch, ts, ok, msg):
     p = tmp_path / "maint.json"
     p.write_text(

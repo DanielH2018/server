@@ -89,6 +89,17 @@ RENOVATE_MAX_AGE_S = float(_env("RENOVATE_MAX_AGE_MIN", "2160")) * 60
 RESTORE_DRILL_STATE = _env("RESTORE_DRILL_STATE", "/restore-drill/state.json")
 RESTORE_DRILL_MAX_AGE_S = float(_env("RESTORE_DRILL_MAX_AGE_D", "35")) * 86400
 
+# Daily wg-easy Pi-peer backup pull: the wg-easy role's daniel-server host cron
+# (wg-easy-pull-pi-peers.sh) rsyncs the Pi's WireGuard peer configs (wg0.conf/wg0.json — private
+# keys a redeploy can't rebuild) into Kopia scope and writes {"ts": epoch, "ok": bool, "msg": str}.
+# It's the only Pi state pulled into the backup AND was the only backup cron with no watchdog: the
+# pull uses no --delete, so a broken pull (Pi unreachable, SSH/sudo break) leaves the last-good copy
+# in place and Backup Freshness stays green while the peers silently go stale. We alert on a FAILED
+# pull, staleness (cron broken / never ran), or a missing/corrupt state file. 2.5d staleness = two
+# missed daily runs + slack (same as the daily b2-usage / maintenance crons).
+PI_PEERS_STATE = _env("PI_PEERS_STATE", "/pi-peers/state.json")
+PI_PEERS_MAX_AGE_S = float(_env("PI_PEERS_MAX_AGE_D", "2.5")) * 86400
+
 # Weekly kopia snapshot verify: the host cron (kopia-verify.sh, kopia role) writes
 # {"ts": epoch, "ok": bool, "msg": str} after each run; we alert on a FAILED verify
 # (detected bit-rot / an unreadable blob — failures the old `| logger` cron silently
@@ -1018,6 +1029,36 @@ def check_verify():
     return verify(state, age_s, VERIFY_MAX_AGE_S)
 
 
+def pi_peers(state, age_s, max_age_s):
+    """Pure: did the last wg-easy Pi-peer backup pull succeed, and recently? (ok, msg).
+
+    Same state-file idiom as verify/restore_drill. The pull is the only path that carries the Pi's
+    un-rebuildable WireGuard peer keys into Kopia scope; because it never --deletes, a silently
+    failing pull leaves stale-but-present files that keep Backup Freshness green — so a FAILED or
+    STALE pull is the signal that the offsite copy of those keys has quietly stopped refreshing.
+    """
+    if not state.get("ok"):
+        return False, "last Pi-peer backup pull FAILED: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return False, "last successful Pi-peer pull %.1fd ago (max %.1fd)" % (
+            age_s / 86400,
+            max_age_s / 86400,
+        )
+    return True, "Pi-peer pull ok %.1fd ago: %s" % (age_s / 86400, state.get("msg", ""))
+
+
+def check_pi_peers():
+    try:
+        with open(PI_PEERS_STATE) as fh:
+            state = json.load(fh)
+        age_s = time.time() - float(state.get("ts", 0))
+    except FileNotFoundError:
+        return False, "no Pi-peer backup state (pull never ran?)"
+    except ValueError, TypeError:
+        return False, "Pi-peer backup state unparseable"
+    return pi_peers(state, age_s, PI_PEERS_MAX_AGE_S)
+
+
 def b2_usage(state, age_s, max_age_s, cap_bytes, max_pct):
     """Pure: billable B2 bytes vs the plan cap, plus probe-failure/staleness.
 
@@ -1477,6 +1518,7 @@ CHECKS = [
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
     ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
     ("verify", _env("KUMA_PUSH_VERIFY", ""), check_verify),
+    ("pi_peers", _env("KUMA_PUSH_PI_PEERS", ""), check_pi_peers),
     ("maintenance", _env("KUMA_PUSH_MAINTENANCE", ""), check_maintenance),
     ("b2_usage", _env("KUMA_PUSH_B2", ""), check_b2_usage),
     ("b2_trend", _env("KUMA_PUSH_B2_TREND", ""), check_b2_trend),

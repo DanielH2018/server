@@ -30,6 +30,21 @@
     group: "{{ sys_user }}"
     mode: "0700"
 
+- name: Create the Pi wg-easy peer-backup monitor state directory
+  tags: [cron]
+  when: inventory_hostname == 'daniel-server'
+  # monitor-bridge bind-mounts this read-only (/pi-peers) and its `pi_peers` check alerts on a
+  # failed/stale/missing pull — created here (not by Docker) so it's sys_user-writable for the cron.
+  # Deploy wg-easy BEFORE monitor-bridge on a fresh host, else Docker auto-creates the mount source
+  # root-owned; this file task chowns it back on the next wg-easy deploy either way.
+  ansible.builtin.file:
+    path: /var/lib/wg-easy-pi-peers
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
 - name: Deploy the Pi wg-easy peer-backup pull script
   tags: [cron]
   when: inventory_hostname == 'daniel-server'

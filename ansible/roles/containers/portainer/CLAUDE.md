@@ -5,7 +5,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 ## At a glance
 - **Images:** `portainer/portainer-ce` (version-pinned `-alpine`, Renovate-managed — stateful
   BoltDB under `./data`, so no watchtower) + `lscr.io/linuxserver/socket-proxy:latest` (sidecar)
-- **Hosts:** **daniel-server AND daniel-pi** (defined in both host_vars files)
+- **Host:** daniel-server (the role is host-agnostic, but only server's `containers_list` has it — see Notable)
 - **Port:** 9000 · **URL:** `portainer.<domain>`
 - **Authelia:** yes on server, **no on the Pi** (Pi is LAN-only)
 - **Networks:** proxy

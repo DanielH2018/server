@@ -252,7 +252,10 @@ def cmd_audit(args) -> int:
         if not url:
             print("--push set but SECRET_ROTATION_KUMA env missing", file=sys.stderr)
             return 2
-        _push(url, ok=(n_over == 0 and not missing), msg=summary)
+        # `stale` too (a registry row for a since-removed secret), so the daily Kuma push and
+        # the CI `--check` gate below agree on registry drift — otherwise a `stale`-only drift
+        # fails CI while the monitor stays green.
+        _push(url, ok=(n_over == 0 and not missing and not stale), msg=summary)
     # --check: a CI/PR gate that the registry is in sync with secrets.yml. Fails ONLY on drift,
     # NOT on overdue (a time-based runtime state the daily Kuma push owns — blocking an unrelated
     # commit on a due-for-rotation secret would be wrong). Read-only (no decrypt), CI-safe.

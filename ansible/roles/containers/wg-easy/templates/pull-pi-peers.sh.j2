@@ -8,16 +8,53 @@
 # unreadable to the ubuntu SSH user. BatchMode=yes so a broken key/host-key fails fast rather than
 # hanging the cron. No --delete: a peer removed on the Pi lingering in the backup is harmless, and
 # --delete would wipe the offsite copy if the source were ever momentarily empty/unreadable.
-set -euo pipefail
+#
+# Reporting: writes {"ts","ok","msg"} to STATE; monitor-bridge's `pi_peers` check reads it (read-only
+# bind mount) and pushes the "WG Pi Peer Backup" Kuma monitor every cycle — a FAILED pull (Pi
+# unreachable, SSH/sudo break, partial sync), staleness (cron broken / never ran), or a missing state
+# file all alert. Without this the pull is the ONE backup cron with no watchdog: because it uses no
+# --delete, a silently-failing pull leaves the last-good copy in place and the nightly Kopia snapshot
+# of the surrounding tree still succeeds, so Backup Freshness stays GREEN while the un-rebuildable
+# peer keys quietly stop refreshing — discovered only during an SD-card-death restore. `set -uo` (not
+# -euo) so the rsync exit code is captured and reported, not swallowed by an early exit (verify.sh idiom).
+set -uo pipefail
 
 SRC="{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}@{{ hostvars['daniel-pi'].ansible_host }}:/home/{{ sys_user }}/server/containers/wg-easy/config/"
 DEST="/home/{{ sys_user }}/server/containers/wg-easy/pi-peers/"
+STATE=/var/lib/wg-easy-pi-peers/state.json
+
+write_state() { # ok msg
+  # jq, not printf: a stray backslash/control char in the rsync-derived msg would make a hand-built
+  # string invalid JSON -> monitor-bridge reads "state unparseable" (false DOWN). Matches the kopia crons.
+  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
+    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE"
+  logger -t wg-easy-pull-pi-peers "$1: $2"
+}
 
 mkdir -p "$DEST"
 # --chmod=D700 forces the dest dir to 0700 (rsync -a would otherwise stamp it with the Pi source
 # dir's own 0755+mtime, churning the role's `mode: "0700"` file task every deploy). File perms are
-# still preserved from the source (0600/0640), so the WireGuard keys stay locked down.
-rsync -a --chmod=D700 \
+# still preserved from the source (0600/0640), so the WireGuard keys stay locked down. Capture the
+# rsync's OWN exit code (no `| logger` to mask it) + output for the state msg.
+OUT=$(rsync -a --chmod=D700 \
   --rsync-path='sudo rsync' \
   -e 'ssh -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new' \
-  "$SRC" "$DEST"
+  "$SRC" "$DEST" 2>&1)
+RC=$?
+
+if [ "$RC" -ne 0 ]; then
+  SUMMARY=$(printf '%s' "$OUT" | tail -1 | tr -d '"' | tr '\n' ' ')
+  write_state false "rsync exit $RC: ${SUMMARY:-see wg-easy-pull-pi-peers syslog}"
+  exit 1
+fi
+
+# File-count floor: an rsync of a momentarily empty/unreadable source can still exit 0 and, with no
+# --delete, leaves a stale-but-present pi-peers/ that keeps Backup Freshness green. The Pi's wg-easy
+# config always holds at least wg0.conf + wg0.json (the private keys), so require >= 2 files.
+FILES=$(find "$DEST" -type f | wc -l | tr -d '[:space:]')
+if [ "${FILES:-0}" -lt 2 ]; then
+  write_state false "pulled but only ${FILES:-0} file(s) in pi-peers (expected >=2: wg0.conf + wg0.json) — Pi source empty/unreadable?"
+  exit 1
+fi
+
+write_state true "pulled $FILES peer file(s) from daniel-pi"

@@ -16,7 +16,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **twenty-nine checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **thirty checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the nine
@@ -87,6 +87,14 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   - **Backup Restore Drill** (reads `/restore-drill/state.json`, written monthly by the kopia
     role's `kopia-restore-drill.sh` host cron — `down` on a failed drill, >35 d staleness, or a
     missing/corrupt state file. Same state-file pattern as the GitOps monitors.)
+  - **WG Pi Peer Backup** (reads `/pi-peers/state.json`, written daily by the **wg-easy** role's
+    daniel-server `wg-easy-pull-pi-peers.sh` host cron — `down` on a FAILED pull (Pi unreachable /
+    SSH-sudo break / file-count floor tripped), >2.5 d staleness, or a missing/corrupt state file.
+    The pull rsyncs the Pi's un-rebuildable WireGuard peer keys into Kopia scope; it uses **no
+    `--delete`**, so a silently-failing pull leaves the last-good copy in place and the nightly
+    snapshot still succeeds — **Backup Freshness stays green while the peers go stale**. This is the
+    dedicated watchdog for that gap (added 2026-07-05 — it was the one backup cron with no monitor).
+    Same state-file idiom as Backup Verify / Restore Drill; pure `pi_peers()` is unit-tested.)
   - **Backup Verify** (reads `/verify/state.json`, written weekly by the kopia role's
     `kopia-verify.sh` host cron — `down` on a FAILED `kopia snapshot verify` (detected
     bit-rot / an unreadable blob), >10 d staleness, or a missing/corrupt state file. The
@@ -237,7 +245,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,pi,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,verify,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,pi,pi_peers,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,verify,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -252,6 +260,11 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   `/var/lib/renovate-notify:/renovate-state:ro` (written by the `renovate_notify` daily timer).
   Deploy `renovate_notify` before `monitor-bridge` for the same reason — so the dir is created
   and owned by the deploy user, not root.
+- Likewise, the **WG Pi Peer Backup** monitor bind-mounts `/var/lib/wg-easy-pi-peers:/pi-peers:ro`
+  (written by the `wg-easy` role's daniel-server pull cron). The `wg-easy` role creates that dir
+  sys_user-owned (and its file task re-chowns it if Docker got there first), so deploy `wg-easy`
+  before `monitor-bridge` on a fresh host. Kopia's own state dirs (`/var/lib/kopia-*`) are created
+  by the kopia role, which `monitor-bridge` already depends on.
 - Thresholds are env-tunable in the compose template (`BACKUP_MAX_AGE_H`, `DISK_MAX_PCT`,
   `CERT_MIN_DAYS`, `MEM_MAX_PCT`, `RESTART_WINDOW`/`RESTART_MAX`, `OOM_WINDOW`,
   `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`/`CPU_CONSECUTIVE`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`,
@@ -265,7 +278,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the twenty-nine push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the thirty push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI

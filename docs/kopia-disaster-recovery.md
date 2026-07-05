@@ -107,7 +107,12 @@ Scrape-Targets monitor flags this if you miss it.
 - **Maintenance ownership** stays with the original identity (`root@kopia`) recorded in the
   repo; after a fresh-host reconnect the entrypoint re-asserts it (`kopia maintenance set
   --owner me ...`) so blob GC resumes.
-- **The Pi is intentionally not in Kopia scope** — its services are stateless / Ansible-
-  reconstructible (wg-easy keys re-template, clients re-enroll).
+- **The Pi is (almost) intentionally not in Kopia scope** — its services are stateless /
+  Ansible-reconstructible. **The one exception (2026-07-04): the Pi's wg-easy peer configs**
+  (`wg0.conf`/`wg0.json` — WireGuard private keys a redeploy can NOT rebuild). A daily
+  daniel-server cron (`wg-easy-pull-pi-peers.sh`, wg-easy role) pulls them into
+  `containers/wg-easy/pi-peers/` — inside the snapshot source — so an SD-card death doesn't force
+  re-enrolling every VPN client. On recovery, restore that dir back to the Pi. Everything else on
+  the Pi still re-templates on a redeploy.
 - Test the read path any time without a real disaster: `kopia snapshot list` + a scratch
   `kopia restore <obj> /tmp/dr-test` from a host with the SOPS key.

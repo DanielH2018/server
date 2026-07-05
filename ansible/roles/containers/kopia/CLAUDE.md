@@ -68,6 +68,10 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
   the 00:00 snapshot) that `sudo rsync`-pulls the Pi's `containers/wg-easy/config/` into
   `containers/wg-easy/pi-peers/` on the server — inside this snapshot source — so an SD-card death
   doesn't force re-enrolling every VPN client. Everything else on the Pi stays out of scope by design.
+  The pull is **watchdogged** (2026-07-05): it writes `/var/lib/wg-easy-pi-peers/state.json` →
+  monitor-bridge's `pi_peers` check → the **WG Pi Peer Backup** Kuma monitor (a no-`--delete` pull
+  otherwise keeps Backup Freshness green while the peers silently go stale). `wg-easy` is also in the
+  restore-drill rotation (sentinel `pi-peers/wg0.json`) so the pulled keys are proven restorable.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Entry/ignore: `templates/entrypoint.sh.j2`, `kopiaignore.j2`

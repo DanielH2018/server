@@ -15,6 +15,7 @@ WireGuard VPN with the wg-easy web admin, for remote access into the homelab.
 - **WireGuard UDP port:** `udp_port` per host — **51820 on daniel-server, 51822 on daniel-pi**
   (both sit behind one public IP/router, so the listen ports must differ).
 - **Networks:** monitoring (server) / proxy (Pi)
+- **Depends on:** traefik, authelia (`meta/deps.yml`)
 - **Config in:** each `ansible/inventory/host_vars/<host>.yml` → `containers_list`
 
 ## Notable
@@ -41,6 +42,15 @@ WireGuard VPN with the wg-easy web admin, for remote access into the homelab.
   the Pi's NOPASSWD `sudo rsync` is required to read them) into `containers/wg-easy/pi-peers/` on the
   server — inside Kopia's snapshot source. Tasks are gated on `inventory_hostname == 'daniel-server'`
   (NOT `containers_list` — a tagged deploy filters that). See the kopia role's CLAUDE.md.
+- **The pull is watchdogged (2026-07-05).** It uses **no `--delete`**, so a silently-failing pull
+  (Pi unreachable, SSH/sudo break) leaves the last-good copy in place and the nightly Kopia snapshot
+  still succeeds — **Backup Freshness would stay green while the un-rebuildable peer keys go stale**.
+  So the script captures the rsync exit code + a `>=2` file-count floor and writes
+  `/var/lib/wg-easy-pi-peers/state.json` (created sys_user-owned by this role's cron tasks);
+  monitor-bridge bind-mounts it `:ro` and its `pi_peers` check pushes the **WG Pi Peer Backup** Kuma
+  monitor — `down` on a failed pull, >2.5 d staleness, or missing state. The pulled `pi-peers/wg0.json`
+  is also the monthly restore-drill sentinel for `wg-easy`. Deploy `wg-easy` before `monitor-bridge`
+  on a fresh host so the state dir exists sys_user-owned. Push token `monitor_bridge_pi_peers_push_token`.
 - **Built-in healthcheck:** the `wg-easy/wg-easy` image ships its own Docker `HEALTHCHECK`
   (`wg show | grep -q interface` — verifies the WireGuard *interface* is up, not just the
   UI), so there is no compose `healthcheck:` block. `autoheal` and uptime-kuma rely on this

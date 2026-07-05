@@ -24,7 +24,7 @@ set -uo pipefail
 
 # Stateful services worth proving restorable, each paired with a service-SPECIFIC state
 # file that must reappear after restore. All verified present in the snapshot.
-SVCS=(authelia traefik n8n karakeep freshrss grafana pihole home-assistant zigbee2mqtt)
+SVCS=(authelia traefik n8n karakeep freshrss grafana pihole home-assistant zigbee2mqtt wg-easy)
 declare -A SENTINEL=(
   [authelia]=config/configuration.yml
   [traefik]=data/acme.json
@@ -33,6 +33,11 @@ declare -A SENTINEL=(
   [freshrss]=config/www/freshrss/data/config.php
   [grafana]=data/grafana.db
   [pihole]=data/etc-pihole/pihole.toml
+  # wg-easy's sentinel is the PULLED Pi peer config (pi-peers/, filled by the daniel-server
+  # wg-easy-pull-pi-peers cron) — the one un-rebuildable secret backup, so prove IT restores,
+  # not just the server's own re-templatable config. wg0.json is a real JSON file, so it skips
+  # the SQLite-magic branch below like home-assistant's/zigbee2mqtt's JSON sentinels.
+  [wg-easy]=pi-peers/wg0.json
   # HA's .storage registry (device/entity/Z2M pairings) is the highest-value, hardest-to-
   # rebuild tree in the homelab — prove it restores, not just that it's backed up. The
   # registry is a JSON file (not *.db), so it skips the SQLite-magic branch below.

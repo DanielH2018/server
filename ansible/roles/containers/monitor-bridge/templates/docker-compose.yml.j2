@@ -101,6 +101,13 @@ services:
       - RESTORE_DRILL_STATE=/restore-drill/state.json
       - RESTORE_DRILL_MAX_AGE_D=35
       - KUMA_PUSH_RESTORE_DRILL={{ kopia_restore_drill_push_token }}
+      # Daily wg-easy Pi-peer backup pull: the wg-easy role's daniel-server host cron writes
+      # state.json after rsyncing the Pi's un-rebuildable WireGuard peer keys into Kopia scope. The
+      # pull uses no --delete, so a broken pull keeps Backup Freshness green while the peers go stale
+      # — this is the watchdog. Alert on a failed pull, >2.5d staleness, or a missing/corrupt file.
+      - PI_PEERS_STATE=/pi-peers/state.json
+      - PI_PEERS_MAX_AGE_D=2.5
+      - KUMA_PUSH_PI_PEERS={{ monitor_bridge_pi_peers_push_token }}
       # Weekly kopia snapshot verify: the host cron (kopia role) writes state.json; we
       # alert on a FAILED verify (bit-rot / unreadable blob the old `| logger` cron
       # swallowed), >10d staleness, or a missing/corrupt file. The verify tier of the
@@ -222,6 +229,7 @@ services:
       - /var/lib/gitops-deploy:/gitops-state:ro
       - /var/lib/renovate-notify:/renovate-state:ro
       - /var/lib/kopia-restore-drill:/restore-drill:ro
+      - /var/lib/wg-easy-pi-peers:/pi-peers:ro
       - /var/lib/kopia-verify:/verify:ro
       - /var/lib/kopia-maintenance:/maintenance:ro
       - /var/lib/kopia-b2-usage:/b2-usage:ro
@@ -261,6 +269,11 @@ services:
       {{ kuma('gitops-deploy-alive', monitor_type='push', name='GitOps Deploy — Alive', interval=600, max_retries=0, push_token=monitor_bridge_gitops_alive_push_token) }}
       {{ kuma('gitops-deploy-status', monitor_type='push', name='GitOps Deploy — Status', interval=600, max_retries=0, push_token=monitor_bridge_gitops_status_push_token) }}
       {{ kuma('kopia-restore-drill', monitor_type='push', name='Backup Restore Drill', interval=600, max_retries=0, push_token=kopia_restore_drill_push_token) }}
+      {# WG Pi Peer Backup: check_pi_peers reads /pi-peers/state.json (written by the wg-easy role's
+         daily daniel-server pull cron) — the ONLY backup cron that was previously unwatched; the
+         no-delete pull keeps Backup Freshness green even when the un-rebuildable peer keys stop
+         refreshing, so this is the dedicated failed/stale/missing watchdog for it. -#}
+      {{ kuma('wg-easy-pi-peers', monitor_type='push', name='WG Pi Peer Backup', interval=600, max_retries=0, push_token=monitor_bridge_pi_peers_push_token) }}
       {{ kuma('kopia-verify', monitor_type='push', name='Backup Verify', interval=600, max_retries=0, push_token=monitor_bridge_verify_push_token) }}
       {{ kuma('kopia-maintenance', monitor_type='push', name='Backup Maintenance', interval=600, max_retries=0, push_token=monitor_bridge_maintenance_push_token) }}
       {{ kuma('monitor-bridge-b2', monitor_type='push', name='B2 Storage Usage', interval=600, max_retries=0, push_token=monitor_bridge_b2_push_token) }}
