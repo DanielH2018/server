@@ -5,8 +5,8 @@
 
 {# Wake window: the ramp runs 45 minutes total — it starts at sensor.bedroom_wake_start (alarm - 15
    min) and ends 30 min AFTER the alarm, so the alarm sits 1/3 of the way through (NOT centered). The
-   window length (45 below) and the two internal knees in wake_brightness (15 = the alarm, 30 =
-   alarm+15) define the 3-segment curve; the 15-min PRE-alarm lead MUST stay equal to the 15-min
+   window length (45 below) and the two internal knees in wake_brightness (15 = the alarm, 35 =
+   alarm+20) define the 3-segment curve; the 15-min PRE-alarm lead MUST stay equal to the 15-min
    offset baked into templates.yaml's bedroom_wake_start state expression — change the pre-alarm lead
    in both places together. The caller passes minutes since wake_start (or a negative sentinel when
    unavailable). #}
@@ -28,28 +28,30 @@
 {{ 45 <= e < 90 }}
 {%- endmacro -%}
 
-{# Wake-ramp brightness %: a gentle-then-steep sunrise that keeps climbing to FULL brightness so the
-   hand-off to Adaptive Lighting at window end is seamless (no sudden jump — the old curve stopped at
-   40% then AL popped the room to its daytime target). Three segments: 1% at window start (e=0) ->
-   a mid point at the alarm (e=15) -> a knee at alarm+15 (e=30) -> 100% at alarm+30 (e=45). Sleep-aware:
-   a short night (0 < sleep_min < 360) scales the early mid/knee down to wake you more gently, but
-   STILL reaches 100% by e=45 — ending below full would reintroduce the AL hand-off pop, which is
-   exactly what ramping to 100% removes. Re-evaluated once a minute by bedroom_wake_ramp, so a single
-   call returns the level for the current elapsed. #}
+{# Wake-ramp brightness %: a long gentle dawn that STAYS DIM through the alarm and the ~20 min after,
+   then climbs steeply to FULL brightness in the last stretch so the hand-off to Adaptive Lighting at
+   window end is still seamless (no sudden jump — the old curve stopped at 40% then AL popped the room
+   to its daytime target). Three segments: 1% at window start (e=0) -> a low mid at the alarm (e=15)
+   -> a still-dim knee at alarm+20 (e=35) -> 100% at alarm+30 (e=45). The steep run is deliberately
+   pushed into the final 10 min: you get a soft, non-jarring alarm (~8%) and it only gets bright once
+   you should already be up. Sleep-aware: a short night (0 < sleep_min < 360) scales the mid/knee down
+   to wake you even more gently, but STILL reaches 100% by e=45 — ending below full would reintroduce
+   the AL hand-off pop, which is exactly what ramping to 100% removes. Re-evaluated once a minute by
+   bedroom_wake_ramp, so a single call returns the level for the current elapsed. #}
 {%- macro wake_brightness(elapsed_min, sleep_min) -%}
 {%- set e = elapsed_min | float(0) -%}
 {%- set s = sleep_min | float(0) -%}
 {%- set short = (0 < s < 360) -%}
 {%- set start = 1 -%}
-{%- set mid = 7 if short else 12 -%}
-{%- set knee = 24 if short else 40 -%}
+{%- set mid = 5 if short else 8 -%}
+{%- set knee = 14 if short else 20 -%}
 {%- set full = 100 -%}
 {%- if e <= 15 -%}
 {{ (start + (mid - start) * e / 15) | round(0) | int }}
-{%- elif e <= 30 -%}
-{{ (mid + (knee - mid) * (e - 15) / 15) | round(0) | int }}
+{%- elif e <= 35 -%}
+{{ (mid + (knee - mid) * (e - 15) / 20) | round(0) | int }}
 {%- else -%}
-{{ (knee + (full - knee) * (e - 30) / 15) | round(0) | int }}
+{{ (knee + (full - knee) * (e - 35) / 10) | round(0) | int }}
 {%- endif -%}
 {%- endmacro -%}
 

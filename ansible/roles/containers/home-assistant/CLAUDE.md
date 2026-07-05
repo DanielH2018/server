@@ -214,14 +214,17 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   it still protects the B3-tap nightlight and any other direct caller of the dispatcher.
   The morning wake ramp is the next exception. It spans a **45-min window** (`alarm−15` →
   `alarm+30`, so the alarm sits 1/3 in — NOT centered), with a gentle-then-steep three-segment curve:
-  1% at window start → ~12% at the alarm → 40% at `alarm+15` (the knee) → **100% at `alarm+30`**.
-  Ramping all the way to 100% by window end is deliberate (since 2026-06-29): the old curve stopped
-  at 40% then `bedroom_wake_ramp`'s hand-off to Adaptive Lighting popped the room to its full daytime
+  1% at window start → ~8% at the alarm → 20% at `alarm+20` (the knee) → **100% at `alarm+30`**.
+  The curve deliberately STAYS DIM through the alarm and the ~20 min after (a soft, non-jarring
+  wake), then does the steep climb in the final 10 min (reshaped 2026-07-05 after "too bright at the
+  alarm" — the old curve hit ~12%/40% earlier and reached 40% by `alarm+15`). Ramping all the way to
+  100% by window end is still deliberate (since 2026-06-29): the old pre-100% curve stopped at 40%
+  then `bedroom_wake_ramp`'s hand-off to Adaptive Lighting popped the room to its full daytime
   target all at once. Now AL takes over at 100%, so the hand-off has no upward jump — it just keeps
   getting gradually brighter. `sensor.bedroom_wake_start` = alarm−15 min (the window open edge;
   dynamic — see the dynamic-wake bullet below). Delegated entirely to `script.bedroom_apply_wake`
   (fixed warm 2200K, no `adaptive_lighting.apply` turn-on flash), driven per-minute by
-  `automation.bedroom_wake_ramp`. Short night (<6h) scales the EARLY mid/knee down to ~7/24% but still
+  `automation.bedroom_wake_ramp`. Short night (<6h) scales the mid/knee down to ~5/14% but still
   reaches 100% by `alarm+30` (else the hand-off pop returns on short nights — see the sleep-quality
   bullet). Pressing button 4 mid-window resumes the ramp from the current point (`bedroom_apply_wake`
   recomputes the right frame for now()). When no morning alarm is set the sensor is `unavailable` →
@@ -439,8 +442,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 - **Sleep-quality-aware morning (since 2026-06-18).** The wake ramp adapts to how you slept: the
   `wake_brightness` macro (`custom_templates/lighting.jinja`, the tested source of the ramp —
   `bedroom_apply_natural` now delegates the morning exception to `bedroom_apply_wake`) scales the
-  EARLY mid/knee down on a short night — knee **24%** (mid 7%) at `alarm+15` when
-  `sensor.pixel_9_pro_sleep_duration` is `0 < x < 360` min (under 6h), else knee **40%** (mid 12%);
+  mid/knee down on a short night — knee **14%** (mid 5%) at `alarm+20` when
+  `sensor.pixel_9_pro_sleep_duration` is `0 < x < 360` min (under 6h), else knee **20%** (mid 8%);
   unknown/0 falls back to the normal curve. The final segment STILL climbs to **100% by `alarm+30`**
   on a short night — only the early (most-asleep) part softens; ending below 100% would reintroduce
   the AL hand-off pop the ramp-to-100 design removes. `bedroom_morning_reset`'s alarm+present block

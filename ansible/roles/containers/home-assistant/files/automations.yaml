@@ -275,15 +275,29 @@
     - service: script.bedroom_blip
 
 # Absence OFF: room empty for 5 minutes → lights off (ignores the override — leaving always allows off).
+# EXCEPT during the morning wake ramp: the FP300 drops a motionless sleeper (same reason the air
+# purifier has bedroom_purifier_hold), so a 5-min "empty" mid-ramp is a false absence that would cut
+# the wake lights out from under you. Guarded on the wake window ONLY (not sleep_mode) so overnight
+# nightlight behaviour is untouched; a genuine leave-during-window is still caught by bedroom_away
+# (person not-home) or the next real presence off-edge once you're up.
 - id: bedroom_absence_off
   alias: Bedroom absence off
-  description: Turn off the bedroom lights after the room has been empty for 5 minutes.
+  description: Turn off the bedroom lights after the room has been empty for 5 minutes, except during the morning wake ramp (the FP300 can drop a motionless sleeper).
   mode: single
   trigger:
     - platform: state
       entity_id: binary_sensor.aqara_fp300_presence
       to: "off"
       for: "00:05:00"
+  condition:
+    # Not inside the wake window. in_wake_window is the tested macro; the sensor read stays in the
+    # caller (mirrors bedroom_purifier_hold / bedroom_apply_natural). Outside the window this is true.
+    - condition: template
+      value_template: >-
+        {% set ws = states('sensor.bedroom_wake_start') %}
+        {% from 'lighting.jinja' import in_wake_window %}
+        {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool %}
+        {{ not in_window }}
   action:
     - service: script.bedroom_lights_set
       data:
