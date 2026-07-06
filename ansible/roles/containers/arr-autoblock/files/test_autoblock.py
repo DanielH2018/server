@@ -51,6 +51,11 @@ def test_dangerous_empty_is_false():
     assert autoblock.dangerous([], PATTERNS) is False
 
 
+def test_dangerous_matches_mixed_case_pattern():
+    # patterns aren't pre-lowered by the caller here -> dangerous() must lower them itself
+    assert autoblock.dangerous(["found a Sample file"], ["SaMpLe"]) is True
+
+
 # --- is_candidate ------------------------------------------------------------
 def test_candidate_hard_bad_status_error():
     assert autoblock.is_candidate(_item(status="error"), PATTERNS) is True
@@ -131,6 +136,39 @@ def test_within_cap_all_act():
     to_act, held = autoblock.eligible(set("abc"), streaks, grace=3, max_actions=5)
     assert to_act == sorted("abc")
     assert held == []
+
+
+def test_exactly_at_cap_all_act():
+    # 5 grace-met items, cap 5 -> all 5 act, none held (pins the strict `>` boundary)
+    streaks = {k: 3 for k in "abcde"}
+    to_act, held = autoblock.eligible(set("abcde"), streaks, grace=3, max_actions=5)
+    assert to_act == sorted("abcde")
+    assert held == []
+
+
+# --- item_key ------------------------------------------------------------------
+def test_item_key_stable_across_repeated_calls():
+    it = _item(download_id="hash123", qid=7)
+    assert autoblock.item_key("Sonarr", it) == autoblock.item_key("Sonarr", it)
+
+
+def test_item_key_uses_download_id_when_present():
+    it = _item(download_id="hash123", qid=7)
+    assert autoblock.item_key("Sonarr", it) == "Sonarr:hash123"
+
+
+def test_item_key_falls_back_to_queue_id_without_download_id():
+    it = _item(download_id=None, qid=7)
+    assert autoblock.item_key("Sonarr", it) == "Sonarr:7"
+
+
+def test_item_key_distinct_across_apps_for_same_id():
+    # regression test for the cross-app streak-key collision fix
+    sonarr_item = _item(download_id=None, qid=7)
+    radarr_item = _item(download_id=None, qid=7)
+    assert autoblock.item_key("Sonarr", sonarr_item) != autoblock.item_key(
+        "Radarr", radarr_item
+    )
 
 
 # --- search_command ----------------------------------------------------------

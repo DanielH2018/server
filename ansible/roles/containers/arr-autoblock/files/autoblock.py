@@ -75,7 +75,8 @@ def item_messages(item):
 def dangerous(messages, patterns):
     """True if any statusMessage matches a known-dangerous substring (case-insensitive)."""
     low = [m.lower() for m in messages]
-    return any(p in m for p in patterns for m in low)
+    pats = [p.lower() for p in patterns]
+    return any(p in m for p in pats for m in low)
 
 
 def is_candidate(item, patterns):
@@ -95,9 +96,14 @@ def is_candidate(item, patterns):
     return False
 
 
-def item_key(item):
-    """Stable identity across cycles: the download-client hash, falling back to the queue id."""
-    return item.get("downloadId") or ("id:%s" % item.get("id"))
+def item_key(app_name, item):
+    """Stable identity across cycles: the download-client hash, falling back to the queue id.
+
+    App-scoped (prefixed with `app_name`) because Sonarr and Radarr number their queue `id`s
+    independently — without the prefix, two unrelated items (one per app) that both lack
+    `downloadId` would collide on the same fallback key and share a streak.
+    """
+    return "%s:%s" % (app_name, item.get("downloadId") or item.get("id"))
 
 
 def item_reason(item):
@@ -236,7 +242,7 @@ def run_once(streaks):
         data = _request(url, headers={"X-Api-Key": key})
         for item in data.get("records", []):
             if is_candidate(item, DANGEROUS_MSG_PATTERNS):
-                candidates[item_key(item)] = (app_name, base, key, item)
+                candidates[item_key(app_name, item)] = (app_name, base, key, item)
 
     to_act, held = eligible(
         set(candidates), streaks, GRACE_CYCLES, MAX_ACTIONS_PER_CYCLE
