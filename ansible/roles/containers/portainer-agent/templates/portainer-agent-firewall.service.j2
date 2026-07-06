@@ -2,6 +2,9 @@
 Description=Lock the Portainer agent port to the server in the DOCKER-USER chain
 After=docker.service
 Requires=docker.service
+# PartOf: re-run this oneshot when docker.service restarts (e.g. a docker-ce upgrade), not just on
+# reboot — Docker rebuilds DOCKER-USER on restart, so the lock must be re-asserted afterward.
+PartOf=docker.service
 
 [Service]
 Type=oneshot

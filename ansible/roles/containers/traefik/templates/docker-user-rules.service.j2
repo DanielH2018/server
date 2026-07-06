@@ -2,6 +2,9 @@
 Description=Restrict ports 80/443 to Cloudflare IPs in DOCKER-USER chain
 After=docker.service
 Requires=docker.service
+# PartOf: re-run this oneshot when docker.service restarts (e.g. a docker-ce upgrade), not just on
+# reboot — Docker rebuilds DOCKER-USER on restart, so the origin lock must be re-asserted afterward.
+PartOf=docker.service
 
 [Service]
 Type=oneshot

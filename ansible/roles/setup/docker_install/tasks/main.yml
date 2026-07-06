@@ -178,4 +178,5 @@
     - terraria   # isolation net: Terraria <-> Traefik only (raw-TCP game port bypasses the CrowdSec chain; keeps a game-protocol exploit off the shared apps net)
     - ups        # isolation net: NUT <-> Home Assistant only (UPS state, kept off apps)
     - mqtt       # isolation net: Mosquitto <-> Zigbee2MQTT <-> Home Assistant only (MQTT off apps)
+    - portainer-agent  # isolation net (daniel-pi): single-member — keeps the root-equivalent Docker-socket agent off the Pi's shared proxy bridge (reached only via its host-published :9001)
   become: true

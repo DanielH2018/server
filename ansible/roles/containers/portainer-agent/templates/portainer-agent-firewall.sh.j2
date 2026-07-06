@@ -6,6 +6,12 @@
 # After=docker.service); idempotent — deletes its own prior rules before re-adding, safe to re-run.
 
 PORT={{ container_item.port }}
+# ALLOW is the server's PRIMARY-NIC /32 (enp88s0). Deliberately tighter than traefik's 10.0.0.0/8:
+# the whole point of this lock is "only the server", so we do NOT widen to the LAN /24. Caveat:
+# daniel-server is dual-homed (enp88s0 primary + wlo1 backup). If ethernet ever fails over to wlo1,
+# egress NATs to the wlo1 IP, misses this /32, and the Pi's Portainer environment silently goes
+# down. Accepted (routing egresses via enp88s0 today; a NIC failover is already a degraded state) —
+# if that link matters, add the wlo1 /32 as a second RETURN rather than widening to /24.
 ALLOW={{ hostvars['daniel-server'].server_ip }}
 
 # Remove any previously-added rules for this port (ignore if absent)
@@ -13,6 +19,11 @@ iptables -D DOCKER-USER -p tcp --dport "$PORT" -s "$ALLOW" -j RETURN 2>/dev/null
 iptables -D DOCKER-USER -p tcp --dport "$PORT" -j DROP 2>/dev/null || true
 
 # Allow the server (RETURN = stop DOCKER-USER processing, continue in FORWARD), drop everyone else.
-# The DROP is APPENDED so it always sits after the RETURN, regardless of insert order.
+# The DROP is APPENDED so it sits after our allow-RETURN. This is only effective because this host's
+# Docker seeds NO terminal unconditional `-j RETURN` in DOCKER-USER — VERIFIED LIVE 2026-07-06: the
+# chain holds exactly these two rules, so the DROP is reachable (a homelab-review skeptic flagged the
+# classic "Docker appends a default RETURN that preempts an appended DROP" gotcha; it does NOT apply
+# to this Docker/nftables build). If a future Docker major DOES add a preempting terminal RETURN, the
+# DROP silently becomes a no-op — re-check `iptables -nvL DOCKER-USER` after a Docker engine upgrade.
 iptables -I DOCKER-USER -p tcp --dport "$PORT" -s "$ALLOW" -j RETURN
 iptables -A DOCKER-USER -p tcp --dport "$PORT" -j DROP

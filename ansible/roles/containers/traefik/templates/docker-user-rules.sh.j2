@@ -16,6 +16,12 @@ iptables -I DOCKER-USER -p tcp --dport 80 -s {{ ip }} -j RETURN
 iptables -I DOCKER-USER -p tcp --dport 443 -s {{ ip }} -j RETURN
 {% endfor %}
 
-# Drop everything else on 80/443 (appended after all RETURN rules)
+# Drop everything else on 80/443 (appended after all RETURN rules). This only holds because this
+# host's Docker seeds NO terminal unconditional `-j RETURN` in DOCKER-USER — corroborated 2026-07-06
+# (8 days of Traefik access logs: 2041 unique client IPs, ZERO non-Cloudflare/non-LAN hits on 80/443
+# despite heavy scanner interest; and the daniel-pi twin's live chain is exactly its 2 script rules).
+# If a future Docker major adds a preempting terminal RETURN, these DROPs silently no-op and the
+# origin is reachable direct (Cloudflare/CrowdSec bypass) — re-check `iptables -nvL DOCKER-USER` after
+# a Docker engine upgrade.
 iptables -A DOCKER-USER -p tcp --dport 80 -j DROP
 iptables -A DOCKER-USER -p tcp --dport 443 -j DROP

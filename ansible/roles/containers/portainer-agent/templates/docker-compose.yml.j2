@@ -45,6 +45,10 @@ services:
       # root-equivalent agent; add it only if you want Portainer's volume file browser for the Pi.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     {{ service_networks() }}
+    # `nc -z` opens+closes a bare TCP connection against the agent's TLS listener, which logs a
+    # benign `http: TLS handshake error from [::1]:… EOF` every interval (~1440/day). Expected, not a
+    # fault — don't switch to `wget`: a real TLS GET to / returns 403 (no AGENT_SECRET) and would
+    # false-fail the healthcheck. So the TCP-liveness probe is the correct choice despite the noise.
     {{ healthcheck('nc -z localhost 9001 || exit 1', interval=(container_healthcheck_interval | default(none))) }}
     labels:
       # Disable watchtower update — pinned + Renovate-managed (tracks the Portainer server version).

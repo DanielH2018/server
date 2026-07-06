@@ -199,3 +199,29 @@ def test_shellcheck_py_pins_in_lockstep() -> None:
         f"shellcheck-py pins drifted: prek.toml rev v{rev.group(1)} vs "
         f"pyproject.toml =={pin.group(1)} — bump both together (they render/lint the same shell)."
     )
+
+
+def test_portainer_server_agent_pins_in_lockstep() -> None:
+    """portainer-ce (server) and portainer/agent (Pi) image tags must match.
+
+    The Portainer Agent API version tracks the Portainer server it connects to, so the two images
+    MUST run the same version (portainer-agent/CLAUDE.md). They live in separate compose templates
+    on separate hosts (daniel-server GitOps-auto-deployed vs daniel-pi manual-only), so a Renovate
+    packageRule groups them into one no-automerge PR; this asserts the coupling actually held, so a
+    skew (which silently breaks the Pi's Portainer environment with no alert) fails CI at commit time.
+    """
+    server = (
+        _REPO / "ansible/roles/containers/portainer/templates/docker-compose.yml.j2"
+    ).read_text()
+    agent = (
+        _REPO
+        / "ansible/roles/containers/portainer-agent/templates/docker-compose.yml.j2"
+    ).read_text()
+    s = re.search(r"image:\s*portainer/portainer-ce:(\S+)", server)
+    a = re.search(r"image:\s*portainer/agent:(\S+)", agent)
+    assert s, "portainer/portainer-ce image pin not found in the portainer role"
+    assert a, "portainer/agent image pin not found in the portainer-agent role"
+    assert s.group(1) == a.group(1), (
+        f"portainer pins drifted: portainer-ce {s.group(1)} vs agent {a.group(1)} — bump both "
+        f"together (the agent API version must match the server it connects to)."
+    )

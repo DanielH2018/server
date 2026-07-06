@@ -56,6 +56,12 @@ services:
               url='http://' ~ hostvars['daniel-pi'].server_ip ~ ':8080') }}
       {{ kuma('daniel-pi-wg-easy', name='Daniel Pi WG Easy', monitor_type='http',
               url='http://' ~ hostvars['daniel-pi'].server_ip ~ ':51821') }}
+      # Pi Portainer agent: root-equivalent Docker-socket agent on :9001. TLS + AGENT_SECRET
+      # gated, so a `port` (raw TCP) probe — an http probe would hit the TLS listener + 403 and
+      # false-fail (mirrors the agent's own `nc -z localhost 9001` healthcheck). The server-run
+      # Kuma probe egresses as the server IP, which the Pi's DOCKER-USER :9001 allow permits.
+      {{ kuma('daniel-pi-portainer-agent', name='Daniel Pi Portainer Agent', monitor_type='port',
+              hostname=hostvars['daniel-pi'].server_ip, port=9001) }}
       # Pi SD-card health: SD cards have no SMART, so a dying card only announces
       # itself via ext4 errors. The Pi's pi-sd-health.sh cron (optimize_pi role)
       # pushes errors_count every 5 min through the LAN-bypassed push API

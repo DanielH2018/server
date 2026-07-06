@@ -154,6 +154,13 @@
       "matchPackageNames": ["maxlerebourg/crowdsec-bouncer-traefik-plugin"],
       "groupName": "crowdsec bouncer plugin (manual — needs traefik redeploy)",
       "automerge": false
+    },
+    {
+      "description": "Portainer server (portainer/portainer-ce, daniel-server, GitOps-auto-deployed) and the Pi agent (portainer/agent, daniel-pi, MANUAL deploy only) MUST run the same version — the agent API tracks the Portainer server it connects to (portainer-agent/CLAUDE.md). One group = one PR touching both, and NO automerge: the Pi has no GitOps path, so if this auto-merged the server would deploy ahead while the un-deployed Pi agent silently lags (broken environment, no alert — Pi-only changes phantom-succeed). Merge, then redeploy the Pi by hand: deploy.yml --tags portainer-agent -e target=daniel-pi. scripts/test_renovate_managers.py asserts the two tags stay in lockstep. Overrides the non-major automerge group.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["portainer/portainer-ce", "portainer/agent"],
+      "groupName": "portainer (lockstep: server portainer-ce + Pi agent)",
+      "automerge": false
     }
   ]
 }
