@@ -29,9 +29,11 @@ services:
       - PYTHONDONTWRITEBYTECODE=1
       - INTERVAL=300
       - KUMA_URL=http://uptime-kuma:3001
-      # Ships DRY_RUN=true: report "WOULD blocklist …" to Discord, mutate NOTHING. Flip to
-      # false (edit here + redeploy) after observing a week — see the design's Rollout section.
-      - DRY_RUN=true
+      # LIVE (DRY_RUN=false): actually blocklist+remove and re-search eligible items. Flipped
+      # from the initial dry-run at the operator's direction on 2026-07-06, after adding the
+      # client-communication-error exclusion. Set back to true (edit here + redeploy) to return
+      # to report-only. See the design's Rollout section.
+      - DRY_RUN=false
       # Only act on an item that stays a candidate GRACE_CYCLES cycles running (~15 min at 300s),
       # so a transient blip self-clears first. Same hysteresis idiom as monitor-bridge CPU_CONSECUTIVE.
       - GRACE_CYCLES=3
