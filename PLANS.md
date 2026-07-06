@@ -6,8 +6,6 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- Try to connect 'daniel-server' Portainer to Pi?
-
 _Recently cleared (2026-06-29): adopted `ruff format` + a `ruff format --check` prek hook
 (config kept in `pyproject.toml [tool.ruff]`, not a separate `ruff.toml`). "Organize tests in
 scripts/" closed as already-satisfied — every `scripts/` test sits beside the module it tests
