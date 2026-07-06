@@ -1,0 +1,56 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+---
+
+services:
+  portainer-agent:
+    # Portainer Agent — lets the SERVER's Portainer manage THIS host (daniel-pi) as a remote
+    # environment. Pinned to match the server's portainer-ce 2.43.0 (the agent API version should
+    # track the Portainer server it connects to); Renovate-managed, watchtower off — same tier as
+    # portainer itself. Bumps to the agent MUST move in lockstep with the server's portainer image.
+    image: portainer/agent:2.43.0-alpine
+    container_name: portainer-agent
+    restart: unless-stopped
+    # Runs as root to reach the root-owned docker.sock; needs NO Linux caps beyond that — verified
+    # live 2026-07-06 that it starts + serves the Agent API on :9001 under cap_drop ALL (root's
+    # owner-match on the socket doesn't need DAC_OVERRIDE). The privileged Docker ops all happen in
+    # the daemon, not the agent, so the agent stays capless.
+    #
+    # ACCEPTED TRADE-OFF: the agent mounts the Docker socket = root-equivalent on the Pi (same class
+    # as the server's Portainer socket-proxy). Contained by: AGENT_SECRET auth + TLS on :9001, the
+    # port bound to the Pi LAN IP only, a DOCKER-USER host rule that lets ONLY the server reach
+    # :9001, and the socket mounted :ro. See this role's CLAUDE.md.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      # Agent API (TLS). Bound to the Pi's LAN IP (server_ip resolves to the Pi's own IP on a
+      # `-e target=daniel-pi` deploy — see wg-easy), never 0.0.0.0, so it's off the WireGuard
+      # tunnel / other interfaces. Reachability is further locked to the server by the
+      # portainer-agent-firewall DOCKER-USER rule (Docker publishes bypass ufw, so the lock can't
+      # live in ufw). Host and container port are both 9001 (the agent's fixed port).
+      - "{{ server_ip }}:{{ container_item.port }}:9001"
+    environment:
+      # Shared secret gating the Agent API (SOPS). Entered ONCE in the server's Portainer when
+      # adding this environment (Environments -> Add -> Agent). No `$` in the value, so no
+      # Compose interpolation risk.
+      - AGENT_SECRET={{ portainer_agent_secret }}
+    volumes:
+      # The agent proxies Docker API calls to the daemon; :ro is enough — API send/recv isn't a
+      # file write, and the repo's socket-proxies already POST through :ro-mounted sockets. Volume
+      # browsing (mounting /var/lib/docker/volumes) is intentionally OMITTED — least privilege on a
+      # root-equivalent agent; add it only if you want Portainer's volume file browser for the Pi.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    {{ service_networks() }}
+    {{ healthcheck('nc -z localhost 9001 || exit 1', interval=(container_healthcheck_interval | default(none))) }}
+    labels:
+      # Disable watchtower update — pinned + Renovate-managed (tracks the Portainer server version).
+      - "com.centurylinklabs.watchtower.enable=false"
+      {{ kuma(container_item.name) }}
+    # Resource caps — the agent idles ~20-40MB; keep it tight on the memory-constrained Pi.
+    {{ resources('0.50', '128M', '0.05', '32M') }}
+
+{{ external_networks() }}

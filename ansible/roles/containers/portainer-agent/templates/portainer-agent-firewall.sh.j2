@@ -1,0 +1,18 @@
+#!/bin/bash
+# Restrict the published Portainer agent port to the SERVER only, in the DOCKER-USER chain.
+# Docker-published ports BYPASS ufw (Docker inserts its own FORWARD rules ahead of ufw), so a
+# host-firewall lock for a *container* port must live here, not in ufw. Mirrors traefik's
+# docker-user-rules mechanism. Runs after Docker so the chain exists (see the systemd unit's
+# After=docker.service); idempotent — deletes its own prior rules before re-adding, safe to re-run.
+
+PORT={{ container_item.port }}
+ALLOW={{ hostvars['daniel-server'].server_ip }}
+
+# Remove any previously-added rules for this port (ignore if absent)
+iptables -D DOCKER-USER -p tcp --dport "$PORT" -s "$ALLOW" -j RETURN 2>/dev/null || true
+iptables -D DOCKER-USER -p tcp --dport "$PORT" -j DROP 2>/dev/null || true
+
+# Allow the server (RETURN = stop DOCKER-USER processing, continue in FORWARD), drop everyone else.
+# The DROP is APPENDED so it always sits after the RETURN, regardless of insert order.
+iptables -I DOCKER-USER -p tcp --dport "$PORT" -s "$ALLOW" -j RETURN
+iptables -A DOCKER-USER -p tcp --dport "$PORT" -j DROP

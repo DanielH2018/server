@@ -50,6 +50,14 @@ containers_list:
     use_authelia: false
     networks:
       - proxy
+  # Portainer Agent — lets the SERVER's Portainer manage this Pi as a remote environment.
+  # Not Traefik-routed: publishes :9001 (TLS) bound to the Pi LAN IP, locked to the server by a
+  # DOCKER-USER rule; auth via AGENT_SECRET (SOPS). See the portainer-agent role CLAUDE.md.
+  - name: portainer-agent
+    port: 9001
+    use_authelia: false
+    networks:
+      - proxy
   - name: autoheal
     use_authelia: false
     networks:

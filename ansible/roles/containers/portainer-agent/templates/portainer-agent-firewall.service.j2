@@ -1,0 +1,12 @@
+[Unit]
+Description=Lock the Portainer agent port to the server in the DOCKER-USER chain
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash /etc/portainer-agent-firewall.sh
+
+[Install]
+WantedBy=multi-user.target

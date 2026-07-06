@@ -1,0 +1,60 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}"
+
+# --- Host firewall: lock the published agent port to the server only (DOCKER-USER) ---
+# Docker-published ports bypass ufw, so the LAN lock for :9001 lives in DOCKER-USER, applied by a
+# systemd oneshot (After=docker.service) so it survives reboots + Docker restarts. Mirrors traefik's
+# docker-user-rules mechanism. Applied BEFORE the container deploy so there is no window where
+# :9001 is open to the whole LAN. See this role's CLAUDE.md.
+- name: Deploy the Portainer-agent DOCKER-USER firewall script
+  tags: [config]
+  ansible.builtin.template:
+    src: portainer-agent-firewall.sh.j2
+    dest: /etc/portainer-agent-firewall.sh
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+  register: portainer_agent_fw_script
+
+- name: Deploy the Portainer-agent firewall systemd service
+  tags: [config]
+  ansible.builtin.template:
+    src: portainer-agent-firewall.service.j2
+    dest: /etc/systemd/system/portainer-agent-firewall.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: portainer_agent_fw_service
+
+- name: Enable the Portainer-agent firewall service
+  tags: [config]
+  ansible.builtin.systemd:
+    name: portainer-agent-firewall
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+- name: Re-apply the firewall rules if the script or unit changed
+  tags: [config]
+  ansible.builtin.systemd:
+    name: portainer-agent-firewall
+    state: restarted
+    daemon_reload: true
+  become: true
+  when: portainer_agent_fw_script.changed or portainer_agent_fw_service.changed
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
