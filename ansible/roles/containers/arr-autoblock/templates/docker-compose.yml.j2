@@ -41,6 +41,11 @@ services:
       # warning-status items are auto-blocked ONLY when a statusMessage matches one of these
       # (the 2026-07-01 poisoned-.exe class); generic transient warnings stay notify-only.
       - DANGEROUS_MSG_PATTERNS=executable file with extension,potentially dangerous,sample
+      # Bare trackedDownloadStatus=error items are NOT auto-blocked when a statusMessage or
+      # errorMessage matches one of these — a transient download-client-communication problem
+      # (qBittorrent/VPN outage) that would otherwise wrongly blocklist a legit in-progress
+      # download. importBlocked/importFailed + malware-signature items are still auto-blocked.
+      - CLIENT_ERROR_PATTERNS=unable to communicate,not responding,failed to connect,connection refused,download client is unavailable
       # Same URLs/keys as monitor-bridge's read-only check_arr_queue; reached over `media`.
       - SONARR_URL=http://sonarr:8989
       - SONARR_API_KEY={{ sonarr_api_key }}

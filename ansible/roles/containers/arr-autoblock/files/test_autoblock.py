@@ -9,6 +9,13 @@ autoblock = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(autoblock)
 
 PATTERNS = ["executable file with extension", "potentially dangerous", "sample"]
+CLIENT_PATTERNS = [
+    "unable to communicate",
+    "not responding",
+    "failed to connect",
+    "connection refused",
+    "download client is unavailable",
+]
 
 
 def _item(
@@ -20,6 +27,7 @@ def _item(
     series_id=None,
     movie_id=None,
     title="Some.Release",
+    error_message=None,
 ):
     it = {
         "trackedDownloadStatus": status,
@@ -34,6 +42,8 @@ def _item(
         it["seriesId"] = series_id
     if movie_id is not None:
         it["movieId"] = movie_id
+    if error_message is not None:
+        it["errorMessage"] = error_message
     return it
 
 
@@ -103,6 +113,50 @@ def test_import_pending_with_messages_is_not_a_candidate():
         )
         is False
     )
+
+
+# --- client_comm_error / bare-error exclusion --------------------------------
+def test_client_comm_error_helper_checks_both_sources():
+    in_status = _item(
+        status="error", messages=["Unable to communicate with qBittorrent."]
+    )
+    assert autoblock.client_comm_error(in_status, CLIENT_PATTERNS) is True
+
+    in_error_message = _item(
+        status="error", error_message="qBittorrent is not responding"
+    )
+    assert autoblock.client_comm_error(in_error_message, CLIENT_PATTERNS) is True
+
+
+def test_error_with_client_comm_statusmessage_excluded():
+    item = _item(status="error", messages=["Unable to communicate with qBittorrent."])
+    assert autoblock.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is False
+
+
+def test_error_with_client_comm_in_errormessage_excluded():
+    item = _item(status="error", error_message="qBittorrent is not responding")
+    assert autoblock.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is False
+
+
+def test_error_without_client_message_still_candidate():
+    item = _item(status="error", messages=["Waiting to import"])
+    assert autoblock.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
+
+
+def test_import_blocked_with_client_message_still_candidate():
+    # import-step failure wins; the exclusion only guards a bare `error` status
+    item = _item(
+        state="importBlocked", messages=["Unable to communicate with qBittorrent."]
+    )
+    assert autoblock.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
+
+
+def test_malware_signature_still_candidate_with_client_patterns():
+    item = _item(
+        status="warning",
+        messages=["Caution: Found executable file with extension: '.exe'"],
+    )
+    assert autoblock.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
 
 
 # --- eligible (grace + blast radius) -----------------------------------------

@@ -62,7 +62,7 @@ An item is a candidate when it is **hard-bad** OR **malware-signature** (decisio
 
 ```text
 candidate if:
-    trackedDownloadStatus == "error"
+    (trackedDownloadStatus == "error" AND NOT client-communication error)
  OR trackedDownloadState  in ("importBlocked", "importFailed")
  OR (trackedDownloadStatus == "warning" AND any statusMessage matches DANGEROUS_MSG_PATTERNS)
 ```
@@ -78,6 +78,17 @@ candidate if:
   - `sample`
   This is what makes the actor actually cover the incident that motivated the monitor. A `warning`
   with no dangerous message is **left alone** (monitor-bridge still pages it for a human).
+
+- **Client-communication-error exclusion** (added 2026-07-06, before the live flip): a *bare*
+  `trackedDownloadStatus == "error"` is **excluded** when a `statusMessage` or the queue record's
+  top-level `errorMessage` matches `CLIENT_ERROR_PATTERNS` (case-insensitive substring, env-tunable;
+  default `unable to communicate` / `not responding` / `failed to connect` / `connection refused` /
+  `download client is unavailable`). This stops a transient qBittorrent/VPN outage — which flips
+  legitimate in-progress downloads to `error` — from wrongly blocklisting them. The exclusion applies
+  **only** to the bare-`error` bucket: `importBlocked`/`importFailed` (the download completed, so a
+  client outage can't produce them) and malware-signature items are still candidates. `stalled`/
+  no-seeders is deliberately **not** excluded — a dead-seeded release is a legitimate
+  blocklist-and-re-search case.
 
 Everything the predicate does not match — transient `warning`, plain `importPending` with messages —
 stays **notify-only** via the existing monitor. Failing to match fails **safe** (no action).

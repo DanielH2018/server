@@ -53,6 +53,15 @@ DANGEROUS_MSG_PATTERNS = [
     ).split(",")
     if p.strip()
 ]
+CLIENT_ERROR_PATTERNS = [
+    p.strip().lower()
+    for p in _env(
+        "CLIENT_ERROR_PATTERNS",
+        "unable to communicate,not responding,failed to connect,"
+        "connection refused,download client is unavailable",
+    ).split(",")
+    if p.strip()
+]
 
 HARD_BAD_STATUS = frozenset({"error"})
 HARD_BAD_STATE = frozenset({"importBlocked", "importFailed"})
@@ -85,20 +94,43 @@ def dangerous(messages, patterns):
     return any(p in m for p in pats for m in low)
 
 
-def is_candidate(item, patterns):
-    """A queue item is an auto-block candidate when it is hard-bad OR malware-signature.
+def all_error_text(item):
+    """statusMessage strings PLUS the queue record's top-level errorMessage — download-client
+    communication errors often land in errorMessage rather than statusMessages."""
+    out = item_messages(item)
+    err = item.get("errorMessage")
+    if err:
+        out = out + [err]
+    return out
 
-    hard-bad: trackedDownloadStatus == 'error' OR trackedDownloadState in importBlocked/importFailed.
-    malware-signature: trackedDownloadStatus == 'warning' AND a statusMessage matches `patterns`.
-    Everything else (transient warning, plain importPending) is left for the human via the
-    read-only Arr Queue Warnings monitor — failing to match fails SAFE (no action).
+
+def client_comm_error(item, patterns):
+    """True if the item's error text matches a transient download-client-communication problem
+    (client unreachable / not responding), as opposed to a bad release. Reuses the same
+    case-insensitive substring matcher as dangerous()."""
+    return dangerous(all_error_text(item), patterns)
+
+
+def is_candidate(item, patterns, client_error_patterns=()):
+    """A queue item is an auto-block candidate when it is hard-bad OR malware-signature,
+    EXCEPT a bare trackedDownloadStatus=='error' that looks like a transient download-client
+    communication problem (client/VPN unreachable) — blocklisting that would wrongly nuke a
+    legitimate in-progress download.
+
+    - malware-signature (warning + dangerous statusMessage) -> candidate.
+    - import-step failure (trackedDownloadState in importBlocked/importFailed) -> candidate
+      (the download completed; a client outage can't produce these, so no exclusion).
+    - bare error (trackedDownloadStatus=='error') -> candidate UNLESS client_comm_error matches.
+    - everything else (transient warning, plain importPending) -> not a candidate (fails SAFE).
     """
     status = item.get("trackedDownloadStatus")
     state = item.get("trackedDownloadState")
-    if status in HARD_BAD_STATUS or state in HARD_BAD_STATE:
-        return True
     if status == "warning" and dangerous(item_messages(item), patterns):
         return True
+    if state in HARD_BAD_STATE:
+        return True
+    if status in HARD_BAD_STATUS:
+        return not client_comm_error(item, client_error_patterns)
     return False
 
 
@@ -255,7 +287,7 @@ def run_once(streaks):
     for app_name, base, url, key in configured:
         data = _request(url, headers={"X-Api-Key": key})
         for item in data.get("records", []):
-            if is_candidate(item, DANGEROUS_MSG_PATTERNS):
+            if is_candidate(item, DANGEROUS_MSG_PATTERNS, CLIENT_ERROR_PATTERNS):
                 candidates[item_key(app_name, item)] = (app_name, base, key, item)
 
     to_act, held = eligible(
