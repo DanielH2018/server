@@ -1,0 +1,28 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}"
+
+- name: Deploy arr-autoblock script
+  tags: [config]
+  ansible.builtin.copy:
+    src: autoblock.py
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/autoblock.py"
+    mode: "0644"
+  register: arr_autoblock_script
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+  vars:
+    # autoblock.py is bind-mounted; the loop reads it once at startup, so only a recreate
+    # applies a code change. Without this a script-only edit leaves recreate: auto and the
+    # new logic silently never deploys. See common/CLAUDE.md.
+    common_config_changed: "{{ arr_autoblock_script is changed }}"

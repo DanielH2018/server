@@ -243,6 +243,14 @@ containers_list:
       - kopia
       - apps
       - media
+  - name: arr-autoblock
+    port: false
+    use_authelia: false
+    networks:
+      # media: reach sonarr:8989 + radarr:7878 (queue read + blocklist/search writes).
+      # monitoring: push to uptime-kuma:3001 AND egress to the *arr Discord webhook. No web UI.
+      - media
+      - monitoring
   # Organization: Miscellaneous (apps network)
   - name: healthchecks
     port: 8000

@@ -208,6 +208,7 @@ WATCHTOWER_AUTOUPDATE: frozenset = frozenset(
         # code, trivially rolled back; a base-image patch bump is exactly what we want
         # applied unattended.
         "monitor-bridge",
+        "arr-autoblock",
         "terraria-stats",
         "terraria",
         # influxdb:2.9 — non-critical SMART-history time-series store (scrutiny role);

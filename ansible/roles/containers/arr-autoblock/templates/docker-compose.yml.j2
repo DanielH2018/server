@@ -1,0 +1,63 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+---
+
+services:
+  arr-autoblock:
+    image: python:3.14-alpine
+    container_name: arr-autoblock
+    user: "{{ puid }}:{{ pgid }}"
+    restart: unless-stopped
+    # Pure stdlib Python over HTTP — no caps, no writable rootfs needed.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command: ["python", "/app/autoblock.py"]
+    # autoblock.py touches /tmp/heartbeat after every completed cycle; stale mtime means the
+    # loop HUNG (death already exits the container) -> unhealthy -> autoheal restart. 1000s
+    # ≈ 3×INTERVAL + slack. Kuma push silence on "Arr Auto-Block" remains the alerting path.
+    {{ healthcheck("[\"CMD\", \"python3\", \"-c\", \"import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/heartbeat').st_mtime<1000 else 1)\"]") }}
+    environment:
+      - TZ={{ tz }}
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - INTERVAL=300
+      - KUMA_URL=http://uptime-kuma:3001
+      # Ships DRY_RUN=true: report "WOULD blocklist …" to Discord, mutate NOTHING. Flip to
+      # false (edit here + redeploy) after observing a week — see the design's Rollout section.
+      - DRY_RUN=true
+      # Only act on an item that stays a candidate GRACE_CYCLES cycles running (~15 min at 300s),
+      # so a transient blip self-clears first. Same hysteresis idiom as monitor-bridge CPU_CONSECUTIVE.
+      - GRACE_CYCLES=3
+      # Blast-radius valve: if more than this many items are eligible in one cycle, act on NONE and
+      # alert — a mass-flag is a systemic cause (disk full, poisoned batch) where auto-nuking is wrong.
+      - MAX_ACTIONS_PER_CYCLE=5
+      # warning-status items are auto-blocked ONLY when a statusMessage matches one of these
+      # (the 2026-07-01 poisoned-.exe class); generic transient warnings stay notify-only.
+      - DANGEROUS_MSG_PATTERNS=executable file with extension,potentially dangerous,sample
+      # Same URLs/keys as monitor-bridge's read-only check_arr_queue; reached over `media`.
+      - SONARR_URL=http://sonarr:8989
+      - SONARR_API_KEY={{ sonarr_api_key }}
+      - RADARR_URL=http://radarr:7878
+      - RADARR_API_KEY={{ radarr_api_key }}
+      # Direct Discord POST for the action log (the same channel the *arr post health to). urllib
+      # POSTs 403 silently via Cloudflare 1010 without a User-Agent — autoblock.py sets one.
+      - ARR_DISCORD_WEBHOOK_URL={{ arr_discord_webhook_url }}
+      - KUMA_PUSH_ARR_AUTOBLOCK={{ arr_autoblock_push_token }}
+    volumes:
+      - ./autoblock.py:/app/autoblock.py:ro
+    {{ service_networks() }}
+    labels:
+      {# Single push monitor: it pushes health every cycle (up/down), so its heartbeat is also
+         the dead-man for the container. max_retries=0 like every bridge push monitor. -#}
+      {{ kuma('arr-autoblock', monitor_type='push', name='Arr Auto-Block', interval=600, max_retries=0, push_token=arr_autoblock_push_token) }}
+    # Resource caps for blast-radius containment; tune from cAdvisor/Grafana.
+    {{ resources('0.10', '64M', '0.02', '16M') }}
+
+{{ external_networks() }}

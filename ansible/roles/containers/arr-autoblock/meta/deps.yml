@@ -1,0 +1,8 @@
+---
+# Deploy after the services it reads/writes/pushes to, so they're up first. Sequencing is
+# computed by the toposort filter in deploy.yml from these names (matching containers_list
+# entries), not by Ansible meta dependencies.
+role_deps:
+  - sonarr
+  - radarr
+  - uptime-kuma
