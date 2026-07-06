@@ -5,9 +5,9 @@
 ---
 
 services:
-  arr-autoblock:
+  autofix-bridge:
     image: python:3.14-alpine
-    container_name: arr-autoblock
+    container_name: autofix-bridge
     user: "{{ puid }}:{{ pgid }}"
     restart: unless-stopped
     # Pure stdlib Python over HTTP — no caps, no writable rootfs needed.
@@ -18,8 +18,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    command: ["python", "/app/autoblock.py"]
-    # autoblock.py touches /tmp/heartbeat after every completed cycle; stale mtime means the
+    command: ["python", "/app/autofix.py"]
+    # autofix.py touches /tmp/heartbeat after every completed cycle; stale mtime means the
     # loop HUNG (death already exits the container) -> unhealthy -> autoheal restart. 1000s
     # ≈ 3×INTERVAL + slack. Kuma push silence on "Arr Auto-Block" remains the alerting path.
     {{ healthcheck("[\"CMD\", \"python3\", \"-c\", \"import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/heartbeat').st_mtime<1000 else 1)\"]") }}
@@ -54,11 +54,11 @@ services:
       - RADARR_URL=http://radarr:7878
       - RADARR_API_KEY={{ radarr_api_key }}
       # Direct Discord POST for the action log (the same channel the *arr post health to). urllib
-      # POSTs 403 silently via Cloudflare 1010 without a User-Agent — autoblock.py sets one.
+      # POSTs 403 silently via Cloudflare 1010 without a User-Agent — autofix.py sets one.
       - ARR_DISCORD_WEBHOOK_URL={{ arr_discord_webhook_url }}
       - KUMA_PUSH_ARR_AUTOBLOCK={{ arr_autoblock_push_token }}
     volumes:
-      - ./autoblock.py:/app/autoblock.py:ro
+      - ./autofix.py:/app/autofix.py:ro
     {{ service_networks() }}
     labels:
       {# Single push monitor: it pushes health every cycle (up/down), so its heartbeat is also

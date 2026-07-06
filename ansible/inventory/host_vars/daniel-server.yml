@@ -243,7 +243,7 @@ containers_list:
       - kopia
       - apps
       - media
-  - name: arr-autoblock
+  - name: autofix-bridge
     port: false
     use_authelia: false
     networks:

@@ -22,7 +22,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
 testpaths = [                        # single source of truth for WHAT runs; excludes vendored
   "ansible/tests",                   # ansible/collections/** third-party tests
   "ansible/roles/containers/monitor-bridge/files",
-  "ansible/roles/containers/arr-autoblock/files",
+  "ansible/roles/containers/autofix-bridge/files",
   "ansible/roles/containers/terraria-stats/files",
   ".claude/hooks",
   ".claude/scripts",                 # audit-permissions report/suggester logic tests

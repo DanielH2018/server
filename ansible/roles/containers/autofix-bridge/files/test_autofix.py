@@ -3,10 +3,10 @@ import pathlib
 
 # Load the bind-mounted script directly (not a package), mirroring monitor-bridge/test_check.py.
 _SPEC = importlib.util.spec_from_file_location(
-    "autoblock", pathlib.Path(__file__).with_name("autoblock.py")
+    "autofix", pathlib.Path(__file__).with_name("autofix.py")
 )
-autoblock = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(autoblock)
+autofix = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(autofix)
 
 PATTERNS = ["executable file with extension", "potentially dangerous", "sample"]
 CLIENT_PATTERNS = [
@@ -50,39 +50,39 @@ def _item(
 # --- dangerous ---------------------------------------------------------------
 def test_dangerous_matches_executable_message_case_insensitively():
     msgs = ["Caution: Found EXECUTABLE File With Extension: '.exe'"]
-    assert autoblock.dangerous(msgs, PATTERNS) is True
+    assert autofix.dangerous(msgs, PATTERNS) is True
 
 
 def test_dangerous_ignores_benign_message():
-    assert autoblock.dangerous(["Waiting to import"], PATTERNS) is False
+    assert autofix.dangerous(["Waiting to import"], PATTERNS) is False
 
 
 def test_dangerous_empty_is_false():
-    assert autoblock.dangerous([], PATTERNS) is False
+    assert autofix.dangerous([], PATTERNS) is False
 
 
 def test_dangerous_matches_mixed_case_pattern():
     # patterns aren't pre-lowered by the caller here -> dangerous() must lower them itself
-    assert autoblock.dangerous(["found a Sample file"], ["SaMpLe"]) is True
+    assert autofix.dangerous(["found a Sample file"], ["SaMpLe"]) is True
 
 
 # --- is_candidate ------------------------------------------------------------
 def test_candidate_hard_bad_status_error():
-    assert autoblock.is_candidate(_item(status="error"), PATTERNS) is True
+    assert autofix.is_candidate(_item(status="error"), PATTERNS) is True
 
 
 def test_candidate_hard_bad_state_import_blocked():
-    assert autoblock.is_candidate(_item(state="importBlocked"), PATTERNS) is True
+    assert autofix.is_candidate(_item(state="importBlocked"), PATTERNS) is True
 
 
 def test_candidate_hard_bad_state_import_failed():
-    assert autoblock.is_candidate(_item(state="importFailed"), PATTERNS) is True
+    assert autofix.is_candidate(_item(state="importFailed"), PATTERNS) is True
 
 
 def test_plain_warning_is_not_a_candidate():
     # warning with no dangerous message -> notify-only (monitor-bridge pages it), not auto-blocked
     assert (
-        autoblock.is_candidate(
+        autofix.is_candidate(
             _item(status="warning", messages=["Waiting to import"]), PATTERNS
         )
         is False
@@ -92,7 +92,7 @@ def test_plain_warning_is_not_a_candidate():
 def test_warning_with_dangerous_message_is_candidate():
     # the 2026-07-01 poisoned-.exe class
     assert (
-        autoblock.is_candidate(
+        autofix.is_candidate(
             _item(
                 status="warning",
                 messages=["Caution: Found executable file with extension: '.exe'"],
@@ -105,7 +105,7 @@ def test_warning_with_dangerous_message_is_candidate():
 
 def test_import_pending_with_messages_is_not_a_candidate():
     assert (
-        autoblock.is_candidate(
+        autofix.is_candidate(
             _item(
                 state="importPending", messages=["Not an upgrade for existing episode"]
             ),
@@ -120,27 +120,27 @@ def test_client_comm_error_helper_checks_both_sources():
     in_status = _item(
         status="error", messages=["Unable to communicate with qBittorrent."]
     )
-    assert autoblock.client_comm_error(in_status, CLIENT_PATTERNS) is True
+    assert autofix.client_comm_error(in_status, CLIENT_PATTERNS) is True
 
     in_error_message = _item(
         status="error", error_message="qBittorrent is not responding"
     )
-    assert autoblock.client_comm_error(in_error_message, CLIENT_PATTERNS) is True
+    assert autofix.client_comm_error(in_error_message, CLIENT_PATTERNS) is True
 
 
 def test_error_with_client_comm_statusmessage_excluded():
     item = _item(status="error", messages=["Unable to communicate with qBittorrent."])
-    assert autoblock.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is False
+    assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is False
 
 
 def test_error_with_client_comm_in_errormessage_excluded():
     item = _item(status="error", error_message="qBittorrent is not responding")
-    assert autoblock.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is False
+    assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is False
 
 
 def test_error_without_client_message_still_candidate():
     item = _item(status="error", messages=["Waiting to import"])
-    assert autoblock.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
+    assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
 
 
 def test_import_blocked_with_client_message_still_candidate():
@@ -148,7 +148,7 @@ def test_import_blocked_with_client_message_still_candidate():
     item = _item(
         state="importBlocked", messages=["Unable to communicate with qBittorrent."]
     )
-    assert autoblock.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
+    assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
 
 
 def test_malware_signature_still_candidate_with_client_patterns():
@@ -156,38 +156,38 @@ def test_malware_signature_still_candidate_with_client_patterns():
         status="warning",
         messages=["Caution: Found executable file with extension: '.exe'"],
     )
-    assert autoblock.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
+    assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
 
 
 # --- eligible (grace + blast radius) -----------------------------------------
 def test_not_eligible_until_grace_met():
     streaks = {}
-    assert autoblock.eligible({"a"}, streaks, grace=3, max_actions=5) == ([], [])
-    assert autoblock.eligible({"a"}, streaks, grace=3, max_actions=5) == ([], [])
-    assert autoblock.eligible({"a"}, streaks, grace=3, max_actions=5) == (["a"], [])
+    assert autofix.eligible({"a"}, streaks, grace=3, max_actions=5) == ([], [])
+    assert autofix.eligible({"a"}, streaks, grace=3, max_actions=5) == ([], [])
+    assert autofix.eligible({"a"}, streaks, grace=3, max_actions=5) == (["a"], [])
     assert streaks["a"] == 3
 
 
 def test_streak_resets_when_candidate_clears():
     streaks = {}
-    autoblock.eligible({"a"}, streaks, grace=3, max_actions=5)  # a=1
-    autoblock.eligible(set(), streaks, grace=3, max_actions=5)  # a cleared
+    autofix.eligible({"a"}, streaks, grace=3, max_actions=5)  # a=1
+    autofix.eligible(set(), streaks, grace=3, max_actions=5)  # a cleared
     assert "a" not in streaks
-    to_act, _ = autoblock.eligible({"a"}, streaks, grace=3, max_actions=5)  # a=1 again
+    to_act, _ = autofix.eligible({"a"}, streaks, grace=3, max_actions=5)  # a=1 again
     assert to_act == []
 
 
 def test_blast_radius_holds_and_acts_on_none():
     # 6 items all past grace, cap 5 -> act on none, hold all
     streaks = {k: 3 for k in "abcdef"}
-    to_act, held = autoblock.eligible(set("abcdef"), streaks, grace=3, max_actions=5)
+    to_act, held = autofix.eligible(set("abcdef"), streaks, grace=3, max_actions=5)
     assert to_act == []
     assert held == sorted("abcdef")
 
 
 def test_within_cap_all_act():
     streaks = {k: 3 for k in "abc"}
-    to_act, held = autoblock.eligible(set("abc"), streaks, grace=3, max_actions=5)
+    to_act, held = autofix.eligible(set("abc"), streaks, grace=3, max_actions=5)
     assert to_act == sorted("abc")
     assert held == []
 
@@ -195,7 +195,7 @@ def test_within_cap_all_act():
 def test_exactly_at_cap_all_act():
     # 5 grace-met items, cap 5 -> all 5 act, none held (pins the strict `>` boundary)
     streaks = {k: 3 for k in "abcde"}
-    to_act, held = autoblock.eligible(set("abcde"), streaks, grace=3, max_actions=5)
+    to_act, held = autofix.eligible(set("abcde"), streaks, grace=3, max_actions=5)
     assert to_act == sorted("abcde")
     assert held == []
 
@@ -203,24 +203,24 @@ def test_exactly_at_cap_all_act():
 # --- item_key ------------------------------------------------------------------
 def test_item_key_stable_across_repeated_calls():
     it = _item(download_id="hash123", qid=7)
-    assert autoblock.item_key("Sonarr", it) == autoblock.item_key("Sonarr", it)
+    assert autofix.item_key("Sonarr", it) == autofix.item_key("Sonarr", it)
 
 
 def test_item_key_uses_download_id_when_present():
     it = _item(download_id="hash123", qid=7)
-    assert autoblock.item_key("Sonarr", it) == "Sonarr:dl:hash123"
+    assert autofix.item_key("Sonarr", it) == "Sonarr:dl:hash123"
 
 
 def test_item_key_falls_back_to_queue_id_without_download_id():
     it = _item(download_id=None, qid=7)
-    assert autoblock.item_key("Sonarr", it) == "Sonarr:id:7"
+    assert autofix.item_key("Sonarr", it) == "Sonarr:id:7"
 
 
 def test_item_key_distinct_across_apps_for_same_id():
     # regression test for the cross-app streak-key collision fix
     sonarr_item = _item(download_id=None, qid=7)
     radarr_item = _item(download_id=None, qid=7)
-    assert autoblock.item_key("Sonarr", sonarr_item) != autoblock.item_key(
+    assert autofix.item_key("Sonarr", sonarr_item) != autofix.item_key(
         "Radarr", radarr_item
     )
 
@@ -230,26 +230,24 @@ def test_item_key_numeric_download_id_does_not_collide_with_id_fallback():
     # same-numbered queue `id` fallback of another item
     dl_item = _item(download_id="7", qid=99)
     id_item = _item(download_id=None, qid=7)
-    assert autoblock.item_key("Sonarr", dl_item) == "Sonarr:dl:7"
-    assert autoblock.item_key("Sonarr", id_item) == "Sonarr:id:7"
-    assert autoblock.item_key("Sonarr", dl_item) != autoblock.item_key(
-        "Sonarr", id_item
-    )
+    assert autofix.item_key("Sonarr", dl_item) == "Sonarr:dl:7"
+    assert autofix.item_key("Sonarr", id_item) == "Sonarr:id:7"
+    assert autofix.item_key("Sonarr", dl_item) != autofix.item_key("Sonarr", id_item)
 
 
 # --- search_command ----------------------------------------------------------
 def test_search_command_sonarr_series_level():
-    cmd = autoblock.search_command("Sonarr", _item(series_id=42))
+    cmd = autofix.search_command("Sonarr", _item(series_id=42))
     assert cmd == {"name": "SeriesSearch", "seriesId": 42}
 
 
 def test_search_command_radarr_movie_level():
-    cmd = autoblock.search_command("Radarr", _item(movie_id=7))
+    cmd = autofix.search_command("Radarr", _item(movie_id=7))
     assert cmd == {"name": "MoviesSearch", "movieIds": [7]}
 
 
 def test_search_command_missing_id_returns_none():
-    assert autoblock.search_command("Sonarr", _item()) is None
+    assert autofix.search_command("Sonarr", _item()) is None
 
 
 # --- item_reason / format_action ---------------------------------------------
@@ -257,56 +255,56 @@ def test_item_reason_prefers_status_messages():
     it = _item(
         status="warning", messages=["Found executable file with extension: '.exe'"]
     )
-    assert "executable" in autoblock.item_reason(it)
+    assert "executable" in autofix.item_reason(it)
 
 
 def test_item_reason_falls_back_to_status():
-    assert autoblock.item_reason(_item(status="error")) == "error"
+    assert autofix.item_reason(_item(status="error")) == "error"
 
 
 def test_format_action_dry_run_says_would():
-    s = autoblock.format_action(True, "Sonarr", "Bad.Release", "importBlocked", 3, 3)
+    s = autofix.format_action(True, "Sonarr", "Bad.Release", "importBlocked", 3, 3)
     assert s.startswith("WOULD blocklist [Sonarr]")
     assert "(3/3)" in s
 
 
 def test_format_action_live_says_blocklisted():
-    s = autoblock.format_action(False, "Radarr", "Bad.Movie", "error", 3, 3)
+    s = autofix.format_action(False, "Radarr", "Bad.Movie", "error", 3, 3)
     assert s.startswith("Blocklisted + re-searched [Radarr]")
 
 
 def test_sanitize_defuses_discord_mentions_and_backticks():
-    assert "@" not in autoblock.sanitize("@everyone `rm`")
+    assert "@" not in autofix.sanitize("@everyone `rm`")
 
 
 # --- _dry_run_enabled (fail-safe parsing) -------------------------------------
 def test_dry_run_enabled_true_for_explicit_true_values():
-    assert autoblock._dry_run_enabled("true") is True
-    assert autoblock._dry_run_enabled("1") is True
+    assert autofix._dry_run_enabled("true") is True
+    assert autofix._dry_run_enabled("1") is True
 
 
 def test_dry_run_enabled_true_for_typo_value():
     # fail SAFE: an unrecognized/typo'd value must not fall through to live mode
-    assert autoblock._dry_run_enabled("ture") is True
+    assert autofix._dry_run_enabled("ture") is True
 
 
 def test_dry_run_enabled_true_for_empty_value():
-    assert autoblock._dry_run_enabled("") is True
+    assert autofix._dry_run_enabled("") is True
 
 
 def test_dry_run_enabled_false_for_explicit_disable_values():
-    assert autoblock._dry_run_enabled("false") is False
-    assert autoblock._dry_run_enabled("0") is False
-    assert autoblock._dry_run_enabled("no") is False
-    assert autoblock._dry_run_enabled("FALSE") is False
+    assert autofix._dry_run_enabled("false") is False
+    assert autofix._dry_run_enabled("0") is False
+    assert autofix._dry_run_enabled("no") is False
+    assert autofix._dry_run_enabled("FALSE") is False
 
 
 # --- run_once (I/O-mocked integration) ----------------------------------------
 def _configure_sonarr_only(monkeypatch):
-    monkeypatch.setattr(autoblock, "post_discord", lambda msg: None)
-    monkeypatch.setattr(autoblock, "push", lambda ok, msg: None)
-    monkeypatch.setattr(autoblock, "SONARR_API_KEY", "sonarr-key")
-    monkeypatch.setattr(autoblock, "RADARR_API_KEY", "")
+    monkeypatch.setattr(autofix, "post_discord", lambda msg: None)
+    monkeypatch.setattr(autofix, "push", lambda ok, msg: None)
+    monkeypatch.setattr(autofix, "SONARR_API_KEY", "sonarr-key")
+    monkeypatch.setattr(autofix, "RADARR_API_KEY", "")
 
 
 def _fake_request(records, calls):
@@ -325,13 +323,13 @@ def _fake_request(records, calls):
 def test_run_once_dry_run_makes_zero_mutating_calls(monkeypatch):
     item = _item(status="error", download_id=None, qid=7, series_id=42)
     calls = []
-    monkeypatch.setattr(autoblock, "_request", _fake_request([item], calls))
+    monkeypatch.setattr(autofix, "_request", _fake_request([item], calls))
     _configure_sonarr_only(monkeypatch)
-    monkeypatch.setattr(autoblock, "DRY_RUN", True)
+    monkeypatch.setattr(autofix, "DRY_RUN", True)
 
-    key = autoblock.item_key("Sonarr", item)
-    streaks = {key: autoblock.GRACE_CYCLES - 1}
-    ok, msg = autoblock.run_once(streaks)
+    key = autofix.item_key("Sonarr", item)
+    streaks = {key: autofix.GRACE_CYCLES - 1}
+    ok, msg = autofix.run_once(streaks)
 
     assert calls == []
     assert ok is True
@@ -340,13 +338,13 @@ def test_run_once_dry_run_makes_zero_mutating_calls(monkeypatch):
 def test_run_once_live_deletes_then_searches_in_order(monkeypatch):
     item = _item(status="error", download_id=None, qid=7, series_id=42)
     calls = []
-    monkeypatch.setattr(autoblock, "_request", _fake_request([item], calls))
+    monkeypatch.setattr(autofix, "_request", _fake_request([item], calls))
     _configure_sonarr_only(monkeypatch)
-    monkeypatch.setattr(autoblock, "DRY_RUN", False)
+    monkeypatch.setattr(autofix, "DRY_RUN", False)
 
-    key = autoblock.item_key("Sonarr", item)
-    streaks = {key: autoblock.GRACE_CYCLES - 1}
-    ok, msg = autoblock.run_once(streaks)
+    key = autofix.item_key("Sonarr", item)
+    streaks = {key: autofix.GRACE_CYCLES - 1}
+    ok, msg = autofix.run_once(streaks)
 
     assert ok is True
     assert len(calls) == 2
@@ -360,20 +358,18 @@ def test_run_once_live_deletes_then_searches_in_order(monkeypatch):
 
 
 def test_run_once_held_branch_makes_zero_mutating_calls(monkeypatch):
-    n = autoblock.MAX_ACTIONS_PER_CYCLE + 1
+    n = autofix.MAX_ACTIONS_PER_CYCLE + 1
     items = [
         _item(status="error", download_id="dl-%d" % i, qid=i, series_id=100 + i)
         for i in range(n)
     ]
     calls = []
-    monkeypatch.setattr(autoblock, "_request", _fake_request(items, calls))
+    monkeypatch.setattr(autofix, "_request", _fake_request(items, calls))
     _configure_sonarr_only(monkeypatch)
-    monkeypatch.setattr(autoblock, "DRY_RUN", False)
+    monkeypatch.setattr(autofix, "DRY_RUN", False)
 
-    streaks = {
-        autoblock.item_key("Sonarr", it): autoblock.GRACE_CYCLES - 1 for it in items
-    }
-    ok, msg = autoblock.run_once(streaks)
+    streaks = {autofix.item_key("Sonarr", it): autofix.GRACE_CYCLES - 1 for it in items}
+    ok, msg = autofix.run_once(streaks)
 
     assert calls == []
     assert ok is False
@@ -384,10 +380,10 @@ def test_run_once_no_api_keys_is_disabled_with_no_requests(monkeypatch):
     def fake(url, method="GET", headers=None, data=None):
         raise AssertionError("no HTTP call should happen with no API keys configured")
 
-    monkeypatch.setattr(autoblock, "_request", fake)
-    monkeypatch.setattr(autoblock, "SONARR_API_KEY", "")
-    monkeypatch.setattr(autoblock, "RADARR_API_KEY", "")
+    monkeypatch.setattr(autofix, "_request", fake)
+    monkeypatch.setattr(autofix, "SONARR_API_KEY", "")
+    monkeypatch.setattr(autofix, "RADARR_API_KEY", "")
 
-    ok, msg = autoblock.run_once({})
+    ok, msg = autofix.run_once({})
 
     assert (ok, msg) == (True, "arr auto-block disabled (no API keys)")

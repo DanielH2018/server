@@ -8,13 +8,13 @@
     common_dirs_to_create:
       - "{{ container_item.name }}"
 
-- name: Deploy arr-autoblock script
+- name: Deploy autofix-bridge script
   tags: [config]
   ansible.builtin.copy:
-    src: autoblock.py
-    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/autoblock.py"
+    src: autofix.py
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/autofix.py"
     mode: "0644"
-  register: arr_autoblock_script
+  register: autofix_script
 
 - name: Deploy Container
   tags: [deploy]
@@ -22,7 +22,7 @@
     name: common
     tasks_from: docker_deploy.yml
   vars:
-    # autoblock.py is bind-mounted; the loop reads it once at startup, so only a recreate
+    # autofix.py is bind-mounted; the loop reads it once at startup, so only a recreate
     # applies a code change. Without this a script-only edit leaves recreate: auto and the
     # new logic silently never deploys. See common/CLAUDE.md.
-    common_config_changed: "{{ arr_autoblock_script is changed }}"
+    common_config_changed: "{{ autofix_script is changed }}"

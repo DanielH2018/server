@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""arr-autoblock — auto-blocklist stuck/poisoned Sonarr/Radarr queue items.
+"""autofix-bridge — auto-remediation sidecar (arr-queue module): auto-blocklist stuck/poisoned Sonarr/Radarr queue items.
 
 The mutating twin of the read-only monitor-bridge. Each cycle it polls Sonarr's and Radarr's
 own /api/v3/queue, classifies items as auto-block candidates (the narrow hard-bad +
@@ -9,7 +9,7 @@ caps the per-cycle blast radius, then — unless DRY_RUN — DELETEs the item wi
 grabs a clean replacement. Health -> its own Uptime Kuma push monitor; each action -> the *arr
 Discord webhook. Stdlib only (python:3.14-alpine); config is env-driven so this stays testable.
 
-Design: docs/superpowers/specs/2026-07-06-arr-autoblock-queue-warnings-design.md
+Design: docs/superpowers/specs/2026-07-06-autofix-bridge-disk-autoprune-design.md (Part A)
 """
 
 import json
@@ -220,7 +220,7 @@ def log(*args):
 
 def _request(url, method="GET", headers=None, data=None):
     """One HTTP call. Always sends a User-Agent (Discord Cloudflare 1010-403s without one)."""
-    hdrs = {"User-Agent": "arr-autoblock"}
+    hdrs = {"User-Agent": "autofix-bridge"}
     if headers:
         hdrs.update(headers)
     body = None
@@ -344,7 +344,7 @@ def main():
     once = "--once" in sys.argv
     streaks = {}
     log(
-        "arr-autoblock starting (interval=%ss, dry_run=%s, once=%s)"
+        "autofix-bridge starting (interval=%ss, dry_run=%s, once=%s)"
         % (INTERVAL, DRY_RUN, once)
     )
     while True:
@@ -353,7 +353,7 @@ def main():
         except (
             Exception
         ) as e:  # an unreachable *arr / failed mutation must not kill the loop
-            ok, msg = False, "arr-autoblock error: %s" % e
+            ok, msg = False, "autofix-bridge error: %s" % e
         log("OK  " if ok else "DOWN", msg)
         push(ok, msg)
         touch_heartbeat()
