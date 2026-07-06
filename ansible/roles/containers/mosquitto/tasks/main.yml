@@ -8,6 +8,7 @@
     common_dirs_to_create:
       - "{{ container_item.name }}/config"
       - "{{ container_item.name }}/data"
+      - "{{ container_item.name }}/log"
 
 - name: Deploy Mosquitto config
   tags: [config]

@@ -16,6 +16,9 @@ services:
     volumes:
       - ./config:/mosquitto/config
       - ./data:/mosquitto/data
+      # Image declares VOLUME /mosquitto/log; bind-mount it so recreates don't orphan an
+      # anonymous volume each time. Stays empty (log_dest is stdout) — exists only to bind the VOLUME.
+      - ./log:/mosquitto/log
     restart: unless-stopped
     cap_drop:
       - ALL
