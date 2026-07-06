@@ -43,7 +43,7 @@ fi
 # unrecoverable. The snapshot source is config-only (media is excluded), which dedupes
 # heavily, so a few monthlies cost little on the B2 free tier; the b2_usage monitor backstops.
 if /usr/bin/kopia repository status 2>/dev/null; then
-    /usr/bin/kopia policy set /data/home/ubuntu/server/containers \
+    /usr/bin/kopia policy set /data/home/{{ sys_user }}/server/containers \
         --snapshot-interval 24h \
         --keep-latest 3 \
         --keep-hourly 0 \

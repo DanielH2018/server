@@ -20,6 +20,11 @@ Polls for newer image tags and recreates containers. See repo-root `CLAUDE.md`.
   **mutable-tag** tier (wireguard, qbittorrent, scrutiny, crowdsec, unbound, flaresolverr)
   updates ONLY via `deploy.yml --tags <svc> -e common_pull=always` — a plain redeploy never
   re-pulls a locally-present tag (see `common/tasks/docker_deploy.yml`).
+- **Built-in healthcheck (no compose `healthcheck:` block by design).** The
+  `nickfedor/watchtower` image ships its own Docker `HEALTHCHECK` (`/watchtower --health-check`),
+  so `docker ps` reports health without a compose probe — same pattern as `authelia`/`homepage`.
+  Don't add a redundant `healthcheck()` block (a "which services lack a healthcheck" grep flags it;
+  it's already covered).
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`

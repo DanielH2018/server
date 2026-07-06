@@ -17,8 +17,10 @@
     mode: "0755"
     # SOPS is the root of the whole secret-decryption trust chain (every deploy's
     # community.sops decrypt runs through it), so the download is checksum-pinned —
-    # an unverified binary here is a supply-chain hole. Bump BOTH the version and the
-    # per-arch sha256 in lockstep from the release's sops-<ver>.checksums.txt.
+    # an unverified binary here is a supply-chain hole. Renovate tracks sops_version
+    # (customManager -> getsops/sops, no-automerge) and opens the version-bump PR, but the
+    # per-arch sops_sha256 is a MANUAL finish — bump BOTH in lockstep from the release's
+    # sops-<ver>.checksums.txt.
     checksum: "sha256:{{ sops_sha256 }}"
   vars:
     # You can check https://github.com/getsops/sops/releases for the latest

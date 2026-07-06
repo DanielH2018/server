@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard that every Renovate custom-regex manager still matches its live target(s).
 
-renovate.json's five `customManagers` are hand-rolled regexes (the built-in ansible-galaxy /
+renovate.json's `customManagers` are hand-rolled regexes (the built-in ansible-galaxy /
 pre-commit managers weren't reliably matching these paths — see the in-file descriptions). If a
 template is renamed, a pin's formatting shifts, or a matchString is edited, a manager silently
 matches ZERO files/lines and that dependency axis ages with no signal: the 8-day dependency-
@@ -41,7 +41,7 @@ def _to_python_regex(pattern: str) -> str:
 
 def _file_pattern_to_regex(fp: str) -> re.Pattern:
     # A Renovate managerFilePattern wrapped in /.../ is a regex matched against the repo-relative
-    # path (all five here use that form). Strip the one leading + trailing slash.
+    # path (all of them use this /regex/ form). Strip the one leading + trailing slash.
     assert fp.startswith("/") and fp.endswith("/"), (
         f"expected a /regex/ file pattern: {fp}"
     )

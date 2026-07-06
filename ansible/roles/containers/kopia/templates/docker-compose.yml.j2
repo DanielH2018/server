@@ -36,7 +36,7 @@ services:
       - ./logs:/app/logs
       - ./rclone:/app/rclone
       - ./scripts:/scripts:ro
-      - /home/ubuntu/server/containers:/data/home/ubuntu/server/containers:ro
+      - /home/{{ sys_user }}/server/containers:/data/home/{{ sys_user }}/server/containers:ro
     {{ healthcheck("[\"CMD-SHELL\", \"curl -so /dev/null -w '%{http_code}' http://localhost:51515/ | grep -qE '^(200|401)'\"]") }}
     {{ service_networks() }}
     labels:

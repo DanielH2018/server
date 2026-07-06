@@ -89,6 +89,18 @@
         "moduleName:\\s*\"github\\.com/(?<depName>[^\"]+?)\"\\s+version:\\s*\"(?<currentValue>[^\"]+)\""
       ],
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "SOPS binary pin in sops_setup/tasks/main.yml. SOPS is the root of the secret-decryption trust chain and is the one version pin no other manager covers, so it would age silently (silence != up-to-date, same failure mode as the galaxy/crowdsec pins). getsops/sops publishes real GitHub releases, so github-releases is the right datasource. The paired per-arch sops_sha256 can't be auto-computed by a regex manager, so no automerge (packageRule below) — Renovate opens the version-bump PR, then finish the sha256 from the release's sops-<ver>.checksums.txt.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/setup/sops_setup/tasks/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "sops_version:\\s*\"(?<currentValue>v[^\"]+)\""
+      ],
+      "depNameTemplate": "getsops/sops",
+      "datasourceTemplate": "github-releases"
     }
   ],
   "packageRules": [
@@ -160,6 +172,13 @@
       "matchDatasources": ["docker"],
       "matchPackageNames": ["portainer/portainer-ce", "portainer/agent"],
       "groupName": "portainer (lockstep: server portainer-ce + Pi agent)",
+      "automerge": false
+    },
+    {
+      "description": "SOPS binary (getsops/sops) — the secret-decryption root of trust; its paired per-arch sops_sha256 needs a manual bump from the release checksums, so NO automerge (same manual-finish class as the galaxy collections + crowdsec plugin). Own group, so it overrides the custom.regex non-major automerge rule above and gets a deliberate operator review + sha256 finish.",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": ["getsops/sops"],
+      "groupName": "sops binary (manual — finish the per-arch sha256 from checksums.txt)",
       "automerge": false
     }
   ]

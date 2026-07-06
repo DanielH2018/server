@@ -35,7 +35,7 @@ desktop, so your real ISP IP is never exposed to anything.
 `jellyfin`, `sonarr`, `radarr`, `prowlarr`, `bazarr`, `tdarr`, `karakeep`, `freshrss`,
 `qbittorrent`, `n8n`, `home-assistant`, `code-server`, `portainer`, `grafana`,
 `prometheus`, `uptime-kuma`, `glances`, `scrutiny`, `healthchecks`, `pihole`, `peanut`,
-`kopia`, `wg-easy`, `speedtest`, `bento-pdf`, `livesync`, `crowdsec`, `zigbee2mqtt`,
+`kopia`, `wg-easy`, `speedtest`, `bento-pdf`, `livesync`, `crowdsec`, `traefik`, `zigbee2mqtt`,
 plus `auth` (the login portal, **required**) and `www` (littlelink).
 
 ---
