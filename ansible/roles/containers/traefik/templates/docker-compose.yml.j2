@@ -57,7 +57,7 @@ services:
     {{ resources('1.0', '1024M', '0.10', '128M') }}
 
   traefik:
-    image: traefik:v3.7.4
+    image: traefik:v3.7.5
     container_name: traefik
     restart: unless-stopped
     depends_on:
