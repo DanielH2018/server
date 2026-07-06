@@ -97,6 +97,11 @@ services:
       # bare domain). Two origins, comma-separated: the Traefik/Authelia path (portainer.<domain>)
       # and the break-glass :9000 LAN path (see the ports mapping above). Keep them full-scheme.
       TRUSTED_ORIGINS: "https://portainer.{{ domain }},http://{{ server_ip }}:9000"
+      # Shared secret for connecting to Portainer AGENT environments (currently daniel-pi's
+      # portainer-agent). AGENT_SECRET is MUTUAL — the agent rejects secret-less requests, so the
+      # server must present the SAME value the Pi agent has. Only affects agent-type environments,
+      # not the local socket-proxy endpoint. SOPS `portainer_agent_secret`. See the portainer-agent role.
+      AGENT_SECRET: "{{ portainer_agent_secret }}"
     command: -H tcp://docker-proxy-portainer:2375
     depends_on:
       docker-proxy-portainer:

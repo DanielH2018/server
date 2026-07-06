@@ -38,13 +38,17 @@ shared conventions and the `portainer` role for the server side.
   and an independent failure domain (works if Portainer/the agent is down). Not redundant enough to drop.
 
 ## Registering the Pi in the server's Portainer (one-time, manual)
-Portainer environments live in Portainer's own BoltDB, not in Ansible — so after the agent is up,
-add it once in the UI:
+The `AGENT_SECRET` is MUTUAL — the **server's** Portainer carries a matching `AGENT_SECRET` env
+(SOPS `portainer_agent_secret`, in the `portainer` role) so it authenticates to the agent
+automatically; you do NOT paste the secret in the UI. Portainer environments live in Portainer's own
+BoltDB, not in Ansible, so after both are deployed, add the environment once in the UI:
 1. Server Portainer → **Environments** → **Add environment** → **Docker Standalone** → **Agent**.
-2. **Name:** `daniel-pi`. **Environment address:** `10.0.0.139:9001`.
-3. Enable **TLS** (self-signed from the agent) and paste the shared secret
-   (`sops -d ansible/vars/secrets.yml` → `portainer_agent_secret`) if prompted, then **Connect**.
-4. Verify the Pi's containers appear and that **Console/exec** into a Pi container works.
+2. **Name:** `daniel-pi`. **Environment address:** `10.0.0.139:9001`. Leave TLS at the default
+   (the agent self-signs; the server trusts it). **Connect.**
+3. Verify the Pi's containers appear and that **Console/exec** into a Pi container works.
+If the environment shows **down**, the usual causes are the server's `AGENT_SECRET` not matching the
+agent's (redeploy both after a `portainer_agent_secret` rotation) or the DOCKER-USER lock (only the
+server IP may reach :9001).
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
