@@ -1,0 +1,312 @@
+#!/usr/bin/env python3
+"""arr-autoblock — auto-blocklist stuck/poisoned Sonarr/Radarr queue items.
+
+The mutating twin of the read-only monitor-bridge. Each cycle it polls Sonarr's and Radarr's
+own /api/v3/queue, classifies items as auto-block candidates (the narrow hard-bad +
+malware-signature classes), tracks a consecutive-cycle streak in-process for a grace period,
+caps the per-cycle blast radius, then — unless DRY_RUN — DELETEs the item with blocklist=true
+(removes from client + blocklists the release) and fires a series/movie re-search so the *arr
+grabs a clean replacement. Health -> its own Uptime Kuma push monitor; each action -> the *arr
+Discord webhook. Stdlib only (python:3.14-alpine); config is env-driven so this stays testable.
+
+Design: docs/superpowers/specs/2026-07-06-arr-autoblock-queue-warnings-design.md
+"""
+
+import json
+import os
+import sys
+import time
+import urllib.parse
+import urllib.request
+
+
+def _env(name, default):
+    return os.environ.get(name, default)
+
+
+INTERVAL = int(_env("INTERVAL", "300"))
+HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
+HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
+KUMA_URL = _env("KUMA_URL", "http://uptime-kuma:3001").rstrip("/")
+KUMA_PUSH = _env("KUMA_PUSH_ARR_AUTOBLOCK", "")
+
+SONARR_URL = _env("SONARR_URL", "http://sonarr:8989").rstrip("/")
+SONARR_API_KEY = _env("SONARR_API_KEY", "")
+RADARR_URL = _env("RADARR_URL", "http://radarr:7878").rstrip("/")
+RADARR_API_KEY = _env("RADARR_API_KEY", "")
+
+DISCORD_WEBHOOK_URL = _env("ARR_DISCORD_WEBHOOK_URL", "")
+DRY_RUN = _env("DRY_RUN", "true").strip().lower() in ("1", "true", "yes")
+GRACE_CYCLES = int(_env("GRACE_CYCLES", "3"))
+MAX_ACTIONS_PER_CYCLE = int(_env("MAX_ACTIONS_PER_CYCLE", "5"))
+DANGEROUS_MSG_PATTERNS = [
+    p.strip().lower()
+    for p in _env(
+        "DANGEROUS_MSG_PATTERNS",
+        "executable file with extension,potentially dangerous,sample",
+    ).split(",")
+    if p.strip()
+]
+
+HARD_BAD_STATUS = frozenset({"error"})
+HARD_BAD_STATE = frozenset({"importBlocked", "importFailed"})
+
+
+def sanitize(s, maxlen=120):
+    """Neutralize adversary-controlled text (release titles, statusMessages) before it enters
+    a Discord-bound string: collapse whitespace, defuse @mentions/backticks, cap length."""
+    s = "?" if s is None else str(s)
+    s = " ".join(s.split())
+    s = s.replace("@", "(at)").replace("`", "'")
+    if len(s) > maxlen:
+        s = s[: maxlen - 3] + "..."
+    return s
+
+
+# --- pure decision core ------------------------------------------------------
+def item_messages(item):
+    """All statusMessage strings for a queue item, flattened."""
+    out = []
+    for sm in item.get("statusMessages") or []:
+        out.extend(sm.get("messages") or [])
+    return out
+
+
+def dangerous(messages, patterns):
+    """True if any statusMessage matches a known-dangerous substring (case-insensitive)."""
+    low = [m.lower() for m in messages]
+    return any(p in m for p in patterns for m in low)
+
+
+def is_candidate(item, patterns):
+    """A queue item is an auto-block candidate when it is hard-bad OR malware-signature.
+
+    hard-bad: trackedDownloadStatus == 'error' OR trackedDownloadState in importBlocked/importFailed.
+    malware-signature: trackedDownloadStatus == 'warning' AND a statusMessage matches `patterns`.
+    Everything else (transient warning, plain importPending) is left for the human via the
+    read-only Arr Queue Warnings monitor — failing to match fails SAFE (no action).
+    """
+    status = item.get("trackedDownloadStatus")
+    state = item.get("trackedDownloadState")
+    if status in HARD_BAD_STATUS or state in HARD_BAD_STATE:
+        return True
+    if status == "warning" and dangerous(item_messages(item), patterns):
+        return True
+    return False
+
+
+def item_key(item):
+    """Stable identity across cycles: the download-client hash, falling back to the queue id."""
+    return item.get("downloadId") or ("id:%s" % item.get("id"))
+
+
+def item_reason(item):
+    """Human reason for the action log: the statusMessages, else the status/state."""
+    msgs = item_messages(item)
+    return (
+        "; ".join(msgs)
+        or item.get("trackedDownloadStatus")
+        or item.get("trackedDownloadState")
+        or "warning"
+    )
+
+
+def eligible(candidate_keys, streaks, grace, max_actions):
+    """Pure grace + blast-radius decision. MUTATES `streaks` in place.
+
+    - increments the streak of each key that is a candidate THIS cycle;
+    - drops keys that are no longer candidates (streak resets to 0);
+    - a key is grace-met once its streak >= grace;
+    Returns (to_act, held): the sorted grace-met keys to act on, OR — when more than
+    max_actions are grace-met at once (a systemic mass-flag) — ([], all grace-met keys),
+    so the loop acts on NONE and alerts instead.
+    """
+    for k in list(streaks):
+        if k not in candidate_keys:
+            del streaks[k]
+    for k in candidate_keys:
+        streaks[k] = streaks.get(k, 0) + 1
+    met = sorted(k for k, n in streaks.items() if n >= grace)
+    if len(met) > max_actions:
+        return [], met
+    return met, []
+
+
+def search_command(app_name, item):
+    """The /api/v3/command body to re-search the series/movie of a queue item, or None.
+
+    Series/movie granularity (robust for season packs — a queue record's episodeId may not
+    represent every episode in a stuck pack; the *arr only grabs genuine gaps).
+    """
+    if app_name == "Sonarr":
+        sid = item.get("seriesId")
+        if sid:
+            return {"name": "SeriesSearch", "seriesId": sid}
+    elif app_name == "Radarr":
+        mid = item.get("movieId")
+        if mid:
+            return {"name": "MoviesSearch", "movieIds": [mid]}
+    return None
+
+
+def format_action(dry_run, app_name, title, reason, streak, grace):
+    verb = "WOULD blocklist" if dry_run else "Blocklisted + re-searched"
+    return "%s [%s] %s — %s (%d/%d)" % (
+        verb,
+        app_name,
+        sanitize(title),
+        sanitize(reason),
+        streak,
+        grace,
+    )
+
+
+# --- I/O ---------------------------------------------------------------------
+def log(*args):
+    print("[%s]" % time.strftime("%Y-%m-%dT%H:%M:%S"), *args, flush=True)
+
+
+def _request(url, method="GET", headers=None, data=None):
+    """One HTTP call. Always sends a User-Agent (Discord Cloudflare 1010-403s without one)."""
+    hdrs = {"User-Agent": "arr-autoblock"}
+    if headers:
+        hdrs.update(headers)
+    body = None
+    if data is not None:
+        body = json.dumps(data).encode()
+        hdrs["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, headers=hdrs, data=body, method=method)
+    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 (internal URLs)
+        raw = resp.read()
+        return json.loads(raw) if raw else None
+
+
+def post_discord(msg):
+    if not DISCORD_WEBHOOK_URL:
+        log("WARN: no Discord webhook set; skipping report:", msg)
+        return
+    try:
+        _request(DISCORD_WEBHOOK_URL, method="POST", data={"content": msg})
+    except Exception as e:  # best-effort report; never crash the loop
+        log("discord post failed (%s):" % msg, e)
+
+
+def push(ok, msg):
+    if not KUMA_PUSH:
+        log("WARN: no push token set; skipping push:", msg)
+        return
+    qs = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})
+    try:
+        _request("%s/api/push/%s?%s" % (KUMA_URL, KUMA_PUSH, qs))
+    except Exception as e:  # best-effort heartbeat; never crash the loop
+        log("push failed (%s):" % msg, e)
+
+
+def touch_heartbeat():
+    try:
+        with open(HEARTBEAT_FILE, "w") as fh:
+            fh.write("%s\n" % time.time())
+    except OSError as e:
+        log("WARN: heartbeat write failed:", e)
+
+
+def run_once(streaks):
+    """One poll+decide+act cycle. Returns (ok, msg) for the Kuma push. Raises on an
+    unreachable *arr / failed mutation, which main() converts to a descriptive `down`."""
+    apps = [
+        (
+            "Sonarr",
+            SONARR_URL,
+            SONARR_URL + "/api/v3/queue?includeUnknownSeriesItems=true&pageSize=250",
+            SONARR_API_KEY,
+        ),
+        (
+            "Radarr",
+            RADARR_URL,
+            RADARR_URL + "/api/v3/queue?includeUnknownMovieItems=true&pageSize=250",
+            RADARR_API_KEY,
+        ),
+    ]
+    configured = [a for a in apps if a[3]]
+    if not configured:
+        return True, "arr auto-block disabled (no API keys)"
+
+    candidates = {}  # item_key -> (app_name, base, key, item)
+    for app_name, base, url, key in configured:
+        data = _request(url, headers={"X-Api-Key": key})
+        for item in data.get("records", []):
+            if is_candidate(item, DANGEROUS_MSG_PATTERNS):
+                candidates[item_key(item)] = (app_name, base, key, item)
+
+    to_act, held = eligible(
+        set(candidates), streaks, GRACE_CYCLES, MAX_ACTIONS_PER_CYCLE
+    )
+    if held:
+        msg = "%d queue items eligible — holding (max %d/cycle), investigate" % (
+            len(held),
+            MAX_ACTIONS_PER_CYCLE,
+        )
+        post_discord(msg)
+        return False, msg
+
+    acted = 0
+    for k in to_act:
+        app_name, base, key, item = candidates[k]
+        streak = streaks.get(k, GRACE_CYCLES)
+        report = format_action(
+            DRY_RUN,
+            app_name,
+            item.get("title") or "?",
+            item_reason(item),
+            streak,
+            GRACE_CYCLES,
+        )
+        log(report)
+        post_discord(report)
+        if not DRY_RUN:
+            _request(
+                "%s/api/v3/queue/%s?removeFromClient=true&blocklist=true"
+                % (base, item["id"]),
+                method="DELETE",
+                headers={"X-Api-Key": key},
+            )
+            cmd = search_command(app_name, item)
+            if cmd:
+                _request(
+                    base + "/api/v3/command",
+                    method="POST",
+                    headers={"X-Api-Key": key},
+                    data=cmd,
+                )
+        acted += 1
+
+    if acted:
+        verb = "would act on" if DRY_RUN else "acted on"
+        return True, "%s %d queue item(s)" % (verb, acted)
+    return True, "queue clean (%s)" % ", ".join(a[0] for a in configured)
+
+
+def main():
+    once = "--once" in sys.argv
+    streaks = {}
+    log(
+        "arr-autoblock starting (interval=%ss, dry_run=%s, once=%s)"
+        % (INTERVAL, DRY_RUN, once)
+    )
+    while True:
+        try:
+            ok, msg = run_once(streaks)
+        except (
+            Exception
+        ) as e:  # an unreachable *arr / failed mutation must not kill the loop
+            ok, msg = False, "arr-autoblock error: %s" % e
+        log("OK  " if ok else "DOWN", msg)
+        push(ok, msg)
+        touch_heartbeat()
+        if once:
+            break
+        time.sleep(INTERVAL)
+
+
+if __name__ == "__main__":
+    main()
