@@ -35,8 +35,14 @@ SONARR_API_KEY = _env("SONARR_API_KEY", "")
 RADARR_URL = _env("RADARR_URL", "http://radarr:7878").rstrip("/")
 RADARR_API_KEY = _env("RADARR_API_KEY", "")
 
+
+def _dry_run_enabled(val):
+    """Fail-safe dry-run: enabled UNLESS explicitly disabled (0/false/no)."""
+    return str(val).strip().lower() not in ("0", "false", "no")
+
+
 DISCORD_WEBHOOK_URL = _env("ARR_DISCORD_WEBHOOK_URL", "")
-DRY_RUN = _env("DRY_RUN", "true").strip().lower() in ("1", "true", "yes")
+DRY_RUN = _dry_run_enabled(_env("DRY_RUN", "true"))
 GRACE_CYCLES = int(_env("GRACE_CYCLES", "3"))
 MAX_ACTIONS_PER_CYCLE = int(_env("MAX_ACTIONS_PER_CYCLE", "5"))
 DANGEROUS_MSG_PATTERNS = [
@@ -102,8 +108,16 @@ def item_key(app_name, item):
     App-scoped (prefixed with `app_name`) because Sonarr and Radarr number their queue `id`s
     independently — without the prefix, two unrelated items (one per app) that both lack
     `downloadId` would collide on the same fallback key and share a streak.
+
+    Branch-tagged (`dl:`/`id:`) because a `downloadId` and a queue `id` share the same value
+    space (a string hash today, but nothing stops a numeric-string `downloadId` from a future
+    Usenet client like NZBGet from colliding with another item's integer `id` fallback) —
+    the tag keeps the two branches from ever aliasing to the same key.
     """
-    return "%s:%s" % (app_name, item.get("downloadId") or item.get("id"))
+    dl = item.get("downloadId")
+    if dl:
+        return "%s:dl:%s" % (app_name, dl)
+    return "%s:id:%s" % (app_name, item.get("id"))
 
 
 def item_reason(item):
@@ -259,17 +273,9 @@ def run_once(streaks):
     for k in to_act:
         app_name, base, key, item = candidates[k]
         streak = streaks.get(k, GRACE_CYCLES)
-        report = format_action(
-            DRY_RUN,
-            app_name,
-            item.get("title") or "?",
-            item_reason(item),
-            streak,
-            GRACE_CYCLES,
-        )
-        log(report)
-        post_discord(report)
         if not DRY_RUN:
+            # Mutate FIRST: if the DELETE/search raises, it must propagate (main() renders a
+            # Kuma `down`) without a false "Blocklisted" report having already gone to Discord.
             _request(
                 "%s/api/v3/queue/%s?removeFromClient=true&blocklist=true"
                 % (base, item["id"]),
@@ -284,6 +290,16 @@ def run_once(streaks):
                     headers={"X-Api-Key": key},
                     data=cmd,
                 )
+        report = format_action(
+            DRY_RUN,
+            app_name,
+            item.get("title") or "?",
+            item_reason(item),
+            streak,
+            GRACE_CYCLES,
+        )
+        log(report)
+        post_discord(report)
         acted += 1
 
     if acted:

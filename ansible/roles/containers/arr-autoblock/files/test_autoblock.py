@@ -154,12 +154,12 @@ def test_item_key_stable_across_repeated_calls():
 
 def test_item_key_uses_download_id_when_present():
     it = _item(download_id="hash123", qid=7)
-    assert autoblock.item_key("Sonarr", it) == "Sonarr:hash123"
+    assert autoblock.item_key("Sonarr", it) == "Sonarr:dl:hash123"
 
 
 def test_item_key_falls_back_to_queue_id_without_download_id():
     it = _item(download_id=None, qid=7)
-    assert autoblock.item_key("Sonarr", it) == "Sonarr:7"
+    assert autoblock.item_key("Sonarr", it) == "Sonarr:id:7"
 
 
 def test_item_key_distinct_across_apps_for_same_id():
@@ -168,6 +168,18 @@ def test_item_key_distinct_across_apps_for_same_id():
     radarr_item = _item(download_id=None, qid=7)
     assert autoblock.item_key("Sonarr", sonarr_item) != autoblock.item_key(
         "Radarr", radarr_item
+    )
+
+
+def test_item_key_numeric_download_id_does_not_collide_with_id_fallback():
+    # a numeric-string downloadId (e.g. a future NZBGet numeric id) must not alias the
+    # same-numbered queue `id` fallback of another item
+    dl_item = _item(download_id="7", qid=99)
+    id_item = _item(download_id=None, qid=7)
+    assert autoblock.item_key("Sonarr", dl_item) == "Sonarr:dl:7"
+    assert autoblock.item_key("Sonarr", id_item) == "Sonarr:id:7"
+    assert autoblock.item_key("Sonarr", dl_item) != autoblock.item_key(
+        "Sonarr", id_item
     )
 
 
@@ -211,3 +223,117 @@ def test_format_action_live_says_blocklisted():
 
 def test_sanitize_defuses_discord_mentions_and_backticks():
     assert "@" not in autoblock.sanitize("@everyone `rm`")
+
+
+# --- _dry_run_enabled (fail-safe parsing) -------------------------------------
+def test_dry_run_enabled_true_for_explicit_true_values():
+    assert autoblock._dry_run_enabled("true") is True
+    assert autoblock._dry_run_enabled("1") is True
+
+
+def test_dry_run_enabled_true_for_typo_value():
+    # fail SAFE: an unrecognized/typo'd value must not fall through to live mode
+    assert autoblock._dry_run_enabled("ture") is True
+
+
+def test_dry_run_enabled_true_for_empty_value():
+    assert autoblock._dry_run_enabled("") is True
+
+
+def test_dry_run_enabled_false_for_explicit_disable_values():
+    assert autoblock._dry_run_enabled("false") is False
+    assert autoblock._dry_run_enabled("0") is False
+    assert autoblock._dry_run_enabled("no") is False
+    assert autoblock._dry_run_enabled("FALSE") is False
+
+
+# --- run_once (I/O-mocked integration) ----------------------------------------
+def _configure_sonarr_only(monkeypatch):
+    monkeypatch.setattr(autoblock, "post_discord", lambda msg: None)
+    monkeypatch.setattr(autoblock, "push", lambda ok, msg: None)
+    monkeypatch.setattr(autoblock, "SONARR_API_KEY", "sonarr-key")
+    monkeypatch.setattr(autoblock, "RADARR_API_KEY", "")
+
+
+def _fake_request(records, calls):
+    """A `_request` stand-in: GETs (the queue poll) return the canned records; anything
+    else (DELETE / /api/v3/command) is recorded instead of hitting the network."""
+
+    def fake(url, method="GET", headers=None, data=None):
+        if method == "GET":
+            return {"records": records}
+        calls.append((method, url, data))
+        return None
+
+    return fake
+
+
+def test_run_once_dry_run_makes_zero_mutating_calls(monkeypatch):
+    item = _item(status="error", download_id=None, qid=7, series_id=42)
+    calls = []
+    monkeypatch.setattr(autoblock, "_request", _fake_request([item], calls))
+    _configure_sonarr_only(monkeypatch)
+    monkeypatch.setattr(autoblock, "DRY_RUN", True)
+
+    key = autoblock.item_key("Sonarr", item)
+    streaks = {key: autoblock.GRACE_CYCLES - 1}
+    ok, msg = autoblock.run_once(streaks)
+
+    assert calls == []
+    assert ok is True
+
+
+def test_run_once_live_deletes_then_searches_in_order(monkeypatch):
+    item = _item(status="error", download_id=None, qid=7, series_id=42)
+    calls = []
+    monkeypatch.setattr(autoblock, "_request", _fake_request([item], calls))
+    _configure_sonarr_only(monkeypatch)
+    monkeypatch.setattr(autoblock, "DRY_RUN", False)
+
+    key = autoblock.item_key("Sonarr", item)
+    streaks = {key: autoblock.GRACE_CYCLES - 1}
+    ok, msg = autoblock.run_once(streaks)
+
+    assert ok is True
+    assert len(calls) == 2
+    method, url, data = calls[0]
+    assert method == "DELETE"
+    assert "removeFromClient=true&blocklist=true" in url
+    method, url, data = calls[1]
+    assert method == "POST"
+    assert url.endswith("/api/v3/command")
+    assert data == {"name": "SeriesSearch", "seriesId": 42}
+
+
+def test_run_once_held_branch_makes_zero_mutating_calls(monkeypatch):
+    n = autoblock.MAX_ACTIONS_PER_CYCLE + 1
+    items = [
+        _item(status="error", download_id="dl-%d" % i, qid=i, series_id=100 + i)
+        for i in range(n)
+    ]
+    calls = []
+    monkeypatch.setattr(autoblock, "_request", _fake_request(items, calls))
+    _configure_sonarr_only(monkeypatch)
+    monkeypatch.setattr(autoblock, "DRY_RUN", False)
+
+    streaks = {
+        autoblock.item_key("Sonarr", it): autoblock.GRACE_CYCLES - 1 for it in items
+    }
+    ok, msg = autoblock.run_once(streaks)
+
+    assert calls == []
+    assert ok is False
+    assert "holding" in msg
+
+
+def test_run_once_no_api_keys_is_disabled_with_no_requests(monkeypatch):
+    def fake(url, method="GET", headers=None, data=None):
+        raise AssertionError("no HTTP call should happen with no API keys configured")
+
+    monkeypatch.setattr(autoblock, "_request", fake)
+    monkeypatch.setattr(autoblock, "SONARR_API_KEY", "")
+    monkeypatch.setattr(autoblock, "RADARR_API_KEY", "")
+
+    ok, msg = autoblock.run_once({})
+
+    assert (ok, msg) == (True, "arr auto-block disabled (no API keys)")
