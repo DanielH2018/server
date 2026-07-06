@@ -65,7 +65,7 @@ services:
     # under ./data) so it belongs to the Renovate-managed tier, not watchtower's auto-update
     # pool. Pin digest-verified against the image that was actually running (the OCI version
     # label is absent on this image — a Hub tag digest match is the only reliable check).
-    image: portainer/portainer-ce:2.39.4-alpine
+    image: portainer/portainer-ce:2.43.0-alpine
     container_name: portainer
     restart: unless-stopped
     # Go binary on a high port; /data is root-owned and it performs no privileged ops.
