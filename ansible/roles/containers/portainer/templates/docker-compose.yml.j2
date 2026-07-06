@@ -90,11 +90,13 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - ./data:/data
     environment:
-      # Keep a BARE domain here. Portainer 2.39.4 FATAL-rejects a full scheme://host origin
-      # ("invalid url for trusted origin" → crash-loop, verified live 2026-07-04) but accepts a
-      # bare domain; the CSRF check errs closed either way. Do NOT "correct" this to
-      # https://portainer.<domain> — that's a review misfire that takes the container down.
-      TRUSTED_ORIGINS: "{{ domain }}"
+      # Portainer 2.43.0+ REQUIRES full scheme://host[:port] origins and FATAL-crashes on a bare
+      # domain ("invalid trusted origin: must be scheme://host or scheme://host:port" — verified
+      # live 2026-07-06 on the 2.39.4→2.43.0 Renovate bump, which the gitops health gate rolled
+      # back). This INVERTS the pre-2.43 rule (2.39.4 crash-looped on a full origin and needed the
+      # bare domain). Two origins, comma-separated: the Traefik/Authelia path (portainer.<domain>)
+      # and the break-glass :9000 LAN path (see the ports mapping above). Keep them full-scheme.
+      TRUSTED_ORIGINS: "https://portainer.{{ domain }},http://{{ server_ip }}:9000"
     command: -H tcp://docker-proxy-portainer:2375
     depends_on:
       docker-proxy-portainer:
