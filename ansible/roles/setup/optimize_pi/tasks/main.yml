@@ -256,6 +256,71 @@
   changed_when: true
   become: true
 
+# Reclaim ~17 MB more on the 512 MB board by shedding a redundant logger, an unused radio's
+# supplicant, and a stale init log — all found 2026-07-06 while auditing where the ~310 MB used
+# goes (dockerd+containerd+shims are ~108 MB of it and can't be trimmed). Pi-only, since this whole
+# role is `when: inventory_hostname == 'daniel-pi'` — the server keeps these (it has RAM to spare).
+
+- name: Disable + mask rsyslog (journald is the log of record here)
+  tags: [debloat]
+  # journald already captures everything (journalctl works) and fail2ban reads the journal
+  # (systemd backend, verified), so rsyslog is a redundant SECOND logger — and its text logs
+  # (/var/log/{syslog,kern,auth,daemon}.log) land in the log2ram tmpfs = REAL RAM. Mask, not just
+  # disable, so a package/dependency update can't silently re-enable it. journald provides /dev/log
+  # via its own socket, so syslog() calls still get captured.
+  ansible.builtin.systemd:
+    name: rsyslog.service
+    state: stopped
+    enabled: false
+    masked: true
+  become: true
+
+- name: Find the stale rsyslog text logs left in the log2ram tmpfs
+  tags: [debloat]
+  # rsyslog stops writing once masked, but the files it already produced sit in RAM-backed /var/log
+  # until logrotate/reboot. Collect them (incl. rotated .1/.gz) to reclaim the RAM now — journald
+  # retains the same records and nothing here reads these text files.
+  ansible.builtin.find:
+    paths: /var/log
+    patterns:
+      ["syslog*", "kern.log*", "auth.log*", "daemon.log*", "user.log*", "messages*", "debug*"]
+    recurse: false
+  register: optimize_pi_rsyslog_logs
+  become: true
+
+- name: Remove the stale rsyslog text logs
+  tags: [debloat]
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ optimize_pi_rsyslog_logs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+
+- name: Disable + mask wpa_supplicant (the Pi is on wired ethernet; wlan0 is down)
+  tags: [debloat]
+  # The USB ethernet NIC carries the default route and wlan0 is DOWN, so the WiFi supplicant runs
+  # for nothing. Mask, don't purge — netplan / the network stack depend on the wpasupplicant package;
+  # this stops the daemon (and the idle radio) without touching those deps.
+  ansible.builtin.systemd:
+    name: wpa_supplicant.service
+    state: stopped
+    enabled: false
+    masked: true
+  become: true
+
+- name: Remove the stale AIDE init log from the log2ram tmpfs (RAM)
+  tags: [debloat]
+  # /var/log/aide/aide.log is the one-time `aideinit` report (~9 MB, written when the DB was first
+  # built). The weekly `aide --check` cron logs to journald (`| logger -t aide`, see initial_setup),
+  # NOT here, so this file has been dead since init yet sits in RAM-backed /var/log. Safe to remove:
+  # AIDE reads its DB (/var/lib/aide), never this log, and aideinit is `creates:`-guarded (won't rerun).
+  ansible.builtin.file:
+    path: /var/log/aide/aide.log
+    state: absent
+  become: true
+
 # -------------------------------------------------------
 # 7. LOG RAM BUDGET (log2ram tmpfs is 128 MB of REAL RAM)
 # -------------------------------------------------------

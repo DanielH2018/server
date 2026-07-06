@@ -35,7 +35,12 @@ See repo-root `CLAUDE.md` for conventions.
    netplan only Suggests OVS. Also purges fwupd: its hourly `fwupd-refresh.timer`
    swap-thrashed the 512 MB board (healthcheck-timeout storms → autoheal restart loops)
    while never surviving its own 25 s dbus activation timeout; Pi firmware comes via apt,
-   not LVFS.
+   not LVFS. Also **masks rsyslog** (journald is the log of record — fail2ban reads the
+   journal; rsyslog was a redundant second logger writing text logs into the RAM-backed
+   /var/log) and its stale text logs, **masks wpa_supplicant** (the Pi is on wired ethernet,
+   `wlan0` DOWN), and removes the stale ~9 MB `aideinit` log (`/var/log/aide/aide.log`; the
+   weekly `aide --check` logs to journald, so that file is dead RAM). Reclaimed ~17 MB
+   (2026-07-06). Masks, not purges, for rsyslog/wpa — a package update can't silently re-enable them.
 7. **Log RAM budget** — `/var/log` is log2ram's 128 MB RAM-backed tmpfs (was 81% full
    2026-06-11): a Pi journald drop-in (`60-homelab-pi.conf`, `SystemMaxUse=32M`) overrides
    initial_setup's server-sized 1G cap, and `ACCT_LOGGING="3"` cuts pacct retention from
