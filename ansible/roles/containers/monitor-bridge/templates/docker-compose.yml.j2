@@ -191,13 +191,16 @@ services:
       - RENOVATE_MAX_AGE_MIN=2160
       - KUMA_PUSH_RENOVATE_ALIVE={{ monitor_bridge_renovate_alive_push_token }}
       # Loki log-ingestion freshness: Loki's /ready Kuma probe stays green even when promtail
-      # stops shipping (docker-proxy break, positions corruption). Count lines across ALL file-tailed
-      # streams ({job=~".+"} = authlog+syslog+traefik) over 30m and `down` at zero — if promtail dies
-      # they all fall silent together, while no single quiet file can trip it (syslog alone over 10m
-      # false-paged: this debloated host idles >15m between syslog writes). Reached at loki:3100 over `monitoring`.
+      # stops shipping (docker-proxy break, positions corruption). Two arms (see check.py):
+      # arm 1 counts the file-tail union (authlog+syslog+traefik, EXCLUDING the high-volume
+      # docker_sd `job:docker` stream) over a tolerant window (LOKI_FILETAIL_WINDOW) and `down`s at
+      # zero — a file-tail break silences all three at once, while syslog's routine volume keeps a
+      # quiet night alive; arm 2 counts {container=~".+"} (the docker stream) over LOKI_WINDOW.
+      # Reached at loki:3100 over `monitoring`.
       - LOKI_URL=http://loki:3100
-      - LOKI_STREAM={job=~".+"}
+      - LOKI_STREAM={job=~"authlog|syslog|traefik"}
       - LOKI_WINDOW=30m
+      - LOKI_FILETAIL_WINDOW=3h
       - KUMA_PUSH_LOKI={{ monitor_bridge_loki_push_token }}
       # Loki reachability GATE (peer of the Prometheus gate): probed once per cycle before the
       # Loki-querying checks (Loki Ingestion, Recyclarr, Janitorr). When Loki is unreachable they're

@@ -30,6 +30,10 @@ services:
     # re-pulls a present tag, see common/tasks/docker_deploy.yml.)
     environment:
       DOCKER_HOST: tcp://docker-proxy-lifecycle:2375
+      # WATCHTOWER_SCHEDULE resolves against the container's local time; without TZ the host is
+      # UTC, so "04:00" would fire at ~23:00 Central. Set TZ so the low-traffic 4am window is
+      # actually 4am local (same explicit-TZ idiom as traefik's log legibility).
+      TZ: "{{ tz }}"
       WATCHTOWER_CLEANUP: true
       WATCHTOWER_SCHEDULE: "0 0 4 * * *"
       WATCHTOWER_INCLUDE_RESTARTING: true

@@ -190,21 +190,27 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     pages. Without it one Loki outage fired all three at once. Loki being UP but promtail not
     shipping is a different signal Loki Log Ingestion still surfaces. `LOKI_DEPENDENT` is guarded by
     a test against the live `CHECKS` so it can't drift.)
-  - **Loki Log Ingestion** (instant LogQL `sum(count_over_time({job=~".+"}[30m]))` against
-    `loki:3100` over `monitoring`: `down` at zero lines — a silently-dead promtail→Loki pipeline
-    (docker-proxy break, positions-file corruption, relabel regression) that Loki's `/ready` Kuma
-    probe stays green through. Counts ALL file-tailed streams (`authlog`+`syslog`+`traefik`), not one:
-    if promtail dies they ALL fall silent together, while no single low-volume file going quiet can
-    trip it. **Second arm (added after the docker stream blind-spot review): also counts
-    `{container=~".+"}` (`LOKI_DOCKER_STREAM`) — the docker_sd stream carries a `container`
-    label, no `job`, so it's outside `{job=~".+"}`; a docker_sd-specific break (docker-proxy
-    down, the docker relabel regressing) would silence every container log while the file-tail
-    union keeps flowing. `down` if EITHER arm is silent. Promtail also now stamps the docker
-    stream `job: docker` so it's filterable + falls under the union too.** **Originally `{job="syslog"}` over 10m — false-paged 2026-06-23 because this debloated
-    host routinely idles >15m between syslog writes (a 15m35s gap was observed), so a normal quiet
-    spell read as a dead pipeline; the broadened selector + 30m window is the fix.** Stream/window
-    tunable via `LOKI_STREAM`/`LOKI_WINDOW`. Pure `loki_ingestion_fresh()` + `loki_count()` are
-    unit-tested. A freshness watchdog in the same idiom as the SMART/restore-drill checks.)
+  - **Loki Log Ingestion** (two-arm LogQL freshness against `loki:3100` over `monitoring`, `down`
+    if EITHER arm is silent — a silently-dead promtail→Loki pipeline (docker-proxy break,
+    positions-file corruption, relabel regression) that Loki's `/ready` Kuma probe stays green
+    through. **Arm 1 — file-tail union** `sum(count_over_time({job=~"authlog|syslog|traefik"}[3h]))`:
+    counts the file-tailed streams — not one, so if promtail dies they ALL fall silent together
+    while syslog's routine volume keeps a quiet night alive (no single low-volume file trips it) —
+    over a TOLERANT window. It deliberately EXCLUDES the docker_sd stream: promtail stamps that
+    stream `job: docker` (so a bare `{job=~".+"}` would swallow it), and it dwarfs the file-tail
+    streams (~all 44 containers' stdout), so including it let a healthy container stream mask a
+    total file-tail outage — arm 1 could then only reach zero if promtail was *totally* dead, which
+    arm 2 already catches (the 2026-07-07 blind-spot review re-scoped it to file-tail-only). The
+    window is wider than arm 2's because file-tail volume is low and dips overnight (a lone
+    `{job="syslog"}` over 10m false-paged 2026-06-23 — a 15m35s idle gap was observed). **Arm 2 —
+    docker stream** `sum(count_over_time({container=~".+"}[30m]))` (`LOKI_DOCKER_STREAM`): the
+    docker_sd stream carries a `container` label, no `job`, so it's exactly the one arm 1 excludes;
+    a docker_sd-specific break (docker-proxy down, the docker relabel regressing) silences every
+    container log while the file-tail streams keep flowing, and a tight window catches a total
+    promtail death fast. Selectors/windows tunable via
+    `LOKI_STREAM`/`LOKI_FILETAIL_WINDOW`/`LOKI_DOCKER_STREAM`/`LOKI_WINDOW`. Pure
+    `loki_ingestion_fresh()` + `loki_count()` are unit-tested. A freshness watchdog in the same
+    idiom as the SMART/restore-drill checks.)
   - **Discord Delivery** (GET-verifies **all five** Discord notification webhooks: Kuma's own
     `monitor_discord_webhook_url` — the one Kuma POSTs every alert to — CrowdSec's
     `crowdsec_discord_webhook_url`, which CrowdSec POSTs ban alerts to *directly* (not via Kuma),

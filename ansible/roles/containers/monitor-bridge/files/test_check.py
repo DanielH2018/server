@@ -1737,9 +1737,9 @@ def test_check_loki_ingestion_silent_is_down(monkeypatch):
 
 
 def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch):
-    # docker_sd-specific failure: the static file-tail union ({job=~".+"}) keeps flowing,
-    # but the highest-volume container-log stream ({container=~".+"}) went silent. The
-    # union count alone stays non-zero and would hide it — the docker-specific arm must page.
+    # docker_sd-specific failure: the file-tail streams keep flowing, but the highest-volume
+    # container-log stream ({container=~".+"}) went silent. The file-tail arm alone stays
+    # non-zero and would hide it — the docker-specific arm must page.
     def fake_count(selector, window):
         return 0 if "container" in selector else 500
 
@@ -1747,6 +1747,20 @@ def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch):
     ok, msg = check.check_loki_ingestion()
     assert not ok
     assert "container" in msg
+
+
+def test_check_loki_ingestion_filetail_silent_is_down(monkeypatch):
+    # file-tail-only failure (the 2026-07-07 blind spot): the docker stream keeps flowing,
+    # but authlog/syslog/traefik went silent. Arm 1's selector must EXCLUDE the docker stream
+    # (which carries a `container` label) so a healthy container stream can't mask a dead
+    # file-tail pipeline — the file-tail arm must page.
+    def fake_count(selector, window):
+        return 500 if "container" in selector else 0
+
+    monkeypatch.setattr(check, "loki_count", fake_count)
+    ok, msg = check.check_loki_ingestion()
+    assert not ok
+    assert "file-tail" in msg
 
 
 # --- loki_reachable (the Loki-dependent gate) -------------------------------

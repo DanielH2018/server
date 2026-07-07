@@ -190,20 +190,28 @@ SCRUTINY_MAX_AGE_H = float(_env("SCRUTINY_MAX_AGE_H", "26"))
 # Loki log-ingestion freshness: Loki's Kuma /ready probe stays green even when promtail
 # stops SHIPPING (DOCKER_HOST/docker-proxy break, positions-file corruption, relabel
 # regression) — a silently-dead log pipeline that quietly blinds the log dashboards and
-# any future log forensics. We count ingested lines across ALL file-tailed streams
-# ({job=~".+"} = authlog+syslog+traefik) over a 30m window and go down at zero: if promtail
-# itself dies (or its positions file corrupts — exactly the failures /ready can't see) they
-# ALL fall silent together, while no single low-volume file going quiet can trip it. (A single
-# syslog stream over 10m false-paged — this debloated host routinely idles >15m between syslog
-# writes, so a normal quiet spell read as a dead pipeline.) Reached at loki:3100 over `monitoring`.
-LOKI_STREAM = _env("LOKI_STREAM", '{job=~".+"}')
-# The static file-tail union above does NOT include the docker_sd stream (it carries a
-# `container` label, no `job`), which is the highest-volume source — all ~44 containers'
-# stdout/stderr. A docker_sd-specific break (docker-proxy down, the docker relabel block
-# regressing) would silence every container log while authlog/syslog/traefik keep flowing,
-# so the union count stays non-zero and hides it. Check the container stream separately.
+# any future log forensics. Two arms, down if EITHER is silent:
+#   arm 1 (file-tail union): count the file-tailed streams (authlog+syslog+traefik) over a
+#   TOLERANT window (LOKI_FILETAIL_WINDOW) and go down at zero — a promtail static_configs
+#   regression, a stale /var/log bind, or host rsyslog dying silences all three at once
+#   (exactly what /ready can't see), while syslog's routine volume keeps the union alive on
+#   a quiet night so no single low-volume file going quiet trips it. The selector EXCLUDES
+#   the docker_sd stream (promtail stamps it `job: docker`, so a bare `{job=~".+"}` would
+#   swallow it): that stream dwarfs the file-tail streams — ~all 44 containers' stdout — so
+#   including it let a healthy docker stream MASK a total file-tail outage (arm 1 could then
+#   only reach zero if promtail was TOTALLY dead, which arm 2 already catches — the
+#   2026-07-07 blind-spot review). The window is wider than arm 2's because file-tail volume
+#   is low and dips overnight (a lone `{job="syslog"}` over 10m false-paged 2026-06-23 —
+#   this debloated host routinely idles >15m between syslog writes).
+#   arm 2 (docker stream): count {container=~".+"} — the docker_sd stream carries a
+#   `container` label, no `job`, so it's exactly the one arm 1 excludes. A docker_sd-specific
+#   break (docker-proxy down, the docker relabel block regressing) silences every container
+#   log while the file-tail streams keep flowing; a tight window catches a total promtail
+#   death fast. Reached at loki:3100 over `monitoring`.
+LOKI_STREAM = _env("LOKI_STREAM", '{job=~"authlog|syslog|traefik"}')
 LOKI_DOCKER_STREAM = _env("LOKI_DOCKER_STREAM", '{container=~".+"}')
 LOKI_WINDOW = _env("LOKI_WINDOW", "30m")
+LOKI_FILETAIL_WINDOW = _env("LOKI_FILETAIL_WINDOW", "3h")
 
 # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
 # 2026-06-11 (fwupd): hourly load5/core >1.7 episodes with healthcheck-timeout storms
@@ -1392,14 +1400,18 @@ def loki_ingestion_fresh(count, window):
 
 
 def check_loki_ingestion():
-    # Two arms, down if EITHER pipeline is silent: the file-tail union catches a total
-    # promtail death; the container-stream arm catches a docker_sd-specific break the
-    # union would hide (see LOKI_DOCKER_STREAM). Both share the same quiet-tolerant window.
+    # Two arms, down if EITHER pipeline is silent: the file-tail union (arm 1) catches a
+    # file-tail break (all of authlog/syslog/traefik going silent — a total promtail death or
+    # a static_configs/bind regression) over a tolerant window; the container-stream arm
+    # (arm 2) catches a docker_sd-specific break the file-tail selector excludes (see
+    # LOKI_DOCKER_STREAM). The docker stream dwarfs the file-tail streams, so arm 1 must NOT
+    # include it (else a healthy docker stream masks a dead file-tail pipeline) — hence the
+    # separate selector + wider window (LOKI_FILETAIL_WINDOW).
     ok_all, msg_all = loki_ingestion_fresh(
-        loki_count(LOKI_STREAM, LOKI_WINDOW), LOKI_WINDOW
+        loki_count(LOKI_STREAM, LOKI_FILETAIL_WINDOW), LOKI_FILETAIL_WINDOW
     )
     if not ok_all:
-        return False, msg_all
+        return False, "file-tail streams silent — " + msg_all
     ok_docker, msg_docker = loki_ingestion_fresh(
         loki_count(LOKI_DOCKER_STREAM, LOKI_WINDOW), LOKI_WINDOW
     )

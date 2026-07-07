@@ -98,6 +98,12 @@ def consumer_tag(name: str) -> str | None:
         return "monitor-bridge"
     if name.startswith("cloudflare_ddns_"):
         return "cloudflare-ddns"
+    if name == "arr_autoblock_push_token":
+        # autofix-bridge (daniel-server only) consumes it in env + the AutoKuma label on one
+        # compose file — the single-host single-redeploy pattern, not cross-host. (Token name
+        # kept as arr_autoblock_* through the arr-autoblock -> autofix-bridge rename for Kuma
+        # history continuity; the consumer is the autofix-bridge deploy tag.)
+        return "autofix-bridge"
     return (
         None  # pi_sd_health (Pi cron + server label), secret_rotation (self) -> manual
     )

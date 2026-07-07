@@ -153,6 +153,30 @@ def test_consumer_tag_cross_host_tokens_are_manual():
     assert sr.consumer_tag("secret_rotation_push_token") is None
 
 
+def test_consumer_tag_autofix_bridge_token():
+    # Single-host, single-redeploy auto token — must auto-rotate, not false-skip as cross-host.
+    assert sr.consumer_tag("arr_autoblock_push_token") == "autofix-bridge"
+
+
+def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
+    # Registry-driven guard: a new single-host `auto` push token must resolve a consumer_tag
+    # (so the unattended weekly `rotate --commit --deploy` cron actually rotates it) or sit in
+    # the explicit known-manual allowlist. Without this, a token whose consumer_tag falls
+    # through to None silently drops out of rotation and only surfaces months later as an
+    # OVERDUE page — exactly how arr_autoblock_push_token slipped in when autofix-bridge landed.
+    known_manual = {"pi_sd_health_push_token", "secret_rotation_push_token"}
+    reg = sr.load_registry()
+    auto = [n for n, m in reg["secrets"].items() if m.get("tier") == "auto"]
+    assert auto  # sanity: the registry has auto-tier tokens
+    unrotatable = [
+        n for n in auto if sr.consumer_tag(n) is None and n not in known_manual
+    ]
+    assert not unrotatable, (
+        "auto-tier tokens with no consumer_tag and not known-manual — they silently drop "
+        "out of unattended rotation: %s" % unrotatable
+    )
+
+
 def test_sync_preserves_a_manual_tier_override():
     today = dt.date(2026, 6, 11)
     # Operator downgraded a push token to ignore — sync must not reclassify it.
