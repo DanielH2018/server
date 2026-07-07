@@ -1096,6 +1096,24 @@ def test_pi_peers_unparseable_is_down(tmp_path, monkeypatch):
     assert "unparseable" in msg
 
 
+# ── autofix-bridge disk-autoprune host cron (hourly; we alert on it) ──
+
+
+def test_disk_prune_ok():
+    ok, msg = check.disk_prune({"ok": True, "msg": "82% -> 74%"}, 600, 3 * 3600)
+    assert ok and "ok" in msg
+
+
+def test_disk_prune_failed():
+    ok, msg = check.disk_prune({"ok": False, "msg": "image prune failed"}, 60, 3 * 3600)
+    assert not ok and "FAILED" in msg
+
+
+def test_disk_prune_stale():
+    ok, msg = check.disk_prune({"ok": True, "msg": "x"}, 5 * 3600, 3 * 3600)
+    assert not ok and "ago" in msg
+
+
 # ── CrowdSec home-IP allowlist updater (every-5-min host cron writes state.json; we alert on it) ──
 
 

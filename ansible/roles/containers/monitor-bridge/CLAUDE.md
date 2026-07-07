@@ -16,7 +16,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **thirty-one checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **thirty-two checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the nine
@@ -116,6 +116,14 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     across ALL snapshots, where the restore drill proves ONE service's tree restores. The
     script captures the verify's own exit code — the old `... | logger` cron made cron see
     logger's always-zero exit and silently swallowed a non-zero verify.)
+  - **Disk Autoprune** (reads `/autofix-disk/state.json`, written hourly by the **autofix-bridge**
+    role's disk-prune host cron — `down` on a FAILED prune command (docker image/builder/container
+    prune erroring), >3 h staleness (cron broken / never ran), or a missing/corrupt state file. The
+    cron conservatively reclaims dangling images/build cache/stopped containers (never `-a`, never
+    volumes) when `/` used% crosses a threshold, keeping Root Disk from ever needing a manual prune
+    as image churn grows. A disk still full of real data after a clean prune is Root Disk's alert,
+    not this one — single-purpose monitors, no double-paging. Same state-file idiom as Backup
+    Verify / WG Pi Peer Backup; pure `disk_prune()` is unit-tested.)
   - **Backup Maintenance** (reads `/maintenance/state.json`, written daily by the kopia role's
     `kopia-maintenance` host cron from `kopia maintenance info --json` — `down` on a
     disabled/overdue/failed full-maintenance cycle, >2.5 d staleness, or a missing/corrupt state
@@ -259,7 +267,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,pi,pi_peers,home_allowlist,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,verify,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,pi,pi_peers,home_allowlist,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,verify,disk_prune,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -283,6 +291,10 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   (written by the `traefik` role's every-5-min `crowdsec-update-home-allowlist.sh` cron). The `traefik`
   role creates that dir sys_user-owned, and traefik deploys first (everything depends on it), so the
   ordering is naturally satisfied.
+- The **Disk Autoprune** monitor bind-mounts `/var/lib/autofix-disk-prune:/autofix-disk:ro`
+  (written by the `autofix-bridge` role's hourly disk-prune cron). That role creates the dir
+  sys_user-owned, so on a fresh host deploy `autofix-bridge` before `monitor-bridge` (else Docker
+  auto-creates the mount source root-owned and the non-root container can't read it).
 - Thresholds are env-tunable in the compose template (`BACKUP_MAX_AGE_H`, `DISK_MAX_PCT`,
   `CERT_MIN_DAYS`, `MEM_MAX_PCT`, `RESTART_WINDOW`/`RESTART_MAX`, `OOM_WINDOW`,
   `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`/`CPU_CONSECUTIVE`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`,

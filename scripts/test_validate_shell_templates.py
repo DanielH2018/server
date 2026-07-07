@@ -27,6 +27,7 @@ def test_discover_templates_finds_the_known_set():
         "pi-sd-health.sh.j2",
         "pull-pi-peers.sh.j2",
         "portainer-agent-firewall.sh.j2",
+        "autofix-disk-prune.sh.j2",
     }
 
 

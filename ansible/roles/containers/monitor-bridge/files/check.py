@@ -126,6 +126,14 @@ HOME_ALLOWLIST_MAX_AGE_S = float(_env("HOME_ALLOWLIST_MAX_AGE_MIN", "30")) * 60
 VERIFY_STATE = _env("VERIFY_STATE", "/verify/state.json")
 VERIFY_MAX_AGE_S = float(_env("VERIFY_MAX_AGE_D", "10")) * 86400
 
+# Hourly disk-autoprune host cron (autofix-bridge role): writes {"ts": epoch, "ok": bool, "msg":
+# str} after checking `/` used% against a threshold and, if crossed, running a conservative
+# docker/builder/container prune. Same state-file idiom as verify/pi_peers. ok=false means the
+# prune command itself errored — a disk still full of real data after a clean prune is Root
+# Disk's alert, not this one. 3h staleness = 3x the hourly cron + slack.
+DISK_PRUNE_STATE = _env("DISK_PRUNE_STATE", "/autofix-disk/state.json")
+DISK_PRUNE_MAX_AGE_S = float(_env("DISK_PRUNE_MAX_AGE_H", "3")) * 3600
+
 # Daily kopia FULL-maintenance freshness: the host cron (kopia-maintenance-check.sh, kopia role)
 # queries `kopia maintenance info --json` and writes {"ts": epoch, "ok": bool, "msg": str} after
 # deciding whether full maintenance is healthy (enabled + owned + next full run not overdue +
@@ -1085,6 +1093,37 @@ def check_pi_peers():
     return pi_peers(state, age_s, PI_PEERS_MAX_AGE_S)
 
 
+def disk_prune(state, age_s, max_age_s):
+    """Pure: did the last disk-autoprune run succeed, and recently? (ok, msg).
+
+    Same state-file idiom as verify/pi_peers. ok=false means the last prune command errored; a
+    disk still full of real data after a clean prune is Root Disk's alert, not this one.
+    """
+    if not state.get("ok"):
+        return False, "last disk autoprune FAILED: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return False, "last disk autoprune %.1fh ago (max %.1fh)" % (
+            age_s / 3600,
+            max_age_s / 3600,
+        )
+    return True, "disk autoprune ok %.1fh ago: %s" % (
+        age_s / 3600,
+        state.get("msg", ""),
+    )
+
+
+def check_disk_prune():
+    try:
+        with open(DISK_PRUNE_STATE) as fh:
+            state = json.load(fh)
+        age_s = time.time() - float(state.get("ts", 0))
+    except FileNotFoundError:
+        return False, "no disk-autoprune state (never ran?)"
+    except ValueError, TypeError:
+        return False, "disk-autoprune state unparseable"
+    return disk_prune(state, age_s, DISK_PRUNE_MAX_AGE_S)
+
+
 def home_allowlist(state, age_s, max_age_s):
     """Pure: did the last CrowdSec home-IP allowlist update run succeed, and recently? (ok, msg).
 
@@ -1578,6 +1617,7 @@ CHECKS = [
     ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
     ("verify", _env("KUMA_PUSH_VERIFY", ""), check_verify),
     ("pi_peers", _env("KUMA_PUSH_PI_PEERS", ""), check_pi_peers),
+    ("disk_prune", _env("KUMA_PUSH_DISK_PRUNE", ""), check_disk_prune),
     (
         "home_allowlist",
         _env("KUMA_PUSH_HOME_ALLOWLIST", ""),
