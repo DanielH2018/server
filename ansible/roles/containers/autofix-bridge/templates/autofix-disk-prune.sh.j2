@@ -9,6 +9,9 @@
 # Reporting: writes {"ts","ok","msg"} to STATE; monitor-bridge's `disk_prune` check reads it
 # (read-only bind mount) and pushes the "Disk Autoprune" Kuma monitor. ok=false ONLY on a prune
 # command error — a disk still full of real data after a clean prune is Root Disk's alert, not this.
+#
+# Requires `jq` (builds state.json below). Installed by initial_setup (for Claude Code hook
+# parsing) AND re-ensured by this role's tasks/main.yml, so it's always present when this runs.
 set -uo pipefail
 
 STATE=/var/lib/autofix-disk-prune/state.json
@@ -39,7 +42,9 @@ fi
 ERR=""
 docker image prune -f     >/dev/null 2>&1 || ERR="image prune failed"
 [[ -z "$ERR" ]] && { docker builder prune -f   >/dev/null 2>&1 || ERR="builder prune failed"; }
-[[ -z "$ERR" ]] && { docker container prune -f  >/dev/null 2>&1 || ERR="container prune failed"; }
+# `until=24h` spares containers created in the last day, so a stopped/exited container kept for
+# incident forensics (or a crash-loop giveup) survives one investigation window before reclaim.
+[[ -z "$ERR" ]] && { docker container prune -f --filter "until=24h"  >/dev/null 2>&1 || ERR="container prune failed"; }
 
 AFTER=$(used_pct)
 

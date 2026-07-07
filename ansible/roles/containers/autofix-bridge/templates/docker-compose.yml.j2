@@ -61,8 +61,13 @@ services:
       - ./autofix.py:/app/autofix.py:ro
     {{ service_networks() }}
     labels:
-      {# Single push monitor: it pushes health every cycle (up/down), so its heartbeat is also
-         the dead-man for the container. max_retries=0 like every bridge push monitor. -#}
+      # Docker-liveness monitor (AutoKuma polls the socket ~60s, maxretries=2) surfaces a hard
+      # crash in ~2-3 min — the fast dead-man for this live (DRY_RUN=false) remediation actor.
+      {{ kuma('autofix-bridge') }}
+      # Push monitor: the remediation loop pushes health every cycle (up/down), the per-cycle
+      # heartbeat + descriptive alert. Slower backstop (600s). max_retries=0 like every bridge
+      # push monitor. Id/name stay 'arr-autoblock'/'Arr Auto-Block' through the container rename
+      # (a monitor names the CHECK, not the container) — keeping its Kuma history + push token.
       {{ kuma('arr-autoblock', monitor_type='push', name='Arr Auto-Block', interval=600, max_retries=0, push_token=arr_autoblock_push_token) }}
     # Resource caps for blast-radius containment; tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}

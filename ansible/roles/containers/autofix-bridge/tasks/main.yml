@@ -14,7 +14,7 @@
     src: autofix.py
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/autofix.py"
     mode: "0644"
-  register: autofix_script
+  register: autofix_bridge_script
 
 - name: Deploy Container
   tags: [deploy]
@@ -25,7 +25,7 @@
     # autofix.py is bind-mounted; the loop reads it once at startup, so only a recreate
     # applies a code change. Without this a script-only edit leaves recreate: auto and the
     # new logic silently never deploys. See common/CLAUDE.md.
-    common_config_changed: "{{ autofix_script is changed }}"
+    common_config_changed: "{{ autofix_bridge_script is changed }}"
 
 - name: Create the disk-autoprune monitor state directory
   tags: [config]
@@ -40,6 +40,16 @@
     mode: "0755"
   become: true
 
+- name: Ensure jq is installed for the disk-autoprune state writer
+  tags: [config]
+  # The disk-prune script builds state.json with jq. initial_setup already installs jq (for
+  # Claude Code hook parsing) so it should always be present — but that's an unrelated reason on
+  # a different role, so pin the dependency here too rather than rely on it implicitly.
+  ansible.builtin.apt:
+    name: jq
+    state: present
+  become: true
+
 - name: Deploy the disk-autoprune script
   tags: [config]
   ansible.builtin.template:
@@ -50,26 +60,26 @@
     mode: "0750"
   become: true
 
-- name: Install journald SystemMaxUse drop-in (bounds journald growth)
+- name: Remove the stale autofix-bridge journald drop-in
   tags: [config]
-  # A standing host cap (not a cron) — the biggest one-time reclaim. Lives in this role to keep
-  # disk hygiene cohesive + iterable via `deploy.yml --tags autofix-bridge`.
-  ansible.builtin.template:
-    src: 60-autofix-journald.conf.j2
-    dest: /etc/systemd/journald.conf.d/60-autofix-journald.conf
-    owner: root
-    group: root
-    mode: "0644"
+  # The journald disk cap is owned SOLELY by initial_setup's 50-homelab.conf (1G — a reasoned
+  # host-forensics window). This role briefly shipped a 60- SystemMaxUse=200M drop-in that
+  # silently won (systemd merges drop-ins last-wins-by-filename), cutting the journal 5x and
+  # leaving the 1G as dead config. Remove the stale file so 50-homelab.conf's 1G takes effect
+  # again; a fresh host never had it, so this is a no-op there. Journald cap = one source of truth.
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d/60-autofix-journald.conf
+    state: absent
   become: true
-  register: autofix_journald_conf
+  register: autofix_bridge_journald_removed
 
-- name: Restart systemd-journald to apply the cap # noqa no-handler
+- name: Restart systemd-journald after removing the drop-in # noqa no-handler
   tags: [config]
   ansible.builtin.systemd_service:
     name: systemd-journald
     state: restarted
   become: true
-  when: autofix_journald_conf is changed
+  when: autofix_bridge_journald_removed is changed
 
 - name: Schedule the disk-autoprune cron
   tags: [cron]
@@ -80,3 +90,16 @@
     job: /usr/local/bin/autofix-disk-prune.sh
     state: present
   become: true
+
+- name: Seed the disk-autoprune state on first deploy (idempotent)
+  tags: [cron]
+  # monitor-bridge reports "Disk Autoprune" DOWN when the state file is MISSING ("never ran?").
+  # The hourly cron writes it, so a fresh host / bare-metal DR would false-DOWN for up to ~1h,
+  # precisely during recovery. Run the script ONCE now to seed it; `creates:` makes every reseed
+  # a no-op (the cron owns ongoing refresh) and failed_when:false keeps a not-yet-ready run off
+  # the deploy path. Mirrors kopia's seed-on-first-deploy; runs as the cron user (sys_user).
+  ansible.builtin.command:
+    cmd: /usr/local/bin/autofix-disk-prune.sh
+    creates: /var/lib/autofix-disk-prune/state.json
+  changed_when: false
+  failed_when: false
