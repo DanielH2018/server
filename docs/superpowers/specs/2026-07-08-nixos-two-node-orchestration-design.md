@@ -44,6 +44,11 @@ These were settled during brainstorming and frame the whole plan:
    is revisited only once the new node has proven itself.
 4. **Repo layout: monorepo, flake at root.** One repo, one CI, one SOPS keyring, one Renovate.
    Nix and Ansible share the *same* `ansible/vars/secrets.yml` via `sops-nix`.
+5. **Runtime requirements: everything-as-code + blue-green + scaling.** Config-as-code is the
+   plan's core (NixOS + sops-nix, already maximized). Blue-green deploys and horizontal scaling
+   are Kubernetes capabilities that land in Phase 2, targeted **single-node for now** — learned as
+   mechanics on the stateless service subset; multi-node HA stays a deferred Phase-3 option, not a
+   commitment. See *Runtime requirements* below.
 
 ### Operator's stated (non-binding) vision
 
@@ -51,6 +56,32 @@ Long-term, the K8 Plus likely becomes the **primary node** — handling media wo
 minimum — with `daniel-server` ported to NixOS and folded into the monorepo. This is **not
 committed**; it is the documented Phase-3 target, decided only after the new node runs well
 standalone. The design below is built so that this future is *additive*, never a rewrite.
+
+## Runtime requirements: config-in-code, blue-green, scaling
+
+Three operator requirements and where each lands:
+
+| Requirement | Kind | Phase | Notes |
+| --- | --- | --- | --- |
+| **Everything-as-code** | ✅ Plan core | 0–1 | NixOS declares host/services/firewall/users; sops-nix declares secrets (encrypted). Already maximized by the design. |
+| **Blue-green deploys** | Kubernetes feature | 2 | NixOS gives atomic generation swap + rollback (host-level) — that is *not* blue-green. True blue-green needs traffic-shifting: k3s rolling updates, or Argo Rollouts / weighted Traefik-Gateway routing. Phase-1 oci-containers do not provide it. |
+| **Service scaling** | Kubernetes feature | 2 | Replicas + load-balancing + autoscaling (HPA) are core k8s; podman/oci-containers have no scheduler for it. |
+
+**Decided stance: single-node k3s for now.** Blue-green and scaling are learned as *mechanics* on
+one node. Two limits are accepted honestly:
+
+- **Single node is not HA.** One machine is a SPOF and caps scale at its own resources. Real
+  availability — survive a node dying, scale past one box — needs ≥2 cluster nodes (the deferred
+  Phase-3 multi-node option). Not a near-term goal.
+- **Only the stateless subset applies.** DBs, the *arr apps, jellyfin, and Home Assistant are
+  stateful singletons; they cannot be naively replicated or blue-greened (shared state, DB locks,
+  coordinator affinity). Blue-green/scaling target the stateless services (`littlelink`,
+  `bento-pdf`, `ical-proxy`, frontends).
+
+**Phase-1 implication — keep oci-containers lean.** Since Phase 2 rewrites container definitions
+as k8s manifests, do not gold-plate the `mk-oci` helper — build just enough to learn NixOS and run
+the apps. The NixOS host/secrets/monitoring/backup/firewall work carries over fully; only the
+container packaging is redone. This is the accepted cost of NixOS-first vs k8s-first.
 
 ## Hard constraint: storage anchoring
 
@@ -106,9 +137,12 @@ cannot run k3s at all. It stays on Ubuntu+Ansible.
   firewall, generations/rollback — without K8s in the mix. **End state:** the `apps`-network tier
   runs on NixOS.
 - **Phase 2 — Kubernetes (k3s on NixOS).** Stand up single-node `services.k3s`; re-platform the
-  apps tier again as k3s manifests. Orchestration learned on services already understood.
+  apps tier again as k3s manifests. Orchestration learned on services already understood —
+  including **blue-green deploys** and **horizontal scaling** on the stateless subset (single-node
+  = mechanics, not HA).
 - **Phase 3 — Decision gate (deferred).** Convert `daniel-server` to NixOS and/or add it as a
-  real second k3s node for multi-node HA; potentially relocate media/storage to make the K8 Plus
+  real second k3s node for multi-node HA — the point at which blue-green/scaling become genuine HA
+  rather than single-node mechanics; potentially relocate media/storage to make the K8 Plus
   primary. Explicitly not committed now.
 
 ## Tech choices
@@ -228,9 +262,17 @@ the control plane). NixOS collapses several sidecars into the OS itself.
 
 Re-platform Rung 0→2 as k3s objects on services already known cold: `littlelink`/`bento-pdf` as
 Deployment + Service + Ingress; `speedtest`/`freshrss` with PVCs. Learn scheduling, probes,
-ConfigMaps/Secrets (via a sops-nix→k8s bridge), and Ingress on familiar workloads. Cluster-ingress
-choice — NodePort into the existing Traefik vs k3s's bundled Traefik vs metallb LoadBalancer — is
-decided at Phase 2. This phase gets its own spec before implementation.
+ConfigMaps/Secrets (via a sops-nix→k8s bridge), and Ingress on familiar workloads.
+
+**Blue-green + scaling are the headline Phase-2 lessons**, exercised on the stateless subset:
+- **Scaling:** replicas + a Service load-balancer; then autoscaling (HPA + metrics-server) on
+  `littlelink`/`bento-pdf`. Single node caps scale at the box's resources — that limit is accepted.
+- **Blue-green:** start with k8s rolling updates (native), then a true blue-green/canary cut with
+  **Argo Rollouts** (or weighted Traefik-Gateway routing) — hold two versions, shift traffic,
+  roll back by flipping. Stateful singletons keep NixOS-generation-style deploys, not blue-green.
+
+Cluster-ingress choice — NodePort into the existing Traefik vs k3s's bundled Traefik vs metallb
+LoadBalancer — is decided at Phase 2. This phase gets its own spec before implementation.
 
 ## Phase 3 — Decision gate (deferred)
 
@@ -263,5 +305,6 @@ Revisited only after the K8 Plus runs well standalone. Options, non-binding:
 - **Phase 1:** Rungs 1–3 migrated (Rung 4 optional); `mk-oci` helper stable; per-service files
   ~10 lines; CI runs `nix flake check` + Nix lints; Renovate bumps `flake.lock`.
 - **Phase 2:** single-node k3s runs Rung 0→2 as manifests; cluster reachable through chosen
-  ingress; own spec written and executed.
+  ingress; a stateless service demonstrably **scales** (replicas + HPA) and does a **blue-green**
+  cutover with rollback; own spec written and executed.
 - **Phase 3:** decision made deliberately, with a storage plan if media relocates.
