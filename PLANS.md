@@ -5,6 +5,7 @@ Lightweight idea backlog. Per-feature design rationale lives in
 the Renovate dependency dashboard.
 
 ## Backlog
+- Update stop hook to not trigger the "unstaged modifications on master" for the Server and Windows PC.
 
 _Recently cleared (2026-06-29): adopted `ruff format` + a `ruff format --check` prek hook
 (config kept in `pyproject.toml [tool.ruff]`, not a separate `ruff.toml`). "Organize tests in
