@@ -101,6 +101,30 @@
       ],
       "depNameTemplate": "getsops/sops",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "CI test-runner Python pin (`python-version:` input in ci.yml). helpers:pinGitHubActionDigests tracks the setup-python ACTION digest but not its version INPUT, so this was one of the two last silently-aging pins in the repo. A bump PR runs the whole test suite ON the new interpreter, which is exactly the compatibility proof; keep it moving with the host toolchain rather than frozen at the requires-python floor.",
+      "managerFilePatterns": [
+        "/(^|/)\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "python-version:\\s*\"(?<currentValue>[\\d.]+)\""
+      ],
+      "depNameTemplate": "python",
+      "datasourceTemplate": "python-version"
+    },
+    {
+      "customType": "regex",
+      "description": "CI Node pin (`node-version:` input in ci.yml) — the other silently-aging setup-* version input; it only feeds renovate-config-validator, so stakes are low, but the tracking doctrine applies uniformly. Majors (22 -> 24) stay manual per the default automerge rules.",
+      "managerFilePatterns": [
+        "/(^|/)\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "node-version:\\s*\"(?<currentValue>\\d+)\""
+      ],
+      "depNameTemplate": "node",
+      "datasourceTemplate": "node-version"
     }
   ],
   "packageRules": [

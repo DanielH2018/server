@@ -314,7 +314,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the thirty push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the thirty-two push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI

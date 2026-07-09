@@ -10,9 +10,12 @@ Three subcommands:
   audit  — compute which secrets are due / overdue per tier and print a report. With
            --push, post up/down to an Uptime Kuma push monitor (the SECRET_ROTATION_KUMA
            env var holds the full push URL incl. token).
-  rotate — rotate DUE `auto`-tier secrets (locally-generated push tokens — no external
-           coupling). Dry-run by default; --commit writes new values via `sops set` and
-           records the new date. Only-due-by-default means rotations stay staggered.
+  rotate — rotate `auto`-tier secrets coming due (locally-generated push tokens — no
+           external coupling). Dry-run by default; --commit writes new values via
+           `sops set` and records the new date. The unattended path picks up anything
+           due within ROTATE_LEAD_DAYS so a token rotates the weekly-cron run BEFORE
+           it goes overdue (see the constant's comment); coming-due-only-by-default
+           means rotations stay staggered.
 
 Secret NAMES are read straight from the encrypted secrets.yml — SOPS encrypts values but
 leaves keys in plaintext — so `audit`/`sync` never decrypt anything and never see a value.
@@ -54,6 +57,15 @@ TIER_DAYS = {
     "pinned": 730,
     "ignore": None,
 }
+
+# The unattended rotate cron is WEEKLY (Sunday 09:00, initial_setup). Rotating only
+# already-overdue tokens would leave each one overdue up to 6 days first — with the daily
+# 08:00 audit paging the "Secret Rotation" Kuma monitor DOWN the whole time for a rotation
+# that was always going to happen anyway. Anything due within one cron interval (+1 day
+# margin) rotates the run BEFORE its due date instead, so a working cron never lets an
+# auto token go overdue — an auto-tier OVERDUE in the audit now genuinely means the
+# weekly cron is broken, not that it hasn't come around yet.
+ROTATE_LEAD_DAYS = 8
 
 # Classification by name. First matching rule wins; default is `assisted` (the safe,
 # reminds-but-doesn't-touch tier). Override per-secret by editing `tier` in the registry —
@@ -275,6 +287,15 @@ def cmd_audit(args) -> int:
     return 0
 
 
+def unattended_due(rows: list, rotate_all: bool = False) -> list:
+    """Auto-tier rows the unattended weekly cron should rotate: due within
+    ROTATE_LEAD_DAYS (everything auto-tier with rotate_all). Rows are audit()
+    tuples (name, tier, due_date, days_left)."""
+    return [
+        r for r in rows if r[1] == "auto" and (rotate_all or r[3] < ROTATE_LEAD_DAYS)
+    ]
+
+
 def cmd_rotate(args) -> int:
     reg = load_registry()
     today = dt.date.today()
@@ -289,9 +310,10 @@ def cmd_rotate(args) -> int:
             )
             return 2
     else:
-        # Unattended path: auto-tier, due (unless --all), AND with a single-redeploy consumer.
-        # Tokens with no consumer_tag (cross-host / self-referential) are reported but skipped.
-        due_auto = [r for r in res["all"] if r[1] == "auto" and (args.all or r[3] < 0)]
+        # Unattended path: auto-tier, coming due (unless --all), AND with a single-redeploy
+        # consumer. Tokens with no consumer_tag (cross-host / self-referential) are reported
+        # but skipped.
+        due_auto = unattended_due(res["all"], args.all)
         targets = [r for r in due_auto if consumer_tag(r[0])]
         for name, _t, _d, _dl in due_auto:
             if not consumer_tag(name):

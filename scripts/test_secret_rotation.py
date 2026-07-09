@@ -177,6 +177,30 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     )
 
 
+def test_unattended_rotation_picks_tokens_up_before_they_go_overdue():
+    # Weekly cron + rotate-only-when-overdue left every token overdue up to 6 days while
+    # the daily audit paged DOWN on it (2026-07-09 review). The pick-up window must catch
+    # anything due within the next cron interval, and still catch a genuinely missed one.
+    rows = [
+        ("due_next_week_push_token", "auto", dt.date(2026, 7, 14), 5),
+        ("missed_push_token", "auto", dt.date(2026, 7, 6), -3),
+        ("not_due_push_token", "auto", dt.date(2026, 9, 7), 60),
+        ("app_password", "assisted", dt.date(2026, 7, 10), 1),  # never auto-rotated
+    ]
+    names = [r[0] for r in sr.unattended_due(rows)]
+    assert "due_next_week_push_token" in names  # rotates BEFORE going overdue
+    assert "missed_push_token" in names  # a missed rotation still gets caught
+    assert "not_due_push_token" not in names  # staggering preserved
+    assert "app_password" not in names
+    assert len(sr.unattended_due(rows, rotate_all=True)) == 3  # --all: every auto row
+
+
+def test_unattended_rotation_lead_exceeds_the_cron_interval():
+    # The lead window must be longer than the weekly cron interval, else a token due the
+    # day after a Sunday run goes overdue before the next run — the exact gap this fixes.
+    assert sr.ROTATE_LEAD_DAYS > 7
+
+
 def test_sync_preserves_a_manual_tier_override():
     today = dt.date(2026, 6, 11)
     # Operator downgraded a push token to ignore — sync must not reclassify it.

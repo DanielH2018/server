@@ -31,6 +31,12 @@ tmp/
 # up anywhere as a result (operator-accepted 2026-06-10 — the service is retired,
 # the dir is kept as the only copy of the worlds).
 valheim/
+# Terraria's own world-save rotation (.wld.bak/.bak2) — backups-of-a-backup, same
+# class as tdarr Backups/ below: each is a ~12M near-copy of the live .wld rewritten
+# on every daily autosave, so the trio re-uploaded ~37M/day of poorly-deduping churn
+# (2026-07-09 B2 triage). The live .wld STAYS backed up — kopia's 7 dailies + weeklies
+# + monthlies already provide the rollback the .bak files exist for.
+terraria/config/*.wld.bak*
 
 
 # ── Jellyfin ─────────────────────────────────────────────────────────────────

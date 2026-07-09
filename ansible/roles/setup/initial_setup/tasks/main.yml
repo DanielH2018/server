@@ -295,6 +295,7 @@
     group: "{{ sys_user }}"
     mode: "0700"
   become: true
+  no_log: true  # renders secret_rotation_push_token (gitops_deploy wrapper parity)
 
 - name: Schedule the daily secret-rotation audit (server only)
   tags: [crons]
@@ -311,7 +312,8 @@
 
 - name: Deploy the weekly secret-rotation wrapper (server only)
   tags: [crons]
-  # Unattended rotation of DUE auto-tier push tokens (rotate --commit --deploy + git push).
+  # Unattended rotation of coming-due auto-tier push tokens (rotate --commit --deploy +
+  # git push; anything due within ROTATE_LEAD_DAYS rotates BEFORE it goes overdue).
   # Reverts on failure; cross-host tokens stay manual. See scripts/secret_rotation.py +
   # docs/secret-rotation.md.
   when: inventory_hostname == 'daniel-server'
@@ -322,6 +324,7 @@
     group: "{{ sys_user }}"
     mode: "0700"
   become: true
+  no_log: true  # renders secret_rotation_push_token (gitops_deploy wrapper parity)
 
 - name: Schedule the weekly secret rotation (server only)
   tags: [crons]

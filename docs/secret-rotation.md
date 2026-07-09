@@ -39,7 +39,9 @@ its `tier` in the registry (`sync` preserves overrides).
 `rotate --commit` generates a new 32-char token, writes it via `sops set`, and records the
 date. Then redeploy whatever reads it, e.g. `uv run ansible-playbook ansible/deploy.yml
 --tags monitor-bridge`. Uptime Kuma honours the new push token on the next push — no Kuma
-UI step. Because only **due** secrets rotate, runs stay staggered.
+UI step. Because only **coming-due** secrets rotate (due within `ROTATE_LEAD_DAYS` = 8 —
+one weekly-cron interval, so a token rotates the Sunday *before* it goes overdue and the
+daily audit never pages DOWN on a rotation the cron was about to do), runs stay staggered.
 
 ## `assisted` — app-issued (regenerate in the app, then update SOPS)
 
