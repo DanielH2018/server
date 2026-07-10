@@ -149,6 +149,7 @@ def test_validate_case_flags_unknown_mode():
 
 def test_all_case_files_valid():
     files = _all_case_files()
+    assert files, "no case files found under evals/cases/"
     for f in files:
         obj = json.loads(f.read_text())
         problems = validate_case(obj)
