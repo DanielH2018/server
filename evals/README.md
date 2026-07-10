@@ -21,8 +21,10 @@ done
 
 # filters + cheap iteration
 … run-evals.mjs --agent security-review        # one agent
-… run-evals.mjs --smoke                         # k=1 everywhere
+… run-evals.mjs --smoke                         # k=1 everywhere (overrides case k)
+… run-evals.mjs --k 1                           # force k=N for every case (smoke > --k > case k)
 … run-evals.mjs --case security-review/001-hardcoded-secret
+… run-evals.mjs --agent security-review --json report.json   # + machine-readable report (see caveat below)
 
 # live smoke (manual, costly, non-deterministic — real subagent dispatch in ~/server)
 EVAL_CASE_DIRS=$HOME/server/evals/cases \
@@ -45,6 +47,10 @@ Two run modes, and they are NOT equally trustworthy:
   live `grep`; a sound catch-defect case scored 1/3 then 1/1 run-to-run. Good enough for a rough
   "does the wiring work / does the case catch its defect" sanity check — **not** for regression
   numbers. Costs subscription usage, not dollars.
+
+`--json report.json` dumps each case's aggregate + per-run detail. Only persist/commit it as a
+baseline from a **hermetic** (API-key) run — a subscription run's numbers are noisy per the above,
+so a committed subscription baseline would trend noise, not regressions.
 
 ## Schema guard (offline, free)
 
