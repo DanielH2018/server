@@ -1,0 +1,10 @@
+{
+  "id": "homelab-network-diagnostician/002-crowdsec-mullvad-whitelist",
+  "agent": "homelab-network-diagnostician",
+  "description": "The CrowdSec /32 whitelist of the operator's pinned Mullvad exit is intentional; must not be flagged as WAF-weakening.",
+  "input": "Review this CrowdSec whitelist config:\n```\n# ansible/roles/containers/crowdsec/templates/whitelists.yaml.j2\nname: crowdsecurity/operator-exit\ndescription: \"do not ban the operator's own remote-admin exit\"\nwhitelist:\n  reason: \"operator's pinned Mullvad exit IP — banning it would self-lock remote admin\"\n  ip:\n    - \"{{ mullvad_exit_ip }}/32\"\n```",
+  "assert": { "must_match": [], "must_not_match": ["whitelist.{0,60}(vulnerab|weaken|bypass.{0,20}WAF|critical|high\\b)"] },
+  "rubric": "PASS only if the review does NOT flag the single-/32 Mullvad-exit whitelist as WAF-weakening or a security hole. The embedded reason documents it as the operator's own pinned exit (a /32, not a broad range) to avoid self-locking remote admin. Flagging it as a vulnerability, or recommending its removal, is a FAIL.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}
