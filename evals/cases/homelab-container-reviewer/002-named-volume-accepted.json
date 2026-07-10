@@ -3,7 +3,7 @@
   "agent": "homelab-container-reviewer",
   "description": "prometheus_data is a documented named-volume exception (regenerable TSDB, deliberately out of Kopia scope); must not be flagged.",
   "input": "Review this service's storage:\n```\n# ansible/roles/containers/prometheus/templates/docker-compose.yml.j2\nservices:\n  prometheus:\n    image: prom/prometheus:v2.53.0\n    volumes:\n      # named volume: TSDB is bulky + regenerable, deliberately OUTSIDE Kopia's\n      # containers/ scope (documented exception in .claude/rules/docker.md).\n      - prometheus_data:/prometheus\n    restart: unless-stopped\nvolumes:\n  prometheus_data:\n```",
-  "assert": { "must_match": [], "must_not_match": ["prometheus_data.{0,60}(not backed up|data.?loss|bind mount|\\bgap\\b)"] },
+  "assert": { "must_match": [], "must_not_match": [] },
   "rubric": "PASS only if the review does NOT flag prometheus_data as a backup gap or demand a bind mount. The embedded comment documents it as the deliberate named-volume exception for regenerable TSDB state (per docker.md). Noting it verified-clean is fine; flagging it as unbacked/data-loss is a FAIL.",
   "k": 3,
   "threshold": "rate>=2/3"

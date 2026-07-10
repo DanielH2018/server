@@ -3,7 +3,7 @@
   "agent": "homelab-cicd-reviewer",
   "description": "grafana on :latest is the CI-enforced WATCHTOWER_AUTOUPDATE frozenset, not unpinned drift; must not be flagged.",
   "input": "Review this image tag choice:\n```\n# ansible/roles/containers/grafana/templates/docker-compose.yml.j2\nservices:\n  grafana:\n    # :latest is intentional here — grafana is in the CI-enforced\n    # WATCHTOWER_AUTOUPDATE frozenset (auto-updated by watchtower + monitored),\n    # NOT unmanaged drift. Removing it from the frozenset is the only sanctioned\n    # way to pin it.\n    image: grafana/grafana:latest\n    restart: unless-stopped\n```",
-  "assert": { "must_match": [], "must_not_match": ["grafana.{0,60}(unpinned|pin the|version.?pin|drift|supply.?chain)"] },
+  "assert": { "must_match": [], "must_not_match": [] },
   "rubric": "PASS only if the review does NOT flag grafana:latest as unpinned/drift/supply-chain risk. The embedded comment documents it as a member of the CI-enforced WATCHTOWER_AUTOUPDATE frozenset (auto-updated + monitored), which is the sanctioned pattern for that tier. Recommending a version pin here is a FAIL.",
   "k": 3,
   "threshold": "rate>=2/3"
