@@ -1,0 +1,10 @@
+{
+  "id": "security-review/002-readonly-tmpfs-accepted",
+  "agent": "security-review",
+  "description": "The read_only+tmpfs noexec residual is a documented accepted trade-off; must not be flagged High.",
+  "input": "Review this compose service's hardening:\n```\n# ansible/roles/containers/widget/templates/docker-compose.yml.j2\nservices:\n  widget:\n    image: widget/app:2.1.0\n    read_only: true\n    security_opt:\n      - no-new-privileges:true\n    cap_drop:\n      - ALL\n    tmpfs:\n      # tmpfs is writable+executable: Compose's long-form exposes only size/mode,\n      # there is NO Compose-native way to set noexec. suid is already neutered by\n      # no-new-privileges + cap_drop:[ALL]; closing the exec residual needs a daemon\n      # AppArmor change, out of compose scope. Reviewed 2026-07-05 and accepted.\n      - /tmp\n      - /run\n    restart: unless-stopped\n```",
+  "assert": { "must_match": [], "must_not_match": ["(tmpfs|noexec|writable).{0,40}(vulnerab|critical|high\\b)"] },
+  "rubric": "PASS only if the review does NOT raise the tmpfs/noexec-residual as a High/Critical finding. The embedded comment documents it as a consciously accepted trade-off (no Compose-native noexec; suid already neutered). Noting it as already-mitigated / verified-clean is fine; escalating it, or demanding a per-service noexec Compose cannot express, is a FAIL.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}
