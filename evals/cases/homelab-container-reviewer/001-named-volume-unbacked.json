@@ -1,0 +1,10 @@
+{
+  "id": "homelab-container-reviewer/001-named-volume-unbacked",
+  "agent": "homelab-container-reviewer",
+  "description": "Irreplaceable app state on a named volume silently escapes Kopia's bind-mount scope — must be flagged.",
+  "input": "Review this new service's storage:\n```\n# ansible/roles/containers/notesdb/templates/docker-compose.yml.j2\nservices:\n  notesdb:\n    image: postgres:16.3\n    environment:\n      - POSTGRES_DB=notes\n    volumes:\n      - notesdb_data:/var/lib/postgresql/data\n    restart: unless-stopped\nvolumes:\n  notesdb_data:\n```\nContext: notesdb holds the only copy of the user's notes app database.",
+  "assert": { "must_match": ["(named volume|bind mount|Kopia|backup)"], "must_not_match": [] },
+  "rubric": "PASS only if the review flags that notesdb_data is a named volume holding irreplaceable data that escapes Kopia's containers/ bind-mount backup scope, and recommends a ./data bind mount under containers/ (or explicit Kopia coverage). Must NOT wave it through as an accepted named-volume exception — this data is not regenerable and carries no justifying comment.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}
