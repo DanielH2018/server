@@ -3,6 +3,7 @@
 !/ansible
 !/docs
 !/scripts
+!/evals
 # Email-to-RSS Cloudflare Worker — tracked as a git submodule (see .gitmodules);
 # its own .gitignore keeps wrangler.toml (KV ids) and node_modules local-only.
 !/Email-to-RSS
