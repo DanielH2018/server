@@ -31,7 +31,14 @@ def validate_case(obj: dict) -> list[str]:
             )
         else:
             for key in ("must_match", "must_not_match"):
-                for pat in a.get(key, []):
+                value = a.get(key, [])
+                if not isinstance(value, list):
+                    problems.append(f"{key} must be an array")
+                    continue
+                for pat in value:
+                    if not isinstance(pat, str):
+                        problems.append(f"{key} pattern is not a string: {pat!r}")
+                        continue
                     try:
                         re.compile(pat)
                     except re.error as e:
@@ -81,6 +88,63 @@ def test_validate_case_flags_missing_field_and_bad_threshold_and_regex():
     problems = validate_case(bad)
     assert any("bad threshold" in p for p in problems)
     assert any("invalid regex" in p for p in problems)
+
+
+def test_validate_case_flags_must_match_not_a_list():
+    bad = {
+        "id": "x/1",
+        "agent": "x",
+        "input": "i",
+        "assert": {"must_match": "High", "must_not_match": []},
+        "rubric": "r",
+        "k": 3,
+        "threshold": "all",
+    }
+    problems = validate_case(bad)
+    assert problems
+
+
+def test_validate_case_flags_non_string_pattern_element():
+    bad = {
+        "id": "x/1",
+        "agent": "x",
+        "input": "i",
+        "assert": {"must_match": [123], "must_not_match": []},
+        "rubric": "r",
+        "k": 3,
+        "threshold": "all",
+    }
+    problems = validate_case(bad)
+    assert problems
+
+
+def test_validate_case_flags_id_not_prefixed_with_agent():
+    bad = {
+        "id": "wrong-prefix/1",
+        "agent": "x",
+        "input": "i",
+        "assert": {"must_match": [], "must_not_match": []},
+        "rubric": "r",
+        "k": 3,
+        "threshold": "all",
+    }
+    problems = validate_case(bad)
+    assert any("must start with" in p for p in problems)
+
+
+def test_validate_case_flags_unknown_mode():
+    bad = {
+        "id": "x/1",
+        "agent": "x",
+        "input": "i",
+        "assert": {"must_match": [], "must_not_match": []},
+        "rubric": "r",
+        "k": 3,
+        "threshold": "all",
+        "mode": "bogus",
+    }
+    problems = validate_case(bad)
+    assert any("unknown mode" in p for p in problems)
 
 
 def test_all_case_files_valid():
