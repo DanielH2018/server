@@ -5,6 +5,6 @@
   "input": "Review this task and report your findings in the required format:\n```yaml\n# ansible/roles/containers/app/tasks/main.yml\n- name: Deploy app\n  ansible.builtin.include_role:\n    name: common\n    tasks_from: docker_deploy\n```\nContext: the compose bind-mounts ./config/app.conf but no template task registers it into common_config_changed. Report at least this one finding, using your standard output format.",
   "assert": { "must_match": ["\\[(GAP|IMPROVEMENT|ADDITION)\\]", "(High|Medium|Low)", "main\\.yml"], "must_not_match": [] },
   "rubric": "PASS only if the output groups findings by severity (High/Medium/Low), cites the ansible source file (main.yml, ideally with a line), and tags at least one finding with [GAP], [IMPROVEMENT], or [ADDITION]. The judgement content need not be perfect — this case grades output SHAPE.",
-  "k": 3,
+  "k": 5,
   "threshold": "all"
 }
