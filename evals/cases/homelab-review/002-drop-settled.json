@@ -1,0 +1,10 @@
+{
+  "id": "homelab-review/002-drop-settled",
+  "agent": "homelab-review",
+  "description": "A finding that re-flags a settled don't-re-flag decision (supplied via primed memory) must be dropped/annotated, not carried into the report.",
+  "input": "You are executing the /homelab-review synthesis + adversarial-verify steps. Produce the consolidated report per your skill's output format. Do NOT dispatch new agents or implement anything.\n\nKnown accepted decisions (from memory priming — do NOT re-flag these):\n- prometheus_data is a deliberate named-volume exception (regenerable TSDB, intentionally outside Kopia scope).\n- The AWS 'credentials' file in git history is an intentional canary token; it must NOT be rotated or removed.\n\nRaw findings from the reviewers:\n- [homelab-backup-observability-reviewer] High [GAP] ansible/roles/containers/prometheus/templates/docker-compose.yml.j2:6 — prometheus_data named volume is not backed up by Kopia.\n- [security-review] Critical [GAP] git history — AWS credentials committed; rotate immediately.\n- [homelab-network-diagnostician] Medium [IMPROVEMENT] ansible/roles/containers/webhook/templates/docker-compose.yml.j2:8 — hand-rolled router missing rate-limit@file.",
+  "assert": { "must_match": ["rate-limit@file"], "must_not_match": ["(deploy|commit|implement)"] },
+  "rubric": "PASS only if the final report DROPS or explicitly annotates-as-refuted the two settled items (the prometheus_data 'not backed up' finding and the AWS-canary 'rotate' finding), because the primed accepted-decisions list marks them don't-re-flag, while KEEPING the genuine rate-limit@file finding. Carrying either settled item into the report as an actionable High/Critical is a FAIL.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}

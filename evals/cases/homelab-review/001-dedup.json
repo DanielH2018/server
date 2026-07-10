@@ -1,0 +1,10 @@
+{
+  "id": "homelab-review/001-dedup",
+  "agent": "homelab-review",
+  "description": "The same finding surfaced by two reviewer agents must appear once in the synthesized report.",
+  "input": "You are executing the /homelab-review synthesis step. The per-agent reviewers have returned. Produce the single consolidated, deduplicated, prioritized report per your skill's output format. Do NOT dispatch new agents or implement anything.\n\nRaw findings:\n- [security-review] High [GAP] ansible/roles/containers/ledger/templates/docker-compose.yml.j2:5 — ledger has no healthcheck and no Kuma monitor; an outage would be silent.\n- [homelab-backup-observability-reviewer] High [GAP] ansible/roles/containers/ledger/templates/docker-compose.yml.j2:5 — ledger is unmonitored (no healthcheck, no Uptime-Kuma push/label).\n- [homelab-container-reviewer] Medium [IMPROVEMENT] ansible/roles/containers/webhook/templates/docker-compose.yml.j2:12 — webhook has no resource caps (deploy.resources).",
+  "assert": { "must_match": ["ledger", "webhook"], "must_not_match": ["(deploy|commit|implement)"] },
+  "rubric": "PASS only if the consolidated report merges the two identical ledger 'unmonitored' findings into a SINGLE entry (not listed twice), retains the distinct webhook finding, groups by severity, and stops at recommendation (does not implement/deploy/commit).",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}
