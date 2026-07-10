@@ -29,12 +29,27 @@ EVAL_CASE_DIRS=$HOME/server/evals/cases \
   node $HOME/.local/share/chezmoi/evals/run-live.mjs
 ```
 
-Set `ANTHROPIC_API_KEY` for the fully-hermetic `--bare` path (see the chezmoi eval README).
+## Auth & fidelity (read before trusting pass rates)
 
-## Schema guard (offline, CI-cheap)
+Two run modes, and they are NOT equally trustworthy:
 
-`uv run pytest evals` validates every case file's shape without spending a cent. The paid LLM run
-above is manual — a full `k=3` sweep is single-digit dollars.
+- **`ANTHROPIC_API_KEY` set → hermetic.** The engine adds `--bare`, so no ambient global
+  `CLAUDE.md`, hooks, skills, or memory load and `--tools ""` cleanly strips tools. Results are
+  reproducible — the mode the harness (and CI) is designed for. This is pay-per-token **API**
+  billing (single-digit dollars for a full `k=3` sweep), *separate from any Claude subscription*.
+- **Subscription / interactive OAuth (no API key) → NON-hermetic; results are noisy.** `--bare` is
+  incompatible with OAuth (it prints "Not logged in"), so the run takes the fallback path: your
+  global `CLAUDE.md`, the superpowers skill framework, and your homelab memory leak into the eval
+  agent, and `--tools ""` is not reliably honored. Observed 2026-07-10: a reviewer agent read the
+  live repo and cited `traefik.yml.j2` internals absent from the case input; another opened with a
+  live `grep`; a sound catch-defect case scored 1/3 then 1/1 run-to-run. Good enough for a rough
+  "does the wiring work / does the case catch its defect" sanity check — **not** for regression
+  numbers. Costs subscription usage, not dollars.
+
+## Schema guard (offline, free)
+
+`uv run pytest evals` validates every case file's shape without an API call or a subscription
+call. The LLM run above is manual — see **Auth & fidelity** for its cost and its trust caveats.
 
 ## What's tested (v1: the /homelab-review fleet)
 
