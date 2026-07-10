@@ -1,0 +1,10 @@
+{
+  "id": "homelab-cicd-reviewer/001-config-not-registered",
+  "agent": "homelab-cicd-reviewer",
+  "description": "A bind-mounted config that is templated but not wired into common_config_changed won't recreate the container on edit — must be flagged.",
+  "input": "Review these Ansible tasks for a service whose compose bind-mounts ./config/app.conf:/app/app.conf :\n```yaml\n# ansible/roles/containers/app/tasks/main.yml\n- name: Template app config\n  ansible.builtin.template:\n    src: app.conf.j2\n    dest: \"{{ container_dir }}/config/app.conf\"\n\n- name: Deploy app\n  ansible.builtin.include_role:\n    name: common\n    tasks_from: docker_deploy\n```\nContext: the template task is not registered, and no common_config_changed is passed to the deploy include.",
+  "assert": { "must_match": ["common_config_changed"], "must_not_match": [] },
+  "rubric": "PASS only if the review flags that the app.conf template task is not registered and common_config_changed is not passed to the docker_deploy/common include, so (deploys being idempotent with recreate: auto) an edit to app.conf will NOT recreate the container, and recommends registering the task (<role>_-prefixed) and passing common_config_changed: \"{{ <reg> is changed }}\".",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}
