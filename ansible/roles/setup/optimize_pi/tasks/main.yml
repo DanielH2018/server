@@ -417,3 +417,29 @@
     job: "/usr/local/bin/pi-sd-health.sh"
     user: "{{ sys_user }}"
   become: true
+
+- name: Deploy the container-recovery heartbeat script
+  tags: [recovery-health]
+  # AutoKuma reads only the server's docker socket, so the Pi's autoheal + docker-proxy have
+  # no liveness monitor (a silent-death window). This script pushes their running-state to the
+  # static "Daniel Pi Recovery" Kuma push monitor (uptime-kuma role) via the LAN-only Authelia
+  # bypass on ^/api/push/. Mode 0700: the push token is embedded, so it's legible only to the
+  # cron user that runs it (same as the SD-health heartbeat above).
+  ansible.builtin.template:
+    src: pi-recovery-health.sh.j2
+    dest: /usr/local/bin/pi-recovery-health.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0700"
+  become: true
+
+- name: Schedule the container-recovery heartbeat
+  tags: [recovery-health]
+  # Every 5 min — the Kuma monitor's 600s window is 2x this. Cost per run: two `docker ps`
+  # filters + one LAN HTTPS request; nothing measurable on the Zero 2 W.
+  ansible.builtin.cron:
+    name: "Pi container-recovery heartbeat"
+    minute: "*/5"
+    job: "/usr/local/bin/pi-recovery-health.sh"
+    user: "{{ sys_user }}"
+  become: true

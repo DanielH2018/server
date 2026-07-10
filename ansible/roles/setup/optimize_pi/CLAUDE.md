@@ -13,7 +13,7 @@ See repo-root `CLAUDE.md` for conventions.
   the play's `hosts:` defaults to the local hostname, so `--limit daniel-pi` from the
   server intersects to zero hosts and silently does nothing.
 - **Granular tags** (one section without the whole role): `gpu-mem`, `zram`, `log2ram`,
-  `watchdog`, `debloat`, `earlyoom`, `sd-health`. The shared prep tasks are dual-tagged (`Set variables` →
+  `watchdog`, `debloat`, `earlyoom`, `sd-health`, `recovery-health`. The shared prep tasks are dual-tagged (`Set variables` →
   `[gpu-mem, zram]`; the config.txt path detection → `[gpu-mem, watchdog]`) so
   tag-scoped runs still get the facts they consume. `log2ram` also covers the log
   RAM-budget tasks (journald cap, acct retention) — they exist because of the tmpfs.
@@ -55,6 +55,19 @@ See repo-root `CLAUDE.md` for conventions.
    Health" Kuma push monitor (uptime-kuma role) via the LAN-only Authelia bypass on
    `^/api/push/` (authelia role). Nonzero count = explicit `down`; a dead cron/host
    trips the 600s push watchdog. Token: `pi_sd_health_push_token` in `secrets.yml`.
+10. **Container-recovery heartbeat** — AutoKuma reads only the SERVER's docker socket, so the
+    Pi's `autoheal` (restarts unhealthy containers) and `docker-proxy` (dozzle's read-only
+    socket) have no liveness monitor — a dead autoheal silently stops recovering Pi containers,
+    and a dead docker-proxy leaves dozzle serving 200 so its http monitor stays green.
+    `templates/pi-recovery-health.sh.j2` (cron, */5) pushes both containers' running-state
+    (via `docker ps`, which reads the real socket through the docker group — so it still
+    reports docker-proxy's own death) to the static "Daniel Pi Recovery" Kuma push monitor
+    (uptime-kuma role), same LAN-only `^/api/push/` bypass. Either down = explicit `down`; a
+    dead cron/host trips the 600s watchdog. Token: `pi_recovery_push_token` in `secrets.yml`.
+    **Two deploys to activate** (Pi is manual-deploy): install the cron with
+    `initial_setup.yml --tags recovery-health -e target=daniel-pi`, then redeploy `uptime-kuma`
+    on the server so AutoKuma provisions the monitor — do both close together or the fresh push
+    monitor false-DOWNs until the first heartbeat lands.
 
 ## Notable
 - **Handlers live in the playbook, not this role:** `Reboot Pi`, `Restart ZRAM`,

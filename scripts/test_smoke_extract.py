@@ -40,3 +40,21 @@ def test_ignores_non_image_additions():
 def test_dedupes():
     diff = "+    image: foo:2\n+    image: foo:2\n"
     assert extract_changed_images(diff) == ["foo:2"]
+
+
+def test_skips_config_mandatory_images():
+    # authelia + couchdb crash on a bare `docker run` (no config/creds), so image-smoke
+    # must not try to boot them or the required check false-fails; any tag is skipped.
+    diff = "+    image: authelia/authelia:4.39.20\n+    image: couchdb:3.5.2\n"
+    assert extract_changed_images(diff) == []
+
+
+def test_skip_list_is_repo_scoped_not_substring():
+    # A different repo whose name merely contains a skipped one is still smoked.
+    diff = "+    image: ghcr.io/example/couchdb-exporter:1.0\n"
+    assert extract_changed_images(diff) == ["ghcr.io/example/couchdb-exporter:1.0"]
+
+
+def test_skips_digest_pinned_skiplist_image():
+    diff = "+    image: couchdb:3.5.2@sha256:abc123\n"
+    assert extract_changed_images(diff) == []

@@ -68,6 +68,13 @@ services:
       # (authelia: ^/api/push/ on this .local host); interval 600 = 2x the cron,
       # so the push watchdog also catches a dead cron/host.
       {{ kuma('daniel-pi-sd-health', name='Daniel Pi SD Health', monitor_type='push', interval=600, push_token=pi_sd_health_push_token) }}
+      # Pi container-recovery: autoheal + docker-proxy have no AutoKuma coverage (it reads
+      # the SERVER socket only), so their death is otherwise silent — a dead autoheal stops
+      # recovering unhealthy Pi containers, and a dead docker-proxy leaves dozzle serving 200
+      # (SPA shell) so its http monitor stays green. The Pi's pi-recovery-health.sh cron
+      # (optimize_pi role) pushes both containers' running-state every 5 min through the same
+      # LAN-bypassed push API; interval 600 = 2x the cron, so a dead cron/host also trips it.
+      {{ kuma('daniel-pi-recovery', name='Daniel Pi Recovery', monitor_type='push', interval=600, push_token=pi_recovery_push_token) }}
       # Secret rotation: a daily server cron (secret-rotation-audit.sh, initial_setup) runs
       # scripts/secret_rotation.py audit --push — down when any secret is past its
       # per-tier rotation window OR an unregistered secret exists (run `sync`). interval

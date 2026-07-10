@@ -25,6 +25,7 @@ def test_discover_templates_finds_the_known_set():
         "secret-rotate.sh.j2",
         "secret-rotation-audit.sh.j2",
         "pi-sd-health.sh.j2",
+        "pi-recovery-health.sh.j2",
         "pull-pi-peers.sh.j2",
         "portainer-agent-firewall.sh.j2",
         "autofix-disk-prune.sh.j2",

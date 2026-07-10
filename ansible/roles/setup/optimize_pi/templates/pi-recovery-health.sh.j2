@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Pi container-recovery heartbeat — managed by Ansible (optimize_pi role); edits overwritten.
+#
+# AutoKuma only reads the SERVER's docker socket, so the Pi's own autoheal (restarts
+# unhealthy containers) and docker-proxy (read-only socket that dozzle's log UI reads) have
+# no liveness monitor: if autoheal dies, unhealthy Pi containers stop self-recovering; if
+# docker-proxy dies, dozzle still serves 200 (its SPA shell) so its http monitor stays green.
+# Both deaths are otherwise silent. This cron pushes `up` only while BOTH run, to the static
+# "Daniel Pi Recovery" Kuma push monitor (uptime-kuma role), every 5 min. Dead-man's-switch:
+# an explicit `down` names the dead container fast, while a dead cron/host stops pushing and
+# trips the monitor's 600s heartbeat watchdog. Route + auth are the SD-health heartbeat's:
+# Traefik's .local router resolved straight to the server LAN IP, Authelia bypasses ^/api/push/
+# on this host LAN-only — the URL token is the credential.
+set -uo pipefail
+
+{# `domain` is the SOPS-loaded server domain (same reasoning as pi-sd-health.sh.j2). #}
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+PUSH_URL="https://${KUMA_HOST}/api/push/{{ pi_recovery_push_token }}"
+
+DOWN=""
+for c in autoheal docker-proxy; do
+  # `docker ps` reads the REAL docker socket via the docker group (not docker-proxy), so it
+  # still reports docker-proxy's own state when docker-proxy is the container that's down.
+  # `-q` + name/status filters print only IDs — no Go-template `--format` for Jinja to choke on.
+  if [ -z "$(docker ps -q --filter "name=^${c}$" --filter status=running)" ]; then
+    DOWN="${DOWN:+$DOWN, }$c"
+  fi
+done
+
+if [ -z "$DOWN" ]; then
+  STATUS=up;   MSG="autoheal + docker-proxy running"
+else
+  STATUS=down; MSG="not running: ${DOWN}"
+fi
+
+curl -fsS --max-time 10 -G \
+  --resolve "${KUMA_HOST}:443:{{ hostvars['daniel-server'].server_ip }}" \
+  --data-urlencode "status=${STATUS}" \
+  --data-urlencode "msg=${MSG}" \
+  "$PUSH_URL" >/dev/null \
+  || logger -t pi-recovery-health "push failed (status=${STATUS}: ${MSG})"

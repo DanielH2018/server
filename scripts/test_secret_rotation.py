@@ -150,6 +150,9 @@ def test_consumer_tag_cloudflare_ddns_tokens():
 def test_consumer_tag_cross_host_tokens_are_manual():
     # Cross-host / self-referential — the unattended cron must NOT auto-rotate these.
     assert sr.consumer_tag("pi_sd_health_push_token") is None
+    assert (
+        sr.consumer_tag("pi_recovery_push_token") is None
+    )  # Pi cron, manual Pi deploy
     assert sr.consumer_tag("secret_rotation_push_token") is None
 
 
@@ -164,7 +167,11 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     # the explicit known-manual allowlist. Without this, a token whose consumer_tag falls
     # through to None silently drops out of rotation and only surfaces months later as an
     # OVERDUE page — exactly how arr_autoblock_push_token slipped in when autofix-bridge landed.
-    known_manual = {"pi_sd_health_push_token", "secret_rotation_push_token"}
+    known_manual = {
+        "pi_sd_health_push_token",
+        "pi_recovery_push_token",
+        "secret_rotation_push_token",
+    }
     reg = sr.load_registry()
     auto = [n for n, m in reg["secrets"].items() if m.get("tier") == "auto"]
     assert auto  # sanity: the registry has auto-tier tokens

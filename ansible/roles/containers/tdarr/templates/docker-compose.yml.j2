@@ -46,7 +46,7 @@ services:
       - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
-    {{ healthcheck('["CMD", "curl", "-f", "http://localhost:8265/"]', start_period='60s') }}
+    {{ healthcheck('["CMD", "curl", "-f", "http://localhost:8265/api/v2/status"]', start_period='60s') }}
     labels:
       {# Generate labels(container, port, docker_network, use_authelia) -#}
       {{ labels(

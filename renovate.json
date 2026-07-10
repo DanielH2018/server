@@ -11,9 +11,10 @@
   "prHourlyLimit": 4,
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
-    "description": "CVE-driven bumps bypass the Monday-only window so security fixes land ASAP. osvVulnerabilityAlerts adds OSV-database scanning for the version-pinned Docker images (GitHub-native Dependabot doesn't cover Docker), closing the one dependency axis without a 'silence != up-to-date' backstop. Requires repo Dependabot *alerts* (not PRs) enabled so Renovate can read the advisory feed.",
+    "description": "CVE-driven bumps bypass the Monday-only window (schedule: at any time) so security PRs are RAISED immediately, and minimumReleaseAge shortens their auto-merge soak to 1 day — overriding the 7-day non-major default below, which otherwise made 'land ASAP' a misnomer (the PR appeared at once but still soaked a week). 1 day is fast enough to patch a live CVE while leaving a 24h window to catch a yanked/poisoned upstream release; the post-merge gitops-deploy host health gate + rollback is the final backstop. osvVulnerabilityAlerts adds OSV-database scanning for the version-pinned Docker images (GitHub-native Dependabot doesn't cover Docker), closing the one dependency axis without a 'silence != up-to-date' backstop. Requires repo Dependabot *alerts* (not PRs) enabled so Renovate can read the advisory feed.",
     "enabled": true,
     "schedule": ["at any time"],
+    "minimumReleaseAge": "1 day",
     "labels": ["dependencies", "security"]
   },
   "lockFileMaintenance": {
@@ -104,9 +105,9 @@
     },
     {
       "customType": "regex",
-      "description": "CI test-runner Python pin (`python-version:` input in ci.yml). helpers:pinGitHubActionDigests tracks the setup-python ACTION digest but not its version INPUT, so this was one of the two last silently-aging pins in the repo. A bump PR runs the whole test suite ON the new interpreter, which is exactly the compatibility proof; keep it moving with the host toolchain rather than frozen at the requires-python floor.",
+      "description": "CI test-runner Python pin (`python-version:` input in the workflows). helpers:pinGitHubActionDigests tracks the setup-python ACTION digest but not its version INPUT, so this was one of the two last silently-aging pins in the repo. A bump PR runs the whole test suite ON the new interpreter, which is exactly the compatibility proof; keep it moving with the host toolchain rather than frozen at the requires-python floor. Scans EVERY workflow file (not just ci.yml): image-smoke.yml pins the same `python-version` and a ci.yml-only pattern let its twin age silently until it drifted (2026-07-10 review). Both hold the same value, so one bump PR edits them in lockstep.",
       "managerFilePatterns": [
-        "/(^|/)\\.github/workflows/ci\\.yml$/"
+        "/(^|/)\\.github/workflows/[^/]+\\.yml$/"
       ],
       "matchStrings": [
         "python-version:\\s*\"(?<currentValue>[\\d.]+)\""

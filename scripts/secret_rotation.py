@@ -117,7 +117,9 @@ def consumer_tag(name: str) -> str | None:
         # history continuity; the consumer is the autofix-bridge deploy tag.)
         return "autofix-bridge"
     return (
-        None  # pi_sd_health (Pi cron + server label), secret_rotation (self) -> manual
+        # pi_sd_health / pi_recovery (Pi cron + server label, MANUAL Pi deploy),
+        # secret_rotation (self) -> manual
+        None
     )
 
 

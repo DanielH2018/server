@@ -52,7 +52,7 @@ http:
     default-headers:
       headers:
         customResponseHeaders:
-          Permissions-Policy: "geolocation=(self), microphone=(), camera=(), fullscreen=*, usb=()"
+          Permissions-Policy: "geolocation=(self), microphone=(), camera=(), fullscreen=(self), usb=()"
           # No global Content-Security-Policy here: Traefik's customResponseHeaders REPLACES the
           # backend's header, so a blanket CSP clobbers the stricter, per-app CSPs that apps like
           # FreshRSS and Homepage set themselves (FreshRSS even self-detects the weakened header and
