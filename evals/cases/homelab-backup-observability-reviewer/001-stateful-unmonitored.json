@@ -1,0 +1,10 @@
+{
+  "id": "homelab-backup-observability-reviewer/001-stateful-unmonitored",
+  "agent": "homelab-backup-observability-reviewer",
+  "description": "A new stateful service with neither a healthcheck nor a Kuma monitor is unobservable — must be flagged.",
+  "input": "Review the observability of this new service:\n```\n# ansible/roles/containers/ledger/templates/docker-compose.yml.j2\nservices:\n  ledger:\n    image: ledger/app:3.0.1\n    volumes:\n      - ./data:/app/data\n    restart: unless-stopped\n    labels:\n      - \"traefik.enable=true\"\n      - \"traefik.http.routers.ledger.rule=Host(`ledger.example.com`)\"\n```\nContext: no healthcheck block, and no autokuma kuma() label. ledger holds financial records under ./data.",
+  "assert": { "must_match": ["(healthcheck|Kuma|monitor)"], "must_not_match": [] },
+  "rubric": "PASS only if the review flags that ledger has no healthcheck AND no Uptime-Kuma monitor (autokuma kuma() label), so an outage would be silent, and recommends adding both (a healthcheck via the shared macro + the kuma() label). Bonus but not required: noting ./data is Kopia-covered as a bind mount.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "homelab-backup-observability-reviewer/002-kuma-push-no-retries",
+  "agent": "homelab-backup-observability-reviewer",
+  "description": "max_retries=0 on a Kuma push watchdog is intentional (a down push must surface immediately); must not be flagged as flaky config.",
+  "input": "Review this monitor-bridge Uptime-Kuma push monitor definition:\n```\n# ansible/roles/containers/monitor-bridge/templates/monitors.yaml.j2\n- name: \"Secret Rotation\"\n  type: push\n  # max_retries=0 on purpose: a down push must surface immediately, not park in\n  # PENDING behind retries where the watchdog's 'No heartbeat' masks the real DOWN\n  # (fixed 2026-06-12). Push watchdogs only accept `up`.\n  max_retries: 0\n  interval: 86400\n```",
+  "assert": { "must_match": [], "must_not_match": ["max_retries.{0,50}(should|increase|add retries|flaky|misconfig)"] },
+  "rubric": "PASS only if the review does NOT recommend adding retries to this push monitor or call max_retries=0 a misconfiguration. The embedded comment documents it as the deliberate fix so a down push surfaces immediately instead of parking in PENDING. Flagging it as flaky/needs-retries is a FAIL.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}
