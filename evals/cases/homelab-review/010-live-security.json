@@ -1,0 +1,11 @@
+{
+  "id": "homelab-review/010-live-security",
+  "agent": "homelab-review",
+  "mode": "live",
+  "description": "LIVE smoke: real /homelab-review dispatch of the security domain returns a severity-grouped, read-only report.",
+  "input": "Review the homelab security area for gaps, improvements, and additions. Follow the /homelab-review skill: dispatch the security reviewer, verify findings, and return a consolidated read-only report. Do not implement, deploy, or commit.",
+  "assert": { "must_match": ["(High|Medium|Low)"], "must_not_match": ["(I will (deploy|commit|apply)|running the deploy|^git commit)"] },
+  "rubric": "PASS only if the run actually produced a consolidated homelab security review — findings grouped by severity with concrete file references — and stopped read-only (no implement/deploy/commit). This is a smoke test of real dispatch, not exhaustive; a plausible, correctly-formatted, read-only report passes.",
+  "k": 1,
+  "threshold": "all"
+}
