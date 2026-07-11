@@ -2,6 +2,8 @@
 /*
 !/ansible
 !/docs
+# docs/superpowers (design plans + specs) kept on-disk but intentionally untracked
+/docs/superpowers/
 !/scripts
 !/evals
 # Email-to-RSS Cloudflare Worker — tracked as a git submodule (see .gitmodules);
