@@ -287,8 +287,8 @@ services:
          incident) and names the offending release + app. -#}
       {{ kuma('monitor-bridge-arr-queue', monitor_type='push', name='Arr Queue Warnings', interval=600, max_retries=0, push_token=monitor_bridge_arr_queue_push_token) }}
       {# Prowlarr sustained-indexer watchdog: check_prowlarr_indexers pages only when an indexer
-         has been failing >= PROWLARR_INDEXER_MIN_DOWN_MIN (30m) per Prowlarr's initialFailure —
-         the sustained-per-indexer signal Prowlarr's binary in-app warning can't express. -#}
+         has been failing >= PROWLARR_INDEXER_MIN_DOWN_MIN (1 week = 10080m) per Prowlarr's
+         initialFailure — the sustained-per-indexer signal Prowlarr's binary in-app warning can't express. -#}
       {{ kuma('monitor-bridge-prowlarr-indexers', monitor_type='push', name='Prowlarr Indexers', interval=600, max_retries=0, push_token=monitor_bridge_prowlarr_indexers_push_token) }}
       {# GitOps deployer: liveness (deployer ticking) + deploy-status (rollback hold), pushed by
          check_gitops_alive/status from the host state files. interval 600s = 2× the 5-min loop. -#}

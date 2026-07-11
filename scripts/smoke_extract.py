@@ -11,15 +11,20 @@ import sys
 # Added line (starts with a single '+', not '+++'), an `image:` key, capture the ref.
 _IMAGE_RE = re.compile(r'^\+(?!\+\+)\s*image:\s*["\']?([^\s"\']+)["\']?\s*$')
 
-# Images that can't boot from a bare `docker run` (they need config/creds mounted) and so
-# always crash image-smoke's boot check — false-failing the required status check and
-# blocking the auto-merge their pinned + Renovate-managed bumps are meant to get. Skip them;
-# their post-bump boot is covered instead by the gitops-deploy host health gate. Matched by
-# repository, so any tag/digest of these is skipped.
+# Images that can't pass image-smoke's bare `docker run` boot check without their real
+# config/creds — either they hard-exit (authelia/couchdb) or they stay up but their image-baked
+# HEALTHCHECK never reaches "healthy" within image-smoke's poll window (karakeep). Either way the
+# required status check false-fails, blocking the auto-merge / adding manual-override friction that
+# their pinned + Renovate-managed bumps are meant to avoid. Skip them; their real post-bump boot is
+# covered instead by the gitops-deploy host health gate. Matched by repository, so any tag/digest of
+# these is skipped.
 _SKIP_BARE_BOOT = frozenset(
     {
         "authelia/authelia",  # fatal without /config/configuration.yml
         "couchdb",  # aborts without COUCHDB_USER/PASSWORD ("Admin Party" refused)
+        # boots fine but its baked /api/health check is still "starting" past the ~60s poll window
+        # (only reports "unhealthy" at ~t=69s) — false-fails on every Renovate digest-bump PR.
+        "ghcr.io/karakeep-app/karakeep",
     }
 )
 

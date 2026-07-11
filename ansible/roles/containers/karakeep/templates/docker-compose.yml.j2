@@ -158,9 +158,12 @@ services:
     {{ resources('1.0', '1024M', '0.10', '128M') }}
 
   karakeep-time-tagger:
-    # Rolling uv base (bookworm-slim): the tagger reinstalls its Python deps each cycle, so a
-    # fresh base is harmless. The watchtower opt-out (in labels below) keeps the bump manual anyway.
-    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    # uv base (bookworm-slim): the tagger reinstalls its Python deps each cycle, so a fresh base is
+    # harmless — but the tag is a rolling channel Renovate can't version-order and Compose never
+    # re-pulls a present tag, so without a digest it aged silently with no update signal. Digest-pinned
+    # so Renovate opens tracked digest-bump PRs (same as the karakeep app image above / tdarr / janitorr);
+    # the watchtower opt-out (in labels below) keeps the stack's updates manual + reviewed.
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58
     container_name: karakeep-time-tagger
     restart: unless-stopped
     environment:
@@ -173,8 +176,14 @@ services:
     # `touch /tmp/healthy` only on a SUCCESSFUL tagger run — the healthcheck below goes
     # unhealthy when the file is older than ~2 cycles (hung or persistently failing run),
     # and autoheal restarts the container. Process death alone is covered by restart:.
+    # The bind-mounted script's loguru sink rotates at 10 MB with NO retention, dropping rotated
+    # `karakeep-time-tagger.<ts>.log` files into cwd (/) — the container's writable layer, which
+    # no volume/tmpfs covers — so they pile up unbounded, invisible to both autofix-bridge's prune
+    # (skips running containers) and the 90%-only Root Disk check. Prune rotated logs >2 days old
+    # each cycle to bound it; the active `karakeep-time-tagger.log` has no `.<ts>.` middle segment,
+    # so the glob never matches it.
     command: >-
-      bash -c "uv pip install karakeep_python_api fire tqdm beautifulsoup4 loguru -q --system && while true; do python /script/karakeep-time-tagger.py --cache_file /tmp/bookmarks.temp --reset_all=True && touch /tmp/healthy; sleep 900; done"
+      bash -c "uv pip install karakeep_python_api fire tqdm beautifulsoup4 loguru -q --system && while true; do find / -maxdepth 1 -name 'karakeep-time-tagger.*.log' -mtime +2 -delete 2>/dev/null; python /script/karakeep-time-tagger.py --cache_file /tmp/bookmarks.temp --reset_all=True && touch /tmp/healthy; sleep 900; done"
     # start_period covers the uv pip install + the first tagging run; the loop sleeps
     # 900s, so <2100 allows one missed cycle before going unhealthy.
     {{ healthcheck("[\"CMD\", \"python3\", \"-c\", \"import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/healthy').st_mtime<2100 else 1)\"]", start_period='600s', interval='60s') }}

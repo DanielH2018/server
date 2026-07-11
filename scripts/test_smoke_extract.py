@@ -49,6 +49,17 @@ def test_skips_config_mandatory_images():
     assert extract_changed_images(diff) == []
 
 
+def test_skips_never_healthy_image():
+    # karakeep boots and stays up but its baked healthcheck never reaches "healthy" within
+    # image-smoke's poll window, so image-smoke false-fails on its Renovate digest bumps; skip
+    # it by repository like the hard-exit ones (its real config is covered by the host health gate).
+    diff = (
+        "+    image: ghcr.io/karakeep-app/karakeep:release"
+        "@sha256:64d6a9bbf2d37b5c808cf06b5d87f1f1c7846fdd3844724145a9741aeb06fd31\n"
+    )
+    assert extract_changed_images(diff) == []
+
+
 def test_skip_list_is_repo_scoped_not_substring():
     # A different repo whose name merely contains a skipped one is still smoked.
     diff = "+    image: ghcr.io/example/couchdb-exporter:1.0\n"
