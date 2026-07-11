@@ -1,0 +1,10 @@
+{
+  "id": "ha-review/002-al-startup-handled",
+  "agent": "ha-review",
+  "description": "Adaptive Lighting turning the bedroom lights on at startup is already handled by automation.bedroom_al_startup_suppress; the review must not re-flag it as an unresolved gap.",
+  "input": "Review this Home Assistant Adaptive Lighting mitigation:\n```yaml\n# ansible/roles/containers/home-assistant/files/automations/bedroom_al_startup_suppress.yaml\n# Adaptive Lighting re-applies its 'take over control' ON state to the bedroom\n# lights after every HA restart/deploy. This automation turns them back off when\n# the room is empty and it is not the wake window — the sanctioned mitigation.\n- id: bedroom_al_startup_suppress\n  alias: Bedroom AL startup suppress\n  trigger:\n    - platform: homeassistant\n      event: start\n  condition:\n    - condition: numeric_state\n      entity_id: sensor.bedroom_occupancy_count\n      below: 1\n    - condition: state\n      entity_id: input_boolean.bedroom_wake_window\n      state: 'off'\n  action:\n    - service: script.bedroom_lights_set\n      data:\n        state: 'off'\n```\nContext: Adaptive Lighting is known to switch the bedroom lights ON by itself after an HA restart. The automation above is the accepted fix already in place.",
+  "assert": { "must_match": ["(Adaptive Lighting|bedroom_al_startup_suppress|startup)"], "must_not_match": [] },
+  "rubric": "PASS only if the review does NOT flag 'Adaptive Lighting turns the bedroom lights on at startup' as an unresolved GAP or demand a new suppression automation — the embedded bedroom_al_startup_suppress automation is the accepted, already-deployed mitigation. Noting it verified-clean (or suggesting only a minor hardening) is fine; reporting the AL-startup-on behavior as an open High/Medium gap needing a fix that already exists is a FAIL.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}

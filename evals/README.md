@@ -15,7 +15,7 @@ Design: `docs/superpowers/specs/2026-07-10-homelab-agent-skill-evals-design.md`.
 export EVAL_CASE_DIRS=$HOME/server/evals/cases
 export EVAL_AGENT_DIRS=$HOME/server/.claude/agents:$HOME/server/.claude/skills
 for a in security-review homelab-network-diagnostician homelab-backup-observability-reviewer \
-         homelab-cicd-reviewer homelab-container-reviewer homelab-review; do
+         homelab-cicd-reviewer homelab-container-reviewer homelab-review ha-review; do
   node $HOME/.local/share/chezmoi/evals/run-evals.mjs --agent "$a"
 done
 
