@@ -40,6 +40,17 @@ services:
       - "kuma.discord.notification.name=Homelab Alerts"
       - "kuma.discord.notification.active=true"
       - 'kuma.discord.notification.config={"type":"discord","discordWebhookUrl":"{{ monitor_discord_webhook_url }}","discordUsername":"Uptime Kuma"}'
+      # AutoKuma-managed EMAIL notification (id: email) — the INDEPENDENT 2nd channel for the
+      # alert-delivery SPOF. The whole fleet funnels through the Discord webhook above, and the
+      # Discord Delivery monitor that catches a dead webhook can only deliver its own `down` THROUGH
+      # that dead webhook (circular). This email notification is attached ONLY to Discord Delivery
+      # (extra_notifications=['email'] on its kuma() call, monitor-bridge role), so a rotated/broken
+      # Discord webhook still pages via Gmail. Gmail SMTP, implicit TLS on :465; app-password +
+      # address (reuses the acme {{ '{{ email }}' }} var) in secrets.yml. Like the discord one above,
+      # label-defined notifications are AutoKuma-experimental (harmless ~5s "Updating notification" churn).
+      - "kuma.email.notification.name=Homelab Alerts (Email)"
+      - "kuma.email.notification.active=true"
+      - 'kuma.email.notification.config={"type":"smtp","smtpHost":"smtp.gmail.com","smtpPort":465,"smtpSecure":true,"smtpUsername":"{{ email }}","smtpPassword":"{{ smtp_notify_app_password }}","smtpFrom":"{{ email }}","smtpTo":"{{ email }}","customSubject":"[Homelab] Uptime Kuma alert"}'
       # daniel-pi monitors (static, defined here like the notification above): AutoKuma
       # only reads the SERVER's docker socket, so the kuma() labels rendered on the Pi's
       # own compose files are never seen. Probe the Pi's LAN-bound UIs over HTTP instead

@@ -376,7 +376,10 @@ services:
       {{ kuma('monitor-bridge-loki-reachable', monitor_type='push', name='Loki Reachable', interval=600, max_retries=0, push_token=monitor_bridge_loki_reachable_push_token) }}
       {# Discord delivery: check_discord GET-verifies Kuma's notification webhook is still valid —
          the alert chain's delivery hop that no other monitor (incl. UptimeRobot) exercises. -#}
-      {{ kuma('monitor-bridge-discord', monitor_type='push', name='Discord Delivery', interval=600, max_retries=0, push_token=monitor_bridge_discord_push_token) }}
+      {# extra_notifications=['email']: the ONLY monitor with the independent 2nd (Gmail) channel —
+         a dead/rotated Discord webhook flips THIS monitor down, and it can't self-report via the
+         dead webhook, so it also pages by email. The `email` notification is defined on uptime-kuma. -#}
+      {{ kuma('monitor-bridge-discord', monitor_type='push', name='Discord Delivery', interval=600, max_retries=0, push_token=monitor_bridge_discord_push_token, extra_notifications=['email']) }}
       {# Recyclarr sync health: check_recyclarr counts supercronic `job succeeded`/`job failed`
          lines in Loki over 26h — catches an erroring nightly sync the supercronic-only
          healthcheck stays green through (the silent 2026-06-10 v8 breakage class). -#}
