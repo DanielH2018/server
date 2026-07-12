@@ -33,6 +33,8 @@ services:
       - SETGID
       - SETUID
       - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
     {{ service_networks() }}

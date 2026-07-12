@@ -67,19 +67,19 @@ services:
       # pushes errors_count every 5 min through the LAN-bypassed push API
       # (authelia: ^/api/push/ on this .local host); interval 600 = 2x the cron,
       # so the push watchdog also catches a dead cron/host.
-      {{ kuma('daniel-pi-sd-health', name='Daniel Pi SD Health', monitor_type='push', interval=600, push_token=pi_sd_health_push_token) }}
+      {{ kuma('daniel-pi-sd-health', name='Daniel Pi SD Health', monitor_type='push', interval=600, max_retries=0, push_token=pi_sd_health_push_token) }}
       # Pi container-recovery: autoheal + docker-proxy have no AutoKuma coverage (it reads
       # the SERVER socket only), so their death is otherwise silent — a dead autoheal stops
       # recovering unhealthy Pi containers, and a dead docker-proxy leaves dozzle serving 200
       # (SPA shell) so its http monitor stays green. The Pi's pi-recovery-health.sh cron
       # (optimize_pi role) pushes both containers' running-state every 5 min through the same
       # LAN-bypassed push API; interval 600 = 2x the cron, so a dead cron/host also trips it.
-      {{ kuma('daniel-pi-recovery', name='Daniel Pi Recovery', monitor_type='push', interval=600, push_token=pi_recovery_push_token) }}
+      {{ kuma('daniel-pi-recovery', name='Daniel Pi Recovery', monitor_type='push', interval=600, max_retries=0, push_token=pi_recovery_push_token) }}
       # Secret rotation: a daily server cron (secret-rotation-audit.sh, initial_setup) runs
       # scripts/secret_rotation.py audit --push — down when any secret is past its
       # per-tier rotation window OR an unregistered secret exists (run `sync`). interval
       # 90000s (25h) = 1 day + slack, so a dead audit cron also trips the push watchdog.
-      {{ kuma('secret-rotation', name='Secret Rotation', monitor_type='push', interval=90000, push_token=secret_rotation_push_token) }}
+      {{ kuma('secret-rotation', name='Secret Rotation', monitor_type='push', interval=90000, max_retries=0, push_token=secret_rotation_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '512M', '0.05', '64M') }}
 
