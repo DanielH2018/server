@@ -126,4 +126,18 @@ Scrape-Targets monitor flags this if you miss it.
   when Kuma can no longer evaluate its own monitors. The monitor is deliberately out-of-repo (an
   external SaaS can't be IaC-managed), but its target is otherwise unrecorded, making this SPOF's only
   backstop un-auditable. **Record the configured UptimeRobot target here so it can be verified:**
-  - UptimeRobot monitor URL: `<fill in — must be a uptime-kuma-served endpoint, not a generic Traefik route>`
+  - **UptimeRobot monitor (recorded 2026-07-12):** dashboard
+    `https://dashboard.uptimerobot.com/monitors/803270234`, probing `https://homepage.daniel-hunter.com`.
+  - **KNOWN RESIDUAL — operator-accepted 2026-07-12:** that target is a generic, **Authelia-gated**
+    route, NOT a Kuma-served endpoint. `homepage` is `use_authelia: true`, so an external probe only
+    reaches Authelia's 302 → login portal (UptimeRobot counts the 302 as "up"). This DOES back-stop a
+    total host / Cloudflare / Traefik / **Authelia** outage — but it does NOT catch a *uptime-kuma-
+    container* death: with the host + Traefik + Authelia up, homepage still 302s "up" while Kuma can no
+    longer evaluate its own monitors. The SPOF is real but narrow (a Kuma-only crash while everything
+    else stays healthy) and consciously accepted; it is NOT a fresh review finding — don't re-flag.
+  - **To close it later:** `uptime-kuma.daniel-hunter.com` is already publicly routed (Cloudflare), so
+    add an Authelia `bypass` rule for `^/status/.*$` on `uptime-kuma.{{ domain }}` (configuration.yml.j2),
+    create a public Kuma status page (`/status/<slug>` — served by the Kuma container, so a Kuma death →
+    Traefik 502 → the probe fires), and repoint the UptimeRobot monitor at
+    `https://uptime-kuma.daniel-hunter.com/status/<slug>`. Trade-off: that status page becomes publicly
+    viewable (read-only; scope its contents).
