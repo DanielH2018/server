@@ -1,6 +1,13 @@
 #!/bin/bash
 # Restrict ports 80/443 to Cloudflare IPs and local network in the DOCKER-USER chain.
-# Runs after Docker so the chain exists. Safe to re-run - clears existing rules first.
+# Runs BOTH as an early Before=docker.service seed (docker-user-seed.service) and after Docker
+# (docker-user-rules.service, PartOf=docker.service). Safe to re-run - clears existing rules first.
+
+# Create the chain if it doesn't exist yet. On the pre-docker seed run dockerd hasn't created
+# DOCKER-USER, so make it here; Docker adopts a pre-existing DOCKER-USER on start and never flushes
+# user rules from it, so the terminal DROP is already in place before the first container binds
+# 80/443 (closing the reboot race). After Docker it's a harmless no-op (chain already exists).
+iptables -N DOCKER-USER 2>/dev/null || true
 
 # Remove any previously-added rules for these ports
 iptables -D DOCKER-USER -p tcp --dport 80 -j DROP 2>/dev/null || true

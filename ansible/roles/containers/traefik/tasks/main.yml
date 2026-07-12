@@ -159,6 +159,73 @@
   become: true
   when: traefik_docker_user_rules_script.changed or traefik_docker_user_rules_service.changed
 
+- name: Deploy DOCKER-USER seed systemd service (pre-docker origin lock)
+  tags: [config]
+  # Runs the same apply script Before=docker.service so the lock is present before dockerd binds
+  # traefik's 80/443 on boot — the After=docker.service unit above can't (ports are already bound
+  # by the time it runs). Enable-only: this is the boot unit; deploy-time application is handled by
+  # the docker-user-rules restart task above, so no state:started/restart-on-change here.
+  ansible.builtin.template:
+    src: docker-user-seed.service.j2
+    dest: /etc/systemd/system/docker-user-seed.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Enable docker-user-seed systemd service
+  tags: [config]
+  ansible.builtin.systemd:
+    name: docker-user-seed
+    enabled: true
+    daemon_reload: true
+  become: true
+
+- name: Create the DOCKER-USER origin-lock monitor state directory
+  tags: [config]
+  # monitor-bridge bind-mounts this read-only (/docker-user) and its `docker_user` check alerts on a
+  # failed live-chain assert or staleness. Root-owned: the verify cron runs as root (iptables needs
+  # CAP_NET_ADMIN) and writes state.json here. Deploy traefik before monitor-bridge on a fresh host
+  # (traefik deploys first anyway) else Docker auto-creates the mount source.
+  ansible.builtin.file:
+    path: /var/lib/docker-user-rules
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Deploy DOCKER-USER live-verify watchdog script
+  tags: [config]
+  ansible.builtin.template:
+    src: docker-user-verify.sh.j2
+    dest: /usr/local/bin/docker-user-verify.sh
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+
+- name: Refresh the DOCKER-USER verify state each deploy
+  tags: [config]
+  # Run the verify once per deploy so state.json exists, is fresh, and is world-readable (the script
+  # chmods it) before monitor-bridge reads it — so a fresh host / this very deploy don't false-page
+  # "never ran"; the 15-min cron owns ongoing refresh. A read-only iptables assert; failed_when:false
+  # so a failed assert is the monitor's page, not a deploy blocker (kopia state-seed idiom).
+  ansible.builtin.command: /usr/local/bin/docker-user-verify.sh
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Schedule DOCKER-USER origin-lock verify
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "Verify DOCKER-USER origin lock"
+    minute: "*/15"
+    user: root
+    job: /usr/local/bin/docker-user-verify.sh
+    state: present
+  become: true
+
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:

@@ -12,12 +12,16 @@ entryPoints:
 {% for ip in cloudflare_ips %}
         - "{{ ip }}"
 {% endfor %}
-        # server LAN only — deliberately NOT 10.0.0.0/8: that wider range trusts
-        # wg-easy's 10.8.0.0/24 clients as upstream proxies, letting a WG client spoof
-        # X-Forwarded-For (forged client IP into CrowdSec/Authelia, wrong forensic attribution).
+        # server LAN only — deliberately NOT 10.0.0.0/8 (that trusts wg-easy's 10.8.0.0/24
+        # clients as upstream proxies, letting a WG client spoof X-Forwarded-For), and
+        # deliberately NOT the docker ranges 172.16.0.0/12 / 192.168.0.0/16: trustedIPs governs
+        # XFF *trust*, not admission — external traffic arrives as real Cloudflare IPs (verified:
+        # 2041 unique client IPs in access logs, so inbound is DNAT'd not SNAT'd), so those ranges
+        # only ever match a container hairpinning into Traefik, which is an origin client (sends
+        # no XFF) and never needs trusting. Trusting them would let a compromised container on any
+        # docker network forge X-Forwarded-For, poisoning CrowdSec attribution + the RFC1918
+        # Authelia .local / push-bypass conditions.
         - "10.0.0.0/24"
-        - "192.168.0.0/16"
-        - "172.16.0.0/12"
         - "127.0.0.1/32"
     http:
       redirections:
@@ -36,12 +40,16 @@ entryPoints:
 {% for ip in cloudflare_ips %}
         - "{{ ip }}"
 {% endfor %}
-        # server LAN only — deliberately NOT 10.0.0.0/8: that wider range trusts
-        # wg-easy's 10.8.0.0/24 clients as upstream proxies, letting a WG client spoof
-        # X-Forwarded-For (forged client IP into CrowdSec/Authelia, wrong forensic attribution).
+        # server LAN only — deliberately NOT 10.0.0.0/8 (that trusts wg-easy's 10.8.0.0/24
+        # clients as upstream proxies, letting a WG client spoof X-Forwarded-For), and
+        # deliberately NOT the docker ranges 172.16.0.0/12 / 192.168.0.0/16: trustedIPs governs
+        # XFF *trust*, not admission — external traffic arrives as real Cloudflare IPs (verified:
+        # 2041 unique client IPs in access logs, so inbound is DNAT'd not SNAT'd), so those ranges
+        # only ever match a container hairpinning into Traefik, which is an origin client (sends
+        # no XFF) and never needs trusting. Trusting them would let a compromised container on any
+        # docker network forge X-Forwarded-For, poisoning CrowdSec attribution + the RFC1918
+        # Authelia .local / push-bypass conditions.
         - "10.0.0.0/24"
-        - "192.168.0.0/16"
-        - "172.16.0.0/12"
         - "127.0.0.1/32"
     http:
       middlewares:

@@ -1,0 +1,47 @@
+#!/bin/bash
+# Watchdog for the DOCKER-USER origin lock (docker-user-rules.sh). The seed/re-assert units write no
+# state, so without this a lock that got FLUSHED after boot — a docker network reload, a manual
+# iptables -F, or a Docker engine upgrade that seeds a preempting terminal RETURN — would be invisible
+# until an external scan found the origin open on 80/443. Reads the LIVE chain and asserts the terminal
+# DROP for :80 and :443 is present (and that a RETURN allow precedes it, so we're not black-holing the
+# origin), then writes {"ts","ok","msg"} to STATE every run. monitor-bridge's `docker_user` check reads
+# it (:ro bind mount) and pushes the "DOCKER-USER Origin Lock" Kuma monitor on a failed assert or
+# staleness (cron broken / never ran). Runs as root — iptables needs CAP_NET_ADMIN. `set -uo` (not
+# -euo) so a failed assert is captured + reported, not swallowed by an early exit (kopia/crowdsec idiom).
+set -uo pipefail
+
+STATE=/var/lib/docker-user-rules/state.json
+
+write_state() { # ok msg
+  # jq, not printf: a stray control char would make hand-built JSON invalid -> monitor-bridge reads
+  # "state unparseable" (false DOWN). Matches the crowdsec/kopia/wg-easy-pull crons.
+  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
+    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE"
+  # This cron runs as root (iptables needs it), so the state file is root-owned; make it world-
+  # readable so the non-root monitor-bridge container (UID 1000, :ro bind) can read it. `>` truncates
+  # in place and preserves an existing file's mode, so a umask alone wouldn't fix a pre-existing 0640.
+  chmod 0644 "$STATE"
+  logger -t docker-user-verify "$1: $2"
+}
+
+if ! iptables -L DOCKER-USER -n >/dev/null 2>&1; then
+  write_state false "DOCKER-USER chain missing — origin lock NOT applied"
+  exit 1
+fi
+
+MISSING=
+iptables -C DOCKER-USER -p tcp --dport 80 -j DROP 2>/dev/null || MISSING="$MISSING :80"
+iptables -C DOCKER-USER -p tcp --dport 443 -j DROP 2>/dev/null || MISSING="$MISSING :443"
+if [ -n "$MISSING" ]; then
+  write_state false "terminal DROP missing for$MISSING — origin reachable direct (Cloudflare/CrowdSec bypass)"
+  exit 1
+fi
+
+# A DROP with no preceding RETURN allow would black-hole the origin (incl. Cloudflare). The apply
+# script always inserts a 10.0.0.0/8 LAN RETURN, so use it as the "allows are present" anchor.
+if ! iptables -C DOCKER-USER -p tcp --dport 443 -s 10.0.0.0/8 -j RETURN 2>/dev/null; then
+  write_state false "RETURN allows missing (only DROP present) — origin would be black-holed"
+  exit 1
+fi
+
+write_state true "origin lock applied (DROP :80/:443 present, RETURN allows present)"

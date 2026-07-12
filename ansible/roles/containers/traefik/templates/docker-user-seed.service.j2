@@ -1,0 +1,18 @@
+[Unit]
+Description=Seed the DOCKER-USER origin lock before Docker starts containers
+# Ordered Before=docker.service so the RETURN-allow + terminal DROP rules are in the chain the
+# moment dockerd restores restart:unless-stopped containers (traefik binds 0.0.0.0:80/443) during
+# its own init on boot — closing the window where the origin was reachable direct, bypassing the
+# Cloudflare edge + the CrowdSec fail-open. systemd blocks docker.service until this Type=oneshot
+# ExecStart completes. docker-user-rules.sh seeds the chain (iptables -N …); Docker adopts a
+# pre-existing DOCKER-USER and preserves its user rules. The sibling docker-user-rules.service
+# (After=/PartOf=docker.service) re-asserts the lock after a docker-ce upgrade / docker restart.
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash /etc/docker-user-rules.sh
+
+[Install]
+WantedBy=multi-user.target

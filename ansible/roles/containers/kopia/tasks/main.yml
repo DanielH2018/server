@@ -157,6 +157,61 @@
     user: "{{ sys_user }}"
   become: true
 
+- name: Create content-verify state directory
+  tags: [cron]
+  # monitor-bridge bind-mounts this read-only and its `content_verify` check alerts on a failed/
+  # stale/missing verify — created here (not by Docker) so it's sys_user-writable for the cron.
+  ansible.builtin.file:
+    path: /var/lib/kopia-content-verify
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Deploy the quarterly deep content-verify script
+  tags: [cron]
+  # The deep tier below the weekly 1% verify: a 25% content re-read, quarterly. See
+  # files/content-verify.sh.
+  ansible.builtin.copy:
+    src: content-verify.sh
+    dest: /usr/local/bin/kopia-content-verify.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Schedule quarterly Kopia deep content verify
+  tags: [cron]
+  # 1st of Mar/Jun/Sep/Dec at 06:00 — an hour after the 05:00 restore drill (same day-1 slot) so the
+  # two heavy kopia jobs don't contend; 25% content is 25x the weekly download, hence quarterly.
+  # Result -> /var/lib/kopia-content-verify/state.json -> monitor-bridge's content_verify check.
+  ansible.builtin.cron:
+    name: "Quarterly Kopia deep content verify"
+    minute: "0"
+    hour: "6"
+    day: "1"
+    month: "3,6,9,12"
+    job: "/usr/local/bin/kopia-content-verify.sh"
+    user: "{{ sys_user }}"
+  become: true
+
+- name: Seed the content-verify state so its monitor is green until the first quarterly run
+  tags: [cron]
+  # The quarterly cron can be up to ~3 months out; without a seed, content_verify false-DOWNs
+  # "never ran" until then. Write a neutral placeholder (ts now, ok) that the cron overwrites on its
+  # first real run. force:false = only when absent, so a real result is never clobbered; sys_user-
+  # owned so the sys_user cron can truncate it later. The weekly 1% verify (monitored separately)
+  # covers actual integrity in the interim. `date +%s` runs on the controller (== daniel-server here).
+  ansible.builtin.copy:
+    dest: /var/lib/kopia-content-verify/state.json
+    content: "{{ {'ts': (lookup('pipe', 'date +%s') | int), 'ok': true, 'msg': 'seeded — first quarterly content verify pending'} | to_json }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0644"
+    force: false
+  become: true
+
 - name: Create maintenance-check state directory
   tags: [cron]
   # monitor-bridge bind-mounts this read-only and alerts on an unhealthy/stale/missing

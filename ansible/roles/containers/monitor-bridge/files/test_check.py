@@ -2725,3 +2725,159 @@ def test_run_once_graced_check_recovers_without_paging(monkeypatch):
     )
     assert out[0][0] is True
     assert out[1] == (True, "queue clean")
+
+
+# ── DOCKER-USER origin-lock watchdog (traefik verify cron writes state.json; we alert on it) ──
+
+
+def _docker_user_state(tmp_path, monkeypatch, ts, ok, msg):
+    p = tmp_path / "state.json"
+    p.write_text(
+        '{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg)
+    )
+    monkeypatch.setattr(check, "DOCKER_USER_STATE", str(p))
+
+
+def test_docker_user_fresh_success_is_up(tmp_path, monkeypatch):
+    _docker_user_state(
+        tmp_path, monkeypatch, time.time() - 300, True, "origin lock applied"
+    )
+    ok, msg = check.check_docker_user()
+    assert ok
+    assert "verified" in msg
+
+
+def test_docker_user_failure_is_down(tmp_path, monkeypatch):
+    # A flushed chain (terminal DROP gone) must page — the origin is reachable direct otherwise.
+    _docker_user_state(
+        tmp_path, monkeypatch, time.time(), False, "terminal DROP missing for :443"
+    )
+    ok, msg = check.check_docker_user()
+    assert not ok
+    assert "NOT applied" in msg
+    assert ":443" in msg
+
+
+def test_docker_user_stale_success_is_down(tmp_path, monkeypatch):
+    # 15-min cadence; a 60-min-old success (past the 45-min window) means the verify cron stopped.
+    _docker_user_state(
+        tmp_path, monkeypatch, time.time() - 60 * 60, True, "origin lock applied"
+    )
+    ok, msg = check.check_docker_user()
+    assert not ok
+    assert "min ago" in msg
+
+
+def test_docker_user_missing_state_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "DOCKER_USER_STATE", str(tmp_path / "nope.json"))
+    ok, msg = check.check_docker_user()
+    assert not ok
+    assert "never ran" in msg
+
+
+def test_docker_user_unparseable_is_down(tmp_path, monkeypatch):
+    p = tmp_path / "state.json"
+    p.write_text("not json")
+    monkeypatch.setattr(check, "DOCKER_USER_STATE", str(p))
+    ok, msg = check.check_docker_user()
+    assert not ok
+    assert "unparseable" in msg
+
+
+# ── quarterly kopia DEEP content verify (quarterly cron writes state.json; we alert on it) ──
+
+
+def _content_verify_state(tmp_path, monkeypatch, ts, ok, msg):
+    p = tmp_path / "state.json"
+    p.write_text(
+        '{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg)
+    )
+    monkeypatch.setattr(check, "CONTENT_VERIFY_STATE", str(p))
+
+
+def test_content_verify_fresh_success_is_up(tmp_path, monkeypatch):
+    _content_verify_state(
+        tmp_path,
+        monkeypatch,
+        time.time() - 30 * 86400,
+        True,
+        "verified 142 snapshots, 0 errors",
+    )
+    ok, msg = check.check_content_verify()
+    assert ok
+    assert "142 snapshots" in msg
+
+
+def test_content_verify_failure_is_down(tmp_path, monkeypatch):
+    # A non-zero deep verify (detected bit-rot / unreadable blob on the 25% sample) must page.
+    _content_verify_state(
+        tmp_path, monkeypatch, time.time(), False, "verify found 2 unreadable objects"
+    )
+    ok, msg = check.check_content_verify()
+    assert not ok
+    assert "unreadable" in msg
+
+
+def test_content_verify_stale_success_is_down(tmp_path, monkeypatch):
+    # Quarterly cadence; a 120d-old success (past the 100d window) means the quarterly cron stopped.
+    _content_verify_state(tmp_path, monkeypatch, time.time() - 120 * 86400, True, "ok")
+    ok, msg = check.check_content_verify()
+    assert not ok
+    assert "ago" in msg
+
+
+def test_content_verify_missing_state_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "CONTENT_VERIFY_STATE", str(tmp_path / "nope.json"))
+    ok, msg = check.check_content_verify()
+    assert not ok
+    assert "never ran" in msg
+
+
+def test_content_verify_unparseable_is_down(tmp_path, monkeypatch):
+    p = tmp_path / "state.json"
+    p.write_text("not json")
+    monkeypatch.setattr(check, "CONTENT_VERIFY_STATE", str(p))
+    ok, msg = check.check_content_verify()
+    assert not ok
+    assert "unparseable" in msg
+
+
+# ── promtail dropped-entries watchdog (Prometheus counter; partial log loss) ──
+
+
+def test_promtail_dropped_under_threshold_is_ok():
+    ok, msg = check.promtail_dropped(50, "1h", 1000)
+    assert ok
+    assert "ok" in msg
+
+
+def test_promtail_dropped_over_threshold_is_down():
+    ok, msg = check.promtail_dropped(5000, "1h", 1000)
+    assert not ok
+    assert "5000" in msg
+    assert "partial log loss" in msg
+
+
+def test_promtail_dropped_none_is_ok():
+    # No series (counter never incremented) -> None -> 0 -> up.
+    ok, _ = check.promtail_dropped(None, "1h", 1000)
+    assert ok
+
+
+def test_promtail_dropped_at_threshold_is_ok():
+    # Exactly at the threshold must NOT alert (strictly greater).
+    ok, _ = check.promtail_dropped(1000, "1h", 1000)
+    assert ok
+
+
+def test_check_promtail_dropped_uses_increase(monkeypatch):
+    queries = []
+
+    def fake_scalar(q):
+        queries.append(q)
+        return 5000.0
+
+    monkeypatch.setattr(check, "prom_scalar", fake_scalar)
+    ok, _ = check.check_promtail_dropped()
+    assert not ok
+    assert any("increase(" in q and "ingester_error" in q for q in queries)

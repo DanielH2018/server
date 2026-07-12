@@ -130,6 +130,15 @@ services:
       - HOME_ALLOWLIST_STATE=/home-allowlist/state.json
       - HOME_ALLOWLIST_MAX_AGE_MIN=30
       - KUMA_PUSH_HOME_ALLOWLIST={{ monitor_bridge_home_allowlist_push_token }}
+      # DOCKER-USER origin-lock watchdog: the traefik role's docker-user-verify.sh cron (every 15 min,
+      # as root) re-reads the LIVE iptables DOCKER-USER chain and asserts the terminal DROP for :80/:443
+      # + a RETURN allow are present, writing state.json. The seed/re-assert units apply the rules but
+      # write no state — this is the only signal the origin lock is ACTUALLY applied (a post-boot flush
+      # would leave 80/443 reachable direct, Cloudflare/CrowdSec bypass, invisibly). Alert on a failed
+      # live assert or 45-min staleness (3 missed 15-min runs).
+      - DOCKER_USER_STATE=/docker-user/state.json
+      - DOCKER_USER_MAX_AGE_MIN=45
+      - KUMA_PUSH_DOCKER_USER={{ monitor_bridge_docker_user_push_token }}
       # Weekly kopia snapshot verify: the host cron (kopia role) writes state.json; we
       # alert on a FAILED verify (bit-rot / unreadable blob the old `| logger` cron
       # swallowed), >10d staleness, or a missing/corrupt file. The verify tier of the
@@ -137,6 +146,14 @@ services:
       - VERIFY_STATE=/verify/state.json
       - VERIFY_MAX_AGE_D=10
       - KUMA_PUSH_VERIFY={{ monitor_bridge_verify_push_token }}
+      # Quarterly kopia DEEP content verify: the kopia role's content-verify.sh cron (1st of Mar/Jun/
+      # Sep/Dec) runs `kopia snapshot verify --verify-files-percent=25` and writes state.json — the
+      # deep tier below the weekly 1% verify, catching a mis-purge / blob bug the 1% sample misses.
+      # Alert on a FAILED deep verify or >100d staleness (~92d max inter-quarter gap + margin; a missed
+      # quarter pages). Seeded on first deploy so it's green until the first quarterly run.
+      - CONTENT_VERIFY_STATE=/content-verify/state.json
+      - CONTENT_VERIFY_MAX_AGE_D=100
+      - KUMA_PUSH_CONTENT_VERIFY={{ monitor_bridge_content_verify_push_token }}
       # Hourly disk-autoprune host cron (autofix-bridge role): conservative docker/builder/
       # container prune when `/` used% crosses a threshold. Alert on a FAILED prune command
       # or >3h staleness (cron broken / never ran) — a disk still full of real data after a
@@ -214,6 +231,14 @@ services:
       # Loki-querying checks (Loki Ingestion, Recyclarr, Janitorr). When Loki is unreachable they're
       # suppressed (pushed `up` w/ a skip msg) and only THIS monitor pages — one outage, one alert.
       - KUMA_PUSH_LOKI_REACHABLE={{ monitor_bridge_loki_reachable_push_token }}
+      # Promtail dropped-entries watchdog: Prometheus already scrapes promtail:9080, exposing the
+      # promtail_dropped_entries_total{reason=...} counter. Loki Log Ingestion only catches TOTAL
+      # silence; this surfaces PARTIAL loss — entries promtail gave up shipping when Loki rejected them
+      # (reason="ingester_error"). increase() over the window handles counter resets; alert only above
+      # PROMTAIL_DROPPED_MAX so a transient Loki restart doesn't page. Prom-dependent.
+      - PROMTAIL_DROPPED_WINDOW=1h
+      - PROMTAIL_DROPPED_MAX=1000
+      - KUMA_PUSH_PROMTAIL_DROPPED={{ monitor_bridge_promtail_dropped_push_token }}
       # Discord delivery: GET-verify Kuma's own notification webhook is still valid — a
       # rotated/revoked/deleted webhook makes Kuma's alert POSTs silently fail while every
       # monitor stays green-in-UI (the alert chain's delivery hop no other monitor, not even
@@ -267,6 +292,8 @@ services:
       - /var/lib/autofix-disk-prune:/autofix-disk:ro
       - /var/lib/kopia-maintenance:/maintenance:ro
       - /var/lib/kopia-b2-usage:/b2-usage:ro
+      - /var/lib/docker-user-rules:/docker-user:ro
+      - /var/lib/kopia-content-verify:/content-verify:ro
     {{ service_networks() }}
     labels:
       {# Container-liveness monitor + one push monitor per check (AutoKuma-provisioned).
@@ -313,7 +340,16 @@ services:
          unreachable / cscli error) or 30-min staleness (cron broken). The updater's twin of the
          wg-easy pull watchdog — the other self-loggering cron that had no monitor. -#}
       {{ kuma('crowdsec-home-allowlist', monitor_type='push', name='CrowdSec Home Allowlist', interval=600, max_retries=0, push_token=monitor_bridge_home_allowlist_push_token) }}
+      {# DOCKER-USER Origin Lock: check_docker_user reads /docker-user/state.json (written every 15 min
+         by the traefik role's docker-user-verify.sh, which asserts the LIVE iptables DROP/allow shape)
+         — down on a failed live assert (lock flushed → origin reachable direct, Cloudflare/CrowdSec
+         bypass) or 45-min staleness. The applier units write no state; this is the only "is it applied" signal. -#}
+      {{ kuma('docker-user-origin-lock', monitor_type='push', name='DOCKER-USER Origin Lock', interval=600, max_retries=0, push_token=monitor_bridge_docker_user_push_token) }}
       {{ kuma('kopia-verify', monitor_type='push', name='Backup Verify', interval=600, max_retries=0, push_token=monitor_bridge_verify_push_token) }}
+      {# Backup Content Verify: check_content_verify reads /content-verify/state.json (written quarterly
+         by the kopia role's content-verify.sh — a 25% deep content re-read) — down on a failed verify
+         or >100d staleness. The deep tier below the weekly Backup Verify. -#}
+      {{ kuma('kopia-content-verify', monitor_type='push', name='Backup Content Verify', interval=600, max_retries=0, push_token=monitor_bridge_content_verify_push_token) }}
       {# Disk Autoprune: check_disk_prune reads /autofix-disk/state.json (written hourly by the
          autofix-bridge role's disk-prune cron) — down on a FAILED prune command or >3h staleness. -#}
       {{ kuma('autofix-disk-prune', monitor_type='push', name='Disk Autoprune', interval=600, max_retries=0, push_token=monitor_bridge_disk_prune_push_token) }}
@@ -331,6 +367,10 @@ services:
       {# Loki log-ingestion freshness: check_loki_ingestion counts lines across all file-tailed
          streams over 30m and `down` at zero — catches a dead promtail/Loki pipeline that /ready can't see. -#}
       {{ kuma('monitor-bridge-loki', monitor_type='push', name='Loki Log Ingestion', interval=600, max_retries=0, push_token=monitor_bridge_loki_push_token) }}
+      {# Promtail Dropped Entries: check_promtail_dropped reads promtail_dropped_entries_total
+         {reason="ingester_error"} from Prometheus — down on sustained PARTIAL log loss (entries Loki
+         rejected + promtail dropped) that the total-silence Loki Log Ingestion check can't see. Prom-dependent. -#}
+      {{ kuma('monitor-bridge-promtail-dropped', monitor_type='push', name='Promtail Dropped Entries', interval=600, max_retries=0, push_token=monitor_bridge_promtail_dropped_push_token) }}
       {# Loki reachability — the root-cause monitor that gates the Loki-querying checks: when it's
          down they're suppressed and only this one pages (no Loki-Ingestion/Recyclarr/Janitorr storm). -#}
       {{ kuma('monitor-bridge-loki-reachable', monitor_type='push', name='Loki Reachable', interval=600, max_retries=0, push_token=monitor_bridge_loki_reachable_push_token) }}

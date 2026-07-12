@@ -123,6 +123,17 @@ PI_PEERS_MAX_AGE_S = float(_env("PI_PEERS_MAX_AGE_D", "2.5")) * 86400
 HOME_ALLOWLIST_STATE = _env("HOME_ALLOWLIST_STATE", "/home-allowlist/state.json")
 HOME_ALLOWLIST_MAX_AGE_S = float(_env("HOME_ALLOWLIST_MAX_AGE_MIN", "30")) * 60
 
+# DOCKER-USER origin-lock watchdog: the traefik role's docker-user-verify.sh cron (every 15 min, as
+# root) reads the LIVE iptables DOCKER-USER chain and asserts the terminal DROP for :80/:443 plus a
+# RETURN allow are present, then writes {"ts": epoch, "ok": bool, "msg": str}. The seed/re-assert
+# systemd units apply the rules but write no state, so this is the only signal that the origin lock is
+# ACTUALLY applied — a chain flushed after boot (docker network reload, manual iptables -F, a Docker
+# upgrade seeding a preempting RETURN) would otherwise leave 80/443 reachable direct (Cloudflare/
+# CrowdSec bypass) invisibly. ok=false = the live assert failed; staleness = the verify cron stopped.
+# 45 min = 3 missed 15-min runs.
+DOCKER_USER_STATE = _env("DOCKER_USER_STATE", "/docker-user/state.json")
+DOCKER_USER_MAX_AGE_S = float(_env("DOCKER_USER_MAX_AGE_MIN", "45")) * 60
+
 # Weekly kopia snapshot verify: the host cron (kopia-verify.sh, kopia role) writes
 # {"ts": epoch, "ok": bool, "msg": str} after each run; we alert on a FAILED verify
 # (detected bit-rot / an unreadable blob — failures the old `| logger` cron silently
@@ -132,6 +143,15 @@ HOME_ALLOWLIST_MAX_AGE_S = float(_env("HOME_ALLOWLIST_MAX_AGE_MIN", "30")) * 60
 # 10d staleness = one missed weekly run + slack.
 VERIFY_STATE = _env("VERIFY_STATE", "/verify/state.json")
 VERIFY_MAX_AGE_S = float(_env("VERIFY_MAX_AGE_D", "10")) * 86400
+
+# Quarterly kopia DEEP content verify: the kopia role's content-verify.sh cron (1st of Mar/Jun/Sep/
+# Dec) runs `kopia snapshot verify --verify-files-percent=25` and writes {"ts": epoch, "ok": bool,
+# "msg": str}. The deep tier below the weekly 1% verify — a mis-purge / blob-accounting bug the 1%
+# sample keeps missing gets caught within a quarter. ok=false = the deep verify FAILED; staleness =
+# the quarterly cron stopped. 100d tolerates the ~92d max gap between quarters + margin (a MISSED
+# quarter -> ~183d -> pages).
+CONTENT_VERIFY_STATE = _env("CONTENT_VERIFY_STATE", "/content-verify/state.json")
+CONTENT_VERIFY_MAX_AGE_S = float(_env("CONTENT_VERIFY_MAX_AGE_D", "100")) * 86400
 
 # Hourly disk-autoprune host cron (autofix-bridge role): writes {"ts": epoch, "ok": bool, "msg":
 # str} after checking `/` used% against a threshold and, if crossed, running a conservative
@@ -219,6 +239,20 @@ LOKI_STREAM = _env("LOKI_STREAM", '{job=~"authlog|syslog|traefik"}')
 LOKI_DOCKER_STREAM = _env("LOKI_DOCKER_STREAM", '{container=~".+"}')
 LOKI_WINDOW = _env("LOKI_WINDOW", "30m")
 LOKI_FILETAIL_WINDOW = _env("LOKI_FILETAIL_WINDOW", "3h")
+
+# Promtail dropped-entries watchdog: Prometheus scrapes promtail:9080, which exposes the
+# promtail_dropped_entries_total{reason=...} counter. Loki Log Ingestion only catches TOTAL silence;
+# this surfaces PARTIAL loss — entries promtail gave up shipping (reason="ingester_error" = Loki
+# ingester unavailable / rate-limited / out-of-order). increase() over a window handles counter
+# resets; alert only ABOVE a threshold so a transient Loki restart's handful of drops doesn't page.
+# Prom-dependent (suppressed under the Prometheus gate). No series (counter never incremented) reads
+# as 0 -> up; a dead promtail scrape is Scrape Targets' page, not this one.
+PROMTAIL_DROPPED_SELECTOR = _env(
+    "PROMTAIL_DROPPED_SELECTOR",
+    'promtail_dropped_entries_total{reason="ingester_error"}',
+)
+PROMTAIL_DROPPED_WINDOW = _env("PROMTAIL_DROPPED_WINDOW", "1h")
+PROMTAIL_DROPPED_MAX = float(_env("PROMTAIL_DROPPED_MAX", "1000"))
 
 # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
 # 2026-06-11 (fwupd): hourly load5/core >1.7 episodes with healthcheck-timeout storms
@@ -1078,6 +1112,38 @@ def check_verify():
     return verify(state, age_s, VERIFY_MAX_AGE_S)
 
 
+def content_verify(state, age_s, max_age_s):
+    """Pure: did the last quarterly deep (25%) content verify pass, and recently enough? (ok, msg).
+
+    Same state-file idiom as verify (the weekly 1% pass). This re-reads a QUARTER of every snapshot's
+    file content, so it catches a mis-purge / blob-accounting bug the 1% sample can miss; a failure is
+    detected B2 bit-rot / repo corruption on the deep sample.
+    """
+    if not state.get("ok"):
+        return False, "last deep content verify FAILED: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return False, "last successful content verify %.0fd ago (max %.0fd)" % (
+            age_s / 86400,
+            max_age_s / 86400,
+        )
+    return True, "content verify ok %.0fd ago: %s" % (
+        age_s / 86400,
+        state.get("msg", ""),
+    )
+
+
+def check_content_verify():
+    try:
+        with open(CONTENT_VERIFY_STATE) as fh:
+            state = json.load(fh)
+        age_s = time.time() - float(state.get("ts", 0))
+    except FileNotFoundError:
+        return False, "no content-verify state (verify never ran?)"
+    except ValueError, TypeError:
+        return False, "content-verify state unparseable"
+    return content_verify(state, age_s, CONTENT_VERIFY_MAX_AGE_S)
+
+
 def pi_peers(state, age_s, max_age_s):
     """Pure: did the last wg-easy Pi-peer backup pull succeed, and recently? (ok, msg).
 
@@ -1170,6 +1236,39 @@ def check_home_allowlist():
     except ValueError, TypeError:
         return False, "home-allowlist state unparseable"
     return home_allowlist(state, age_s, HOME_ALLOWLIST_MAX_AGE_S)
+
+
+def docker_user(state, age_s, max_age_s):
+    """Pure: is the DOCKER-USER origin lock currently applied, per the last live-chain verify? (ok, msg).
+
+    Same state-file idiom as home_allowlist/verify. The verify cron re-reads the live iptables chain
+    every run, so ok=false means the terminal DROP or the RETURN allows went missing (origin reachable
+    direct), and a stale timestamp means the verify cron itself stopped.
+    """
+    if not state.get("ok"):
+        return False, "DOCKER-USER origin lock NOT applied: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return (
+            False,
+            "last DOCKER-USER verify %.0f min ago (max %.0f) — verify cron stopped?"
+            % (age_s / 60, max_age_s / 60),
+        )
+    return True, "origin lock verified %.0f min ago: %s" % (
+        age_s / 60,
+        state.get("msg", ""),
+    )
+
+
+def check_docker_user():
+    try:
+        with open(DOCKER_USER_STATE) as fh:
+            state = json.load(fh)
+        age_s = time.time() - float(state.get("ts", 0))
+    except FileNotFoundError:
+        return False, "no DOCKER-USER verify state (verify never ran?)"
+    except ValueError, TypeError:
+        return False, "DOCKER-USER verify state unparseable"
+    return docker_user(state, age_s, DOCKER_USER_MAX_AGE_S)
 
 
 def b2_usage(state, age_s, max_age_s, cap_bytes, max_pct):
@@ -1427,6 +1526,31 @@ def check_loki_ingestion():
     return True, "%s (+ container stream)" % msg_all
 
 
+def promtail_dropped(count, window, threshold):
+    """Pure: did promtail drop more than `threshold` entries over `window`? (ok, msg).
+
+    `count` = sum(increase(promtail_dropped_entries_total{reason=...}[window])), None when the counter
+    has no series (reads as 0). Above the threshold means Loki was rejecting entries (ingester
+    unavailable / rate-limited / out-of-order) and promtail gave up on them — partial log loss the
+    total-silence Loki Log Ingestion check can't see.
+    """
+    n = count or 0.0
+    if n > threshold:
+        return False, (
+            "promtail dropped %.0f log entries in %s (reason=ingester_error, > %.0f) "
+            "— partial log loss" % (n, window, threshold)
+        )
+    return True, "promtail drops ok (%.0f in %s)" % (n, window)
+
+
+def check_promtail_dropped():
+    """Prometheus-based promtail partial-loss watchdog (see promtail_dropped). Prom-dependent."""
+    count = prom_scalar(
+        "sum(increase(%s[%s]))" % (PROMTAIL_DROPPED_SELECTOR, PROMTAIL_DROPPED_WINDOW)
+    )
+    return promtail_dropped(count, PROMTAIL_DROPPED_WINDOW, PROMTAIL_DROPPED_MAX)
+
+
 def loki_reachable():
     """Is Loki itself reachable and answering queries? (the LOKI_DEPENDENT gate).
 
@@ -1635,6 +1759,7 @@ CHECKS = [
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
     ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
     ("verify", _env("KUMA_PUSH_VERIFY", ""), check_verify),
+    ("content_verify", _env("KUMA_PUSH_CONTENT_VERIFY", ""), check_content_verify),
     ("pi_peers", _env("KUMA_PUSH_PI_PEERS", ""), check_pi_peers),
     ("disk_prune", _env("KUMA_PUSH_DISK_PRUNE", ""), check_disk_prune),
     (
@@ -1642,6 +1767,7 @@ CHECKS = [
         _env("KUMA_PUSH_HOME_ALLOWLIST", ""),
         check_home_allowlist,
     ),
+    ("docker_user", _env("KUMA_PUSH_DOCKER_USER", ""), check_docker_user),
     ("maintenance", _env("KUMA_PUSH_MAINTENANCE", ""), check_maintenance),
     ("b2_usage", _env("KUMA_PUSH_B2", ""), check_b2_usage),
     ("b2_trend", _env("KUMA_PUSH_B2_TREND", ""), check_b2_trend),
@@ -1650,6 +1776,11 @@ CHECKS = [
     ("ha_heartbeat", _env("KUMA_PUSH_HA", ""), check_ha_heartbeat),
     ("renovate_alive", _env("KUMA_PUSH_RENOVATE_ALIVE", ""), check_renovate_alive),
     ("loki_ingestion", _env("KUMA_PUSH_LOKI", ""), check_loki_ingestion),
+    (
+        "promtail_dropped",
+        _env("KUMA_PUSH_PROMTAIL_DROPPED", ""),
+        check_promtail_dropped,
+    ),
     ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
     ("recyclarr", _env("KUMA_PUSH_RECYCLARR", ""), check_recyclarr),
     ("janitorr", _env("KUMA_PUSH_JANITORR", ""), check_janitorr),
@@ -1672,6 +1803,7 @@ PROM_DEPENDENT = frozenset(
         "traefik5xx",
         "b2_trend",
         "janitorr",  # reads container_start_time_seconds for its startup-race uptime gate
+        "promtail_dropped",  # increase(promtail_dropped_entries_total) instant query
     }
 )
 
