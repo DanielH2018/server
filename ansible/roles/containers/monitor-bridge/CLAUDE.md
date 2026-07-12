@@ -269,6 +269,23 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   the state and the descriptive msg lands in the event + Discord notification. Trade-off:
   a dead bridge pages after one missed 600s window (acceptable — that's the dead-man's
   switch doing its job).
+- **Startup/redeploy grace for the reach-out checks (`STARTUP_GRACE`, 2026-07-12):** the four
+  checks that poll a live app dependency with **no reachability gate and no per-check hysteresis**
+  — **Backup Freshness** (kopia), **n8n Prod Workflows** (n8n), **Arr Queue Warnings**
+  (sonarr/radarr), **Pi Pressure** (the Pi glances) — get a consecutive-down grace applied in
+  `run_once` (peer mechanism to `PROM_DEPENDENT`/`LOKI_DEPENDENT`, but a *hysteresis* not a
+  *suppression*). Cause: the bridge's first cycle after the **weekly Sunday 07:30 host reboot**
+  runs before those heavy apps finish starting, so each un-graced `max_retries=0` monitor flipped
+  DOWN on that one transient cycle (`<name> check error: Connection refused` / n8n `HTTP 404` while
+  its API routes warmed up) and paged, then recovered next cycle — a weekly DOWN/UP flap. Which
+  subset actually paged varied week to week (a startup race: some weeks the DOWN push itself failed
+  because uptime-kuma wasn't ready yet). `apply_startup_grace()` holds each `up` for the first
+  `GRACE_CYCLES`-1 (default 2−1 = 1) consecutive down cycles — the same "down streak n/N" idiom as
+  `check_ha_heartbeat`'s `HA_CONSECUTIVE` — so only the `GRACE_CYCLES`'th straight down pages a
+  genuinely-dead dependency (~one extra INTERVAL later), and one `ok` resets the streak. The set is
+  **disjoint from every run_once skip set** (so a graced check reaches the eval path each cycle and
+  its streak advances) — both invariants guarded by a test against `CHECKS`. `GRACE_CYCLES` is
+  env-tunable. Pure `apply_startup_grace()` is unit-tested.
 - **Container healthcheck (2026-06-10):** check.py touches `/tmp/heartbeat` (tmpfs) after
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
@@ -301,7 +318,8 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   (written by the `autofix-bridge` role's hourly disk-prune cron). That role creates the dir
   sys_user-owned, so on a fresh host deploy `autofix-bridge` before `monitor-bridge` (else Docker
   auto-creates the mount source root-owned and the non-root container can't read it).
-- Thresholds are env-tunable in the compose template (`BACKUP_MAX_AGE_H`, `DISK_MAX_PCT`,
+- Thresholds are env-tunable in the compose template (`GRACE_CYCLES` (startup/redeploy grace),
+  `BACKUP_MAX_AGE_H`, `DISK_MAX_PCT`,
   `CERT_MIN_DAYS`, `MEM_MAX_PCT`, `RESTART_WINDOW`/`RESTART_MAX`, `OOM_WINDOW`,
   `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`/`CPU_CONSECUTIVE`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`,
   `N8N_FAIL_WINDOW`/`N8N_FAIL_MAX`; n8n connection config: `N8N_URL`/`N8N_API_KEY`; arr queue

@@ -2620,3 +2620,108 @@ def test_every_push_token_env_is_wired_to_a_monitor():
     assert env_vars <= label_vars, "env push tokens with no monitor label: %s" % sorted(
         env_vars - label_vars
     )
+
+
+# --- startup/redeploy grace for the reach-out checks (STARTUP_GRACE) ----------
+
+
+def test_apply_startup_grace_single_down_is_suppressed():
+    # One down cycle (a dependency still starting after the reboot) must NOT page.
+    streaks = {}
+    ok, msg = check.apply_startup_grace("n8n", False, "Connection refused", 2, streaks)
+    assert ok
+    assert "1/2" in msg
+    assert "startup/redeploy grace" in msg
+    assert "Connection refused" in msg  # the real reason is preserved for the log
+
+
+def test_apply_startup_grace_second_consecutive_down_pages():
+    # Default GRACE_CYCLES=2: the 2nd straight down is a genuinely-dead dependency -> down.
+    streaks = {}
+    assert check.apply_startup_grace("n8n", False, "boom", 2, streaks)[0]
+    ok, msg = check.apply_startup_grace("n8n", False, "boom", 2, streaks)
+    assert not ok
+    assert "boom" in msg
+    assert "(2 cycles)" in msg
+
+
+def test_apply_startup_grace_ok_resets_streak():
+    # down, then ok -> never pages, and the streak restarts so the next down is suppressed again.
+    streaks = {}
+    assert check.apply_startup_grace("backup", False, "down", 2, streaks)[0]
+    ok, msg = check.apply_startup_grace("backup", True, "recovered", 2, streaks)
+    assert ok
+    assert msg == "recovered"
+    assert streaks["backup"] == 0
+    ok, msg = check.apply_startup_grace("backup", False, "down again", 2, streaks)
+    assert ok
+    assert "1/2" in msg
+
+
+def test_apply_startup_grace_streaks_are_per_name():
+    # Each monitor keeps its own streak — one flapping check can't age another toward paging.
+    streaks = {}
+    check.apply_startup_grace("n8n", False, "x", 2, streaks)
+    ok, msg = check.apply_startup_grace("arr_queue", False, "y", 2, streaks)
+    assert ok
+    assert "1/2" in msg  # arr_queue is on its own first cycle, not n8n's second
+
+
+def test_startup_grace_set_matches_real_checks():
+    # Guard (mirrors PROM_DEPENDENT/LOKI_DEPENDENT): every graced name is a real check.
+    names = {name for name, _, _ in check.CHECKS}
+    assert check.STARTUP_GRACE <= names
+
+
+def test_startup_grace_disjoint_from_run_once_skip_sets():
+    # A graced check must reach the eval path EVERY cycle for its streak to be correct, so it
+    # can't also be force-skipped by a reachability gate — STARTUP_GRACE must be disjoint from
+    # every run_once skip set (else the streak wouldn't advance while the dependency was down).
+    assert check.STARTUP_GRACE.isdisjoint(check.PROM_DEPENDENT)
+    assert check.STARTUP_GRACE.isdisjoint(check.LOKI_DEPENDENT)
+    for deps in check.EXPORTER_DEPENDENT.values():
+        assert check.STARTUP_GRACE.isdisjoint(deps)
+
+
+def _wire_run_once_grace(monkeypatch, results):
+    """Drive run_once with Prometheus+Loki UP and one STARTUP_GRACE check whose eval returns
+    `results` in order across calls; capture the (ok, msg) pushed for it each cycle."""
+    monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
+    monkeypatch.setattr(check, "prom_vector", lambda q: [])
+    monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
+    monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset())
+    monkeypatch.setattr(check, "LOKI_DEPENDENT", frozenset())
+    monkeypatch.setattr(check, "STARTUP_GRACE", frozenset({"n8n"}))
+    monkeypatch.setattr(check, "GRACE_CYCLES", 2)
+    monkeypatch.setattr(check, "_grace_streaks", {})
+    seq = iter(results)
+    monkeypatch.setattr(check, "CHECKS", [("n8n", "tok_n8n", lambda: next(seq))])
+    pushes = []
+    monkeypatch.setattr(check, "push", lambda t, ok, m: pushes.append((t, ok, m)))
+    out = []
+    for _ in range(len(results)):
+        check.run_once()
+        out.append(next((ok, m) for t, ok, m in pushes if t == "tok_n8n"))
+        pushes.clear()
+    return out
+
+
+def test_run_once_holds_graced_check_up_on_first_down_then_pages(monkeypatch):
+    # The weekly-reboot case end to end: first cycle down (dependency mid-start) is held up with a
+    # streak msg; a second straight down (dependency really gone) pages with the real reason.
+    out = _wire_run_once_grace(
+        monkeypatch,
+        [(False, "Connection refused"), (False, "Connection refused")],
+    )
+    assert out[0][0] is True and "1/2" in out[0][1]
+    assert out[1][0] is False and "Connection refused" in out[1][1]
+
+
+def test_run_once_graced_check_recovers_without_paging(monkeypatch):
+    # Down then up (the real reboot recovery) never pushes a down for the graced monitor.
+    out = _wire_run_once_grace(
+        monkeypatch,
+        [(False, "Connection refused"), (True, "queue clean")],
+    )
+    assert out[0][0] is True
+    assert out[1] == (True, "queue clean")

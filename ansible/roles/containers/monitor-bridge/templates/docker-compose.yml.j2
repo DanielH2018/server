@@ -28,6 +28,14 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       - INTERVAL=300
+      # Startup/redeploy grace for the reach-out checks (STARTUP_GRACE in check.py: Backup
+      # Freshness / n8n Prod Workflows / Arr Queue Warnings / Pi Pressure). They poll a live app
+      # dependency with no reachability gate and no hysteresis, so the bridge's first cycle after
+      # the weekly host reboot — when kopia/n8n/sonarr/radarr/the Pi glances are still starting —
+      # flipped each max_retries=0 monitor DOWN for one transient cycle and paged. run_once now
+      # holds them `up` for the first GRACE_CYCLES-1 consecutive down cycles; only the
+      # GRACE_CYCLES'th straight down pages a genuinely-dead dependency (like HA_CONSECUTIVE=2).
+      - GRACE_CYCLES=2
       - PROMETHEUS_URL=http://prometheus:9090
       - KOPIA_URL=http://kopia:51515
       - KUMA_URL=http://uptime-kuma:3001

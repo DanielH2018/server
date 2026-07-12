@@ -26,6 +26,13 @@ def _env(name, default):
 
 INTERVAL = int(_env("INTERVAL", "300"))
 HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
+# Startup/redeploy grace for the reach-out checks (STARTUP_GRACE, applied in run_once). The
+# bridge's first cycle after a host reboot runs before the heavy apps it polls (kopia, n8n,
+# sonarr/radarr, the Pi glances) finish starting, so an un-graced reach-out check flips its
+# max_retries=0 push monitor DOWN on that one transient cycle and pages, then recovers next cycle —
+# the weekly-reboot noise. Like HA_CONSECUTIVE, only the GRACE_CYCLES'th consecutive down pages; a
+# genuinely-down dependency still alerts after ~one extra INTERVAL, and one ok resets the streak.
+GRACE_CYCLES = int(_env("GRACE_CYCLES", "2"))
 # Touched after every completed cycle; the container healthcheck compares its mtime
 # against ~3×INTERVAL. PID death already restarts the container, but a HANG only shows
 # up as push silence in Kuma — the healthcheck lets autoheal restart on that too.
@@ -1691,6 +1698,41 @@ EXPORTER_DEPENDENT = {
 # surfaces (it evaluates whenever Loki is reachable). Guarded by a test against CHECKS.
 LOKI_DEPENDENT = frozenset({"loki_ingestion", "recyclarr", "janitorr"})
 
+# Reach-out checks that poll a live app dependency (kopia/n8n/sonarr/radarr/the Pi glances) with NO
+# reachability gate above them and NO per-check hysteresis of their own — unlike check_ha_heartbeat,
+# whose HA_CONSECUTIVE grace rides out exactly this. On the bridge's first cycle after the weekly
+# host reboot those dependencies are still starting, so an un-graced check flips its max_retries=0
+# monitor DOWN on that one transient cycle and pages (then recovers next cycle). run_once holds each
+# of these `up` for the first GRACE_CYCLES-1 consecutive down cycles; the GRACE_CYCLES'th straight
+# down still pages a genuinely-dead dependency. Must be DISJOINT from the run_once skip sets
+# (PROM_DEPENDENT/LOKI_DEPENDENT/EXPORTER_DEPENDENT) so a graced check reaches the eval path every
+# cycle — guarded, with the "real check name" guard, by a test against CHECKS.
+STARTUP_GRACE = frozenset({"backup", "n8n", "arr_queue", "pi_pressure"})
+
+_grace_streaks = {}
+
+
+def apply_startup_grace(name, ok, msg, threshold, streaks):
+    """Pure: hold a reach-out check `up` through the first `threshold`-1 consecutive down cycles.
+
+    `streaks` is a name->consecutive-down-count dict, mutated in place (like the module-global
+    streak counters check_ha_heartbeat/check_cpu_throttle keep). An `ok` result resets the count;
+    the `threshold`'th straight down passes through unchanged. Same "down streak n/N" held-up /
+    "(n cycles)" paging msg shape as the HA/Discord grace, so a held cycle stays legible in the log.
+    """
+    if ok:
+        streaks[name] = 0
+        return ok, msg
+    n = streaks.get(name, 0) + 1
+    streaks[name] = n
+    if n < threshold:
+        return True, "down streak %d/%d (startup/redeploy grace): %s" % (
+            n,
+            threshold,
+            msg,
+        )
+    return False, "%s (%d cycles)" % (msg, n)
+
 
 def down_exporters(up_vector):
     """Pure: which EXPORTER_DEPENDENT jobs report up==0 in a Prometheus `up` vector.
@@ -1766,6 +1808,10 @@ def run_once():
             log("SKIP", name, "-", msg)
         else:
             ok, msg = _evaluate(name, fn)
+            if name in STARTUP_GRACE:
+                ok, msg = apply_startup_grace(
+                    name, ok, msg, GRACE_CYCLES, _grace_streaks
+                )
             log("OK  " if ok else "DOWN", name, "-", msg)
         push(token, ok, msg)
 
