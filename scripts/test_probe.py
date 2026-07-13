@@ -486,3 +486,102 @@ def test_verify_automations_subcommand_parses():
 
     ns = _build_parser().parse_args(["ha", "verify-automations"])
     assert ns.cmd == "ha" and ns.ha_cmd == "verify-automations"
+
+
+# --- metric / loki-query output formatters ----------------------------------
+# These replace the `probe.py metric … | python3 -c "…reshape JSON…"` one-liners
+# that kept prompting: the reshape now lives in the allow-listed script instead.
+
+
+def test_format_metric_vector_prints_labels_and_value_per_series():
+    data = {
+        "data": {
+            "resultType": "vector",
+            "result": [
+                {
+                    "metric": {"__name__": "monitor_status", "monitor_name": "Pi"},
+                    "value": [1720000000, "1"],
+                },
+                {
+                    "metric": {"__name__": "monitor_status", "monitor_name": "Loki"},
+                    "value": [1720000000, "0"],
+                },
+            ],
+        }
+    }
+    out = probe.format_metric(data)
+    assert "monitor_name=Pi = 1" in out
+    assert "monitor_name=Loki = 0" in out
+    # __name__ is dropped — it's the metric name, redundant here.
+    assert "__name__" not in out
+
+
+def test_format_metric_single_unlabeled_series_prints_bare_value():
+    # e.g. predict_linear(...)/1e9 strips all labels -> just the scalar.
+    data = {
+        "data": {
+            "resultType": "vector",
+            "result": [{"metric": {}, "value": [0, "6.47"]}],
+        }
+    }
+    assert probe.format_metric(data) == "6.47"
+
+
+def test_format_metric_matrix_uses_latest_point():
+    data = {
+        "data": {
+            "resultType": "matrix",
+            "result": [
+                {
+                    "metric": {"mountpoint": "/"},
+                    "values": [[1, "10"], [2, "12"], [3, "15"]],
+                }
+            ],
+        }
+    }
+    assert probe.format_metric(data) == "mountpoint=/ = 15"
+
+
+def test_format_metric_scalar_result_prints_value():
+    data = {"data": {"resultType": "scalar", "result": [1720000000, "42"]}}
+    assert probe.format_metric(data) == "42"
+
+
+def test_format_metric_empty_is_no_data():
+    assert (
+        probe.format_metric({"data": {"resultType": "vector", "result": []}})
+        == "no data"
+    )
+
+
+def test_format_loki_prints_lines_oldest_first_across_streams():
+    data = {
+        "data": {
+            "resultType": "streams",
+            "result": [
+                {
+                    "stream": {"container": "traefik"},
+                    "values": [["30", "newest"], ["10", "oldest"]],
+                },
+                {"stream": {"container": "traefik"}, "values": [["20", "middle"]]},
+            ],
+        }
+    }
+    # Sorted by nanosecond timestamp so the newest line sits nearest the prompt.
+    assert probe.format_loki(data) == "oldest\nmiddle\nnewest"
+
+
+def test_format_loki_empty_is_no_logs():
+    assert probe.format_loki({"data": {"result": []}}) == "no logs"
+
+
+def test_metric_defaults_to_formatted_with_json_escape_hatch():
+    p = probe._build_parser()
+    assert p.parse_args(["metric", "up"]).json is False
+    assert p.parse_args(["metric", "up", "--json"]).json is True
+
+
+def test_loki_query_defaults_to_formatted_with_json_escape_hatch():
+    p = probe._build_parser()
+    assert p.parse_args(["loki-query", '{job="x"}']).json is False
+    assert p.parse_args(["loki-query", '{job="x"}', "--json"]).json is True

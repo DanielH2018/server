@@ -15,10 +15,10 @@ covers every subcommand:
 Everything it runs is read-only (HTTP GET / TLS handshake / docker inspect).
 
 Subcommands:
-    metric '<promql>'        Prometheus instant query        (prometheus :9090)
+    metric '<promql>'        Prometheus instant query [--json] (prometheus :9090)
     targets                  Prometheus scrape-target health (prometheus :9090)
     loki-labels              Loki label names                (loki :3100)
-    loki-query '<logql>'     Loki range query [--limit N]    (loki :3100)
+    loki-query '<logql>'     Loki range query [--limit N] [--json] (loki :3100)
     scrutiny                 Disk SMART summary              (scrutiny :8080)
     pi <subpath>             Pi glances API, e.g. `pi fs`    (daniel-pi.lan:61208)
     cert <host[:port]>       Served TLS cert subj/dates [--sni NAME]
@@ -26,6 +26,10 @@ Subcommands:
     ha state <entity_id>     Live HA entity state + attrs    (home-assistant :8123)
     ha automation <id|alias> One automation's on/off + last_triggered (resolves alias!=id)
     ha get <api-path>        Raw GET /api/<path>, e.g. `ha get error_log`
+
+`metric` and `loki-query` print a formatted view by default (one `<labels> = <value>`
+line per series; log lines oldest→newest) so you don't need to pipe into `python3 -c`
+to reshape the JSON — pass `--json` for the raw response.
 
 `ha` is read-only (GET) and authenticates with the SOPS-encrypted claude_ha_token
 (server-only — needs the host age key). The token is fed to curl via stdin, never argv.
@@ -483,6 +487,51 @@ def cert_stages(host, port, sni):
     return [s_client, x509]
 
 
+def format_metric(data):
+    """Human view of a Prometheus /api/v1/query result. One `<labels> = <value>`
+    line per series (labels are the metric dict minus __name__); a single
+    label-less series prints just the value, so scalars read cleanly. A matrix
+    (range vector) shows each series' latest point. Empty result -> 'no data'.
+
+    Replaces the recurring `… | python3 -c "…[print(r['metric'].get('X'),'=',
+    r['value'][1]) …]"` reshapes."""
+    d = data.get("data") or {}
+    result = d.get("result") or []
+    if d.get("resultType") == "scalar":  # result = [ts, "val"]
+        return str(result[1]) if len(result) == 2 else "no data"
+    if not result:
+        return "no data"
+    lines = []
+    for series in result:
+        labels = {
+            k: v for k, v in (series.get("metric") or {}).items() if k != "__name__"
+        }
+        key = ", ".join(f"{k}={v}" for k, v in sorted(labels.items()))
+        if "value" in series:  # instant vector
+            val = series["value"][1]
+        else:  # matrix -> latest point
+            vals = series.get("values") or []
+            val = vals[-1][1] if vals else "?"
+        lines.append(f"{key} = {val}" if key else str(val))
+    return "\n".join(lines)
+
+
+def format_loki(data):
+    """Human view of a Loki query_range result: just the log lines, sorted oldest
+    -> newest across all streams (nanosecond-epoch timestamps), so the newest sits
+    nearest the prompt. Empty result -> 'no logs'.
+
+    Replaces the recurring `… | python3 -c "…for v in r['values']: print(v[1])"`."""
+    rows = []
+    for stream in (data.get("data") or {}).get("result") or []:
+        for ts, line in stream.get("values") or []:
+            rows.append((int(ts), line))
+    if not rows:
+        return "no logs"
+    rows.sort(key=lambda r: r[0])
+    return "\n".join(line for _, line in rows)
+
+
 # --- routing (pure given resolve_ip) ----------------------------------------
 
 
@@ -497,11 +546,19 @@ def _build_parser():
 
     m = sub.add_parser("metric", help="Prometheus instant query")
     m.add_argument("promql")
+    m.add_argument(
+        "--json",
+        action="store_true",
+        help="print raw JSON instead of the formatted view",
+    )
     sub.add_parser("targets", help="Prometheus scrape-target health")
     sub.add_parser("loki-labels", help="Loki label names")
     lq = sub.add_parser("loki-query", help="Loki range query")
     lq.add_argument("logql")
     lq.add_argument("--limit", type=int, default=100)
+    lq.add_argument(
+        "--json", action="store_true", help="print raw JSON instead of the log lines"
+    )
     sub.add_parser("scrutiny", help="disk SMART summary")
     pi = sub.add_parser("pi", help="Pi glances API")
     pi.add_argument("subpath", help="e.g. fs, quicklook, mem, cpu")
@@ -609,6 +666,33 @@ def run_pipeline(stages):
         prev = proc.stdout
         procs.append(proc)
     return procs[-1].wait()
+
+
+def fetch(url):
+    """Run the read-only curl GET and return its body (raise on failure)."""
+    out = subprocess.run(curl_argv(url), capture_output=True, text=True)
+    if out.returncode != 0:
+        raise SystemExit(f"curl {url} failed: {out.stderr.strip()}")
+    return out.stdout
+
+
+def run_query(ns):
+    """Fetch a metric / loki-query and print the formatted view (the default).
+    `--json` and `--dry-run` never reach here — they take the raw streaming path."""
+    if ns.cmd == "metric":
+        url = prom_query_url(resolve_ip("prometheus"), ns.promql)
+        formatter = format_metric
+    else:
+        url = loki_query_url(resolve_ip("loki"), ns.logql, ns.limit)
+        formatter = format_loki
+    body = fetch(url)
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        print(body.strip())
+        return 1
+    print(formatter(data))
+    return 0
 
 
 def run_health(container):
@@ -768,6 +852,10 @@ def main(argv=None):
         return run_ha(ns)
     if ns.cmd == "ha-state":
         return run_ha_state(ns)
+    # metric / loki-query default to a formatted view; --json and --dry-run fall
+    # through to the raw streaming path below.
+    if ns.cmd in ("metric", "loki-query") and not ns.json and not ns.dry_run:
+        return run_query(ns)
     stages = plan(argv, resolve_ip)
     if ns.dry_run:
         for stage in stages:
