@@ -41,6 +41,12 @@ services:
       - KUMA_URL=http://uptime-kuma:3001
       - BACKUP_SOURCE_PATH=/data/home/{{ sys_user }}/server/containers
       - BACKUP_MAX_AGE_H=30
+      # Snapshot-shrink guard folded into Backup Freshness: a fresh, 0-error snapshot still hides a
+      # service that silently left backup scope (kopiaignore over-match / vanished bind mount). Floor
+      # the latest snapshot's total files+bytes at 20% below the trailing-median (from Kopia's own
+      # snapshot history); the median absorbs the routine one-off drops from exclusion tuning.
+      - BACKUP_SIZE_DROP_PCT=20
+      - BACKUP_SIZE_MIN_HISTORY=3
       # /boot: old kernels filling it quietly breaks upgrades; /boot/efi (vfat ESP):
       # same failure class for firmware/bootloader updates (node-exporter exposes both)
       - DISK_MOUNTPOINTS=/,/boot,/boot/efi
@@ -263,6 +269,13 @@ services:
       - DISCORD_HEALTHCHECKS_WEBHOOK_URL={{ healthchecks_discord_webhook_url }}
       - DISCORD_CONSECUTIVE=2
       - KUMA_PUSH_DISCORD={{ monitor_bridge_discord_push_token }}
+      # Alert-email backstop deliverability, folded into the Discord Delivery check: the uptime-kuma
+      # `email` notification (Gmail SMTP) is the independent 2nd channel attached only to Discord
+      # Delivery, so a silently-revoked app-password would leave that backstop dead undetected. A
+      # throttled SMTP login probe (same creds Kuma uses) flips this monitor down on a broken
+      # credential, which still pages via the working Discord channel. Reuses the acme `email` var.
+      - SMTP_USER={{ email }}
+      - SMTP_PASSWORD={{ smtp_notify_app_password }}
       # Recyclarr sync health via Loki: recyclarr runs `recyclarr sync` under supercronic (@daily);
       # the container healthcheck only proves the scheduler is alive, so an ERRORING sync (the silent
       # 2026-06-10 v8-major breakage) shows up nowhere but the logs. /cron.sh ends with the sync so

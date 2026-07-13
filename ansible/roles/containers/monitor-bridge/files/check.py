@@ -12,6 +12,9 @@ Design: docs/superpowers/specs/2026-06-06-monitor-bridge-alerting-design.md
 
 import json
 import os
+import smtplib
+import ssl
+import statistics
 import sys
 import time
 import urllib.error
@@ -44,6 +47,18 @@ LOKI_URL = _env("LOKI_URL", "http://loki:3100").rstrip("/")
 
 BACKUP_PATH = _env("BACKUP_SOURCE_PATH", "/data/home/ubuntu/server/containers")
 BACKUP_MAX_AGE_H = float(_env("BACKUP_MAX_AGE_H", "30"))
+# Snapshot-size regression guard (folded into check_backup). A kopiaignore over-match or a vanished
+# bind mount can silently drop a service from the CONFIG-ONLY backup source: the snapshot still
+# completes with errorCount 0 and a fresh timestamp, so the freshness/error check above stays GREEN
+# while the offsite copy quietly loses a service (the recurring bare-`data/` incident class, see
+# kopiaignore.j2's own changelog). Nothing else catches a SHRINK — the B2 monitors track billable-bytes
+# GROWTH (a shrink reads greener) and the monthly restore drill exercises only one rotated service. We
+# compare the latest snapshot's total files/bytes against a rolling floor: BACKUP_SIZE_DROP_PCT below
+# the MEDIAN of the trailing snapshots (the median absorbs the routine one-off drops from exclusion
+# tuning, so only a sharp anomalous drop pages). Sourced from Kopia's own snapshot history
+# (/api/v1/snapshots), so the check stays stateless.
+BACKUP_SIZE_DROP_PCT = float(_env("BACKUP_SIZE_DROP_PCT", "20"))
+BACKUP_SIZE_MIN_HISTORY = int(_env("BACKUP_SIZE_MIN_HISTORY", "3"))
 DISK_MOUNTPOINTS = [
     m.strip() for m in _env("DISK_MOUNTPOINTS", "/").split(",") if m.strip()
 ]
@@ -315,6 +330,21 @@ DISCORD_ARR_WEBHOOK_URL = _env("DISCORD_ARR_WEBHOOK_URL", "")
 DISCORD_HEALTHCHECKS_WEBHOOK_URL = _env("DISCORD_HEALTHCHECKS_WEBHOOK_URL", "")
 DISCORD_CONSECUTIVE = int(_env("DISCORD_CONSECUTIVE", "2"))
 
+# Alert-email backstop deliverability (folded into check_discord). The uptime-kuma `email` notification
+# (Gmail SMTP) is the independent 2nd channel attached ONLY to the Discord Delivery monitor — the
+# escape hatch when the Kuma Discord webhook is dead (the alert-delivery SPOF). But it had no liveness
+# check of its own, so a silently revoked Gmail app-password could leave that backstop dead undetected
+# and BOTH channels down at once. We fold a throttled SMTP login probe into check_discord: connect +
+# AUTH to SMTP_HOST:SMTP_PORT with the same creds Kuma uses, so a revoked password / broken SMTP flips
+# the Discord Delivery monitor down (which still pages via the working Discord channel). Throttled to
+# EMAIL_PROBE_INTERVAL_S — Gmail flags frequent AUTHs, so a success is cached and only a failure
+# re-probes every cycle. Empty SMTP_PASSWORD = disabled (stays up), like the empty-webhook skips.
+SMTP_HOST = _env("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(_env("SMTP_PORT", "465"))
+SMTP_USER = _env("SMTP_USER", "")
+SMTP_PASSWORD = _env("SMTP_PASSWORD", "")
+EMAIL_PROBE_INTERVAL_S = float(_env("EMAIL_PROBE_INTERVAL_S", "21600"))  # 6h
+
 # Recyclarr sync health: recyclarr runs `recyclarr sync` via supercronic on an @daily schedule;
 # the container healthcheck only proves supercronic (the scheduler) is alive, so a sync that
 # ERRORS shows up nowhere but the logs (the silent 2026-06-10 v8-major breakage class). /cron.sh
@@ -442,6 +472,75 @@ def backup_age_hours(sources_json, path, now=None):
     return age_h, errs
 
 
+def backup_source(sources_json, path):
+    """Return the {host, userName, path} identity dict for the Kopia source matching `path`.
+
+    Raises LookupError if there's no such source (same contract as backup_age_hours). The host +
+    userName are needed to query that source's snapshot HISTORY (/api/v1/snapshots), which only
+    /api/v1/sources exposes.
+    """
+    for s in sources_json.get("sources", []):
+        src = s.get("source", {})
+        if src.get("path") == path:
+            return src
+    raise LookupError("no Kopia source for %s" % path)
+
+
+def backup_size_regression(snapshots, drop_pct, min_history):
+    """Pure: has the latest snapshot's file count or total size dropped below a rolling floor? (ok, msg).
+
+    `snapshots` is Kopia's /api/v1/snapshots list for ONE source, each carrying a `summary` with the
+    whole-tree totals `files` and `size` — NOT `stats.fileCount`, which counts only the newly-hashed
+    non-cached files (e.g. 100 of 8113) and swings wildly by design. A config-only source grows
+    steadily, so we floor each metric at `drop_pct` below the MEDIAN of the trailing history (excluding
+    the latest): the median absorbs the routine one-off dips from exclusion tuning, so only a sharp
+    anomalous drop — a service silently leaving backup scope — pages. Fewer than `min_history` prior
+    snapshots means too little baseline to judge, so it stays up.
+    """
+    entries = []
+    for s in snapshots or []:
+        summ = s.get("summary") or {}
+        files, size = summ.get("files"), summ.get("size")
+        if files is None or size is None:
+            continue
+        entries.append(
+            (s.get("endTime") or s.get("startTime") or "", int(files), int(size))
+        )
+    entries.sort(
+        key=lambda e: e[0]
+    )  # chronological; endTimes are same-format UTC, so lexical == temporal
+    if len(entries) < min_history + 1:
+        return True, "size guard skipped — only %d snapshot(s) of history" % len(
+            entries
+        )
+    latest_files, latest_size = entries[-1][1], entries[-1][2]
+    med_files = statistics.median(f for _, f, _ in entries[:-1])
+    med_size = statistics.median(sz for _, _, sz in entries[:-1])
+    floor = 1 - drop_pct / 100.0
+    if med_files > 0 and latest_files < med_files * floor:
+        return False, (
+            "snapshot file count dropped to %d (trailing median %g, -%.0f%%, floor %.0f%%) "
+            "— a service may have silently left backup scope"
+            % (latest_files, med_files, 100 * (1 - latest_files / med_files), drop_pct)
+        )
+    if med_size > 0 and latest_size < med_size * floor:
+        return False, (
+            "snapshot size dropped to %.2fGB (trailing median %.2fGB, -%.0f%%, floor %.0f%%) "
+            "— a service may have silently left backup scope"
+            % (
+                latest_size / 1e9,
+                med_size / 1e9,
+                100 * (1 - latest_size / med_size),
+                drop_pct,
+            )
+        )
+    return True, "size ok (%d files, %.2fGB, >= %.0f%% of trailing median)" % (
+        latest_files,
+        latest_size / 1e9,
+        100 * floor,
+    )
+
+
 # --- checks: each returns (ok, msg) -----------------------------------------
 
 
@@ -455,7 +554,24 @@ def check_backup():
         return False, "last snapshot had %d errors (%.1fh ago)" % (errs, age_h)
     if age_h > BACKUP_MAX_AGE_H:
         return False, "last snapshot %.1fh ago (> %.0fh)" % (age_h, BACKUP_MAX_AGE_H)
-    return True, "last snapshot %.1fh ago, 0 errors" % age_h
+    # Freshness + errorCount are clean — now guard against a silent SHRINK (a dropped bind mount or a
+    # kopiaignore over-match that the fresh/0-error snapshot above happily hides). Pull the source's
+    # snapshot history and floor the latest against the trailing median.
+    src = backup_source(data, BACKUP_PATH)
+    q = urllib.parse.urlencode(
+        {
+            "userName": src.get("userName", ""),
+            "host": src.get("host", ""),
+            "path": BACKUP_PATH,
+        }
+    )
+    snaps = _get_json(KOPIA_URL + "/api/v1/snapshots?" + q).get("snapshots", [])
+    size_ok, size_msg = backup_size_regression(
+        snaps, BACKUP_SIZE_DROP_PCT, BACKUP_SIZE_MIN_HISTORY
+    )
+    if not size_ok:
+        return False, size_msg
+    return True, "last snapshot %.1fh ago, 0 errors; %s" % (age_h, size_msg)
 
 
 def check_disk():
@@ -1609,19 +1725,66 @@ def _discord_webhooks():
     ]
 
 
+def _smtp_login_ok():
+    """Connect to the SMTP server over implicit TLS and AUTH with the notify creds. (ok, msg).
+
+    A revoked/expired Gmail app-password fails at login; a broken SMTP endpoint fails at connect. NOOP
+    then QUIT — never sends a message. Raises are caught by the caller and ridden through the streak.
+    """
+    ctx = ssl.create_default_context()
+    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=HTTP_TIMEOUT, context=ctx) as s:
+        s.login(SMTP_USER, SMTP_PASSWORD)
+        s.noop()
+    return True, "SMTP login ok (%s)" % SMTP_USER
+
+
+_email_probe = {"ts": 0.0, "ok": True, "msg": "not yet probed"}
+
+
+def email_backstop(now=None):
+    """Throttled deliverability probe for the alert-email 2nd channel. (ok, msg).
+
+    Empty SMTP_PASSWORD -> disabled (stays up). A SUCCESS is cached for EMAIL_PROBE_INTERVAL_S (so
+    Gmail doesn't see an AUTH every cycle); a FAILURE isn't cached, so it re-probes every cycle until
+    it recovers — and check_discord's DISCORD_CONSECUTIVE streak rides out a transient blip before
+    paging. Module-global cache, reset on container restart, like the streak counters — no persistent
+    state needed.
+    """
+    if not SMTP_PASSWORD:
+        return True, "email backstop disabled (no SMTP password)"
+    now = now if now is not None else time.time()
+    if _email_probe["ok"] and now - _email_probe["ts"] < EMAIL_PROBE_INTERVAL_S:
+        return True, "email backstop ok (verified %.1fh ago)" % (
+            (now - _email_probe["ts"]) / 3600
+        )
+    try:
+        ok, msg = _smtp_login_ok()
+    except (
+        Exception
+    ) as e:  # revoked password / SMTP unreachable -> ride the check_discord streak
+        ok, msg = False, "email backstop SMTP login FAILED: %s" % e
+    if ok:
+        _email_probe["ts"] = now
+    _email_probe["ok"] = ok
+    _email_probe["msg"] = msg
+    return ok, msg
+
+
 _discord_down_streak = 0
 
 
 def check_discord():
-    """GET-verify EVERY configured Discord notification webhook still delivers.
+    """GET-verify EVERY configured Discord notification webhook still delivers, plus the email backstop.
 
     Verifies the Kuma alert webhook, the CrowdSec ban-alert webhook, AND the GitOps/Renovate
     webhook (the latter two have no Kuma backstop). `down` if ANY is invalid, naming which. Each
     empty URL is skipped; all empty -> disabled (stays up), like
-    check_n8n. Streak hysteresis (DISCORD_CONSECUTIVE, like check_ha_heartbeat): this is the only
-    check that reaches the public internet, so a single transient non-200 / network blip pushes
-    `up` with a streak msg and only the Nth straight failure pages — a genuinely dead webhook
-    stays bad and pages.
+    check_n8n. Also probes the alert-email 2nd channel (email_backstop) — the independent delivery
+    path this same monitor relies on when its Discord webhook is dead — so a silently revoked SMTP
+    credential surfaces here too. Streak hysteresis (DISCORD_CONSECUTIVE, like check_ha_heartbeat):
+    this check reaches the public internet (webhooks + SMTP), so a single transient non-200 / network
+    blip pushes `up` with a streak msg and only the Nth straight failure pages — a genuinely dead
+    webhook or SMTP credential stays bad and pages.
     """
     global _discord_down_streak
     webhooks = _discord_webhooks()
@@ -1643,8 +1806,14 @@ def check_discord():
             break
         valid.append(label)
     if ok:
+        e_ok, e_msg = email_backstop()
+        if e_ok:
+            valid.append("email")
+        else:
+            ok, msg = False, e_msg
+    if ok:
         _discord_down_streak = 0
-        return True, "Discord webhooks valid (%s)" % ", ".join(valid)
+        return True, "delivery channels valid (%s)" % ", ".join(valid)
     _discord_down_streak += 1
     if _discord_down_streak < DISCORD_CONSECUTIVE:
         return True, "down streak %d/%d (transient grace): %s" % (

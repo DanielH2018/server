@@ -26,7 +26,18 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     fired all nine at once: one root cause, a nine-monitor alert storm. A single scrape target down
     (Prometheus up, one exporter gone) still surfaces separately on Scrape Targets. The
     `PROM_DEPENDENT` set is guarded by a test against the live `CHECKS` so it can't drift.)
-  - **Backup Freshness** (Kopia `/api/v1/sources` last-snapshot age + errorCount)
+  - **Backup Freshness** (Kopia `/api/v1/sources` last-snapshot age + errorCount, **plus a
+    snapshot-shrink guard**: once age/errorCount are clean it pulls the source's snapshot HISTORY
+    (`/api/v1/snapshots`) and `down`s if the latest snapshot's total files or bytes dropped >
+    `BACKUP_SIZE_DROP_PCT` (20%) below the trailing-snapshot MEDIAN. A kopiaignore over-match or a
+    vanished bind mount silently drops a service from the config-only backup while the snapshot still
+    completes fresh + 0-error — the recurring bare-`data/` incident class (kopiaignore.j2) that nothing
+    else catches: the B2 monitors track billable-bytes GROWTH, a shrink reads greener, and the monthly
+    restore drill exercises only one rotated service. Uses `summary.{files,size}` — the whole-tree
+    totals — NOT `stats.fileCount`, which counts only newly-hashed non-cached files and swings by
+    design. The median absorbs the routine one-off drops from exclusion tuning, so only a sharp
+    anomalous drop pages. Stateless (sourced from Kopia's own history). Pure `backup_size_regression()`
+    is unit-tested; `BACKUP_SIZE_DROP_PCT`/`BACKUP_SIZE_MIN_HISTORY` tune it.)
   - **Root Disk** (`node_filesystem_*` for `/`, `/boot` **and `/boot/efi`** — old kernels
     filling /boot quietly breaks upgrades, and a full ESP breaks firmware/bootloader
     updates the same way; server-only, the Pi's disk lives in the Pi Pressure check)
@@ -252,14 +263,20 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     rotated/revoked/deleted webhook makes those alerts silently fail to deliver while every monitor
     stays GREEN in the Kuma UI; this is the alert chain's delivery hop that NO other monitor — not
     even the off-box UptimeRobot host dead-man — exercises. A webhook GET returns Discord's metadata (200) when valid
-    and 404 once gone, and never posts a message (no channel spam) — unlike a test POST. The only
-    check that reaches the PUBLIC internet, so `DISCORD_CONSECUTIVE` (2) adds the same streak
+    and 404 once gone, and never posts a message (no channel spam) — unlike a test POST. **It also
+    probes the alert-EMAIL 2nd channel** (`email_backstop`): the Gmail SMTP notification attached
+    (only) to THIS monitor as the escape hatch when the Discord webhook is dead — a throttled SMTP
+    login with the same creds Kuma uses (`SMTP_USER`/`SMTP_PASSWORD`), so a silently-revoked
+    app-password flips this monitor down and still pages via the working Discord channel. Throttled to
+    `EMAIL_PROBE_INTERVAL_S` (6h — Gmail flags frequent AUTHs): a success is cached, a failure
+    re-probes every cycle. Empty `SMTP_PASSWORD` = that probe disabled. Both webhooks + SMTP reach the
+    PUBLIC internet, so `DISCORD_CONSECUTIVE` (2) adds the same streak
     hysteresis as the HA heartbeat: a single transient non-200/network blip pushes `up` with a
     "down streak n/N" msg and only the 2nd straight failure pages. Empty `DISCORD_WEBHOOK_URL` =
-    disabled (stays up), like `N8N_API_KEY`. Pure `discord_webhook_ok()` + the streak wrapper are
-    unit-tested. NOTE: it verifies the webhook is DELIVERABLE (catches a rotated/revoked URL); it
-    does NOT assert Kuma still has the notification *attached* to each monitor — AutoKuma re-applies
-    that on every deploy via the `kuma()` macro's `notification_name_list`.)
+    disabled (stays up), like `N8N_API_KEY`. Pure `discord_webhook_ok()`, `email_backstop()`'s
+    throttle + the streak wrapper are unit-tested. NOTE: it verifies the webhook is DELIVERABLE
+    (catches a rotated/revoked URL); it does NOT assert Kuma still has the notification *attached* to
+    each monitor — AutoKuma re-applies that on every deploy via the `kuma()` macro's `notification_name_list`.)
   - **Recyclarr Sync** (instant LogQL counts of supercronic's `job succeeded` / `job failed` lines
     for `{container="recyclarr"}` over `RECYCLARR_WINDOW` (26 h = one `@daily` run + slack), reached
     at `loki:3100`: recyclarr runs `recyclarr sync` under supercronic and `/cron.sh` ends with the

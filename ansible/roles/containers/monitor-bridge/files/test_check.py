@@ -403,6 +403,79 @@ def test_backup_missing_source_alerts(monkeypatch):
     assert "no Kopia source" in msg
 
 
+# --- backup_source / backup_size_regression ---------------------------------
+
+
+def _snaps(*pairs):
+    """Kopia /api/v1/snapshots list from (files, size) pairs, oldest-first (endTime ascending)."""
+    return [
+        {
+            "endTime": "2026-06-%02dT00:00:00Z" % (i + 1),
+            "summary": {"files": f, "size": sz},
+        }
+        for i, (f, sz) in enumerate(pairs)
+    ]
+
+
+def test_backup_source_returns_identity():
+    src = check.backup_source(_sources({"endTime": "x"}), "/data/containers")
+    assert src["path"] == "/data/containers"
+
+
+def test_backup_source_missing_raises():
+    with pytest.raises(LookupError):
+        check.backup_source({"sources": []}, "/data/containers")
+
+
+def test_size_regression_steady_growth_is_ok():
+    snaps = _snaps((5000, 9e8), (6000, 1.0e9), (7000, 1.1e9), (8000, 1.2e9))
+    ok, msg = check.backup_size_regression(snaps, 20, 3)
+    assert ok
+    assert "size ok" in msg
+
+
+def test_size_regression_file_count_drop_alerts():
+    # latest file count collapses far below the trailing median -> a service left backup scope
+    snaps = _snaps((8000, 1.2e9), (8100, 1.2e9), (8050, 1.2e9), (3000, 1.19e9))
+    ok, msg = check.backup_size_regression(snaps, 20, 3)
+    assert not ok
+    assert "file count" in msg and "left backup scope" in msg
+
+
+def test_size_regression_byte_drop_alerts():
+    # files steady but total bytes collapse (a large bind mount vanished) -> down
+    snaps = _snaps((8000, 1.2e9), (8000, 1.2e9), (8000, 1.2e9), (7900, 0.5e9))
+    ok, msg = check.backup_size_regression(snaps, 20, 3)
+    assert not ok
+    assert "size dropped" in msg
+
+
+def test_size_regression_median_absorbs_one_off_dip():
+    # a single prior exclusion-tuning dip must not drag the median enough to flag a healthy latest
+    snaps = _snaps((8000, 1.2e9), (6500, 1.0e9), (8000, 1.2e9), (8000, 1.2e9))
+    ok, _ = check.backup_size_regression(snaps, 20, 3)
+    assert ok
+
+
+def test_size_regression_insufficient_history_is_ok():
+    ok, msg = check.backup_size_regression(_snaps((5000, 9e8), (8000, 1.2e9)), 20, 3)
+    assert ok
+    assert "history" in msg
+
+
+def test_check_backup_shrink_folds_into_down(monkeypatch):
+    # freshness + errorCount clean, but the latest snapshot shrank -> check_backup goes down
+    monkeypatch.setattr(check, "BACKUP_PATH", "/data/containers")
+    last = {"endTime": _iso_ago(1), "stats": {"errorCount": 0}}
+    shrunk = {
+        "snapshots": _snaps((8000, 1.2e9), (8000, 1.2e9), (8000, 1.2e9), (3000, 1.2e9))
+    }
+    monkeypatch.setattr(check, "_get_json", _seq(_sources(last), shrunk))
+    ok, msg = check.check_backup()
+    assert not ok
+    assert "left backup scope" in msg
+
+
 # --- check_disk -------------------------------------------------------------
 
 
@@ -2048,6 +2121,78 @@ def test_discord_healthchecks_webhook_failure_pages(monkeypatch):
     ok, msg = check.check_discord()  # streak 2, pages
     assert not ok
     assert "Healthchecks" in msg and "404" in msg
+
+
+# --- email_backstop (throttled SMTP deliverability) -------------------------
+
+
+def test_email_backstop_disabled_without_password(monkeypatch):
+    monkeypatch.setattr(check, "SMTP_PASSWORD", "")
+    ok, msg = check.email_backstop()
+    assert ok
+    assert "disabled" in msg
+
+
+def test_email_backstop_caches_success_within_interval(monkeypatch):
+    monkeypatch.setattr(check, "SMTP_PASSWORD", "app-pw")
+    monkeypatch.setattr(check, "EMAIL_PROBE_INTERVAL_S", 3600)
+    monkeypatch.setattr(check, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""})
+    calls = []
+
+    def probe():
+        calls.append(1)
+        return True, "SMTP login ok"
+
+    monkeypatch.setattr(check, "_smtp_login_ok", probe)
+    assert check.email_backstop(now=10000.0)[0]  # stale ts -> probes
+    ok, msg = check.email_backstop(now=11800.0)  # +1800 < interval -> cached
+    assert ok and len(calls) == 1 and "verified" in msg
+    check.email_backstop(now=13601.0)  # +3601 > interval -> re-probes
+    assert len(calls) == 2
+
+
+def test_email_backstop_failure_reprobes_every_cycle(monkeypatch):
+    # a failure is NOT cached (unlike a success), so recovery is caught next cycle, not 6h later
+    monkeypatch.setattr(check, "SMTP_PASSWORD", "app-pw")
+    monkeypatch.setattr(check, "EMAIL_PROBE_INTERVAL_S", 3600)
+    monkeypatch.setattr(check, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""})
+    calls = []
+
+    def boom():
+        calls.append(1)
+        raise RuntimeError("auth refused")
+
+    monkeypatch.setattr(check, "_smtp_login_ok", boom)
+    ok, msg = check.email_backstop(now=10000.0)
+    assert not ok and "FAILED" in msg
+    ok, _ = check.email_backstop(
+        now=10001.0
+    )  # 1s later, well within interval -> still re-probes
+    assert not ok and len(calls) == 2
+
+
+def test_check_discord_email_backstop_failure_pages(monkeypatch):
+    # webhooks fine but the email 2nd channel's SMTP login fails -> Discord Delivery pages after streak
+    monkeypatch.setattr(
+        check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
+    )
+    monkeypatch.setattr(check, "DISCORD_CROWDSEC_WEBHOOK_URL", "")
+    monkeypatch.setattr(check, "DISCORD_GITOPS_WEBHOOK_URL", "")
+    monkeypatch.setattr(check, "DISCORD_ARR_WEBHOOK_URL", "")
+    monkeypatch.setattr(check, "DISCORD_HEALTHCHECKS_WEBHOOK_URL", "")
+    monkeypatch.setattr(check, "_discord_down_streak", 0)
+    monkeypatch.setattr(check, "SMTP_PASSWORD", "app-pw")
+    monkeypatch.setattr(check, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""})
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"name": "Homelab Alerts"})
+
+    def boom():
+        raise RuntimeError("auth refused")
+
+    monkeypatch.setattr(check, "_smtp_login_ok", boom)
+    assert check.check_discord()[0]  # streak 1, suppressed
+    ok, msg = check.check_discord()  # streak 2, pages
+    assert not ok
+    assert "email backstop" in msg
 
 
 # ── Prometheus reachability gate + alert-storm suppression (L1) ──────────────
