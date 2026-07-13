@@ -228,3 +228,24 @@ def test_portainer_server_agent_pins_in_lockstep() -> None:
         f"portainer pins drifted: portainer-ce {s.group(1)} vs agent {a.group(1)} — bump both "
         f"together (the agent API version must match the server it connects to)."
     )
+
+
+def test_python_version_pins_in_lockstep() -> None:
+    """ci.yml and image-smoke.yml must pin the same Python version.
+
+    A single Renovate customManager scans every workflow file (renovate.json), so one bump PR is
+    meant to edit both `python-version:` pins together; nothing else asserts the coupling actually
+    held. A skew would run the scripts suite under one interpreter in CI and boot-smoke changed
+    images under another — a silent test/runtime mismatch. Mirrors the shellcheck-py / portainer
+    lockstep tests above.
+    """
+    ci = (_REPO / ".github/workflows/ci.yml").read_text()
+    smoke = (_REPO / ".github/workflows/image-smoke.yml").read_text()
+    c = re.search(r'python-version:\s*"([^"]+)"', ci)
+    s = re.search(r'python-version:\s*"([^"]+)"', smoke)
+    assert c, "python-version pin not found in ci.yml"
+    assert s, "python-version pin not found in image-smoke.yml"
+    assert c.group(1) == s.group(1), (
+        f"python-version pins drifted: ci.yml {c.group(1)} vs image-smoke.yml {s.group(1)} — bump "
+        f"both together (they must run the scripts suite and image smoke on the same interpreter)."
+    )
