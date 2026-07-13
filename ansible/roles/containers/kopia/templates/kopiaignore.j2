@@ -57,11 +57,14 @@ sonarr/config/MediaCover/
 radarr/config/MediaCover/
 bazarr/config/cache/
 prowlarr/config/Definitions/
-# prowlarr.db (the config DB) STAYS backed up; logs.db is request/log history and
-# Sentry/ is queued upstream crash-report telemetry — both regeneratable churn that
-# re-chunks daily (2026-07-13 B2 triage). Their .db-wal/.db-shm are dropped above.
+# The *arr config DBs (prowlarr.db/sonarr.db/radarr.db) STAY backed up; logs.db is
+# request/log history and prowlarr's Sentry/ is queued upstream crash-report telemetry
+# — regeneratable churn that re-chunks daily (2026-07-13 B2 triage). The .db-wal/.db-shm
+# sidecars are dropped above.
 prowlarr/config/logs.db
 prowlarr/config/Sentry/
+sonarr/config/logs.db
+radarr/config/logs.db
 tdarr/transcode_cache/
 
 # ── Metrics & monitoring (regenerate from live services) ─────────────────────
@@ -79,6 +82,12 @@ scrutiny/influxdb2/
 # auto-update churn then bled ~0.8GB/day of unique content into B2. Keep both lines.
 code-server/config/extensions/
 code-server/config/.local/share/code-server/extensions/
+# CachedExtensionVSIXs = downloaded .vsix installers, CachedProfilesData = profile
+# cache — re-fetched on demand, same regeneratable class as extensions/ above (74M was
+# silently backed up, found in the 2026-07-13 footprint audit). code-server's own logs/
+# is already dropped by the generic logs/ rule.
+code-server/config/data/CachedExtensionVSIXs/
+code-server/config/data/CachedProfilesData/
 # Uptime-Kuma's SQLite DB: deliberately excluded — AutoKuma reconstitutes every monitor + the
 # Discord notification from container labels on deploy, so it's regeneratable. Caveat (in the DR
 # runbook, docs/kopia-disaster-recovery.md): a bare-metal restore needs the Kuma first-run admin
