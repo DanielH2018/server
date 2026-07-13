@@ -23,6 +23,7 @@ Subcommands:
     pi <subpath>             Pi glances API, e.g. `pi fs`    (daniel-pi.lan:61208)
     cert <host[:port]>       Served TLS cert subj/dates [--sni NAME]
     health <container>       Container state + healthcheck rollup (exit 0 = healthy)
+    arr <app> <api-path>     Read-only *arr API GET [--json] (sonarr/radarr/prowlarr)
     ha state <entity_id>     Live HA entity state + attrs    (home-assistant :8123)
     ha automation <id|alias> One automation's on/off + last_triggered (resolves alias!=id)
     ha get <api-path>        Raw GET /api/<path>, e.g. `ha get error_log`
@@ -33,6 +34,8 @@ to reshape the JSON — pass `--json` for the raw response.
 
 `ha` is read-only (GET) and authenticates with the SOPS-encrypted claude_ha_token
 (server-only — needs the host age key). The token is fed to curl via stdin, never argv.
+`arr` works the same way — it pulls `<app>_api_key` from SOPS and passes it via stdin,
+so the *arr key never lands in argv / `ps` / shell history.
 Add `--dry-run` to print the command(s) instead of running them.
 
 NB: `cert <public-host>` shows the CLOUDFLARE EDGE cert, NOT Traefik's origin cert — public DNS
@@ -131,6 +134,31 @@ def ha_curl_argv(url, timeout=DEFAULT_TIMEOUT):
 def ha_curl_config(token):
     """The `curl --config -` body carrying the auth header (consumed via stdin)."""
     return f'header = "Authorization: Bearer {token}"\n'
+
+
+# --- *arr apps (sonarr/radarr/prowlarr) read-only API (pure) ----------------
+# Sonarr/Radarr speak /api/v3, Prowlarr /api/v1. The X-Api-Key comes from SOPS
+# and is fed to curl via stdin (arr_curl_config), never argv — same guard as ha.
+ARR_PORTS = {"sonarr": 8989, "radarr": 7878, "prowlarr": 9696}
+ARR_API_VERSION = {"sonarr": "v3", "radarr": "v3", "prowlarr": "v1"}
+
+
+def arr_url(ip, app, path):
+    """Build an *arr API URL. Normalizes a leading `/`, an `api/` prefix, and a
+    redundant version segment so `health`, `/health`, `api/v3/health`, and
+    `v3/health` all resolve to the app's correct `/api/<ver>/health`."""
+    ver = ARR_API_VERSION[app]
+    p = path.lstrip("/")
+    if p.startswith("api/"):
+        p = p[len("api/") :]
+    if p.startswith(ver + "/"):
+        p = p[len(ver) + 1 :]
+    return f"http://{ip}:{ARR_PORTS[app]}/api/{ver}/{p}"
+
+
+def arr_curl_config(api_key):
+    """The `curl --config -` body carrying the *arr X-Api-Key header (via stdin)."""
+    return f'header = "X-Api-Key: {api_key}"\n'
 
 
 # --- Minimal synchronous WebSocket client (stdlib only — no `websockets` dep) -----------------
@@ -573,6 +601,14 @@ def _build_parser():
         "health", help="container state + healthcheck rollup (exit 0 = healthy)"
     )
     hl.add_argument("container", help="container name, e.g. jellyfin")
+    ar = sub.add_parser(
+        "arr", help="read-only *arr API GET (key from SOPS, fed via stdin)"
+    )
+    ar.add_argument("app", choices=sorted(ARR_PORTS))
+    ar.add_argument("path", help="api path, e.g. health, indexerstatus, notification")
+    ar.add_argument(
+        "--json", action="store_true", help="print raw JSON instead of pretty-printed"
+    )
     ha = sub.add_parser("ha", help="Home Assistant live state (read-only, GET)")
     hasub = ha.add_subparsers(dest="ha_cmd", required=True)
     hs = hasub.add_parser("state", help="GET /api/states/<entity_id>")
@@ -731,6 +767,54 @@ def ha_get(url, token):
     return out.stdout
 
 
+def sops_extract(key_name):
+    """Decrypt a single top-level key from the SOPS secrets file. Requires the
+    host's age key (present on daniel-server)."""
+    out = subprocess.run(
+        ["sops", "-d", "--extract", f'["{key_name}"]', SECRETS_PATH],
+        capture_output=True,
+        text=True,
+    )
+    if out.returncode != 0:
+        raise SystemExit(
+            f"could not decrypt {key_name} from {SECRETS_PATH}: {out.stderr.strip()}"
+        )
+    return out.stdout.strip()
+
+
+def config_get(url, config_body):
+    """Authenticated GET whose auth header is fed via curl `--config -` stdin
+    (never argv). Returns the response body."""
+    out = subprocess.run(
+        ha_curl_argv(url), input=config_body, capture_output=True, text=True
+    )
+    if out.returncode != 0:
+        raise SystemExit(f"curl {url} failed: {out.stderr.strip()}")
+    return out.stdout
+
+
+def run_arr(ns):
+    """Read-only *arr API GET. Pulls <app>_api_key from SOPS and passes it via
+    stdin. Pretty-prints JSON by default; `--json` prints the raw response."""
+    if ns.dry_run:
+        print(
+            " ".join(ha_curl_argv(arr_url("<arr-ip>", ns.app, ns.path)))
+            + "   # + X-Api-Key: <redacted> (via --config stdin)"
+        )
+        return 0
+    url = arr_url(resolve_ip(ns.app), ns.app, ns.path)
+    body = config_get(url, arr_curl_config(sops_extract(f"{ns.app}_api_key")))
+    if ns.json:
+        print(body, end="")
+        return 0
+    try:
+        print(json.dumps(json.loads(body), indent=2))
+    except json.JSONDecodeError:
+        print(body.strip())
+        return 1
+    return 0
+
+
 def _ha_url(ip, ns):
     if ns.ha_cmd == "state":
         return ha_state_url(ip, ns.entity_id)
@@ -850,6 +934,8 @@ def main(argv=None):
     # `ha` resolves a token + talks to the HA REST API rather than streaming a pipeline.
     if ns.cmd == "ha":
         return run_ha(ns)
+    if ns.cmd == "arr":
+        return run_arr(ns)
     if ns.cmd == "ha-state":
         return run_ha_state(ns)
     # metric / loki-query default to a formatted view; --json and --dry-run fall

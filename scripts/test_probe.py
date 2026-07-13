@@ -585,3 +585,77 @@ def test_loki_query_defaults_to_formatted_with_json_escape_hatch():
     p = probe._build_parser()
     assert p.parse_args(["loki-query", '{job="x"}']).json is False
     assert p.parse_args(["loki-query", '{job="x"}', "--json"]).json is True
+
+
+# --- arr subcommand: read-only *arr API GET (key from SOPS, fed via stdin) ----
+# Replaces `docker exec <arr> curl -H "X-Api-Key: <hex>" …/api/… | python3`,
+# which both prompted AND leaked the key into argv / shell history / the log.
+
+
+def test_arr_url_sonarr_defaults_to_api_v3_and_port_8989():
+    assert (
+        probe.arr_url("10.0.0.5", "sonarr", "health")
+        == "http://10.0.0.5:8989/api/v3/health"
+    )
+
+
+def test_arr_url_radarr_port_7878_api_v3():
+    assert (
+        probe.arr_url("10.0.0.6", "radarr", "queue")
+        == "http://10.0.0.6:7878/api/v3/queue"
+    )
+
+
+def test_arr_url_prowlarr_port_9696_api_v1():
+    assert (
+        probe.arr_url("10.0.0.7", "prowlarr", "indexerstatus")
+        == "http://10.0.0.7:9696/api/v1/indexerstatus"
+    )
+
+
+def test_arr_url_normalizes_leading_slash_api_and_version_prefix():
+    # bare, /-prefixed, api/-prefixed, and version-prefixed all mean the same endpoint.
+    for path in ("health", "/health", "api/v3/health", "v3/health", "/api/v3/health"):
+        assert probe.arr_url("h", "sonarr", path) == "http://h:8989/api/v3/health"
+
+
+def test_arr_url_keeps_multi_segment_path():
+    assert (
+        probe.arr_url("h", "prowlarr", "indexer/testall")
+        == "http://h:9696/api/v1/indexer/testall"
+    )
+
+
+def test_arr_curl_config_uses_x_api_key_header():
+    assert 'header = "X-Api-Key: SECRET_KEY"' in probe.arr_curl_config("SECRET_KEY")
+
+
+def test_arr_curl_config_is_not_bearer():
+    cfg = probe.arr_curl_config("SECRET_KEY")
+    assert "Bearer" not in cfg and "Authorization" not in cfg
+
+
+def test_arr_request_never_puts_key_in_argv():
+    # Regression guard mirroring the ha token: the key travels via stdin --config, never argv.
+    argv = probe.ha_curl_argv(probe.arr_url("h", "sonarr", "health"))
+    assert "--config" in argv
+    assert not any("Api-Key" in a or "SECRET" in a for a in argv)
+
+
+def test_arr_subcommand_parses_app_path_and_json_flag():
+    p = probe._build_parser()
+    ns = p.parse_args(["arr", "sonarr", "health"])
+    assert (
+        ns.cmd == "arr"
+        and ns.app == "sonarr"
+        and ns.path == "health"
+        and ns.json is False
+    )
+    assert p.parse_args(["arr", "prowlarr", "indexerstatus", "--json"]).json is True
+
+
+def test_arr_subcommand_rejects_unknown_app():
+    import pytest
+
+    with pytest.raises(SystemExit):
+        probe._build_parser().parse_args(["arr", "lidarr", "health"])
