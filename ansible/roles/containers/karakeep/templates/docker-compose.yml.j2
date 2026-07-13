@@ -210,8 +210,11 @@ services:
       # Manual/Renovate-managed stack (see karakeep service) — no watchtower auto-bump.
       - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('karakeep-time-tagger') }}
-    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    {{ resources('0.50', '512M', '0.05', '64M') }}
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana. cpu 1.0:
+    # the per-cycle `uv pip install` + tag burst hit the old 0.5 cap and CFS-throttled ~67% of
+    # periods (cAdvisor 2026-07-13) though the 24h avg is ~0.01 cores — a wider ceiling lets the
+    # burst finish without throttling; the 0.05 reservation keeps its steady-state footprint tiny.
+    {{ resources('1.0', '512M', '0.05', '64M') }}
 
 volumes:
   karakeep_meili:
