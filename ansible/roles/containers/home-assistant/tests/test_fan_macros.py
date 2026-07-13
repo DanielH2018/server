@@ -15,9 +15,11 @@ def _pct(level):
     return int(render_macro(FAN, "level_to_pct", level))
 
 
-def _target(temp_f, cur_level, is_night, sleep):
+def _target(temp_f, cur_level, is_night, sleep, outdoor_temp_f=-999):
     return int(
-        render_macro(FAN, "fan_target_level", temp_f, cur_level, is_night, sleep)
+        render_macro(
+            FAN, "fan_target_level", temp_f, cur_level, is_night, sleep, outdoor_temp_f
+        )
     )
 
 
@@ -72,21 +74,57 @@ def test_hysteresis_steps_outside_deadband():
     assert _target(78.6, 5, False, False) == 6
 
 
-def test_sleep_cap_limits_to_level_2():
-    assert _target(83.0, 0, False, True) == 2
-
-
 def test_night_cap_limits_to_level_4():
     assert _target(83.0, 0, True, False) == 4
 
 
-# Migration safety net: the extracted macro must equal the ORIGINAL inline bedroom_apply_fan
-# formula for every input. This pins behavior-preservation of the Task 5 rewire; keep it as a
-# permanent regression guard against the curve being changed in only one place.
-def _inline_target(t, cur_level, is_night, sleep):
-    # The pre-extraction formula, transcribed from scripts.yaml's bedroom_apply_fan.
+# Sleep-mode seasonal floor + fixed L5 ceiling, keyed off OUTDOOR temp: outdoor picks the floor band
+# (winter 2 / shoulder 3 / summer 4), the indoor curve modulates within [floor, 5]. Replaces the old
+# flat L2 sleep cap.
+def test_sleep_summer_floor_and_ceiling():
+    # Summer (outdoor >= 68): floor L4, ceiling L5.
+    assert (
+        _target(83.0, 0, False, True, 80.0) == 5
+    )  # hot room, curve ~9.2 -> L5 ceiling
+    assert _target(74.0, 0, False, True, 80.0) == 4  # warm room, curve ~2.3 -> L4 floor
+
+
+def test_sleep_winter_floor_holds_white_noise():
+    # Winter (outdoor < 45): floor L2. A cold room's curve wants 0 -> the floor keeps it at L2, not off.
+    assert _target(69.0, 0, False, True, 30.0) == 2
+    assert (
+        _target(78.0, 0, False, True, 30.0) == 5
+    )  # hot room still capped at the L5 ceiling
+
+
+def test_sleep_shoulder_floor():
+    # Spring/fall (45 <= outdoor < 68): floor L3.
+    assert _target(70.0, 0, False, True, 55.0) == 3  # cool room -> L3 floor
+    assert _target(76.0, 0, False, True, 55.0) == 4  # curve ~3.85 -> L4, within [3, 5]
+
+
+def test_sleep_floor_band_boundaries():
+    # Bands are half-open at 45 and 68 °F. Cold room (curve wants 0) so the FLOOR is the output.
+    assert _target(69.0, 0, False, True, 44.9) == 2  # just below 45 -> winter floor
+    assert _target(69.0, 0, False, True, 45.0) == 3  # 45 -> shoulder floor
+    assert _target(69.0, 0, False, True, 67.9) == 3  # just below 68 -> shoulder floor
+    assert _target(69.0, 0, False, True, 68.0) == 4  # 68 -> summer floor
+
+
+def test_sleep_missing_outdoor_falls_back_to_winter_band():
+    # Outdoor unavailable (default sentinel) -> winter band (floor L2 = the old quiet sleep behavior).
+    assert _target(69.0, 0, False, True) == 2  # cold room -> L2 floor
+    assert _target(83.0, 0, False, True) == 5  # hot room -> L5 ceiling
+
+
+# Migration safety net: the extracted macro must equal the ORIGINAL inline bedroom_apply_fan formula
+# for every NON-sleep input. This pins behavior-preservation of the curve + night cap. The sleep
+# branch intentionally diverges from the old flat L2 cap (seasonal floor/ceiling — covered by the
+# dedicated tests above), so it is excluded here.
+def _inline_target(t, cur_level, is_night):
+    # The pre-extraction non-sleep formula, transcribed from scripts.yaml's bedroom_apply_fan.
     ideal = (t - 71) / 1.3 if t >= 0 else 0
-    cap = 2 if sleep else (4 if is_night else 9)
+    cap = 4 if is_night else 9
     if t < 0 or ideal < 0.3:
         want = 0
     elif cur_level == 0 or ideal > cur_level + 0.7 or ideal < cur_level - 0.7:
@@ -98,14 +136,13 @@ def _inline_target(t, cur_level, is_night, sleep):
     return min(want, cap)
 
 
-def test_macro_matches_original_inline_formula():
+def test_macro_matches_original_inline_formula_non_sleep():
     for t in [x / 10 for x in range(680, 900)]:  # 68.0 .. 89.9 °F
         for cur_level in range(0, 10):
             for is_night in (False, True):
-                for sleep in (False, True):
-                    assert _target(t, cur_level, is_night, sleep) == _inline_target(
-                        t, cur_level, is_night, sleep
-                    ), f"drift at t={t} cur={cur_level} night={is_night} sleep={sleep}"
+                assert _target(t, cur_level, is_night, False) == _inline_target(
+                    t, cur_level, is_night
+                ), f"drift at t={t} cur={cur_level} night={is_night}"
 
 
 # fan_nudge_level: the Tap Dial fan-dial-mode step. Current level + delta, clamped to 0..9 (0 = off).

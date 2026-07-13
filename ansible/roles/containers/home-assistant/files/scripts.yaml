@@ -348,8 +348,9 @@ bedroom_apply_fan:
   alias: "Bedroom — apply temperature fan state"
   description: >-
     Set fan.tower_fan from sensor.bedroom_airgradient_one_temperature (°F): a smooth curve of ~0.8
-    DREO level per °F (off below ~72°F, 72→L1 .. ~82→L9), with a ~0.7-level hysteresis deadband and
-    level caps (max L4 during 22:00-06:00, max L2 in sleep mode).
+    DREO level per °F (off below ~72°F, 72→L1 .. ~82→L9), with a ~0.7-level hysteresis deadband, a
+    max-L4 cap during 22:00-06:00, and in sleep mode an outdoor-temp seasonal floor (L2/L3/L4) up to
+    an L5 ceiling.
   mode: restart
   sequence:
     - variables:
@@ -360,12 +361,16 @@ bedroom_apply_fan:
         # shared with bedroom_fan_manual_detect so the round-trip can't drift.
         cur_pct: "{{ state_attr('fan.tower_fan', 'percentage') | float(0) if is_state('fan.tower_fan', 'on') else 0 }}"
         cur_level: "{% from 'fan.jinja' import pct_to_level %}{{ pct_to_level(cur_pct) | int }}"
-        # Clock + sleep flag stay here (entity/time reads); the curve, hysteresis deadband, and the
-        # night/sleep caps live in fan.jinja's fan_target_level (single source of truth, unit-tested
-        # in tests/test_fan_macros.py). TUNE the curve there.
+        # Clock + sleep flag + outdoor temp stay here (entity/time reads); the curve, hysteresis
+        # deadband, the night cap, and the sleep-mode seasonal floor/ceiling live in fan.jinja's
+        # fan_target_level (single source of truth, unit-tested in tests/test_fan_macros.py). TUNE
+        # the curve/bands there.
         is_night: "{{ now().hour >= 22 or now().hour < 6 }}"
         sleep: "{{ is_state('input_boolean.bedroom_sleep_mode', 'on') }}"
-        target_level: "{% from 'fan.jinja' import fan_target_level %}{{ fan_target_level(t, cur_level, is_night, sleep) | int }}"
+        # Outdoor temp (°F) picks the sleep-mode seasonal floor/ceiling band; -999 when weather is
+        # unavailable -> winter band (quiet L2 floor).
+        outdoor_t: "{{ state_attr('weather.forecast_home', 'temperature') | float(-999) }}"
+        target_level: "{% from 'fan.jinja' import fan_target_level %}{{ fan_target_level(t, cur_level, is_night, sleep, outdoor_t) | int }}"
         # % to SEND to hit target_level despite the integration's ceil (level -> midpoint %, via the
         # shared fan.jinja macro): the midpoint of the level's range ceils to exactly L. 0 = off.
         send_pct: "{% from 'fan.jinja' import level_to_pct %}{{ level_to_pct(target_level) | int }}"

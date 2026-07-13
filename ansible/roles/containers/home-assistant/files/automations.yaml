@@ -1110,8 +1110,11 @@
         t: "{{ states('sensor.bedroom_airgradient_one_temperature') | float(-1) }}"
         is_night: "{{ now().hour >= 22 or now().hour < 6 }}"
         sleep: "{{ is_state('input_boolean.bedroom_sleep_mode', 'on') }}"
+        # Outdoor temp (°F) — MUST match bedroom_apply_fan's read so this reconcile's "what auto would
+        # pick" reference uses the same sleep-mode seasonal floor/ceiling the live control applies.
+        outdoor_t: "{{ state_attr('weather.forecast_home', 'temperature') | float(-999) }}"
         # Hysteresis-free auto ideal — cur_level=0 bypasses fan_target_level's ±0.7-level deadband.
-        ideal: "{% from 'fan.jinja' import fan_target_level %}{{ fan_target_level(t, 0, is_night, sleep) | int }}"
+        ideal: "{% from 'fan.jinja' import fan_target_level %}{{ fan_target_level(t, 0, is_night, sleep, outdoor_t) | int }}"
     # Hand-set fan? Home, fan on, temp known, running >1 level from auto's pick, and the override wasn't
     # restored (still off). The >1 tolerance absorbs the curve's hysteresis so a legit auto level never
     # trips this — only a deliberate manual speed sits that far from ideal.

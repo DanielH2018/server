@@ -414,9 +414,13 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   mid-fade doesn't abort it — only a bulb power-cycle would. Triggered by `automation.bedroom_bedtime`
   off `binary_sensor.pixel_watch_3_bedtime_mode` → on (gated `person.daniel == home`), with **Tap
   Dial button-3 (Sleep) HOLD** as the manual fallback (`bedroom_tap_dial_control`). **Charging is deliberately
-  NOT a trigger** (operator charges in-room). **Fan stays temperature-responsive, just quieter:**
-  `bedroom_apply_fan` caps the fan to Low (level 2) when `bedroom_sleep_mode` is on — below the
-  22:00–06:00 Medium (level 4) night cap, via `cap = 2 if sleep else (4 if night else 9)`; it does
+  NOT a trigger** (operator charges in-room). **Fan stays temperature-responsive, just bounded to a
+  seasonal band:** when `bedroom_sleep_mode` is on, `bedroom_apply_fan`/`fan_target_level` apply an
+  **outdoor-temp seasonal FLOOR** (L2 winter `< 45°F` / L3 shoulder `45–68°F` / L4 summer `≥ 68°F`,
+  from `weather.forecast_home`) up to a fixed **L5 ceiling** — the floor guarantees white noise even in
+  a cold room (curve wants 0 → floor holds), the indoor-temp curve modulates within `[floor, 5]` on a
+  hot night, and a missing outdoor reading falls back to the winter band (quiet L2, the old behavior).
+  Replaced the old flat L2 sleep cap 2026-07-13; TUNE the bands/floors/ceiling in `fan.jinja`. It does
   NOT freeze the fan. `bedroom_morning_reset` unwinds both sleep_mode + AL sleep mode before its fan/
   light re-applies (later moves to the watch-alarm wake). Phone bedtime/sleep sensors (DND,
   sleep_confidence, next_alarm) are now enabled in the companion app; the watch exposes
@@ -457,7 +461,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `sensor.bedroom_airgradient_one_temperature` (°F) on a **smooth ~0.8-level-per-°F curve**: off below
   ~72°F, then `ideal = (t − 71)/1.3` → `round` clamped 1–9 (72→L1 … ~82→L9). A **~0.7-level hysteresis
   deadband** (`want` only steps when temp wants ≥0.7 level away from current; turning on jumps to the
-  ideal) prevents flapping. **Level caps:** max **L4** during 22:00–06:00, max **L2** in sleep mode.
+  ideal) prevents flapping. **Level caps:** max **L4** during 22:00–06:00; in sleep mode an
+  outdoor-temp seasonal **floor** (L2/L3/L4) up to an **L5 ceiling** (see the Bedtime/sleep bullet).
   Works in fan LEVELS, not raw %, because the DREO integration `math.ceil()`s a requested % up to the
   next level — send `(L−0.5)/9·100`% to hit level L. That `%`<->level conversion (and the `9`-level
   count) lives once in the `pct_to_level`/`level_to_pct` macros in `files/custom_templates/fan.jinja`,

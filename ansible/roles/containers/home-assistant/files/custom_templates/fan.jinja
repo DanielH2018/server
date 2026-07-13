@@ -21,18 +21,30 @@
 
 {# Temperature(°F) + current level + caps -> target DREO level (0..9). The single source of truth
    for the fan curve, extracted verbatim from bedroom_apply_fan so it can be unit-tested: the
-   (t-71)/1.3 ideal curve, the ±0.7-level hysteresis deadband, and the night/sleep caps. Entity
-   reads (temp, current %, clock, sleep flag) stay in the caller. TUNE the curve here: the 71 offset
-   sets the start temp; the /1.3 divisor sets the slope (bigger = gentler). Tested in
-   tests/test_fan_macros.py. #}
-{%- macro fan_target_level(temp_f, cur_level, is_night, sleep) -%}
+   (t-71)/1.3 ideal curve, the ±0.7-level hysteresis deadband, the 22:00-06:00 night cap, and the
+   sleep-mode seasonal floor + L5 ceiling. Entity reads (indoor temp, current %, clock, sleep flag,
+   outdoor temp) stay in the caller. TUNE the curve here: the 71 offset sets the start temp; the
+   /1.3 divisor sets the slope (bigger = gentler). Tested in tests/test_fan_macros.py. #}
+{%- macro fan_target_level(temp_f, cur_level, is_night, sleep, outdoor_temp_f=-999) -%}
 {%- set t = temp_f | float(-1) -%}
 {%- set cl = cur_level | int(0) -%}
 {%- set ideal = ((t - 71) / 1.3) if t >= 0 else 0 -%}
-{%- set cap = (2 if (sleep | bool) else (4 if (is_night | bool) else 9)) | int -%}
 {%- set want = 0 if (t < 0 or ideal < 0.3)
    else ((ideal | round | int) if (cl == 0 or ideal > cl + 0.7 or ideal < cl - 0.7) else cl) -%}
-{{ [want, cap] | min | int }}
+{%- if sleep | bool -%}
+{#- Bedtime/sleep: a seasonal FLOOR (guaranteed white noise) keyed off OUTDOOR temp, with the indoor
+    curve free to climb up to a fixed L5 ceiling on a hot night — outdoor sets the season, indoor
+    modulates within [floor, ceiling]. Missing/unavailable outdoor (-999 default) falls into the
+    winter band (quiet L2 floor = the old sleep behavior). TUNE the 45/68°F bands, the 2/3/4 floors,
+    and the 5 ceiling here; every floor is <= the ceiling so the clamp never inverts. -#}
+{%- set ot = outdoor_temp_f | float(-999) -%}
+{%- set floor = 4 if ot >= 68 else (3 if ot >= 45 else 2) -%}
+{%- set ceiling = 5 -%}
+{{- [[want, floor] | max, ceiling] | min | int -}}
+{%- else -%}
+{%- set cap = (4 if (is_night | bool) else 9) | int -%}
+{{- [want, cap] | min | int -}}
+{%- endif -%}
 {%- endmacro -%}
 
 {# Current level + delta -> new level, clamped to 0..FAN_LEVELS (0 = off). Used by
