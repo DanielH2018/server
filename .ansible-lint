@@ -11,5 +11,10 @@ exclude_paths:
 skip_list:
   - no-changed-when
   - yaml[line-length]
+  # Role dirs are intentionally hyphenated to mirror their container/compose service
+  # names (home-assistant, docker-proxy, wg-easy, ...) and deploy tags derive from the
+  # name, so renaming would cascade through containers_list/host_vars/tags. ansible-lint
+  # v26.6.0 tightened role-name to reject hyphens (^[a-z][a-z0-9_]*$) — skip it, don't rename.
+  - role-name
 
 offline: false
