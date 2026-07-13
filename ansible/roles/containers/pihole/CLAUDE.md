@@ -5,7 +5,8 @@ LAN DNS sinkhole (Pi-hole) with a recursive Unbound upstream. See repo-root `CLA
 ## At a glance
 - **Images:** `pihole/pihole` (version-pinned, Renovate-managed) + `klutchell/unbound:latest`
   (`watchtower.enable=false` — it health-gates pihole and is the LAN's only DNS upstream; image
-  updates are deliberate manual pulls)
+  updates are deliberate manual pulls: `deploy.yml --tags pihole -e common_pull=always` — a plain
+  redeploy never re-pulls a tag already present locally)
 - **Host:** daniel-server · **Port:** 80 · **URL:** `pihole.<domain>` (Authelia: yes)
 - **Networks:** apps + pihole_internal (Unbound only on `pihole_internal`)
 - **Depends on:** traefik
