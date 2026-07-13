@@ -52,8 +52,13 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
   `/usr/local/bin/kopia-restore-drill.sh`. The drill also header-magic-checks `*.db`
   sentinels (karakeep/grafana) — the image has no `sqlite3`, so it asserts the
   `SQLite format 3` magic rather than a full `PRAGMA integrity_check`.
-- **Retention (entrypoint policy):** 7 daily + 4 weekly + **3 monthly** (monthlies added
-  2026-06-24 for a >28 d DR horizon; config-only source dedupes, so the B2 cost is small).
+- **Retention (entrypoint policy):** **7 daily only** — no weekly/monthly/annual (cut 2026-07-13
+  from 7d/4w/3m). The operator's requirement is a backup of the CURRENT server state, not a
+  historical archive, so the DR horizon is ~1 week by design; a week of dailies is the "undo an
+  unnoticed bad state" net (the monitor-bridge Backup Freshness shrink guard backstops within a
+  cycle). This roughly halved the retained set — the biggest B2 lever, since each snapshot pins a
+  day's poorly-deduping DB-rewrite deltas (dropping 4w/3m + GC reclaimed 2.8 GB, billable 65%→38%).
+  Don't re-add weekly/monthly as a "DR gap" — it's a deliberate operator call.
   The entrypoint also re-asserts `kopia maintenance set --owner me --enable-full true`
   idempotently — full maintenance is what actually GCs expired blobs from B2; without an
   owner running it the bucket grows unbounded (the `b2_usage` monitor only sees the symptom).
