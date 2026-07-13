@@ -45,12 +45,12 @@ services:
       # service that silently left backup scope (kopiaignore over-match / vanished bind mount). Floor
       # the latest snapshot's total files+bytes at N% below the trailing-median (from Kopia's own
       # snapshot history); the median absorbs the routine one-off drops from exclusion tuning.
-      # TEMP 2026-07-13 → revert ~2026-07-20: bumped 20→55 to absorb an INTENTIONAL ~40% re-baseline
-      # (karakeep precrawled purge −360M + code-server VSIX exclude −74M + retention 4w/3m→0 dropping
-      # the fat weekly/monthly snapshots). The trailing median holds the pre-shrink ~1.1GB for ~4 days,
-      # so a 20% floor would false-page Backup Freshness until post-shrink dailies dominate it. Revert
-      # to 20 once `kopia snapshot list` shows the retained set is all post-shrink (~0.7GB). See memory.
-      - BACKUP_SIZE_DROP_PCT=55
+      # The intended ~40% re-baseline (karakeep precrawled purge / retention 4w/3m→0) never landed in
+      # summary.size: the B2 65%→38% drop came from retention-set reduction + GC/hidden-version cleanup
+      # (dedup/repo-level), not the logical tree size — the 7 retained dailies hold flat at ~1.1GB with
+      # files growing, latest ~5% under the trailing median (verified live 2026-07-13). So a 20% floor
+      # has comfortable headroom; the temp 55 bump is reverted early to close the wide shrink blind spot.
+      - BACKUP_SIZE_DROP_PCT=20
       - BACKUP_SIZE_MIN_HISTORY=3
       # /boot: old kernels filling it quietly breaks upgrades; /boot/efi (vfat ESP):
       # same failure class for firmware/bootloader updates (node-exporter exposes both)

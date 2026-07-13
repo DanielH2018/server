@@ -68,8 +68,8 @@ docker run ... kopia restore "$ROOT" /home/ubuntu/server/containers
 ```
 
 Restoring an **older** state? `kopia snapshot list` shows all retained snapshots
-(7 daily + 4 weekly + 3 monthly — see the entrypoint retention policy); pass that
-snapshot's `rootEntry.obj`.
+(7 daily only — no weekly/monthly, so the DR horizon is ~1 week; retention cut
+2026-07-13, see the entrypoint retention policy); pass that snapshot's `rootEntry.obj`.
 
 ## Step 3 — fix ownership + bring services back
 ```bash
