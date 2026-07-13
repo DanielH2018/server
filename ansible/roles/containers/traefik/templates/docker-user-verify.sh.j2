@@ -37,11 +37,26 @@ if [ -n "$MISSING" ]; then
   exit 1
 fi
 
-# A DROP with no preceding RETURN allow would black-hole the origin (incl. Cloudflare). The apply
-# script always inserts a 10.0.0.0/8 LAN RETURN, so use it as the "allows are present" anchor.
-if ! iptables -C DOCKER-USER -p tcp --dport 443 -s 10.0.0.0/8 -j RETURN 2>/dev/null; then
-  write_state false "RETURN allows missing (only DROP present) — origin would be black-holed"
+# `iptables -C` only proves a rule EXISTS, not that it's REACHABLE: an unconditional `-A DOCKER-USER
+# -j RETURN` seeded AHEAD of our appended DROPs (what a future Docker engine could add if it ever
+# recreates the chain — the scenario named in this script's header) would shadow them dead while the
+# -C checks above still pass. The apply script NEVER emits a bare RETURN (its allows are all
+# -s/--dport-qualified), so a whole-line `-A DOCKER-USER -j RETURN` in the live chain means the DROPs
+# are being pre-empted — the exact origin bypass this watchdog exists for, which -C alone can't see.
+if iptables -S DOCKER-USER | grep -qxF -- '-A DOCKER-USER -j RETURN'; then
+  write_state false "unconditional RETURN shadows the DROP — origin reachable direct (Cloudflare/CrowdSec bypass); re-check after a Docker upgrade"
   exit 1
 fi
 
-write_state true "origin lock applied (DROP :80/:443 present, RETURN allows present)"
+# A DROP with no preceding RETURN allow would black-hole the origin (incl. Cloudflare). The apply
+# script inserts a 10.0.0.0/8 LAN RETURN for BOTH ports, so assert both — a one-port divergence
+# shouldn't read as fully applied.
+RETURN_MISSING=
+iptables -C DOCKER-USER -p tcp --dport 80 -s 10.0.0.0/8 -j RETURN 2>/dev/null || RETURN_MISSING="$RETURN_MISSING :80"
+iptables -C DOCKER-USER -p tcp --dport 443 -s 10.0.0.0/8 -j RETURN 2>/dev/null || RETURN_MISSING="$RETURN_MISSING :443"
+if [ -n "$RETURN_MISSING" ]; then
+  write_state false "RETURN allow missing for$RETURN_MISSING — origin would be black-holed"
+  exit 1
+fi
+
+write_state true "origin lock applied (DROP :80/:443 present + not shadowed, RETURN allows present)"

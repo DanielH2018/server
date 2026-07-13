@@ -9,6 +9,13 @@
 # 80/443 (closing the reboot race). After Docker it's a harmless no-op (chain already exists).
 iptables -N DOCKER-USER 2>/dev/null || true
 
+# Strip any FOREIGN unconditional RETURN before we re-append the DROPs. A bare `-j RETURN` seeded
+# ahead of them (what a future Docker engine could add if it ever recreates DOCKER-USER) would shadow
+# them dead — origin reachable direct, Cloudflare/CrowdSec bypass. Our own allows are ALL
+# -s/--dport-qualified, so a bare RETURN is never ours; the bounded loop clears any it finds. This makes
+# the PartOf=docker.service re-assert self-heal that case instead of only the verify cron detecting it.
+while iptables -D DOCKER-USER -j RETURN 2>/dev/null; do :; done
+
 # Remove any previously-added rules for these ports
 iptables -D DOCKER-USER -p tcp --dport 80 -j DROP 2>/dev/null || true
 iptables -D DOCKER-USER -p tcp --dport 443 -j DROP 2>/dev/null || true
