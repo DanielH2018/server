@@ -34,22 +34,24 @@ fi
 # TZ (America/Chicago), so it prints 19:00 for that same 00:00 UTC instant — an artifact, not a
 # different schedule. The host crons (tasks/main.yml, host TZ = UTC) are timed around this 00:00 UTC
 # boundary: wg-easy pi-peers pull 23:30, verify Wed 04:00, drill 05:00, rebuild Sun 06:00, b2 02:30.
-# Retention: 7 dailies + 4 weeklies + 3 monthlies, nothing annual. hourly/annual/latest
-# are pinned explicitly because unset tiers inherit kopia's global defaults (hourly 48,
-# monthly 24, annual 3, latest 10), which silently widened retention before. latest 3
-# (not 0) briefly protects manual/verification snapshots that fit no calendar bucket.
-# keep-monthly 3 (added 2026-06-24, supersedes the 2026-06-12 no-monthly choice): 4 weeklies
-# gave only a ~28d recovery horizon, so a slow corruption / unnoticed-for-a-month event was
-# unrecoverable. The snapshot source is config-only (media is excluded), which dedupes
-# heavily, so a few monthlies cost little on the B2 free tier; the b2_usage monitor backstops.
+# Retention: 7 dailies only — nothing weekly/monthly/annual. The operator's requirement
+# (2026-07-13) is a backup of the CURRENT server state, not a historical archive; a week of
+# dailies is the "undo an unnoticed bad state" safety net (the monitor-bridge Backup Freshness
+# shrink guard catches a sudden corruption within a cycle, so a week is ample) and nothing
+# longer is wanted. Dropping the former 4 weekly + 3 monthly fat snapshots roughly halves the
+# retained set — the biggest B2 footprint lever, since each retained snapshot pins its day's
+# poorly-deduping DB-rewrite deltas. hourly/weekly/monthly/annual are pinned to 0 explicitly
+# because unset tiers inherit kopia's global defaults (hourly 48, monthly 24, annual 3,
+# latest 10), which silently widen retention. latest 3 (not 0) briefly protects manual/
+# verification snapshots that fit no calendar bucket.
 if /usr/bin/kopia repository status 2>/dev/null; then
     /usr/bin/kopia policy set /data/home/{{ sys_user }}/server/containers \
         --snapshot-interval 24h \
         --keep-latest 3 \
         --keep-hourly 0 \
         --keep-daily 7 \
-        --keep-weekly 4 \
-        --keep-monthly 3 \
+        --keep-weekly 0 \
+        --keep-monthly 0 \
         --keep-annual 0
 
     # Maintenance (blob GC) explicitly owned + enabled. Without an owner running FULL

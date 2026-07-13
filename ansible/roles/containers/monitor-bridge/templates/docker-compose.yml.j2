@@ -43,9 +43,14 @@ services:
       - BACKUP_MAX_AGE_H=30
       # Snapshot-shrink guard folded into Backup Freshness: a fresh, 0-error snapshot still hides a
       # service that silently left backup scope (kopiaignore over-match / vanished bind mount). Floor
-      # the latest snapshot's total files+bytes at 20% below the trailing-median (from Kopia's own
+      # the latest snapshot's total files+bytes at N% below the trailing-median (from Kopia's own
       # snapshot history); the median absorbs the routine one-off drops from exclusion tuning.
-      - BACKUP_SIZE_DROP_PCT=20
+      # TEMP 2026-07-13 → revert ~2026-07-20: bumped 20→55 to absorb an INTENTIONAL ~40% re-baseline
+      # (karakeep precrawled purge −360M + code-server VSIX exclude −74M + retention 4w/3m→0 dropping
+      # the fat weekly/monthly snapshots). The trailing median holds the pre-shrink ~1.1GB for ~4 days,
+      # so a 20% floor would false-page Backup Freshness until post-shrink dailies dominate it. Revert
+      # to 20 once `kopia snapshot list` shows the retained set is all post-shrink (~0.7GB). See memory.
+      - BACKUP_SIZE_DROP_PCT=55
       - BACKUP_SIZE_MIN_HISTORY=3
       # /boot: old kernels filling it quietly breaks upgrades; /boot/efi (vfat ESP):
       # same failure class for firmware/bootloader updates (node-exporter exposes both)
