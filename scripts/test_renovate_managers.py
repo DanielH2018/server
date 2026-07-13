@@ -136,13 +136,16 @@ def test_every_deployed_image_is_renovate_tracked() -> None:
     )
 
 
-# Renovate's BUILT-IN dockerfile manager's default filePatterns (docs.renovatebot.com/modules/
-# manager/dockerfile, verified 2026-07-03). The fleet's Dockerfile base pins (python:3.14-slim,
-# debian:bookworm-slim) are tracked ONLY by that manager — no custom manager covers them — so a
-# build file renamed/added outside these shapes drops out of update tracking with no signal.
+# Renovate's BUILT-IN dockerfile manager's default managerFilePatterns, copied verbatim from source
+# (lib/modules/manager/dockerfile/index.ts, verified against upstream 2026-07-13). The fleet's
+# Dockerfile base pins are tracked ONLY by that manager (no custom manager covers them), so a build
+# file renamed/added outside these shapes drops out of update tracking with no signal. NB the 2nd
+# pattern's `[^/]*$` matches suffixed names too (`Dockerfile-runners.j2` IS visible), so this guard
+# reflects exactly what Renovate scans — the earlier `[Cc]ontain` was a typo (matched a nonexistent
+# `Containfile`, missed a real `Containerfile`); upstream is `[Cc]ontainer`.
 DOCKERFILE_MANAGER_FILE_RES = [
-    re.compile(r"(^|/|\.)([Dd]ocker|[Cc]ontain)file$"),
-    re.compile(r"(^|/)([Dd]ocker|[Cc]ontain)file[^/]*$"),
+    re.compile(r"(^|/|\.)([Dd]ocker|[Cc]ontainer)file$"),
+    re.compile(r"(^|/)([Dd]ocker|[Cc]ontainer)file[^/]*$"),
 ]
 
 
