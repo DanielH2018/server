@@ -17,7 +17,12 @@ See repo-root `CLAUDE.md` for shared conventions.
 - Behaviour (retention rules, leaving-soon thresholds, dry-run flag) lives in
   `templates/application.yml.j2`. **It deletes files** — `dry-run` was flipped off
   2026-06-10 (operator decision after the initial trial period), so it now cleans for
-  real. Tag media `janitorr_keep` in the *arrs to exempt it.
+  real. Tag media `janitorr-keep` in the *arrs to exempt it (see `exclusion-tags` in
+  `application.yml.j2`). **NB:** Radarr/Sonarr reject underscores in tag labels
+  (`^[a-z0-9-]+$`) and Janitorr matches by exact label — the upstream-doc `janitorr_keep`
+  is uncreatable here, so the tags are hyphenated. Add a tag in Radarr via
+  Settings→Tags or the API; Janitorr picks it up on its next run and drops the item
+  from the Leaving Soon collection.
 - Mounts the whole `containers/data` tree at `/data` (same as Sonarr/Radarr since the
   2026-07-02 hardlink-mount unification). Janitorr acts on media via the Sonarr/Radarr
   APIs; its direct filesystem use is `leaving-soon-dir` (where it writes the symlinks) and

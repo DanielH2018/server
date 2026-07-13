@@ -12,15 +12,18 @@ file-system:
 application:
   # Live since 2026-06-10 (operator call after a dry-run trial period since the role
   # was added) — janitorr now actually deletes per the rules below. The *arr tags
-  # janitorr_keep / janitorr_keep_too exclude media from cleanup.
+  # janitorr-keep / janitorr-keep-too exclude media from cleanup.
   dry-run: false
   run-once: false
   whole-tv-show: false
   whole-show-seeding-check: false
   leaving-soon: 14d
-  exclusion-tags: # Set these tags to your movies or TV shows in the *arrs to exclude media from being cleaned up
-    - "janitorr_keep"
-    - "janitorr_keep_too"
+  # Janitorr matches these by EXACT label equality (RadarrRestService: exclusionTags.contains(label)).
+  # Radarr/Sonarr tag labels are validated against ^[a-z0-9-]+$ — no underscores — so the upstream
+  # default `janitorr_keep` can never be created and would silently never match. Keep these hyphenated.
+  exclusion-tags: # Set these tags on movies/TV shows in the *arrs to exclude media from being cleaned up
+    - "janitorr-keep"
+    - "janitorr-keep-too"
 
   media-deletion:
     enabled: true
