@@ -57,6 +57,11 @@ sonarr/config/MediaCover/
 radarr/config/MediaCover/
 bazarr/config/cache/
 prowlarr/config/Definitions/
+# prowlarr.db (the config DB) STAYS backed up; logs.db is request/log history and
+# Sentry/ is queued upstream crash-report telemetry — both regeneratable churn that
+# re-chunks daily (2026-07-13 B2 triage). Their .db-wal/.db-shm are dropped above.
+prowlarr/config/logs.db
+prowlarr/config/Sentry/
 tdarr/transcode_cache/
 
 # ── Metrics & monitoring (regenerate from live services) ─────────────────────
