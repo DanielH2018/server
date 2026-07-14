@@ -217,13 +217,16 @@ services:
       # Kuma->Discord brain), and nothing trends the battery, so a slowly-degrading one — full-charge
       # runtime decaying over years — is invisible until an outage collapses it. Page on a low battery
       # RUNWAY: charge < UPS_CHARGE_MIN_PCT (deep discharge on battery) OR estimated runtime <
-      # UPS_RUNTIME_MIN_S (aged battery even at full charge, or a discharge nearing shutdown).
-      # Prom-dependent: both series absent (HA scrape down) -> up (Scrape Targets owns HA-source
-      # liveness; the nut healthcheck owns the NUT server). UPS_CONSECUTIVE rides out a one-cycle
-      # runtime dip from a load spike. Queries env-driven (both empty disables it) so an entity
-      # rename needs no code edit.
+      # UPS_RUNTIME_MIN_S (aged battery even at full charge, or a discharge nearing shutdown) — PLUS
+      # the UPS's own replace-battery self-test verdict (UPS_REPLACE_QUERY), an HA template
+      # binary_sensor over the NUT RB flag, which trips earliest (before the runway floors).
+      # Prom-dependent: ALL series absent (HA scrape down) -> up (Scrape Targets owns HA-source
+      # liveness; the nut healthcheck owns the NUT server); a partial drop pages. UPS_CONSECUTIVE
+      # rides out a one-cycle dip from a load spike. Queries env-driven (all empty disables it) so an
+      # entity rename needs no code edit.
       - UPS_CHARGE_QUERY=hass_sensor_battery_percent{entity="sensor.apc_ups_battery_charge"}
       - UPS_RUNTIME_QUERY=hass_sensor_duration_s{entity="sensor.apc_ups_battery_runtime"}
+      - UPS_REPLACE_QUERY=hass_binary_sensor_state{entity="binary_sensor.apc_ups_replace_battery"}
       - UPS_CHARGE_MIN_PCT=50
       - UPS_RUNTIME_MIN_S=300
       - UPS_CONSECUTIVE=2

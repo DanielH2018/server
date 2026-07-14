@@ -81,6 +81,20 @@
       state: >-
         {{ (states('sensor.apc_ups_load') | float(0) / 100 * 900) | round(1) }}
 
+- binary_sensor:
+    - name: "APC UPS Replace Battery"
+      unique_id: apc_ups_replace_battery
+      device_class: problem
+      # The UPS's own self-test verdict: NUT sets the RB (Replace Battery) flag in ups.status
+      # (sensor.apc_ups_status_data, a space-separated flag list) when a periodic self-test fails.
+      # Kept strictly on/off (falls back to 'off' when the source is unavailable/unknown) so HA's
+      # Prometheus scrape always exports hass_binary_sensor_state for it while HA is up — its absence
+      # then means the whole HA scrape is down, which monitor-bridge's check_ups treats as a defer
+      # (not a silent single-arm drop). Read by monitor-bridge (UPS_REPLACE_QUERY) for the
+      # Kuma->Discord channel; the ups_power_event automation covers the HA-mobile-push channel.
+      state: >-
+        {{ 'RB' in (states('sensor.apc_ups_status_data') or '').split() }}
+
 # Auto-light gate: the SINGLE source of truth for "is it dark enough (or the morning wake window) to
 # put the bedroom lights on automatically" — illuminance < 75 OR inside the wake window
 # [wake_start, +45min] (inherited from in_wake_window). Referenced by bedroom_presence_on (its darkness condition),

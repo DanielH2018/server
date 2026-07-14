@@ -1624,47 +1624,56 @@ def test_scrutiny_temp_ceiling_flags_only_when_enabled():
 
 
 def test_ups_health_ok():
-    ok, msg = check.ups_health(100, 900, 50, 300)
+    ok, msg = check.ups_health(100, 900, 0, 50, 300)
     assert ok
-    assert "battery 100%" in msg and "runtime 15.0m" in msg
+    assert "battery 100%" in msg and "runtime 15.0m" in msg and "self-test ok" in msg
 
 
 def test_ups_health_low_charge_is_named():
-    ok, msg = check.ups_health(30, 900, 50, 300)
+    ok, msg = check.ups_health(30, 900, 0, 50, 300)
     assert not ok
     assert "battery 30%" in msg and "runtime" not in msg
 
 
 def test_ups_health_low_runtime_is_named():
-    ok, msg = check.ups_health(100, 120, 50, 300)
+    ok, msg = check.ups_health(100, 120, 0, 50, 300)
     assert not ok
     assert "runtime 2.0m" in msg and "battery" not in msg
 
 
 def test_ups_health_both_breaches_named():
-    ok, msg = check.ups_health(20, 60, 50, 300)
+    ok, msg = check.ups_health(20, 60, 0, 50, 300)
     assert not ok
     assert "battery 20%" in msg and "runtime 1.0m" in msg
 
 
+def test_ups_health_replace_battery_pages_even_with_good_runway():
+    # The UPS's own RB self-test verdict trips even while charge/runtime read fine — earliest signal.
+    ok, msg = check.ups_health(100, 900, 1, 50, 300)
+    assert not ok
+    assert "replace-battery" in msg
+
+
 def test_ups_health_at_threshold_is_ok():
     # strict `<`, so exactly at the floor is fine
-    assert check.ups_health(50, 300, 50, 300)[0]
+    assert check.ups_health(50, 300, 0, 50, 300)[0]
 
 
 def test_ups_health_absent_arm_is_skipped():
-    # only runtime present and low -> pages on runtime alone; the charge arm is ignored
-    ok, msg = check.ups_health(None, 120, 50, 300)
+    # only runtime present and low -> pages on runtime alone; the other arms are ignored
+    ok, msg = check.ups_health(None, 120, None, 50, 300)
     assert not ok
     assert "runtime" in msg and "battery" not in msg
 
 
-def _ups_scalars(monkeypatch, charge, runtime):
+def _ups_scalars(monkeypatch, charge, runtime, replace=0.0):
     def fake(q):
         if q == check.UPS_CHARGE_QUERY:
             return charge
         if q == check.UPS_RUNTIME_QUERY:
             return runtime
+        if q == check.UPS_REPLACE_QUERY:
+            return replace
         return None
 
     monkeypatch.setattr(check, "prom_scalar", fake)
@@ -1674,14 +1683,35 @@ def test_check_ups_healthy_is_up(monkeypatch):
     check._ups_down_streak = 0
     _ups_scalars(monkeypatch, 100, 900)
     ok, msg = check.check_ups()
-    assert ok and "battery 100%" in msg
+    assert ok and "battery 100%" in msg and "self-test ok" in msg
 
 
 def test_check_ups_absent_data_defers_to_scrape_targets(monkeypatch):
     check._ups_down_streak = 0
-    _ups_scalars(monkeypatch, None, None)
+    _ups_scalars(monkeypatch, None, None, replace=None)
     ok, msg = check.check_ups()
     assert ok and "no UPS data" in msg
+
+
+def test_check_ups_replace_battery_pages(monkeypatch):
+    # RB verdict from the self-test -> down after the streak even with a full charge / good runtime.
+    check._ups_down_streak = 0
+    _ups_scalars(monkeypatch, 100, 900, replace=1.0)
+    ok1, _ = check.check_ups()
+    assert ok1  # streak grace on the first cycle
+    ok2, msg2 = check.check_ups()
+    assert not ok2 and "replace-battery" in msg2
+
+
+def test_check_ups_partial_absence_pages_not_silently_survives(monkeypatch):
+    # charge+runtime present but the replace arm vanished (entity rename) -> flag, don't monitor the
+    # survivor silently. Goes through the streak (HA-restart grace) then pages, naming the missing arm.
+    check._ups_down_streak = 0
+    _ups_scalars(monkeypatch, 100, 900, replace=None)
+    ok1, msg1 = check.check_ups()
+    assert ok1 and "streak 1/2" in msg1
+    ok2, msg2 = check.check_ups()
+    assert not ok2 and "absent" in msg2 and "replace-battery" in msg2
 
 
 def test_check_ups_single_low_runtime_is_suppressed_then_pages(monkeypatch):
@@ -1707,6 +1737,7 @@ def test_check_ups_disabled_when_no_queries(monkeypatch):
     check._ups_down_streak = 0
     monkeypatch.setattr(check, "UPS_CHARGE_QUERY", "")
     monkeypatch.setattr(check, "UPS_RUNTIME_QUERY", "")
+    monkeypatch.setattr(check, "UPS_REPLACE_QUERY", "")
     ok, msg = check.check_ups()
     assert ok and "disabled" in msg
 

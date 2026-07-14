@@ -206,20 +206,27 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     path). Also `down` when scrutiny lists no devices at all. `SCRUTINY_TEMP_MAX` (°C, default
     0 = off) adds an optional early-warning temperature ceiling on top. Pure `scrutiny_freshness()`
     + `scrutiny_health()` are unit-tested.)
-  - **UPS Battery Health** (the APC UPS's charge % + estimated runtime, via HA's Prometheus-scraped
-    `hass_sensor_*` sensors over `monitoring` — the UPS is on NUT/peanut and HA's prometheus
-    integration exports it). `down` on a low battery RUNWAY: charge < `UPS_CHARGE_MIN_PCT` (50, a
-    deep discharge while on battery) OR estimated runtime < `UPS_RUNTIME_MIN_S` (300 s — an aged
-    battery whose full-charge runway has decayed, OR a discharge nearing shutdown). The only
+  - **UPS Battery Health** (the APC UPS's charge % + estimated runtime + the replace-battery
+    self-test verdict, via HA's Prometheus-scraped sensors over `monitoring` — the UPS is on
+    NUT/peanut and HA's prometheus integration exports it). `down` on a low battery RUNWAY: charge <
+    `UPS_CHARGE_MIN_PCT` (50, a deep discharge while on battery) OR estimated runtime <
+    `UPS_RUNTIME_MIN_S` (300 s — an aged battery whose full-charge runway has decayed, OR a discharge
+    nearing shutdown) OR the UPS's own **replace-battery** verdict (`UPS_REPLACE_QUERY`, an HA
+    template `binary_sensor.apc_ups_replace_battery` over the NUT `RB` flag — the earliest signal, it
+    can trip while charge/runtime still read fine; before this the RB verdict reached NEITHER channel,
+    2026-07-14 review). A **partial** absence (one configured arm gone while others report — an entity
+    rename) pages rather than silently monitoring the survivor; ALL arms absent still defers (HA
+    scrape down). The only
     pre-existing UPS alert is an HA automation → **mobile** push (a separate channel from this
     Kuma→Discord brain) and nothing trended the battery, so a slowly-degrading battery was invisible
     until an outage collapsed it — this is the health/runway signal + the Discord escalation path.
-    **Prom-dependent** (queries HA's scrape); both series absent (HA scrape down / NUT integration
+    **Prom-dependent** (queries HA's scrape); ALL series absent (HA scrape down / NUT integration
     dropped) → `up` — Scrape Targets owns HA-source liveness and the `nut` container healthcheck owns
     the NUT server, so it defers rather than double-paging. `UPS_CONSECUTIVE` (2, like
-    `HA_CONSECUTIVE`) rides out a one-cycle runtime dip from a transient load spike. Queries are
-    env-driven (`UPS_CHARGE_QUERY`/`UPS_RUNTIME_QUERY`, both empty = disabled) so a UPS/entity rename
-    needs no code edit. Pure `ups_health()` is unit-tested.)
+    `HA_CONSECUTIVE`) rides out a one-cycle dip from a transient load spike (or an HA-restart blip
+    that briefly drops one arm). Queries are env-driven
+    (`UPS_CHARGE_QUERY`/`UPS_RUNTIME_QUERY`/`UPS_REPLACE_QUERY`, all empty = disabled) so a UPS/entity
+    rename needs no code edit. Pure `ups_health()` is unit-tested.)
   - **Pi Pressure** (the Pi's glances API `/api/4/load` + `/api/4/mem` + `/api/4/fs` over
     the LAN: `down` when load5/core > `PI_LOAD_MAX`, mem `available` < `PI_MEM_MIN_MB`, or
     any filesystem device > `PI_DISK_MAX_PCT` — glances' fs list is its *container* view

@@ -252,11 +252,14 @@ SCRUTINY_TEMP_MAX = float(_env("SCRUTINY_TEMP_MAX", "0"))
 # invisible until an outage collapses it. We page on a low battery RUNWAY: charge below
 # UPS_CHARGE_MIN_PCT (a deep discharge while on battery) OR estimated runtime below UPS_RUNTIME_MIN_S
 # (an aged battery even at full charge, or a discharge nearing shutdown) — a dual-purpose health +
-# imminent-cutoff floor. Queries are env-driven (both empty = disabled, like PI_GLANCES_URL) so a
-# UPS/entity rename or removal needs no code edit. Prom-dependent: an HA-scrape outage leaves both
-# series absent -> up (Scrape Targets owns HA-source liveness; the nut container healthcheck owns
-# NUT-server death), so this never double-pages those. UPS_CONSECUTIVE rides out a one-cycle runtime
-# dip from a transient load spike (like HA_CONSECUTIVE), so only a sustained low runway pages.
+# imminent-cutoff floor — PLUS the UPS's own replace-battery self-test verdict (UPS_REPLACE_QUERY),
+# the earliest signal, which can trip while charge/runtime still read fine. Queries are env-driven
+# (all empty = disabled, like PI_GLANCES_URL) so a UPS/entity rename or removal needs no code edit.
+# Prom-dependent: an HA-scrape outage leaves ALL series absent -> up (Scrape Targets owns HA-source
+# liveness; the nut container healthcheck owns NUT-server death), so this never double-pages those;
+# a PARTIAL drop (one arm gone) pages instead of silently monitoring the survivor. UPS_CONSECUTIVE
+# rides out a one-cycle dip from a transient load spike (like HA_CONSECUTIVE), so only a sustained
+# problem pages.
 UPS_CHARGE_QUERY = _env(
     "UPS_CHARGE_QUERY",
     'hass_sensor_battery_percent{entity="sensor.apc_ups_battery_charge"}',
@@ -264,6 +267,17 @@ UPS_CHARGE_QUERY = _env(
 UPS_RUNTIME_QUERY = _env(
     "UPS_RUNTIME_QUERY",
     'hass_sensor_duration_s{entity="sensor.apc_ups_battery_runtime"}',
+)
+# The UPS's own "Replace Battery" self-test verdict (NUT `ups.status` RB flag). Charge/runtime are a
+# lagging runway proxy — a failed periodic self-test can trip RB while both still read fine — so this
+# is the earliest actionable replace-the-battery signal, and it reached NEITHER alert channel before
+# (the HA ups_power_event automation only branches on OB/LB, and check_ups read only charge/runtime).
+# Exposed as a numeric 0/1 series by an HA template binary_sensor (home-assistant templates.yaml),
+# which stays on/off — never unknown — while HA is up, so its absence means the whole HA scrape is
+# down (all arms absent -> defer), not a silent single-arm drop. Empty = arm disabled.
+UPS_REPLACE_QUERY = _env(
+    "UPS_REPLACE_QUERY",
+    'hass_binary_sensor_state{entity="binary_sensor.apc_ups_replace_battery"}',
 )
 UPS_CHARGE_MIN_PCT = float(_env("UPS_CHARGE_MIN_PCT", "50"))
 UPS_RUNTIME_MIN_S = float(_env("UPS_RUNTIME_MIN_S", "300"))
@@ -1268,14 +1282,16 @@ def check_scrutiny():
     return True, "%s; %s" % (fresh_msg, health_msg)
 
 
-def ups_health(charge_pct, runtime_s, charge_min_pct, runtime_min_s):
-    """Pure: is the UPS battery runway healthy given charge (%) and estimated runtime (s)? (ok, msg).
+def ups_health(charge_pct, runtime_s, replace_battery, charge_min_pct, runtime_min_s):
+    """Pure: is the UPS battery healthy given charge (%), estimated runtime (s), and the replace-
+    battery verdict (0/1)? (ok, msg).
 
-    Either value may be None (that metric absent from Prometheus) — only present arms are judged, and
-    the caller handles the both-absent case. A low charge means an active deep discharge on battery;
-    a low runtime means an aged battery whose full-charge runway has decayed OR a discharge nearing
-    shutdown — both actionable ("replace the battery" / "it's about to cut power"). Strict `<`, so a
-    value exactly at the floor is still ok.
+    Any value may be None (that metric absent) — only present arms are judged, and the caller handles
+    the all-absent / partial-absence cases. A low charge means an active deep discharge on battery; a
+    low runtime means an aged battery whose full-charge runway has decayed OR a discharge nearing
+    shutdown; replace_battery>0 is the UPS's OWN self-test verdict (NUT RB flag), which can trip while
+    charge/runtime still read fine — the earliest replace-the-battery signal. Strict `<`, so a value
+    exactly at the floor is still ok.
     """
     problems = []
     if charge_pct is not None and charge_pct < charge_min_pct:
@@ -1284,6 +1300,8 @@ def ups_health(charge_pct, runtime_s, charge_min_pct, runtime_min_s):
         problems.append(
             "runtime %.1fm (< %.1fm)" % (runtime_s / 60.0, runtime_min_s / 60.0)
         )
+    if replace_battery is not None and replace_battery > 0.5:
+        problems.append("replace-battery (UPS self-test / RB flag)")
     if problems:
         return False, "; ".join(problems)
     parts = []
@@ -1291,6 +1309,8 @@ def ups_health(charge_pct, runtime_s, charge_min_pct, runtime_min_s):
         parts.append("battery %.0f%%" % charge_pct)
     if runtime_s is not None:
         parts.append("runtime %.1fm" % (runtime_s / 60.0))
+    if replace_battery is not None:
+        parts.append("self-test ok")
     return True, ", ".join(parts)
 
 
@@ -1300,30 +1320,59 @@ _ups_down_streak = 0
 def check_ups():
     """UPS battery health from HA's Prometheus-scraped sensors (see the UPS_* env block above).
 
-    Both queries empty -> disabled (stays up), like check_pi_pressure without a glances URL. Both
-    series absent (HA scrape down / NUT integration dropped) -> up: the HA scrape target being down
-    is Scrape Targets' page and the nut container healthcheck owns the NUT server, so this defers
-    rather than double-paging. UPS_CONSECUTIVE hysteresis (like check_ha_heartbeat) rides out a
-    single-cycle runtime dip from a transient load spike; only a sustained low runway pages.
+    Three arms: charge %, estimated runtime, and the replace-battery self-test verdict. All queries
+    empty -> disabled (stays up), like check_pi_pressure without a glances URL. ALL series absent (HA
+    scrape down / NUT integration dropped) -> up: the HA scrape target being down is Scrape Targets'
+    page and the nut container healthcheck owns the NUT server, so this defers rather than
+    double-paging. A PARTIAL absence (some configured arms present, others gone) is a specific entity
+    rename/removal, NOT that deferral — it pages (through the streak) rather than silently monitoring
+    the survivor. UPS_CONSECUTIVE hysteresis (like check_ha_heartbeat) rides out a single-cycle
+    runtime dip from a load spike or an HA-restart blip; only a sustained problem pages.
     """
     global _ups_down_streak
-    if not UPS_CHARGE_QUERY and not UPS_RUNTIME_QUERY:
+    configured = [
+        (name, q)
+        for name, q in (
+            ("charge", UPS_CHARGE_QUERY),
+            ("runtime", UPS_RUNTIME_QUERY),
+            ("replace-battery", UPS_REPLACE_QUERY),
+        )
+        if q
+    ]
+    if not configured:
         return True, "UPS monitoring disabled (no query)"
-    charge = prom_scalar(UPS_CHARGE_QUERY) if UPS_CHARGE_QUERY else None
-    runtime = prom_scalar(UPS_RUNTIME_QUERY) if UPS_RUNTIME_QUERY else None
-    if charge is None and runtime is None:
+    values = {name: prom_scalar(q) for name, q in configured}
+    if all(v is None for v in values.values()):
         _ups_down_streak = 0
         return (
             True,
             "no UPS data in Prometheus (HA scrape down? Scrape Targets owns source liveness)",
         )
-    ok, msg = ups_health(charge, runtime, UPS_CHARGE_MIN_PCT, UPS_RUNTIME_MIN_S)
+    missing = [name for name, v in values.items() if v is None]
+    if missing:
+        # Some configured arms present, others absent — NOT the whole-scrape-down case above but a
+        # specific entity rename/removal. Don't silently monitor the survivor: passing on the present
+        # arm(s) would blind the missing one (e.g. keep charge green while the primary aged-battery
+        # runtime signal is gone). Flag it through the same down-streak so an HA-restart blip still
+        # gets the UPS_CONSECUTIVE grace, but a sustained partial drop pages.
+        ok, msg = (
+            False,
+            "UPS sensor(s) absent: %s (entity renamed/removed?)" % ", ".join(missing),
+        )
+    else:
+        ok, msg = ups_health(
+            values.get("charge"),
+            values.get("runtime"),
+            values.get("replace-battery"),
+            UPS_CHARGE_MIN_PCT,
+            UPS_RUNTIME_MIN_S,
+        )
     if ok:
         _ups_down_streak = 0
         return True, msg
     _ups_down_streak += 1
     if _ups_down_streak < UPS_CONSECUTIVE:
-        return True, "down streak %d/%d (load-spike grace): %s" % (
+        return True, "down streak %d/%d (grace): %s" % (
             _ups_down_streak,
             UPS_CONSECUTIVE,
             msg,

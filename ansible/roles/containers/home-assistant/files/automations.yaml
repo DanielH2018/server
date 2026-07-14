@@ -1626,6 +1626,8 @@
         is_ob: "{{ 'OB' in cur }}"
         was_lb: "{{ 'LB' in prev }}"
         is_lb: "{{ 'LB' in cur }}"
+        was_rb: "{{ 'RB' in prev }}"
+        is_rb: "{{ 'RB' in cur }}"
         charge: "{{ states('sensor.apc_ups_battery_charge') }}"
         runtime_min: "{{ (states('sensor.apc_ups_battery_runtime') | float(0) / 60) | round }}"
     - choose:
@@ -1653,6 +1655,18 @@
                 message: "UPS on battery ({{ charge }}% · ~{{ runtime_min }} min runtime)."
                 tag: ups_power
                 watch: true
+        # Newly Replace-Battery — the UPS's own periodic self-test failed (NUT set RB). Independent of
+        # the mains/charge state (RB can trip while OL and charge/runtime still read fine), so it's the
+        # earliest replace-the-battery signal. Maintenance-class: watch buzz, but NOT pierce (not an
+        # imminent power cut). Same coalescing ups_power tag.
+        - conditions: "{{ is_rb and not was_rb }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🔋 UPS replace battery"
+                message: "UPS battery needs replacing — self-test flagged RB."
+                tag: ups_power
+                watch: true
         # Recovered — was on battery, mains is back (can only be a genuine OB->OL runtime transition,
         # never the startup reconnect, because from_state must be a valid OB flag, not unavailable).
         - conditions: "{{ was_ob and not is_ob }}"
@@ -1661,6 +1675,16 @@
               data:
                 title: "✅ Power restored"
                 message: "Mains power back; UPS online ({{ charge }}%)."
+                tag: ups_power
+                recovery: true
+        # Replace-Battery cleared — the RB flag dropped (battery replaced or a later self-test passed).
+        # Routine recovery, same convention as the UPS-restored recovery above (recovery: true).
+        - conditions: "{{ was_rb and not is_rb }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "✅ UPS battery OK"
+                message: "UPS Replace-Battery flag cleared."
                 tag: ups_power
                 recovery: true
 
