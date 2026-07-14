@@ -27,7 +27,11 @@ services:
       # good-actor false-positive suppression (2026-07-04 review M2). The "Ensure CrowdSec
       # dependency collections are installed" deploy task re-asserts them so a hub version
       # bump can't silently regress them.
-      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik LePresidente/authelia crowdsecurity/http-cve crowdsecurity/whitelist-good-actors"
+      # appsec-virtual-patching (CVE signatures) + appsec-generic-rules (SQLi/SSTI/path-traversal)
+      # install the inline-WAF rulesets + the crowdsecurity/appsec-default config the acquis file
+      # references (crowdsec-acquis.yaml.j2). Deliberately NOT appsec-crs (full OWASP CRS is
+      # false-positive-prone for a homelab); these two are CrowdSec's recommended low-noise starter.
+      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik LePresidente/authelia crowdsecurity/http-cve crowdsecurity/whitelist-good-actors crowdsecurity/appsec-virtual-patching crowdsecurity/appsec-generic-rules"
     volumes:
       - ./crowdsec-config:/etc/crowdsec:rw
       - crowdsec-db:/var/lib/crowdsec/data/
@@ -76,9 +80,10 @@ services:
     networks:
       # Traefik must share a Docker net with EVERY backend it routes to (Docker only resolves a
       # service name on a shared net), so this list is the UNION of all routed backends' nets — it
-      # grows whenever a service lands on a brand-new net, or that service's route 502s. (Nothing
-      # enforces this membership: test_network_invariant.py guards that a net EXISTS, not that
-      # traefik joined it.) proxy is the default; monitoring/media/apps/kopia reach those backends.
+      # grows whenever a service lands on a brand-new net, or that service's route 502s.
+      # test_network_invariant.py's test_traefik_joins_every_routed_network enforces this: it fails
+      # pre-deploy if any routed service's route network (networks[0]) isn't in this list. proxy is
+      # the default; monitoring/media/apps/kopia reach those backends.
       - proxy
       - monitoring
       - media

@@ -361,10 +361,15 @@
   # them here heals a deploy that doesn't recreate crowdsec and guards against a future hub
   # bump silently regressing them. Idempotent; no --force, so a locally-modified item is never
   # clobbered. `install` on an already-present item exits 0 ("nothing to install").
+  # appsec-virtual-patching + appsec-generic-rules install the inline-WAF rulesets + the
+  # crowdsecurity/appsec-default config the acquis references; re-asserting here heals a
+  # config-only deploy (no crowdsec recreate) the same way as the dep collections above.
   tags: [deploy]
   community.docker.docker_container_exec:
     container: crowdsec
-    command: "cscli collections install crowdsecurity/http-cve crowdsecurity/whitelist-good-actors"
+    command: >-
+      cscli collections install crowdsecurity/http-cve crowdsecurity/whitelist-good-actors
+      crowdsecurity/appsec-virtual-patching crowdsecurity/appsec-generic-rules
   register: traefik_crowdsec_dep_collections
   changed_when: "'installed' in (traefik_crowdsec_dep_collections.stdout | lower)"
   failed_when: traefik_crowdsec_dep_collections.rc != 0

@@ -17,6 +17,20 @@ Metabase dashboard.
 - TLS via Cloudflare DNS-01; routes services at `<hostname>.<domain>` from their labels.
 - CrowdSec bouncer/WAF: `crowdsec-acquis.yaml`, `crowdsec-profiles.yaml`,
   `crowdsec-whitelist.yaml`, Discord alerts, home-IP allowlist updater.
+- **CrowdSec AppSec (inline L7 WAF, 2026-07-14):** the bouncer runs BOTH modes — `stream`
+  (reactive ban-list: bans an IP after a pattern of log lines) AND the **AppSec Component**, which
+  inspects each request INLINE before the backend, so a first-hit malicious payload (a CVE exploit
+  string, SQLi/SSTI, path traversal) is blocked, not merely banned-after-the-fact. Config: the
+  `appsec` acquisition source in `crowdsec-acquis.yaml.j2` (`crowdsec:7422`, `appsec_config:
+  crowdsecurity/appsec-default`) + `crowdsecAppsecEnabled`/`crowdsecAppsecHost` on the bouncer
+  middleware (`config.yml.j2`). Rulesets = `crowdsecurity/appsec-virtual-patching` (CVE signatures) +
+  `crowdsecurity/appsec-generic-rules` (generic attack vectors), installed via the crowdsec
+  `COLLECTIONS` env + re-asserted by the "Ensure CrowdSec dependency collections" deploy task —
+  deliberately NOT the full OWASP CRS (`appsec-crs`), which is false-positive-prone. **Fails OPEN**
+  (`crowdsecAppsecUnreachableBlock: false`): an appsec-broker/crowdsec hiccup keeps the edge serving
+  (defers to the ban-list) rather than 500ing the fleet — the add-on must not become a new edge SPOF.
+  Verify active: `docker exec crowdsec cscli appsec-configs list` (non-empty) + `metrics` shows an
+  `appsec` acquisition source.
 - **Host crons (state-file → monitor-bridge):** `crowdsec-update-home-allowlist.sh` (every 5 min),
   `docker-user-verify.sh` (every 15 min), and `cloudflare-ip-drift.sh` (weekly) — the last diffs the
   hardcoded `cloudflare_ips` (`group_vars/all.yml`, which gates trustedIPs + the DOCKER-USER DROP)

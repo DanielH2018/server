@@ -107,6 +107,17 @@ http:
           crowdsecLapiHost: "crowdsec:8080"
           crowdsecMode: stream
           updateIntervalSeconds: 60
+          # AppSec Component — inline L7 WAF (see crowdsec-acquis.yaml.j2). stream mode above is the
+          # reactive ban-list (bans an IP after a pattern of log lines); this inspects each request
+          # inline BEFORE the backend, so a first-hit malicious payload (CVE string / SQLi / path
+          # traversal) is blocked, not merely banned-after-the-fact. crowdsec:7422 is the appsec
+          # acquisition listener on the shared `proxy` net. UnreachableBlock:false = FAIL OPEN: an
+          # appsec-broker/crowdsec hiccup keeps the edge serving (defers to the ban-list) instead of
+          # 500ing the fleet — the add-on must not become a new edge SPOF. FailureBlock keeps its
+          # secure default (a rule-eval error on a request blocks that one request).
+          crowdsecAppsecEnabled: true
+          crowdsecAppsecHost: "crowdsec:7422"
+          crowdsecAppsecUnreachableBlock: false
 
     rate-limit:
       rateLimit:

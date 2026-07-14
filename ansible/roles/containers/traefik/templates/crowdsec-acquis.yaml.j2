@@ -15,3 +15,21 @@ filenames:
   - /var/log/authelia/*.log
 labels:
   type: authelia
+---
+# AppSec Component — inline L7 WAF. Traefik's bouncer plugin forwards each request here
+# (crowdsecAppsecHost=crowdsec:7422) BEFORE proxying to the backend, so a malicious payload (a CVE
+# exploit string, SQLi/SSTI, path traversal) is blocked on its FIRST request — the stream-mode
+# ban-list only bans an IP AFTER enough log lines accumulate, so a first-hit payload sailed through.
+# appsec_config crowdsecurity/appsec-default loads the virtual-patching (CVE signatures) +
+# generic-rules inband rulesets installed via the crowdsec COLLECTIONS env (appsec-virtual-patching
+# + appsec-generic-rules — deliberately NOT the full OWASP CRS, which is false-positive-prone).
+# Bound 0.0.0.0 so traefik reaches it over the shared `proxy` net (NOT host-published — this port is
+# internal). The plugin is set crowdsecAppsecUnreachableBlock:false (config.yml.j2), so an appsec
+# broker hiccup fails OPEN — the edge keeps serving (deferring to the stream-mode ban-list) rather
+# than 500ing the whole fleet; the appsec add-on must not become a new edge SPOF.
+source: appsec
+listen_addr: 0.0.0.0:7422
+appsec_config: crowdsecurity/appsec-default
+name: traefik-appsec
+labels:
+  type: appsec
