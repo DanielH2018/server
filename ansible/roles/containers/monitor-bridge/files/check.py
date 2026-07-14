@@ -245,6 +245,30 @@ SCRUTINY_URL = _env("SCRUTINY_URL", "http://scrutiny:8080").rstrip("/")
 SCRUTINY_MAX_AGE_H = float(_env("SCRUTINY_MAX_AGE_H", "26"))
 SCRUTINY_TEMP_MAX = float(_env("SCRUTINY_TEMP_MAX", "0"))
 
+# UPS battery health via Home Assistant's Prometheus scrape (the APC UPS is on NUT/peanut; HA's
+# prometheus integration exposes its sensors as hass_sensor_*). The only pre-existing UPS alert is
+# an HA automation -> mobile push (a separate channel from this Kuma->Discord brain), and nothing
+# trends the battery, so a slowly-degrading battery — full-charge runtime decaying over years — is
+# invisible until an outage collapses it. We page on a low battery RUNWAY: charge below
+# UPS_CHARGE_MIN_PCT (a deep discharge while on battery) OR estimated runtime below UPS_RUNTIME_MIN_S
+# (an aged battery even at full charge, or a discharge nearing shutdown) — a dual-purpose health +
+# imminent-cutoff floor. Queries are env-driven (both empty = disabled, like PI_GLANCES_URL) so a
+# UPS/entity rename or removal needs no code edit. Prom-dependent: an HA-scrape outage leaves both
+# series absent -> up (Scrape Targets owns HA-source liveness; the nut container healthcheck owns
+# NUT-server death), so this never double-pages those. UPS_CONSECUTIVE rides out a one-cycle runtime
+# dip from a transient load spike (like HA_CONSECUTIVE), so only a sustained low runway pages.
+UPS_CHARGE_QUERY = _env(
+    "UPS_CHARGE_QUERY",
+    'hass_sensor_battery_percent{entity="sensor.apc_ups_battery_charge"}',
+)
+UPS_RUNTIME_QUERY = _env(
+    "UPS_RUNTIME_QUERY",
+    'hass_sensor_duration_s{entity="sensor.apc_ups_battery_runtime"}',
+)
+UPS_CHARGE_MIN_PCT = float(_env("UPS_CHARGE_MIN_PCT", "50"))
+UPS_RUNTIME_MIN_S = float(_env("UPS_RUNTIME_MIN_S", "300"))
+UPS_CONSECUTIVE = int(_env("UPS_CONSECUTIVE", "2"))
+
 # Loki log-ingestion freshness: Loki's Kuma /ready probe stays green even when promtail
 # stops SHIPPING (DOCKER_HOST/docker-proxy break, positions-file corruption, relabel
 # regression) — a silently-dead log pipeline that quietly blinds the log dashboards and
@@ -1244,6 +1268,69 @@ def check_scrutiny():
     return True, "%s; %s" % (fresh_msg, health_msg)
 
 
+def ups_health(charge_pct, runtime_s, charge_min_pct, runtime_min_s):
+    """Pure: is the UPS battery runway healthy given charge (%) and estimated runtime (s)? (ok, msg).
+
+    Either value may be None (that metric absent from Prometheus) — only present arms are judged, and
+    the caller handles the both-absent case. A low charge means an active deep discharge on battery;
+    a low runtime means an aged battery whose full-charge runway has decayed OR a discharge nearing
+    shutdown — both actionable ("replace the battery" / "it's about to cut power"). Strict `<`, so a
+    value exactly at the floor is still ok.
+    """
+    problems = []
+    if charge_pct is not None and charge_pct < charge_min_pct:
+        problems.append("battery %.0f%% (< %.0f%%)" % (charge_pct, charge_min_pct))
+    if runtime_s is not None and runtime_s < runtime_min_s:
+        problems.append(
+            "runtime %.1fm (< %.1fm)" % (runtime_s / 60.0, runtime_min_s / 60.0)
+        )
+    if problems:
+        return False, "; ".join(problems)
+    parts = []
+    if charge_pct is not None:
+        parts.append("battery %.0f%%" % charge_pct)
+    if runtime_s is not None:
+        parts.append("runtime %.1fm" % (runtime_s / 60.0))
+    return True, ", ".join(parts)
+
+
+_ups_down_streak = 0
+
+
+def check_ups():
+    """UPS battery health from HA's Prometheus-scraped sensors (see the UPS_* env block above).
+
+    Both queries empty -> disabled (stays up), like check_pi_pressure without a glances URL. Both
+    series absent (HA scrape down / NUT integration dropped) -> up: the HA scrape target being down
+    is Scrape Targets' page and the nut container healthcheck owns the NUT server, so this defers
+    rather than double-paging. UPS_CONSECUTIVE hysteresis (like check_ha_heartbeat) rides out a
+    single-cycle runtime dip from a transient load spike; only a sustained low runway pages.
+    """
+    global _ups_down_streak
+    if not UPS_CHARGE_QUERY and not UPS_RUNTIME_QUERY:
+        return True, "UPS monitoring disabled (no query)"
+    charge = prom_scalar(UPS_CHARGE_QUERY) if UPS_CHARGE_QUERY else None
+    runtime = prom_scalar(UPS_RUNTIME_QUERY) if UPS_RUNTIME_QUERY else None
+    if charge is None and runtime is None:
+        _ups_down_streak = 0
+        return (
+            True,
+            "no UPS data in Prometheus (HA scrape down? Scrape Targets owns source liveness)",
+        )
+    ok, msg = ups_health(charge, runtime, UPS_CHARGE_MIN_PCT, UPS_RUNTIME_MIN_S)
+    if ok:
+        _ups_down_streak = 0
+        return True, msg
+    _ups_down_streak += 1
+    if _ups_down_streak < UPS_CONSECUTIVE:
+        return True, "down streak %d/%d (load-spike grace): %s" % (
+            _ups_down_streak,
+            UPS_CONSECUTIVE,
+            msg,
+        )
+    return False, "%s (%d cycles)" % (msg, _ups_down_streak)
+
+
 def pi_pressure(load_json, mem_json, fs_json, load_max, mem_min_mb, disk_max_pct):
     """Pure: load per core, available-memory floor, or a full filesystem on the Pi.
 
@@ -2108,6 +2195,7 @@ CHECKS = [
     ("b2_usage", _env("KUMA_PUSH_B2", ""), check_b2_usage),
     ("b2_trend", _env("KUMA_PUSH_B2_TREND", ""), check_b2_trend),
     ("scrutiny", _env("KUMA_PUSH_SCRUTINY", ""), check_scrutiny),
+    ("ups", _env("KUMA_PUSH_UPS", ""), check_ups),
     ("pi_pressure", _env("KUMA_PUSH_PI", ""), check_pi_pressure),
     ("ha_heartbeat", _env("KUMA_PUSH_HA", ""), check_ha_heartbeat),
     ("renovate_alive", _env("KUMA_PUSH_RENOVATE_ALIVE", ""), check_renovate_alive),
@@ -2138,6 +2226,7 @@ PROM_DEPENDENT = frozenset(
         "targets",
         "traefik5xx",
         "b2_trend",
+        "ups",  # queries HA's Prometheus-scraped UPS battery sensors
         "janitorr",  # reads container_start_time_seconds for its startup-race uptime gate
         "promtail_dropped",  # increase(promtail_dropped_entries_total) instant query
     }

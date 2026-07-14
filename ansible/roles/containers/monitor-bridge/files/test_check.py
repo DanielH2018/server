@@ -1620,6 +1620,97 @@ def test_scrutiny_temp_ceiling_flags_only_when_enabled():
     assert "70" in msg and "60" in msg
 
 
+# ── ups (battery health via HA's Prometheus-scraped UPS sensors) ─────────────
+
+
+def test_ups_health_ok():
+    ok, msg = check.ups_health(100, 900, 50, 300)
+    assert ok
+    assert "battery 100%" in msg and "runtime 15.0m" in msg
+
+
+def test_ups_health_low_charge_is_named():
+    ok, msg = check.ups_health(30, 900, 50, 300)
+    assert not ok
+    assert "battery 30%" in msg and "runtime" not in msg
+
+
+def test_ups_health_low_runtime_is_named():
+    ok, msg = check.ups_health(100, 120, 50, 300)
+    assert not ok
+    assert "runtime 2.0m" in msg and "battery" not in msg
+
+
+def test_ups_health_both_breaches_named():
+    ok, msg = check.ups_health(20, 60, 50, 300)
+    assert not ok
+    assert "battery 20%" in msg and "runtime 1.0m" in msg
+
+
+def test_ups_health_at_threshold_is_ok():
+    # strict `<`, so exactly at the floor is fine
+    assert check.ups_health(50, 300, 50, 300)[0]
+
+
+def test_ups_health_absent_arm_is_skipped():
+    # only runtime present and low -> pages on runtime alone; the charge arm is ignored
+    ok, msg = check.ups_health(None, 120, 50, 300)
+    assert not ok
+    assert "runtime" in msg and "battery" not in msg
+
+
+def _ups_scalars(monkeypatch, charge, runtime):
+    def fake(q):
+        if q == check.UPS_CHARGE_QUERY:
+            return charge
+        if q == check.UPS_RUNTIME_QUERY:
+            return runtime
+        return None
+
+    monkeypatch.setattr(check, "prom_scalar", fake)
+
+
+def test_check_ups_healthy_is_up(monkeypatch):
+    check._ups_down_streak = 0
+    _ups_scalars(monkeypatch, 100, 900)
+    ok, msg = check.check_ups()
+    assert ok and "battery 100%" in msg
+
+
+def test_check_ups_absent_data_defers_to_scrape_targets(monkeypatch):
+    check._ups_down_streak = 0
+    _ups_scalars(monkeypatch, None, None)
+    ok, msg = check.check_ups()
+    assert ok and "no UPS data" in msg
+
+
+def test_check_ups_single_low_runtime_is_suppressed_then_pages(monkeypatch):
+    check._ups_down_streak = 0
+    _ups_scalars(monkeypatch, 100, 60)  # runtime 1m < 5m floor
+    ok1, msg1 = check.check_ups()
+    assert ok1 and "streak 1/2" in msg1  # UPS_CONSECUTIVE default 2
+    ok2, msg2 = check.check_ups()
+    assert not ok2 and "runtime" in msg2
+
+
+def test_check_ups_recovery_resets_streak(monkeypatch):
+    check._ups_down_streak = 0
+    _ups_scalars(monkeypatch, 100, 60)
+    check.check_ups()  # streak advances to 1
+    _ups_scalars(monkeypatch, 100, 900)  # healthy again
+    ok, _ = check.check_ups()
+    assert ok
+    assert check._ups_down_streak == 0
+
+
+def test_check_ups_disabled_when_no_queries(monkeypatch):
+    check._ups_down_streak = 0
+    monkeypatch.setattr(check, "UPS_CHARGE_QUERY", "")
+    monkeypatch.setattr(check, "UPS_RUNTIME_QUERY", "")
+    ok, msg = check.check_ups()
+    assert ok and "disabled" in msg
+
+
 # ── pi_pressure (Pi load / memory / disk headroom via the Pi's glances API) ──
 
 

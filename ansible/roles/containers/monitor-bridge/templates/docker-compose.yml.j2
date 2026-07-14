@@ -28,11 +28,12 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       - INTERVAL=300
-      # Startup/redeploy grace for the reach-out checks (STARTUP_GRACE in check.py: Backup
-      # Freshness / n8n Prod Workflows / Arr Queue Warnings / Pi Pressure). They poll a live app
-      # dependency with no reachability gate and no hysteresis, so the bridge's first cycle after
-      # the weekly host reboot — when kopia/n8n/sonarr/radarr/the Pi glances are still starting —
-      # flipped each max_retries=0 monitor DOWN for one transient cycle and paged. run_once now
+      # Startup/redeploy grace for the reach-out checks (STARTUP_GRACE in check.py: Backup Freshness /
+      # n8n Prod Workflows / Arr Queue Warnings / Prowlarr Indexers / SMART Data-Health / Pi Pressure).
+      # They poll a live app dependency with no reachability gate and no hysteresis, so the bridge's
+      # first cycle after the weekly host reboot — when kopia/n8n/sonarr/radarr/prowlarr/scrutiny/the
+      # Pi glances are still starting — flipped each max_retries=0 monitor DOWN for one transient
+      # cycle and paged. run_once now
       # holds them `up` for the first GRACE_CYCLES-1 consecutive down cycles; only the
       # GRACE_CYCLES'th straight down pages a genuinely-dead dependency (like HA_CONSECUTIVE=2).
       - GRACE_CYCLES=2
@@ -211,6 +212,22 @@ services:
       - SCRUTINY_MAX_AGE_H=26
       - SCRUTINY_TEMP_MAX=0
       - KUMA_PUSH_SCRUTINY={{ monitor_bridge_scrutiny_push_token }}
+      # UPS battery health via HA's Prometheus-scraped sensors (the APC UPS is on NUT/peanut). The
+      # only other UPS alert is an HA automation -> mobile push (a separate channel from this
+      # Kuma->Discord brain), and nothing trends the battery, so a slowly-degrading one — full-charge
+      # runtime decaying over years — is invisible until an outage collapses it. Page on a low battery
+      # RUNWAY: charge < UPS_CHARGE_MIN_PCT (deep discharge on battery) OR estimated runtime <
+      # UPS_RUNTIME_MIN_S (aged battery even at full charge, or a discharge nearing shutdown).
+      # Prom-dependent: both series absent (HA scrape down) -> up (Scrape Targets owns HA-source
+      # liveness; the nut healthcheck owns the NUT server). UPS_CONSECUTIVE rides out a one-cycle
+      # runtime dip from a load spike. Queries env-driven (both empty disables it) so an entity
+      # rename needs no code edit.
+      - UPS_CHARGE_QUERY=hass_sensor_battery_percent{entity="sensor.apc_ups_battery_charge"}
+      - UPS_RUNTIME_QUERY=hass_sensor_duration_s{entity="sensor.apc_ups_battery_runtime"}
+      - UPS_CHARGE_MIN_PCT=50
+      - UPS_RUNTIME_MIN_S=300
+      - UPS_CONSECUTIVE=2
+      - KUMA_PUSH_UPS={{ monitor_bridge_ups_push_token }}
       # Pi pressure: swap-thrash early warning for the 512MB Zero 2 W, polled from the
       # glances API already running there (zero Pi-side footprint; the static Kuma HTTP
       # monitor covers glances itself). 2026-06-11 fwupd incident: load5/core >1.7 with
@@ -396,6 +413,10 @@ services:
          before the absolute 85% B2 Storage Usage monitor fires. Prom-dependent. -#}
       {{ kuma('monitor-bridge-b2-trend', monitor_type='push', name='B2 Usage Trend', interval=600, max_retries=0, push_token=monitor_bridge_b2_trend_push_token) }}
       {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data / Health', interval=600, max_retries=0, push_token=monitor_bridge_scrutiny_push_token) }}
+      {# UPS Battery Health: check_ups pages on a low battery RUNWAY (charge or estimated runtime under
+         the floor) from HA's Prometheus-scraped APC sensors — the slowly-degrading-battery signal the
+         HA mobile-push power-event automation and the nut healthcheck can't give. Prom-dependent. -#}
+      {{ kuma('monitor-bridge-ups', monitor_type='push', name='UPS Battery Health', interval=600, max_retries=0, push_token=monitor_bridge_ups_push_token) }}
       {{ kuma('monitor-bridge-pi', monitor_type='push', name='Pi Pressure', interval=600, max_retries=0, push_token=monitor_bridge_pi_push_token) }}
       {# HA automation-engine liveness: check_ha_heartbeat polls the HA heartbeat helper's freshness
          over `apps`. interval 600s (2× the 300s loop), max_retries=0 like every bridge push monitor. -#}

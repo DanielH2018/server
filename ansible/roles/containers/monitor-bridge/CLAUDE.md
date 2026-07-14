@@ -16,7 +16,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **thirty-six checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **thirty-seven checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the nine
@@ -206,6 +206,20 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     path). Also `down` when scrutiny lists no devices at all. `SCRUTINY_TEMP_MAX` (°C, default
     0 = off) adds an optional early-warning temperature ceiling on top. Pure `scrutiny_freshness()`
     + `scrutiny_health()` are unit-tested.)
+  - **UPS Battery Health** (the APC UPS's charge % + estimated runtime, via HA's Prometheus-scraped
+    `hass_sensor_*` sensors over `monitoring` — the UPS is on NUT/peanut and HA's prometheus
+    integration exports it). `down` on a low battery RUNWAY: charge < `UPS_CHARGE_MIN_PCT` (50, a
+    deep discharge while on battery) OR estimated runtime < `UPS_RUNTIME_MIN_S` (300 s — an aged
+    battery whose full-charge runway has decayed, OR a discharge nearing shutdown). The only
+    pre-existing UPS alert is an HA automation → **mobile** push (a separate channel from this
+    Kuma→Discord brain) and nothing trended the battery, so a slowly-degrading battery was invisible
+    until an outage collapsed it — this is the health/runway signal + the Discord escalation path.
+    **Prom-dependent** (queries HA's scrape); both series absent (HA scrape down / NUT integration
+    dropped) → `up` — Scrape Targets owns HA-source liveness and the `nut` container healthcheck owns
+    the NUT server, so it defers rather than double-paging. `UPS_CONSECUTIVE` (2, like
+    `HA_CONSECUTIVE`) rides out a one-cycle runtime dip from a transient load spike. Queries are
+    env-driven (`UPS_CHARGE_QUERY`/`UPS_RUNTIME_QUERY`, both empty = disabled) so a UPS/entity rename
+    needs no code edit. Pure `ups_health()` is unit-tested.)
   - **Pi Pressure** (the Pi's glances API `/api/4/load` + `/api/4/mem` + `/api/4/fs` over
     the LAN: `down` when load5/core > `PI_LOAD_MAX`, mem `available` < `PI_MEM_MIN_MB`, or
     any filesystem device > `PI_DISK_MAX_PCT` — glances' fs list is its *container* view
@@ -359,7 +373,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -403,7 +417,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the thirty-six push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the thirty-seven push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI
