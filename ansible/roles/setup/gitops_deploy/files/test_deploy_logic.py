@@ -248,6 +248,63 @@ def test_role_meta_change_flags_meta_not_deploy():
     assert cs.secrets is False
 
 
+# L2: a change under a container role's defaults/, vars/, or handlers/ matched none of the
+# config/tasks/meta regexes and fell through to the silent docs-only ff-merge — a structural change
+# that alters what a deploy does, applied with no signal. The _ACTIVE_ROLE catch-all flags it on the
+# tasks channel (defer-and-alert), so a future role adding one of these dirs can't regress silently.
+def test_role_defaults_change_flags_tasks_not_deploy():
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/prometheus/defaults/main.yml"]
+    )
+    assert cs.tasks == {"prometheus"}
+    assert cs.services == set()
+    assert cs.broad is False
+    assert cs.secrets is False
+
+
+def test_role_vars_and_handlers_change_flag_tasks():
+    for sub in ("vars", "handlers"):
+        cs = services_from_changed_paths(
+            [f"ansible/roles/containers/sonarr/{sub}/main.yml"]
+        )
+        assert cs.tasks == {"sonarr"}, sub
+        assert cs.services == set(), sub
+
+
+def test_role_root_non_md_file_flags_tasks():
+    # A non-doc file at the role root (not templates/files/tasks/meta) is structural too.
+    cs = services_from_changed_paths(["ansible/roles/containers/prometheus/vars.yml"])
+    assert cs.tasks == {"prometheus"}
+
+
+def test_role_readme_md_stays_silent_like_claude_md():
+    # *.md is a doc — the catch-all must not flag it (regression guard for the .md exclusion).
+    cs = services_from_changed_paths(["ansible/roles/containers/prometheus/README.md"])
+    assert cs.tasks == set()
+    assert cs.services == set()
+    assert cs.broad is False
+
+
+def test_archived_defaults_change_is_ignored():
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/archive/duplicati/defaults/main.yml"]
+    )
+    assert cs.tasks == set()
+    assert cs.services == set()
+    assert cs.broad is False
+
+
+def test_common_defaults_change_stays_broad_not_tasks():
+    # common/ is the shared deploy path — a defaults change there is BROAD (manual full deploy);
+    # the broad-prefix check must win over the catch-all.
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/common/defaults/main.yml"]
+    )
+    assert cs.broad is True
+    assert cs.tasks == set()
+    assert cs.services == set()
+
+
 def test_common_meta_change_stays_broad_not_meta():
     # common/ is the shared deploy path — a meta change there is BROAD (manual full deploy); the
     # broad-prefix check must win over the new meta match.

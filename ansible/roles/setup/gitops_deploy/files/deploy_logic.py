@@ -38,6 +38,13 @@ _ACTIVE_TASKS = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/tasks
 # already _BROAD_PREFIXES; this is its DATA.) Same archive/ exclusion; common/meta is caught earlier
 # by the _BROAD_PREFIXES check.
 _ACTIVE_META = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/meta/")
+# Catch-all for ANY other non-doc file under an active container role — `defaults/`, `vars/`,
+# `handlers/`, or a future dir. Like tasks/ these change what a deploy of that service does but
+# aren't auto-deployed, so a change here must defer-and-alert (via the tasks channel) rather than
+# fall through to the silent docs-only ff-merge. Checked LAST, so templates/files (deploy), tasks/,
+# and meta/ have already claimed their paths; only the structural remainder reaches it. CLAUDE.md /
+# *.md are docs and keep the silent path (the caller excludes them). Same archive/ exclusion.
+_ACTIVE_ROLE = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/")
 # A `container_name:` line in a rendered docker-compose.yml.
 _CONTAINER_NAME = re.compile(r'^\s*container_name:\s*["\']?([^\s"\']+)["\']?\s*$')
 # Changes whose blast radius we don't try to scope automatically.
@@ -75,6 +82,9 @@ class ChangeSet:
     services: set[str] = field(default_factory=set)
     broad: bool = False
     secrets: bool = False
+    # `tasks` is the defer-and-alert channel for a service's structural, not-auto-deployed dirs:
+    # tasks/ plus the _ACTIVE_ROLE catch-all (defaults/, vars/, handlers/, …). The alert names all
+    # of them, so the field keeps its name for continuity even though it's no longer tasks/-only.
     tasks: set[str] = field(default_factory=set)
     meta: set[str] = field(default_factory=set)
 
@@ -99,6 +109,14 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         mt = _ACTIVE_META.match(p)
         if mt:
             cs.meta.add(mt.group(1))
+            continue
+        # Catch-all: any other non-doc file under an active container role (defaults/, vars/,
+        # handlers/, …). Not auto-deployed but it changes what a deploy does — defer-and-alert
+        # via the tasks channel instead of a silent ff-merge. *.md (CLAUDE.md, README) are docs
+        # and keep the silent path.
+        r = _ACTIVE_ROLE.match(p)
+        if r and not p.endswith(".md"):
+            cs.tasks.add(r.group(1))
     return cs
 
 

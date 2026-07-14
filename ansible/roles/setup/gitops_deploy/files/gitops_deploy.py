@@ -189,10 +189,10 @@ def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
     if pending_tasks and _read_marker(TASKS_ALERT_FILE) != origin:
         # Mark only on confirmed delivery, else retry next tick (see discord()).
         if discord(
-            f"⚠️ gitops-deploy: `tasks/` changed for `{', '.join(sorted(pending_tasks))}` in "
-            f"`{origin[:8]}` with no redeploy of those service(s) — fast-forwarded but "
-            f"**not applied** (tasks/ isn't auto-deployed). Redeploy by hand: "
-            f"`ansible-playbook ansible/deploy.yml --tags <svc>`."
+            f"⚠️ gitops-deploy: a structural dir (`tasks/`/`defaults/`/`vars/`/`handlers/`) changed "
+            f"for `{', '.join(sorted(pending_tasks))}` in `{origin[:8]}` with no redeploy of those "
+            f"service(s) — fast-forwarded but **not applied** (those dirs aren't auto-deployed). "
+            f"Redeploy by hand: `ansible-playbook ansible/deploy.yml --tags <svc>`."
         ):
             _write_marker(TASKS_ALERT_FILE, origin)
     if pending_meta and _read_marker(META_ALERT_FILE) != origin:
@@ -390,12 +390,18 @@ def main() -> int:
         log(
             f"deploy execution failed for {sorted(cs.services)}: {exc}; rolling back to {local[:8]}"
         )
+        # Hold BEFORE the reset + rollback redeploy. deploy() is unbounded (timeout=None) with no
+        # SIGTERM handler, so if the rollback redeploy HANGS (wedged docker daemon, stalled pull)
+        # systemd SIGTERMs at TimeoutStartSec before a trailing write_hold could run — leaving no
+        # marker, origin still ahead, and the next tick re-merging + redeploying the same bad commit
+        # in a per-tick loop. Holding first makes the next tick skip_hold even if we're killed
+        # mid-rollback. (A catchable raise below is already handled; this covers the kill/hang.)
+        write_hold(origin)
         run(["git", "reset", "--hard", local])
         try:
             deploy(cs.services)
         except Exception as exc2:  # noqa: BLE001 — best-effort restore; we still hold + alert
             log(f"rollback redeploy of the prior version also failed: {exc2}")
-        write_hold(origin)
         discord(
             f"🚨 gitops-deploy: **deploy failed** on daniel-server.\n"
             f"`ansible-playbook` errored deploying `{', '.join(sorted(cs.services))}` from "
@@ -433,16 +439,16 @@ def main() -> int:
     # Rollback: reset to prior HEAD, redeploy the prior version. Redeploy the WHOLE batch
     # (cs.services), not just `failed`: in a multi-service tick the services that DID pass
     # were recreated on the new images, so after the git reset they'd otherwise stay on the
-    # new images while the tree points at old — partial-batch drift. Mirror the exec-failure
-    # path (above): guard the redeploy and write the hold regardless, else a raise here skips
-    # write_hold and the next tick re-merges the bad commit and loops every 30 min.
+    # new images while the tree points at old — partial-batch drift. Hold BEFORE the reset +
+    # redeploy (see the exec-failure path above): a hung rollback redeploy would otherwise be
+    # SIGTERMed before write_hold, stranding the bad commit into a per-tick redeploy loop.
     log(f"health gate failed for {failed}; rolling back to {local[:8]}")
+    write_hold(origin)
     run(["git", "reset", "--hard", local])
     try:
         deploy(cs.services)
     except Exception as exc:  # noqa: BLE001 — best-effort restore; we still hold + alert
         log(f"rollback redeploy of the prior version also failed: {exc}")
-    write_hold(origin)
     discord(
         f"🚨 gitops-deploy: **rollback** on daniel-server.\n"
         f"Service(s) `{', '.join(failed)}` from commit `{origin[:8]}` failed the health "
