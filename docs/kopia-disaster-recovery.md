@@ -21,8 +21,19 @@ survives a total loss; this runbook is the procedure.
    out-of-band age key to decrypt): it holds the *only* off-site copy of the encrypted
    `secrets.yml` + all the Ansible. The age key alone can't reconstruct `secrets.yml`, so a
    *simultaneous* loss of both the hosts and the GitHub repo would strand the B2 credentials.
-   Cheap insurance: keep an occasional `git bundle create homelab.bundle --all` stored
-   alongside the out-of-band age-key backup, or push to a second git remote.
+   **Close that leg — the off-site recovery kit:** the out-of-band age key and an encrypted copy of
+   this repo together are the *complete* recovery kit, so keep them in the SAME off-site place.
+   Whenever you refresh the age-key backup (or after a `secrets.yml` change), drop a fresh repo bundle
+   beside it — a single file holding all refs:
+   ```bash
+   git bundle create "homelab-$(date +%F).bundle" --all
+   ```
+   `secrets.yml` inside stays SOPS-encrypted — useless without the age key sitting next to it — so the
+   bundle is no more sensitive than the (already off-site) GitHub repo; the age key is the part that
+   must stay protected. Recover from it with:
+   ```bash
+   git clone homelab-YYYY-MM-DD.bundle server   # then: sops -d server/ansible/vars/secrets.yml (needs the age key)
+   ```
 3. Docker (or a local `kopia` binary).
 
 ## The five repository credentials (all in `ansible/vars/secrets.yml`)
