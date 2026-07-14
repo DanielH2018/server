@@ -31,7 +31,7 @@ fi
 # Validate the response is a well-formed IPv4 before using it. The value is already quoted and the
 # source is HTTPS (no injection risk) — this guards against a malformed/MITM'd response adding a junk
 # or overly-broad allowlist entry.
-if ! [[ $CURRENT_IP =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+if ! [[ $CURRENT_IP =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; then
   write_state false "invalid IP from ipify: $CURRENT_IP"
   exit 1
 fi

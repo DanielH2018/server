@@ -231,16 +231,20 @@ def test_portainer_server_agent_pins_in_lockstep() -> None:
 
 
 def test_python_version_pins_in_lockstep() -> None:
-    """ci.yml and image-smoke.yml must pin the same Python version.
+    """ci.yml, image-smoke.yml, and .python-version must pin the same Python minor version.
 
     A single Renovate customManager scans every workflow file (renovate.json), so one bump PR is
     meant to edit both `python-version:` pins together; nothing else asserts the coupling actually
     held. A skew would run the scripts suite under one interpreter in CI and boot-smoke changed
-    images under another — a silent test/runtime mismatch. Mirrors the shellcheck-py / portainer
-    lockstep tests above.
+    images under another — a silent test/runtime mismatch. `.python-version` (the interpreter host
+    `uv run` selects) is tracked by a SEPARATE Renovate manager (built-in pyenv) whose PR does NOT
+    automerge, so it can lag the workflow bump — leaving the host on 3.N while CI moves to 3.N+1.
+    Compared on major.minor (pyenv may carry a patch the workflow pin omits). Mirrors the
+    shellcheck-py / portainer lockstep tests above.
     """
     ci = (_REPO / ".github/workflows/ci.yml").read_text()
     smoke = (_REPO / ".github/workflows/image-smoke.yml").read_text()
+    dotver = (_REPO / ".python-version").read_text().strip()
     c = re.search(r'python-version:\s*"([^"]+)"', ci)
     s = re.search(r'python-version:\s*"([^"]+)"', smoke)
     assert c, "python-version pin not found in ci.yml"
@@ -248,4 +252,12 @@ def test_python_version_pins_in_lockstep() -> None:
     assert c.group(1) == s.group(1), (
         f"python-version pins drifted: ci.yml {c.group(1)} vs image-smoke.yml {s.group(1)} — bump "
         f"both together (they must run the scripts suite and image smoke on the same interpreter)."
+    )
+
+    def _minor(v: str) -> str:
+        return ".".join(v.split(".")[:2])
+
+    assert _minor(dotver) == _minor(c.group(1)), (
+        f"python-version drifted: .python-version {dotver} vs the workflows' {c.group(1)} — bump "
+        f"the pyenv .python-version to match (its Renovate PR doesn't automerge, so it can lag)."
     )

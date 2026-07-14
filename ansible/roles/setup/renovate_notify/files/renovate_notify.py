@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Renovate manual-action notifier — runs once per daily systemd-timer tick.
 
-Queries the public GitHub REST API (unauthenticated) for open Renovate PRs, classifies
-each (notify_logic), and posts a Discord digest ONLY when the actionable set changes.
-Writes a last_run timestamp for the monitor-bridge "Renovate Notifier — Alive" monitor.
+Queries the GitHub REST API (unauthenticated by default, authenticated when GITHUB_TOKEN is
+set) for open Renovate PRs, classifies each (notify_logic), and posts a Discord digest ONLY
+when the actionable set changes. Writes a last_run timestamp for the monitor-bridge
+"Renovate Notifier — Alive" monitor.
 
-Config from /etc/renovate-notify/config.env (KEY=VALUE): REPO, DISCORD_WEBHOOK, STATE_DIR.
-Stdlib only.
+Config from /etc/renovate-notify/config.env (KEY=VALUE): REPO, DISCORD_WEBHOOK, STATE_DIR,
+GITHUB_TOKEN (optional). Stdlib only.
 """
 
 from __future__ import annotations
@@ -134,6 +135,14 @@ def main() -> int:
     dry = "--dry-run" in sys.argv
     c = cfg()
     repo = c["REPO"]
+    # Authenticate the REST calls when a token is configured. Unauthenticated GitHub is 60 req/hr/IP,
+    # and each open Renovate PR costs ~3 calls (detail + check-runs + status) on top of the two list
+    # calls, so a large backlog (~19+ PRs) can exhaust the limit in one run -> the fetch 403s, main()
+    # raises, the OnFailure alert unit fires a *false* page, and that day's digest is skipped. A
+    # fine-grained read-only PAT lifts the ceiling to 5000/hr. Empty token = stay unauthenticated.
+    token = c.get("GITHUB_TOKEN", "")
+    if token:
+        HEADERS["Authorization"] = "Bearer " + token
     state_dir = c.get("STATE_DIR", "/var/lib/renovate-notify")
     state_file = os.path.join(state_dir, "last_notified")
 

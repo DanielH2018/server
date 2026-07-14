@@ -2,5 +2,8 @@
 role_deps:
   - traefik
   - authelia
+  # sonarr/radarr's setup_dirs materialize the shared data/media tree bazarr writes subtitles
+  # into, and bazarr pulls their library lists — so it must deploy after them. Toposort
+  # ordering-correctness, not a hard runtime dependency (same pattern as tdarr/janitorr).
   - sonarr
   - radarr

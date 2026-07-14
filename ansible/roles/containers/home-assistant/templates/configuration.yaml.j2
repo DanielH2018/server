@@ -372,9 +372,13 @@ prometheus:
 
 http:
   use_x_forwarded_for: true
-  # Trust the whole Docker bridge range (RFC1918 172.16/12) so HA honors
-  # X-Forwarded-For from Traefik regardless of which bridge subnet it connects
-  # from — matches the trusted-proxy ranges in the authelia and traefik configs.
+  # Trust the Docker bridge range (RFC1918 172.16/12) so HA honors X-Forwarded-For from
+  # Traefik regardless of which bridge subnet it connects from (HA is on the shared `apps`
+  # bridge; Traefik's IP there isn't pinned, so this can't be scoped to a single /32).
+  # NOT the same as Traefik's forwardedHeaders.trustedIPs, which was narrowed to Cloudflare +
+  # 10.0.0.0/24 (07-12) and governs Traefik trusting ITS upstream (real clients arrive as CF
+  # IPs); here Traefik IS HA's proxy and legitimately needs XFF trust. Broader than strictly
+  # necessary — defense in depth only: MFA, not ip_ban, is the real gate (see below).
   trusted_proxies:
     - 172.16.0.0/12
   # Brute-force defense for the internet-facing login. Authelia is intentionally OFF on this route
