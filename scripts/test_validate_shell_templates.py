@@ -21,6 +21,7 @@ def test_discover_templates_finds_the_known_set():
     assert names == {
         "entrypoint.sh.j2",
         "crowdsec-update-home-allowlist.sh.j2",
+        "cloudflare-ip-drift.sh.j2",
         "docker-user-rules.sh.j2",
         "docker-user-verify.sh.j2",
         "secret-rotate.sh.j2",

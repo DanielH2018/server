@@ -150,6 +150,14 @@ services:
       - DOCKER_USER_STATE=/docker-user/state.json
       - DOCKER_USER_MAX_AGE_MIN=45
       - KUMA_PUSH_DOCKER_USER={{ monitor_bridge_docker_user_push_token }}
+      # Weekly Cloudflare-IP drift check (traefik role's cloudflare-ip-drift.sh): the hardcoded
+      # cloudflare_ips allowlist (group_vars/all.yml) gates BOTH Traefik trustedIPs AND the
+      # DOCKER-USER origin-lock DROP, so a client on a newly-added CF range is silently DROPped at the
+      # edge if the list goes stale. The cron diffs it against Cloudflare's published ranges and writes
+      # state.json. Alert on drift/failed-fetch or >10d staleness (one missed weekly run + slack).
+      - CLOUDFLARE_DRIFT_STATE=/cloudflare-drift/state.json
+      - CLOUDFLARE_DRIFT_MAX_AGE_D=10
+      - KUMA_PUSH_CLOUDFLARE_DRIFT={{ monitor_bridge_cloudflare_drift_push_token }}
       # Weekly kopia snapshot verify: the host cron (kopia role) writes state.json; we
       # alert on a FAILED verify (bit-rot / unreadable blob the old `| logger` cron
       # swallowed), >10d staleness, or a missing/corrupt file. The verify tier of the
@@ -193,10 +201,15 @@ services:
       - B2_TREND_WINDOW=7d
       - B2_TREND_HORIZON_D=7
       - KUMA_PUSH_B2_TREND={{ monitor_bridge_b2_trend_push_token }}
-      # Scrutiny SMART freshness: the collector (cron-as-PID1, daily 00:00, no usable
-      # healthcheck) only shows death as aging collector_date in the web API.
+      # Scrutiny SMART freshness + health: the collector (cron-as-PID1, daily 00:00, no usable
+      # healthcheck) only shows death as aging collector_date in the web API; on TOP of freshness
+      # the check asserts each device's SMART/threshold status (device_status == 0), so a drive
+      # that goes SMART-FAILED while still reporting fresh data still pages (Scrutiny stores to
+      # InfluxDB not Prometheus and its own notifier is off — this is the only alert path).
+      # SCRUTINY_TEMP_MAX (°C) is an optional early-warning temperature ceiling; 0 disables it.
       - SCRUTINY_URL=http://scrutiny:8080
       - SCRUTINY_MAX_AGE_H=26
+      - SCRUTINY_TEMP_MAX=0
       - KUMA_PUSH_SCRUTINY={{ monitor_bridge_scrutiny_push_token }}
       # Pi pressure: swap-thrash early warning for the 512MB Zero 2 W, polled from the
       # glances API already running there (zero Pi-side footprint; the static Kuma HTTP
@@ -311,6 +324,7 @@ services:
       - /var/lib/kopia-maintenance:/maintenance:ro
       - /var/lib/kopia-b2-usage:/b2-usage:ro
       - /var/lib/docker-user-rules:/docker-user:ro
+      - /var/lib/cloudflare-ip-drift:/cloudflare-drift:ro
       - /var/lib/kopia-content-verify:/content-verify:ro
     {{ service_networks() }}
     labels:
@@ -363,6 +377,11 @@ services:
          — down on a failed live assert (lock flushed → origin reachable direct, Cloudflare/CrowdSec
          bypass) or 45-min staleness. The applier units write no state; this is the only "is it applied" signal. -#}
       {{ kuma('docker-user-origin-lock', monitor_type='push', name='DOCKER-USER Origin Lock', interval=600, max_retries=0, push_token=monitor_bridge_docker_user_push_token) }}
+      {# Cloudflare IP Drift: check_cloudflare_drift reads /cloudflare-drift/state.json (written weekly
+         by the traefik role's cloudflare-ip-drift.sh, which diffs cloudflare_ips vs Cloudflare's
+         published ranges) — down on drift (a stale list DROPs a client on a new CF range at the origin
+         lock, no log trail), a failed fetch, or >10d staleness. -#}
+      {{ kuma('cloudflare-ip-drift', monitor_type='push', name='Cloudflare IP Drift', interval=600, max_retries=0, push_token=monitor_bridge_cloudflare_drift_push_token) }}
       {{ kuma('kopia-verify', monitor_type='push', name='Backup Verify', interval=600, max_retries=0, push_token=monitor_bridge_verify_push_token) }}
       {# Backup Content Verify: check_content_verify reads /content-verify/state.json (written quarterly
          by the kopia role's content-verify.sh — a 25% deep content re-read) — down on a failed verify
@@ -376,7 +395,7 @@ services:
       {# B2 growth trend: predict_linear projection of the billable-bytes gauge — runway warning
          before the absolute 85% B2 Storage Usage monitor fires. Prom-dependent. -#}
       {{ kuma('monitor-bridge-b2-trend', monitor_type='push', name='B2 Usage Trend', interval=600, max_retries=0, push_token=monitor_bridge_b2_trend_push_token) }}
-      {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data Freshness', interval=600, max_retries=0, push_token=monitor_bridge_scrutiny_push_token) }}
+      {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data / Health', interval=600, max_retries=0, push_token=monitor_bridge_scrutiny_push_token) }}
       {{ kuma('monitor-bridge-pi', monitor_type='push', name='Pi Pressure', interval=600, max_retries=0, push_token=monitor_bridge_pi_push_token) }}
       {# HA automation-engine liveness: check_ha_heartbeat polls the HA heartbeat helper's freshness
          over `apps`. interval 600s (2× the 300s loop), max_retries=0 like every bridge push monitor. -#}

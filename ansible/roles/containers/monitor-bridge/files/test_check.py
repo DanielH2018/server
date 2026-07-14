@@ -476,6 +476,93 @@ def test_check_backup_shrink_folds_into_down(monkeypatch):
     assert "left backup scope" in msg
 
 
+# --- backup_presence_regression ---------------------------------------------
+
+
+def _listing(*names_with_files):
+    """A snapshot's {top_level_dir_name: recursive_file_count} listing from (name, files) pairs."""
+    return dict(names_with_files)
+
+
+def test_presence_stable_set_is_ok():
+    full = _listing(("authelia", 5), ("portainer", 3), ("grafana", 9))
+    ok, msg = check.backup_presence_regression([full, full, full, full], 3)
+    assert ok
+    assert "expected" in msg
+
+
+def test_presence_vanished_dir_alerts():
+    full = _listing(("authelia", 5), ("portainer", 3), ("grafana", 9))
+    latest = _listing(("authelia", 5), ("grafana", 9))  # portainer gone
+    ok, msg = check.backup_presence_regression([full, full, full, latest], 3)
+    assert not ok
+    assert "portainer" in msg and "vanished" in msg
+
+
+def test_presence_zero_files_counts_as_vanished():
+    full = _listing(("authelia", 5), ("portainer", 3))
+    latest = _listing(("authelia", 5), ("portainer", 0))  # dir present but emptied
+    ok, msg = check.backup_presence_regression([full, full, full, latest], 3)
+    assert not ok
+    assert "portainer" in msg
+
+
+def test_presence_newly_added_dir_is_not_flagged():
+    prior = _listing(("authelia", 5))
+    latest = _listing(("authelia", 5), ("newsvc", 2))  # added, absent from priors
+    ok, _ = check.backup_presence_regression([prior, prior, prior, latest], 3)
+    assert ok
+
+
+def test_presence_intentional_removal_clears_after_one_cycle():
+    # once the removal is itself in a prior snapshot, the dir is no longer "expected" -> no page
+    full = _listing(("authelia", 5), ("portainer", 3))
+    removed = _listing(("authelia", 5))
+    ok, _ = check.backup_presence_regression([full, full, removed, removed], 3)
+    assert ok
+
+
+def test_presence_insufficient_history_is_ok():
+    full = _listing(("authelia", 5))
+    ok, msg = check.backup_presence_regression([full, full], 3)
+    assert ok
+    assert "history" in msg
+
+
+def test_presence_empty_latest_is_skipped():
+    full = _listing(("authelia", 5))
+    ok, msg = check.backup_presence_regression([full, full, full, {}], 3)
+    assert ok
+    assert "empty" in msg
+
+
+def _objlisting(names):
+    return {"entries": [{"name": n, "type": "d", "summ": {"files": 5}} for n in names]}
+
+
+def test_check_backup_presence_folds_into_down(monkeypatch):
+    # freshness + size clean, but a service dir in all prior snapshots vanished from the latest ->
+    # check_backup goes down via the presence guard (exercises the /api/v1/objects fetch path)
+    monkeypatch.setattr(check, "BACKUP_PATH", "/data/containers")
+    last = {"endTime": _iso_ago(1), "stats": {"errorCount": 0}}
+    steady = _snaps((8000, 1.2e9), (8000, 1.2e9), (8000, 1.2e9), (8000, 1.2e9))
+    for i, s in enumerate(steady):
+        s["rootID"] = "r%d" % i
+    full = ["authelia", "portainer", "grafana"]
+    objs = [
+        _objlisting(full),
+        _objlisting(full),
+        _objlisting(full),
+        _objlisting(["authelia", "grafana"]),  # portainer dropped in the latest
+    ]
+    monkeypatch.setattr(
+        check, "_get_json", _seq(_sources(last), {"snapshots": steady}, *objs)
+    )
+    ok, msg = check.check_backup()
+    assert not ok
+    assert "portainer" in msg and "vanished" in msg
+
+
 # --- check_disk -------------------------------------------------------------
 
 
@@ -1252,6 +1339,57 @@ def test_home_allowlist_unparseable_is_down(tmp_path, monkeypatch):
     assert "unparseable" in msg
 
 
+# ── Cloudflare-IP drift (weekly host cron diffs cloudflare_ips vs Cloudflare's published ranges) ──
+
+
+def _cloudflare_drift_state(tmp_path, monkeypatch, ts, ok, msg):
+    p = tmp_path / "state.json"
+    p.write_text(
+        '{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg)
+    )
+    monkeypatch.setattr(check, "CLOUDFLARE_DRIFT_STATE", str(p))
+
+
+def test_cloudflare_drift_match_is_up(tmp_path, monkeypatch):
+    _cloudflare_drift_state(
+        tmp_path, monkeypatch, time.time() - 3600, True, "matches upstream (22 CIDRs)"
+    )
+    ok, msg = check.check_cloudflare_drift()
+    assert ok
+    assert "ok" in msg
+
+
+def test_cloudflare_drift_mismatch_is_down(tmp_path, monkeypatch):
+    # A drifted list silently DROPs a client arriving on a newly-added CF range at the origin lock.
+    _cloudflare_drift_state(
+        tmp_path,
+        monkeypatch,
+        time.time(),
+        False,
+        "cloudflare_ips DRIFTED from upstream",
+    )
+    ok, msg = check.check_cloudflare_drift()
+    assert not ok
+    assert "drift" in msg.lower()
+
+
+def test_cloudflare_drift_stale_is_down(tmp_path, monkeypatch):
+    # weekly cadence; a 12-day-old success means the weekly cron stopped
+    _cloudflare_drift_state(
+        tmp_path, monkeypatch, time.time() - 12 * 86400, True, "matches upstream"
+    )
+    ok, msg = check.check_cloudflare_drift()
+    assert not ok
+    assert "cron stopped" in msg
+
+
+def test_cloudflare_drift_missing_state_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "CLOUDFLARE_DRIFT_STATE", str(tmp_path / "nope.json"))
+    ok, msg = check.check_cloudflare_drift()
+    assert not ok
+    assert "never ran" in msg
+
+
 def _maintenance_state(tmp_path, monkeypatch, ts, ok, msg):
     p = tmp_path / "maint.json"
     p.write_text(
@@ -1374,10 +1512,16 @@ def _summary(*entries):
     return {e["device"]["wwn"]: e for e in entries}
 
 
-def _dev(wwn, name, collector_date=None, archived=False):
-    e = {"device": {"wwn": wwn, "device_name": name, "archived": archived}}
-    e["smart"] = {"collector_date": collector_date} if collector_date else None
-    return e
+def _dev(wwn, name, collector_date=None, archived=False, device_status=None, temp=None):
+    dev = {"wwn": wwn, "device_name": name, "archived": archived}
+    if device_status is not None:
+        dev["device_status"] = device_status
+    smart = {}
+    if collector_date:
+        smart["collector_date"] = collector_date
+    if temp is not None:
+        smart["temp"] = temp
+    return {"device": dev, "smart": smart or None}
 
 
 def test_scrutiny_fresh_device_is_ok():
@@ -1425,6 +1569,55 @@ def test_scrutiny_no_devices_is_down():
     ok, msg = check.scrutiny_freshness({}, 26)
     assert not ok
     assert "no devices" in msg
+
+
+# ── scrutiny SMART health (device_status != 0 = a failing drive; freshness alone can't see it) ──
+
+
+def test_scrutiny_passing_device_is_healthy():
+    s = _summary(_dev("w1", "nvme0", device_status=0))
+    ok, msg = check.scrutiny_health(s)
+    assert ok
+    assert "ok" in msg
+
+
+def test_scrutiny_failed_smart_is_named():
+    s = _summary(
+        _dev("w1", "nvme0", device_status=1),
+        _dev("w2", "sda", device_status=0),
+    )
+    ok, msg = check.scrutiny_health(s)
+    assert not ok
+    assert "nvme0" in msg and "SMART self-assessment FAILED" in msg
+    assert "sda" not in msg
+
+
+def test_scrutiny_failed_threshold_is_named():
+    s = _summary(_dev("w1", "nvme0", device_status=2))
+    ok, msg = check.scrutiny_health(s)
+    assert not ok
+    assert "attribute threshold breached" in msg
+
+
+def test_scrutiny_missing_device_status_is_ok():
+    # An API that omits device_status must not false-page.
+    s = _summary(_dev("w1", "nvme0", "2026-06-06T06:00:00Z"))
+    ok, _ = check.scrutiny_health(s)
+    assert ok
+
+
+def test_scrutiny_archived_failing_device_is_skipped():
+    s = _summary(_dev("w1", "old-disk", device_status=1, archived=True))
+    ok, _ = check.scrutiny_health(s)
+    assert ok
+
+
+def test_scrutiny_temp_ceiling_flags_only_when_enabled():
+    s = _summary(_dev("w1", "nvme0", device_status=0, temp=70))
+    assert check.scrutiny_health(s, temp_max=0)[0]  # disabled -> ok
+    ok, msg = check.scrutiny_health(s, temp_max=60)
+    assert not ok
+    assert "70" in msg and "60" in msg
 
 
 # ── pi_pressure (Pi load / memory / disk headroom via the Pi's glances API) ──

@@ -16,7 +16,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **thirty-five checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **thirty-six checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the nine
@@ -37,7 +37,15 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     totals — NOT `stats.fileCount`, which counts only newly-hashed non-cached files and swings by
     design. The median absorbs the routine one-off drops from exclusion tuning, so only a sharp
     anomalous drop pages. Stateless (sourced from Kopia's own history). Pure `backup_size_regression()`
-    is unit-tested; `BACKUP_SIZE_DROP_PCT`/`BACKUP_SIZE_MIN_HISTORY` tune it.)
+    is unit-tested; `BACKUP_SIZE_DROP_PCT`/`BACKUP_SIZE_MIN_HISTORY` tune it. **Plus a per-service
+    presence guard** (once size is clean): fetches the top-level directory listing of the latest +
+    trailing snapshots (`/api/v1/objects/<rootID>`, `entries[].summ.files`) and `down`s if a service
+    dir present with >0 files in ALL of the prior `BACKUP_SIZE_MIN_HISTORY` snapshots vanished (or
+    dropped to 0 files) from the latest — the residual the aggregate size floor can't reach once a
+    service is small (portainer is ~0.05% of the tree, far under 20%), and portainer is NOT in the
+    restore-drill rotation. A newly-added service isn't in the priors (no false page on an add), and
+    an intentional removal stops being "expected" after one cycle. Pure `backup_presence_regression()`
+    is unit-tested.)
   - **Root Disk** (`node_filesystem_*` for `/`, `/boot` **and `/boot/efi`** — old kernels
     filling /boot quietly breaks upgrades, and a full ESP breaks firmware/bootloader
     updates the same way; server-only, the Pi's disk lives in the Pi Pressure check)
@@ -130,6 +138,16 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     (docker network reload, manual `iptables -F`, a Docker upgrade seeding a preempting RETURN) leaves
     80/443 reachable direct — a Cloudflare/CrowdSec bypass — invisibly otherwise. Same state-file idiom;
     pure `docker_user()` is unit-tested. `DOCKER_USER_MAX_AGE_MIN` tunes the staleness window.)
+  - **Cloudflare IP Drift** (reads `/cloudflare-drift/state.json`, written **weekly** by the
+    **traefik** role's `cloudflare-ip-drift.sh` cron — `down` on drift, a failed fetch, or >10 d
+    staleness (one missed weekly run), a missing/corrupt state file included. The hardcoded
+    `cloudflare_ips` allowlist (`group_vars/all.yml`) gates BOTH Traefik's `forwardedHeaders.trustedIPs`
+    AND the DOCKER-USER origin-lock DROP (`docker-user-rules.sh`), so if Cloudflare adds a range a
+    client arriving on it is silently DROPped at the edge firewall with NO log trail (reads like a
+    random regional outage). The cron diffs the baked-in list against Cloudflare's published
+    `ips-v4`/`ips-v6` and alerts on any mismatch — it never auto-applies a fetched list to a firewall.
+    Cloudflare changes these ~once per several years, so it's a low-frequency safety net. Same
+    state-file idiom; pure `cloudflare_drift()` is unit-tested. `CLOUDFLARE_DRIFT_MAX_AGE_D` tunes it.)
   - **Backup Verify** (reads `/verify/state.json`, written weekly by the kopia role's
     `kopia-verify.sh` host cron — `down` on a FAILED `kopia snapshot verify` (detected
     bit-rot / an unreadable blob), >10 d staleness, or a missing/corrupt state file. The
@@ -177,10 +195,17 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     suppressed under the Prometheus Reachable gate. Pure `b2_trend()` is unit-tested. node-exporter
     serves the last textfile value every scrape, so predict_linear has a dense series even between
     the cron's daily writes — a stalled cron reads flat here (its staleness is B2 Storage Usage's job).)
-  - **SMART Data Freshness** (scrutiny web API `/api/summary` over `monitoring`: every
-    non-archived device must have a `collector_date` within 26 h — the collector is
-    cron-as-PID1 with no usable healthcheck, so a silently-dead collector only shows up as
-    aging SMART data. Also `down` when scrutiny lists no devices at all.)
+  - **SMART Data / Health** (scrutiny web API `/api/summary` over `monitoring`: every
+    non-archived device must have a `collector_date` within 26 h **AND a passing `device_status`**
+    (0 = SMART self-assessment + Scrutiny's attribute thresholds both OK; non-zero decodes to
+    "SMART self-assessment FAILED" / "attribute threshold breached"). Freshness catches a
+    silently-dead collector (cron-as-PID1, no usable healthcheck → only shows as aging data); the
+    status check catches a drive that goes SMART-FAILED / breaches a threshold while STILL reporting
+    fresh data — nothing else alerts on that (Scrutiny writes to InfluxDB not Prometheus, and its
+    own Shoutrrr notifier is unconfigured, so this bridge check is the only drive-failure alert
+    path). Also `down` when scrutiny lists no devices at all. `SCRUTINY_TEMP_MAX` (°C, default
+    0 = off) adds an optional early-warning temperature ceiling on top. Pure `scrutiny_freshness()`
+    + `scrutiny_health()` are unit-tested.)
   - **Pi Pressure** (the Pi's glances API `/api/4/load` + `/api/4/mem` + `/api/4/fs` over
     the LAN: `down` when load5/core > `PI_LOAD_MAX`, mem `available` < `PI_MEM_MIN_MB`, or
     any filesystem device > `PI_DISK_MAX_PCT` — glances' fs list is its *container* view
@@ -333,7 +358,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,pi,pi_peers,home_allowlist,docker_user,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -356,7 +381,9 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 - The **CrowdSec Home Allowlist** monitor bind-mounts `/var/lib/crowdsec-home-allowlist:/home-allowlist:ro`
   (written by the `traefik` role's every-5-min `crowdsec-update-home-allowlist.sh` cron). The `traefik`
   role creates that dir sys_user-owned, and traefik deploys first (everything depends on it), so the
-  ordering is naturally satisfied.
+  ordering is naturally satisfied. The **Cloudflare IP Drift** monitor's
+  `/var/lib/cloudflare-ip-drift:/cloudflare-drift:ro` mount (written weekly by the same role's
+  `cloudflare-ip-drift.sh`, seeded once on deploy) is created the same way with the same ordering.
 - The **Disk Autoprune** monitor bind-mounts `/var/lib/autofix-disk-prune:/autofix-disk:ro`
   (written by the `autofix-bridge` role's hourly disk-prune cron). That role creates the dir
   sys_user-owned, so on a fresh host deploy `autofix-bridge` before `monitor-bridge` (else Docker
@@ -375,7 +402,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the thirty-five push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the thirty-six push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI

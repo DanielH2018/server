@@ -149,6 +149,15 @@ HOME_ALLOWLIST_MAX_AGE_S = float(_env("HOME_ALLOWLIST_MAX_AGE_MIN", "30")) * 60
 DOCKER_USER_STATE = _env("DOCKER_USER_STATE", "/docker-user/state.json")
 DOCKER_USER_MAX_AGE_S = float(_env("DOCKER_USER_MAX_AGE_MIN", "45")) * 60
 
+# Weekly Cloudflare-IP drift check (traefik role's cloudflare-ip-drift.sh cron): compares the hardcoded
+# cloudflare_ips allowlist (group_vars/all.yml) — which gates BOTH Traefik's forwardedHeaders.trustedIPs
+# AND the DOCKER-USER origin-lock DROP — against Cloudflare's published ranges and writes {"ts","ok",
+# "msg"}. A stale list silently DROPs a client arriving on a newly-added CF range at the edge firewall
+# (no log trail); Cloudflare changes these rarely, so this is a low-frequency safety net. We alert on
+# drift (ok=false), a failed fetch, or >10d staleness (one missed weekly run + slack).
+CLOUDFLARE_DRIFT_STATE = _env("CLOUDFLARE_DRIFT_STATE", "/cloudflare-drift/state.json")
+CLOUDFLARE_DRIFT_MAX_AGE_S = float(_env("CLOUDFLARE_DRIFT_MAX_AGE_D", "10")) * 86400
+
 # Weekly kopia snapshot verify: the host cron (kopia-verify.sh, kopia role) writes
 # {"ts": epoch, "ok": bool, "msg": str} after each run; we alert on a FAILED verify
 # (detected bit-rot / an unreadable blob — failures the old `| logger` cron silently
@@ -223,11 +232,18 @@ B2_TREND_MTIME_QUERY = _env(
 )
 B2_TREND_MAX_AGE_S = float(_env("B2_TREND_MAX_AGE_D", "2.5")) * 86400
 
-# Scrutiny SMART freshness: the collector cron runs daily (00:00) and has no usable
-# container healthcheck (cron is PID 1) — a silently-dead collector only shows as
-# aging collector_date values in the web API. 26h allows one run + slack.
+# Scrutiny SMART freshness + health: the collector cron runs daily (00:00) and has no usable
+# container healthcheck (cron is PID 1) — a silently-dead collector only shows as aging
+# collector_date values in the web API. 26h allows one run + slack. On TOP of freshness we assert
+# each device's `device_status` == 0: freshness only proves the collector still reports, so a drive
+# that goes SMART-FAILED / breaches a Scrutiny attribute threshold while STILL reporting fresh data
+# would otherwise page nothing (Scrutiny stores to InfluxDB, not Prometheus, and its own Shoutrrr
+# notifier is unconfigured — this bridge check is the only alert path). SCRUTINY_TEMP_MAX is an
+# optional temperature ceiling (°C); 0 = disabled (default), since Scrutiny already folds the SMART
+# temperature attribute into device_status — the ceiling is just an earlier-warning lever.
 SCRUTINY_URL = _env("SCRUTINY_URL", "http://scrutiny:8080").rstrip("/")
 SCRUTINY_MAX_AGE_H = float(_env("SCRUTINY_MAX_AGE_H", "26"))
+SCRUTINY_TEMP_MAX = float(_env("SCRUTINY_TEMP_MAX", "0"))
 
 # Loki log-ingestion freshness: Loki's Kuma /ready probe stays green even when promtail
 # stops SHIPPING (DOCKER_HOST/docker-proxy break, positions-file corruption, relabel
@@ -541,7 +557,60 @@ def backup_size_regression(snapshots, drop_pct, min_history):
     )
 
 
+def backup_presence_regression(listings, min_history):
+    """Pure: did a consistently-backed-up service directory vanish from the latest snapshot? (ok, msg).
+
+    `listings` is a chronological list (latest LAST) of {top_level_dir_name: recursive_file_count}
+    maps — one per snapshot, from each snapshot's root directory listing. A service is "present" in a
+    snapshot when its dir is there with > 0 files. The expected set is every dir present in ALL of the
+    trailing `min_history` snapshots before the latest; we page if any expected dir is missing (or
+    dropped to 0 files) in the latest — a whole service silently leaving backup scope, which the
+    aggregate backup_size_regression can't see once the service is small (< the 20% floor; e.g.
+    portainer is ~0.05% of the tree). A newly-added service isn't in the priors, so it's never
+    "expected" (no false page on an add); an intentional removal stops being expected after one cycle
+    (it drops out of the prior window). Fewer than min_history+1 snapshots -> too little baseline, up.
+    An empty latest listing -> skip (a genuine total loss is already caught by the size guard above).
+    """
+    if len(listings) < min_history + 1:
+        return True, "presence guard skipped — only %d snapshot(s) of history" % len(
+            listings
+        )
+    latest = listings[-1]
+    if not latest:
+        return True, "presence guard skipped — latest listing empty"
+    priors = listings[-(min_history + 1) : -1]
+
+    def present(m, name):
+        return m.get(name, 0) > 0
+
+    expected = {n for n in priors[0] if all(present(p, n) for p in priors)}
+    missing = sorted(n for n in expected if not present(latest, n))
+    if missing:
+        return False, (
+            "%d service dir(s) vanished from the latest backup (present in the prior %d "
+            "snapshots): %s — a kopiaignore over-match or dropped bind mount?"
+            % (len(missing), min_history, ", ".join(missing))
+        )
+    return True, "all %d expected service dir(s) present" % len(expected)
+
+
 # --- checks: each returns (ok, msg) -----------------------------------------
+
+
+def _kopia_dir_files(root_id):
+    """{top_level_dir_name: recursive_file_count} for a Kopia snapshot's root object (dirs only).
+
+    Fetches /api/v1/objects/<rootID>, whose `entries` list carries each child's type ('d'/'f') and,
+    for directories, a recursive `summ.files`. Feeds check_backup's presence guard.
+    """
+    if not root_id:
+        return {}
+    data = _get_json(KOPIA_URL + "/api/v1/objects/" + root_id)
+    return {
+        e.get("name"): int((e.get("summ") or {}).get("files", 0))
+        for e in (data.get("entries") or [])
+        if e.get("type") == "d"
+    }
 
 
 def check_backup():
@@ -571,7 +640,21 @@ def check_backup():
     )
     if not size_ok:
         return False, size_msg
-    return True, "last snapshot %.1fh ago, 0 errors; %s" % (age_h, size_msg)
+    # Presence guard: the aggregate size floor can't see a WHOLE small service dir vanish (portainer
+    # is ~0.05% of the tree, far under the 20% floor). Fetch the top-level dir listing of the latest +
+    # trailing snapshots and page if a consistently-backed-up service dir left the latest.
+    recent = sorted(snaps, key=lambda s: s.get("endTime") or s.get("startTime") or "")[
+        -(BACKUP_SIZE_MIN_HISTORY + 1) :
+    ]
+    listings = [_kopia_dir_files(s.get("rootID")) for s in recent]
+    pres_ok, pres_msg = backup_presence_regression(listings, BACKUP_SIZE_MIN_HISTORY)
+    if not pres_ok:
+        return False, pres_msg
+    return True, "last snapshot %.1fh ago, 0 errors; %s; %s" % (
+        age_h,
+        size_msg,
+        pres_msg,
+    )
 
 
 def check_disk():
@@ -1109,11 +1192,56 @@ def scrutiny_freshness(summary, max_age_h, now=None):
     return True, "%d device(s) reported within %gh" % (n, max_age_h)
 
 
+def _scrutiny_status_desc(status):
+    """Human-readable reason for a non-zero Scrutiny device_status (a bitwise enum)."""
+    if not isinstance(status, int):
+        return "device_status %s" % status
+    reasons = []
+    if status & 1:
+        reasons.append("SMART self-assessment FAILED")
+    if status & 2:
+        reasons.append("Scrutiny attribute threshold breached")
+    return ", ".join(reasons) or ("device_status %s" % status)
+
+
+def scrutiny_health(summary, temp_max=0):
+    """Pure: any non-archived device reporting a drive failure or over-temp? (ok, msg).
+
+    `summary` is scrutiny's /api/summary data.summary dict. device_status is 0 when the drive
+    passes both SMART's own self-assessment AND Scrutiny's attribute thresholds, non-zero on a
+    failure — the actual drive-failure signal the freshness check (which only proves the collector
+    still reports) can't see. A missing device_status is treated as unknown -> ok (don't false-page
+    on an API that omits the field). temp_max > 0 adds a temperature ceiling (°C); 0 disables it.
+    """
+    failing, hot = [], []
+    for wwn, entry in (summary or {}).items():
+        dev = entry.get("device") or {}
+        if dev.get("archived"):
+            continue
+        name = dev.get("device_name") or wwn
+        status = dev.get("device_status")
+        if status not in (0, None):
+            failing.append("%s (%s)" % (name, _scrutiny_status_desc(status)))
+        if temp_max:
+            temp = (entry.get("smart") or {}).get("temp")
+            if temp is not None and temp > temp_max:
+                hot.append("%s (%g°C > %g°C)" % (name, temp, temp_max))
+    problems = failing + hot
+    if problems:
+        return False, "SMART health: " + ", ".join(problems)
+    return True, "SMART health ok"
+
+
 def check_scrutiny():
     data = _get_json(SCRUTINY_URL + "/api/summary")
-    return scrutiny_freshness(
-        (data.get("data") or {}).get("summary"), SCRUTINY_MAX_AGE_H
-    )
+    summary = (data.get("data") or {}).get("summary")
+    fresh_ok, fresh_msg = scrutiny_freshness(summary, SCRUTINY_MAX_AGE_H)
+    if not fresh_ok:
+        return False, fresh_msg
+    health_ok, health_msg = scrutiny_health(summary, SCRUTINY_TEMP_MAX)
+    if not health_ok:
+        return False, health_msg
+    return True, "%s; %s" % (fresh_msg, health_msg)
 
 
 def pi_pressure(load_json, mem_json, fs_json, load_max, mem_min_mb, disk_max_pct):
@@ -1385,6 +1513,40 @@ def check_docker_user():
     except ValueError, TypeError:
         return False, "DOCKER-USER verify state unparseable"
     return docker_user(state, age_s, DOCKER_USER_MAX_AGE_S)
+
+
+def cloudflare_drift(state, age_s, max_age_s):
+    """Pure: did the last Cloudflare-IP drift check pass, and recently? (ok, msg).
+
+    Same state-file idiom as home_allowlist/docker_user. The weekly cron writes state on every run;
+    ok=false means the hardcoded cloudflare_ips allowlist no longer matches Cloudflare's published
+    ranges (or the fetch failed) — a stale list silently DROPs a client on a new CF range at the
+    DOCKER-USER origin lock. A stale timestamp means the weekly cron stopped.
+    """
+    if not state.get("ok"):
+        return False, "Cloudflare IP allowlist drift: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return (
+            False,
+            "last Cloudflare-IP drift check %.1fd ago (max %.1fd) — verify cron stopped?"
+            % (age_s / 86400, max_age_s / 86400),
+        )
+    return True, "cloudflare_ips ok %.1fd ago: %s" % (
+        age_s / 86400,
+        state.get("msg", ""),
+    )
+
+
+def check_cloudflare_drift():
+    try:
+        with open(CLOUDFLARE_DRIFT_STATE) as fh:
+            state = json.load(fh)
+        age_s = time.time() - float(state.get("ts", 0))
+    except FileNotFoundError:
+        return False, "no Cloudflare-drift state (check never ran?)"
+    except ValueError, TypeError:
+        return False, "Cloudflare-drift state unparseable"
+    return cloudflare_drift(state, age_s, CLOUDFLARE_DRIFT_MAX_AGE_S)
 
 
 def b2_usage(state, age_s, max_age_s, cap_bytes, max_pct):
@@ -1937,6 +2099,11 @@ CHECKS = [
         check_home_allowlist,
     ),
     ("docker_user", _env("KUMA_PUSH_DOCKER_USER", ""), check_docker_user),
+    (
+        "cloudflare_drift",
+        _env("KUMA_PUSH_CLOUDFLARE_DRIFT", ""),
+        check_cloudflare_drift,
+    ),
     ("maintenance", _env("KUMA_PUSH_MAINTENANCE", ""), check_maintenance),
     ("b2_usage", _env("KUMA_PUSH_B2", ""), check_b2_usage),
     ("b2_trend", _env("KUMA_PUSH_B2_TREND", ""), check_b2_trend),

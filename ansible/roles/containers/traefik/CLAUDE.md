@@ -17,6 +17,11 @@ Metabase dashboard.
 - TLS via Cloudflare DNS-01; routes services at `<hostname>.<domain>` from their labels.
 - CrowdSec bouncer/WAF: `crowdsec-acquis.yaml`, `crowdsec-profiles.yaml`,
   `crowdsec-whitelist.yaml`, Discord alerts, home-IP allowlist updater.
+- **Host crons (state-file → monitor-bridge):** `crowdsec-update-home-allowlist.sh` (every 5 min),
+  `docker-user-verify.sh` (every 15 min), and `cloudflare-ip-drift.sh` (weekly) — the last diffs the
+  hardcoded `cloudflare_ips` (`group_vars/all.yml`, which gates trustedIPs + the DOCKER-USER DROP)
+  against Cloudflare's published ranges and pages the "Cloudflare IP Drift" monitor on a mismatch,
+  since a stale list silently DROPs a client on a newly-added CF range at the edge.
 - **Bouncer registration is rotation-safe (2026-07-03, exercised live):** the deploy probes
   LAPI with the configured `crowdsec_bouncer_api_key` and deletes + re-adds `traefik-bouncer`
   on mismatch (`cscli bouncers add` is create-only — without this, a rotated key leaves LAPI

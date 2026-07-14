@@ -441,3 +441,50 @@
     user: "{{ sys_user }}"
     job: /usr/local/bin/crowdsec-update-home-allowlist.sh
     state: present
+
+- name: Create the Cloudflare-IP drift monitor state directory
+  tags: [config]
+  # monitor-bridge bind-mounts this read-only (/cloudflare-drift) and its `cloudflare_drift` check
+  # alerts on a failed fetch, a mismatch, or staleness. Created sys_user-owned so the weekly cron can
+  # write state.json; traefik deploys before monitor-bridge (everything depends on it) so the mount
+  # source exists (else Docker auto-creates it root-owned and the non-root container can't read it).
+  ansible.builtin.file:
+    path: /var/lib/cloudflare-ip-drift
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Deploy Cloudflare IP drift check script
+  tags: [config]
+  ansible.builtin.template:
+    src: cloudflare-ip-drift.sh.j2
+    dest: /usr/local/bin/cloudflare-ip-drift.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0750"
+  become: true
+
+- name: Seed the Cloudflare-IP drift state on deploy
+  tags: [cron]
+  # Run once now so state.json exists + is fresh before the first weekly cron tick — else the
+  # cloudflare_drift monitor false-DOWNs on staleness for up to a week on a fresh host (the kopia /
+  # docker-user state-seed idiom). failed_when:false so a transient fetch failure at deploy time is
+  # the monitor's page, not a deploy blocker.
+  ansible.builtin.command: /usr/local/bin/cloudflare-ip-drift.sh
+  become: true
+  become_user: "{{ sys_user }}"
+  changed_when: false
+  failed_when: false
+
+- name: Schedule weekly Cloudflare IP drift check
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "Check Cloudflare IP allowlist drift"
+    minute: "17"
+    hour: "5"
+    weekday: "1"
+    user: "{{ sys_user }}"
+    job: /usr/local/bin/cloudflare-ip-drift.sh
+    state: present
