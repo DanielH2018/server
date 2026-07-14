@@ -40,6 +40,11 @@ jobs:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
         run: |
           git fetch origin "$BASE_REF" --depth=1
+          # Scope is compose templates ONLY: a Renovate bump to a version-bearing Dockerfile FROM
+          # (ical-proxy python:3.14-slim, peanut debian:bookworm-slim) is deliberately NOT boot-smoked
+          # here. Those are manual-merge dockerfile-manager updates (no custom.regex automerge match),
+          # and a broken build / unhealthy container is caught post-merge by the gitops host health
+          # gate (rollback + hold + Discord page) — same "covered downstream" posture as _SKIP_BARE_BOOT.
           diff="$(git diff "origin/$BASE_REF"...HEAD -- 'ansible/roles/containers/**/templates/docker-compose.yml.j2')"
           images="$(printf '%s' "$diff" | uv run python scripts/smoke_extract.py)"
           echo "list<<EOF" >> "$GITHUB_OUTPUT"

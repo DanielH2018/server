@@ -7,4 +7,15 @@ OnFailure=renovate-notify-alert.service
 [Service]
 Type=oneshot
 User={{ sys_user }}
+# Sandbox: a narrow notifier — queries open PRs over HTTPS and writes ONLY its state dir — so it
+# can be confined, unlike the gitops-deploy unit which deploys the whole fleet. Limits blast radius
+# once a read-only GitHub PAT (renovate_notify_github_token) is wired in and it parses attacker-
+# influenceable API JSON. ReadWritePaths is the only writable path (last_run/last_notified markers);
+# the script + config are read-only (reads are always allowed under ProtectSystem).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/var/lib/renovate-notify
+Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=/usr/bin/python3 /opt/renovate-notify/renovate_notify.py

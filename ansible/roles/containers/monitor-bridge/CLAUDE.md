@@ -337,10 +337,11 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   the state and the descriptive msg lands in the event + Discord notification. Trade-off:
   a dead bridge pages after one missed 600s window (acceptable — that's the dead-man's
   switch doing its job).
-- **Startup/redeploy grace for the reach-out checks (`STARTUP_GRACE`, 2026-07-12):** the four
+- **Startup/redeploy grace for the reach-out checks (`STARTUP_GRACE`, 2026-07-12):** the six
   checks that poll a live app dependency with **no reachability gate and no per-check hysteresis**
   — **Backup Freshness** (kopia), **n8n Prod Workflows** (n8n), **Arr Queue Warnings**
-  (sonarr/radarr), **Pi Pressure** (the Pi glances) — get a consecutive-down grace applied in
+  (sonarr/radarr), **Prowlarr Indexers** (prowlarr) and **SMART Data / Health** (scrutiny) (both
+  added 2026-07-14), **Pi Pressure** (the Pi glances) — get a consecutive-down grace applied in
   `run_once` (peer mechanism to `PROM_DEPENDENT`/`LOKI_DEPENDENT`, but a *hysteresis* not a
   *suppression*). Cause: the bridge's first cycle after the **weekly Sunday 07:30 host reboot**
   runs before those heavy apps finish starting, so each un-graced `max_retries=0` monitor flipped

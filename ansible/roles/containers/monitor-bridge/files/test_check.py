@@ -3021,6 +3021,31 @@ def test_startup_grace_disjoint_from_run_once_skip_sets():
         assert check.STARTUP_GRACE.isdisjoint(deps)
 
 
+def test_startup_grace_covers_every_ungated_reach_out_check():
+    # Completeness guard (the 2026-07-14 gap: prowlarr_indexers + scrutiny were reach-out checks
+    # structurally identical to the four graced ones, yet omitted). Every check that polls a live
+    # app dependency via _get_json — and is NEITHER reachability-gated NOR carrying its own
+    # consecutive-streak hysteresis — must be in STARTUP_GRACE, else it false-pages on the
+    # weekly-reboot first cycle. A new reach-out check that skips the set trips this test, forcing
+    # a conscious classify (add to STARTUP_GRACE, or to the self-hysteresis allowlist below).
+    import inspect
+
+    gated = set(check.PROM_DEPENDENT) | set(check.LOKI_DEPENDENT)
+    for deps in check.EXPORTER_DEPENDENT.values():
+        gated |= set(deps)
+    # These ride out the reboot blip with their own down-streak hysteresis instead of the
+    # STARTUP_GRACE mechanism (HA_CONSECUTIVE / DISCORD_CONSECUTIVE).
+    self_hysteresis = {"ha_heartbeat", "discord"}
+    reach_out = {
+        name for name, _, fn in check.CHECKS if "_get_json(" in inspect.getsource(fn)
+    }
+    ungated = reach_out - gated - self_hysteresis
+    missing = ungated - check.STARTUP_GRACE
+    assert not missing, "ungated reach-out checks missing startup grace: %s" % sorted(
+        missing
+    )
+
+
 def _wire_run_once_grace(monkeypatch, results):
     """Drive run_once with Prometheus+Loki UP and one STARTUP_GRACE check whose eval returns
     `results` in order across calls; capture the (ok, msg) pushed for it each cycle."""

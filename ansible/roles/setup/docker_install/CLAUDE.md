@@ -46,3 +46,13 @@ repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
   both need `python3-debian` and both clean up the legacy `.list`.
 - Networks are created here once; container roles only *attach* (see the `networks.yml.j2`
   macro). Adding a new shared network means editing the `loop:` here.
+- **`live-restore` covers every container EXCEPT the `network_mode: service:wireguard` pair.** A
+  daemon restart — a `docker-ce` upgrade OR **any** `daemon.json` edit in task 4 — keeps the ~63
+  normal containers running, but re-triggers `docker-compose-qbittorrent.service`
+  (`Requires=docker.service`, `Type=oneshot`), which re-runs `docker compose up -d` and RECREATES
+  both `wireguard` + `qbittorrent` (the same boot-race unit the [[qbittorrent]] role documents). It
+  self-heals (the wg0 listen-interface binding persists in `./config`), but after any daemon
+  restart confirm the tunnel came back: `docker exec qbittorrent curl -s
+  localhost:8080/api/v2/transfer/info` should show `dht_nodes` > 0 — a silent rebind to `eth0`
+  stalls every torrent at 0% while the TCP-only healthcheck stays green (qbittorrent role's
+  UDP-leak failure mode).

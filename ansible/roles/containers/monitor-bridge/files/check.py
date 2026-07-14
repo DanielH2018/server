@@ -2166,16 +2166,21 @@ EXPORTER_DEPENDENT = {
 # surfaces (it evaluates whenever Loki is reachable). Guarded by a test against CHECKS.
 LOKI_DEPENDENT = frozenset({"loki_ingestion", "recyclarr", "janitorr"})
 
-# Reach-out checks that poll a live app dependency (kopia/n8n/sonarr/radarr/the Pi glances) with NO
-# reachability gate above them and NO per-check hysteresis of their own — unlike check_ha_heartbeat,
-# whose HA_CONSECUTIVE grace rides out exactly this. On the bridge's first cycle after the weekly
-# host reboot those dependencies are still starting, so an un-graced check flips its max_retries=0
-# monitor DOWN on that one transient cycle and pages (then recovers next cycle). run_once holds each
-# of these `up` for the first GRACE_CYCLES-1 consecutive down cycles; the GRACE_CYCLES'th straight
-# down still pages a genuinely-dead dependency. Must be DISJOINT from the run_once skip sets
+# Reach-out checks that poll a live app dependency (kopia/n8n/sonarr/radarr/prowlarr/scrutiny/the Pi
+# glances) with NO reachability gate above them and NO per-check hysteresis of their own — unlike
+# check_ha_heartbeat/check_discord, whose HA_CONSECUTIVE/DISCORD_CONSECUTIVE grace rides out exactly
+# this. On the bridge's first cycle after the weekly host reboot those dependencies are still
+# starting, so an un-graced check flips its max_retries=0 monitor DOWN on that one transient cycle
+# and pages (then recovers next cycle). run_once holds each of these `up` for the first
+# GRACE_CYCLES-1 consecutive down cycles; the GRACE_CYCLES'th straight down still pages a
+# genuinely-dead dependency. Must be DISJOINT from the run_once skip sets
 # (PROM_DEPENDENT/LOKI_DEPENDENT/EXPORTER_DEPENDENT) so a graced check reaches the eval path every
-# cycle — guarded, with the "real check name" guard, by a test against CHECKS.
-STARTUP_GRACE = frozenset({"backup", "n8n", "arr_queue", "pi_pressure"})
+# cycle. Guarded by a test against CHECKS: the "real check name" guard PLUS a completeness guard
+# that every un-gated _get_json reach-out check is in here (prowlarr_indexers/scrutiny were added
+# 2026-07-14 after they were found missing — the weekly-reboot flap's original set omitted them).
+STARTUP_GRACE = frozenset(
+    {"backup", "n8n", "arr_queue", "pi_pressure", "prowlarr_indexers", "scrutiny"}
+)
 
 _grace_streaks = {}
 
