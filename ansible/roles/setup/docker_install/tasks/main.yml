@@ -138,6 +138,15 @@
     # live-restore keeps containers running across a daemon restart (e.g. a
     # docker-ce package upgrade), so a Docker restart doesn't bounce all ~42
     # containers. Safe on this single-node, non-swarm host.
+    #
+    # default-address-pools: Docker's built-in default (172.17-172.31/16 + 192.168.0.0/16
+    # as /20s) is nearly exhausted — all fourteen 172.x /16 slots are used and new isolation
+    # nets have started landing in the 192.168.0.0/16 fallback, which also squats on a common
+    # home-LAN range AND on the RFC1918 blocks Authelia/Unbound/Mullvad treat as trusted. Pin
+    # new-network allocation to 10.200.0.0/16 in /24s (256 nets): clear of the LAN (10.0.0.0/24),
+    # wg-easy (10.8.0.0/24), the Mullvad tunnel (10.64.0.0/10), and Docker's own 172.16/12 +
+    # 192.168/16 defaults. Only NEW `docker network create` calls draw from this; the ~20
+    # existing networks keep their current subnets across the restart (live-restore).
     content: |
       {
         "log-driver": "json-file",
@@ -145,7 +154,10 @@
           "max-size": "10m",
           "max-file": "3"
         },
-        "live-restore": true
+        "live-restore": true,
+        "default-address-pools": [
+          { "base": "10.200.0.0/16", "size": 24 }
+        ]
       }
     mode: "0644"
     owner: root

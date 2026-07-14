@@ -24,7 +24,12 @@ repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
    and appends them to the `docker` group.
 4. **Daemon config** (`/etc/docker/daemon.json`): json-file log limits (10m × 3) +
    `live-restore: true` so a daemon restart (e.g. a `docker-ce` upgrade) doesn't bounce all
-   ~58 containers. Restarts Docker only when the file changes.
+   ~58 containers, **+ `default-address-pools` (`10.200.0.0/16` in /24s)** — the built-in
+   default pool (172.17-172.31/16 + 192.168.0.0/16 /20s) was nearly full and new isolation nets
+   had started landing in 192.168.x (a common home-LAN range + the RFC1918 blocks
+   Authelia/Unbound/Mullvad trust). `10.200.0.0/16` is clear of the LAN, wg-easy (10.8/24), the
+   Mullvad tunnel (10.64/10), and Docker's own defaults; only NEW networks draw from it (existing
+   ones keep their subnets). Restarts Docker only when the file changes.
 5. **Networks:** creates `proxy` (`{{ docker_network }}`), `monitoring`, `media`, `apps`,
    `homepage_private`, `lifecycle` (Watchtower/Autoheal ↔ docker-proxy-lifecycle only),
    `codeserver` (code-server ↔ docker-proxy-codeserver only — lets the shared docker-proxy stay
