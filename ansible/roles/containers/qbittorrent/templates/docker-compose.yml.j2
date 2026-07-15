@@ -30,12 +30,20 @@ services:
       - PGID={{ pgid }}
       - TZ={{ tz }}
       - DOCKER_MODS=linuxserver/mods:wireguard-mullvad
-      - MULLVAD_PRIVATE_KEY={{ wireguard_interface_private_key }}
-      - MULLVAD_ACCOUNT={{ mullvad_account }}
+      # Mullvad private key + account file-mounted, NOT inline, so these tier-external creds stay out
+      # of the container Env the read-only docker-proxy exposes to every neighbor (2026-07-15 review
+      # L2). The LSIO base's init-envfile reads FILE__<VAR> from the file into <VAR> BEFORE the
+      # wireguard-mullvad mod's install script reads it (s6 order init-envfile → init-os-end → ... →
+      # init-mods → the mod). The rendered files are `| trim`med — init-envfile does NOT strip a
+      # trailing newline (it only warns), and a newline would corrupt the key/account.
+      - FILE__MULLVAD_PRIVATE_KEY=/run/secrets/mullvad_key
+      - FILE__MULLVAD_ACCOUNT=/run/secrets/mullvad_account
       - MULLVAD_LOCATION=us-qas
       - LAN_NETWORKS=192.168.0.0/24,10.0.0.0/24,172.16.0.0/12
     volumes:
       - ./config:/config
+      - ./mullvad-secrets/key:/run/secrets/mullvad_key:ro
+      - ./mullvad-secrets/account:/run/secrets/mullvad_account:ro
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
       - net.ipv6.conf.all.disable_ipv6=1

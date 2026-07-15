@@ -7,16 +7,47 @@
   vars:
     common_dirs_to_create:
       - "{{ container_item.name }}/config/wg_confs"
+      - "{{ container_item.name }}/mullvad-secrets"  # 0600 FILE__ mounts for the Mullvad creds
       - "data/torrents"
       - "data/torrents/tv-sonarr"
       - "data/torrents/radarr"
       - "data/torrents/incomplete"
+
+- name: Render the Mullvad private key to a file (kept out of the container's Env)
+  tags: [config]
+  # Inlined as MULLVAD_PRIVATE_KEY it lands in the wireguard container's Env, readable via the
+  # read-only docker-proxy by any neighbor. The LSIO init-envfile reads FILE__MULLVAD_PRIVATE_KEY
+  # from this file before the mullvad mod runs (2026-07-15 review L2). `| trim`: init-envfile does
+  # NOT strip a trailing newline and one would corrupt the key. no_log; 0600 owned by sys_user (the
+  # wireguard init reads it as root — 1000-owned is fine). NO become.
+  no_log: true
+  ansible.builtin.copy:
+    content: "{{ wireguard_interface_private_key | trim }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/mullvad-secrets/key"
+    mode: "0600"
+  register: qbittorrent_cfg_mullvad_key
+
+- name: Render the Mullvad account number to a file (kept out of the container's Env)
+  tags: [config]
+  # Same rationale as the key above — MULLVAD_ACCOUNT via FILE__, trailing whitespace trimmed.
+  no_log: true
+  ansible.builtin.copy:
+    content: "{{ mullvad_account | trim }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/mullvad-secrets/account"
+    mode: "0600"
+  register: qbittorrent_cfg_mullvad_account
 
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # The Mullvad cred files are read by the wireguard mod once at container init, so a rotation
+    # must recreate the sidecar to re-read them (recreate: auto skips a content-only change).
+    # Recreating wireguard also recreates qbittorrent (shared netns); the wg0 rebind task below
+    # re-runs, and the boot systemd unit keeps the start-order race covered.
+    common_config_changed: "{{ (qbittorrent_cfg_mullvad_key is changed) or (qbittorrent_cfg_mullvad_account is changed) }}"
 
 # qBittorrent.conf is stateful (it lives in the bind-mounted ./config and is rewritten
 # by qBittorrent itself, so it is NOT templated). Enforce the VPN interface binding via

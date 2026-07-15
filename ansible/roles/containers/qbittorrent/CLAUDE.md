@@ -17,6 +17,11 @@ kill-switch. See repo-root `CLAUDE.md` for shared conventions.
   `wireguard-mullvad` mod guarantees that egress is Mullvad-only).
 - Mullvad creds (`mullvad_account`, `wireguard_interface_private_key`) come from secrets;
   location pinned `us-qas`. WireGuard needs `NET_ADMIN`/`NET_RAW`; qBittorrent does not.
+  **The creds are file-mounted, not inline env** (`FILE__MULLVAD_PRIVATE_KEY`/`FILE__MULLVAD_ACCOUNT`
+  → `./mullvad-secrets/{key,account}`, 0600) so these tier-external secrets stay out of the
+  container Env the docker-proxy exposes (2026-07-15 review L2). The LSIO base's `init-envfile`
+  resolves `FILE__<VAR>` into `<VAR>` before the `wireguard-mullvad` mod reads it (verified s6 order);
+  the files are `| trim`med because init-envfile does not strip a trailing newline.
 - Watchtower disabled on the wireguard container.
 - **Mounts `containers/data/torrents` at `/data/torrents`** (scoped from the whole-tree
   `/data` mount, 2026-07-02 security review — the largest untrusted-input surface shouldn't
