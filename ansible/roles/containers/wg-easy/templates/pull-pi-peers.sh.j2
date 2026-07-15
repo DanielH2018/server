@@ -6,7 +6,10 @@
 #
 # sudo rsync on the Pi (it has NOPASSWD sudo) is REQUIRED: the files are root:root 0600/0640,
 # unreadable to the ubuntu SSH user. BatchMode=yes so a broken key/host-key fails fast rather than
-# hanging the cron. No --delete: a peer removed on the Pi lingering in the backup is harmless, and
+# hanging the cron. The Pi's SSH host key is pre-pinned into the sys_user known_hosts at deploy (the
+# wg-easy role slurps it over Ansible's trusted connection), so StrictHostKeyChecking=accept-new
+# VERIFIES against that pin (a CHANGED key is rejected) instead of blind-TOFU-accepting on the first
+# connect. No --delete: a peer removed on the Pi lingering in the backup is harmless, and
 # --delete would wipe the offsite copy if the source were ever momentarily empty/unreadable.
 #
 # Reporting: writes {"ts","ok","msg"} to STATE; monitor-bridge's `pi_peers` check reads it (read-only

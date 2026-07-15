@@ -5,7 +5,7 @@
 # — a bad `cscli collections upgrade`, a hub rename dropping appsec-virtual-patching/appsec-generic-
 # rules, a broken appsec-default config — the edge silently degrades to ban-list-only with NO signal:
 # Scrape Targets only catches a TOTAL crowdsec death (the container stays up + `cscli lapi status`
-# healthy). This asserts the live agent has >=1 ENABLED appsec-config AND >=1 inband appsec-rule
+# healthy). This asserts the live agent has >=1 ENABLED appsec-config AND >=1 ENABLED appsec-rule
 # loaded — both traffic-independent (unlike the cs_appsec_* request counters, which read zero on a
 # quiet homelab and would false-page). Writes {"ts","ok","msg"} to STATE every run; monitor-bridge's
 # `appsec` check reads it (:ro bind mount) and pushes the "CrowdSec AppSec" Kuma monitor on a failed
@@ -38,15 +38,19 @@ if [ "$CONFIGS" -lt 1 ]; then
   exit 1
 fi
 
+# Count ENABLED appsec-rules (symmetric with the appsec-configs filter above). `appsec-rules list`
+# doesn't expose inband-vs-outofband (that's an appsec-config assignment, not a rule property), so
+# `status == "enabled"` — a loaded, non-disabled rule — is the closest traffic-independent proxy for
+# "the WAF is actually armed"; the old unfiltered count also counted any installed-but-disabled rule.
 RULES=$(docker exec crowdsec cscli appsec-rules list -o json 2>/dev/null \
-  | jq '(.["appsec-rules"] // []) | length' 2>/dev/null)
+  | jq '[.["appsec-rules"][]? | select(.status == "enabled")] | length' 2>/dev/null)
 if [ -z "$RULES" ]; then
   write_state false "cscli appsec-rules list failed (crowdsec down / cscli error)"
   exit 1
 fi
 if [ "$RULES" -lt 1 ]; then
-  write_state false "0 inband appsec-rules loaded — WAF config present but not enforcing"
+  write_state false "0 enabled appsec-rules loaded — WAF config present but not enforcing"
   exit 1
 fi
 
-write_state true "$CONFIGS appsec-configs enabled, $RULES inband rules loaded"
+write_state true "$CONFIGS appsec-configs enabled, $RULES enabled rules loaded"

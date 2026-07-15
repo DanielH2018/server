@@ -45,6 +45,33 @@
     mode: "0755"
   become: true
 
+- name: Read daniel-pi's SSH host key for the peer-pull known_hosts pin
+  tags: [cron]
+  when: inventory_hostname == 'daniel-server'
+  # Pull the Pi's host public key over Ansible's own (operator-trusted) connection so the peer-pull
+  # cron can VERIFY it rather than blind-TOFU-accept whatever answers on first connect. failed_when
+  # false: an unreachable Pi at deploy must not fail the server play — pull-pi-peers.sh's accept-new
+  # still seeds it on the next successful connect (and rejects a CHANGED key either way).
+  delegate_to: daniel-pi
+  ansible.builtin.slurp:
+    src: /etc/ssh/ssh_host_ed25519_key.pub
+  register: wg_easy_pi_hostkey
+  failed_when: false
+
+- name: Pin daniel-pi's SSH host key into the peer-pull known_hosts
+  tags: [cron]
+  when:
+    - inventory_hostname == 'daniel-server'
+    - wg_easy_pi_hostkey.content is defined
+  # No become: write into sys_user's own ~/.ssh/known_hosts (the cron runs as sys_user) so it stays
+  # sys_user-owned and cron-readable. Idempotent — re-pinning the same key is a no-op; a rotated Pi
+  # host key (re-image) is re-pinned on the next deploy.
+  ansible.builtin.known_hosts:
+    path: "/home/{{ sys_user }}/.ssh/known_hosts"
+    name: "{{ hostvars['daniel-pi'].ansible_host }}"
+    key: "{{ hostvars['daniel-pi'].ansible_host }} {{ (wg_easy_pi_hostkey.content | b64decode).split()[0] }} {{ (wg_easy_pi_hostkey.content | b64decode).split()[1] }}"
+    state: present
+
 - name: Deploy the Pi wg-easy peer-backup pull script
   tags: [cron]
   when: inventory_hostname == 'daniel-server'
