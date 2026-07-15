@@ -152,8 +152,13 @@ def _write_marker(path: str, sha: str | None) -> None:
         except FileNotFoundError:
             pass
     else:
-        with open(path, "w") as fh:
+        # Atomic temp+rename (like _write_pending): monitor-bridge reads LAST_RUN/hold_sha every
+        # 300s with no retry and float()s an empty read into a false "unparseable" DOWN page — the
+        # torn-write class 58056d18 closed for the shell state writers, applied to the Python twins.
+        tmp = path + ".tmp"
+        with open(tmp, "w") as fh:
             fh.write(sha)
+        os.replace(tmp, path)
 
 
 def read_hold() -> str | None:

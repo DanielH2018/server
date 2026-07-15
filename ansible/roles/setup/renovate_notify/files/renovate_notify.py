@@ -127,8 +127,13 @@ def read_state(path: str) -> str:
 
 
 def write_state(path: str, fp: str) -> None:
-    with open(path, "w") as fh:
+    # Atomic temp+rename: the last_run twin written below is read by monitor-bridge every 300s with
+    # no retry, and a torn read float()s an empty string into a false DOWN page (the class 58056d18
+    # closed for the shell state writers). Shared by last_notified + last_run for consistency.
+    tmp = path + ".tmp"
+    with open(tmp, "w") as fh:
         fh.write(fp)
+    os.replace(tmp, path)
 
 
 def main() -> int:
@@ -182,9 +187,9 @@ def main() -> int:
 
     if not dry:
         # Liveness marker for monitor-bridge — only on a clean completion (a fetch
-        # exception propagates and skips this, so a broken notifier goes stale).
-        with open(os.path.join(state_dir, "last_run"), "w") as fh:
-            fh.write(str(time.time()))
+        # exception propagates and skips this, so a broken notifier goes stale). Atomic
+        # (via write_state) so a torn read can't false-page Renovate Notifier — Alive.
+        write_state(os.path.join(state_dir, "last_run"), str(time.time()))
     return 0
 
 
