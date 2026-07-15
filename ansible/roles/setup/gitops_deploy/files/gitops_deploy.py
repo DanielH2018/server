@@ -59,6 +59,16 @@ TASKS_ALERT_FILE = "/var/lib/gitops-deploy/tasks_alerted_sha"
 # Same throttle for a meta-only push (a role meta/deps.yml change — the cross-service deploy
 # graph, not auto-deployed): alert once per SHA so the operator redeploys the affected service(s).
 META_ALERT_FILE = "/var/lib/gitops-deploy/meta_alerted_sha"
+# Undelivered post-merge alerts, retried at the TOP of every tick. The secrets/tasks/meta/combined
+# channels `git merge --ff-only` BEFORE their delivery-gated marker write, so once merged
+# local==origin and the next tick short-circuits at `noop` (main) before ever re-reaching the alert
+# code — a single transient discord() failure (timeout/5xx/Cloudflare-1010/DNS blip) would otherwise
+# drop that alert forever (the rotated secret sits stale in its container / the tasks|meta change sits
+# ff-merged-but-unapplied, with no other signal). This queue decouples DELIVERY from the git action:
+# an alert that fails to send is persisted here keyed by "<channel>:<sha>" and drain_pending() resends
+# it every tick until a confirmed 2xx clears it. The per-SHA markers above still gate DETECTION (so a
+# delivered alert isn't re-queued on the broad path's every-tick re-eval); this queue owns delivery.
+PENDING_ALERTS_FILE = "/var/lib/gitops-deploy/pending_alerts.json"
 # Last CT date (YYYY-MM-DD) we paged for a dirty working tree. The tick runs every
 # 30 min, so without this an open edit session would re-alert all day; we throttle
 # to one alert per day, fired on the first tick at/after DIRTY_ALERT_HOUR (07:00 CT).
@@ -177,6 +187,53 @@ def discord(content: str) -> bool:
         return False
 
 
+def _read_pending() -> dict[str, str]:
+    try:
+        with open(PENDING_ALERTS_FILE) as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except FileNotFoundError, json.JSONDecodeError:
+        return {}
+
+
+def _write_pending(pending: dict[str, str]) -> None:
+    os.makedirs(os.path.dirname(PENDING_ALERTS_FILE), exist_ok=True)
+    tmp = PENDING_ALERTS_FILE + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(pending, fh)
+    os.replace(
+        tmp, PENDING_ALERTS_FILE
+    )  # atomic — a torn write mustn't strand the queue
+
+
+def deliver(key: str, content: str) -> bool:
+    """Post an alert now, queuing it (keyed by "<channel>:<sha>") for retry on a delivery FAILURE so a
+    transient webhook blip can't permanently drop it — the ff-merged secrets/tasks/meta/combined paths
+    never re-reach their alert code on the next (noop) tick, so `discord()`'s own 'retry next tick'
+    doesn't hold for them. drain_pending() resends any queued entry every tick. Returns discord()'s result."""
+    pending = _read_pending()
+    if discord(content):
+        if pending.pop(key, None) is not None:
+            _write_pending(pending)
+        return True
+    if pending.get(key) != content:
+        pending[key] = content
+        _write_pending(pending)
+    return False
+
+
+def drain_pending() -> None:
+    """Resend every queued-but-undelivered alert. Runs first thing each tick — BEFORE the
+    noop/hold/dirty short-circuits — so an alert whose original tick ff-merged (local==origin -> the
+    next tick noops) still gets redelivered. Clears each entry on a confirmed 2xx."""
+    pending = _read_pending()
+    if not pending:
+        return
+    remaining = {k: c for k, c in pending.items() if not discord(c)}
+    if remaining != pending:
+        _write_pending(remaining)
+
+
 def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
     """Fire the tasks/ and meta/deps.yml defer-and-alert for services NOT redeployed this tick.
 
@@ -187,24 +244,26 @@ def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
     alerts at most once per origin SHA and advances its marker only on a confirmed delivery."""
     pending_tasks, pending_meta = deferred_service_alerts(cs, deployed)
     if pending_tasks and _read_marker(TASKS_ALERT_FILE) != origin:
-        # Mark only on confirmed delivery, else retry next tick (see discord()).
-        if discord(
+        # Mark DETECTION here (once per SHA); deliver() owns delivery + retry. This tick ff-merged, so
+        # the next tick noops without re-reaching this code — the queue, not a re-eval, redelivers.
+        _write_marker(TASKS_ALERT_FILE, origin)
+        deliver(
+            f"tasks:{origin}",
             f"⚠️ gitops-deploy: a structural dir (`tasks/`/`defaults/`/`vars/`/`handlers/`) changed "
             f"for `{', '.join(sorted(pending_tasks))}` in `{origin[:8]}` with no redeploy of those "
             f"service(s) — fast-forwarded but **not applied** (those dirs aren't auto-deployed). "
-            f"Redeploy by hand: `ansible-playbook ansible/deploy.yml --tags <svc>`."
-        ):
-            _write_marker(TASKS_ALERT_FILE, origin)
+            f"Redeploy by hand: `ansible-playbook ansible/deploy.yml --tags <svc>`.",
+        )
     if pending_meta and _read_marker(META_ALERT_FILE) != origin:
-        # Mark only on confirmed delivery, else retry next tick (see discord()).
-        if discord(
+        _write_marker(META_ALERT_FILE, origin)
+        deliver(
+            f"meta:{origin}",
             f"⚠️ gitops-deploy: `meta/deps.yml` changed for "
             f"`{', '.join(sorted(pending_meta))}` in `{origin[:8]}` with no redeploy of those "
             f"service(s) — fast-forwarded but **not applied** (meta/ isn't auto-deployed; it "
             f"changes deploy ordering + dep closure). Redeploy the affected service(s) by hand: "
-            f"`ansible-playbook ansible/deploy.yml --tags <svc>`."
-        ):
-            _write_marker(META_ALERT_FILE, origin)
+            f"`ansible-playbook ansible/deploy.yml --tags <svc>`.",
+        )
 
 
 def _inspect(fmt: str, container: str, timeout: float = 15.0) -> str:
@@ -295,6 +354,11 @@ def deploy(services: set[str]) -> None:
 
 
 def main() -> int:
+    # Resend any alert a prior tick failed to deliver, BEFORE any short-circuit below: the ff-merged
+    # secrets/tasks/meta/combined paths never re-reach their alert code (local==origin -> noop), so a
+    # transient webhook failure is only recoverable here, not by discord()'s per-tick re-eval.
+    drain_pending()
+
     # A dirty working tree (operator may be mid-edit) is a healthy skip, not an
     # outage: we never deploy from it, but the tick completes and writes last_run so
     # a long edit session doesn't falsely trip the GitOps-Alive monitor.
@@ -346,14 +410,16 @@ def main() -> int:
         if (
             _read_marker(BROAD_FILE) != origin
         ):  # alert once per broad SHA, not every tick
-            # Mark only on confirmed delivery, else retry next tick (see discord()).
-            if discord(
+            # Mark DETECTION here; deliver() owns delivery + retry. (Broad doesn't ff-merge, so it
+            # would re-eval next tick — the marker stops a re-queue while the queue owns redelivery.)
+            _write_marker(BROAD_FILE, origin)
+            deliver(
+                f"broad:{origin}",
                 f"⚠️ gitops-deploy: shared template / inventory changed in "
                 f"`{origin[:8]}` — deferring to a manual full deploy "
                 f"(`ansible-playbook ansible/deploy.yml`), then `git merge --ff-only "
-                f"origin/{BRANCH}` on the host to clear it."
-            ):
-                _write_marker(BROAD_FILE, origin)
+                f"origin/{BRANCH}` on the host to clear it.",
+            )
         return 0
     if not cs.services:
         run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])  # docs-only etc.
@@ -362,14 +428,16 @@ def main() -> int:
         # reaches a container on its next deploy. Defer-and-alert (once per SHA) so the
         # operator redeploys the consumer(s); without this the rotated secret sits stale.
         if cs.secrets and _read_marker(SECRETS_ALERT_FILE) != origin:
-            # Mark only on confirmed delivery, else retry next tick (see discord()).
-            if discord(
+            # Mark DETECTION here (once per SHA); deliver() owns delivery + retry. This tick ff-merged
+            # (local==origin), so the next tick noops without re-reaching this — the queue redelivers.
+            _write_marker(SECRETS_ALERT_FILE, origin)
+            deliver(
+                f"secrets:{origin}",
                 f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
                 f"service template — fast-forwarded but **nothing was redeployed**. The "
                 f"rotated secret won't reach its container(s) until you redeploy them "
-                f"(`ansible-playbook ansible/deploy.yml --tags <svc>`)."
-            ):
-                _write_marker(SECRETS_ALERT_FILE, origin)
+                f"(`ansible-playbook ansible/deploy.yml --tags <svc>`).",
+            )
         # tasks/ and meta/deps.yml changes aren't auto-deployed but DO change what a deploy does,
         # so they must not sit silently ff-merged. Nothing was deployed this tick (deployed=set()),
         # so the full sets are flagged. Same helper runs on the deploy path for a combined push.
@@ -402,14 +470,20 @@ def main() -> int:
             deploy(cs.services)
         except Exception as exc2:  # noqa: BLE001 — best-effort restore; we still hold + alert
             log(f"rollback redeploy of the prior version also failed: {exc2}")
-        discord(
+        posted = discord(
             f"🚨 gitops-deploy: **deploy failed** on daniel-server.\n"
             f"`ansible-playbook` errored deploying `{', '.join(sorted(cs.services))}` from "
             f"`{origin[:8]}`:\n`{exc}`\n"
             f"Rolled back to `{local[:8]}`; the bad commit is held until origin advances past it.\n"
             f"**Action:** fix or revert the offending commit."
         )
-        return 1
+        # A rollback already surfaces via THIS detailed post + the GitOps Deploy — Status monitor
+        # (hold_sha). Exit 0 when the detailed post was delivered so systemd's
+        # OnFailure=gitops-deploy-alert.service (a GENERIC "unit failed" curl) doesn't ALSO fire — one
+        # detailed page, not a duplicate. Only if the detailed post failed (Cloudflare-1010/webhook
+        # down) exit 1, so OnFailure is the guaranteed backstop. last_run is written either way (the
+        # tick completed; the deployer is alive — GitOps-Alive stays green, Status carries the hold).
+        return 0 if posted else 1
 
     # Health-gate only services actually deployed on THIS host. A changed template
     # for an other-host-only service (dozzle is daniel-pi-only) renders no compose
@@ -449,13 +523,15 @@ def main() -> int:
         deploy(cs.services)
     except Exception as exc:  # noqa: BLE001 — best-effort restore; we still hold + alert
         log(f"rollback redeploy of the prior version also failed: {exc}")
-    discord(
+    posted = discord(
         f"🚨 gitops-deploy: **rollback** on daniel-server.\n"
         f"Service(s) `{', '.join(failed)}` from commit `{origin[:8]}` failed the health "
         f"gate and were rolled back to `{local[:8]}`.\n"
         f"**Action:** revert the offending Renovate PR — the bad commit is held until you do."
     )
-    return 1
+    # Exit 0 on a delivered detailed post so OnFailure's generic curl doesn't double-page (see the
+    # exec-failure path above); exit 1 only if the detailed post failed, leaving OnFailure the backstop.
+    return 0 if posted else 1
 
 
 if __name__ == "__main__":

@@ -169,3 +169,106 @@ def test_generic_crash_handler_still_pages():
     assert _calls(_handler(_main_guard_try(), "Exception"), "discord"), (
         "the generic crash handler must still post a Discord alert"
     )
+
+
+# --- write_hold-before-rollback ordering (run-4 M1) + deploy --frozen ---------
+# main() can't be imported (module-level `C = cfg()` reads /etc config absent in CI), so these AST
+# guards pin two source invariants that no behavioural test can reach.
+
+
+def _fn(name: str) -> ast.FunctionDef:
+    fn = next(
+        (
+            n
+            for n in ast.walk(_tree())
+            if isinstance(n, ast.FunctionDef) and n.name == name
+        ),
+        None,
+    )
+    assert fn is not None, f"{name}() not found in gitops_deploy.py"
+    return fn
+
+
+def _is_git_reset_hard(node: ast.AST) -> bool:
+    # A `run([... "git", "reset", "--hard", ...])` call — the rollback that reverts to the prior HEAD.
+    if not (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "run"
+        and node.args
+        and isinstance(node.args[0], ast.List)
+    ):
+        return False
+    consts = {e.value for e in node.args[0].elts if isinstance(e, ast.Constant)}
+    return {"reset", "--hard"} <= consts
+
+
+def test_write_hold_precedes_every_rollback_reset():
+    # The 2026-07-14 run-4 M1 fix: write_hold(origin) must run BEFORE the `git reset --hard` + rollback
+    # deploy() in BOTH failure paths, so a hung/SIGTERMed rollback still parks the bad commit on
+    # skip_hold instead of re-merging + redeploying it every tick. A refactor moving write_hold after
+    # the reset would otherwise reintroduce the strand-the-bad-commit loop and pass every other test.
+    main = _fn("main")
+    reset_lines = [n.lineno for n in ast.walk(main) if _is_git_reset_hard(n)]
+    # write_hold(<non-None>) linenos — write_hold(origin), NOT the write_hold(None) success-clear.
+    hold_lines = [
+        n.lineno
+        for n in ast.walk(main)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Name)
+        and n.func.id == "write_hold"
+        and n.args
+        and not (isinstance(n.args[0], ast.Constant) and n.args[0].value is None)
+    ]
+    assert len(reset_lines) >= 2, (
+        "expected both rollback `git reset --hard` calls in main()"
+    )
+    for rl in reset_lines:
+        assert any(0 < rl - hl <= 5 for hl in hold_lines), (
+            "each rollback `git reset --hard` (line %d) must be immediately preceded by "
+            "write_hold(origin)" % rl
+        )
+
+
+def test_deploy_uses_frozen():
+    # A dropped `--frozen` would let a deploy mutate uv.lock on the host, dirtying the tree and wedging
+    # the dirty-skip. deploy() isn't unit-tested either, so guard the invariant at the source level.
+    assert "--frozen" in _str_constants(_fn("deploy")), (
+        "deploy() must run ansible via `uv run --frozen`"
+    )
+
+
+# --- pending-alert queue (H1): no post-merge alert silently lost on a webhook blip ---
+
+
+def test_drain_pending_runs_before_short_circuits():
+    # The ff-merged secrets/tasks/meta/combined paths never re-reach their alert code on the next
+    # (noop) tick, so a transient webhook failure is only recoverable by draining the queue at the TOP
+    # of every tick — before the noop/hold/dirty returns. Guard that drain_pending() is called in
+    # main() ahead of its first `return`.
+    main = _fn("main")
+    drain_line = next(
+        (
+            n.lineno
+            for n in ast.walk(main)
+            if isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Name)
+            and n.func.id == "drain_pending"
+        ),
+        None,
+    )
+    assert drain_line is not None, "main() must call drain_pending()"
+    first_return = min(n.lineno for n in ast.walk(main) if isinstance(n, ast.Return))
+    assert drain_line < first_return, (
+        "drain_pending() must run before any short-circuit return in main()"
+    )
+
+
+def test_deliver_queues_undelivered_for_retry():
+    # deliver() must persist an alert that failed to send (else H1's whole point — surviving a
+    # transient webhook blip — is lost) and must actually attempt delivery via discord().
+    fn = _fn("deliver")
+    assert _calls(fn, "_write_pending"), (
+        "deliver() must persist an undelivered alert for retry"
+    )
+    assert _calls(fn, "discord"), "deliver() must attempt delivery via discord()"
