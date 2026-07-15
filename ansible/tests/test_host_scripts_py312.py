@@ -24,7 +24,12 @@ HOST_PY_FLOOR = (3, 12)
 _REPO = Path(__file__).resolve().parents[2]
 HOST_RUN_SCRIPTS = [
     "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
+    # gitops_deploy.py imports this at runtime under the SAME /usr/bin/python3 (sys.path.insert of its
+    # own dir), so it needs the 3.12 floor-check too — but it never appears on an ExecStart line, so
+    # the unit scan can't find it. The import-resolution check below re-derives this requirement.
+    "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
     "ansible/roles/setup/renovate_notify/files/renovate_notify.py",
+    "ansible/roles/setup/renovate_notify/files/notify_logic.py",
 ]
 
 
@@ -61,6 +66,28 @@ def _host_python_scripts_in_units() -> set[str]:
     return found
 
 
+def _first_party_imports(script: Path) -> set[str]:
+    """Basenames of sibling modules `script` imports from its own dir. Each host-run script does a
+    `sys.path.insert(0, <own dir>)` and imports its logic module, which then loads under the SAME
+    host /usr/bin/python3 — so a 3.14-only construct there SyntaxErrors at import time just as it
+    would in the entry script, yet the module never appears on an ExecStart line for the unit scan
+    to catch. Only first-party siblings (a .py of that name exists alongside the script) are returned;
+    stdlib/third-party imports have no matching sibling and are ignored."""
+    tree = ast.parse(script.read_text())
+    siblings = {p.stem for p in script.parent.glob("*.py")}
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.level == 0
+            and node.module in siblings
+        ):
+            found.add(f"{node.module}.py")
+        elif isinstance(node, ast.Import):
+            found.update(f"{a.name}.py" for a in node.names if a.name in siblings)
+    return found
+
+
 def test_host_run_scripts_list_is_complete() -> None:
     # The parse-guard above only covers the scripts hand-listed in HOST_RUN_SCRIPTS. This closes the
     # drift one level up (the same lockstep pattern as test_prek_pytest_files_cover_testpaths /
@@ -78,4 +105,18 @@ def test_host_run_scripts_list_is_complete() -> None:
         f"systemd unit(s) run these under a bare /usr/bin/python3, but they're absent from "
         f"HOST_RUN_SCRIPTS so the 3.12 parse-guard skips them: {sorted(missing)}. "
         f"Add each script's repo path to HOST_RUN_SCRIPTS."
+    )
+
+    # The ExecStart scan can't see a module that's IMPORTED rather than exec'd — but a first-party
+    # sibling loads under the same host /usr/bin/python3 and would SyntaxError at import time on a
+    # 3.14-only construct just the same. Re-derive that requirement from each listed script's imports
+    # so a future sibling (or a new import in deploy_logic.py / notify_logic.py) can't silently escape.
+    imported: set[str] = set()
+    for rel in HOST_RUN_SCRIPTS:
+        imported |= _first_party_imports(_REPO / rel)
+    missing_imports = imported - covered
+    assert not missing_imports, (
+        f"a host-run /usr/bin/python3 script imports these first-party modules (same interpreter), "
+        f"but they're absent from HOST_RUN_SCRIPTS so the 3.12 parse-guard skips them: "
+        f"{sorted(missing_imports)}. Add each module's repo path to HOST_RUN_SCRIPTS."
     )
