@@ -400,7 +400,11 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
   **Long-Lived Access Token** (operator-minted in HA → Profile → Security; can't be templated), NOT
-  a Kuma push token. tier `assisted` (rotate = revoke + reissue in HA). Empty `HA_TOKEN` disables it.
+  a Kuma push token. tier `assisted` (rotate = revoke + reissue in HA). It's **file-mounted**
+  (`HA_TOKEN_FILE=/run/secrets/ha_token`, rendered 0600 by the role, read via `check.py`'s
+  `_env_file`) — an unscoped full-access token must NOT sit inline in the container Env the
+  docker-proxy exposes to monitoring-net neighbors (2026-07-15 review H2). An empty token file
+  disables the check (falls back to the `HA_TOKEN` env, also empty = disabled).
 - The two GitOps monitors read host state via a **read-only bind-mount**
   `/var/lib/gitops-deploy:/gitops-state:ro` (written by the `gitops_deploy` host role) — no
   Prometheus/Kopia/n8n source. That dir must exist owned by the deploy user before deploy; the

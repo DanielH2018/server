@@ -26,6 +26,28 @@ def _seq(*values):
     return lambda *a, **k: next(it)
 
 
+# --- _env_file --------------------------------------------------------------
+def test_env_file_reads_from_file_and_strips(monkeypatch, tmp_path):
+    f = tmp_path / "secret"
+    # trailing newline from a rendered file must be stripped
+    f.write_text("s3cret-token\n")
+    monkeypatch.setenv("HA_TOKEN_FILE", str(f))
+    monkeypatch.setenv("HA_TOKEN", "inline-should-be-ignored")
+    assert check._env_file("HA_TOKEN", "") == "s3cret-token"
+
+
+def test_env_file_falls_back_to_plain_env(monkeypatch):
+    monkeypatch.delenv("HA_TOKEN_FILE", raising=False)
+    monkeypatch.setenv("HA_TOKEN", "inline-token")
+    assert check._env_file("HA_TOKEN", "") == "inline-token"
+
+
+def test_env_file_default_when_neither_set(monkeypatch):
+    monkeypatch.delenv("HA_TOKEN_FILE", raising=False)
+    monkeypatch.delenv("HA_TOKEN", raising=False)
+    assert check._env_file("HA_TOKEN", "") == ""
+
+
 # --- parse_rfc3339 ----------------------------------------------------------
 
 

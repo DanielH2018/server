@@ -119,14 +119,26 @@ services:
         # changed service is recreated), so the old "same stack = recreated together"
         # assumption no longer holds — restart the sidecar with its dependency.
         restart: true
+    # The Kuma ADMIN password (AutoKuma authenticates as the human admin — it can silence the whole
+    # fleet's alerting) is exported from a 0600 file-mount by this entrypoint wrapper instead of an
+    # inline AUTOKUMA__KUMA__PASSWORD env, so it stays out of the container Env the read-only
+    # docker-proxy exposes to every monitoring-net neighbor (2026-07-15 review H1). AutoKuma has no
+    # working file-ref for it. `$$(cat …)` strips any trailing newline; `exec "$$@"` keeps autokuma
+    # as PID 1 (the healthcheck greps /proc/1/comm); `$$` doubled so Compose doesn't interpolate.
+    entrypoint:
+      - /usr/bin/sh
+      - -c
+      - 'export AUTOKUMA__KUMA__PASSWORD="$$(cat /run/secrets/kuma_password)"; exec "$$@"'
+      - --
+    command: ["autokuma"]
     environment:
       - AUTOKUMA__KUMA__URL=http://uptime-kuma:3001
       - AUTOKUMA__KUMA__USERNAME={{ uptime_kuma_username }}
-      - AUTOKUMA__KUMA__PASSWORD={{ uptime_kuma_password }}
       - AUTOKUMA__DOCKER__HOSTS=tcp://docker-proxy:2375
       - AUTOKUMA__DB_PATH=/data/autokuma.db
     volumes:
       - ./autokuma-data:/data
+      - ./autokuma-secrets/kuma_password:/run/secrets/kuma_password:ro
     {{ service_networks() }}
     {{ healthcheck('["CMD", "bash", "-c", "cat /proc/1/comm | grep -q autokuma"]', timeout='5s', start_period='10s') }}
     labels:

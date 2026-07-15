@@ -27,6 +27,21 @@ def _env(name, default):
     return os.environ.get(name, default)
 
 
+def _env_file(name, default=""):
+    """Read a secret from the file named by <name>_FILE if set, else the plain <name> env var.
+
+    Inlined in the compose environment, a secret lands in the container's Config.Env, which the
+    read-only docker-proxy exposes to any monitoring-net neighbor. Pointing <name>_FILE at a
+    0600 bind-mounted file keeps it out of container metadata (2026-07-15 review H2). Trailing
+    whitespace is stripped so a rendered newline can't corrupt the value.
+    """
+    path = os.environ.get(name + "_FILE", "")
+    if path:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read().strip()
+    return os.environ.get(name, default)
+
+
 INTERVAL = int(_env("INTERVAL", "300"))
 HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
 # Startup/redeploy grace for the reach-out checks (STARTUP_GRACE, applied in run_once). The
@@ -345,7 +360,9 @@ PI_DISK_MAX_PCT = float(_env("PI_DISK_MAX_PCT", "90"))
 # 1-min beats; rides out an HA restart/deploy. Seconds (no unit suffix) — kept a plain
 # float here because parse_duration is defined below this config block.
 HA_URL = _env("HA_URL", "").rstrip("/")
-HA_TOKEN = _env("HA_TOKEN", "")
+# File-mounted (HA_TOKEN_FILE) so this full-access HA long-lived token stays out of the container
+# Env the docker-proxy exposes to monitoring-net neighbors; falls back to the HA_TOKEN env.
+HA_TOKEN = _env_file("HA_TOKEN", "")
 HA_HEARTBEAT_MAX_AGE_S = float(_env("HA_HEARTBEAT_MAX_AGE", "300"))
 HA_HEARTBEAT_ENTITY = "input_datetime.ha_heartbeat"
 # Consecutive-cycle hysteresis (like CPU_CONSECUTIVE) so a planned HA redeploy — which takes

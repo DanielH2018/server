@@ -16,11 +16,15 @@ services:
     security_opt:
       - no-new-privileges:true
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}
+      # File-mounted (below), NOT inline, so the admin password stays out of the container Env the
+      # read-only docker-proxy exposes to every monitoring-net neighbor (2026-07-15 review M2).
+      # Grafana natively reads GF_<SECTION>_<KEY>__FILE (double underscore) from the file.
+      - GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_admin_password
       - GF_ANALYTICS_REPORTING_ENABLED=false
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
     volumes:
       - ./data:/var/lib/grafana
+      - ./admin_password:/run/secrets/grafana_admin_password:ro
       # Provisioned-as-code datasources + dashboards (read-only; UI edits persist in ./data).
       - ./provisioning/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - ./provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro

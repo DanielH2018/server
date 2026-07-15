@@ -10,8 +10,36 @@
       - "{{ container_item.name }}/influxdb2"
       - "{{ container_item.name }}/influxdb2-config"
 
+- name: Render the InfluxDB admin token to a file (kept out of the containers' Env)
+  tags: [config]
+  # Inlined as SCRUTINY_WEB_INFLUXDB_TOKEN / DOCKER_INFLUXDB_INIT_ADMIN_TOKEN it lands in both
+  # containers' Env, readable via the read-only docker-proxy by any monitoring-net container.
+  # scrutiny-web reads it via an entrypoint wrapper, influxdb via _FILE (2026-07-15 review M2).
+  # no_log; 0600 owned by sys_user — both containers read it as root, so 1000-owned is fine.
+  no_log: true
+  ansible.builtin.copy:
+    content: "{{ scrutiny_influxdb_token }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/influxdb_token"
+    mode: "0600"
+  register: scrutiny_cfg_influxdb_token
+
+- name: Render the InfluxDB admin password to a file (kept out of the container's Env)
+  tags: [config]
+  # DOCKER_INFLUXDB_INIT_PASSWORD file-mounted so it stays out of influxdb's Env; influxdb reads
+  # the _FILE variant natively (only on first-run setup, skipped once initialized). no_log; 0600.
+  no_log: true
+  ansible.builtin.copy:
+    content: "{{ scrutiny_influxdb_admin_password }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/influxdb_admin_password"
+    mode: "0600"
+  register: scrutiny_cfg_influxdb_password
+
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # The token/password files are bind-mounted + read once at startup, so a rotation must
+    # recreate the containers to re-read them (recreate: auto skips a content-only change).
+    common_config_changed: "{{ (scrutiny_cfg_influxdb_token is changed) or (scrutiny_cfg_influxdb_password is changed) }}"

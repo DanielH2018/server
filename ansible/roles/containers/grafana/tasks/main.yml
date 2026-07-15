@@ -10,6 +10,19 @@
       - "{{ container_item.name }}/provisioning"
       - "{{ container_item.name }}/dashboards"
 
+- name: Render the Grafana admin password to a file (kept out of the container's Env)
+  tags: [config]
+  # GF_SECURITY_ADMIN_PASSWORD inlined lands in grafana's Env, readable via the read-only
+  # docker-proxy by any monitoring-net container. Grafana reads GF_SECURITY_ADMIN_PASSWORD__FILE,
+  # so file-mounting keeps it out of container metadata (2026-07-15 review M2). no_log; 0600 owned
+  # by sys_user (grafana runs as UID 1000) — NO become.
+  no_log: true
+  ansible.builtin.copy:
+    content: "{{ grafana_admin_password }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/admin_password"
+    mode: "0600"
+  register: grafana_cfg_admin_password
+
 - name: Provision Grafana datasources (Prometheus + Loki)
   tags: [config]
   ansible.builtin.template:
@@ -61,4 +74,4 @@
     common_config_changed: >-
       {{ (grafana_cfg_datasources is changed) or (grafana_cfg_dashboards_cfg is changed)
          or (grafana_cfg_dashboards is changed) or (grafana_cfg_loki is changed)
-         or (grafana_cfg_promtail is changed) }}
+         or (grafana_cfg_promtail is changed) or (grafana_cfg_admin_password is changed) }}

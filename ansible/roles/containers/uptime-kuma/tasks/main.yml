@@ -8,9 +8,29 @@
     common_dirs_to_create:
       - "{{ container_item.name }}/data"
       - "{{ container_item.name }}/autokuma-data"  # AutoKuma now runs in this stack
+      - "{{ container_item.name }}/autokuma-secrets"  # 0600 file-mounted Kuma admin password
+
+- name: Render the Uptime Kuma admin password to a file (kept out of AutoKuma's Env)
+  tags: [config]
+  # AUTOKUMA__KUMA__PASSWORD is the Kuma ADMIN login; inlined it lands in autokuma's Env, readable
+  # via the read-only docker-proxy by any monitoring-net container — and it can silence the whole
+  # fleet's alerting. AutoKuma reads any value starting with `@/` as a file path, so file-mounting
+  # keeps it out of container metadata (2026-07-15 review H1). no_log so a -v/--diff run doesn't
+  # leak it. 0600 owned by sys_user (UID 1000 = autokuma's user) — NO become, a root-owned 0600
+  # file would be unreadable to the cap-dropped non-root container.
+  no_log: true
+  ansible.builtin.copy:
+    content: "{{ uptime_kuma_password }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/autokuma-secrets/kuma_password"
+    mode: "0600"
+  register: uptime_kuma_cfg_password
 
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # The Kuma admin password is bind-mounted + read by autokuma once at startup, so a rotation
+    # must recreate autokuma to re-read it (recreate: auto otherwise skips a content-only change).
+    common_config_changed: "{{ uptime_kuma_cfg_password is changed }}"

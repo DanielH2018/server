@@ -25,16 +25,22 @@ services:
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD={{ scrutiny_influxdb_admin_password }}
+      # Admin password + admin token file-mounted (below), NOT inline, so they stay out of the
+      # container Env the read-only docker-proxy exposes to every neighbor (2026-07-15 review M2).
+      # influxdb 2.x natively reads the _FILE variants. Only consumed on first-run setup (skipped
+      # once influxd.bolt exists), so swapping to _FILE on the initialized instance is a no-op.
+      - DOCKER_INFLUXDB_INIT_PASSWORD_FILE=/run/secrets/influxdb_admin_password
       - DOCKER_INFLUXDB_INIT_ORG=scrutiny
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ scrutiny_influxdb_token }}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE=/run/secrets/influxdb_token
       - TZ={{ tz }}
     volumes:
       - ./influxdb2:/var/lib/influxdb2
       # The image also declares VOLUME /etc/influxdb2 (the CLI's influx-configs file);
       # without a mapping Docker silently created an anonymous volume for it.
       - ./influxdb2-config:/etc/influxdb2
+      - ./influxdb_admin_password:/run/secrets/influxdb_admin_password:ro
+      - ./influxdb_token:/run/secrets/influxdb_token:ro
     networks:
       - scrutiny_internal
     {{ healthcheck('["CMD", "influx", "ping"]', retries=5) }}
@@ -62,15 +68,25 @@ services:
     depends_on:
       scrutiny-influxdb:
         condition: service_healthy
+    # Scrutiny has no native _FILE convention, so a wrapper exports the influxdb token from a 0600
+    # file-mount before exec'ing the binary — keeping it out of the container Env the read-only
+    # docker-proxy exposes to every monitoring-net neighbor (2026-07-15 review M2). The `$$` are
+    # doubled so Compose doesn't interpolate them at parse time; the in-container shell sees $(...)/$@.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - 'export SCRUTINY_WEB_INFLUXDB_TOKEN="$$(cat /run/secrets/influxdb_token)"; exec "$$@"'
+      - --
+    command: ["/opt/scrutiny/bin/scrutiny", "start"]
     environment:
       - SCRUTINY_WEB_INFLUXDB_HOST=scrutiny-influxdb
       - SCRUTINY_WEB_INFLUXDB_PORT=8086
-      - SCRUTINY_WEB_INFLUXDB_TOKEN={{ scrutiny_influxdb_token }}
       - SCRUTINY_WEB_INFLUXDB_ORG=scrutiny
       - SCRUTINY_WEB_INFLUXDB_BUCKET=metrics
       - TZ={{ tz }}
     volumes:
       - ./config:/opt/scrutiny/config
+      - ./influxdb_token:/run/secrets/influxdb_token:ro
     {{ service_networks() }}
       - scrutiny_internal
     {{ healthcheck('curl --fail -s http://localhost:8080/api/health || exit 1') }}

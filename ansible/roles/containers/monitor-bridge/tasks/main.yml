@@ -16,6 +16,20 @@
     mode: "0644"
   register: monitor_bridge_check
 
+- name: Render the Home Assistant token to a file (kept out of the container's Env)
+  tags: [config]
+  # HA_TOKEN is a full-access HA long-lived token; inlined it lands in the container's Env,
+  # readable via the read-only docker-proxy by any monitoring-net container. check.py reads
+  # HA_TOKEN_FILE, so file-mounting keeps it out of container metadata (2026-07-15 review H2).
+  # no_log so a -v/--diff run doesn't leak it. 0600 owned by sys_user (UID 1000): monitor-bridge
+  # runs as 1000:1000 — NO become, a root-owned 0600 file would be unreadable to it.
+  no_log: true
+  ansible.builtin.copy:
+    content: "{{ monitor_bridge_ha_token }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/ha_token"
+    mode: "0600"
+  register: monitor_bridge_ha_token_file
+
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:
@@ -25,5 +39,6 @@
     # check.py is bind-mounted (./check.py:/app/check.py); the loop reads it once at
     # startup, so only a recreate applies a code change. Without this, a check.py-only
     # edit (no compose change) leaves recreate: auto and the new logic silently never
-    # deploys. See repo-root CLAUDE.md + common/CLAUDE.md.
-    common_config_changed: "{{ monitor_bridge_check is changed }}"
+    # deploys. The ha_token file is bind-mounted + read once at startup too, so a rotation
+    # must recreate as well. See repo-root CLAUDE.md + common/CLAUDE.md.
+    common_config_changed: "{{ (monitor_bridge_check is changed) or (monitor_bridge_ha_token_file is changed) }}"

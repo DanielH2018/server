@@ -259,7 +259,10 @@ services:
       # unreachable ~120s, then the scheduler a beat behind — doesn't false-page; only 2 straight
       # down cycles (~one INTERVAL of continuous badness) go `down`. A real wedge still pages.
       - HA_URL=http://home-assistant:8123
-      - HA_TOKEN={{ monitor_bridge_ha_token }}
+      # HA_TOKEN is a full-access HA long-lived token (unscoped by design). File-mounted (below),
+      # NOT inline, so it stays out of the container Env the read-only docker-proxy exposes to every
+      # monitoring-net neighbor (2026-07-15 review H2). check.py reads HA_TOKEN_FILE.
+      - HA_TOKEN_FILE=/run/secrets/ha_token
       - HA_HEARTBEAT_MAX_AGE=300
       - HA_CONSECUTIVE=2
       - KUMA_PUSH_HA={{ monitor_bridge_ha_push_token }}
@@ -343,6 +346,7 @@ services:
       - KUMA_PUSH_JANITORR={{ monitor_bridge_janitorr_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
+      - ./ha_token:/run/secrets/ha_token:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
       - /var/lib/renovate-notify:/renovate-state:ro
       - /var/lib/kopia-restore-drill:/restore-drill:ro
