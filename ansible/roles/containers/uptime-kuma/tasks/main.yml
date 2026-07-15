@@ -14,10 +14,13 @@
   tags: [config]
   # AUTOKUMA__KUMA__PASSWORD is the Kuma ADMIN login; inlined it lands in autokuma's Env, readable
   # via the read-only docker-proxy by any monitoring-net container — and it can silence the whole
-  # fleet's alerting. AutoKuma reads any value starting with `@/` as a file path, so file-mounting
-  # keeps it out of container metadata (2026-07-15 review H1). no_log so a -v/--diff run doesn't
-  # leak it. 0600 owned by sys_user (UID 1000 = autokuma's user) — NO become, a root-owned 0600
-  # file would be unreadable to the cap-dropped non-root container.
+  # fleet's alerting. AutoKuma has NO working file-ref env, so the compose entrypoint wrapper reads
+  # this 0600 file at startup (`export AUTOKUMA__KUMA__PASSWORD="$(cat ...)"; exec "$@"`) to keep the
+  # value out of the container Env (2026-07-15 review H1) — do NOT "simplify" it to an `@/`-prefixed
+  # env value; this image doesn't honor that, so it would break admin auth (silent: existing monitors
+  # keep running) or re-inline the secret. no_log so a -v/--diff run doesn't leak it. 0600 owned by
+  # sys_user (UID 1000 = autokuma's user) — NO become, a root-owned 0600 file would be unreadable to
+  # the cap-dropped non-root container.
   no_log: true
   ansible.builtin.copy:
     content: "{{ uptime_kuma_password }}"
