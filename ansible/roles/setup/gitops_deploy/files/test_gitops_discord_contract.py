@@ -272,3 +272,33 @@ def test_deliver_queues_undelivered_for_retry():
         "deliver() must persist an undelivered alert for retry"
     )
     assert _calls(fn, "discord"), "deliver() must attempt delivery via discord()"
+
+
+def test_rollback_return_is_gated_on_delivered_post():
+    # 2026-07-14 run-5 L2: each rollback path must `return 0 if posted else 1` — exit 0 when the
+    # detailed Discord post was delivered so systemd's OnFailure generic curl doesn't ALSO fire
+    # (double-page), exit 1 only if the post failed so OnFailure is the guaranteed backstop.
+    # Collapsing either terminal return to a bare `return 1` reintroduces the double-page this fix
+    # removes; a bare `return 0` drops the OnFailure backstop. main() is un-importable, so pin the
+    # invariant at the source like the sibling write_hold-ordering guard above.
+    main = _fn("main")
+    reset_count = sum(1 for n in ast.walk(main) if _is_git_reset_hard(n))
+    posted_returns = [
+        n
+        for n in ast.walk(main)
+        if isinstance(n, ast.Return)
+        and isinstance(n.value, ast.IfExp)
+        and isinstance(n.value.test, ast.Name)
+        and n.value.test.id == "posted"
+        and isinstance(n.value.body, ast.Constant)
+        and n.value.body.value == 0
+        and isinstance(n.value.orelse, ast.Constant)
+        and n.value.orelse.value == 1
+    ]
+    assert reset_count >= 2, (
+        "expected both rollback paths (each a `git reset --hard`) in main()"
+    )
+    assert len(posted_returns) >= reset_count, (
+        "each rollback path must `return 0 if posted else 1` so a delivered detailed post doesn't "
+        "double-page via systemd OnFailure — one posted-gated return per rollback `git reset --hard`"
+    )
