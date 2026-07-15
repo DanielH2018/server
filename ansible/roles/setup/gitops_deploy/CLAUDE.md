@@ -47,6 +47,13 @@ the held SHA and the hold clears automatically.
   `next_action(..., origin_ahead=…)`). Un-pushed local commits make origin an *ancestor* of
   local; that's a no-op, not a deploy — otherwise the tick would diff `local..origin` (the
   *reverse* of those commits) and mis-fire a redeploy + false rollback. Push to clear it.
+- **Divergence watchdog** (`deploy_logic.is_diverged`): if local and origin differ yet *neither*
+  is an ancestor of the other (e.g. `secret-rotate` committed locally, its push failed, then origin
+  advanced), the deployer can't fast-forward and every tick noops while origin's new commits — a
+  Renovate/security bump — never deploy. Both other GitOps signals stay green (`last_run` keeps
+  ticking, no hold), so each tick writes the diverged SHA to `/var/lib/gitops-deploy/diverged_sha`
+  (cleared once resolved) and `monitor-bridge`'s **GitOps Deploy — Status** monitor pages on it.
+  A merely-unpushed local commit (`local_ahead`) is NOT flagged — that's the plain no-op above.
 - Health-gates **only services deployed on THIS host** (daniel-server). A changed template for
   an other-host-only service (e.g. `dozzle` is daniel-pi-only) renders no compose here, so
   `containers_for()` returns `[]` and it's skipped — without this the gate polls a phantom

@@ -5,6 +5,7 @@ from deploy_logic import (
     services_from_changed_paths,
     deferred_service_alerts,
     next_action,
+    is_diverged,
     container_names,
     containers_to_gate,
     should_alert_dirty,
@@ -486,6 +487,26 @@ def test_next_action_dirty_precedes_origin_ahead_check():
         next_action("localnew", "originold", None, dirty=True, origin_ahead=False)
         == "dirty"
     )
+
+
+# is_diverged: local↔origin diverged (neither an ancestor of the other) → the deployer noops
+# forever while origin's new commits never deploy; surfaced via GitOps Status (review L3).
+def test_is_diverged_true_when_neither_is_ancestor():
+    assert is_diverged("originX", "localY", origin_ahead=False, local_ahead=False)
+
+
+def test_is_diverged_false_when_origin_ahead():
+    # normal pull path — fast-forwardable, deploys.
+    assert not is_diverged("originX", "localY", origin_ahead=True, local_ahead=False)
+
+
+def test_is_diverged_false_when_local_ahead_unpushed():
+    # committed-but-unpushed local commit is a plain noop (secret-rotate's domain), not divergence.
+    assert not is_diverged("originX", "localY", origin_ahead=False, local_ahead=True)
+
+
+def test_is_diverged_false_when_in_sync():
+    assert not is_diverged("same", "same", origin_ahead=True, local_ahead=True)
 
 
 # The health gate must only check services actually deployed on THIS host. A

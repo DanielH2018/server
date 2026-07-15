@@ -338,14 +338,18 @@ LOKI_FILETAIL_WINDOW = _env("LOKI_FILETAIL_WINDOW", "3h")
 
 # Promtail dropped-entries watchdog: Prometheus scrapes promtail:9080, which exposes the
 # promtail_dropped_entries_total{reason=...} counter. Loki Log Ingestion only catches TOTAL silence;
-# this surfaces PARTIAL loss — entries promtail gave up shipping (reason="ingester_error" = Loki
-# ingester unavailable / rate-limited / out-of-order). increase() over a window handles counter
-# resets; alert only ABOVE a threshold so a transient Loki restart's handful of drops doesn't page.
-# Prom-dependent (suppressed under the Prometheus gate). No series (counter never incremented) reads
-# as 0 -> up; a dead promtail scrape is Scrape Targets' page, not this one.
+# this surfaces PARTIAL loss — entries promtail gave up shipping. NO reason filter (was
+# reason="ingester_error" only): every reason is a real drop, and Loki's own configured limits
+# reject under DIFFERENT reasons the ingester_error-only selector missed entirely — rate_limited
+# (per_stream_rate_limit / ingestion_rate_mb), stream_limited (max_global_streams_per_user), and
+# line_too_long — so a stream explosion or a chatty container hitting the rate cap dropped logs while
+# this stayed green (2026-07-15 review M2). increase() over a window handles counter resets; alert
+# only ABOVE a threshold so a transient Loki restart's handful of drops doesn't page. Prom-dependent
+# (suppressed under the Prometheus gate). No series (counter never incremented) reads as 0 -> up; a
+# dead promtail scrape is Scrape Targets' page, not this one.
 PROMTAIL_DROPPED_SELECTOR = _env(
     "PROMTAIL_DROPPED_SELECTOR",
-    'promtail_dropped_entries_total{reason="ingester_error"}',
+    "promtail_dropped_entries_total",
 )
 PROMTAIL_DROPPED_WINDOW = _env("PROMTAIL_DROPPED_WINDOW", "1h")
 PROMTAIL_DROPPED_MAX = float(_env("PROMTAIL_DROPPED_MAX", "1000"))
@@ -1000,11 +1004,21 @@ def gitops_alive(age_s, max_age_s):
     return False, "deployer last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
 
 
-def gitops_status(hold_sha):
-    """Pure: is a rolled-back commit being held? Returns (ok, msg)."""
-    if not hold_sha:
-        return True, "no held deploy"
-    return False, "deploy held at %s — revert the offending PR" % hold_sha[:8]
+def gitops_status(hold_sha, diverged_sha=None):
+    """Pure: is the deploy pipeline in a state needing operator action? Returns (ok, msg).
+
+    Two down states share this monitor: a rolled-back commit HELD pending a revert, and a
+    local↔origin DIVERGENCE where the deployer can't fast-forward and silently noops forever while
+    origin's new commits never deploy (both other GitOps signals stay green — 2026-07-15 review L3).
+    """
+    if hold_sha:
+        return False, "deploy held at %s — revert the offending PR" % hold_sha[:8]
+    if diverged_sha:
+        return False, (
+            "local diverged from origin at %s — deployer can't fast-forward, new commits "
+            "aren't deploying; reconcile the host tree" % diverged_sha[:8]
+        )
+    return True, "no held deploy"
 
 
 def sanitize(s, maxlen=120):
@@ -1208,13 +1222,18 @@ def check_gitops_alive():
     return gitops_alive(time.time() - ts, GITOPS_MAX_AGE_S)
 
 
-def check_gitops_status():
+def _read_gitops_marker(name):
     try:
-        with open(os.path.join(GITOPS_STATE_DIR, "hold_sha")) as fh:
-            hold = fh.read().strip() or None
+        with open(os.path.join(GITOPS_STATE_DIR, name)) as fh:
+            return fh.read().strip() or None
     except FileNotFoundError:
-        hold = None
-    return gitops_status(hold)
+        return None
+
+
+def check_gitops_status():
+    return gitops_status(
+        _read_gitops_marker("hold_sha"), _read_gitops_marker("diverged_sha")
+    )
 
 
 def renovate_alive(age_s, max_age_s):
@@ -2034,16 +2053,16 @@ def check_loki_ingestion():
 def promtail_dropped(count, window, threshold):
     """Pure: did promtail drop more than `threshold` entries over `window`? (ok, msg).
 
-    `count` = sum(increase(promtail_dropped_entries_total{reason=...}[window])), None when the counter
-    has no series (reads as 0). Above the threshold means Loki was rejecting entries (ingester
-    unavailable / rate-limited / out-of-order) and promtail gave up on them — partial log loss the
-    total-silence Loki Log Ingestion check can't see.
+    `count` = sum(increase(promtail_dropped_entries_total[window])) over ALL drop reasons
+    (ingester_error / rate_limited / stream_limited / line_too_long), None when the counter has no
+    series (reads as 0). Above the threshold means Loki was rejecting entries and promtail gave up on
+    them — partial log loss the total-silence Loki Log Ingestion check can't see.
     """
     n = count or 0.0
     if n > threshold:
         return False, (
-            "promtail dropped %.0f log entries in %s (reason=ingester_error, > %.0f) "
-            "— partial log loss" % (n, window, threshold)
+            "promtail dropped %.0f log entries in %s (> %.0f) — partial log loss"
+            % (n, window, threshold)
         )
     return True, "promtail drops ok (%.0f in %s)" % (n, window)
 

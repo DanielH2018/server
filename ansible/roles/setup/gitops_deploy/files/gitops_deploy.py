@@ -31,6 +31,7 @@ from deploy_logic import (  # noqa: E402
     deferred_service_alerts,
     gate_services,
     health_decision,
+    is_diverged,
     next_action,
     services_from_changed_paths,
     should_alert_dirty,
@@ -49,6 +50,11 @@ class RetryableFetchError(Exception):
 
 HOLD_FILE = "/var/lib/gitops-deploy/hold_sha"
 LAST_RUN = "/var/lib/gitops-deploy/last_run"
+# Origin SHA recorded while local and origin have DIVERGED (see deploy_logic.is_diverged): the
+# deployer can't fast-forward and noops forever, so origin's new commits never deploy while both
+# GitOps monitors stay green. monitor-bridge's check_gitops_status reads this (same :ro mount as
+# hold_sha) and pages GitOps Status until the host tree is reconciled. Cleared once resolved.
+DIVERGED_FILE = "/var/lib/gitops-deploy/diverged_sha"
 # Last origin SHA we've already alerted on for a broad change, so a deferred
 # broad change doesn't re-page Discord every 30-min tick until it's resolved.
 BROAD_FILE = "/var/lib/gitops-deploy/broad_alerted_sha"
@@ -395,6 +401,16 @@ def main() -> int:
     # but hasn't pushed) or the two diverged, there is nothing to fast-forward and
     # next_action() makes this a no-op instead of mis-firing on the reverse diff.
     origin_ahead = is_ancestor(local, origin)
+    # Divergence watchdog: if local and origin differ but neither is an ancestor of the other, the
+    # deployer can't fast-forward and every tick noops while origin's new commits never deploy —
+    # invisible otherwise (last_run keeps ticking, no hold). Record it so GitOps Status pages; clear
+    # it once resolved. A committed-but-unpushed local commit (local_ahead — secret-rotate's domain)
+    # is a plain noop, NOT flagged here. Managed every tick regardless of `action`.
+    local_ahead = is_ancestor(origin, local)
+    _write_marker(
+        DIVERGED_FILE,
+        origin if is_diverged(origin, local, origin_ahead, local_ahead) else None,
+    )
     action = next_action(local, origin, hold, dirty, origin_ahead)
     if action == "dirty":
         # Healthy skip (operator mid-edit). Throttle the page to once a day at

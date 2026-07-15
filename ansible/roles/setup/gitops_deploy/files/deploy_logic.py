@@ -180,6 +180,19 @@ def next_action(
     return "deploy"
 
 
+def is_diverged(
+    origin_head: str, local_head: str, origin_ahead: bool, local_ahead: bool
+) -> bool:
+    """True when origin and local have DIVERGED — they differ yet neither is an ancestor of the
+    other, so the deployer can neither fast-forward (`origin_ahead`) nor is this the healthy
+    committed-but-unpushed local state (`local_ahead`, which secret-rotate owns and which stays a
+    plain noop). A diverged tree noops forever while origin's new commits — a Renovate/security bump
+    — never deploy, and both GitOps monitors stay green (last_run keeps ticking, no hold). The
+    deployer records this so GitOps Status surfaces it instead of camouflaging it as a healthy noop
+    (2026-07-15 review L3)."""
+    return origin_head != local_head and not origin_ahead and not local_ahead
+
+
 def should_alert_dirty(now, last_alert_date: str | None, alert_hour: int = 7) -> bool:
     """Whether this tick should send the dirty-working-tree Discord alert.
 

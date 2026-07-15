@@ -289,9 +289,10 @@ services:
       - KUMA_PUSH_LOKI_REACHABLE={{ monitor_bridge_loki_reachable_push_token }}
       # Promtail dropped-entries watchdog: Prometheus already scrapes promtail:9080, exposing the
       # promtail_dropped_entries_total{reason=...} counter. Loki Log Ingestion only catches TOTAL
-      # silence; this surfaces PARTIAL loss — entries promtail gave up shipping when Loki rejected them
-      # (reason="ingester_error"). increase() over the window handles counter resets; alert only above
-      # PROMTAIL_DROPPED_MAX so a transient Loki restart doesn't page. Prom-dependent.
+      # silence; this surfaces PARTIAL loss — entries promtail gave up shipping across ALL drop
+      # reasons (ingester_error / rate_limited / stream_limited / line_too_long — the code default
+      # dropped the reason filter, review M2). increase() over the window handles counter resets;
+      # alert only above PROMTAIL_DROPPED_MAX so a transient Loki restart doesn't page. Prom-dependent.
       - PROMTAIL_DROPPED_WINDOW=1h
       - PROMTAIL_DROPPED_MAX=1000
       - KUMA_PUSH_PROMTAIL_DROPPED={{ monitor_bridge_promtail_dropped_push_token }}

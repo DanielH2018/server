@@ -106,8 +106,11 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     `gitops_deploy` deployer rewrites each non-crashing tick; `down` once it's older than
     `GITOPS_MAX_AGE_MIN` — i.e. the deployer stalled / host down. The deployer no longer pushes
     to Kuma itself — see [[the gitops_deploy CLAUDE.md]])
-  - **GitOps Deploy — Status** (reads `/gitops-state/hold_sha`; `down` while a rolled-back commit
-    is held pending the operator reverting the offending PR — self-heals when the hold clears)
+  - **GitOps Deploy — Status** (reads `/gitops-state/hold_sha` **and `/gitops-state/diverged_sha`**;
+    `down` while a rolled-back commit is held pending the operator reverting the offending PR —
+    self-heals when the hold clears — OR while local and origin have **diverged** so the deployer
+    can't fast-forward and silently noops forever while origin's new commits never deploy (both other
+    GitOps signals stay green; the deployer records the diverged SHA each tick, 2026-07-15 review L3))
   - **Backup Restore Drill** (reads `/restore-drill/state.json`, written monthly by the kopia
     role's `kopia-restore-drill.sh` host cron — `down` on a failed drill, >35 d staleness, or a
     missing/corrupt state file. Same state-file pattern as the GitOps monitors.)
@@ -301,11 +304,13 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     `LOKI_STREAM`/`LOKI_FILETAIL_WINDOW`/`LOKI_DOCKER_STREAM`/`LOKI_WINDOW`. Pure
     `loki_ingestion_fresh()` + `loki_count()` are unit-tested. A freshness watchdog in the same
     idiom as the SMART/restore-drill checks.)
-  - **Promtail Dropped Entries** (`sum(increase(promtail_dropped_entries_total{reason="ingester_error"}[1h]))`
+  - **Promtail Dropped Entries** (`sum(increase(promtail_dropped_entries_total[1h]))`
     from Prometheus, which already scrapes `promtail:9080` — `down` above `PROMTAIL_DROPPED_MAX` (1000)
     entries dropped in the window. Where **Loki Log Ingestion** catches TOTAL silence, this surfaces
-    PARTIAL loss: entries promtail gave up shipping when Loki rejected them (`ingester_error` = ingester
-    unavailable / rate-limited / out-of-order). The threshold keeps a transient Loki restart's handful
+    PARTIAL loss: entries promtail gave up shipping across ALL drop reasons (`ingester_error`,
+    `rate_limited`, `stream_limited`, `line_too_long` — the selector dropped its `ingester_error`-only
+    filter on 2026-07-15, review M2, so Loki's own configured limits no longer reject logs unseen).
+    The threshold keeps a transient Loki restart's handful
     of drops from paging; `increase()` handles counter resets; no series → 0 → up (a dead promtail
     scrape is Scrape Targets' page). **Prom-dependent** — suppressed under the Prometheus gate. Pure
     `promtail_dropped()` is unit-tested; `PROMTAIL_DROPPED_WINDOW`/`PROMTAIL_DROPPED_MAX` tune it.)

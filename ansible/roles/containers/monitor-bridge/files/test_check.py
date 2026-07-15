@@ -1053,6 +1053,19 @@ def test_gitops_status_held_names_sha():
     assert "abc123de" in msg
 
 
+def test_gitops_status_diverged_names_sha():
+    ok, msg = check.gitops_status(None, "def456abc7890123")
+    assert not ok
+    assert "diverged" in msg
+    assert "def456ab" in msg
+
+
+def test_gitops_status_hold_takes_priority_over_diverged():
+    ok, msg = check.gitops_status("abc123def4567890", "def456abc7890123")
+    assert not ok
+    assert "held" in msg
+
+
 # --- check_gitops_alive / check_gitops_status (file I/O) ---------------------
 
 
@@ -1101,6 +1114,14 @@ def test_check_gitops_status_held(tmp_path, monkeypatch):
     ok, msg = check.check_gitops_status()
     assert not ok
     assert "abc123de" in msg
+
+
+def test_check_gitops_status_diverged(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    _gw(tmp_path, "diverged_sha", "def456abc7890123")
+    ok, msg = check.check_gitops_status()
+    assert not ok
+    assert "diverged" in msg
 
 
 # ── loop heartbeat (container healthcheck reads this file's mtime) ─────────────
@@ -3452,4 +3473,8 @@ def test_check_promtail_dropped_uses_increase(monkeypatch):
     monkeypatch.setattr(check, "prom_scalar", fake_scalar)
     ok, _ = check.check_promtail_dropped()
     assert not ok
-    assert any("increase(" in q and "ingester_error" in q for q in queries)
+    # No reason filter — sums drops across ALL reasons (rate_limited/stream_limited/... too, M2).
+    assert any(
+        "increase(" in q and "promtail_dropped_entries_total" in q and "reason" not in q
+        for q in queries
+    )
