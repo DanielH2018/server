@@ -48,6 +48,23 @@ def test_env_file_default_when_neither_set(monkeypatch):
     assert check._env_file("HA_TOKEN", "") == ""
 
 
+def test_env_file_missing_file_falls_back_to_env(monkeypatch, tmp_path):
+    # A *_FILE path that doesn't exist must degrade to the plain env var, not raise — _env_file runs
+    # at import for HA_TOKEN, so an unguarded open() would crash the whole loop and silence every
+    # monitor over one missing file (2026-07-15 review L1).
+    monkeypatch.setenv("HA_TOKEN_FILE", str(tmp_path / "does-not-exist"))
+    monkeypatch.setenv("HA_TOKEN", "inline-fallback")
+    assert check._env_file("HA_TOKEN", "") == "inline-fallback"
+
+
+def test_env_file_directory_path_falls_back_to_env(monkeypatch, tmp_path):
+    # The specific Docker failure mode: an absent bind-mount source is created as a directory, so
+    # open() raises IsADirectoryError (an OSError subclass) — must still fall back to the env var.
+    monkeypatch.setenv("HA_TOKEN_FILE", str(tmp_path))  # tmp_path is a directory
+    monkeypatch.setenv("HA_TOKEN", "inline-fallback")
+    assert check._env_file("HA_TOKEN", "") == "inline-fallback"
+
+
 # --- parse_rfc3339 ----------------------------------------------------------
 
 

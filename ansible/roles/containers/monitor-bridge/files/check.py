@@ -34,11 +34,20 @@ def _env_file(name, default=""):
     read-only docker-proxy exposes to any monitoring-net neighbor. Pointing <name>_FILE at a
     0600 bind-mounted file keeps it out of container metadata (2026-07-15 review H2). Trailing
     whitespace is stripped so a rendered newline can't corrupt the value.
+
+    A read error (the file went missing, or Docker auto-created the mount source as a directory
+    because the host file was absent at container-create) falls back to the plain env var rather
+    than raising: this runs at import for HA_TOKEN, so an unguarded open() would crash the whole
+    loop and silence all monitors over one missing file, instead of just disabling the HA check
+    the way an empty file does (2026-07-15 review L1).
     """
     path = os.environ.get(name + "_FILE", "")
     if path:
-        with open(path, encoding="utf-8") as fh:
-            return fh.read().strip()
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return fh.read().strip()
+        except OSError:
+            pass
     return os.environ.get(name, default)
 
 
