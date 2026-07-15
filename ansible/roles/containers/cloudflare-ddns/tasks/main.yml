@@ -6,10 +6,30 @@
     tasks_from: setup_dirs.yml
   vars:
     common_dirs_to_create:
-      - "{{ container_item.name }}"
+      - "{{ container_item.name }}/data"
+
+- name: Render the Cloudflare API token to a file (kept out of the container's Env)
+  tags: [config]
+  # Same zone-edit token as traefik's CF_DNS_API_TOKEN (secrets.yml `cloudflare_dns_token`). Inlined
+  # as CF_API_TOKEN it lands in the container's Env, readable via the read-only docker-proxy by any
+  # monitoring-net container — the exact exposure the traefik role closed in 78969ff8. favonia reads
+  # CLOUDFLARE_API_TOKEN_FILE, so file-mounting keeps the zone token out of container metadata.
+  # no_log so a -v/--diff run doesn't leak it. 0600, owned by sys_user (UID 1000): the container runs
+  # as 1000:1000, so DO NOT add become — a root-owned 0600 file is unreadable to the non-root,
+  # cap-dropped container and would silently break DDNS.
+  no_log: true
+  ansible.builtin.copy:
+    content: "{{ cloudflare_dns_token }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/data/cf_dns_token"
+    mode: "0600"
+  register: cloudflare_ddns_cfg_token
 
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # Recreate both updaters when the token file changes so a rotation actually reaches them
+    # (the mounted file's content isn't re-read by a running container).
+    common_config_changed: "{{ cloudflare_ddns_cfg_token is changed }}"

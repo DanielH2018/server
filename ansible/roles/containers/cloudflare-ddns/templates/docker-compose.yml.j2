@@ -12,7 +12,9 @@ services:
     security_opt:
       - no-new-privileges:true
     environment:
-      - CF_API_TOKEN={{ cloudflare_dns_token }}
+      # Zone-edit token file-mounted (below), NOT inline, so it stays out of the container Env that
+      # the read-only docker-proxy exposes to every monitoring-net neighbor (2026-07-15 review H1).
+      - CLOUDFLARE_API_TOKEN_FILE=/run/secrets/cf_dns_token
       - DOMAINS={{ domain }}
       - PROXIED=true
       - IP6_PROVIDER=none
@@ -20,6 +22,8 @@ services:
       # Internal http (same `monitoring` net) — keeps the heartbeat off public DNS
       # and out of the Authelia-gated public route. Token lives in secrets.yml.
       - UPTIMEKUMA=http://uptime-kuma:3001/api/push/{{ cloudflare_ddns_proxied_push_token }}
+    volumes:
+      - ./data/cf_dns_token:/run/secrets/cf_dns_token:ro
     {{ service_networks() }}
     labels:
       {{ kuma('cloudflare-ddns-proxied') }}
@@ -36,7 +40,9 @@ services:
     security_opt:
       - no-new-privileges:true
     environment:
-      - CF_API_TOKEN={{ cloudflare_dns_token }}
+      # Zone-edit token file-mounted (below), NOT inline, so it stays out of the container Env that
+      # the read-only docker-proxy exposes to every monitoring-net neighbor (2026-07-15 review H1).
+      - CLOUDFLARE_API_TOKEN_FILE=/run/secrets/cf_dns_token
       # Only terraria is live. valheim/minecraft are archived — publishing their A
       # records pointed unproxied home IP at nothing, needlessly exposing the raw IP.
       # Re-add a domain here when its game server is reactivated.
@@ -47,6 +53,8 @@ services:
       # Internal http (same `monitoring` net) — keeps the heartbeat off public DNS
       # and out of the Authelia-gated public route. Token lives in secrets.yml.
       - UPTIMEKUMA=http://uptime-kuma:3001/api/push/{{ cloudflare_ddns_direct_push_token }}
+    volumes:
+      - ./data/cf_dns_token:/run/secrets/cf_dns_token:ro
     {{ service_networks() }}
     labels:
       {{ kuma('cloudflare-ddns-direct') }}
