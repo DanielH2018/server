@@ -22,7 +22,7 @@ services:
     # autofix.py touches /tmp/heartbeat after every completed cycle; stale mtime means the
     # loop HUNG (death already exits the container) -> unhealthy -> autoheal restart. 1000s
     # ≈ 3×INTERVAL + slack. Kuma push silence on "Arr Auto-Block" remains the alerting path.
-    {{ healthcheck("[\"CMD\", \"python3\", \"-c\", \"import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/heartbeat').st_mtime<1000 else 1)\"]") }}
+    {{ healthcheck("[\"CMD\", \"python3\", \"-c\", \"import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/heartbeat').st_mtime<1000 else 1)\"]", name=container_item.name) }}
     environment:
       - TZ={{ tz }}
       - PYTHONUNBUFFERED=1
