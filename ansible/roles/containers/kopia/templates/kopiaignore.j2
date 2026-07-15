@@ -41,18 +41,26 @@ terraria/config/*.wld.bak*
 
 
 # ── Jellyfin ─────────────────────────────────────────────────────────────────
-# data* covers the metadata cache DB; metadata/ covers downloaded artwork;
-# plugins/ covers plugin binaries — all re-fetchable from TVDB/TMDB/catalog.
-jellyfin/config/data*/
-jellyfin/config/metadata/
-jellyfin/config/plugins/
+# KEEP the primary DB (config/data/data/jellyfin.db — users, watch history/resume, API keys)
+# and config/data/root/ (library virtual-folder defs, incl. janitorr's "Leaving Soon"); drop
+# only the re-fetchable caches under it. The old blanket `data*/` matched config/data/ ITSELF and
+# silently dropped that whole DB tree from the only offsite backup — invisible to the shrink +
+# presence guards (top-level jellyfin/ stays present via its XML configs) and never restore-drilled
+# (2026-07-15 review H1). jellyfin's DB is now in the restore-drill rotation. metadata/ + plugins/
+# live under config/data/ here, NOT config/ — the old config/metadata|plugins lines matched nothing.
+jellyfin/config/data/metadata/
+jellyfin/config/data/plugins/
+jellyfin/config/data/transcodes/
+jellyfin/config/data/data/attachments/
+jellyfin/config/data/data/subtitles/
+jellyfin/config/data/data/SQLiteBackups/
 
 # ── Media stack ───────────────────────────────────────────────────────────────
 # Anchored with a leading slash so this excludes ONLY the top-level media library
 # (containers/data/, ~27G). A bare "data/" matches a dir named data at ANY depth,
 # which silently dropped service state — n8n/data, karakeep/data, grafana/data,
-# portainer/data, traefik/data — from the backup. Game/regeneratable */data dirs
-# (valheim, uptime-kuma, jellyfin) stay excluded via their own rules.
+# portainer/data, traefik/data — from the backup. Fully-regeneratable */data dirs
+# (valheim, uptime-kuma) stay excluded via their own rules; jellyfin keeps its DB (above).
 /data/
 sonarr/config/MediaCover/
 radarr/config/MediaCover/

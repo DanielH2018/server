@@ -40,9 +40,9 @@ Kopia backup server/UI for encrypted, deduplicated backups. See repo-root `CLAUD
   exit code, which the old `... | logger` cron silently swallowed) →
   **monthly restore drill** (`files/restore-drill.sh` → `/usr/local/bin/`, cron 1st
   05:00): restores one rotating service dir (rotation folds in the year — `(month+year) %
-  len` — so the singly-covered slot, incl. authelia the SSO root of trust, moves year over
-  year) inside the container and asserts a **service-specific state-file sentinel** (e.g.
-  `grafana/data/grafana.db`, `authelia/config/configuration.yml` — proves the right tree
+  len` — so which service each month drills shifts year over year; with 12 services each is
+  drilled once a year) inside the container and asserts a **service-specific state-file sentinel**
+  (e.g. `grafana/data/grafana.db`, `authelia/config/configuration.yml` — proves the right tree
   with real data, not just any compose file) plus a file-count floor. Two extra integrity
   guards: it fails if the **latest snapshot is >48 h old** (catches a stalled scheduler,
   independent of which snapshot it restores), and **quarterly restores the OLDEST retained

@@ -24,7 +24,7 @@ set -uo pipefail
 
 # Stateful services worth proving restorable, each paired with a service-SPECIFIC state
 # file that must reappear after restore. All verified present in the snapshot.
-SVCS=(authelia traefik n8n karakeep freshrss grafana pihole home-assistant zigbee2mqtt wg-easy sonarr)
+SVCS=(authelia traefik n8n karakeep freshrss grafana pihole home-assistant zigbee2mqtt wg-easy sonarr jellyfin)
 declare -A SENTINEL=(
   [authelia]=config/configuration.yml
   [traefik]=data/acme.json
@@ -33,6 +33,10 @@ declare -A SENTINEL=(
   [freshrss]=config/www/freshrss/data/config.php
   [grafana]=data/grafana.db
   [pihole]=data/etc-pihole/pihole.toml
+  # jellyfin's primary DB (users / watch history / API keys / library defs) — kept in Kopia
+  # scope by kopiaignore since 2026-07-15 (a blanket data*/ used to drop it). A real SQLite file,
+  # so it also exercises the SQLite-magic header check below.
+  [jellyfin]=config/data/data/jellyfin.db
   # sonarr's config DB (quality profiles / indexer config, kept in Kopia scope by kopiaignore)
   # proves an *arr config restores. A real SQLite file, so it also exercises the SQLite-magic
   # header check below — unlike the JSON/plain sentinels above.
@@ -52,10 +56,11 @@ declare -A SENTINEL=(
   # skips that branch the same way home-assistant's registry does.
   [zigbee2mqtt]=data/coordinator_backup.json
 )
-# Rotation: + year term so the singly-covered slot moves year over year. With a bare
-# month % len, the services in the wrap-around (months > len) are drilled only once a year
-# while the rest get twice — authelia (the SSO root of trust) shouldn't be the perennial
-# odd one out, so fold the year in to rotate which service draws the short straw.
+# Rotation: (month + year) % len picks one service per monthly run. With 12 services and 12
+# months each is drilled once a year; the + year term shifts which calendar month a given
+# service lands on year over year, so none is perennially stuck in the same (e.g. reboot-heavy)
+# month — and the state file is rewritten every month regardless, so the freshness monitor
+# stays green between a service's yearly turns.
 M=$(date +%-m); Y=$(date +%Y)
 SVC="${SVCS[$(( (M + Y) % ${#SVCS[@]} ))]}"
 SENT="${SENTINEL[$SVC]}"
