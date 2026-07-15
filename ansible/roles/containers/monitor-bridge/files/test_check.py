@@ -11,9 +11,11 @@ via `check.py --once` at deploy time.
 """
 
 import os
+import re
 import time
 import urllib.error
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -559,6 +561,58 @@ def test_presence_intentional_removal_clears_after_one_cycle():
     removed = _listing(("authelia", 5))
     ok, _ = check.backup_presence_regression([full, full, removed, removed], 3)
     assert ok
+
+
+# --- backup_sentinels_regression --------------------------------------------
+
+_SENTINELS = ["jellyfin/config/data/data/jellyfin.db", "sonarr/config/sonarr.db"]
+
+
+def test_sentinels_all_present_is_ok():
+    dirs = {"jellyfin": 50, "sonarr": 30}
+    ok, msg = check.backup_sentinels_regression(_SENTINELS, set(_SENTINELS), dirs)
+    assert ok
+    assert "2 critical sentinel" in msg
+
+
+def test_sentinels_missing_nested_file_alerts():
+    # jellyfin.db re-dropped from a still-present jellyfin/ dir — the incident this guard closes
+    present = {"sonarr/config/sonarr.db"}
+    dirs = {"jellyfin": 50, "sonarr": 30}
+    ok, msg = check.backup_sentinels_regression(_SENTINELS, present, dirs)
+    assert not ok
+    assert "jellyfin/config/data/data/jellyfin.db" in msg and "vanished" in msg
+
+
+def test_sentinels_skipped_when_service_dir_absent():
+    # a decommissioned service (whole dir gone) is the presence/size guard's job — don't double-page
+    present = {"sonarr/config/sonarr.db"}
+    dirs = {"sonarr": 30}  # no jellyfin/ dir at all
+    ok, _ = check.backup_sentinels_regression(_SENTINELS, present, dirs)
+    assert ok
+
+
+def test_sentinels_service_dir_zero_files_is_skipped():
+    dirs = {
+        "jellyfin": 0,
+        "sonarr": 30,
+    }  # jellyfin/ present but emptied -> presence guard owns it
+    present = {"sonarr/config/sonarr.db"}
+    ok, _ = check.backup_sentinels_regression(_SENTINELS, present, dirs)
+    assert ok
+
+
+def test_backup_sentinels_match_restore_drill():
+    """BACKUP_SENTINELS must mirror the kopia restore-drill's SENTINEL map (as <service>/<sentinel>)
+    so the per-cycle critical-file guard and the yearly restore proof can't drift apart (review L2)."""
+    drill = _read_sibling("../../kopia/files/restore-drill.sh")
+    block = re.search(r"declare -A SENTINEL=\((.*?)\n\)", drill, re.S).group(1)
+    drill_sentinels = {
+        "%s/%s" % (m.group(1), m.group(2))
+        for m in re.finditer(r"^\s*\[([a-z0-9-]+)\]=(\S+)", block, re.M)
+    }
+    assert drill_sentinels, "no sentinels parsed from restore-drill.sh — regex drift?"
+    assert set(check.BACKUP_SENTINELS) == drill_sentinels
 
 
 def test_presence_insufficient_history_is_ok():
@@ -3148,8 +3202,6 @@ def test_arr_queue_msg_is_sanitized(monkeypatch):
 
 
 def _read_sibling(relpath):
-    from pathlib import Path
-
     return (Path(__file__).resolve().parent / relpath).read_text()
 
 
@@ -3157,7 +3209,6 @@ def test_checks_and_compose_push_env_agree():
     # Every KUMA_PUSH_* check.py reads must have a compose `environment:` entry and vice-versa —
     # a check added to CHECKS without its env silently never pushes (empty token) with no Kuma
     # no-heartbeat to self-correct. This is the one wiring axis with no other automated guard.
-    import re
 
     in_code = set(
         re.findall(r'_env\("(KUMA_PUSH_[A-Z0-9_]+)"', _read_sibling("check.py"))
@@ -3177,7 +3228,6 @@ def test_checks_and_compose_push_env_agree():
 def test_every_push_token_env_is_wired_to_a_monitor():
     # Each KUMA_PUSH_*={{ var }} env value must also appear as push_token=var in a kuma() label,
     # i.e. an AutoKuma push monitor actually exists to receive what the check pushes.
-    import re
 
     text = _read_sibling("../templates/docker-compose.yml.j2")
     env_vars = set(

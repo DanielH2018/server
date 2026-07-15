@@ -83,6 +83,34 @@ BACKUP_MAX_AGE_H = float(_env("BACKUP_MAX_AGE_H", "30"))
 # (/api/v1/snapshots), so the check stays stateless.
 BACKUP_SIZE_DROP_PCT = float(_env("BACKUP_SIZE_DROP_PCT", "20"))
 BACKUP_SIZE_MIN_HISTORY = int(_env("BACKUP_SIZE_MIN_HISTORY", "3"))
+# Critical-file sentinel guard (folded into check_backup, 2026-07-15 review L2). The presence guard
+# tracks only TOP-LEVEL service dirs and the size guard floors at 20% of the tree, so a kopiaignore
+# regression that re-drops a small NESTED critical file slips through BOTH: the 2026-07-15 incident
+# was a blanket `data*/` dropping jellyfin/config/data/data/jellyfin.db (~4MB, <1% of the tree) while
+# jellyfin/ stayed present via its XML configs — invisible until the yearly restore-drill's turn. We
+# assert each critical file still resolves in the latest snapshot's object tree every cycle. The list
+# MIRRORS the kopia restore-drill's SENTINEL map as `<service>/<sentinel>` (the operator's own set of
+# critical-enough-to-prove-restorable files, all verified present); a lockstep test
+# (test_backup_sentinels_match_restore_drill) keeps the two from drifting.
+_DEFAULT_BACKUP_SENTINELS = [
+    "authelia/config/configuration.yml",
+    "traefik/data/acme.json",
+    "n8n/data/config",
+    "karakeep/data/db.db",
+    "freshrss/config/www/freshrss/data/config.php",
+    "grafana/data/grafana.db",
+    "pihole/data/etc-pihole/pihole.toml",
+    "jellyfin/config/data/data/jellyfin.db",
+    "sonarr/config/sonarr.db",
+    "wg-easy/pi-peers/wg0.json",
+    "home-assistant/config/.storage/core.device_registry",
+    "zigbee2mqtt/data/coordinator_backup.json",
+]
+BACKUP_SENTINELS = [
+    s.strip()
+    for s in _env("BACKUP_SENTINELS", ",".join(_DEFAULT_BACKUP_SENTINELS)).split(",")
+    if s.strip()
+]
 DISK_MOUNTPOINTS = [
     m.strip() for m in _env("DISK_MOUNTPOINTS", "/").split(",") if m.strip()
 ]
@@ -665,6 +693,30 @@ def backup_presence_regression(listings, min_history):
     return True, "all %d expected service dir(s) present" % len(expected)
 
 
+def backup_sentinels_regression(sentinels, present, service_dirs):
+    """Pure: did a critical NESTED sentinel file vanish while its service dir is still present? (ok, msg).
+
+    `sentinels`: snapshot-relative critical-file paths (e.g. 'jellyfin/config/data/data/jellyfin.db').
+    `present`: the subset of `sentinels` that resolved in the latest snapshot's object tree.
+    `service_dirs`: {top_level_dir: file_count} for the latest snapshot. A sentinel is only asserted
+    when its own top-level service dir is present with > 0 files: a whole-service disappearance is the
+    presence/size guard's job (an intentional removal clears there after one cycle), so gating here
+    avoids double-paging AND means a decommissioned service still listed in `sentinels` can't
+    false-page. What this catches that neither other guard can: the presence guard sees only top-level
+    dirs and the size floor is 20% of the tree, so a re-dropped small nested file (the jellyfin.db
+    incident class) trips neither.
+    """
+    checked = [s for s in sentinels if service_dirs.get(s.split("/", 1)[0], 0) > 0]
+    missing = sorted(s for s in checked if s not in present)
+    if missing:
+        return False, (
+            "%d critical backup sentinel file(s) vanished from the latest snapshot while the "
+            "service dir remains (a kopiaignore over-match on a nested path?): %s"
+            % (len(missing), ", ".join(missing))
+        )
+    return True, "all %d critical sentinel file(s) present" % len(checked)
+
+
 # --- checks: each returns (ok, msg) -----------------------------------------
 
 
@@ -682,6 +734,34 @@ def _kopia_dir_files(root_id):
         for e in (data.get("entries") or [])
         if e.get("type") == "d"
     }
+
+
+def _kopia_dir_entries(obj_id, cache):
+    """Cached {child_name: entry} for a Kopia directory object; {} for a missing id. See _kopia_path_exists."""
+    if obj_id not in cache:
+        data = _get_json(KOPIA_URL + "/api/v1/objects/" + obj_id) if obj_id else {}
+        cache[obj_id] = {e.get("name"): e for e in (data.get("entries") or [])}
+    return cache[obj_id]
+
+
+def _kopia_path_exists(root_id, path, cache):
+    """Does `path` (snapshot-relative, '/'-separated) resolve under the snapshot root object?
+
+    Walks /api/v1/objects/<id> level by level from the root, matching each path component against its
+    parent directory's `entries` — the leaf file itself is never fetched, just confirmed to appear in
+    its parent listing. `cache` memoizes each dir listing by object id so sentinels sharing a prefix
+    (the same service dir) fetch it once per cycle. Feeds check_backup's critical-sentinel guard.
+    """
+    obj = root_id
+    parts = [p for p in path.split("/") if p]
+    for i, part in enumerate(parts):
+        entry = _kopia_dir_entries(obj, cache).get(part)
+        if entry is None:
+            return False
+        if i < len(parts) - 1 and entry.get("type") != "d":
+            return False
+        obj = entry.get("obj")
+    return True
 
 
 def check_backup():
@@ -721,10 +801,29 @@ def check_backup():
     pres_ok, pres_msg = backup_presence_regression(listings, BACKUP_SIZE_MIN_HISTORY)
     if not pres_ok:
         return False, pres_msg
-    return True, "last snapshot %.1fh ago, 0 errors; %s; %s" % (
+    # Critical-file sentinel guard: the presence guard above sees only top-level dirs, so a
+    # kopiaignore regression re-dropping a small NESTED file (the jellyfin.db incident) while its
+    # service dir stays present slips through. Walk the latest snapshot's object tree to each
+    # configured sentinel and page if one vanished. Skips when there's no snapshot history to walk
+    # (same as the size/presence guards above).
+    sent_msg = "sentinel guard skipped — no snapshot history"
+    if recent:
+        obj_cache = {}
+        present_sentinels = {
+            s
+            for s in BACKUP_SENTINELS
+            if _kopia_path_exists(recent[-1].get("rootID"), s, obj_cache)
+        }
+        sent_ok, sent_msg = backup_sentinels_regression(
+            BACKUP_SENTINELS, present_sentinels, listings[-1]
+        )
+        if not sent_ok:
+            return False, sent_msg
+    return True, "last snapshot %.1fh ago, 0 errors; %s; %s; %s" % (
         age_h,
         size_msg,
         pres_msg,
+        sent_msg,
     )
 
 
