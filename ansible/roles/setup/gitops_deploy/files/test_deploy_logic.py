@@ -11,6 +11,8 @@ from deploy_logic import (
     health_decision,
     health_settles,
     gate_services,
+    apply_send_result,
+    apply_drain_result,
 )
 
 
@@ -685,3 +687,53 @@ def test_gate_services_threads_deadline_into_health_fn():
 
     gate_services({"a"}, health, 55.0, lambda: 0.0)
     assert seen == [55.0]
+
+
+# The pending-alert queue reconciliation (gitops_deploy.deliver / drain_pending) is pure keep/drop
+# logic lifted here so it's exercised without the un-importable deployer's discord() I/O. deliver()
+# clears a key on a confirmed send and (re)queues its content on a failure; drain() drops only the
+# entries a redelivery confirmed. A regression here silently drops (or never clears) a post-merge alert.
+def test_apply_send_result_clears_key_on_delivery():
+    assert apply_send_result({"secrets:abc": "msg"}, "secrets:abc", "msg", True) == {}
+
+
+def test_apply_send_result_keeps_other_keys_on_delivery():
+    pending = {"secrets:abc": "m1", "tasks:def": "m2"}
+    assert apply_send_result(pending, "secrets:abc", "m1", True) == {"tasks:def": "m2"}
+
+
+def test_apply_send_result_queues_content_on_failure():
+    assert apply_send_result({}, "secrets:abc", "msg", False) == {"secrets:abc": "msg"}
+
+
+def test_apply_send_result_requeues_updated_content_on_failure():
+    # A re-detected alert with fresh content overwrites the stale queued copy.
+    assert apply_send_result({"broad:abc": "old"}, "broad:abc", "new", False) == {
+        "broad:abc": "new"
+    }
+
+
+def test_apply_send_result_delivery_of_absent_key_is_noop():
+    # Delivering a key that was never queued leaves the queue unchanged (caller skips the write).
+    pending = {"tasks:def": "m2"}
+    assert apply_send_result(pending, "secrets:abc", "m1", True) == {"tasks:def": "m2"}
+
+
+def test_apply_send_result_does_not_mutate_input():
+    pending = {"secrets:abc": "msg"}
+    apply_send_result(pending, "secrets:abc", "msg", True)
+    assert pending == {"secrets:abc": "msg"}
+
+
+def test_apply_drain_result_removes_only_delivered():
+    pending = {"a:1": "x", "b:2": "y", "c:3": "z"}
+    assert apply_drain_result(pending, {"a:1", "c:3"}) == {"b:2": "y"}
+
+
+def test_apply_drain_result_none_delivered_keeps_all():
+    pending = {"a:1": "x", "b:2": "y"}
+    assert apply_drain_result(pending, set()) == pending
+
+
+def test_apply_drain_result_all_delivered_empties():
+    assert apply_drain_result({"a:1": "x"}, {"a:1"}) == {}

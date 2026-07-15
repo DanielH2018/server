@@ -25,6 +25,8 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from deploy_logic import (  # noqa: E402
     ChangeSet,
+    apply_drain_result,
+    apply_send_result,
     containers_to_gate,
     deferred_service_alerts,
     gate_services,
@@ -217,14 +219,11 @@ def deliver(key: str, content: str) -> bool:
     never re-reach their alert code on the next (noop) tick, so `discord()`'s own 'retry next tick'
     doesn't hold for them. drain_pending() resends any queued entry every tick. Returns discord()'s result."""
     pending = _read_pending()
-    if discord(content):
-        if pending.pop(key, None) is not None:
-            _write_pending(pending)
-        return True
-    if pending.get(key) != content:
-        pending[key] = content
-        _write_pending(pending)
-    return False
+    delivered = discord(content)
+    updated = apply_send_result(pending, key, content, delivered)
+    if updated != pending:
+        _write_pending(updated)
+    return delivered
 
 
 def drain_pending() -> None:
@@ -234,9 +233,10 @@ def drain_pending() -> None:
     pending = _read_pending()
     if not pending:
         return
-    remaining = {k: c for k, c in pending.items() if not discord(c)}
-    if remaining != pending:
-        _write_pending(remaining)
+    delivered = {k for k, c in pending.items() if discord(c)}
+    updated = apply_drain_result(pending, delivered)
+    if updated != pending:
+        _write_pending(updated)
 
 
 def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
@@ -245,8 +245,9 @@ def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
     Runs on BOTH the no-services branch (deployed=set()) and after a SUCCESSFUL deploy
     (deployed=cs.services): a combined push (svcA template + svcB meta/deps.yml) deploys svcA but
     leaves svcB's deploy-graph change ff-merged and unapplied. The pending remainder is the pure
-    `deferred_service_alerts`; this is its I/O shell (per-SHA dedupe marker + discord). Each channel
-    alerts at most once per origin SHA and advances its marker only on a confirmed delivery."""
+    `deferred_service_alerts`; this is its I/O shell (per-SHA dedupe marker + deliver). Each channel
+    alerts at most once per origin SHA; its marker advances on DETECTION (deliver() and the pending
+    queue own delivery + retry), so a transient webhook blip is redelivered, not silently dropped."""
     pending_tasks, pending_meta = deferred_service_alerts(cs, deployed)
     if pending_tasks and _read_marker(TASKS_ALERT_FILE) != origin:
         # Mark DETECTION here (once per SHA); deliver() owns delivery + retry. This tick ff-merged, so

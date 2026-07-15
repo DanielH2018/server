@@ -268,6 +268,33 @@ def health_settles(samples: list[tuple[str, bool]], settle_checks: int = 3) -> b
     return False
 
 
+def apply_send_result(
+    pending: dict[str, str], key: str, content: str, delivered: bool
+) -> dict[str, str]:
+    """The pending-alert queue after attempting to send `content` under `key`.
+
+    On a confirmed delivery the key is cleared; on a failure the content is (re)queued under it, so a
+    transient webhook blip can't permanently drop a post-merge alert (the ff-merged secrets/tasks/meta
+    paths never re-reach their alert code). Pure: the caller (`deliver` in gitops_deploy.py) does the
+    discord() I/O and persists the result only when it differs from the input. Returns a NEW dict;
+    `pending` is not mutated.
+    """
+    updated = dict(pending)
+    if delivered:
+        updated.pop(key, None)
+    else:
+        updated[key] = content
+    return updated
+
+
+def apply_drain_result(pending: dict[str, str], delivered: set[str]) -> dict[str, str]:
+    """The queue after a drain pass in which the `delivered` keys were confirmed sent — every other
+    entry is kept for the next tick. Pure; the caller (`drain_pending`) does the per-entry discord()
+    I/O and persists only on a change.
+    """
+    return {k: c for k, c in pending.items() if k not in delivered}
+
+
 def gate_services(services, health_fn, gate_deadline, now_fn) -> list[str]:
     """Health-gate `services` (sorted, deterministic) and return those that FAILED.
 
