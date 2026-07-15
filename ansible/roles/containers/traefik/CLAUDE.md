@@ -40,6 +40,16 @@ Metabase dashboard.
   the hardcoded `cloudflare_ips` (`group_vars/all.yml`, which gates trustedIPs + the DOCKER-USER DROP)
   against Cloudflare's published ranges and pages the "Cloudflare IP Drift" monitor on a mismatch,
   since a stale list silently DROPs a client on a newly-added CF range at the edge.
+- **Validating the origin-lock after a reboot: read the state file / Kuma, NOT `journalctl`/
+  `systemctl` on `docker-user-seed.service`.** That seed oneshot logs nothing on success and is
+  `RemainAfterExit=yes`, so any later deploy that re-renders the unit + `daemon_reload`s resets its
+  tracked state without re-running it — leaving `journalctl -b -u docker-user-seed.service` blank and
+  `systemctl show` `inactive`/`ConditionResult=no` even though it engaged correctly at boot (the
+  frequent traefik-role deploy cadence guarantees this within a day of any boot). The DURABLE proof
+  the chain is applied is `/var/lib/docker-user-rules/state.json` (world-readable, rewritten every
+  15 min by `docker-user-verify.sh` — `ok:true` = the live `iptables DOCKER-USER` chain asserts the
+  terminal :80/:443 DROP) and its **DOCKER-USER Origin Lock** Kuma monitor. `iptables -nvL
+  DOCKER-USER` (needs root) is the ground truth if you have a shell.
 - **Bouncer registration is rotation-safe (2026-07-03, exercised live):** the deploy probes
   LAPI with the configured `crowdsec_bouncer_api_key` and deletes + re-adds `traefik-bouncer`
   on mismatch (`cscli bouncers add` is create-only — without this, a rotated key leaves LAPI
@@ -48,7 +58,12 @@ Metabase dashboard.
   traefik recreate, sharing the parent's key hash) **cannot be pruned individually** — cscli
   refuses, "delete parent instead" — so accumulation between rotations is cosmetic and
   accepted; the rotation-path parent delete cascades the whole set. Rotation runbook:
-  `docs/secret-rotation.md` (`assisted`).
+  `docs/secret-rotation.md` (`assisted`). **Not an anomaly: a `traefik-bouncer@::1` row with
+  `Type: Wget` is the deploy-time rotation-guard probe** (`tasks/main.yml` "Probe LAPI with the
+  configured bouncer key" `wget`s `localhost:8080/v1/decisions` from *inside* the crowdsec
+  container). It looks exactly like a bouncer-key leak used from within the container, so a future
+  `cscli bouncers list` audit shouldn't chase it as a compromise indicator — it shares the same
+  known key and is cascaded away by the same parent delete.
 - Ships **systemd units** (`traefik-init.service`, `docker-user-rules.service`) and
   logrotate — this role does more than run a container.
 - The `labels()` macro imported by every other service's compose lives in the repo-level

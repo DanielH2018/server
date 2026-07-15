@@ -33,7 +33,9 @@ Utility role (not a container). Every container role calls into it via
 > grafana, prometheus, janitorr, livesync, peanut, recyclarr, kopia (entrypoint.sh), pihole
 > (resolver configs; its former `absent`→`present` exemption was removed 2026-06-09),
 > freshrss (nginx feed-cache conf), home-assistant, monitor-bridge, mosquitto, terraria,
-> terraria-stats, zigbee2mqtt, autofix-bridge (files/autofix.py bind-mount). Design:
+> terraria-stats, zigbee2mqtt, autofix-bridge (files/autofix.py bind-mount), and
+> cloudflare-ddns, qbittorrent, scrutiny, uptime-kuma (their 2026-07-15 file-mounted secret
+> tasks). This list drifts — trust the grep above over the enumeration. Design:
 > `docs/superpowers/specs/2026-06-07-idempotent-deploys-conditional-recreate-design.md`.
 >
 > **New config-mounting role?** `register:` each bind-mounted config task with a
