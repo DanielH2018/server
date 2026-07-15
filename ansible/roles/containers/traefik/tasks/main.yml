@@ -19,6 +19,20 @@
     modification_time: preserve
     access_time: preserve
 
+- name: Render the Cloudflare DNS API token to a file (kept out of the container's Env)
+  tags: [config]
+  # CF_DNS_API_TOKEN is a zone-edit token; inlined as a compose env var it lands in the container's
+  # Env, readable via the read-only docker-proxy by any monitoring-net container. lego reads
+  # CF_DNS_API_TOKEN_FILE (stripping a trailing newline) — file-mounting keeps it out of container
+  # metadata. no_log so a -v/--diff run doesn't leak it (repo-wide secret-task discipline). 0600 like
+  # acme.json / config.yml; traefik reads it as root via DAC_OVERRIDE.
+  no_log: true
+  ansible.builtin.copy:
+    content: "{{ cloudflare_dns_token }}"
+    dest: "/home/{{ sys_user }}/server/containers/traefik/data/cf_dns_token"
+    mode: "0600"
+  register: traefik_cfg_cf_token
+
 - name: Configure logrotate for Traefik logs
   tags: [config]
   ansible.builtin.copy:
@@ -240,6 +254,7 @@
     # (traefik.yml) stays in the OR since Traefik only reads its static config at boot.
     common_config_changed: >-
       {{ (traefik_cfg_static is changed)
+         or (traefik_cfg_cf_token is changed)
          or (traefik_cfg_whitelist is changed) or (traefik_cfg_trusted_remote_whitelist is changed)
          or (traefik_cfg_acquis is changed)
          or (traefik_cfg_profiles is changed) or (traefik_cfg_discord is changed) }}

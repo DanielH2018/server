@@ -108,7 +108,12 @@ services:
       # - 0.0.0.0:25565:25565/tcp  # minecraft (still archived)
     environment:
       - CF_API_EMAIL={{ email }}
-      - CF_DNS_API_TOKEN={{ cloudflare_dns_token }}
+      # The DNS-01 zone-edit token is file-mounted, NOT inlined here: an inline env var lands in the
+      # container's Env, readable via the read-only docker-proxy by any monitoring-net container — and
+      # this token can repoint DNS / mint certs for the whole zone. lego (traefik's ACME lib) reads
+      # CF_DNS_API_TOKEN_FILE and strips a trailing newline, so file-mounting removes it from container
+      # metadata entirely. (CF_API_EMAIL isn't sensitive.) Rendered by the tasks/main.yml token task.
+      - CF_DNS_API_TOKEN_FILE=/run/secrets/cf_dns_token
       # TZ (not an /etc/localtime mount): the image ships zoneinfo, so this gives access logs +
       # CrowdSec decision logs the homelab's America/Chicago like every other container (host is
       # UTC). Downstream-safe — promtail ships traefik lines on ingestion time (no timestamp
@@ -118,6 +123,7 @@ services:
       - ./data/traefik.yml:/traefik.yml:ro
       - ./data/acme.json:/acme.json
       - ./data/dynamic:/dynamic:ro
+      - ./data/cf_dns_token:/run/secrets/cf_dns_token:ro
       - /var/log/traefik:/var/log/traefik
     {{ healthcheck('["CMD", "traefik", "healthcheck"]') }}
     labels:

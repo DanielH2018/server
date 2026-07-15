@@ -27,10 +27,22 @@ write_state() { # ok msg
   logger -t crowdsec-appsec-verify "$1: $2"
 }
 
+# DEFER a TOTAL crowdsec outage to the monitors that already own it — the crowdsec container's own
+# Kuma monitor and Prometheus Scrape Targets (crowdsec:6060). This check owns ONLY the fail-open-
+# while-crowdsec-is-UP blind spot (a silently-broken appsec engine); paging here on crowdsec death
+# too would triple-page one root cause and misdirect, and this every-15-min cron could false-page in
+# the crowdsec-still-starting window after the weekly reboot. Mirrors check_ups' NUT-down defer
+# (same commit). `cscli lapi status` is exactly crowdsec's OWN healthcheck gate, so "crowdsec healthy"
+# and "this check runs its asserts" stay in lockstep. write ok + exit 0 so the monitor stays green.
+if ! docker exec crowdsec cscli lapi status >/dev/null 2>&1; then
+  write_state true "crowdsec unreachable — deferring to Scrape Targets + the crowdsec monitor"
+  exit 0
+fi
+
 CONFIGS=$(docker exec crowdsec cscli appsec-configs list -o json 2>/dev/null \
   | jq '[.["appsec-configs"][]? | select(.status == "enabled")] | length' 2>/dev/null)
 if [ -z "$CONFIGS" ]; then
-  write_state false "cscli appsec-configs list failed (crowdsec down / cscli error)"
+  write_state false "cscli appsec-configs list failed though LAPI is up (appsec query error)"
   exit 1
 fi
 if [ "$CONFIGS" -lt 1 ]; then
@@ -45,7 +57,7 @@ fi
 RULES=$(docker exec crowdsec cscli appsec-rules list -o json 2>/dev/null \
   | jq '[.["appsec-rules"][]? | select(.status == "enabled")] | length' 2>/dev/null)
 if [ -z "$RULES" ]; then
-  write_state false "cscli appsec-rules list failed (crowdsec down / cscli error)"
+  write_state false "cscli appsec-rules list failed though LAPI is up (appsec query error)"
   exit 1
 fi
 if [ "$RULES" -lt 1 ]; then
