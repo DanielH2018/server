@@ -68,6 +68,15 @@ _BROAD_PREFIXES = (
     "ansible/roles/setup/",
     "ansible/initial_setup.yml",
     "ansible/bootstrap.yml",
+    # Repo-root deploy-toolchain files, read fresh by every ansible-playbook the deployer runs
+    # (WorkingDirectory is the repo root, so ./ansible.cfg applies) but mapping to no service:
+    # ansible.cfg sets inventory/roles_path/collections_path/fact-caching; pyproject.toml + uv.lock
+    # pin the `uv run --frozen` env each deploy uses. Without these a toolchain-only push falls into
+    # the silent docs-only ff-merge and a bad value then mis-attributes a later unrelated deploy's
+    # failure (2026-07-15 review M1). pyproject/uv.lock are partly backstopped by CI `uv lock --check`.
+    "ansible.cfg",
+    "pyproject.toml",
+    "uv.lock",
 )
 # The SOPS-encrypted secrets file. A change here maps to no service template, but the new
 # value only reaches a container on its next deploy — so a secrets-ONLY push must NOT be

@@ -91,6 +91,16 @@ def test_bringup_playbooks_are_broad():
         assert cs.services == set()
 
 
+def test_deploy_toolchain_files_are_broad():
+    # ansible.cfg / pyproject.toml / uv.lock are repo-root files read by every ansible-playbook the
+    # deployer runs (CWD = repo root) but map to no service — flag broad (defer-and-alert) so a
+    # toolchain change can't silently ff-merge and mis-attribute a later deploy's failure.
+    for p in ("ansible.cfg", "pyproject.toml", "uv.lock"):
+        cs = services_from_changed_paths([p])
+        assert cs.broad is True, p
+        assert cs.services == set(), p
+
+
 def test_unrelated_path_ignored():
     paths = ["docs/superpowers/specs/x.md", "README.md"]
     cs = services_from_changed_paths(paths)
