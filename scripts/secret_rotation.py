@@ -244,6 +244,32 @@ def registry_drift(registered: set, present: set) -> tuple[list, list]:
     return sorted(present - registered), sorted(registered - present)
 
 
+def audit_summary(res: dict, missing: list, stale: list) -> str:
+    """The one-line status pushed to the "Secret Rotation" Kuma monitor. NAMES the overdue
+    secrets (most-overdue first, capped) — a bare count read identically whether a genuine cron
+    break stranded a rotatable token or one of the consumer-less known-manual auto tokens
+    (secret_rotation/pi_sd_health/pi_recovery push tokens, which the weekly cron deliberately
+    skips) merely came due, so the operator had to SSH in to tell the two apart (2026-07-15 M1)."""
+    n_over = len(res["overdue"])
+    parts = ["%d %s" % (c, t) for t, c in sorted(res["by_tier"].items())]
+    if n_over:
+        names = [r[0] for r in res["overdue"]]
+        shown = ", ".join(names[:5]) + (
+            (" +%d more" % (len(names) - 5)) if len(names) > 5 else ""
+        )
+        summary = "%d secret(s) overdue (%s): %s" % (n_over, ", ".join(parts), shown)
+    else:
+        summary = "all secrets within rotation window"
+    if missing:
+        summary += "; %d unregistered (run sync)" % len(missing)
+    if stale:
+        summary += "; %d stale registry entr%s (run sync)" % (
+            len(stale),
+            "y" if len(stale) == 1 else "ies",
+        )
+    return summary
+
+
 def cmd_audit(args) -> int:
     reg = load_registry()
     # Registry drift: warn by default (so a forgotten `sync` is visible); --check fails on it.
@@ -253,19 +279,7 @@ def cmd_audit(args) -> int:
     for name, tier, d, days_left in res["all"]:
         flag = "OVERDUE" if days_left < 0 else ("soon" if days_left <= 14 else "ok")
         print("  %-7s %-40s %-9s due %s (%+d d)" % (flag, name, tier, d, days_left))
-    parts = ["%d %s" % (c, t) for t, c in sorted(res["by_tier"].items())]
-    summary = (
-        ("%d secret(s) overdue (%s)" % (n_over, ", ".join(parts)))
-        if n_over
-        else "all secrets within rotation window"
-    )
-    if missing:
-        summary += "; %d unregistered (run sync)" % len(missing)
-    if stale:
-        summary += "; %d stale registry entr%s (run sync)" % (
-            len(stale),
-            "y" if len(stale) == 1 else "ies",
-        )
+    summary = audit_summary(res, missing, stale)
     print("audit:", summary)
     if args.push:
         url = os.environ.get("SECRET_ROTATION_KUMA")

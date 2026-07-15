@@ -107,6 +107,35 @@ def test_due_date_pinned_uses_long_cadence():
     assert sr.due_date(entry) == dt.date(2026, 1, 1) + dt.timedelta(days=730)
 
 
+def test_audit_summary_names_overdue_secrets():
+    # The pushed Kuma msg must NAME which secret is overdue — a bare count can't tell a genuine
+    # cron break from one of the consumer-less known-manual auto tokens merely coming due (M1).
+    today = dt.date(2026, 6, 11)
+    reg = _reg(
+        ("secret_rotation_push_token", "auto", "2025-01-01"),
+        ("fresh_push_token", "auto", "2026-06-01"),
+    )
+    summary = sr.audit_summary(sr.audit(reg, today), [], [])
+    assert "secret_rotation_push_token" in summary
+    assert "1 auto" in summary
+
+
+def test_audit_summary_clean_when_nothing_overdue():
+    today = dt.date(2026, 6, 11)
+    reg = _reg(("fresh_push_token", "auto", "2026-06-01"))
+    assert (
+        sr.audit_summary(sr.audit(reg, today), [], [])
+        == "all secrets within rotation window"
+    )
+
+
+def test_audit_summary_caps_the_overdue_name_list():
+    today = dt.date(2026, 6, 11)
+    reg = _reg(*[("t%02d_push_token" % i, "auto", "2025-01-01") for i in range(8)])
+    summary = sr.audit_summary(sr.audit(reg, today), [], [])
+    assert "+3 more" in summary  # 8 overdue → first 5 named, then "+3 more"
+
+
 # ── sync ────────────────────────────────────────────────────────────────────
 def test_sync_adds_missing_and_preserves_existing():
     today = dt.date(2026, 6, 11)
