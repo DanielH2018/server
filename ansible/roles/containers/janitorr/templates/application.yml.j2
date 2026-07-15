@@ -38,8 +38,14 @@ application:
       15: 60d # 2 months
       20: 120d # 4 months
 
+  # DISABLED (2026-07-15 review M2): both features shipped enabled with janitorr's upstream DEMO tag
+  # placeholders — "5 - demo" / "10 - demo" (spaces) and janitorr_daily (underscore) — which all
+  # violate the *arr ^[a-z0-9-]+$ tag-label rule (same trap as exclusion-tags above), so no such tag
+  # can exist and neither feature ever matched any media; verified inert since the role began. Turned
+  # OFF rather than "fixed": they were never operator-wired (no matching tag exists in Sonarr/Radarr)
+  # and janitorr deletes for real. To use one, set enabled: true with HYPHENATED, operator-created tags.
   tag-based-deletion:
-    enabled: true
+    enabled: false
     minimum-free-disk-percent: 100
     schedules:
       - tag: 5 - demo
@@ -48,7 +54,7 @@ application:
         expiration: 7d
 
   episode-deletion:
-    enabled: true
+    enabled: false
     clean-older-seasons: false
     tag: janitorr_daily # Shows tagged with this will have all episodes of their LATEST season deleted by the below thresholds
     max-episodes: 10
