@@ -16,7 +16,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **thirty-seven checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **thirty-eight checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the nine
@@ -148,6 +148,18 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     `ips-v4`/`ips-v6` and alerts on any mismatch — it never auto-applies a fetched list to a firewall.
     Cloudflare changes these ~once per several years, so it's a low-frequency safety net. Same
     state-file idiom; pure `cloudflare_drift()` is unit-tested. `CLOUDFLARE_DRIFT_MAX_AGE_D` tunes it.)
+  - **CrowdSec AppSec** (reads `/crowdsec-appsec/state.json`, written **every 15 min** by the
+    **traefik** role's `appsec-verify.sh` root cron — `down` on a failed live assert or >45 min
+    staleness (3 missed 15-min runs), a missing/corrupt state file included. The CrowdSec AppSec
+    inline L7 WAF (2026-07-14) fails **OPEN** (`crowdsecAppsecUnreachableBlock: false`), so if its
+    engine stops loading the appsec config/rulesets — a bad `cscli collections upgrade`, a hub rename
+    dropping `appsec-virtual-patching`/`appsec-generic-rules`, a broken `appsec-default` config — the
+    edge silently degrades to ban-list-only while the crowdsec container stays up + `cscli lapi status`
+    healthy, which Scrape Targets can't catch (it only sees a TOTAL crowdsec death). The cron asserts
+    the live agent has ≥1 enabled `cscli appsec-configs` **and** ≥1 inband `cscli appsec-rules` loaded
+    — both traffic-independent (the `cs_appsec_*` request counters read zero on a quiet homelab and
+    would false-page). It's the one fail-open edge control that lacked the repo's state-file→monitor
+    idiom. Same idiom as `docker_user`; pure `appsec()` is unit-tested. `APPSEC_MAX_AGE_MIN` tunes it.)
   - **Backup Verify** (reads `/verify/state.json`, written weekly by the kopia role's
     `kopia-verify.sh` host cron — `down` on a FAILED `kopia snapshot verify` (detected
     bit-rot / an unreadable blob), >10 d staleness, or a missing/corrupt state file. The
@@ -214,15 +226,18 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     nearing shutdown) OR the UPS's own **replace-battery** verdict (`UPS_REPLACE_QUERY`, an HA
     template `binary_sensor.apc_ups_replace_battery` over the NUT `RB` flag — the earliest signal, it
     can trip while charge/runtime still read fine; before this the RB verdict reached NEITHER channel,
-    2026-07-14 review). A **partial** absence (one configured arm gone while others report — an entity
-    rename) pages rather than silently monitoring the survivor; ALL arms absent still defers (HA
-    scrape down). The only
+    2026-07-14 review). Two defer paths avoid double-paging a source outage another monitor owns:
+    ALL arms absent → HA's whole scrape is down (Scrape Targets' page); **both NUT numeric arms
+    (charge, runtime) absent while the replace arm is still present** → the NUT server/integration
+    dropped (HA drops the unavailable numeric sensors, but the replace-battery template FLOORS to 0 so
+    it stays present — it CANNOT reach the all-absent branch), which the `nut` container healthcheck
+    owns. A **partial** absence that is neither (a single numeric arm gone, or replace gone while the
+    numerics report) is a specific entity rename → pages through the streak rather than silently
+    monitoring the survivor. The only
     pre-existing UPS alert is an HA automation → **mobile** push (a separate channel from this
     Kuma→Discord brain) and nothing trended the battery, so a slowly-degrading battery was invisible
     until an outage collapsed it — this is the health/runway signal + the Discord escalation path.
-    **Prom-dependent** (queries HA's scrape); ALL series absent (HA scrape down / NUT integration
-    dropped) → `up` — Scrape Targets owns HA-source liveness and the `nut` container healthcheck owns
-    the NUT server, so it defers rather than double-paging. `UPS_CONSECUTIVE` (2, like
+    **Prom-dependent** (queries HA's scrape). `UPS_CONSECUTIVE` (2, like
     `HA_CONSECUTIVE`) rides out a one-cycle dip from a transient load spike (or an HA-restart blip
     that briefly drops one arm). Queries are env-driven
     (`UPS_CHARGE_QUERY`/`UPS_RUNTIME_QUERY`/`UPS_REPLACE_QUERY`, all empty = disabled) so a UPS/entity
@@ -380,7 +395,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,appsec,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -406,6 +421,10 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   ordering is naturally satisfied. The **Cloudflare IP Drift** monitor's
   `/var/lib/cloudflare-ip-drift:/cloudflare-drift:ro` mount (written weekly by the same role's
   `cloudflare-ip-drift.sh`, seeded once on deploy) is created the same way with the same ordering.
+  The **CrowdSec AppSec** monitor's `/var/lib/crowdsec-appsec:/crowdsec-appsec:ro` mount (written
+  every 15 min by the same role's `appsec-verify.sh`, seeded once on deploy) follows the same
+  ordering — but that dir is **root-owned** (the verify cron runs as root via `docker exec`, like
+  `docker-user-verify.sh`), and the script `chmod 0644`s its state file for the non-root reader.
 - The **Disk Autoprune** monitor bind-mounts `/var/lib/autofix-disk-prune:/autofix-disk:ro`
   (written by the `autofix-bridge` role's hourly disk-prune cron). That role creates the dir
   sys_user-owned, so on a fresh host deploy `autofix-bridge` before `monitor-bridge` (else Docker
@@ -424,7 +443,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the thirty-seven push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the thirty-eight push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI

@@ -493,3 +493,49 @@
     user: "{{ sys_user }}"
     job: /usr/local/bin/cloudflare-ip-drift.sh
     state: present
+
+- name: Create the CrowdSec AppSec monitor state directory
+  tags: [config]
+  # monitor-bridge bind-mounts this read-only (/crowdsec-appsec) and its `appsec` check alerts on a
+  # failed live assert or staleness. Root-owned: the verify cron runs as root (docker exec) and writes
+  # state.json here. Traefik deploys before monitor-bridge (everything depends on it) so the mount
+  # source exists (else Docker auto-creates it and monitor-bridge reads "never ran").
+  ansible.builtin.file:
+    path: /var/lib/crowdsec-appsec
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Deploy CrowdSec AppSec live-verify watchdog script
+  tags: [config]
+  ansible.builtin.template:
+    src: appsec-verify.sh.j2
+    dest: /usr/local/bin/appsec-verify.sh
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+
+- name: Refresh the CrowdSec AppSec verify state each deploy
+  tags: [config]
+  # Run once now so state.json exists, is fresh, and is world-readable (the script chmods it) before
+  # monitor-bridge reads it — so a fresh host / this very deploy don't false-page "never ran"; the
+  # 15-min cron owns ongoing refresh. Read-only cscli asserts; failed_when:false so a failed assert is
+  # the monitor's page, not a deploy blocker (docker-user-verify / kopia state-seed idiom). Runs after
+  # the collections re-assert above, so the appsec rulesets are in place before the first check.
+  ansible.builtin.command: /usr/local/bin/appsec-verify.sh
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Schedule CrowdSec AppSec live-verify
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "Verify CrowdSec AppSec WAF"
+    minute: "*/15"
+    user: root
+    job: /usr/local/bin/appsec-verify.sh
+    state: present
+  become: true

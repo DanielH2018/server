@@ -1,0 +1,52 @@
+#!/bin/bash
+# Watchdog for the CrowdSec AppSec inline WAF (config.yml.j2 `crowdsecAppsecEnabled` + the `appsec`
+# acquisition source in crowdsec-acquis.yaml.j2). The bouncer fails OPEN
+# (`crowdsecAppsecUnreachableBlock: false`), so if the appsec engine stops loading its config/rulesets
+# — a bad `cscli collections upgrade`, a hub rename dropping appsec-virtual-patching/appsec-generic-
+# rules, a broken appsec-default config — the edge silently degrades to ban-list-only with NO signal:
+# Scrape Targets only catches a TOTAL crowdsec death (the container stays up + `cscli lapi status`
+# healthy). This asserts the live agent has >=1 ENABLED appsec-config AND >=1 inband appsec-rule
+# loaded — both traffic-independent (unlike the cs_appsec_* request counters, which read zero on a
+# quiet homelab and would false-page). Writes {"ts","ok","msg"} to STATE every run; monitor-bridge's
+# `appsec` check reads it (:ro bind mount) and pushes the "CrowdSec AppSec" Kuma monitor on a failed
+# assert or staleness. Runs as root (docker exec). `set -uo` (not -euo) so a failed assert is captured
+# + reported, not swallowed by an early exit (docker-user-verify / cloudflare-ip-drift / kopia idiom).
+set -uo pipefail
+
+STATE=/var/lib/crowdsec-appsec/state.json
+
+write_state() { # ok msg
+  # jq, not printf: a stray control char would make hand-built JSON invalid -> monitor-bridge reads
+  # "state unparseable" (false DOWN). Matches docker-user-verify / cloudflare-ip-drift / the kopia crons.
+  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
+    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE"
+  # This cron runs as root (docker exec), so the state file is root-owned; make it world-readable so
+  # the non-root monitor-bridge container (UID 1000, :ro bind) can read it. `>` truncates in place and
+  # preserves an existing file's mode, so a umask alone wouldn't fix a pre-existing 0640.
+  chmod 0644 "$STATE"
+  logger -t crowdsec-appsec-verify "$1: $2"
+}
+
+CONFIGS=$(docker exec crowdsec cscli appsec-configs list -o json 2>/dev/null \
+  | jq '[.["appsec-configs"][]? | select(.status == "enabled")] | length' 2>/dev/null)
+if [ -z "$CONFIGS" ]; then
+  write_state false "cscli appsec-configs list failed (crowdsec down / cscli error)"
+  exit 1
+fi
+if [ "$CONFIGS" -lt 1 ]; then
+  write_state false "no enabled appsec-configs — inline WAF not loaded, edge is ban-list-only"
+  exit 1
+fi
+
+RULES=$(docker exec crowdsec cscli appsec-rules list -o json 2>/dev/null \
+  | jq '(.["appsec-rules"] // []) | length' 2>/dev/null)
+if [ -z "$RULES" ]; then
+  write_state false "cscli appsec-rules list failed (crowdsec down / cscli error)"
+  exit 1
+fi
+if [ "$RULES" -lt 1 ]; then
+  write_state false "0 inband appsec-rules loaded — WAF config present but not enforcing"
+  exit 1
+fi
+
+write_state true "$CONFIGS appsec-configs enabled, $RULES inband rules loaded"

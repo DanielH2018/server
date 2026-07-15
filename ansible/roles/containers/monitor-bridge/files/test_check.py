@@ -1390,6 +1390,41 @@ def test_cloudflare_drift_missing_state_is_down(tmp_path, monkeypatch):
     assert "never ran" in msg
 
 
+def test_appsec_ok_recent_is_up():
+    ok, msg = check.appsec(
+        {"ok": True, "msg": "3 appsec-configs enabled, 195 inband rules loaded"},
+        60,
+        2700,
+    )
+    assert ok
+    assert "enforcing" in msg
+
+
+def test_appsec_failed_assert_is_down():
+    # A broken appsec engine (bad cscli collections upgrade / hub rename) leaves the WAF unloaded
+    # while crowdsec stays up — the fail-open blind spot this monitor exists to catch.
+    ok, msg = check.appsec(
+        {"ok": False, "msg": "no enabled appsec-configs — inline WAF not loaded"},
+        60,
+        2700,
+    )
+    assert not ok
+    assert "not enforcing" in msg
+
+
+def test_appsec_stale_is_down():
+    ok, msg = check.appsec({"ok": True, "msg": "ok"}, 4000, 2700)
+    assert not ok
+    assert "verify cron stopped" in msg
+
+
+def test_check_appsec_missing_state_is_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "APPSEC_STATE", str(tmp_path / "nope.json"))
+    ok, msg = check.check_appsec()
+    assert not ok
+    assert "never ran" in msg
+
+
 def _maintenance_state(tmp_path, monkeypatch, ts, ok, msg):
     p = tmp_path / "maint.json"
     p.write_text(
@@ -1691,6 +1726,19 @@ def test_check_ups_absent_data_defers_to_scrape_targets(monkeypatch):
     _ups_scalars(monkeypatch, None, None, replace=None)
     ok, msg = check.check_ups()
     assert ok and "no UPS data" in msg
+
+
+def test_check_ups_nut_server_down_defers_not_double_pages(monkeypatch):
+    # A real NUT-server outage (peanut down / USB unplugged): HA drops the numeric charge+runtime
+    # sensors (unavailable) while the replace-battery template FLOORS to 0 (stays present) ->
+    # charge=None, runtime=None, replace=0.0. That's the nut container healthcheck's page, NOT an
+    # entity rename, so check_ups must DEFER (up) — not partial-absence page with a misdirecting
+    # "entity renamed?" msg (the 2026-07-14 review M1 double-page bug).
+    check._ups_down_streak = 0
+    _ups_scalars(monkeypatch, None, None, replace=0.0)
+    ok, msg = check.check_ups()
+    assert ok and "NUT numeric arms" in msg
+    assert check._ups_down_streak == 0
 
 
 def test_check_ups_replace_battery_pages(monkeypatch):

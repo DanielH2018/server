@@ -29,11 +29,15 @@ Metabase dashboard.
   deliberately NOT the full OWASP CRS (`appsec-crs`), which is false-positive-prone. **Fails OPEN**
   (`crowdsecAppsecUnreachableBlock: false`): an appsec-broker/crowdsec hiccup keeps the edge serving
   (defers to the ban-list) rather than 500ing the fleet — the add-on must not become a new edge SPOF.
-  Verify active: `docker exec crowdsec cscli appsec-configs list` (non-empty) + `metrics` shows an
-  `appsec` acquisition source.
+  **Because it fails open, a silently-broken appsec engine has no other signal** — so `appsec-verify.sh`
+  (every 15 min, below) asserts the live agent has ≥1 enabled `cscli appsec-configs` + ≥1 inband
+  `cscli appsec-rules` loaded and pages monitor-bridge's "CrowdSec AppSec" monitor on failure. Manual
+  verify: `docker exec crowdsec cscli appsec-configs list` (non-empty) + `metrics` shows an `appsec`
+  acquisition source.
 - **Host crons (state-file → monitor-bridge):** `crowdsec-update-home-allowlist.sh` (every 5 min),
-  `docker-user-verify.sh` (every 15 min), and `cloudflare-ip-drift.sh` (weekly) — the last diffs the
-  hardcoded `cloudflare_ips` (`group_vars/all.yml`, which gates trustedIPs + the DOCKER-USER DROP)
+  `docker-user-verify.sh` (every 15 min), `appsec-verify.sh` (every 15 min, asserts the inline WAF is
+  actually loaded — the fail-open blind spot), and `cloudflare-ip-drift.sh` (weekly) — the last diffs
+  the hardcoded `cloudflare_ips` (`group_vars/all.yml`, which gates trustedIPs + the DOCKER-USER DROP)
   against Cloudflare's published ranges and pages the "Cloudflare IP Drift" monitor on a mismatch,
   since a stale list silently DROPs a client on a newly-added CF range at the edge.
 - **Bouncer registration is rotation-safe (2026-07-03, exercised live):** the deploy probes

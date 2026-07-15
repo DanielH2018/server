@@ -159,6 +159,15 @@ services:
       - CLOUDFLARE_DRIFT_STATE=/cloudflare-drift/state.json
       - CLOUDFLARE_DRIFT_MAX_AGE_D=10
       - KUMA_PUSH_CLOUDFLARE_DRIFT={{ monitor_bridge_cloudflare_drift_push_token }}
+      # CrowdSec AppSec inline-WAF liveness (traefik role's appsec-verify.sh cron, every 15 min): the
+      # bouncer fails OPEN (crowdsecAppsecUnreachableBlock:false), so a broken appsec engine (a bad
+      # cscli collections upgrade, a hub rename dropping the appsec rulesets) silently drops the edge
+      # to ban-list-only while crowdsec stays up + LAPI-healthy — Scrape Targets only catches a TOTAL
+      # crowdsec death. The cron asserts the live agent has >=1 enabled appsec-config + >=1 inband rule
+      # and writes state.json; alert on a failed assert or 45-min staleness (3 missed 15-min runs).
+      - APPSEC_STATE=/crowdsec-appsec/state.json
+      - APPSEC_MAX_AGE_MIN=45
+      - KUMA_PUSH_APPSEC={{ monitor_bridge_appsec_push_token }}
       # Weekly kopia snapshot verify: the host cron (kopia role) writes state.json; we
       # alert on a FAILED verify (bit-rot / unreadable blob the old `| logger` cron
       # swallowed), >10d staleness, or a missing/corrupt file. The verify tier of the
@@ -345,6 +354,7 @@ services:
       - /var/lib/kopia-b2-usage:/b2-usage:ro
       - /var/lib/docker-user-rules:/docker-user:ro
       - /var/lib/cloudflare-ip-drift:/cloudflare-drift:ro
+      - /var/lib/crowdsec-appsec:/crowdsec-appsec:ro
       - /var/lib/kopia-content-verify:/content-verify:ro
     {{ service_networks() }}
     labels:
@@ -402,6 +412,12 @@ services:
          published ranges) — down on drift (a stale list DROPs a client on a new CF range at the origin
          lock, no log trail), a failed fetch, or >10d staleness. -#}
       {{ kuma('cloudflare-ip-drift', monitor_type='push', name='Cloudflare IP Drift', interval=600, max_retries=0, push_token=monitor_bridge_cloudflare_drift_push_token) }}
+      {# CrowdSec AppSec: check_appsec reads /crowdsec-appsec/state.json (written every 15 min by the
+         traefik role's appsec-verify.sh, which asserts the live agent has appsec configs + inband
+         rules loaded) — down on a failed assert (WAF not enforcing → the edge silently degraded to
+         ban-list-only, the fail-open blind spot) or 45m staleness. The bouncer fails open, so nothing
+         else signals a dead inline WAF while crowdsec stays up. -#}
+      {{ kuma('crowdsec-appsec', monitor_type='push', name='CrowdSec AppSec', interval=600, max_retries=0, push_token=monitor_bridge_appsec_push_token) }}
       {{ kuma('kopia-verify', monitor_type='push', name='Backup Verify', interval=600, max_retries=0, push_token=monitor_bridge_verify_push_token) }}
       {# Backup Content Verify: check_content_verify reads /content-verify/state.json (written quarterly
          by the kopia role's content-verify.sh — a 25% deep content re-read) — down on a failed verify

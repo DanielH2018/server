@@ -158,6 +158,9 @@ DOCKER_USER_MAX_AGE_S = float(_env("DOCKER_USER_MAX_AGE_MIN", "45")) * 60
 CLOUDFLARE_DRIFT_STATE = _env("CLOUDFLARE_DRIFT_STATE", "/cloudflare-drift/state.json")
 CLOUDFLARE_DRIFT_MAX_AGE_S = float(_env("CLOUDFLARE_DRIFT_MAX_AGE_D", "10")) * 86400
 
+APPSEC_STATE = _env("APPSEC_STATE", "/crowdsec-appsec/state.json")
+APPSEC_MAX_AGE_S = float(_env("APPSEC_MAX_AGE_MIN", "45")) * 60
+
 # Weekly kopia snapshot verify: the host cron (kopia-verify.sh, kopia role) writes
 # {"ts": epoch, "ok": bool, "msg": str} after each run; we alert on a FAILED verify
 # (detected bit-rot / an unreadable blob — failures the old `| logger` cron silently
@@ -1321,13 +1324,19 @@ def check_ups():
     """UPS battery health from HA's Prometheus-scraped sensors (see the UPS_* env block above).
 
     Three arms: charge %, estimated runtime, and the replace-battery self-test verdict. All queries
-    empty -> disabled (stays up), like check_pi_pressure without a glances URL. ALL series absent (HA
-    scrape down / NUT integration dropped) -> up: the HA scrape target being down is Scrape Targets'
-    page and the nut container healthcheck owns the NUT server, so this defers rather than
-    double-paging. A PARTIAL absence (some configured arms present, others gone) is a specific entity
-    rename/removal, NOT that deferral — it pages (through the streak) rather than silently monitoring
-    the survivor. UPS_CONSECUTIVE hysteresis (like check_ha_heartbeat) rides out a single-cycle
-    runtime dip from a load spike or an HA-restart blip; only a sustained problem pages.
+    empty -> disabled (stays up), like check_pi_pressure without a glances URL. Two defer paths keep
+    this from double-paging a source outage another monitor already owns:
+      - ALL arms absent -> HA's whole Prometheus scrape is down (Scrape Targets' page).
+      - both NUT NUMERIC arms (charge, runtime) absent while the replace-battery arm is still present
+        -> the NUT server/integration dropped: HA drops the unavailable numeric sensors, but the
+        replace-battery template FLOORS to 0 (stays present) in that same outage (templates.yaml), so
+        a NUT outage can't reach the all-absent branch above. The nut container healthcheck owns
+        NUT-server death, so defer rather than double-paging it with a misdirecting "entity renamed?".
+    A PARTIAL absence that is NEITHER of those (a single numeric arm gone, or the replace arm gone
+    while the numerics report) is a specific entity rename/removal — it pages (through the streak)
+    rather than silently monitoring the survivor. UPS_CONSECUTIVE hysteresis (like check_ha_heartbeat)
+    rides out a single-cycle runtime dip from a load spike or an HA-restart blip; only a sustained
+    problem pages.
     """
     global _ups_down_streak
     configured = [
@@ -1349,6 +1358,25 @@ def check_ups():
             "no UPS data in Prometheus (HA scrape down? Scrape Targets owns source liveness)",
         )
     missing = [name for name, v in values.items() if v is None]
+    if (
+        "charge" in values
+        and "runtime" in values
+        and values["charge"] is None
+        and values["runtime"] is None
+    ):
+        # NUT server/integration down, NOT an entity rename: charge+runtime are direct NUT numeric
+        # sensors HA drops from Prometheus when the source goes unavailable, while the replace-battery
+        # arm is an HA template binary_sensor that FLOORS to 0 (stays present) in that same outage
+        # (templates.yaml) — so a NUT outage reads as both numeric arms absent + replace present, past
+        # the all-absent branch above. The nut container healthcheck owns NUT-server death, so defer
+        # rather than double-paging it through the partial-absence path below with a misdirecting
+        # "entity renamed?" msg. A single numeric arm gone (charge XOR runtime) is still a real rename.
+        _ups_down_streak = 0
+        return (
+            True,
+            "NUT numeric arms (charge, runtime) absent — NUT server/integration down; "
+            "nut healthcheck owns it",
+        )
     if missing:
         # Some configured arms present, others absent — NOT the whole-scrape-down case above but a
         # specific entity rename/removal. Don't silently monitor the survivor: passing on the present
@@ -1683,6 +1711,43 @@ def check_cloudflare_drift():
     except ValueError, TypeError:
         return False, "Cloudflare-drift state unparseable"
     return cloudflare_drift(state, age_s, CLOUDFLARE_DRIFT_MAX_AGE_S)
+
+
+def appsec(state, age_s, max_age_s):
+    """Pure: is the CrowdSec AppSec inline WAF loaded and enforcing, per the last verify? (ok, msg).
+
+    Same state-file idiom as home_allowlist/docker_user/cloudflare_drift. The verify cron asserts the
+    live crowdsec agent has its appsec config + inband rulesets loaded every run. The bouncer fails
+    OPEN (crowdsecAppsecUnreachableBlock:false), so a broken appsec engine — a bad `cscli collections
+    upgrade`, a hub rename dropping appsec-virtual-patching/appsec-generic-rules — silently degrades
+    the edge to ban-list-only while the container stays up + `cscli lapi status`-healthy, which Scrape
+    Targets can't catch (it only sees a TOTAL crowdsec death). ok=false means the live assert failed
+    (WAF not enforcing); a stale timestamp means the verify cron itself stopped.
+    """
+    if not state.get("ok"):
+        return False, "CrowdSec AppSec WAF not enforcing: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return (
+            False,
+            "last AppSec verify %.0f min ago (max %.0f) — verify cron stopped?"
+            % (age_s / 60, max_age_s / 60),
+        )
+    return True, "AppSec WAF enforcing, verified %.0f min ago: %s" % (
+        age_s / 60,
+        state.get("msg", ""),
+    )
+
+
+def check_appsec():
+    try:
+        with open(APPSEC_STATE) as fh:
+            state = json.load(fh)
+        age_s = time.time() - float(state.get("ts", 0))
+    except FileNotFoundError:
+        return False, "no AppSec verify state (verify never ran?)"
+    except ValueError, TypeError:
+        return False, "AppSec verify state unparseable"
+    return appsec(state, age_s, APPSEC_MAX_AGE_S)
 
 
 def b2_usage(state, age_s, max_age_s, cap_bytes, max_pct):
@@ -2240,6 +2305,7 @@ CHECKS = [
         _env("KUMA_PUSH_CLOUDFLARE_DRIFT", ""),
         check_cloudflare_drift,
     ),
+    ("appsec", _env("KUMA_PUSH_APPSEC", ""), check_appsec),
     ("maintenance", _env("KUMA_PUSH_MAINTENANCE", ""), check_maintenance),
     ("b2_usage", _env("KUMA_PUSH_B2", ""), check_b2_usage),
     ("b2_trend", _env("KUMA_PUSH_B2_TREND", ""), check_b2_trend),
