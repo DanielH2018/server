@@ -17,10 +17,12 @@ set -uo pipefail
 STATE=/var/lib/kopia-content-verify/state.json
 
 write_state() { # ok msg
-  # jq, not printf: a stray backslash/control char in the kopia-derived msg would make a hand-built
-  # string invalid JSON -> monitor-bridge reads "state unparseable" (false DOWN). jq escapes it.
+  # jq (not printf) so a stray backslash/control char in the kopia-derived msg can't make invalid
+  # JSON. Temp + atomic rename: monitor-bridge reads this every 300s with no retry, so a read landing
+  # mid-truncate would see a half-written file and page a false "state unparseable" DOWN.
   jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
-    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE"
+    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE.tmp" \
+    && chmod 0644 "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
   logger -t kopia-content-verify "$1: $2"
 }
 

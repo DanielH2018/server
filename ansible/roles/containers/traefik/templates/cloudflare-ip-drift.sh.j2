@@ -15,10 +15,12 @@ set -uo pipefail
 STATE=/var/lib/cloudflare-ip-drift/state.json
 
 write_state() { # ok msg
-  # jq, not printf: a stray control char in msg would make hand-built JSON invalid -> monitor-bridge
-  # reads "state unparseable" (false DOWN). Matches crowdsec-update-home-allowlist / the kopia crons.
+  # jq (not printf) so a stray control char in msg can't make invalid JSON. Temp + atomic rename:
+  # monitor-bridge reads this every 300s with no retry, so a read landing mid-truncate would see a
+  # half-written file and page a false "state unparseable" DOWN.
   jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
-    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE"
+    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE.tmp" \
+    && chmod 0644 "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
   logger -t cloudflare-ip-drift "$1: $2"
 }
 

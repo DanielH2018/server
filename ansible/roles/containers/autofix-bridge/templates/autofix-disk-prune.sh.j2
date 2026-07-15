@@ -20,9 +20,13 @@ DRY_RUN={{ (autofix_disk_dry_run | default(false)) | string | lower }}
 
 used_pct() { df -P / | awk 'NR==2 { gsub(/%/,"",$5); print $5 }'; }
 
-write_state() { # ok msg   (jq builds valid JSON; a raw msg could break a hand-built string)
+write_state() { # ok msg
+  # jq builds valid JSON (a raw msg could break a hand-built string). Temp + atomic rename:
+  # monitor-bridge reads this every 300s with no retry, so a read landing mid-truncate would see a
+  # half-written file and page a false "state unparseable" DOWN.
   jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
-    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE"
+    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE.tmp" \
+    && chmod 0644 "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
   logger -t autofix-disk-prune "$1: $2"
 }
 

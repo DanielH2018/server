@@ -16,10 +16,12 @@ STATE_FILE="/home/{{ sys_user }}/.crowdsec-home-ip"
 STATE=/var/lib/crowdsec-home-allowlist/state.json
 
 write_state() { # ok msg
-  # jq, not printf: a stray control char in msg would make hand-built JSON invalid -> monitor-bridge
-  # reads "state unparseable" (false DOWN). Matches the kopia / wg-easy-pull-pi-peers crons.
+  # jq (not printf) so a stray control char in msg can't make invalid JSON. Temp + atomic rename:
+  # this cron writes every 5 min — exactly monitor-bridge's read interval — so a read landing
+  # mid-truncate would see a half-written file and page a false "state unparseable" DOWN.
   jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
-    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE"
+    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE.tmp" \
+    && chmod 0644 "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
   logger -t crowdsec-home-allowlist "$1: $2"
 }
 

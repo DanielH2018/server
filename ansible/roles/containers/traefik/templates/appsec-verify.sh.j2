@@ -16,14 +16,14 @@ set -uo pipefail
 STATE=/var/lib/crowdsec-appsec/state.json
 
 write_state() { # ok msg
-  # jq, not printf: a stray control char would make hand-built JSON invalid -> monitor-bridge reads
-  # "state unparseable" (false DOWN). Matches docker-user-verify / cloudflare-ip-drift / the kopia crons.
+  # jq (not printf) so a stray control char can't make hand-built JSON invalid. Temp + atomic rename,
+  # chmod'ing the temp 0644 BEFORE the mv: this root cron writes a root-owned file, and the non-root
+  # monitor-bridge container (UID 1000, :ro bind) reads it every 300s with no retry — so a mid-truncate
+  # read would page a false "state unparseable" DOWN, and the swapped-in file must be world-readable
+  # the instant it appears (a plain `>` truncates in place and would also expose the half-written file).
   jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
-    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE"
-  # This cron runs as root (docker exec), so the state file is root-owned; make it world-readable so
-  # the non-root monitor-bridge container (UID 1000, :ro bind) can read it. `>` truncates in place and
-  # preserves an existing file's mode, so a umask alone wouldn't fix a pre-existing 0640.
-  chmod 0644 "$STATE"
+    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE.tmp" \
+    && chmod 0644 "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
   logger -t crowdsec-appsec-verify "$1: $2"
 }
 

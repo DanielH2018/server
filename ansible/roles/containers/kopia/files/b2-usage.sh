@@ -19,10 +19,12 @@ STATE=/var/lib/kopia-b2-usage/state.json
 CFG=/app/config/repository.config
 
 write_state() { # ok bytes msg
-  # jq, not printf: a stray backslash/control char in the msg would make a hand-built
-  # string invalid JSON -> monitor-bridge reads "state unparseable" (false DOWN).
+  # jq (not printf) so a stray backslash/control char in the msg can't make invalid JSON. Temp +
+  # atomic rename (like the .prom write below): monitor-bridge reads this every 300s with no retry,
+  # so a read landing mid-truncate would see a half-written file and page a false "state unparseable".
   jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --argjson bytes "$2" --arg msg "$3" \
-    '{ts: $ts, ok: $ok, bytes: $bytes, msg: $msg}' > "$STATE"
+    '{ts: $ts, ok: $ok, bytes: $bytes, msg: $msg}' > "$STATE.tmp" \
+    && chmod 0644 "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
   logger -t kopia-b2-usage "$1: $3"
 }
 fail() { write_state false 0 "$1"; exit 1; }
