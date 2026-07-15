@@ -68,15 +68,18 @@ _BROAD_PREFIXES = (
     "ansible/roles/setup/",
     "ansible/initial_setup.yml",
     "ansible/bootstrap.yml",
-    # Repo-root deploy-toolchain files, read fresh by every ansible-playbook the deployer runs
-    # (WorkingDirectory is the repo root, so ./ansible.cfg applies) but mapping to no service:
-    # ansible.cfg sets inventory/roles_path/collections_path/fact-caching; pyproject.toml + uv.lock
-    # pin the `uv run --frozen` env each deploy uses. Without these a toolchain-only push falls into
-    # the silent docs-only ff-merge and a bad value then mis-attributes a later unrelated deploy's
-    # failure (2026-07-15 review M1). pyproject/uv.lock are partly backstopped by CI `uv lock --check`.
+    # ansible.cfg is a repo-root file read fresh by every ansible-playbook the deployer runs
+    # (WorkingDirectory is the repo root, so ./ansible.cfg applies) but maps to no service — it sets
+    # inventory/roles_path/collections_path/fact-caching, so a bad value mis-attributes a later
+    # unrelated deploy's failure (2026-07-15 review M1). It changes rarely and operator-driven, so
+    # broad (defer-and-alert) fits. pyproject.toml + uv.lock are deliberately NOT broad: they churn on
+    # a predictable weekly cadence (renovate.json lockFileMaintenance + every dep-pin bump re-resolves
+    # uv.lock), and the broad path never ff-merges — it parks local behind origin, and since broad is
+    # checked before services, every later image bump (incl. CVE automerges) then piles up unapplied
+    # behind the stuck lockfile until a manual full deploy (2026-07-15 review H1). A bad lockfile is
+    # already caught pre-merge by CI `uv lock --check` and at deploy by the health-gate rollback, so
+    # letting them take the silent ff-merge path (pre-2026-07-15 behavior) is the safer trade.
     "ansible.cfg",
-    "pyproject.toml",
-    "uv.lock",
 )
 # The SOPS-encrypted secrets file. A change here maps to no service template, but the new
 # value only reaches a container on its next deploy — so a secrets-ONLY push must NOT be

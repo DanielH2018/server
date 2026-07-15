@@ -91,14 +91,24 @@ def test_bringup_playbooks_are_broad():
         assert cs.services == set()
 
 
-def test_deploy_toolchain_files_are_broad():
-    # ansible.cfg / pyproject.toml / uv.lock are repo-root files read by every ansible-playbook the
-    # deployer runs (CWD = repo root) but map to no service — flag broad (defer-and-alert) so a
-    # toolchain change can't silently ff-merge and mis-attribute a later deploy's failure.
-    for p in ("ansible.cfg", "pyproject.toml", "uv.lock"):
+def test_ansible_cfg_is_broad_but_lockfiles_are_not():
+    # ansible.cfg is a repo-root file read by every ansible-playbook the deployer runs (CWD = repo
+    # root) but maps to no service — flag broad (defer-and-alert) so a bad value can't silently
+    # ff-merge and mis-attribute a later deploy's failure.
+    cs = services_from_changed_paths(["ansible.cfg"])
+    assert cs.broad is True
+    assert cs.services == set()
+    # pyproject.toml / uv.lock churn weekly (lockFileMaintenance) and the broad path never ff-merges,
+    # so flagging them broad parked the host and blocked every downstream image bump behind the stuck
+    # lockfile (2026-07-15 review H1). They map to no service and aren't secrets, so they take the
+    # silent ff-merge path; CI `uv lock --check` + the deploy health-gate back them up.
+    for p in ("pyproject.toml", "uv.lock"):
         cs = services_from_changed_paths([p])
-        assert cs.broad is True, p
+        assert cs.broad is False, p
         assert cs.services == set(), p
+        assert cs.secrets is False, p
+        assert cs.tasks == set(), p
+        assert cs.meta == set(), p
 
 
 def test_unrelated_path_ignored():
