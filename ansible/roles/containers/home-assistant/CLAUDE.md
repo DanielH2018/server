@@ -10,8 +10,9 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   releases, so it belongs in the critical/stateful tier (like jellyfin/the *arr stack) — bump via
   Renovate PRs (the `/linuxserver/` regex tracks the tag), not watchtower's watch-all `:latest` pool.
   (LSIO is x86-64-maintained; only the 32-bit ARM variant was deprecated — fine for daniel-server.)
-- **Host:** daniel-server · **Port:** 8123 · **Networks:** apps + ups · **Authelia:** no
-  (`ups` = isolation net to the `nut` sidecar's upsd:3493 for the NUT integration;
+- **Host:** daniel-server · **Port:** 8123 · **Networks:** apps + ups + mqtt · **Authelia:** no
+  (`ups` = isolation net to the `nut` sidecar's upsd:3493 for the NUT integration; `mqtt` = isolation
+  net to the `mosquitto` broker for the MQTT / Zigbee2MQTT integration;
   `apps` stays networks[0] so the Traefik label binds to it)
 - **Depends on:** traefik
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
