@@ -1,6 +1,7 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
 {% from 'expose.yml.j2' import web_ui_labels, web_ui_ports_block with context %}
 ---
 
@@ -25,18 +26,13 @@ services:
       - DOZZLE_NO_ANALYTICS=true
       - TZ={{ tz }}
     {{ service_networks() }}
-    healthcheck:
-      # Dozzle ships a self-check subcommand in its own binary (no curl/wget needed,
-      # so it works under cap_drop ALL). Verify the path on deploy (docker inspect).
-      # timeout is 30s, not the fleet's 10s: on the Pi (Zero 2 W) load spikes made the
-      # probe exceed 10s while dozzle was actually fine — autoheal then restarted it,
-      # adding more load (observed 2026-06-11). The check is in-binary and cheap; the
-      # long timeout only delays detection, it can't mask a real failure.
-      test: ["CMD", "/dozzle", "healthcheck"]
-      interval: {{ container_healthcheck_interval | default('30s') }}
-      timeout: 30s
-      retries: 3
-      start_period: 15s
+    # Dozzle ships a self-check subcommand in its own binary (no curl/wget needed, so it works under
+    # cap_drop ALL — verify the path on deploy). timeout is 30s, not the fleet's 10s: on the Pi
+    # (Zero 2 W) load spikes made the probe exceed 10s while dozzle was actually fine — autoheal then
+    # restarted it, adding load (observed 2026-06-11). The check is in-binary and cheap; the long
+    # timeout only delays detection, it can't mask a real failure. The Pi host_vars pin
+    # container_healthcheck_interval (60s), so the macro's hash de-stagger isn't used on the real host.
+    {{ healthcheck('["CMD", "/dozzle", "healthcheck"]', start_period='15s', interval=(container_healthcheck_interval | default(none)), timeout='30s') }}
     labels:
 {{ web_ui_labels('8080') }}
       {{ kuma(container_item.name) }}
