@@ -18,15 +18,17 @@
    Invoke at the service's 4-space indent so `healthcheck:` lands correctly:
        healthcheck('curl --fail -s http://localhost:80/ || exit 1')
 #}
-{% macro healthcheck(test, start_period='30s', interval=none, timeout='10s', retries=3) -%}
+{% macro healthcheck(test, start_period='30s', interval=none, timeout='10s', retries=3, name='') -%}
 {#- De-stagger the healthcheck herd: at a fixed 30s, the ~40 macro-using containers all
     started in the same post-reboot second probe in lockstep, firing ~40 exec checks
     every 30s. When the caller doesn't override `interval`, derive a deterministic 30-40s
-    from a hash of the (per-service) `test` string, so probes spread across an 11s window
-    AND drift apart over time (different periods). Callers passing `interval=` (e.g. the
-    Pi's 60s) are untouched. -#}
+    from a hash of `name ~ test`, so probes spread across an 11s window AND drift apart over
+    time (different periods). Two services with a BYTE-IDENTICAL `test` string (e.g. grafana +
+    littlelink both wget localhost:3000) would otherwise phase-lock on the same derived interval,
+    defeating the spread — so pass `name=container_item.name` to break the tie. Callers passing
+    `interval=` (e.g. the Pi's 60s) are untouched. -#}
 {%- if interval is none -%}
-{%- set interval = (30 + ((test | hash('md5'))[:4] | int(0, 16) % 11)) ~ 's' -%}
+{%- set interval = (30 + (((name ~ test) | hash('md5'))[:4] | int(0, 16) % 11)) ~ 's' -%}
 {%- endif -%}
 healthcheck:
       test: {{ test }}

@@ -34,7 +34,7 @@ services:
       - GITHUB=https://github.com/DanielH2018
       - LINKED_IN=https://www.linkedin.com/in/danielrhunter/
     {{ service_networks() }}
-    {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1') }}
+    {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1', name=container_item.name) }}
     restart: unless-stopped
     # Read-only rootfs: `docker diff` shows zero rootfs writes. tmpfs /tmp is defensive
     # (Node's os.tmpdir) — this is the public landing page, so favor a safe margin.
