@@ -15,8 +15,9 @@ can catch a title that lies — the only pre-grab lever is **release-group reput
 ## At a glance
 - **Image:** `ghcr.io/raydak-labs/configarr` (version-pinned, Renovate-managed)
 - **Host:** daniel-server · **No web UI**, no Authelia · **Networks:** media · **Depends on:** sonarr
-- **One-shot:** runs, reconciles Sonarr, exits (`restart: "no"`, no healthcheck/AutoKuma).
-  Re-runs on deploy (config change) + a daily `docker start -a configarr` cron.
+- **One-shot (ephemeral):** run via `compose run --rm` (a fresh container that auto-removes each
+  sync, so nothing lingers in `docker ps -a`), on deploy + a daily cron. No container_name /
+  restart / healthcheck / AutoKuma — a batch job, not a service.
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 
 ## Scope — deliberately minimal (READ THIS before changing the config)
@@ -48,5 +49,6 @@ uv run python scripts/probe.py arr sonarr "/api/v3/qualityprofile" --json \
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Sync config: `templates/config.yml.j2`
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "configarr"`
-- Verify a sync: `docker logs configarr` (it exits after reconciling; a healthy run lists the
-  managed CFs and reports no errors).
+- Verify/run a sync manually (no persistent container to `docker logs` — it's `--rm`):
+  `docker compose -f containers/configarr/docker-compose.yml run --rm -T configarr` — a healthy
+  run lists the managed CFs and reports no errors.

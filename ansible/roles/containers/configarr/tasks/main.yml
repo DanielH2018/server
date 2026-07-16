@@ -14,28 +14,44 @@
   ansible.builtin.template:
     src: config.yml.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/config.yml"
-    # 0600: embeds the Sonarr API key. Owned by the PUID the container runs as (1000:1000),
-    # so it stays readable.
+    # 0600: embeds the Sonarr API key. Owned by the PUID the container runs as (1000:1000).
     mode: "0600"
   no_log: true
-  register: configarr_cfg
 
-- name: Deploy Container
+- name: Render docker-compose.yml
   tags: [deploy]
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: docker_deploy.yml
-  vars:
-    # A changed config.yml must recreate the one-shot so the new sync runs (the compose
-    # service definition itself is unchanged — see common/CLAUDE.md on common_config_changed).
-    common_config_changed: "{{ configarr_cfg is changed }}"
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/docker-compose.yml"
+    mode: "0600"
+  no_log: true
 
-- name: Schedule daily Configarr re-sync (drift correction)
+# Configarr is a one-shot reconcile, not a long-running service. `compose up` would leave a
+# stopped container lingering in `docker ps -a` between syncs, so instead the role runs it via
+# `compose run --rm` — a fresh container that auto-removes on exit. Nothing lingers.
+- name: Remove the leftover persistent configarr container (migrated off compose up)
+  tags: [deploy]
+  community.docker.docker_container:
+    name: "{{ container_item.name }}"
+    state: absent
+
+- name: Reconcile Sonarr now (fresh --rm container)
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      docker compose
+      -f /home/{{ sys_user }}/server/containers/{{ container_item.name }}/docker-compose.yml
+      run --rm -T {{ container_item.name }}
+  changed_when: true
+
+- name: Schedule daily Configarr re-sync (fresh --rm container, nothing lingers)
   tags: [cron]
   ansible.builtin.cron:
     name: "configarr-sync"
     minute: "30"
     hour: "4"
-    # Re-run the one-shot container. `-a` blocks + propagates the sync exit code so a
-    # failed reconcile is logged (mirrors the repo's other host-cron jobs).
-    job: "docker start -a configarr >/dev/null 2>&1 || logger -t configarr-sync 'configarr re-sync failed'"
+    job: >-
+      docker compose
+      -f /home/{{ sys_user }}/server/containers/{{ container_item.name }}/docker-compose.yml
+      run --rm -T {{ container_item.name }}
+      >/dev/null 2>&1 || logger -t configarr-sync 'configarr re-sync failed'

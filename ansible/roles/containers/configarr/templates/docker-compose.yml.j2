@@ -6,14 +6,11 @@ services:
     # supports LOCAL custom-format definitions (recyclarr is TRaSH-guide-only). We use it
     # to keep the Sonarr "Anime" profile's release-group defense in IaC — see CLAUDE.md.
     image: ghcr.io/raydak-labs/configarr:1.30.0
-    container_name: configarr
     user: {{ puid }}:{{ pgid }}
-    # One-shot: Configarr reconciles Sonarr and exits. `no` = don't loop-restart on exit.
-    # Re-runs happen on deploy (config change -> recreate) and via the daily
-    # `docker start -a configarr` cron in tasks/main.yml. Deliberately NO healthcheck /
-    # AutoKuma label — this is a batch job, not a service; an exited one-shot would
-    # otherwise show as a false "down" in Kuma.
-    restart: "no"
+    # One-shot reconcile, never `compose up`'d: the role runs it via `compose run --rm` (fresh
+    # container, auto-removed each sync) on deploy + a daily cron, so nothing lingers in
+    # `docker ps -a` between runs — hence no container_name, no restart policy, and deliberately
+    # no healthcheck / AutoKuma label (a batch job, not a service).
     cap_drop:
       - ALL
     security_opt:
