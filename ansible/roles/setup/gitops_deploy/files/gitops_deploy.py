@@ -26,6 +26,7 @@ from deploy_logic import (  # noqa: E402
     ChangeSet,
     apply_drain_result,
     apply_send_result,
+    broad_remediation,
     containers_to_gate,
     deferred_service_alerts,
     gate_services,
@@ -414,15 +415,17 @@ def main() -> int:
 
     if cs.broad:
         # Broad doesn't ff-merge, so it re-evals next tick — the per-SHA marker (inside alert_once)
-        # stops a re-queue while the pending queue owns redelivery.
+        # stops a re-queue while the pending queue owns redelivery. Name the RIGHT playbook per plane:
+        # deploy.yml applies only container roles, so a setup-plane change (roles/setup/,
+        # requirements.yml, bring-up playbooks) needs initial_setup.yml (2026-07-16 review M1).
         alert_once(
             BROAD_FILE,
             "broad",
             origin,
-            f"⚠️ gitops-deploy: shared template / inventory changed in "
-            f"`{origin[:8]}` — deferring to a manual full deploy "
-            f"(`ansible-playbook ansible/deploy.yml`), then `git merge --ff-only "
-            f"origin/{BRANCH}` on the host to clear it.",
+            f"⚠️ gitops-deploy: broad change (shared template / inventory / setup role) in "
+            f"`{origin[:8]}` — deferring to a manual deploy. Run "
+            f"{broad_remediation(cs.broad_deploy, cs.broad_setup)} on the host, then "
+            f"`git merge --ff-only origin/{BRANCH}` to clear it.",
         )
         return 0
     if not cs.services:

@@ -47,27 +47,16 @@ _ACTIVE_META = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/meta/"
 _ACTIVE_ROLE = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/")
 # A `container_name:` line in a rendered docker-compose.yml.
 _CONTAINER_NAME = re.compile(r'^\s*container_name:\s*["\']?([^\s"\']+)["\']?\s*$')
-# Changes whose blast radius we don't try to scope automatically.
-_BROAD_PREFIXES = (
+# Changes whose blast radius we don't try to scope automatically. Split by which manual playbook
+# actually applies them, so the defer-and-alert can name the RIGHT one (2026-07-16 review M1):
+# `deploy.yml` is a pure containers_list loop, so a setup-plane change deployed via deploy.yml is a
+# silent no-op — it must be applied with `initial_setup.yml` instead.
+_BROAD_DEPLOY_PREFIXES = (
     "ansible/templates/",  # shared macros (traefik/networks/resources/...)
     "ansible/inventory/",  # host_vars / group_vars
     "ansible/roles/containers/common/",  # shared deploy path
     "ansible/deploy.yml",
     "ansible/filter_plugins/",  # toposort
-    # Galaxy collections: installed by sops_setup (initial_setup.yml), NOT deploy.yml — a
-    # bump here maps to no service, so without this it would silently ff-merge and sit
-    # unapplied until a manual `initial_setup.yml --tags collections`. Defer-and-alert instead.
-    "ansible/requirements.yml",
-    # Setup roles (gitops_deploy itself, renovate_notify, sops_setup, …): wired into
-    # initial_setup.yml, NOT deploy.yml — a change here maps to no container service, so
-    # without this it falls into the silent "docs-only" ff-merge and sits unapplied until a
-    # manual `initial_setup.yml --tags <role>`. Worst case is a fix to gitops_deploy.py
-    # itself: it ff-merges, the host keeps running the OLD code forever, and last_run still
-    # updates (old code writes it) so no monitor catches it. Defer-and-alert instead. The
-    # bring-up playbooks share this fate — they only run by hand — so flag them too.
-    "ansible/roles/setup/",
-    "ansible/initial_setup.yml",
-    "ansible/bootstrap.yml",
     # ansible.cfg is a repo-root file read fresh by every ansible-playbook the deployer runs
     # (WorkingDirectory is the repo root, so ./ansible.cfg applies) but maps to no service — it sets
     # inventory/roles_path/collections_path/fact-caching, so a bad value mis-attributes a later
@@ -81,6 +70,20 @@ _BROAD_PREFIXES = (
     # letting them take the silent ff-merge path (pre-2026-07-15 behavior) is the safer trade.
     "ansible.cfg",
 )
+# Broad changes applied by initial_setup.yml, NOT deploy.yml — deploy.yml renders NOTHING for these,
+# so the defer-alert must point the operator at `initial_setup.yml --tags <role>`. Naming deploy.yml
+# here is a no-op that leaves the change unapplied while a plain `git merge --ff-only` clears the
+# divergence — worst case a fix to gitops_deploy.py itself ff-merges and the host keeps running the
+# OLD code forever, with last_run still updating (old code writes it) so no monitor catches it.
+_BROAD_SETUP_PREFIXES = (
+    # Galaxy collections: installed by sops_setup — `initial_setup.yml --tags collections`.
+    "ansible/requirements.yml",
+    # Setup roles (gitops_deploy itself, renovate_notify, sops_setup, …): `--tags <role>`.
+    "ansible/roles/setup/",
+    # The bring-up playbooks — they only run by hand.
+    "ansible/initial_setup.yml",
+    "ansible/bootstrap.yml",
+)
 # The SOPS-encrypted secrets file. A change here maps to no service template, but the new
 # value only reaches a container on its next deploy — so a secrets-ONLY push must NOT be
 # silently fast-forwarded; the deployer defers-and-alerts (see gitops_deploy.py). NOT in
@@ -93,6 +96,12 @@ _SECRETS_FILE = "ansible/vars/secrets.yml"
 class ChangeSet:
     services: set[str] = field(default_factory=set)
     broad: bool = False
+    # Which manual playbook a broad change needs — deploy.yml's plane (shared templates/inventory/
+    # common) vs initial_setup.yml's (roles/setup/, requirements.yml, bring-up playbooks). `broad`
+    # stays the OR so the existing defer branch is unchanged; these drive the alert's remediation
+    # command so a setup-plane change isn't sent to deploy.yml (a no-op). A push can set both.
+    broad_deploy: bool = False
+    broad_setup: bool = False
     secrets: bool = False
     # `tasks` is the defer-and-alert channel for a service's structural, not-auto-deployed dirs:
     # tasks/ plus the _ACTIVE_ROLE catch-all (defaults/, vars/, handlers/, …). The alert names all
@@ -107,8 +116,13 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         if p == _SECRETS_FILE:
             cs.secrets = True
             continue
-        if any(p.startswith(prefix) for prefix in _BROAD_PREFIXES):
+        if any(p.startswith(prefix) for prefix in _BROAD_SETUP_PREFIXES):
             cs.broad = True
+            cs.broad_setup = True
+            continue
+        if any(p.startswith(prefix) for prefix in _BROAD_DEPLOY_PREFIXES):
+            cs.broad = True
+            cs.broad_deploy = True
             continue
         m = _ACTIVE_CONFIG.match(p)
         if m:
@@ -130,6 +144,23 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         if r and not p.endswith(".md"):
             cs.tasks.add(r.group(1))
     return cs
+
+
+def broad_remediation(broad_deploy: bool, broad_setup: bool) -> str:
+    """The manual command(s) a broad (defer-and-alert) change needs, by which plane it hit.
+
+    deploy.yml runs only container roles, so a setup-plane change (roles/setup/, requirements.yml,
+    the bring-up playbooks) needs `initial_setup.yml --tags <role>`; naming deploy.yml there is a
+    silent no-op that leaves the change unapplied while a plain ff-merge clears the divergence —
+    worst case a fix to gitops_deploy.py itself (2026-07-16 review M1). A push hitting both planes
+    names both.
+    """
+    cmds: list[str] = []
+    if broad_deploy:
+        cmds.append("`ansible-playbook ansible/deploy.yml`")
+    if broad_setup:
+        cmds.append("`ansible-playbook ansible/initial_setup.yml --tags <role>`")
+    return " and ".join(cmds)
 
 
 def deferred_service_alerts(

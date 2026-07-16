@@ -3,6 +3,7 @@ from datetime import datetime
 
 from deploy_logic import (
     services_from_changed_paths,
+    broad_remediation,
     deferred_service_alerts,
     next_action,
     is_diverged,
@@ -110,6 +111,72 @@ def test_ansible_cfg_is_broad_but_lockfiles_are_not():
         assert cs.secrets is False, p
         assert cs.tasks == set(), p
         assert cs.meta == set(), p
+
+
+# review-M1 (2026-07-16): a broad change is sub-classified by which manual playbook applies it, so
+# the defer-alert names the RIGHT one. deploy.yml runs only container roles; the setup plane
+# (roles/setup/, requirements.yml, bring-up playbooks) is applied by initial_setup.yml. Sending a
+# setup-plane change to deploy.yml is a silent no-op that leaves it unapplied while a plain ff-merge
+# clears the divergence — worst case a fix to gitops_deploy.py itself.
+def test_broad_deploy_plane_flags_broad_deploy_not_setup():
+    for p in (
+        "ansible/templates/resources.yml.j2",
+        "ansible/inventory/host_vars/daniel-server.yml",
+        "ansible/roles/containers/common/templates/healthcheck.yml.j2",
+        "ansible/deploy.yml",
+        "ansible/filter_plugins/toposort.py",
+        "ansible.cfg",
+    ):
+        cs = services_from_changed_paths([p])
+        assert cs.broad is True, p
+        assert cs.broad_deploy is True, p
+        assert cs.broad_setup is False, p
+
+
+def test_broad_setup_plane_flags_broad_setup_not_deploy():
+    for p in (
+        "ansible/requirements.yml",
+        "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
+        "ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2",
+        "ansible/initial_setup.yml",
+        "ansible/bootstrap.yml",
+    ):
+        cs = services_from_changed_paths([p])
+        assert cs.broad is True, p
+        assert cs.broad_setup is True, p
+        assert cs.broad_deploy is False, p
+
+
+def test_broad_both_planes_flags_both():
+    # A push touching both planes must flag both so the alert names both playbooks.
+    cs = services_from_changed_paths(
+        [
+            "ansible/deploy.yml",
+            "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
+        ]
+    )
+    assert cs.broad_deploy is True
+    assert cs.broad_setup is True
+
+
+def test_broad_remediation_deploy_only_names_deploy_yml():
+    cmd = broad_remediation(True, False)
+    assert "ansible/deploy.yml" in cmd
+    assert "initial_setup.yml" not in cmd
+
+
+def test_broad_remediation_setup_only_names_initial_setup_not_deploy():
+    # The M1 fix: a setup-plane broad change must NOT tell the operator to run deploy.yml (a no-op
+    # for roles/setup/**) — it names initial_setup.yml --tags <role>.
+    cmd = broad_remediation(False, True)
+    assert "ansible/initial_setup.yml --tags <role>" in cmd
+    assert "ansible/deploy.yml" not in cmd
+
+
+def test_broad_remediation_both_planes_names_both():
+    cmd = broad_remediation(True, True)
+    assert "ansible/deploy.yml" in cmd
+    assert "ansible/initial_setup.yml --tags <role>" in cmd
 
 
 def test_unrelated_path_ignored():
