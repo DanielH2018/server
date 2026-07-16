@@ -25,6 +25,16 @@
   become: true
   notify: Run gitops-deploy once
 
+- name: Install the shared host_lib helper (source of truth in roles/setup/common/files)
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../common/files/host_lib.py"
+    dest: /opt/gitops-deploy/host_lib.py
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+  notify: Run gitops-deploy once
+
 - name: Write deployer config (secrets, host-only)
   ansible.builtin.template:
     src: config.env.j2

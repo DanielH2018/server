@@ -31,6 +31,7 @@ from notify_logic import (  # noqa: E402
     should_notify,
     CLEARED_MSG,
 )
+from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
 
 CONFIG = "/etc/renovate-notify/config.env"
 API = "https://api.github.com"
@@ -44,14 +45,7 @@ DASHBOARD_STALE_MSG = (
 
 
 def cfg() -> dict[str, str]:
-    out: dict[str, str] = {}
-    with open(CONFIG) as fh:
-        for line in fh:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                out[k] = v
-    return out
+    return parse_env_file(CONFIG)
 
 
 def log(msg: str) -> None:
@@ -95,27 +89,10 @@ def build_pr(repo: str, pr: dict) -> PR:
 
 
 def discord(webhook: str, content: str) -> bool:
-    """Post the digest. Returns True only on a confirmed delivery (a 2xx), so the caller can
-    persist the dedupe fingerprint only when the message actually landed -- otherwise a transient
-    webhook failure would advance the fingerprint and permanently suppress that digest (the next
-    daily run sees fingerprint unchanged and stays silent). Failure returns False -> retry next run."""
-    if not webhook:
-        log("no DISCORD_WEBHOOK set; skipping post")
-        return False
-    data = json.dumps({"content": content[:1900]}).encode()
-    # User-Agent is required: Discord is behind Cloudflare, which 403s the default
-    # Python-urllib UA (error code 1010) — without this the post silently fails.
-    req = urllib.request.Request(
-        webhook,
-        data=data,
-        headers={"Content-Type": "application/json", "User-Agent": "renovate-notify"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return 200 <= resp.status < 300
-    except Exception as e:  # alerting must never crash the notifier
-        log("discord post failed: %s" % e)
-        return False
+    """Post the digest via the shared host_lib.discord_post — see there for the Cloudflare-1010
+    User-Agent + 2xx-only-success contract the dedupe fingerprint gates on. Failure returns False so
+    the digest is retried on the next daily run."""
+    return discord_post(webhook, content, "renovate-notify", log=log)
 
 
 def read_state(path: str) -> str:
@@ -127,13 +104,7 @@ def read_state(path: str) -> str:
 
 
 def write_state(path: str, fp: str) -> None:
-    # Atomic temp+rename: the last_run twin written below is read by monitor-bridge every 300s with
-    # no retry, and a torn read float()s an empty string into a false DOWN page (the class 58056d18
-    # closed for the shell state writers). Shared by last_notified + last_run for consistency.
-    tmp = path + ".tmp"
-    with open(tmp, "w") as fh:
-        fh.write(fp)
-    os.replace(tmp, path)
+    atomic_write(path, fp)  # torn-write-safe temp+rename, see host_lib
 
 
 def main() -> int:

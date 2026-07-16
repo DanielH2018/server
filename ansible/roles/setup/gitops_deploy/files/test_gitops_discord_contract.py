@@ -46,28 +46,18 @@ def _str_constants(fn: ast.FunctionDef) -> set[str]:
     }
 
 
-def _int_constants(fn: ast.FunctionDef) -> set[int]:
-    return {
-        c.value
-        for c in ast.walk(fn)
-        if isinstance(c, ast.Constant) and isinstance(c.value, int)
-    }
-
-
-def test_discord_sends_user_agent_header():
-    # Cloudflare 1010-blocks the default python-urllib UA; without a UA the POST 403s and the
-    # `except` swallows it -> a silently-undelivered rollback alert. Assert a User-Agent is set.
-    assert "User-Agent" in _str_constants(_discord_fn()), (
-        "discord() must set a User-Agent header (Cloudflare 1010)"
+def test_discord_delegates_to_shared_discord_post():
+    # The Cloudflare-1010 User-Agent + 2xx-only-success contract now lives in host_lib.discord_post,
+    # which IS importable and is behaviourally tested (common/files/test_host_lib.py) — strictly
+    # stronger than the old AST proxy that pinned the "User-Agent"/200/300 constants inside this
+    # un-importable module. Guard here only that gitops's discord() still ROUTES through it (a
+    # regression inlining a UA-less POST would drop the call) and passes its own User-Agent.
+    fn = _discord_fn()
+    assert _calls(fn, "discord_post"), (
+        "discord() must delegate to host_lib.discord_post (the UA + 2xx contract lives there)"
     )
-
-
-def test_discord_returns_true_only_on_2xx():
-    # The per-SHA dedupe marker is gated on discord() returning True; it must return True ONLY on a
-    # 2xx so a transient failure doesn't advance the marker and suppress the alert forever. Assert a
-    # `200 <= status < 300`-shaped bound survives.
-    assert {200, 300} <= _int_constants(_discord_fn()), (
-        "discord() must bound success to 2xx (200 <= status < 300)"
+    assert "gitops-deploy" in _str_constants(fn), (
+        "discord() must pass its own User-Agent ('gitops-deploy') to discord_post"
     )
 
 

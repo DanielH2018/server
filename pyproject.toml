@@ -29,11 +29,15 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "scripts",                         # closes the smoke_extract CI gap
   "ansible/roles/setup/gitops_deploy/files",   # deploy_logic decision tests
   "ansible/roles/setup/renovate_notify/files", # notifier decision tests
+  "ansible/roles/setup/common/files",          # shared host_lib helper tests
   "ansible/roles/containers/home-assistant/tests", # HA Jinja macro logic tests
   "evals",                                         # homelab eval-case schema validation
 ]
 addopts = "-q"
-pythonpath = ["ansible/filter_plugins"]   # lets test_toposort import toposort (replaces conftest.py)
+# filter_plugins: lets test_toposort import toposort. setup/common/files: host_lib is a cross-role
+# shared module (deployed INTO each setup script's /opt dir as a sibling) — on pythonpath so the
+# import-tested renovate_notify.py + test_host_lib.py resolve it in CI.
+pythonpath = ["ansible/filter_plugins", "ansible/roles/setup/common/files"]
 
 [tool.ruff]
 extend-exclude = ["ansible/collections"]  # never lint or format the vendored third-party collections

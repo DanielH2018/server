@@ -18,7 +18,6 @@ import os
 import subprocess
 import sys
 import time
-import urllib.request
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -36,6 +35,7 @@ from deploy_logic import (  # noqa: E402
     services_from_changed_paths,
     should_alert_dirty,
 )
+from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
 
 
 class RetryableFetchError(Exception):
@@ -87,14 +87,7 @@ CHICAGO = ZoneInfo("America/Chicago")
 
 
 def cfg() -> dict[str, str]:
-    out: dict[str, str] = {}
-    with open("/etc/gitops-deploy/config.env") as fh:
-        for line in fh:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                out[k] = v
-    return out
+    return parse_env_file("/etc/gitops-deploy/config.env")
 
 
 C = cfg()
@@ -154,20 +147,13 @@ def _read_marker(path: str) -> str | None:
 
 
 def _write_marker(path: str, sha: str | None) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
     if sha is None:
         try:
             os.remove(path)
         except FileNotFoundError:
             pass
     else:
-        # Atomic temp+rename (like _write_pending): monitor-bridge reads LAST_RUN/hold_sha every
-        # 300s with no retry and float()s an empty read into a false "unparseable" DOWN page — the
-        # torn-write class 58056d18 closed for the shell state writers, applied to the Python twins.
-        tmp = path + ".tmp"
-        with open(tmp, "w") as fh:
-            fh.write(sha)
-        os.replace(tmp, path)
+        atomic_write(path, sha)  # torn-write-safe temp+rename, see host_lib
 
 
 def read_hold() -> str | None:
@@ -179,28 +165,10 @@ def write_hold(sha: str | None) -> None:
 
 
 def discord(content: str) -> bool:
-    """Post to the alert webhook. Returns True only on a confirmed delivery (a 2xx), so a
-    caller can gate its per-SHA dedupe marker on it -- otherwise a transient webhook failure
-    (timeout, 5xx, momentary Cloudflare block) would advance the marker and permanently
-    suppress that alert (the next tick would see marker==SHA and stay silent). A missing
-    webhook or any error returns False, so the alert is retried on the next tick."""
-    url = C.get("DISCORD_WEBHOOK", "")
-    if not url:
-        return False
-    data = json.dumps({"content": content[:1900]}).encode()
-    # User-Agent required: Discord is behind Cloudflare, which 403s the default Python-urllib
-    # UA (error code 1010) — without this the alert silently fails (the except below swallows it).
-    req = urllib.request.Request(
-        url,
-        data=data,
-        headers={"Content-Type": "application/json", "User-Agent": "gitops-deploy"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return 200 <= resp.status < 300
-    except Exception as e:  # alerting must never crash the deployer
-        log(f"discord alert failed: {e}")
-        return False
+    """Post to the alert webhook via the shared host_lib.discord_post — see there for the
+    Cloudflare-1010 User-Agent + 2xx-only-success contract the per-SHA dedupe markers gate on. A
+    missing webhook or any error returns False, so the alert is retried on the next tick."""
+    return discord_post(C.get("DISCORD_WEBHOOK", ""), content, "gitops-deploy", log=log)
 
 
 def _read_pending() -> dict[str, str]:
