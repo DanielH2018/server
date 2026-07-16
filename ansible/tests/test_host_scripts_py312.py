@@ -120,6 +120,36 @@ def _first_party_imports(script: Path) -> set[str]:
     return found
 
 
+# The cross-role shared lib dir: host_lib.py lives here and is copied INTO each host-run script's
+# /opt dir, so it loads under the same host /usr/bin/python3 but is NOT a sibling of any script —
+# _first_party_imports can't derive it. Resolving a listed script's imports against this dir makes
+# its coverage self-enforcing instead of relying on the hand-listed HOST_RUN_SCRIPTS entry.
+_SHARED_LIB_DIR = _REPO / "ansible/roles/setup/common/files"
+
+
+def _cross_role_shared_imports(script: Path) -> set[str]:
+    """Basenames of modules `script` imports that live in the cross-role shared lib dir. Unlike a
+    first-party sibling (same dir as the script) these can't be derived from the script's own
+    directory, so without this a host-run script importing host_lib.py would rely solely on its
+    hand-listed HOST_RUN_SCRIPTS entry — drop that line and the 3.12 floor-check silently stops
+    covering it, re-opening the exact 3.14-syntax brick this file guards against."""
+    if not _SHARED_LIB_DIR.is_dir():
+        return set()
+    shared = {p.stem for p in _SHARED_LIB_DIR.glob("*.py")}
+    tree = ast.parse(script.read_text())
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.level == 0
+            and node.module in shared
+        ):
+            found.add(f"{node.module}.py")
+        elif isinstance(node, ast.Import):
+            found.update(f"{a.name}.py" for a in node.names if a.name in shared)
+    return found
+
+
 def test_host_run_scripts_list_is_complete() -> None:
     # The parse-guard above only covers the scripts hand-listed in HOST_RUN_SCRIPTS. This closes the
     # drift one level up (the same lockstep pattern as test_prek_pytest_files_cover_testpaths /
@@ -151,4 +181,22 @@ def test_host_run_scripts_list_is_complete() -> None:
         f"a host-run /usr/bin/python3 script imports these first-party modules (same interpreter), "
         f"but they're absent from HOST_RUN_SCRIPTS so the 3.12 parse-guard skips them: "
         f"{sorted(missing_imports)}. Add each module's repo path to HOST_RUN_SCRIPTS."
+    )
+
+    # A cross-role shared lib (host_lib.py) is copied into a script's /opt dir and imported there, so
+    # it loads under the same host python3 but isn't a sibling the scan above can derive — sanity
+    # that the resolver actually sees it (a broken glob would make the assert vacuously pass), then
+    # require every such import be covered, so its HOST_RUN_SCRIPTS entry can't be silently dropped.
+    shared_imports: set[str] = set()
+    for rel in HOST_RUN_SCRIPTS:
+        shared_imports |= _cross_role_shared_imports(_REPO / rel)
+    assert "host_lib.py" in shared_imports, (
+        f"expected a host-run script to import the cross-role host_lib; found {sorted(shared_imports)}"
+    )
+    missing_shared = shared_imports - covered
+    assert not missing_shared, (
+        f"a host-run /usr/bin/python3 script imports these cross-role shared modules (copied into "
+        f"its /opt dir, same interpreter), but they're absent from HOST_RUN_SCRIPTS so the 3.12 "
+        f"parse-guard skips them: {sorted(missing_shared)}. Add each module's repo path to "
+        f"HOST_RUN_SCRIPTS."
     )
