@@ -72,6 +72,20 @@
     key: "{{ hostvars['daniel-pi'].ansible_host }} {{ (wg_easy_pi_hostkey.content | b64decode).split()[0] }} {{ (wg_easy_pi_hostkey.content | b64decode).split()[1] }}"
     state: present
 
+- name: Deploy the shared host-cron state-file writer
+  tags: [cron]
+  when: inventory_hostname == 'daniel-server'
+  # pull-pi-peers.sh sources this for its atomic {ts,ok,msg} state write (the shell twin of
+  # host_lib.py's cross-role Python sharing). Cross-role source lives in the common role; ordered
+  # before the pull script + its deploy-time seed so it's on disk first.
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../common/files/state-lib.sh"
+    dest: /usr/local/lib/state-lib.sh
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: Deploy the Pi wg-easy peer-backup pull script
   tags: [cron]
   when: inventory_hostname == 'daniel-server'

@@ -50,6 +50,19 @@
     state: present
   become: true
 
+- name: Deploy the shared host-cron state-file writer
+  tags: [config]
+  # autofix-disk-prune.sh sources this for its atomic {ts,ok,msg} state write (the shell twin of
+  # host_lib.py's cross-role Python sharing). Cross-role source lives in the common role; ordered
+  # before the prune script + its deploy-time seed so it's on disk first.
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../common/files/state-lib.sh"
+    dest: /usr/local/lib/state-lib.sh
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: Deploy the disk-autoprune script
   tags: [config]
   ansible.builtin.template:

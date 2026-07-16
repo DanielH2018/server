@@ -26,15 +26,9 @@ SRC="{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}@{{ hostvars['d
 DEST="/home/{{ sys_user }}/server/containers/wg-easy/pi-peers/"
 STATE=/var/lib/wg-easy-pi-peers/state.json
 
-write_state() { # ok msg
-  # jq (not printf) so a stray backslash/control char in the rsync-derived msg can't make invalid
-  # JSON. Temp + atomic rename: monitor-bridge reads this every 300s with no retry, so a read landing
-  # mid-truncate would see a half-written file and page a false "state unparseable" DOWN.
-  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
-    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE.tmp" \
-    && chmod 0644 "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
-  logger -t wg-easy-pull-pi-peers "$1: $2"
-}
+# shellcheck source=/dev/null
+source /usr/local/lib/state-lib.sh
+write_state() { state_write "$STATE" wg-easy-pull-pi-peers "$1" "$2"; } # ok msg
 
 mkdir -p "$DEST"
 # --chmod=D700 forces the dest dir to 0700 (rsync -a would otherwise stamp it with the Pi source
