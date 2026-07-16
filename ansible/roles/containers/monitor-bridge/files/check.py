@@ -506,13 +506,21 @@ def _get_json(url, headers=None):
         return json.load(resp)
 
 
-def prom_scalar(promql):
-    """Run an instant query; return the first result's value as float, or None if empty."""
-    url = PROM_URL + "/api/v1/query?" + urllib.parse.urlencode({"query": promql})
+def _instant_query(base_url, path, query, source):
+    """Run an instant query against `base_url + path` (Prometheus or Loki — same
+    /query?query= shape and {status, data.result} envelope); return the result list.
+    Raises RuntimeError if the endpoint reports a non-success status. `source` labels
+    the error ('prometheus'/'loki')."""
+    url = base_url + path + "?" + urllib.parse.urlencode({"query": query})
     data = _get_json(url)
     if data.get("status") != "success":
-        raise RuntimeError("prometheus query status=%s" % data.get("status"))
-    result = data.get("data", {}).get("result", [])
+        raise RuntimeError("%s query status=%s" % (source, data.get("status")))
+    return data.get("data", {}).get("result", [])
+
+
+def prom_scalar(promql):
+    """Run an instant query; return the first result's value as float, or None if empty."""
+    result = _instant_query(PROM_URL, "/api/v1/query", promql, "prometheus")
     if not result:
         return None
     return float(result[0]["value"][1])
@@ -524,13 +532,9 @@ def prom_vector(promql):
     Unlike prom_scalar this keeps each series' labels, so checks can name *which*
     container / target / route is failing.
     """
-    url = PROM_URL + "/api/v1/query?" + urllib.parse.urlencode({"query": promql})
-    data = _get_json(url)
-    if data.get("status") != "success":
-        raise RuntimeError("prometheus query status=%s" % data.get("status"))
     return [
         (series.get("metric", {}), float(series["value"][1]))
-        for series in data.get("data", {}).get("result", [])
+        for series in _instant_query(PROM_URL, "/api/v1/query", promql, "prometheus")
     ]
 
 
@@ -2106,11 +2110,7 @@ def loki_count(selector, window):
     [ts, value] shape prom_scalar parses, so we read result[0].value[1].
     """
     query = "sum(count_over_time(%s[%s]))" % (selector, window)
-    url = LOKI_URL + "/loki/api/v1/query?" + urllib.parse.urlencode({"query": query})
-    data = _get_json(url)
-    if data.get("status") != "success":
-        raise RuntimeError("loki query status=%s" % data.get("status"))
-    result = data.get("data", {}).get("result", [])
+    result = _instant_query(LOKI_URL, "/loki/api/v1/query", query, "loki")
     if not result:
         return None
     return float(result[0]["value"][1])

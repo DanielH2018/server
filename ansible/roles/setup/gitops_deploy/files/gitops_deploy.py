@@ -186,13 +186,9 @@ def _read_pending() -> dict[str, str]:
 
 
 def _write_pending(pending: dict[str, str]) -> None:
-    os.makedirs(os.path.dirname(PENDING_ALERTS_FILE), exist_ok=True)
-    tmp = PENDING_ALERTS_FILE + ".tmp"
-    with open(tmp, "w") as fh:
-        json.dump(pending, fh)
-    os.replace(
-        tmp, PENDING_ALERTS_FILE
-    )  # atomic — a torn write mustn't strand the queue
+    # atomic_write does the same makedirs + temp + os.replace (see host_lib) — a torn write mustn't
+    # strand the queue; already used for the SHA markers above.
+    atomic_write(PENDING_ALERTS_FILE, json.dumps(pending))
 
 
 def deliver(key: str, content: str) -> bool:
