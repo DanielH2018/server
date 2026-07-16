@@ -334,6 +334,11 @@ UPS_REPLACE_QUERY = _env(
     "UPS_REPLACE_QUERY",
     'hass_binary_sensor_state{entity="binary_sensor.apc_ups_replace_battery"}',
 )
+# HA's own scrape-up series, used only to discriminate the all-arms-absent case: HA's whole
+# Prometheus scrape being down (all hass_sensor_* vanish → Scrape Targets owns it, defer) vs HA
+# scraping fine while every UPS entity was renamed/removed at once (Scrape Targets can't see it →
+# the UPS would go silently unmonitored). Empty disables the gate (always defer, the old behaviour).
+UPS_HA_UP_QUERY = _env("UPS_HA_UP_QUERY", 'up{job="home-assistant"}')
 UPS_CHARGE_MIN_PCT = float(_env("UPS_CHARGE_MIN_PCT", "50"))
 UPS_RUNTIME_MIN_S = float(_env("UPS_RUNTIME_MIN_S", "300"))
 UPS_CONSECUTIVE = int(_env("UPS_CONSECUTIVE", "2"))
@@ -1470,7 +1475,10 @@ def check_ups():
     Three arms: charge %, estimated runtime, and the replace-battery self-test verdict. All queries
     empty -> disabled (stays up), like check_pi_pressure without a glances URL. Two defer paths keep
     this from double-paging a source outage another monitor already owns:
-      - ALL arms absent -> HA's whole Prometheus scrape is down (Scrape Targets' page).
+      - ALL arms absent while HA's scrape is DOWN (or the up-gate is unqueryable) -> HA's whole
+        Prometheus scrape is down (Scrape Targets' page). If instead HA is scraping fine (up-gate == 1)
+        and the replace arm is configured, all-absent means every UPS entity was renamed/removed at
+        once — Scrape Targets can't see it, so page through the streak rather than silently unmonitor.
       - both NUT NUMERIC arms (charge, runtime) absent while the replace-battery arm is still present
         -> the NUT server/integration dropped: HA drops the unavailable numeric sensors, but the
         replace-battery template FLOORS to 0 (stays present) in that same outage (templates.yaml), so
@@ -1496,17 +1504,28 @@ def check_ups():
         return True, "UPS monitoring disabled (no query)"
     values = {name: prom_scalar(q) for name, q in configured}
     if all(v is None for v in values.values()):
-        _ups_down_streak = 0
-        return (
-            True,
-            "no UPS data in Prometheus (HA scrape down? Scrape Targets owns source liveness)",
-        )
+        # All arms gone. Usually HA's whole Prometheus scrape is down (the numeric AND the template
+        # sensors vanish together) — Scrape Targets owns that, so defer. But if HA is scraping fine and
+        # every UPS entity was renamed/removed at once, Scrape Targets can't see it and the UPS would go
+        # silently unmonitored — so gate on HA's own up series and fall through to the partial-absence
+        # page below when HA is affirmatively up AND the replace arm is configured (its 0-floor in a NUT
+        # outage means a real NUT-server outage is never all-absent, so this can't misfire on one).
+        # An unqueryable/absent gate keeps the safe defer (never page over a source outage another
+        # monitor owns).
+        ha_up = prom_scalar(UPS_HA_UP_QUERY) if UPS_HA_UP_QUERY else None
+        if not (ha_up is not None and ha_up > 0.5 and "replace-battery" in values):
+            _ups_down_streak = 0
+            return (
+                True,
+                "no UPS data in Prometheus (HA scrape down? Scrape Targets owns source liveness)",
+            )
     missing = [name for name, v in values.items() if v is None]
     if (
         "charge" in values
         and "runtime" in values
         and values["charge"] is None
         and values["runtime"] is None
+        and values.get("replace-battery") is not None
     ):
         # NUT server/integration down, NOT an entity rename: charge+runtime are direct NUT numeric
         # sensors HA drops from Prometheus when the source goes unavailable, while the replace-battery

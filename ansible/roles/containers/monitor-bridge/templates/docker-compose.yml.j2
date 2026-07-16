@@ -236,6 +236,9 @@ services:
       - UPS_CHARGE_QUERY=hass_sensor_battery_percent{entity="sensor.apc_ups_battery_charge"}
       - UPS_RUNTIME_QUERY=hass_sensor_duration_s{entity="sensor.apc_ups_battery_runtime"}
       - UPS_REPLACE_QUERY=hass_binary_sensor_state{entity="binary_sensor.apc_ups_replace_battery"}
+      # HA's own scrape-up series — discriminates "all UPS arms absent because HA's scrape is down"
+      # (defer, Scrape Targets owns it) from "HA scraping fine but every UPS entity renamed" (page).
+      - UPS_HA_UP_QUERY=up{job="home-assistant"}
       - UPS_CHARGE_MIN_PCT=50
       - UPS_RUNTIME_MIN_S=300
       - UPS_CONSECUTIVE=2

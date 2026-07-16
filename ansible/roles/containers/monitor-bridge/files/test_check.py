@@ -1815,7 +1815,7 @@ def test_ups_health_absent_arm_is_skipped():
     assert "runtime" in msg and "battery" not in msg
 
 
-def _ups_scalars(monkeypatch, charge, runtime, replace=0.0):
+def _ups_scalars(monkeypatch, charge, runtime, replace=0.0, ha_up=None):
     def fake(q):
         if q == check.UPS_CHARGE_QUERY:
             return charge
@@ -1823,6 +1823,8 @@ def _ups_scalars(monkeypatch, charge, runtime, replace=0.0):
             return runtime
         if q == check.UPS_REPLACE_QUERY:
             return replace
+        if q == check.UPS_HA_UP_QUERY:
+            return ha_up
         return None
 
     monkeypatch.setattr(check, "prom_scalar", fake)
@@ -1836,8 +1838,31 @@ def test_check_ups_healthy_is_up(monkeypatch):
 
 
 def test_check_ups_absent_data_defers_to_scrape_targets(monkeypatch):
+    # HA scrape down (ha_up None via the fake) -> all arms absent defers to Scrape Targets.
     check._ups_down_streak = 0
     _ups_scalars(monkeypatch, None, None, replace=None)
+    ok, msg = check.check_ups()
+    assert ok and "no UPS data" in msg
+
+
+def test_check_ups_all_absent_but_ha_scraping_pages(monkeypatch):
+    # Every UPS entity renamed/removed at once while HA keeps scraping (up{home-assistant}==1):
+    # Scrape Targets can't see it, so the old all-absent defer silently unmonitored the UPS. Now it
+    # pages through the streak (naming the missing arms) instead of deferring.
+    check._ups_down_streak = 0
+    _ups_scalars(monkeypatch, None, None, replace=None, ha_up=1.0)
+    ok1, msg1 = check.check_ups()
+    assert ok1 and "streak 1/2" in msg1
+    ok2, msg2 = check.check_ups()
+    assert not ok2 and "absent" in msg2
+    assert check._ups_down_streak == 2
+
+
+def test_check_ups_all_absent_ha_down_still_defers(monkeypatch):
+    # HA scrape affirmatively down (up==0) with all arms absent -> still defer (Scrape Targets owns
+    # the HA-source outage); the up-gate only flips the all-absent case to a page when HA is UP.
+    check._ups_down_streak = 0
+    _ups_scalars(monkeypatch, None, None, replace=None, ha_up=0.0)
     ok, msg = check.check_ups()
     assert ok and "no UPS data" in msg
 
