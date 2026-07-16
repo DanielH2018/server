@@ -160,7 +160,7 @@ services:
     {{ resources('1.0', '1024M', '0.10', '128M') }}
 
   karakeep-time-tagger:
-    # uv base (bookworm-slim): the tagger reinstalls its Python deps each cycle, so a fresh base is
+    # uv base (bookworm-slim): the tagger installs its (version-pinned) Python deps at container start, so a fresh base is
     # harmless — but the tag is a rolling channel Renovate can't version-order and Compose never
     # re-pulls a present tag, so without a digest it aged silently with no update signal. Pinning
     # repo:tag@sha256 KEEPS the tag, so Renovate's docker manager matches it and opens tracked
@@ -187,8 +187,13 @@ services:
     # (skips running containers) and the 90%-only Root Disk check. Prune rotated logs >2 days old
     # each cycle to bound it; the active `karakeep-time-tagger.log` has no `.<ts>.` middle segment,
     # so the glob never matches it.
+    # Runtime deps are version-pinned (not floating) so a container start doesn't silently re-resolve
+    # them to whatever's newest on PyPI with no update signal — the same silent-drift the base-image
+    # digest pin closes, one layer down (2026-07-16 review M3). Renovate tracks each pin on PyPI (a
+    # custom manager in renovate.json, manual-bump group) so they age visibly, bumped alongside the
+    # digest-pinned karakeep app whose API the client talks to.
     command: >-
-      bash -c "uv pip install karakeep_python_api fire tqdm beautifulsoup4 loguru -q --system && while true; do find / -maxdepth 1 -name 'karakeep-time-tagger.*.log' -mtime +2 -delete 2>/dev/null; python /script/karakeep-time-tagger.py --cache_file /tmp/bookmarks.temp --reset_all=True && touch /tmp/healthy; sleep 900; done"
+      bash -c "uv pip install karakeep-python-api==1.8.0 fire==0.7.1 tqdm==4.68.4 beautifulsoup4==4.15.0 loguru==0.7.3 -q --system && while true; do find / -maxdepth 1 -name 'karakeep-time-tagger.*.log' -mtime +2 -delete 2>/dev/null; python /script/karakeep-time-tagger.py --cache_file /tmp/bookmarks.temp --reset_all=True && touch /tmp/healthy; sleep 900; done"
     # start_period covers the uv pip install + the first tagging run; the loop sleeps
     # 900s, so <2100 allows one missed cycle before going unhealthy.
     {{ healthcheck("[\"CMD\", \"python3\", \"-c\", \"import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/healthy').st_mtime<2100 else 1)\"]", start_period='600s', interval='60s') }}
@@ -211,8 +216,8 @@ services:
       - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('karakeep-time-tagger') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana. cpu 1.0:
-    # the per-cycle `uv pip install` + tag burst hit the old 0.5 cap and CFS-throttled ~67% of
-    # periods (cAdvisor 2026-07-13) though the 24h avg is ~0.01 cores — a wider ceiling lets the
+    # the boot-time `uv pip install` plus the per-cycle tag burst hit the old 0.5 cap and CFS-throttled
+    # ~67% of periods (cAdvisor 2026-07-13) though the 24h avg is ~0.01 cores — a wider ceiling lets the
     # burst finish without throttling; the 0.05 reservation keeps its steady-state footprint tiny.
     {{ resources('1.0', '512M', '0.05', '64M') }}
 

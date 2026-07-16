@@ -126,6 +126,17 @@
       ],
       "depNameTemplate": "node",
       "datasourceTemplate": "node-version"
+    },
+    {
+      "customType": "regex",
+      "description": "karakeep-time-tagger runtime pip deps pinned inside its docker-compose command (`uv pip install <pkg>==<ver>`). The uv base image is digest-pinned, but its runtime deps would otherwise re-resolve to newest PyPI on every container start with no update signal (2026-07-16 review M3) — the same silent-drift the image pin closes, one layer down. Track each pin on PyPI; the packageRule below keeps them manual so a client bump is reviewed alongside the digest-pinned karakeep app it talks to.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/containers/karakeep/templates/docker-compose\\.yml\\.j2$/"
+      ],
+      "matchStrings": [
+        "(?<depName>[A-Za-z0-9._-]+)==(?<currentValue>[0-9][^\\s\"']*)"
+      ],
+      "datasourceTemplate": "pypi"
     }
   ],
   "packageRules": [
@@ -204,6 +215,18 @@
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["getsops/sops"],
       "groupName": "sops binary (manual — finish the per-arch sha256 from checksums.txt)",
+      "automerge": false
+    },
+    {
+      "description": "karakeep-time-tagger's pinned runtime pip deps (2026-07-16 review M3). karakeep-python-api tracks the digest-pinned karakeep app's API and the uv base image is a manual bump too, so a client/dep bump wants a deliberate look alongside them rather than auto-merging on the 7-day soak. Own group, no automerge — overrides the custom.regex non-major automerge rule above.",
+      "matchPackageNames": [
+        "karakeep-python-api",
+        "fire",
+        "tqdm",
+        "beautifulsoup4",
+        "loguru"
+      ],
+      "groupName": "karakeep time-tagger pip deps (manual — track the pinned app)",
       "automerge": false
     }
   ]
