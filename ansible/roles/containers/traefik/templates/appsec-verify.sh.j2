@@ -13,19 +13,10 @@
 # + reported, not swallowed by an early exit (docker-user-verify / cloudflare-ip-drift / kopia idiom).
 set -uo pipefail
 
+# shellcheck source=/dev/null
+source /usr/local/lib/traefik-lib.sh
 STATE=/var/lib/crowdsec-appsec/state.json
-
-write_state() { # ok msg
-  # jq (not printf) so a stray control char can't make hand-built JSON invalid. Temp + atomic rename,
-  # chmod'ing the temp 0644 BEFORE the mv: this root cron writes a root-owned file, and the non-root
-  # monitor-bridge container (UID 1000, :ro bind) reads it every 300s with no retry — so a mid-truncate
-  # read would page a false "state unparseable" DOWN, and the swapped-in file must be world-readable
-  # the instant it appears (a plain `>` truncates in place and would also expose the half-written file).
-  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
-    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE.tmp" \
-    && chmod 0644 "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
-  logger -t crowdsec-appsec-verify "$1: $2"
-}
+write_state() { traefik_write_state "$STATE" crowdsec-appsec-verify "$@"; } # ok msg
 
 # DEFER a TOTAL crowdsec outage to the monitors that already own it — the crowdsec container's own
 # Kuma monitor and Prometheus Scrape Targets (crowdsec:6060). This check owns ONLY the fail-open-

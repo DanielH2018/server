@@ -10,19 +10,10 @@
 # -euo) so a failed assert is captured + reported, not swallowed by an early exit (kopia/crowdsec idiom).
 set -uo pipefail
 
+# shellcheck source=/dev/null
+source /usr/local/lib/traefik-lib.sh
 STATE=/var/lib/docker-user-rules/state.json
-
-write_state() { # ok msg
-  # jq (not printf) so a stray control char can't make hand-built JSON invalid. Temp + atomic rename,
-  # chmod'ing the temp 0644 BEFORE the mv: this root cron writes a root-owned file, and the non-root
-  # monitor-bridge container (UID 1000, :ro bind) reads it every 300s with no retry — so a mid-truncate
-  # read would page a false "state unparseable" DOWN, and the swapped-in file must be world-readable
-  # the instant it appears (a plain `>` truncates in place and would also expose the half-written file).
-  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
-    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE.tmp" \
-    && chmod 0644 "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
-  logger -t docker-user-verify "$1: $2"
-}
+write_state() { traefik_write_state "$STATE" docker-user-verify "$@"; } # ok msg
 
 if ! iptables -L DOCKER-USER -n >/dev/null 2>&1; then
   write_state false "DOCKER-USER chain missing — origin lock NOT applied"

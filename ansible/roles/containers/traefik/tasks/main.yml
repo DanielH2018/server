@@ -209,6 +209,20 @@
     mode: "0755"
   become: true
 
+- name: Deploy the shared traefik state-file helper
+  tags: [config]
+  # Sourced by every traefik host cron (docker-user-verify/appsec-verify/cloudflare-ip-drift/
+  # crowdsec-update-home-allowlist) for the atomic {ts,ok,msg} state write monitor-bridge polls
+  # (mirrors kopia-lib.sh). config-tagged + ordered first: docker-user-verify runs during the deploy
+  # (below), so the lib must be on disk before it — and before the 15-min crons fire.
+  ansible.builtin.copy:
+    src: traefik-lib.sh
+    dest: /usr/local/lib/traefik-lib.sh
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: Deploy DOCKER-USER live-verify watchdog script
   tags: [config]
   ansible.builtin.template:

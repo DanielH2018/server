@@ -26,11 +26,7 @@ write_state() { kopia_write_state "$STATE" kopia-verify "$@"; } # ok msg
 OUT=$(docker exec kopia kopia snapshot verify --verify-files-percent=1 2>&1)
 RC=$?
 
-# Collapse to a single-line summary for the Kuma msg / state file: prefer kopia's final
-# "Finished verifying N snapshots..." / error line, else fall back to the last line.
-# Strip quotes/newlines so the value stays valid inside the JSON string.
-SUMMARY=$(printf '%s' "$OUT" | grep -iE 'verif|error|fail' | tail -1 | tr -d '"' | tr '\n' ' ')
-[ -n "$SUMMARY" ] || SUMMARY=$(printf '%s' "$OUT" | tail -1 | tr -d '"' | tr '\n' ' ')
+SUMMARY=$(kopia_summarize "$OUT")
 
 if [ "$RC" -eq 0 ]; then
   write_state true "${SUMMARY:-verify ok}"

@@ -20,3 +20,15 @@ kopia_write_state() {
   fi && chmod 0644 "$state.tmp" && mv -f "$state.tmp" "$state"
   logger -t "$tag" "$ok: $msg"
 }
+
+# kopia_summarize OUT
+# Collapse a kopia command's output to a single-line summary for the Kuma msg / state file: prefer
+# the last line matching verif/error/fail (kopia's "Finished verifying N snapshots..." or its error
+# line), else fall back to the very last line. Strips quotes/newlines so the value stays valid inside
+# the JSON string kopia_write_state builds.
+kopia_summarize() {
+  local out="$1" summary
+  summary=$(printf '%s' "$out" | grep -iE 'verif|error|fail' | tail -1 | tr -d '"' | tr '\n' ' ')
+  [ -n "$summary" ] || summary=$(printf '%s' "$out" | tail -1 | tr -d '"' | tr '\n' ' ')
+  printf '%s' "$summary"
+}

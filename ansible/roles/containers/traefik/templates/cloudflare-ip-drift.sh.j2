@@ -12,17 +12,10 @@
 # an early exit (same idiom as crowdsec-update-home-allowlist / the kopia crons).
 set -uo pipefail
 
+# shellcheck source=/dev/null
+source /usr/local/lib/traefik-lib.sh
 STATE=/var/lib/cloudflare-ip-drift/state.json
-
-write_state() { # ok msg
-  # jq (not printf) so a stray control char in msg can't make invalid JSON. Temp + atomic rename:
-  # monitor-bridge reads this every 300s with no retry, so a read landing mid-truncate would see a
-  # half-written file and page a false "state unparseable" DOWN.
-  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
-    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE.tmp" \
-    && chmod 0644 "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
-  logger -t cloudflare-ip-drift "$1: $2"
-}
+write_state() { traefik_write_state "$STATE" cloudflare-ip-drift "$@"; } # ok msg
 
 # The expected set: the cloudflare_ips baked in at template time (group_vars/all.yml), one CIDR/line.
 EXPECTED=$(cat <<'CFIPS' | sort

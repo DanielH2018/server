@@ -15,15 +15,9 @@ ALLOWLIST="home-ips"
 STATE_FILE="/home/{{ sys_user }}/.crowdsec-home-ip"
 STATE=/var/lib/crowdsec-home-allowlist/state.json
 
-write_state() { # ok msg
-  # jq (not printf) so a stray control char in msg can't make invalid JSON. Temp + atomic rename:
-  # this cron writes every 5 min — exactly monitor-bridge's read interval — so a read landing
-  # mid-truncate would see a half-written file and page a false "state unparseable" DOWN.
-  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
-    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE.tmp" \
-    && chmod 0644 "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
-  logger -t crowdsec-home-allowlist "$1: $2"
-}
+# shellcheck source=/dev/null
+source /usr/local/lib/traefik-lib.sh
+write_state() { traefik_write_state "$STATE" crowdsec-home-allowlist "$@"; } # ok msg
 
 if ! CURRENT_IP=$(curl -sf --max-time 10 https://api4.ipify.org); then
   write_state false "failed to resolve public IP from ipify"

@@ -24,8 +24,7 @@ write_state() { kopia_write_state "$STATE" kopia-content-verify "$@"; } # ok msg
 OUT=$(docker exec kopia kopia snapshot verify --verify-files-percent=25 2>&1)
 RC=$?
 
-SUMMARY=$(printf '%s' "$OUT" | grep -iE 'verif|error|fail' | tail -1 | tr -d '"' | tr '\n' ' ')
-[ -n "$SUMMARY" ] || SUMMARY=$(printf '%s' "$OUT" | tail -1 | tr -d '"' | tr '\n' ' ')
+SUMMARY=$(kopia_summarize "$OUT")
 
 if [ "$RC" -eq 0 ]; then
   write_state true "${SUMMARY:-content verify ok}"
