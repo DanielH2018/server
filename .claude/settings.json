@@ -1,4 +1,5 @@
 {
+  "disableClaudeAiConnectors": true,
   "permissions": {
     "allow": [
       "Bash(ansible-lint *)",
