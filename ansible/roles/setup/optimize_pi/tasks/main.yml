@@ -390,6 +390,18 @@
     state: started
   become: true
 
+- name: Deploy the shared Pi Kuma-push helper
+  tags: [sd-health, recovery-health]
+  # Sourced by both health crons (pi-sd-health / pi-recovery-health) for the identical Kuma push tail.
+  # Same-role lib (both consumers live here); deployed before either script so it's on disk first.
+  ansible.builtin.copy:
+    src: pi-kuma-push-lib.sh
+    dest: /usr/local/lib/pi-kuma-push-lib.sh
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: Deploy the SD-card health heartbeat script
   tags: [sd-health]
   # SD cards can't do SMART (no ATA/NVMe command set behind mmcblk0), so scrutiny is

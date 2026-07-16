@@ -15,12 +15,16 @@
 # the URL token is the credential.
 set -uo pipefail
 
+# shellcheck source=/dev/null
+source /usr/local/lib/pi-kuma-push-lib.sh
+
 COUNTER=/sys/fs/ext4/mmcblk0p2/errors_count
 {# `domain` here is the SOPS-loaded server domain (community.sops.load_vars in
    initial_setup.yml outranks the Pi host_vars' daniel-pi.com override), NOT
    hostvars['daniel-server'].domain — secrets are play-scoped, so that lookup
    fails cross-host. Verified: the Pi's wg-easy renders the same way. #}
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
+KUMA_RESOLVE_IP="{{ hostvars['daniel-server'].server_ip }}"
 PUSH_URL="https://${KUMA_HOST}/api/push/{{ pi_sd_health_push_token }}"
 
 if COUNT=$(cat "$COUNTER" 2>/dev/null); then
@@ -35,9 +39,4 @@ else
   STATUS=down; MSG="cannot read ${COUNTER}"
 fi
 
-curl -fsS --max-time 10 -G \
-  --resolve "${KUMA_HOST}:443:{{ hostvars['daniel-server'].server_ip }}" \
-  --data-urlencode "status=${STATUS}" \
-  --data-urlencode "msg=${MSG}" \
-  "$PUSH_URL" >/dev/null \
-  || logger -t pi-sd-health "push failed (status=${STATUS}: ${MSG})"
+pi_kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-sd-health
