@@ -61,7 +61,12 @@ def docker_problems():
             ],
             5,
         )
-    except subprocess.TimeoutExpired, FileNotFoundError, OSError:
+    # Two clauses, not `except (A, B, C)`: this runs under the host's bare python3 (3.12 via
+    # session-health.sh), and ruff (3.14 target) rewrites a parenthesized tuple into the 3.14-only
+    # `except A, B:` that SyntaxErrors on 3.12. See ansible/tests/test_host_scripts_py312.py.
+    except subprocess.TimeoutExpired:
+        return ["  ✗ docker unreachable (dockerd wedged or not installed)"], False
+    except OSError:  # FileNotFoundError (docker binary absent) is an OSError subclass
         return ["  ✗ docker unreachable (dockerd wedged or not installed)"], False
     lines = []
     for label, res in (("unhealthy", unhealthy), ("restarting", restarting)):

@@ -35,6 +35,12 @@ HOST_RUN_SCRIPTS = [
     # different role's files/, so the _first_party_imports sibling scan below can't derive it. Listed
     # by hand for the 3.12 parse-check; keep it 3.12-clean.
     "ansible/roles/setup/common/files/host_lib.py",
+    # .claude/hooks/*.sh wrappers run these under a BARE python3 (for hook latency — not `uv run`), so
+    # they face the same host 3.12 floor. The ExecStart scan can't see a .sh-wrapped invocation;
+    # _host_python_scripts_in_hooks() below re-derives the requirement. session-health.py had a live
+    # 3.14-only `except A, B, C:` that SyntaxErrored on the host and failed silently (stderr→/dev/null).
+    ".claude/hooks/session-health.py",
+    ".claude/hooks/log-instructions.py",
 ]
 
 
@@ -71,6 +77,27 @@ def _host_python_scripts_in_units() -> set[str]:
     return found
 
 
+def _host_python_scripts_in_hooks() -> set[str]:
+    """Basenames of every repo .py a .claude/hooks/*.sh wrapper runs under a BARE python3 (the host
+    interpreter, chosen for hook latency — NOT `uv run`, which would pin CI's 3.14). session-health.sh
+    is the live case: its wrapped session-health.py had a 3.14-only `except A, B, C:` that SyntaxErrored
+    on the host's 3.12, and the wrapper sends stderr to /dev/null + exits 0, so the health banner failed
+    SILENTLY. The _EXECSTART scan only reads systemd units, so a .sh-wrapped hook escapes it — this
+    closes that gap the same way. Skips comment lines and `uv run` (3.14-pinned) invocations."""
+    found: set[str] = set()
+    for wrapper in _REPO.glob(".claude/hooks/*.sh"):
+        for line in wrapper.read_text().splitlines():
+            stripped = line.strip()
+            if (
+                stripped.startswith("#")
+                or "uv run" in stripped
+                or "python3" not in stripped
+            ):
+                continue
+            found.update(re.findall(r"([\w.-]+\.py)\b", stripped))
+    return found
+
+
 def _first_party_imports(script: Path) -> set[str]:
     """Basenames of sibling modules `script` imports from its own dir. Each host-run script does a
     `sys.path.insert(0, <own dir>)` and imports its logic module, which then loads under the SAME
@@ -99,16 +126,16 @@ def test_host_run_scripts_list_is_complete() -> None:
     # test_renovate_managers): a future setup role adding `ExecStart=/usr/bin/python3 …/<x>.py` would
     # otherwise silently escape the 3.12 floor-check — the exact class that bricked the deployer on
     # 2026-07-15 (a 3.14-only `except A, B:` that passed ruff/CI but SyntaxErrors on the host).
-    found = _host_python_scripts_in_units()
+    found = _host_python_scripts_in_units() | _host_python_scripts_in_hooks()
     # Sanity: a broken glob/regex finding nothing would make the coverage assert vacuously pass.
-    assert {"gitops_deploy.py", "renovate_notify.py"} <= found, (
-        f"expected the known host-run scripts among the unit templates; found {sorted(found)}"
+    assert {"gitops_deploy.py", "renovate_notify.py", "session-health.py"} <= found, (
+        f"expected the known host-run scripts among the unit/hook templates; found {sorted(found)}"
     )
     covered = {Path(rel).name for rel in HOST_RUN_SCRIPTS}
     missing = found - covered
     assert not missing, (
-        f"systemd unit(s) run these under a bare /usr/bin/python3, but they're absent from "
-        f"HOST_RUN_SCRIPTS so the 3.12 parse-guard skips them: {sorted(missing)}. "
+        f"a systemd unit or .claude/hooks/*.sh wrapper runs these under a bare host python3, but "
+        f"they're absent from HOST_RUN_SCRIPTS so the 3.12 parse-guard skips them: {sorted(missing)}. "
         f"Add each script's repo path to HOST_RUN_SCRIPTS."
     )
 
