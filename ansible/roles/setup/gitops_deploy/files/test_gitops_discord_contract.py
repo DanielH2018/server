@@ -302,3 +302,55 @@ def test_rollback_return_is_gated_on_delivered_post():
         "each rollback path must `return 0 if posted else 1` so a delivered detailed post doesn't "
         "double-page via systemd OnFailure — one posted-gated return per rollback `git reset --hard`"
     )
+
+
+# --- divergence-marker write wiring (2026-07-15 review L3) ---------------------
+# The pure is_diverged() (test_deploy_logic.py) and the read side (check_gitops_status,
+# test_check.py) are covered, but the WRITE — that main() emits the diverged-SHA marker every tick,
+# gated on is_diverged, ahead of the action short-circuits — lives only in the un-importable main().
+# A refactor dropping it or stranding it behind an early `return` would silently lose the watchdog
+# (a diverged tree noops forever while origin's commits never deploy, both other GitOps signals
+# green) and pass every other test. Pin it at the source like the write_hold-ordering guard above.
+
+
+def test_diverged_marker_write_is_gated_and_precedes_action_branching():
+    main = _fn("main")
+    marker_writes = [
+        n
+        for n in ast.walk(main)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Name)
+        and n.func.id == "_write_marker"
+        and n.args
+        and isinstance(n.args[0], ast.Name)
+        and n.args[0].id == "DIVERGED_FILE"
+    ]
+    assert marker_writes, (
+        "main() must call _write_marker(DIVERGED_FILE, ...) every tick"
+    )
+    assert any(
+        any(
+            isinstance(sub, ast.Call)
+            and isinstance(sub.func, ast.Name)
+            and sub.func.id == "is_diverged"
+            for sub in ast.walk(w)
+        )
+        for w in marker_writes
+    ), (
+        "the DIVERGED_FILE marker write must be gated on is_diverged(...), not unconditional"
+    )
+    write_line = min(w.lineno for w in marker_writes)
+    action_assign = next(
+        (
+            n.lineno
+            for n in ast.walk(main)
+            if isinstance(n, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "action" for t in n.targets)
+        ),
+        None,
+    )
+    assert action_assign is not None, "main() must assign `action = next_action(...)`"
+    assert write_line < action_assign, (
+        "the DIVERGED_FILE marker write must precede `action = next_action(...)` so it runs every "
+        "tick regardless of the action short-circuit returns"
+    )
