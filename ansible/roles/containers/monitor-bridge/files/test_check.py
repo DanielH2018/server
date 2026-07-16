@@ -637,6 +637,9 @@ def test_check_backup_presence_folds_into_down(monkeypatch):
     # freshness + size clean, but a service dir in all prior snapshots vanished from the latest ->
     # check_backup goes down via the presence guard (exercises the /api/v1/objects fetch path)
     monkeypatch.setattr(check, "BACKUP_PATH", "/data/containers")
+    # the sentinel guard now runs every cycle too; stub its walk so it doesn't fetch (its own service
+    # dirs aren't in this listing anyway) and the presence failure is the one reported
+    monkeypatch.setattr(check, "_kopia_path_exists", lambda *a, **k: True)
     last = {"endTime": _iso_ago(1), "stats": {"errorCount": 0}}
     steady = _snaps((8000, 1.2e9), (8000, 1.2e9), (8000, 1.2e9), (8000, 1.2e9))
     for i, s in enumerate(steady):
@@ -654,6 +657,36 @@ def test_check_backup_presence_folds_into_down(monkeypatch):
     ok, msg = check.check_backup()
     assert not ok
     assert "portainer" in msg and "vanished" in msg
+
+
+def test_check_backup_reports_most_urgent_guard(monkeypatch):
+    # size AND sentinel both fail in the same cycle (the karakeep asset-volatility window overlap):
+    # the sentinel regression must WIN, not be masked behind the already-triaged size dip.
+    monkeypatch.setattr(check, "BACKUP_PATH", "/data/containers")
+    monkeypatch.setattr(
+        check, "BACKUP_SENTINELS", ["jellyfin/config/data/data/jellyfin.db"]
+    )
+    last = {"endTime": _iso_ago(1), "stats": {"errorCount": 0}}
+    # latest file count collapses -> size guard trips ("left backup scope")
+    shrunk = _snaps((8000, 1.2e9), (8000, 1.2e9), (8000, 1.2e9), (3000, 1.2e9))
+    for i, s in enumerate(shrunk):
+        s["rootID"] = "r%d" % i
+    dirs = [
+        "jellyfin",
+        "sonarr",
+    ]  # stable across snapshots -> presence ok, sentinel not skipped
+    objs = [_objlisting(dirs) for _ in shrunk]
+    monkeypatch.setattr(
+        check, "_get_json", _seq(_sources(last), {"snapshots": shrunk}, *objs)
+    )
+    # jellyfin/ present but its nested sentinel file resolved missing
+    monkeypatch.setattr(check, "_kopia_path_exists", lambda *a, **k: False)
+    ok, msg = check.check_backup()
+    assert not ok
+    assert "jellyfin/config/data/data/jellyfin.db" in msg and "vanished" in msg
+    assert (
+        "left backup scope" not in msg
+    )  # the size failure did NOT mask the sentinel one
 
 
 # --- check_disk -------------------------------------------------------------

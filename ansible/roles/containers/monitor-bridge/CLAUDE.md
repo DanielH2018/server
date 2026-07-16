@@ -38,14 +38,20 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     design. The median absorbs the routine one-off drops from exclusion tuning, so only a sharp
     anomalous drop pages. Stateless (sourced from Kopia's own history). Pure `backup_size_regression()`
     is unit-tested; `BACKUP_SIZE_DROP_PCT`/`BACKUP_SIZE_MIN_HISTORY` tune it. **Plus a per-service
-    presence guard** (once size is clean): fetches the top-level directory listing of the latest +
+    presence guard**: fetches the top-level directory listing of the latest +
     trailing snapshots (`/api/v1/objects/<rootID>`, `entries[].summ.files`) and `down`s if a service
     dir present with >0 files in ALL of the prior `BACKUP_SIZE_MIN_HISTORY` snapshots vanished (or
     dropped to 0 files) from the latest — the residual the aggregate size floor can't reach once a
     service is small (portainer is ~0.05% of the tree, far under 20%), and portainer is NOT in the
     restore-drill rotation. A newly-added service isn't in the priors (no false page on an add), and
     an intentional removal stops being "expected" after one cycle. Pure `backup_presence_regression()`
-    is unit-tested.)
+    is unit-tested. **Plus a nested-sentinel guard** that walks the latest snapshot's object tree to
+    each `BACKUP_SENTINELS` path and `down`s if a critical file (e.g. `jellyfin.db`) vanished while its
+    service dir remains — the residual neither the top-level presence guard nor the 20% size floor can
+    see. All three shrink guards evaluate every cycle and the check reports the **most-urgent** failure
+    (sentinel > presence > size), so a genuinely new regression can't hide behind a concurrent,
+    already-triaged size dip (the recurring karakeep asset-volatility window). Pure
+    `backup_sentinels_regression()` is unit-tested.)
   - **Root Disk** (`node_filesystem_*` for `/`, `/boot` **and `/boot/efi`** — old kernels
     filling /boot quietly breaks upgrades, and a full ESP breaks firmware/bootloader
     updates the same way; server-only, the Pi's disk lives in the Pi Pressure check)

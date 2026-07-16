@@ -779,9 +779,15 @@ def check_backup():
         return False, "last snapshot had %d errors (%.1fh ago)" % (errs, age_h)
     if age_h > BACKUP_MAX_AGE_H:
         return False, "last snapshot %.1fh ago (> %.0fh)" % (age_h, BACKUP_MAX_AGE_H)
-    # Freshness + errorCount are clean — now guard against a silent SHRINK (a dropped bind mount or a
-    # kopiaignore over-match that the fresh/0-error snapshot above happily hides). Pull the source's
-    # snapshot history and floor the latest against the trailing median.
+    # Freshness + errorCount are clean — now run three shrink guards over the snapshot HISTORY, coarse
+    # to fine: a size floor (a dropped bind mount / kopiaignore over-match the fresh, 0-error snapshot
+    # hides), a per-service presence guard (a whole small dir the size floor can't see — portainer is
+    # ~0.05% of the tree, far under the 20% floor), and a nested-sentinel guard (a critical file
+    # re-dropped from a still-present service dir — the jellyfin.db incident class). Evaluate ALL THREE
+    # even after one trips, then report the MOST-URGENT failure (sentinel > presence > size): during the
+    # recurring karakeep asset-volatility window the size guard sits tripped for days, and
+    # short-circuiting on it would mask a genuinely new presence/sentinel regression behind the same
+    # already-triaged "size dropped" message. The paging state is identical either way.
     src = backup_source(data, BACKUP_PATH)
     q = urllib.parse.urlencode(
         {
@@ -794,24 +800,12 @@ def check_backup():
     size_ok, size_msg = backup_size_regression(
         snaps, BACKUP_SIZE_DROP_PCT, BACKUP_SIZE_MIN_HISTORY
     )
-    if not size_ok:
-        return False, size_msg
-    # Presence guard: the aggregate size floor can't see a WHOLE small service dir vanish (portainer
-    # is ~0.05% of the tree, far under the 20% floor). Fetch the top-level dir listing of the latest +
-    # trailing snapshots and page if a consistently-backed-up service dir left the latest.
     recent = sorted(snaps, key=lambda s: s.get("endTime") or s.get("startTime") or "")[
         -(BACKUP_SIZE_MIN_HISTORY + 1) :
     ]
     listings = [_kopia_dir_files(s.get("rootID")) for s in recent]
     pres_ok, pres_msg = backup_presence_regression(listings, BACKUP_SIZE_MIN_HISTORY)
-    if not pres_ok:
-        return False, pres_msg
-    # Critical-file sentinel guard: the presence guard above sees only top-level dirs, so a
-    # kopiaignore regression re-dropping a small NESTED file (the jellyfin.db incident) while its
-    # service dir stays present slips through. Walk the latest snapshot's object tree to each
-    # configured sentinel and page if one vanished. Skips when there's no snapshot history to walk
-    # (same as the size/presence guards above).
-    sent_msg = "sentinel guard skipped — no snapshot history"
+    sent_ok, sent_msg = True, "sentinel guard skipped — no snapshot history"
     if recent:
         obj_cache = {}
         present_sentinels = {
@@ -822,8 +816,12 @@ def check_backup():
         sent_ok, sent_msg = backup_sentinels_regression(
             BACKUP_SENTINELS, present_sentinels, listings[-1]
         )
-        if not sent_ok:
-            return False, sent_msg
+    if not sent_ok:
+        return False, sent_msg
+    if not pres_ok:
+        return False, pres_msg
+    if not size_ok:
+        return False, size_msg
     return True, "last snapshot %.1fh ago, 0 errors; %s; %s; %s" % (
         age_h,
         size_msg,
