@@ -15,11 +15,16 @@
   # portainer's Config.Env, readable via the shared read-only docker-proxy by any proxy/monitoring-net
   # neighbor (2026-07-16 review M1). Portainer CE has no *_FILE ref, so the compose entrypoint wrapper
   # reads this 0600 file at startup and execs portainer. no_log so a -v/--diff run doesn't leak it.
-  # 0600 owned by sys_user; portainer runs as root and reads it regardless (NO become needed).
+  # MUST be owned root:root: portainer runs as root but with cap_drop:[ALL], so it lacks
+  # CAP_DAC_OVERRIDE — root can only read the 0600 file if it OWNS it (owner-1000 → EACCES →
+  # empty AGENT_SECRET → Pi endpoint shows down). Hence become + owner:root.
+  become: true
   no_log: true
   ansible.builtin.copy:
     content: "{{ portainer_agent_secret }}"
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/secrets/portainer_agent_secret"
+    owner: root
+    group: root
     mode: "0600"
   register: portainer_cfg_secret
 
