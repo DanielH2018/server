@@ -7,9 +7,28 @@
   vars:
     common_dirs_to_create:
       - "{{ container_item.name }}/data"
+      - "{{ container_item.name }}/secrets"  # 0600 file-mounted portainer-agent shared secret
+
+- name: Render the portainer-agent shared secret to a file (kept out of Portainer's Env)
+  tags: [config]
+  # AGENT_SECRET authenticates to daniel-pi's root-equivalent portainer-agent; inlined it lands in
+  # portainer's Config.Env, readable via the shared read-only docker-proxy by any proxy/monitoring-net
+  # neighbor (2026-07-16 review M1). Portainer CE has no *_FILE ref, so the compose entrypoint wrapper
+  # reads this 0600 file at startup and execs portainer. no_log so a -v/--diff run doesn't leak it.
+  # 0600 owned by sys_user; portainer runs as root and reads it regardless (NO become needed).
+  no_log: true
+  ansible.builtin.copy:
+    content: "{{ portainer_agent_secret }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/secrets/portainer_agent_secret"
+    mode: "0600"
+  register: portainer_cfg_secret
 
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
+  vars:
+    # The agent secret is bind-mounted + read by the entrypoint wrapper once at startup, so a rotation
+    # must recreate portainer to re-read it (recreate: auto otherwise skips a content-only change).
+    common_config_changed: "{{ portainer_cfg_secret is changed }}"

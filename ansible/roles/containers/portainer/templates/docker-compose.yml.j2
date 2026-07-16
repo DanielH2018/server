@@ -89,6 +89,9 @@ services:
       # so the localtime-vs-TZ review doesn't re-flag it (see traefik, which DOES have zoneinfo).
       - /etc/localtime:/etc/localtime:ro
       - ./data:/data
+      # 0600 file-mount of the mutual portainer-agent shared secret, exported by the entrypoint
+      # wrapper below — keeps AGENT_SECRET out of the docker-proxy-readable Env (see its note).
+      - ./secrets/portainer_agent_secret:/run/secrets/portainer_agent_secret:ro
     environment:
       # Portainer 2.43.0+ REQUIRES full scheme://host[:port] origins and FATAL-crashes on a bare
       # domain ("invalid trusted origin: must be scheme://host or scheme://host:port" — verified
@@ -97,12 +100,20 @@ services:
       # bare domain). Two origins, comma-separated: the Traefik/Authelia path (portainer.<domain>)
       # and the break-glass :9000 LAN path (see the ports mapping above). Keep them full-scheme.
       TRUSTED_ORIGINS: "https://portainer.{{ domain }},http://{{ server_ip }}:9000"
-      # Shared secret for connecting to Portainer AGENT environments (currently daniel-pi's
-      # portainer-agent). AGENT_SECRET is MUTUAL — the agent rejects secret-less requests, so the
-      # server must present the SAME value the Pi agent has. Only affects agent-type environments,
-      # not the local socket-proxy endpoint. SOPS `portainer_agent_secret`. See the portainer-agent role.
-      AGENT_SECRET: "{{ portainer_agent_secret }}"
-    command: -H tcp://docker-proxy-portainer:2375
+    # AGENT_SECRET is the MUTUAL shared secret that authenticates to daniel-pi's root-equivalent
+    # portainer-agent (the agent rejects secret-less requests, so the server must present the SAME
+    # value the Pi agent has). Inlined as an env it lands in portainer's Config.Env, which the shared
+    # read-only docker-proxy exposes to every proxy/monitoring-net neighbor (2026-07-16 review M1) — a
+    # pivot to root-equivalent Docker on the Pi. Portainer CE has no AGENT_SECRET_FILE, so this
+    # entrypoint wrapper exports it from the 0600 file-mount and execs portainer (the autokuma/
+    # scrutiny-web pattern). `$$(cat …)` strips a trailing newline; `exec "$$@"` keeps portainer as
+    # PID 1; `$$` doubled so Compose doesn't interpolate. Only affects agent-type environments.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - 'export AGENT_SECRET="$$(cat /run/secrets/portainer_agent_secret)"; exec "$$@"'
+      - --
+    command: ["/portainer", "-H", "tcp://docker-proxy-portainer:2375"]
     depends_on:
       docker-proxy-portainer:
         condition: service_healthy
