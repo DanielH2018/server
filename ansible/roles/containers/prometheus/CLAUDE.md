@@ -6,7 +6,7 @@ Prometheus plus its exporters; the scrape source for Grafana. See repo-root `CLA
 - **Images:** `prom/prometheus:latest` + `prom/node-exporter:latest`
   + `ghcr.io/google/cadvisor` (container metrics; version-pinned, Renovate-managed)
 - **Host:** daniel-server · **Port:** 9090 · **URL:** `prometheus.<domain>` (Authelia: yes)
-- **Networks:** monitoring
+- **Networks:** monitoring, apps (reaches `home-assistant:8123` for the `/api/prometheus` scrape)
 - **Depends on:** traefik
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 

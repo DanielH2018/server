@@ -40,7 +40,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "authelia"`
 
 ## Fresh install
-The role asserts the four generated secrets exist in SOPS before templating. On a
+The role asserts the three generated secrets exist in SOPS before templating. On a
 brand-new environment, generate them and add via `sops set` (values are JSON-encoded;
 **strip the `Random Value: ` / `Digest: ` banner prefixes from new values**):
 ```bash

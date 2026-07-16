@@ -55,7 +55,8 @@ INTERVAL = int(_env("INTERVAL", "300"))
 HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
 # Startup/redeploy grace for the reach-out checks (STARTUP_GRACE, applied in run_once). The
 # bridge's first cycle after a host reboot runs before the heavy apps it polls (kopia, n8n,
-# sonarr/radarr, the Pi glances) finish starting, so an un-graced reach-out check flips its
+# sonarr/radarr, prowlarr, scrutiny, the Pi glances) finish starting, so an un-graced reach-out
+# check flips its
 # max_retries=0 push monitor DOWN on that one transient cycle and pages, then recovers next cycle —
 # the weekly-reboot noise. Like HA_CONSECUTIVE, only the GRACE_CYCLES'th consecutive down pages; a
 # genuinely-down dependency still alerts after ~one extra INTERVAL, and one ok resets the streak.

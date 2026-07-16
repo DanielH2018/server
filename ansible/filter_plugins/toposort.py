@@ -116,7 +116,8 @@ def expand_with_deps(containers_list, deps_map, requested_tags, running_names):
     For each container whose tags match requested_tags, walks the dep graph
     transitively and includes upstream roles that are not already running.
     The originally-requested containers are always included regardless of
-    running state. Returns the effective subset in topological order.
+    running state. Preserves containers_list's order (the caller toposorts that
+    list first, so the returned subset comes out topologically ordered).
     """
     name_to_obj = {c["name"]: c for c in containers_list}
     running = set(running_names)

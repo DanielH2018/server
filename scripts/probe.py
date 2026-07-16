@@ -27,6 +27,9 @@ Subcommands:
     ha state <entity_id>     Live HA entity state + attrs    (home-assistant :8123)
     ha automation <id|alias> One automation's on/off + last_triggered (resolves alias!=id)
     ha get <api-path>        Raw GET /api/<path>, e.g. `ha get error_log`
+    ha trace <id|alias>      Why an automation last ran/no-op'd (per-condition WS trace; alias: why)
+    ha verify-automations    Assert every automation in automations.yaml loaded (exit 0 = all loaded)
+    ha-state [--inventory]   Live view of the derived HA state model
 
 `metric` and `loki-query` print a formatted view by default (one `<labels> = <value>`
 line per series; log lines oldest→newest) so you don't need to pipe into `python3 -c`

@@ -8,7 +8,7 @@ This document covers the security and monitoring tools deployed by `ansible/role
 
 **What it does:** Scans the system for rootkits, backdoors, and suspicious files. Checks whether system binaries (`ls`, `ps`, `netstat`, etc.) have been replaced by trojaned versions, looks for hidden processes or ports, and checks for files/directories that rootkits commonly create.
 
-**Schedule:** Weekly, Monday at 2:00 AM. Warnings-only output is sent to syslog tagged `rkhunter`.
+**Schedule:** Weekly, Wednesday at 2:00 AM (staggered off the Monday AIDE check). Warnings-only output is sent to syslog tagged `rkhunter`.
 
 **Check for findings:**
 

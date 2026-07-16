@@ -12,8 +12,9 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 
 ## Notable
-- `templates/local.ini.j2` sets `require_valid_user`, CORS, and chunk-size tuning needed
-  by Obsidian LiveSync. Admin creds come from `ansible/vars/secrets.yml`.
+- `templates/local.ini.j2` sets `require_valid_user` and smoosh auto-compaction ratios
+  (curbing `.couch` bloat from Obsidian LiveSync's MVCC revisions). Admin creds come from
+  `ansible/vars/secrets.yml`.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · CouchDB cfg: `templates/local.ini.j2`

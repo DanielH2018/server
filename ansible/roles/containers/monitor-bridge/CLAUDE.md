@@ -19,11 +19,12 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   `INTERVAL` (300 s) it runs **thirty-eight checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
-    prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the nine
-    prom-dependent checks (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/b2_trend) are
+    prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the twelve
+    prom-dependent checks (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/b2_trend/ups/
+    janitorr/promtail_dropped) are
     **suppressed** — pushed `up` with a "skipped — Prometheus unreachable" msg so their push-monitor
     heartbeats stay alive — and only THIS monitor pages. Without the gate one Prometheus outage
-    fired all nine at once: one root cause, a nine-monitor alert storm. A single scrape target down
+    fired all twelve at once: one root cause, a twelve-monitor alert storm. A single scrape target down
     (Prometheus up, one exporter gone) still surfaces separately on Scrape Targets. The
     `PROM_DEPENDENT` set is guarded by a test against the live `CHECKS` so it can't drift.)
   - **Backup Freshness** (Kopia `/api/v1/sources` last-snapshot age + errorCount, **plus a

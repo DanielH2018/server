@@ -31,8 +31,9 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   heavy apt on the 512 MB Zero 2 W doesn't OOM. Also installs Pi-only packages.
 - **Packages & tooling:** apt upgrade; base packages; install **uv per-user** (PEP 668-safe on
   24.04+) and the Python CLI tooling as uv tools.
-- **SSH:** `.ssh` perms, an `ssh-users` group, sshd hardening, and a `Match` block enabling
-  agent/X11 forwarding for `sys_user`. → `notify: Restart SSH`.
+- **SSH:** `.ssh` perms, an `ssh-users` group, sshd hardening, and a `Match` block re-enabling
+  local TCP forwarding for `sys_user` (the global config disables agent/X11/TCP forwarding).
+  → `notify: Restart SSH`.
 - **Firewall (UFW):** default-deny incoming / allow outgoing, **rate-limited** SSH (replaces a
   plain allow), then enable. No WireGuard allow: Docker-published ports (incl. wg-easy's UDP
   port) bypass UFW INPUT via Docker's own chains; a stale Pi-only `51820/udp` allow from the

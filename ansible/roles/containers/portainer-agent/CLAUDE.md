@@ -10,7 +10,7 @@ shared conventions and the `portainer` role for the server side.
 - **Host:** daniel-pi ONLY (LAN-only host — [[daniel-pi-lan-only]]). Not on the server.
 - **Port:** `9001` (TLS), published bound to the **Pi's LAN IP** (`server_ip` = the Pi's IP on a
   `-e target=daniel-pi` deploy), never `0.0.0.0`. **Not Traefik-routed, no Authelia.**
-- **Networks:** proxy · **Depends on:** nothing (mounts the raw socket, not the docker-proxy).
+- **Networks:** portainer-agent (own isolation net) · **Depends on:** nothing (mounts the raw socket, not the docker-proxy).
 - **Config in:** `ansible/inventory/host_vars/daniel-pi.yml` → `containers_list`
 
 ## Notable
@@ -38,7 +38,7 @@ shared conventions and the `portainer` role for the server side.
   and an independent failure domain (works if Portainer/the agent is down). Not redundant enough to drop.
 
 ## Registering the Pi in the server's Portainer (one-time, manual)
-The `AGENT_SECRET` is MUTUAL — the **server's** Portainer carries a matching `AGENT_SECRET` env
+The `AGENT_SECRET` is MUTUAL — the **server's** Portainer injects a matching `AGENT_SECRET` from a file-mounted secret
 (SOPS `portainer_agent_secret`, in the `portainer` role) so it authenticates to the agent
 automatically; you do NOT paste the secret in the UI. Portainer environments live in Portainer's own
 BoltDB, not in Ansible, so after both are deployed, add the environment once in the UI:

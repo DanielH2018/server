@@ -10,5 +10,6 @@ upsdrvctl start
 # Start upsd (NUT server, allows clients to query UPS status)
 upsd
 
-# Start upsmon in foreground (monitors UPS, triggers shutdown on low battery)
+# Start upsmon in foreground (monitors UPS, raises FSD on low battery; the host-side
+# secondary upsmon performs the actual poweroff — see role CLAUDE.md, two-tier shutdown)
 exec upsmon -D

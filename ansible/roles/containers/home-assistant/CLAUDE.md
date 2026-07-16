@@ -239,7 +239,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   also arms `input_number.bedroom_light_expected_color_temp` (the color tracker's "auto" baseline)
   so `automation.bedroom_color_tracking` (id `bedroom_color_track`) knows what color it last set
   and can drift from there without treating it as a manual override.
-- **Threshold alerts — unified engine (since 2026-06-18).** `configuration.yaml` defines twelve
+- **Threshold alerts — unified engine (since 2026-06-18).** `configuration.yaml` defines sixteen
   built-in `threshold` binary-sensors; the platform's native hysteresis (on past bound±hyst) IS the
   "alert once + recovery, no bounce" lifecycle. ALL feed ONE automation `bedroom_threshold_alert`
   (files/automations.yaml) in four **categories** — air quality (CO2/PM2.5/VOC/NOx, `upper`),

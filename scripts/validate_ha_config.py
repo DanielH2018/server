@@ -42,8 +42,8 @@ _STATIC_FILES = [
 ]
 _ANSIBLE_MARKERS = ("{{", "{%")
 # Entry files to structurally load. configuration.yaml pulls in customize/automations/scenes/
-# scripts/templates via !include; ui-lovelace.yaml is referenced by filename (not !include), so
-# it is loaded explicitly.
+# scripts/templates/rest via !include; ui-lovelace.yaml is referenced by filename (not !include),
+# so it is loaded explicitly.
 _ENTRY_FILES = ["configuration.yaml", "ui-lovelace.yaml"]
 
 
