@@ -21,13 +21,22 @@ render or produces invalid YAML.
 
 from __future__ import annotations
 
-import sys
 import hashlib
 import re
-from pathlib import Path
+import sys
 
 import yaml
-from jinja2 import ChainableUndefined, Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader
+
+from _render_guard import (
+    ALL_VARS,
+    ANSIBLE,
+    BASE_CONTEXT,
+    SHARED_TPL,
+    StubUndefined,
+    dump_numbered,
+    load_yaml,
+)
 
 
 def _ansible_hash(value, algo="sha1"):
@@ -35,46 +44,8 @@ def _ansible_hash(value, algo="sha1"):
     return hashlib.new(algo, str(value).encode("utf-8")).hexdigest()
 
 
-REPO = Path(__file__).resolve().parent.parent
-ANSIBLE = REPO / "ansible"
-SHARED_TPL = ANSIBLE / "templates"  # traefik.yml.j2 / autokuma.yml.j2 live here
 ROLES = ANSIBLE / "roles" / "containers"
 HOST_VARS = ANSIBLE / "inventory" / "host_vars"
-ALL_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
-
-# Fallback values for variables that are not defined in the (plaintext) inventory
-# — e.g. host facts. Anything still missing (SOPS secrets) renders via StubUndefined.
-BASE_CONTEXT = {
-    "docker_network": "proxy",
-    "puid": 1000,
-    "pgid": 1000,
-    "tz": "America/Chicago",
-    "sys_user": "ubuntu",
-    "email": "stub@example.com",
-    "domain": "example.com",
-    "server_ip": "10.0.0.1",
-    "kuma_docker_host": 1,
-}
-
-
-class StubUndefined(ChainableUndefined):
-    """Any undefined variable (a SOPS secret, a host fact) renders as the literal
-    ``STUB`` and tolerates attribute/item access and iteration, so structural
-    rendering never aborts on a missing value."""
-
-    _FILL = "STUB"
-
-    def __str__(self) -> str:  # {{ secret }}
-        return self._FILL
-
-    def __iter__(self):  # {% for x in undefined %}
-        return iter(())
-
-
-def load_yaml(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    return yaml.safe_load(path.read_text()) or {}
 
 
 def build_env(role: str) -> Environment:
@@ -89,11 +60,6 @@ def build_env(role: str) -> Environment:
     )
     env.filters["hash"] = _ansible_hash  # used by healthcheck.yml.j2's interval jitter
     return env
-
-
-def dump_numbered(text: str) -> None:
-    for i, line in enumerate(text.splitlines(), 1):
-        print(f"  {i:3d}| {line}", file=sys.stderr)
 
 
 def _unescaped_dollars(value) -> list[str]:

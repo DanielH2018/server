@@ -17,18 +17,21 @@ render failure or invalid YAML.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 import yaml
-from jinja2 import ChainableUndefined, Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader
 
-REPO = Path(__file__).resolve().parent.parent
-ANSIBLE = REPO / "ansible"
-SHARED_TPL = (
-    ANSIBLE / "templates"
-)  # shared macros (and the labels-macro traefik.yml.j2)
+from _render_guard import (
+    ALL_VARS,
+    ANSIBLE,
+    BASE_CONTEXT,
+    SHARED_TPL,
+    dump_numbered,
+    load_yaml,
+)
+from _render_guard import StubUndefined as _BaseStubUndefined
+
 ROLES = ANSIBLE / "roles" / "containers"
-ALL_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 
 # Role-relative config templates to validate. NOT docker-compose.yml.j2 (that's the compose
 # validator's job). These are bind-mounted, re-rendered every deploy, Jinja-bearing, and gate
@@ -43,45 +46,17 @@ CONFIG_TEMPLATES = [
     "grafana/promtail-config.yml.j2",
 ]
 
-# Non-secret fallbacks for host facts not in the plaintext inventory. Anything still missing
-# (SOPS secrets, role vars) renders via StubUndefined — fine for a STRUCTURAL parse check.
-BASE_CONTEXT = {
-    "docker_network": "proxy",
-    "puid": 1000,
-    "pgid": 1000,
-    "tz": "America/Chicago",
-    "sys_user": "ubuntu",
-    "email": "stub@example.com",
-    "domain": "example.com",
-    "server_ip": "10.0.0.1",
-    "kuma_docker_host": 1,
-}
 
-
-class StubUndefined(ChainableUndefined):
-    """Any undefined variable renders as the literal ``STUB`` and tolerates str/concat/iter, so a
-    structural render never aborts on a missing secret/host var — including ``{{ secret | indent(n) }}``
-    (Jinja's ``indent`` does ``s += "\\n"``, which a bare Undefined can't, hence ``__add__``)."""
-
-    _FILL = "STUB"
-
-    def __str__(self) -> str:
-        return self._FILL
-
-    def __iter__(self):
-        return iter(())
+class StubUndefined(_BaseStubUndefined):
+    """Extends the shared base with ``__add__``/``__radd__`` so ``{{ secret | indent(n) }}`` renders
+    instead of aborting — Jinja's ``indent`` filter concatenates a newline onto the value, which the
+    bare Undefined can't do."""
 
     def __add__(self, other):
         return self._FILL + str(other)
 
     def __radd__(self, other):
         return str(other) + self._FILL
-
-
-def load_yaml(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    return yaml.safe_load(path.read_text()) or {}
 
 
 def build_env(role: str) -> Environment:
@@ -121,8 +96,7 @@ def check_template(rel: str, ctx: dict) -> str | None:
     err = yaml_error(rendered)
     if err:
         print(f"\n----- rendered {rel} -----", file=sys.stderr)
-        for i, line in enumerate(rendered.splitlines(), 1):
-            print(f"  {i:3d}| {line}", file=sys.stderr)
+        dump_numbered(rendered)
     return err
 
 

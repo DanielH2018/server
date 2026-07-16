@@ -16,17 +16,10 @@
 # see logger's (always-0) exit code, silently swallowing a non-zero verify.
 set -uo pipefail
 
+# shellcheck source=/dev/null
+source /usr/local/lib/kopia-lib.sh
 STATE=/var/lib/kopia-verify/state.json
-
-write_state() { # ok msg
-  # jq (not printf) so a stray backslash/control char in the kopia-derived msg can't make invalid
-  # JSON. Temp + atomic rename: monitor-bridge reads this every 300s with no retry, so a read landing
-  # mid-truncate would see a half-written file and page a false "state unparseable" DOWN.
-  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --arg msg "$2" \
-    '{ts: $ts, ok: $ok, msg: $msg}' > "$STATE.tmp" \
-    && chmod 0644 "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
-  logger -t kopia-verify "$1: $2"
-}
+write_state() { kopia_write_state "$STATE" kopia-verify "$@"; } # ok msg
 
 # Capture output + the verify's OWN exit code (the command substitution's status is
 # `docker exec`'s, which propagates kopia's — no `| logger` to mask it this time).

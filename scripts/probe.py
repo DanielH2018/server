@@ -748,26 +748,12 @@ def run_health(container):
 def ha_token():
     """Decrypt claude_ha_token from the SOPS secrets file. Requires the host's age
     key (present on daniel-server, where HA runs)."""
-    out = subprocess.run(
-        ["sops", "-d", "--extract", '["claude_ha_token"]', SECRETS_PATH],
-        capture_output=True,
-        text=True,
-    )
-    if out.returncode != 0:
-        raise SystemExit(
-            f"could not decrypt claude_ha_token from {SECRETS_PATH}: {out.stderr.strip()}"
-        )
-    return out.stdout.strip()
+    return sops_extract("claude_ha_token")
 
 
 def ha_get(url, token):
     """Authenticated HA GET; returns the response body. Token is passed via stdin."""
-    out = subprocess.run(
-        ha_curl_argv(url), input=ha_curl_config(token), capture_output=True, text=True
-    )
-    if out.returncode != 0:
-        raise SystemExit(f"curl {url} failed: {out.stderr.strip()}")
-    return out.stdout
+    return config_get(url, ha_curl_config(token))
 
 
 def sops_extract(key_name):

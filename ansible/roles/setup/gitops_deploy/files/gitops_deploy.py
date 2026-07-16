@@ -253,6 +253,18 @@ def drain_pending() -> None:
         _write_pending(updated)
 
 
+def alert_once(marker_file: str, channel: str, origin: str, content: str) -> None:
+    """Deliver a per-SHA-deduped alert on `channel`. No-op if this origin SHA was already
+    alerted (marker == origin). Otherwise mark DETECTION here (advance the marker once per SHA)
+    and hand delivery + retry to deliver()/the pending queue — the marker advances on DETECTION,
+    NOT delivery, so a transient webhook blip is redelivered by drain_pending() rather than
+    silently dropped, and an ff-merged path that noops next tick doesn't re-page."""
+    if _read_marker(marker_file) == origin:
+        return
+    _write_marker(marker_file, origin)
+    deliver(f"{channel}:{origin}", content)
+
+
 def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
     """Fire the tasks/ and meta/deps.yml defer-and-alert for services NOT redeployed this tick.
 
@@ -263,21 +275,21 @@ def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
     alerts at most once per origin SHA; its marker advances on DETECTION (deliver() and the pending
     queue own delivery + retry), so a transient webhook blip is redelivered, not silently dropped."""
     pending_tasks, pending_meta = deferred_service_alerts(cs, deployed)
-    if pending_tasks and _read_marker(TASKS_ALERT_FILE) != origin:
-        # Mark DETECTION here (once per SHA); deliver() owns delivery + retry. This tick ff-merged, so
-        # the next tick noops without re-reaching this code — the queue, not a re-eval, redelivers.
-        _write_marker(TASKS_ALERT_FILE, origin)
-        deliver(
-            f"tasks:{origin}",
+    if pending_tasks:
+        alert_once(
+            TASKS_ALERT_FILE,
+            "tasks",
+            origin,
             f"⚠️ gitops-deploy: a structural dir (`tasks/`/`defaults/`/`vars/`/`handlers/`) changed "
             f"for `{', '.join(sorted(pending_tasks))}` in `{origin[:8]}` with no redeploy of those "
             f"service(s) — fast-forwarded but **not applied** (those dirs aren't auto-deployed). "
             f"Redeploy by hand: `ansible-playbook ansible/deploy.yml --tags <svc>`.",
         )
-    if pending_meta and _read_marker(META_ALERT_FILE) != origin:
-        _write_marker(META_ALERT_FILE, origin)
-        deliver(
-            f"meta:{origin}",
+    if pending_meta:
+        alert_once(
+            META_ALERT_FILE,
+            "meta",
+            origin,
             f"⚠️ gitops-deploy: `meta/deps.yml` changed for "
             f"`{', '.join(sorted(pending_meta))}` in `{origin[:8]}` with no redeploy of those "
             f"service(s) — fast-forwarded but **not applied** (meta/ isn't auto-deployed; it "
@@ -437,19 +449,17 @@ def main() -> int:
     cs = services_from_changed_paths(paths)
 
     if cs.broad:
-        if (
-            _read_marker(BROAD_FILE) != origin
-        ):  # alert once per broad SHA, not every tick
-            # Mark DETECTION here; deliver() owns delivery + retry. (Broad doesn't ff-merge, so it
-            # would re-eval next tick — the marker stops a re-queue while the queue owns redelivery.)
-            _write_marker(BROAD_FILE, origin)
-            deliver(
-                f"broad:{origin}",
-                f"⚠️ gitops-deploy: shared template / inventory changed in "
-                f"`{origin[:8]}` — deferring to a manual full deploy "
-                f"(`ansible-playbook ansible/deploy.yml`), then `git merge --ff-only "
-                f"origin/{BRANCH}` on the host to clear it.",
-            )
+        # Broad doesn't ff-merge, so it re-evals next tick — the per-SHA marker (inside alert_once)
+        # stops a re-queue while the pending queue owns redelivery.
+        alert_once(
+            BROAD_FILE,
+            "broad",
+            origin,
+            f"⚠️ gitops-deploy: shared template / inventory changed in "
+            f"`{origin[:8]}` — deferring to a manual full deploy "
+            f"(`ansible-playbook ansible/deploy.yml`), then `git merge --ff-only "
+            f"origin/{BRANCH}` on the host to clear it.",
+        )
         return 0
     if not cs.services:
         run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])  # docs-only etc.
@@ -457,12 +467,11 @@ def main() -> int:
         # so the ff-merge above is all we can do automatically — but the new value only
         # reaches a container on its next deploy. Defer-and-alert (once per SHA) so the
         # operator redeploys the consumer(s); without this the rotated secret sits stale.
-        if cs.secrets and _read_marker(SECRETS_ALERT_FILE) != origin:
-            # Mark DETECTION here (once per SHA); deliver() owns delivery + retry. This tick ff-merged
-            # (local==origin), so the next tick noops without re-reaching this — the queue redelivers.
-            _write_marker(SECRETS_ALERT_FILE, origin)
-            deliver(
-                f"secrets:{origin}",
+        if cs.secrets:
+            alert_once(
+                SECRETS_ALERT_FILE,
+                "secrets",
+                origin,
                 f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
                 f"service template — fast-forwarded but **nothing was redeployed**. The "
                 f"rotated secret won't reach its container(s) until you redeploy them "

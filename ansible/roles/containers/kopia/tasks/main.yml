@@ -37,6 +37,19 @@
     # change. kopiaignore is read at snapshot time (data, not container config), so excluded.
     common_config_changed: "{{ kopia_cfg_entrypoint is changed }}"
 
+- name: Deploy the shared kopia state-file helper
+  tags: [cron]
+  # Sourced by every kopia host cron (verify/content-verify/maintenance-check/restore-drill/
+  # b2-usage) for the atomic {ts,ok,msg} state write monitor-bridge polls. Fixed absolute path so
+  # each cron can `source` it; must exist before those crons run.
+  ansible.builtin.copy:
+    src: kopia-lib.sh
+    dest: /usr/local/lib/kopia-lib.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0644"
+  become: true
+
 - name: Create restore-drill state directory
   tags: [cron]
   # monitor-bridge bind-mounts this read-only and alerts on failed/stale/missing

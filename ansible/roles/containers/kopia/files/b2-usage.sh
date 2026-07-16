@@ -14,19 +14,14 @@
 # monitor every cycle — over-threshold, staleness, or a missing state file all alert.
 # Also asserts the bucket's daysFromHidingToDeleting lifecycle rule (see below).
 set -uo pipefail
+# shellcheck source=/dev/null
+source /usr/local/lib/kopia-lib.sh
 
 STATE=/var/lib/kopia-b2-usage/state.json
 CFG=/app/config/repository.config
 
-write_state() { # ok bytes msg
-  # jq (not printf) so a stray backslash/control char in the msg can't make invalid JSON. Temp +
-  # atomic rename (like the .prom write below): monitor-bridge reads this every 300s with no retry,
-  # so a read landing mid-truncate would see a half-written file and page a false "state unparseable".
-  jq -nc --argjson ts "$(date +%s)" --argjson ok "$1" --argjson bytes "$2" --arg msg "$3" \
-    '{ts: $ts, ok: $ok, bytes: $bytes, msg: $msg}' > "$STATE.tmp" \
-    && chmod 0644 "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
-  logger -t kopia-b2-usage "$1: $3"
-}
+# args: ok bytes msg  (lib takes STATE TAG OK MSG [BYTES], so bytes/msg are reordered here)
+write_state() { kopia_write_state "$STATE" kopia-b2-usage "$1" "$3" "$2"; }
 fail() { write_state false 0 "$1"; exit 1; }
 
 CONF=$(docker exec kopia cat "$CFG" 2>/dev/null) \

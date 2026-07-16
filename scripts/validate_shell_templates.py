@@ -26,8 +26,18 @@ import sys
 import tempfile
 from pathlib import Path
 
-import yaml
-from jinja2 import ChainableUndefined, Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader
+
+from _render_guard import (
+    ALL_VARS,
+    ANSIBLE,
+    BASE_CONTEXT,
+    REPO,
+    SHARED_TPL,
+    StubUndefined,
+    dump_numbered,
+    load_yaml,
+)
 
 
 def _ansible_search(value, pattern, ignorecase=False, multiline=False) -> bool:
@@ -39,26 +49,7 @@ def _ansible_search(value, pattern, ignorecase=False, multiline=False) -> bool:
     return bool(re.search(pattern, str(value), flags))
 
 
-REPO = Path(__file__).resolve().parent.parent
-ANSIBLE = REPO / "ansible"
-SHARED_TPL = ANSIBLE / "templates"
 ROLES = ANSIBLE / "roles"
-ALL_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
-
-# Fallback values for variables that are not defined in the (plaintext) inventory — e.g. SOPS
-# secrets. Anything still missing renders via StubUndefined. Mirrors validate_compose_templates.py
-# / validate_config_templates.py so the three render guards stay consistent.
-BASE_CONTEXT = {
-    "docker_network": "proxy",
-    "puid": 1000,
-    "pgid": 1000,
-    "tz": "America/Chicago",
-    "sys_user": "ubuntu",
-    "email": "stub@example.com",
-    "domain": "example.com",
-    "server_ip": "10.0.0.1",
-    "kuma_docker_host": 1,
-}
 
 # Shell-specific overrides: values a lint pass needs to be shell-plausible rather than the bare
 # "STUB" literal StubUndefined fills in elsewhere. A bare "STUB" would actually be fine for a
@@ -75,28 +66,6 @@ SHELL_STUB_OVERRIDES = {
     "pi_sd_health_push_token": "stub-pi-sd-health-token",
     "hostvars": {"daniel-server": {"server_ip": "10.0.0.1"}},
 }
-
-
-class StubUndefined(ChainableUndefined):
-    """Any undefined variable (a SOPS secret, a host fact) renders as the literal ``STUB`` and
-    tolerates attribute/item access and iteration, so structural rendering never aborts on a
-    missing value. Backstop only — every var actually referenced by the current templates is
-    covered by BASE_CONTEXT / all.yml / SHELL_STUB_OVERRIDES above, precisely so a lone "STUB"
-    never has to survive being embedded in a shell comparison/arithmetic/format context."""
-
-    _FILL = "STUB"
-
-    def __str__(self) -> str:
-        return self._FILL
-
-    def __iter__(self):
-        return iter(())
-
-
-def load_yaml(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    return yaml.safe_load(path.read_text()) or {}
 
 
 def discover_templates() -> list[Path]:
@@ -125,11 +94,6 @@ def render_template(path: Path, ctx: dict) -> str:
     env = build_env(path.parent)
     env.globals.update(ctx)
     return env.get_template(path.name).render(**ctx)
-
-
-def dump_numbered(text: str) -> None:
-    for i, line in enumerate(text.splitlines(), 1):
-        print(f"  {i:3d}| {line}", file=sys.stderr)
 
 
 def bash_syntax_check(path: Path) -> str | None:

@@ -1640,16 +1640,32 @@ def restore_drill(state, age_s, max_age_s):
     )
 
 
-def check_restore_drill():
+def _check_state_file(path, missing_msg, bad_msg, decide):
+    """Read a JSON state file written by a host cron and hand (state, age_s) to `decide`.
+
+    Shared IO half of the state-file monitors (restore-drill/verify/pi-peers/docker-user/…):
+    every one reads the same {ts, ok, msg} shape, so only the path, the two failure messages,
+    and the pure decision differ. Returns `decide(state, age_s)`, or (False, msg) when the file
+    is missing/unparseable.
+    """
     try:
-        with open(RESTORE_DRILL_STATE) as fh:
+        with open(path) as fh:
             state = json.load(fh)
         age_s = time.time() - float(state.get("ts", 0))
     except FileNotFoundError:
-        return False, "no restore-drill state (drill never ran?)"
+        return False, missing_msg
     except ValueError, TypeError:
-        return False, "restore-drill state unparseable"
-    return restore_drill(state, age_s, RESTORE_DRILL_MAX_AGE_S)
+        return False, bad_msg
+    return decide(state, age_s)
+
+
+def check_restore_drill():
+    return _check_state_file(
+        RESTORE_DRILL_STATE,
+        "no restore-drill state (drill never ran?)",
+        "restore-drill state unparseable",
+        lambda state, age_s: restore_drill(state, age_s, RESTORE_DRILL_MAX_AGE_S),
+    )
 
 
 def verify(state, age_s, max_age_s):
@@ -1671,15 +1687,12 @@ def verify(state, age_s, max_age_s):
 
 
 def check_verify():
-    try:
-        with open(VERIFY_STATE) as fh:
-            state = json.load(fh)
-        age_s = time.time() - float(state.get("ts", 0))
-    except FileNotFoundError:
-        return False, "no verify state (verify never ran?)"
-    except ValueError, TypeError:
-        return False, "verify state unparseable"
-    return verify(state, age_s, VERIFY_MAX_AGE_S)
+    return _check_state_file(
+        VERIFY_STATE,
+        "no verify state (verify never ran?)",
+        "verify state unparseable",
+        lambda state, age_s: verify(state, age_s, VERIFY_MAX_AGE_S),
+    )
 
 
 def content_verify(state, age_s, max_age_s):
@@ -1703,15 +1716,12 @@ def content_verify(state, age_s, max_age_s):
 
 
 def check_content_verify():
-    try:
-        with open(CONTENT_VERIFY_STATE) as fh:
-            state = json.load(fh)
-        age_s = time.time() - float(state.get("ts", 0))
-    except FileNotFoundError:
-        return False, "no content-verify state (verify never ran?)"
-    except ValueError, TypeError:
-        return False, "content-verify state unparseable"
-    return content_verify(state, age_s, CONTENT_VERIFY_MAX_AGE_S)
+    return _check_state_file(
+        CONTENT_VERIFY_STATE,
+        "no content-verify state (verify never ran?)",
+        "content-verify state unparseable",
+        lambda state, age_s: content_verify(state, age_s, CONTENT_VERIFY_MAX_AGE_S),
+    )
 
 
 def pi_peers(state, age_s, max_age_s):
@@ -1733,15 +1743,12 @@ def pi_peers(state, age_s, max_age_s):
 
 
 def check_pi_peers():
-    try:
-        with open(PI_PEERS_STATE) as fh:
-            state = json.load(fh)
-        age_s = time.time() - float(state.get("ts", 0))
-    except FileNotFoundError:
-        return False, "no Pi-peer backup state (pull never ran?)"
-    except ValueError, TypeError:
-        return False, "Pi-peer backup state unparseable"
-    return pi_peers(state, age_s, PI_PEERS_MAX_AGE_S)
+    return _check_state_file(
+        PI_PEERS_STATE,
+        "no Pi-peer backup state (pull never ran?)",
+        "Pi-peer backup state unparseable",
+        lambda state, age_s: pi_peers(state, age_s, PI_PEERS_MAX_AGE_S),
+    )
 
 
 def disk_prune(state, age_s, max_age_s):
@@ -1764,15 +1771,12 @@ def disk_prune(state, age_s, max_age_s):
 
 
 def check_disk_prune():
-    try:
-        with open(DISK_PRUNE_STATE) as fh:
-            state = json.load(fh)
-        age_s = time.time() - float(state.get("ts", 0))
-    except FileNotFoundError:
-        return False, "no disk-autoprune state (never ran?)"
-    except ValueError, TypeError:
-        return False, "disk-autoprune state unparseable"
-    return disk_prune(state, age_s, DISK_PRUNE_MAX_AGE_S)
+    return _check_state_file(
+        DISK_PRUNE_STATE,
+        "no disk-autoprune state (never ran?)",
+        "disk-autoprune state unparseable",
+        lambda state, age_s: disk_prune(state, age_s, DISK_PRUNE_MAX_AGE_S),
+    )
 
 
 def home_allowlist(state, age_s, max_age_s):
@@ -1797,15 +1801,12 @@ def home_allowlist(state, age_s, max_age_s):
 
 
 def check_home_allowlist():
-    try:
-        with open(HOME_ALLOWLIST_STATE) as fh:
-            state = json.load(fh)
-        age_s = time.time() - float(state.get("ts", 0))
-    except FileNotFoundError:
-        return False, "no home-allowlist state (updater never ran?)"
-    except ValueError, TypeError:
-        return False, "home-allowlist state unparseable"
-    return home_allowlist(state, age_s, HOME_ALLOWLIST_MAX_AGE_S)
+    return _check_state_file(
+        HOME_ALLOWLIST_STATE,
+        "no home-allowlist state (updater never ran?)",
+        "home-allowlist state unparseable",
+        lambda state, age_s: home_allowlist(state, age_s, HOME_ALLOWLIST_MAX_AGE_S),
+    )
 
 
 def docker_user(state, age_s, max_age_s):
@@ -1830,15 +1831,12 @@ def docker_user(state, age_s, max_age_s):
 
 
 def check_docker_user():
-    try:
-        with open(DOCKER_USER_STATE) as fh:
-            state = json.load(fh)
-        age_s = time.time() - float(state.get("ts", 0))
-    except FileNotFoundError:
-        return False, "no DOCKER-USER verify state (verify never ran?)"
-    except ValueError, TypeError:
-        return False, "DOCKER-USER verify state unparseable"
-    return docker_user(state, age_s, DOCKER_USER_MAX_AGE_S)
+    return _check_state_file(
+        DOCKER_USER_STATE,
+        "no DOCKER-USER verify state (verify never ran?)",
+        "DOCKER-USER verify state unparseable",
+        lambda state, age_s: docker_user(state, age_s, DOCKER_USER_MAX_AGE_S),
+    )
 
 
 def cloudflare_drift(state, age_s, max_age_s):
@@ -1864,15 +1862,12 @@ def cloudflare_drift(state, age_s, max_age_s):
 
 
 def check_cloudflare_drift():
-    try:
-        with open(CLOUDFLARE_DRIFT_STATE) as fh:
-            state = json.load(fh)
-        age_s = time.time() - float(state.get("ts", 0))
-    except FileNotFoundError:
-        return False, "no Cloudflare-drift state (check never ran?)"
-    except ValueError, TypeError:
-        return False, "Cloudflare-drift state unparseable"
-    return cloudflare_drift(state, age_s, CLOUDFLARE_DRIFT_MAX_AGE_S)
+    return _check_state_file(
+        CLOUDFLARE_DRIFT_STATE,
+        "no Cloudflare-drift state (check never ran?)",
+        "Cloudflare-drift state unparseable",
+        lambda state, age_s: cloudflare_drift(state, age_s, CLOUDFLARE_DRIFT_MAX_AGE_S),
+    )
 
 
 def appsec(state, age_s, max_age_s):
@@ -1901,15 +1896,12 @@ def appsec(state, age_s, max_age_s):
 
 
 def check_appsec():
-    try:
-        with open(APPSEC_STATE) as fh:
-            state = json.load(fh)
-        age_s = time.time() - float(state.get("ts", 0))
-    except FileNotFoundError:
-        return False, "no AppSec verify state (verify never ran?)"
-    except ValueError, TypeError:
-        return False, "AppSec verify state unparseable"
-    return appsec(state, age_s, APPSEC_MAX_AGE_S)
+    return _check_state_file(
+        APPSEC_STATE,
+        "no AppSec verify state (verify never ran?)",
+        "AppSec verify state unparseable",
+        lambda state, age_s: appsec(state, age_s, APPSEC_MAX_AGE_S),
+    )
 
 
 def b2_usage(state, age_s, max_age_s, cap_bytes, max_pct):
@@ -1942,15 +1934,14 @@ def b2_usage(state, age_s, max_age_s, cap_bytes, max_pct):
 
 
 def check_b2_usage():
-    try:
-        with open(B2_USAGE_STATE) as fh:
-            state = json.load(fh)
-        age_s = time.time() - float(state.get("ts", 0))
-    except FileNotFoundError:
-        return False, "no B2-usage state (probe never ran?)"
-    except ValueError, TypeError:
-        return False, "B2-usage state unparseable"
-    return b2_usage(state, age_s, B2_USAGE_MAX_AGE_S, B2_CAP_BYTES, B2_USAGE_MAX_PCT)
+    return _check_state_file(
+        B2_USAGE_STATE,
+        "no B2-usage state (probe never ran?)",
+        "B2-usage state unparseable",
+        lambda state, age_s: b2_usage(
+            state, age_s, B2_USAGE_MAX_AGE_S, B2_CAP_BYTES, B2_USAGE_MAX_PCT
+        ),
+    )
 
 
 def b2_trend(current, predicted, cap_bytes, horizon_d, age_s=None, max_age_s=None):
@@ -2044,15 +2035,12 @@ def maintenance(state, age_s, max_age_s):
 
 
 def check_maintenance():
-    try:
-        with open(MAINTENANCE_STATE) as fh:
-            state = json.load(fh)
-        age_s = time.time() - float(state.get("ts", 0))
-    except FileNotFoundError:
-        return False, "no maintenance state (check never ran?)"
-    except ValueError, TypeError:
-        return False, "maintenance state unparseable"
-    return maintenance(state, age_s, MAINTENANCE_MAX_AGE_S)
+    return _check_state_file(
+        MAINTENANCE_STATE,
+        "no maintenance state (check never ran?)",
+        "maintenance state unparseable",
+        lambda state, age_s: maintenance(state, age_s, MAINTENANCE_MAX_AGE_S),
+    )
 
 
 def ha_heartbeat_fresh(state, max_age_s, now=None):
