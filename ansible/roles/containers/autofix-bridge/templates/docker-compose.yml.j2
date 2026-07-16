@@ -57,6 +57,17 @@ services:
       # POSTs 403 silently via Cloudflare 1010 without a User-Agent — autofix.py sets one.
       - ARR_DISCORD_WEBHOOK_URL={{ arr_discord_webhook_url }}
       - KUMA_PUSH_ARR_AUTOBLOCK={{ arr_autoblock_push_token }}
+      # --- fake-remux scan (second module, daily) ---
+      # Flags files whose quality claims a <=1080p Remux but whose stream is HEVC (a re-encode
+      # mislabeled as a remux — the NTRX Mushoku S2 case). Its dry-run is SEPARATE from DRY_RUN
+      # above and left TRUE on purpose: this module DELETES imported library files, so shipping it
+      # report-only both proves it out AND honors the "leave the current S2 files for now"
+      # decision (it will FLAG them without deleting). Flip to false (+ redeploy) to let it
+      # delete+re-search; the Anime profile's NTRX block (configarr) then steers the re-grab.
+      - FAKEREMUX_DRY_RUN=true
+      - FAKEREMUX_SCAN_HOURS=24
+      # Blast-radius valve: a whole-library match = a rule bug, not N bad grabs -> act on none, alert.
+      - FAKEREMUX_MAX_PER_SCAN=5
     volumes:
       - ./autofix.py:/app/autofix.py:ro
     {{ service_networks() }}

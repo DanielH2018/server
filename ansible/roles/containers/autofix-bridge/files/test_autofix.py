@@ -387,3 +387,138 @@ def test_run_once_no_api_keys_is_disabled_with_no_requests(monkeypatch):
     ok, msg = autofix.run_once({})
 
     assert (ok, msg) == (True, "arr auto-block disabled (no API keys)")
+
+
+# --- is_fake_remux / resolution_height / fake_files --------------------------
+def test_resolution_height_parses_and_fails_safe():
+    assert autofix.resolution_height("1920x1080") == 1080
+    assert autofix.resolution_height("3840x2160") == 2160
+    assert autofix.resolution_height(None) is None
+    assert autofix.resolution_height("garbage") is None
+
+
+def test_fake_remux_1080p_or_720p_hevc_is_flagged():
+    assert autofix.is_fake_remux("Bluray-1080p Remux", "1920x1080", "h265") is True
+    assert autofix.is_fake_remux("Bluray-1080p Remux", "1920x1080", "x265") is True
+    assert autofix.is_fake_remux("Bluray-720p Remux", "1280x720", "hevc") is True
+
+
+def test_real_remux_and_web_hevc_are_not_flagged():
+    # a genuine <=1080p remux is the untouched AVC disc stream
+    assert autofix.is_fake_remux("Bluray-1080p Remux", "1920x1080", "h264") is False
+    # HEVC in a NON-remux quality is normal (WEB/BD encodes) — must not trip
+    assert autofix.is_fake_remux("WEBDL-1080p", "1920x1080", "h265") is False
+
+
+def test_2160p_hevc_remux_is_legitimate():
+    # UHD remuxes ARE HEVC — the resolution gate must exclude them
+    assert autofix.is_fake_remux("Bluray-2160p Remux", "3840x2160", "h265") is False
+
+
+def test_unknown_resolution_or_codec_fails_safe():
+    assert autofix.is_fake_remux("Bluray-1080p Remux", None, "h265") is False
+    assert autofix.is_fake_remux("Bluray-1080p Remux", "1920x1080", None) is False
+
+
+def _episodefile(quality, resolution, codec, fid=1, series_id=9, path="S01E01.mkv"):
+    return {
+        "id": fid,
+        "seriesId": series_id,
+        "relativePath": path,
+        "quality": {"quality": {"name": quality}},
+        "mediaInfo": {"resolution": resolution, "videoCodec": codec},
+    }
+
+
+def test_fake_files_selects_only_the_fake_with_flat_fields():
+    files = [
+        _episodefile(
+            "Bluray-1080p Remux", "1920x1080", "h265", fid=11, path="fake.mkv"
+        ),
+        _episodefile("WEBDL-1080p", "1920x1080", "h265", fid=12, path="ok.mkv"),
+        _episodefile(
+            "Bluray-1080p Remux", "1920x1080", "h264", fid=13, path="realremux.mkv"
+        ),
+    ]
+    out = autofix.fake_files(files, "Mushoku Tensei")
+    assert len(out) == 1
+    assert out[0]["fileId"] == 11
+    assert out[0]["seriesId"] == 9
+    assert out[0]["seriesTitle"] == "Mushoku Tensei"
+    assert out[0]["codec"] == "h265"
+
+
+# --- run_fake_remux_scan (I/O-mocked) ----------------------------------------
+def _fake_scan_request(series, efs_by_series, calls):
+    """A `_request` stand-in: GET /series returns the list, GET /episodefile?seriesId=N returns
+    that series' files; DELETE / command are recorded instead of hitting the network."""
+
+    def fake(url, method="GET", headers=None, data=None):
+        if method != "GET":
+            calls.append((method, url, data))
+            return None
+        if url.endswith("/api/v3/series"):
+            return series
+        return efs_by_series.get(int(url.rsplit("seriesId=", 1)[1]), [])
+
+    return fake
+
+
+def test_fake_remux_scan_dry_run_makes_zero_mutations(monkeypatch):
+    series = [{"id": 9, "title": "Mushoku"}]
+    efs = {9: [_episodefile("Bluray-1080p Remux", "1920x1080", "h265", fid=11)]}
+    calls = []
+    monkeypatch.setattr(autofix, "_request", _fake_scan_request(series, efs, calls))
+    monkeypatch.setattr(autofix, "post_discord", lambda msg: None)
+    monkeypatch.setattr(autofix, "SONARR_API_KEY", "k")
+    monkeypatch.setattr(autofix, "FAKEREMUX_DRY_RUN", True)
+
+    summary = autofix.run_fake_remux_scan()
+
+    assert calls == []
+    assert "1 fake remux" in summary
+
+
+def test_fake_remux_scan_live_deletes_fake_then_searches(monkeypatch):
+    series = [{"id": 9, "title": "Mushoku"}]
+    efs = {
+        9: [
+            _episodefile("Bluray-1080p Remux", "1920x1080", "h265", fid=11),
+            _episodefile("WEBDL-1080p", "1920x1080", "h265", fid=12),
+        ]
+    }
+    calls = []
+    monkeypatch.setattr(autofix, "_request", _fake_scan_request(series, efs, calls))
+    monkeypatch.setattr(autofix, "post_discord", lambda msg: None)
+    monkeypatch.setattr(autofix, "SONARR_API_KEY", "k")
+    monkeypatch.setattr(autofix, "FAKEREMUX_DRY_RUN", False)
+
+    autofix.run_fake_remux_scan()
+
+    # only the fake (fid 11) is deleted, then one SeriesSearch; the WEB file is untouched
+    assert [c[0] for c in calls] == ["DELETE", "POST"]
+    assert "/api/v3/episodefile/11" in calls[0][1]
+    assert calls[1][2] == {"name": "SeriesSearch", "seriesId": 9}
+
+
+def test_fake_remux_scan_mass_match_holds_and_acts_on_none(monkeypatch):
+    n = autofix.FAKEREMUX_MAX_PER_SCAN + 1
+    series = [{"id": i, "title": "S%d" % i} for i in range(n)]
+    efs = {
+        i: [
+            _episodefile(
+                "Bluray-1080p Remux", "1920x1080", "h265", fid=100 + i, series_id=i
+            )
+        ]
+        for i in range(n)
+    }
+    calls = []
+    monkeypatch.setattr(autofix, "_request", _fake_scan_request(series, efs, calls))
+    monkeypatch.setattr(autofix, "post_discord", lambda msg: None)
+    monkeypatch.setattr(autofix, "SONARR_API_KEY", "k")
+    monkeypatch.setattr(autofix, "FAKEREMUX_DRY_RUN", False)
+
+    summary = autofix.run_fake_remux_scan()
+
+    assert calls == []
+    assert "holding" in summary

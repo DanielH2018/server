@@ -23,6 +23,14 @@ sidecar per fix. See repo-root `CLAUDE.md`.
    class), and `CLIENT_ERROR_PATTERNS` — a download-client/VPN outage is EXCLUDED so a legit
    in-progress download isn't wrongly blocklisted (see [[qbittorrent-bind-wg0]]). Flip
    `DRY_RUN=true` + redeploy to return to report-only.
+   **Second module — fake-remux scan (`run_fake_remux_scan`, daily):** sweeps the Sonarr library
+   for files whose quality claims a **≤1080p Remux** but whose MediaInfo codec is **HEVC** — a
+   re-encode mislabeled as a remux (a real ≤1080p BD remux is AVC; 2160p HEVC remuxes are excluded;
+   unknown resolution fails safe). Unless `FAKEREMUX_DRY_RUN` — its **OWN** gate, **default `true`**
+   because it DELETEs library files — it deletes each fake + re-searches the series (the Anime
+   profile's NTRX block via the configarr role keeps the re-grab clean). `FAKEREMUX_MAX_PER_SCAN`
+   is its blast valve (a whole-library match → act on none + alert). Left report-only on purpose so
+   it flags the current mislabeled Mushoku S2 files without deleting them.
 2. **Host plane** — the disk-autoprune cron (`templates/autofix-disk-prune.sh.j2` →
    `/usr/local/bin/`, hourly `minute:0`, runs as `sys_user` ∈ docker group, no root). Host work
    (docker daemon) **can't** run in the locked-down container, so it lives beside it as a cron
