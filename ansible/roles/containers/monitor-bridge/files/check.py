@@ -1560,14 +1560,10 @@ def check_ups():
     if ok:
         _ups_down_streak = 0
         return True, msg
-    _ups_down_streak += 1
-    if _ups_down_streak < UPS_CONSECUTIVE:
-        return True, "down streak %d/%d (grace): %s" % (
-            _ups_down_streak,
-            UPS_CONSECUTIVE,
-            msg,
-        )
-    return False, "%s (%d cycles)" % (msg, _ups_down_streak)
+    _ups_down_streak, ok, msg = down_streak(
+        _ups_down_streak, UPS_CONSECUTIVE, msg, "grace"
+    )
+    return ok, msg
 
 
 def pi_pressure(load_json, mem_json, fs_json, load_max, mem_min_mb, disk_max_pct):
@@ -2096,14 +2092,10 @@ def check_ha_heartbeat():
     if ok:
         _ha_down_streak = 0
         return True, msg
-    _ha_down_streak += 1
-    if _ha_down_streak < HA_CONSECUTIVE:
-        return True, "down streak %d/%d (deploy/restart grace): %s" % (
-            _ha_down_streak,
-            HA_CONSECUTIVE,
-            msg,
-        )
-    return False, "%s (%d cycles)" % (msg, _ha_down_streak)
+    _ha_down_streak, ok, msg = down_streak(
+        _ha_down_streak, HA_CONSECUTIVE, msg, "deploy/restart grace"
+    )
+    return ok, msg
 
 
 def loki_count(selector, window):
@@ -2327,14 +2319,10 @@ def check_discord():
     if ok:
         _discord_down_streak = 0
         return True, "delivery channels valid (%s)" % ", ".join(valid)
-    _discord_down_streak += 1
-    if _discord_down_streak < DISCORD_CONSECUTIVE:
-        return True, "down streak %d/%d (transient grace): %s" % (
-            _discord_down_streak,
-            DISCORD_CONSECUTIVE,
-            msg,
-        )
-    return False, "%s (%d cycles)" % (msg, _discord_down_streak)
+    _discord_down_streak, ok, msg = down_streak(
+        _discord_down_streak, DISCORD_CONSECUTIVE, msg, "transient grace"
+    )
+    return ok, msg
 
 
 def recyclarr_sync_ok(failed_count, succeeded_count, window):
@@ -2539,26 +2527,38 @@ STARTUP_GRACE = frozenset(
 _grace_streaks = {}
 
 
+def down_streak(count, threshold, msg, grace_note, held_label="down streak"):
+    """Pure consecutive-down hysteresis step shared by every per-check grace (check_ha_heartbeat/
+    check_ups/check_discord) and apply_startup_grace. Call on a DOWN result — the caller resets its
+    own counter to 0 on `ok`. Increments `count` and returns (new_count, hold_ok, out_msg): while
+    under `threshold` it holds `up` with a "<held_label> n/N (<grace_note>): msg" note; the
+    `threshold`'th straight down pages with "msg (n cycles)". (check_cpu_throttle keeps its own down
+    branch — its page message embeds the throttle thresholds, so it can't use the generic format.)
+    """
+    count += 1
+    if count < threshold:
+        return (
+            count,
+            True,
+            "%s %d/%d (%s): %s" % (held_label, count, threshold, grace_note, msg),
+        )
+    return count, False, "%s (%d cycles)" % (msg, count)
+
+
 def apply_startup_grace(name, ok, msg, threshold, streaks):
     """Pure: hold a reach-out check `up` through the first `threshold`-1 consecutive down cycles.
 
-    `streaks` is a name->consecutive-down-count dict, mutated in place (like the module-global
-    streak counters check_ha_heartbeat/check_cpu_throttle keep). An `ok` result resets the count;
-    the `threshold`'th straight down passes through unchanged. Same "down streak n/N" held-up /
-    "(n cycles)" paging msg shape as the HA/Discord grace, so a held cycle stays legible in the log.
+    `streaks` is a name->consecutive-down-count dict, mutated in place. An `ok` result resets the
+    count; a down result advances the shared `down_streak` hysteresis, so a held cycle reads with the
+    same "down streak n/N" / "(n cycles)" wording as the HA/UPS/Discord per-check grace.
     """
     if ok:
         streaks[name] = 0
         return ok, msg
-    n = streaks.get(name, 0) + 1
-    streaks[name] = n
-    if n < threshold:
-        return True, "down streak %d/%d (startup/redeploy grace): %s" % (
-            n,
-            threshold,
-            msg,
-        )
-    return False, "%s (%d cycles)" % (msg, n)
+    streaks[name], ok, msg = down_streak(
+        streaks.get(name, 0), threshold, msg, "startup/redeploy grace"
+    )
+    return ok, msg
 
 
 def down_exporters(up_vector):

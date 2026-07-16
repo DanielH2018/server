@@ -26,6 +26,8 @@ import re
 import shlex
 import sys
 
+from _hook_common import emit_pretooluse_decision
+
 # --- Programs that cannot write or exec under ANY arguments --------------------
 # Deliberately excludes commands with a write/exec mode: env (`env CMD`),
 # less/more (`!cmd` escape), command/xargs/timeout/nice/... (exec wrappers),
@@ -807,17 +809,7 @@ def main():
     command = ((data.get("tool_input") or {}).get("command")) or ""
     reason = classify(command)
     if reason:
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "allow",
-                        "permissionDecisionReason": reason,
-                    }
-                }
-            )
-        )
+        emit_pretooluse_decision("allow", reason)
     return 0
 
 

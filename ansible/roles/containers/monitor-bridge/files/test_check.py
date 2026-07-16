@@ -3298,6 +3298,29 @@ def test_every_push_token_env_is_wired_to_a_monitor():
     )
 
 
+# --- down_streak: the shared consecutive-down hysteresis primitive ------------
+
+
+def test_down_streak_holds_up_below_threshold():
+    count, ok, msg = check.down_streak(0, 2, "boom", "grace")
+    assert (count, ok) == (1, True)
+    assert msg == "down streak 1/2 (grace): boom"
+
+
+def test_down_streak_pages_at_threshold():
+    count, ok, msg = check.down_streak(1, 2, "boom", "grace")
+    assert (count, ok) == (2, False)
+    assert msg == "boom (2 cycles)"
+
+
+def test_down_streak_custom_label_and_note():
+    _, ok, msg = check.down_streak(
+        0, 3, "x", "not alerting yet", held_label="throttling streak"
+    )
+    assert ok
+    assert msg == "throttling streak 1/3 (not alerting yet): x"
+
+
 # --- startup/redeploy grace for the reach-out checks (STARTUP_GRACE) ----------
 
 

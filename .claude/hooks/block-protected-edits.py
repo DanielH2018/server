@@ -25,6 +25,8 @@ import os
 import re
 import sys
 
+from _hook_common import emit_pretooluse_decision
+
 
 _SOPS_MAC_RE = re.compile(r'(?m)^\s*"?mac"?:\s*"?ENC\[AES256_GCM,')
 
@@ -100,17 +102,7 @@ def main():
     )
     reason = classify(file_path, repo_root)
     if reason:
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": reason,
-                    }
-                }
-            )
-        )
+        emit_pretooluse_decision("deny", reason)
     return 0
 
 
