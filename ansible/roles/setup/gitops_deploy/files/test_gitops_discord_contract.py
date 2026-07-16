@@ -19,6 +19,7 @@ Contracts guarded here:
 
 import ast
 import pathlib
+import re
 
 _SRC = pathlib.Path(__file__).with_name("gitops_deploy.py")
 
@@ -353,4 +354,47 @@ def test_diverged_marker_write_is_gated_and_precedes_action_branching():
     assert write_line < action_assign, (
         "the DIVERGED_FILE marker write must precede `action = next_action(...)` so it runs every "
         "tick regardless of the action short-circuit returns"
+    )
+
+
+# --- deploy-timeout budget arithmetic (2026-07-16 review M1) ------------------
+# "The rollback survives max flock contention" is an invariant split across two templates:
+#   config.env.j2            -> RUN_BUDGET_S (health-gate budget) + HEALTH_TIMEOUT_S (rollback redeploy)
+#   gitops-deploy.service.j2 -> flock -w <N> (max lock wait) + TimeoutStartSec (systemd hard kill)
+# RUN_START is measured AFTER flock acquires, but TimeoutStartSec counts from unit activation and so
+# INCLUDES the flock wait — so the worst case flock_wait + RUN_BUDGET_S + HEALTH_TIMEOUT_S must fit
+# inside TimeoutStartSec, else systemd SIGTERMs the deployer mid-rollback and the bad commit is
+# stranded live (the failure 1ba4fbb2 sized these four values to avoid, down to zero slack). Nothing
+# else pins the cross-file sum, so a later bump to any one value would silently reopen it while every
+# other test stays green — the same class the write_hold / divergence-marker guards above pin.
+
+_TEMPLATES = pathlib.Path(__file__).parents[1] / "templates"
+
+
+def _search1(pattern: str, text: str) -> str:
+    m = re.search(pattern, text, re.MULTILINE)
+    assert m is not None, f"pattern {pattern!r} did not match — template renamed?"
+    return m.group(1)
+
+
+def _systemd_seconds(span: str) -> int:
+    # Parse the systemd time spans this unit actually uses (Nmin / Ns / bare seconds).
+    m = re.fullmatch(r"(\d+)\s*(min|m|sec|s|)", span.strip())
+    assert m is not None, f"unrecognized systemd time span {span!r}"
+    return int(m.group(1)) * (60 if m.group(2) in ("min", "m") else 1)
+
+
+def test_deploy_timeout_budget_survives_max_flock_contention():
+    env = (_TEMPLATES / "config.env.j2").read_text()
+    unit = (_TEMPLATES / "gitops-deploy.service.j2").read_text()
+    flock_wait = int(_search1(r"^ExecStart=.*?flock\s+-w\s+(\d+)", unit))
+    run_budget = int(_search1(r"^RUN_BUDGET_S=(\d+)", env))
+    health_timeout = int(_search1(r"^HEALTH_TIMEOUT_S=(\d+)", env))
+    timeout_start = _systemd_seconds(_search1(r"^TimeoutStartSec=(\S+)", unit))
+    budget = flock_wait + run_budget + health_timeout
+    assert budget <= timeout_start, (
+        f"flock -w {flock_wait} + RUN_BUDGET_S {run_budget} + HEALTH_TIMEOUT_S {health_timeout} "
+        f"= {budget}s must fit inside TimeoutStartSec {timeout_start}s, or a slow health-gate under "
+        f"max flock contention gets SIGTERMed mid-rollback and the bad commit is stranded live "
+        f"(see 1ba4fbb2)."
     )

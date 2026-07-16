@@ -104,9 +104,12 @@ TIMEOUT = int(C.get("HEALTH_TIMEOUT_S", "300"))
 # Wall-clock budget (measured from process start, RUN_START) for the whole run's health-gating
 # phase. Once spent, the gate stops and rolls back so the rollback (git reset + one redeploy)
 # still finishes inside the unit's TimeoutStartSec (25min) — otherwise systemd SIGTERMs the
-# deployer mid-gate, before write_hold()/rollback, and the bad commit is left live. Default
-# 1200s (20min) leaves ~5min of the 25min timeout for the rollback. See gitops-deploy.service.j2.
-RUN_BUDGET_S = int(C.get("RUN_BUDGET_S", "1200"))
+# deployer mid-gate, before write_hold()/rollback, and the bad commit is left live. RUN_START is
+# measured AFTER `flock -w 180` acquires, but TimeoutStartSec counts the flock wait too, so the
+# budget is sized 180 (max flock wait) + 1020 (this gate) + 300 (HEALTH_TIMEOUT_S) = 1500 = the
+# 25min timeout, keeping the rollback intact even under max lock contention with the weekly
+# secret-rotate. See gitops-deploy.service.j2.
+RUN_BUDGET_S = int(C.get("RUN_BUDGET_S", "1020"))
 RUN_START = time.time()
 
 
