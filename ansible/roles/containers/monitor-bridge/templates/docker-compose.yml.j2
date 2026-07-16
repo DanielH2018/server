@@ -453,7 +453,7 @@ services:
          streams over 30m and `down` at zero — catches a dead promtail/Loki pipeline that /ready can't see. -#}
       {{ kuma('monitor-bridge-loki', monitor_type='push', name='Loki Log Ingestion', interval=600, max_retries=0, push_token=monitor_bridge_loki_push_token) }}
       {# Promtail Dropped Entries: check_promtail_dropped reads promtail_dropped_entries_total
-         {reason="ingester_error"} from Prometheus — down on sustained PARTIAL log loss (entries Loki
+         (across all drop reasons) from Prometheus — down on sustained PARTIAL log loss (entries Loki
          rejected + promtail dropped) that the total-silence Loki Log Ingestion check can't see. Prom-dependent. -#}
       {{ kuma('monitor-bridge-promtail-dropped', monitor_type='push', name='Promtail Dropped Entries', interval=600, max_retries=0, push_token=monitor_bridge_promtail_dropped_push_token) }}
       {# Loki reachability — the root-cause monitor that gates the Loki-querying checks: when it's
