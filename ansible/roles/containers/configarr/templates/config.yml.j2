@@ -1,0 +1,63 @@
+# Configarr config — managed by Ansible (roles/containers/configarr). DO NOT hand-edit
+# the rendered copy under containers/ — edit this template.
+#
+# SCOPE IS DELIBERATELY MINIMAL. The Sonarr "Anime" profile is the operator's own bespoke
+# scheme (52 scored "Anime Profile N_N_N" custom formats). We do NOT reproduce or manage
+# that scheme here — a read-only snapshot lives in files/baseline/ for reference, and the
+# live definitions stay in Sonarr's DB (Kopia-backed). Because `delete_unmanaged_custom_formats`
+# is left OFF (the default), Configarr only ADDS/updates the CFs defined below and never
+# touches the bespoke scheme or its scores.
+#
+# Why this exists: NTRX advertised "BD Remux 1080p AVC" but shipped a long-GOP HEVC 10-bit
+# re-encode (Mushoku Tensei S2, 2026-07-16) -> Jellyfin buffering + slow seeks. Sonarr trusts
+# the release TITLE at grab time, so only release-group reputation can stop a lying label.
+trashGuideUrl: https://github.com/TRaSH-Guides/Guides
+
+customFormatDefinitions:
+  # Reject mislabeled "fake remux" groups. With the Anime profile's minFormatScore=0,
+  # a -10000 assigned score drops the release below the floor -> rejected outright.
+  - trash_id: local-fake-remux-groups
+    name: "Fake/Mislabeled Remux Groups"
+    includeCustomFormatWhenRenaming: false
+    specifications:
+      - name: NTRX
+        implementation: ReleaseGroupSpecification
+        negate: false
+        required: false
+        fields:
+          value: "^(NTRX)$"
+
+  # Prefer genuine anime remux/encode groups actually seen in this library's grab history.
+  - trash_id: local-anime-trusted-groups
+    name: "Trusted Anime Groups"
+    includeCustomFormatWhenRenaming: false
+    specifications:
+      - name: TTGA
+        implementation: ReleaseGroupSpecification
+        negate: false
+        required: false
+        fields:
+          value: "^(TTGA)$"
+      - name: LostYears
+        implementation: ReleaseGroupSpecification
+        negate: false
+        required: false
+        fields:
+          value: "^(LostYears)$"
+
+sonarr:
+  series:
+    base_url: http://sonarr:8989
+    api_key: {{ sonarr_api_key }}
+
+    custom_formats:
+      - trash_ids:
+          - local-fake-remux-groups
+        assign_scores_to:
+          - name: Anime
+            score: -10000
+      - trash_ids:
+          - local-anime-trusted-groups
+        assign_scores_to:
+          - name: Anime
+            score: 200

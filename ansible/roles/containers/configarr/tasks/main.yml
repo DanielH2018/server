@@ -1,0 +1,41 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}/config"
+      - "{{ container_item.name }}/repos"
+
+- name: Create config.yml from template
+  tags: [config]
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/config.yml"
+    # 0600: embeds the Sonarr API key. Owned by the PUID the container runs as (1000:1000),
+    # so it stays readable.
+    mode: "0600"
+  no_log: true
+  register: configarr_cfg
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+  vars:
+    # A changed config.yml must recreate the one-shot so the new sync runs (the compose
+    # service definition itself is unchanged — see common/CLAUDE.md on common_config_changed).
+    common_config_changed: "{{ configarr_cfg is changed }}"
+
+- name: Schedule daily Configarr re-sync (drift correction)
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "configarr-sync"
+    minute: "30"
+    hour: "4"
+    # Re-run the one-shot container. `-a` blocks + propagates the sync exit code so a
+    # failed reconcile is logged (mirrors the repo's other host-cron jobs).
+    job: "docker start -a configarr >/dev/null 2>&1 || logger -t configarr-sync 'configarr re-sync failed'"

@@ -1,0 +1,38 @@
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+services:
+  configarr:
+    # Pinned + Renovate-managed. Configarr is a recyclarr-compatible syncer that ALSO
+    # supports LOCAL custom-format definitions (recyclarr is TRaSH-guide-only). We use it
+    # to keep the Sonarr "Anime" profile's release-group defense in IaC — see CLAUDE.md.
+    image: ghcr.io/raydak-labs/configarr:1.30.0
+    container_name: configarr
+    user: {{ puid }}:{{ pgid }}
+    # One-shot: Configarr reconciles Sonarr and exits. `no` = don't loop-restart on exit.
+    # Re-runs happen on deploy (config change -> recreate) and via the daily
+    # `docker start -a configarr` cron in tasks/main.yml. Deliberately NO healthcheck /
+    # AutoKuma label — this is a batch job, not a service; an exited one-shot would
+    # otherwise show as a false "down" in Kuma.
+    restart: "no"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    {{ service_networks() }}
+    environment:
+      - TZ={{ tz }}
+    volumes:
+      # config.yml embeds the Sonarr API key (0600) — rendered by Ansible from config.yml.j2.
+      - ./config:/app/config
+      # Guide-repo clone cache: Configarr clones the TRaSH guides on each run; persisting
+      # this avoids a re-clone every sync. Writable bind (owned by the PUID it runs as).
+      - ./repos:/app/repos
+    labels:
+      # Disable watchtower update — pinned + Renovate-managed
+      - "com.centurylinklabs.watchtower.enable=false"
+    # Resource caps for blast-radius containment; tune from cAdvisor/Grafana.
+    # NB: read_only rootfs deliberately omitted for now — Configarr (Node + git guide-clone)
+    # write footprint is unverified; revisit after observing `docker diff configarr`.
+    {{ resources('0.50', '256M', '0.05', '16M') }}
+
+{{ external_networks() }}

@@ -198,6 +198,10 @@ containers_list:
     use_authelia: false
     networks:
       - media
+  - name: configarr
+    use_authelia: false
+    networks:
+      - media
   - name: janitorr
     use_authelia: false
     networks:
