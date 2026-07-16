@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 import yaml
-from jinja2 import ChainableUndefined
+from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
 REPO = Path(__file__).resolve().parent.parent
 ANSIBLE = REPO / "ansible"
@@ -65,3 +65,30 @@ def load_yaml(path: Path) -> dict:
 def dump_numbered(text: str) -> None:
     for i, line in enumerate(text.splitlines(), 1):
         print(f"  {i:3d}| {line}", file=sys.stderr)
+
+
+def make_env(dirs, undefined_cls=StubUndefined) -> Environment:
+    """The Jinja Environment shared by the three render guards: the given template dirs on the
+    loader, the stub-undefined class, and the whitespace flags matching Ansible's Templar so
+    rendered output matches a real deploy. Callers register any Ansible filter/test shims
+    (the compose guard's ``hash`` filter, the shell guard's ``search`` test) on the returned env."""
+    return Environment(
+        loader=FileSystemLoader([str(d) for d in dirs]),
+        undefined=undefined_cls,
+        trim_blocks=True,
+        lstrip_blocks=False,
+        keep_trailing_newline=True,
+    )
+
+
+def render_or_error(
+    env: Environment, name: str, ctx: dict
+) -> tuple[str | None, str | None]:
+    """Render template ``name`` with ``ctx`` (also injected as globals so imported macros see it).
+    Return ``(rendered, None)`` on success or ``(None, "render error: <Type>: <msg>")`` — the
+    identical error format all three guards wrapped their render call in."""
+    env.globals.update(ctx)
+    try:
+        return env.get_template(name).render(**ctx), None
+    except Exception as exc:  # noqa: BLE001 — surface any render failure
+        return None, f"render error: {type(exc).__name__}: {exc}"

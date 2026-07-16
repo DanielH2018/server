@@ -193,6 +193,49 @@ def test_cap_drop_walks_all_services():
     assert vct.find_missing_cap_drop(docs) == ["b"]
 
 
+# --- no-new-privileges policy guard ------------------------------------------
+# The companion of cap_drop: [ALL]. Enforced symmetrically so a new service (or a copy-paste that
+# silently drops the security_opt line) can't omit it; documented exceptions go in NO_NEW_PRIV_EXEMPT.
+
+
+def test_no_new_privileges_is_clean():
+    docs = _docs({"security_opt": ["no-new-privileges:true"]})
+    assert vct.find_missing_no_new_privileges(docs) == []
+
+
+def test_no_new_privileges_with_space_is_clean():
+    # `no-new-privileges: true` (a space after the colon) is the same directive to Docker
+    docs = _docs({"security_opt": ["no-new-privileges: true"]})
+    assert vct.find_missing_no_new_privileges(docs) == []
+
+
+def test_missing_no_new_privileges_is_flagged():
+    assert vct.find_missing_no_new_privileges(_docs({"image": "nginx"})) == ["svc"]
+
+
+def test_other_security_opt_without_no_new_privileges_is_flagged():
+    docs = _docs({"security_opt": ["seccomp=unconfined"]})
+    assert vct.find_missing_no_new_privileges(docs) == ["svc"]
+
+
+def test_no_new_privileges_exempt_service_is_skipped():
+    assert (
+        vct.find_missing_no_new_privileges(_docs({"image": "x"}), exempt={"svc"}) == []
+    )
+
+
+def test_no_new_privileges_walks_all_services():
+    docs = [
+        {
+            "services": {
+                "a": {"security_opt": ["no-new-privileges:true"]},
+                "b": {"image": "x"},
+            }
+        }
+    ]
+    assert vct.find_missing_no_new_privileges(docs) == ["b"]
+
+
 # --- watchtower update-policy guard ------------------------------------------
 # Watchtower runs monitor-all, so a mutable-tag service WITHOUT an opt-out is auto-updated.
 # That's fine for the disposable pool but silently swept up karakeep/janitorr (stateful,

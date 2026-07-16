@@ -26,7 +26,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment
 
 from _render_guard import (
     ALL_VARS,
@@ -34,9 +34,10 @@ from _render_guard import (
     BASE_CONTEXT,
     REPO,
     SHARED_TPL,
-    StubUndefined,
     dump_numbered,
     load_yaml,
+    make_env,
+    render_or_error,
 )
 
 
@@ -76,14 +77,7 @@ def discover_templates() -> list[Path]:
 
 
 def build_env(template_dir: Path) -> Environment:
-    env = Environment(
-        loader=FileSystemLoader([str(template_dir), str(SHARED_TPL)]),
-        undefined=StubUndefined,
-        # Match Ansible's Templar so rendered whitespace matches a real deploy.
-        trim_blocks=True,
-        lstrip_blocks=False,
-        keep_trailing_newline=True,
-    )
+    env = make_env([template_dir, SHARED_TPL])
     env.tests["search"] = (
         _ansible_search  # used by docker-user-rules.sh.j2's IPv4/IPv6 split
     )
@@ -92,8 +86,10 @@ def build_env(template_dir: Path) -> Environment:
 
 def render_template(path: Path, ctx: dict) -> str:
     env = build_env(path.parent)
-    env.globals.update(ctx)
-    return env.get_template(path.name).render(**ctx)
+    rendered, err = render_or_error(env, path.name, ctx)
+    if err:
+        raise RuntimeError(err)
+    return rendered
 
 
 def bash_syntax_check(path: Path) -> str | None:
@@ -123,10 +119,10 @@ def check_template(
     """Render one template, write it under out_dir preserving its relative path (minus the
     trailing .j2), then lint the rendered file. Return an error string, or None on success."""
     rel = path.relative_to(ANSIBLE)
-    try:
-        rendered = render_template(path, ctx)
-    except Exception as exc:  # noqa: BLE001 — surface any render failure
-        return f"render error: {type(exc).__name__}: {exc}"
+    env = build_env(path.parent)
+    rendered, err = render_or_error(env, path.name, ctx)
+    if err:
+        return err
 
     out_path = out_dir / rel.with_suffix("")  # drop the trailing .j2
     out_path.parent.mkdir(parents=True, exist_ok=True)

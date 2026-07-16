@@ -12,20 +12,20 @@ services:
     restart: unless-stopped
     {{ healthcheck('["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/5000"]', start_period='10s') }}
     environment:
-        - GOOGLE_ICS_URL={{ calendar_1 }}
-        - GOOGLE_ICS_URL_2={{ calendar_2 }}
-        - OBSIDIAN_GIST_URL={{ calendar_4 }}
-        - REFRESH_INTERVAL=900   # 15 minutes in seconds
-        - PYTHONDONTWRITEBYTECODE=1
+      - GOOGLE_ICS_URL={{ calendar_1 }}
+      - GOOGLE_ICS_URL_2={{ calendar_2 }}
+      - OBSIDIAN_GIST_URL={{ calendar_4 }}
+      - REFRESH_INTERVAL=900   # 15 minutes in seconds
+      - PYTHONDONTWRITEBYTECODE=1
     cap_drop:
-        - ALL
+      - ALL
     security_opt:
-        - no-new-privileges:true
+      - no-new-privileges:true
     # Read-only rootfs: `docker diff` shows only .pyc bytecode (killed by
     # PYTHONDONTWRITEBYTECODE below); app.py caches calendars in memory, never on disk.
     read_only: true
     tmpfs:
-        - /tmp
+      - /tmp
     {{ service_networks() }}
     labels:
       {{ kuma('ical-proxy') }}

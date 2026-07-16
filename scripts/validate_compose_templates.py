@@ -26,16 +26,17 @@ import re
 import sys
 
 import yaml
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment
 
 from _render_guard import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,
     SHARED_TPL,
-    StubUndefined,
     dump_numbered,
     load_yaml,
+    make_env,
+    render_or_error,
 )
 
 
@@ -49,15 +50,7 @@ HOST_VARS = ANSIBLE / "inventory" / "host_vars"
 
 
 def build_env(role: str) -> Environment:
-    role_tpl_dir = ROLES / role / "templates"
-    env = Environment(
-        loader=FileSystemLoader([str(role_tpl_dir), str(SHARED_TPL)]),
-        undefined=StubUndefined,
-        # Match Ansible's Templar so rendered whitespace matches a real deploy.
-        trim_blocks=True,
-        lstrip_blocks=False,
-        keep_trailing_newline=True,
-    )
+    env = make_env([ROLES / role / "templates", SHARED_TPL])
     env.filters["hash"] = _ansible_hash  # used by healthcheck.yml.j2's interval jitter
     return env
 
@@ -135,6 +128,13 @@ CAP_DROP_EXEMPT: dict = {
     "scrutiny-web": "LSIO web UI verified to need its default caps; no-cap_drop is accepted/documented",
     "scrutiny-collector": "SMART collector runs smartctl against raw block devices (needs SYS_RAWIO/SYS_ADMIN)",
 }
+
+# Companion to CAP_DROP_EXEMPT for the `security_opt: [no-new-privileges:true]` baseline. Every
+# service should set it (it blocks a setuid binary from re-gaining a dropped capability); a service
+# that legitimately can't goes here with a reason. Kept empty until a real exception appears — the
+# whole fleet sets it today, and the guard exists so a new service (or a copy-paste that silently
+# drops the line, the way ical-proxy's indent drifted) can't omit it unnoticed.
+NO_NEW_PRIV_EXEMPT: dict = {}
 
 # The INTENTIONAL watchtower auto-update pool: mutable-tag services deliberately left for
 # watchtower to update unattended (disposable / stateless / trivially rolled back). A new
@@ -219,6 +219,34 @@ def find_missing_cap_drop(docs, exempt=frozenset()) -> list:
                 isinstance(spec, dict)
                 and svc not in exempt
                 and not _cap_drops_all(spec)
+            ):
+                missing.append(svc)
+    return missing
+
+
+def _sets_no_new_privileges(spec: dict) -> bool:
+    opts = spec.get("security_opt")
+    return isinstance(opts, list) and any(
+        isinstance(o, str) and o.replace(" ", "") == "no-new-privileges:true"
+        for o in opts
+    )
+
+
+def find_missing_no_new_privileges(docs, exempt=frozenset()) -> list:
+    """Return service names that do NOT set ``security_opt: [no-new-privileges:true]`` and aren't
+    in ``exempt``. It's the companion baseline to ``cap_drop: [ALL]`` — stops a setuid binary from
+    re-escalating past the dropped caps — so it's enforced symmetrically here; a service that omits
+    it (a new one, or a copy-paste that drops the line) is flagged unless allowlisted with a reason."""
+    missing = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if (
+                isinstance(spec, dict)
+                and svc not in exempt
+                and not _sets_no_new_privileges(spec)
             ):
                 missing.append(svc)
     return missing
@@ -325,11 +353,9 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
 
     env = build_env(name)
     ctx = {**host_ctx, "container_item": ci}
-    env.globals.update(ctx)
-    try:
-        rendered = env.get_template("docker-compose.yml.j2").render(**ctx)
-    except Exception as exc:  # noqa: BLE001 — surface any render failure
-        return f"render error: {type(exc).__name__}: {exc}"
+    rendered, err = render_or_error(env, "docker-compose.yml.j2", ctx)
+    if err:
+        return err
 
     try:
         docs = list(yaml.safe_load_all(rendered))
@@ -358,6 +384,14 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
         return (
             "missing `cap_drop: [ALL]` (drop all caps, add back only what's needed — or "
             f"allowlist in CAP_DROP_EXEMPT with a reason): {', '.join(cap_missing)}"
+        )
+
+    nnp_missing = find_missing_no_new_privileges(docs, NO_NEW_PRIV_EXEMPT)
+    if nnp_missing:
+        return (
+            "missing `security_opt: [no-new-privileges:true]` (companion of cap_drop: [ALL] — "
+            f"blocks setuid re-escalation; allowlist in NO_NEW_PRIV_EXEMPT with a reason): "
+            f"{', '.join(nnp_missing)}"
         )
 
     undeclared = find_undeclared_update_policy(docs, WATCHTOWER_AUTOUPDATE)

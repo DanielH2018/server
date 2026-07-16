@@ -19,7 +19,7 @@ from __future__ import annotations
 import sys
 
 import yaml
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment
 
 from _render_guard import (
     ALL_VARS,
@@ -28,6 +28,8 @@ from _render_guard import (
     SHARED_TPL,
     dump_numbered,
     load_yaml,
+    make_env,
+    render_or_error,
 )
 from _render_guard import StubUndefined as _BaseStubUndefined
 
@@ -60,13 +62,8 @@ class StubUndefined(_BaseStubUndefined):
 
 
 def build_env(role: str) -> Environment:
-    return Environment(
-        loader=FileSystemLoader([str(ROLES / role / "templates"), str(SHARED_TPL)]),
-        undefined=StubUndefined,
-        # Match Ansible's Templar so rendered whitespace matches a real deploy.
-        trim_blocks=True,
-        lstrip_blocks=False,
-        keep_trailing_newline=True,
+    return make_env(
+        [ROLES / role / "templates", SHARED_TPL], undefined_cls=StubUndefined
     )
 
 
@@ -87,11 +84,9 @@ def check_template(rel: str, ctx: dict) -> str | None:
         return f"missing template {tpl}"
 
     env = build_env(role)
-    env.globals.update(ctx)
-    try:
-        rendered = env.get_template(name).render(**ctx)
-    except Exception as exc:  # noqa: BLE001 — surface any render failure
-        return f"render error: {type(exc).__name__}: {exc}"
+    rendered, err = render_or_error(env, name, ctx)
+    if err:
+        return err
 
     err = yaml_error(rendered)
     if err:
