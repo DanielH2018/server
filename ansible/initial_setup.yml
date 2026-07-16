@@ -8,25 +8,8 @@
   # run interactively. Same pattern as deploy.yml; -K still works as an override.
   gather_facts: false
   pre_tasks:
-    # MUST be pre_tasks, not tasks: a play runs pre_tasks -> roles -> tasks, so
-    # under `tasks:` this would load AFTER the roles and any role templating a
-    # secret (e.g. gitops_deploy's config.env) would see it undefined.
-    # Fails on a host not yet onboarded to SOPS (no age key / community.sops collection) —
-    # run `ansible/bootstrap.yml` first to break that chicken-and-egg. See bootstrap.yml header.
-    - name: Load encrypted secrets
-      community.sops.load_vars:
-        file: secrets.yml
-      delegate_to: localhost
-      run_once: true # noqa run-once[task]
-      become: false
-      tags: always
-
-    - name: Use the SOPS-stored sudo password for privilege escalation
-      ansible.builtin.set_fact:
-        ansible_become_password: "{{ become_password }}"
-      no_log: true
-      become: false
-      when: become_password is defined
+    - name: Load encrypted secrets and set the become password (shared preamble)
+      ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
       tags: always
 
     - name: Gather facts (escalated — the become password is now available)

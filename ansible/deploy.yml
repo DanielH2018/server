@@ -3,18 +3,8 @@
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
   gather_facts: true
   pre_tasks:
-    - name: Load encrypted secrets
-      community.sops.load_vars:
-        file: secrets.yml
-      delegate_to: localhost
-      run_once: true # noqa run-once[task]
-      tags: always
-
-    - name: Use the SOPS-stored sudo password for privilege escalation
-      ansible.builtin.set_fact:
-        ansible_become_password: "{{ become_password }}"
-      no_log: true
-      when: become_password is defined
+    - name: Load encrypted secrets and set the become password (shared preamble)
+      ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
       tags: always
 
     - name: Build role dependency map
