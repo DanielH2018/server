@@ -242,6 +242,8 @@ DISK_PRUNE_STATE = _env("DISK_PRUNE_STATE", "/autofix-disk/state.json")
 DISK_PRUNE_MAX_AGE_S = float(_env("DISK_PRUNE_MAX_AGE_H", "3")) * 3600
 FAKE_REMUX_STATE = _env("FAKE_REMUX_STATE", "/fake-remux/state.json")
 FAKE_REMUX_MAX_AGE_S = float(_env("FAKE_REMUX_MAX_AGE_H", "26")) * 3600
+CONFIGARR_STATE = _env("CONFIGARR_STATE", "/configarr/state.json")
+CONFIGARR_MAX_AGE_S = float(_env("CONFIGARR_MAX_AGE_H", "26")) * 3600
 
 # Daily kopia FULL-maintenance freshness: the host cron (kopia-maintenance-check.sh, kopia role)
 # queries `kopia maintenance info --json` and writes {"ts": epoch, "ok": bool, "msg": str} after
@@ -1813,6 +1815,35 @@ def check_fake_remux():
     )
 
 
+def configarr(state, age_s, max_age_s):
+    """Pure: did the last configarr guide-sync succeed, and recently? (ok, msg).
+
+    Same state-file idiom as disk_prune/fake_remux. The host cron (configarr role's configarr_sync.py)
+    sets ok=false when the sync exited nonzero or logged an error-level line — the failure recyclarr's
+    process-only healthcheck could not see. A clean sync within max_age is ok=true.
+    """
+    if not state.get("ok"):
+        return False, "configarr sync: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return False, "last configarr sync %.1fh ago (max %.1fh)" % (
+            age_s / 3600,
+            max_age_s / 3600,
+        )
+    return True, "configarr sync ok %.1fh ago: %s" % (
+        age_s / 3600,
+        state.get("msg", ""),
+    )
+
+
+def check_configarr():
+    return _check_state_file(
+        CONFIGARR_STATE,
+        "no configarr sync state (never ran?)",
+        "configarr sync state unparseable",
+        lambda state, age_s: configarr(state, age_s, CONFIGARR_MAX_AGE_S),
+    )
+
+
 def home_allowlist(state, age_s, max_age_s):
     """Pure: did the last CrowdSec home-IP allowlist update run succeed, and recently? (ok, msg).
 
@@ -2467,6 +2498,7 @@ CHECKS = [
     ("pi_peers", _env("KUMA_PUSH_PI_PEERS", ""), check_pi_peers),
     ("disk_prune", _env("KUMA_PUSH_DISK_PRUNE", ""), check_disk_prune),
     ("fake_remux", _env("KUMA_PUSH_FAKE_REMUX", ""), check_fake_remux),
+    ("configarr", _env("KUMA_PUSH_CONFIGARR", ""), check_configarr),
     (
         "home_allowlist",
         _env("KUMA_PUSH_HOME_ALLOWLIST", ""),

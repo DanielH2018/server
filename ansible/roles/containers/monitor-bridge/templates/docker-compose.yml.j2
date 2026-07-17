@@ -196,6 +196,12 @@ services:
       - FAKE_REMUX_STATE=/fake-remux/state.json
       - FAKE_REMUX_MAX_AGE_H=26
       - KUMA_PUSH_FAKE_REMUX={{ monitor_bridge_fake_remux_push_token }}
+      # Daily configarr guide-sync: the configarr role's configarr_sync.py host cron runs the
+      # one-shot sync and writes state.json — down on a failed sync (nonzero exit or error output)
+      # or >26h staleness (a missed daily run). The monitoring recyclarr never had.
+      - CONFIGARR_STATE=/configarr/state.json
+      - CONFIGARR_MAX_AGE_H=26
+      - KUMA_PUSH_CONFIGARR={{ monitor_bridge_configarr_push_token }}
       # Daily kopia FULL-maintenance freshness: the host cron (kopia role) queries `kopia
       # maintenance info --json` and writes state.json. Full maintenance GCs expired blobs from
       # B2, so a stall is the upstream CAUSE the b2_usage check only catches weeks later as the
@@ -365,6 +371,7 @@ services:
       - /var/lib/kopia-verify:/verify:ro
       - /var/lib/autofix-disk-prune:/autofix-disk:ro
       - /var/lib/autofix-fake-remux:/fake-remux:ro
+      - /var/lib/configarr:/configarr:ro
       - /var/lib/kopia-maintenance:/maintenance:ro
       - /var/lib/kopia-b2-usage:/b2-usage:ro
       - /var/lib/docker-user-rules:/docker-user:ro
@@ -445,6 +452,7 @@ services:
          autofix-bridge role's fake_remux_scan.py host cron) — down on a scan failure, a mass-match
          hold, report-only fakes flagged, or >26h staleness. -#}
       {{ kuma('autofix-fake-remux', monitor_type='push', name='Fake Remux Scan', interval=600, max_retries=0, push_token=monitor_bridge_fake_remux_push_token) }}
+      {{ kuma('configarr', monitor_type='push', name='Configarr Sync', interval=600, max_retries=0, push_token=monitor_bridge_configarr_push_token) }}
       {{ kuma('kopia-maintenance', monitor_type='push', name='Backup Maintenance', interval=600, max_retries=0, push_token=monitor_bridge_maintenance_push_token) }}
       {{ kuma('monitor-bridge-b2', monitor_type='push', name='B2 Storage Usage', interval=600, max_retries=0, push_token=monitor_bridge_b2_push_token) }}
       {# B2 growth trend: predict_linear projection of the billable-bytes gauge — runway warning

@@ -6,3 +6,4 @@ role_deps:
   - prometheus
   - uptime-kuma
   - kopia
+  - configarr
