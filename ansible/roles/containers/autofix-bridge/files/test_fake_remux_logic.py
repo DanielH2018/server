@@ -201,6 +201,15 @@ def test_plan_exactly_at_cap_acts():
     assert len(plan["deletes"]) == 5
 
 
+def test_episode_file_map_only_monitored():
+    eps = [
+        {"id": 1, "episodeFileId": 100, "monitored": True},
+        {"id": 2, "episodeFileId": 200, "monitored": False},  # unmonitored -> excluded
+        {"id": 3, "episodeFileId": 0, "monitored": True},  # no file -> excluded
+    ]
+    assert frl.episode_file_map(eps) == {100: 1}
+
+
 # --- seed_ledger --------------------------------------------------------------
 def test_seed_ledger_adds_new_and_blasts_over_cap():
     fakes = [

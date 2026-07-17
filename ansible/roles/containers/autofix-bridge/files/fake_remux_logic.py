@@ -233,6 +233,18 @@ def plan_fake_remux_actions(fakes, dry_run: bool, max_per_scan: int):
     }
 
 
+def episode_file_map(episodes):
+    """Map episodeFileId -> episodeId for MONITORED episodes only. A fake on an unmonitored episode
+    (e.g. one the operator has already watched and deliberately unmonitored) must not be seeded for
+    replacement, so it is excluded here."""
+    out = {}
+    for ep in episodes or []:
+        fid = ep.get("episodeFileId")
+        if fid and ep.get("monitored"):
+            out[fid] = ep.get("id")
+    return out
+
+
 def seed_ledger(ledger, fakes, max_concurrent, now):
     """Add newly-detected fakes (each carrying an `episodeId`) to the reconciler's ledger as
     'detected', keyed by str(episodeId) to match fake_remux_replace_logic.py's correlation. A single

@@ -210,10 +210,7 @@ def scan(cfg):
         candidates.extend(
             frl.remux_candidates(sonarr.episodefiles(sid), s.get("title") or "?")
         )
-        for ep in sonarr.episodes(sid):
-            file_id = ep.get("episodeFileId")
-            if file_id:
-                file_to_episode[file_id] = ep.get("id")
+        file_to_episode.update(frl.episode_file_map(sonarr.episodes(sid)))
 
     probed, skipped = [], 0
     for cand in candidates:
