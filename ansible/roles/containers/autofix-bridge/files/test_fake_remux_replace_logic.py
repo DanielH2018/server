@@ -147,3 +147,125 @@ def test_authentic_webdl_encode_is_fine():
         "window_s": 40,
     }
     assert rl.is_authentic(probe, POLICY)
+
+
+def _rec(ep, state, **kw):
+    r = {
+        "episodeId": ep,
+        "seriesId": 96,
+        "series": "S",
+        "epLabel": "S02E%02d" % ep,
+        "fakeFileId": 2200 + ep,
+        "fakePath": "f",
+        "evidence": "e",
+        "state": state,
+        "attempts": 0,
+        "firstSeen": ep,
+        "lastAction": 0,
+        "reason": "",
+    }
+    r.update(kw)
+    return r
+
+
+def test_plan_searches_oldest_first_capped():
+    ledger = {str(e): _rec(e, "detected", firstSeen=e) for e in (13, 14, 15)}
+    acts = rl.plan_searches(ledger, POLICY)  # searches_per_tick=2
+    assert [a["episodeId"] for a in acts] == [13, 14]
+
+
+def test_advance_grabbed_complete_and_authentic_deletes_then_imports():
+    led = {
+        "13": _rec(13, "grabbed", chosen={"downloadId": "D", "quality": "WEBDL-1080p"})
+    }
+    new, acts = rl.advance(
+        led,
+        {"D": {"sizeleft": 0}},
+        {"13": 2213},
+        {"D": {"quality": "WEBDL-1080p", "encoder": "x264", "keyframes": []}},
+        POLICY,
+        now=100,
+    )
+    assert new["13"]["state"] == "importing"
+    types = [a["type"] for a in acts]
+    assert types == ["delete_file", "import"]
+    assert acts[0]["fileId"] == 2213
+
+
+def test_advance_never_deletes_before_download_complete():
+    led = {
+        "13": _rec(13, "grabbed", chosen={"downloadId": "D", "quality": "WEBDL-1080p"})
+    }
+    new, acts = rl.advance(
+        led, {"D": {"sizeleft": 500_000}}, {"13": 2213}, {}, POLICY, now=100
+    )
+    assert new["13"]["state"] == "grabbed"
+    assert acts == []  # no delete while downloading
+
+
+def test_advance_fake_replacement_blocklists_and_retries_original_untouched():
+    led = {
+        "13": _rec(
+            13,
+            "grabbed",
+            attempts=0,
+            chosen={"downloadId": "D", "quality": "Bluray-1080p Remux"},
+        )
+    }
+    new, acts = rl.advance(
+        led,
+        {"D": {"sizeleft": 0}},
+        {"13": 2213},
+        {"D": {"quality": "Bluray-1080p Remux", "encoder": "x265", "keyframes": []}},
+        POLICY,
+        now=100,
+    )
+    assert new["13"]["state"] == "detected"  # retry with next candidate
+    assert new["13"]["attempts"] == 1
+    assert [a["type"] for a in acts] == ["blocklist"]
+    assert all(a["type"] != "delete_file" for a in acts)  # original fake untouched
+
+
+def test_advance_importing_to_replaced_when_new_file_present():
+    led = {
+        "13": _rec(
+            13,
+            "importing",
+            fakeFileId=2213,
+            chosen={"downloadId": "D", "quality": "WEBDL-1080p"},
+        )
+    }
+    new, _ = rl.advance(
+        led, {}, {"13": 9999}, {}, POLICY, now=100
+    )  # new fileId != fake
+    assert new["13"]["state"] == "replaced"
+
+
+def test_advance_stall_holds():
+    led = {
+        "13": _rec(
+            13,
+            "grabbed",
+            lastAction=0,
+            chosen={"downloadId": "D", "quality": "WEBDL-1080p"},
+        )
+    }
+    pol = dict(POLICY, download_stall_hours=1)
+    new, _ = rl.advance(
+        led, {"D": {"sizeleft": 500}}, {"13": 2213}, {}, pol, now=3600 + 1
+    )
+    assert new["13"]["state"] == "held"
+
+
+def test_advance_is_idempotent():
+    led = {
+        "13": _rec(13, "grabbed", chosen={"downloadId": "D", "quality": "WEBDL-1080p"})
+    }
+    q, f, p = (
+        {"D": {"sizeleft": 0}},
+        {"13": 2213},
+        {"D": {"quality": "WEBDL-1080p", "encoder": "x264", "keyframes": []}},
+    )
+    a1 = rl.advance(led, q, f, p, POLICY, now=100)[1]
+    a2 = rl.advance(led, q, f, p, POLICY, now=100)[1]
+    assert a1 == a2
