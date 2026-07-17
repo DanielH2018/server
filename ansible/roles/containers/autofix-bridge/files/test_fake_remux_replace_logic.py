@@ -1,8 +1,13 @@
-import os
-import sys
+import importlib.util
+import pathlib
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import fake_remux_replace_logic as rl  # noqa: E402
+# Load the host script's pure core directly (not a package), mirroring test_fake_remux_logic.py.
+_SPEC = importlib.util.spec_from_file_location(
+    "fake_remux_replace_logic",
+    pathlib.Path(__file__).with_name("fake_remux_replace_logic.py"),
+)
+rl = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(rl)
 
 POLICY = {
     "deny_release_groups": ["NTRX"],
@@ -89,3 +94,24 @@ def test_av1_wins_when_only_option():
     cands = [_rel("Show S02E13 AV1 only", "WEBDL-1080p", 15, 506, 300)]
     rel, _ = rl.select_replacement(cands, POLICY)
     assert rel is not None and "AV1" in rel["title"]
+
+
+def test_x265_candidate_is_not_codec_rejected():
+    cands = [_rel("Show S02E13 x265", "WEBDL-1080p", 15, 400, 200)]
+    rel, _ = rl.select_replacement(cands, POLICY)
+    assert rel is not None and "x265" in rel["title"]
+
+
+def test_av1_higher_tier_still_beats_lower_tier_non_av1():
+    cands = [
+        _rel("Show S02E13 AV1 2160p", "WEBDL-2160p", 25, 20, 50),
+        _rel("Show S02E13 h264 1080p", "WEBDL-1080p", 15, 506, 300),
+    ]
+    rel, _ = rl.select_replacement(cands, POLICY)
+    assert rel["quality"]["quality"]["name"] == "WEBDL-2160p"
+
+
+def test_size_zero_unknown_passes():
+    cands = [_rel("Show S02E13 unknown size", "WEBDL-1080p", 15, 400, 200, size=0)]
+    rel, _ = rl.select_replacement(cands, POLICY)
+    assert rel is not None

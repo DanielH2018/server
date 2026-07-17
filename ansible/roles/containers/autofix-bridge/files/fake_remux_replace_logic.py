@@ -1,8 +1,8 @@
 """Pure decision core for the fake-remux reconciler (fake_remux_replace.py).
 
-Stdlib-only, 3.12-clean (single-exception except only), no network/clock — `now` is injected — so it
-is unit-testable without Sonarr/docker. Split from the I/O shell exactly like fake_remux_logic.py is
-split from fake_remux_scan.py.
+Stdlib-only, 3.12-clean (single-exception except only), no network so it is unit-testable without
+Sonarr/docker. Split from the I/O shell exactly like fake_remux_logic.py is split from
+fake_remux_scan.py.
 """
 
 from __future__ import annotations
@@ -39,7 +39,8 @@ def in_size_band(rel, policy) -> bool:
 
 def quality_rank(rel) -> int:
     q = (rel.get("quality") or {}).get("quality") or {}
-    return int(rel.get("qualityWeight") or q.get("id") or 0)
+    qw = rel.get("qualityWeight")
+    return int(qw if qw is not None else (q.get("id") or 0))
 
 
 def select_replacement(candidates, policy):
