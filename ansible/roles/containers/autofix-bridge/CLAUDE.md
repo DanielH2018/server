@@ -54,10 +54,12 @@ sidecar per fix. See repo-root `CLAUDE.md`.
      policy.json` picks the candidate — deny/prefer release groups, preferred indexers, a
      depreferenced-but-not-banned codec list, a size band), grabs it, waits for the download,
      ffprobes it the same way the scan does, and only deletes the fake + lets Sonarr import once
-     the replacement is verified genuine — never before. `FAKE_REMUX_REPLACE_MODE` is the gate:
-     `off` = detect only, `shadow` = log intended grabs to `outcomes.jsonl` with zero Sonarr
-     mutations (**ships as this**), `live` = grab+delete+import. Ledger/outcome state all live
-     under `/var/lib/autofix-fake-remux/`. See
+     the replacement is verified genuine — never before. The delete goes through Sonarr's episode-
+     file DELETE API, so whether the fake lands in the OS trash or is removed outright is entirely
+     Sonarr's own Media Management → Recycling Bin setting, not something this policy controls.
+     `FAKE_REMUX_REPLACE_MODE` is the gate: `off` = detect only, `shadow` = log intended grabs to
+     `outcomes.jsonl` with zero Sonarr mutations (**ships as this**), `live` = grab+delete+import.
+     Ledger/outcome state all live under `/var/lib/autofix-fake-remux/`. See
      `docs/superpowers/specs/2026-07-17-fake-remux-auto-replacer-design.md` for the full design.
 
 ## Notable

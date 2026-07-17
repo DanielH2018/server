@@ -102,18 +102,41 @@ def is_authentic(probe, policy) -> bool:
 
 def plan_searches(ledger, policy):
     """Up to searches_per_tick 'detected' entries to interactive-search this tick, oldest first
-    (deterministic). The shell spaces the searches by search_spacing_s and never issues a season
-    search. Returns search-action dicts; does not mutate state (the shell sets grabbed/held/detected
-    after the grab, so a crash mid-tick simply leaves the entry 'detected' for the next tick)."""
+    (deterministic), capped so no more than max_concurrent_replacements are in flight
+    (grabbed/verifying/importing) at once — a reconciler throttle distinct from the detector's
+    MAX_PER_SCAN blast valve. The shell spaces the searches by search_spacing_s and never issues a
+    season search. Returns search-action dicts; does not mutate state (the shell sets
+    grabbed/held/detected after the grab, so a crash mid-tick simply leaves the entry 'detected' for
+    the next tick)."""
     per_tick = int(policy.get("searches_per_tick", 2))
+    cap = int(policy.get("max_concurrent_replacements", 5))
+    active = sum(
+        1
+        for r in ledger.values()
+        if r["state"] in ("grabbed", "verifying", "importing")
+    )
+    slots = cap - active
+    if slots <= 0:
+        return []
     detected = sorted(
         (r for r in ledger.values() if r["state"] == "detected"),
         key=lambda r: (r.get("firstSeen", 0), r["episodeId"]),
     )
     return [
         {"type": "search", "episodeId": r["episodeId"], "seriesId": r["seriesId"]}
-        for r in detected[:per_tick]
+        for r in detected[: min(per_tick, slots)]
     ]
+
+
+def prune_history(ledger, retention_days, now):
+    """Drop 'replaced' entries older than retention_days so the ledger doesn't grow without bound.
+    'held' entries are kept — they still page until a human resolves them."""
+    cutoff = now - int(retention_days) * 86400
+    return {
+        k: r
+        for k, r in ledger.items()
+        if not (r.get("state") == "replaced" and r.get("lastAction", now) < cutoff)
+    }
 
 
 def _set(ledger, ep, **changes):

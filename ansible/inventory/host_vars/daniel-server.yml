@@ -24,7 +24,6 @@ autofix_fake_remux_policy:
   search_spacing_s: 20
   download_stall_hours: 12
   max_attempts: 3
-  delete_mode: recycle-bin
   history_retention_days: 14
 containers_list:
   # Organization: Core Services (proxy network)

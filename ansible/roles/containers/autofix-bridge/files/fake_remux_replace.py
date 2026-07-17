@@ -14,8 +14,8 @@ gates blast radius: `off` skips entirely, `shadow` previews searches/grabs into 
 zero Sonarr mutations, `live` executes grabs/deletes/imports/blocklists.
 
 Runs under the host's /usr/bin/python3 (3.12 floor — keep 3.12-clean, see
-ansible/tests/test_host_scripts_py312.py). Config comes from /etc/autofix-fake-remux/replace.config.env
-(0600, embeds SONARR_API_KEY + the Discord webhook) plus a FAKE_REMUX_POLICY JSON file the pure core
+ansible/tests/test_host_scripts_py312.py). Config comes from /etc/autofix-fake-remux/config.env — the
+same file the detector reads (0600, SONARR_API_KEY + Discord webhook) — plus a FAKE_REMUX_POLICY JSON the pure core
 reads (release-group allow/deny, size band, attempt caps — see fake_remux_replace_logic.py).
 """
 
@@ -89,7 +89,7 @@ def _make_sonarr(cfg):
 
 
 def _load_policy(cfg):
-    path = cfg.get("FAKE_REMUX_POLICY", "/etc/autofix-fake-remux/replace-policy.json")
+    path = cfg.get("FAKE_REMUX_POLICY", "/etc/autofix-fake-remux/policy.json")
     if not path or not os.path.exists(path):
         return {}
     with open(path) as fh:
@@ -352,6 +352,9 @@ def reconcile_once(cfg, sonarr=None):
         _execute(sonarr, actions, cfg, ledger)
 
     _alert_transitions(cfg, before_states, ledger)
+    ledger = frl_replace.prune_history(
+        ledger, int(policy.get("history_retention_days", 14)), int(time.time())
+    )
     _save_json(cfg["LEDGER_FILE"], ledger)
     return _summarize(ledger)
 

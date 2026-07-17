@@ -203,10 +203,10 @@
 # --- fake-remux reconciler (host plane) ---------------------------------------
 # Search-first replacer: acquires a genuine replacement before ever deleting the fake the detector
 # seeded into the ledger. Runs every 20 min, gated by FAKE_REMUX_REPLACE_MODE (off/shadow/live).
-# NB: delete_mode: recycle-bin only makes deletes recoverable if Sonarr's Recycling Bin path
-# (Settings -> Media Management) is set — a Sonarr-side config outside this repo. Unset, deletes are
-# permanent, but still gated on a verified-genuine downloaded replacement, so never data-loss of an
-# un-replaced episode.
+# NB: the DELETE API call is recoverable only if Sonarr's Recycling Bin path (Settings -> Media
+# Management) is set — a Sonarr-side config outside this repo, not a policy knob here. Unset,
+# deletes are permanent, but still gated on a verified-genuine downloaded replacement, so never
+# data-loss of an un-replaced episode.
 - name: Render the fake-remux selection policy
   tags: [config]
   ansible.builtin.copy:

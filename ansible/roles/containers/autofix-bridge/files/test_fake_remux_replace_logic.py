@@ -181,6 +181,28 @@ def test_plan_searches_oldest_first_capped():
     assert [a["episodeId"] for a in acts] == [13, 14]
 
 
+def test_plan_searches_concurrent_cap_blocks_when_full():
+    ledger = {
+        "13": _rec(13, "detected", firstSeen=13),
+        "20": _rec(20, "grabbed", firstSeen=1),
+        "21": _rec(21, "verifying", firstSeen=2),
+    }
+    pol = dict(POLICY, max_concurrent_replacements=2)
+    acts = rl.plan_searches(ledger, pol)
+    assert acts == []
+
+
+def test_plan_searches_concurrent_cap_leaves_one_slot():
+    ledger = {
+        "13": _rec(13, "detected", firstSeen=13),
+        "14": _rec(14, "detected", firstSeen=14),
+        "20": _rec(20, "importing", firstSeen=1),
+    }
+    pol = dict(POLICY, max_concurrent_replacements=2)
+    acts = rl.plan_searches(ledger, pol)
+    assert [a["episodeId"] for a in acts] == [13]
+
+
 def test_advance_grabbed_complete_and_authentic_deletes_then_imports():
     led = {"13": _rec(13, "grabbed", chosen={"quality": "WEBDL-1080p"})}
     new, acts = rl.advance(
@@ -311,6 +333,17 @@ def test_advance_verifying_fake_at_attempt_cap_holds():
     assert new["13"]["state"] == "held"
     assert [a["type"] for a in acts] == ["blocklist"]
     assert acts[0]["queueId"] == 555
+
+
+def test_prune_history_drops_old_replaced_keeps_recent_and_held():
+    now = 1_000_000
+    ledger = {
+        "13": _rec(13, "replaced", lastAction=now - 20 * 86400),  # past 14-day window
+        "14": _rec(14, "replaced", lastAction=now - 1 * 86400),  # recent, kept
+        "15": _rec(15, "held", lastAction=now - 20 * 86400),  # held, always kept
+    }
+    pruned = rl.prune_history(ledger, 14, now)
+    assert set(pruned) == {"14", "15"}
 
 
 def test_summarize_counts_states():
