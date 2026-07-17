@@ -34,7 +34,7 @@ import fake_remux_scan as scan  # noqa: E402  (sibling shell — reused boilerpl
 from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
 
 CONFIG_PATH = os.environ.get(
-    "FAKE_REMUX_REPLACE_CONFIG", "/etc/autofix-fake-remux/replace.config.env"
+    "FAKE_REMUX_REPLACE_CONFIG", "/etc/autofix-fake-remux/config.env"
 )
 log = scan.log  # reuse verbatim — no reason for a second timestamp-prefixed printer
 
@@ -359,9 +359,9 @@ def reconcile_once(cfg, sonarr=None):
 def main() -> int:
     cfg = load_config()
     state_file = cfg.get(
-        "REPLACE_STATE_FILE", "/var/lib/autofix-fake-remux/replace-state.json"
+        "REPLACE_STATE_FILE", "/var/lib/autofix-fake-remux/replace_state.json"
     )
-    cfg.setdefault("LEDGER_FILE", "/var/lib/autofix-fake-remux/replace-ledger.json")
+    cfg.setdefault("LEDGER_FILE", "/var/lib/autofix-fake-remux/replacements.json")
     log(
         "fake-remux reconcile starting (mode=%s)"
         % cfg.get("FAKE_REMUX_REPLACE_MODE", "shadow")
