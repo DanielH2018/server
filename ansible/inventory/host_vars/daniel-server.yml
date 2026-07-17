@@ -18,7 +18,7 @@ autofix_fake_remux_policy:
   depreference_codecs: [av1]
   gop_max_s: 5
   min_size_gb: 0.4
-  max_size_gb: 4.0
+  max_size_gb: 8.0  # sanity ceiling — wide enough for a genuine 2160p WEB-DL episode (no quality cap)
   max_concurrent_replacements: 5
   searches_per_tick: 2
   search_spacing_s: 20
