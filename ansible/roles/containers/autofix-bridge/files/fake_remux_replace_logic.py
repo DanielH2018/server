@@ -212,6 +212,12 @@ def advance(ledger, queue_by_episode, files_by_ep, probes, policy, now):
                     policy.get("grab_grace_s", 300)
                 ):
                     continue
+                cur = files_by_ep.get(epk)
+                if cur is not None and cur != rec["fakeFileId"]:
+                    # gone from the queue because Sonarr already imported it (e.g. a higher-tier grab
+                    # it auto-upgrades) — the episode has a NEW file: success, not a lost grab.
+                    out = _set(out, ep, state="replaced", lastAction=now)
+                    continue
                 attempts = rec.get("attempts", 0) + 1
                 if attempts >= max_attempts:
                     out = _set(

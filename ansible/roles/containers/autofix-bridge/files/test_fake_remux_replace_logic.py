@@ -249,6 +249,16 @@ def test_advance_grabbed_lost_after_grace_resets_to_detected():
     assert new["13"]["attempts"] == 1
 
 
+def test_advance_grabbed_gone_from_queue_but_imported_is_replaced():
+    # left the queue because Sonarr already imported it (new fileId != fake) -> replaced, not lost
+    led = {"13": _rec(13, "grabbed", lastAction=0, chosen={"quality": "WEBDL-2160p"})}
+    new, _ = rl.advance(
+        led, {}, {"13": 9999}, {}, POLICY, now=1000
+    )  # past grace, new file present
+    assert new["13"]["state"] == "replaced"
+    assert new["13"]["attempts"] == 0
+
+
 def test_advance_fake_replacement_blocklists_and_retries_original_untouched():
     led = {
         "13": _rec(
