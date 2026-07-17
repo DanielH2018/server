@@ -77,14 +77,15 @@ class Sonarr:
         self.api_key = api_key
         self.timeout = timeout
 
-    def _request(self, path: str, method: str = "GET", data=None):
+    def _request(self, path: str, method: str = "GET", data=None, timeout=None):
         url = self.base + path
         body = json.dumps(data).encode() if data is not None else None
         headers = {"X-Api-Key": self.api_key, "User-Agent": USER_AGENT}
         if body is not None:
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(url, headers=headers, data=body, method=method)
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:  # noqa: S310 (internal URL)
+        eff_timeout = self.timeout if timeout is None else timeout
+        with urllib.request.urlopen(req, timeout=eff_timeout) as resp:  # noqa: S310 (internal URL)
             raw = resp.read()
             return json.loads(raw) if raw else None
 

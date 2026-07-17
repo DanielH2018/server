@@ -356,6 +356,21 @@ def test_summarize_counts_states():
     assert ok is False and "held" in msg
 
 
+def test_release_search_uses_long_search_timeout():
+    # the interactive /release search takes minutes; it must NOT use the 15s HTTP_TIMEOUT
+    s = sh.Sonarr("http://x", "k", 15)
+    s.search_timeout = 999
+    seen = {}
+
+    def fake_request(path, method="GET", data=None, timeout=None):
+        seen["timeout"] = timeout
+        return []
+
+    s._request = fake_request
+    s.release_search(17666)
+    assert seen["timeout"] == 999
+
+
 def test_mode_off_is_noop(tmp_path):
     ok, msg = sh.reconcile_once({"FAKE_REMUX_REPLACE_MODE": "off"})
     assert ok and "off" in msg

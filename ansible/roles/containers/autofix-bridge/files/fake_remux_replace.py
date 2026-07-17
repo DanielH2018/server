@@ -48,10 +48,19 @@ def load_config():
 
 class Sonarr(scan.Sonarr):
     """Extends the scan shell's Sonarr client with the endpoints the reconciler needs. `_request` and
-    `delete_episodefile` are inherited unchanged from scan.Sonarr."""
+    `delete_episodefile` are inherited unchanged from scan.Sonarr. `search_timeout` is used only for
+    the interactive /release search, which fans out to every indexer and routinely takes 1-3 min —
+    far longer than the 15s HTTP_TIMEOUT that fits the fast queue/grab/delete calls."""
+
+    search_timeout = 180
 
     def release_search(self, episode_id):
-        return self._request("/api/v3/release?episodeId=%s" % episode_id) or []
+        return (
+            self._request(
+                "/api/v3/release?episodeId=%s" % episode_id, timeout=self.search_timeout
+            )
+            or []
+        )
 
     def grab(self, guid, indexer_id):
         return self._request(
@@ -85,7 +94,9 @@ def _make_sonarr(cfg):
     ip = scan.resolve_ip(cfg.get("SONARR_CONTAINER", "sonarr"))
     port = cfg.get("SONARR_PORT", "8989")
     timeout = int(cfg.get("HTTP_TIMEOUT", "15"))
-    return Sonarr("http://%s:%s" % (ip, port), cfg.get("SONARR_API_KEY", ""), timeout)
+    s = Sonarr("http://%s:%s" % (ip, port), cfg.get("SONARR_API_KEY", ""), timeout)
+    s.search_timeout = int(cfg.get("SEARCH_TIMEOUT_S", "180"))
+    return s
 
 
 def _load_policy(cfg):
