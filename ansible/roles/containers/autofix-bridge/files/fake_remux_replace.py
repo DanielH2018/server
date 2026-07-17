@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.error
@@ -161,12 +162,41 @@ def _try_grab(sonarr, cand):
         raise
 
 
+def _host_path(path, host_data_root):
+    """Map a Sonarr download path (its /data container view, e.g. /data/torrents/X.mkv) to the host
+    path the reconciler ffprobes directly. Only the leading /data is rewritten; an empty
+    host_data_root leaves the path unchanged (the probe then fails safe)."""
+    if host_data_root and path.startswith("/data/"):
+        return host_data_root.rstrip("/") + path[len("/data") :]
+    return path
+
+
+def _host_ffprobe(ffprobe_bin, path, args, timeout):
+    """Run ffprobe directly on the host — the reconciler runs here, and unlike the library the
+    download dir (/data/torrents) is NOT mounted in jellyfin. Returns stdout, or "" on any failure
+    (a probe glitch / missing file / missing binary must SKIP the file, never wrongly flag it)."""
+    try:
+        out = subprocess.run(
+            [ffprobe_bin, "-v", "error", *args, path],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except Exception as e:  # OSError (no binary/file) / TimeoutExpired — single except stays 3.12-clean
+        log("host ffprobe failed for %s: %s" % (path, e))
+        return ""
+    if out.returncode != 0:
+        log("host ffprobe error for %s: %s" % (path, out.stderr.strip()[:200]))
+        return ""
+    return out.stdout
+
+
 def _probe_completed(cfg, ledger, q_by_episode, policy):
     """ffprobe every fully-downloaded queue item belonging to a grabbed/verifying ledger entry.
     Returns {episodeId: probe} for `advance()`; an entry with no probe stays in verifying and is
     re-checked next tick (download_stall_hours eventually holds it)."""
-    jellyfin = cfg.get("JELLYFIN_CONTAINER", "jellyfin")
-    ffprobe_bin = cfg.get("FFPROBE_BIN", "/usr/lib/jellyfin-ffmpeg/ffprobe")
+    ffprobe_bin = cfg.get("HOST_FFPROBE_BIN", "ffprobe")
+    host_data_root = cfg.get("HOST_DATA_ROOT", "")
     window_s = int(cfg.get("PROBE_WINDOW_S", "40"))
     timeout = int(cfg.get("PROBE_TIMEOUT_S", "60"))
     probes = {}
@@ -180,14 +210,14 @@ def _probe_completed(cfg, ledger, q_by_episode, policy):
             continue
         path = item.get("outputPath")
         if not path:
-            # Sonarr's queue record has no outputPath for this download client, so jellyfin has
-            # nothing to probe here. Skip -> the entry holds after the stall timeout; jellyfin here
-            # mounts /data, so this is rare.
+            # No outputPath on the queue record yet — skip; the entry holds after the stall timeout.
             continue
-        stream_json = scan.ffprobe(
-            jellyfin,
+        # Downloads land in /data/torrents, which jellyfin does NOT mount — ffprobe on the host
+        # (where the reconciler runs), translating Sonarr's /data view to the host path.
+        host = _host_path(path, host_data_root)
+        stream_json = _host_ffprobe(
             ffprobe_bin,
-            path,
+            host,
             [
                 "-select_streams",
                 "v:0",
@@ -199,11 +229,10 @@ def _probe_completed(cfg, ledger, q_by_episode, policy):
             timeout,
         )
         if not stream_json:
-            continue  # probe glitch or jellyfin down — skip this tick, don't flag
-        keyframe_csv = scan.ffprobe(
-            jellyfin,
+            continue  # probe glitch / missing file — skip this tick, don't flag
+        keyframe_csv = _host_ffprobe(
             ffprobe_bin,
-            path,
+            host,
             [
                 "-select_streams",
                 "v:0",

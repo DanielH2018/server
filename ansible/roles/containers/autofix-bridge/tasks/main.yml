@@ -207,6 +207,15 @@
 # Management) is set — a Sonarr-side config outside this repo, not a policy knob here. Unset,
 # deletes are permanent, but still gated on a verified-genuine downloaded replacement, so never
 # data-loss of an un-replaced episode.
+- name: Ensure ffmpeg (ffprobe) is installed for the reconciler's authenticity gate
+  tags: [config]
+  # The reconciler ffprobes the downloaded replacement on the host — jellyfin doesn't mount the
+  # download dir (/data/torrents), so it needs ffprobe on the host PATH; ffmpeg provides it.
+  ansible.builtin.apt:
+    name: ffmpeg
+    state: present
+  become: true
+
 - name: Render the fake-remux selection policy
   tags: [config]
   ansible.builtin.copy:
