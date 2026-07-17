@@ -23,6 +23,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/tests",                   # ansible/collections/** third-party tests
   "ansible/roles/containers/monitor-bridge/files",
   "ansible/roles/containers/autofix-bridge/files",
+  "ansible/roles/containers/configarr/files",
   "ansible/roles/containers/terraria-stats/files",
   ".claude/hooks",
   ".claude/scripts",                 # audit-permissions report/suggester logic tests
