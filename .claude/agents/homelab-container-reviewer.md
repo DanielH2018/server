@@ -1,6 +1,6 @@
 ---
 name: homelab-container-reviewer
-description: Reviews container-infrastructure hygiene across this homelab's services — the *arr/media stack (sonarr/radarr/jellyfin/qbittorrent/tdarr/recyclarr/janitorr/karakeep) plus general hygiene (resource caps, healthchecks, image pinning, shared-macro usage, restart/volume/depends_on correctness) — for gaps, improvements, and additions. Read-only — investigates and reports, makes no changes.
+description: Reviews container-infrastructure hygiene across this homelab's services — the *arr/media stack (sonarr/radarr/jellyfin/qbittorrent/tdarr/configarr/janitorr/karakeep) plus general hygiene (resource caps, healthchecks, image pinning, shared-macro usage, restart/volume/depends_on correctness) — for gaps, improvements, and additions. Read-only — investigates and reports, makes no changes.
 model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
@@ -51,7 +51,8 @@ fix, tagged **[GAP] / [IMPROVEMENT] / [ADDITION]**. Note verified-clean areas br
 ## Rules
 - Make **no** changes — read-only investigation only. Recommend; don't edit or deploy.
 - Honor accepted designs (don't re-flag): qBittorrent must bind to `wg0` (its TCP healthcheck blind
-  spot is known); recyclarr's Anime profile is deliberately unmanaged; janitorr deletes for real;
+  spot is known); configarr's Anime profile scope is deliberately minimal (only 2 local CFs
+  managed, the 52 bespoke CFs are untouched); janitorr deletes for real;
   meili pinned until karakeep bumps its own pin; the LSIO "unable to set CAP_SETFCAP" warning is
   cosmetic; a doubled `$$` in a compose `healthcheck`/`command` is CORRECT (Compose `$` escaping),
   not a bug. **Also honor any "don't re-flag" items provided in your dispatch context.**

@@ -78,7 +78,8 @@ sidecar per fix. See repo-root `CLAUDE.md`.
 - **Auto-fix survey verdict (don't re-propose):** the *arr queue was the best-fit case in the
   fleet; disk was the one other genuinely-additive one. prowlarr indexers / b2 / recyclarr / targets
   were evaluated and REJECTED (self-heal via backoff, or autoheal/watchtower already cover
-  restarts/images, or need a human). See [[autofix-bridge-auto-remediation]].
+  restarts/images, or need a human; recyclarr itself was later retired 2026-07-17, replaced by
+  configarr). See [[autofix-bridge-auto-remediation]].
 - **fake-remux deploy ordering / seed:** the state dir `/var/lib/autofix-fake-remux` is created
   `sys_user`-owned + the state is **seeded on first deploy** (`command:` + `creates:`) for the same
   reason as disk-prune — so monitor-bridge's **Fake Remux Scan** doesn't false-DOWN on a fresh host

@@ -294,9 +294,9 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     monitors. Spec: `docs/superpowers/specs/2026-06-19-renovate-manual-action-notifier-design.md`.)
   - **Loki Reachable** (a fixed `/loki/api/v1/labels` probe — the root-cause GATE for the
     Loki-querying checks, the peer of Prometheus Reachable. Evaluated each cycle: when Loki is
-    unreachable the three `LOKI_DEPENDENT` checks (loki_ingestion/recyclarr/janitorr) are
+    unreachable the two `LOKI_DEPENDENT` checks (loki_ingestion/janitorr) are
     **suppressed** — pushed `up` with a "skipped — Loki unreachable" msg — and only THIS monitor
-    pages. Without it one Loki outage fired all three at once. Loki being UP but promtail not
+    pages. Without it one Loki outage fired both at once. Loki being UP but promtail not
     shipping is a different signal Loki Log Ingestion still surfaces. `LOKI_DEPENDENT` is guarded by
     a test against the live `CHECKS` so it can't drift.)
   - **Loki Log Ingestion** (two-arm LogQL freshness against `loki:3100` over `monitoring`, `down`
@@ -359,15 +359,17 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     throttle + the streak wrapper are unit-tested. NOTE: it verifies the webhook is DELIVERABLE
     (catches a rotated/revoked URL); it does NOT assert Kuma still has the notification *attached* to
     each monitor — AutoKuma re-applies that on every deploy via the `kuma()` macro's `notification_name_list`.)
-  - **Recyclarr Sync** (instant LogQL counts of supercronic's `job succeeded` / `job failed` lines
-    for `{container="recyclarr"}` over `RECYCLARR_WINDOW` (26 h = one `@daily` run + slack), reached
-    at `loki:3100`: recyclarr runs `recyclarr sync` under supercronic and `/cron.sh` ends with the
-    sync, so its exit code propagates — supercronic logs `job succeeded` on exit 0, `job failed` on
-    non-zero. `down` on any `job failed` (a sync errored) OR zero `job succeeded` (the scheduler
-    stalled / every run failing). The container healthcheck only watches supercronic, so an ERRORING
-    sync was previously invisible — the silent 2026-06-10 v8-major breakage that failed every nightly
-    sync with the healthcheck staying green. Pure `recyclarr_sync_ok()` is unit-tested; selector/window
-    tunable via `RECYCLARR_LOKI_SELECTOR`/`RECYCLARR_WINDOW`. Same Loki-query path as Loki Log Ingestion.)
+  - **Configarr Sync** (reads `/configarr/state.json`, written daily by the **configarr** role's
+    `configarr_sync.py` host cron — `down` on a FAILED sync (the wrapper's `configarr_status.py`
+    reads the `compose run`'s exit code + output), >26 h staleness (one daily run + slack), or a
+    missing/corrupt state file. configarr is Sonarr/Radarr's sole guide-syncer (see its CLAUDE.md);
+    a bare container healthcheck can't watch a one-shot `compose run --rm` job, so this is the
+    lateral replacement for the retired recyclarr role's own Loki-based sync check (recyclarr's
+    healthcheck watched only the supercronic scheduler process, not the sync's exit code — the
+    silent 2026-06-10 v8-major breakage that failed every nightly sync with the healthcheck staying
+    green; configarr's wrapper captures the exit code directly instead). Same state-file idiom as
+    Disk Autoprune / Fake Remux Scan; pure `configarr()` is unit-tested. `CONFIGARR_MAX_AGE_H` tunes
+    staleness.)
   - **Janitorr Errors** (counts janitorr scheduled-task ERROR lines in Loki over the post-startup
     window — janitorr's healthcheck only proves the JVM is alive, so an internal cleanup error
     (failed delete, bad config, a bug) logs ERROR and is otherwise invisible, and **janitorr deletes
@@ -416,7 +418,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,appsec,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,fake_remux,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,appsec,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,fake_remux,configarr,maintenance,discord,janitorr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -477,7 +479,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI
    (**Settings → n8n API**), scoped to read **Workflow** + **Execution** permissions.
 3. For the Arr Queue Warnings monitor: `sonarr_api_key`/`radarr_api_key` already exist in
-   `secrets.yml` (recyclarr/janitorr/homepage reference them too — get the plaintext from
+   `secrets.yml` (configarr/janitorr/homepage reference them too — get the plaintext from
    `docker exec sonarr cat /config/config.xml` / `docker exec radarr cat /config/config.xml`
    if you need to re-derive them). monitor-bridge joined the `media` network for this on
    2026-07-02 (its `containers_list` entry in `ansible/inventory/host_vars/daniel-server.yml`);

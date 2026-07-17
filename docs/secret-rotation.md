@@ -48,7 +48,7 @@ daily audit never pages DOWN on a rotation the cron was about to do), runs stay 
 General shape: rotate/regenerate the credential **in the app**, `sops set
 ansible/vars/secrets.yml '["<name>"]' '"<new>"'`, update the registry date (`sync` won't,
 since the value already existed — set `last_rotated` by hand or re-run after editing), then
-redeploy the app **and** every consumer (e.g. Homepage, monitor-bridge, recyclarr). Examples:
+redeploy the app **and** every consumer (e.g. Homepage, monitor-bridge, configarr). Examples:
 - `*_api_key` (sonarr/radarr/jellyfin/prowlarr): Settings → General → regenerate API key.
 - `crowdsec_bouncer_api_key`: generate any new 32+ char value, `sops set` it, then redeploy
   traefik (`--tags traefik`). The role's registration flow is rotation-safe: it probes LAPI
