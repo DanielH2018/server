@@ -7,7 +7,12 @@ fake_remux_scan.py.
 
 from __future__ import annotations
 
+import os
 import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fake_remux_logic as frl  # noqa: E402  (sibling module — the detector's signal, reused)
 
 _WRONG_MAP = re.compile(r"wasn.?t requested", re.I)
 _BLOCKED = re.compile(r"blocked till|is disabled|unavailable", re.I)
@@ -74,3 +79,22 @@ def select_replacement(candidates, policy):
         )
 
     return sorted(viable, key=key)[0], "selected"
+
+
+def is_authentic(probe, policy) -> bool:
+    """False iff a downloaded file betrays a mislabeled re-encode: it claims a stream-copy tier
+    (Remux) but its video stream is a consumer re-encode (re-encoder ENCODER tag or long GOP). A
+    non-remux claim (WEB-DL / Bluray encode) legitimately carries an encoder tag → authentic. Codec-
+    and resolution-agnostic — the gate is about honesty, not format."""
+    quality = probe.get("quality")
+    if not frl.is_remux_quality(quality):
+        return True
+    ev = frl.reencode_evidence(
+        quality,
+        probe.get("encoder"),
+        probe.get("keyframes"),
+        int(probe.get("window_s", 40)),
+        float(policy.get("gop_max_s", 5)),
+        frl.DEFAULT_RE_ENCODER_MARKERS,
+    )
+    return ev is None

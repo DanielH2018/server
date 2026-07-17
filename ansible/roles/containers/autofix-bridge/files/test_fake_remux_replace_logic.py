@@ -115,3 +115,35 @@ def test_size_zero_unknown_passes():
     cands = [_rel("Show S02E13 unknown size", "WEBDL-1080p", 15, 400, 200, size=0)]
     rel, _ = rl.select_replacement(cands, POLICY)
     assert rel is not None
+
+
+def test_authentic_remux_reencode_fails_regardless_of_codec():
+    # claims Remux but ships an x265 re-encoder tag → not authentic
+    probe = {
+        "quality": "Bluray-1080p Remux",
+        "encoder": "x265",
+        "keyframes": [],
+        "window_s": 40,
+    }
+    assert not rl.is_authentic(probe, POLICY)
+
+
+def test_authentic_genuine_remux_short_gop_passes():
+    probe = {
+        "quality": "Bluray-1080p Remux",
+        "encoder": None,
+        "keyframes": [0.0, 1.0, 2.0, 3.0],
+        "window_s": 40,
+    }
+    assert rl.is_authentic(probe, POLICY)
+
+
+def test_authentic_webdl_encode_is_fine():
+    # a WEB-DL legitimately has an encoder tag → authentic (only Remux claims are stream-copy)
+    probe = {
+        "quality": "WEBDL-1080p",
+        "encoder": "x264",
+        "keyframes": [],
+        "window_s": 40,
+    }
+    assert rl.is_authentic(probe, POLICY)
