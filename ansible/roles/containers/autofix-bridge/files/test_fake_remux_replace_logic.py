@@ -470,3 +470,110 @@ def test_shadow_mode_performs_zero_sonarr_mutations(tmp_path):
     sh.reconcile_once(cfg, sonarr=_AssertNoMutationSonarr())
     saved = json.loads(ledger_path.read_text())
     assert saved["13"]["state"] != "grabbed"  # never grabbed — shadow mutated nothing
+
+
+def _qitem(ep, name="WEBDL-1080p", sizeleft=500):
+    return {
+        "episodeId": ep,
+        "id": 500 + ep,
+        "title": "Show S02E%02d WEBDL" % ep,
+        "quality": {"quality": {"name": name}},
+        "sizeleft": sizeleft,
+    }
+
+
+def test_adopt_in_flight_detected_already_downloading_becomes_grabbed():
+    led = {"13": _rec(13, "detected")}
+    new, adopted = rl.adopt_in_flight(led, {"13": _qitem(13)}, now=100)
+    assert adopted == 1
+    assert new["13"]["state"] == "grabbed"
+    assert new["13"]["chosen"]["quality"] == "WEBDL-1080p"
+    assert new["13"]["lastAction"] == 100
+    # the seeded fields the reconciler needs for a later verify + delete survive adoption
+    assert new["13"]["fakeFileId"] == _rec(13, "detected")["fakeFileId"]
+    assert new["13"]["seriesId"] == 96
+
+
+def test_adopt_in_flight_detected_not_in_queue_unchanged():
+    led = {"13": _rec(13, "detected")}
+    new, adopted = rl.adopt_in_flight(led, {}, now=100)
+    assert adopted == 0
+    assert new["13"]["state"] == "detected"
+
+
+def test_adopt_in_flight_only_touches_detected_entries():
+    led = {"13": _rec(13, "grabbed"), "14": _rec(14, "importing")}
+    new, adopted = rl.adopt_in_flight(
+        led, {"13": _qitem(13), "14": _qitem(14)}, now=100
+    )
+    assert adopted == 0
+    assert new["13"]["state"] == "grabbed" and new["14"]["state"] == "importing"
+
+
+def test_files_for_ledger_covers_grabbed_not_just_importing():
+    # regression (M2): a 'grabbed' series must be queried so advance()'s auto-import success path can
+    # see the new fileId; scoping to 'importing' only left that path dead in production.
+    led = {
+        "13": _rec(13, "grabbed", seriesId=96),
+        "14": _rec(14, "detected", seriesId=97),
+    }
+    called = []
+
+    class _StubSonarr:
+        def episodefile_by_episode(self, series_id):
+            called.append(series_id)
+            return {"13": 9999} if series_id == 96 else {}
+
+    files = sh._files_for_ledger(_StubSonarr(), led)
+    assert called == [96]  # grabbed series queried; detected series (97) is not
+    assert files == {"13": 9999}
+
+
+class _AdoptSonarr:
+    """Live-mode stub where episode 13 is already downloading — searching/grabbing it again would be
+    the duplicate the idempotency guard prevents."""
+
+    def __init__(self):
+        self.searched = []
+        self.grabbed = []
+
+    def queue(self):
+        return [_qitem(13)]
+
+    def release_search(self, episode_id):
+        self.searched.append(episode_id)
+        return []
+
+    def grab(self, guid, indexer_id):
+        self.grabbed.append(guid)
+        return {"id": 1}
+
+    def episodefile_by_episode(self, series_id):
+        return {}
+
+
+def test_reconcile_adopts_in_flight_instead_of_regrabbing(tmp_path):
+    ledger_path = tmp_path / "ledger.json"
+    ledger_path.write_text(json.dumps({"13": _rec(13, "detected")}))
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps({"search_spacing_s": 0}))
+    cfg = {
+        "FAKE_REMUX_REPLACE_MODE": "live",
+        "LEDGER_FILE": str(ledger_path),
+        "FAKE_REMUX_POLICY": str(policy_path),
+    }
+    s = _AdoptSonarr()
+    sh.reconcile_once(cfg, sonarr=s)
+    assert s.searched == []  # never searched — the in-flight download was adopted
+    assert s.grabbed == []  # and never re-grabbed
+    assert json.loads(ledger_path.read_text())["13"]["state"] == "grabbed"
+
+
+def test_trim_outcomes_bounds_a_grown_log(tmp_path, monkeypatch):
+    path = tmp_path / "outcomes.jsonl"
+    path.write_text("".join("line %d\n" % i for i in range(5000)))
+    monkeypatch.setattr(sh, "_OUTCOMES_MAX_BYTES", 1)  # force the size gate
+    monkeypatch.setattr(sh, "_OUTCOMES_KEEP_LINES", 100)
+    sh._trim_outcomes(str(path))
+    lines = path.read_text().splitlines()
+    assert len(lines) == 100 and lines[-1] == "line 4999"

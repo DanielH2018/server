@@ -128,6 +128,42 @@ def plan_searches(ledger, policy):
     ]
 
 
+def _queue_quality_name(item):
+    return ((item.get("quality") or {}).get("quality") or {}).get("name")
+
+
+def adopt_in_flight(ledger, queue_by_episode, now):
+    """Idempotency guard against a duplicate grab. A 'detected' entry whose episode ALREADY has a live
+    download in Sonarr's queue was grabbed on an earlier tick whose ledger write never landed — a crash
+    before the save, or a concurrent scan clobbering the file. Adopt that in-flight download as
+    'grabbed' rather than letting plan_searches issue a second real grab for it. Safe by construction:
+    the adopted download still passes the same post-download authenticity gate before any delete, so
+    adopting an unrelated or itself-fake download can never delete the fake prematurely. Returns
+    (ledger, adopted_count); the ledger is unchanged when there's nothing to adopt."""
+    out = dict(ledger)
+    adopted = 0
+    for ep, rec in ledger.items():
+        if rec["state"] != "detected":
+            continue
+        item = queue_by_episode.get(str(rec["episodeId"]))
+        if item is None:
+            continue
+        out = _set(
+            out,
+            ep,
+            state="grabbed",
+            chosen={
+                "guid": None,
+                "indexerId": None,
+                "title": item.get("title"),
+                "quality": _queue_quality_name(item),
+            },
+            lastAction=now,
+        )
+        adopted += 1
+    return out, adopted
+
+
 def prune_history(ledger, retention_days, now):
     """Drop 'replaced' entries older than retention_days so the ledger doesn't grow without bound.
     'held' entries are kept — they still page until a human resolves them."""
@@ -261,7 +297,9 @@ def advance(ledger, queue_by_episode, files_by_ep, probes, policy, now):
                         out,
                         ep,
                         state="held",
-                        reason="probe unavailable (jellyfin down?)",
+                        # the reconciler ffprobes on the HOST (jellyfin can't see /data/torrents), so
+                        # this is a host ffprobe failure or an unresolvable download path, not jellyfin
+                        reason="probe unavailable (host ffprobe failed / download path missing)",
                         lastAction=now,
                     )
                 continue

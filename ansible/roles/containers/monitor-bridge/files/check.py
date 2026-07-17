@@ -1782,11 +1782,11 @@ def fake_remux(state, age_s, max_age_s):
     """Pure: did the last fake-remux scan run succeed, and recently? (ok, msg).
 
     Same state-file idiom as disk_prune. The host cron (autofix-bridge role's fake_remux_scan.py)
-    sets ok=false for three cases it wants surfaced: it couldn't run at all (Sonarr unreachable), a
-    whole-library match tripped the blast valve (systemic — investigate), OR — while in report-only
-    mode — it flagged re-encoded remuxes without deleting them (the operator wants to see those; it
-    self-clears once they're handled or the scan is flipped live). A clean library, or a live sweep
-    that deleted+re-searched, is ok=true.
+    sets ok=false for two cases it wants surfaced: it couldn't run at all (Sonarr unreachable), or a
+    whole-library match tripped the blast valve (>MAX_PER_SCAN new fakes = systemic — investigate).
+    The scan itself only DETECTS: it seeds each new fake into the ledger and returns ok=true (seeded N
+    / library clean). Unresolved fakes surface on the "Fake Remux Replace" monitor's `held` state (the
+    reconciler owns replacement + hold), not here — this monitor pages only on can't-run / blast-valve.
     """
     if not state.get("ok"):
         return False, "fake-remux scan: %s" % state.get("msg", "?")

@@ -181,7 +181,12 @@
     minute: "45"
     hour: "4"
     user: "{{ sys_user }}"
+    # flock the shared lock: the scan and the */20 reconcile both read-modify-write the same ledger
+    # (replacements.json). atomic_write makes each write atomic but doesn't stop a concurrent run from
+    # clobbering the other's update, and a slow */20 reconcile can still be running at 04:45. -w waits
+    # (rather than -n skip) so this daily singleton isn't lost when the reconcile holds the lock.
     job: >-
+      /usr/bin/flock -w 600 /var/lock/autofix-fake-remux.lock
       /usr/bin/python3 /opt/autofix-fake-remux/fake_remux_scan.py
       >/dev/null 2>&1 || logger -t autofix-fake-remux 'fake-remux scan failed'
     state: present
@@ -253,7 +258,11 @@
     name: "autofix fake-remux reconcile"
     minute: "*/20"
     user: "{{ sys_user }}"
+    # Same shared lock as the scan: both read-modify-write the ledger, so both must flock or the
+    # serialization is a no-op (flock is advisory). -w 600 waits out a slow scan rather than skipping
+    # a tick; a genuinely hung run is caught by the "Fake Remux Replace" staleness monitor.
     job: >-
+      /usr/bin/flock -w 600 /var/lock/autofix-fake-remux.lock
       /usr/bin/python3 /opt/autofix-fake-remux/fake_remux_replace.py
       >/dev/null 2>&1 || logger -t autofix-fake-remux-replace 'reconcile failed'
     state: present

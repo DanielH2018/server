@@ -195,12 +195,13 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     Verify / WG Pi Peer Backup; pure `disk_prune()` is unit-tested.)
   - **Fake Remux Scan** (reads `/fake-remux/state.json`, written daily by the **autofix-bridge**
     role's `fake_remux_scan.py` host cron — `down` on a scan that couldn't run (Sonarr unreachable),
-    a mass-match blast-valve hold, re-encoded remuxes flagged while in report-only mode, or >26 h
-    staleness (a missed daily run), a missing/corrupt state file included. That cron ffprobes every
-    Remux-quality file (via `docker exec jellyfin`) and detects re-encodes mislabeled as remuxes —
-    long GOP or a consumer re-encoder ENCODER tag — the post-import backstop the sidecar can't be
-    (ffprobe needs a binary the zero-privilege container lacks). Report-only fakes keep it `down`
-    until handled (persistent by design, like the *arr queue). Same state-file idiom; pure
+    a mass-match blast-valve hold (>`MAX_PER_SCAN` new fakes = systemic), or >26 h staleness (a missed
+    daily run), a missing/corrupt state file included. That cron ffprobes every Remux-quality file
+    (via `docker exec jellyfin`) and detects re-encodes mislabeled as remuxes — long GOP or a consumer
+    re-encoder ENCODER tag — the post-import backstop the sidecar can't be (ffprobe needs a binary the
+    zero-privilege container lacks). It only DETECTS: each new fake is seeded into the ledger and the
+    scan returns `ok` (seeded N / library clean) — unresolved fakes surface on **Fake Remux Replace**'s
+    `held` state (the reconciler owns replacement + hold), not here. Same state-file idiom; pure
     `fake_remux()` is unit-tested. `FAKE_REMUX_MAX_AGE_H` tunes staleness.)
   - **Fake Remux Replace** (reads `/fake-remux/replace_state.json` — same `/fake-remux` mount as
     the scan above, written every 20 min by the **autofix-bridge** role's `fake_remux_replace.py`

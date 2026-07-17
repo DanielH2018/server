@@ -288,10 +288,16 @@ def _probe_completed(cfg, ledger, q_by_episode, policy):
 
 
 def _files_for_ledger(sonarr, ledger):
-    """Current episodeId -> fileId for every series with an "importing" ledger entry — the only state
-    advance() consults files_by_ep for (has the fake's fileId been replaced by Sonarr's import yet)."""
+    """Current episodeId -> fileId for every series with a grabbed/verifying/importing ledger entry.
+    advance() consults files_by_ep in BOTH the importing branch (has the fake's fileId been replaced
+    by Sonarr's import yet) AND the grabbed branch (a grab Sonarr auto-imported left the queue but
+    the episode has a NEW file → 'replaced', not a lost grab). Scoping this to 'importing' only left
+    that grabbed-branch success path dead in production unless a sibling episode happened to be
+    importing at the same tick."""
     series_ids = {
-        rec["seriesId"] for rec in ledger.values() if rec["state"] == "importing"
+        rec["seriesId"]
+        for rec in ledger.values()
+        if rec["state"] in ("grabbed", "verifying", "importing")
     }
     files = {}
     for series_id in series_ids:
@@ -322,6 +328,25 @@ def _outcomes_path(cfg):
     return cfg.get("OUTCOMES_FILE") or os.path.join(base_dir, "outcomes.jsonl")
 
 
+_OUTCOMES_MAX_BYTES = 1_000_000
+_OUTCOMES_KEEP_LINES = 2000
+
+
+def _trim_outcomes(path):
+    """Bound the append-only outcomes log — prune_history bounds the ledger, but nothing bounded this.
+    A full rewrite past the cap is fine: only real actions get logged, so it grows slowly and trims
+    rarely. Written atomically since monitor-bridge doesn't read it, but the ledger writer might."""
+    try:
+        if os.path.getsize(path) <= _OUTCOMES_MAX_BYTES:
+            return
+        with open(path) as fh:
+            lines = fh.readlines()
+    except OSError:
+        return
+    if len(lines) > _OUTCOMES_KEEP_LINES:
+        atomic_write(path, "".join(lines[-_OUTCOMES_KEEP_LINES:]))
+
+
 def _outcome(cfg, kind, rec, detail):
     detail = frl.sanitize(detail)
     log(
@@ -340,6 +365,7 @@ def _outcome(cfg, kind, rec, detail):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "a") as fh:
         fh.write(json.dumps(entry) + "\n")
+    _trim_outcomes(path)
 
 
 def _alert_transitions(cfg, before_states, ledger):
@@ -384,6 +410,18 @@ def reconcile_once(cfg, sonarr=None):
     before_states = {ep: rec.get("state") for ep, rec in ledger.items()}
     sonarr = sonarr or _make_sonarr(cfg)
 
+    # 0) idempotency guard: adopt any 'detected' entry already downloading in Sonarr (a prior tick
+    # grabbed it but its ledger write was lost — a crash, or a concurrent scan clobbering the file)
+    # so the grab loop below doesn't issue a duplicate grab. Persist immediately so the adoption
+    # itself survives a crash later in this tick.
+    if mode == "live":
+        pre_queue = _queue_by_episode(sonarr.queue())
+        ledger, adopted = frl_replace.adopt_in_flight(
+            ledger, pre_queue, int(time.time())
+        )
+        if adopted:
+            _save_json(cfg["LEDGER_FILE"], ledger)
+
     # 1) search + grab detected entries (respect per-tick cap + spacing)
     for act in frl_replace.plan_searches(ledger, policy):
         cands = sonarr.release_search(act["episodeId"])
@@ -393,6 +431,9 @@ def reconcile_once(cfg, sonarr=None):
         if rel is None:
             ledger[str(act["episodeId"])] = {**rec, "state": "held", "reason": reason}
             _outcome(cfg, "no-candidate", rec, reason)
+            _save_json(
+                cfg["LEDGER_FILE"], ledger
+            )  # persist before the next (slow) search
             continue
         _outcome(cfg, "would-grab" if mode != "live" else "grab", rec, rel.get("title"))
         if mode == "live":
@@ -410,6 +451,9 @@ def reconcile_once(cfg, sonarr=None):
                         },
                         "lastAction": int(time.time()),
                     }
+                    # persist the grab NOW: a real download just started, so if a later search in
+                    # this same tick raises, the next tick must not re-grab it (H1).
+                    _save_json(cfg["LEDGER_FILE"], ledger)
                     break
 
     # 2) advance grabbed/verifying/importing (live only — the mutating half)
@@ -422,6 +466,9 @@ def reconcile_once(cfg, sonarr=None):
             ledger, qbe, files, probes, policy, int(time.time())
         )
         _execute(sonarr, actions, cfg, ledger)
+        _save_json(
+            cfg["LEDGER_FILE"], ledger
+        )  # persist executed deletes/imports before alerting
 
     _alert_transitions(cfg, before_states, ledger)
     ledger = frl_replace.prune_history(
