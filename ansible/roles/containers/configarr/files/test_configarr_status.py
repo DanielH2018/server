@@ -59,6 +59,14 @@ def test_summarize_skips_docker_compose_lifecycle_noise():
     assert "Container configarr" not in s
 
 
+def test_summarize_skips_image_and_network_noise():
+    # docker also emits Image/Network/Volume status lines, not just Container
+    out = "Execution Summary: SONARR (1/0/0)\nImage ghcr.io/raydak-labs/configarr:1.30.0 Pulled"
+    s = summarize(out)
+    assert "Execution Summary" in s
+    assert "Image ghcr" not in s
+
+
 def test_summarize_all_noise_falls_back_to_last_line():
     # if every line is docker lifecycle noise, don't return empty — fall back to the last line
     out = "Container configarr-run-abc Creating\nContainer configarr-run-abc Created"

@@ -21,12 +21,14 @@ import re
 # token set against real configarr output in Task 9 if a clean run pages.
 _ERROR_LINE = re.compile(r"(?im)^[^\w]*(?:error|fatal)\b")
 
-# `docker compose run` appends its own container lifecycle lines ("Container <name> Created") to
-# stderr, which land last in the combined output. Skip them when picking the summary line so the
-# message reflects configarr's real final line (its Execution Summary, or its error), not docker noise.
+# `docker compose run` appends its own resource status lines ("Container <name> Created", "Image
+# <ref> Pulled", "Network <name> Created", …) to stderr, which land last in the combined output.
+# Skip that whole status-line vocabulary when picking the summary so the message reflects configarr's
+# real final line (its Execution Summary, or its error), not docker noise.
 _COMPOSE_NOISE = re.compile(
-    r"^Container\s+\S+\s+(?:Creating|Created|Recreating|Recreated|Starting|Started|"
-    r"Stopping|Stopped|Removing|Removed|Running|Waiting|Healthy|Pulling|Pulled|Building|Built)$"
+    r"^(?:Container|Image|Network|Volume)\s+\S+\s+(?:Creating|Created|Recreating|Recreated|"
+    r"Starting|Started|Stopping|Stopped|Removing|Removed|Running|Waiting|Healthy|"
+    r"Pulling|Pulled|Building|Built)$"
 )
 
 
