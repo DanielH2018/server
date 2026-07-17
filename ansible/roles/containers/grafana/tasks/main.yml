@@ -40,13 +40,22 @@
   register: grafana_cfg_dashboards_cfg
 
 # Recurses subdirectories — with foldersFromFilesStructure: true each subdir
-# (e.g. dashboards/Crowdsec/) becomes a Grafana folder of the same name.
-- name: Copy provisioned dashboards (community seeds + exported custom boards)
+# (e.g. dashboards/Security/) becomes a Grafana folder of the same name.
+# synchronize (not copy) so removing/renaming a dashboard in the role prunes its stale
+# file from the mount: plain copy is additive and a leftover file keeps the board
+# provisioned, so Grafana refuses to delete it ("provisioned dashboard cannot be deleted")
+# and it ghosts in its old folder forever.
+- name: Mirror provisioned dashboards (community seeds + exported custom boards)
   tags: [config]
-  ansible.builtin.copy:
-    src: dashboards/
+  ansible.posix.synchronize:
+    src: "{{ role_path }}/files/dashboards/"
     dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/dashboards/"
-    mode: "0664"
+    archive: false
+    recursive: true
+    checksum: true
+    delete: true
+    rsync_opts:
+      - "--chmod=F664,D775"
   register: grafana_cfg_dashboards
 
 - name: Create loki-config.yml from template
