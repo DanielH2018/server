@@ -35,6 +35,10 @@ HOST_RUN_SCRIPTS = [
     # import`s the shared helper listed below. Keep all three 3.12-clean.
     "ansible/roles/containers/autofix-bridge/files/fake_remux_scan.py",
     "ansible/roles/containers/autofix-bridge/files/fake_remux_logic.py",
+    # configarr sync host cron + its pure core (crontab /usr/bin/python3, not a systemd unit).
+    # configarr_sync.py `from host_lib import`s the shared helper listed below. Keep all 3.12-clean.
+    "ansible/roles/containers/configarr/files/configarr_sync.py",
+    "ansible/roles/containers/configarr/files/configarr_status.py",
     # Cross-role shared lib: deployed INTO each script's /opt dir (a runtime sibling both `from
     # host_lib import`), so it loads under the same host /usr/bin/python3 — but its source lives in a
     # different role's files/, so the _first_party_imports sibling scan below can't derive it. Listed
