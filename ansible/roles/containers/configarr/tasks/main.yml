@@ -16,14 +16,14 @@
   # deploy-time reconcile run as sys_user) — deploy configarr before monitor-bridge (meta/deps) so
   # the mount source exists non-root-owned first.
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: "{{ item.path }}"
     state: directory
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
-    mode: "0750"
+    mode: "{{ item.mode }}"
   loop:
-    - /opt/configarr
-    - /var/lib/configarr
+    - { path: /opt/configarr, mode: "0750" } # scripts
+    - { path: /var/lib/configarr, mode: "0755" } # state.json + monitor-bridge bind source
   become: true
 
 - name: Install configarr sync scripts
