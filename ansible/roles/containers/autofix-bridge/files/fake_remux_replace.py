@@ -111,6 +111,22 @@ def _qname(cand):
     return ((cand.get("quality") or {}).get("quality") or {}).get("name")
 
 
+def _queue_by_episode(records):
+    """episodeId (str) -> queue record, first wins. A season-pack item lists several episodes under
+    `episodes`, so it gets mapped under each of their ids as well as its own `episodeId`."""
+    by_ep = {}
+    for rec in records or []:
+        eids = set()
+        if rec.get("episodeId") is not None:
+            eids.add(rec["episodeId"])
+        for ep in rec.get("episodes") or []:
+            if ep.get("id") is not None:
+                eids.add(ep["id"])
+        for eid in eids:
+            by_ep.setdefault(str(eid), rec)
+    return by_ep
+
+
 def _mirrors(cands, chosen):
     """`chosen` first, then any other candidate offering the identical release (a mirror upload on a
     second indexer) — so a rejected/dead mirror doesn't waste the tick when another copy is grabbable."""
@@ -134,9 +150,9 @@ def _try_grab(sonarr, cand):
         raise
 
 
-def _probe_completed(cfg, ledger, q_by_dlid, policy):
+def _probe_completed(cfg, ledger, q_by_episode, policy):
     """ffprobe every fully-downloaded queue item belonging to a grabbed/verifying ledger entry.
-    Returns {downloadId: probe} for `advance()`; an entry with no probe stays in verifying and is
+    Returns {episodeId: probe} for `advance()`; an entry with no probe stays in verifying and is
     re-checked next tick (download_stall_hours eventually holds it)."""
     jellyfin = cfg.get("JELLYFIN_CONTAINER", "jellyfin")
     ffprobe_bin = cfg.get("FFPROBE_BIN", "/usr/lib/jellyfin-ffmpeg/ffprobe")
@@ -146,19 +162,16 @@ def _probe_completed(cfg, ledger, q_by_dlid, policy):
     for rec in ledger.values():
         if rec["state"] not in ("grabbed", "verifying"):
             continue
+        epk = str(rec["episodeId"])
         chosen = rec.get("chosen") or {}
-        dlid = chosen.get("downloadId")
-        item = q_by_dlid.get(dlid) if dlid else None
+        item = q_by_episode.get(epk)
         if item is None or item.get("sizeleft", 1) != 0:
             continue
         path = item.get("outputPath")
         if not path:
             # Sonarr's queue record has no outputPath for this download client, so jellyfin has
-            # nothing to probe here. Left un-probed on purpose: the entry stays in "verifying" and
-            # advance() eventually falls back to the "importing" state's file-identity check (does
-            # the episode's fileId change after ProcessMonitoredDownloads) instead of a probe verdict.
-            # A site whose jellyfin genuinely can't see the download dir needs a dedicated post-import
-            # probe pass — out of scope here; confirm during the shadow smoke (see task brief).
+            # nothing to probe here. Skip -> the entry holds after the stall timeout; jellyfin here
+            # mounts /data, so this is rare.
             continue
         stream_json = scan.ffprobe(
             jellyfin,
@@ -192,7 +205,7 @@ def _probe_completed(cfg, ledger, q_by_dlid, policy):
             ],
             timeout,
         )
-        probes[dlid] = {
+        probes[epk] = {
             "quality": chosen.get("quality"),
             "encoder": frl.parse_encoder_tag(stream_json),
             "keyframes": frl.parse_keyframe_csv(keyframe_csv),
@@ -214,7 +227,7 @@ def _files_for_ledger(sonarr, ledger):
     return files
 
 
-def _execute(sonarr, actions, cfg, ledger, q_by_dlid):
+def _execute(sonarr, actions, cfg, ledger):
     for act in actions:
         rec = ledger.get(str(act["episodeId"])) or {}
         if act["type"] == "delete_file":
@@ -226,10 +239,10 @@ def _execute(sonarr, actions, cfg, ledger, q_by_dlid):
             sonarr.process_downloads()
             _outcome(cfg, "import", rec, "ProcessMonitoredDownloads")
         elif act["type"] == "blocklist":
-            item = q_by_dlid.get(act.get("downloadId"))
-            if item is not None and item.get("id") is not None:
-                sonarr.blocklist_queue_item(item["id"])
-            _outcome(cfg, "blocklist", rec, "downloadId=%s" % act.get("downloadId"))
+            queue_id = act.get("queueId")
+            if queue_id is not None:
+                sonarr.blocklist_queue_item(queue_id)
+            _outcome(cfg, "blocklist", rec, "queueId=%s" % queue_id)
 
 
 def _outcomes_path(cfg):
@@ -286,9 +299,10 @@ def _summarize(ledger):
     return held == 0, msg
 
 
-def reconcile_once(cfg):
+def reconcile_once(cfg, sonarr=None):
     """One full tick. Returns (ok, summary) for the state file. Raises only on a failure that
-    prevents the tick running at all (main() records that as ok=false)."""
+    prevents the tick running at all (main() records that as ok=false). `sonarr` is an injection
+    seam for tests; production leaves it unset and gets the real client."""
     mode = cfg.get("FAKE_REMUX_REPLACE_MODE", "shadow").strip().lower()
     if mode == "off":
         return True, "replacer off"
@@ -296,7 +310,7 @@ def reconcile_once(cfg):
     policy = _load_policy(cfg)
     ledger = _load_json(cfg["LEDGER_FILE"], default={})
     before_states = {ep: rec.get("state") for ep, rec in ledger.items()}
-    sonarr = _make_sonarr(cfg)
+    sonarr = sonarr or _make_sonarr(cfg)
 
     # 1) search + grab detected entries (respect per-tick cap + spacing)
     for act in frl_replace.plan_searches(ledger, policy):
@@ -316,7 +330,6 @@ def reconcile_once(cfg):
                         **rec,
                         "state": "grabbed",
                         "chosen": {
-                            "downloadId": resp.get("downloadId") or cand.get("guid"),
                             "guid": cand["guid"],
                             "indexerId": cand["indexerId"],
                             "title": cand["title"],
@@ -330,13 +343,13 @@ def reconcile_once(cfg):
     # 2) advance grabbed/verifying/importing (live only — the mutating half)
     if mode == "live":
         q = sonarr.queue()
-        q_by_dlid = {str(r.get("downloadId")): r for r in q}
-        probes = _probe_completed(cfg, ledger, q_by_dlid, policy)
+        qbe = _queue_by_episode(q)
+        probes = _probe_completed(cfg, ledger, qbe, policy)
         files = _files_for_ledger(sonarr, ledger)
         ledger, actions = frl_replace.advance(
-            ledger, q_by_dlid, files, probes, policy, int(time.time())
+            ledger, qbe, files, probes, policy, int(time.time())
         )
-        _execute(sonarr, actions, cfg, ledger, q_by_dlid)
+        _execute(sonarr, actions, cfg, ledger)
 
     _alert_transitions(cfg, before_states, ledger)
     _save_json(cfg["LEDGER_FILE"], ledger)

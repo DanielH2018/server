@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import pathlib
 import sys
 
@@ -181,14 +182,12 @@ def test_plan_searches_oldest_first_capped():
 
 
 def test_advance_grabbed_complete_and_authentic_deletes_then_imports():
-    led = {
-        "13": _rec(13, "grabbed", chosen={"downloadId": "D", "quality": "WEBDL-1080p"})
-    }
+    led = {"13": _rec(13, "grabbed", chosen={"quality": "WEBDL-1080p"})}
     new, acts = rl.advance(
         led,
-        {"D": {"sizeleft": 0}},
+        {"13": {"sizeleft": 0, "id": 555}},
         {"13": 2213},
-        {"D": {"quality": "WEBDL-1080p", "encoder": "x264", "keyframes": []}},
+        {"13": {"quality": "WEBDL-1080p", "encoder": "x264", "keyframes": []}},
         POLICY,
         now=100,
     )
@@ -199,11 +198,9 @@ def test_advance_grabbed_complete_and_authentic_deletes_then_imports():
 
 
 def test_advance_never_deletes_before_download_complete():
-    led = {
-        "13": _rec(13, "grabbed", chosen={"downloadId": "D", "quality": "WEBDL-1080p"})
-    }
+    led = {"13": _rec(13, "grabbed", chosen={"quality": "WEBDL-1080p"})}
     new, acts = rl.advance(
-        led, {"D": {"sizeleft": 500_000}}, {"13": 2213}, {}, POLICY, now=100
+        led, {"13": {"sizeleft": 500_000, "id": 555}}, {"13": 2213}, {}, POLICY, now=100
     )
     assert new["13"]["state"] == "grabbed"
     assert acts == []  # no delete while downloading
@@ -215,20 +212,21 @@ def test_advance_fake_replacement_blocklists_and_retries_original_untouched():
             13,
             "grabbed",
             attempts=0,
-            chosen={"downloadId": "D", "quality": "Bluray-1080p Remux"},
+            chosen={"quality": "Bluray-1080p Remux"},
         )
     }
     new, acts = rl.advance(
         led,
-        {"D": {"sizeleft": 0}},
+        {"13": {"sizeleft": 0, "id": 555}},
         {"13": 2213},
-        {"D": {"quality": "Bluray-1080p Remux", "encoder": "x265", "keyframes": []}},
+        {"13": {"quality": "Bluray-1080p Remux", "encoder": "x265", "keyframes": []}},
         POLICY,
         now=100,
     )
     assert new["13"]["state"] == "detected"  # retry with next candidate
     assert new["13"]["attempts"] == 1
     assert [a["type"] for a in acts] == ["blocklist"]
+    assert acts[0]["queueId"] == 555
     assert all(a["type"] != "delete_file" for a in acts)  # original fake untouched
 
 
@@ -238,7 +236,7 @@ def test_advance_importing_to_replaced_when_new_file_present():
             13,
             "importing",
             fakeFileId=2213,
-            chosen={"downloadId": "D", "quality": "WEBDL-1080p"},
+            chosen={"quality": "WEBDL-1080p"},
         )
     }
     new, _ = rl.advance(
@@ -253,22 +251,20 @@ def test_advance_stall_holds():
             13,
             "grabbed",
             lastAction=0,
-            chosen={"downloadId": "D", "quality": "WEBDL-1080p"},
+            chosen={"quality": "WEBDL-1080p"},
         )
     }
     pol = dict(POLICY, download_stall_hours=1)
     new, _ = rl.advance(
-        led, {"D": {"sizeleft": 500}}, {"13": 2213}, {}, pol, now=3600 + 1
+        led, {"13": {"sizeleft": 500, "id": 555}}, {"13": 2213}, {}, pol, now=3600 + 1
     )
     assert new["13"]["state"] == "held"
 
 
 def test_advance_idempotent_on_own_output_no_double_action():
-    led = {
-        "13": _rec(13, "grabbed", chosen={"downloadId": "D", "quality": "WEBDL-1080p"})
-    }
-    q = {"D": {"sizeleft": 0}}
-    p = {"D": {"quality": "WEBDL-1080p", "encoder": "x264", "keyframes": []}}
+    led = {"13": _rec(13, "grabbed", chosen={"quality": "WEBDL-1080p"})}
+    q = {"13": {"sizeleft": 0, "id": 555}}
+    p = {"13": {"quality": "WEBDL-1080p", "encoder": "x264", "keyframes": []}}
     led2, acts1 = rl.advance(led, q, {"13": 2213}, p, POLICY, now=100)
     assert [a["type"] for a in acts1] == ["delete_file", "import"]
     led3, acts2 = rl.advance(
@@ -284,11 +280,13 @@ def test_advance_verifying_times_out_to_held_when_no_probe():
             13,
             "verifying",
             lastAction=0,
-            chosen={"downloadId": "D", "quality": "WEBDL-1080p"},
+            chosen={"quality": "WEBDL-1080p"},
         )
     }
     pol = dict(POLICY, download_stall_hours=1)
-    new, _ = rl.advance(led, {"D": {"sizeleft": 0}}, {"13": 2213}, {}, pol, now=3601)
+    new, _ = rl.advance(
+        led, {"13": {"sizeleft": 0, "id": 555}}, {"13": 2213}, {}, pol, now=3601
+    )
     assert new["13"]["state"] == "held"
 
 
@@ -298,20 +296,21 @@ def test_advance_verifying_fake_at_attempt_cap_holds():
             13,
             "verifying",
             attempts=2,
-            chosen={"downloadId": "D", "quality": "Bluray-1080p Remux"},
+            chosen={"quality": "Bluray-1080p Remux"},
         )
     }
     pol = dict(POLICY, max_attempts=3)
     new, acts = rl.advance(
         led,
-        {"D": {"sizeleft": 0}},
+        {"13": {"sizeleft": 0, "id": 555}},
         {"13": 2213},
-        {"D": {"quality": "Bluray-1080p Remux", "encoder": "x265", "keyframes": []}},
+        {"13": {"quality": "Bluray-1080p Remux", "encoder": "x265", "keyframes": []}},
         pol,
         now=100,
     )
     assert new["13"]["state"] == "held"
     assert [a["type"] for a in acts] == ["blocklist"]
+    assert acts[0]["queueId"] == 555
 
 
 def test_summarize_counts_states():
@@ -327,3 +326,31 @@ def test_summarize_counts_states():
 def test_mode_off_is_noop(tmp_path):
     ok, msg = sh.reconcile_once({"FAKE_REMUX_REPLACE_MODE": "off"})
     assert ok and "off" in msg
+
+
+class _AssertNoMutationSonarr:
+    """Stands in for Sonarr in shadow mode: raises if any mutating endpoint is called."""
+
+    def release_search(self, episode_id):
+        return []
+
+    def grab(self, guid, indexer_id):
+        raise AssertionError("shadow mode must not grab")
+
+    def delete_episodefile(self, file_id):
+        raise AssertionError("shadow mode must not delete")
+
+    def process_downloads(self):
+        raise AssertionError("shadow mode must not process downloads")
+
+    def blocklist_queue_item(self, queue_id):
+        raise AssertionError("shadow mode must not blocklist")
+
+
+def test_shadow_mode_performs_zero_sonarr_mutations(tmp_path):
+    ledger_path = tmp_path / "ledger.json"
+    ledger_path.write_text(json.dumps({"13": _rec(13, "detected")}))
+    cfg = {"FAKE_REMUX_REPLACE_MODE": "shadow", "LEDGER_FILE": str(ledger_path)}
+    sh.reconcile_once(cfg, sonarr=_AssertNoMutationSonarr())
+    saved = json.loads(ledger_path.read_text())
+    assert saved["13"]["state"] != "grabbed"  # never grabbed — shadow mutated nothing

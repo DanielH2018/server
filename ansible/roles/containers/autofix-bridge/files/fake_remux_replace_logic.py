@@ -122,10 +122,10 @@ def _set(ledger, ep, **changes):
     return {**ledger, str(ep): rec}
 
 
-def _apply_verdict(out, ep, rec, dlid, probe, policy, now, actions):
-    """Shared verify-and-transition for a completed download (grabbed/verifying). Authentic ->
-    delete the fake + import (-> importing). Otherwise blocklist and retry (-> detected, clearing
-    chosen), or hold at the attempt cap (keeping chosen for diagnostics)."""
+def _apply_verdict(out, ep, rec, item, probe, policy, now, actions):
+    """Shared verify-and-transition for a completed download. Authentic -> delete fake + import
+    (-> importing). Else blocklist (if we still have the queue item) and retry (-> detected, clearing
+    chosen) or hold at the attempt cap (keeping chosen for diagnostics)."""
     if is_authentic(probe, policy):
         actions.append(
             {
@@ -137,9 +137,14 @@ def _apply_verdict(out, ep, rec, dlid, probe, policy, now, actions):
         actions.append({"type": "import", "episodeId": rec["episodeId"]})
         return _set(out, ep, state="importing", lastAction=now)
     attempts = rec.get("attempts", 0) + 1
-    actions.append(
-        {"type": "blocklist", "episodeId": rec["episodeId"], "downloadId": dlid}
-    )
+    if item is not None:
+        actions.append(
+            {
+                "type": "blocklist",
+                "episodeId": rec["episodeId"],
+                "queueId": item.get("id"),
+            }
+        )
     if attempts >= int(policy.get("max_attempts", 3)):
         return _set(
             out,
@@ -160,21 +165,21 @@ def _apply_verdict(out, ep, rec, dlid, probe, policy, now, actions):
     )
 
 
-def advance(ledger, queue_by_dlid, files_by_ep, probes, policy, now):
+def advance(ledger, queue_by_episode, files_by_ep, probes, policy, now):
     """Advance grabbed→verifying→importing→replaced from observed reality. Pure: the shell has
-    already grabbed (recording chosen.downloadId), ffprobed completed downloads (into `probes`), and
-    read the queue + current files. Emits delete_file / import / blocklist / alert for the shell to
-    execute (only in live mode). No delete is ever emitted unless the download is complete AND
-    authentic."""
+    already grabbed, ffprobed completed downloads (into `probes`, keyed by episodeId), and read the
+    queue (`queue_by_episode`, also keyed by episodeId) + current files. Emits delete_file / import /
+    blocklist / alert for the shell to execute (only in live mode). No delete is ever emitted unless
+    the download is complete AND authentic."""
     stall_s = float(policy.get("download_stall_hours", 12)) * 3600
     max_attempts = int(policy.get("max_attempts", 3))
     actions = []
     out = dict(ledger)
     for ep, rec in ledger.items():
         state = rec["state"]
+        epk = str(rec["episodeId"])
         if state == "grabbed":
-            dlid = (rec.get("chosen") or {}).get("downloadId")
-            item = queue_by_dlid.get(dlid) if dlid else None
+            item = queue_by_episode.get(epk)
             if item is None:  # vanished/failed from the download client
                 attempts = rec.get("attempts", 0) + 1
                 if attempts >= max_attempts:
@@ -204,15 +209,15 @@ def advance(ledger, queue_by_dlid, files_by_ep, probes, policy, now):
                     )
                 continue
             # sizeleft == 0 → fully downloaded → verify (probe supplied by the shell)
-            probe = probes.get(dlid)
+            probe = probes.get(epk)
             if probe is None:
                 out = _set(out, ep, state="verifying", lastAction=now)
                 continue
-            out = _apply_verdict(out, ep, rec, dlid, probe, policy, now, actions)
+            out = _apply_verdict(out, ep, rec, item, probe, policy, now, actions)
         elif state == "verifying":
             # re-entrant: same logic as the grabbed→verify branch once a probe arrives
-            dlid = (rec.get("chosen") or {}).get("downloadId")
-            probe = probes.get(dlid)
+            item = queue_by_episode.get(epk)
+            probe = probes.get(epk)
             if probe is None:
                 if now - rec.get("lastAction", now) > stall_s:
                     out = _set(
@@ -223,7 +228,7 @@ def advance(ledger, queue_by_dlid, files_by_ep, probes, policy, now):
                         lastAction=now,
                     )
                 continue
-            out = _apply_verdict(out, ep, rec, dlid, probe, policy, now, actions)
+            out = _apply_verdict(out, ep, rec, item, probe, policy, now, actions)
         elif state == "importing":
             cur = files_by_ep.get(str(rec["episodeId"]))
             if cur is not None and cur != rec["fakeFileId"]:
