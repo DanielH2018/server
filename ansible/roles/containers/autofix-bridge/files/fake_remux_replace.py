@@ -191,6 +191,32 @@ def _host_ffprobe(ffprobe_bin, path, args, timeout):
     return out.stdout
 
 
+_VIDEO_EXTS = (".mkv", ".mp4", ".m4v", ".avi", ".ts")
+
+
+def _resolve_video(host_path):
+    """The video file to ffprobe. A single-file download's outputPath IS the file; a multi-file
+    (folder) download's outputPath is the directory — return the largest video inside it. None if the
+    path is missing or has no video (the probe then skips and the entry holds — fail-safe)."""
+    if os.path.isfile(host_path):
+        return host_path
+    if os.path.isdir(host_path):
+        best = None
+        for root, _dirs, files in os.walk(host_path):
+            for name in files:
+                if name.lower().endswith(_VIDEO_EXTS):
+                    candidate = os.path.join(root, name)
+                    try:
+                        size = os.path.getsize(candidate)
+                    except OSError:
+                        continue
+                    if best is None or size > best[0]:
+                        best = (size, candidate)
+        if best is not None:
+            return best[1]
+    return None
+
+
 def _probe_completed(cfg, ledger, q_by_episode, policy):
     """ffprobe every fully-downloaded queue item belonging to a grabbed/verifying ledger entry.
     Returns {episodeId: probe} for `advance()`; an entry with no probe stays in verifying and is
@@ -215,6 +241,12 @@ def _probe_completed(cfg, ledger, q_by_episode, policy):
         # Downloads land in /data/torrents, which jellyfin does NOT mount — ffprobe on the host
         # (where the reconciler runs), translating Sonarr's /data view to the host path.
         host = _host_path(path, host_data_root)
+        host = _resolve_video(
+            host
+        )  # a folder download -> the largest video inside; a file -> itself
+        if not host:
+            # folder with no video, or the path is gone — skip; the entry holds (fail-safe).
+            continue
         stream_json = _host_ffprobe(
             ffprobe_bin,
             host,

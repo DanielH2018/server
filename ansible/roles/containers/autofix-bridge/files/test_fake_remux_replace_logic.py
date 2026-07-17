@@ -416,6 +416,23 @@ def test_host_path_translates_leading_data_only():
     )  # non-/data -> unchanged
 
 
+def test_resolve_video_file_folder_and_missing(tmp_path):
+    f = tmp_path / "ep.mkv"
+    f.write_bytes(b"x" * 100)
+    assert sh._resolve_video(str(f)) == str(f)  # a file -> itself
+    d = tmp_path / "release"
+    d.mkdir()
+    (d / "sample.mkv").write_bytes(b"x" * 10)
+    big = d / "movie.mkv"
+    big.write_bytes(b"x" * 1000)
+    (d / "readme.txt").write_bytes(b"notes")
+    assert sh._resolve_video(str(d)) == str(big)  # a folder -> the largest video inside
+    assert sh._resolve_video(str(tmp_path / "nope")) is None  # missing -> None
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert sh._resolve_video(str(empty)) is None  # folder with no video -> None
+
+
 def test_mode_off_is_noop(tmp_path):
     ok, msg = sh.reconcile_once({"FAKE_REMUX_REPLACE_MODE": "off"})
     assert ok and "off" in msg
