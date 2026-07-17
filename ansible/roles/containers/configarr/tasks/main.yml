@@ -9,6 +9,48 @@
       - "{{ container_item.name }}/config"
       - "{{ container_item.name }}/repos"
 
+- name: Create configarr host-plane directories
+  tags: [config]
+  # /opt/configarr holds the sync wrapper + its pure core + host_lib; /var/lib/configarr holds the
+  # {ts,ok,msg} state.json that monitor-bridge bind-mounts :ro. Created sys_user-owned (the cron +
+  # deploy-time reconcile run as sys_user) — deploy configarr before monitor-bridge (meta/deps) so
+  # the mount source exists non-root-owned first.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0750"
+  loop:
+    - /opt/configarr
+    - /var/lib/configarr
+  become: true
+
+- name: Install configarr sync scripts
+  tags: [config]
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/configarr/{{ item }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  loop:
+    - configarr_sync.py
+    - configarr_status.py
+  become: true
+
+- name: Install the shared host_lib helper for the configarr sync
+  tags: [config]
+  # Source of truth in roles/setup/common/files; deployed beside the script so `from host_lib import`
+  # resolves the sibling copy (same pattern as the fake-remux cron). Kept 3.12-clean.
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../setup/common/files/host_lib.py"
+    dest: /opt/configarr/host_lib.py
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
 - name: Create config.yml from template
   tags: [config]
   ansible.builtin.template:
@@ -35,23 +77,29 @@
     name: "{{ container_item.name }}"
     state: absent
 
-- name: Reconcile Sonarr now (fresh --rm container)
+- name: Reconcile now via the sync wrapper (writes state.json)
   tags: [deploy]
+  # Runs the one-shot configarr sync through configarr_sync.py so a config change applies on deploy
+  # AND the {ts,ok,msg} state file is (re)written every deploy — which doubles as the first-deploy
+  # seed, so monitor-bridge's Configarr Sync monitor never false-DOWNs before the first daily tick.
+  # The wrapper always exits 0 (records ok=false in state on a sync error), so a transient arr outage
+  # pages the monitor instead of failing the play; a real config error is caught by the Task 9 verify.
   ansible.builtin.command:
-    cmd: >-
-      docker compose
-      -f /home/{{ sys_user }}/server/containers/{{ container_item.name }}/docker-compose.yml
-      run --rm -T {{ container_item.name }}
+    cmd: /usr/bin/python3 /opt/configarr/configarr_sync.py
+  environment:
+    CONFIGARR_COMPOSE: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/docker-compose.yml"
   changed_when: true
 
-- name: Schedule daily Configarr re-sync (fresh --rm container, nothing lingers)
+- name: Schedule daily configarr sync (via the state-writing wrapper)
   tags: [cron]
   ansible.builtin.cron:
     name: "configarr-sync"
     minute: "30"
     hour: "4"
+    user: "{{ sys_user }}"
     job: >-
-      docker compose
-      -f /home/{{ sys_user }}/server/containers/{{ container_item.name }}/docker-compose.yml
-      run --rm -T {{ container_item.name }}
-      >/dev/null 2>&1 || logger -t configarr-sync 'configarr re-sync failed'
+      CONFIGARR_COMPOSE=/home/{{ sys_user }}/server/containers/{{ container_item.name }}/docker-compose.yml
+      /usr/bin/python3 /opt/configarr/configarr_sync.py
+      >/dev/null 2>&1 || logger -t configarr-sync 'configarr sync wrapper failed'
+    state: present
+  become: true
