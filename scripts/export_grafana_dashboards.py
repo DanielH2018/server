@@ -17,9 +17,10 @@ in the same folders. UI edits are captured back into version control by re-runni
     python3 scripts/export_grafana_dashboards.py
 
 Requires a running ``grafana`` container; all API calls go through ``docker exec grafana
-wget`` against ``localhost:3000`` with the admin password read from the container env (so
-special characters in the password never have to survive URL/shell quoting). Idempotent;
-overwrites the JSON in the role.
+wget`` against ``localhost:3000`` with the admin password read from its mounted file
+(``GF_SECURITY_ADMIN_PASSWORD__FILE``; the bare env var is empty since the password was
+file-mounted) so special characters in the password never have to survive URL/shell
+quoting. Idempotent; overwrites the JSON in the role.
 """
 
 import base64
@@ -54,7 +55,17 @@ FILENAME_OVERRIDE = {"ddmlqvk12uozka": "traefik-custom"}
 def gapi(path):
     """GET a Grafana API path via the container, authenticated as admin."""
     pw = subprocess.run(
-        ["docker", "exec", "grafana", "printenv", "GF_SECURITY_ADMIN_PASSWORD"],
+        # The admin password is file-mounted (GF_SECURITY_ADMIN_PASSWORD__FILE) so it stays
+        # out of the container env — the bare GF_SECURITY_ADMIN_PASSWORD var is empty. Read
+        # the file it points at.
+        [
+            "docker",
+            "exec",
+            "grafana",
+            "sh",
+            "-c",
+            'cat "$GF_SECURITY_ADMIN_PASSWORD__FILE"',
+        ],
         capture_output=True,
         text=True,
         timeout=15,
