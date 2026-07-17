@@ -48,7 +48,14 @@ didn't create.
   score would reject a subs-less release outright, breaking the intended "grab raw when it's the
   only option, then let Bazarr/Whisper add subs" fallback. `delete_unmanaged_custom_formats` OFF
   means Configarr never deletes/alters the 52 bespoke CFs or their scores — it only reconciles the
-  four local CFs above. A full read-only snapshot of the
+  four local CFs above.
+
+  **`cutoffFormatScore` raised 0 → 400 (2026-07-17, set in Sonarr's DB — NOT Configarr).** Makes a
+  raw that slips in auto-upgrade to a subbed release: a raw loses the +300/+100 English-sub bonus so
+  it lands ~305, while every genuine subbed file already scores ≥400, so it stays upgrade-eligible
+  until Sonarr grabs a release clearing 400, then stops. No existing file re-grabs (none score
+  <400). Blunt total-score lever, reversible via the API; the refreshed `files/baseline/anime-profile.json`
+  snapshot is its only git record. A full read-only snapshot of the
   current Anime profile + CF scores lives in `files/baseline/` (documentation; not applied). The
   live CF definitions stay in Sonarr's DB (Kopia-backed).
 

@@ -253,9 +253,34 @@
     }
   ],
   "minFormatScore": 0,
-  "cutoffFormatScore": 0,
+  "cutoffFormatScore": 400,
   "minUpgradeFormatScore": 1,
   "formatItems": [
+    {
+      "format": 91,
+      "name": "Fake/Mislabeled Remux Groups",
+      "score": -10000
+    },
+    {
+      "format": 92,
+      "name": "Trusted Anime Groups",
+      "score": 200
+    },
+    {
+      "format": 94,
+      "name": "Anime English-Sub Groups",
+      "score": 300
+    },
+    {
+      "format": 95,
+      "name": "Anime Multi-Sub / Dual-Audio (title)",
+      "score": 100
+    },
+    {
+      "format": 93,
+      "name": "DSCP",
+      "score": 0
+    },
     {
       "format": 90,
       "name": "x265 (HD)",
