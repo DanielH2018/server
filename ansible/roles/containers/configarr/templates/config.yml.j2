@@ -49,6 +49,37 @@ customFormatDefinitions:
         fields:
           value: "^(LostYears)$"
 
+  # Prefer anime releases that ship English softsubs. Group reputation is the ONLY pre-grab
+  # English-subtitle signal Sonarr has — it scores the release TITLE, never the file — so these
+  # groups are the ones known to mux the streaming-service English subs (embedded ASS) into the
+  # release. POSITIVE-ONLY on purpose: the Anime profile's minFormatScore=0 means a NEGATIVE
+  # score would drop a subs-less release below the floor and REJECT it, which would break the
+  # "grab a raw release when it's the only option, then let Bazarr/Whisper fill the gap" fallback.
+  # Tune the alternation from THIS library's grab history (same discipline as the trusted list).
+  - trash_id: local-anime-english-sub-groups
+    name: "Anime English-Sub Groups"
+    includeCustomFormatWhenRenaming: false
+    specifications:
+      - name: English-subbing anime groups
+        implementation: ReleaseGroupSpecification
+        negate: false
+        required: false
+        fields:
+          value: "^(SubsPlease|Erai-raws|ASW|EMBER|ToonsHub)$"
+
+  # Title-level English-subtitle signal for subbed releases from groups not in the list above:
+  # multi-sub / dual-audio tags in the release name strongly correlate with an English track.
+  - trash_id: local-anime-multisub-tags
+    name: "Anime Multi-Sub / Dual-Audio (title)"
+    includeCustomFormatWhenRenaming: false
+    specifications:
+      - name: Multi-Sub or Dual-Audio in title
+        implementation: ReleaseTitleSpecification
+        negate: false
+        required: false
+        fields:
+          value: "\\b(Multi[-. ]?Subs?|Multiple[-. ]Subtitle|Dual[-. ]?Audio)\\b"
+
 sonarr:
   series:
     base_url: http://sonarr:8989
@@ -74,6 +105,18 @@ sonarr:
         assign_scores_to:
           - name: Anime
             score: 200
+      # Strong nudge toward English-softsub groups (still below the -10000 fake-remux reject).
+      - trash_ids:
+          - local-anime-english-sub-groups
+        assign_scores_to:
+          - name: Anime
+            score: 300
+      # Milder nudge for title-tagged multi-sub / dual-audio releases.
+      - trash_ids:
+          - local-anime-multisub-tags
+        assign_scores_to:
+          - name: Anime
+            score: 100
 
 radarr:
   movies:

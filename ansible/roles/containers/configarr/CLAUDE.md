@@ -35,15 +35,20 @@ didn't create.
   (`radarr-quality-profile-hd-bluray-web` / `radarr-custom-formats-hd-bluray-web`).
 - **Sonarr `Anime` profile** — the operator's own scheme: **52 scored bespoke
   `Anime Profile N_N_N` custom formats**, plus TRaSH-style CFs (WEB tiers, streaming tags,
-  `Bad Dual Groups`, …). Configarr manages **only** two local CFs and their scores here:
+  `Bad Dual Groups`, …). Configarr manages **only** these four local CFs and their scores here:
 
   | Local CF | Match | Score in Anime | Effect |
   |---|---|---|---|
   | `Fake/Mislabeled Remux Groups` | release group `^(NTRX)$` | **-10000** | rejected (profile `minFormatScore=0`) |
   | `Trusted Anime Groups` | `^(TTGA)$`, `^(LostYears)$` | **+200** | preferred on upgrade |
+  | `Anime English-Sub Groups` | `^(SubsPlease\|Erai-raws\|ASW\|EMBER\|ToonsHub)$` | **+300** | prefer releases that ship English softsubs |
+  | `Anime Multi-Sub / Dual-Audio (title)` | release title `Multi-Sub`/`Dual-Audio` | **+100** | milder English-sub preference by title tag |
 
-  `delete_unmanaged_custom_formats` OFF means Configarr never deletes/alters the 52 bespoke CFs
-  or their scores — it only reconciles the two local CFs above. A full read-only snapshot of the
+  The two English-sub CFs are **positive-only** by design: with `minFormatScore=0` a negative
+  score would reject a subs-less release outright, breaking the intended "grab raw when it's the
+  only option, then let Bazarr/Whisper add subs" fallback. `delete_unmanaged_custom_formats` OFF
+  means Configarr never deletes/alters the 52 bespoke CFs or their scores — it only reconciles the
+  four local CFs above. A full read-only snapshot of the
   current Anime profile + CF scores lives in `files/baseline/` (documentation; not applied). The
   live CF definitions stay in Sonarr's DB (Kopia-backed).
 
