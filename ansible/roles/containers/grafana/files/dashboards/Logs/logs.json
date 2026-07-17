@@ -2,7 +2,6 @@
   "annotations": {
     "list": [
       {
-        "$$hashKey": "object:75",
         "builtIn": 1,
         "datasource": {
           "uid": "-- Grafana --"
@@ -15,25 +14,13 @@
       }
     ]
   },
-  "description": "Log Viewer Dashboard for Loki",
+  "description": "Loki log viewer — filter by container or by job/system, with a free-text match.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
   "links": [
     {
-      "$$hashKey": "object:59",
-      "icon": "bolt",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": true,
-      "title": "View In Explore",
-      "type": "link",
-      "url": "/explore?orgId=1&left=[\"now-1h\",\"now\",\"Loki\",{\"expr\":\"{job=\\\"$app\\\"}\"},{\"ui\":[true,true,true,\"none\"]}]"
-    },
-    {
-      "$$hashKey": "object:61",
       "icon": "external link",
       "tags": [],
       "targetBlank": true,
@@ -43,6 +30,19 @@
     }
   ],
   "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 20,
+      "panels": [],
+      "title": "By container",
+      "type": "row"
+    },
     {
       "datasource": {
         "type": "loki",
@@ -110,7 +110,7 @@
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 1
       },
       "id": 6,
       "options": {
@@ -141,6 +141,7 @@
           "refId": "A"
         }
       ],
+      "title": "Log volume",
       "type": "timeseries"
     },
     {
@@ -149,13 +150,12 @@
         "uid": "bf4q19tuivta8e"
       },
       "gridPos": {
-        "h": 25,
+        "h": 11,
         "w": 24,
         "x": 0,
-        "y": 3
+        "y": 4
       },
       "id": 2,
-      "maxDataPoints": "",
       "options": {
         "dedupStrategy": "none",
         "enableInfiniteScrolling": false,
@@ -183,13 +183,174 @@
         }
       ],
       "transparent": true,
+      "title": "Log stream",
+      "type": "logs"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 21,
+      "panels": [],
+      "title": "By job (system)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "hidden",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum(count_over_time({job=\"$app\"} |= \"$search\" [$__interval]))",
+          "legendFormat": "",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Log volume",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "id": 23,
+      "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "showControls": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{job=\"$app\"} |= \"$search\"",
+          "hide": false,
+          "legendFormat": "",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "transparent": true,
+      "title": "Log stream",
       "type": "logs"
     }
   ],
   "preload": false,
   "refresh": "",
   "schemaVersion": 42,
-  "tags": [],
+  "tags": [
+    "homelab",
+    "logs",
+    "loki"
+  ],
   "templating": {
     "list": [
       {
@@ -204,7 +365,7 @@
         },
         "definition": "",
         "includeAll": false,
-        "label": "App",
+        "label": "Container",
         "name": "container",
         "options": [
           {
@@ -219,6 +380,32 @@
           "stream": "",
           "type": 1
         },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "syslog",
+          "value": "syslog"
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "bf4q19tuivta8e"
+        },
+        "definition": "label_values(job)",
+        "includeAll": false,
+        "label": "Job",
+        "name": "app",
+        "options": [
+          {
+            "selected": true,
+            "text": "syslog",
+            "value": "syslog"
+          }
+        ],
+        "query": "label_values(job)",
         "refresh": 1,
         "regex": "",
         "type": "query"
@@ -260,7 +447,7 @@
     ]
   },
   "timezone": "",
-  "title": "Docker App Logs",
+  "title": "Logs",
   "uid": "sadlil-loki-apps-dashboard",
   "version": 1,
   "weekStart": ""

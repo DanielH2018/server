@@ -1,7 +1,7 @@
 {
   "uid": "ups-power-battery",
   "title": "UPS — Power & Battery",
-  "tags": ["ups", "power"],
+  "tags": ["homelab", "power", "ups"],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,

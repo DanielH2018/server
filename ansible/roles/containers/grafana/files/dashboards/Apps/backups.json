@@ -237,7 +237,8 @@
   "refresh": "5m",
   "schemaVersion": 42,
   "tags": [
-    "backups",
+    "homelab",
+    "backup",
     "kopia",
     "b2"
   ],

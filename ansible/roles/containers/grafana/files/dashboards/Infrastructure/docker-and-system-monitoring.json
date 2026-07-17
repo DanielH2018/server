@@ -2463,7 +2463,7 @@
   "preload": false,
   "refresh": "5m",
   "schemaVersion": 42,
-  "tags": [],
+  "tags": ["homelab", "docker", "host"],
   "templating": {
     "list": [
       {

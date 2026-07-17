@@ -2,7 +2,7 @@
   "uid": "homelab-loki-internals",
   "title": "Loki — Internals",
   "description": "Loki's own /metrics (scraped into Prometheus, job=loki): ingestion rate, request rate/latency/errors and chunk flushes. The trend history the monitor-bridge loki_ingestion check + /ready probe don't retain.",
-  "tags": ["loki", "homelab"],
+  "tags": ["homelab", "logs", "loki"],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,

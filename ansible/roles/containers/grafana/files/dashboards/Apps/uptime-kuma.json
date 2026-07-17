@@ -2,7 +2,7 @@
   "uid": "homelab-uptime-kuma",
   "title": "Uptime-Kuma — Monitors",
   "description": "Per-monitor up/down, response times and TLS cert-days from Uptime-Kuma's /metrics (scraped into Prometheus). Trend history the point-in-time Kuma push monitors don't retain.",
-  "tags": ["uptime-kuma", "homelab"],
+  "tags": ["homelab", "monitoring", "uptime-kuma"],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,

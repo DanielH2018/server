@@ -31,14 +31,20 @@ import re
 import subprocess
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 # Datasource uids we provision (adopted from the pre-existing hand-made datasources).
 UID_BY_PLUGIN = {
     "prometheus": ("EGdsQqhVk", "Prometheus"),
     "loki": ("bf4q19tuivta8e", "Loki"),
 }
-DASHBOARDS = {"node-exporter-full": 1860, "cadvisor": 14282, "traefik": 17346}
-OUTDIR = "ansible/roles/containers/grafana/files/dashboards"
+DASHBOARDS = {"node-exporter-full": 1860, "cadvisor": 14282}
+OUTDIR = Path("ansible/roles/containers/grafana/files/dashboards")
+
+# Grafana folder (subdir) each community board is provisioned into; default is the General
+# root. Keeps a re-fetch writing to the same folder the boards live in, so it doesn't
+# recreate a duplicate at the root (foldersFromFilesStructure derives the folder from path).
+SUBDIR = {"node-exporter-full": "Infrastructure", "cadvisor": "Infrastructure"}
 
 # Panels removed because the underlying metric has no data on this host: no NIC
 # link-speed / battery / fan sensors, and the systemd collector isn't enabled
@@ -156,8 +162,9 @@ def adapt(name, d):
 def main():
     for name, gnet_id in DASHBOARDS.items():
         s, resolved = adapt(name, fetch(gnet_id))
-        with open("%s/%s.json" % (OUTDIR, name), "w") as fh:
-            fh.write(s + "\n")
+        dest = OUTDIR / SUBDIR.get(name, "") / ("%s.json" % name)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(s + "\n")
         print("%-20s defaults=%s" % (name, resolved or "{includeAll->All}"))
 
 

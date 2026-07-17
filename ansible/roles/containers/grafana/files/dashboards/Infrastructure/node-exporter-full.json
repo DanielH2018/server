@@ -14564,7 +14564,10 @@
   "refresh": "1m",
   "schemaVersion": 41,
   "tags": [
-    "linux"
+    "homelab",
+    "host",
+    "node-exporter",
+    "community"
   ],
   "templating": {
     "list": [

@@ -786,7 +786,7 @@
   ],
   "refresh": "",
   "schemaVersion": 42,
-  "tags": [],
+  "tags": ["homelab", "security", "crowdsec"],
   "templating": {
     "list": [
       {

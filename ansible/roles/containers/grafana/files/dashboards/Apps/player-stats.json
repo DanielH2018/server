@@ -1,7 +1,7 @@
 {
   "uid": "terraria-player-stats",
   "title": "Terraria — Player Stats",
-  "tags": ["terraria"],
+  "tags": ["homelab", "terraria", "game"],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,

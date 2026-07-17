@@ -1,7 +1,7 @@
 {
   "uid": "home-assistant-overview",
   "title": "Home Assistant — Overview",
-  "tags": ["home-assistant"],
+  "tags": ["homelab", "home-assistant"],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
