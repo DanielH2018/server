@@ -198,7 +198,8 @@ services:
       - KUMA_PUSH_FAKE_REMUX={{ monitor_bridge_fake_remux_push_token }}
       # Daily configarr guide-sync: the configarr role's configarr_sync.py host cron runs the
       # one-shot sync and writes state.json — down on a failed sync (nonzero exit or error output)
-      # or >26h staleness (a missed daily run). The monitoring recyclarr never had.
+      # or >26h staleness (a missed daily run) — a direct sync-result check (exit code + output),
+      # replacing the prior Loki-log-scrape sync monitor.
       - CONFIGARR_STATE=/configarr/state.json
       - CONFIGARR_MAX_AGE_H=26
       - KUMA_PUSH_CONFIGARR={{ monitor_bridge_configarr_push_token }}
@@ -299,7 +300,7 @@ services:
       - LOKI_FILETAIL_WINDOW=3h
       - KUMA_PUSH_LOKI={{ monitor_bridge_loki_push_token }}
       # Loki reachability GATE (peer of the Prometheus gate): probed once per cycle before the
-      # Loki-querying checks (Loki Ingestion, Recyclarr, Janitorr). When Loki is unreachable they're
+      # Loki-querying checks (Loki Ingestion, Janitorr). When Loki is unreachable they're
       # suppressed (pushed `up` w/ a skip msg) and only THIS monitor pages — one outage, one alert.
       - KUMA_PUSH_LOKI_REACHABLE={{ monitor_bridge_loki_reachable_push_token }}
       # Promtail dropped-entries watchdog: Prometheus already scrapes promtail:9080, exposing the
@@ -342,14 +343,6 @@ services:
       # credential, which still pages via the working Discord channel. Reuses the acme `email` var.
       - SMTP_USER={{ email }}
       - SMTP_PASSWORD={{ smtp_notify_app_password }}
-      # Recyclarr sync health via Loki: recyclarr runs `recyclarr sync` under supercronic (@daily);
-      # the container healthcheck only proves the scheduler is alive, so an ERRORING sync (the silent
-      # 2026-06-10 v8-major breakage) shows up nowhere but the logs. /cron.sh ends with the sync so
-      # its exit code propagates -> supercronic logs `job succeeded`/`job failed`; we count both over
-      # 26h (one @daily run + slack) and `down` on any failure or no successful run. Reached via loki:3100.
-      - RECYCLARR_LOKI_SELECTOR={container="recyclarr"}
-      - RECYCLARR_WINDOW=26h
-      - KUMA_PUSH_RECYCLARR={{ monitor_bridge_recyclarr_push_token }}
       # Janitorr scheduled-cleanup error watchdog: janitorr's healthcheck only proves the JVM is
       # alive, so an internal cleanup error (failed delete, bad config, a bug) logs ERROR and is
       # otherwise invisible — and janitorr DELETES REAL MEDIA. Gated on Prometheus container uptime
@@ -476,7 +469,7 @@ services:
          rejected + promtail dropped) that the total-silence Loki Log Ingestion check can't see. Prom-dependent. -#}
       {{ kuma('monitor-bridge-promtail-dropped', monitor_type='push', name='Promtail Dropped Entries', interval=600, max_retries=0, push_token=monitor_bridge_promtail_dropped_push_token) }}
       {# Loki reachability — the root-cause monitor that gates the Loki-querying checks: when it's
-         down they're suppressed and only this one pages (no Loki-Ingestion/Recyclarr/Janitorr storm). -#}
+         down they're suppressed and only this one pages (no Loki-Ingestion/Janitorr storm). -#}
       {{ kuma('monitor-bridge-loki-reachable', monitor_type='push', name='Loki Reachable', interval=600, max_retries=0, push_token=monitor_bridge_loki_reachable_push_token) }}
       {# Discord delivery: check_discord GET-verifies Kuma's notification webhook is still valid —
          the alert chain's delivery hop that no other monitor (incl. UptimeRobot) exercises. -#}
@@ -484,10 +477,6 @@ services:
          a dead/rotated Discord webhook flips THIS monitor down, and it can't self-report via the
          dead webhook, so it also pages by email. The `email` notification is defined on uptime-kuma. -#}
       {{ kuma('monitor-bridge-discord', monitor_type='push', name='Discord Delivery', interval=600, max_retries=0, push_token=monitor_bridge_discord_push_token, extra_notifications=['email']) }}
-      {# Recyclarr sync health: check_recyclarr counts supercronic `job succeeded`/`job failed`
-         lines in Loki over 26h — catches an erroring nightly sync the supercronic-only
-         healthcheck stays green through (the silent 2026-06-10 v8 breakage class). -#}
-      {{ kuma('monitor-bridge-recyclarr', monitor_type='push', name='Recyclarr Sync', interval=600, max_retries=0, push_token=monitor_bridge_recyclarr_push_token) }}
       {# Janitorr scheduled-cleanup error watchdog: check_janitorr counts scheduled-task ERROR lines
          in Loki over the post-startup window (uptime-gated to skip the documented boot race) —
          catches an internal cleanup error the JVM-only healthcheck stays green through. -#}

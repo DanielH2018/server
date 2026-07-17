@@ -194,10 +194,6 @@ containers_list:
     use_authelia: true
     networks:
       - media
-  - name: recyclarr
-    use_authelia: false
-    networks:
-      - media
   - name: configarr
     use_authelia: false
     networks:

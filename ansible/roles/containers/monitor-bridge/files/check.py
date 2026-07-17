@@ -470,15 +470,6 @@ SMTP_USER = _env("SMTP_USER", "")
 SMTP_PASSWORD = _env("SMTP_PASSWORD", "")
 EMAIL_PROBE_INTERVAL_S = float(_env("EMAIL_PROBE_INTERVAL_S", "21600"))  # 6h
 
-# Recyclarr sync health: recyclarr runs `recyclarr sync` via supercronic on an @daily schedule;
-# the container healthcheck only proves supercronic (the scheduler) is alive, so a sync that
-# ERRORS shows up nowhere but the logs (the silent 2026-06-10 v8-major breakage class). /cron.sh
-# ends with `recyclarr sync`, so its exit code is recyclarr's and supercronic logs `job succeeded`
-# (exit 0) / `job failed` (non-zero). We count both in Loki over a window covering one daily run
-# + slack: any `job failed` OR zero `job succeeded` -> down. Reuses the existing Loki query path.
-RECYCLARR_LOKI_SELECTOR = _env("RECYCLARR_LOKI_SELECTOR", '{container="recyclarr"}')
-RECYCLARR_WINDOW = _env("RECYCLARR_WINDOW", "26h")
-
 # Janitorr scheduled-cleanup error watchdog: janitorr's healthcheck only proves the JVM is alive
 # (`grep java /proc/1/comm`), so a scheduled cleanup that throws — a failed delete, a bad config, an
 # internal bug — logs ERROR and is otherwise invisible, and janitorr DELETES REAL MEDIA. The one
@@ -1819,8 +1810,9 @@ def configarr(state, age_s, max_age_s):
     """Pure: did the last configarr guide-sync succeed, and recently? (ok, msg).
 
     Same state-file idiom as disk_prune/fake_remux. The host cron (configarr role's configarr_sync.py)
-    sets ok=false when the sync exited nonzero or logged an error-level line — the failure recyclarr's
-    process-only healthcheck could not see. A clean sync within max_age is ok=true.
+    sets ok=false when the sync exited nonzero or logged an error-level line — the failure a
+    process-only container healthcheck can't see (configarr captures the sync's exit code + output
+    directly). A clean sync within max_age is ok=true.
     """
     if not state.get("ok"):
         return False, "configarr sync: %s" % state.get("msg", "?")
@@ -2390,45 +2382,6 @@ def check_discord():
     return ok, msg
 
 
-def recyclarr_sync_ok(failed_count, succeeded_count, window):
-    """Decide recyclarr sync health from supercronic's structured job lines over `window`.
-
-    Counts of `job failed` / `job succeeded` log lines (None = no matching Loki series -> 0):
-      - any `job failed`  -> a sync exited non-zero (the silent v8-breakage class).
-      - zero `job succeeded` -> no successful run in the window: the scheduler stalled or every
-        run is failing (the container healthcheck only proves supercronic itself is alive).
-    """
-    failed = int(failed_count or 0)
-    succeeded = int(succeeded_count or 0)
-    if failed:
-        return (
-            False,
-            "recyclarr sync failed %d time(s) in %s (see `docker logs recyclarr`)"
-            % (
-                failed,
-                window,
-            ),
-        )
-    if succeeded == 0:
-        return (
-            False,
-            "no successful recyclarr sync in %s — scheduler stalled or sync failing"
-            % window,
-        )
-    return True, "recyclarr sync ok (%d succeeded in %s)" % (succeeded, window)
-
-
-def check_recyclarr():
-    """Loki-based recyclarr sync watchdog (the healthcheck only watches supercronic, not sync)."""
-    failed = loki_count(
-        "%s |= `job failed`" % RECYCLARR_LOKI_SELECTOR, RECYCLARR_WINDOW
-    )
-    succeeded = loki_count(
-        "%s |= `job succeeded`" % RECYCLARR_LOKI_SELECTOR, RECYCLARR_WINDOW
-    )
-    return recyclarr_sync_ok(failed, succeeded, RECYCLARR_WINDOW)
-
-
 def janitorr_errors_ok(count, uptime_s, window_s, grace_s):
     """Pure: decide janitorr scheduled-task health from the post-startup error count. (ok, msg).
 
@@ -2526,7 +2479,6 @@ CHECKS = [
         check_promtail_dropped,
     ),
     ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
-    ("recyclarr", _env("KUMA_PUSH_RECYCLARR", ""), check_recyclarr),
     ("janitorr", _env("KUMA_PUSH_JANITORR", ""), check_janitorr),
 ]
 
@@ -2567,13 +2519,13 @@ EXPORTER_DEPENDENT = {
 }
 
 # Loki-reachability gate — the peer of the Prometheus gate for the Loki-querying checks. A single
-# Loki outage makes loki_count raise in ALL of them at once (Loki Log Ingestion + Recyclarr Sync +
-# Janitorr Errors) -> a 3-monitor storm for one root cause. run_once probes Loki first
+# Loki outage makes loki_count raise in ALL of them at once (Loki Log Ingestion + Janitorr Errors)
+# -> a 2-monitor storm for one root cause. run_once probes Loki first
 # (check_loki_reachable -> its own "Loki Reachable" monitor) and, when it's unreachable, SUPPRESSES
 # these (pushes `up` with a skip msg so their push heartbeats stay alive) so only Loki Reachable
 # pages. Loki being UP but promtail not shipping is a different signal Loki Log Ingestion still
 # surfaces (it evaluates whenever Loki is reachable). Guarded by a test against CHECKS.
-LOKI_DEPENDENT = frozenset({"loki_ingestion", "recyclarr", "janitorr"})
+LOKI_DEPENDENT = frozenset({"loki_ingestion", "janitorr"})
 
 # Reach-out checks that poll a live app dependency (kopia/n8n/sonarr/radarr/prowlarr/scrutiny/the Pi
 # glances) with NO reachability gate above them and NO per-check hysteresis of their own — unlike
