@@ -257,15 +257,52 @@ def test_advance_stall_holds():
     assert new["13"]["state"] == "held"
 
 
-def test_advance_is_idempotent():
+def test_advance_idempotent_on_own_output_no_double_action():
     led = {
         "13": _rec(13, "grabbed", chosen={"downloadId": "D", "quality": "WEBDL-1080p"})
     }
-    q, f, p = (
+    q = {"D": {"sizeleft": 0}}
+    p = {"D": {"quality": "WEBDL-1080p", "encoder": "x264", "keyframes": []}}
+    led2, acts1 = rl.advance(led, q, {"13": 2213}, p, POLICY, now=100)
+    assert [a["type"] for a in acts1] == ["delete_file", "import"]
+    led3, acts2 = rl.advance(
+        led2, {}, {"13": 9999}, {}, POLICY, now=200
+    )  # new file imported
+    assert acts2 == []
+    assert led3["13"]["state"] == "replaced"
+
+
+def test_advance_verifying_times_out_to_held_when_no_probe():
+    led = {
+        "13": _rec(
+            13,
+            "verifying",
+            lastAction=0,
+            chosen={"downloadId": "D", "quality": "WEBDL-1080p"},
+        )
+    }
+    pol = dict(POLICY, download_stall_hours=1)
+    new, _ = rl.advance(led, {"D": {"sizeleft": 0}}, {"13": 2213}, {}, pol, now=3601)
+    assert new["13"]["state"] == "held"
+
+
+def test_advance_verifying_fake_at_attempt_cap_holds():
+    led = {
+        "13": _rec(
+            13,
+            "verifying",
+            attempts=2,
+            chosen={"downloadId": "D", "quality": "Bluray-1080p Remux"},
+        )
+    }
+    pol = dict(POLICY, max_attempts=3)
+    new, acts = rl.advance(
+        led,
         {"D": {"sizeleft": 0}},
         {"13": 2213},
-        {"D": {"quality": "WEBDL-1080p", "encoder": "x264", "keyframes": []}},
+        {"D": {"quality": "Bluray-1080p Remux", "encoder": "x265", "keyframes": []}},
+        pol,
+        now=100,
     )
-    a1 = rl.advance(led, q, f, p, POLICY, now=100)[1]
-    a2 = rl.advance(led, q, f, p, POLICY, now=100)[1]
-    assert a1 == a2
+    assert new["13"]["state"] == "held"
+    assert [a["type"] for a in acts] == ["blocklist"]

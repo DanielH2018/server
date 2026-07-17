@@ -122,6 +122,44 @@ def _set(ledger, ep, **changes):
     return {**ledger, str(ep): rec}
 
 
+def _apply_verdict(out, ep, rec, dlid, probe, policy, now, actions):
+    """Shared verify-and-transition for a completed download (grabbed/verifying). Authentic ->
+    delete the fake + import (-> importing). Otherwise blocklist and retry (-> detected, clearing
+    chosen), or hold at the attempt cap (keeping chosen for diagnostics)."""
+    if is_authentic(probe, policy):
+        actions.append(
+            {
+                "type": "delete_file",
+                "episodeId": rec["episodeId"],
+                "fileId": rec["fakeFileId"],
+            }
+        )
+        actions.append({"type": "import", "episodeId": rec["episodeId"]})
+        return _set(out, ep, state="importing", lastAction=now)
+    attempts = rec.get("attempts", 0) + 1
+    actions.append(
+        {"type": "blocklist", "episodeId": rec["episodeId"], "downloadId": dlid}
+    )
+    if attempts >= int(policy.get("max_attempts", 3)):
+        return _set(
+            out,
+            ep,
+            state="held",
+            attempts=attempts,
+            reason="replacement also fake",
+            lastAction=now,
+        )
+    return _set(
+        out,
+        ep,
+        state="detected",
+        attempts=attempts,
+        chosen=None,
+        reason="replacement also fake",
+        lastAction=now,
+    )
+
+
 def advance(ledger, queue_by_dlid, files_by_ep, probes, policy, now):
     """Advance grabbed→verifying→importing→replaced from observed reality. Pure: the shell has
     already grabbed (recording chosen.downloadId), ffprobed completed downloads (into `probes`), and
@@ -170,86 +208,29 @@ def advance(ledger, queue_by_dlid, files_by_ep, probes, policy, now):
             if probe is None:
                 out = _set(out, ep, state="verifying", lastAction=now)
                 continue
-            if is_authentic(probe, policy):
-                actions.append(
-                    {
-                        "type": "delete_file",
-                        "episodeId": rec["episodeId"],
-                        "fileId": rec["fakeFileId"],
-                    }
-                )
-                actions.append({"type": "import", "episodeId": rec["episodeId"]})
-                out = _set(out, ep, state="importing", lastAction=now)
-            else:
-                attempts = rec.get("attempts", 0) + 1
-                actions.append(
-                    {
-                        "type": "blocklist",
-                        "episodeId": rec["episodeId"],
-                        "downloadId": dlid,
-                    }
-                )
-                if attempts >= max_attempts:
-                    out = _set(
-                        out,
-                        ep,
-                        state="held",
-                        attempts=attempts,
-                        reason="replacement also fake",
-                        lastAction=now,
-                    )
-                else:
-                    out = _set(
-                        out,
-                        ep,
-                        state="detected",
-                        attempts=attempts,
-                        chosen=None,
-                        reason="replacement also fake",
-                        lastAction=now,
-                    )
+            out = _apply_verdict(out, ep, rec, dlid, probe, policy, now, actions)
         elif state == "verifying":
             # re-entrant: same logic as the grabbed→verify branch once a probe arrives
             dlid = (rec.get("chosen") or {}).get("downloadId")
             probe = probes.get(dlid)
             if probe is None:
+                if now - rec.get("lastAction", now) > stall_s:
+                    out = _set(
+                        out,
+                        ep,
+                        state="held",
+                        reason="probe unavailable (jellyfin down?)",
+                        lastAction=now,
+                    )
                 continue
-            if is_authentic(probe, policy):
-                actions.append(
-                    {
-                        "type": "delete_file",
-                        "episodeId": rec["episodeId"],
-                        "fileId": rec["fakeFileId"],
-                    }
-                )
-                actions.append({"type": "import", "episodeId": rec["episodeId"]})
-                out = _set(out, ep, state="importing", lastAction=now)
-            else:
-                attempts = rec.get("attempts", 0) + 1
-                actions.append(
-                    {
-                        "type": "blocklist",
-                        "episodeId": rec["episodeId"],
-                        "downloadId": dlid,
-                    }
-                )
-                nxt = "held" if attempts >= max_attempts else "detected"
-                out = _set(
-                    out,
-                    ep,
-                    state=nxt,
-                    attempts=attempts,
-                    chosen=None,
-                    reason="replacement also fake",
-                    lastAction=now,
-                )
+            out = _apply_verdict(out, ep, rec, dlid, probe, policy, now, actions)
         elif state == "importing":
             cur = files_by_ep.get(str(rec["episodeId"]))
             if cur is not None and cur != rec["fakeFileId"]:
                 out = _set(out, ep, state="replaced", lastAction=now)
-            elif (
-                now - rec.get("lastAction", now) > 3600
-            ):  # import didn't land within an hour
+            elif now - rec.get("lastAction", now) > float(
+                policy.get("import_timeout_s", 3600)
+            ):  # import didn't land within the timeout
                 out = _set(
                     out,
                     ep,
