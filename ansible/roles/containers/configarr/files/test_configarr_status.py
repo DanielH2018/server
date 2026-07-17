@@ -44,3 +44,22 @@ def test_word_errors_at_line_start_is_not_an_error_level():
 def test_empty_output_summarizes_to_placeholder():
     assert summarize("") == "(no output)"
     assert summarize("  \n \n") == "(no output)"
+
+
+def test_summarize_skips_docker_compose_lifecycle_noise():
+    # `docker compose run` appends "Container … Created" (stderr) last; the message should reflect
+    # configarr's real final line, not docker's lifecycle noise.
+    out = (
+        "Loaded config\n"
+        "Execution Summary (success/failure/skipped) instances: SONARR: (1/0/0)\n"
+        "Container configarr-configarr-run-abc123 Created"
+    )
+    s = summarize(out)
+    assert "Execution Summary" in s
+    assert "Container configarr" not in s
+
+
+def test_summarize_all_noise_falls_back_to_last_line():
+    # if every line is docker lifecycle noise, don't return empty — fall back to the last line
+    out = "Container configarr-run-abc Creating\nContainer configarr-run-abc Created"
+    assert summarize(out).startswith("Container")

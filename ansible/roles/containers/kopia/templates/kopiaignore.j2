@@ -109,6 +109,9 @@ grafana/data/plugins/
 # Tdarr's internal DB backup zips — the live DB2/ is backed up directly, so these
 # are backups-of-a-backup. (DB2/ itself KEPT by operator choice 2026-06-12.)
 tdarr/server/Tdarr/Backups/
+# configarr's guide clones (TRaSH-guides + recyclarr config-templates), re-fetched every sync into
+# ./repos:/app/repos — regeneratable weight. Succeeds the retired recyclarr role's clone cache.
+configarr/repos/
 
 # ── Home Assistant ─────────────────────────────────────────────────────────────
 # HACS frontend bundles (51M) are re-downloaded by HACS on demand — pure regeneratable

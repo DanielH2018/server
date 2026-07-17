@@ -21,18 +21,28 @@ import re
 # token set against real configarr output in Task 9 if a clean run pages.
 _ERROR_LINE = re.compile(r"(?im)^[^\w]*(?:error|fatal)\b")
 
+# `docker compose run` appends its own container lifecycle lines ("Container <name> Created") to
+# stderr, which land last in the combined output. Skip them when picking the summary line so the
+# message reflects configarr's real final line (its Execution Summary, or its error), not docker noise.
+_COMPOSE_NOISE = re.compile(
+    r"^Container\s+\S+\s+(?:Creating|Created|Recreating|Recreated|Starting|Started|"
+    r"Stopping|Stopped|Removing|Removed|Running|Waiting|Healthy|Pulling|Pulled|Building|Built)$"
+)
+
 
 def has_error_line(output) -> bool:
     return bool(_ERROR_LINE.search(output or ""))
 
 
 def summarize(output, maxlen: int = 200) -> str:
-    """Last non-blank line of configarr's output, whitespace-collapsed + length-capped — the useful
-    tail for a Kuma/Discord one-liner. Empty output -> a fixed placeholder."""
+    """Last meaningful line of configarr's output, whitespace-collapsed + length-capped — the useful
+    tail for a Kuma/Discord one-liner. Skips docker-compose's own container lifecycle lines so the
+    summary is configarr's output, not "Container … Created". Empty output -> a fixed placeholder."""
     lines = [ln.strip() for ln in (output or "").splitlines() if ln.strip()]
     if not lines:
         return "(no output)"
-    tail = " ".join(lines[-1].split())
+    meaningful = [ln for ln in lines if not _COMPOSE_NOISE.match(ln)]
+    tail = " ".join((meaningful or lines)[-1].split())
     return tail[: maxlen - 3] + "..." if len(tail) > maxlen else tail
 
 
