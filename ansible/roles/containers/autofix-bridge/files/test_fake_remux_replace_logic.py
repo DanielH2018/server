@@ -383,7 +383,13 @@ class _AssertNoMutationSonarr:
 def test_shadow_mode_performs_zero_sonarr_mutations(tmp_path):
     ledger_path = tmp_path / "ledger.json"
     ledger_path.write_text(json.dumps({"13": _rec(13, "detected")}))
-    cfg = {"FAKE_REMUX_REPLACE_MODE": "shadow", "LEDGER_FILE": str(ledger_path)}
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps({"search_spacing_s": 0}))
+    cfg = {
+        "FAKE_REMUX_REPLACE_MODE": "shadow",
+        "LEDGER_FILE": str(ledger_path),
+        "FAKE_REMUX_POLICY": str(policy_path),
+    }
     sh.reconcile_once(cfg, sonarr=_AssertNoMutationSonarr())
     saved = json.loads(ledger_path.read_text())
     assert saved["13"]["state"] != "grabbed"  # never grabbed — shadow mutated nothing

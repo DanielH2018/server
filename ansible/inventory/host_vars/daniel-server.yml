@@ -23,6 +23,7 @@ autofix_fake_remux_policy:
   searches_per_tick: 2
   search_spacing_s: 20
   download_stall_hours: 12
+  import_timeout_s: 3600
   max_attempts: 3
   history_retention_days: 14
 containers_list:

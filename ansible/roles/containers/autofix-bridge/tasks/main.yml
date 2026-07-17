@@ -256,7 +256,7 @@
   # */20 cron writes it, so a fresh host / DR would false-DOWN for up to 20 min. Seed once now,
   # mirroring the scan-state seed above.
   ansible.builtin.copy:
-    content: '{"ts": 0, "ok": true, "msg": "never run"}'
+    content: '{"ts": {{ ansible_date_time.epoch }}, "ok": true, "msg": "never run"}'
     dest: /var/lib/autofix-fake-remux/replace_state.json
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"

@@ -317,6 +317,7 @@ def reconcile_once(cfg, sonarr=None):
         cands = sonarr.release_search(act["episodeId"])
         rel, reason = frl_replace.select_replacement(cands, policy)
         rec = ledger[str(act["episodeId"])]
+        time.sleep(int(policy.get("search_spacing_s", 20)))
         if rel is None:
             ledger[str(act["episodeId"])] = {**rec, "state": "held", "reason": reason}
             _outcome(cfg, "no-candidate", rec, reason)
@@ -338,7 +339,6 @@ def reconcile_once(cfg, sonarr=None):
                         "lastAction": int(time.time()),
                     }
                     break
-            time.sleep(int(policy.get("search_spacing_s", 20)))
 
     # 2) advance grabbed/verifying/importing (live only — the mutating half)
     if mode == "live":

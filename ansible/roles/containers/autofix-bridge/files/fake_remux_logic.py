@@ -182,57 +182,6 @@ def format_fake_line(verb, fake) -> str:
     )
 
 
-def plan_fake_remux_actions(fakes, dry_run: bool, max_per_scan: int):
-    """Pure blast-valve + dry-run planning. Returns the plan the I/O shell executes plus the
-    (ok, summary) the state file / Kuma monitor reports.
-
-    - no fakes -> ok, nothing to do.
-    - more than max_per_scan -> a whole-library match is a rule bug / systemic import setting, not N
-      independent bad grabs: act on NONE, page (`ok=False`) so a human looks.
-    - dry_run + fakes -> flag only (no mutations), page (`ok=False`) so the report-only phase actually
-      surfaces the files, self-clearing once they're handled.
-    - live + fakes -> delete each file (Sonarr then re-searches the series, the configarr NTRX block
-      steering the re-grab clean); a successful sweep is `ok=True` (handled, like the queue auto-block).
-    """
-    if not fakes:
-        return {
-            "hold": False,
-            "deletes": [],
-            "searches": [],
-            "lines": [],
-            "ok": True,
-            "summary": "library clean",
-        }
-    if len(fakes) > max_per_scan:
-        return {
-            "hold": True,
-            "deletes": [],
-            "searches": [],
-            "lines": [],
-            "ok": False,
-            "summary": "%d fake remuxes found — holding (max %d/scan), investigate"
-            % (len(fakes), max_per_scan),
-        }
-    if dry_run:
-        return {
-            "hold": False,
-            "deletes": [],
-            "searches": [],
-            "lines": [format_fake_line("WOULD delete+re-search", f) for f in fakes],
-            "ok": False,
-            "summary": "%d fake remux(es) flagged (report-only) — investigate"
-            % len(fakes),
-        }
-    return {
-        "hold": False,
-        "deletes": [f["fileId"] for f in fakes],
-        "searches": sorted({f["seriesId"] for f in fakes}),
-        "lines": [format_fake_line("Deleted+re-searched", f) for f in fakes],
-        "ok": True,
-        "summary": "deleted+re-searched %d fake remux(es)" % len(fakes),
-    }
-
-
 def episode_file_map(episodes):
     """Map episodeFileId -> episodeId for MONITORED episodes only. A fake on an unmonitored episode
     (e.g. one the operator has already watched and deliberately unmonitored) must not be seeded for

@@ -150,57 +150,6 @@ def test_select_fakes_keeps_reencodes_and_tags_evidence():
     assert fakes[0]["evidence"].startswith("encoder=")
 
 
-# --- plan_fake_remux_actions -------------------------------------------------
-def _fake(fid=1, series_id=9):
-    return {
-        "fileId": fid,
-        "seriesId": series_id,
-        "relativePath": "e%d.mkv" % fid,
-        "quality": "Bluray-1080p Remux",
-        "evidence": "GOP=10.4s",
-    }
-
-
-def test_plan_empty_is_ok_and_no_actions():
-    plan = frl.plan_fake_remux_actions([], dry_run=True, max_per_scan=5)
-    assert plan["ok"] is True
-    assert plan["deletes"] == [] and plan["searches"] == []
-    assert plan["summary"] == "library clean"
-
-
-def test_plan_dry_run_flags_but_never_mutates_and_pages():
-    plan = frl.plan_fake_remux_actions([_fake(11)], dry_run=True, max_per_scan=5)
-    assert plan["deletes"] == [] and plan["searches"] == []
-    assert plan["ok"] is False  # report-only surfaces the file
-    assert "report-only" in plan["summary"]
-    assert plan["lines"][0].startswith("WOULD delete+re-search")
-
-
-def test_plan_live_deletes_files_and_dedupes_series_searches():
-    fakes = [_fake(11, series_id=9), _fake(12, series_id=9), _fake(13, series_id=7)]
-    plan = frl.plan_fake_remux_actions(fakes, dry_run=False, max_per_scan=5)
-    assert plan["deletes"] == [11, 12, 13]
-    assert plan["searches"] == [7, 9]  # one search per series, sorted
-    assert plan["ok"] is True
-    assert plan["lines"][0].startswith("Deleted+re-searched")
-
-
-def test_plan_mass_match_holds_acts_on_none_and_pages():
-    fakes = [_fake(i, series_id=i) for i in range(6)]  # > max_per_scan
-    plan = frl.plan_fake_remux_actions(fakes, dry_run=False, max_per_scan=5)
-    assert plan["hold"] is True
-    assert plan["deletes"] == [] and plan["searches"] == []
-    assert plan["ok"] is False
-    assert "holding" in plan["summary"]
-
-
-def test_plan_exactly_at_cap_acts():
-    fakes = [_fake(i, series_id=i) for i in range(5)]  # == max_per_scan, not over
-    plan = frl.plan_fake_remux_actions(fakes, dry_run=False, max_per_scan=5)
-    assert plan["hold"] is False
-    assert len(plan["deletes"]) == 5
-
-
 def test_episode_file_map_only_monitored():
     eps = [
         {"id": 1, "episodeFileId": 100, "monitored": True},
