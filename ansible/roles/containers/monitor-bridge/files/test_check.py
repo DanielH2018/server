@@ -1421,6 +1421,27 @@ def test_disk_prune_stale():
     assert not ok and "ago" in msg
 
 
+# ── Fake-remux scan (daily host cron ffprobes Remux files; we alert on its {ts,ok,msg} state) ──
+def test_fake_remux_clean_is_ok():
+    ok, msg = check.fake_remux({"ok": True, "msg": "library clean"}, 3600, 26 * 3600)
+    assert ok and "ok" in msg
+
+
+def test_fake_remux_report_only_flag_pages():
+    # report-only run that flagged fakes writes ok=false so the operator sees them
+    ok, msg = check.fake_remux(
+        {"ok": False, "msg": "2 fake remux(es) flagged (report-only) — investigate"},
+        3600,
+        26 * 3600,
+    )
+    assert not ok and "report-only" in msg
+
+
+def test_fake_remux_stale_pages():
+    ok, msg = check.fake_remux({"ok": True, "msg": "x"}, 30 * 3600, 26 * 3600)
+    assert not ok and "ago" in msg
+
+
 # ── CrowdSec home-IP allowlist updater (every-5-min host cron writes state.json; we alert on it) ──
 
 

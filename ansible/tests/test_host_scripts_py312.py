@@ -30,6 +30,11 @@ HOST_RUN_SCRIPTS = [
     "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
     "ansible/roles/setup/renovate_notify/files/renovate_notify.py",
     "ansible/roles/setup/renovate_notify/files/notify_logic.py",
+    # autofix-bridge's fake-remux host cron + its pure core, run by a plain crontab `/usr/bin/python3`
+    # (not a systemd unit, so the ExecStart scan can't derive them). fake_remux_scan.py `from host_lib
+    # import`s the shared helper listed below. Keep all three 3.12-clean.
+    "ansible/roles/containers/autofix-bridge/files/fake_remux_scan.py",
+    "ansible/roles/containers/autofix-bridge/files/fake_remux_logic.py",
     # Cross-role shared lib: deployed INTO each script's /opt dir (a runtime sibling both `from
     # host_lib import`), so it loads under the same host /usr/bin/python3 — but its source lives in a
     # different role's files/, so the _first_party_imports sibling scan below can't derive it. Listed

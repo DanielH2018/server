@@ -23,22 +23,31 @@ sidecar per fix. See repo-root `CLAUDE.md`.
    class), and `CLIENT_ERROR_PATTERNS` — a download-client/VPN outage is EXCLUDED so a legit
    in-progress download isn't wrongly blocklisted (see [[qbittorrent-bind-wg0]]). Flip
    `DRY_RUN=true` + redeploy to return to report-only.
-   **Second module — fake-remux scan (`run_fake_remux_scan`, daily):** sweeps the Sonarr library
-   for files whose quality claims a **≤1080p Remux** but whose MediaInfo codec is **HEVC** — a
-   re-encode mislabeled as a remux (a real ≤1080p BD remux is AVC; 2160p HEVC remuxes are excluded;
-   unknown resolution fails safe). Unless `FAKEREMUX_DRY_RUN` — its **OWN** gate, **default `true`**
-   because it DELETEs library files — it deletes each fake + re-searches the series (the Anime
-   profile's NTRX block via the configarr role keeps the re-grab clean). `FAKEREMUX_MAX_PER_SCAN`
-   is its blast valve (a whole-library match → act on none + alert). Left report-only on purpose so
-   it flags the current mislabeled Mushoku S2 files without deleting them.
-2. **Host plane** — the disk-autoprune cron (`templates/autofix-disk-prune.sh.j2` →
-   `/usr/local/bin/`, hourly `minute:0`, runs as `sys_user` ∈ docker group, no root). Host work
-   (docker daemon) **can't** run in the locked-down container, so it lives beside it as a cron
-   reporting via a state file — like the fleet's other host crons. Rails: threshold-gated (prune
-   only when `/` used% ≥ `autofix_disk_threshold_pct`, default 80, below monitor-bridge's
-   `DISK_MAX_PCT=90` pager) → conservative `docker image/builder/container prune -f` (**never `-a`,
-   never volumes**; `container prune` carries `--filter until=24h` so a stopped container kept for
-   forensics survives a day) → jq state `{ts,ok,msg}` → `/var/lib/autofix-disk-prune/state.json`.
+2. **Host plane** — two daily/hourly crons doing work the locked-down container can't (docker
+   daemon, `docker exec`, ffprobe), each reporting via a `{ts,ok,msg}` state file monitor-bridge
+   reads. Both run as `sys_user` ∈ docker group (no root).
+   - **disk-autoprune** (`templates/autofix-disk-prune.sh.j2` → `/usr/local/bin/`, hourly
+     `minute:0`). Rails: threshold-gated (prune only when `/` used% ≥ `autofix_disk_threshold_pct`,
+     default 80, below monitor-bridge's `DISK_MAX_PCT=90` pager) → conservative `docker
+     image/builder/container prune -f` (**never `-a`, never volumes**; `container prune` carries
+     `--filter until=24h` so a stopped container kept for forensics survives a day) → jq state
+     `{ts,ok,msg}` → `/var/lib/autofix-disk-prune/state.json`.
+   - **fake-remux scan** (`files/fake_remux_scan.py` + pure `fake_remux_logic.py` →
+     `/opt/autofix-fake-remux/`, daily `04:45`, config in `/etc/autofix-fake-remux/config.env`
+     0600). ffprobe-backed detection of files whose quality claims a **Remux** but whose video
+     stream is a re-encode — **long GOP** (a real remux keyframes ~every 1-2 s; > `GOP_MAX_S`=5 =
+     a re-encode) **or a consumer re-encoder ENCODER tag** (`x264`/`x265`/`*_qsv`/`*_nvenc`/`Lavc`/
+     handbrake…, the cheap metadata-only tell). This **supersedes** the old codec heuristic that
+     lived in the sidecar (`autofix.py`, removed 2026-07-17): definitive + codec/resolution/size-
+     independent, so it catches an AVC-remux-that's-really-an-AVC-reencode and needs no 2160p
+     exclusion. It runs ffprobe via **`docker exec jellyfin`** — jellyfin mounts the media
+     **read-only** at `/data/media`, so Sonarr's absolute path resolves **unchanged** (no
+     translation) and a probe can't write; jellyfin being down just SKIPS files (fail-safe, never
+     flags). Unless `FAKE_REMUX_DRY_RUN` (its own gate, **default `true`** because it DELETEs
+     library files) it deletes each fake + re-searches the series (the Anime profile's NTRX block
+     via the configarr role steers the re-grab clean). `MAX_PER_SCAN`=5 blast valve (a whole-library
+     match → act on none + alert). Left report-only on purpose so it FLAGS the current mislabeled
+     Mushoku S2 files (15 held) without deleting them. Pure core is unit-tested (`test_fake_remux_logic.py`).
 
 ## Notable
 - **Two Kuma monitors, on purpose:**
@@ -70,11 +79,23 @@ sidecar per fix. See repo-root `CLAUDE.md`.
   fleet; disk was the one other genuinely-additive one. prowlarr indexers / b2 / recyclarr / targets
   were evaluated and REJECTED (self-heal via backoff, or autoheal/watchtower already cover
   restarts/images, or need a human). See [[autofix-bridge-auto-remediation]].
-- **Tunables (host_vars):** `autofix_disk_threshold_pct`, `autofix_disk_dry_run`.
+- **fake-remux deploy ordering / seed:** the state dir `/var/lib/autofix-fake-remux` is created
+  `sys_user`-owned + the state is **seeded on first deploy** (`command:` + `creates:`) for the same
+  reason as disk-prune — so monitor-bridge's **Fake Remux Scan** doesn't false-DOWN on a fresh host
+  before the first daily tick. Deploy `autofix-bridge` before `monitor-bridge` (it bind-mounts the
+  state dir `:ro`). The host cron imports the shared `host_lib.py` (copied from `roles/setup/common`)
+  and is registered in the 3.12-floor guard (`ansible/tests/test_host_scripts_py312.py`).
+- **Tunables (host_vars):** `autofix_disk_threshold_pct`, `autofix_disk_dry_run`;
+  `autofix_fake_remux_dry_run`, `autofix_fake_remux_gop_max_s`, `autofix_fake_remux_max_per_scan`.
 
 ## Editing & testing
 - Sidecar: `files/autofix.py` (bind-mounted `:ro`; a code edit needs a **recreate** — the role
   wires `common_config_changed` off the script's register so a script-only edit still recreates).
 - Disk-prune cron: `templates/autofix-disk-prune.sh.j2` · Compose: `templates/docker-compose.yml.j2`
-- Unit tests: `uv run pytest ansible/roles/containers/autofix-bridge` (`files/test_autofix.py`).
+- fake-remux host cron: `files/fake_remux_scan.py` (I/O shell) + `files/fake_remux_logic.py` (pure
+  core) · config `templates/fake-remux.config.env.j2`. Run it live report-only:
+  `SONARR_API_KEY=… ARR_DISCORD_WEBHOOK_URL= STATE_FILE=/tmp/x.json
+  PYTHONPATH=ansible/roles/setup/common/files /usr/bin/python3 files/fake_remux_scan.py`.
+- Unit tests: `uv run pytest ansible/roles/containers/autofix-bridge` (`files/test_autofix.py`,
+  `files/test_fake_remux_logic.py`).
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "autofix-bridge"`

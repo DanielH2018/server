@@ -116,3 +116,86 @@
     creates: /var/lib/autofix-disk-prune/state.json
   changed_when: false
   failed_when: false
+
+# --- fake-remux host scan (host plane) ---------------------------------------
+# ffprobe-backed detector for files whose quality claims a Remux but whose stream is a re-encode
+# (long GOP or a consumer re-encoder ENCODER tag). It lives on the host plane, not in the sidecar,
+# because it runs ffprobe via `docker exec jellyfin` — which the zero-privilege container can't do.
+# Reports like the other host crons: a {ts,ok,msg} state file -> monitor-bridge's "Fake Remux Scan".
+- name: Create fake-remux scan directories
+  tags: [config]
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /opt/autofix-fake-remux, mode: "0750" } # scripts
+    - { path: /etc/autofix-fake-remux, mode: "0750" } # config.env (0600 secret inside)
+    - { path: /var/lib/autofix-fake-remux, mode: "0755" } # state.json + monitor-bridge bind source
+  become: true
+
+- name: Install fake-remux scan scripts
+  tags: [config]
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/autofix-fake-remux/{{ item }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  loop:
+    - fake_remux_scan.py
+    - fake_remux_logic.py
+  become: true
+
+- name: Install the shared host_lib helper for the fake-remux scan
+  tags: [config]
+  # Source of truth in roles/setup/common/files; deployed beside the script so `from host_lib import`
+  # resolves the sibling copy (same pattern as gitops_deploy/renovate_notify). Kept 3.12-clean.
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../setup/common/files/host_lib.py"
+    dest: /opt/autofix-fake-remux/host_lib.py
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Write the fake-remux scan config (secret Sonarr key + webhook, host-only)
+  tags: [config]
+  ansible.builtin.template:
+    src: fake-remux.config.env.j2
+    dest: /etc/autofix-fake-remux/config.env
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  no_log: true
+
+- name: Schedule the daily fake-remux scan cron
+  tags: [cron]
+  # 04:45 — after the configarr sync (04:30) refreshes the Anime profile's NTRX block, so a live
+  # re-search grabs against the current rules. Runs as sys_user (in the docker group: docker exec).
+  ansible.builtin.cron:
+    name: "autofix fake-remux scan"
+    minute: "45"
+    hour: "4"
+    user: "{{ sys_user }}"
+    job: >-
+      /usr/bin/python3 /opt/autofix-fake-remux/fake_remux_scan.py
+      >/dev/null 2>&1 || logger -t autofix-fake-remux 'fake-remux scan failed'
+    state: present
+  become: true
+
+- name: Seed the fake-remux scan state on first deploy (idempotent)
+  tags: [cron]
+  # monitor-bridge reports "Fake Remux Scan" DOWN when the state file is MISSING. The daily cron
+  # writes it, so a fresh host / DR would false-DOWN until the first run; seed once now. `creates:`
+  # makes every reseed a no-op (the cron owns ongoing refresh) and failed_when:false keeps a run
+  # that can't reach Sonarr/jellyfin yet off the deploy path. Runs as the cron user (sys_user, in
+  # the docker group). Mirrors the disk-prune seed.
+  ansible.builtin.command:
+    cmd: /usr/bin/python3 /opt/autofix-fake-remux/fake_remux_scan.py
+    creates: /var/lib/autofix-fake-remux/state.json
+  changed_when: false
+  failed_when: false

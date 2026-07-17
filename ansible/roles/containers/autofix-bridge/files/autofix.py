@@ -9,10 +9,9 @@ caps the per-cycle blast radius, then — unless DRY_RUN — DELETEs the item wi
 grabs a clean replacement. Health -> its own Uptime Kuma push monitor; each action -> the *arr
 Discord webhook. Stdlib only (python:3.14-alpine); config is env-driven so this stays testable.
 
-A second, slower module (run_fake_remux_scan) scans the Sonarr library daily for "fake remuxes" —
-files whose quality claims a <=1080p Remux but whose stream is HEVC (a re-encode mislabeled as a
-remux). It has its OWN dry-run (FAKEREMUX_DRY_RUN, default true) because it DELETES library files +
-re-searches; the queue module's DRY_RUN does not gate it.
+Fake-remux detection moved OUT of this sidecar (2026-07-17) to the host-plane fake_remux_scan.py:
+it needs ffprobe, which this zero-privilege container (cap_drop ALL, no docker) can't run. See the
+role CLAUDE.md.
 
 Design: docs/superpowers/specs/2026-07-06-autofix-bridge-disk-autoprune-design.md (Part A)
 """
@@ -70,14 +69,6 @@ CLIENT_ERROR_PATTERNS = [
 
 HARD_BAD_STATUS = frozenset({"error"})
 HARD_BAD_STATE = frozenset({"importBlocked", "importFailed"})
-
-# --- fake-remux scan (second module) -----------------------------------------
-# Its OWN dry-run, independent of the queue check's DRY_RUN and defaulting to true: this module
-# DELETES imported library files, so it stays report-only until deliberately flipped live.
-FAKEREMUX_DRY_RUN = _dry_run_enabled(_env("FAKEREMUX_DRY_RUN", "true"))
-FAKEREMUX_SCAN_INTERVAL = int(_env("FAKEREMUX_SCAN_HOURS", "24")) * 3600
-FAKEREMUX_MAX_PER_SCAN = int(_env("FAKEREMUX_MAX_PER_SCAN", "5"))
-FAKE_REMUX_CODECS = frozenset({"h265", "hevc", "x265"})
 
 
 def sanitize(s, maxlen=120):
@@ -226,51 +217,6 @@ def format_action(dry_run, app_name, title, reason, streak, grace):
     )
 
 
-def resolution_height(resolution):
-    """Pixel height from a MediaInfo resolution like '1920x1080' -> 1080; None if unparsable."""
-    if not resolution or "x" not in resolution:
-        return None
-    try:
-        return int(resolution.rsplit("x", 1)[1])
-    except ValueError:
-        return None
-
-
-def is_fake_remux(quality_name, resolution, video_codec):
-    """A file whose quality claims a <=1080p Remux but whose stream is HEVC is a re-encode
-    mislabeled as a remux: a real 720p/1080p Blu-ray remux is the untouched AVC (h264) disc
-    stream, never HEVC. 2160p remuxes ARE legitimately HEVC, so the resolution gate excludes them,
-    and an unknown resolution fails safe (not flagged). A definitive codec/quality contradiction —
-    the NTRX 'BD Remux 1080p AVC' that actually shipped HEVC 10-bit (2026-07-16)."""
-    if "remux" not in (quality_name or "").lower():
-        return False
-    height = resolution_height(resolution)
-    if height is None or height > 1080:
-        return False
-    return (video_codec or "").strip().lower() in FAKE_REMUX_CODECS
-
-
-def fake_files(episodefiles, series_title):
-    """The fake-remux entries in one series' /api/v3/episodefile list, each flattened to the
-    fields the delete + re-search + report need."""
-    out = []
-    for ef in episodefiles:
-        mi = ef.get("mediaInfo") or {}
-        quality = ((ef.get("quality") or {}).get("quality") or {}).get("name")
-        if is_fake_remux(quality, mi.get("resolution"), mi.get("videoCodec")):
-            out.append(
-                {
-                    "fileId": ef.get("id"),
-                    "seriesId": ef.get("seriesId"),
-                    "seriesTitle": series_title,
-                    "path": ef.get("relativePath") or "?",
-                    "quality": quality,
-                    "codec": mi.get("videoCodec"),
-                }
-            )
-    return out
-
-
 # --- I/O ---------------------------------------------------------------------
 def log(*args):
     print("[%s]" % time.strftime("%Y-%m-%dT%H:%M:%S"), *args, flush=True)
@@ -398,78 +344,12 @@ def run_once(streaks):
     return True, "queue clean (%s)" % ", ".join(a[0] for a in configured)
 
 
-def scan_series_fakes(base, key):
-    """Every fake-remux episodefile across the Sonarr library. One /api/v3/episodefile call per
-    series (that endpoint requires a seriesId), so this is a daily-cadence scan, not per-cycle."""
-    series = _request(base + "/api/v3/series", headers={"X-Api-Key": key}) or []
-    fakes = []
-    for s in series:
-        efs = (
-            _request(
-                "%s/api/v3/episodefile?seriesId=%s" % (base, s.get("id")),
-                headers={"X-Api-Key": key},
-            )
-            or []
-        )
-        fakes.extend(fake_files(efs, s.get("title") or "?"))
-    return fakes
-
-
-def run_fake_remux_scan():
-    """Scan Sonarr's library for fake remuxes and, unless FAKEREMUX_DRY_RUN, DELETE each file +
-    re-search its series (the NTRX-style block in the Anime profile then keeps the re-grab from
-    re-fetching the same fake). Best-effort — main() catches a raise so a scan error can't kill the
-    queue loop. Returns a one-line summary."""
-    if not SONARR_API_KEY:
-        return "disabled (no Sonarr key)"
-    fakes = scan_series_fakes(SONARR_URL, SONARR_API_KEY)
-    if not fakes:
-        return "library clean"
-    if len(fakes) > FAKEREMUX_MAX_PER_SCAN:
-        # A whole-library match is a rule bug or a systemic import setting, not N independent bad
-        # grabs — never mass-delete the library; alert and let a human look.
-        msg = "%d fake remuxes found — holding (max %d/scan), investigate" % (
-            len(fakes),
-            FAKEREMUX_MAX_PER_SCAN,
-        )
-        post_discord(msg)
-        return msg
-    verb = "WOULD delete+re-search" if FAKEREMUX_DRY_RUN else "Deleted+re-searched"
-    to_search = set()
-    for f in fakes:
-        if not FAKEREMUX_DRY_RUN:
-            # Delete FIRST so a failure propagates before its report is posted (mirrors run_once).
-            _request(
-                "%s/api/v3/episodefile/%s" % (SONARR_URL, f["fileId"]),
-                method="DELETE",
-                headers={"X-Api-Key": SONARR_API_KEY},
-            )
-            to_search.add(f["seriesId"])
-        line = "%s [Sonarr] %s — %s but %s" % (
-            verb,
-            sanitize(f["path"]),
-            sanitize(f["quality"]),
-            sanitize(f["codec"]),
-        )
-        log(line)
-        post_discord(line)
-    for sid in sorted(to_search):
-        _request(
-            SONARR_URL + "/api/v3/command",
-            method="POST",
-            headers={"X-Api-Key": SONARR_API_KEY},
-            data={"name": "SeriesSearch", "seriesId": sid},
-        )
-    return "%s %d fake remux(es)" % (verb.lower(), len(fakes))
-
-
 def main():
     once = "--once" in sys.argv
     streaks = {}
-    last_fakeremux_scan = 0.0
     log(
-        "autofix-bridge starting (interval=%ss, dry_run=%s, fakeremux_dry_run=%s, once=%s)"
-        % (INTERVAL, DRY_RUN, FAKEREMUX_DRY_RUN, once)
+        "autofix-bridge starting (interval=%ss, dry_run=%s, once=%s)"
+        % (INTERVAL, DRY_RUN, once)
     )
     while True:
         try:
@@ -481,16 +361,6 @@ def main():
         log("OK  " if ok else "DOWN", msg)
         push(ok, msg)
         touch_heartbeat()
-
-        now = time.time()
-        if once or now - last_fakeremux_scan >= FAKEREMUX_SCAN_INTERVAL:
-            last_fakeremux_scan = now
-            try:
-                log("fake-remux:", run_fake_remux_scan())
-            except (
-                Exception
-            ) as e:  # best-effort — a scan error must not kill the queue loop
-                log("fake-remux scan error:", e)
 
         if once:
             break

@@ -190,6 +190,12 @@ services:
       - DISK_PRUNE_STATE=/autofix-disk/state.json
       - DISK_PRUNE_MAX_AGE_H=3
       - KUMA_PUSH_DISK_PRUNE={{ monitor_bridge_disk_prune_push_token }}
+      # Daily fake-remux scan: the autofix-bridge role's fake_remux_scan.py host cron ffprobes every
+      # Remux-quality file and writes state.json — down on a scan that couldn't run, a mass-match
+      # hold, report-only fakes flagged, or >26h staleness (a missed daily run).
+      - FAKE_REMUX_STATE=/fake-remux/state.json
+      - FAKE_REMUX_MAX_AGE_H=26
+      - KUMA_PUSH_FAKE_REMUX={{ monitor_bridge_fake_remux_push_token }}
       # Daily kopia FULL-maintenance freshness: the host cron (kopia role) queries `kopia
       # maintenance info --json` and writes state.json. Full maintenance GCs expired blobs from
       # B2, so a stall is the upstream CAUSE the b2_usage check only catches weeks later as the
@@ -358,6 +364,7 @@ services:
       - /var/lib/crowdsec-home-allowlist:/home-allowlist:ro
       - /var/lib/kopia-verify:/verify:ro
       - /var/lib/autofix-disk-prune:/autofix-disk:ro
+      - /var/lib/autofix-fake-remux:/fake-remux:ro
       - /var/lib/kopia-maintenance:/maintenance:ro
       - /var/lib/kopia-b2-usage:/b2-usage:ro
       - /var/lib/docker-user-rules:/docker-user:ro
@@ -434,6 +441,10 @@ services:
       {# Disk Autoprune: check_disk_prune reads /autofix-disk/state.json (written hourly by the
          autofix-bridge role's disk-prune cron) — down on a FAILED prune command or >3h staleness. -#}
       {{ kuma('autofix-disk-prune', monitor_type='push', name='Disk Autoprune', interval=600, max_retries=0, push_token=monitor_bridge_disk_prune_push_token) }}
+      {# Fake Remux Scan: check_fake_remux reads /fake-remux/state.json (written daily by the
+         autofix-bridge role's fake_remux_scan.py host cron) — down on a scan failure, a mass-match
+         hold, report-only fakes flagged, or >26h staleness. -#}
+      {{ kuma('autofix-fake-remux', monitor_type='push', name='Fake Remux Scan', interval=600, max_retries=0, push_token=monitor_bridge_fake_remux_push_token) }}
       {{ kuma('kopia-maintenance', monitor_type='push', name='Backup Maintenance', interval=600, max_retries=0, push_token=monitor_bridge_maintenance_push_token) }}
       {{ kuma('monitor-bridge-b2', monitor_type='push', name='B2 Storage Usage', interval=600, max_retries=0, push_token=monitor_bridge_b2_push_token) }}
       {# B2 growth trend: predict_linear projection of the billable-bytes gauge — runway warning

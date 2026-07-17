@@ -240,6 +240,8 @@ CONTENT_VERIFY_MAX_AGE_S = float(_env("CONTENT_VERIFY_MAX_AGE_D", "100")) * 8640
 # Disk's alert, not this one. 3h staleness = 3x the hourly cron + slack.
 DISK_PRUNE_STATE = _env("DISK_PRUNE_STATE", "/autofix-disk/state.json")
 DISK_PRUNE_MAX_AGE_S = float(_env("DISK_PRUNE_MAX_AGE_H", "3")) * 3600
+FAKE_REMUX_STATE = _env("FAKE_REMUX_STATE", "/fake-remux/state.json")
+FAKE_REMUX_MAX_AGE_S = float(_env("FAKE_REMUX_MAX_AGE_H", "26")) * 3600
 
 # Daily kopia FULL-maintenance freshness: the host cron (kopia-maintenance-check.sh, kopia role)
 # queries `kopia maintenance info --json` and writes {"ts": epoch, "ok": bool, "msg": str} after
@@ -1779,6 +1781,38 @@ def check_disk_prune():
     )
 
 
+def fake_remux(state, age_s, max_age_s):
+    """Pure: did the last fake-remux scan run succeed, and recently? (ok, msg).
+
+    Same state-file idiom as disk_prune. The host cron (autofix-bridge role's fake_remux_scan.py)
+    sets ok=false for three cases it wants surfaced: it couldn't run at all (Sonarr unreachable), a
+    whole-library match tripped the blast valve (systemic — investigate), OR — while in report-only
+    mode — it flagged re-encoded remuxes without deleting them (the operator wants to see those; it
+    self-clears once they're handled or the scan is flipped live). A clean library, or a live sweep
+    that deleted+re-searched, is ok=true.
+    """
+    if not state.get("ok"):
+        return False, "fake-remux scan: %s" % state.get("msg", "?")
+    if age_s > max_age_s:
+        return False, "last fake-remux scan %.1fh ago (max %.1fh)" % (
+            age_s / 3600,
+            max_age_s / 3600,
+        )
+    return True, "fake-remux scan ok %.1fh ago: %s" % (
+        age_s / 3600,
+        state.get("msg", ""),
+    )
+
+
+def check_fake_remux():
+    return _check_state_file(
+        FAKE_REMUX_STATE,
+        "no fake-remux scan state (never ran?)",
+        "fake-remux scan state unparseable",
+        lambda state, age_s: fake_remux(state, age_s, FAKE_REMUX_MAX_AGE_S),
+    )
+
+
 def home_allowlist(state, age_s, max_age_s):
     """Pure: did the last CrowdSec home-IP allowlist update run succeed, and recently? (ok, msg).
 
@@ -2432,6 +2466,7 @@ CHECKS = [
     ("content_verify", _env("KUMA_PUSH_CONTENT_VERIFY", ""), check_content_verify),
     ("pi_peers", _env("KUMA_PUSH_PI_PEERS", ""), check_pi_peers),
     ("disk_prune", _env("KUMA_PUSH_DISK_PRUNE", ""), check_disk_prune),
+    ("fake_remux", _env("KUMA_PUSH_FAKE_REMUX", ""), check_fake_remux),
     (
         "home_allowlist",
         _env("KUMA_PUSH_HOME_ALLOWLIST", ""),

@@ -16,7 +16,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **thirty-eight checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **thirty-nine checks** and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the twelve
@@ -193,6 +193,15 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     as image churn grows. A disk still full of real data after a clean prune is Root Disk's alert,
     not this one — single-purpose monitors, no double-paging. Same state-file idiom as Backup
     Verify / WG Pi Peer Backup; pure `disk_prune()` is unit-tested.)
+  - **Fake Remux Scan** (reads `/fake-remux/state.json`, written daily by the **autofix-bridge**
+    role's `fake_remux_scan.py` host cron — `down` on a scan that couldn't run (Sonarr unreachable),
+    a mass-match blast-valve hold, re-encoded remuxes flagged while in report-only mode, or >26 h
+    staleness (a missed daily run), a missing/corrupt state file included. That cron ffprobes every
+    Remux-quality file (via `docker exec jellyfin`) and detects re-encodes mislabeled as remuxes —
+    long GOP or a consumer re-encoder ENCODER tag — the post-import backstop the sidecar can't be
+    (ffprobe needs a binary the zero-privilege container lacks). Report-only fakes keep it `down`
+    until handled (persistent by design, like the *arr queue). Same state-file idiom; pure
+    `fake_remux()` is unit-tested. `FAKE_REMUX_MAX_AGE_H` tunes staleness.)
   - **Backup Maintenance** (reads `/maintenance/state.json`, written daily by the kopia role's
     `kopia-maintenance` host cron from `kopia maintenance info --json` — `down` on a
     disabled/overdue/failed full-maintenance cycle, >2.5 d staleness, or a missing/corrupt state
@@ -407,7 +416,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,appsec,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,appsec,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,fake_remux,maintenance,discord,recyclarr,janitorr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -444,7 +453,10 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 - The **Disk Autoprune** monitor bind-mounts `/var/lib/autofix-disk-prune:/autofix-disk:ro`
   (written by the `autofix-bridge` role's hourly disk-prune cron). That role creates the dir
   sys_user-owned, so on a fresh host deploy `autofix-bridge` before `monitor-bridge` (else Docker
-  auto-creates the mount source root-owned and the non-root container can't read it).
+  auto-creates the mount source root-owned and the non-root container can't read it). The **Fake
+  Remux Scan** monitor's `/var/lib/autofix-fake-remux:/fake-remux:ro` mount (written daily by the
+  same role's `fake_remux_scan.py` cron, seeded once on deploy) is created the same way with the
+  same ordering.
 - Thresholds are env-tunable in the compose template (`GRACE_CYCLES` (startup/redeploy grace),
   `BACKUP_MAX_AGE_H`, `DISK_MAX_PCT`,
   `CERT_MIN_DAYS`, `MEM_MAX_PCT`, `RESTART_WINDOW`/`RESTART_MAX`, `OOM_WINDOW`,
@@ -459,7 +471,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the thirty-eight push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the thirty-nine push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI
