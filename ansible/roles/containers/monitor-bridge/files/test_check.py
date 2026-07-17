@@ -1442,6 +1442,34 @@ def test_fake_remux_stale_pages():
     assert not ok and "ago" in msg
 
 
+# ── Fake-remux replace (*/20 host cron reconciles held/failed replacements) ──
+def test_fake_remux_replace_clean_is_ok():
+    ok, msg = check.fake_remux_replace(
+        {"ok": True, "msg": "0 held, 0 failed"}, 600, 1.2 * 3600
+    )
+    assert ok and "ok" in msg
+
+
+def test_fake_remux_replace_failed_pages():
+    ok, msg = check.fake_remux_replace(
+        {"ok": False, "msg": "1 replacement held (blast valve)"}, 600, 1.2 * 3600
+    )
+    assert not ok and "held" in msg
+
+
+def test_fake_remux_replace_stale_pages():
+    ok, msg = check.fake_remux_replace({"ok": True, "msg": "x"}, 2 * 3600, 1.2 * 3600)
+    assert not ok and "ago" in msg
+
+
+def test_check_fake_remux_replace_missing_state(monkeypatch, tmp_path):
+    p = tmp_path / "missing.json"
+    monkeypatch.setattr(check, "FAKE_REMUX_REPLACE_STATE", str(p))
+    ok, msg = check.check_fake_remux_replace()
+    assert not ok
+    assert "never ran" in msg
+
+
 def test_configarr_clean_is_ok():
     ok, msg = check.configarr(
         {"ok": True, "msg": "configarr sync ok: 2 profiles"}, 3600, 26 * 3600

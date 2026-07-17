@@ -196,6 +196,12 @@ services:
       - FAKE_REMUX_STATE=/fake-remux/state.json
       - FAKE_REMUX_MAX_AGE_H=26
       - KUMA_PUSH_FAKE_REMUX={{ monitor_bridge_fake_remux_push_token }}
+      # Every-20-min fake-remux replace reconcile: the autofix-bridge role's fake_remux_replace.py
+      # host cron holds/fails replacements flagged by the scan above and writes its own state.json
+      # (same /fake-remux mount) — down on a held/failed entry or >1.2h staleness (missed cron run).
+      - FAKE_REMUX_REPLACE_STATE=/fake-remux/replace_state.json
+      - FAKE_REMUX_REPLACE_MAX_AGE_H=1.2
+      - KUMA_PUSH_FAKE_REMUX_REPLACE={{ monitor_bridge_fake_remux_replace_push_token }}
       # Daily configarr guide-sync: the configarr role's configarr_sync.py host cron runs the
       # one-shot sync and writes state.json — down on a failed sync (nonzero exit or error output)
       # or >26h staleness (a missed daily run) — a direct sync-result check (exit code + output),
@@ -445,6 +451,10 @@ services:
          autofix-bridge role's fake_remux_scan.py host cron) — down on a scan failure, a mass-match
          hold, report-only fakes flagged, or >26h staleness. -#}
       {{ kuma('autofix-fake-remux', monitor_type='push', name='Fake Remux Scan', interval=600, max_retries=0, push_token=monitor_bridge_fake_remux_push_token) }}
+      {# Fake Remux Replace: check_fake_remux_replace reads /fake-remux/replace_state.json (written
+         every 20min by the autofix-bridge role's fake_remux_replace.py host cron, same mount as the
+         scan above) — down on a held/failed replacement or >1.2h staleness. -#}
+      {{ kuma('autofix-fake-remux-replace', monitor_type='push', name='Fake Remux Replace', interval=600, max_retries=0, push_token=monitor_bridge_fake_remux_replace_push_token) }}
       {{ kuma('configarr', monitor_type='push', name='Configarr Sync', interval=600, max_retries=0, push_token=monitor_bridge_configarr_push_token) }}
       {{ kuma('kopia-maintenance', monitor_type='push', name='Backup Maintenance', interval=600, max_retries=0, push_token=monitor_bridge_maintenance_push_token) }}
       {{ kuma('monitor-bridge-b2', monitor_type='push', name='B2 Storage Usage', interval=600, max_retries=0, push_token=monitor_bridge_b2_push_token) }}
