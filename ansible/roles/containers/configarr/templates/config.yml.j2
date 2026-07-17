@@ -12,6 +12,10 @@
 # re-encode (Mushoku Tensei S2, 2026-07-16) -> Jellyfin buffering + slow seeks. Sonarr trusts
 # the release TITLE at grab time, so only release-group reputation can stop a lying label.
 trashGuideUrl: https://github.com/TRaSH-Guides/Guides
+# configarr resolves the `include: - template:` entries below from the recyclarr config-templates
+# repo (the guide-backed WEB-1080p / HD Bluray + WEB profiles recyclarr v8 dropped from `include:`
+# but configarr still pulls). This replaces the retired recyclarr role's trash_id profiles.
+recyclarrConfigUrl: https://github.com/recyclarr/config-templates
 
 customFormatDefinitions:
   # Reject mislabeled "fake remux" groups. With the Anime profile's minFormatScore=0,
@@ -50,6 +54,15 @@ sonarr:
     base_url: http://sonarr:8989
     api_key: {{ sonarr_api_key }}
 
+    # Guide-backed WEB-1080p profile (ported from the retired recyclarr role). Syncs onto the
+    # existing "WEB-1080p" Sonarr profile by name — no duplicate. delete_unmanaged_custom_formats
+    # stays OFF (default) so the 52 bespoke "Anime Profile N_N_N" CFs are never touched.
+    quality_definition:
+      type: series
+    include:
+      - template: sonarr-v4-quality-profile-web-1080p
+      - template: sonarr-v4-custom-formats-web-1080p
+
     custom_formats:
       - trash_ids:
           - local-fake-remux-groups
@@ -61,3 +74,17 @@ sonarr:
         assign_scores_to:
           - name: Anime
             score: 200
+
+radarr:
+  movies:
+    base_url: http://radarr:7878
+    api_key: {{ radarr_api_key }}
+
+    # Guide-backed HD Bluray + WEB profile (ported from the retired recyclarr role). Syncs onto the
+    # existing "HD Bluray + WEB" Radarr profile by name. No local CFs here — Radarr has no bespoke
+    # scheme to protect, but delete_unmanaged stays OFF (default) for symmetry/safety.
+    quality_definition:
+      type: movie
+    include:
+      - template: radarr-quality-profile-hd-bluray-web
+      - template: radarr-custom-formats-hd-bluray-web

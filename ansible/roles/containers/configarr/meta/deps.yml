@@ -2,3 +2,4 @@
 role_deps:
   - traefik
   - sonarr
+  - radarr
