@@ -1,5 +1,6 @@
 import importlib.util
 import pathlib
+import sys
 
 # Load the host script's pure core directly (not a package), mirroring test_fake_remux_logic.py.
 _SPEC = importlib.util.spec_from_file_location(
@@ -8,6 +9,11 @@ _SPEC = importlib.util.spec_from_file_location(
 )
 rl = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(rl)
+
+# The shell resolves its sibling imports via sys.path.insert(0, <own dir>), same as fake_remux_scan.py
+# itself — importing it here (rather than another importlib.util load) exercises that resolution.
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
+import fake_remux_replace as sh  # noqa: E402
 
 POLICY = {
     "deny_release_groups": ["NTRX"],
@@ -306,3 +312,18 @@ def test_advance_verifying_fake_at_attempt_cap_holds():
     )
     assert new["13"]["state"] == "held"
     assert [a["type"] for a in acts] == ["blocklist"]
+
+
+def test_summarize_counts_states():
+    led = {
+        "1": {"state": "replaced"},
+        "2": {"state": "grabbed"},
+        "3": {"state": "held"},
+    }
+    ok, msg = sh._summarize(led)
+    assert ok is False and "held" in msg
+
+
+def test_mode_off_is_noop(tmp_path):
+    ok, msg = sh.reconcile_once({"FAKE_REMUX_REPLACE_MODE": "off"})
+    assert ok and "off" in msg

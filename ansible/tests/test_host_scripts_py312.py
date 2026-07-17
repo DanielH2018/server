@@ -35,6 +35,8 @@ HOST_RUN_SCRIPTS = [
     # import`s the shared helper listed below. Keep all three 3.12-clean.
     "ansible/roles/containers/autofix-bridge/files/fake_remux_scan.py",
     "ansible/roles/containers/autofix-bridge/files/fake_remux_logic.py",
+    "ansible/roles/containers/autofix-bridge/files/fake_remux_replace.py",
+    "ansible/roles/containers/autofix-bridge/files/fake_remux_replace_logic.py",
     # configarr sync host cron + its pure core (crontab /usr/bin/python3, not a systemd unit).
     # configarr_sync.py `from host_lib import`s the shared helper listed below. Keep all 3.12-clean.
     "ansible/roles/containers/configarr/files/configarr_sync.py",
