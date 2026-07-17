@@ -231,3 +231,31 @@ def plan_fake_remux_actions(fakes, dry_run: bool, max_per_scan: int):
         "ok": True,
         "summary": "deleted+re-searched %d fake remux(es)" % len(fakes),
     }
+
+
+def seed_ledger(ledger, fakes, max_concurrent, now):
+    """Add newly-detected fakes (each carrying an `episodeId`) to the reconciler's ledger as
+    'detected', keyed by str(episodeId) to match fake_remux_replace_logic.py's correlation. A single
+    pass finding more than max_concurrent NEW fakes is a systemic import/rule bug, not N independent
+    bad grabs: seed none and report held so the detector pages instead of handing the reconciler a
+    flood of replacements to chase."""
+    new = [f for f in fakes if str(f["episodeId"]) not in ledger]
+    if len(new) > int(max_concurrent):
+        return ledger, True
+    out = dict(ledger)
+    for f in new:
+        out[str(f["episodeId"])] = {
+            "episodeId": f["episodeId"],
+            "seriesId": f["seriesId"],
+            "series": f.get("seriesTitle"),
+            "epLabel": f.get("relativePath"),
+            "fakeFileId": f["fileId"],
+            "fakePath": f.get("path"),
+            "evidence": f.get("evidence"),
+            "state": "detected",
+            "attempts": 0,
+            "firstSeen": now,
+            "lastAction": now,
+            "reason": "",
+        }
+    return out, False

@@ -4,8 +4,11 @@
 The autofix-bridge sidecar is deliberately zero-privilege (stdlib only, cap_drop ALL, no docker), so
 it can't run ffprobe. This host-plane script — a daily cron beside the disk-autoprune one, running as
 the sys_user (in the docker group) — does the part the sidecar can't: it reads Sonarr's library, runs
-jellyfin's ffprobe against each REMUX-quality file, and deletes any that are actually re-encodes
-(long GOP or a consumer re-encoder ENCODER tag — see fake_remux_logic.py for the signal). It reports
+jellyfin's ffprobe against each REMUX-quality file, and flags any that are actually re-encodes (long
+GOP or a consumer re-encoder ENCODER tag — see fake_remux_logic.py for the signal). Each newly found
+fake is enriched with its episodeId and seeded into a persistent ledger (LEDGER_FILE, keyed by
+episodeId) that fake_remux_replace.py — the reconciler — reads to search for, grab, verify, and swap
+in a genuine replacement; this script itself never deletes a file or re-searches a series. It reports
 health the same way the other host crons do: a {ts,ok,msg} state file that monitor-bridge reads over a
 :ro bind mount and turns into the "Fake Remux Scan" Kuma monitor, plus a per-fake Discord line.
 
@@ -13,7 +16,7 @@ Runs under the host's /usr/bin/python3 (3.12 floor — keep 3.12-clean, see
 ansible/tests/test_host_scripts_py312.py). Config comes from /etc/autofix-fake-remux/config.env
 (0600, embeds SONARR_API_KEY + the Discord webhook). ffprobe uses jellyfin because it mounts the media
 read-only at /data/media, so Sonarr's absolute path resolves unchanged (no translation) and a probe
-can't write. FAKE_REMUX_DRY_RUN defaults true — this DELETES library files, so it ships report-only.
+can't write.
 """
 
 from __future__ import annotations
@@ -31,11 +34,6 @@ from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
 
 CONFIG_PATH = os.environ.get("FAKE_REMUX_CONFIG", "/etc/autofix-fake-remux/config.env")
 USER_AGENT = "autofix-fake-remux"
-
-
-def _dry_run_enabled(val) -> bool:
-    """Fail-safe dry-run: enabled UNLESS explicitly disabled (0/false/no), matching autofix.py."""
-    return str(val).strip().lower() not in ("0", "false", "no")
 
 
 def load_config():
@@ -95,6 +93,9 @@ class Sonarr:
 
     def episodefiles(self, series_id):
         return self._request("/api/v3/episodefile?seriesId=%s" % series_id) or []
+
+    def episodes(self, series_id):
+        return self._request("/api/v3/episode?seriesId=%s" % series_id) or []
 
     def delete_episodefile(self, file_id):
         self._request("/api/v3/episodefile/%s" % file_id, method="DELETE")
@@ -185,7 +186,6 @@ def scan(cfg):
     if not api_key:
         return True, "disabled (no Sonarr API key)"
 
-    dry_run = _dry_run_enabled(cfg.get("FAKE_REMUX_DRY_RUN", "true"))
     gop_max_s = float(cfg.get("GOP_MAX_S", "5"))
     window_s = int(cfg.get("PROBE_WINDOW_S", "40"))
     max_per_scan = int(cfg.get("MAX_PER_SCAN", "5"))
@@ -193,6 +193,9 @@ def scan(cfg):
     jellyfin = cfg.get("JELLYFIN_CONTAINER", "jellyfin")
     ffprobe_bin = cfg.get("FFPROBE_BIN", "/usr/lib/jellyfin-ffmpeg/ffprobe")
     webhook = cfg.get("ARR_DISCORD_WEBHOOK_URL", "")
+    ledger_file = cfg.get(
+        "LEDGER_FILE", "/var/lib/autofix-fake-remux/replacements.json"
+    )
 
     ip = resolve_ip(cfg.get("SONARR_CONTAINER", "sonarr"))
     port = cfg.get("SONARR_PORT", "8989")
@@ -201,12 +204,16 @@ def scan(cfg):
     )
 
     candidates = []
+    file_to_episode = {}
     for s in sonarr.series():
+        sid = s.get("id")
         candidates.extend(
-            frl.remux_candidates(
-                sonarr.episodefiles(s.get("id")), s.get("title") or "?"
-            )
+            frl.remux_candidates(sonarr.episodefiles(sid), s.get("title") or "?")
         )
+        for ep in sonarr.episodes(sid):
+            file_id = ep.get("episodeFileId")
+            if file_id:
+                file_to_episode[file_id] = ep.get("id")
 
     probed, skipped = [], 0
     for cand in candidates:
@@ -219,33 +226,51 @@ def scan(cfg):
     fakes = frl.select_fakes(
         probed, window_s, gop_max_s, frl.DEFAULT_RE_ENCODER_MARKERS
     )
-    plan = frl.plan_fake_remux_actions(fakes, dry_run, max_per_scan)
+    # A fake whose file no longer maps to a monitored episode (e.g. unmonitored since) can't be
+    # handed to the reconciler, which correlates everything by episodeId — drop it.
+    fakes = [
+        {**f, "episodeId": file_to_episode[f["fileId"]]}
+        for f in fakes
+        if f["fileId"] in file_to_episode
+    ]
 
-    if plan["hold"]:
-        discord_post(webhook, plan["summary"], USER_AGENT, log=log)
-    for file_id in plan["deletes"]:
-        sonarr.delete_episodefile(
-            file_id
-        )  # delete first so a failure propagates before its report
-    for line in plan["lines"]:
-        log(line)
-        discord_post(webhook, line, USER_AGENT, log=log)
-    for series_id in plan["searches"]:
-        sonarr.series_search(series_id)
+    ledger = {}
+    if os.path.exists(ledger_file):
+        with open(ledger_file) as fh:
+            ledger = json.load(fh)
 
-    summary = plan["summary"]
+    new_fakes = [f for f in fakes if str(f["episodeId"]) not in ledger]
+    ledger, held = frl.seed_ledger(ledger, fakes, max_per_scan, int(time.time()))
+    atomic_write(ledger_file, json.dumps(ledger))
+
+    if held:
+        ok = False
+        summary = "%d fakes — holding (max %d), investigate" % (
+            len(new_fakes),
+            max_per_scan,
+        )
+        discord_post(webhook, summary, USER_AGENT, log=log)
+    else:
+        for f in new_fakes:
+            line = frl.format_fake_line("Seeded for replacement", f)
+            log(line)
+            discord_post(webhook, line, USER_AGENT, log=log)
+        ok = True
+        summary = (
+            "seeded %d fake(s) for replacement" % len(new_fakes)
+            if fakes
+            else "library clean"
+        )
+
     if skipped:
         summary += " (%d candidate(s) unprobed — jellyfin unavailable?)" % skipped
-    return plan["ok"], summary
+    return ok, summary
 
 
 def main() -> int:
     cfg = load_config()
     state_file = cfg.get("STATE_FILE", "/var/lib/autofix-fake-remux/state.json")
-    log(
-        "fake-remux scan starting (dry_run=%s)"
-        % _dry_run_enabled(cfg.get("FAKE_REMUX_DRY_RUN", "true"))
-    )
+    log("fake-remux scan starting")
     try:
         ok, msg = scan(cfg)
     except (

@@ -201,6 +201,51 @@ def test_plan_exactly_at_cap_acts():
     assert len(plan["deletes"]) == 5
 
 
+# --- seed_ledger --------------------------------------------------------------
+def test_seed_ledger_adds_new_and_blasts_over_cap():
+    fakes = [
+        {
+            "fileId": i,
+            "seriesId": 96,
+            "seriesTitle": "S",
+            "relativePath": "E%d" % i,
+            "evidence": "e",
+            "episodeId": i,
+        }
+        for i in range(3)
+    ]
+    led, held = frl.seed_ledger({}, fakes, max_concurrent=5, now=1)
+    assert not held and len(led) == 3 and led["0"]["state"] == "detected"
+    led2, held2 = frl.seed_ledger({}, fakes, max_concurrent=2, now=1)
+    assert held2 and led2 == {}  # over cap → seed none
+
+
+def test_seed_ledger_skips_already_seeded_and_preserves_existing_state():
+    existing = {"0": {"state": "verifying", "episodeId": 0}}
+    fakes = [
+        {
+            "fileId": 0,
+            "seriesId": 96,
+            "seriesTitle": "S",
+            "relativePath": "E0",
+            "evidence": "e",
+            "episodeId": 0,
+        },
+        {
+            "fileId": 1,
+            "seriesId": 96,
+            "seriesTitle": "S",
+            "relativePath": "E1",
+            "evidence": "e",
+            "episodeId": 1,
+        },
+    ]
+    led, held = frl.seed_ledger(existing, fakes, max_concurrent=5, now=2)
+    assert not held
+    assert led["0"]["state"] == "verifying"  # untouched
+    assert led["1"]["state"] == "detected"  # newly seeded
+
+
 # --- ffprobe output parsers --------------------------------------------------
 def test_parse_encoder_tag_reads_video_stream_encoder():
     # shape of `ffprobe -select_streams v:0 -show_entries stream_tags=ENCODER -of json`
