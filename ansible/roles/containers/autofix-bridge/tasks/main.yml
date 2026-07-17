@@ -199,3 +199,67 @@
     creates: /var/lib/autofix-fake-remux/state.json
   changed_when: false
   failed_when: false
+
+# --- fake-remux reconciler (host plane) ---------------------------------------
+# Search-first replacer: acquires a genuine replacement before ever deleting the fake the detector
+# seeded into the ledger. Runs every 20 min, gated by FAKE_REMUX_REPLACE_MODE (off/shadow/live).
+# NB: delete_mode: recycle-bin only makes deletes recoverable if Sonarr's Recycling Bin path
+# (Settings -> Media Management) is set — a Sonarr-side config outside this repo. Unset, deletes are
+# permanent, but still gated on a verified-genuine downloaded replacement, so never data-loss of an
+# un-replaced episode.
+- name: Render the fake-remux selection policy
+  tags: [config]
+  ansible.builtin.copy:
+    content: "{{ autofix_fake_remux_policy | to_json }}"
+    dest: /etc/autofix-fake-remux/policy.json
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0640"
+  become: true
+  register: autofix_fake_remux_policy_file
+
+- name: Install the fake-remux reconciler script
+  tags: [config]
+  ansible.builtin.copy:
+    src: fake_remux_replace.py
+    dest: /opt/autofix-fake-remux/fake_remux_replace.py
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Install the fake-remux reconciler's pure decision core
+  tags: [config]
+  ansible.builtin.copy:
+    src: fake_remux_replace_logic.py
+    dest: /opt/autofix-fake-remux/fake_remux_replace_logic.py
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Schedule the fake-remux reconcile cron
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "autofix fake-remux reconcile"
+    minute: "*/20"
+    user: "{{ sys_user }}"
+    job: >-
+      /usr/bin/python3 /opt/autofix-fake-remux/fake_remux_replace.py
+      >/dev/null 2>&1 || logger -t autofix-fake-remux-replace 'reconcile failed'
+    state: present
+  become: true
+
+- name: Seed the fake-remux reconciler state on first deploy (idempotent)
+  tags: [cron]
+  # monitor-bridge's "Fake Remux Replace" check reports DOWN when the state file is MISSING; the
+  # */20 cron writes it, so a fresh host / DR would false-DOWN for up to 20 min. Seed once now,
+  # mirroring the scan-state seed above.
+  ansible.builtin.copy:
+    content: '{"ts": 0, "ok": true, "msg": "never run"}'
+    dest: /var/lib/autofix-fake-remux/replace_state.json
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0644"
+    force: false
+  become: true

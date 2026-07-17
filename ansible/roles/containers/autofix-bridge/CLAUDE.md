@@ -43,11 +43,22 @@ sidecar per fix. See repo-root `CLAUDE.md`.
      exclusion. It runs ffprobe via **`docker exec jellyfin`** — jellyfin mounts the media
      **read-only** at `/data/media`, so Sonarr's absolute path resolves **unchanged** (no
      translation) and a probe can't write; jellyfin being down just SKIPS files (fail-safe, never
-     flags). Unless `FAKE_REMUX_DRY_RUN` (its own gate, **default `true`** because it DELETEs
-     library files) it deletes each fake + re-searches the series (the Anime profile's NTRX block
-     via the configarr role steers the re-grab clean). `MAX_PER_SCAN`=5 blast valve (a whole-library
-     match → act on none + alert). Left report-only on purpose so it FLAGS the current mislabeled
-     Mushoku S2 files (15 held) without deleting them. Pure core is unit-tested (`test_fake_remux_logic.py`).
+     flags). It never deletes or re-searches itself — each newly found fake is **seeded into the
+     ledger** (`/var/lib/autofix-fake-remux/replacements.json`) for the reconciler below to act on.
+     `MAX_PER_SCAN`=5 blast valve (a whole-library match → act on none + alert). Pure core is
+     unit-tested (`test_fake_remux_logic.py`).
+   - **fake-remux reconcile** (`files/fake_remux_replace.py` + pure
+     `fake_remux_replace_logic.py` → `/opt/autofix-fake-remux/`, every 20 min, same config.env).
+     Search-first replacer: reads the ledger the scan seeded, interactive-searches Sonarr for a
+     clean replacement (`autofix_fake_remux_policy` → rendered `/etc/autofix-fake-remux/
+     policy.json` picks the candidate — deny/prefer release groups, preferred indexers, a
+     depreferenced-but-not-banned codec list, a size band), grabs it, waits for the download,
+     ffprobes it the same way the scan does, and only deletes the fake + lets Sonarr import once
+     the replacement is verified genuine — never before. `FAKE_REMUX_REPLACE_MODE` is the gate:
+     `off` = detect only, `shadow` = log intended grabs to `outcomes.jsonl` with zero Sonarr
+     mutations (**ships as this**), `live` = grab+delete+import. Ledger/outcome state all live
+     under `/var/lib/autofix-fake-remux/`. See
+     `docs/superpowers/specs/2026-07-17-fake-remux-auto-replacer-design.md` for the full design.
 
 ## Notable
 - **Two Kuma monitors, on purpose:**
@@ -81,22 +92,32 @@ sidecar per fix. See repo-root `CLAUDE.md`.
   restarts/images, or need a human; recyclarr itself was later retired 2026-07-17, replaced by
   configarr). See [[autofix-bridge-auto-remediation]].
 - **fake-remux deploy ordering / seed:** the state dir `/var/lib/autofix-fake-remux` is created
-  `sys_user`-owned + the state is **seeded on first deploy** (`command:` + `creates:`) for the same
-  reason as disk-prune — so monitor-bridge's **Fake Remux Scan** doesn't false-DOWN on a fresh host
-  before the first daily tick. Deploy `autofix-bridge` before `monitor-bridge` (it bind-mounts the
-  state dir `:ro`). The host cron imports the shared `host_lib.py` (copied from `roles/setup/common`)
-  and is registered in the 3.12-floor guard (`ansible/tests/test_host_scripts_py312.py`).
+  `sys_user`-owned + both state files are **seeded on first deploy** — `state.json` by running the
+  scan once (`command:` + `creates:`), `replace_state.json` by writing a neutral placeholder
+  (`copy:` + `force: false`, mirroring kopia's content-verify seed) — for the same reason as
+  disk-prune: so monitor-bridge's **Fake Remux Scan** / **Fake Remux Replace** checks don't
+  false-DOWN on a fresh host before the first tick. Deploy `autofix-bridge` before `monitor-bridge`
+  (it bind-mounts the state dir `:ro`). Both host crons import the shared `host_lib.py` (copied from
+  `roles/setup/common`) and are registered in the 3.12-floor guard
+  (`ansible/tests/test_host_scripts_py312.py`).
 - **Tunables (host_vars):** `autofix_disk_threshold_pct`, `autofix_disk_dry_run`;
-  `autofix_fake_remux_dry_run`, `autofix_fake_remux_gop_max_s`, `autofix_fake_remux_max_per_scan`.
+  `autofix_fake_remux_gop_max_s`, `autofix_fake_remux_max_per_scan`;
+  `autofix_fake_remux_replace_mode` (off/shadow/live), `autofix_fake_remux_policy` (the
+  git-tracked selection-policy dict rendered to `policy.json`).
 
 ## Editing & testing
 - Sidecar: `files/autofix.py` (bind-mounted `:ro`; a code edit needs a **recreate** — the role
   wires `common_config_changed` off the script's register so a script-only edit still recreates).
 - Disk-prune cron: `templates/autofix-disk-prune.sh.j2` · Compose: `templates/docker-compose.yml.j2`
-- fake-remux host cron: `files/fake_remux_scan.py` (I/O shell) + `files/fake_remux_logic.py` (pure
+- fake-remux scan cron: `files/fake_remux_scan.py` (I/O shell) + `files/fake_remux_logic.py` (pure
   core) · config `templates/fake-remux.config.env.j2`. Run it live report-only:
   `SONARR_API_KEY=… ARR_DISCORD_WEBHOOK_URL= STATE_FILE=/tmp/x.json
   PYTHONPATH=ansible/roles/setup/common/files /usr/bin/python3 files/fake_remux_scan.py`.
+- fake-remux reconcile cron: `files/fake_remux_replace.py` (I/O shell) + pure
+  `files/fake_remux_replace_logic.py`, same config.env. Run it shadow (no side effects):
+  `FAKE_REMUX_REPLACE_MODE=shadow SONARR_API_KEY=… LEDGER_FILE=/tmp/l.json
+  REPLACE_STATE_FILE=/tmp/rs.json OUTCOMES_FILE=/tmp/o.jsonl
+  PYTHONPATH=ansible/roles/setup/common/files /usr/bin/python3 files/fake_remux_replace.py`.
 - Unit tests: `uv run pytest ansible/roles/containers/autofix-bridge` (`files/test_autofix.py`,
-  `files/test_fake_remux_logic.py`).
+  `files/test_fake_remux_logic.py`, `files/test_fake_remux_replace_logic.py`).
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "autofix-bridge"`
