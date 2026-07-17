@@ -203,7 +203,15 @@ def advance(ledger, queue_by_episode, files_by_ep, probes, policy, now):
         epk = str(rec["episodeId"])
         if state == "grabbed":
             item = queue_by_episode.get(epk)
-            if item is None:  # vanished/failed from the download client
+            if item is None:  # not in the download client's queue
+                # A just-grabbed download takes ~30-60s to register in Sonarr's queue; within the grab
+                # grace stay grabbed rather than falsely calling it lost — otherwise advance (which runs
+                # the same tick as the grab) would re-grab it every tick and never converge. Past the
+                # grace it really is gone.
+                if now - rec.get("lastAction", now) < float(
+                    policy.get("grab_grace_s", 300)
+                ):
+                    continue
                 attempts = rec.get("attempts", 0) + 1
                 if attempts >= max_attempts:
                     out = _set(

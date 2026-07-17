@@ -228,6 +228,27 @@ def test_advance_never_deletes_before_download_complete():
     assert acts == []  # no delete while downloading
 
 
+def test_advance_grabbed_not_yet_in_queue_stays_within_grab_grace():
+    # advance runs the same tick as the grab; the download isn't in Sonarr's queue yet. Within the
+    # grab grace the entry stays grabbed (not falsely reset -> which would re-grab every tick).
+    led = {"13": _rec(13, "grabbed", lastAction=100, chosen={"quality": "WEBDL-1080p"})}
+    new, acts = rl.advance(
+        led, {}, {"13": 2213}, {}, POLICY, now=200
+    )  # age 100 < 300 grace
+    assert new["13"]["state"] == "grabbed"
+    assert new["13"]["attempts"] == 0
+    assert acts == []
+
+
+def test_advance_grabbed_lost_after_grace_resets_to_detected():
+    led = {"13": _rec(13, "grabbed", lastAction=0, chosen={"quality": "WEBDL-1080p"})}
+    new, _ = rl.advance(
+        led, {}, {"13": 2213}, {}, POLICY, now=1000
+    )  # age 1000 > 300 grace, gone
+    assert new["13"]["state"] == "detected"
+    assert new["13"]["attempts"] == 1
+
+
 def test_advance_fake_replacement_blocklists_and_retries_original_untouched():
     led = {
         "13": _rec(
