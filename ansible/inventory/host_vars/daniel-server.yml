@@ -8,6 +8,9 @@ ssh_config_path: /etc/ssh/sshd_config
 slzb_ip: 10.0.0.127
 zigbee_pan_id: 6754
 zigbee_ext_pan_id: [221, 187, 17, 34, 51, 68, 85, 102]
+# Reconciler mode: live = grab a genuine replacement, verify (host ffprobe), delete the fake + import.
+# Pre-live-tested end-to-end on 2026-07-17 (4 blocking bugs found + fixed). off/shadow also available.
+autofix_fake_remux_replace_mode: live
 # fake-remux reconciler's git-tracked selection policy, rendered to policy.json (autofix-bridge
 # role). Quality range is deferred to Sonarr's profile — no resolution floor, no codec ban;
 # authenticity is enforced post-download, codec-agnostically. See the 2026-07-17 design doc.
