@@ -52,10 +52,17 @@ didn't create.
 
   **`cutoffFormatScore` raised 0 → 400 (2026-07-17, set in Sonarr's DB — NOT Configarr).** Makes a
   raw that slips in auto-upgrade to a subbed release: a raw loses the +300/+100 English-sub bonus so
-  it lands ~305, while every genuine subbed file already scores ≥400, so it stays upgrade-eligible
-  until Sonarr grabs a release clearing 400, then stops. No existing file re-grabs (none score
-  <400). Blunt total-score lever, reversible via the API; the refreshed `files/baseline/anime-profile.json`
-  snapshot is its only git record. A full read-only snapshot of the
+  it lands in the low hundreds (~305), staying below the 400 cutoff and thus upgrade-eligible until
+  Sonarr grabs a higher-scoring release. **The "clears 400" guarantee holds only for the +300
+  `Anime English-Sub Groups` path** — a listed-group sub lands ≥400 (e.g. an Erai-raws grab scores
+  705). A subbed release that trips ONLY the milder +100 `Anime Multi-Sub / Dual-Audio (title)` CF
+  (from a group NOT in the +300 list, e.g. `[Breeze] …[multisub]`) scores ~105 and stays
+  *permanently* upgrade-eligible. That's intended, not a bug: cutoff stays 400 precisely so it keeps
+  searching and upgrades to a listed-group sub when one appears. Accepted trade-off (2026-07-18
+  review): ongoing RSS/search churn for such an episode, plus a hard-delete on each upgrade (Sonarr's
+  recycle bin is off — no undo). No existing file re-grabs (all on-disk Anime files currently score
+  506/705, none in the 100-399 gap). Blunt total-score lever, reversible via the API; the refreshed
+  `files/baseline/anime-profile.json` snapshot is its only git record. A full read-only snapshot of the
   current Anime profile + CF scores lives in `files/baseline/` (documentation; not applied). The
   live CF definitions stay in Sonarr's DB (Kopia-backed).
 
