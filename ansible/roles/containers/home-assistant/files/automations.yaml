@@ -77,33 +77,16 @@
             - if: "{{ is_state('person.daniel', 'home') }}"
               then:
                 - service: script.bedroom_apply_fan
-        # Button 2 = BRIGHTNESS. PRESS = Relax/cozy scene; HOLD = Bright (full). Both clear manual-off.
+        # Button 2 = SLEEP (moved from B3 2026-07-18). HOLD = bedtime / sleep routine (30-min fade).
+        # PRESS = sleep TOGGLE: while in sleep mode WITH the lights on (you've wound down and want the
+        # room fully dark to sleep) -> lights OFF, staying in sleep mode so the fan stays quiet AND
+        # presence can't relight you (bedroom_presence_on is gated on sleep_mode below). Otherwise
+        # (daytime, or lights already off) -> the warm nightlight, clearing manual-off. So at night a
+        # tap toggles dark <-> nightlight, and a daytime tap is a quick nightlight. The auto "got up
+        # overnight" nightlight is gone by design (see the sleep_mode gate on bedroom_presence_on) —
+        # get light back with a tap. B2 is no longer a light button, so (unlike B1) it does NOT exit
+        # sleep mode.
         - conditions: "{{ act == 'button_2_press_release' }}"
-          sequence:
-            - service: script.bedroom_exit_sleep
-            - service: scene.turn_on
-              target:
-                entity_id: scene.bedroom_relax
-            - service: input_boolean.turn_off
-              target:
-                entity_id: input_boolean.bedroom_manual_off
-        - conditions: "{{ act == 'button_2_hold_release' }}"
-          sequence:
-            - service: script.bedroom_exit_sleep
-            - service: scene.turn_on
-              target:
-                entity_id: scene.bedroom_bright
-            - service: input_boolean.turn_off
-              target:
-                entity_id: input_boolean.bedroom_manual_off
-        # Button 3 = SLEEP. HOLD = bedtime / sleep routine (15-min fade). PRESS = sleep TOGGLE:
-        # while in sleep mode WITH the lights on (you've wound down and want the room fully dark to
-        # sleep) -> lights OFF, staying in sleep mode so the fan stays quiet AND presence can't relight
-        # you (bedroom_presence_on is gated on sleep_mode below). Otherwise (daytime, or lights already
-        # off) -> the warm nightlight, clearing manual-off. So at night a tap toggles dark <-> nightlight,
-        # and a daytime tap is unchanged (quick nightlight). The auto "got up overnight" nightlight is
-        # gone by design (see the sleep_mode gate on bedroom_presence_on) — get light back with a tap.
-        - conditions: "{{ act == 'button_3_press_release' }}"
           sequence:
             - if: "{{ is_state('input_boolean.bedroom_sleep_mode', 'on') and is_state('light.bedroom_lights', 'on') }}"
               then:
@@ -117,9 +100,36 @@
                 - service: input_boolean.turn_off
                   target:
                     entity_id: input_boolean.bedroom_manual_off
-        - conditions: "{{ act == 'button_3_hold_release' }}"
+        - conditions: "{{ act == 'button_2_hold_release' }}"
           sequence:
             - service: script.bedroom_bedtime
+        # Button 3 = FAN CHARACTER (fan only, since 2026-07-18). PRESS = toggle oscillation (sweep <->
+        # fixed): the DREO exposes the OSCILLATE feature; reverse/DIRECTION is NOT supported, so this is
+        # sweep on/off only. Oscillation is orthogonal to speed, so it deliberately does NOT touch the
+        # fan_manual override or the temp curve (bedroom_fan_manual_detect flags a level/preset change,
+        # not an oscillation change). HOLD = stop the fan: engage fan_manual FIRST (so
+        # bedroom_fan_temperature won't re-enable it on the next temp report), then fan off via the
+        # mediator; also exits fan-dial mode. This is the only dial gesture that force-stops the fan
+        # (B4 tap only turns off when the temp band wants level 0). Writing fan.oscillate directly makes
+        # this automation a fan.tower_fan writer -> declared in state/sanctioned_writers.yml exemptions.
+        - conditions: "{{ act == 'button_3_press_release' }}"
+          sequence:
+            - service: fan.oscillate
+              target:
+                entity_id: fan.tower_fan
+              data:
+                oscillating: "{{ not is_state_attr('fan.tower_fan', 'oscillating', true) }}"
+        - conditions: "{{ act == 'button_3_hold_release' }}"
+          sequence:
+            - service: timer.cancel
+              target:
+                entity_id: timer.bedroom_fan_dial
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.bedroom_fan_manual
+            - service: script.bedroom_fan_set
+              data:
+                reason: "off"
         # Button 4 = FAN (fan only). TAP = clear the sleep_mode flag (un-caps the fan) + the fan override,
         # then apply the temp band — does NOT touch the lights or AL sleep (see the branch for why); also
         # cancels fan-dial mode. HOLD = toggle fan-dial mode (the dial then steps the fan +/-1 level; see

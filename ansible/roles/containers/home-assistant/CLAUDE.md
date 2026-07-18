@@ -64,10 +64,11 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   edit recreates HA (~120s). First automation: Hue Tap Dial (RDM002) drives the
   `light.bedroom_lights` group (dial = brightness ±12%; B1 = Power: press = smart toggle [on → `bedroom_apply_natural`
   ungated, off → off + manual-off], hold = reset-to-auto [clear overrides, re-sync lux-gated
-  via `bedroom_apply_natural_gated` + fan]; B2 = Brightness: press = `scene.bedroom_relax`,
-  hold = `scene.bedroom_bright`; B3 = Sleep: press = sleep TOGGLE [in sleep mode + lights on → lights
-  off (stay in sleep mode, fan quiet); else → `scene.bedroom_nightlight` + clear manual-off], hold =
-  `script.bedroom_bedtime` (30-min fade); B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`
+  via `bedroom_apply_natural_gated` + fan]; B2 = Sleep (moved from B3 2026-07-18): press = sleep TOGGLE
+  [in sleep mode + lights on → lights off (stay in sleep mode, fan quiet); else →
+  `scene.bedroom_nightlight` + clear manual-off], hold = `script.bedroom_bedtime` (30-min fade);
+  B3 = Fan character: press = toggle fan oscillation (sweep↔fixed via `fan.oscillate`), hold = stop the
+  fan [engage fan-manual + `bedroom_fan_set` off + cancel fan-dial mode]; B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`
   + cancel fan-dial mode], hold = toggle fan-dial mode [`timer.bedroom_fan_dial`, 5-min sliding window:
   the dial then steps the fan ±1 level via `script.bedroom_fan_nudge`; auto-reverts to light dial on
   expiry — replaces the old hold-to-boost-100%, max fan still reachable by dialing to L9]). Manual taps
@@ -76,10 +77,11 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `*_press_release`/`*_hold_release` events — a tap fires `button_N_press`→`button_N_press_release`,
   but a HOLD fires `button_N_press` (!) then repeats `button_N_hold` then `button_N_hold_release`, so
   matching `*_press`/`*_hold` double-fires the tap before every hold AND runs holds ~3×; the release
-  events are mutually exclusive (exactly one per gesture). The two LIGHT buttons (B1, B2) call
+  events are mutually exclusive (exactly one per gesture). The LIGHT button (B1) calls
   `script.bedroom_exit_sleep` FIRST (clears `sleep_mode` + AL sleep mode) — using the normal lights
   releases the night state (the daytime sleep-exit the morning reset otherwise owns; closes the "very
-  red" trap where a stuck `sleep_mode` made B1's `apply_natural` serve the amber nightlight). The FAN
+  red" trap where a stuck `sleep_mode` made B1's `apply_natural` serve the amber nightlight). B2 is now
+  the Sleep button and deliberately does NOT exit sleep (that's the point of it). The FAN
   button (B4) is **fan-only** — it clears the `sleep_mode` flag (un-caps `apply_fan` from its L2 sleep cap)
   but does NOT touch AL sleep or the lights. Two reasons it stays off the lights: clearing AL sleep makes
   AL **self-on the lights asynchronously** (a flash that beat a prompt `light.turn_off`), and the FP300
@@ -210,9 +212,9 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   you (it wins over the wake ramp; at wake time sleep_mode is cleared and hour≥5, so it's false).
   **Note (since 2026-06-20):** while `sleep_mode` is on, `bedroom_presence_on` is GATED OFF entirely
   (see its conditions), so there is NO automatic "got up overnight" nightlight — getting up leaves
-  the room dark and a B3 tap brings the nightlight back. The sleep-mode arm of this exception is thus
+  the room dark and a B2 tap brings the nightlight back. The sleep-mode arm of this exception is thus
   reached via `presence_on` only in the 00:00–05:00 *no-sleep-mode* case (up late, not yet in bed);
-  it still protects the B3-tap nightlight and any other direct caller of the dispatcher.
+  it still protects the B2-tap nightlight and any other direct caller of the dispatcher.
   The morning wake ramp is the next exception. It spans a **45-min window** (`alarm−15` →
   `alarm+30`, so the alarm sits 1/3 in — NOT centered), with a gentle-then-steep three-segment curve:
   1% at window start → ~8% at the alarm → 20% at `alarm+20` (the knee) → **100% at `alarm+30`**.
@@ -298,7 +300,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   (`[{action, title}]`, phone-only) → the companion app renders buttons; taps fire
   `mobile_app_notification_action`, dispatched by `automation.bedroom_notification_action` on the
   namespaced `BEDROOM_*` action id. Wired buttons: air-quality bad → **Boost fan**
-  (`BEDROOM_BOOST_FAN`: fan_manual on + 100% — persists until button-3/morning reset; moves air,
+  (`BEDROOM_BOOST_FAN`: fan_manual on + 100% — persists until button-4/morning reset; moves air,
   doesn't lower CO2); away "Left on" → **Turn back on** (`BEDROOM_AWAY_TURN_ON`: apply_natural +
   apply_fan, ignores home-gates — undo a false-away); and a nightly **bedtime prompt**
   (`automation.bedroom_bedtime_prompt`, alarm-anchored: fires at `sensor.bedroom_winddown_start` =
@@ -405,7 +407,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   mode, so AL can't fire its own ~45s pre-dim before the fade begins; then fades to
   `scene.bedroom_nightlight` (amber 3%) over 30 min; then enables AL sleep mode (warm/dim target for
   after morning reset). The fade is a per-call `transition: 1800` on `scene.turn_on` (NOT baked into
-  the scene), so only bedtime ramps — the B3-press and overnight "got up" nightlight stay instant.
+  the scene), so only bedtime ramps — the B2-press and overnight "got up" nightlight stay instant.
   (Lengthened 900 -> 1800 on 2026-06-23 — the 15-min descent felt too fast.)
   This reorder is what makes the 30-min nightlight fade genuinely gradual: without it, enabling AL
   sleep mode FIRST caused AL to immediately pre-dim to its sleep_brightness before the fade started.
@@ -414,7 +416,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   brightness+color ramp internally (single Zigbee command, ZCL caps ~6553s), so an HA/Z2M restart
   mid-fade doesn't abort it — only a bulb power-cycle would. Triggered by `automation.bedroom_bedtime`
   off `binary_sensor.pixel_watch_3_bedtime_mode` → on (gated `person.daniel == home`), with **Tap
-  Dial button-3 (Sleep) HOLD** as the manual fallback (`bedroom_tap_dial_control`). **Charging is deliberately
+  Dial button-2 (Sleep) HOLD** as the manual fallback (`bedroom_tap_dial_control`). **Charging is deliberately
   NOT a trigger** (operator charges in-room). **Fan stays temperature-responsive, just bounded to a
   seasonal band:** when `bedroom_sleep_mode` is on, `bedroom_apply_fan`/`fan_target_level` apply an
   **outdoor-temp seasonal FLOOR** (L2 winter `< 45°F` / L3 shoulder `45–68°F` / L4 summer `≥ 68°F`,
@@ -479,8 +481,11 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   detector flags only when `parent_id is none AND (preset change OR new fan level != expected)` — so
   our echo (level == expected) is ignored, a real manual/remote change is caught. The RF remote is
   caught too (the fan reports app/panel/remote changes to the DREO cloud).
-  **Tap Dial button 3 = reset the fan to automatic** (clear `bedroom_fan_manual` + apply, night-cap
-  aware); the morning reset clears it too. Tune the fan curve (start offset / slope / caps) in
+  **Tap Dial button 4 = reset the fan to automatic** (clear `bedroom_fan_manual` + apply, night-cap
+  aware); the morning reset clears it too. **Button 3 (fan character): tap toggles oscillation
+  (sweep↔fixed via `fan.oscillate` — orthogonal to speed, does not touch the override); hold
+  force-stops the fan (engages `bedroom_fan_manual` first so the temp curve won't restart it, then
+  `bedroom_fan_set` off).** Tune the fan curve (start offset / slope / caps) in
   `bedroom_apply_fan` only.
   **Manual fan survives a restart (since 2026-06-21).** A hand-set fan speed used to be undone by a
   deploy/restart: HA's unclean shutdown (SIGKILL) can drop the `bedroom_fan_manual` +

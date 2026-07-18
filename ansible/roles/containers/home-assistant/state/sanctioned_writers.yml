@@ -24,6 +24,7 @@ fan.tower_fan:
     - script.bedroom_fan_nudge
   exemptions:
     - automation.bedroom_fan_startup_reconcile
+    - automation.bedroom_tap_dial_control
 # The air-purifier plug has no mediator script — bedroom_air_purifier_presence drives switch.turn_on/
 # off directly by design (its own comment says so). Listed here so the single-writer CI tripwire still
 # fails if a SECOND automation/script later writes it, the same guard lights/fan get.

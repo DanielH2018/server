@@ -47,6 +47,7 @@ writes:
     - script.bedroom_run_scenario
   fan.tower_fan:
     - automation.bedroom_fan_startup_reconcile
+    - automation.bedroom_tap_dial_control
     - script.bedroom_apply_fan
     - script.bedroom_fan_nudge
     - script.bedroom_fan_set

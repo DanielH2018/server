@@ -21,5 +21,5 @@ Generated from the real automations/scripts/config. The *why* (runtime traps, fe
 
 ## Actuators — writers
 
-- **`fan.tower_fan`** ← `automation.bedroom_fan_startup_reconcile`, `script.bedroom_apply_fan`, `script.bedroom_fan_nudge`, `script.bedroom_fan_set`
+- **`fan.tower_fan`** ← `automation.bedroom_fan_startup_reconcile`, `automation.bedroom_tap_dial_control`, `script.bedroom_apply_fan`, `script.bedroom_fan_nudge`, `script.bedroom_fan_set`
 - **`light.bedroom_lights`** ← `automation.bedroom_color_tracking`, `automation.bedroom_tap_dial_control`, `script.bedroom_alert_pulse`, `script.bedroom_apply_natural`, `script.bedroom_apply_natural_gated`, `script.bedroom_apply_wake`, `script.bedroom_bedtime`, `script.bedroom_blip`, `script.bedroom_lights_set`, `script.bedroom_preview_wake`, `script.bedroom_run_scenario`, `script.bedroom_set_natural_brightness`
