@@ -44,6 +44,19 @@ services:
       - ./config:/config
       - ./mullvad-secrets/key:/run/secrets/mullvad_key:ro
       - ./mullvad-secrets/account:/run/secrets/mullvad_account:ro
+    # Bootstrap resolver for the wireguard-mullvad mod's api.mullvad.net lookup, which runs
+    # BEFORE the tunnel exists. Without this, Docker preserves the container's in-file
+    # /etc/resolv.conf across a restart/reboot (it only regenerates from host DNS on a fresh
+    # CREATE) — and wg-quick's PostUp had frozen that file at Mullvad's tunnel-only 10.64.0.1,
+    # which is unreachable while the tunnel is down. That deadlocks setup on every boot (can't
+    # resolve api.mullvad.net → no wg0 → qBittorrent DHT stalls at 0; 2026-07-18). Setting
+    # dns: makes Docker rewrite resolv.conf from these on EVERY start, so the API lookup always
+    # resolves; wg-quick then overrides it back to 10.64.0.1 at runtime, so operational DNS
+    # stays inside the tunnel (no leak). Pi-hole ({{ server_ip }}) first to match the host,
+    # 1.1.1.1 fallback so a not-yet-ready Pi-hole at boot can't re-wedge it.
+    dns:
+      - "{{ server_ip }}"
+      - 1.1.1.1
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
       - net.ipv6.conf.all.disable_ipv6=1
@@ -55,10 +68,16 @@ services:
       # up AND leak-free — without depending on am.i.mullvad.net being reachable, whose
       # transient blips previously failed this check and triggered needless restarts
       # (which orphaned qBittorrent). 1.1.1.1 by IP avoids DNS; public so it routes via wg0.
+      # `wg show wg0` gates the curl: if mullvad_setup fails at boot (e.g. DNS not ready),
+      # wg0 AND the kill-switch are never installed, so a bare `curl 1.1.1.1` LEAKS out eth0
+      # and false-passes "healthy" while the tunnel is actually dead (this is exactly what
+      # a 2026-07-18 reboot hit). Asserting wg0 exists first makes that state go unhealthy →
+      # autoheal restarts, and the `dns:` guard (above) lets a restart re-establish the
+      # tunnel instead of re-deadlocking on the frozen resolv.conf.
       # Tolerant: retries 6 × interval 1m means only a sustained (~6 min) outage restarts
       # the tunnel, riding out brief blips while still recovering a genuinely-dead relay.
       test: |
-        bash -c 'curl -fsm 10 https://1.1.1.1 >/dev/null || exit 1'
+        bash -c 'wg show wg0 >/dev/null 2>&1 && curl -fsm 10 https://1.1.1.1 >/dev/null || exit 1'
       interval: 1m
       timeout: 15s
       retries: 6
