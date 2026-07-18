@@ -341,11 +341,15 @@
     container: crowdsec
     command: "cscli bouncers delete traefik-bouncer"
   register: traefik_crowdsec_bouncer_delete
+  # `| default(...)` guards every .rc/.stderr ref in these crowdsec exec tasks: docker_container_exec
+  # registers an error dict with NO rc/stderr keys if crowdsec isn't running yet, which would crash
+  # the condition with "dict object has no attribute 'rc'" (the 2026-07-18 qbittorrent crash class)
+  # instead of failing cleanly. Defaulting rc→1 makes a not-ready crowdsec fail loudly here.
   failed_when:
-    - traefik_crowdsec_bouncer_delete.rc != 0
-    - "'not found' not in (traefik_crowdsec_bouncer_delete.stderr | lower)"
-  changed_when: traefik_crowdsec_bouncer_delete.rc == 0
-  when: traefik_crowdsec_bouncer_probe.rc != 0
+    - (traefik_crowdsec_bouncer_delete.rc | default(1)) != 0
+    - "'not found' not in (traefik_crowdsec_bouncer_delete.stderr | default('') | lower)"
+  changed_when: (traefik_crowdsec_bouncer_delete.rc | default(1)) == 0
+  when: (traefik_crowdsec_bouncer_probe.rc | default(1)) != 0
 
 - name: Register Traefik bouncer API key with CrowdSec
   tags: [deploy]
@@ -354,9 +358,9 @@
     command: "cscli bouncers add traefik-bouncer --key {{ crowdsec_bouncer_api_key }}"
   register: traefik_crowdsec_bouncer_registration
   failed_when:
-    - traefik_crowdsec_bouncer_registration.rc != 0
-    - "'already exist' not in (traefik_crowdsec_bouncer_registration.stderr | lower)"
-  changed_when: traefik_crowdsec_bouncer_registration.rc == 0
+    - (traefik_crowdsec_bouncer_registration.rc | default(1)) != 0
+    - "'already exist' not in (traefik_crowdsec_bouncer_registration.stderr | default('') | lower)"
+  changed_when: (traefik_crowdsec_bouncer_registration.rc | default(1)) == 0
   no_log: true
 
 - name: Restart Traefik to re-authenticate with CrowdSec bouncer # noqa no-handler
@@ -439,9 +443,9 @@
     command: "cscli allowlists create home-ips --description 'Home IPs'"
   register: traefik_crowdsec_allowlist_create
   failed_when:
-    - traefik_crowdsec_allowlist_create.rc != 0
-    - "'already exist' not in (traefik_crowdsec_allowlist_create.stderr | lower)"
-  changed_when: traefik_crowdsec_allowlist_create.rc == 0
+    - (traefik_crowdsec_allowlist_create.rc | default(1)) != 0
+    - "'already exist' not in (traefik_crowdsec_allowlist_create.stderr | default('') | lower)"
+  changed_when: (traefik_crowdsec_allowlist_create.rc | default(1)) == 0
 
 - name: Create the CrowdSec home-allowlist monitor state directory
   tags: [config]
