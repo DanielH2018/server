@@ -1,5 +1,5 @@
 from flask import Flask, Response
-import requests, threading, time, os, re
+import requests, threading, time, os, re, hashlib
 
 from datetime import datetime, timedelta
 
@@ -150,20 +150,45 @@ def obsidian_deep_link(uri):
     return head + path.replace("&", "%26")
 
 
-def process_obsidian_ics(raw_ics):
-    """Give each Obsidian VTODO a clickable URL and drop its noisy LOCATION line.
+def stable_uid(block):
+    """Deterministic UID for a VTODO, derived from its note link + summary.
 
-    The obsidian-ical-plugin emits the note's deep link only in DESCRIPTION and as a
-    malformed LOCATION (raw ALTREP text) — never as a URL property. So Homepage's
-    calendar renders the task as plain, non-clickable text and shows the ALTREP string
-    on hover. Hoist the obsidian:// link into a real URL property (Homepage then wraps
-    the row in an <a href>) and remove LOCATION so hover shows the task title instead.
+    The obsidian-to-ical-plugin (v2.0.1, what this feed uses) emits a fresh random
+    UID every time it regenerates. Homepage's calendar keys each event by (UID, date)
+    and MERGES refetched events into existing state without ever clearing it, so a
+    task whose UID changed reappears under a new key — i.e. a duplicate — on a soft
+    reload (a full page load remounts and clears the state, which is why dupes only
+    show up between refreshes). Rewriting the UID to a hash of the note + summary
+    (what newer plugin versions do) keeps the key stable so refetches overwrite.
+    """
+    summary = get_prop(block, "SUMMARY") or ""
+    description = get_prop(block, "DESCRIPTION") or ""
+    return hashlib.sha1(f"{description}::{summary}".encode()).hexdigest()
+
+
+def process_obsidian_ics(raw_ics):
+    """Give each Obsidian VTODO a clickable URL, a stable UID, and drop LOCATION.
+
+    The obsidian-to-ical-plugin emits the note's deep link only in DESCRIPTION and as
+    a malformed LOCATION (raw ALTREP text) — never as a URL property — and stamps a
+    random UID each regeneration. So Homepage renders the task as plain, non-clickable
+    text (showing the ALTREP string on hover) and accumulates duplicates as the UID
+    churns. Hoist the obsidian:// link into a real URL property (Homepage then wraps
+    the row in an <a href>), replace the UID with a stable hash (see stable_uid), and
+    remove LOCATION so hover shows the task title instead.
     """
 
     def rewrite_todo(match):
         block = match.group(0)
         source = get_prop(block, "DESCRIPTION") or get_prop(block, "LOCATION") or ""
         link = OBSIDIAN_URI_RE.search(source)
+        block = re.sub(
+            r"^UID:[^\r\n]*",
+            f"UID:{stable_uid(block)}",
+            block,
+            count=1,
+            flags=re.MULTILINE,
+        )
         block = re.sub(r"^LOCATION:[^\r\n]*\r?\n", "", block, flags=re.MULTILINE)
         if link and not get_prop(block, "URL"):
             url = obsidian_deep_link(link.group(0))
