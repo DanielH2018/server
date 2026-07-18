@@ -6,6 +6,7 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
+- Fix Ansible Lint Git Worktree catch
 - Setup Radarr with Sonarr's autofixing
 
 _Recently cleared (2026-06-29): adopted `ruff format` + a `ruff format --check` prek hook
