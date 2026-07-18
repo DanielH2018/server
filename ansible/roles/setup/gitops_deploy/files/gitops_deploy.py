@@ -29,6 +29,7 @@ from deploy_logic import (  # noqa: E402
     broad_remediation,
     containers_to_gate,
     deferred_service_alerts,
+    dirty_alert_slot,
     gate_services,
     health_decision,
     is_diverged,
@@ -78,12 +79,14 @@ META_ALERT_FILE = "/var/lib/gitops-deploy/meta_alerted_sha"
 # it every tick until a confirmed 2xx clears it. The per-SHA markers above still gate DETECTION (so a
 # delivered alert isn't re-queued on the broad path's every-tick re-eval); this queue owns delivery.
 PENDING_ALERTS_FILE = "/var/lib/gitops-deploy/pending_alerts.json"
-# Last CT date (YYYY-MM-DD) we paged for a dirty working tree. The tick runs every
-# 30 min, so without this an open edit session would re-alert all day; we throttle
-# to one alert per day, fired on the first tick at/after DIRTY_ALERT_HOUR (07:00 CT).
+# Last dirty-alert slot (YYYY-MM-DD:am|pm) we paged for a dirty working tree. The tick runs every
+# 30 min, so without this an open edit session would re-alert all day; we throttle to one alert per
+# slot — a morning slot fired on the first tick at/after DIRTY_ALERT_MORNING_HOUR (08:00 CT) and an
+# evening slot at/after DIRTY_ALERT_EVENING_HOUR (20:00 CT). See deploy_logic.dirty_alert_slot.
 DIRTY_ALERT_FILE = "/var/lib/gitops-deploy/dirty_alerted_date"
-DIRTY_ALERT_HOUR = 7
-# Host clock is UTC; the operator wants the daily reminder at 07:00 local time.
+DIRTY_ALERT_MORNING_HOUR = 8
+DIRTY_ALERT_EVENING_HOUR = 20
+# Host clock is UTC; the operator wants the twice-daily reminder at 08:00 and 20:00 local time.
 CHICAGO = ZoneInfo("America/Chicago")
 
 
@@ -393,16 +396,26 @@ def main() -> int:
     )
     action = next_action(local, origin, hold, dirty, origin_ahead)
     if action == "dirty":
-        # Healthy skip (operator mid-edit). Throttle the page to once a day at
-        # ~07:00 CT instead of every 30-min tick (see DIRTY_ALERT_FILE).
+        # Healthy skip (operator mid-edit). Throttle the page to twice a day at
+        # ~08:00 and ~20:00 CT instead of every 30-min tick (see DIRTY_ALERT_FILE).
         now_ct = datetime.now(CHICAGO)
-        if should_alert_dirty(now_ct, _read_marker(DIRTY_ALERT_FILE), DIRTY_ALERT_HOUR):
+        if should_alert_dirty(
+            now_ct,
+            _read_marker(DIRTY_ALERT_FILE),
+            DIRTY_ALERT_MORNING_HOUR,
+            DIRTY_ALERT_EVENING_HOUR,
+        ):
             # Mark as alerted only on confirmed delivery, else retry next tick (see discord()).
             if discord(
                 "⚠️ gitops-deploy: working tree dirty on daniel-server — skipping. "
                 "Resolve manually."
             ):
-                _write_marker(DIRTY_ALERT_FILE, now_ct.date().isoformat())
+                _write_marker(
+                    DIRTY_ALERT_FILE,
+                    dirty_alert_slot(
+                        now_ct, DIRTY_ALERT_MORNING_HOUR, DIRTY_ALERT_EVENING_HOUR
+                    ),
+                )
         return 0
     if action == "noop":
         return 0

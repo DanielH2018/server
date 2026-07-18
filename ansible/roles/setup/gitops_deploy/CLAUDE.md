@@ -23,8 +23,9 @@ the held SHA and the hold clears automatically.
   completes normally and writes `last_run` (`next_action(..., dirty=True) -> "dirty"`) — the
   skip is healthy, not an outage, so it must not trip the GitOps-Alive monitor's stale-file
   threshold. The dirty-tree Discord page is throttled (`should_alert_dirty`) to at most once
-  per America/Chicago calendar day, on the first tick at/after 07:00 CT — without it a long
-  edit session would re-page every 30-min tick. State: `/var/lib/gitops-deploy/dirty_alerted_date`.
+  per slot — twice per America/Chicago day, on the first tick at/after 08:00 CT (morning) and
+  at/after 20:00 CT (evening) — without it a long edit session would re-page every 30-min tick.
+  State: `/var/lib/gitops-deploy/dirty_alerted_date` (holds the `YYYY-MM-DD:am|pm` slot key).
 - **Broad changes** (shared `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`)
   are NOT auto-scoped — the deployer alerts and defers to a manual full deploy.
 - **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
