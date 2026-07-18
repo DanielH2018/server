@@ -224,21 +224,44 @@ def is_diverged(
     return origin_head != local_head and not origin_ahead and not local_ahead
 
 
-def should_alert_dirty(now, last_alert_date: str | None, alert_hour: int = 7) -> bool:
+def dirty_alert_slot(now, morning_hour: int = 8, evening_hour: int = 20) -> str | None:
+    """The dirty-alert time slot `now` falls in, or None before the morning slot.
+
+    The day has two slots — morning (`morning_hour` <= h < `evening_hour`) and
+    evening (h >= `evening_hour`) — so a persistently dirty tree pages at most
+    twice per America/Chicago day (~08:00 and ~20:00 CT). Before `morning_hour`
+    there is no slot, so an overnight-dirty tree stays quiet until the morning.
+    Returned as `YYYY-MM-DD:am|pm` so the caller can store it as the throttle key
+    and compare the next tick against it.
+    """
+    if now.hour < morning_hour:
+        return None
+    slot = "am" if now.hour < evening_hour else "pm"
+    return f"{now.date().isoformat()}:{slot}"
+
+
+def should_alert_dirty(
+    now,
+    last_alert_slot: str | None,
+    morning_hour: int = 8,
+    evening_hour: int = 20,
+) -> bool:
     """Whether this tick should send the dirty-working-tree Discord alert.
 
     The deploy timer fires every 30 min, so an unthrottled dirty alert pages the
-    webhook through every long edit session. This caps it to at most once per
-    calendar day and suppresses it before `alert_hour`, so an overnight-dirty
-    tree pages once in the morning (~07:00 CT) instead of all night.
+    webhook through every long edit session. This caps it to at most once per slot
+    (see `dirty_alert_slot`) — once in the morning (~08:00 CT) and once at night
+    (~20:00 CT) — and stays silent before the morning slot, so an overnight-dirty
+    tree pages twice a day instead of all night.
 
     `now` is the current time already in the target timezone (America/Chicago);
-    `last_alert_date` is the ISO date (`YYYY-MM-DD`) we last alerted on, or None.
-    The caller records `now.date().isoformat()` whenever this returns True.
+    `last_alert_slot` is the slot key (`YYYY-MM-DD:am|pm`) we last alerted on, or
+    None. The caller records `dirty_alert_slot(now, ...)` whenever this returns True.
     """
-    if now.hour < alert_hour:
+    slot = dirty_alert_slot(now, morning_hour, evening_hour)
+    if slot is None:
         return False
-    return last_alert_date != now.date().isoformat()
+    return last_alert_slot != slot
 
 
 def container_names(compose_text: str) -> list[str]:
