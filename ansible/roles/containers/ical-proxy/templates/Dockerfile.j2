@@ -1,5 +1,12 @@
 FROM python:3.14-slim
 WORKDIR /app
-RUN pip install flask requests
+# Pin to the versions uv.lock resolves for the `dev` group, so the runtime image matches what
+# test_app.py validates against (a bare `pip install flask requests` re-resolves to newest PyPI on
+# every weekly rebuild, certifying a flask the container never runs — 2026-07-18 review L1). Kept in
+# lockstep with uv.lock by ansible/tests/test_ical_proxy_pins_match_uv_lock.py.
+RUN pip install flask==3.1.3 requests==2.34.2
 COPY app/app.py .
+# Drop root: the app only reads app.py and binds :5000 (no privileged port, read-only rootfs).
+RUN useradd -u 1000 -m appuser
+USER appuser
 CMD ["python", "app.py"]
