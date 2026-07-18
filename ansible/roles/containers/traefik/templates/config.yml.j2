@@ -40,6 +40,27 @@ http:
               - "*.{{ domain }}"
               - "*.local.{{ domain }}"
 
+    homelab-mcp:
+      # Read-only homelab MCP server (roles/containers/homelab-mcp). LAN-ONLY: matches only
+      # mcp.local.<domain> (NO public mcp.<domain> router) AND requires the bearer token in the
+      # Authorization header. Defined here (file provider, mode 0600) — not as a Docker label —
+      # so the token stays out of container metadata (the livesync X-Sync-Token pattern). A
+      # request without the exact token matches NO router for the host and 404s before the app;
+      # the app re-checks the token too (defence in depth, for shared-net peers skipping Traefik).
+      entryPoints:
+        - https
+      rule: "Host(`mcp.local.{{ domain }}`) && Header(`Authorization`, `Bearer {{ homelab_mcp_token }}`)"
+      service: homelab-mcp@docker
+      middlewares:
+        - rate-limit
+      tls:
+        certResolver: cloudflare
+        domains:
+          - main: "{{ domain }}"
+            sans:
+              - "*.{{ domain }}"
+              - "*.local.{{ domain }}"
+
 #endregion
 #region services
   services:

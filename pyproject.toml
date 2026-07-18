@@ -27,6 +27,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/containers/configarr/files",
   "ansible/roles/containers/terraria-stats/files",
   "ansible/roles/containers/ical-proxy/files",
+  "ansible/roles/containers/homelab-mcp/files",
   ".claude/hooks",
   ".claude/scripts",                 # audit-permissions report/suggester logic tests
   "scripts",                         # closes the smoke_extract CI gap

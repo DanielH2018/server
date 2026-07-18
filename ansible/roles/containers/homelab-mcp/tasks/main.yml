@@ -1,0 +1,45 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}/app"
+
+- name: Copy App Code
+  tags: [config]
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/app/{{ item }}"
+    mode: "0664"
+  with_items:
+    - app.py
+    - safe_reads.py
+
+# docker-compose.yml is templated by common/docker_deploy.yml below — only the
+# build-context Dockerfile needs templating here.
+- name: Create Dockerfile from template
+  tags: [config]
+  ansible.builtin.template:
+    src: Dockerfile.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/Dockerfile"
+    mode: "0664"
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+
+# Locally-built image — Renovate only PRs python:3.14-slim on a NEW tag; same-tag base
+# refreshes (patch/security rebuilds) need a scheduled rebuild with build.pull. Same
+# pattern as ical-proxy; minute staggers the Sunday 06:00 slot.
+- name: Schedule weekly redeploy cron job
+  tags: [cron]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: redeploy_cron.yml
+  vars:
+    common_redeploy_cron_minute: "25"

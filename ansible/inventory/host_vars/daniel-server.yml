@@ -251,6 +251,18 @@ containers_list:
     use_authelia: true
     networks:
       - monitoring
+  - name: homelab-mcp
+    port: 8000
+    # Read-only MCP server exposing live state to Claude Code (LAN-only, token-gated at
+    # Traefik + re-checked in-app). No Authelia — a headless MCP client can't pass 2FA.
+    # networks: proxy (Traefik reaches the token-gated route), monitoring (prometheus +
+    # loki + uptime-kuma + scrutiny + docker-proxy), apps (home-assistant:8123 for the
+    # ha_state tool — same precedent as monitor-bridge/prometheus joining apps for HA).
+    use_authelia: false
+    networks:
+      - proxy
+      - monitoring
+      - apps
   - name: monitor-bridge
     port: false
     use_authelia: false
