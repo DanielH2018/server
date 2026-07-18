@@ -14,17 +14,9 @@ initial_fetch_done = threading.Event()
 
 cached_ics = {"1": "", "2": "", "4": ""}
 
-EMOJI_RE = re.compile(
-    "["
-    "\U00002600-\U000027bf"  # misc symbols & dingbats
-    "\U0001f300-\U0001faff"  # all major emoji blocks
-    "\U00002b00-\U00002bff"  # misc symbols and arrows (⬆)
-    "\U000023e0-\U000023ff"  # misc technical (⏫)
-    "\ufe00-\ufe0f"  # variation selectors
-    "\u200d"  # zero-width joiner
-    "]+",
-    flags=re.UNICODE,
-)
+# The note's deep link inside a DESCRIPTION/LOCATION value. Stop at whitespace or the
+# closing quote of the malformed ALTREP the obsidian-ical-plugin puts in LOCATION.
+OBSIDIAN_URI_RE = re.compile(r'obsidian://[^\s"]+')
 
 
 def parse_vevent_blocks(ics_text):
@@ -142,34 +134,43 @@ def process_ics(raw_ics):
     return header + "\r\n".join(filtered) + "\r\n" + footer
 
 
+def obsidian_deep_link(uri):
+    """Return a browser-safe obsidian:// link.
+
+    The obsidian-ical-plugin leaves a literal '&' in folder names (e.g. the
+    "10 Tasks & Habits" folder). In an <a href> a browser reads that '&' as a
+    query-param separator and drops the rest of the path, opening the wrong note.
+    Percent-encode any '&' inside the file value so the path reaches Obsidian intact.
+    """
+    marker = "&file="
+    idx = uri.find(marker)
+    if idx == -1:
+        return uri
+    head, path = uri[: idx + len(marker)], uri[idx + len(marker) :]
+    return head + path.replace("&", "%26")
+
+
 def process_obsidian_ics(raw_ics):
-    """Fix date-only DTSTART/DTSTAMP, strip Habits events, clean up output."""
-    header, events, footer = parse_vevent_blocks(raw_ics)
-    fixed = []
-    for vevent in events:
-        # Filter out Habits.md events
-        location = get_prop(vevent, "LOCATION")
-        if location and "Habits.md" in location:
-            continue
-        # Fix date-only DTSTART → VALUE=DATE
-        vevent = re.sub(
-            r"^(DTSTART):(\d{8})\r?$", r"\1;VALUE=DATE:\2", vevent, flags=re.MULTILINE
-        )
-        # Fix date-only DTSTAMP → datetime
-        vevent = re.sub(
-            r"^(DTSTAMP):(\d{8})\r?$", r"\1:\2T000000Z", vevent, flags=re.MULTILINE
-        )
-        # Remove LOCATION lines entirely
-        vevent = re.sub(r"^LOCATION:[^\r\n]*\r?\n", "", vevent, flags=re.MULTILINE)
-        # Strip emojis from SUMMARY and collapse extra spaces
-        vevent = re.sub(
-            r"^(SUMMARY:)(.+)$",
-            lambda m: m.group(1) + " ".join(EMOJI_RE.sub("", m.group(2)).split()),
-            vevent,
-            flags=re.MULTILINE,
-        )
-        fixed.append(vevent)
-    return header + "\r\n".join(fixed) + "\r\n" + footer
+    """Give each Obsidian VTODO a clickable URL and drop its noisy LOCATION line.
+
+    The obsidian-ical-plugin emits the note's deep link only in DESCRIPTION and as a
+    malformed LOCATION (raw ALTREP text) — never as a URL property. So Homepage's
+    calendar renders the task as plain, non-clickable text and shows the ALTREP string
+    on hover. Hoist the obsidian:// link into a real URL property (Homepage then wraps
+    the row in an <a href>) and remove LOCATION so hover shows the task title instead.
+    """
+
+    def rewrite_todo(match):
+        block = match.group(0)
+        source = get_prop(block, "DESCRIPTION") or get_prop(block, "LOCATION") or ""
+        link = OBSIDIAN_URI_RE.search(source)
+        block = re.sub(r"^LOCATION:[^\r\n]*\r?\n", "", block, flags=re.MULTILINE)
+        if link and not get_prop(block, "URL"):
+            url = obsidian_deep_link(link.group(0))
+            block = block.replace("END:VTODO", f"URL:{url}\r\nEND:VTODO", 1)
+        return block
+
+    return re.sub(r"BEGIN:VTODO.*?END:VTODO", rewrite_todo, raw_ics, flags=re.DOTALL)
 
 
 # Ceiling on a fetched ICS feed read into memory. Real calendars are KBs-to-low-MBs; the

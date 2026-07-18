@@ -14,6 +14,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "jinja2>=3",                      # validate_compose_templates
   "requests",                       # community.docker modules (docker_container_info dependency check)
   "docker",                         # community.docker SDK-backed modules
+  "flask",                          # ical-proxy app.py imports flask at module top (test_app.py)
   "ruff>=0.10",                     # first-party Python lint gate (prek hook); pinned via uv.lock
   "shellcheck-py==0.11.0.1",        # validate_shell_templates; pinned to match prek.toml's shellcheck-py rev
 ]
@@ -25,6 +26,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/containers/autofix-bridge/files",
   "ansible/roles/containers/configarr/files",
   "ansible/roles/containers/terraria-stats/files",
+  "ansible/roles/containers/ical-proxy/files",
   ".claude/hooks",
   ".claude/scripts",                 # audit-permissions report/suggester logic tests
   "scripts",                         # closes the smoke_extract CI gap
