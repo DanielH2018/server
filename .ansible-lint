@@ -7,6 +7,12 @@ exclude_paths:
   - "*.log"
   - "ansible/vars/secrets.yml"
   - "ansible/collections/"
+  # Claude Code creates git worktrees under .claude/worktrees/<name>/, each a FULL repo
+  # checkout — including its own copy of the vendored ansible/collections/ whose changelog
+  # YAMLs trip yaml[indentation]. The root `ansible/collections/` exclude above only matches
+  # the primary worktree's copy, so the whole subtree must be excluded here (ansible-lint walks
+  # the filesystem, not git). Without this, ANY staged .yml fails the full-repo lint hook.
+  - ".claude/worktrees/"
 
 skip_list:
   - no-changed-when
