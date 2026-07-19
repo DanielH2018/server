@@ -57,6 +57,29 @@ so a committed subscription baseline would trend noise, not regressions.
 `uv run pytest evals` validates every case file's shape without an API call or a subscription
 call. The LLM run above is manual — see **Auth & fidelity** for its cost and its trust caveats.
 
+## Trend tracking (cross-run)
+
+A single `--json` report is point-in-time. `trend.py` rolls hermetic reports into
+`evals/history.json` across runs, so a case that was reliably passing and drops shows up as a
+**regression** instead of looking like a one-off flake:
+
+```bash
+# after a hermetic run that wrote report.json:
+node $HOME/.local/share/chezmoi/evals/run-evals.mjs --agent security-review --json report.json
+uv run python evals/trend.py report.json            # append + flag REGRESSED / RECOVERED / FLAKY / STABLE
+uv run python evals/trend.py report.json --no-write  # report only, don't touch history
+```
+
+- Records **hermetic** runs only — `--mode subscription` prints current FAILs but never writes
+  (subscription numbers are too noisy to trend, per **Auth & fidelity** above).
+- Exits non-zero if any case **regressed** (was passing last run, now failing) — usable as a gate.
+- **STABLE** = met threshold in the last `--stable-n` (default 3) hermetic runs; a candidate
+  skip-set. The chezmoi engine has no `--skip` flag yet, so this is advisory today — wiring
+  `--skip-stable` into `run-evals.mjs` is a small follow-up if you want the paid-run cost saving
+  automated.
+- `history.json` is committed (a hermetic run is reproducible, so it's a real baseline). The pure
+  trend logic is offline-tested in `test_trend.py`, part of `uv run pytest evals`.
+
 ## What's tested (v1: the /homelab-review fleet)
 
 - **catch-defect** — a planted regression (drawn from this repo's documented gotchas) the agent must flag.
