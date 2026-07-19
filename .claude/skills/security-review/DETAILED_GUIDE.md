@@ -151,9 +151,14 @@ finding before reporting it (and re-check each dismissal the same way):
   is not a verdict — go read the code.
 - **Comment skepticism.** A code comment, a reassuring name (`sanitize`, `*_valid`), a `# intentional`,
   or "the gateway/Traefik/Authelia handles it" NEVER satisfies a check on its own — verify the behavior
-  in the actual code. Most misfires here trace to trusting prose over code.
+  in the actual code. In particular, a defense that runs at the edge/proxy *before* the handler (Traefik
+  middleware, CrowdSec, forward-auth) does not clear a sink-level finding unless you confirm the path
+  can't skip it — a port bound to `0.0.0.0`, an internal/container-network caller, or a `.local`/LAN
+  route that bypasses the proxy. Most misfires here trace to trusting prose over code.
 - **Check every writer/caller.** Before calling a value "server-controlled" or a sink "unreachable",
   grep ALL writers of that value / callers of that sink — one safe path does not clear the others.
+- **Check git history before flagging.** `git log`/`git blame` the lines — a finding already fixed in a
+  later commit, or reverted on purpose with the reason in the message, is not live. Cite the commit.
 - **Don't merge distinct issues.** Findings that differ in file, parameter, or fix are separate, even
   at the same service.
 

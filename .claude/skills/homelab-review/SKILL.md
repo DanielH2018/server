@@ -63,7 +63,9 @@ operator more than a missed one. So: **deduplicate first** (below), then for eac
 High/Medium finding dispatch one skeptic — `general-purpose`, **`model: sonnet`**, all in one
 parallel message — whose ONLY job is to try to **refute** it against: the role's CLAUDE.md
 (accepted trade-offs), the role's tasks/templates + shared macros, monitor-bridge `check.py` +
-role crons, the don't-re-flag memories, and live state via `scripts/probe.py` where relevant.
+role crons, the don't-re-flag memories, **git history (`git log`/`git blame` the cited lines — a
+finding already fixed in a later commit or intentionally reverted with a rationale is not live)**,
+and live state via `scripts/probe.py` where relevant.
 Verdict per finding: **CONFIRMED** (refutation failed), **REFUTED** (cite the disproving
 evidence), or **UNCERTAIN**. Refuted findings drop to a one-line "refuted in verification"
 appendix; UNCERTAIN ones stay but are marked unverified. Lows skip verification.
