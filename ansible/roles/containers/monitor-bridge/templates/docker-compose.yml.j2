@@ -114,8 +114,11 @@ services:
       # Comma-separated indexer names never paged (case-insensitive) — chronically-flaky public
       # trackers whose backend routinely 503s/times-out past the sustained-down gate while the other indexers
       # cover the same searches. The Pirate Bay's apibay.org (503s + full timeouts) flapped this
-      # monitor up/down for hours on 2026-07-05. Prowlarr's own all-down onHealthIssue is the backstop.
-      - PROWLARR_INDEXER_IGNORE=The Pirate Bay
+      # monitor up/down for hours on 2026-07-05. 1337x.to has hard-blocked our egress IP at Cloudflare
+      # (403 error code 1006) since 2026-07-12 — FlareSolverr (which 1337x already routes through)
+      # solves JS challenges but can't clear an IP ban, so it's a permanent upstream block, not a flap.
+      # Prowlarr's own all-down onHealthIssue is the backstop.
+      - PROWLARR_INDEXER_IGNORE=The Pirate Bay,1337x
       - KUMA_PUSH_PROWLARR_INDEXERS={{ monitor_bridge_prowlarr_indexers_push_token }}
       # GitOps deployer liveness + deploy-status. State files are written on the host by
       # gitops_deploy.py and bind-mounted read-only at /gitops-state.
