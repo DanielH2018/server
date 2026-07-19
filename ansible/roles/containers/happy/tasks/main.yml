@@ -1,0 +1,54 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}/data"
+
+# No published happy image (see role CLAUDE.md) — the compose build context is a pinned
+# upstream checkout on the host, gitignored (containers/ is outside the repo's tracked tree).
+# Bumping happy_git_version changes this checkout's contents, which changes the Docker build
+# layer cache, which produces a new image ID — `docker_deploy.yml`'s `recreate: auto` picks
+# that up on its own (same reasoning as an image tag bump), so this role does NOT need to
+# wire common_config_changed.
+- name: Checkout happy source at pinned version
+  tags: [config]
+  ansible.builtin.git:
+    repo: https://github.com/slopus/happy.git
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/src"
+    version: "{{ happy_git_version }}"
+
+- name: Make the happy data dir root-owned (container runs as root under cap_drop ALL)
+  # The image runs as root and, with cap_drop:[ALL], has no CAP_DAC_OVERRIDE — so it can
+  # only write a bind mount it owns. setup_dirs.yml creates it as the deploy user (1000);
+  # re-own to root so /data/pglite + /data/files are writable. See role CLAUDE.md "Hardening".
+  become: true
+  tags: [config]
+  ansible.builtin.file:
+    path: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/data"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+
+# Locally-built image (no upstream registry tag to Watchtower-track) — a scheduled rebuild
+# picks up node:20 base-image security patches between happy_git_version bumps. Same pattern
+# as homelab-mcp tasks/main.yml. Note: the build context is the whole pnpm monorepo (incl.
+# happy-app's expo deps), so this weekly rebuild is heavier than the other locally-built
+# roles' — acceptable at a Sunday-06:00 off-peak slot.
+- name: Schedule weekly redeploy cron job
+  tags: [cron]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: redeploy_cron.yml
+  vars:
+    common_redeploy_cron_minute: "30"

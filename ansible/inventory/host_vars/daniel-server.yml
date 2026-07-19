@@ -30,6 +30,13 @@ autofix_fake_remux_policy:
   grab_grace_s: 300
   max_attempts: 3
   history_retention_days: 14
+# Self-hosted happy (slopus/happy, standalone shape) — pinned upstream commit for the
+# ansible.builtin.git checkout that becomes the Docker build context (see
+# roles/containers/happy). No usable release tag exists yet: the newest tag (v3) predates
+# the standalone.ts/PGlite architecture (verified missing from that ref, 2026-07-19), and
+# the cli-* tags are the npm CLI package's own releases, not the server. Bump this SHA to
+# update; a redeploy then rebuilds from the new checkout.
+happy_git_version: 3f161de70541b1cedaf0b7547ed70889d8dae22d
 containers_list:
   # Organization: Core Services (proxy network)
   - name: traefik
@@ -263,6 +270,15 @@ containers_list:
       - proxy
       - monitoring
       - apps
+  - name: happy
+    port: 3005
+    # Self-hosted Claude Code session-sync server (unified PC/homelab/phone session list,
+    # E2E-encrypted). No Authelia: happy clients authenticate via their own device-auth
+    # crypto pairing and can't pass a 2FA redirect. LAN/WG-only instead — the route in
+    # traefik's file provider matches ONLY happy.local.<domain>, no public router.
+    use_authelia: false
+    networks:
+      - proxy
   - name: monitor-bridge
     port: false
     use_authelia: false

@@ -1,0 +1,45 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+{% from 'healthcheck.yml.j2' import healthcheck %}
+---
+services:
+  happy:
+    build:
+      context: ./src           # pinned upstream checkout — see tasks/main.yml + happy_git_version
+      dockerfile: Dockerfile
+      pull: true                # refresh the node:20 base on rebuild
+    container_name: happy
+    restart: unless-stopped
+    # Runs as root (the image's default — its Dockerfile sets no USER, and the built app
+    # tree under /repo is root-readable-only, so a `user:` override can't traverse it). To
+    # let root write the volume under cap_drop:[ALL] (no CAP_DAC_OVERRIDE), tasks/main.yml
+    # makes the ./data bind mount root-owned. See CLAUDE.md "Hardening".
+    environment:
+      - HANDY_MASTER_SECRET={{ handy_master_secret }}
+      - PORT={{ container_item.port }}
+      - HOST=0.0.0.0
+      # Local-storage attachment URLs are built from this (files.ts getPublicUrl) — must
+      # resolve for every client (PC/phone/homelab), so it's the WG/LAN-only hostname.
+      - PUBLIC_URL=https://happy.local.{{ domain }}
+      - NODE_ENV=production
+      - TZ=America/Chicago
+    volumes:
+      # PGlite (/data/pglite) + local blob storage (/data/files) — Kopia-backed bind mount.
+      - ./data:/data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    {{ healthcheck('["CMD", "curl", "-f", "http://localhost:' ~ container_item.port ~ '/health"]', start_period='60s', name=container_item.name) }}
+    {{ service_networks() }}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network={{ (container_item.networks | default([docker_network]))[0] }}"
+      - "traefik.http.services.happy.loadbalancer.server.port={{ container_item.port }}"
+      - "com.centurylinklabs.watchtower.enable=false"   # built image, not a pulled tag
+      {{ kuma(container_item.name) }}
+    # node + PGlite; tune from cAdvisor/Grafana once real usage is visible.
+    {{ resources('1.0', '1G', '0.10', '128M') }}
+
+{{ external_networks() }}

@@ -61,6 +61,27 @@ http:
               - "*.{{ domain }}"
               - "*.local.{{ domain }}"
 
+    happy:
+      # Self-hosted happy (roles/containers/happy) — Claude Code session-sync server
+      # (slopus/happy, standalone shape). LAN-ONLY: matches only happy.local.<domain> (NO
+      # public happy.<domain> router). No bearer/Authelia, unlike homelab-mcp above — happy
+      # clients authenticate via their own E2E device-auth crypto pairing and can't send a
+      # Traefik bearer or pass Authelia 2FA, so the posture here is network-reachability
+      # (WireGuard/LAN + Pi-hole *.local DNS) + native auth. The server never sees plaintext.
+      entryPoints:
+        - https
+      rule: "Host(`happy.local.{{ domain }}`)"
+      service: happy@docker
+      middlewares:
+        - rate-limit
+      tls:
+        certResolver: cloudflare
+        domains:
+          - main: "{{ domain }}"
+            sans:
+              - "*.{{ domain }}"
+              - "*.local.{{ domain }}"
+
 #endregion
 #region services
   services:
