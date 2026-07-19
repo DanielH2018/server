@@ -42,4 +42,41 @@ services:
     # node + PGlite; tune from cAdvisor/Grafana once real usage is visible.
     {{ resources('1.0', '1G', '0.10', '128M') }}
 
+  # Phase 3 — browser dashboard. Separate static build (Dockerfile.webapp): expo exports the
+  # happy-app web bundle, served by nginx. HAPPY_SERVER_URL is baked in at build time (the
+  # Dockerfile maps this ARG to ENV EXPO_PUBLIC_HAPPY_SERVER_URL, which getServerUrl() falls
+  # back to) so the dashboard defaults to OUR server, not api.cluster-fluster.com. The browser
+  # calls the API cross-origin at happy.local — the server allows it (CORS origin:*). LAN-only,
+  # no Authelia (matches the happy route); route lives in the traefik file provider.
+  happy-webapp:
+    build:
+      context: ./src
+      dockerfile: Dockerfile.webapp
+      pull: true                # refresh the node:20 / nginx alpine bases on rebuild
+      args:
+        HAPPY_SERVER_URL: https://happy.local.{{ domain }}
+    container_name: happy-webapp
+    restart: unless-stopped
+    # nginx:alpine (Dockerfile.webapp runner stage) binds :80 and forks workers — under
+    # cap_drop:[ALL] that needs NET_BIND_SERVICE + SETUID/SETGID/CHOWN (freshrss feed-cache twin).
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    {{ healthcheck('["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/"]', start_period='20s', name='happy-webapp') }}
+    {{ service_networks() }}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network={{ (container_item.networks | default([docker_network]))[0] }}"
+      - "traefik.http.services.happy-webapp.loadbalancer.server.port=80"
+      - "com.centurylinklabs.watchtower.enable=false"   # built image, not a pulled tag
+      {{ kuma('happy-webapp') }}
+    # nginx serving a static bundle — tiny; mirrors littlelink/bento-pdf caps.
+    {{ resources('0.50', '128M', '0.05', '16M') }}
+
 {{ external_networks() }}

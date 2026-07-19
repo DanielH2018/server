@@ -82,10 +82,30 @@ across versions). Pairing (`~/.happy` token) persists across restarts — no re-
   NOT the "Authenticate Terminal → paste URL" field (which wants the CLI's QR/pairing URL —
   pasting the server URL there yields "Invalid Authentication URL").
 
-## Webapp (Phase 3 — not deployed)
-The standalone image serves API/WebSocket only — the root `Dockerfile` never runs `expo
-export` for `happy-app`. A browser dashboard needs a separate static build; see
-`docs/happy-selfhost-spec.md` §6. Not needed for the phone app or CLI clients.
+## Webapp — browser dashboard (Phase 3, deployed)
+Second service `happy-webapp` in this role's compose: a separate static build
+(`Dockerfile.webapp` — `expo export --platform web` → `nginx:alpine` on :80), routed at
+`app.local.<domain>` (traefik file provider). The standalone server image serves
+API/WebSocket only, so this is its own container. Not needed for the phone app or CLI.
+- **Server URL is baked at build time.** Compose passes `build.args.HAPPY_SERVER_URL` →
+  the Dockerfile maps it to `ENV EXPO_PUBLIC_HAPPY_SERVER_URL`, which `getServerUrl()`
+  (`packages/happy-app/sources/sync/serverConfig.ts`) falls back to before the cloud default.
+  So the dashboard defaults to `https://happy.local.<domain>` out of the box — no manual
+  "Custom Server URL" needed (that step was only for the phone's *prebuilt* vendor app, which
+  had no bake). Bumping `happy_git_version` rebuilds both services and re-bakes this.
+- **Cross-origin is fine.** The browser (origin `app.local`) calls the API at `happy.local` —
+  the server sets Fastify + Socket.IO CORS `origin:'*'`, and the vendor itself runs the webapp
+  on a separate origin, so this is a first-class config.
+- **No Authelia (WG-only), by decision.** Same posture as the sync route: the bundle holds no
+  secrets and its API calls hit `happy.local` (also un-Authelia'd), so a UI-only gate would add
+  a second login for no data-protection gain. Reachability + happy's native auth is the gate.
+- **Hardening:** `nginx:alpine` binds :80, so under `cap_drop:[ALL]` it needs
+  `cap_add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE]` (the freshrss `feed-cache` twin).
+  Healthcheck hits `http://127.0.0.1/` — **not** `localhost` (busybox `wget` resolves that to
+  `::1`, which nginx's IPv4-only `listen 80` refuses). `read_only` is deferred (matches the
+  server service); revisit with a `tmpfs` if hardening further.
+- **First build is heavy:** the webapp's `pnpm install --filter happy-app...` pulls the whole
+  Expo/React Native toolchain — separate from and heavier than the server build. Cached after.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Checkout/cron: `tasks/main.yml` ·

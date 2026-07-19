@@ -82,6 +82,28 @@ http:
               - "*.{{ domain }}"
               - "*.local.{{ domain }}"
 
+    happy-webapp:
+      # Self-hosted happy browser dashboard (roles/containers/happy, Phase 3) — the static
+      # webapp that talks to the happy server. Same posture as the happy router above:
+      # LAN-ONLY (only app.local.<domain>, NO public app.<domain>), and NO Authelia. The
+      # bundle holds no secrets and its API/WS calls go to happy.local (which has no Authelia
+      # either) — real gate is WireGuard reachability + happy's own account/E2E auth, which
+      # the browser prompts for regardless. Gating only the static UI here would add a second
+      # login for no data-protection gain, so it matches the sync route: reachability + native auth.
+      entryPoints:
+        - https
+      rule: "Host(`app.local.{{ domain }}`)"
+      service: happy-webapp@docker
+      middlewares:
+        - rate-limit
+      tls:
+        certResolver: cloudflare
+        domains:
+          - main: "{{ domain }}"
+            sans:
+              - "*.{{ domain }}"
+              - "*.local.{{ domain }}"
+
 #endregion
 #region services
   services:
