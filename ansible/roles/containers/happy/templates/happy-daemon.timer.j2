@@ -1,0 +1,14 @@
+# Managed by Ansible (roles/containers/happy) — edits are overwritten on deploy.
+# Starts the Happy daemon shortly after boot and re-asserts it every 5 min (self-heal if it
+# ever dies). Monotonic timer (no lingering needed — happy-daemon.service runs as User=ubuntu
+# under the system manager, not a user-session service).
+[Unit]
+Description=Keep the Happy CLI daemon alive (boot + every 5 min)
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+Unit=happy-daemon.service
+
+[Install]
+WantedBy=timers.target

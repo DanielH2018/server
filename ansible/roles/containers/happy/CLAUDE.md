@@ -65,6 +65,23 @@ runtime may write a compile cache under `/repo`; revisit with a scoped `tmpfs:` 
 further. Root + `cap_drop:[ALL]` + `no-new-privileges` is an accepted fleet posture for
 root-designed images (cf. portainer, zigbee2mqtt).
 
+## Daemon service (host-side, not the container)
+
+Separate from the server container: this host is also a **client**. The `happy` CLI
+(`npm i -g happy`, fnm node) runs a background **daemon** that keeps daniel-server reachable
+from the phone/PC — view, resume, and spawn Claude Code sessions here without a terminal
+open. To survive reboots it's wrapped in a systemd **timer + oneshot** (`happy-daemon.timer`
+→ `happy-daemon.service`, templated to `/etc/systemd/system`): boot + every 5 min it runs
+`happy daemon start`, which is **idempotent** (no-op if already up), as `User=ubuntu`. **No
+lingering** — it's a system unit, not a user-session service. `node`/happy are invoked by
+absolute path via fnm's `default` alias, so an fnm node-version bump keeps working **only if
+`happy` is re-installed globally on the new version** (fnm global npm packages don't carry
+across versions). Pairing (`~/.happy` token) persists across restarts — no re-scan.
+- Check: `systemctl status happy-daemon.timer` · `happy daemon status` · `happy daemon list`
+- The phone/PC set the server via the app's **Custom Server URL** setting (`server.tsx`),
+  NOT the "Authenticate Terminal → paste URL" field (which wants the CLI's QR/pairing URL —
+  pasting the server URL there yields "Invalid Authentication URL").
+
 ## Webapp (Phase 3 — not deployed)
 The standalone image serves API/WebSocket only — the root `Dockerfile` never runs `expo
 export` for `happy-app`. A browser dashboard needs a separate static build; see

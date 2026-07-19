@@ -40,6 +40,39 @@
     name: common
     tasks_from: docker_deploy.yml
 
+# Boot-persistent Happy CLI daemon (see role CLAUDE.md "Daemon service"). Keeps the homelab
+# reachable from the phone/PC — view/resume/spawn sessions without a terminal open — across
+# reboots. A systemd timer re-asserts the (idempotent) `happy daemon start` at boot + every
+# 5 min; no lingering (system unit as User=ubuntu, not a user-session service).
+- name: Install the happy daemon systemd service + timer
+  become: true
+  tags: [config]
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - happy-daemon.service
+    - happy-daemon.timer
+
+- name: Enable + start the happy daemon keepalive timer
+  become: true
+  tags: [config]
+  ansible.builtin.systemd:
+    name: happy-daemon.timer
+    daemon_reload: true
+    enabled: true
+    state: started
+
+- name: Assert the happy daemon is running now (idempotent oneshot)
+  become: true
+  tags: [config]
+  ansible.builtin.systemd:
+    name: happy-daemon.service
+    state: started
+
 # Locally-built image (no upstream registry tag to Watchtower-track) — a scheduled rebuild
 # picks up node:20 base-image security patches between happy_git_version bumps. Same pattern
 # as homelab-mcp tasks/main.yml. Note: the build context is the whole pnpm monorepo (incl.

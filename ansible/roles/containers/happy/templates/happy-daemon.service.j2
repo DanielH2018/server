@@ -1,0 +1,20 @@
+# Managed by Ansible (roles/containers/happy) — edits are overwritten on deploy.
+# Keeps the Happy CLI background daemon running so the phone/PC can view, resume, and
+# spawn Claude Code sessions on this host without an interactive terminal open. Triggered
+# at boot + every 5 min by happy-daemon.timer; `happy daemon start` is idempotent (a no-op
+# if the daemon is already up), so re-running it is safe. node + the happy entrypoint are
+# invoked by absolute path via fnm's `default` alias (follows the default node version),
+# so no shell/PATH resolution is needed to find them.
+[Unit]
+Description=Happy CLI background daemon (self-hosted Claude Code session sync)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+Environment=HOME=/home/{{ sys_user }}
+Environment=HAPPY_SERVER_URL=https://happy.local.{{ domain }}
+# PATH is for sessions the daemon spawns (claude lives in ~/.local/bin; git etc. in /usr/bin).
+Environment=PATH=/home/{{ sys_user }}/.local/share/fnm/aliases/default/bin:/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/{{ sys_user }}/.local/share/fnm/aliases/default/bin/node /home/{{ sys_user }}/.local/share/fnm/aliases/default/lib/node_modules/happy/bin/happy.mjs daemon start
