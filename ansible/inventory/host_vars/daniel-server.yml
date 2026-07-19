@@ -270,15 +270,16 @@ containers_list:
       - proxy
       - monitoring
       - apps
-  - name: happy
-    port: 3005
-    # Self-hosted Claude Code session-sync server (unified PC/homelab/phone session list,
-    # E2E-encrypted). No Authelia: happy clients authenticate via their own device-auth
-    # crypto pairing and can't pass a 2FA redirect. LAN/WG-only instead — the route in
-    # traefik's file provider matches ONLY happy.local.<domain>, no public router.
-    use_authelia: false
-    networks:
-      - proxy
+  # ARCHIVED 2026-07-19 — happy mothballed: containers removed, live PGlite+blob data
+  # deleted, daemon timer disabled + redeploy cron removed on the host. Retained for revival:
+  # the role, the traefik happy/happy-webapp routes, the SOPS handy_master_secret, and the
+  # src/ checkout. To revive: uncomment this entry and run `deploy.yml --tags traefik,happy`
+  # (rebuilds from src; the deleted data means every machine/session re-pairs from scratch).
+  # - name: happy
+  #   port: 3005
+  #   use_authelia: false
+  #   networks:
+  #     - proxy
   - name: monitor-bridge
     port: false
     use_authelia: false
