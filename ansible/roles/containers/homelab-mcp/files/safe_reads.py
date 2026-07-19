@@ -138,3 +138,17 @@ def bearer_token_valid(header: str | None, expected: str) -> bool:
     if not expected or not header or not header.startswith(prefix):
         return False
     return hmac.compare_digest(header[len(prefix) :], expected)
+
+
+def allowed_hosts_and_origins(public_host: str) -> tuple[list[str], list[str]]:
+    """Trusted Host/Origin allowlist for the MCP transport's DNS-rebinding guard.
+
+    `public_host` is the external hostname Traefik forwards (e.g. mcp.local.<domain>).
+    Without it the transport's default guard rejects any non-localhost Host header with
+    a 421 before auth is ever reached.
+    """
+    if not public_host:
+        return [], []
+    hosts = [public_host, "127.0.0.1:8000", "localhost:8000"]
+    origins = [f"https://{public_host}"]
+    return hosts, origins

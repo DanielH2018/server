@@ -19,6 +19,7 @@ from pathlib import Path
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, PlainTextResponse
 
@@ -33,9 +34,20 @@ SCRUTINY = os.environ.get("SCRUTINY_URL", "http://scrutiny:8080")
 HA = os.environ.get("HA_URL", "http://home-assistant:8123")
 FILE_ROOT = Path(os.environ.get("HOMELAB_FILE_ROOT", "/srv/ansible-src"))
 FILE_MAX_BYTES = 256 * 1024
+# The external hostname Traefik forwards. Must be allowlisted or the MCP transport's
+# DNS-rebinding guard rejects the request with 421 before auth is ever checked.
+PUBLIC_HOST = os.environ.get("MCP_PUBLIC_HOST", "")
 
 _client = httpx.Client(timeout=httpx.Timeout(15.0))
-mcp = FastMCP("homelab")
+_hosts, _origins = safe_reads.allowed_hosts_and_origins(PUBLIC_HOST)
+mcp = FastMCP(
+    "homelab",
+    transport_security=(
+        TransportSecuritySettings(allowed_hosts=_hosts, allowed_origins=_origins)
+        if PUBLIC_HOST
+        else None
+    ),
+)
 
 
 def _get_json(

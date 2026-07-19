@@ -15,6 +15,8 @@ services:
       - HOMELAB_MCP_TOKEN={{ homelab_mcp_token }}
       - HOMELAB_HA_TOKEN={{ claude_ha_token }}
       - HOMELAB_FILE_ROOT=/srv/ansible-src
+      # Trusted host for the MCP transport's DNS-rebinding guard (else 421 Invalid Host).
+      - MCP_PUBLIC_HOST=mcp.local.{{ domain }}
       - PORT={{ container_item.port }}
       - PYTHONDONTWRITEBYTECODE=1
       - TZ=America/Chicago

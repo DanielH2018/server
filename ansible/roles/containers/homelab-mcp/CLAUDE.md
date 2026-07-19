@@ -31,11 +31,13 @@ execs a container, writes a file, or reads a secret. See repo-root `CLAUDE.md`.
   Sunday rebuild cron (06:25) pulls the newest base.
 
 ## Client (PC) config
-`~/.claude.json`, user scope; export `HOMELAB_MCP_TOKEN` before launching Claude:
+`~/.claude.json`, user scope. Inline the literal token — Claude Code only expands
+`${VAR}` in a header if VAR is exported in the shell that launches `claude` (it is NOT
+sourced from hook env like `local.env`), so a bare `${HOMELAB_MCP_TOKEN}` sends an empty Bearer:
 ```jsonc
 { "mcpServers": { "homelab": {
     "type": "http", "url": "https://mcp.local.<domain>/mcp",
-    "headers": { "Authorization": "Bearer ${HOMELAB_MCP_TOKEN}" } } } }
+    "headers": { "Authorization": "Bearer <homelab_mcp_token value>" } } } }
 ```
 
 ## Editing

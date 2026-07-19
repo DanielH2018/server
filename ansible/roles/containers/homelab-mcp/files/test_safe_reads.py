@@ -3,6 +3,7 @@ import json
 import pytest
 
 from safe_reads import (
+    allowed_hosts_and_origins,
     bearer_token_valid,
     parse_loki,
     parse_metric,
@@ -203,6 +204,13 @@ def test_resolve_within_jail_rejects_symlink_escape(tmp_path):
     (jail / "link").symlink_to(outside)
     with pytest.raises(ValueError):
         resolve_within_jail(jail, "link")
+
+
+def test_allowed_hosts_and_origins():
+    hosts, origins = allowed_hosts_and_origins("mcp.local.example.com")
+    assert "mcp.local.example.com" in hosts
+    assert origins == ["https://mcp.local.example.com"]
+    assert allowed_hosts_and_origins("") == ([], [])
 
 
 def test_bearer_token_valid():
