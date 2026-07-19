@@ -6,9 +6,7 @@ the Renovate dependency dashboard.
 
 ## Backlog
 
-- Fix Ansible Lint Git Worktree catch
-- Setup GPG Key for Signing
-- Setup Radarr with Sonarr's autofixing
+- empty
 
 _Recently cleared (2026-06-29): adopted `ruff format` + a `ruff format --check` prek hook
 (config kept in `pyproject.toml [tool.ruff]`, not a separate `ruff.toml`). "Organize tests in
