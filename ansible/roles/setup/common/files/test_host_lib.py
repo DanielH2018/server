@@ -59,6 +59,32 @@ def test_discord_post_sends_user_agent_and_true_on_2xx():
     assert json.loads(req.data)["content"] == "hello"
 
 
+def test_discord_post_prepends_marker():
+    captured = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["req"] = req
+        return _Resp(204)
+
+    with mock.patch("host_lib.urllib.request.urlopen", fake_urlopen):
+        host_lib.discord_post(
+            "https://x", "3 fakes held", "ua", marker="📼 fake-remux:"
+        )
+    assert json.loads(captured["req"].data)["content"] == "📼 fake-remux: 3 fakes held"
+
+
+def test_discord_post_no_marker_leaves_content_unchanged():
+    captured = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["req"] = req
+        return _Resp(204)
+
+    with mock.patch("host_lib.urllib.request.urlopen", fake_urlopen):
+        host_lib.discord_post("https://x", "plain", "ua")
+    assert json.loads(captured["req"].data)["content"] == "plain"
+
+
 def test_discord_post_false_on_non_2xx():
     with mock.patch(
         "host_lib.urllib.request.urlopen", lambda req, timeout=None: _Resp(500)

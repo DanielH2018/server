@@ -1,6 +1,13 @@
 import json
 
-from trend import classify, load_history, main, record_run, write_json
+from trend import (
+    _epoch_shift,
+    classify,
+    load_history,
+    main,
+    record_run,
+    write_json,
+)
 
 
 def _entry(met, mode="hermetic"):
@@ -141,3 +148,42 @@ def test_main_subscription_does_not_write(tmp_path):
     rc = main(["--history", str(hist), "--mode", "subscription", str(report)])
     assert rc == 0
     assert not hist.exists()
+
+
+def test_record_run_stamps_epoch():
+    hist = {}
+    record_run(
+        hist,
+        [_report_case("a/1", "PASS", True)],
+        ts=1,
+        mode="hermetic",
+        epoch="opus-4.8/cc-2.0",
+    )
+    assert hist["a/1"][0]["epoch"] == "opus-4.8/cc-2.0"
+
+
+def test_record_run_epoch_defaults_to_unknown():
+    hist = {}
+    record_run(hist, [_report_case("a/1", "PASS", True)], ts=1, mode="hermetic")
+    assert hist["a/1"][0]["epoch"] == "unknown"
+
+
+def test_epoch_shift_detected_and_none_when_same():
+    same = [{**_entry(True), "epoch": "e1"}, {**_entry(False), "epoch": "e1"}]
+    assert _epoch_shift(same, "hermetic") is None
+    shifted = [{**_entry(True), "epoch": "e1"}, {**_entry(False), "epoch": "e2"}]
+    assert _epoch_shift(shifted, "hermetic") == ("e1", "e2")
+
+
+def test_regression_across_epoch_is_annotated(tmp_path, capsys):
+    hist = tmp_path / "history.json"
+    write_json(
+        hist,
+        {"a/1": [{**_entry(True), "epoch": "e1"}, {**_entry(True), "epoch": "e1"}]},
+    )
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps([_report_case("a/1", "FAIL", False, passes=1)]))
+    rc = main(["--history", str(hist), "--epoch", "e2", str(report)])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "REGRESSED" in out and "e1 -> e2" in out

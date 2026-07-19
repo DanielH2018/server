@@ -38,8 +38,14 @@ def write_json(path: Path, obj: dict) -> None:
     os.replace(tmp, path)
 
 
-def record_run(history: dict, report: list[dict], ts: int, mode: str) -> dict:
-    """Append one entry per case from a report array; returns the updated history."""
+def record_run(
+    history: dict, report: list[dict], ts: int, mode: str, epoch: str = "unknown"
+) -> dict:
+    """Append one entry per case from a report array; returns the updated history.
+
+    `epoch` tags the worker configuration that produced the run (model + coding-agent version).
+    A regression across an epoch boundary is likely the *worker* changing, not the harness — the
+    trend summary flags that so an upgrade isn't mistaken for a harness regression."""
     for case in report:
         # INCONCLUSIVE runs carry no pass/fail signal — record the status but leave
         # thresholdMet null so the trend math skips them (mirrors the engine).
@@ -48,6 +54,7 @@ def record_run(history: dict, report: list[dict], ts: int, mode: str) -> dict:
             {
                 "ts": ts,
                 "mode": mode,
+                "epoch": epoch,
                 "status": case["status"],
                 "passes": case["passes"],
                 "healthy": case["healthy"],
@@ -65,6 +72,24 @@ def _signal(entries: list[dict], mode: str) -> list[bool]:
         for e in entries
         if e.get("mode") == mode and e.get("thresholdMet") is not None
     ]
+
+
+def _epoch_shift(entries: list[dict], mode: str):
+    """If the last two signal-bearing `mode` entries ran under different worker epochs, return
+    (prev_epoch, cur_epoch); else None. Used to flag a regression that coincides with a worker
+    change (a new model / agent version) rather than a harness change."""
+    signal_entries = [
+        e
+        for e in entries
+        if e.get("mode") == mode and e.get("thresholdMet") is not None
+    ]
+    if len(signal_entries) < 2:
+        return None
+    prev, cur = (
+        signal_entries[-2].get("epoch", "unknown"),
+        signal_entries[-1].get("epoch", "unknown"),
+    )
+    return (prev, cur) if prev != cur else None
 
 
 def classify(
@@ -108,7 +133,13 @@ def _rate(history: dict, cid: str, mode: str) -> str:
 
 def _print_summary(history: dict, buckets: dict, mode: str, recorded: bool) -> None:
     for cid in buckets["regressed"]:
-        print(f"  REGRESSED  {cid}  (now {_rate(history, cid, mode)})")
+        shift = _epoch_shift(history[cid], mode)
+        note = (
+            f"  [worker epoch {shift[0]} -> {shift[1]}: may be the worker, not the harness]"
+            if shift
+            else ""
+        )
+        print(f"  REGRESSED  {cid}  (now {_rate(history, cid, mode)}){note}")
     for cid in buckets["recovered"]:
         print(f"  RECOVERED  {cid}  (now {_rate(history, cid, mode)})")
     for cid in buckets["flaky"]:
@@ -131,6 +162,12 @@ def main(argv=None) -> int:
     p.add_argument("--window", type=int, default=5)
     p.add_argument("--stable-n", type=int, default=3)
     p.add_argument(
+        "--epoch",
+        default=os.environ.get("CLAUDE_EVAL_EPOCH", "unknown"),
+        help="worker-epoch tag (e.g. 'opus-4.8/cc-2.0') recorded with each entry; a regression "
+        "across an epoch boundary is flagged as possibly the worker, not the harness",
+    )
+    p.add_argument(
         "--no-write", action="store_true", help="report only; don't update history"
     )
     args = p.parse_args(argv)
@@ -145,7 +182,7 @@ def main(argv=None) -> int:
         return 0
 
     history = record_run(
-        load_history(args.history), report, int(time.time()), args.mode
+        load_history(args.history), report, int(time.time()), args.mode, args.epoch
     )
     buckets = classify(
         history, mode=args.mode, window=args.window, stable_n=args.stable_n

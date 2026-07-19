@@ -19,6 +19,22 @@ docs/             # Runbooks, design specs, security notes
 
 > **`containers/` is read-only.** Files here are generated and deployed by Ansible from templates in `ansible/roles/containers/*/templates/`. Any direct edits will be overwritten on the next deploy. Always modify the corresponding Ansible role template instead.
 
+## Where to Look (task → start here)
+Route to the source of truth by what you're doing, before reading linearly:
+
+| If you're… | Start here |
+|---|---|
+| Adding / changing a container service | `## Adding a New Container Service` below · `/new-container` skill |
+| Deploying or redeploying a service | `/deploy` skill · `## Common Commands` |
+| Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |
+| A Bash command keeps prompting for approval | `## Shell Commands — Shape Them to Auto-Approve` |
+| Editing HA automations / lighting / fans | `ansible/roles/containers/home-assistant/CLAUDE.md` · `/ha-edit-automation` |
+| Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
+| Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `check.py` **first** — mature setup, most are handled |
+| A config edit won't recreate the container | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
+| A host can't decrypt secrets | `## Secrets Management` → *Onboarding a host to SOPS* |
+| Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract* |
+
 ## Adding a New Container Service
 1. Create `ansible/roles/containers/<name>/tasks/main.yml`
 2. Add a `docker-compose.yml.j2` template in `ansible/roles/containers/<name>/templates/`.

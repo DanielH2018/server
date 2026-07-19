@@ -161,6 +161,10 @@ finding before reporting it (and re-check each dismissal the same way):
   later commit, or reverted on purpose with the reason in the message, is not live. Cite the commit.
 - **Don't merge distinct issues.** Findings that differ in file, parameter, or fix are separate, even
   at the same service.
+- **State what the evidence does NOT establish.** A confirmed finding still has bounds — the
+  preconditions the exploit needs (LAN-only, prior container compromise, a specific auth state). Name
+  them in the `Bounds:` line; an unbounded claim is easy to over-rate. Bounding a finding is not
+  softening it — it's the difference between a calibrated severity and an inflated one.
 
 ---
 
@@ -173,7 +177,13 @@ Each finding should include:
 File: path/to/file.yml (line N)
 Issue: What the problem is.
 Risk: What an attacker could do if exploited.
+Bounds: What the evidence does NOT establish — the preconditions the risk needs (e.g. "only from the
+        LAN", "requires the container already compromised", "not reachable while Traefik fronts it").
 Fix: Specific remediation step.
 ```
+
+The `Bounds:` line keeps severity honest: a finding that needs a precondition the setup doesn't grant
+is not the same as one exploitable from the open internet, and stating the bound stops a
+plausible-but-narrow issue from being over-rated. If a risk truly has no precondition, say so.
 
 Group findings by severity (Critical → High → Medium → Low). End the report with a summary count per severity level.

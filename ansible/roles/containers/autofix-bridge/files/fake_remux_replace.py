@@ -386,7 +386,9 @@ def _alert_transitions(cfg, before_states, ledger):
             frl.sanitize(rec.get("reason") or ""),
         )
         log(line)
-        discord_post(webhook, line, scan.USER_AGENT, log=log)
+        discord_post(
+            webhook, line, scan.USER_AGENT, log=log, marker=scan.DISCORD_MARKER
+        )
 
 
 def _summarize(ledger):

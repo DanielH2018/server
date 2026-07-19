@@ -66,12 +66,18 @@ A single `--json` report is point-in-time. `trend.py` rolls hermetic reports int
 ```bash
 # after a hermetic run that wrote report.json:
 node $HOME/.local/share/chezmoi/evals/run-evals.mjs --agent security-review --json report.json
-uv run python evals/trend.py report.json            # append + flag REGRESSED / RECOVERED / FLAKY / STABLE
-uv run python evals/trend.py report.json --no-write  # report only, don't touch history
+uv run python evals/trend.py report.json --epoch "opus-4.8/cc-2.0"  # append + flag REGRESSED / RECOVERED / FLAKY / STABLE
+uv run python evals/trend.py report.json --no-write                 # report only, don't touch history
 ```
 
 - Records **hermetic** runs only — `--mode subscription` prints current FAILs but never writes
   (subscription numbers are too noisy to trend, per **Auth & fidelity** above).
+- **Tag the worker epoch** (`--epoch "<model>/<coding-agent-version>"`, or the `CLAUDE_EVAL_EPOCH`
+  env var). The eval holds the model + agent as a fixed worker; a regression that coincides with a
+  **worker change** (a model or Claude Code upgrade) is likely the worker, not the harness, so the
+  summary annotates a regression that crosses an epoch boundary (`epoch e1 -> e2`). Rerun the
+  hermetic sweep after any worker upgrade so the baseline is comparable — an untagged run records
+  `epoch: "unknown"`.
 - Exits non-zero if any case **regressed** (was passing last run, now failing) — usable as a gate.
 - **STABLE** = met threshold in the last `--stable-n` (default 3) hermetic runs; a candidate
   skip-set. The chezmoi engine has no `--skip` flag yet, so this is advisory today — wiring

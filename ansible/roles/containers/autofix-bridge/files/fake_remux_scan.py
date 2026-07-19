@@ -34,6 +34,9 @@ from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
 
 CONFIG_PATH = os.environ.get("FAKE_REMUX_CONFIG", "/etc/autofix-fake-remux/config.env")
 USER_AGENT = "autofix-fake-remux"
+DISCORD_MARKER = (
+    "📼 fake-remux:"  # self-identifying prefix on posts (the UA is header-only)
+)
 
 
 def load_config():
@@ -247,12 +250,12 @@ def scan(cfg):
             len(new_fakes),
             max_per_scan,
         )
-        discord_post(webhook, summary, USER_AGENT, log=log)
+        discord_post(webhook, summary, USER_AGENT, log=log, marker=DISCORD_MARKER)
     else:
         for f in new_fakes:
             line = frl.format_fake_line("Seeded for replacement", f)
             log(line)
-            discord_post(webhook, line, USER_AGENT, log=log)
+            discord_post(webhook, line, USER_AGENT, log=log, marker=DISCORD_MARKER)
         ok = True
         summary = (
             "seeded %d fake(s) for replacement" % len(new_fakes)
