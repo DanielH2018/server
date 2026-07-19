@@ -43,6 +43,21 @@ UI step. Because only **coming-due** secrets rotate (due within `ROTATE_LEAD_DAY
 one weekly-cron interval, so a token rotates the Sunday *before* it goes overdue and the
 daily audit never pages DOWN on a rotation the cron was about to do), runs stay staggered.
 
+### Auto-rotate contract (the weekly cron changes secrets unattended)
+The `rotate --commit` weekly cron is autonomous and state-changing — its authority, bounded
+(harness-engineering's versioned-contract pattern for a change-producing role):
+- **Scope / exclusions:** only `auto`-tier, locally-generated push tokens with **no external
+  coupling**, and only those **coming due** within `ROTATE_LEAD_DAYS` (8). `assisted` / `external` /
+  `pinned` are **never** touched by the cron — a `pinned` swap loses data (see below).
+- **Mode:** change-producing — writes via `sops set`, commits the registry, and the operator
+  redeploys the consumer. Not report-only; there is no dry-run cron (the bare `rotate` is the dry run,
+  run by hand).
+- **Required evidence:** the daily "Secret Rotation" Kuma monitor must return green after a rotation.
+  An `auto`-tier secret still overdue after a cron window means the **cron broke** — investigate it,
+  don't hand-rotate around it.
+- **Abort/escalation:** the cron only ever *narrows* to coming-due `auto` secrets; anything it can't
+  classify stays untouched and surfaces in `audit`, never a blind rotate.
+
 ## `assisted` — app-issued (regenerate in the app, then update SOPS)
 
 General shape: rotate/regenerate the credential **in the app**, `sops set
@@ -74,7 +89,25 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
 
 ## `pinned` — DANGER, never `sops set` blindly
 
-These encrypt/anchor existing data; swapping the value alone **loses data**:
+These encrypt/anchor existing data; swapping the value alone **loses data**.
+
+### The safe-cutover discipline for any pinned rotation
+A pinned secret anchors existing data, so treat rotation as a **staged cutover with a live fallback**,
+never a swap (harness-engineering's consequential-operation state machine — verify the new path
+before you destroy the old one):
+1. **Back up the anchored data first** (the kopia repo is remote + versioned; snapshot
+   `authelia/config/db.sqlite3`). This backup is the recovery path — keep it until step 5 passes.
+2. **Re-key through the tool, not `sops set`** (`kopia repository change-password` /
+   `authelia storage encryption change-key`) so the data is re-anchored to the new value.
+3. **Prove the new value opens the data BEFORE removing anything** (`kopia snapshot list` / an
+   Authelia login + TOTP). If this fails, the old artifact is still on disk and still works.
+4. **Only then** `sops set` the new value and redeploy the consumer.
+5. **Verify live** (audit resets green, Kuma monitor green, a real restore/login works) — and only
+   after that delete the pre-rotation backup. If any step fails, anchored data + old value are intact.
+
+The failure this prevents: `sops set` first, redeploy, discover the data is now undecryptable — and
+the only value that could open it has already been overwritten. The two procedures below are concrete
+instances of this discipline:
 
 - **`kopia_password`** — the backup repository password. Change it *through Kopia* or you
   can no longer open the repo (all backups become unreadable):

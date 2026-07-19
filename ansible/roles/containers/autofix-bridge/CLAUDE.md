@@ -13,6 +13,27 @@ sidecar per fix. See repo-root `CLAUDE.md`.
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 - **Spec:** `docs/superpowers/specs/2026-07-06-autofix-bridge-disk-autoprune-design.md`
 
+## Autonomous-role contract (it changes state with no human in the loop)
+This is a **change-producing autonomous role** — its authority is written down so a future edit can't
+quietly widen it (harness-engineering's versioned-contract pattern). The facts below live in detail
+elsewhere in this doc; this is the governed summary a change here must satisfy.
+- **Scope / exclusions:** *arr queue remediation, host disk hygiene, fake-remux replacement — and
+  nothing else. **Never** `docker prune -a`, **never** volumes, **never** a delete before the
+  replacement is ffprobe-verified genuine, **never** a legit in-progress download (VPN/client-outage
+  patterns are held out).
+- **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live) · disk
+  `autofix_disk_dry_run` · fake-remux `FAKE_REMUX_REPLACE_MODE` (off/shadow/live; ships `shadow`).
+  Returning any plane to report-only is one env flip + redeploy — preserve that.
+- **Authoritative sources:** sonarr/radarr `/api/v3/queue`, ffprobe truth via `docker exec jellyfin`,
+  `/` used-%. Never a doc or a cached guess.
+- **Abort valves:** `GRACE_CYCLES`, `MAX_ACTIONS_PER_CYCLE` / `MAX_PER_SCAN` (a mass-match = systemic
+  cause → act on **none** + alert), the disk threshold gate.
+- **Required evidence:** every cycle writes a `{ts,ok,msg}` state file / push heartbeat monitor-bridge
+  reads; a live action is Discord-alerted. No silent mutation.
+- **Next-run review (the cumulative-judgment clause):** before widening scope or flipping a plane to
+  `live`, reconcile the last run's outcomes (`outcomes.jsonl`, the Discord log) — don't repeat a
+  class of mis-fire the previous run already surfaced.
+
 ## Two actuator planes (the load-bearing design point — don't merge them)
 1. **Containerized HTTP-API plane** — the zero-privilege sidecar (`files/autofix.py`). Polls
    sonarr/radarr `/api/v3/queue` and auto-blocklists stuck/poisoned items. Fully hardened

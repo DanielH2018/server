@@ -10,7 +10,7 @@ report. **READ-ONLY: this skill reviews and recommends — it does NOT implement
 Stop after the report; let the operator drive any changes.
 
 ## 1. Resolve scope
-Default: all five areas. If the user named a subset (e.g. `homelab-review security,network`), run only
+Default: all six areas. If the user named a subset (e.g. `homelab-review security,network`), run only
 those. Home Assistant is NOT one of them — its review lives in the separate `/ha-review` skill; if the
 user asks for HA, point them there (or invoke it) rather than folding it in here. Map each area to its
 agent:
@@ -22,12 +22,14 @@ agent:
 | Backups & observability | `homelab-backup-observability-reviewer` | opus (frontmatter) |
 | CI/CD & GitOps | `homelab-cicd-reviewer` | opus (frontmatter) |
 | Media & container infra | `homelab-container-reviewer` | sonnet (frontmatter) |
+| Docs vs live-config drift | `homelab-docs-freshness-reviewer` | sonnet (frontmatter) |
 
 **Sizing:** reviewer tiers are pinned in each agent's frontmatter so a routine review never
 silently rides the session model. Judgment-heavy domains (security, backup/alert-chain, GitOps)
-run opus; pattern/consistency scans (container hygiene) and live-wiring triage (network) run
-sonnet. Only when the operator asks for a **deep audit** should you override per-dispatch with a
-bigger `model` (e.g. the session model).
+run opus; pattern/consistency scans (container hygiene, docs-vs-config drift) and live-wiring triage
+(network) run sonnet. Only when the operator asks for a **deep audit** should you override
+per-dispatch with a bigger `model` (e.g. the session model). The docs-freshness reviewer is
+report-only by nature — its findings are stale-doc edits for the operator, never infra changes.
 
 ## 2. Prime from memory FIRST (the signal-booster — do this before dispatching)
 This is a **mature** setup: a cold agent will re-flag dozens of settled decisions. Before dispatching,
@@ -39,7 +41,7 @@ the exact failure mode these reviews keep finding).
 
 ## 3. Dispatch all selected agents IN PARALLEL
 Issue every dispatch in a single message so they run concurrently (one agent per independent domain —
-see the `dispatching-parallel-agents` skill; 4–5 parallel reviewers is normal here). Each agent prompt
+see the `dispatching-parallel-agents` skill; 4–6 parallel reviewers is normal here). Each agent prompt
 must include:
 - its **scope** (the area's surface);
 - the **repo conventions** — `containers/` is generated/read-only, so cite the

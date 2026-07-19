@@ -127,6 +127,22 @@ Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hook
   with the `ha-edit-automation` / `ha-deploy` / `ha-verify-state` / `z2m-device-setting` skills.
 - **`/add-secret`** skill — guided SOPS add → `secret_rotation.py sync` → commit.
 
+## Review & Memory Hygiene (making judgment cumulative)
+Two rules keep the review→memory loop from compounding noise (adapted from harness-engineering's
+feedback + MLD discipline):
+- **Corroborate before you promote.** A single review run's "learning" is a *candidate*, not a fact.
+  Don't write a new auto-memory entry (or a don't-re-flag verdict) off one run's say-so — an
+  uncorroborated learning that then gets auto-injected every session reinforces itself as an
+  instruction even if it was wrong. Promote a candidate to durable memory only when a **second
+  independent occurrence** confirms it, or you've checked it against real evidence (a diff, a log, a
+  passing test, live `probe.py` state). Until then it stays a run-local note, not a memory file.
+- **Escalate a recurring finding to the smallest durable owner — don't just grow the ledger.** When
+  the same correction lands 2–3 times, move it *down* this ladder instead of filing another
+  don't-re-flag verdict: run-local note → memory fact → a CLAUDE.md rule → an executable check (a
+  pytest guard, a prek hook, a `validate-compose`/`auto-approve` rule). A rule a machine enforces
+  beats a paragraph an agent has to remember. Before adding a don't-re-flag verdict, ask: is this a
+  *class* (are there sibling instances the same principle governs), and should it be a lint instead?
+
 ## Secrets Management
 - Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age
 - `ansible/.sops.yaml` (tracked — public keys only) lists the age recipients new/updated
