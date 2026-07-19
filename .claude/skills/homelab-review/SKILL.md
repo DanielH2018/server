@@ -45,6 +45,9 @@ must include:
 - the **repo conventions** — `containers/` is generated/read-only, so cite the
   `ansible/roles/containers/<svc>/templates/` source, never `containers/`;
 - its **domain don't-re-flag list** (from step 2) + the verify-first discipline;
+- the **falsify-before-flag rule**: cite the specific `file:line` that makes a finding true, and cite
+  the `file:line` of the defense when clearing one — a comment, a reassuring name (`*_valid`,
+  `# intentional`), or "handled by Traefik/Authelia/upstream" is NOT evidence; verify it in code;
 - the **output format** below.
 
 ## 4. Output format each agent must return
@@ -64,10 +67,17 @@ role crons, the don't-re-flag memories, and live state via `scripts/probe.py` wh
 Verdict per finding: **CONFIRMED** (refutation failed), **REFUTED** (cite the disproving
 evidence), or **UNCERTAIN**. Refuted findings drop to a one-line "refuted in verification"
 appendix; UNCERTAIN ones stay but are marked unverified. Lows skip verification.
+**Manifest the candidates first:** list every High/Medium finding, then give each its own verdict row —
+a candidate with no row was *skipped*, not cleared (a verification miss, not an implicit pass). A verdict
+that rests on a comment, a name, or a "by design" claim is not done until it is re-checked against the
+executable code.
 
 ## 6. Synthesize (your job once agents return)
 - **Deduplicate** findings multiple agents surfaced (e.g. a healthcheck gap seen by both the security
   and container reviewers — report it once) — this happens BEFORE step 5's verification pass.
+  **Anti-merge:** only merge findings that are the *same* defect (same `file:line` + same mechanism +
+  same fix). Do NOT collapse findings that differ in file, parameter, service, or remediation — two
+  issues that need different fixes are two findings, even at one service.
 - **Surface cross-cutting THEMES** no single agent can see (e.g. a "co-located failure domain" spanning
   security + backups + network) — this is the main value of synthesizing over relaying.
 - Present **one consolidated report** grouped by severity, with a top-priorities shortlist and a clear

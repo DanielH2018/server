@@ -141,6 +141,24 @@ These risks are minimal in a pure Ansible/Docker infrastructure repo but apply t
 
 ---
 
+## Falsify before you flag
+
+Historically ~half of first-pass candidates here are false positives, so try to **disprove** each
+finding before reporting it (and re-check each dismissal the same way):
+
+- **Cite-or-drop.** Every finding cites the specific `file:line` that makes it true; every dismissal
+  cites the `file:line` of the defense that makes it safe. "Probably fine" / "likely handled upstream"
+  is not a verdict — go read the code.
+- **Comment skepticism.** A code comment, a reassuring name (`sanitize`, `*_valid`), a `# intentional`,
+  or "the gateway/Traefik/Authelia handles it" NEVER satisfies a check on its own — verify the behavior
+  in the actual code. Most misfires here trace to trusting prose over code.
+- **Check every writer/caller.** Before calling a value "server-controlled" or a sink "unreachable",
+  grep ALL writers of that value / callers of that sink — one safe path does not clear the others.
+- **Don't merge distinct issues.** Findings that differ in file, parameter, or fix are separate, even
+  at the same service.
+
+---
+
 ## Reporting Format
 
 Each finding should include:
