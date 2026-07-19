@@ -91,6 +91,8 @@ def list_containers() -> list[dict]:
 @mcp.tool()
 def container_status(name: str) -> dict:
     """Status/health/uptime for one container (no Env, no secrets)."""
+    if not safe_reads.container_ref_valid(name):
+        raise ValueError("invalid container name")
     return safe_reads.strip_container_fields(
         _get_json(f"{DOCKER_PROXY}/containers/{name}/json")
     )
@@ -99,6 +101,8 @@ def container_status(name: str) -> dict:
 @mcp.tool()
 def service_health(name: str) -> dict:
     """Whether a container is running and, if it has a healthcheck, healthy."""
+    if not safe_reads.container_ref_valid(name):
+        raise ValueError("invalid container name")
     data = safe_reads.strip_container_fields(
         _get_json(f"{DOCKER_PROXY}/containers/{name}/json")
     )
@@ -128,6 +132,8 @@ def _demux_docker_logs(raw: bytes) -> str:
 @mcp.tool()
 def container_logs(name: str, tail: int = 100) -> str:
     """Last `tail` lines of a container's logs (bounded)."""
+    if not safe_reads.container_ref_valid(name):
+        raise ValueError("invalid container name")
     r = _client.get(
         f"{DOCKER_PROXY}/containers/{name}/logs",
         params={"stdout": "1", "stderr": "1", "tail": str(tail)},
@@ -163,6 +169,8 @@ def cert_expiry(host: str, port: int = 443) -> dict:
 @mcp.tool()
 def ha_state(entity_id: str) -> dict:
     """Live Home Assistant state for one entity."""
+    if not safe_reads.entity_id_valid(entity_id):
+        raise ValueError("invalid entity_id")
     data = _get_json(
         f"{HA}/api/states/{entity_id}", headers={"Authorization": f"Bearer {HA_TOKEN}"}
     )
@@ -232,6 +240,10 @@ def list_files(directory: str = ".") -> list[dict]:
         rel = f"{rel_base}/{child.name}" if rel_base not in ("", ".") else child.name
         if safe_reads.path_is_denied(rel):
             continue
+        try:
+            safe_reads.resolve_within_jail(FILE_ROOT, rel)
+        except ValueError:
+            continue  # symlink to a denied file or outside the jail
         entries.append({"name": child.name, "is_dir": child.is_dir()})
     return entries
 

@@ -94,6 +94,36 @@ def parse_loki(resp: dict) -> list[dict]:
     return rows
 
 
+# --- Downstream URL-path guards ---------------------------------------------
+# `name` (docker) and `entity_id` (Home Assistant) get interpolated into an
+# outbound URL path, and httpx does not percent-encode an f-string path segment.
+# A value carrying `/`, `?`, `..`, or `%` would steer the request to a different
+# endpoint (e.g. the container-logs tool onto the inspect route, which leaks Env).
+# Constrain each to the character set its downstream actually uses before it
+# reaches the URL.
+def container_ref_valid(name: str) -> bool:
+    """True if `name` is a bare docker container name/id (no URL-path characters)."""
+    return (
+        bool(name)
+        and name[0].isascii()
+        and name[0].isalnum()
+        and all(c.isascii() and (c.isalnum() or c in "_.-") for c in name)
+    )
+
+
+def _is_ha_slug(part: str) -> bool:
+    """True for a Home Assistant identifier segment — ascii [a-z0-9_], non-empty."""
+    return bool(part) and all(
+        c.isascii() and (c.islower() or c.isdigit() or c == "_") for c in part
+    )
+
+
+def entity_id_valid(entity_id: str) -> bool:
+    """True if `entity_id` is a bare Home Assistant `domain.object_id` slug."""
+    domain, dot, obj = entity_id.partition(".")
+    return dot == "." and "." not in obj and _is_ha_slug(domain) and _is_ha_slug(obj)
+
+
 # --- File-read jail ---------------------------------------------------------
 # The container bind-mounts ansible/ read-only; these guards keep a read_file
 # tool inside it. The age private key lives outside the mount (~/.config/sops),
@@ -129,6 +159,13 @@ def resolve_within_jail(root: Path, rel: str) -> Path:
     candidate = (root_resolved / rel).resolve()
     if candidate != root_resolved and root_resolved not in candidate.parents:
         raise ValueError("path escapes the jail")
+    # Re-check the denylist on the RESOLVED path. read_file runs path_is_denied on
+    # the pre-resolution name only, so a benignly-named symlink pointing at a denied
+    # file inside the jail (e.g. -> vars/secrets.yml) would otherwise slip through.
+    if candidate != root_resolved and path_is_denied(
+        str(candidate.relative_to(root_resolved))
+    ):
+        raise ValueError("path resolves to a denied file")
     return candidate
 
 

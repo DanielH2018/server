@@ -5,6 +5,8 @@ import pytest
 from safe_reads import (
     allowed_hosts_and_origins,
     bearer_token_valid,
+    container_ref_valid,
+    entity_id_valid,
     parse_loki,
     parse_metric,
     parse_targets,
@@ -13,6 +15,69 @@ from safe_reads import (
     strip_container_fields,
     summarize_container_list,
 )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "traefik",
+        "radarr",
+        "homelab-mcp",
+        "home-assistant",
+        "a",
+        "abc123def456",
+        "x.y_z",
+    ],
+)
+def test_container_ref_valid_accepts_names(name):
+    assert container_ref_valid(name) is True
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "traefik/json?x=",  # VULN-001 payload: steers container_logs onto the inspect route
+        "traefik/json",
+        "../etc",
+        "a/b",
+        "x?y",
+        "name%2f",
+        "has space",
+        "a\x00b",
+        "",
+        ".leading-dot",
+        "-leading-dash",
+    ],
+)
+def test_container_ref_valid_rejects_url_path_chars(name):
+    assert container_ref_valid(name) is False
+
+
+@pytest.mark.parametrize(
+    "eid",
+    ["light.kitchen", "binary_sensor.front_door", "sensor.cpu_temp_2", "person.dan"],
+)
+def test_entity_id_valid_accepts_slugs(eid):
+    assert entity_id_valid(eid) is True
+
+
+@pytest.mark.parametrize(
+    "eid",
+    [
+        "../config",  # VULN-002 traversal payload
+        "light.kitchen/../config",
+        "states",
+        "light.kitchen.extra",
+        "Light.Kitchen",
+        "a.b/c",
+        "x?y",
+        ".kitchen",
+        "light.",
+        "",
+    ],
+)
+def test_entity_id_valid_rejects_traversal(eid):
+    assert entity_id_valid(eid) is False
 
 
 def test_strip_container_fields_never_leaks_env():
@@ -204,6 +269,26 @@ def test_resolve_within_jail_rejects_symlink_escape(tmp_path):
     (jail / "link").symlink_to(outside)
     with pytest.raises(ValueError):
         resolve_within_jail(jail, "link")
+
+
+def test_resolve_within_jail_rejects_symlink_to_internal_secret(tmp_path):
+    # A benignly-named symlink whose target is a denied file INSIDE the jail must
+    # not slip past the denylist, which only sees the pre-resolution name.
+    (tmp_path / "vars").mkdir()
+    secret = tmp_path / "vars" / "secrets.yml"
+    secret.write_text("SOPS ciphertext")
+    (tmp_path / "notes.txt").symlink_to(secret)
+    with pytest.raises(ValueError):
+        resolve_within_jail(tmp_path, "notes.txt")
+
+
+def test_resolve_within_jail_allows_benign_symlink(tmp_path):
+    # Symlinks resolving to a non-denied in-jail file stay readable.
+    target = tmp_path / "COPYING"
+    target.write_text("license")
+    (tmp_path / "collection").mkdir()
+    (tmp_path / "collection" / "COPYING").symlink_to(target)
+    assert resolve_within_jail(tmp_path, "collection/COPYING") == target.resolve()
 
 
 def test_allowed_hosts_and_origins():
