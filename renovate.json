@@ -9,6 +9,7 @@
   "labels": ["dependencies"],
   "schedule": ["before 6am on monday"],
   "prHourlyLimit": 4,
+  "rebaseWhen": "behind-base-branch",
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
     "description": "CVE-driven bumps bypass the Monday-only window (schedule: at any time) so security PRs are RAISED immediately, and minimumReleaseAge shortens their auto-merge soak to 1 day — overriding the 7-day non-major default below, which otherwise made 'land ASAP' a misnomer (the PR appeared at once but still soaked a week). 1 day is fast enough to patch a live CVE while leaving a 24h window to catch a yanked/poisoned upstream release; the post-merge gitops-deploy host health gate + rollback is the final backstop. osvVulnerabilityAlerts adds OSV-database scanning for the version-pinned Docker images (GitHub-native Dependabot doesn't cover Docker), closing the one dependency axis without a 'silence != up-to-date' backstop. Requires repo Dependabot *alerts* (not PRs) enabled so Renovate can read the advisory feed.",
