@@ -124,3 +124,30 @@
         {% from 'lighting.jinja' import in_wake_window %}
         {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool %}
         {{ is_state('input_boolean.bedroom_sleep_mode', 'on') or in_window }}
+
+# DREO tower-fan oscillation toggle. The DREO integration exposes oscillation ONLY as the
+# `oscillating` attribute on fan.tower_fan (+ the fan.oscillate service) — there is no native switch
+# entity — so this template switch surfaces sweep on/off as a dashboard toggle that reflects live
+# state. Oscillation is orthogonal to speed/on-off, so it deliberately does NOT route through the
+# bedroom_fan_set mediator (same call the Tap Dial button-3 press makes). It stays OUTSIDE the
+# single-writer invariant on purpose: that guard covers power/level, and extract_writes only scans
+# automations + scripts, so a template switch isn't a tracked writer — do NOT add it to
+# state/sanctioned_writers.yml (the symmetric check would then fail on an undetected writer).
+- switch:
+    - name: "Tower Fan Oscillation"
+      unique_id: tower_fan_oscillation
+      icon: mdi:arrow-oscillating
+      availability: "{{ has_value('fan.tower_fan') }}"
+      state: "{{ is_state_attr('fan.tower_fan', 'oscillating', true) }}"
+      turn_on:
+        - service: fan.oscillate
+          target:
+            entity_id: fan.tower_fan
+          data:
+            oscillating: true
+      turn_off:
+        - service: fan.oscillate
+          target:
+            entity_id: fan.tower_fan
+          data:
+            oscillating: false

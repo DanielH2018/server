@@ -118,6 +118,10 @@ views:
             entities:
               - entity: sensor.tower_fan_temperature
                 name: Temperature
+              # Template switch (files/templates.yaml) — DREO exposes oscillation only as the
+              # fan.tower_fan `oscillating` attribute, not a native switch entity.
+              - entity: switch.tower_fan_oscillation
+                name: Oscillation
               - entity: switch.tower_fan_display_auto_off
                 name: Display Auto-Off
               - entity: switch.tower_fan_panel_sound
