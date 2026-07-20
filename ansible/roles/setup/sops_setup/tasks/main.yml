@@ -24,11 +24,11 @@
     checksum: "sha256:{{ sops_sha256 }}"
   vars:
     # You can check https://github.com/getsops/sops/releases for the latest
-    sops_version: "v3.9.2"
+    sops_version: "v3.13.2"
     sops_arch: "{{ 'amd64' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
     sops_binary_url: "https://github.com/getsops/sops/releases/download/{{ sops_version }}/sops-{{ sops_version }}.linux.{{ sops_arch }}"
-    # sha256 of sops-v3.9.2.linux.{amd64,arm64} from the upstream checksums.txt.
-    sops_sha256: "{{ '8d939bb53fe3f05b12ba4bec85c562e843b7fccba9a867cbfa626caa06a39eed' if ansible_facts.architecture == 'x86_64' else '07ff67d6ec28b2660c6bc2b065fa8f949dd51f15522e0770ebea781a0df00faf' }}"
+    # sha256 of sops-v3.13.2.linux.{amd64,arm64} from the upstream checksums.txt.
+    sops_sha256: "{{ '154dfe4cd70554bdd82b98e4cd4acf191d43d01ead6f00a73477aa44c4ac42ef' if ansible_facts.architecture == 'x86_64' else '78abf2e15c86250a1553ae6f53aba96be6b2a8126f160b1534959add3467ad76' }}"
 
 - name: Install pinned Ansible collections from requirements.yml
   tags: [collections]
