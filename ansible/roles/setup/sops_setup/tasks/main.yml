@@ -24,7 +24,7 @@
     checksum: "sha256:{{ sops_sha256 }}"
   vars:
     # You can check https://github.com/getsops/sops/releases for the latest
-    sops_version: "v3.9.2"
+    sops_version: "v3.13.2"
     sops_arch: "{{ 'amd64' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
     sops_binary_url: "https://github.com/getsops/sops/releases/download/{{ sops_version }}/sops-{{ sops_version }}.linux.{{ sops_arch }}"
     # sha256 of sops-v3.9.2.linux.{amd64,arm64} from the upstream checksums.txt.
