@@ -85,10 +85,14 @@ services:
       # heartbeat kept alive) and only THIS monitor pages — one outage is one alert, not a storm.
       - KUMA_PUSH_PROMETHEUS={{ monitor_bridge_prometheus_push_token }}
       # n8n Prod-workflow failure monitoring (active workflows via the n8n public API).
+      # FAIL_MAX=1 (pages at >1 failure in the window) gives a one-failure grace: a single
+      # transient external fetch — e.g. an RSS feed 5xx, which flapped this monitor on
+      # 2026-07-21 and self-cleared next cycle — doesn't page; a real broken workflow keeps
+      # failing and crosses the threshold.
       - N8N_URL=http://n8n:5678
       - N8N_API_KEY={{ n8n_api_key }}
       - N8N_FAIL_WINDOW=15m
-      - N8N_FAIL_MAX=0
+      - N8N_FAIL_MAX=1
       - KUMA_PUSH_N8N={{ monitor_bridge_n8n_push_token }}
       # Sonarr/Radarr queue warnings (2026-07-01 incident: an indexer served a poisoned
       # fake-episode .exe; sonarr blocked the import itself and flagged the queue item
