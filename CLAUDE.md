@@ -117,7 +117,10 @@ Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hook
 - **`scripts/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt). Resolves the
   live container IP via `docker inspect`, so prefer it over curling bridge IPs (which change on
   recreate): `uv run python scripts/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
-  scrutiny | pi <path> | cert <host> | health <svc> | ha <state|automation|get> …>`. `health <svc>`
+  alerts | scrutiny | pi <path> | cert <host> | health <svc> | ha <state|automation|get> …>`.
+  `alerts [--days N --check X]` reconstructs monitor-bridge's DOWN alert history from Loki (Kuma
+  keeps only current state) — one row per firing episode; the same view is the "Alert History"
+  Grafana board (Infrastructure folder). `health <svc>`
   exits 0 only when the container is running + healthy — usable as a post-deploy gate. `ha …`
   reads live Home Assistant state (authed with the SOPS `claude_ha_token`); `ha automation
   <id-or-alias>` resolves the alias-slug≠id trap. See the home-assistant role's CLAUDE.md.

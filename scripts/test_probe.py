@@ -659,3 +659,53 @@ def test_arr_subcommand_rejects_unknown_app():
 
     with pytest.raises(SystemExit):
         probe._build_parser().parse_args(["arr", "lidarr", "health"])
+
+
+# --- alerts (monitor-bridge DOWN history) -----------------------------------
+
+
+def test_loki_query_url_with_range_adds_start_end_direction():
+    url = probe.loki_query_url(
+        "10.0.0.2", '{job="x"}', 5000, start=1000, end=2000, direction="forward"
+    )
+    assert "start=1000" in url and "end=2000" in url and "direction=forward" in url
+
+
+def test_parse_down_line_extracts_name_and_strips_cycle_counter():
+    line = "[2026-07-21T08:37:00] DOWN n8n - 1 active workflow(s) failed (2 cycles)"
+    assert probe.parse_down_line(line) == ("n8n", "1 active workflow(s) failed")
+
+
+def test_parse_down_line_ignores_ok_and_malformed_lines():
+    assert probe.parse_down_line("[2026-07-21T08:37:00] OK   n8n - fine") is None
+    assert probe.parse_down_line("not a monitor-bridge line") is None
+
+
+def test_alert_episodes_splits_on_a_silence_gap():
+    minute = int(60 * 1e9)
+    rows = [
+        (0, "backup", "shrank"),
+        (5 * minute, "backup", "shrank"),  # same episode (5m <= 30m gap)
+        (60 * minute, "backup", "shrank again"),  # new episode (55m gap)
+    ]
+    eps = probe.alert_episodes(rows, gap_s=1800)
+    assert len(eps) == 2
+    # newest episode first; its latest msg wins
+    assert eps[0]["cycles"] == 1 and eps[0]["msg"] == "shrank again"
+    assert eps[1]["cycles"] == 2 and eps[1]["first_ns"] == 0
+
+
+def test_alert_episodes_keeps_distinct_checks_separate():
+    rows = [(0, "backup", "a"), (0, "cpu", "b")]
+    eps = probe.alert_episodes(rows, gap_s=1800)
+    assert {e["name"] for e in eps} == {"backup", "cpu"}
+
+
+def test_format_alert_episodes_empty_is_all_clear():
+    assert probe.format_alert_episodes([], 7) == "no DOWN alerts in the last 7d"
+
+
+def test_format_alert_episodes_renders_name_and_msg():
+    eps = [{"name": "n8n", "first_ns": 0, "last_ns": 0, "cycles": 1, "msg": "boom"}]
+    out = probe.format_alert_episodes(eps, 7)
+    assert "1 DOWN episode(s)" in out and "n8n" in out and "boom" in out

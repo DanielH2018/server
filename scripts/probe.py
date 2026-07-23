@@ -19,6 +19,7 @@ Subcommands:
     targets                  Prometheus scrape-target health (prometheus :9090)
     loki-labels              Loki label names                (loki :3100)
     loki-query '<logql>'     Loki range query [--limit N] [--json] (loki :3100)
+    alerts                   monitor-bridge DOWN history as episodes [--days N --check X --raw --json]
     scrutiny                 Disk SMART summary              (scrutiny :8080)
     pi <subpath>             Pi glances API, e.g. `pi fs`    (daniel-pi.lan:61208)
     cert <host[:port]>       Served TLS cert subj/dates [--sni NAME]
@@ -54,7 +55,10 @@ import os
 import re
 import subprocess
 import sys
+from collections import defaultdict
+from datetime import datetime
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 DEFAULT_TIMEOUT = 10
 HA_PORT = 8123
@@ -98,10 +102,15 @@ def loki_labels_url(ip):
     return f"http://{ip}:3100/loki/api/v1/labels"
 
 
-def loki_query_url(ip, logql, limit):
-    return f"http://{ip}:3100/loki/api/v1/query_range?" + urlencode(
-        {"query": logql, "limit": limit}
-    )
+def loki_query_url(ip, logql, limit, start=None, end=None, direction=None):
+    params = {"query": logql, "limit": limit}
+    if start is not None:
+        params["start"] = start
+    if end is not None:
+        params["end"] = end
+    if direction is not None:
+        params["direction"] = direction
+    return f"http://{ip}:3100/loki/api/v1/query_range?" + urlencode(params)
 
 
 def scrutiny_url(ip):
@@ -563,6 +572,96 @@ def format_loki(data):
     return "\n".join(line for _, line in rows)
 
 
+# --- alert history (pure) ---------------------------------------------------
+# monitor-bridge is the homelab's alert brain: every INTERVAL it pushes each check's
+# state to a Kuma push monitor and logs "[<ts>] DOWN <name> - <msg> (<n> cycles)" for
+# any check that's firing. Kuma keeps only current state; Loki keeps the log lines
+# (31d retention), so the history of *what alerted, when* is these DOWN lines. This
+# collapses the every-cycle repeats into one row per firing episode.
+ALERT_LOGQL = '{container="monitor-bridge"} |= "DOWN"'
+_CHICAGO = ZoneInfo("America/Chicago")
+# "[2026-07-21T08:37:00] DOWN n8n - 1 active workflow(s) failed ... (2 cycles)"
+_DOWN_RE = re.compile(r"^\[[^\]]+\] DOWN (?P<name>\S+) - (?P<msg>.*)$")
+_CYCLES_SUFFIX_RE = re.compile(r"\s*\(\d+ cycles?\)\s*$")
+
+
+def parse_down_line(line):
+    """(check_name, msg) for a monitor-bridge DOWN log line, else None. The
+    trailing "(N cycles)" consecutive-down counter is stripped from msg."""
+    m = _DOWN_RE.match(line)
+    if not m:
+        return None
+    return m["name"], _CYCLES_SUFFIX_RE.sub("", m["msg"])
+
+
+def alert_episodes(rows, gap_s=1800):
+    """Collapse per-cycle DOWN samples into firing episodes.
+
+    `rows` is an iterable of (epoch_ns, check_name, msg). Consecutive samples for the
+    same check within `gap_s` seconds are one episode; a longer silence (the check
+    recovered, then fired again) starts a new one. Returns episode dicts
+    {name, first_ns, last_ns, cycles, msg} newest-episode-first (by last_ns). msg is
+    the latest sample's — check messages evolve as the underlying value drifts."""
+    by_name = defaultdict(list)
+    for ns, name, msg in rows:
+        by_name[name].append((int(ns), msg))
+    episodes = []
+    gap_ns = int(gap_s * 1e9)
+    for name, samples in by_name.items():
+        samples.sort()
+        ep = None
+        for ns, msg in samples:
+            if ep is not None and ns - ep["last_ns"] <= gap_ns:
+                ep["last_ns"] = ns
+                ep["cycles"] += 1
+                ep["msg"] = msg
+            else:
+                ep = {
+                    "name": name,
+                    "first_ns": ns,
+                    "last_ns": ns,
+                    "cycles": 1,
+                    "msg": msg,
+                }
+                episodes.append(ep)
+    episodes.sort(key=lambda e: e["last_ns"], reverse=True)
+    return episodes
+
+
+def _fmt_local(ns):
+    return datetime.fromtimestamp(ns / 1e9, _CHICAGO).strftime("%Y-%m-%d %H:%M")
+
+
+def _fmt_duration(ns):
+    secs = ns / 1e9
+    if secs < 60:
+        return "1cyc"
+    if secs < 3600:
+        return f"{round(secs / 60)}m"
+    if secs < 86400:
+        return f"{secs / 3600:.1f}h"
+    return f"{secs / 86400:.1f}d"
+
+
+def format_alert_episodes(episodes, days):
+    """Human view: one aligned row per episode, newest first (America/Chicago, the
+    container-log timezone). Empty -> a clear all-clear line."""
+    if not episodes:
+        return f"no DOWN alerts in the last {days:g}d"
+    width = max(len(e["name"]) for e in episodes)
+    header = (
+        f"{len(episodes)} DOWN episode(s), last {days:g}d (monitor-bridge -> Kuma):"
+    )
+    lines = [header, ""]
+    for e in episodes:
+        dur = _fmt_duration(e["last_ns"] - e["first_ns"])
+        lines.append(
+            f"{_fmt_local(e['first_ns'])}  {dur:>6}  "
+            f"{e['name']:<{width}}  {e['cycles']:>3}c  {e['msg'][:88]}"
+        )
+    return "\n".join(lines)
+
+
 # --- routing (pure given resolve_ip) ----------------------------------------
 
 
@@ -589,6 +688,26 @@ def _build_parser():
     lq.add_argument("--limit", type=int, default=100)
     lq.add_argument(
         "--json", action="store_true", help="print raw JSON instead of the log lines"
+    )
+    al = sub.add_parser(
+        "alerts", help="monitor-bridge DOWN alert history, collapsed to episodes (Loki)"
+    )
+    al.add_argument(
+        "--days", type=float, default=7, help="lookback window in days (default 7)"
+    )
+    al.add_argument("--check", help="filter to check names containing this substring")
+    al.add_argument(
+        "--gap-min",
+        type=float,
+        default=30,
+        help="minutes of silence that splits one episode from the next (default 30)",
+    )
+    al.add_argument("--limit", type=int, default=5000)
+    al.add_argument(
+        "--raw", action="store_true", help="print the matching log lines, not episodes"
+    )
+    al.add_argument(
+        "--json", action="store_true", help="print episodes as JSON (epoch-ns times)"
     )
     sub.add_parser("scrutiny", help="disk SMART summary")
     pi = sub.add_parser("pi", help="Pi glances API")
@@ -731,6 +850,53 @@ def run_query(ns):
         print(body.strip())
         return 1
     print(formatter(data))
+    return 0
+
+
+def run_alerts(ns):
+    """Fetch monitor-bridge's DOWN log lines over the window and print firing episodes."""
+    end_s = datetime.now(_CHICAGO).timestamp()
+    start_s = end_s - ns.days * 86400
+    url = loki_query_url(
+        resolve_ip("loki"),
+        ALERT_LOGQL,
+        ns.limit,
+        start=int(start_s * 1e9),
+        end=int(end_s * 1e9),
+        direction="forward",
+    )
+    if ns.dry_run:
+        print(" ".join(curl_argv(url)))
+        return 0
+    data = json.loads(fetch(url))
+    raw = [
+        (int(ts), line)
+        for stream in (data.get("data") or {}).get("result") or []
+        for ts, line in stream.get("values") or []
+    ]
+    raw.sort()
+    if ns.raw:
+        print("\n".join(line for _, line in raw) or "no logs")
+    else:
+        rows = []
+        for ns_ts, line in raw:
+            parsed = parse_down_line(line)
+            if parsed is None:
+                continue
+            name, msg = parsed
+            if ns.check and ns.check.lower() not in name.lower():
+                continue
+            rows.append((ns_ts, name, msg))
+        episodes = alert_episodes(rows, ns.gap_min * 60)
+        if ns.json:
+            print(json.dumps(episodes, indent=2))
+        else:
+            print(format_alert_episodes(episodes, ns.days))
+    if len(raw) >= ns.limit:
+        print(
+            f"\n(warning: hit --limit {ns.limit} log lines — results may be truncated; "
+            "raise --limit or narrow --days)"
+        )
     return 0
 
 
@@ -925,6 +1091,8 @@ def main(argv=None):
         return run_ha(ns)
     if ns.cmd == "arr":
         return run_arr(ns)
+    if ns.cmd == "alerts":
+        return run_alerts(ns)
     if ns.cmd == "ha-state":
         return run_ha_state(ns)
     # metric / loki-query default to a formatted view; --json and --dry-run fall
