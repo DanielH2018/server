@@ -61,7 +61,7 @@ services:
       - pihole_internal
     environment:
       TZ: {{ tz }}
-      WEBPASSWORD: {{ pihole_password }}
+      FTLCONF_webserver_api_password: "{{ pihole_password }}"
       ServerIP: {{ server_ip }}
       FTLCONF_dns_upstreams: unbound
       FTLCONF_dns_listeningMode: all
