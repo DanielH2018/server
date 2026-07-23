@@ -84,6 +84,7 @@
         src: users_database.yml.j2
         dest: "{{ authelia_config_dir }}/users_database.yml"
         mode: "0600"
+      become: true
       register: authelia_cfg_users
       # Renders the argon2 password hash into the file; without this a --diff run
       # prints the digest to the console/CI log (matches the sibling hash tasks above).
