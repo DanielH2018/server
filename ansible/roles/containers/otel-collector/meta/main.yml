@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: DanielH2018
+  description: "OpenTelemetry collector for Claude Code telemetry (OTLP -> Prometheus + Loki)"
+  license: MIT
+  min_ansible_version: "2.15"
+
+# Logical ordering: deploy after prometheus + grafana (loki) — see meta/deps.yml. Actual
+# sequencing is computed by the toposort filter in deploy.yml reading meta/deps.yml, not by
+# Ansible meta dependencies (which conflict with the include_role loop used in deploy.yml).
+dependencies: []

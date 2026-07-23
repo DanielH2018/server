@@ -67,6 +67,17 @@ scrape_configs:
 
 #################################################################################################
 
+  # Claude Code telemetry: the otel-collector re-exposes Claude Code's OTLP metric stream
+  # (token usage, cost, sessions, LoC/commits/PRs) as Prometheus metrics on :8889. Collector
+  # and Prometheus share the `monitoring` net. Powers the "Claude Code — Usage & Observability"
+  # Grafana dashboard (AI folder). Event logs go straight to Loki via OTLP, not through here.
+  - job_name: "otel-collector"
+    scrape_interval: 1m
+    static_configs:
+    - targets: ["otel-collector:8889"]
+
+#################################################################################################
+
   # Uptime-Kuma's own /metrics (per-monitor up/down, response times, cert-days-remaining) —
   # Kuma and Prometheus share the `monitoring` net. The endpoint is API-key protected, sent as
   # HTTP Basic auth: blank username, password = the key (prometheus_kuma_api_key in SOPS).

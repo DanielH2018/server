@@ -1,0 +1,43 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+---
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.157.0
+    container_name: otel-collector
+    restart: unless-stopped
+    # Distroless single-Go-binary image — no writable rootfs or caps needed. /tmp tmpfs
+    # covers any transient scratch; the config is bind-mounted read-only below.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      # Claude Code runs on the HOST (not in a container) and exports OTLP here. Bound to
+      # loopback only — nothing is exposed on the LAN.
+      - "127.0.0.1:4317:4317"   # OTLP gRPC  <- Claude Code exports here
+      - "127.0.0.1:4318:4318"   # OTLP HTTP  (alternative)
+    expose:
+      # Prometheus scrapes the re-exposed Claude metrics; Kuma probes health_check — both
+      # over the shared `monitoring` net (expose is documentation; same-net ports are reachable).
+      - 8889
+      - 13133
+    {{ service_networks() }}
+    labels:
+      # Distroless image has no shell for a docker healthcheck (like loki), so Kuma
+      # http-probes the collector's health_check extension on :13133 over `monitoring`.
+      {{ kuma('otel-collector', monitor_type='http', name='Claude OTEL Collector', url='http://otel-collector:13133/', interval=60, max_retries=2) }}
+      # Watchtower: version-pinned image, skip auto-update (same as cadvisor).
+      - "com.centurylinklabs.watchtower.enable=false"
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
+    {{ resources('0.30', '256M', '0.05', '32M') }}
+
+{{ external_networks() }}

@@ -1,0 +1,142 @@
+{
+  "uid": "claude-code-otel",
+  "title": "Claude Code — Usage & Observability",
+  "tags": ["claude-code", "otel"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 4,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Sessions",
+      "description": "Cumulative CLI sessions since the collector started.",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "targets": [
+        { "refId": "A", "expr": "sum({__name__=~\"claude_code_session_count.*\"}) or vector(0)", "instant": true }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Active time",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum({__name__=~\"claude_code_active_time.*\"}) or vector(0)", "instant": true }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Cost estimate (USD)",
+      "description": "Estimated only — on a subscription plan this is not real spend.",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2 }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum({__name__=~\"claude_code_cost_usage.*\"}) or vector(0)", "instant": true }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Lines of code changed",
+      "description": "Populates once code is edited in a session.",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "targets": [
+        { "refId": "A", "expr": "sum({__name__=~\"claude_code_lines_of_code.*\"}) or vector(0)", "instant": true }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Commits",
+      "description": "Populates on git commits made via Claude Code.",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "targets": [
+        { "refId": "A", "expr": "sum({__name__=~\"claude_code_commit_count.*\"}) or vector(0)", "instant": true }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Pull requests",
+      "description": "Populates on PRs created via Claude Code.",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "targets": [
+        { "refId": "A", "expr": "sum({__name__=~\"claude_code_pull_request_count.*\"}) or vector(0)", "instant": true }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Token usage rate by model",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 15, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum by (model) (rate({__name__=~\"claude_code_token_usage.*\"}[$__rate_interval]))", "legendFormat": "{{model}}", "range": true, "editorMode": "code" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Token usage rate by type",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 15, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum by (type) (rate({__name__=~\"claude_code_token_usage.*\"}[$__rate_interval]))", "legendFormat": "{{type}}", "range": true, "editorMode": "code" }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Cumulative tokens by type",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum by (type) ({__name__=~\"claude_code_token_usage.*\"})", "legendFormat": "{{type}}", "range": true, "editorMode": "code" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Cumulative cost by model (USD, estimated)",
+      "description": "Estimated only — on a subscription plan this is not real spend. Edit accept/reject shows as tool_decision events in the Recent events panel below (Claude Code only emits the code_edit_tool.decision metric for interactive diff decisions, not auto-accepted edits).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 3, "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum by (model) ({__name__=~\"claude_code_cost_usage.*\"})", "legendFormat": "{{model}}", "range": true, "editorMode": "code" }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "logs",
+      "title": "Recent events (tool decisions, api requests/errors, MCP)",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 20 },
+      "datasource": { "type": "loki", "uid": "bf4q19tuivta8e" },
+      "options": { "showTime": true, "wrapLogMessage": true, "dedupStrategy": "none", "enableLogDetails": true, "sortOrder": "Descending" },
+      "targets": [
+        { "refId": "A", "expr": "{service_name=~\".+\"}", "queryType": "range" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+---
+# Deploy after the stack it feeds, so they're up first. Sequencing is computed by the
+# toposort filter in deploy.yml from these names (which must match containers_list entries),
+# not by Ansible meta dependencies. loki lives in the grafana compose, so `grafana` covers it.
+role_deps:
+  - prometheus
+  - grafana

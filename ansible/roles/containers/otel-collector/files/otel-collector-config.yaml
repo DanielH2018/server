@@ -1,0 +1,57 @@
+# OpenTelemetry Collector config for Claude Code telemetry.
+#   metrics -> exposed for Prometheus to scrape (:8889/metrics, job "otel-collector")
+#   logs    -> forwarded to the EXISTING homelab Loki's native OTLP endpoint
+# Adapted from the portable chezmoi ~/claude-otel stack to reuse the running
+# Loki/Prometheus/Grafana here instead of standing up a duplicate stack.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+
+exporters:
+  # Metrics: collector exposes a /metrics endpoint Prometheus scrapes.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    # Keep exposing each counter's last value long after activity stops. The default (5m)
+    # drops idle metrics, making cumulative-counter panels flicker to "No data" between
+    # bursts of usage.
+    metric_expiration: 168h
+    # Turn OTLP resource attributes (model, terminal, …) into metric labels so token usage
+    # can be broken down by model in Grafana.
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  # Event logs (tool decisions, api_request/error/refusal, mcp connections) -> the existing
+  # Loki's OTLP ingest path (Loki 3.x). otlp_http appends /v1/logs to the endpoint. (v0.157
+  # renamed the exporter otlphttp -> otlp_http; the old name still works but logs a warning.)
+  otlp_http/loki:
+    endpoint: http://loki:3100/otlp
+
+extensions:
+  # The otelcol-contrib image is a distroless single Go binary (no shell), so a docker
+  # healthcheck is impossible — like loki. Expose a health endpoint the Kuma http monitor
+  # probes at http://otel-collector:13133/ over the shared monitoring net instead.
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http/loki]

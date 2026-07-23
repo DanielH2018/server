@@ -243,6 +243,14 @@ containers_list:
     use_authelia: true
     networks:
       - monitoring
+  - name: otel-collector
+    port: false
+    use_authelia: false
+    networks:
+      # monitoring only: Prometheus scrapes otel-collector:8889 and the collector pushes
+      # event logs to loki:3100 over this net. OTLP 4317/4318 are published to host loopback
+      # for Claude Code, which runs on the host (not a container). No web UI, so no port/Authelia.
+      - monitoring
   - name: glances
     port: 61208
     use_authelia: true

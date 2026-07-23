@@ -1,0 +1,28 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}"
+
+- name: Deploy the OTEL collector config
+  tags: [config]
+  ansible.builtin.copy:
+    src: otel-collector-config.yaml
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/otel-collector-config.yaml"
+    mode: "0644"
+  register: otel_collector_cfg
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+  vars:
+    # The config is bind-mounted and read once at startup, so a config-only edit must force
+    # a recreate — recreate: auto wouldn't otherwise notice. Same idiom as monitor-bridge's
+    # check.py wiring; see repo-root CLAUDE.md + common/CLAUDE.md.
+    common_config_changed: "{{ otel_collector_cfg is changed }}"
