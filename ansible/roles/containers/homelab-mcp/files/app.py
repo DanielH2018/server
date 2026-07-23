@@ -213,6 +213,48 @@ def top_containers(by: str = "cpu", n: int = 5) -> list[dict]:
 
 
 @mcp.tool()
+def claude_code_usage() -> dict:
+    """Claude Code telemetry at a glance (the OTLP -> otel-collector -> Prometheus stream).
+
+    Totals plus by-model / by-type breakdowns. Empty until a Claude Code session has
+    exported to the collector. Cost is estimated, not real spend on a subscription plan.
+    """
+    queries = {
+        "sessions": 'sum({__name__=~"claude_code_session_count.*"})',
+        "active_time_seconds": 'sum({__name__=~"claude_code_active_time.*"})',
+        "cost_usd_estimated": 'sum({__name__=~"claude_code_cost_usage.*"})',
+        "lines_of_code": 'sum({__name__=~"claude_code_lines_of_code.*"})',
+        "commits": 'sum({__name__=~"claude_code_commit_count.*"})',
+        "pull_requests": 'sum({__name__=~"claude_code_pull_request_count.*"})',
+        "tokens_by_type": 'sum by (type) ({__name__=~"claude_code_token_usage.*"})',
+        "tokens_by_model": 'sum by (model) ({__name__=~"claude_code_token_usage.*"})',
+        "cost_by_model_usd": 'sum by (model) ({__name__=~"claude_code_cost_usage.*"})',
+    }
+    return {
+        k: safe_reads.parse_metric(
+            _get_json(f"{PROMETHEUS}/api/v1/query", {"query": q})
+        )
+        for k, q in queries.items()
+    }
+
+
+@mcp.tool()
+def claude_code_events(limit: int = 100) -> list[dict]:
+    """Recent Claude Code event logs from the OTLP -> Loki pipeline: tool decisions,
+    api_request / api_error / api_refusal, mcp_server_connection, permission-mode changes.
+    Metadata only, no prompt/response/tool content. For arbitrary LogQL use query_logs.
+
+    The selector matches the OTLP-ingested stream (`service_name` is set by OTLP ingest;
+    promtail's homelab logs carry `job`/`container` instead), which is Claude Code only.
+    """
+    resp = _get_json(
+        f"{LOKI}/loki/api/v1/query_range",
+        {"query": '{service_name=~".+"}', "limit": limit},
+    )
+    return safe_reads.parse_loki(resp)
+
+
+@mcp.tool()
 def read_file(path: str) -> str:
     """Read a text file under the ansible/ source tree (read-only, jailed).
 
