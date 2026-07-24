@@ -21,10 +21,10 @@ services:
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
     ports:
-      # Claude Code runs on the HOST (not in a container) and exports OTLP here. Bound to
-      # loopback only — nothing is exposed on the LAN.
+      # Claude Code runs on the HOST (not in a container) and exports OTLP/gRPC here. Bound to
+      # loopback only — nothing is exposed on the LAN. The HTTP :4318 receiver was dropped as
+      # unused (the host exporter is grpc-only, settings.json OTEL_EXPORTER_OTLP_PROTOCOL=grpc).
       - "127.0.0.1:4317:4317"   # OTLP gRPC  <- Claude Code exports here
-      - "127.0.0.1:4318:4318"   # OTLP HTTP  (alternative)
     expose:
       # Prometheus scrapes the re-exposed Claude metrics; Kuma probes health_check — both
       # over the shared `monitoring` net (expose is documentation; same-net ports are reachable).

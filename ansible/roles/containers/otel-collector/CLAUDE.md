@@ -12,9 +12,10 @@ repo-root `CLAUDE.md`.
 - **Image:** `otel/opentelemetry-collector-contrib:0.157.0` (pinned; Renovate-tracked via the
   generic docker-compose manager; Watchtower disabled)
 - **Host:** daniel-server · **Web UI:** none (`port: false`, no Authelia)
-- **Ports:** OTLP `127.0.0.1:4317` (gRPC) / `4318` (HTTP) — **host loopback only** (Claude Code
-  runs on the host, not a container). `:8889` (Prometheus scrape) and `:13133` (health) are
-  reachable only over the `monitoring` net.
+- **Ports:** OTLP `127.0.0.1:4317` (gRPC only — the host exporter is grpc; the HTTP `:4318`
+  receiver was dropped as unused) — **host loopback only** (Claude Code runs on the host, not a
+  container). `:8889` (Prometheus scrape) and `:13133` (health) are reachable only over the
+  `monitoring` net.
 - **Networks:** monitoring
 - **Depends on:** prometheus, grafana (loki lives in the grafana compose) — deploy ordering via
   `meta/deps.yml` toposort, not compose `depends_on` (the collector queues its Loki export if
@@ -23,10 +24,10 @@ repo-root `CLAUDE.md`.
   `files/otel-collector-config.yaml`
 
 ## Notable
-- **Loopback-only OTLP is deliberate.** 4317/4318 are published to `127.0.0.1` so nothing lands
-  on the LAN. The receiver binds `0.0.0.0` *inside* the container, so `monitoring`-net peers can
-  also push to it — accepted, the same unauthenticated same-net trust boundary as Loki's push
-  API and the Prometheus scrape plane.
+- **Loopback-only OTLP is deliberate.** 4317 is published to `127.0.0.1` so nothing lands on the
+  LAN. The receiver binds `0.0.0.0` *inside* the container, so `monitoring`-net peers can also
+  push to it — accepted, the same unauthenticated same-net trust boundary as Loki's push API and
+  the Prometheus scrape plane.
 - **No Docker healthcheck — Kuma HTTP-probes instead** (same reason as loki: the otelcol-contrib
   image is a distroless single Go binary, no shell). The `health_check` extension listens on
   `:13133` and the `kuma()` label points an HTTP monitor at `http://otel-collector:13133/`.
