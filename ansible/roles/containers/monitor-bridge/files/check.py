@@ -129,8 +129,19 @@ TRAEFIK_5XX_PCT = float(_env("TRAEFIK_5XX_PCT", "5"))
 TRAEFIK_MIN_RPS = float(_env("TRAEFIK_MIN_RPS", "0.05"))
 N8N_URL = _env("N8N_URL", "http://n8n:5678").rstrip("/")
 N8N_API_KEY = _env("N8N_API_KEY", "")
-N8N_FAIL_WINDOW = _env("N8N_FAIL_WINDOW", "15m")
-N8N_FAIL_MAX = float(_env("N8N_FAIL_MAX", "0"))
+# n8n hides successful executions (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none, kept that way to bound
+# database.sqlite + its B2 backup churn), so "consecutive" can't be read from one snapshot — the
+# per-workflow failure streak is accumulated across cycles in _n8n_streaks (see n8n_update_streaks):
+# it advances once per NEW error (deduped by execution id) and resets when a workflow's latest
+# error ages past N8N_FAIL_WINDOW (recovered / went idle).
+N8N_FAIL_WINDOW = _env("N8N_FAIL_WINDOW", "2h")
+N8N_CONSECUTIVE_MAX = int(_env("N8N_CONSECUTIVE_MAX", "3"))
+# Systemic catch: if N8N_SYSTEMIC_MAX+ workflows are each failing >= N8N_SYSTEMIC_STREAK times,
+# something is wrong with n8n itself — page now as ONE alert instead of waiting for each to reach
+# N8N_CONSECUTIVE_MAX (and instead of a per-workflow flood).
+N8N_SYSTEMIC_STREAK = int(_env("N8N_SYSTEMIC_STREAK", "2"))
+N8N_SYSTEMIC_MAX = int(_env("N8N_SYSTEMIC_MAX", "2"))
+_n8n_streaks = {}
 
 # Sonarr/Radarr queue warnings: the 2026-07-01 incident — an indexer served a poisoned
 # fake-episode .exe, sonarr itself blocked the import and flagged the queue item
@@ -1067,22 +1078,25 @@ def check_traefik_5xx():
     )
 
 
-def n8n_failures(workflows_json, executions_json, window_s, now=None):
-    """Failed executions of *active* workflows within the last `window_s` seconds.
+def n8n_update_streaks(workflows_json, executions_json, state, now, window_s):
+    """Advance per-workflow consecutive-failure streaks across check cycles.
 
-    Returns [(workflow_name, count), ...] sorted by count desc. An execution counts only
-    if its workflowId belongs to an active ("Prod") workflow AND its stoppedAt (fallback
-    startedAt) is within the window. Pure — fed the n8n /workflows and /executions
-    payloads, so it's unit-tested without HTTP (like backup_age_hours).
+    n8n doesn't record successful executions (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none), so a
+    streak can't be read from one snapshot — it's accumulated here. Per active ("Prod")
+    workflow we find its most-recent error execution; the streak advances by one each time
+    that id is NEW (a fresh failure since last cycle, so a single lingering failure isn't
+    double-counted across cycles), and resets to 0 once the most-recent error ages past
+    `window_s` (recovered / went idle) or no error is on record. `state` is a mutable
+    {workflow_id: {"last_id", "streak"}} dict persisted across cycles. Returns
+    {workflow_name: streak} for streak >= 1. Pure given (state, now) — unit-tested by
+    driving cycles (like backup_age_hours).
     """
-    now = now or datetime.now(timezone.utc)
     active = {
-        w["id"]: w.get("name") or w["id"]
+        w["id"]: (w.get("name") or w["id"])
         for w in workflows_json.get("data", [])
         if w.get("active")
     }
-    cutoff = now - timedelta(seconds=window_s)
-    counts = {}
+    latest = {}
     for ex in executions_json.get("data", []):
         wid = ex.get("workflowId")
         if wid not in active:
@@ -1090,17 +1104,66 @@ def n8n_failures(workflows_json, executions_json, window_s, now=None):
         ts = ex.get("stoppedAt") or ex.get("startedAt")
         if not ts:
             continue
+        cur = latest.get(wid)
+        if cur is None or ts > cur[1]:  # RFC3339 'Z' timestamps sort lexicographically
+            latest[wid] = (ex.get("id"), ts)
+    for wid in list(state):  # forget workflows that are no longer active
+        if wid not in active:
+            del state[wid]
+    cutoff = now - timedelta(seconds=window_s)
+    result = {}
+    for wid, name in active.items():
+        st = state.setdefault(wid, {"last_id": None, "streak": 0})
+        info = latest.get(wid)
+        if info is None:
+            st["last_id"], st["streak"] = None, 0
+            continue
+        eid, ts = info
         dt = parse_rfc3339(ts)
         if (
             dt.tzinfo is None
-        ):  # n8n normally emits UTC 'Z'; assume UTC if a naive ts slips through
+        ):  # n8n emits UTC 'Z'; assume UTC if a naive ts slips through
             dt = dt.replace(tzinfo=timezone.utc)
         if dt < cutoff:
+            st["last_id"], st["streak"] = None, 0
             continue
-        counts[wid] = counts.get(wid, 0) + 1
-    pairs = [(active[wid], c) for wid, c in counts.items()]
-    pairs.sort(key=lambda nc: -nc[1])
-    return pairs
+        if eid != st["last_id"]:
+            st["streak"] += 1
+            st["last_id"] = eid
+        result[name] = st["streak"]
+    return result
+
+
+def n8n_verdict(streaks, consecutive_max, systemic_streak, systemic_max):
+    """Pure: turn per-workflow failure streaks into an up/down verdict + message.
+
+    Down if any single workflow has failed >= consecutive_max times in a row, OR if
+    >= systemic_max workflows are each failing >= systemic_streak times — the n8n-wide catch
+    that pages promptly as ONE alert (a broken n8n) instead of waiting for each workflow to
+    reach consecutive_max, and instead of a per-workflow flood.
+    """
+    if not streaks:
+        return True, "no active-workflow failures"
+    ranked = sorted(streaks.items(), key=lambda nc: (-nc[1], nc[0]))
+    systemic = [(n, c) for n, c in ranked if c >= systemic_streak]
+    if len(systemic) >= systemic_max:
+        names = ", ".join("%s (%d)" % (sanitize(n), c) for n, c in systemic[:5])
+        return False, "n8n systemic: %d workflows failing repeatedly (%s)" % (
+            len(systemic),
+            names,
+        )
+    broken = [(n, c) for n, c in ranked if c >= consecutive_max]
+    if broken:
+        desc = ", ".join("%s (%d)" % (sanitize(n), c) for n, c in broken)
+        return False, "n8n: %d active workflow(s) failed %d+ consecutive: %s" % (
+            len(broken),
+            consecutive_max,
+            desc,
+        )
+    return True, "%d active workflow(s) failing (< %d consecutive)" % (
+        len(ranked),
+        consecutive_max,
+    )
 
 
 def gitops_alive(age_s, max_age_s):
@@ -1144,12 +1207,14 @@ def sanitize(s, maxlen=120):
 
 
 def check_n8n():
-    """Failed executions of active ("Prod") n8n workflows within N8N_FAIL_WINDOW.
+    """Consecutive failures of active ("Prod") n8n workflows (streak accumulated across cycles).
 
-    Polls the n8n public API on the internal network (X-N8N-API-KEY header, no Authelia).
-    Empty N8N_API_KEY -> disabled (stays up) so it never false-pages before the operator
-    sets the key. An unreachable/erroring API raises -> the loop renders it down with the
-    error, like check_targets_down (a dead API surfaces, not silent-green).
+    Polls the n8n public API on the internal network (X-N8N-API-KEY header, no Authelia). n8n
+    doesn't save successful executions, so the per-workflow failure streak lives in the
+    module-global _n8n_streaks and is advanced by n8n_update_streaks each cycle; n8n_verdict
+    turns it into the page decision. Empty N8N_API_KEY -> disabled (stays up) so it never
+    false-pages before the operator sets the key. An unreachable/erroring API raises -> the loop
+    renders it down with the error, like check_targets_down (a dead API surfaces, not silent-green).
     """
     if not N8N_API_KEY:
         return True, "n8n monitoring disabled (no API key)"
@@ -1160,16 +1225,16 @@ def check_n8n():
     executions = _get_json(
         N8N_URL + "/api/v1/executions?status=error&limit=100", headers=headers
     )
-    offenders = n8n_failures(workflows, executions, parse_duration(N8N_FAIL_WINDOW))
-    total = sum(c for _, c in offenders)
-    if total > N8N_FAIL_MAX:
-        desc = ", ".join("%s (%d)" % (sanitize(n), c) for n, c in offenders[:5])
-        return False, "%d active workflow(s) failed in %s: %s" % (
-            len(offenders),
-            N8N_FAIL_WINDOW,
-            desc,
-        )
-    return True, "no active-workflow failures in %s" % N8N_FAIL_WINDOW
+    streaks = n8n_update_streaks(
+        workflows,
+        executions,
+        _n8n_streaks,
+        datetime.now(timezone.utc),
+        parse_duration(N8N_FAIL_WINDOW),
+    )
+    return n8n_verdict(
+        streaks, N8N_CONSECUTIVE_MAX, N8N_SYSTEMIC_STREAK, N8N_SYSTEMIC_MAX
+    )
 
 
 def queue_warnings(queue_json, app_name):

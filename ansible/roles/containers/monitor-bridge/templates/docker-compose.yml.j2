@@ -85,14 +85,20 @@ services:
       # heartbeat kept alive) and only THIS monitor pages — one outage is one alert, not a storm.
       - KUMA_PUSH_PROMETHEUS={{ monitor_bridge_prometheus_push_token }}
       # n8n Prod-workflow failure monitoring (active workflows via the n8n public API).
-      # FAIL_MAX=1 (pages at >1 failure in the window) gives a one-failure grace: a single
-      # transient external fetch — e.g. an RSS feed 5xx, which flapped this monitor on
-      # 2026-07-21 and self-cleared next cycle — doesn't page; a real broken workflow keeps
-      # failing and crosses the threshold.
+      # Per-workflow consecutive-failure streak: n8n hides successful runs
+      # (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none, to bound database.sqlite + its B2 backup churn),
+      # so check.py accumulates the streak across cycles (deduped by execution id). A workflow
+      # pages at N8N_CONSECUTIVE_MAX distinct failures — so a single transient fetch (e.g. an RSS
+      # feed 5xx, which flapped this monitor on 2026-07-21) doesn't page; its streak resets once
+      # its latest error ages past N8N_FAIL_WINDOW (recovered/idle). Systemic catch:
+      # N8N_SYSTEMIC_MAX+ workflows each failing N8N_SYSTEMIC_STREAK+ times = n8n-wide → page now
+      # as one alert, without waiting for each to hit N8N_CONSECUTIVE_MAX.
       - N8N_URL=http://n8n:5678
       - N8N_API_KEY={{ n8n_api_key }}
-      - N8N_FAIL_WINDOW=15m
-      - N8N_FAIL_MAX=1
+      - N8N_FAIL_WINDOW=2h
+      - N8N_CONSECUTIVE_MAX=3
+      - N8N_SYSTEMIC_STREAK=2
+      - N8N_SYSTEMIC_MAX=2
       - KUMA_PUSH_N8N={{ monitor_bridge_n8n_push_token }}
       # Sonarr/Radarr queue warnings (2026-07-01 incident: an indexer served a poisoned
       # fake-episode .exe; sonarr blocked the import itself and flagged the queue item

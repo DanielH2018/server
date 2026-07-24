@@ -77,11 +77,20 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   - **Traefik 5xx** (5xx ratio over 5m **per service**, naming each offender, gated by a
     per-service `TRAEFIK_MIN_RPS` volume floor — per-service so the alert points at the
     erroring backend and a broken low-traffic service can't hide diluted in the aggregate)
-  - **n8n Prod Workflows** (n8n public API: failed executions of *active* workflows within
-    `N8N_FAIL_WINDOW`, naming each one. "Prod" = active. Empty `N8N_API_KEY` = disabled
-    (stays up); an unreachable API surfaces as `down`. Reached at `n8n:5678` over `apps`,
-    bypassing Authelia via the `X-N8N-API-KEY` header. Caps the workflow page at 250 and the
-    error-execution page at 100 — ample for a homelab window.)
+  - **n8n Prod Workflows** (n8n public API: per-*active*-workflow **consecutive-failure
+    streak**. n8n doesn't save successful executions (`EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`, to
+    bound `database.sqlite` + its B2 backup churn — 2026-07-03), so "consecutive" can't be read
+    from one snapshot: `check.py` accumulates the streak ACROSS cycles, deduped by execution id
+    so a single lingering failure isn't recounted, and resets a workflow's streak once its latest
+    error ages past `N8N_FAIL_WINDOW` (recovered/idle). `down` when any workflow fails
+    `N8N_CONSECUTIVE_MAX` (3) times in a row, OR when `N8N_SYSTEMIC_MAX` (2)+ workflows are each
+    failing `N8N_SYSTEMIC_STREAK` (2)+ times — the n8n-wide catch that pages promptly as ONE
+    alert instead of waiting for each to hit the consecutive threshold (and instead of a
+    per-workflow flood). "Prod" = active. Empty `N8N_API_KEY` = disabled (stays up); an
+    unreachable API surfaces as `down`. Reached at `n8n:5678` over `apps`, bypassing Authelia via
+    the `X-N8N-API-KEY` header. Streak state is module-global (resets on a bridge restart, ridden
+    out by the STARTUP_GRACE hysteresis). Pure `n8n_update_streaks()`/`n8n_verdict()` are
+    unit-tested.)
   - **Arr Queue Warnings** (sonarr's + radarr's own `/api/v3/queue`: `down` on any item with
     `trackedDownloadStatus == "warning"`, `trackedDownloadState == "importBlocked"`, or
     `importPending` carrying `statusMessages` — naming the release title + app. Added after the
@@ -474,7 +483,8 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   `BACKUP_MAX_AGE_H`, `DISK_MAX_PCT`,
   `CERT_MIN_DAYS`, `MEM_MAX_PCT`, `RESTART_WINDOW`/`RESTART_MAX`, `OOM_WINDOW`,
   `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`/`CPU_CONSECUTIVE`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`,
-  `N8N_FAIL_WINDOW`/`N8N_FAIL_MAX`; n8n connection config: `N8N_URL`/`N8N_API_KEY`; arr queue
+  `N8N_FAIL_WINDOW`/`N8N_CONSECUTIVE_MAX`/`N8N_SYSTEMIC_STREAK`/`N8N_SYSTEMIC_MAX`; n8n connection
+  config: `N8N_URL`/`N8N_API_KEY`; arr queue
   connection config: `SONARR_URL`/`SONARR_API_KEY`/`RADARR_URL`/`RADARR_API_KEY`; GitOps
   liveness: `GITOPS_MAX_AGE_MIN`/`GITOPS_STATE_DIR`; Pi pressure:
   `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`; HA heartbeat:

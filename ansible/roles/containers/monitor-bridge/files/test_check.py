@@ -757,7 +757,7 @@ def test_parse_duration_units():
     assert check.parse_duration("300") == 300  # bare number = seconds
 
 
-# --- n8n_failures -----------------------------------------------------------
+# --- n8n consecutive-failure streaks ----------------------------------------
 
 N8N_NOW = datetime(2026, 6, 8, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -771,54 +771,87 @@ def _workflows(*items):
     return {"data": [{"id": i, "name": n, "active": a} for i, n, a in items]}
 
 
-def _executions(*items):
-    """items: (workflowId, stoppedAt) tuples -> n8n /executions payload (all status=error)."""
+def _errors(*items):
+    """items: (exec_id, workflowId, ago_min) tuples -> n8n /executions?status=error payload."""
     return {
-        "data": [{"workflowId": w, "status": "error", "stoppedAt": s} for w, s in items]
+        "data": [
+            {"id": eid, "workflowId": w, "status": "error", "stoppedAt": _n8n_ago(m)}
+            for eid, w, m in items
+        ]
     }
 
 
-def test_n8n_failure_within_window_named():
+def _run(wf, ex, state, window_s=7200):
+    return check.n8n_update_streaks(wf, ex, state, N8N_NOW, window_s)
+
+
+def test_n8n_streak_advances_once_per_new_failure():
     wf = _workflows(("1", "Prod Flow", True))
-    ex = _executions(("1", _n8n_ago(5)))
-    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("Prod Flow", 1)]
+    state = {}
+    assert _run(wf, _errors(("e1", "1", 5)), state) == {"Prod Flow": 1}
+    # same failure still newest (no new run) -> held at 1, not double-counted across cycles
+    assert _run(wf, _errors(("e1", "1", 5)), state) == {"Prod Flow": 1}
+    # a new failure -> streak 2
+    assert _run(wf, _errors(("e2", "1", 1), ("e1", "1", 5)), state) == {"Prod Flow": 2}
 
 
-def test_n8n_failure_outside_window_ignored():
+def test_n8n_streak_resets_when_failure_ages_past_window():
     wf = _workflows(("1", "Prod Flow", True))
-    ex = _executions(("1", _n8n_ago(30)))  # 30m ago, window 15m
-    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == []
+    state = {"1": {"last_id": "e1", "streak": 2}}
+    # newest error is 3h old, window 2h -> recovered/idle -> reset, drops out
+    assert _run(wf, _errors(("e1", "1", 180)), state) == {}
+    assert state["1"]["streak"] == 0
 
 
-def test_n8n_inactive_workflow_ignored():
+def test_n8n_streak_resets_when_no_errors_on_record():
+    wf = _workflows(("1", "Prod Flow", True))
+    state = {"1": {"last_id": "e1", "streak": 2}}
+    assert _run(wf, {"data": []}, state) == {}
+    assert state["1"]["streak"] == 0
+
+
+def test_n8n_inactive_workflow_ignored_and_forgotten():
     wf = _workflows(("1", "Draft Flow", False))
-    ex = _executions(("1", _n8n_ago(5)))
-    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == []
+    state = {"1": {"last_id": "e1", "streak": 2}}
+    assert _run(wf, _errors(("e2", "1", 1)), state) == {}
+    assert "1" not in state
 
 
-def test_n8n_multiple_failures_counted_and_sorted():
-    wf = _workflows(("1", "A Flow", True), ("2", "B Flow", True))
-    ex = _executions(
-        ("1", _n8n_ago(2)),
-        ("2", _n8n_ago(3)),
-        ("2", _n8n_ago(4)),
-        ("2", _n8n_ago(5)),
-    )
-    # B has 3 failures, A has 1 -> sorted by count desc
-    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [
-        ("B Flow", 3),
-        ("A Flow", 1),
-    ]
+def test_n8n_verdict_single_workflow_consecutive_pages():
+    ok, msg = check.n8n_verdict({"A Flow": 3}, 3, 2, 2)
+    assert not ok and "A Flow" in msg and "consecutive" in msg
 
 
-def test_n8n_empty_inputs():
-    assert check.n8n_failures({"data": []}, {"data": []}, 900, now=N8N_NOW) == []
+def test_n8n_verdict_below_consecutive_is_up():
+    ok, _ = check.n8n_verdict({"A Flow": 2}, 3, 2, 2)
+    assert ok
+
+
+def test_n8n_verdict_systemic_pages_before_consecutive():
+    # two workflows each failing twice (< consecutive_max 3) -> systemic, one alert
+    ok, msg = check.n8n_verdict({"A Flow": 2, "B Flow": 2}, 3, 2, 2)
+    assert not ok and "systemic" in msg and "2 workflows" in msg
+
+
+def test_n8n_verdict_two_single_transients_not_systemic():
+    # two workflows each failing ONCE (< systemic_streak 2) -> not systemic, not broken -> up
+    ok, _ = check.n8n_verdict({"A Flow": 1, "B Flow": 1}, 3, 2, 2)
+    assert ok
+
+
+def test_n8n_verdict_empty_is_up():
+    ok, _ = check.n8n_verdict({}, 3, 2, 2)
+    assert ok
 
 
 def test_n8n_missing_stoppedat_falls_back_to_startedat():
     wf = _workflows(("1", "Prod Flow", True))
-    ex = {"data": [{"workflowId": "1", "status": "error", "startedAt": _n8n_ago(5)}]}
-    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("Prod Flow", 1)]
+    ex = {
+        "data": [
+            {"id": "e1", "workflowId": "1", "status": "error", "startedAt": _n8n_ago(5)}
+        ]
+    }
+    assert check.n8n_update_streaks(wf, ex, {}, N8N_NOW, 7200) == {"Prod Flow": 1}
 
 
 def test_n8n_naive_timestamp_treated_as_utc():
@@ -827,8 +860,10 @@ def test_n8n_naive_timestamp_treated_as_utc():
     naive = (
         (N8N_NOW - timedelta(minutes=5)).replace(tzinfo=None).isoformat()
     )  # no offset/Z
-    ex = {"data": [{"workflowId": "1", "status": "error", "stoppedAt": naive}]}
-    assert check.n8n_failures(wf, ex, 900, now=N8N_NOW) == [("Prod Flow", 1)]
+    ex = {
+        "data": [{"id": "e1", "workflowId": "1", "status": "error", "stoppedAt": naive}]
+    }
+    assert check.n8n_update_streaks(wf, ex, {}, N8N_NOW, 7200) == {"Prod Flow": 1}
 
 
 # --- check_n8n --------------------------------------------------------------
@@ -841,15 +876,27 @@ def test_n8n_disabled_without_key():
     assert "disabled" in msg.lower()
 
 
-def test_n8n_check_down_on_recent_failure(monkeypatch):
+def test_n8n_check_down_after_consecutive_failures(monkeypatch):
+    # a workflow pages only once its streak reaches N8N_CONSECUTIVE_MAX (3) distinct failures
     monkeypatch.setattr(check, "N8N_API_KEY", "x")
+    monkeypatch.setattr(check, "_n8n_streaks", {})
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
-    now_iso = datetime.now(timezone.utc).isoformat()
-    ex = {"data": [{"workflowId": "1", "status": "error", "stoppedAt": now_iso}]}
-    monkeypatch.setattr(check, "_get_json", _seq(wf, ex))
-    ok, msg = check.check_n8n()
+
+    def cycle(eid):
+        now_iso = datetime.now(timezone.utc).isoformat()
+        ex = {
+            "data": [
+                {"id": eid, "workflowId": "1", "status": "error", "stoppedAt": now_iso}
+            ]
+        }
+        monkeypatch.setattr(check, "_get_json", _seq(wf, ex))
+        return check.check_n8n()
+
+    assert cycle("e1")[0]  # streak 1 -> up
+    assert cycle("e2")[0]  # streak 2 -> up
+    ok, msg = cycle("e3")  # streak 3 -> down
     assert not ok
-    assert "Prod Flow" in msg
+    assert "Prod Flow" in msg and "consecutive" in msg
 
 
 def test_n8n_check_ok_when_no_failures(monkeypatch):
@@ -862,13 +909,17 @@ def test_n8n_check_ok_when_no_failures(monkeypatch):
     assert "no active-workflow failures" in msg
 
 
-def test_n8n_check_at_threshold_is_ok(monkeypatch):
-    # total failures == N8N_FAIL_MAX must NOT alert (strictly greater)
+def test_n8n_check_single_failure_does_not_page(monkeypatch):
+    # one failure -> streak 1 < N8N_CONSECUTIVE_MAX -> stays up (the one-transient grace)
     monkeypatch.setattr(check, "N8N_API_KEY", "x")
-    monkeypatch.setattr(check, "N8N_FAIL_MAX", 1.0)
+    monkeypatch.setattr(check, "_n8n_streaks", {})
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
     now_iso = datetime.now(timezone.utc).isoformat()
-    ex = {"data": [{"workflowId": "1", "status": "error", "stoppedAt": now_iso}]}
+    ex = {
+        "data": [
+            {"id": "e1", "workflowId": "1", "status": "error", "stoppedAt": now_iso}
+        ]
+    }
     monkeypatch.setattr(check, "_get_json", _seq(wf, ex))
     ok, _ = check.check_n8n()
     assert ok
