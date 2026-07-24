@@ -12,6 +12,13 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
+  # Shed load before an OTLP burst walks the process into its 256M cgroup cap (compose
+  # resources) and gets OOM-killed. otelcol guidance: memory_limiter must be the FIRST
+  # processor in every pipeline.
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 80
+    spike_limit_percentage: 25
   batch:
     timeout: 5s
 
@@ -49,9 +56,9 @@ service:
   pipelines:
     metrics:
       receivers: [otlp]
-      processors: [batch]
+      processors: [memory_limiter, batch]
       exporters: [prometheus]
     logs:
       receivers: [otlp]
-      processors: [batch]
+      processors: [memory_limiter, batch]
       exporters: [otlp_http/loki]

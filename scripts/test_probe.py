@@ -671,6 +671,24 @@ def test_loki_query_url_with_range_adds_start_end_direction():
     assert "start=1000" in url and "end=2000" in url and "direction=forward" in url
 
 
+def test_rows_from_loki_flattens_and_sorts_streams():
+    data = {
+        "data": {
+            "result": [
+                {"values": [["20", "b"], ["10", "a"]]},
+                {"values": [["30", "c"]]},
+            ]
+        }
+    }
+    assert probe._rows_from_loki(data) == [(10, "a"), (20, "b"), (30, "c")]
+
+
+def test_rows_from_loki_handles_empty_and_missing_keys():
+    assert probe._rows_from_loki({}) == []
+    assert probe._rows_from_loki({"data": {"result": []}}) == []
+    assert probe._rows_from_loki({"data": {"result": [{"values": None}]}}) == []
+
+
 def test_parse_down_line_extracts_name_and_strips_cycle_counter():
     line = "[2026-07-21T08:37:00] DOWN n8n - 1 active workflow(s) failed (2 cycles)"
     assert probe.parse_down_line(line) == ("n8n", "1 active workflow(s) failed")

@@ -1,7 +1,7 @@
 # Server Homelab — Claude Code Context
 
 ## Project Overview
-Docker-based homelab managed with Ansible. ~44 containerized services deployed across two hosts via infrastructure-as-code.
+Docker-based homelab managed with Ansible. ~49 containerized services deployed across two hosts via infrastructure-as-code.
 
 **Hosts:**
 - `daniel-server` — main server (Intel XE graphics, LVM storage)

@@ -853,6 +853,18 @@ def run_query(ns):
     return 0
 
 
+def _rows_from_loki(data: dict) -> list[tuple[int, str]]:
+    """Flatten a Loki query_range response into a time-sorted list of (ns_ts, line)
+    tuples across all returned streams."""
+    rows = [
+        (int(ts), line)
+        for stream in (data.get("data") or {}).get("result") or []
+        for ts, line in stream.get("values") or []
+    ]
+    rows.sort()
+    return rows
+
+
 def run_alerts(ns):
     """Fetch monitor-bridge's DOWN log lines over the window and print firing episodes."""
     end_s = datetime.now(_CHICAGO).timestamp()
@@ -868,13 +880,7 @@ def run_alerts(ns):
     if ns.dry_run:
         print(" ".join(curl_argv(url)))
         return 0
-    data = json.loads(fetch(url))
-    raw = [
-        (int(ts), line)
-        for stream in (data.get("data") or {}).get("result") or []
-        for ts, line in stream.get("values") or []
-    ]
-    raw.sort()
+    raw = _rows_from_loki(json.loads(fetch(url)))
     if ns.raw:
         print("\n".join(line for _, line in raw) or "no logs")
     else:

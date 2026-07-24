@@ -18,20 +18,22 @@ Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md
     rather than delete/recreate.
   - `templates/provisioning/dashboards.yml.j2` — a file provider with `allowUiUpdates: true`
     and `foldersFromFilesStructure: true` pointing at `/var/lib/grafana/dashboards`. Each
-    subdirectory becomes a Grafana folder of the same name (e.g. `dashboards/Crowdsec/`).
-  - `files/dashboards/**/*.json` — **every** dashboard is provisioned as code, from two
-    sources (see *Editing* below):
-    - **Community boards** (`node-exporter-full`, `cadvisor`, `traefik`) — upstream is
-      grafana.com (1860 / 14282 / 17346).
-    - **Custom boards** — upstream is the live Grafana DB: the CrowdSec set
-      (`Crowdsec/`), the Loki log views (`system-logs`, `docker-app-logs`),
-      `docker-and-system-monitoring`, `traefik-custom`, and `HomeAssistant/home-assistant.json`.
-      Also `Uptime-Kuma/uptime-kuma.json` (per-monitor up/down, response time, cert-days from
-      Kuma's `/metrics`), `Loki/loki-internals.json` (Loki's own ingestion/request/flush
-      metrics), and `ups.json` (the APC UPS's charge / estimated runtime / input voltage / load
-      from HA's Prometheus scrape — the visual companion to monitor-bridge's UPS Battery Health
-      check; the runtime-trend panel is the slow battery-decay view the alert floor can't show) —
-      hand-authored seeds; edit-in-UI then `export_grafana_dashboards.py` to round-trip like the rest.
+    subdirectory becomes a Grafana folder of the same name (e.g. `dashboards/Security/`).
+  - `files/dashboards/**/*.json` — **every** dashboard is provisioned as code, sorted into
+    functional folders (`AI/`, `Apps/`, `Infrastructure/`, `Logs/`, `Networking/`, `Security/`),
+    from two sources (see *Editing* below):
+    - **Community boards** — upstream is grafana.com: `Infrastructure/node-exporter-full`
+      (1860) and `Infrastructure/cadvisor` (14282).
+    - **Custom boards** — upstream is the live Grafana DB: the CrowdSec set + `lapi-metrics`
+      (`Security/`); `home-assistant`, `uptime-kuma`, `backups`, `player-stats` (`Apps/`);
+      `docker-and-system-monitoring`, `ups`, `alert-history` (`Infrastructure/`); the Loki log
+      views `logs` + `loki-internals` (`Logs/`); `traefik-custom` (`Networking/`); and
+      `claude-code` (`AI/` — the Claude Code token/cost/session board fed by the otel-collector
+      Prometheus scrape). `ups.json` is the visual companion to monitor-bridge's UPS Battery
+      Health check (its runtime-trend panel is the slow battery-decay view the alert floor can't
+      show); `alert-history.json` reconstructs monitor-bridge DOWN episodes from Loki (the board
+      twin of `probe.py alerts`). These are hand-authored seeds — edit-in-UI then
+      `export_grafana_dashboards.py` to round-trip like the rest.
     - All datasource references are **pinned to the provisioned uids** (`EGdsQqhVk`
       Prometheus / `bf4q19tuivta8e` Loki) so they resolve without the import prompt that
       file-provisioning skips. A stale Prometheus uid (`IH0jqv6nz`) that lingered in a
