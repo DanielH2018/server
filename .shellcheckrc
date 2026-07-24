@@ -1,0 +1,18 @@
+# Repo policy for shellcheck's OPTIONAL rules (the default gate in prek.toml runs with
+# optional checks off and is clean — this file only governs `-o all` / editor sweeps, and
+# a disable here wins even when `-o all` is passed).
+# Each rule below was triaged 2026-07-24 and rejected deliberately; delete a line to adopt it.
+
+# 167 hits. Repo convention is unbraced "$var"; braces-everywhere is taste, not correctness.
+disable=SC2250
+
+# 23 hits. Scripts span bash and POSIX sh (container entrypoints, busybox); [ ] runs in both.
+disable=SC2292
+
+# 22 hits. Masked-return info in $(...); the dangerous subset (SC2155) is already on by
+# default and clean.
+disable=SC2312
+
+# 1 hit (kopia restore-drill.sh). Its `case` is a filter — the *.db branch adds SQLite
+# validation; other sentinels intentionally fall through with no default branch.
+disable=SC2249

@@ -54,7 +54,9 @@ id = "gitleaks"
 # (language = python) — no host apt package and no Docker, so it works unmodified on the
 # ubuntu-latest CI runner via prek's own hook-env bootstrap. All severities are on by
 # default (not just --severity=error): the repo's shell scripts are currently
-# shellcheck-clean, so there's nothing to suppress yet.
+# shellcheck-clean, so there's nothing to suppress yet. OPTIONAL (off-by-default) rules
+# are a separate axis: the triaged accept/exclude policy for them lives in .shellcheckrc,
+# which also silences `shellcheck -o all` sweeps (rc disables win over -o all).
 [[repos]]
 repo = "https://github.com/shellcheck-py/shellcheck-py"
 rev = "v0.11.0.1"

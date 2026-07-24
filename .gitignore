@@ -12,6 +12,7 @@
 !/.gitmodules
 !prek.toml
 !.ansible-lint
+!/.shellcheckrc
 !/.gitleaks.toml
 !ansible.cfg
 !/.vscode
