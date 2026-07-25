@@ -66,13 +66,25 @@ def query_metric(promql: str) -> list[dict]:
     )
 
 
-@mcp.tool()
-def query_logs(logql: str, limit: int = 100) -> list[dict]:
-    """Loki range query. Returns {labels, ts, line} rows (newest range)."""
-    resp = _get_json(
-        f"{LOKI}/loki/api/v1/query_range", {"query": logql, "limit": limit}
+def _loki_range(logql: str, limit: int, hours: float) -> list[dict]:
+    """Loki range query over an explicit trailing window, newest first.
+
+    Window construction lives in safe_reads.loki_range_params (unit-tested); this
+    is the wiring.
+    """
+    params = safe_reads.loki_range_params(
+        logql, limit, hours, datetime.now(timezone.utc).timestamp()
     )
-    return safe_reads.parse_loki(resp)
+    return safe_reads.parse_loki(_get_json(f"{LOKI}/loki/api/v1/query_range", params))
+
+
+@mcp.tool()
+def query_logs(logql: str, limit: int = 100, hours: float = 24.0) -> list[dict]:
+    """Loki range query over the trailing `hours` (default 24h, newest first).
+
+    Returns {labels, ts, line} rows. Widen `hours` to reach older activity.
+    """
+    return _loki_range(logql, limit, hours)
 
 
 @mcp.tool()
@@ -239,19 +251,18 @@ def claude_code_usage() -> dict:
 
 
 @mcp.tool()
-def claude_code_events(limit: int = 100) -> list[dict]:
+def claude_code_events(limit: int = 100, hours: float = 24.0) -> list[dict]:
     """Recent Claude Code event logs from the OTLP -> Loki pipeline: tool decisions,
     api_request / api_error / api_refusal, mcp_server_connection, permission-mode changes.
     Metadata only, no prompt/response/tool content. For arbitrary LogQL use query_logs.
 
-    The selector matches the OTLP-ingested stream (`service_name` is set by OTLP ingest;
-    promtail's homelab logs carry `job`/`container` instead), which is Claude Code only.
+    Pinned to service_name="claude-code": Loki 3.x derives `service_name` for promtail
+    streams too, so a `=~".+"` selector returns every container's logs, not these events.
+    Only service_name is an indexed label — event_name, tool_name, decision, success and
+    the rest are structured metadata, so filter them after the selector, e.g.
+    `{service_name="claude-code"} | event_name="tool_decision" | decision="reject"`.
     """
-    resp = _get_json(
-        f"{LOKI}/loki/api/v1/query_range",
-        {"query": '{service_name=~".+"}', "limit": limit},
-    )
-    return safe_reads.parse_loki(resp)
+    return _loki_range('{service_name="claude-code"}', limit, hours)
 
 
 @mcp.tool()

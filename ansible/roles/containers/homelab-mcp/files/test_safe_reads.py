@@ -7,6 +7,7 @@ from safe_reads import (
     bearer_token_valid,
     container_ref_valid,
     entity_id_valid,
+    loki_range_params,
     parse_loki,
     parse_metric,
     parse_targets,
@@ -304,3 +305,25 @@ def test_bearer_token_valid():
     assert bearer_token_valid("s3cret", "s3cret") is False
     assert bearer_token_valid(None, "s3cret") is False
     assert bearer_token_valid("Bearer s3cret", "") is False
+
+
+def test_loki_range_params_builds_explicit_window():
+    now = 1_700_000_000.0
+    p = loki_range_params('{service_name="claude-code"}', 50, 24.0, now)
+    assert p["query"] == '{service_name="claude-code"}'
+    assert p["limit"] == 50
+    assert p["direction"] == "backward"
+    # nanosecond epoch, start exactly `hours` earlier than end
+    assert p["end"] == str(int(now * 1e9))
+    assert int(p["end"]) - int(p["start"]) == 24 * 3600 * 10**9
+
+
+def test_loki_range_params_accepts_fractional_hours():
+    p = loki_range_params("{}", 1, 0.5, 1_700_000_000.0)
+    assert int(p["end"]) - int(p["start"]) == 1800 * 10**9
+
+
+@pytest.mark.parametrize("hours", [0, -1])
+def test_loki_range_params_rejects_nonpositive_hours(hours):
+    with pytest.raises(ValueError):
+        loki_range_params("{}", 1, hours, 1_700_000_000.0)

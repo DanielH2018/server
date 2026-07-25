@@ -94,6 +94,24 @@ def parse_loki(resp: dict) -> list[dict]:
     return rows
 
 
+def loki_range_params(logql: str, limit: int, hours: float, now: float) -> dict:
+    """Build query_range params for the trailing `hours` window ending at `now`.
+
+    Loki falls back to a ~1h lookback when start/end are omitted, so a query about
+    anything older silently returns zero rows — indistinguishable from a dead
+    pipeline. Callers must always send an explicit range.
+    """
+    if hours <= 0:
+        raise ValueError("hours must be positive")
+    return {
+        "query": logql,
+        "limit": limit,
+        "start": str(int((now - hours * 3600) * 1e9)),
+        "end": str(int(now * 1e9)),
+        "direction": "backward",
+    }
+
+
 # --- Downstream URL-path guards ---------------------------------------------
 # `name` (docker) and `entity_id` (Home Assistant) get interpolated into an
 # outbound URL path, and httpx does not percent-encode an f-string path segment.
