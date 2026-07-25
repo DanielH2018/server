@@ -13,9 +13,10 @@ test_ha_round_semantics.py.
 """
 
 import math
+from functools import lru_cache
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, Template
 
 _MACRO_DIR = Path(__file__).resolve().parent.parent / "files" / "custom_templates"
 _SENTINEL = object()
@@ -71,13 +72,23 @@ def _forgiving_bool(value, default=_SENTINEL):
     return bool(value) if default is _SENTINEL else default
 
 
-def _env():
+# Built once and reused: the env's loader caches the parsed macro files, and _wrapper caches the
+# compiled call templates. Rebuilding both per render_macro() call made the 8.8k-point fan
+# equivalence grid take ~143s on its own. FileSystemLoader stats mtimes (auto_reload defaults on),
+# so an edited .jinja is still picked up.
+@lru_cache(maxsize=None)
+def _env() -> Environment:
     env = Environment(loader=FileSystemLoader(str(_MACRO_DIR)))
     env.filters["float"] = _forgiving_float
     env.filters["int"] = _forgiving_int
     env.filters["round"] = _forgiving_round
     env.filters["bool"] = _forgiving_bool
     return env
+
+
+@lru_cache(maxsize=None)
+def _wrapper(source: str) -> Template:
+    return _env().from_string(source)
 
 
 def render_macro(file: str, macro: str, *args, **kwargs) -> str:
@@ -87,13 +98,12 @@ def render_macro(file: str, macro: str, *args, **kwargs) -> str:
     stay bools). Positional args are passed positionally; keyword args let a test set one of the
     macro's keyword-default parameters (e.g. outdoor_pm10=80) without listing the ones before it.
     """
-    env = _env()
     ctx = {f"a{i}": v for i, v in enumerate(args)}
     ctx.update({f"k_{k}": v for k, v in kwargs.items()})
     pos = ", ".join(f"a{i}" for i in range(len(args)))
     kw = ", ".join(f"{k}=k_{k}" for k in kwargs)
     call = ", ".join(p for p in (pos, kw) if p)
-    template = env.from_string(
+    template = _wrapper(
         "{%% from '%s' import %s %%}{{ %s(%s) }}" % (file, macro, macro, call)
     )
     return template.render(**ctx).strip()

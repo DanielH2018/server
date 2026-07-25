@@ -14,6 +14,12 @@ from validate_ha_config import (
 )
 
 
+@pytest.fixture(scope="session")
+def real_role_errors():
+    """validate() on the real role costs ~2s; the two guards below assert on the same run."""
+    return validate()
+
+
 def _write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
@@ -125,9 +131,9 @@ def test_jinja_errors_clean_on_valid(tmp_path):
     assert jinja_errors(trees, cdir) == []
 
 
-def test_validate_real_config_is_clean():
+def test_validate_real_config_is_clean(real_role_errors):
     # The headline regression guard: the live role config passes structural + Jinja checks.
-    assert validate() == []
+    assert real_role_errors == []
 
 
 def test_validate_reports_structural_error(tmp_path):
@@ -170,10 +176,9 @@ def test_uncoerced_macro_bool_uses_truth_table():
     assert u("{{ m() and n() }}", names) == ["m", "n"]  # both operands, sorted
 
 
-def test_macro_bool_coercion_clean_on_real_role():
+def test_macro_bool_coercion_clean_on_real_role(real_role_errors):
     # The real role must pass — no current macro is a raw boolean operand (error_in_scope is
     # `| bool`-coerced). Pure future-tightening; this guards against a false-positive regression.
-    import validate_ha_config
-
-    errors = validate_ha_config.validate()
-    assert all("boolean and/or/not operand" not in e for e in errors), errors
+    assert all("boolean and/or/not operand" not in e for e in real_role_errors), (
+        real_role_errors
+    )
