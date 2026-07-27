@@ -8,6 +8,7 @@ the Renovate dependency dashboard.
 
 - Navidrome
 - Replace Flaresolvarr with Byparr
+- Setup Kagi Search in Homepage
 
 _Recently cleared (2026-06-29): adopted `ruff format` + a `ruff format --check` prek hook
 (config kept in `pyproject.toml [tool.ruff]`, not a separate `ruff.toml`). "Organize tests in
