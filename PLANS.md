@@ -7,6 +7,7 @@ the Renovate dependency dashboard.
 ## Backlog
 
 - Navidrome
+- Replace Flaresolvarr with Byparr
 
 _Recently cleared (2026-06-29): adopted `ruff format` + a `ruff format --check` prek hook
 (config kept in `pyproject.toml [tool.ruff]`, not a separate `ruff.toml`). "Organize tests in
