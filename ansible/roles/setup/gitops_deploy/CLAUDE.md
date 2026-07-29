@@ -1,4 +1,4 @@
-# gitops_deploy — pull-based deploy on master change (daniel-server only)
+# gitops_deploy — pull-based deploy on master change (every has_gitops host)
 
 Installs a systemd **timer** (every 30 min) that runs `/opt/gitops-deploy/gitops_deploy.py`
 as `{{ sys_user }}`. The script fetches `origin/master`; if it advanced, maps each changed file
@@ -55,13 +55,14 @@ the held SHA and the hold clears automatically.
   ticking, no hold), so each tick writes the diverged SHA to `/var/lib/gitops-deploy/diverged_sha`
   (cleared once resolved) and `monitor-bridge`'s **GitOps Deploy — Status** monitor pages on it.
   A merely-unpushed local commit (`local_ahead`) is NOT flagged — that's the plain no-op above.
-- Health-gates **only services deployed on THIS host** (daniel-server). A changed template for
-  an other-host-only service (e.g. `dozzle` is daniel-pi-only) renders no compose here, so
-  `containers_for()` returns `[]` and it's skipped — without this the gate polls a phantom
-  container until `HEALTH_TIMEOUT_S` and false-rollbacks (`deploy_logic.containers_to_gate`).
-  - **By design: Pi-only services are NOT auto-deployed by GitOps (accepted, 2026-06-30).** The
-    deployer runs on daniel-server only; there is deliberately **no GitOps/CI deploy path to
-    daniel-pi**. A change to a Pi-only service (e.g. `wg-easy`/`dozzle` on the Pi) ff-merges and
+- Health-gates **only services deployed on THIS host** — each `has_gitops` host runs its own
+  independent instance of this deployer, own git clone, own state dir, own lock, gating only its
+  own `containers_list`. A changed template for a service deployed on a DIFFERENT host renders no
+  compose here, so `containers_for()` returns `[]` and it's skipped — without this the gate polls
+  a phantom container until `HEALTH_TIMEOUT_S` and false-rollbacks (`deploy_logic.containers_to_gate`).
+  - **By design: Pi-only services are NOT auto-deployed by GitOps (accepted, 2026-06-30).** The Pi
+    has `has_gitops: false`; there is deliberately **no GitOps/CI deploy path to daniel-pi**. A
+    change to a Pi-only service (e.g. `wg-easy`/`dozzle` on the Pi) ff-merges and
     "deploys" as a local no-op, then skips the health gate per the rule above — so the tick reports
     success while the Pi never actually redeploys ("cross-host phantom-success", review CI-L2). This
     is intentional, not a gap: the Pi is a memory-constrained Zero 2 W driven manually over SSH (see

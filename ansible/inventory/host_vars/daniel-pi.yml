@@ -12,6 +12,9 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # separate daniel-pi.com zone.
 # LAN-only host: publish web UIs bound to the LAN IP instead of routing through Traefik.
 expose_mode: lan
+# No GitOps auto-deploy path to the Pi (accepted, 2026-06-30) — memory-constrained and driven
+# manually over SSH. See gitops_deploy CLAUDE.md.
+has_gitops: false
 # Disk-backed swap for the 512 MB Zero 2 W. The RAM-resident zram (optimize_pi) can't add
 # real capacity, so heavy one-shot apt/dpkg steps (apt-show-versions cache build, `upgrade: dist`,
 # AIDE init) OOM-kill mid-transaction and corrupt the package DB. Created by the initial_setup

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GitOps deployer — runs once per systemd-timer tick on daniel-server.
+"""GitOps deployer — runs once per systemd-timer tick, on every host with has_gitops set.
 
 Flow: fetch origin/master; if it advanced, map changed templates to services;
 ff-merge; deploy each via the existing ansible-playbook path; health-gate each
@@ -7,7 +7,7 @@ container. On failure: reset to the previous HEAD, redeploy the prior version,
 record the bad SHA as a hold marker, and alert the dedicated Discord webhook.
 
 Config comes from /etc/gitops-deploy/config.env (KEY=VALUE), written by Ansible:
-  REPO_DIR, BRANCH, DISCORD_WEBHOOK, HEALTH_TIMEOUT_S
+  REPO_DIR, BRANCH, HOSTNAME, DISCORD_WEBHOOK, HEALTH_TIMEOUT_S
 Stdlib only.
 """
 
@@ -97,6 +97,7 @@ def cfg() -> dict[str, str]:
 C = cfg()
 REPO = C["REPO_DIR"]
 BRANCH = C.get("BRANCH", "master")
+HOSTNAME = C.get("HOSTNAME", "unknown-host")
 TIMEOUT = int(C.get("HEALTH_TIMEOUT_S", "300"))
 # Wall-clock budget (measured from process start, RUN_START) for the whole run's health-gating
 # phase. Once spent, the gate stops and rolls back so the rollback (git reset + one redeploy)
@@ -315,9 +316,9 @@ def health_ok(
 def containers_for(service: str) -> list[str]:
     """Container names to health-gate for a deployed service, from its rendered
     compose. Empty when the service isn't deployed on THIS host — its rendered
-    file doesn't exist (dozzle is daniel-pi-only; the deployer runs on
-    daniel-server) — so the caller skips it instead of gating a phantom container
-    (see deploy_logic.containers_to_gate). A present compose that declares no
+    file doesn't exist (dozzle is daniel-pi-only, and the deployer doesn't run
+    on the Pi at all) — so the caller skips it instead of gating a phantom
+    container (see deploy_logic.containers_to_gate). A present compose that declares no
     container_name falls back to [service]."""
     path = os.path.join(REPO, "containers", service, "docker-compose.yml")
     try:
@@ -407,7 +408,7 @@ def main() -> int:
         ):
             # Mark as alerted only on confirmed delivery, else retry next tick (see discord()).
             if discord(
-                "⚠️ gitops-deploy: working tree dirty on daniel-server — skipping. "
+                f"⚠️ gitops-deploy: working tree dirty on {HOSTNAME} — skipping. "
                 "Resolve manually."
             ):
                 _write_marker(
@@ -490,7 +491,7 @@ def main() -> int:
         except Exception as exc2:  # noqa: BLE001 — best-effort restore; we still hold + alert
             log(f"rollback redeploy of the prior version also failed: {exc2}")
         posted = discord(
-            f"🚨 gitops-deploy: **deploy failed** on daniel-server.\n"
+            f"🚨 gitops-deploy: **deploy failed** on {HOSTNAME}.\n"
             f"`ansible-playbook` errored deploying `{', '.join(sorted(cs.services))}` from "
             f"`{origin[:8]}`:\n`{exc}`\n"
             f"Rolled back to `{local[:8]}`; the bad commit is held until origin advances past it.\n"
@@ -543,7 +544,7 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001 — best-effort restore; we still hold + alert
         log(f"rollback redeploy of the prior version also failed: {exc}")
     posted = discord(
-        f"🚨 gitops-deploy: **rollback** on daniel-server.\n"
+        f"🚨 gitops-deploy: **rollback** on {HOSTNAME}.\n"
         f"Service(s) `{', '.join(failed)}` from commit `{origin[:8]}` failed the health "
         f"gate and were rolled back to `{local[:8]}`.\n"
         f"**Action:** revert the offending Renovate PR — the bad commit is held until you do."

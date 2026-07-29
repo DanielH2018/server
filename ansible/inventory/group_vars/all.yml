@@ -52,9 +52,6 @@ lan_subnet: "10.0.0.0/24"
 # tagged `deploy.yml --tags docker-proxy` set_facts containers_list to the filtered
 # dependency closure, which would drop code-server and render False). Override per-host.
 has_code_server: false
-# The one host authoritative for the GitOps auto-deploy pipeline and Renovate PR
-# notifications (see gitops_deploy/renovate_notify CLAUDE.md — deliberately singular).
-gitops_controller_host: daniel-server
 # The host Uptime Kuma / the Pi's push-monitor heartbeats resolve to.
 monitoring_controller_host: daniel-server
 # The one host that pulls daniel-pi's wg-easy peer configs into its own Kopia backup
@@ -64,3 +61,13 @@ backup_controller_host: daniel-server
 # The one host the DOCKER-USER firewall admits to the Pi's Portainer agent port
 # (see portainer-agent CLAUDE.md).
 portainer_manager_host: daniel-server
+# The one host that checks for open Renovate PRs and posts the Discord digest (see
+# renovate_notify CLAUDE.md) — fleet-wide by nature (queries the GitHub repo, not
+# anything host-local), so running it on more than one host would just duplicate
+# every notification. Doesn't matter which host, but must be exactly one.
+renovate_notify_host: daniel-server
+# Whether this host runs its own gitops_deploy pull-based auto-deployer. True by
+# default — every full host redeploys its own containers_list independently on a
+# git push (see gitops_deploy CLAUDE.md). daniel-pi overrides this false: it's
+# memory-constrained and driven manually over SSH, not by GitOps, by design.
+has_gitops: true

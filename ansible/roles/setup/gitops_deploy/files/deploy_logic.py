@@ -285,7 +285,8 @@ def containers_to_gate(compose_text: str | None, service: str) -> list[str]:
 
     `compose_text` is the service's rendered docker-compose.yml on THIS host, or
     None when that file doesn't exist — which means the service isn't deployed on
-    this host (e.g. dozzle is daniel-pi-only; the deployer runs on daniel-server).
+    this host (e.g. dozzle is daniel-pi-only, and the deployer doesn't run on the
+    Pi at all — has_gitops: false there).
     A changed template for such a service renders nothing here, so we must gate
     nothing: returning [] makes the caller skip it instead of polling a phantom
     container until HEALTH_TIMEOUT_S and triggering a false rollback.
