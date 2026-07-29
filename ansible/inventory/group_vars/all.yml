@@ -44,5 +44,7 @@ kuma_notification_id: discord
 # Uptime Kuma "docker host" id referenced by AutoKuma docker monitors; the same id on
 # every host so far, so it lives here — override per-host if one ever diverges.
 kuma_docker_host: 1
-lat: 38.89
-long: -77.08
+# Physical LAN subnet, narrow /24 (not the broader RFC1918 range — see traefik's trustedIPs
+# comment for why that distinction matters). Same for every host so far; override per-host
+# if a new host sits on a different LAN.
+lan_subnet: "10.0.0.0/24"

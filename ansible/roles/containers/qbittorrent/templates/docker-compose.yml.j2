@@ -39,7 +39,7 @@ services:
       - FILE__MULLVAD_PRIVATE_KEY=/run/secrets/mullvad_key
       - FILE__MULLVAD_ACCOUNT=/run/secrets/mullvad_account
       - MULLVAD_LOCATION=us-qas
-      - LAN_NETWORKS=192.168.0.0/24,10.0.0.0/24,172.16.0.0/12
+      - LAN_NETWORKS=192.168.0.0/24,{{ lan_subnet }},172.16.0.0/12
     volumes:
       - ./config:/config
       - ./mullvad-secrets/key:/run/secrets/mullvad_key:ro

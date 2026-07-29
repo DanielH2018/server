@@ -6,6 +6,9 @@ has_igpu: true
 # scrutiny-collector's SMART source device (see scrutiny role CLAUDE.md) — override per host
 # if the NVMe enumerates differently, or drop the scrutiny role entirely if the host has none.
 scrutiny_nvme_device: /dev/nvme0
+# Physical location, feeds the homepage weather widget. Only this host runs homepage.
+lat: 38.89
+long: -77.08
 # SLZB-06M Zigbee coordinator (network-attached) + pinned Zigbee PAN identity. The
 # coordinator is reached over serial-over-TCP; pan_id/ext_pan_id are network identifiers
 # (not secrets) fixed so a templated-config redeploy never regenerates the mesh. The
