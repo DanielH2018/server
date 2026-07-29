@@ -14,15 +14,15 @@
     name: common
     tasks_from: docker_deploy.yml
 
-# --- daniel-server only: back up daniel-pi's wg-easy peer configs into Kopia scope ---
+# --- backup_controller_host only: back up daniel-pi's wg-easy peer configs into Kopia scope ---
 # The Pi is otherwise out of Kopia scope (kopia role CLAUDE.md); its wg-easy peers (WireGuard
-# private keys) are the one thing a redeploy can't rebuild, so pull them into the server's
-# containers/ tree for the offsite (B2) backup. Gated on inventory_hostname (NOT containers_list —
-# a tagged deploy filters that list to the dep closure), so it lands only on the server, which
-# pulls FROM the Pi. See this role's + the kopia role's CLAUDE.md.
+# private keys) are the one thing a redeploy can't rebuild, so pull them into the backup
+# controller's containers/ tree for the offsite (B2) backup. Gated on backup_controller_host
+# (NOT containers_list — a tagged deploy filters that list to the dep closure), so it lands only
+# on that host, which pulls FROM the Pi. See this role's + the kopia role's CLAUDE.md.
 - name: Create the Pi wg-easy peer-backup directory
   tags: [cron]
-  when: inventory_hostname == 'daniel-server'
+  when: inventory_hostname == backup_controller_host
   ansible.builtin.file:
     path: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/pi-peers"
     state: directory
@@ -32,7 +32,7 @@
 
 - name: Create the Pi wg-easy peer-backup monitor state directory
   tags: [cron]
-  when: inventory_hostname == 'daniel-server'
+  when: inventory_hostname == backup_controller_host
   # monitor-bridge bind-mounts this read-only (/pi-peers) and its `pi_peers` check alerts on a
   # failed/stale/missing pull — created here (not by Docker) so it's sys_user-writable for the cron.
   # Deploy wg-easy BEFORE monitor-bridge on a fresh host, else Docker auto-creates the mount source
@@ -47,7 +47,7 @@
 
 - name: Read daniel-pi's SSH host key for the peer-pull known_hosts pin
   tags: [cron]
-  when: inventory_hostname == 'daniel-server'
+  when: inventory_hostname == backup_controller_host
   # Pull the Pi's host public key over Ansible's own (operator-trusted) connection so the peer-pull
   # cron can VERIFY it rather than blind-TOFU-accept whatever answers on first connect. failed_when
   # false: an unreachable Pi at deploy must not fail the server play — pull-pi-peers.sh's accept-new
@@ -61,7 +61,7 @@
 - name: Pin daniel-pi's SSH host key into the peer-pull known_hosts
   tags: [cron]
   when:
-    - inventory_hostname == 'daniel-server'
+    - inventory_hostname == backup_controller_host
     - wg_easy_pi_hostkey.content is defined
   # No become: write into sys_user's own ~/.ssh/known_hosts (the cron runs as sys_user) so it stays
   # sys_user-owned and cron-readable. Idempotent — re-pinning the same key is a no-op; a rotated Pi
@@ -74,7 +74,7 @@
 
 - name: Deploy the shared host-cron state-file writer
   tags: [cron]
-  when: inventory_hostname == 'daniel-server'
+  when: inventory_hostname == backup_controller_host
   # pull-pi-peers.sh sources this for its atomic {ts,ok,msg} state write (the shell twin of
   # host_lib.py's cross-role Python sharing). Cross-role source lives in the common role; ordered
   # before the pull script + its deploy-time seed so it's on disk first.
@@ -88,7 +88,7 @@
 
 - name: Deploy the Pi wg-easy peer-backup pull script
   tags: [cron]
-  when: inventory_hostname == 'daniel-server'
+  when: inventory_hostname == backup_controller_host
   ansible.builtin.template:
     src: pull-pi-peers.sh.j2
     dest: /usr/local/bin/wg-easy-pull-pi-peers.sh
@@ -99,7 +99,7 @@
 
 - name: Schedule the daily daniel-pi wg-easy peer backup
   tags: [cron]
-  when: inventory_hostname == 'daniel-server'
+  when: inventory_hostname == backup_controller_host
   # 23:30 — 30 min before the 00:00 in-container Kopia snapshot, so each night's snapshot captures
   # the fresh pull; clear of the kopia crons (02:30 b2-usage, 03:30 maint, 04:00 verify, 05:00 drill).
   ansible.builtin.cron:
@@ -112,7 +112,7 @@
 
 - name: Seed the Pi wg-easy peer backup on first deploy
   tags: [cron]
-  when: inventory_hostname == 'daniel-server'
+  when: inventory_hostname == backup_controller_host
   # Run once now so a copy exists immediately (the cron owns ongoing refresh). failed_when:false so
   # an unreachable Pi at deploy time doesn't fail the play — the nightly cron self-corrects.
   ansible.builtin.command:

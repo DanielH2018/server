@@ -57,6 +57,10 @@ has_code_server: false
 gitops_controller_host: daniel-server
 # The host Uptime Kuma / the Pi's push-monitor heartbeats resolve to.
 monitoring_controller_host: daniel-server
+# The one host that pulls daniel-pi's wg-easy peer configs into its own Kopia backup
+# scope (see wg-easy CLAUDE.md) — daniel-pi itself is not parameterized here, it's the
+# one confirmed satellite with no sibling expected.
+backup_controller_host: daniel-server
 # The one host the DOCKER-USER firewall admits to the Pi's Portainer agent port
 # (see portainer-agent CLAUDE.md).
 portainer_manager_host: daniel-server
