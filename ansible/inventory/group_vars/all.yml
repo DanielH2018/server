@@ -48,3 +48,15 @@ kuma_docker_host: 1
 # comment for why that distinction matters). Same for every host so far; override per-host
 # if a new host sits on a different LAN.
 lan_subnet: "10.0.0.0/24"
+# code-server's read-only docker-proxy is gated on this host_var, not containers_list (a
+# tagged `deploy.yml --tags docker-proxy` set_facts containers_list to the filtered
+# dependency closure, which would drop code-server and render False). Override per-host.
+has_code_server: false
+# The one host authoritative for the GitOps auto-deploy pipeline and Renovate PR
+# notifications (see gitops_deploy/renovate_notify CLAUDE.md — deliberately singular).
+gitops_controller_host: daniel-server
+# The host Uptime Kuma / the Pi's push-monitor heartbeats resolve to.
+monitoring_controller_host: daniel-server
+# The one host the DOCKER-USER firewall admits to the Pi's Portainer agent port
+# (see portainer-agent CLAUDE.md).
+portainer_manager_host: daniel-server

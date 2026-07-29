@@ -12,7 +12,7 @@ PORT={{ container_item.port }}
 # egress NATs to the wlo1 IP, misses this /32, and the Pi's Portainer environment silently goes
 # down. Accepted (routing egresses via enp88s0 today; a NIC failover is already a degraded state) —
 # if that link matters, add the wlo1 /32 as a second RETURN rather than widening to /24.
-ALLOW={{ hostvars['daniel-server'].server_ip }}
+ALLOW={{ hostvars[portainer_manager_host].server_ip }}
 
 # Remove any previously-added rules for this port (ignore if absent)
 iptables -D DOCKER-USER -p tcp --dport "$PORT" -s "$ALLOW" -j RETURN 2>/dev/null || true

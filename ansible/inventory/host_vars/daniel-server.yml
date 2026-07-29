@@ -3,6 +3,7 @@ server_ip: 10.0.0.161
 ssh_config_path: /etc/ssh/sshd_config
 # Intel XE iGPU present — enables /dev/dri passthrough for jellyfin/tdarr hardware transcode.
 has_igpu: true
+has_code_server: true
 # scrutiny-collector's SMART source device (see scrutiny role CLAUDE.md) — override per host
 # if the NVMe enumerates differently, or drop the scrutiny role entirely if the host has none.
 scrutiny_nvme_device: /dev/nvme0

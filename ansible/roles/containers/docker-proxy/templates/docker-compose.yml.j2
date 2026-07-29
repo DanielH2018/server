@@ -2,12 +2,11 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
-{# Only stand up the code-server read proxy on the host that runs code-server (daniel-server; NOT
-   the memory-constrained Pi, which has docker-proxy for autoheal but no code-server). Gated on the
-   HOST, not containers_list: a tagged `deploy.yml --tags docker-proxy` set_facts containers_list to
-   the filtered dependency closure (docker-proxy + deps, no code-server), so a containers_list probe
-   renders False and drops the service. inventory_hostname is stable across that filtering. -#}
-{% set has_code_server = (inventory_hostname | default('')) == 'daniel-server' %}
+{# Only stand up the code-server read proxy on the host that runs code-server — gated on the
+   has_code_server host_var (group_vars/all.yml), not containers_list: a tagged
+   `deploy.yml --tags docker-proxy` set_facts containers_list to the filtered dependency closure
+   (docker-proxy + deps, no code-server), so a containers_list probe would render False and drop
+   the service. has_code_server is a plain host_var, stable across that filtering. -#}
 ---
 
 services:
