@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Host bring-up — get a freshly-cloned host to the point where Ansible can take over.
 #
-# Automates §3 (install uv) and §4 (SOPS onboarding via bootstrap.yml) of
-# ansible/README.md. It assumes §1 (SSH) and §2 (git clone) are already done — the repo
-# has to exist for this script to exist — and stops at the manual, cross-host SOPS
-# key-exchange that one host cannot do on its own. After you finish that exchange, run
-# the playbooks yourself (the script prints the exact commands):
+# Automates §3 (install uv) and §5 (SOPS onboarding via bootstrap.yml) of
+# ansible/README.md. It assumes §1 (SSH), §2 (git clone), and §4 (the host already has an
+# entry in ansible/inventory/hosts.ini + host_vars — bootstrap.yml matches nothing
+# otherwise) are already done, and stops at the manual, cross-host SOPS key-exchange that
+# one host cannot do on its own. After you finish that exchange, run the playbooks
+# yourself (the script prints the exact commands):
 #     uv run ansible-playbook ansible/initial_setup.yml
 #     uv run ansible-playbook ansible/deploy.yml
 #
@@ -20,8 +21,9 @@ HOST="$(hostname)"
 
 usage() {
   cat <<'EOF'
-Host bring-up — get a freshly-cloned host ready for Ansible (§3 + §4 of ansible/README.md).
-Installs uv, runs bootstrap.yml (SOPS), and prints the manual SOPS key-exchange to finish.
+Host bring-up — get a freshly-cloned host ready for Ansible (§3 + §5 of ansible/README.md).
+Assumes the host is already in ansible/inventory (§4). Installs uv, runs bootstrap.yml
+(SOPS), and prints the manual SOPS key-exchange to finish.
 
 Usage:  ansible/bring-up.sh [--host <name>]
   --host <name>   inventory host to bootstrap (default: this machine's hostname)
@@ -58,7 +60,7 @@ command -v uv >/dev/null 2>&1 ||
   { echo "error: uv still not on PATH after install — add ~/.local/bin to PATH" >&2; exit 1; }
 echo ">> uv $(uv --version)"
 
-# --- §4: SOPS bootstrap (installs age/sops + collections, generates this host's age ---
+# --- §5: SOPS bootstrap (installs age/sops + collections, generates this host's age ---
 # key, prints its public key). No secret dependency — this is what breaks the
 # chicken-and-egg before initial_setup.yml's secret-loading pre_tasks.
 echo ">> bootstrapping SOPS on host '$HOST' ..."

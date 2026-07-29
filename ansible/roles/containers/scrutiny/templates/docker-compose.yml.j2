@@ -147,7 +147,7 @@ services:
     volumes:
       - /run/udev:/run/udev:ro
     devices:
-      - /dev/nvme0:/dev/nvme0
+      - "{{ scrutiny_nvme_device }}:{{ scrutiny_nvme_device }}"
     networks:
       - scrutiny_internal
     labels:
