@@ -12,7 +12,9 @@
 # Add a host (e.g. the Pi):
 #   1. On that host:  ansible-playbook ansible/bootstrap.yml --limit <host>
 #      (generates the host's own age key, prints its PUBLIC key — no secret needed).
-#   2. Add the printed pubkey to the `age:` list below, with a trailing `# <host>` comment.
+#   2. Append the printed pubkey to the comma-separated `age:` string below — it is ONE quoted
+#      scalar, not a YAML list, so a per-key trailing comment is impossible; extend the
+#      position->host note above it instead.
 #   3. On a host that can already decrypt (daniel-server):
 #        sops updatekeys ansible/vars/secrets.yml
 #      then commit the re-encrypted secrets.yml + this file, and `git pull` on the host.

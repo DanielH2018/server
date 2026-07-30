@@ -33,7 +33,7 @@ scrape_configs:
       # (panels filtering on instance="$node" matched nothing). A static replacement keeps
       # one stable host identity everywhere.
       - target_label: instance
-        replacement: daniel-server
+        replacement: "{{ inventory_hostname }}"
 
 #################################################################################################
 
@@ -104,12 +104,12 @@ scrape_configs:
 #################################################################################################
 
 
-  - job_name: "crowdsec_daniel-server"
+  - job_name: "crowdsec_{{ inventory_hostname }}"
     scrape_interval: 1m
     static_configs:
     - targets: ["crowdsec:6060"]
       labels:
-        machine: 'daniel-server'
+        machine: "{{ inventory_hostname }}"
 
   - job_name: "terraria-stats"
     scrape_interval: 1m

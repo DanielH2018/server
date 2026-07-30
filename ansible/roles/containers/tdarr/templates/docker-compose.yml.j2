@@ -25,15 +25,17 @@ services:
       - internalNode=true
       - inContainer=true
       - maxLogSizeMB=10
-      - nodeID=daniel-server
+      - nodeID={{ inventory_hostname }}
     volumes:
       - ./server:/app/server
       - ./configs:/app/configs
       - ./logs:/app/logs
       - ./transcode_cache:/temp
       - /home/{{ sys_user }}/server/containers/data/media/:/media
+{% if has_igpu %}
     devices:
       - /dev/dri:/dev/dri
+{% endif %}
     # cap_drop ALL with the minimal set the image needs to chown mounts and drop to PUID/PGID.
     # Verify on deploy (docker logs tdarr) — add back caps if it fails to start.
     cap_drop:

@@ -43,8 +43,10 @@ services:
       # never listens on the WAN/other interfaces — Traefik still fronts the
       # public jellyfin.<domain> route.
       - "{{ server_ip }}:8096:8096"
+{% if has_igpu %}
     devices:
       - /dev/dri:/dev/dri
+{% endif %}
     security_opt:
       - no-new-privileges:true
     cap_drop:

@@ -84,3 +84,28 @@
       {{ (grafana_cfg_datasources is changed) or (grafana_cfg_dashboards_cfg is changed)
          or (grafana_cfg_dashboards is changed) or (grafana_cfg_loki is changed)
          or (grafana_cfg_promtail is changed) or (grafana_cfg_admin_password is changed) }}
+
+# GF_SECURITY_ADMIN_PASSWORD__FILE is only consulted when Grafana initialises its database,
+# so on an existing install a rotated grafana_admin_password never reaches the live admin
+# user: SOPS and the actual login diverge silently and the runbook grew a "change it in the
+# UI" step. `grafana cli admin reset-admin-password` writes straight to the DB and needs no
+# knowledge of the CURRENT password — unlike PUT /api/admin/users/1/password, which
+# authenticates as admin and is therefore useless in exactly the case that matters.
+# Gated on the password file changing, so it fires on a fresh install and on a rotation and
+# is skipped on every other deploy.
+- name: Sync the live Grafana admin password with SOPS # noqa no-handler
+  tags: [deploy]
+  when: grafana_cfg_admin_password is changed
+  community.docker.docker_container_exec:
+    container: grafana
+    command: "grafana cli admin reset-admin-password {{ grafana_admin_password }}"
+  register: grafana_admin_password_sync
+  # A freshly-deployed Grafana is still running its schema migrations for a few seconds and
+  # the CLI exits non-zero until the user table exists. `| default(1)` guards the same crash
+  # class as the traefik/crowdsec execs: a not-yet-running container registers an error dict
+  # with no rc key at all.
+  until: (grafana_admin_password_sync.rc | default(1)) == 0
+  retries: 5
+  delay: 10
+  changed_when: (grafana_admin_password_sync.rc | default(1)) == 0
+  no_log: true

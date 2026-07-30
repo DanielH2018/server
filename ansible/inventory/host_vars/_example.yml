@@ -1,0 +1,71 @@
+---
+# Template for a new host's host_vars. Copy to `<hostname>.yml` and edit — Ansible only
+# loads a host_vars file whose name matches an inventory hostname, so this one is inert.
+# Full walkthrough: ansible/README.md §4. Defaults quoted below come from
+# inventory/group_vars/all.yml; anything already correct there can simply be left out.
+#
+# Never put a secret here — inventory/ is NOT SOPS-auto-encrypted and NOT hook-guarded
+# (see .claude/rules/secrets.md). Secrets go in vars/secrets.yml and are referenced by name.
+
+# --- Required: no default exists, and a role will fail or misbehave without it ----------
+
+# The host's LAN IP. Needed by every role that publishes a LAN-bound port or firewalls by
+# IP, and read cross-host as hostvars[<other>].server_ip.
+server_ip: 10.0.0.x
+
+# Where sshd's config actually lives on this OS image — check with
+# `sudo sshd -T | grep -i '^include'` or `ls /etc/ssh/sshd_config.d/`. Cloud-init images
+# (the Pi) drop a file under sshd_config.d/; a stock Ubuntu install uses the bare path.
+# The SSH-hardening tasks have no `create:` fallback, so a wrong value fails the run.
+ssh_config_path: /etc/ssh/sshd_config
+
+# Services this host runs, in dependency order-agnostic form (deploy.yml toposorts them).
+# Start empty and populate as you add services — deploy.yml dies in its first pre_task if
+# this is undefined. See the repo-root CLAUDE.md → "Adding a New Container Service".
+containers_list: []
+
+# --- Bring-up: revert once the host is established --------------------------------------
+
+# Default: true. Keep it false until this host's first `deploy.yml` succeeds by hand. The
+# gitops_deploy role's "Run gitops-deploy once" handler shells a full deploy at the end of
+# initial_setup.yml and fails the play if it fails, so on a fresh host one bad service takes
+# down the OS-hardening run. Flip to true and re-run `--tags gitops_deploy` afterwards.
+has_gitops: false
+
+# --- Hardware / capability flags: set only what this host actually has ------------------
+
+# Default: false. Intel iGPU present → /dev/dri passthrough for jellyfin/tdarr transcode.
+# has_igpu: true
+
+# Default: false.
+# has_code_server: true
+
+# Only if you deploy scrutiny and its NVMe enumerates as something other than /dev/nvme0.
+# scrutiny_nvme_device: /dev/nvme0
+
+# Physical location for the homepage weather widget — only the host running homepage needs it.
+# lat: 38.89
+# long: -77.08
+
+# --- Optional overrides -----------------------------------------------------------------
+
+# Default: traefik. Use `lan` on a host that should publish web UIs bound to server_ip
+# instead of routing through Traefik (how daniel-pi is set up).
+# expose_mode: lan
+
+# Unset by default — each compose template falls back to its own value (10s/30s). Raise it
+# on a slow/constrained host: every probe costs 2 runc invocations.
+# container_healthcheck_interval: 60s
+
+# Disk-backed swap, created before the apt tasks run. Only needed on a host with too little
+# RAM for `upgrade: dist` / AIDE init (the 512 MB Pi Zero 2 W).
+# pi_swapfile_path: /swapfile
+# pi_swapfile_size: 1G
+
+# --- Fleet-role assignments (defined in group_vars/all.yml, all defaulting to -----------
+# --- daniel-server). Override only when MOVING a role to this host, and make sure --------
+# --- the old host stops claiming it. -----------------------------------------------------
+# monitoring_controller_host: <hostname>
+# backup_controller_host: <hostname>
+# portainer_manager_host: <hostname>
+# renovate_notify_host: <hostname>

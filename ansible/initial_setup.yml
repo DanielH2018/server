@@ -20,8 +20,8 @@
     - { role: initial_setup, tags: ["initial_setup"] }
     - { role: sops_setup, tags: ["sops_setup"] }
     - { role: docker_install, tags: ["docker_install"] }
-    - { role: gitops_deploy, tags: ["gitops_deploy"], when: inventory_hostname == 'daniel-server' }
-    - { role: renovate_notify, tags: ["renovate_notify"], when: inventory_hostname == 'daniel-server' }
+    - { role: gitops_deploy, tags: ["gitops_deploy"], when: has_gitops }
+    - { role: renovate_notify, tags: ["renovate_notify"], when: inventory_hostname == renovate_notify_host }
     - { role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == 'daniel-pi' }
   handlers:
     - name: Restart fail2ban
@@ -80,3 +80,20 @@
     - name: Reboot Pi
       ansible.builtin.reboot:
         msg: "Rebooting to apply low-level hardware changes (GPU/Watchdog/Log2Ram)"
+
+    # i915 loads from the initramfs, so a modprobe.d option only reaches it once the
+    # initramfs is regenerated. update-grub is NOT run: it was in the hand-written runbook
+    # but kernel module parameters set this way don't touch the boot loader config.
+    - name: Rebuild initramfs for i915
+      ansible.builtin.command: update-initramfs -u
+      changed_when: true
+
+    # Deliberately no reboot handler. Unlike "Reboot Pi" — which is gated to daniel-pi —
+    # this fires on the machine running the whole homelab, and rebooting it unattended to
+    # apply a transcode tunable is not a trade initial_setup.yml should make on its own.
+    - name: Warn that a reboot is required for i915 GuC
+      ansible.builtin.debug:
+        msg: >-
+          /etc/modprobe.d/i915.conf changed and the initramfs was rebuilt, but GuC firmware
+          loading only takes effect after a reboot. Reboot this host when convenient, then
+          confirm with `ls /dev/dri` and `dmesg | grep -i guc`.

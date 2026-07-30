@@ -66,12 +66,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /home/ubuntu/server/.claude/hooks/ansible-lint.sh",
+            "command": "~/server/.claude/hooks/ansible-lint.sh",
             "timeout": 30
           },
           {
             "type": "command",
-            "command": "bash /home/ubuntu/server/.claude/hooks/validate-compose.sh",
+            "command": "~/server/.claude/hooks/validate-compose.sh",
             "timeout": 30
           }
         ]

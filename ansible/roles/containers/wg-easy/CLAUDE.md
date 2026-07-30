@@ -51,11 +51,12 @@ WireGuard VPN with the wg-easy web admin, for remote access into the homelab.
   reframed from "gap" to intentional once the operator confirmed the backup-access purpose.)
 - **Pi peer configs are backed up to Kopia (2026-07-04).** The Pi is otherwise out of Kopia scope,
   but its wg-easy `wg0.conf`/`wg0.json` (WireGuard private keys) can't be rebuilt by a redeploy. So
-  this role installs a **daniel-server-only** daily cron (`/usr/local/bin/wg-easy-pull-pi-peers.sh`,
-  23:30) that `sudo rsync`-pulls the Pi's `containers/wg-easy/config/` (root-owned `0600`/`0640`, so
-  the Pi's NOPASSWD `sudo rsync` is required to read them) into `containers/wg-easy/pi-peers/` on the
-  server — inside Kopia's snapshot source. Tasks are gated on `inventory_hostname == 'daniel-server'`
-  (NOT `containers_list` — a tagged deploy filters that). See the kopia role's CLAUDE.md.
+  this role installs a daily cron on **`backup_controller_host`** (`group_vars/all.yml`, defaults to
+  daniel-server) (`/usr/local/bin/wg-easy-pull-pi-peers.sh`, 23:30) that `sudo rsync`-pulls the Pi's
+  `containers/wg-easy/config/` (root-owned `0600`/`0640`, so the Pi's NOPASSWD `sudo rsync` is
+  required to read them) into `containers/wg-easy/pi-peers/` on that host — inside Kopia's snapshot
+  source. Tasks are gated on `inventory_hostname == backup_controller_host` (NOT `containers_list` —
+  a tagged deploy filters that). See the kopia role's CLAUDE.md.
 - **The pull is watchdogged (2026-07-05).** It uses **no `--delete`**, so a silently-failing pull
   (Pi unreachable, SSH/sudo break) leaves the last-good copy in place and the nightly Kopia snapshot
   still succeeds — **Backup Freshness would stay green while the un-rebuildable peer keys go stale**.

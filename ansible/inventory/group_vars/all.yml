@@ -31,6 +31,9 @@ puid: 1000
 pgid: 1000
 # Docker
 docker_network: proxy
+# Intel iGPU/QuickSync passthrough (jellyfin/tdarr hardware transcode via /dev/dri).
+# False by default — override to true in a host's host_vars if the machine has one.
+has_igpu: false
 # Default web-UI exposure mode for hosts. `traefik` = route UIs through Traefik
 # (Authelia-gated when use_authelia). Override to `lan` on LAN-only hosts (daniel-pi)
 # to publish UI ports bound to the host's LAN IP instead. Consumed by expose.yml.j2.
@@ -41,5 +44,30 @@ kuma_notification_id: discord
 # Uptime Kuma "docker host" id referenced by AutoKuma docker monitors; the same id on
 # every host so far, so it lives here — override per-host if one ever diverges.
 kuma_docker_host: 1
-lat: 38.89
-long: -77.08
+# Physical LAN subnet, narrow /24 (not the broader RFC1918 range — see traefik's trustedIPs
+# comment for why that distinction matters). Same for every host so far; override per-host
+# if a new host sits on a different LAN.
+lan_subnet: "10.0.0.0/24"
+# code-server's read-only docker-proxy is gated on this host_var, not containers_list (a
+# tagged `deploy.yml --tags docker-proxy` set_facts containers_list to the filtered
+# dependency closure, which would drop code-server and render False). Override per-host.
+has_code_server: false
+# The host Uptime Kuma / the Pi's push-monitor heartbeats resolve to.
+monitoring_controller_host: daniel-server
+# The one host that pulls daniel-pi's wg-easy peer configs into its own Kopia backup
+# scope (see wg-easy CLAUDE.md) — daniel-pi itself is not parameterized here, it's the
+# one confirmed satellite with no sibling expected.
+backup_controller_host: daniel-server
+# The one host the DOCKER-USER firewall admits to the Pi's Portainer agent port
+# (see portainer-agent CLAUDE.md).
+portainer_manager_host: daniel-server
+# The one host that checks for open Renovate PRs and posts the Discord digest (see
+# renovate_notify CLAUDE.md) — fleet-wide by nature (queries the GitHub repo, not
+# anything host-local), so running it on more than one host would just duplicate
+# every notification. Doesn't matter which host, but must be exactly one.
+renovate_notify_host: daniel-server
+# Whether this host runs its own gitops_deploy pull-based auto-deployer. True by
+# default — every full host redeploys its own containers_list independently on a
+# git push (see gitops_deploy CLAUDE.md). daniel-pi overrides this false: it's
+# memory-constrained and driven manually over SSH, not by GitOps, by design.
+has_gitops: true
