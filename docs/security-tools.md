@@ -29,11 +29,15 @@ Files checked: 147       Suspect files: 0
 Rootkits checked: 497    Possible rootkits: 0
 ```
 
-**False positives:** rkhunter is noisy after package upgrades — it will warn about changed binary hashes. After any intentional system update, reset the baseline:
+**False positives:** rkhunter is noisy after package upgrades — it will warn about changed binary hashes. **Routine upgrades are already handled:** `initial_setup` sets `APT_AUTOGEN=true` in `/etc/default/rkhunter`, so `--propupd` runs from the package-manager hook after every apt install/upgrade, including unattended-upgrades. That's the point — the only file-property changes the weekly scan flags are ones *not* explained by a trusted package event.
+
+So don't reflexively run this after an upgrade. Reset the baseline by hand only after an intentional change apt didn't make (a manually-installed binary, a hand-edited config in a watched path), and only once you've confirmed the warning is yours:
 
 ```bash
 sudo rkhunter --propupd
 ```
+
+Running it to silence a warning you haven't explained re-blesses whatever caused it, which is exactly the tampering the weekly `--check` exists to catch.
 
 ---
 

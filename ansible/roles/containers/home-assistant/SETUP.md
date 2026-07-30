@@ -77,7 +77,8 @@ These are **not** captured by `deploy.yml` — they're device/app/UI state:
 | `files/scripts.yaml` | the 16 scripts | `copy` |
 | `files/scenes.yaml` | `bedroom_bright` / `bedroom_nightlight` | `copy` |
 | `files/templates.yaml` | `sensor.bedroom_wake_start` template sensor | `copy` |
-| `files/custom_templates/fan.jinja` | shared `pct_to_level` / `level_to_pct` fan macros | `copy` |
+| `files/rest.yaml` | Open-Meteo outdoor AQI sensors, pulled in via `rest: !include rest.yaml` | `copy` |
+| `files/custom_templates/*.jinja` | shared HA Jinja macros, auto-loaded at startup — `fan` (`pct_to_level`/`level_to_pct`), `lighting` (wake-ramp math), `ventilation` (window advisor), `diagnostics` (runtime-error alert scope). The pure ones are unit-tested under `tests/`. | `copy` (whole directory) |
 | `templates/customize.yaml.j2` | entity friendly-name / icon overrides | `template` |
 | `templates/ui-lovelace.yaml.j2` | the Bedroom dashboard | `template` |
 

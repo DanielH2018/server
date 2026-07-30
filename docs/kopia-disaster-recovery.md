@@ -53,6 +53,10 @@ sops -d ansible/vars/secrets.yml | grep -E 'kopia_(password|b2_)'
 Mirrors `ansible/roles/containers/kopia/templates/entrypoint.sh.j2`. Export the five values
 first, then (the repo speaks B2's **S3** endpoint):
 
+> **The image tag below is pinned to match production** (`docker-compose.yml.j2`), not `latest`.
+> A repo-format change in a newer Kopia is not something you want to discover mid-restore. If
+> the compose pin moves, move this one with it.
+
 ```bash
 export KOPIA_PASSWORD=...           KOPIA_B2_KEY_ID=...
 export KOPIA_B2_APPLICATION_KEY=... KOPIA_B2_BUCKET=...   KOPIA_B2_ENDPOINT=...
@@ -60,7 +64,7 @@ export KOPIA_B2_APPLICATION_KEY=... KOPIA_B2_BUCKET=...   KOPIA_B2_ENDPOINT=...
 docker run --rm -it \
   -e KOPIA_PASSWORD \
   -v "$HOME/.kopia-dr:/app/config" \
-  kopia/kopia:latest repository connect s3 \
+  kopia/kopia:0.23.1 repository connect s3 \
     --bucket="$KOPIA_B2_BUCKET" \
     --endpoint="$KOPIA_B2_ENDPOINT" \
     --access-key="$KOPIA_B2_KEY_ID" \

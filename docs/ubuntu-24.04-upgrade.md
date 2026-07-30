@@ -1,11 +1,20 @@
-# daniel-server: Ubuntu 22.04 → 24.04 LTS Upgrade Runbook
+# daniel-server: Ubuntu 22.04 → 24.04 LTS Upgrade Runbook (historical)
 
-> **Status: ✅ COMPLETED 2026-06-05** — daniel-server is on Ubuntu 24.04.4 / Python
-> 3.12.3, ansible-core **2.21.0** (originally via pipx; **migrated to `uv tool` on
-> 2026-06-07** — see `docs/superpowers/specs/2026-06-07-python-uv-test-env-design.md`),
-> collections at latest (community.general 13.0.1). See commit `2837dbc`. **The Pi is
-> now also on Ubuntu 24.04.4** (aarch64), driven remotely as an Ansible target from
-> daniel-server (see Follow-ups). Kept as a reference for the gotcha noted in Phase 3.
+> ## ⚠️ Do not follow this as instructions
+>
+> **Status: ✅ COMPLETED 2026-06-05.** Both hosts are on Ubuntu 24.04.4 — daniel-server
+> (commit `2837dbc`) and the Pi (aarch64, driven remotely as an Ansible target from
+> daniel-server; see Follow-ups). There is no 22.04 host left to upgrade.
+>
+> This is kept as a **record of what was done**, for the Phase 3 gotcha and the
+> config-file decisions. It is written throughout in the imperative — read it as past
+> tense. Two things in it are now actively wrong if copied:
+>
+> - **Step 9 installs ansible via pipx.** That was **replaced by `uv tool` on 2026-06-07**
+>   (see `docs/superpowers/specs/2026-06-07-python-uv-test-env-design.md`). pipx appears
+>   nowhere in the live `initial_setup` role — it uses
+>   `uv tool install --python 3.14 …`. For a new host, follow `ansible/README.md` §3.
+> - **Service counts and versions are frozen at mid-2026** and have moved since.
 
 **Goal:** move the host to a single, newer system Python (24.04 ships Python **3.12**)
 so we can run **ansible-core 2.21** (latest) without juggling two Python versions.
@@ -107,21 +116,25 @@ metadata) — it survives an in-place upgrade, but that is what a backup must pr
 ## Phase 3 — ansible-core + collections  (Claude does this in the repo)
 
 9. Install ansible-core 2.21 cleanly. 24.04 enforces PEP 668 (externally-managed
-   environment), so `pip install --user` is blocked by default — use **pipx**:
+   environment), so `pip install --user` is blocked by default.
+
+   **This step is obsolete — do not copy it.** It used pipx; the homelab moved to **uv**
+   on 2026-06-07, and pipx is no longer used anywhere in the `initial_setup` role. The
+   role now runs `uv tool install --python 3.14 {ansible-core, ansible-lint, prek}`
+   (`ansible/roles/setup/initial_setup/tasks/main.yml`), and `ansible/bring-up.sh`
+   installs uv itself. For a fresh host, follow `ansible/README.md` §3 — not this.
+
+   <details><summary>What was actually run in June 2026 (historical)</summary>
+
    ```bash
    sudo apt install pipx
    pipx install ansible-core==2.21.0
    pipx install ansible-lint            # optional, for local linting
    pipx ensurepath                      # then re-open the shell
    ```
-   (The old `~/.local/lib/python3.10/site-packages` ansible-core becomes orphaned and
-   can be ignored or removed.)
-
-   > **Update (2026-06-07):** the homelab moved off pipx to **uv**. Python CLI tools
-   > (ansible-core, ansible-lint, prek) are now installed via `uv tool install`, which
-   > the `initial_setup` role does automatically. For a fresh host today, install uv
-   > (`curl -LsSf https://astral.sh/uv/install.sh | sh`) then
-   > `uv tool install ansible-core ansible-lint prek` instead of the pipx steps above.
+   (The old `~/.local/lib/python3.10/site-packages` ansible-core became orphaned and
+   could be ignored or removed.)
+   </details>
 
 10. Claude then:
     - bumps `ansible/requirements.yml` to the latest collections (community.general
