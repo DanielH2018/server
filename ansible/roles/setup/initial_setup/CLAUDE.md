@@ -64,10 +64,14 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   systemd-journald`, `Rebuild initramfs for i915`, `Warn that a reboot is required for i915 GuC`
   are defined in `initial_setup.yml`. Same pattern as [[optimize_pi]]: a new `notify:` here needs a matching
   handler added to that playbook.
-- **iGPU (`igpu` tag)** writes `/etc/modprobe.d/i915.conf` (`options i915 enable_guc=2`) on
-  `has_igpu` hosts and rebuilds the initramfs, but **never reboots** — unlike `Reboot Pi`, this
-  fires on the machine running the whole homelab, so it only prints a reboot reminder. The same
-  `has_igpu` flag gates `/dev/dri` passthrough in the jellyfin/tdarr compose templates.
+- **iGPU (`igpu` tag)** writes `/etc/modprobe.d/i915.conf` (`options i915 enable_guc=2`) and
+  rebuilds the initramfs, but **never reboots** — unlike `Reboot Pi`, this fires on the machine
+  running the whole homelab, so it only prints a reboot reminder.
+  **Gated on `has_igpu` AND `/sys/module/i915` existing.** `has_igpu` alone is the wrong gate:
+  it means "pass `/dev/dri` through to jellyfin/tdarr", which is vendor-neutral (AMD does VAAPI
+  through the same node), while `enable_guc` is Intel-only. The driver check keeps this correct
+  on a future AMD/NVIDIA host without hostname-gating it — deliberately, since the repo is
+  removing `daniel-server` literals ahead of the master-node migration.
 - **`become` vs HOME:** the `Resolve the deploy user's home directory` task exists because
   `ansible_facts.env.HOME` is root's under the play's `become: true`, but uv / per-user tooling
   must install for the unprivileged deploy user — recent fixes (Pi bring-up era) replaced naive

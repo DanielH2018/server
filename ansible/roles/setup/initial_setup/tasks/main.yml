@@ -702,11 +702,24 @@
 # QuickSync transcode for jellyfin/tdarr needs the i915 GuC firmware loaded. This was a
 # hand-run `echo … | tee -a` in the bring-up runbook, which appends a DUPLICATE option line
 # every time it's run — daniel-server's i915.conf carries the line twice from exactly that.
-# copy is idempotent and gates on the same has_igpu flag the compose templates use for
-# /dev/dri passthrough, so one host_var now drives both halves.
+#
+# has_igpu alone is the WRONG gate: it means "pass /dev/dri through to jellyfin/tdarr", which
+# is vendor-neutral (AMD does VAAPI through the same device node), whereas enable_guc is an
+# i915 option. So detect the driver rather than trusting the flag or hardcoding a hostname —
+# /sys/module/i915 exists iff the i915 driver is loaded, and it loads on its own for any Intel
+# GPU (the option only tunes it). On an AMD/NVIDIA host this skips instead of writing a
+# modprobe option for a module that never loads.
+- name: Check whether the i915 driver is loaded (Intel GPU)
+  tags: [igpu]
+  ansible.builtin.stat:
+    path: /sys/module/i915
+  register: initial_setup_i915_module
+
 - name: Enable Intel GuC firmware loading for QuickSync transcode
   tags: [igpu]
-  when: has_igpu | default(false)
+  when:
+    - has_igpu | default(false)
+    - initial_setup_i915_module.stat.exists
   ansible.builtin.copy:
     dest: /etc/modprobe.d/i915.conf
     owner: root

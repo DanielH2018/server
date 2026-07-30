@@ -161,9 +161,9 @@ sudo resize2fs /dev/ubuntu-vg/ubuntu-lv
 ## 7. Intel iGPU / QuickSync (Jellyfin / Tdarr transcode)
 
 Only needed if this host will run jellyfin/tdarr with hardware transcode. Set
-`has_igpu: true` in its `host_vars` (§4) — that one flag now drives both halves: the
-jellyfin/tdarr compose templates pass through `/dev/dri`, and `initial_setup.yml` writes
-`/etc/modprobe.d/i915.conf` and rebuilds the initramfs.
+`has_igpu: true` in its `host_vars` (§4) — that flag passes `/dev/dri` through in the
+jellyfin/tdarr compose templates, and on an **Intel** GPU also has `initial_setup.yml` write
+`/etc/modprobe.d/i915.conf` and rebuild the initramfs.
 
 ```bash
 uv run ansible-playbook ansible/initial_setup.yml --tags igpu
@@ -176,6 +176,10 @@ GuC only takes effect after a reboot, so do that when convenient, then confirm w
 > This used to be a hand-run `echo … | sudo tee -a`, which appends a **duplicate** option
 > line every time it's run — daniel-server's `i915.conf` still carries the line twice from
 > exactly that. The Ansible task is idempotent and converges it back to one.
+
+`enable_guc` is an i915 option, so the task additionally checks that `/sys/module/i915` exists
+and skips on a non-Intel GPU. `has_igpu` on its own would be the wrong gate — it means "pass
+`/dev/dri` through", which AMD also uses for VAAPI.
 
 If `/dev/dri/` is missing entirely the kernel has no i915 driver for this GPU, which needs
 an OEM kernel matching **this host's Ubuntu release** plus a reboot. Don't copy
