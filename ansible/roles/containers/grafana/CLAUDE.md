@@ -42,6 +42,14 @@ Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md
   **re-seed** a dashboard whenever their *content* changes (Grafana ignores the JSON
   `version` field for provisioned boards — the export script pins it to 1 purely so
   drift-check re-exports don't produce noise diffs).
+- **The admin password is synced on rotation, not just at init.**
+  `GF_SECURITY_ADMIN_PASSWORD__FILE` is only consulted when Grafana initialises its DB, so a
+  rotated `grafana_admin_password` would otherwise never reach the live admin user (SOPS and the
+  actual login diverge silently). A post-deploy task runs `grafana cli admin
+  reset-admin-password` — it writes straight to the DB and needs no knowledge of the *current*
+  password, unlike `PUT /api/admin/users/1/password`, which authenticates as admin and is
+  therefore useless in exactly the case that matters. Gated on the password file changing, with
+  a retry loop because the CLI exits non-zero while a fresh Grafana is still migrating.
 - Promtail ships container logs into Loki for the Explore/log views.
 - **Loki has no Docker healthcheck** — the image is a single Go binary (no shell/wget), so
   its Kuma monitor is an **HTTP probe of `http://loki:3100/ready`** instead of the default

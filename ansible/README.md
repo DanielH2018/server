@@ -160,18 +160,27 @@ sudo resize2fs /dev/ubuntu-vg/ubuntu-lv
 
 ## 7. Intel iGPU / QuickSync (Jellyfin / Tdarr transcode)
 
-Only needed if this host will run jellyfin/tdarr with hardware transcode — set
-`has_igpu: true` in its `host_vars` (§4) once this is done, so those roles' compose
-templates pass through `/dev/dri`.
+Only needed if this host will run jellyfin/tdarr with hardware transcode. Set
+`has_igpu: true` in its `host_vars` (§4) — that one flag now drives both halves: the
+jellyfin/tdarr compose templates pass through `/dev/dri`, and `initial_setup.yml` writes
+`/etc/modprobe.d/i915.conf` and rebuilds the initramfs.
 
-1. If `/dev/dri/` is missing: `sudo apt install linux-oem-22.04`, then reboot.
-2. Enable GuC:
+```bash
+uv run ansible-playbook ansible/initial_setup.yml --tags igpu
+```
 
-   ```bash
-   sudo mkdir -p /etc/modprobe.d
-   echo 'options i915 enable_guc=2' | sudo tee -a /etc/modprobe.d/i915.conf
-   sudo update-initramfs -u && sudo update-grub && sudo reboot
-   ```
+It deliberately does **not** reboot for you — this is the machine running the whole homelab.
+GuC only takes effect after a reboot, so do that when convenient, then confirm with
+`ls /dev/dri` and `dmesg | grep -i guc`.
+
+> This used to be a hand-run `echo … | sudo tee -a`, which appends a **duplicate** option
+> line every time it's run — daniel-server's `i915.conf` still carries the line twice from
+> exactly that. The Ansible task is idempotent and converges it back to one.
+
+If `/dev/dri/` is missing entirely the kernel has no i915 driver for this GPU, which needs
+an OEM kernel matching **this host's Ubuntu release** plus a reboot. Don't copy
+`linux-oem-22.04` from an older runbook onto a 24.04 host: there it's a transitional dummy
+package (verified on daniel-server, where the generic 6.8 kernel already provides i915).
 
 ## 8. Run the playbooks
 
@@ -206,9 +215,10 @@ Router port-forwarding, Cloudflare DNS and the other off-box prerequisites are i
 ## 9. Post-deploy setup that Ansible can't do
 
 `deploy.yml` finishing green does **not** mean the host is done. The steps below live in each
-app's own database, which Ansible never writes — and **every one of them fails silently**:
-the containers stay healthy while the feature behind them does nothing. Work top-down; the
-first two gate the whole monitoring fleet.
+app's own database, which Ansible never writes. Most of them **fail silently** — the container
+stays healthy while the feature behind it does nothing (the exception is Authelia, whose role
+asserts up front and fails the deploy). Work top-down; the first two gate the whole monitoring
+fleet.
 
 1. **Create the Uptime-Kuma admin** at `https://uptime-kuma.<domain>` (first-run wizard). AutoKuma
    **cannot** create it, and until it exists AutoKuma provisions **zero** monitors — so nothing
@@ -232,11 +242,19 @@ first two gate the whole monitoring fleet.
    ("Fresh install") — the role asserts they exist. Note `users_database.yml` is written
    **first-run-only**, so `authelia_user`/`authelia_password` must be right before the first
    deploy; later changes never reach the file.
-6. **Grafana's admin password** is only read at DB init. On an existing Grafana, a changed
-   `grafana_admin_password` has to be applied in-app.
-7. **Register a second host in Portainer** (Environments → Add), per
+6. **Register a second host in Portainer** (Environments → Add), per
    [`roles/containers/portainer-agent/CLAUDE.md`](roles/containers/portainer-agent/CLAUDE.md) —
    Portainer keeps environments in its own BoltDB.
+
+**Why these can't move into Ansible** (checked 2026-07-30, so it doesn't get re-litigated):
+Uptime-Kuma 2.x exposes setup and API-key minting over **Socket.IO only** — there is no REST
+route to drive, so items 1-2 are structurally manual. Home Assistant's `/api/onboarding/users`
+is drivable, but minting a long-lived token isn't, and seeding `.storage/` by hand corrupts
+installs. The *arr keys are deliberately left manual: writing `config.xml` under a running
+container is the kind of stateful surgery that silently breaks an app.
+**Grafana is no longer on this list** — the role now runs `grafana cli admin
+reset-admin-password` whenever the SOPS password file changes, so a rotation reaches the live
+admin user on the next deploy with no UI step.
 
 External prerequisites, none of them IaC-managed: the Cloudflare DNS records (including the
 hand-created grey-cloud `*.local.<domain>` wildcard that all internal routing depends on — see

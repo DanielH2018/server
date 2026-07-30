@@ -699,6 +699,25 @@
     mode: "0644"
   become: true
 
+# QuickSync transcode for jellyfin/tdarr needs the i915 GuC firmware loaded. This was a
+# hand-run `echo … | tee -a` in the bring-up runbook, which appends a DUPLICATE option line
+# every time it's run — daniel-server's i915.conf carries the line twice from exactly that.
+# copy is idempotent and gates on the same has_igpu flag the compose templates use for
+# /dev/dri passthrough, so one host_var now drives both halves.
+- name: Enable Intel GuC firmware loading for QuickSync transcode
+  tags: [igpu]
+  when: has_igpu | default(false)
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/i915.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: "options i915 enable_guc=2\n"
+  become: true
+  notify:
+    - Rebuild initramfs for i915
+    - Warn that a reboot is required for i915 GuC
+
 - name: Install sysstat for system accounting
   tags: [accounting]
   ansible.builtin.apt:
