@@ -92,7 +92,10 @@ uv run ansible-playbook ansible/initial_setup.yml                      # host bo
 ```
 
 First-host bring-up (uv → SOPS onboarding → `initial_setup.yml`) is ordered in
-[`ansible/README.md`](ansible/README.md).
+[`ansible/README.md`](ansible/README.md); [`ansible/bring-up.sh`](ansible/bring-up.sh) drives
+those steps (`--scaffold` for inventory, no flag for uv + SOPS, `--continue` for the
+playbooks). The manual post-deploy setup Ansible can't do is verified by
+`uv run python scripts/postflight.py`.
 
 ## Cross-cutting systems
 

@@ -28,6 +28,15 @@ if [[ "$file_path" == *"/ansible/"* ]] && [[ "$file_path" == *.yml || "$file_pat
     fi
 
     echo "ansible-lint: checking $(basename "$file_path")..."
-    relative_path="${file_path#/home/ubuntu/server/}"
+    # Lint from the checkout that owns the file, not always the primary one: a file in a
+    # .claude/worktrees/<name>/ checkout linted from /home/ubuntu/server gets a path
+    # ansible-lint can't resolve to a role, and every role variable is then reported as
+    # a var-naming[no-role-prefix] violation.
+    repo_root="${file_path%%/ansible/*}"
+    cd "$repo_root" || exit 0
+    relative_path="${file_path#"$repo_root"/}"
+    # Worktrees don't carry the vendored collections (gitignored, installed once in the
+    # primary checkout), so point ansible-lint's module resolution back at those.
+    export ANSIBLE_COLLECTIONS_PATH=/home/ubuntu/server/ansible/collections
     /home/ubuntu/.local/bin/ansible-lint "$relative_path" 2>&1
 fi

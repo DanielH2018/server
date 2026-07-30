@@ -29,8 +29,13 @@ OS/hardware bring-up that those don't.
    ```
 
    then `sudo netplan apply`, and find the host's IP with `ip a`.
-3. Copy your public key to the host:
-   `type C:\Users\<username>\.ssh\id_rsa.pub | ssh username@remote_host "mkdir -p ~/.ssh && touch ~/.ssh/authorized_keys && chmod -R go= ~/.ssh && cat >> ~/.ssh/authorized_keys"`
+3. Copy your public key to the host: `ssh-copy-id <user>@<host>`. It ships with OpenSSH on
+   Linux/macOS and in Git Bash / WSL on Windows, and gets the `~/.ssh` permissions right on
+   its own. Only if you're stuck in PowerShell with no `ssh-copy-id`:
+
+   ```powershell
+   type C:\Users\<username>\.ssh\id_rsa.pub | ssh <user>@<host> "mkdir -p ~/.ssh && touch ~/.ssh/authorized_keys && chmod -R go= ~/.ssh && cat >> ~/.ssh/authorized_keys"
+   ```
 4. SSH in with the key.
 
 ## 2. Clone the repo
@@ -48,8 +53,8 @@ systemd units — gitops-deploy's `REPO_DIR`, the secret-rotation crons, AIDE's 
 and every container role's `containers/` bind mount. A repo cloned elsewhere, or owned by a
 differently-named user, breaks those with no clear error.
 
-`--recurse-submodules` picks up `Email-to-RSS` (a pinned submodule — see the bottom of this
-file); a plain clone leaves the directory empty.
+`--recurse-submodules` picks up `Email-to-RSS` (a pinned submodule — see
+[`docs/email-to-rss.md`](../docs/email-to-rss.md)); a plain clone leaves the directory empty.
 
 Secrets are committed **encrypted** (SOPS/age), so the clone already contains
 `ansible/vars/secrets.yml` — there is no separate secrets-copy step. Letting this host
@@ -57,10 +62,18 @@ Secrets are committed **encrypted** (SOPS/age), so the clone already contains
 
 ## 3. Install uv
 
-> **Shortcut:** [`bring-up.sh`](bring-up.sh) wraps §3+§5 — `./ansible/bring-up.sh` installs
-> uv, runs `bootstrap.yml`, and prints the §5 manual steps. It assumes §4 (inventory) is
-> already done. The walkthrough below is what it does (and the path to take if you'd rather
-> run each step by hand).
+> **Shortcut:** [`bring-up.sh`](bring-up.sh) drives §3-§5 and §8:
+>
+> ```bash
+> ./ansible/bring-up.sh --scaffold   # §4: create the inventory entries, then stop to edit them
+> ./ansible/bring-up.sh              # §3+§5: install uv, run bootstrap.yml, print the SOPS steps
+> ./ansible/bring-up.sh --continue   # §8: preflight + initial_setup + deploy
+> ```
+>
+> It takes `--host <name>` to bring up a host other than this one, checks the target resolves
+> to exactly one inventory host before doing anything, and is idempotent throughout. §6, §7 and
+> §9 stay manual. The walkthrough below is what it does — and the path to take if you'd rather
+> run each step by hand.
 
 `uv` is the **only manual prerequisite** — everything else flows from it. The repo is a uv
 "virtual" project (`pyproject.toml` pins `ansible-core` in the `dev` group; `.python-version`
@@ -77,7 +90,9 @@ source ~/.bashrc   # (or re-login) to pick up ~/.local/bin on PATH
 
 Every playbook (`bootstrap.yml`, `initial_setup.yml`, `deploy.yml`) resolves its target through
 `ansible/inventory/hosts.ini` — a host that isn't listed there matches nothing, and the run
-just silently no-ops. Before touching SOPS:
+just silently no-ops. `./ansible/bring-up.sh --scaffold [--host <name>]` creates both files
+below if they're missing (it never overwrites) and then stops so you can fill them in. Before
+touching SOPS:
 
 1. Add the new host under `[homeservers]` in `ansible/inventory/hosts.ini`. **The connection
    fields are not optional** — a bare hostname makes Ansible open an SSH connection to the
@@ -197,6 +212,10 @@ uv run ansible-playbook ansible/initial_setup.yml   # OS hardening; base pkgs, D
 uv run ansible-playbook ansible/deploy.yml          # deploy all containers (dependency-ordered)
 ```
 
+or `./ansible/bring-up.sh --continue [--host <name>]`, which runs those three in order and
+stops at the first failure. Add `-e target=<host>` to each command when driving another host
+(see the §5 note — `--limit` alone silently matches nothing).
+
 `preflight.yml` changes nothing — it just fails fast, with an error that names the cause, on
 the mistakes that otherwise surface deep inside `initial_setup.yml`: a missing `host_vars`
 entry, an `ssh_config_path` that doesn't exist on this OS image, a sudo password that doesn't
@@ -223,6 +242,14 @@ app's own database, which Ansible never writes. Most of them **fail silently** �
 stays healthy while the feature behind it does nothing (the exception is Authelia, whose role
 asserts up front and fails the deploy). Work top-down; the first two gate the whole monitoring
 fleet.
+
+```bash
+uv run python scripts/postflight.py   # exercises every item below against the live host
+```
+
+It authenticates with each SOPS credential exactly as the real consumers do, prints one line
+per item, and exits non-zero naming what's still pending. A service this host doesn't run
+reports SKIP. Run it after `deploy.yml` and again after working through the list.
 
 1. **Create the Uptime-Kuma admin** at `https://uptime-kuma.<domain>` (first-run wizard). AutoKuma
    **cannot** create it, and until it exists AutoKuma provisions **zero** monitors — so nothing
@@ -268,66 +295,11 @@ off-box UptimeRobot dead-man's-switch. Rebuilding rather than bringing up a new 
 [`docs/kopia-disaster-recovery.md`](../docs/kopia-disaster-recovery.md) instead — it covers
 restore ordering this section doesn't.
 
-## Misc host notes
+## Not bring-up, moved out of this file
 
-### Trim journald log level
-
-```bash
-sudo nano /etc/systemd/journald.conf   # uncomment + set MaxLevelStore=notice, MaxLevelSyslog=notice
-sudo systemctl restart systemd-journald
-```
-
-### LaTeX editor (code-server devcontainer)
-
-1. Clone the Resume repository on the server.
-2. Copy `.devcontainer` from <https://github.com/James-Yu/LaTeX-Workshop/tree/master/samples/docker>.
-3. Install the VS Code Remote - Containers + SSH extensions, then reopen the directory in the container.
-
-## Email-to-RSS (Cloudflare Worker)
-
-Converts email newsletters to RSS feeds. Runs as a Cloudflare Worker (not a Docker container).
-Tracked as a **git submodule** at `~/server/Email-to-RSS` (upstream
-<https://github.com/yl8976/Email-to-RSS>, pinned to a known-good commit in `.gitmodules`).
-Admin UI at <https://email-rss.daniel-hunter.com/admin>.
-
-`wrangler.toml` (KV namespace ids, routes) is ignored by the submodule's own `.gitignore`
-and stays local-only — recreate it from `wrangler-example.toml` + step 5 below on a fresh
-machine. To pull upstream changes: `cd Email-to-RSS && git pull`, redeploy, then commit the
-new submodule pointer here. If local patches are ever needed, fork upstream and re-point
-the submodule URL at the fork.
-
-**Prerequisites:** Node.js 20+, Cloudflare account, ForwardEmail account, domain managed in Cloudflare DNS.
-
-**Initial setup (already done — for reference):**
-
-1. Fetch the code: `git submodule update --init Email-to-RSS` (originally a plain clone of the repo above)
-2. Run `npm install` in the repo directory.
-3. Authenticate with Cloudflare: `npx wrangler login`
-4. Create KV namespaces manually (setup.sh has a bug with namespace title matching):
-   `npx wrangler kv namespace create EMAIL_STORAGE`
-   `npx wrangler kv namespace create EMAIL_STORAGE --preview`
-5. Copy wrangler-example.toml to wrangler.toml and fill in:
-   - compatibility_date: today's date (YYYY-MM-DD)
-   - KV namespace IDs from step 4
-   - DOMAIN: daniel-hunter.com
-   - routes: email-rss.daniel-hunter.com (subdomain required — root domain has existing A records)
-6. Set admin password: `npx wrangler secret put ADMIN_PASSWORD --env production` (confirm worker creation when prompted)
-7. Deploy: `npm run deploy`
-
-**DNS records required in Cloudflare (daniel-hunter.com):**
-
-- MX  @  mx1.forwardemail.net  (priority 10)  — email reception via ForwardEmail
-- MX  @  mx2.forwardemail.net  (priority 10)
-- TXT @  v=spf1 include:spf.forwardemail.net -all
-- TXT @  `forward-email=https://email-rss.daniel-hunter.com/api/inbound`  — webhook to Worker
-
-**Known limitation:** The DOMAIN variable controls both email addresses and RSS feed URLs. Since the
-Worker is deployed on a subdomain (email-rss.daniel-hunter.com) but email must be received at the root
-domain (daniel-hunter.com), these can't be the same value. DOMAIN is set to daniel-hunter.com so email
-addresses are correct. When copying RSS feed URLs from the admin UI, manually replace daniel-hunter.com
-with email-rss.daniel-hunter.com (e.g. `https://email-rss.daniel-hunter.com/rss/{feedId}`).
-
-**Redeploying after changes:**
-
-1. `cd ~/server/Email-to-RSS`
-2. `npm run deploy`
+- **journald** log level and disk cap are managed by `initial_setup.yml` (the drop-in at
+  `/etc/systemd/journald.conf.d/50-homelab.conf`) — nothing to do by hand.
+- **LaTeX editing in code-server:**
+  [`roles/containers/code-server/CLAUDE.md`](roles/containers/code-server/CLAUDE.md).
+- **Email-to-RSS** (the Cloudflare Worker submodule):
+  [`docs/email-to-rss.md`](../docs/email-to-rss.md).

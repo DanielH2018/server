@@ -15,6 +15,12 @@ See repo-root `CLAUDE.md` for shared conventions.
 - Because the image is built (`build: always` in the deploy task), bump it by redeploying
   this role — Watchtower won't update it.
 
+## LaTeX editing (devcontainer)
+1. Clone the Resume repository on the server.
+2. Copy `.devcontainer` from <https://github.com/James-Yu/LaTeX-Workshop/tree/master/samples/docker>.
+3. Install the VS Code Remote - Containers + SSH extensions, then reopen the directory in the
+   container.
+
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Image: `templates/Dockerfile.j2`, `files/extensions.sh`
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "code-server"`

@@ -66,6 +66,27 @@
           container role's bind mount. Clone it there as {{ sys_user }} — see README §2.
         success_msg: "repo present at /home/{{ sys_user }}/server"
 
+    - name: Read unallocated volume-group space
+      # Read directly rather than from ansible_facts.lvm: that fact is "N/A" unless the
+      # gather ran escalated, and the shared fact cache is written by whichever play
+      # gathered last — so it's "N/A" on a host that does have LVM.
+      ansible.builtin.command: vgs --noheadings --nosuffix --units g -o vg_name,vg_free
+      register: preflight_vg_free
+      changed_when: false
+      failed_when: false # a host without LVM (the Pi) has no vgs binary
+      check_mode: false
+
+    - name: Warn when a volume group still has unallocated space
+      # The Ubuntu installer leaves the root LV at ~half the disk, and nothing downstream
+      # complains until containers/ fills it months later (README §6).
+      ansible.builtin.debug:
+        msg: >-
+          Volume group {{ item.split()[0] }} has {{ item.split()[1] }}G unallocated — the
+          root LV is probably still at the installer's default size. Extend it and grow the
+          filesystem before deploying, per ansible/README.md §6.
+      loop: "{{ preflight_vg_free.stdout_lines | default([]) }}"
+      when: item.split() | length == 2 and (item.split()[1] | float) > 10
+
     - name: Warn when a fresh host still has GitOps auto-deploy enabled
       ansible.builtin.debug:
         msg: >-
