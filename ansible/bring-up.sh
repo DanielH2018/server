@@ -2,9 +2,9 @@
 # Host bring-up — get a freshly-cloned host to the point where Ansible can take over.
 #
 # Automates §3 (install uv) and §5 (SOPS onboarding via bootstrap.yml) of
-# ansible/README.md. It assumes §1 (SSH), §2 (git clone), and §4 (the host already has an
-# entry in ansible/inventory/hosts.ini + host_vars — bootstrap.yml matches nothing
-# otherwise) are already done, and stops at the manual, cross-host SOPS key-exchange that
+# ansible/README.md. It assumes §1 (SSH) and §2 (git clone) are already done, checks §4 (the
+# host must already have an entry in ansible/inventory/hosts.ini — bootstrap.yml matches
+# nothing otherwise), and stops at the manual, cross-host SOPS key-exchange that
 # one host cannot do on its own. After you finish that exchange, run the playbooks
 # yourself (the script prints the exact commands):
 #     uv run ansible-playbook ansible/initial_setup.yml
@@ -46,8 +46,21 @@ cd "$(dirname "$(readlink -f "$0")")/.."
 [[ -f ansible/bootstrap.yml ]] ||
   { echo "error: ansible/bootstrap.yml not found — run this from a cloned repo" >&2; exit 1; }
 
+# --- §4: the host must already be in inventory ---------------------------------------
+# `--limit <host>` against a host with no inventory entry intersects to zero hosts, so
+# bootstrap.yml would print "skipping: no hosts matched" and exit 0 — a silent no-op that
+# looks like success until initial_setup.yml fails on a missing age key much later.
+if ! grep -qE "^[[:space:]]*${HOST}([[:space:]]|$)" ansible/inventory/hosts.ini; then
+  echo "error: '$HOST' has no entry in ansible/inventory/hosts.ini — see README §4." >&2
+  echo "       Without one, --limit matches nothing and bootstrap silently does nothing." >&2
+  exit 1
+fi
+# host_vars isn't needed by bootstrap.yml itself, only by the playbooks after it — warn.
+[[ -f "ansible/inventory/host_vars/${HOST}.yml" ]] ||
+  echo ">> warning: no ansible/inventory/host_vars/${HOST}.yml yet — copy _example.yml (README §4)" >&2
+
 # --- §3: install uv (the only manual prerequisite) ----------------------------------
-# `uv run` then self-provisions Python 3.13 + ansible-core from uv.lock for the playbook
+# `uv run` then self-provisions Python 3.14 + ansible-core from uv.lock for the playbook
 # below, so no system-wide Ansible is needed.
 if ! command -v uv >/dev/null 2>&1; then
   echo ">> uv not found — installing per-user into ~/.local/bin ..."
@@ -83,6 +96,7 @@ The "Your Public Key is: age1..." line above is THIS host's age key.
  this host's own key — skip steps 1-4.
 
  Then hand off to Ansible:
+        uv run ansible-playbook ansible/preflight.yml      # read-only; catches §1-§5 mistakes
         uv run ansible-playbook ansible/initial_setup.yml
         uv run ansible-playbook ansible/deploy.yml
 ============================================================

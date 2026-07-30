@@ -1,0 +1,77 @@
+---
+# Fail fast on the handful of new-host mistakes that otherwise surface deep inside a long
+# run: a missing host_var, a wrong ssh_config_path, a sudo password that doesn't match the
+# SOPS become_password, or a repo cloned to the wrong path. Every one of those currently
+# fails partway through initial_setup.yml (or, for containers_list, in deploy.yml's first
+# pre_task) with an error that doesn't name the real cause.
+#
+# Read-only: asserts and stats only, no changes. Run it between README §5 and §8.
+#     uv run ansible-playbook ansible/preflight.yml
+#     uv run ansible-playbook ansible/preflight.yml -e target=daniel-pi
+#
+# Deliberately mirrors initial_setup.yml's preamble (gather_facts: false + the shared
+# load_secrets import), so reaching the asserts at all already proves SOPS decryption and
+# privilege escalation work on this host.
+- name: Preflight checks for a new host
+  hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - name: Load encrypted secrets and set the become password (shared preamble)
+      ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
+      tags: always
+
+    - name: Gather facts (escalated — the become password is now available)
+      ansible.builtin.setup:
+      tags: always
+  tasks:
+    - name: Required host_vars are defined
+      ansible.builtin.assert:
+        that:
+          - server_ip is defined
+          - ssh_config_path is defined
+          - containers_list is defined
+        fail_msg: >-
+          Missing required host_vars for {{ inventory_hostname }}. server_ip, ssh_config_path
+          and containers_list have no defaults. Copy inventory/host_vars/_example.yml to
+          inventory/host_vars/{{ inventory_hostname }}.yml — see ansible/README.md §4.
+        success_msg: "server_ip, ssh_config_path and containers_list are set"
+
+    - name: Stat the configured sshd config file
+      ansible.builtin.stat:
+        path: "{{ ssh_config_path }}"
+      register: preflight_sshd_config
+
+    - name: The configured ssh_config_path exists
+      ansible.builtin.assert:
+        that: preflight_sshd_config.stat.exists
+        fail_msg: >-
+          ssh_config_path points at {{ ssh_config_path }}, which does not exist on
+          {{ inventory_hostname }}. The SSH-hardening tasks use lineinfile/blockinfile with no
+          `create:` fallback, so initial_setup.yml would fail there. Find the real path with
+          `sudo sshd -T | grep -i '^include'` or `ls /etc/ssh/sshd_config.d/`.
+        success_msg: "sshd config found at {{ ssh_config_path }}"
+
+    - name: Stat the repo checkout at its expected path
+      ansible.builtin.stat:
+        path: "/home/{{ sys_user }}/server/ansible/deploy.yml"
+      register: preflight_repo
+
+    - name: The repo is cloned where the role templates expect it
+      ansible.builtin.assert:
+        that: preflight_repo.stat.exists
+        fail_msg: >-
+          No repo found at /home/{{ sys_user }}/server. That path is hardcoded into
+          gitops-deploy's REPO_DIR, the secret-rotation crons, AIDE's local config and every
+          container role's bind mount. Clone it there as {{ sys_user }} — see README §2.
+        success_msg: "repo present at /home/{{ sys_user }}/server"
+
+    - name: Warn when a fresh host still has GitOps auto-deploy enabled
+      ansible.builtin.debug:
+        msg: >-
+          has_gitops is true and containers_list is empty. initial_setup.yml will run a full
+          deploy.yml at the end and fail the play if it fails. Set has_gitops: false until
+          this host's first manual deploy succeeds (README §4).
+      when:
+        - has_gitops | default(true)
+        - containers_list | length == 0

@@ -10,6 +10,12 @@ OS/hardware bring-up that those don't.
 
 1. Generate an SSH key (e.g. <https://phoenixnap.com/kb/generate-ssh-key-windows-10>) and set
    a password on the new machine.
+
+   > **That password must match the SOPS `become_password`** — or the deploy user must have
+   > NOPASSWD sudo (how `daniel-pi` does it, see `inventory/hosts.ini`). `pre_tasks/load_secrets.yml`
+   > sets `ansible_become_password` from that one fleet-wide secret before any role runs, and
+   > there is no per-host override, so a host whose password differs fails every escalated
+   > task in §8.
 2. **WiFi (if no ethernet):** edit the file under `/etc/netplan/` (`ls` to find it):
 
    ```yaml
@@ -33,8 +39,17 @@ OS/hardware bring-up that those don't.
 git config --global user.name  "your_username"
 git config --global user.email "your_email@example.com"
 git config --global credential.helper store
-git clone https://github.com/DanielH2018/server.git   # use a GitHub PAT as the password
+git clone --recurse-submodules https://github.com/DanielH2018/server.git   # use a GitHub PAT as the password
 ```
+
+Clone it to **`/home/<user>/server`, as the user named by `sys_user`** (`ubuntu`, in
+`group_vars/all.yml`). Both the path and the username are baked into role templates and
+systemd units — gitops-deploy's `REPO_DIR`, the secret-rotation crons, AIDE's local config,
+and every container role's `containers/` bind mount. A repo cloned elsewhere, or owned by a
+differently-named user, breaks those with no clear error.
+
+`--recurse-submodules` picks up `Email-to-RSS` (a pinned submodule — see the bottom of this
+file); a plain clone leaves the directory empty.
 
 Secrets are committed **encrypted** (SOPS/age), so the clone already contains
 `ansible/vars/secrets.yml` — there is no separate secrets-copy step. Letting this host
@@ -64,8 +79,20 @@ Every playbook (`bootstrap.yml`, `initial_setup.yml`, `deploy.yml`) resolves its
 `ansible/inventory/hosts.ini` — a host that isn't listed there matches nothing, and the run
 just silently no-ops. Before touching SOPS:
 
-1. Add the new hostname under `[homeservers]` in `ansible/inventory/hosts.ini`.
-2. Create `ansible/inventory/host_vars/<host>.yml` with, at minimum:
+1. Add the new host under `[homeservers]` in `ansible/inventory/hosts.ini`. **The connection
+   fields are not optional** — a bare hostname makes Ansible open an SSH connection to the
+   host even when it *is* the host. Use whichever line applies:
+
+   ```ini
+   # Playbooks are run ON this host (the usual case for a new server):
+   <host>   ansible_connection=local
+   # Driven remotely from another host acting as controller (how daniel-pi is set up):
+   <host>   ansible_host=<lan-ip> ansible_user=ubuntu ansible_connection=ssh
+   ```
+
+2. Create `ansible/inventory/host_vars/<host>.yml` — copy
+   [`host_vars/_example.yml`](inventory/host_vars/_example.yml), which lists every variable a
+   new host can set with its default and why it matters. At minimum:
    - `server_ip` — the host's LAN IP (no default exists; every role that publishes a
      LAN-bound port or firewalls by IP needs it).
    - `ssh_config_path` — where sshd's config actually lives on this OS image. Check with
@@ -79,6 +106,12 @@ just silently no-ops. Before touching SOPS:
      only if the host has an Intel iGPU (gates `/dev/dri` passthrough for jellyfin/tdarr;
      defaults to `false` in `group_vars/all.yml`), or `scrutiny_nvme_device` if you deploy
      scrutiny and its NVMe enumerates as something other than `/dev/nvme0`.
+   - `has_gitops: false` **until the host's first successful manual deploy**. It defaults to
+     `true`, and the `gitops_deploy` role's "Run gitops-deploy once" handler shells a full
+     `uv run ansible-playbook deploy.yml` at the end of §8's `initial_setup.yml` — failing the
+     play if that deploy fails. On a brand-new host that fires before you have ever deployed
+     by hand, so a single bad service takes down the whole OS-hardening run. Flip it to `true`
+     and re-run `--tags gitops_deploy` once §8's `deploy.yml` succeeds.
 
 ## 5. Onboard the host to SOPS
 
@@ -146,19 +179,72 @@ Ansible runs through the repo's pinned uv env (see repo-root [`CLAUDE.md`](../CL
 "Common Commands"). From the repo root:
 
 ```bash
+uv run ansible-playbook ansible/preflight.yml       # read-only; asserts §1-§5 actually landed
 uv run ansible-playbook ansible/initial_setup.yml   # OS hardening; base pkgs, Docker, uv-tool CLIs, gitops deployer — needs §5 SOPS
 uv run ansible-playbook ansible/deploy.yml          # deploy all containers (dependency-ordered)
 ```
 
-After the first deploy, register the Traefik bouncer with CrowdSec and store the key in
-`secrets.yml`: `docker exec crowdsec cscli bouncers add bouncer-traefik`.
+`preflight.yml` changes nothing — it just fails fast, with an error that names the cause, on
+the mistakes that otherwise surface deep inside `initial_setup.yml`: a missing `host_vars`
+entry, an `ssh_config_path` that doesn't exist on this OS image, a sudo password that doesn't
+match the SOPS `become_password` (§1), or a repo cloned somewhere other than
+`/home/<user>/server` (§2). Reaching its asserts at all proves §5's SOPS onboarding worked.
+
+**CrowdSec's Traefik bouncer needs no manual registration.** The traefik role registers it
+from the existing SOPS `crowdsec_bouncer_api_key` on every deploy, and its probe/delete/re-add
+sequence is rotation-safe (`roles/containers/traefik/tasks/main.yml`). Verify with
+`docker exec crowdsec cscli bouncers list` — the name is `traefik-bouncer`. Rotation is
+`docs/secret-rotation.md`, not a hand-run `cscli bouncers add`.
 
 > **Adding a new service**, **secrets**, and **deploy flow** are documented once in the
 > repo-root [`CLAUDE.md`](../CLAUDE.md) and [`README.md`](../README.md) and the
 > `new-container` skill — not duplicated here. **Backups** are handled by the Kopia role
 > (snapshots the bind-mounted `containers/` data), not the legacy Duplicati setup.
 
-Not covered here: home-router port forwarding and Cloudflare DNS setup.
+Router port-forwarding, Cloudflare DNS and the other off-box prerequisites are in §9.
+
+## 9. Post-deploy setup that Ansible can't do
+
+`deploy.yml` finishing green does **not** mean the host is done. The steps below live in each
+app's own database, which Ansible never writes — and **every one of them fails silently**:
+the containers stay healthy while the feature behind them does nothing. Work top-down; the
+first two gate the whole monitoring fleet.
+
+1. **Create the Uptime-Kuma admin** at `https://uptime-kuma.<domain>` (first-run wizard). AutoKuma
+   **cannot** create it, and until it exists AutoKuma provisions **zero** monitors — so nothing
+   in the fleet is watched and no alert can fire. Kuma's own DB is deliberately excluded from
+   Kopia backups, so a rebuilt host always needs this again.
+2. **Re-mint `prometheus_kuma_api_key`** in Kuma (Settings → API Keys) and `sops set` it. Kuma
+   issues keys into that same unbacked-up DB, so the value in `secrets.yml` is stale on any
+   fresh Kuma and the `uptime-kuma` scrape target sits at 401/DOWN.
+3. **Seed the *arr API keys.** `sonarr_api_key`, `radarr_api_key`, `prowlarr_api_key` and
+   `jellyfin_api_key` in SOPS are what configarr, janitorr, homepage, monitor-bridge and
+   autofix-bridge authenticate with — but a fresh *arr generates its own random key on first
+   start. Either paste the SOPS value into each app's Settings → General, or stop the
+   container and write it into `config.xml`'s `<ApiKey>`. Skip this and every consumer 401s
+   against a service that reports healthy.
+4. **Home Assistant onboarding**, then mint four long-lived tokens (Profile → Security) for
+   `monitor_bridge_ha_token`, `homepage_ha_token`, `prometheus_ha_token`, `claude_ha_token`.
+   The rest of HA's one-time setup — HACS, Zigbee pairing, the `light.bedroom_lights` group,
+   companion-app sensors — is in [`roles/containers/home-assistant/SETUP.md`](roles/containers/home-assistant/SETUP.md).
+5. **Authelia**, on a genuinely fresh install: generate the OIDC HMAC secret, client password
+   hash and RSA key per [`roles/containers/authelia/CLAUDE.md`](roles/containers/authelia/CLAUDE.md)
+   ("Fresh install") — the role asserts they exist. Note `users_database.yml` is written
+   **first-run-only**, so `authelia_user`/`authelia_password` must be right before the first
+   deploy; later changes never reach the file.
+6. **Grafana's admin password** is only read at DB init. On an existing Grafana, a changed
+   `grafana_admin_password` has to be applied in-app.
+7. **Register a second host in Portainer** (Environments → Add), per
+   [`roles/containers/portainer-agent/CLAUDE.md`](roles/containers/portainer-agent/CLAUDE.md) —
+   Portainer keeps environments in its own BoltDB.
+
+External prerequisites, none of them IaC-managed: the Cloudflare DNS records (including the
+hand-created grey-cloud `*.local.<domain>` wildcard that all internal routing depends on — see
+[`roles/containers/cloudflare-ddns/CLAUDE.md`](roles/containers/cloudflare-ddns/CLAUDE.md)),
+router port-forwards for Traefik and WireGuard, a Backblaze B2 bucket for Kopia, and the
+off-box UptimeRobot dead-man's-switch. Rebuilding rather than bringing up a new host? Follow
+[`docs/kopia-disaster-recovery.md`](../docs/kopia-disaster-recovery.md) instead — it covers
+restore ordering this section doesn't.
 
 ## Misc host notes
 

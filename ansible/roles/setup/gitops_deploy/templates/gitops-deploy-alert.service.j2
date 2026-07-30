@@ -10,5 +10,5 @@ Type=oneshot
 # Cloudflare only 1010-blocks python-urllib, not curl. This unit is therefore installed mode 0600
 # (see tasks/main.yml) so the embedded webhook isn't world-readable.
 ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
-  -d '{"content":"🚨 gitops-deploy unit failed on daniel-server — check `journalctl -u gitops-deploy`."}' \
+  -d '{"content":"🚨 gitops-deploy unit failed on {{ inventory_hostname }} — check `journalctl -u gitops-deploy`."}' \
   "{{ gitops_deploy_discord_webhook }}"
