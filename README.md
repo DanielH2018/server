@@ -1,8 +1,16 @@
 # Server Homelab
 
-Docker-based homelab managed as infrastructure-as-code with **Ansible**. ~44 containerized
+Docker-based homelab managed as infrastructure-as-code with **Ansible**. ~50 containerized
 services across two hosts, fronted by **Traefik** with **Authelia** SSO, secrets encrypted
 with **SOPS/age**, and reverse-proxied behind **Cloudflare**.
+
+<!-- The exact count is whatever `containers_list` says in inventory/host_vars/*.yml — don't
+     restate a precise number here or in CLAUDE.md; two hand-maintained copies drift apart
+     (they read 44 and 49 while the real total was 52). -->
+
+```bash
+grep -c '^  - name:' ansible/inventory/host_vars/*.yml   # the actual per-host tally
+```
 
 > Day-to-day conventions and the agent contract live in [`CLAUDE.md`](CLAUDE.md). Most
 > directories and many roles have their own `CLAUDE.md` with role-specific notes.
