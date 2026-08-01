@@ -176,17 +176,53 @@ sudo k3s kubectl -n longhorn-system get volumes.longhorn.io
 Expect `REPLICAS 1`. Do not `--check` the playbook: nearly every task is
 `ansible.builtin.command`, which check mode skips rather than simulates.
 
+### 5a. k3s bound its node IP to a NIC that no longer exists
+
+Found while re-proving the replica fix, and it had already broken the cluster. The re-created
+PVC never left `Pending`, because Longhorn could not talk to the API:
+
+```
+dial tcp 10.43.0.1:443: connect: no route to host
+failed to validate nodeIP: node IP: "10.0.0.153" not found in the host's network interfaces
+```
+
+daniel-box was multi-homed when k3s was installed — a USB ethernet adapter on 10.0.0.153
+alongside `eno1` on 10.0.0.215, both with equal-metric default routes — and k3s autodetected
+the USB one, registering the node's InternalIP as **10.0.0.153**. That adapter has since
+disappeared: `ip -br addr` now shows only `eno1` up. kube-proxy's DNAT is intact (101 nat
+`KUBE-*` rules, the `10.43.0.1:443` rule present), so the ClusterIP still resolves — to an
+apiserver endpoint on an address no interface owns. Every pod lost the API.
+
+It stayed invisible for hours because `k3s kubectl` from the host talks to `127.0.0.1:6443`
+and kept working throughout. The Docker purge is **not** implicated: the three surviving
+`DOCKER*` entries are empty chain declarations (`-N DOCKER`, `-N DOCKER-BRIDGE`, `-N
+DOCKER-CT`) with no rules, and `FORWARD` is `ACCEPT`.
+
+Fixed in the role, **not yet applied**: `k3s_server_args` pins `--node-ip` and
+`--advertise-address` to `server_ip`. Two things had to change for that to be deliverable at
+all — the install task's `creates: /usr/local/bin/k3s` guard meant any `k3s_server_args` edit
+was silently skipped on an installed host, so it now compares the desired arguments against
+the systemd unit; and `k3s_version` is pinned, because a re-runnable installer would otherwise
+upgrade the control plane as a side effect of a flag change. The role also asserts the
+registered InternalIP equals `server_ip`. Guarded by
+`ansible/tests/test_k3s_node_ip_pinned.py`.
+
+Applying it re-runs the installer and restarts k3s; etcd, Longhorn, MetalLB and the B2 target
+all survive, since only an `ExecStart` argument changes. If kubelet keeps the old address
+anyway, wipe and reinstall — this cluster holds nothing worth preserving.
+
+**Open question for whoever picks this up:** whether the USB adapter is meant to be plugged in
+at all. It does not change the fix — a control-plane node must not bind its identity to a
+removable NIC either way.
+
 ### The two still open
 
 1. **Cross-LAN curl.** `curl -sS --max-time 10 http://10.0.0.240/` **from another machine.** The
    on-host curl already run proves nothing — it returned `RemoteAddr: 10.42.0.1`, i.e. it was
    routed via `cni0` and never touched the LAN. The ARP/L2 half is what silently fails.
 
-   If it fails, suspect the multi-homed host before MetalLB config: `eno1` is 10.0.0.215 and
-   `enx9cebe885f44e` is 10.0.0.153, both with equal-metric default routes via 10.0.0.1. k3s
-   registered the node's INTERNAL-IP as **10.0.0.153**, while `host_vars/daniel-box.yml` sets
-   `server_ip: 10.0.0.215`. First diagnostic:
-   `sudo k3s kubectl -n metallb-system logs -l component=speaker | grep -i arp`.
+   **Blocked until §5a is applied.** Not worth running before then: a failure would say nothing
+   about ARP/L2.
 
 2. **An object is actually written to B2.** `available: true` proves credentials and
    reachability, *not* that anything was stored. Only listing the bucket settles it — and
