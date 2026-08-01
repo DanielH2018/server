@@ -7,6 +7,14 @@
       ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
       tags: always
 
+    # Must precede build_dep_map: a k8s-platform entry should never reach
+    # dependency resolution, the dep closure, or the docker_container_info
+    # state check below.
+    - name: Restrict this play to Docker-platform containers
+      ansible.builtin.set_fact:
+        containers_list: "{{ containers_list | filter_by_platform('docker') }}"
+      tags: always
+
     - name: Build role dependency map
       ansible.builtin.set_fact:
         _container_deps_map: "{{ containers_list | build_dep_map(playbook_dir, ansible_run_tags) }}"
