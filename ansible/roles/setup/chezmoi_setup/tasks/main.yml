@@ -103,9 +103,20 @@
   # umask pin and [interpreters.sh] that .chezmoi.toml.tmpl provides. Re-running init is
   # safe and re-renders the full config, so the role self-heals instead of needing a
   # manual rm of the partial state.
+  #
+  # --force: overwrite locally-modified targets instead of prompting. Without it, init dies
+  # with "chezmoi: .bashrc: could not open a new TTY" the moment any managed file has drifted
+  # — and one had: uv's installer appends `export PATH="$PATH:$HOME/.local/bin"` to .bashrc
+  # during bring-up, before chezmoi ever runs here.
+  #
+  # This is the right call for a host whose home directory is DECLARED by the dotfiles repo:
+  # the repo is the source of truth and local edits are drift by definition. It does mean
+  # every apply silently discards hand-edits to managed files, so anything host-specific
+  # belongs in the dotfiles (or in one of the *.local.* files .chezmoiignore already excludes),
+  # not edited in place here.
   ansible.builtin.command:
     cmd: >-
-      /home/{{ sys_user }}/.local/bin/chezmoi init {{ chezmoi_setup_repo }} --apply
+      /home/{{ sys_user }}/.local/bin/chezmoi init {{ chezmoi_setup_repo }} --apply --force
   register: chezmoi_setup_init
   become: false
   changed_when: chezmoi_setup_init.stdout | length > 0

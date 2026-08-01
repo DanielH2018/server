@@ -40,31 +40,29 @@ and aborts the play. Not a PATH problem.
 
 ---
 
-## 2. The immediate blocker
+## 2. The immediate blocker — fixed, needs verifying on the host
 
-`chezmoi init --apply` fails:
+`chezmoi init --apply` was failing:
 
 ```
 stdout: ".bashrc has changed since chezmoi last wrote it?"
 stderr: chezmoi: .bashrc: could not open a new TTY: open /dev/tty: no such device or address
 ```
 
-The uv installer appends to `~/.bashrc` (it says so: "The installer edits ~/.bashrc for FUTURE
-shells"), so chezmoi sees a modified target and wants to prompt before overwriting. Ansible has
-no TTY.
+**Cause:** uv's installer appends `export PATH="$PATH:$HOME/.local/bin"` to `~/.bashrc` during
+bring-up, before chezmoi ever runs on this host. chezmoi then sees a modified target and wants
+to confirm before overwriting; Ansible has no TTY. On-disk `.bashrc` was 127 lines against the
+managed 97.
 
-**Likely fix**, untested: add `--force` to the init in `roles/setup/chezmoi_setup/tasks/main.yml`.
+**Fix applied:** `--force` on the init in `roles/setup/chezmoi_setup/tasks/main.yml`.
 
-```yaml
-cmd: >-
-  /home/{{ sys_user }}/.local/bin/chezmoi init {{ chezmoi_setup_repo }} --apply --force
-```
+Safe here because the managed `dot_bashrc` delegates PATH to the shared shell config, and
+daniel-server runs the same dotfiles with `~/.local/bin` on PATH — the uv line is redundant
+drift. But note the standing consequence: **every apply now silently discards hand-edits to
+managed files.** Anything host-specific belongs in the dotfiles, or in one of the `*.local.*`
+files `.chezmoiignore` already excludes — not edited in place.
 
-Consider this carefully rather than pasting it: `--force` overwrites *every* locally-modified
-target without asking, on every run. That is usually right for a machine whose home directory is
-declared by the dotfiles repo, and wrong if anything on the host legitimately hand-edits a
-managed file. A narrower alternative is to resolve the `.bashrc` drift once by hand and leave
-the role prompt-free.
+Not yet run on the host. Verify the next play gets past this task.
 
 ---
 
