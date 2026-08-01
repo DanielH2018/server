@@ -71,6 +71,14 @@ renovate_notify_host: daniel-server
 # git push (see gitops_deploy CLAUDE.md). daniel-pi overrides this false: it's
 # memory-constrained and driven manually over SSH, not by GitOps, by design.
 has_gitops: true
+# Whether this host runs Docker. True by default — it's the container runtime the whole
+# containers_list plane is built on. daniel-box overrides this false: it's the k3s node,
+# and k3s ships its own containerd plus flannel/kube-proxy iptables rules. A bare
+# initial_setup.yml run installed Docker there on 2026-08-01 and tripped the k3s role's
+# fail-closed "already runs Docker" guard; the gate is what stops that recurring, since
+# relying on the operator to remember --tags is what let it happen. See
+# docs/k3s-migration/slice-0-cluster-foundation.md.
+has_docker: true
 # Per-user developer environment: the chezmoi-managed dotfiles (DanielH2018/dotfiles) and
 # Claude Code. Both default OFF and are opted into per host — daniel-server already has
 # both installed by hand and shouldn't have them re-provisioned underneath it, and the Pi

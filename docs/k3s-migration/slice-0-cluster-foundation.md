@@ -335,6 +335,17 @@ One consequence to carry forward: **daniel-box is not a working Docker host.** `
 
 If Docker *is* present, stop — someone installed it since, and the risk assessment that put k3s here first no longer holds.
 
+> **Update 2026-08-01 — this happened, and the reasoning above was wrong.** A bare
+> `initial_setup.yml` run (no `--tags`) installed Docker on daniel-box later the same day. The
+> claim in the paragraph above — that a green Ansible run left Docker out *because
+> `containers_list` is empty* — does not hold: `docker_install` was an **unconditional** role in
+> `initial_setup.yml`, wired to nothing in `containers_list`. Any full run would have installed
+> it. The empty `containers_list` was never what protected this host.
+>
+> Docker was purged the same day and the precondition is now **enforced rather than assumed**:
+> `docker_install` carries `when: has_docker`, which `host_vars/daniel-box.yml` sets false.
+> See the handoff doc §1a and `ansible/tests/test_k3s_host_has_no_docker.py`.
+
 - [ ] **Step 2: Install k3s**
 
 ```bash

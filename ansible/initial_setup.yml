@@ -19,7 +19,7 @@
     - { role: config_files, tags: ["config_files"] }
     - { role: initial_setup, tags: ["initial_setup"] }
     - { role: sops_setup, tags: ["sops_setup"] }
-    - { role: docker_install, tags: ["docker_install"] }
+    - { role: docker_install, tags: ["docker_install"], when: has_docker }
     - { role: gitops_deploy, tags: ["gitops_deploy"], when: has_gitops }
     # Per-user, become: false throughout — they manage the connecting user's home, not
     # root's. Placed after docker_install so the OS is fully set up before the dotfiles

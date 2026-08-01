@@ -7,36 +7,65 @@ Host: **daniel-box**, 10.0.0.215, Ubuntu 24.04, Ryzen 7 8845HS / Radeon 780M, 91
 
 ---
 
-## 1. Two things need a decision before more work
+## 1. One thing needs a decision before more work
 
-### 1a. Docker is now installed on the k3s control-plane node
+### 1a. Docker was installed on the k3s node — RESOLVED, removed 2026-08-01
 
 A full `initial_setup.yml` run (no `--tags`) at 18:56 installed Docker and created 12 bridge
-networks. Both `docker` and `k3s` report `active`.
+networks on the k3s control-plane node. That was explicitly what the migration's slice ordering
+was designed to prevent: k3s ships its own containerd plus flannel/kube-proxy iptables rules,
+and daniel-box was chosen to go first *because it had no container runtime*. See
+`docs/k3s-migration/slice-0-cluster-foundation.md`.
 
-This was explicitly what the migration's slice ordering was designed to prevent: k3s ships its
-own containerd plus flannel/kube-proxy iptables rules, and daniel-box was chosen to go first
-*because it had no container runtime*. See `docs/k3s-migration/slice-0-cluster-foundation.md`.
+**Resolved by removing Docker**, restoring a clean k3s node. Nothing was lost — Docker had zero
+containers, zero images and zero volumes; only the 12 empty bridge networks.
 
-Consequences:
+Confirmed gone by direct inspection: the six `docker-ce`/`containerd.io` packages,
+`/usr/bin/docker`, `/var/lib/docker`, `/var/lib/containerd`, `/etc/docker`, the APT repo +
+keyring, the whole `10.200.0.0/16` address pool, and every `docker0`/`br-*` bridge — `cni0` is
+the only bridge left on the host.
 
-- Docker's `DOCKER`/`DOCKER-USER` chains and FORWARD-policy handling now sit alongside k3s
-  networking on the same host. Coexistence often works, but it is the exact interaction the
-  plan deferred to slice 7 so it could be dealt with deliberately.
-- `roles/setup/k3s` has a fail-closed guard (`Refuse to run on a host that already runs Docker
-  containers`) that now **fails on this host**. Re-running `ansible/k3s-bringup.yml` will stop.
+**Not verified:** the removal script also deletes the `DOCKER*` iptables/ip6tables chains and
+resets the `FORWARD` policy to ACCEPT, but it runs under `set -uo pipefail` *without* `-e`, and
+its log is root-owned — the session that ran it could not read the log or query iptables. Treat
+the chain cleanup as unconfirmed until someone runs:
 
-**Decide:** remove Docker from daniel-box to restore a clean k3s node, or accept coexistence
-and drop that guard. If removing, `has_chezmoi`/`has_claude_code` runs must be scoped with
-`--tags` so `docker_install` does not simply reinstall it — that is how it arrived.
+```bash
+sudo sh -c 'iptables -S | grep -ci docker; iptables -t nat -S | grep -ci docker; iptables -S FORWARD | head -3'
+```
 
-Nothing here is on fire; k3s is still running. But do not treat it as the intended state.
+Both counts should be 0. If they are not, the residue is inert rather than dangerous — orphan
+chains referencing deleted `br-*` interfaces never match, and k3s ran fine under Docker's
+`FORWARD DROP` for hours — so this is cleanliness, not risk.
 
-### 1b. Claude Code is not installed
+k3s was untouched throughout — it runs its **own** containerd out of
+`/var/lib/rancher/k3s/data/…/bin/containerd`, entirely separate from the `/usr/bin/containerd`
+that served `dockerd`. `net.ipv4.ip_forward=1` survives the removal: it is persisted at
+`/etc/sysctl.conf:65` by the `initial_setup` role, not by Docker.
 
-`/home/ubuntu/.local/bin/claude` does not exist, and `~/.local/share/installers/` contains only
-`chezmoi-install.sh`. The `claude_code` role has never executed — `chezmoi_setup` fails first
-and aborts the play. Not a PATH problem.
+With `/usr/bin/docker` gone, the `roles/setup/k3s` fail-closed guard (`Refuse to run on a host
+that already runs Docker containers`) passes again and `ansible/k3s-bringup.yml` is unblocked.
+
+**This is now enforced, not remembered.** `docker_install` carries `when: has_docker`;
+`has_docker` defaults true fleet-wide in `group_vars/all.yml` and is set **false** in
+`host_vars/daniel-box.yml`. A bare `initial_setup.yml` on this host no longer reinstalls Docker,
+so runs here no longer need `--tags` to stay safe. Guarded by
+`ansible/tests/test_k3s_host_has_no_docker.py`.
+
+### 1b. Claude Code is installed — RESOLVED 2026-08-01
+
+At the time of writing, `/home/ubuntu/.local/bin/claude` did not exist: the `claude_code` role
+had never executed, because `chezmoi_setup` failed first (§2) and aborted the play.
+
+Installed since, at 19:20 — `/home/ubuntu/.local/bin/claude` is a symlink to
+`~/.local/share/claude/versions/2.1.220`, and a session runs on this host. `claude login` (old
+§4 step 4) is therefore also done.
+
+It was installed **by hand, not by the role**: `~/.local/share/installers/` still contains only
+`chezmoi-install.sh`, and the role fetches `claude-install.sh` there before running it. So this
+does *not* evidence that `chezmoi_setup` now gets past §2 — that verification is still open. The
+role stays idempotent regardless: its install task is `creates: ~/.local/bin/claude`, which is
+now satisfied, so it will skip rather than reinstall.
 
 ---
 
@@ -78,25 +107,19 @@ Not yet run on the host. Verify the next play gets past this task.
 | chezmoi | Binary installed; dotfiles cloned and applied |
 | CLI tools | node, eza, fastfetch, curlie, sd, starship, fzf, zoxide, rg, gron, nvim, yazi |
 | Distro packages | bat, fd-find, gron, shellcheck, lua5.4, btop, chafa, zsh + plugins |
-| Docker | Installed (see §1a) |
+| Docker | **Removed** 2026-08-01 — gated off by `has_docker: false` (see §1a) |
+| Claude Code | Installed (2.1.220), logged in, running on this host (see §1b) |
 
 ---
 
 ## 4. Next steps, in order
 
-All of these need a TTY, which is why they were not done from an agent session.
+§1a (Docker), §1b (Claude Code) and old step 4 (`claude login`) are done. What is left needs a
+TTY, which is why it was not done from an agent session.
 
-1. **Resolve §1a** — decide Docker's fate on this host.
-2. **Fix the chezmoi TTY blocker** (§2), then:
-   ```bash
-   cd ~/server && git pull
-   uv run ansible-playbook ansible/initial_setup.yml --tags chezmoi,claude_code
-   ```
-   Use `--tags`. A bare run reinstalls Docker.
-3. **`chezmoi apply`** in an interactive shell, so `install-cli-tools.sh` can sudo and add the
+1. **`chezmoi apply`** in an interactive shell, so `install-cli-tools.sh` can sudo and add the
    WezTerm repo. Until then it exits 1 and, being `run_once_after`, retries every apply.
-4. **`claude login`** once `claude_code` has installed the binary.
-5. **`rm ~/.ssh/config`** — the `.chezmoiignore` fix (dotfiles PR #157, merged) stops chezmoi
+2. **`rm ~/.ssh/config`** — the `.chezmoiignore` fix (dotfiles PR #157, merged) stops chezmoi
    *managing* that file here, but does not delete the copy already deployed.
 
 ---
