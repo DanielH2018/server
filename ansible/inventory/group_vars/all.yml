@@ -75,5 +75,8 @@ has_gitops: true
 # Claude Code. Both default OFF and are opted into per host — daniel-server already has
 # both installed by hand and shouldn't have them re-provisioned underneath it, and the Pi
 # (512 MB Zero 2 W) can carry neither. Set true in host_vars to enable.
+# The GitHub CLI plus the git credential helper that lets a host clone private repos.
+# Required by has_chezmoi (the dotfiles repo is private); useful on its own too.
+has_github_cli: false
 has_chezmoi: false
 has_claude_code: false
