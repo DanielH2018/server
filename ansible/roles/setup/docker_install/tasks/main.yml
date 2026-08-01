@@ -14,40 +14,49 @@
       - python3-debian  # required by ansible.builtin.deb822_repository (below)
   become: true
 
-- name: Check for the existing Docker GPG keyring
+- name: Ensure the APT keyring directory exists
   tags: [docker-repo]
-  # get_url has no `creates`, so without this it re-downloads to /tmp and reports "changed"
-  # every run. Gate the download on the dearmored keyring's absence so the GPG fetch is
-  # genuinely run-once. (Pinning the key to a published checksum is a separate follow-up.)
-  ansible.builtin.stat:
-    path: /usr/share/keyrings/docker-archive-keyring.gpg
-  register: docker_install_keyring
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
 
-- name: Download Docker GPG key
+- name: Install the Docker GPG key
   tags: [docker-repo]
+  # Fetched ASCII-armored straight to its final path. apt reads armored keys referenced by
+  # Signed-By, so there is nothing to dearmor — this is what Docker's own install docs do.
+  #
+  # Deliberately NOT `gpg --dearmor` via `command`: that creates the file under root's
+  # umask, which the initial_setup role tightens to 027 EARLIER IN THE SAME PLAY. On a fresh
+  # host the keyring therefore landed 0640; apt fetches as the unprivileged `_apt` user,
+  # could not read it, and reported the repo as unsigned — failing the play at the cache
+  # refresh below, before Docker was ever installed (daniel-box, 2026-08-01). Existing hosts
+  # never showed it because their keyring predates the umask change and a `creates:` guard
+  # stopped it being regenerated. get_url sets the mode declaratively, so no umask can reach
+  # it. Same idiom as optimize_pi's azlux key.
+  #
+  # force defaults to false, so an existing key is not re-fetched every run; the fingerprint
+  # check below still runs every play, and now validates the exact file apt consumes.
   ansible.builtin.get_url:
     url: https://download.docker.com/linux/ubuntu/gpg
-    dest: /tmp/docker.gpg
+    dest: /etc/apt/keyrings/docker.asc
     mode: "0644"
-  when: not docker_install_keyring.stat.exists
-
-- name: Dearmor Docker GPG key
-  tags: [docker-repo]
-  ansible.builtin.command:
-    cmd: gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg --yes /tmp/docker.gpg
-  args:
-    creates: /usr/share/keyrings/docker-archive-keyring.gpg
+    owner: root
+    group: root
   become: true
 
 - name: Verify the Docker GPG key fingerprint
   tags: [docker-repo]
-  # Fail the play closed if the imported keyring is NOT Docker's published signing key
+  # Fail the play closed if the fetched key is NOT Docker's published signing key
   # (fingerprint 9DC85822 9FC7DD38 854AE2D8 8D81803C 0EBFCD88, per docs.docker.com). Without
-  # this, a swapped/MITM'd key fetched over the network would be silently dearmored and then
-  # trusted by apt. Runs every play (changed_when: false), so a tampered keyring is also caught
-  # on re-runs, not just first install.
+  # this, a swapped/MITM'd key fetched over the network would be silently trusted by apt.
+  # Runs every play (changed_when: false), so a tampered key is also caught on re-runs, not
+  # just first install. gpg --show-keys reads armored input, so this needs no dearmored copy.
   ansible.builtin.command:
-    cmd: gpg --show-keys --with-colons /usr/share/keyrings/docker-archive-keyring.gpg
+    cmd: gpg --show-keys --with-colons /etc/apt/keyrings/docker.asc
   register: docker_install_key_fpr
   changed_when: false
   failed_when: "'9DC858229FC7DD38854AE2D88D81803C0EBFCD88' not in docker_install_key_fpr.stdout"
@@ -63,7 +72,7 @@
     suites: "{{ ansible_facts.distribution_release }}"
     components: [stable]
     architectures: ["{{ repo_arch }}"]
-    signed_by: /usr/share/keyrings/docker-archive-keyring.gpg
+    signed_by: /etc/apt/keyrings/docker.asc
     state: present
   vars:
     # Map ansible_facts.architecture (x86_64) to dpkg terms (amd64)
@@ -77,6 +86,20 @@
   ansible.builtin.file:
     path: /etc/apt/sources.list.d/docker.list
     state: absent
+  become: true
+
+- name: Remove the superseded dearmored keyring and its download artefact
+  tags: [docker-repo]
+  # Runs AFTER deb822_repository has repointed Signed-By at the .asc, so apt is never left
+  # referencing a keyring that no longer exists. On a host provisioned before this change
+  # the old file is the 0640 one that broke the cache refresh; leaving it around invites a
+  # future Signed-By pointing back at an unreadable key.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/share/keyrings/docker-archive-keyring.gpg
+    - /tmp/docker.gpg
   become: true
 
 - name: Update apt-get repo and cache
