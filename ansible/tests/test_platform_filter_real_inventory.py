@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""Guards filter_by_platform against the real inventory, not a synthetic list.
+
+deploy.yml runs this filter over every host's containers_list, and daniel-server
+has has_gitops: true — a 30-minute timer pulls master and deploys. So a filter
+that silently dropped entries would take services down with no manual gate in
+between. These tests assert the filter is a no-op for every entry that hasn't
+been explicitly migrated, using the inventory files as they actually are.
+
+They stay correct as services migrate: an entry only leaves the docker set by
+gaining `platform: k8s`, which is exactly what the assertions check for.
+
+Run: uv run pytest ansible/tests/test_platform_filter_real_inventory.py
+"""
+
+from pathlib import Path
+
+import pytest
+import yaml
+
+from toposort import filter_by_platform
+
+HOST_VARS = Path(__file__).resolve().parents[1] / "inventory" / "host_vars"
+
+
+def _host_var_files():
+    return sorted(p for p in HOST_VARS.glob("*.yml") if not p.name.startswith("_"))
+
+
+def _containers(path):
+    return (yaml.safe_load(path.read_text()) or {}).get("containers_list") or []
+
+
+@pytest.mark.parametrize("path", _host_var_files(), ids=lambda p: p.stem)
+def test_docker_filter_keeps_every_unmigrated_entry_in_order(path):
+    containers = _containers(path)
+    expected = [
+        c["name"] for c in containers if c.get("platform", "docker") == "docker"
+    ]
+
+    got = [c["name"] for c in filter_by_platform(containers, "docker")]
+
+    assert got == expected
+
+
+@pytest.mark.parametrize("path", _host_var_files(), ids=lambda p: p.stem)
+def test_every_entry_lands_in_exactly_one_platform(path):
+    containers = _containers(path)
+
+    docker = filter_by_platform(containers, "docker")
+    k8s = filter_by_platform(containers, "k8s")
+
+    assert len(docker) + len(k8s) == len(containers), (
+        "an entry carries a platform value that is neither docker nor k8s, so "
+        "deploy.yml would skip it and no k8s manifest would claim it"
+    )
+
+
+def test_daniel_server_is_still_wholly_docker():
+    # The migration has not started. If this fails, either a service was migrated
+    # (update the count deliberately) or the default regressed and 46 production
+    # services just stopped being managed.
+    containers = _containers(HOST_VARS / "daniel-server.yml")
+
+    assert len(containers) == 46
+    assert len(filter_by_platform(containers, "docker")) == 46
+    assert filter_by_platform(containers, "k8s") == []
