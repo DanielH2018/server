@@ -1,0 +1,54 @@
+---
+# chezmoi manages a USER's home directory, so every task here runs as the connecting
+# user with become: false. The play sets become: true for OS hardening; inheriting it
+# would deploy the dotfiles into /root instead.
+
+- name: Ensure ~/.local/bin exists
+  tags: [chezmoi]
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/.local/bin"
+    state: directory
+    mode: "0755"
+  become: false
+
+- name: Install the chezmoi binary
+  tags: [chezmoi]
+  # Official installer, pinned to ~/.local/bin to match daniel-server. `creates` makes it
+  # run-once; chezmoi upgrades are a deliberate act, not a side effect of every play.
+  ansible.builtin.shell:
+    cmd: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "{{ ansible_env.HOME }}/.local/bin"
+    creates: "{{ ansible_env.HOME }}/.local/bin/chezmoi"
+  become: false
+
+- name: Check whether chezmoi has a source directory yet
+  tags: [chezmoi]
+  ansible.builtin.stat:
+    path: "{{ ansible_env.HOME }}/.local/share/chezmoi/.git"
+  register: chezmoi_source
+  become: false
+
+- name: Initialise chezmoi from the dotfiles repo and apply
+  tags: [chezmoi]
+  # --promptBool/--promptString answer the promptBoolOnce/promptStringOnce calls in
+  # .chezmoi.toml.tmpl. Without them init would block on a TTY Ansible hasn't provided.
+  # Only on first run: after this the answers live in ~/.config/chezmoi/chezmoi.toml and
+  # re-passing them would silently overwrite a value changed by hand on the host.
+  ansible.builtin.command:
+    cmd: >-
+      {{ ansible_env.HOME }}/.local/bin/chezmoi init {{ chezmoi_repo }} --apply
+      --promptBool work={{ chezmoi_work | lower }}
+      --promptString profile={{ chezmoi_profile }}
+  when: not chezmoi_source.stat.exists
+  become: false
+  changed_when: true
+
+- name: Apply chezmoi
+  tags: [chezmoi]
+  # Idempotent by design: chezmoi prints the targets it changed and nothing when the
+  # destination already matches the source, so an unchanged run reports ok.
+  ansible.builtin.command:
+    cmd: "{{ ansible_env.HOME }}/.local/bin/chezmoi apply"
+  when: chezmoi_source.stat.exists
+  register: chezmoi_apply
+  become: false
+  changed_when: chezmoi_apply.stdout | length > 0
