@@ -50,6 +50,30 @@
   register: chezmoi_setup_source
   become: false
 
+- name: Check GitHub authentication before cloning
+  tags: [chezmoi]
+  # DanielH2018/dotfiles is PRIVATE. Without a credential, `chezmoi init` fails with
+  # "fatal: could not read Username for 'https://github.com'" — a git-level error that
+  # says nothing about what to do. Check first so the failure names the fix.
+  ansible.builtin.command:
+    cmd: gh auth status
+  register: chezmoi_setup_gh_auth
+  when: not chezmoi_setup_source.stat.exists
+  become: false
+  changed_when: false
+  failed_when: false
+
+- name: Fail with a usable message if GitHub authentication is missing
+  tags: [chezmoi]
+  ansible.builtin.assert:
+    that: chezmoi_setup_gh_auth.rc == 0
+    fail_msg: >-
+      Cannot clone {{ chezmoi_setup_repo }} — it is private and this host has no GitHub
+      credential. Run `gh auth login` once, by hand, on {{ inventory_hostname }}, then
+      re-run this play. (The github_cli role installs gh and sets the credential helper,
+      but the login itself is interactive.)
+  when: not chezmoi_setup_source.stat.exists
+
 - name: Initialise chezmoi from the dotfiles repo and apply
   tags: [chezmoi]
   # --promptBool/--promptString answer the promptBoolOnce/promptStringOnce calls in

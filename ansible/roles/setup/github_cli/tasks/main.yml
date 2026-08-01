@@ -1,0 +1,90 @@
+---
+# The GitHub CLI, plus the git credential helper that lets this host clone PRIVATE repos.
+# Needed because DanielH2018/dotfiles is private: without a credential, `chezmoi init`
+# fails with "could not read Username for 'https://github.com'". daniel-server solves it
+# the same way — credential.helper = !gh auth git-credential.
+
+- name: Ensure the APT keyring directory exists
+  tags: [github_cli]
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Install the GitHub CLI GPG key
+  tags: [github_cli]
+  # Explicit mode, never a umask-inheriting `command`: initial_setup sets UMASK 027 earlier
+  # in this play, and a 0640 keyring is unreadable by apt's unprivileged _apt user, which
+  # reports the repo as unsigned. See docker_install for the failure that taught us this.
+  ansible.builtin.get_url:
+    url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    dest: /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Add the GitHub CLI APT repository
+  tags: [github_cli]
+  # deb822 (.sources), not the deprecated one-line form. daniel-server still has the old
+  # github-cli.list from a hand install; the cleanup task below removes it.
+  ansible.builtin.deb822_repository:
+    name: github-cli
+    types: [deb]
+    uris: https://cli.github.com/packages
+    suites: stable
+    components: [main]
+    architectures: ["{{ repo_arch }}"]
+    signed_by: /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    state: present
+  vars:
+    repo_arch: "{{ 'amd64' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
+  become: true
+
+- name: Remove the deprecated one-line GitHub CLI APT source
+  tags: [github_cli]
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/github-cli.list
+    state: absent
+  become: true
+
+- name: Install the GitHub CLI
+  tags: [github_cli]
+  ansible.builtin.apt:
+    name: gh
+    state: present
+    update_cache: true
+  become: true
+
+- name: Point git at the gh credential helper
+  tags: [github_cli]
+  # become: false — this is the CONNECTING user's git config, not root's. Matches
+  # daniel-server, where credential.helper is "!gh auth git-credential" globally.
+  community.general.git_config:
+    name: credential.helper
+    scope: global
+    value: "!gh auth git-credential"
+  become: false
+
+- name: Check whether this host has authenticated to GitHub
+  tags: [github_cli]
+  ansible.builtin.command:
+    cmd: gh auth status
+  register: github_cli_auth
+  become: false
+  changed_when: false
+  failed_when: false
+
+- name: Report that an interactive GitHub login is still required
+  tags: [github_cli]
+  # Like `claude login`, this cannot be automated without introducing a long-lived token.
+  # Reported rather than failed so the play can still finish the tasks that don't need it.
+  ansible.builtin.debug:
+    msg: >-
+      gh is installed but this host is not authenticated to GitHub, so cloning the private
+      dotfiles repo will fail. Run `gh auth login` once, by hand, on {{ inventory_hostname }},
+      then re-run this play.
+  when: github_cli_auth.rc != 0

@@ -17,6 +17,7 @@ has_gitops: true
 # "server" matches daniel-server and pulls the full CLI toolchain on first apply.
 # Claude Code still needs one interactive `claude login` on this host afterwards —
 # the role installs the binary but cannot mint the OAuth credential.
+has_github_cli: true
 has_chezmoi: true
 has_claude_code: true
 # Deliberately unset. This is an AMD Ryzen 7 8845HS with a Radeon 780M — /dev/dri/renderD128
