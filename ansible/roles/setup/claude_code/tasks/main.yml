@@ -6,11 +6,16 @@
 # Deliberately the native installer rather than the apt repo Anthropic also publishes: it
 # matches daniel-server, needs no root, and auto-updates in the background. The apt route
 # would need elevation and would not auto-update.
+#
+# The home directory is /home/{{ sys_user }}, NOT ansible_env.HOME — ansible_env reports
+# the environment of the user facts were GATHERED as, and this play gathers them escalated,
+# so ansible_env.HOME is /root even in a become: false task. See chezmoi_setup for the
+# failure this caused.
 
 - name: Ensure the installer directory exists
   tags: [claude_code]
   ansible.builtin.file:
-    path: "{{ ansible_env.HOME }}/.local/share/installers"
+    path: "/home/{{ sys_user }}/.local/share/installers"
     state: directory
     mode: "0755"
   become: false
@@ -22,7 +27,7 @@
   # it first, and it stays inspectable after the fact.
   ansible.builtin.get_url:
     url: https://claude.ai/install.sh
-    dest: "{{ ansible_env.HOME }}/.local/share/installers/claude-install.sh"
+    dest: "/home/{{ sys_user }}/.local/share/installers/claude-install.sh"
     mode: "0755"
   become: false
 
@@ -32,15 +37,15 @@
   # symlink into ~/.local/share/claude/versions/ and updates itself thereafter, so
   # re-running the installer on every play would fight its own updater.
   ansible.builtin.command:
-    cmd: bash {{ ansible_env.HOME }}/.local/share/installers/claude-install.sh
+    cmd: bash /home/{{ sys_user }}/.local/share/installers/claude-install.sh
   args:
-    creates: "{{ ansible_env.HOME }}/.local/bin/claude"
+    creates: "/home/{{ sys_user }}/.local/bin/claude"
   become: false
 
 - name: Report the Claude Code version
   tags: [claude_code]
   ansible.builtin.command:
-    cmd: "{{ ansible_env.HOME }}/.local/bin/claude --version"
+    cmd: "/home/{{ sys_user }}/.local/bin/claude --version"
   register: claude_code_version
   become: false
   changed_when: false
@@ -52,7 +57,7 @@
   # SOPS, and copying one between hosts would be sharing a credential rather than
   # provisioning one. So this role installs everything EXCEPT the login.
   ansible.builtin.stat:
-    path: "{{ ansible_env.HOME }}/.claude/.credentials.json"
+    path: "/home/{{ sys_user }}/.claude/.credentials.json"
   register: claude_code_credentials
   become: false
 
