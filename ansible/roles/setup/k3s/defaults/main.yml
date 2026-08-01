@@ -20,10 +20,10 @@ k3s_server_args: >-
 # hand out addresses the router also leases.
 k3s_metallb_pool: 10.0.0.240-10.0.0.250
 
-# One replica until daniel-server joins the cluster (slice 7). Longhorn's default of 3 on a
-# single-node cluster leaves every volume permanently "degraded", which buries a real fault
-# in expected noise. Slice 7 raises this — that is the step where replication, and therefore
-# failover, starts existing.
+# One replica until daniel-server joins the cluster (slice 7). More replicas than nodes leaves
+# every volume permanently "degraded", which buries a real fault in expected noise — and
+# upstream's StorageClass ships 3. Slice 7 raises this to 2, one per node — that is the step
+# where replication, and therefore failover, starts existing.
 #
 # This reaches volumes through the `default-replica-count` setting alone, which only applies
 # to StorageClasses that do not pin a count themselves. That is why the role replaces

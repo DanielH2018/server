@@ -36,9 +36,20 @@ def _tasks():
     return yaml.safe_load((K3S / "tasks" / "main.yml").read_text())
 
 
-def _commands(tasks):
+def _commands(tasks: list[dict]) -> list[str]:
     """The `cmd:` of every command task, positionally aligned with `tasks`."""
     return [t.get("ansible.builtin.command", {}).get("cmd", "") for t in tasks]
+
+
+def _index_of(commands: list[str], matches) -> int:
+    """Position of the first matching command, as a failed assert rather than a raise."""
+    for i, cmd in enumerate(commands):
+        if matches(cmd):
+            return i
+    raise AssertionError(
+        "No k3s role task runs a command matching this predicate — a task was renamed "
+        "or restructured, and the ordering guarantee below is no longer being checked."
+    )
 
 
 def test_storageclass_does_not_pin_a_replica_count():
@@ -76,16 +87,12 @@ def test_role_still_patches_the_default_replica_count_setting():
 def test_storageclass_is_applied_after_upstream_longhorn():
     """Ordering is load-bearing: upstream's apply re-pins the ConfigMap every run."""
     commands = _commands(_tasks())
-    install = next(i for i, c in enumerate(commands) if "deploy/longhorn.yaml" in c)
-    apply_class = next(
-        i
-        for i, c in enumerate(commands)
-        if "apply -f" in c and "longhorn-storageclass.yaml" in c
+    install = _index_of(commands, lambda c: "deploy/longhorn.yaml" in c)
+    apply_class = _index_of(
+        commands, lambda c: "apply -f" in c and "longhorn-storageclass.yaml" in c
     )
-    patch_configmap = next(
-        i
-        for i, c in enumerate(commands)
-        if "patch configmap longhorn-storageclass" in c
+    patch_configmap = _index_of(
+        commands, lambda c: "patch configmap longhorn-storageclass" in c
     )
     assert install < apply_class, (
         "The StorageClass must be applied AFTER `kubectl apply -f longhorn.yaml`, "

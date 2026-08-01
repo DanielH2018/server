@@ -511,8 +511,11 @@ One node cannot satisfy 2 replicas; leaving the default at 2 makes every PVC rep
 > Upstream's `deploy/longhorn.yaml` hardcodes `numberOfReplicas: "3"` in the
 > `longhorn-storageclass` ConfigMap, and a StorageClass parameter **overrides**
 > `default-replica-count` — which only governs volumes whose class stays quiet about replicas.
-> Two other corrections while here: upstream v1.7.2's default is **3**, not 2 (both in the
-> setting and in the class), and slice 7 therefore raises this to 3, not 2.
+> Note that v1.7.2's manifest does not set `default-replica-count` anywhere; the setting falls
+> back to longhorn-manager's compiled-in default, so the "leaving the default at 2" above
+> describes a value not verified here. What *is* verified is the class shipping 3. Slice 7's
+> target of 2 is unaffected — that number comes from the cluster having two nodes, not from
+> upstream.
 >
 > Fixed in `roles/setup/k3s`: it now applies its own class from
 > `files/longhorn-storageclass.yaml`, verbatim from upstream except that
@@ -613,6 +616,6 @@ Slice 0 is done when all of these are true, each demonstrated by a command whose
 - Any change to daniel-server (slice 7)
 - Any service migration (slice 1 onward)
 - Traefik, Authelia, or ingress configuration (slice 1)
-- Raising Longhorn to 3 replicas (slice 7) — upstream's default; the 2 written here originally was wrong
+- Raising Longhorn to 2 replicas (slice 7)
 - Retiring Portainer or the Pi's agent (slice 7)
 - Widening `peanut`'s loopback publish (slice 5, needs its own review)

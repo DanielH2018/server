@@ -10,7 +10,7 @@
 # setting read 1, the class read 3, and a fresh PVC bound at 3.
 #
 # Omitting the parameter makes `default-replica-count` load-bearing, leaving one source of
-# truth (k3s_longhorn_replica_count). It also keeps slice 7's raise to 3 a settings patch
+# truth (k3s_longhorn_replica_count). It also keeps slice 7's raise to 2 a settings patch
 # instead of StorageClass surgery: parameters are immutable, so changing one means deleting
 # and recreating the class — cheap today on an empty cluster, not cheap once services run
 # on it.
