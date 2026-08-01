@@ -1,0 +1,15 @@
+# Seeded by Ansible (chezmoi_setup role) BEFORE `chezmoi init`.
+#
+# The dotfiles' .chezmoi.toml.tmpl calls promptBoolOnce/promptStringOnce, which prompt on
+# a TTY unless the value already exists in the config data. Ansible has no TTY, so without
+# this file init dies with "could not open a new TTY: /dev/tty". The --promptBool /
+# --promptString flags do NOT cover this: they were passed and init prompted anyway
+# (verified on daniel-box, chezmoi v2.71.1).
+#
+# Only the two prompted values are seeded. `chezmoi init` then renders the FULL config from
+# .chezmoi.toml.tmpl — umask, [interpreters.sh], and anything added later — reusing these
+# answers instead of asking. Not overwritten once it exists, so a value changed by hand on
+# the host survives.
+[data]
+    work = {{ chezmoi_setup_work | lower }}
+    profile = "{{ chezmoi_setup_profile }}"

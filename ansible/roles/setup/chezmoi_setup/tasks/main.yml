@@ -16,8 +16,9 @@
     state: directory
     mode: "0755"
   loop:
-    - "/home/{{ sys_user }}/.local/bin"
-    - "/home/{{ sys_user }}/.local/share/installers"
+    - /home/{{ sys_user }}/.local/bin
+    - /home/{{ sys_user }}/.local/share/installers
+    - /home/{{ sys_user }}/.config/chezmoi
   become: false
 
 - name: Download the chezmoi installer
@@ -27,7 +28,7 @@
   # re-fetched, so this is quiet on re-runs.
   ansible.builtin.get_url:
     url: https://get.chezmoi.io
-    dest: "/home/{{ sys_user }}/.local/share/installers/chezmoi-install.sh"
+    dest: /home/{{ sys_user }}/.local/share/installers/chezmoi-install.sh
     mode: "0755"
   become: false
 
@@ -40,25 +41,17 @@
       /home/{{ sys_user }}/.local/share/installers/chezmoi-install.sh
       -b /home/{{ sys_user }}/.local/bin
   args:
-    creates: "/home/{{ sys_user }}/.local/bin/chezmoi"
-  become: false
-
-- name: Check whether chezmoi has a source directory yet
-  tags: [chezmoi]
-  ansible.builtin.stat:
-    path: "/home/{{ sys_user }}/.local/share/chezmoi/.git"
-  register: chezmoi_setup_source
+    creates: /home/{{ sys_user }}/.local/bin/chezmoi
   become: false
 
 - name: Check GitHub authentication before cloning
   tags: [chezmoi]
-  # DanielH2018/dotfiles is PRIVATE. Without a credential, `chezmoi init` fails with
+  # DanielH2018/dotfiles is PRIVATE. Without a credential, chezmoi fails with
   # "fatal: could not read Username for 'https://github.com'" — a git-level error that
   # says nothing about what to do. Check first so the failure names the fix.
   ansible.builtin.command:
     cmd: gh auth status
   register: chezmoi_setup_gh_auth
-  when: not chezmoi_setup_source.stat.exists
   become: false
   changed_when: false
   failed_when: false
@@ -68,34 +61,39 @@
   ansible.builtin.assert:
     that: chezmoi_setup_gh_auth.rc == 0
     fail_msg: >-
-      Cannot clone {{ chezmoi_setup_repo }} — it is private and this host has no GitHub
+      Cannot reach {{ chezmoi_setup_repo }} — it is private and this host has no GitHub
       credential. Run `gh auth login` once, by hand, on {{ inventory_hostname }}, then
       re-run this play. (The github_cli role installs gh and sets the credential helper,
       but the login itself is interactive.)
-  when: not chezmoi_setup_source.stat.exists
+
+- name: Seed the chezmoi config data so init never needs a TTY
+  tags: [chezmoi]
+  # promptBoolOnce/promptStringOnce only prompt when the value is absent from the config
+  # data, so seeding the two answers is what makes a non-interactive init possible. The
+  # --promptBool/--promptString flags do NOT cover this: they were passed on daniel-box
+  # (chezmoi v2.71.1) and init prompted anyway, dying on "could not open a new TTY".
+  #
+  # force: false — once init has rendered the real config from .chezmoi.toml.tmpl, this
+  # must not clobber it on every later run.
+  ansible.builtin.template:
+    src: chezmoi-seed.toml.j2
+    dest: /home/{{ sys_user }}/.config/chezmoi/chezmoi.toml
+    mode: "0644"
+    force: false
+  become: false
 
 - name: Initialise chezmoi from the dotfiles repo and apply
   tags: [chezmoi]
-  # --promptBool/--promptString answer the promptBoolOnce/promptStringOnce calls in
-  # .chezmoi.toml.tmpl. Without them init would block on a TTY Ansible hasn't provided.
-  # Only on first run: after this the answers live in ~/.config/chezmoi/chezmoi.toml and
-  # re-passing them would silently overwrite a value changed by hand on the host.
+  # Unconditional rather than gated on the source directory being absent. A failed init
+  # leaves a COMPLETE clone but no rendered config (exactly what happened on daniel-box:
+  # the clone succeeded, then the config template hit the TTY error). Gating on the source
+  # would then skip init forever and fall through to a bare `apply`, running without the
+  # umask pin and [interpreters.sh] that .chezmoi.toml.tmpl provides. Re-running init is
+  # safe and re-renders the full config, so the role self-heals instead of needing a
+  # manual rm of the partial state.
   ansible.builtin.command:
     cmd: >-
       /home/{{ sys_user }}/.local/bin/chezmoi init {{ chezmoi_setup_repo }} --apply
-      --promptBool work={{ chezmoi_setup_work | lower }}
-      --promptString profile={{ chezmoi_setup_profile }}
-  when: not chezmoi_setup_source.stat.exists
+  register: chezmoi_setup_init
   become: false
-  changed_when: true
-
-- name: Apply chezmoi
-  tags: [chezmoi]
-  # Idempotent by design: chezmoi prints the targets it changed and nothing when the
-  # destination already matches the source, so an unchanged run reports ok.
-  ansible.builtin.command:
-    cmd: "/home/{{ sys_user }}/.local/bin/chezmoi apply"
-  when: chezmoi_setup_source.stat.exists
-  register: chezmoi_setup_apply
-  become: false
-  changed_when: chezmoi_setup_apply.stdout | length > 0
+  changed_when: chezmoi_setup_init.stdout | length > 0
