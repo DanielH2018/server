@@ -21,6 +21,11 @@
     - { role: sops_setup, tags: ["sops_setup"] }
     - { role: docker_install, tags: ["docker_install"] }
     - { role: gitops_deploy, tags: ["gitops_deploy"], when: has_gitops }
+    # Per-user, become: false throughout — they manage the connecting user's home, not
+    # root's. Placed after docker_install so the OS is fully set up before the dotfiles
+    # land on top of it.
+    - { role: chezmoi_setup, tags: ["chezmoi"], when: has_chezmoi }
+    - { role: claude_code, tags: ["claude_code"], when: has_claude_code }
     - { role: renovate_notify, tags: ["renovate_notify"], when: inventory_hostname == renovate_notify_host }
     - { role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == 'daniel-pi' }
   handlers:

@@ -1,0 +1,46 @@
+---
+# Claude Code is a per-user install (binary under ~/.local/share/claude, launcher symlinked
+# at ~/.local/bin/claude), so like chezmoi_setup every task runs become: false. Installing
+# it as root would put it in /root and leave the real user without it.
+#
+# Deliberately the native installer rather than the apt repo Anthropic also publishes: it
+# matches daniel-server, needs no root, and auto-updates in the background. The apt route
+# would need elevation and would not auto-update.
+
+- name: Install Claude Code
+  tags: [claude_code]
+  # `creates` makes this run-once. The native installer manages ~/.local/bin/claude as a
+  # symlink into ~/.local/share/claude/versions/ and updates itself thereafter, so
+  # re-running the installer on every play would fight its own updater.
+  ansible.builtin.shell:
+    cmd: curl -fsSL https://claude.ai/install.sh | bash
+    creates: "{{ ansible_env.HOME }}/.local/bin/claude"
+  become: false
+
+- name: Report the Claude Code version
+  tags: [claude_code]
+  ansible.builtin.command:
+    cmd: "{{ ansible_env.HOME }}/.local/bin/claude --version"
+  register: claude_code_version
+  become: false
+  changed_when: false
+
+- name: Check whether Claude Code has been authenticated
+  tags: [claude_code]
+  # ~/.claude/.credentials.json is written by an interactive `claude login` and holds a
+  # refreshing OAuth token. It is per-machine and per-user: it cannot be templated from
+  # SOPS, and copying one between hosts would be sharing a credential rather than
+  # provisioning one. So this role installs everything EXCEPT the login.
+  ansible.builtin.stat:
+    path: "{{ ansible_env.HOME }}/.claude/.credentials.json"
+  register: claude_code_credentials
+  become: false
+
+- name: Report that an interactive login is still required
+  tags: [claude_code]
+  ansible.builtin.debug:
+    msg: >-
+      Claude Code {{ claude_code_version.stdout }} is installed, but this host has no
+      ~/.claude/.credentials.json. Log in once, by hand, on {{ inventory_hostname }}:
+      run `claude` and follow the browser prompt. Ansible cannot do this step.
+  when: not claude_code_credentials.stat.exists
