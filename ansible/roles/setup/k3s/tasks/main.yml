@@ -74,9 +74,11 @@
 - name: Read the node's registered internal IP
   tags: [k3s_server]
   ansible.builtin.command:
+    # Single-quoted deliberately: the command module shlex-splits cmd, which would
+    # otherwise strip the quotes around "InternalIP" and leave an invalid jsonpath.
     cmd: >-
       k3s kubectl get node -o
-      jsonpath={.items[0].status.addresses[?(@.type=="InternalIP")].address}
+      jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'
   register: k3s_node_ip
   become: true
   changed_when: false
