@@ -42,8 +42,19 @@ repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
 - **`become: false` user resolution (task 3) is deliberate** — under the play's `become: true`,
   `ansible_facts.env.USER` is `root`; the user who actually runs `docker` is the unprivileged
   connecting user, so membership is resolved with `become: false`.
+- **The GPG key is fetched ASCII-armored to `/etc/apt/keyrings/docker.asc` and never
+  dearmored.** apt reads armored keys referenced by `Signed-By` (this is what Docker's own
+  install docs do). Do **not** reintroduce `gpg --dearmor` via `command`: that creates the
+  file under root's umask, which [[initial_setup]] tightens to `027` *earlier in the same
+  play*. On a fresh host the keyring landed `0640`, apt fetches as the unprivileged `_apt`
+  user, couldn't read it, and reported the repo as **unsigned** — failing `initial_setup.yml`
+  at the cache refresh, one task before Docker would have installed (daniel-box, 2026-08-01).
+  Existing hosts never showed it: their keyring predates the umask change and a `creates:`
+  guard stopped it being rewritten, so the bug was invisible until the next fresh host.
+  `ansible/tests/test_apt_keyring_permissions.py` is the regression guard.
 - **deb822 migration** (commit `fee21f9`) is shared with [[optimize_pi]]'s Log2Ram repo —
-  both need `python3-debian` and both clean up the legacy `.list`.
+  both need `python3-debian` and both clean up the legacy `.list`. optimize_pi already used
+  the correct idiom (`get_url` with an explicit `mode:`); this role now matches it.
 - Networks are created here once; container roles only *attach* (see the `networks.yml.j2`
   macro). Adding a new shared network means editing the `loop:` here.
 - **`live-restore` covers every container EXCEPT the `network_mode: service:wireguard` pair.** A
