@@ -2,6 +2,12 @@
 # chezmoi manages a USER's home directory, so every task here runs as the connecting
 # user with become: false. The play sets become: true for OS hardening; inheriting it
 # would deploy the dotfiles into /root instead.
+#
+# The home directory is /home/{{ sys_user }}, NOT ansible_env.HOME. ansible_env reports
+# the environment of the user facts were GATHERED as, and initial_setup.yml gathers them
+# escalated (its setup: pre_task runs under the play's become: true) — so ansible_env.HOME
+# is /root even inside a become: false task. Using it here failed on daniel-box with
+# "Permission denied: /root/.local". Same reason config_files hardcodes the path.
 
 - name: Ensure the per-user directories exist
   tags: [chezmoi]
@@ -10,8 +16,8 @@
     state: directory
     mode: "0755"
   loop:
-    - "{{ ansible_env.HOME }}/.local/bin"
-    - "{{ ansible_env.HOME }}/.local/share/installers"
+    - "/home/{{ sys_user }}/.local/bin"
+    - "/home/{{ sys_user }}/.local/share/installers"
   become: false
 
 - name: Download the chezmoi installer
@@ -21,7 +27,7 @@
   # re-fetched, so this is quiet on re-runs.
   ansible.builtin.get_url:
     url: https://get.chezmoi.io
-    dest: "{{ ansible_env.HOME }}/.local/share/installers/chezmoi-install.sh"
+    dest: "/home/{{ sys_user }}/.local/share/installers/chezmoi-install.sh"
     mode: "0755"
   become: false
 
@@ -31,16 +37,16 @@
   # chezmoi is a deliberate act, not a side effect of every play.
   ansible.builtin.command:
     cmd: >-
-      {{ ansible_env.HOME }}/.local/share/installers/chezmoi-install.sh
-      -b {{ ansible_env.HOME }}/.local/bin
+      /home/{{ sys_user }}/.local/share/installers/chezmoi-install.sh
+      -b /home/{{ sys_user }}/.local/bin
   args:
-    creates: "{{ ansible_env.HOME }}/.local/bin/chezmoi"
+    creates: "/home/{{ sys_user }}/.local/bin/chezmoi"
   become: false
 
 - name: Check whether chezmoi has a source directory yet
   tags: [chezmoi]
   ansible.builtin.stat:
-    path: "{{ ansible_env.HOME }}/.local/share/chezmoi/.git"
+    path: "/home/{{ sys_user }}/.local/share/chezmoi/.git"
   register: chezmoi_setup_source
   become: false
 
@@ -52,7 +58,7 @@
   # re-passing them would silently overwrite a value changed by hand on the host.
   ansible.builtin.command:
     cmd: >-
-      {{ ansible_env.HOME }}/.local/bin/chezmoi init {{ chezmoi_setup_repo }} --apply
+      /home/{{ sys_user }}/.local/bin/chezmoi init {{ chezmoi_setup_repo }} --apply
       --promptBool work={{ chezmoi_setup_work | lower }}
       --promptString profile={{ chezmoi_setup_profile }}
   when: not chezmoi_setup_source.stat.exists
@@ -64,7 +70,7 @@
   # Idempotent by design: chezmoi prints the targets it changed and nothing when the
   # destination already matches the source, so an unchanged run reports ok.
   ansible.builtin.command:
-    cmd: "{{ ansible_env.HOME }}/.local/bin/chezmoi apply"
+    cmd: "/home/{{ sys_user }}/.local/bin/chezmoi apply"
   when: chezmoi_setup_source.stat.exists
   register: chezmoi_setup_apply
   become: false
