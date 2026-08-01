@@ -3,8 +3,11 @@
 # Plan: docs/k3s-migration/slice-0-cluster-foundation.md
 #
 # Run ON daniel-box (the play's hosts: defaults to the local hostname, same as deploy.yml):
-#   uv run ansible-playbook ansible/k3s-bringup.yml --check   # dry run first
 #   uv run ansible-playbook ansible/k3s-bringup.yml
+#
+# Do NOT trust `--check` here: nearly every task is ansible.builtin.command, which check
+# mode skips rather than simulates, so a dry run reports green having proved nothing. The
+# fail-closed guards below (daniel-box only, no Docker) are the real safety net.
 #
 # Deliberately a separate playbook rather than a role in initial_setup.yml: that playbook
 # runs on every host, and k3s must not land on daniel-server until slice 7.

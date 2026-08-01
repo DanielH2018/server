@@ -309,13 +309,14 @@ Infrastructure, not software — there is no failing-test-first cycle for an ins
 > **Tasks 4–7 are implemented as `ansible/k3s-bringup.yml` + `roles/setup/k3s`.** Run that rather than pasting the shell below:
 >
 > ```bash
-> uv run ansible-playbook ansible/k3s-bringup.yml --check   # dry run first
 > uv run ansible-playbook ansible/k3s-bringup.yml
 > ```
 >
 > It must be run **on daniel-box** — the play asserts `inventory_hostname == 'daniel-box'` and refuses to run anywhere else. The shell steps below remain the reference for what each stage does and how to verify it by hand.
 >
-> **This playbook has never been executed.** It was authored from an agent session, where a guard blocks `sudo` inside remote commands, so every claim in it is unverified against a real cluster. Dry-run it first and expect to fix something.
+> **`--check` is close to useless here, and you should not rely on it.** Nearly every task is `ansible.builtin.command`, which check mode *skips* rather than simulates. A dry run therefore skips the k3s install, then skips the node-Ready wait and every `kubectl` task that depended on it, and reports green having proved nothing. Adding `check_mode: false` to "fix" that would make a dry run genuinely install k3s, which is worse. The meaningful first run is the real one, on an empty host, where the two fail-closed guards are the actual safety net.
+>
+> **This playbook has never been executed.** It was authored from an agent session where a guard blocks `sudo` inside remote commands, so every claim in it is unverified against a real cluster. Expect to fix something on the first run.
 
 - [ ] **Step 1: Confirm the host is still clean**
 

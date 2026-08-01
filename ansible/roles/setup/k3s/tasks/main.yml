@@ -163,9 +163,16 @@
   tags: [longhorn_backup]
   # Longhorn's S3 target is s3://<bucket>@<region>/<prefix>; Kopia stores a hostname.
   # Derived rather than duplicated so the two can't drift apart in SOPS.
+  # Deliberately not the capture-group form of regex_search: on no match it returns None,
+  # and `None | first` raises a Jinja error before any default can catch it — so a bad
+  # endpoint would blow up here instead of hitting the assert below with a usable message.
+  # Search-then-replace degrades to an empty string instead, which the assert reports.
   ansible.builtin.set_fact:
     k3s_longhorn_b2_region: >-
-      {{ kopia_b2_endpoint | regex_search('s3\.([a-z0-9-]+)\.backblazeb2\.com', '\1') | first | default('', true) }}
+      {{ kopia_b2_endpoint
+         | regex_search('s3\.[a-z0-9-]+\.backblazeb2\.com')
+         | default('', true)
+         | regex_replace('^s3\.([a-z0-9-]+)\.backblazeb2\.com$', '\1') }}
 
 - name: Fail if the B2 region could not be derived
   tags: [longhorn_backup]
