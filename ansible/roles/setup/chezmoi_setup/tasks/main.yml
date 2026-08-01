@@ -66,6 +66,18 @@
       re-run this play. (The github_cli role installs gh and sets the credential helper,
       but the login itself is interactive.)
 
+- name: Install the distro packages the dotfiles scripts cannot install themselves
+  tags: [chezmoi]
+  # become: true is the exception in this role. install-cli-tools.sh shells out to sudo for
+  # these, but sudo has no TTY under Ansible and ubuntu has no NOPASSWD, so the script
+  # defers them and exits 1 — which, being a run_once_after script, means chezmoi never
+  # records success and retries the failure on every later apply. Ansible already has the
+  # become password from SOPS, so it does the job the script cannot.
+  ansible.builtin.apt:
+    name: "{{ chezmoi_setup_distro_packages }}"
+    state: present
+  become: true
+
 - name: Seed the chezmoi config data so init never needs a TTY
   tags: [chezmoi]
   # promptBoolOnce/promptStringOnce only prompt when the value is absent from the config

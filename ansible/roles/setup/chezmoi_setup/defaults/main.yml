@@ -10,3 +10,20 @@ chezmoi_setup_repo: https://github.com/DanielH2018/dotfiles.git
 # run_once_after_install-cli-tools script — a substantial package install on first apply.
 chezmoi_setup_profile: server
 chezmoi_setup_work: false
+
+# Distro packages the dotfiles' install-cli-tools.sh wants but cannot install itself on a
+# non-interactive host: it shells out to sudo, which has no TTY under Ansible and no
+# NOPASSWD here, so it defers them and exits 1. Ansible already holds the become password
+# from SOPS, so it installs them properly and the script then finds them present.
+# Mirrors the PKGS list in .chezmoiscripts/os-linux/run_once_after_install-cli-tools.sh.tmpl.
+chezmoi_setup_distro_packages:
+  - bat
+  - fd-find
+  - gron
+  - shellcheck
+  - lua5.4
+  - btop
+  - chafa
+  - zsh
+  - zsh-autosuggestions
+  - zsh-syntax-highlighting
