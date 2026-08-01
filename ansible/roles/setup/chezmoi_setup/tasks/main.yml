@@ -3,20 +3,37 @@
 # user with become: false. The play sets become: true for OS hardening; inheriting it
 # would deploy the dotfiles into /root instead.
 
-- name: Ensure ~/.local/bin exists
+- name: Ensure the per-user directories exist
   tags: [chezmoi]
   ansible.builtin.file:
-    path: "{{ ansible_env.HOME }}/.local/bin"
+    path: "{{ item }}"
     state: directory
+    mode: "0755"
+  loop:
+    - "{{ ansible_env.HOME }}/.local/bin"
+    - "{{ ansible_env.HOME }}/.local/share/installers"
+  become: false
+
+- name: Download the chezmoi installer
+  tags: [chezmoi]
+  # Fetched to a user-owned directory rather than /tmp: this script is executed, and /tmp
+  # is world-writable. get_url's default force: false means an existing copy is not
+  # re-fetched, so this is quiet on re-runs.
+  ansible.builtin.get_url:
+    url: https://get.chezmoi.io
+    dest: "{{ ansible_env.HOME }}/.local/share/installers/chezmoi-install.sh"
     mode: "0755"
   become: false
 
 - name: Install the chezmoi binary
   tags: [chezmoi]
-  # Official installer, pinned to ~/.local/bin to match daniel-server. `creates` makes it
-  # run-once; chezmoi upgrades are a deliberate act, not a side effect of every play.
-  ansible.builtin.shell:
-    cmd: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "{{ ansible_env.HOME }}/.local/bin"
+  # Pinned to ~/.local/bin to match daniel-server. `creates` makes it run-once; upgrading
+  # chezmoi is a deliberate act, not a side effect of every play.
+  ansible.builtin.command:
+    cmd: >-
+      {{ ansible_env.HOME }}/.local/share/installers/chezmoi-install.sh
+      -b {{ ansible_env.HOME }}/.local/bin
+  args:
     creates: "{{ ansible_env.HOME }}/.local/bin/chezmoi"
   become: false
 
@@ -24,7 +41,7 @@
   tags: [chezmoi]
   ansible.builtin.stat:
     path: "{{ ansible_env.HOME }}/.local/share/chezmoi/.git"
-  register: chezmoi_source
+  register: chezmoi_setup_source
   become: false
 
 - name: Initialise chezmoi from the dotfiles repo and apply
@@ -35,10 +52,10 @@
   # re-passing them would silently overwrite a value changed by hand on the host.
   ansible.builtin.command:
     cmd: >-
-      {{ ansible_env.HOME }}/.local/bin/chezmoi init {{ chezmoi_repo }} --apply
-      --promptBool work={{ chezmoi_work | lower }}
-      --promptString profile={{ chezmoi_profile }}
-  when: not chezmoi_source.stat.exists
+      {{ ansible_env.HOME }}/.local/bin/chezmoi init {{ chezmoi_setup_repo }} --apply
+      --promptBool work={{ chezmoi_setup_work | lower }}
+      --promptString profile={{ chezmoi_setup_profile }}
+  when: not chezmoi_setup_source.stat.exists
   become: false
   changed_when: true
 
@@ -48,7 +65,7 @@
   # destination already matches the source, so an unchanged run reports ok.
   ansible.builtin.command:
     cmd: "{{ ansible_env.HOME }}/.local/bin/chezmoi apply"
-  when: chezmoi_source.stat.exists
-  register: chezmoi_apply
+  when: chezmoi_setup_source.stat.exists
+  register: chezmoi_setup_apply
   become: false
-  changed_when: chezmoi_apply.stdout | length > 0
+  changed_when: chezmoi_setup_apply.stdout | length > 0

@@ -1,5 +1,5 @@
 ---
-chezmoi_repo: https://github.com/DanielH2018/dotfiles.git
+chezmoi_setup_repo: https://github.com/DanielH2018/dotfiles.git
 
 # Answers to the two promptOnce functions in the dotfiles' .chezmoi.toml.tmpl. Passed on
 # the command line so `chezmoi init` never blocks waiting for a TTY that Ansible has not
@@ -8,5 +8,5 @@ chezmoi_repo: https://github.com/DanielH2018/dotfiles.git
 # profile: workstation|server = full tooling; minimal = resource-constrained (the Pi).
 # "server" matches daniel-server and pulls the full Linux CLI toolchain via the
 # run_once_after_install-cli-tools script — a substantial package install on first apply.
-chezmoi_profile: server
-chezmoi_work: false
+chezmoi_setup_profile: server
+chezmoi_setup_work: false

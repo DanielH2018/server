@@ -7,13 +7,33 @@
 # matches daniel-server, needs no root, and auto-updates in the background. The apt route
 # would need elevation and would not auto-update.
 
+- name: Ensure the installer directory exists
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/.local/share/installers"
+    state: directory
+    mode: "0755"
+  become: false
+
+- name: Download the Claude Code installer
+  tags: [claude_code]
+  # Fetched to a user-owned directory rather than piped straight into a shell: the script
+  # is executed, so it should land somewhere world-writable code cannot have tampered with
+  # it first, and it stays inspectable after the fact.
+  ansible.builtin.get_url:
+    url: https://claude.ai/install.sh
+    dest: "{{ ansible_env.HOME }}/.local/share/installers/claude-install.sh"
+    mode: "0755"
+  become: false
+
 - name: Install Claude Code
   tags: [claude_code]
   # `creates` makes this run-once. The native installer manages ~/.local/bin/claude as a
   # symlink into ~/.local/share/claude/versions/ and updates itself thereafter, so
   # re-running the installer on every play would fight its own updater.
-  ansible.builtin.shell:
-    cmd: curl -fsSL https://claude.ai/install.sh | bash
+  ansible.builtin.command:
+    cmd: bash {{ ansible_env.HOME }}/.local/share/installers/claude-install.sh
+  args:
     creates: "{{ ansible_env.HOME }}/.local/bin/claude"
   become: false
 
