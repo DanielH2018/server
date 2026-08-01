@@ -1,175 +1,184 @@
 # daniel-box handoff — 2026-08-01
 
-Written to hand off to a Claude session running **on the server**. Everything below was
-verified on the hosts unless explicitly marked otherwise.
+Written for a Claude session running **on the server**. Everything below was verified on the
+host unless explicitly marked otherwise.
 
-Two independent workstreams ran today: the **k3s migration** (slice 0) and the **developer
-environment** (chezmoi + Claude Code). They share a host but nothing else.
+Host: **daniel-box**, 10.0.0.215, Ubuntu 24.04, Ryzen 7 8845HS / Radeon 780M, 914 G root FS.
 
 ---
 
-## 1. Where daniel-box actually is
+## 1. Two things need a decision before more work
 
-**Hardware / role.** 10.0.0.215, Ubuntu 24.04, Ryzen 7 8845HS (8c/16t), 914 G root FS with
-~864 G free. Now the k3s control plane.
+### 1a. Docker is now installed on the k3s control-plane node
 
-**Verified working:**
+A full `initial_setup.yml` run (no `--tags`) at 18:56 installed Docker and created 12 bridge
+networks. Both `docker` and `k3s` report `active`.
 
-| Thing | State |
+This was explicitly what the migration's slice ordering was designed to prevent: k3s ships its
+own containerd plus flannel/kube-proxy iptables rules, and daniel-box was chosen to go first
+*because it had no container runtime*. See `docs/k3s-migration/slice-0-cluster-foundation.md`.
+
+Consequences:
+
+- Docker's `DOCKER`/`DOCKER-USER` chains and FORWARD-policy handling now sit alongside k3s
+  networking on the same host. Coexistence often works, but it is the exact interaction the
+  plan deferred to slice 7 so it could be dealt with deliberately.
+- `roles/setup/k3s` has a fail-closed guard (`Refuse to run on a host that already runs Docker
+  containers`) that now **fails on this host**. Re-running `ansible/k3s-bringup.yml` will stop.
+
+**Decide:** remove Docker from daniel-box to restore a clean k3s node, or accept coexistence
+and drop that guard. If removing, `has_chezmoi`/`has_claude_code` runs must be scoped with
+`--tags` so `docker_install` does not simply reinstall it — that is how it arrived.
+
+Nothing here is on fire; k3s is still running. But do not treat it as the intended state.
+
+### 1b. Claude Code is not installed
+
+`/home/ubuntu/.local/bin/claude` does not exist, and `~/.local/share/installers/` contains only
+`chezmoi-install.sh`. The `claude_code` role has never executed — `chezmoi_setup` fails first
+and aborts the play. Not a PATH problem.
+
+---
+
+## 2. The immediate blocker
+
+`chezmoi init --apply` fails:
+
+```
+stdout: ".bashrc has changed since chezmoi last wrote it?"
+stderr: chezmoi: .bashrc: could not open a new TTY: open /dev/tty: no such device or address
+```
+
+The uv installer appends to `~/.bashrc` (it says so: "The installer edits ~/.bashrc for FUTURE
+shells"), so chezmoi sees a modified target and wants to prompt before overwriting. Ansible has
+no TTY.
+
+**Likely fix**, untested: add `--force` to the init in `roles/setup/chezmoi_setup/tasks/main.yml`.
+
+```yaml
+cmd: >-
+  /home/{{ sys_user }}/.local/bin/chezmoi init {{ chezmoi_setup_repo }} --apply --force
+```
+
+Consider this carefully rather than pasting it: `--force` overwrites *every* locally-modified
+target without asking, on every run. That is usually right for a machine whose home directory is
+declared by the dotfiles repo, and wrong if anything on the host legitimately hand-edits a
+managed file. A narrower alternative is to resolve the `.bashrc` drift once by hand and leave
+the role prompt-free.
+
+---
+
+## 3. What is already working
+
+| Component | State |
 |---|---|
-| k3s | Single-node cluster, embedded etcd (`--cluster-init`), Traefik + servicelb disabled |
+| k3s | Single-node cluster, control-plane, embedded etcd (`--cluster-init`) |
 | MetalLB | Installed, pool `10.0.0.240-250` |
-| Longhorn | Installed, `default-replica-count: 1`, backup target → B2 (`daniel-server-kopia`, prefix `longhorn/`) |
-| Docker | **Not installed, deliberately** — k3s brings its own containerd |
-| `gh` | Installed + authenticated as DanielH2018 |
-| chezmoi | Installed at `~/.local/bin/chezmoi`, dotfiles cloned and applied |
+| Longhorn | Installed, **1 replica** (2 nodes not yet joined) |
+| Longhorn backup | Target set to B2, `backuptarget default` reported `available: true` |
+| `gh` | Installed, authenticated as DanielH2018, `credential.helper = !gh auth git-credential` |
+| chezmoi | Binary installed; dotfiles cloned and applied |
 | CLI tools | node, eza, fastfetch, curlie, sd, starship, fzf, zoxide, rg, gron, nvim, yazi |
-| Claude Code | **Not yet installed** — the play never reached that role |
-
-**`containers_list` is `[]`.** Nothing Docker-shaped runs here and nothing should; the
-GitOps timer is a no-op while that list is empty. Anything landing here is `platform: k8s`.
+| Distro packages | bat, fd-find, gron, shellcheck, lua5.4, btop, chafa, zsh + plugins |
+| Docker | Installed (see §1a) |
 
 ---
 
-## 2. Next steps — all need a TTY
+## 4. Next steps, in order
 
-Every remaining step needs a real terminal, because `sudo` must be able to prompt and
-`claude login` is interactive. Run them **on daniel-box**:
+All of these need a TTY, which is why they were not done from an agent session.
 
-```bash
-ssh -t daniel-box
-cd ~/server && git pull
-
-# 1. Finish the dev environment. Should now clear chezmoi_setup (packages installed by
-#    Ansible, gh_ready fixed) and reach claude_code.
-~/.local/bin/uv run ansible-playbook ansible/initial_setup.yml --tags chezmoi,claude_code
-
-# 2. Let install-cli-tools.sh add the WezTerm repo itself — this is the one step that
-#    needs sudo to prompt. After it succeeds the script finally records success and stops
-#    retrying on every apply.
-chezmoi apply
-
-# 3. Claude Code auth. Deliberately not automated: ~/.claude/.credentials.json is a
-#    refreshing per-machine OAuth token that cannot be templated from SOPS.
-claude login
-
-# 4. The .chezmoiignore fix stops chezmoi MANAGING this file but does not delete the copy
-#    already deployed. Remove it once.
-rm ~/.ssh/config
-```
-
-### Then verify
-
-```bash
-claude --version                 # expect 2.1.x
-chezmoi status                   # expect empty
-gh auth status                   # expect logged in as DanielH2018
-```
+1. **Resolve §1a** — decide Docker's fate on this host.
+2. **Fix the chezmoi TTY blocker** (§2), then:
+   ```bash
+   cd ~/server && git pull
+   uv run ansible-playbook ansible/initial_setup.yml --tags chezmoi,claude_code
+   ```
+   Use `--tags`. A bare run reinstalls Docker.
+3. **`chezmoi apply`** in an interactive shell, so `install-cli-tools.sh` can sudo and add the
+   WezTerm repo. Until then it exits 1 and, being `run_once_after`, retries every apply.
+4. **`claude login`** once `claude_code` has installed the binary.
+5. **`rm ~/.ssh/config`** — the `.chezmoiignore` fix (dotfiles PR #157, merged) stops chezmoi
+   *managing* that file here, but does not delete the copy already deployed.
 
 ---
 
-## 3. Outstanding work
+## 5. Slice 0 exit criteria still unproven
 
-### 3a. k3s slice 0 — three exit criteria unproven
+From `docs/k3s-migration/slice-0-cluster-foundation.md`. The bring-up playbook asserts node
+readiness, the etcd datastore, and the absence of bundled Traefik/servicelb — all passed. These
+three were deliberately left for a human:
 
-The bring-up playbook asserts node readiness, the etcd datastore, and the absence of the
-bundled Traefik/servicelb. It deliberately does **not** assert these three, and they are
-the ones that matter:
+1. A LoadBalancer Service gets a pool IP **and answers from another machine on the LAN**. The
+   ARP/L2 half is what silently fails.
+2. A Longhorn PVC reaches `Bound`.
+3. **An object is actually written to B2.** `available: true` proves credentials and
+   reachability, *not* that anything was stored. Only listing the bucket settles it — and
+   "backup reports success while storing nothing" is the specific failure slice 0 exists to
+   prevent.
 
-1. **A LoadBalancer Service gets a pool IP and answers over L2 from another machine.**
-   Allocation is not the hard part; ARP reaching the LAN is.
-2. **A Longhorn PVC reaches `Bound`.**
-3. **An object is genuinely written to B2.** `backuptarget.status.available: true` proves
-   credentials and reachability, *not* that anything was stored.
-
-Criterion 3 is the one not to skip — "a backup system that reports success while storing
-nothing" is the exact failure slice 0 exists to prevent, and it is a hard precondition for
-slice 1. See `docs/k3s-migration/slice-0-cluster-foundation.md` §Task 7.
+One command covers 1 and 2:
 
 ```bash
 sudo k3s kubectl create deploy smoke --image=traefik/whoami
 sudo k3s kubectl expose deploy smoke --port=80 --type=LoadBalancer
-sudo k3s kubectl get svc smoke                      # EXTERNAL-IP must not be <pending>
-# then, FROM ANOTHER MACHINE:  curl -s --max-time 5 http://<EXTERNAL-IP>/
-sudo k3s kubectl delete deploy/smoke svc/smoke
+printf 'apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: smoke-pvc\nspec:\n  accessModes: [ReadWriteOnce]\n  storageClassName: longhorn\n  resources:\n    requests:\n      storage: 1Gi\n' | sudo k3s kubectl apply -f -
+sleep 25
+sudo k3s kubectl get svc smoke pvc/smoke-pvc
 ```
 
-Record the outcomes under a "Slice 0 results" heading in the slice-0 plan — the next
-slice's author needs to know what was observed, not what was intended.
-
-### 3b. MCP wiring — agreed scope, deferred
-
-Was in scope for the dev-environment work and deliberately left out rather than guessed.
-MCP servers live in `~/.claude.json`, which is machine-local and **not** chezmoi-managed,
-and daniel-server's working config could not be read (it holds tokens). `homelab_mcp_token`
-is already in SOPS, so the credential half is ready — what is missing is the confirmed
-endpoint and header format for `homelab-mcp`.
-
-Easiest path now: on daniel-server, inspect how its `homelab` MCP server is registered,
-then reproduce it on daniel-box with `claude mcp add`.
-
-### 3c. Telemetry — out of scope by decision
-
-daniel-server's `otel-collector` binds OTLP to its own loopback, and daniel-box has no
-Docker to run one. Revisit when the k3s monitoring cluster lands (slice 3).
+Then `curl http://<EXTERNAL-IP>/` **from a different machine**, and clean up with
+`sudo k3s kubectl delete deploy/smoke svc/smoke pvc/smoke-pvc`.
 
 ---
 
-## 4. Traps found the hard way
+## 6. Traps already paid for — do not rediscover these
 
-Each of these cost a round-trip. They are recorded so they are not rediscovered.
-
-**`ansible_env.HOME` is `/root`, even in a `become: false` task.** `ansible_env` reports the
-environment of the user facts were *gathered* as, and `initial_setup.yml` gathers escalated
-on purpose. Use `/home/{{ sys_user }}`. Guarded by
-`ansible/tests/test_per_user_home_resolution.py`.
-
-**`gpg --dearmor` via `command` inherits root's umask.** `initial_setup` sets `UMASK 027`
-earlier in the same play, so the keyring landed 0640; apt fetches as the unprivileged `_apt`
-user and reports the repo *unsigned*. This failed `initial_setup.yml` one task before Docker
-would have installed, and was invisible on daniel-server because its keyring predates the
-umask change. Fetch armored keys with `get_url` and an explicit `mode`. Guarded by
-`ansible/tests/test_apt_keyring_permissions.py`.
-
-**chezmoi's `--promptBool`/`--promptString` do not satisfy `promptBoolOnce`.** They were
-passed and init prompted anyway (v2.71.1). `promptXxxOnce` only skips when the value is
-already in the config *data*, so the config is seeded before init.
-
-**`DanielH2018/dotfiles` is private; `DanielH2018/server` is public.** That asymmetry is why
-`git pull` works on daniel-box while `chezmoi init` failed. Cloning needs
-`credential.helper = !gh auth git-credential`.
-
-**A failed `chezmoi init` leaves a complete clone but no rendered config.** Gating init on
-"source directory absent" would then skip it forever and fall through to a bare `apply`
-running without the `umask` pin and `[interpreters.sh]`. `init --apply` is therefore
-unconditional.
-
-**Privileged remote commands are blocked from agent sessions.** A guard refuses `sudo`
-inside `ssh`. This is why every fix above was authored blind and validated one round-trip at
-a time — a session running *on* the host does not have that constraint, which is the main
-reason this handoff exists.
+- **`ansible_env.HOME` is `/root`.** `initial_setup.yml` gathers facts escalated on purpose, so
+  `ansible_env` reflects root even inside a `become: false` task. Use `/home/{{ sys_user }}`.
+  Guarded by `ansible/tests/test_per_user_home_resolution.py`.
+- **APT keyrings must set an explicit mode.** `initial_setup` sets `UMASK 027`; a keyring created
+  by a `command` (e.g. `gpg --dearmor`) lands 0640, and apt's unprivileged `_apt` user then
+  reports the repo as *unsigned*. This silently broke Docker's install for weeks. Guarded by
+  `ansible/tests/test_apt_keyring_permissions.py`.
+- **`DanielH2018/dotfiles` is private**; `DanielH2018/server` is public. That asymmetry hid the
+  missing credential until chezmoi tried to clone.
+- **chezmoi's `--promptBool`/`--promptString` do not satisfy `promptBoolOnce`/`promptStringOnce`.**
+  Seed the answers into `~/.config/chezmoi/chezmoi.toml` before init instead — that is what the
+  role's `chezmoi-seed.toml.j2` does.
+- **Kopia backs up host bind paths to B2.** When service config moves onto Longhorn PVs, that
+  path still exists but is empty of live data, so Kopia keeps *reporting success while backing
+  up nothing*. Every migration slice must confirm data in its new backup path before the Docker
+  copy is retired.
+- **`peanut` publishes upsd on `127.0.0.1:3493`** — loopback only. Home Assistant cannot reach
+  it from another host until that publish is widened, which is a security-relevant change to a
+  shutdown-critical service.
+- **`except OSError, yaml.YAMLError:` in `filter_plugins/toposort.py` is valid**, not a bug —
+  Python 3.14 (PEP 758) allows unparenthesized exception groups. It only looks broken under an
+  older interpreter.
 
 ---
 
-## 5. Security notes worth revisiting
+## 7. Deferred work
 
-**`gh auth login` stored a plaintext token.** No keyring on a headless host, so
-`~/.config/gh/hosts.yml` holds a **full-scope GitHub user token in plaintext**. Anyone who
-gets `ubuntu` on daniel-box gets the GitHub account. A read-only deploy key scoped to the
-dotfiles repo would be tighter; it was rejected only to match daniel-server. Worth
-revisiting if daniel-box's exposure changes.
-
-**Resilience is asymmetric and currently absent.** Longhorn runs at 1 replica until
-daniel-server joins the cluster in slice 7. Until then B2 is the only durability story, and
-losing daniel-box loses the control plane outright.
+- **MCP wiring for Claude Code on daniel-box.** Agreed in scope, never implemented. MCP servers
+  live in `~/.claude.json`, which is machine-local and not chezmoi-managed. `homelab_mcp_token`
+  is already in SOPS. Confirm the real endpoint against a working config rather than guessing.
+- **Telemetry** — deliberately skipped. daniel-server's otel-collector binds OTLP to its own
+  loopback for Claude Code on *that* host.
+- **`gh` token is stored in plaintext** at `~/.config/gh/hosts.yml` (no keyring on a headless
+  box) and carries full account scope. A read-only deploy key for the dotfiles repo would be
+  tighter; it diverges from daniel-server, which is why it was not chosen.
+- **Longhorn stays at 1 replica** until daniel-server joins at slice 7. Failover does not exist
+  before then — resilience arrives last in this ordering, by design.
 
 ---
 
-## 6. Landed today
+## 8. Landed this session
 
-Server repo: **#46** (k3s slice 0 + `platform` key), **#47** (Docker keyring umask fix),
-**#48** (chezmoi + claude_code roles), **#49** (per-user home resolution), **#50**
-(`github_cli` role), **#52** (chezmoi config seeding), **#53** (deferred distro packages).
-Dotfiles: **#157** (`.chezmoiignore` for daniel-box + `gh_ready` deb822 fix).
+Server repo: #46 (k3s slice 0 + `platform` key), #47 (Docker keyring umask), #48 (chezmoi +
+claude_code roles), #49 (per-user home resolution), #50 (github_cli role), #52 (chezmoi config
+seeding), #53 (deferred distro packages). #51 was a duplicate, closed.
 
-Design and plan documents live in `docs/k3s-migration/`.
+Dotfiles repo: #157 (`.chezmoiignore` for daniel-box + deb822 `gh_ready`), merged and applied on
+the workstation. **Not yet applied on daniel-box** — step 3 above covers it.
