@@ -28,6 +28,15 @@ k3s_longhorn_version: v1.7.2
 #                        every pod got "no route to host" dialling 10.43.0.1 and Longhorn
 #                        could not provision a single volume. A control-plane node must not
 #                        bind its identity to a removable NIC.
+#
+#                        CHANGING THIS ON A LIVE CLUSTER IS NOT A RESTART. etcd stores the
+#                        member's peer URL, and k3s validates its own membership against it
+#                        on startup: "this server is not a member of the etcd cluster.
+#                        Found [...=https://<old>:2380], expect: ...=https://<new>:2380".
+#                        It then retries forever without signalling ready, so `systemctl
+#                        restart k3s` — and any play that triggers one — hangs indefinitely
+#                        (the unit is Type=notify with TimeoutStartSec=0). Repair with
+#                        `k3s server --cluster-reset`, or wipe and re-run k3s-bringup.yml.
 k3s_server_args: >-
   server --cluster-init --disable=traefik --disable=servicelb
   --write-kubeconfig-mode 0640
