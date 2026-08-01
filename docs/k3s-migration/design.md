@@ -189,6 +189,8 @@ Since in-cluster is the decided path, the mitigation is no longer optional:
 
 Sequenced as thin end-to-end slices, each independently exercisable and reversible.
 
+> **Superseded in one respect.** Slice 0 below installs k3s on both nodes. `slice-0-cluster-foundation.md` corrects this: k3s goes on **daniel-box alone** first, because daniel-server's Docker iptables chains, `DOCKER-USER` rules, and hairpin-NAT behaviour are the riskiest possible starting point. daniel-server joins at slice 7. Consequences: Longhorn runs at 1 replica until then, and the resilience payoff lands last. The plan document is authoritative where the two disagree.
+
 | Slice | Content | Exit criterion |
 |---|---|---|
 | **0** | k3s on both nodes, `--cluster-init`, Longhorn, MetalLB pool, `platform:` key in `deploy.yml`. No service moved. | `kubectl get nodes` shows both Ready; a scratch PVC replicates |
