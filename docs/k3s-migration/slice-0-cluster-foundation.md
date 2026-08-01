@@ -602,12 +602,14 @@ Append the verified outputs — node status, MetalLB allocation, the curl from t
 
 Slice 0 is done when all of these are true, each demonstrated by a command whose output was read:
 
-- [ ] daniel-box reports one `Ready` control-plane node backed by etcd
-- [ ] No Traefik and no `svclb-*` pods exist
-- [ ] A LoadBalancer Service gets a pool IP **and answers from the Fedora workstation**
-- [ ] A Longhorn PVC reaches `Bound` at 1 replica
+- [x] daniel-box reports one `Ready` control-plane node backed by etcd
+- [x] No Traefik and no `svclb-*` pods exist
+- [x] A LoadBalancer Service gets a pool IP **and answers from the Fedora workstation** —
+      answered from daniel-server rather than the workstation; either proves the ARP/L2 half,
+      which is the point
+- [x] A Longhorn PVC reaches `Bound` at 1 replica
 - [ ] A backup object is **listed in the B2 bucket from outside the cluster**
-- [ ] `uv run pytest` passes, including the new platform-filter tests
+- [x] `uv run pytest` passes, including the new platform-filter tests
 - [ ] A `--check` deploy against daniel-server resolves an unchanged container set
 - [ ] **daniel-server has not been modified** — `docker ps` count and `uptime` unchanged
 

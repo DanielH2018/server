@@ -138,7 +138,7 @@ now passes on that rebuild:
 | No Traefik, no `svclb-*` pods | pass |
 | Node registered on its canonical address | pass — `10.0.0.215` (was 10.0.0.153, see §5a) |
 | LoadBalancer gets a pool IP | pass — `10.0.0.240`, in-pool |
-| …**and answers from another LAN machine** | **open** — needs a second machine |
+| …**and answers from another LAN machine** | pass — curled from daniel-server |
 | Longhorn PVC reaches `Bound` | pass |
 | …**at 1 replica** | pass — `numberOfReplicas: 1` on the bound volume |
 | Backup target reachable | pass — `available: true` |
@@ -218,21 +218,19 @@ at all. It does not change the fix — a control-plane node must not bind its id
 removable NIC either way — but something unplugged it around 21:21 on 2026-08-01 and that is
 worth understanding separately.
 
-### The two still open
+### The one still open
 
-1. **Cross-LAN curl.** `curl -sS --max-time 10 http://10.0.0.240/` **from another machine.** The
-   on-host curl already run proves nothing — it returned `RemoteAddr: 10.42.0.1`, i.e. it was
-   routed via `cni0` and never touched the LAN. The ARP/L2 half is what silently fails.
+`curl -sS --max-time 10 http://10.0.0.240/` from **daniel-server** returned the whoami pod's
+response on 2026-08-01, so the LoadBalancer answers across the LAN and MetalLB's ARP is
+working. See §6 for why the `RemoteAddr` in that response is not the thing that proves it.
 
-   **Now worth running** — §5a is applied, so a failure would be a genuine ARP/L2 result rather
-   than a symptom of pods having lost the apiserver. Note the node's address moved to
-   10.0.0.215 since MetalLB last announced, so this is a fresh test either way.
-
-2. **An object is actually written to B2.** `available: true` proves credentials and
+1. **An object is actually written to B2.** `available: true` proves credentials and
    reachability, *not* that anything was stored. Only listing the bucket settles it — and
    "backup reports success while storing nothing" is the specific failure slice 0 exists to
-   prevent. Blocked on tooling: `b2`, `aws`, `rclone`, `restic` and `kopia` are all absent from
-   daniel-box, and daniel-server's SSH host key is not in this host's `known_hosts`.
+   prevent. Two steps, not one: the role only sets the backup *target*, so a volume still has
+   to be snapshotted and backed up before there is anything to list. Do the listing from
+   **daniel-server** — `b2`, `aws`, `rclone`, `restic` and `kopia` are all absent from
+   daniel-box, and daniel-server already runs Kopia against the same bucket.
 
 Clean up the smoke resources when done:
 `sudo k3s kubectl delete deploy/smoke svc/smoke pvc/smoke-pvc`.
@@ -257,6 +255,12 @@ Clean up the smoke resources when done:
   path still exists but is empty of live data, so Kopia keeps *reporting success while backing
   up nothing*. Every migration slice must confirm data in its new backup path before the Docker
   copy is retired.
+- **`RemoteAddr` from a whoami pod cannot tell you where a request came from.** With a Service
+  on the default `externalTrafficPolicy: Cluster`, kube-proxy masquerades external traffic
+  before it reaches the pod, so the source reads as cni0's `10.42.0.1` whether the client was
+  on the LAN or on the node itself. To test MetalLB's ARP, run the curl from a machine you know
+  is not the node; to see the real client IP, patch the Service to
+  `externalTrafficPolicy: Local` first.
 - **`peanut` publishes upsd on `127.0.0.1:3493`** — loopback only. Home Assistant cannot reach
   it from another host until that publish is widened, which is a security-relevant change to a
   shutdown-critical service.
