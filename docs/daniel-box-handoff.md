@@ -101,7 +101,7 @@ Not yet run on the host. Verify the next play gets past this task.
 |---|---|
 | k3s | Single-node cluster, control-plane, embedded etcd (`--cluster-init`) |
 | MetalLB | Installed, pool `10.0.0.240-250` |
-| Longhorn | Installed. Replica count was **3, not 1** — fixed in the role, see §5 |
+| Longhorn | Installed, **1 replica** — proven on a bound PVC after the fix in §5 |
 | Longhorn backup | Target set to B2, `backuptarget default` reported `available: true` |
 | `gh` | Installed, authenticated as DanielH2018, `credential.helper = !gh auth git-credential` |
 | chezmoi | Binary installed; dotfiles cloned and applied |
@@ -124,21 +124,29 @@ TTY, which is why it was not done from an agent session.
 
 ---
 
-## 5. Slice 0 exit criteria — one fixed, two still open
+## 5. Slice 0 exit criteria — everything local passes, two remain
 
 From `docs/k3s-migration/slice-0-cluster-foundation.md`. The bring-up playbook asserts node
 readiness, the etcd datastore, and the absence of bundled Traefik/servicelb — all passed. Three
-were left for a human; a smoke run on 2026-08-01 settled some of them:
+were left for a human. Proving them found two real defects (§5's *replica failure* and §5a),
+both since fixed; the cluster was rebuilt on 2026-08-01 and every locally-verifiable criterion
+now passes on that rebuild:
 
 | Criterion | State |
 |---|---|
 | One `Ready` control-plane node backed by etcd | pass — `control-plane,etcd`, `v1.36.2+k3s1` |
 | No Traefik, no `svclb-*` pods | pass |
+| Node registered on its canonical address | pass — `10.0.0.215` (was 10.0.0.153, see §5a) |
 | LoadBalancer gets a pool IP | pass — `10.0.0.240`, in-pool |
-| …**and answers from another LAN machine** | **open** — see below |
+| …**and answers from another LAN machine** | **open** — needs a second machine |
 | Longhorn PVC reaches `Bound` | pass |
-| …**at 1 replica** | **failed, fixed in the role — needs re-proving** |
-| Backup object listed in B2 | **open** — no tooling on this host |
+| …**at 1 replica** | pass — `numberOfReplicas: 1` on the bound volume |
+| Backup target reachable | pass — `available: true` |
+| Backup **object** listed in B2 | **open** — no tooling on this host |
+
+The rebuild run was `ok=36 changed=12 failed=0 skipped=2`, and both skips are the intended
+ones: the k3s install task found its arguments already in the systemd unit, and the
+StorageClass had no replica count to strip.
 
 ### The replica failure
 
@@ -152,29 +160,11 @@ with `numberOfReplicas` omitted, so the setting governs) and deletes/recreates t
 finds one still pinning a count — parameters are immutable. Guarded by
 `ansible/tests/test_longhorn_storageclass.py`.
 
-**Not yet applied to the live cluster.** Re-run and re-prove:
+**Applied and proven** on the rebuilt cluster: a fresh PVC binds at `numberOfReplicas: 1`.
 
-```bash
-uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn
-sudo k3s kubectl delete pvc smoke-pvc
-sudo k3s kubectl apply -f - <<'EOF'
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: smoke-pvc
-spec:
-  accessModes: [ReadWriteOnce]
-  storageClassName: longhorn
-  resources:
-    requests:
-      storage: 1Gi
-EOF
-sleep 20
-sudo k3s kubectl -n longhorn-system get volumes.longhorn.io
-```
-
-Expect `REPLICAS 1`. Do not `--check` the playbook: nearly every task is
-`ansible.builtin.command`, which check mode skips rather than simulates.
+Do not `--check` this playbook if you re-run it: nearly every task is
+`ansible.builtin.command`, which check mode skips rather than simulates, so a dry run reports
+green having proved nothing.
 
 ### 5a. k3s bound its node IP to a NIC that no longer exists
 
@@ -198,7 +188,7 @@ and kept working throughout. The Docker purge is **not** implicated: the three s
 `DOCKER*` entries are empty chain declarations (`-N DOCKER`, `-N DOCKER-BRIDGE`, `-N
 DOCKER-CT`) with no rules, and `FORWARD` is `ACCEPT`.
 
-Fixed in the role, **not yet applied**: `k3s_server_args` pins `--node-ip` and
+Fixed in the role and applied: `k3s_server_args` pins `--node-ip` and
 `--advertise-address` to `server_ip`. Two things had to change for that to be deliverable at
 all — the install task's `creates: /usr/local/bin/k3s` guard meant any `k3s_server_args` edit
 was silently skipped on an installed host, so it now compares the desired arguments against
@@ -207,13 +197,26 @@ upgrade the control plane as a side effect of a flag change. The role also asser
 registered InternalIP equals `server_ip`. Guarded by
 `ansible/tests/test_k3s_node_ip_pinned.py`.
 
-Applying it re-runs the installer and restarts k3s; etcd, Longhorn, MetalLB and the B2 target
-all survive, since only an `ExecStart` argument changes. If kubelet keeps the old address
-anyway, wipe and reinstall — this cluster holds nothing worth preserving.
+**The cluster had to be rebuilt to take it, and that is the trap worth remembering.** Moving
+the address is not a restart — etcd stores the member's peer URL and k3s validates its own
+membership against it:
+
+```
+this server is not a member of the etcd cluster.
+Found [daniel-box-2eb310c7=https://10.0.0.153:2380], expect: ...=https://10.0.0.215:2380
+```
+
+k3s then retries forever without signalling ready, and the unit is `Type=notify` with
+`TimeoutStartSec=0`, so `systemctl restart k3s` never returns and the play hangs with no
+error. Remedies are `k3s server --cluster-reset`, which rewrites the member list from the
+existing data, or a wipe. A wipe was taken here because the cluster held nothing: uninstall,
+`rm -rf /var/lib/longhorn` (which `k3s-uninstall.sh` leaves behind), re-run `k3s-bringup.yml`.
+The trap is recorded next to the flag in `roles/setup/k3s/defaults/main.yml`.
 
 **Open question for whoever picks this up:** whether the USB adapter is meant to be plugged in
 at all. It does not change the fix — a control-plane node must not bind its identity to a
-removable NIC either way.
+removable NIC either way — but something unplugged it around 21:21 on 2026-08-01 and that is
+worth understanding separately.
 
 ### The two still open
 
@@ -221,8 +224,9 @@ removable NIC either way.
    on-host curl already run proves nothing — it returned `RemoteAddr: 10.42.0.1`, i.e. it was
    routed via `cni0` and never touched the LAN. The ARP/L2 half is what silently fails.
 
-   **Blocked until §5a is applied.** Not worth running before then: a failure would say nothing
-   about ARP/L2.
+   **Now worth running** — §5a is applied, so a failure would be a genuine ARP/L2 result rather
+   than a symptom of pods having lost the apiserver. Note the node's address moved to
+   10.0.0.215 since MetalLB last announced, so this is a fresh test either way.
 
 2. **An object is actually written to B2.** `available: true` proves credentials and
    reachability, *not* that anything was stored. Only listing the bucket settles it — and
