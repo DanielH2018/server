@@ -22,6 +22,11 @@ ssh_config_path: /etc/ssh/sshd_config
 # Services this host runs, in dependency order-agnostic form (deploy.yml toposorts them).
 # Start empty and populate as you add services — deploy.yml dies in its first pre_task if
 # this is undefined. See the repo-root CLAUDE.md → "Adding a New Container Service".
+#
+# Each entry may carry `platform: docker|k8s` (default `docker`). It selects which deploy
+# stack owns the service during the k3s migration: deploy.yml skips anything marked `k8s`,
+# and the k8s manifests become that service's source of truth instead. Leave it unset for
+# Compose services. See docs/superpowers/plans/ for the current migration slice.
 containers_list: []
 
 # --- Bring-up: revert once the host is established --------------------------------------
