@@ -1,0 +1,247 @@
+---
+# Slice 0 of the k3s migration — see docs/k3s-migration/slice-0-cluster-foundation.md.
+# This role brings up a SINGLE-NODE cluster on daniel-box. daniel-server deliberately does
+# not join until slice 7: k3s ships its own containerd and flannel/kube-proxy iptables
+# rules, and landing those on the host running 46 containers, the custom DOCKER-USER rule
+# and the wg-easy hairpin-NAT setup is the riskiest possible starting point.
+
+- name: Refuse to run on a host that already runs Docker containers
+  tags: [k3s_server]
+  # The whole risk assessment behind "k3s goes on daniel-box first" is that the host is
+  # empty. If Docker is present, that assumption no longer holds and the iptables
+  # interaction needs deciding before, not during, an install.
+  ansible.builtin.stat:
+    path: /usr/bin/docker
+  register: k3s_docker_binary
+
+- name: Fail if Docker is installed
+  tags: [k3s_server]
+  ansible.builtin.assert:
+    that: not k3s_docker_binary.stat.exists
+    fail_msg: >-
+      Docker is installed on {{ inventory_hostname }}. This role targets a host with no
+      container runtime; k3s brings its own containerd and its iptables rules would land
+      on top of Docker's chains. Resolve that interaction deliberately before proceeding.
+
+- name: Download the k3s installer
+  tags: [k3s_server]
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /usr/local/bin/k3s-install.sh
+    mode: "0755"
+  become: true
+
+- name: Install the k3s server
+  tags: [k3s_server]
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s-install.sh
+  args:
+    creates: /usr/local/bin/k3s
+  environment:
+    INSTALL_K3S_EXEC: "{{ k3s_server_args }}"
+  become: true
+
+- name: Wait for the node to report Ready
+  tags: [k3s_server]
+  ansible.builtin.command:
+    cmd: k3s kubectl wait --for=condition=Ready node --all --timeout=300s
+  become: true
+  changed_when: false
+
+- name: Check the datastore backing the control plane
+  tags: [k3s_server]
+  ansible.builtin.stat:
+    path: /var/lib/rancher/k3s/server/db/etcd
+  register: k3s_etcd_dir
+  become: true
+
+- name: Fail if the control plane is on SQLite rather than embedded etcd
+  tags: [k3s_server]
+  ansible.builtin.assert:
+    that: k3s_etcd_dir.stat.isdir | default(false)
+    fail_msg: >-
+      /var/lib/rancher/k3s/server/db/etcd is absent, so --cluster-init did not take and
+      k3s is running on SQLite. Recoverable (restart the server with --cluster-init) but
+      everything below would be built on the wrong datastore, so stop here.
+
+- name: List kube-system workloads
+  tags: [k3s_server]
+  ansible.builtin.command:
+    cmd: k3s kubectl get pods -n kube-system -o name
+  register: k3s_kube_system_pods
+  become: true
+  changed_when: false
+
+- name: Fail if the bundled Traefik or servicelb is running
+  tags: [k3s_server]
+  # Both disables are load-bearing: a bundled Traefik would fight the real ingress in
+  # slice 1, and klipper-lb would race MetalLB for LoadBalancer Services.
+  ansible.builtin.assert:
+    that:
+      - "'traefik' not in k3s_kube_system_pods.stdout"
+      - "'svclb' not in k3s_kube_system_pods.stdout"
+    fail_msg: >-
+      k3s started with its bundled Traefik and/or servicelb. The --disable flags in
+      k3s_server_args were not applied — check /etc/systemd/system/k3s.service.
+
+- name: Install MetalLB
+  tags: [metallb]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      https://raw.githubusercontent.com/metallb/metallb/{{ k3s_metallb_version }}/config/manifests/metallb-native.yaml
+  register: k3s_metallb_apply
+  become: true
+  changed_when: "'created' in k3s_metallb_apply.stdout or 'configured' in k3s_metallb_apply.stdout"
+
+- name: Wait for the MetalLB controller
+  tags: [metallb]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n metallb-system wait --for=condition=Available deploy/controller --timeout=300s
+  become: true
+  changed_when: false
+
+- name: Render the MetalLB address pool
+  tags: [metallb]
+  ansible.builtin.template:
+    src: metallb-pool.yaml.j2
+    dest: /etc/rancher/k3s/metallb-pool.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Apply the MetalLB address pool
+  tags: [metallb]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/metallb-pool.yaml
+  register: k3s_metallb_pool_apply
+  become: true
+  changed_when: "'created' in k3s_metallb_pool_apply.stdout or 'configured' in k3s_metallb_pool_apply.stdout"
+
+- name: Install Longhorn prerequisites
+  tags: [longhorn]
+  # open-iscsi is not optional: without it volumes hang in "Attaching" with an error that
+  # never names the missing package.
+  ansible.builtin.apt:
+    name:
+      - open-iscsi
+      - nfs-common
+    state: present
+  become: true
+
+- name: Install Longhorn
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      https://raw.githubusercontent.com/longhorn/longhorn/{{ k3s_longhorn_version }}/deploy/longhorn.yaml
+  register: k3s_longhorn_apply
+  become: true
+  changed_when: "'created' in k3s_longhorn_apply.stdout or 'configured' in k3s_longhorn_apply.stdout"
+
+- name: Wait for the Longhorn driver deployer
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n longhorn-system rollout status deploy/longhorn-driver-deployer --timeout=600s
+  become: true
+  changed_when: false
+
+- name: Set the default Longhorn replica count
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch settings.longhorn.io default-replica-count
+      --type=merge -p {{ replica_patch | quote }}
+  vars:
+    replica_patch: '{"value":"{{ k3s_longhorn_replica_count }}"}'
+  register: k3s_longhorn_replicas
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_replicas.stdout"
+
+- name: Derive the B2 region from the Kopia endpoint
+  tags: [longhorn_backup]
+  # Longhorn's S3 target is s3://<bucket>@<region>/<prefix>; Kopia stores a hostname.
+  # Derived rather than duplicated so the two can't drift apart in SOPS.
+  ansible.builtin.set_fact:
+    k3s_longhorn_b2_region: >-
+      {{ kopia_b2_endpoint | regex_search('s3\.([a-z0-9-]+)\.backblazeb2\.com', '\1') | first | default('', true) }}
+
+- name: Fail if the B2 region could not be derived
+  tags: [longhorn_backup]
+  ansible.builtin.assert:
+    that: k3s_longhorn_b2_region | length > 0
+    fail_msg: >-
+      Could not derive a B2 region from kopia_b2_endpoint. Longhorn needs
+      s3://<bucket>@<region>/<prefix>. Set k3s_longhorn_b2_region explicitly in host_vars
+      rather than loosening the regex.
+
+- name: Look for an existing Longhorn backup credential
+  tags: [longhorn_backup]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n longhorn-system get secret longhorn-b2 -o name
+  register: k3s_longhorn_secret
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Create the Longhorn backup credential
+  tags: [longhorn_backup]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system create secret generic longhorn-b2
+      --from-literal=AWS_ACCESS_KEY_ID={{ kopia_b2_key_id }}
+      --from-literal=AWS_SECRET_ACCESS_KEY={{ kopia_b2_application_key }}
+      --from-literal=AWS_ENDPOINTS=https://s3.{{ k3s_longhorn_b2_region }}.backblazeb2.com
+  become: true
+  no_log: true
+  when: k3s_longhorn_secret.rc != 0
+  changed_when: true
+
+- name: Point Longhorn at the backup target
+  tags: [longhorn_backup]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch settings.longhorn.io backup-target
+      --type=merge -p {{ target_patch | quote }}
+  vars:
+    target_patch: >-
+      {"value":"s3://{{ kopia_b2_bucket }}@{{ k3s_longhorn_b2_region }}/{{ k3s_longhorn_backup_prefix }}"}
+  register: k3s_longhorn_target
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_target.stdout"
+
+- name: Point Longhorn at the backup credential
+  tags: [longhorn_backup]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch settings.longhorn.io backup-target-credential-secret
+      --type=merge -p {{ secret_patch | quote }}
+  vars:
+    secret_patch: '{"value":"longhorn-b2"}'
+  register: k3s_longhorn_target_secret
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_target_secret.stdout"
+
+- name: Check whether Longhorn can reach the backup target
+  tags: [longhorn_backup]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n longhorn-system get backuptarget default -o jsonpath={.status.available}
+  register: k3s_backup_available
+  become: true
+  changed_when: false
+  retries: 12
+  delay: 10
+  until: k3s_backup_available.stdout == "true"
+
+- name: Report what still needs proving by hand
+  tags: [longhorn_backup]
+  # available:true proves credentials and reachability. It does NOT prove an object was
+  # ever written, and "a backup system that reports success while storing nothing" is the
+  # exact failure this slice exists to prevent. Only listing the bucket settles it.
+  ansible.builtin.debug:
+    msg: >-
+      Longhorn reports the backup target reachable. This does NOT prove an object was
+      written. Before migrating any service (slice 1), snapshot a test volume, back it up,
+      and confirm the object exists under the '{{ k3s_longhorn_backup_prefix }}/' prefix in
+      bucket '{{ kopia_b2_bucket }}' by listing it from outside the cluster.

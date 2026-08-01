@@ -1,0 +1,37 @@
+---
+# Slice 0 of the k3s migration: stand up a single-node cluster on daniel-box.
+# Plan: docs/k3s-migration/slice-0-cluster-foundation.md
+#
+# Run ON daniel-box (the play's hosts: defaults to the local hostname, same as deploy.yml):
+#   uv run ansible-playbook ansible/k3s-bringup.yml --check   # dry run first
+#   uv run ansible-playbook ansible/k3s-bringup.yml
+#
+# Deliberately a separate playbook rather than a role in initial_setup.yml: that playbook
+# runs on every host, and k3s must not land on daniel-server until slice 7.
+- name: Bring up the k3s cluster
+  hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
+  # Facts are gathered explicitly after the SOPS sudo password is set — same reason as
+  # initial_setup.yml: with gather_facts: true the play escalates before secrets load, so
+  # a passworded-sudo host would need --ask-become-pass.
+  gather_facts: false
+  pre_tasks:
+    - name: Load encrypted secrets and set the become password (shared preamble)
+      ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
+      tags: always
+
+    - name: Gather facts (escalated — the become password is now available)
+      ansible.builtin.setup:
+      tags: always
+
+    - name: Refuse to run anywhere but daniel-box
+      # daniel-server joins the cluster in slice 7, after its Docker workload has drained.
+      # Running this against it today would put k3s's iptables rules on top of Docker's on
+      # the host that serves everything.
+      ansible.builtin.assert:
+        that: inventory_hostname == 'daniel-box'
+        fail_msg: >-
+          This playbook targets daniel-box only. daniel-server joins the cluster in slice 7
+          — see docs/k3s-migration/slice-0-cluster-foundation.md.
+      tags: always
+  roles:
+    - { role: k3s, tags: ["k3s"] }

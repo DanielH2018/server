@@ -306,6 +306,17 @@ Infrastructure, not software — there is no failing-test-first cycle for an ins
 
 **Host:** daniel-box (10.0.0.215) only. **daniel-server is not touched.**
 
+> **Tasks 4–7 are implemented as `ansible/k3s-bringup.yml` + `roles/setup/k3s`.** Run that rather than pasting the shell below:
+>
+> ```bash
+> uv run ansible-playbook ansible/k3s-bringup.yml --check   # dry run first
+> uv run ansible-playbook ansible/k3s-bringup.yml
+> ```
+>
+> It must be run **on daniel-box** — the play asserts `inventory_hostname == 'daniel-box'` and refuses to run anywhere else. The shell steps below remain the reference for what each stage does and how to verify it by hand.
+>
+> **This playbook has never been executed.** It was authored from an agent session, where a guard blocks `sudo` inside remote commands, so every claim in it is unverified against a real cluster. Dry-run it first and expect to fix something.
+
 - [ ] **Step 1: Confirm the host is still clean**
 
 ```bash

@@ -1,0 +1,32 @@
+---
+# Pinned upstream versions. Bump deliberately — Longhorn has version-to-version
+# upgrade constraints and does not support arbitrary version skips.
+k3s_metallb_version: v0.14.8
+k3s_longhorn_version: v1.7.2
+
+# Flags for the k3s server install:
+#   --cluster-init       embedded etcd from day one. Not a one-way door (k3s converts
+#                        SQLite->etcd on restart with this flag) but it saves a
+#                        control-plane restart if a third node is ever added.
+#   --disable=traefik    the bundled Traefik cannot carry the existing config: CrowdSec
+#                        Yaegi plugin, Authelia forwardauth, the raw-TCP Terraria
+#                        entrypoint, Cloudflare trustedIPs.
+#   --disable=servicelb  k3s's klipper-lb fights MetalLB for LoadBalancer Services.
+k3s_server_args: >-
+  server --cluster-init --disable=traefik --disable=servicelb
+  --write-kubeconfig-mode 0640
+
+# LoadBalancer address pool. Must sit OUTSIDE the router's DHCP scope, or MetalLB will
+# hand out addresses the router also leases.
+k3s_metallb_pool: 10.0.0.240-10.0.0.250
+
+# One replica until daniel-server joins the cluster (slice 7). Longhorn's default of 2
+# on a single-node cluster leaves every volume permanently "degraded", which buries a
+# real fault in expected noise. Slice 7 raises this — that is the step where replication,
+# and therefore failover, starts existing.
+k3s_longhorn_replica_count: 1
+
+# Longhorn writes under this prefix inside the existing Kopia B2 bucket, so the two tools
+# never share a namespace and a lifecycle rule written for one cannot expire the other's
+# data. Kopia's own snapshots live at the bucket root.
+k3s_longhorn_backup_prefix: longhorn
