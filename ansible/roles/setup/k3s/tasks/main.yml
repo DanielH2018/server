@@ -159,6 +159,72 @@
   become: true
   changed_when: "'no change' not in k3s_longhorn_replicas.stdout"
 
+- name: Render the Longhorn StorageClass
+  tags: [longhorn]
+  # The setting patched above only governs volumes whose StorageClass stays quiet about
+  # replicas, and upstream's class does not: it pins numberOfReplicas: "3". Without this
+  # block every PVC lands at 3 replicas on a one-node cluster and sits Degraded forever.
+  # Full reasoning in the header of files/longhorn-storageclass.yaml.
+  ansible.builtin.copy:
+    src: longhorn-storageclass.yaml
+    dest: /etc/rancher/k3s/longhorn-storageclass.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Render the StorageClass ConfigMap patch
+  tags: [longhorn]
+  # longhorn-driver-deployer recreates the class from this ConfigMap whenever it is absent,
+  # and `Install Longhorn` above re-applies upstream's "3" into it on every run. Patching it
+  # from the same file the class is applied from stops the two disagreeing.
+  ansible.builtin.copy:
+    content: "{{ {'data': {'storageclass.yaml': lookup('file', 'longhorn-storageclass.yaml')}} | to_json }}"
+    dest: /etc/rancher/k3s/longhorn-storageclass-configmap-patch.json
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Keep the StorageClass ConfigMap in step with the rendered class
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch configmap longhorn-storageclass --type=merge
+      --patch-file /etc/rancher/k3s/longhorn-storageclass-configmap-patch.json
+  register: k3s_longhorn_sc_configmap
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_sc_configmap.stdout"
+
+- name: Read the replica count pinned by the live StorageClass
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: k3s kubectl get storageclass longhorn -o jsonpath={.parameters.numberOfReplicas}
+  register: k3s_longhorn_sc_replicas
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Delete the StorageClass while it still pins a replica count
+  tags: [longhorn]
+  # StorageClass parameters are immutable, so `apply` cannot remove one — the class has to be
+  # recreated. This is safe: parameters are read at provision time only, so deleting the class
+  # neither touches an existing PV nor unbinds a PVC. The task skips itself once the pin is
+  # gone, which is what makes this pair idempotent rather than a delete/recreate every run.
+  ansible.builtin.command:
+    cmd: k3s kubectl delete storageclass longhorn
+  become: true
+  when: k3s_longhorn_sc_replicas.stdout | default('', true) | length > 0
+  changed_when: true
+
+- name: Apply the Longhorn StorageClass
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/longhorn-storageclass.yaml
+  register: k3s_longhorn_sc_apply
+  become: true
+  changed_when: "'created' in k3s_longhorn_sc_apply.stdout or 'configured' in k3s_longhorn_sc_apply.stdout"
+
 - name: Derive the B2 region from the Kopia endpoint
   tags: [longhorn_backup]
   # Longhorn's S3 target is s3://<bucket>@<region>/<prefix>; Kopia stores a hostname.

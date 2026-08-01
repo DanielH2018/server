@@ -498,6 +498,31 @@ ssh daniel-box sudo k3s kubectl -n longhorn-system patch settings.longhorn.io de
 
 One node cannot satisfy 2 replicas; leaving the default at 2 makes every PVC report degraded and buries real problems in expected noise. **Slice 7 raises this to 2 when daniel-server joins** — that is the step that turns replication on, and it is the point at which failover starts existing.
 
+> **Update 2026-08-01 — this step alone does not do what it claims.** The patch above applies
+> cleanly and reading the setting back returns `1`, but a PVC created through the `longhorn`
+> StorageClass still binds at **3** replicas, which is how this failed slice 0's exit criteria
+> on the first real attempt:
+>
+> ```
+> kubectl -n longhorn-system get settings.longhorn.io default-replica-count  -> 1
+> kubectl get sc longhorn -o jsonpath='{.parameters.numberOfReplicas}'       -> 3
+> ```
+>
+> Upstream's `deploy/longhorn.yaml` hardcodes `numberOfReplicas: "3"` in the
+> `longhorn-storageclass` ConfigMap, and a StorageClass parameter **overrides**
+> `default-replica-count` — which only governs volumes whose class stays quiet about replicas.
+> Two other corrections while here: upstream v1.7.2's default is **3**, not 2 (both in the
+> setting and in the class), and slice 7 therefore raises this to 3, not 2.
+>
+> Fixed in `roles/setup/k3s`: it now applies its own class from
+> `files/longhorn-storageclass.yaml`, verbatim from upstream except that
+> `numberOfReplicas` is **omitted**, so the setting is the single lever. StorageClass
+> parameters are immutable, so the role deletes and recreates the class when it finds one
+> still pinning a count — safe, because parameters are read at provision time only and an
+> existing PV keeps its own spec. Guarded by `ansible/tests/test_longhorn_storageclass.py`.
+> Keeping the parameter absent is also what keeps slice 7's raise a settings patch instead of
+> StorageClass surgery under live workloads.
+
 - [ ] **Step 5: Prove a PVC binds**
 
 ```bash
@@ -588,6 +613,6 @@ Slice 0 is done when all of these are true, each demonstrated by a command whose
 - Any change to daniel-server (slice 7)
 - Any service migration (slice 1 onward)
 - Traefik, Authelia, or ingress configuration (slice 1)
-- Raising Longhorn to 2 replicas (slice 7)
+- Raising Longhorn to 3 replicas (slice 7) — upstream's default; the 2 written here originally was wrong
 - Retiring Portainer or the Pi's agent (slice 7)
 - Widening `peanut`'s loopback publish (slice 5, needs its own review)

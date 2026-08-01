@@ -1,0 +1,38 @@
+---
+# Longhorn's default StorageClass, applied by roles/setup/k3s in place of the one shipped
+# inside longhorn.yaml. The single deliberate difference is the ABSENCE of numberOfReplicas.
+#
+# Upstream hardcodes `numberOfReplicas: "3"` here, and a StorageClass parameter beats the
+# `default-replica-count` setting the role patches. So on the single-node cluster every PVC
+# provisioned through this class asked for 3 replicas it could never schedule — permanently
+# Degraded volumes, which is exactly the "real fault buried in expected noise" that
+# k3s_longhorn_replica_count exists to prevent. Observed on daniel-box 2026-08-01: the
+# setting read 1, the class read 3, and a fresh PVC bound at 3.
+#
+# Omitting the parameter makes `default-replica-count` load-bearing, leaving one source of
+# truth (k3s_longhorn_replica_count). It also keeps slice 7's raise to 3 a settings patch
+# instead of StorageClass surgery: parameters are immutable, so changing one means deleting
+# and recreating the class — cheap today on an empty cluster, not cheap once services run
+# on it.
+#
+# Everything else is verbatim from longhorn v1.7.2 deploy/longhorn.yaml. Keep it that way on
+# a version bump, and do NOT paste numberOfReplicas back in when re-syncing from upstream —
+# ansible/tests/test_longhorn_storageclass.py fails if it reappears.
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: longhorn
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: "Delete"
+volumeBindingMode: Immediate
+parameters:
+  staleReplicaTimeout: "30"
+  fromBackup: ""
+  fsType: "ext4"
+  dataLocality: "disabled"
+  unmapMarkSnapChainRemoved: "ignored"
+  disableRevisionCounter: "true"
+  dataEngine: "v1"

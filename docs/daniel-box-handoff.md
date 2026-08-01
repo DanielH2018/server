@@ -101,7 +101,7 @@ Not yet run on the host. Verify the next play gets past this task.
 |---|---|
 | k3s | Single-node cluster, control-plane, embedded etcd (`--cluster-init`) |
 | MetalLB | Installed, pool `10.0.0.240-250` |
-| Longhorn | Installed, **1 replica** (2 nodes not yet joined) |
+| Longhorn | Installed. Replica count was **3, not 1** — fixed in the role, see §5 |
 | Longhorn backup | Target set to B2, `backuptarget default` reported `available: true` |
 | `gh` | Installed, authenticated as DanielH2018, `credential.helper = !gh auth git-credential` |
 | chezmoi | Binary installed; dotfiles cloned and applied |
@@ -124,31 +124,77 @@ TTY, which is why it was not done from an agent session.
 
 ---
 
-## 5. Slice 0 exit criteria still unproven
+## 5. Slice 0 exit criteria — one fixed, two still open
 
 From `docs/k3s-migration/slice-0-cluster-foundation.md`. The bring-up playbook asserts node
-readiness, the etcd datastore, and the absence of bundled Traefik/servicelb — all passed. These
-three were deliberately left for a human:
+readiness, the etcd datastore, and the absence of bundled Traefik/servicelb — all passed. Three
+were left for a human; a smoke run on 2026-08-01 settled some of them:
 
-1. A LoadBalancer Service gets a pool IP **and answers from another machine on the LAN**. The
-   ARP/L2 half is what silently fails.
-2. A Longhorn PVC reaches `Bound`.
-3. **An object is actually written to B2.** `available: true` proves credentials and
-   reachability, *not* that anything was stored. Only listing the bucket settles it — and
-   "backup reports success while storing nothing" is the specific failure slice 0 exists to
-   prevent.
+| Criterion | State |
+|---|---|
+| One `Ready` control-plane node backed by etcd | pass — `control-plane,etcd`, `v1.36.2+k3s1` |
+| No Traefik, no `svclb-*` pods | pass |
+| LoadBalancer gets a pool IP | pass — `10.0.0.240`, in-pool |
+| …**and answers from another LAN machine** | **open** — see below |
+| Longhorn PVC reaches `Bound` | pass |
+| …**at 1 replica** | **failed, fixed in the role — needs re-proving** |
+| Backup object listed in B2 | **open** — no tooling on this host |
 
-One command covers 1 and 2:
+### The replica failure
+
+`smoke-pvc` bound at **3** replicas against a criterion of 1. The role's
+`default-replica-count` patch was not at fault — it applied, and the setting read back `1`. The
+`longhorn` StorageClass carried its own `numberOfReplicas: "3"`, hardcoded in upstream's
+`deploy/longhorn.yaml`, and a StorageClass parameter overrides the global setting.
+
+Fixed in `roles/setup/k3s`: it now applies `files/longhorn-storageclass.yaml` (upstream's class
+with `numberOfReplicas` omitted, so the setting governs) and deletes/recreates the class when it
+finds one still pinning a count — parameters are immutable. Guarded by
+`ansible/tests/test_longhorn_storageclass.py`.
+
+**Not yet applied to the live cluster.** Re-run and re-prove:
 
 ```bash
-sudo k3s kubectl create deploy smoke --image=traefik/whoami
-sudo k3s kubectl expose deploy smoke --port=80 --type=LoadBalancer
-printf 'apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: smoke-pvc\nspec:\n  accessModes: [ReadWriteOnce]\n  storageClassName: longhorn\n  resources:\n    requests:\n      storage: 1Gi\n' | sudo k3s kubectl apply -f -
-sleep 25
-sudo k3s kubectl get svc smoke pvc/smoke-pvc
+uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn
+sudo k3s kubectl delete pvc smoke-pvc
+sudo k3s kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: smoke-pvc
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+EOF
+sleep 20
+sudo k3s kubectl -n longhorn-system get volumes.longhorn.io
 ```
 
-Then `curl http://<EXTERNAL-IP>/` **from a different machine**, and clean up with
+Expect `REPLICAS 1`. Do not `--check` the playbook: nearly every task is
+`ansible.builtin.command`, which check mode skips rather than simulates.
+
+### The two still open
+
+1. **Cross-LAN curl.** `curl -sS --max-time 10 http://10.0.0.240/` **from another machine.** The
+   on-host curl already run proves nothing — it returned `RemoteAddr: 10.42.0.1`, i.e. it was
+   routed via `cni0` and never touched the LAN. The ARP/L2 half is what silently fails.
+
+   If it fails, suspect the multi-homed host before MetalLB config: `eno1` is 10.0.0.215 and
+   `enx9cebe885f44e` is 10.0.0.153, both with equal-metric default routes via 10.0.0.1. k3s
+   registered the node's INTERNAL-IP as **10.0.0.153**, while `host_vars/daniel-box.yml` sets
+   `server_ip: 10.0.0.215`. First diagnostic:
+   `sudo k3s kubectl -n metallb-system logs -l component=speaker | grep -i arp`.
+
+2. **An object is actually written to B2.** `available: true` proves credentials and
+   reachability, *not* that anything was stored. Only listing the bucket settles it — and
+   "backup reports success while storing nothing" is the specific failure slice 0 exists to
+   prevent. Blocked on tooling: `b2`, `aws`, `rclone`, `restic` and `kopia` are all absent from
+   daniel-box, and daniel-server's SSH host key is not in this host's `known_hosts`.
+
+Clean up the smoke resources when done:
 `sudo k3s kubectl delete deploy/smoke svc/smoke pvc/smoke-pvc`.
 
 ---
