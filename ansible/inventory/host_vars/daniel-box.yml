@@ -1,0 +1,19 @@
+---
+server_ip: 10.0.0.215
+# Cloud-init (subiquity) image, like the Pi: sshd's real config is the drop-in, not the
+# bare /etc/ssh/sshd_config. Verified on the host — /etc/ssh/sshd_config.d/ contains only
+# 50-cloud-init.conf. The SSH-hardening tasks have no `create:` fallback, so a wrong value
+# here fails initial_setup.yml outright.
+ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
+# Nothing runs here yet — populate as services move onto this host (CLAUDE.md → "Adding a
+# New Container Service"). deploy.yml dies in its first pre_task if this is undefined.
+containers_list: []
+# Stays false until this host's first manual deploy.yml succeeds: the gitops_deploy
+# handler shells a full deploy at the end of initial_setup.yml and fails the play with it.
+# Flip to true and re-run `--tags gitops_deploy` afterwards (README §4).
+has_gitops: false
+# Deliberately unset. This is an AMD Ryzen 7 8845HS with a Radeon 780M — /dev/dri/renderD128
+# already exists, and `has_igpu` means "pass /dev/dri through", which AMD uses for VAAPI too
+# (README §7). It gates nothing while containers_list is empty; set it when jellyfin/tdarr
+# land here. The i915 modprobe task self-skips on a non-Intel GPU either way.
+# has_igpu: true
