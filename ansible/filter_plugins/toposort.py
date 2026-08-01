@@ -138,6 +138,16 @@ def expand_with_deps(containers_list, deps_map, requested_tags, running_names):
     return [c for c in containers_list if c["name"] in effective]
 
 
+def filter_by_platform(containers_list, platform="docker"):
+    """Select containers_list entries targeting a given deploy platform.
+
+    A missing `platform` key means "docker". That default is load-bearing:
+    every pre-migration entry omits the key, so defaulting any other way would
+    silently drop every service from the next deploy.
+    """
+    return [c for c in containers_list if c.get("platform", "docker") == platform]
+
+
 class FilterModule:
     def filters(self):
         return {
@@ -145,4 +155,5 @@ class FilterModule:
             "toposort_containers": toposort_containers,
             "dep_closure": dep_closure,
             "expand_with_deps": expand_with_deps,
+            "filter_by_platform": filter_by_platform,
         }
