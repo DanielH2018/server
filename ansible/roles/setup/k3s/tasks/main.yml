@@ -31,15 +31,38 @@
     mode: "0755"
   become: true
 
-- name: Install the k3s server
+- name: Read the installed k3s systemd unit
   tags: [k3s_server]
+  ansible.builtin.slurp:
+    src: /etc/systemd/system/k3s.service
+  register: k3s_unit
+  become: true
+  failed_when: false
+
+- name: Install or reconfigure the k3s server
+  tags: [k3s_server]
+  # Guarded on the unit's arguments, not on /usr/local/bin/k3s existing. The old
+  # `creates:` guard meant a change to k3s_server_args never reached an already-installed
+  # host: the play reported ok while the unit kept its original ExecStart. That is how the
+  # node IP stayed pinned to a NIC that had been removed. The installer rewrites the unit,
+  # daemon-reloads and restarts k3s itself, so no handler is needed.
+  #
+  # Quotes are stripped from the unit before matching because the installer single-quotes
+  # each argument. This detects arguments that are missing, which covers adding or changing
+  # a flag; it does not detect one that was *removed* from k3s_server_args, so a removal
+  # needs the installer re-run by hand. Deliberate: a stricter set comparison that
+  # misjudged the unit's quoting would restart k3s on every play.
   ansible.builtin.command:
     cmd: /usr/local/bin/k3s-install.sh
-  args:
-    creates: /usr/local/bin/k3s
   environment:
     INSTALL_K3S_EXEC: "{{ k3s_server_args }}"
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
   become: true
+  when: >-
+    k3s_server_args.split() | reject('equalto', 'server')
+    | difference(k3s_unit.content | default('') | b64decode | replace("'", "") | split())
+    | length > 0
+  changed_when: true
 
 - name: Wait for the node to report Ready
   tags: [k3s_server]
@@ -47,6 +70,28 @@
     cmd: k3s kubectl wait --for=condition=Ready node --all --timeout=300s
   become: true
   changed_when: false
+
+- name: Read the node's registered internal IP
+  tags: [k3s_server]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl get node -o
+      jsonpath={.items[0].status.addresses[?(@.type=="InternalIP")].address}
+  register: k3s_node_ip
+  become: true
+  changed_when: false
+
+- name: Fail if the node registered an address the host does not own
+  tags: [k3s_server]
+  # The failure this catches took the cluster down silently: pods kept dialling an
+  # apiserver endpoint on an address that no longer existed on any interface, while
+  # `kubectl` from the host went on working over 127.0.0.1 and hid it.
+  ansible.builtin.assert:
+    that: k3s_node_ip.stdout == server_ip
+    fail_msg: >-
+      k3s registered {{ inventory_hostname }} at {{ k3s_node_ip.stdout }}, but its canonical
+      address is {{ server_ip }}. Every pod reaches the apiserver through that address, so
+      it must be one the host will keep. Check for a second NIC winning autodetection.
 
 - name: Check the datastore backing the control plane
   tags: [k3s_server]
