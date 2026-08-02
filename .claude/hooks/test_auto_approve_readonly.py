@@ -19,6 +19,7 @@ _spec = importlib.util.spec_from_file_location("auto_approve_readonly", _HOOK)
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 classify = _mod.classify
+classify_remote = _mod.classify_remote
 
 
 # --- (command, label) tables ------------------------------------------------
@@ -36,6 +37,30 @@ APPROVE = [
     ("find . -name '*.yml'", "find without write actions"),
     ("cat a.txt | grep foo | head -5", "pure read-only pipeline"),
     ("pwd", "pwd builtin"),
+    # --- NEW: read-only commands on a homelab host over ssh ---
+    ("ssh daniel-server docker ps", "bare remote read-only command"),
+    ("ssh daniel-pi uptime", "the other homelab host"),
+    ("ssh ubuntu@daniel-server hostname", "user@host form"),
+    ("ssh daniel-server 'docker ps | head -3'", "pipeline inside the remote string"),
+    ("ssh daniel-server docker ps | head -3", "pipeline on the local side"),
+    (
+        "ssh daniel-server docker logs monitor-bridge --since 3h 2>&1 | tail -12",
+        "remote logs with a 2>&1 dup and a local filter",
+    ),
+    (
+        "ssh -i /home/ubuntu/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes "
+        "daniel-server git -C /home/ubuntu/server log --oneline -1",
+        "the option prefix these calls are actually written with",
+    ),
+    ("ssh -o BatchMode=yes -o ConnectTimeout=8 daniel-pi hostname", "connect options"),
+    (
+        "ssh -q -p 22 daniel-server systemctl status traefik",
+        "-q/-p plus a guarded verb",
+    ),
+    (
+        "ssh daniel-server 'cd /home/ubuntu/server; git status'",
+        "; sequence, both stages read-only",
+    ),
     # --- NEW: cd is read-only ---
     ("cd /home/ubuntu/server", "cd changes cwd only"),
     ("cd /srv && ls", "cd then ls"),
@@ -177,6 +202,35 @@ REJECT = [
     ("crontab -u ubuntu -r", "crontab -r for a user still deletes"),
     ("sensors -s", "sensors -s applies config to hardware"),
     ("sensors --set", "sensors --set writes"),
+    # --- ssh: the remote command is held to the same standard as a local one ---
+    ("ssh daniel-server", "no remote command -> interactive shell"),
+    ("ssh daniel-server rm -rf /tmp/x", "remote rm deletes"),
+    ("ssh daniel-server docker run alpine", "remote docker run executes"),
+    ("ssh daniel-server systemctl restart traefik", "remote systemctl restart"),
+    ("ssh daniel-server uv run ansible-playbook deploy.yml", "remote deploy writes"),
+    ("ssh daniel-server 'cat a; rm b'", "bad stage inside the remote string"),
+    ("ssh daniel-server docker ps | tee out.txt", "write stage in the local pipeline"),
+    ("ssh unknown-host docker ps", "host outside SSH_HOSTS"),
+    ("ssh root@unknown-host uptime", "user@ does not exempt the host check"),
+    # forwarding / proxying / agent flags never reach the option whitelist
+    ("ssh -o ProxyCommand=nc daniel-server uptime", "-o ProxyCommand execs locally"),
+    ("ssh -o LocalCommand=id daniel-server uptime", "-o LocalCommand execs locally"),
+    ("ssh -L 8080:localhost:80 daniel-server uptime", "-L opens a tunnel"),
+    ("ssh -R 80:localhost:80 daniel-server uptime", "-R opens a reverse tunnel"),
+    ("ssh -D 1080 daniel-server uptime", "-D opens a SOCKS proxy"),
+    ("ssh -A daniel-server uptime", "-A forwards the agent"),
+    ("ssh -F /tmp/cfg daniel-server uptime", "-F swaps the ssh config"),
+    ("ssh -o BatchMode=yes", "options but no host"),
+    ("ssh -i", "value flag with no value"),
+    # secret reads over ssh land in the transcript
+    ("ssh daniel-server cat /home/ubuntu/.ssh/id_ed25519", "remote private key"),
+    ("ssh daniel-server grep -r x /home/ubuntu/.ssh", "remote .ssh directory"),
+    ("ssh daniel-server cat /proc/self/environ", "remote process environment"),
+    ("ssh daniel-pi cat /home/ubuntu/.aws/credentials", "remote aws credentials"),
+    ("ssh daniel-server cat /home/ubuntu/server/.env", "remote dotenv"),
+    # a glob is expanded by the REMOTE shell, after these checks run
+    ("ssh daniel-server cat /proc/self/enviro?", "glob can become a secret path"),
+    ("ssh daniel-server ssh daniel-pi uptime", "second hop"),
 ]
 
 
@@ -199,6 +253,45 @@ def test_rejects_unsafe_commands():
     bad = _failures_reject()
     assert not bad, "Expected REJECT but got auto-approve:\n" + "\n".join(
         f"  [{l}] {c!r} -> {classify(c)!r}" for c, l in bad
+    )
+
+
+# --- the PermissionRequest entry point ---------------------------------------
+# classify_remote answers `ask` rules, so it must speak only for the traffic that
+# needs it. A read-only command with no ssh in it is already handled at PreToolUse.
+
+REMOTE_ONLY = [
+    ("ssh daniel-server docker ps", "plain remote command"),
+    ("ssh daniel-server docker ps | head -3", "ssh as one stage of a pipeline"),
+]
+
+LOCAL_NOT_REMOTE = [
+    ("ls -la", "read-only, but purely local"),
+    ("cat a.txt | grep foo", "read-only local pipeline"),
+    ("git status", "read-only local git"),
+]
+
+
+def test_permission_request_covers_remote_commands():
+    bad = [(c, l) for c, l in REMOTE_ONLY if classify_remote(c) is None]
+    assert not bad, "Expected a PermissionRequest allow:\n" + "\n".join(
+        f"  [{l}] {c!r}" for c, l in bad
+    )
+
+
+def test_permission_request_stays_out_of_local_commands():
+    bad = [(c, l) for c, l in LOCAL_NOT_REMOTE if classify_remote(c) is not None]
+    assert not bad, "PermissionRequest spoke for a non-ssh command:\n" + "\n".join(
+        f"  [{l}] {c!r} -> {classify_remote(c)!r}" for c, l in bad
+    )
+
+
+def test_permission_request_never_widens_classify():
+    # Everything classify() refuses must stay refused here -- this entry point may
+    # only ever narrow it.
+    bad = [(c, l) for c, l in REJECT if classify_remote(c) is not None]
+    assert not bad, "PermissionRequest approved a rejected command:\n" + "\n".join(
+        f"  [{l}] {c!r} -> {classify_remote(c)!r}" for c, l in bad
     )
 
 
