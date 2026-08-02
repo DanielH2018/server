@@ -608,7 +608,8 @@ Slice 0 is done when all of these are true, each demonstrated by a command whose
       answered from daniel-server rather than the workstation; either proves the ARP/L2 half,
       which is the point
 - [x] A Longhorn PVC reaches `Bound` at 1 replica
-- [ ] A backup object is **listed in the B2 bucket from outside the cluster**
+- [x] A backup object is **listed in the B2 bucket from outside the cluster** — 10 `.blk` data
+      blocks under `longhorn/backupstore/volumes/…`, listed from daniel-server
 - [x] `uv run pytest` passes, including the new platform-filter tests
 - [ ] A `--check` deploy against daniel-server resolves an unchanged container set
 - [ ] **daniel-server has not been modified** — `docker ps` count and `uptime` unchanged

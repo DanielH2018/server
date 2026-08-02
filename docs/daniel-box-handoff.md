@@ -124,13 +124,13 @@ TTY, which is why it was not done from an agent session.
 
 ---
 
-## 5. Slice 0 exit criteria — everything local passes, two remain
+## 5. Slice 0 exit criteria — all met
 
 From `docs/k3s-migration/slice-0-cluster-foundation.md`. The bring-up playbook asserts node
 readiness, the etcd datastore, and the absence of bundled Traefik/servicelb — all passed. Three
 were left for a human. Proving them found two real defects (§5's *replica failure* and §5a),
-both since fixed; the cluster was rebuilt on 2026-08-01 and every locally-verifiable criterion
-now passes on that rebuild:
+both since fixed; the cluster was rebuilt on 2026-08-01 and every criterion passes on that
+rebuild:
 
 | Criterion | State |
 |---|---|
@@ -142,7 +142,7 @@ now passes on that rebuild:
 | Longhorn PVC reaches `Bound` | pass |
 | …**at 1 replica** | pass — `numberOfReplicas: 1` on the bound volume |
 | Backup target reachable | pass — `available: true` |
-| Backup **object** listed in B2 | **open** — no tooling on this host |
+| Backup **object** listed in B2 | pass — 10 `.blk` data blocks, listed from daniel-server |
 
 The rebuild run was `ok=36 changed=12 failed=0 skipped=2`, and both skips are the intended
 ones: the k3s install task found its arguments already in the systemd unit, and the
@@ -218,22 +218,36 @@ at all. It does not change the fix — a control-plane node must not bind its id
 removable NIC either way — but something unplugged it around 21:21 on 2026-08-01 and that is
 worth understanding separately.
 
-### The one still open
+### How the last two were proven
 
-`curl -sS --max-time 10 http://10.0.0.240/` from **daniel-server** returned the whoami pod's
-response on 2026-08-01, so the LoadBalancer answers across the LAN and MetalLB's ARP is
-working. See §6 for why the `RemoteAddr` in that response is not the thing that proves it.
+**LoadBalancer across the LAN.** `curl -sS --max-time 10 http://10.0.0.240/` run from
+**daniel-server** returned the whoami pod's response, so `10.0.0.240` was resolved by ARP and
+the packet crossed the wire to daniel-box's `eno1`. See §6 for why the `RemoteAddr` in that
+response is *not* the thing that proves it.
 
-1. **An object is actually written to B2.** `available: true` proves credentials and
-   reachability, *not* that anything was stored. Only listing the bucket settles it — and
-   "backup reports success while storing nothing" is the specific failure slice 0 exists to
-   prevent. Two steps, not one: the role only sets the backup *target*, so a volume still has
-   to be snapshotted and backed up before there is anything to list. Do the listing from
-   **daniel-server** — `b2`, `aws`, `rclone`, `restic` and `kopia` are all absent from
-   daniel-box, and daniel-server already runs Kopia against the same bucket.
+**An object actually written to B2.** `available: true` proves credentials and reachability,
+not that anything was stored, and "backup reports success while storing nothing" is the
+specific failure slice 0 exists to prevent. It takes two steps, because the role only
+configures the backup *target*:
+
+1. On daniel-box: mount `smoke-pvc` in a pod so the volume attaches (a snapshot cannot be
+   taken while detached), write a marker, create a `Snapshot` CR, then a `Backup` CR. The
+   `Backup` **must** carry the label `backup-volume: <volume>` — longhorn-manager's backup
+   controller resolves the volume through it and fails with `cannot find the backup volume
+   label` otherwise.
+2. From daniel-server, list the bucket with an S3 client. `b2`, `aws`, `rclone`, `restic` and
+   `kopia` are all absent from daniel-box; daniel-server is the Docker host, so
+   `docker run --rm amazon/aws-cli s3 ls … --endpoint-url https://s3.<region>.backblazeb2.com`
+   needs nothing installed. B2 speaks the S3 API — the endpoint URL is the only thing that
+   makes it Backblaze rather than AWS.
+
+Result on 2026-08-01: 12 objects under `longhorn/`, of which **10 were `.blk` data blocks**
+alongside one `backup_*.cfg` and one `volume.cfg`. The blocks are the point — a `.cfg` on its
+own is metadata describing a backup that stored nothing.
 
 Clean up the smoke resources when done:
-`sudo k3s kubectl delete deploy/smoke svc/smoke pvc/smoke-pvc`.
+`sudo k3s kubectl delete deploy/smoke svc/smoke pvc/smoke-pvc`. Deleting the PVC does **not**
+remove the backup from B2; drop the `Backup` CR too if you do not want it lingering.
 
 ---
 
@@ -280,6 +294,11 @@ Clean up the smoke resources when done:
 - **`gh` token is stored in plaintext** at `~/.config/gh/hosts.yml` (no keyring on a headless
   box) and carries full account scope. A read-only deploy key for the dotfiles repo would be
   tighter; it diverges from daniel-server, which is why it was not chosen.
+- **Longhorn and Kopia share one B2 bucket**, isolated only by Longhorn's `longhorn/` prefix
+  against Kopia's snapshots at the root. That is the role's intent, and it keeps a lifecycle
+  rule written for one from expiring the other's data *only for as long as every such rule is
+  prefix-scoped*. Nothing enforces that today. Worth settling before slice 1 puts a real
+  service behind it.
 - **Longhorn stays at 1 replica** until daniel-server joins at slice 7. Failover does not exist
   before then — resilience arrives last in this ordering, by design.
 
