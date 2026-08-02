@@ -21,3 +21,8 @@ authelia_k8s_cpu_limit: "1.0"
 authelia_k8s_mem_limit: 512Mi
 authelia_k8s_cpu_request: "100m"
 authelia_k8s_mem_request: 64Mi
+
+# Authelia's startup checks report "Errors occurred performing startup checks" and nothing
+# else at info — the per-provider failures only surface at debug. Raise it for a run with
+# `-e authelia_k8s_log_level=debug` rather than committing a noisy default.
+authelia_k8s_log_level: info
