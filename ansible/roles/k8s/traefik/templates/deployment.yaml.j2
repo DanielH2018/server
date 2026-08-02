@@ -19,6 +19,9 @@ spec:
         app: traefik
     spec:
       serviceAccountName: traefik-ingress-controller
+      # No legacy Docker-link env vars for every Service in the namespace. Harmless clutter
+      # here, fatal for Authelia — see that role's deployment for the failure it causes.
+      enableServiceLinks: false
       securityContext:
         runAsUser: {{ traefik_k8s_uid }}
         runAsGroup: {{ traefik_k8s_uid }}

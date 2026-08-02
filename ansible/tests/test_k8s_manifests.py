@@ -232,6 +232,38 @@ def test_nothing_mounts_over_the_serviceaccount_token_path():
                 ), f"{entry['name']} mounts {path}, shadowing the ServiceAccount token"
 
 
+def test_every_deployment_disables_service_link_env_vars():
+    """Kubernetes injects legacy Docker-link env vars for every Service in the namespace —
+    <NAME>_SERVICE_HOST, <NAME>_PORT_<n>_TCP and so on. Any app that reads its own config from
+    <NAME>_* env vars then picks them up as configuration. Authelia did, and exited before
+    serving anything (daniel-box, 2026-08-02):
+
+        error occurred performing deprecation mapping for keys 'server.host', 'server.port',
+        and 'server.path' to new key server.address: the new key already exists with value
+        'tcp4://:9091' but the deprecated keys and the new key can't both be configured
+
+    Triggering it needs only that a Service name match an app's env-var prefix, which is the
+    normal case in this namespace — so the guard covers every workload, not just Authelia.
+    """
+    for entry in _k8s_entries():
+        tpl = K8S / entry["name"] / "templates" / "deployment.yaml.j2"
+        if not tpl.exists():
+            continue
+        doc = yaml.safe_load(
+            _render(
+                tpl,
+                container_item=entry,
+                **ALL_VARS,
+                **yaml.safe_load(
+                    (K8S / entry["name"] / "defaults" / "main.yml").read_text()
+                ),
+            )
+        )
+        assert doc["spec"]["template"]["spec"].get("enableServiceLinks") is False, (
+            f"{entry['name']} inherits Docker-link env vars for every Service in the namespace"
+        )
+
+
 # --- 3. protected services are actually protected -------------------------------------------
 
 

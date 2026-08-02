@@ -18,6 +18,15 @@ spec:
       labels:
         app: authelia
     spec:
+      # Kubernetes otherwise injects legacy Docker-link environment variables for every Service
+      # in the namespace — AUTHELIA_SERVICE_HOST, AUTHELIA_PORT_9091_TCP, and friends. Authelia
+      # reads AUTHELIA_* as configuration, so the injected `port` collides with server.address
+      # from the config file and it exits before serving anything:
+      #   the new key already exists with value 'tcp4://:9091' but the deprecated keys and the
+      #   new key can't both be configured
+      # The collision needs only that a Service name match the app's env-var prefix, which is
+      # the normal case here, so this is off for every workload rather than just this one.
+      enableServiceLinks: false
       securityContext:
         # Starting as UID 1000 rather than root is why this needs none of the SETUID/SETGID
         # capabilities the compose template grants: the image's entrypoint only su-execs down

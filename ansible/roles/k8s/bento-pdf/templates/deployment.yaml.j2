@@ -14,6 +14,9 @@ spec:
       labels:
         app: bento-pdf
     spec:
+      # No legacy Docker-link env vars for every Service in the namespace. Harmless clutter
+      # here, fatal for Authelia — see that role's deployment for the failure it causes.
+      enableServiceLinks: false
       securityContext:
         runAsUser: {{ bento_pdf_k8s_uid }}
         runAsGroup: {{ bento_pdf_k8s_uid }}
