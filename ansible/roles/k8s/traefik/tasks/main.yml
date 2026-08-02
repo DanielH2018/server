@@ -56,3 +56,33 @@
       - service.yaml
     manifests_secret_files:
       - cf-token-secret.yaml
+
+- name: Read the address MetalLB assigned to the Traefik Service
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get svc traefik
+      -o jsonpath={.status.loadBalancer.ingress[0].ip}
+  register: traefik_k8s_lb_ip
+  become: true
+  changed_when: false
+  retries: 12
+  delay: 5
+  until: traefik_k8s_lb_ip.stdout | length > 0
+
+- name: Fail if Traefik did not get the reserved ingress VIP
+  tags: [deploy]
+  # Kubernetes accepts any annotation key and MetalLB ignores the ones it does not recognise,
+  # so a wrong or misspelled request annotation costs nothing at apply time: the Service comes
+  # up, an address is assigned out of the auto-assign pool, every pod is healthy and the
+  # deploy is green — on the wrong address. That is exactly what metallb.io/loadBalancerIPs
+  # (instead of metallb.universe.tf/) did here, and it survived a full slice-1 bring-up
+  # unnoticed. The address is the one thing DNS and the router port-forward both hardcode, so
+  # assert it rather than trusting the annotation was honoured.
+  ansible.builtin.assert:
+    that: traefik_k8s_lb_ip.stdout == k3s_metallb_ingress_vip
+    fail_msg: >-
+      Traefik holds {{ traefik_k8s_lb_ip.stdout }}, not the reserved ingress VIP
+      {{ k3s_metallb_ingress_vip }}. MetalLB does not re-evaluate an existing allocation when
+      pools or annotations change — delete the Service and redeploy to force reallocation.
+    success_msg: "Traefik holds the reserved ingress VIP {{ k3s_metallb_ingress_vip }}"

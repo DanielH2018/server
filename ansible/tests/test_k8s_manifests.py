@@ -418,3 +418,68 @@ def test_no_task_reads_a_dotted_secret_key_by_jsonpath():
                     f"{tasks.relative_to(ANSIBLE)}: jsonpath cannot address a dotted key — "
                     f"it returns empty and exits 0. Fetch {{.data}} and index it. Line: {line.strip()}"
                 )
+
+
+# --- 7. MetalLB Service annotations use the namespace MetalLB actually reads ---------------
+
+
+def test_metallb_service_annotations_use_the_universe_tf_namespace():
+    """metallb.io is the API GROUP of the CRDs; Service annotations keep metallb.universe.tf.
+
+    Kubernetes accepts any annotation key and MetalLB ignores unrecognised ones, so the wrong
+    prefix is completely silent — the Service is created, an address is assigned from the
+    auto-assign pool instead of the reserved VIP, and the deploy is green. Traefik ran on
+    10.0.0.241 instead of 10.0.0.240 through an entire slice-1 bring-up because of this.
+    """
+    for tpl in sorted((K8S).glob("*/templates/service.yaml.j2")):
+        for i, line in enumerate(tpl.read_text().splitlines(), 1):
+            body = line.split("#", 1)[0]
+            if "metallb.io/" in body:
+                raise AssertionError(
+                    f"{tpl.relative_to(ANSIBLE)}:{i} uses a metallb.io/ Service annotation, "
+                    f"which MetalLB silently ignores — use metallb.universe.tf/. Line: {line.strip()}"
+                )
+
+
+# --- 8. the TLS options the routes name must actually exist under that name ---------------
+
+
+def _tlsoption_names() -> set:
+    rendered = _render(
+        K8S / "traefik" / "templates" / "dynamic.yaml.j2",
+        **ALL_VARS,
+        **yaml.safe_load((K8S / "traefik" / "defaults" / "main.yml").read_text()),
+    )
+    return {
+        d["metadata"]["name"]
+        for d in yaml.safe_load_all(rendered)
+        if d and d.get("kind") == "TLSOption"
+    }
+
+
+def test_routes_reference_a_tlsoption_that_exists_and_is_not_named_default():
+    """`default` is reserved: Traefik registers a TLSOption of that name as the global default
+    options, never under <namespace>-default@kubernetescrd. An IngressRoute naming it
+    explicitly therefore fails to build, while the object sits there looking perfectly valid:
+
+        error "unknown TLS options: homelab-default@kubernetescrd"
+
+    Every router carrying that reference stops serving. Guard both halves — the name is not
+    the reserved one, and the name the macro asks for is one the traefik role defines.
+    """
+    defined = _tlsoption_names()
+    assert defined, "the traefik role no longer defines any TLSOption"
+    assert "default" not in defined, (
+        "a TLSOption named 'default' is registered as Traefik's global default and cannot be "
+        "referenced by name from an IngressRoute"
+    )
+    for entry in _k8s_entries():
+        tpl = K8S / entry["name"] / "templates" / "ingressroute.yaml.j2"
+        if not tpl.exists():
+            continue
+        doc = yaml.safe_load(_render(tpl, container_item=entry, **ALL_VARS))
+        named = doc["spec"]["tls"]["options"]["name"]
+        assert named in defined, (
+            f"{entry['name']} references TLS options '{named}', which the traefik role does "
+            f"not define (it defines {sorted(defined)})"
+        )
