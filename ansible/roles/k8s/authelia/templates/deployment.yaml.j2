@@ -48,7 +48,19 @@ spec:
             - name: TZ
               value: "{{ tz }}"
           securityContext:
-            readOnlyRootFilesystem: true
+            # NO readOnlyRootFilesystem, unlike traefik and bento-pdf. With it on, Authelia
+            # dies during provider construction — before a single startup check runs — and
+            # logs only an aggregate with no detail, at every level including trace:
+            #   level=fatal msg="Errors occurred performing startup checks"
+            # Measured on daniel-box: flipping this one field is the entire difference
+            # between that and "Startup complete ... Listening ... on '0.0.0.0:9091'".
+            # Config, the users database, /config's permissions, storage migration, DNS and
+            # NTP egress were each verified good independently, so none of them is the cause.
+            # It cannot be a plain permission problem either: as uid 1000 the process cannot
+            # write anywhere outside its mounts in the WORKING case either, which leaves
+            # EROFS-vs-EACCES on some path Authelia probes and never names.
+            # The Docker role this was ported from sets no read_only, so dropping it is not a
+            # regression against the instance being migrated — keeping it was the divergence.
             allowPrivilegeEscalation: false
             capabilities:
               drop:
@@ -61,9 +73,9 @@ spec:
               readOnly: true
             - name: config
               mountPath: /config
-            # readOnlyRootFilesystem is a tightening past the Docker copy, which sets no
-            # read_only. Scratch space has to come from somewhere, and the failure mode
-            # without it is the portal never starting.
+            # Kept even though the root filesystem is writable again: as uid 1000 the process
+            # can write nowhere else outside its mounts, so scratch space still has to come
+            # from somewhere.
             - name: tmp
               mountPath: /tmp
           readinessProbe:

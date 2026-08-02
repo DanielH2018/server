@@ -8,10 +8,15 @@
 # form of the Docker role's first-run-only users_database.yml guard.
 - name: Look for an existing Authelia users database in the cluster
   tags: [config]
+  # Fetches the whole .data map rather than jsonpath={.data.users_database\.yml}. A key
+  # containing a dot cannot be addressed that way: kubectl does not error, it returns an
+  # empty string and exit 0. The guard below then read that as "no existing hash", so every
+  # deploy regenerated the argon2 hash with a fresh salt, rewrote the Secret and rolled the
+  # pod — the exact churn the read-back exists to prevent, with nothing in the output saying so.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get secret authelia-config
-      -o jsonpath={.data.users_database\.yml}
+      -o jsonpath={.data}
   register: authelia_k8s_existing
   become: true
   changed_when: false
@@ -21,9 +26,14 @@
 - name: Reuse the password hash already in the cluster
   tags: [config]
   ansible.builtin.set_fact:
-    authelia_password_hash: >-
-      {{ authelia_k8s_existing.stdout | b64decode | regex_search('\$argon2[^\s\']+') }}
-  when: authelia_k8s_existing.stdout | default('') | length > 0
+    authelia_password_hash: "{{ authelia_k8s_existing_hash }}"
+  vars:
+    # default('{}', true) covers both a missing Secret and an empty stdout — from_json on ''
+    # raises. The regex tolerates the value being absent from the map on a partial Secret.
+    authelia_k8s_existing_hash: >-
+      {{ (authelia_k8s_existing.stdout | default('{}', true) | from_json).get('users_database.yml', '')
+         | b64decode | regex_search('\$argon2[^\s\']+') | default('', true) }}
+  when: authelia_k8s_existing_hash | length > 0
   no_log: true
 
 - name: Hash the Authelia password
