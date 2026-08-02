@@ -122,11 +122,22 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     `gitops_deploy` deployer rewrites each non-crashing tick; `down` once it's older than
     `GITOPS_MAX_AGE_MIN` — i.e. the deployer stalled / host down. The deployer no longer pushes
     to Kuma itself — see [[the gitops_deploy CLAUDE.md]])
-  - **GitOps Deploy — Status** (reads `/gitops-state/hold_sha` **and `/gitops-state/diverged_sha`**;
+  - **GitOps Deploy — Status** (reads `/gitops-state/hold_sha`, `/gitops-state/diverged_sha`
+    **and `/gitops-state/behind_since`**;
     `down` while a rolled-back commit is held pending the operator reverting the offending PR —
     self-heals when the hold clears — OR while local and origin have **diverged** so the deployer
     can't fast-forward and silently noops forever while origin's new commits never deploy (both other
-    GitOps signals stay green; the deployer records the diverged SHA each tick, 2026-07-15 review L3))
+    GitOps signals stay green; the deployer records the diverged SHA each tick, 2026-07-15 review L3)
+    — OR while the host has simply sat **behind origin** longer than `GITOPS_BEHIND_MAX_MIN` (360 =
+    6 h). That last arm is the general case the other two are instances of, and it is the one that
+    caught nothing: a deferred **broad** change never fast-forwards, so the host parks on an old tree
+    with `last_run` still ticking and `is_diverged` false (origin is a strict descendant). daniel-server
+    ran a 12-commit-old tree for hours that way on 2026-08-02, every GitOps signal green, until its
+    un-deployed Pi-hole DNS records were noticed by hand. Age-gated, not presence-gated: a routine push
+    is behind for one tick and the deployer's dirty-tree path is behind for a whole edit session by
+    design, so only sustained behind-ness is a fault. hold/diverged are reported ahead of it — they
+    name the cause where "behind" names the symptom. Pure `gitops_status()`/`_parse_behind()` are
+    unit-tested; an unparseable marker reads as not-behind rather than paging forever on garbage.)
   - **Backup Restore Drill** (reads `/restore-drill/state.json`, written monthly by the kopia
     role's `kopia-restore-drill.sh` host cron — `down` on a failed drill, >35 d staleness, or a
     missing/corrupt state file. Same state-file pattern as the GitOps monitors.)

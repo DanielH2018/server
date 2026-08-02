@@ -7,6 +7,7 @@ from deploy_logic import (
     deferred_service_alerts,
     next_action,
     is_diverged,
+    behind_marker,
     container_names,
     containers_to_gate,
     should_alert_dirty,
@@ -887,3 +888,30 @@ def test_apply_drain_result_none_delivered_keeps_all():
 
 def test_apply_drain_result_all_delivered_empties():
     assert apply_drain_result({"a:1": "x"}, {"a:1"}) == {}
+
+
+# behind_marker: the "host is parked on an old tree" signal. Its whole value is the timestamp —
+# presence alone is normal (a push is behind for one tick), so these pin the clock semantics.
+
+
+def test_behind_marker_cleared_when_caught_up():
+    assert behind_marker(False, "originX", "originW 100.0", now=200.0) is None
+
+
+def test_behind_marker_stamps_now_on_first_tick_behind():
+    assert behind_marker(True, "originX", None, now=200.0) == "originX 200.0"
+
+
+def test_behind_marker_keeps_first_seen_across_ticks():
+    # Still behind 10 min later: the age must keep growing, not reset.
+    assert behind_marker(True, "originX", "originX 200.0", now=800.0) == "originX 200.0"
+
+
+def test_behind_marker_keeps_first_seen_when_origin_advances():
+    # A new push while still stuck refreshes the SHA but must NOT restart the clock — otherwise a
+    # steady trickle of pushes to a permanently-stuck host never trips the age threshold.
+    assert behind_marker(True, "originZ", "originX 200.0", now=800.0) == "originZ 200.0"
+
+
+def test_behind_marker_restamps_when_marker_unparseable():
+    assert behind_marker(True, "originX", "garbage", now=200.0) == "originX 200.0"

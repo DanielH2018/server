@@ -28,6 +28,18 @@ the held SHA and the hold clears automatically.
   State: `/var/lib/gitops-deploy/dirty_alerted_date` (holds the `YYYY-MM-DD:am|pm` slot key).
 - **Broad changes** (shared `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`)
   are NOT auto-scoped — the deployer alerts and defers to a manual full deploy.
+- **Behind-origin watchdog** (`deploy_logic.behind_marker`): every deferral above leaves the host
+  parked on an old tree, and until 2026-08-02 nothing but a Discord message said so — `last_run`
+  keeps ticking (Alive green) and `is_diverged` is false (origin is a strict *descendant*, so
+  Status green too). daniel-server ran a 12-commit-old tree for hours that way, and the miss only
+  surfaced when its un-deployed Pi-hole DNS records were noticed by hand. Each tick now records
+  `"<origin_sha> <first_seen_ts>"` to `/var/lib/gitops-deploy/behind_since` when it ends behind
+  origin, cleared on convergence, and `monitor-bridge`'s **GitOps Deploy — Status** pages once the
+  age exceeds `GITOPS_BEHIND_MAX_MIN` (6 h). Written AFTER `main()` so it reflects the state the
+  tick finished in, not the one it started in. The stamp is **not** refreshed per-SHA — a trickle
+  of pushes to a stuck host would otherwise restart the clock forever. Age-gated because being
+  behind is normal in the small: a push is behind for one tick, and the dirty path is behind for a
+  whole edit session by design.
 - **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
   rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
   value only reaches a container on its next deploy, so the deployer alerts (once per SHA,

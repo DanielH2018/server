@@ -26,6 +26,7 @@ from deploy_logic import (  # noqa: E402
     ChangeSet,
     apply_drain_result,
     apply_send_result,
+    behind_marker,
     broad_remediation,
     containers_to_gate,
     deferred_service_alerts,
@@ -57,6 +58,20 @@ LAST_RUN = "/var/lib/gitops-deploy/last_run"
 # GitOps monitors stay green. monitor-bridge's check_gitops_status reads this (same :ro mount as
 # hold_sha) and pages GitOps Status until the host tree is reconciled. Cleared once resolved.
 DIVERGED_FILE = "/var/lib/gitops-deploy/diverged_sha"
+# "<origin_sha> <unix_ts_first_seen>" while the host is BEHIND origin at the end of a tick — origin
+# strictly ahead and we did not converge. Every reason lands here: a deferred broad change, a
+# long-dirty tree, a hold. The broad path in particular is invisible otherwise — it never
+# ff-merges, so the host parks behind master indefinitely while last_run keeps ticking (Alive
+# green) and is_diverged stays false (origin is a strict descendant, so Status green too). That is
+# how daniel-server sat on a 12-commit-old tree for hours on 2026-08-02 with every GitOps signal
+# green, until the un-deployed Pi-hole DNS records were noticed by hand.
+#
+# The timestamp is what makes this safe to page on: a normal push is behind for one tick, and an
+# operator mid-edit (the dirty path, deliberately treated as healthy) is behind for as long as they
+# are editing. Only sustained behind-ness is a problem, so monitor-bridge applies an age threshold.
+# The first-seen stamp is preserved across ticks and reset ONLY on convergence — not per-SHA, or a
+# steady trickle of pushes to a permanently-stuck host would keep restarting the clock.
+BEHIND_FILE = "/var/lib/gitops-deploy/behind_since"
 # Last origin SHA we've already alerted on for a broad change, so a deferred
 # broad change doesn't re-page Discord every 30-min tick until it's resolved.
 BROAD_FILE = "/var/lib/gitops-deploy/broad_alerted_sha"
@@ -159,6 +174,29 @@ def _write_marker(path: str, sha: str | None) -> None:
             pass
     else:
         atomic_write(path, sha)  # torn-write-safe temp+rename, see host_lib
+
+
+def _record_behind() -> None:
+    """Record whether this host ended the tick behind origin (see BEHIND_FILE).
+
+    Runs after main() so it reads the state we actually finished in, not the one we started in —
+    a tick that deployed successfully converged and must clear the marker rather than leave a
+    stale one for the next 30 minutes.
+
+    Best-effort: a `git rev-parse` failure here must not turn an otherwise-fine tick into a
+    "gitops-deploy crashed" page. The tick has already done its work by this point, and a
+    persistently broken repo surfaces through last_run/Alive anyway.
+    """
+    try:
+        local = run(["git", "rev-parse", "HEAD"])
+        origin = run(["git", "rev-parse", f"origin/{BRANCH}"])
+        behind = origin != local and is_ancestor(local, origin)
+        _write_marker(
+            BEHIND_FILE,
+            behind_marker(behind, origin, _read_marker(BEHIND_FILE), time.time()),
+        )
+    except Exception as e:  # noqa: BLE001 - never fail the tick over a status marker
+        log(f"could not record behind-origin state: {e}")
 
 
 def read_hold() -> str | None:
@@ -569,5 +607,6 @@ if __name__ == "__main__":
         raise
     # Liveness marker: a tick that completed without crashing (incl. a rollback, rc=1).
     # monitor-bridge reads this; a crash skips the write so the Alive monitor goes stale.
+    _record_behind()
     _write_marker(LAST_RUN, str(time.time()))
     sys.exit(rc)

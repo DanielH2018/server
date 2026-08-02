@@ -134,6 +134,10 @@ services:
       # gitops_deploy.py and bind-mounted read-only at /gitops-state.
       - GITOPS_STATE_DIR=/gitops-state
       - GITOPS_MAX_AGE_MIN=90
+      # How long the host may sit behind origin before GitOps Status pages. Deliberately loose:
+      # the deployer ticks every 30 min and the dirty-tree path is behind for a whole edit session
+      # by design, so only sustained behind-ness is a fault.
+      - GITOPS_BEHIND_MAX_MIN=360
       - KUMA_PUSH_GITOPS_ALIVE={{ monitor_bridge_gitops_alive_push_token }}
       - KUMA_PUSH_GITOPS_STATUS={{ monitor_bridge_gitops_status_push_token }}
       # Monthly kopia restore drill: the host cron (kopia role) writes state.json;

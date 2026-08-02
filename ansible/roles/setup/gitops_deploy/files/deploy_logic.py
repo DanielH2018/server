@@ -224,6 +224,32 @@ def is_diverged(
     return origin_head != local_head and not origin_ahead and not local_ahead
 
 
+def behind_marker(
+    behind: bool, origin_head: str, existing: str | None, now: float
+) -> str | None:
+    """Next value of the `behind_since` marker: "<origin_sha> <unix_ts_first_seen>", or None to
+    clear it.
+
+    `behind` means origin is strictly ahead of local at the END of a tick — we saw new commits and
+    did not converge on them. Unlike is_diverged this is not a broken state on its own: a routine
+    push is behind for exactly one tick, and the dirty-tree path is behind for as long as the
+    operator is editing (deliberately healthy). What is NOT healthy is staying behind, which is why
+    the marker carries a first-seen timestamp and monitor-bridge pages on AGE, not on presence.
+
+    The timestamp survives across ticks and resets only when we converge — deliberately not per-SHA.
+    Re-stamping on each new origin SHA would let a steady trickle of pushes to a permanently-stuck
+    host restart the clock forever, which is the exact failure this is meant to catch. The SHA is
+    refreshed each tick so the alert names where origin actually is.
+    """
+    if not behind:
+        return None
+    if existing:
+        parts = existing.split()
+        if len(parts) == 2:
+            return f"{origin_head} {parts[1]}"
+    return f"{origin_head} {now}"
+
+
 def dirty_alert_slot(now, morning_hour: int = 8, evening_hour: int = 20) -> str | None:
     """The dirty-alert time slot `now` falls in, or None before the morning slot.
 
