@@ -40,7 +40,7 @@ spec:
             - name: CF_API_EMAIL
               value: "{{ email }}"
             - name: CF_DNS_API_TOKEN_FILE
-              value: /run/secrets/cf_dns_token
+              value: /secrets/cf_dns_token
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
@@ -51,8 +51,13 @@ spec:
             - name: config
               mountPath: /config
               readOnly: true
+            # NOT /run/secrets, which is the Docker convention this was ported from.
+            # /var/run/secrets symlinks to /run/secrets, and that is where Kubernetes projects
+            # the ServiceAccount token — mounting a read-only Secret over it leaves runc unable
+            # to create /run/secrets/kubernetes.io and the container never starts:
+            #   mkdirat .../rootfs/run/secrets/kubernetes.io: read-only file system
             - name: cloudflare
-              mountPath: /run/secrets
+              mountPath: /secrets
               readOnly: true
             - name: acme
               mountPath: /data
@@ -84,7 +89,10 @@ spec:
         - name: cloudflare
           secret:
             secretName: traefik-cloudflare
-            defaultMode: 0400
+            # 0440, not 0400: the kubelet owns secret files as root:fsGroup, so the container
+            # user reaches them through the GROUP bit. 0400 grants the group nothing and the
+            # token is unreadable to the process that needs it.
+            defaultMode: 0440
         - name: acme
           persistentVolumeClaim:
             claimName: traefik-acme

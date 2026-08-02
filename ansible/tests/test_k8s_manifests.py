@@ -197,6 +197,41 @@ def test_k8s_authelia_database_is_on_its_own_volume():
     )
 
 
+def test_nothing_mounts_over_the_serviceaccount_token_path():
+    """`/run/secrets` is the Docker convention for file-mounted credentials and it does not
+    survive the port. `/var/run/secrets` symlinks to `/run/secrets`, which is where Kubernetes
+    projects the ServiceAccount token — a read-only Secret volume there leaves runc unable to
+    create the mountpoint and the container never starts (daniel-box, 2026-08-02):
+
+        mkdirat .../rootfs/run/secrets/kubernetes.io: read-only file system
+
+    Worth a guard rather than a fix in one file: slice 2 ports ~33 more services from compose
+    templates that all use /run/secrets, and the symptom is a CrashLoopBackOff whose message
+    says nothing about the mount the author chose.
+    """
+    reserved = ("/run/secrets", "/var/run/secrets")
+    for entry in _k8s_entries():
+        tpl = K8S / entry["name"] / "templates" / "deployment.yaml.j2"
+        if not tpl.exists():
+            continue
+        doc = yaml.safe_load(
+            _render(
+                tpl,
+                container_item=entry,
+                **ALL_VARS,
+                **yaml.safe_load(
+                    (K8S / entry["name"] / "defaults" / "main.yml").read_text()
+                ),
+            )
+        )
+        for container in doc["spec"]["template"]["spec"]["containers"]:
+            for mount in container.get("volumeMounts", []):
+                path = mount["mountPath"].rstrip("/")
+                assert not any(
+                    path == r or path.startswith(r + "/") for r in reserved
+                ), f"{entry['name']} mounts {path}, shadowing the ServiceAccount token"
+
+
 # --- 3. protected services are actually protected -------------------------------------------
 
 

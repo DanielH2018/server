@@ -80,7 +80,9 @@ spec:
         - name: secrets
           secret:
             secretName: authelia-config
-            defaultMode: 0400
+            # 0440, not 0400: secret files are owned root:fsGroup, so a non-root container
+            # reads them via the group bit. 0400 leaves the group nothing.
+            defaultMode: 0440
         - name: config
           persistentVolumeClaim:
             claimName: authelia-config
