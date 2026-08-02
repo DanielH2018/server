@@ -1,4 +1,4 @@
-{% macro labels(container, port=none, name=none, url=none, monitor_type='docker', interval=60, max_retries=2, push_token=none, notify=true, hostname=none, extra_notifications=none) -%}
+{% macro labels(container, port=none, name=none, url=none, monitor_type='docker', interval=60, max_retries=2, push_token=none, notify=true, hostname=none, extra_notifications=none, accepted_statuscodes=none) -%}
 {% set _name = name if name is not none else container | replace('-', ' ') | title -%}
 {% if monitor_type == 'docker' -%}
       - "kuma.{{ container }}.docker.name={{ _name }}"
@@ -30,6 +30,8 @@
       - "kuma.{{ container }}.http.url={{ _url }}"
       - "kuma.{{ container }}.http.interval={{ interval | string }}"
       - "kuma.{{ container }}.http.maxretries={{ max_retries | string }}"
+{% if accepted_statuscodes is not none %}      - 'kuma.{{ container }}.http.accepted_statuscodes={{ accepted_statuscodes | tojson }}'
+{% endif -%}
 {% if notify and kuma_notification_id is defined and kuma_notification_id %}      - 'kuma.{{ container }}.http.notification_name_list={{ ([kuma_notification_id] + (extra_notifications or [])) | tojson }}'
 {% endif -%}
 {%- endif %}
