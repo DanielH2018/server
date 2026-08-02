@@ -1,0 +1,451 @@
+# k3s Slice 1 — Ingress, SSO, and the First Leaf Service
+
+Stands up **Traefik + Authelia in k3s on a new MetalLB VIP**, with **bento-pdf** behind a test
+hostname, and proves the whole chain: routing → TLS → SSO → monitor → backup.
+
+Prerequisite: [slice 0](slice-0-cluster-foundation.md), complete. Cluster is single-node on
+daniel-box (`10.0.0.215`), Longhorn at 1 replica with a B2 backup target under the `longhorn/`
+prefix, MetalLB pool `10.0.0.240-250`.
+
+Design context: [`design.md`](design.md) §7 (ingress VIP, secrets, coexistence), §8 (slice table
+and the Authelia-storage hazard).
+
+---
+
+## What this slice proves, and what it deliberately does not
+
+**Proves:** that a request can enter the cluster on a VIP, terminate TLS with a real
+Let's Encrypt certificate, be gated by an Authelia forward-auth Middleware, reach a pod, be
+monitored, and have its state land in B2.
+
+**Does not prove, on purpose:**
+
+- **Public reachability.** The router forward stays on `10.0.0.161`. No public DNS record points
+  at the new VIP. The k8s stack is reachable **only from the LAN**, via Pi-hole overrides. This is
+  what makes it safe to run without CrowdSec.
+- **Two-factor.** See *Decision 4*. Slice 1 exercises the `one_factor` LAN path end to end.
+- **That the Docker copies can be turned off.** They stay running. That is slice 2.
+
+---
+
+## Global constraints
+
+Same as slice 0, plus two new ones.
+
+1. **daniel-box only.** Nothing in this slice touches daniel-server's Docker stack — with one
+   exception, called out explicitly: the Pi-hole DNS override (Task 5) is an Ansible change
+   deployed to daniel-server. It adds two `address=` lines and changes nothing else.
+2. **`--check` proves nothing here.** Every k8s task is `ansible.builtin.command`/`kubernetes.core`,
+   which check mode skips rather than simulates. This bit twice in slice 0. Exit criteria below are
+   real `curl`/`kubectl` invocations, never a dry run.
+3. **No secret values in manifests committed to git.** Rendered manifests land on the node under
+   `/etc/rancher/k3s/` (root-owned) with `mode: '0600'` and `no_log: true` on the task, matching how
+   `authelia/configuration.yml` is already rendered in plaintext on daniel-server today.
+4. **The k8s stack is not in the blast radius of the Docker stack.** Separate VIP, separate
+   Authelia storage, separate ACME account, separate session cookie. If slice 1 breaks, nothing
+   currently serving traffic notices.
+
+---
+
+## Decisions settled here
+
+These are the parts `design.md` left open. Each is load-bearing for a later slice.
+
+### 1. Ingress VIP — `10.0.0.240`, reserved structurally
+
+The ingress address must not be claimable by an ordinary `LoadBalancer` Service. Rather than
+writing "don't use .240" in a comment, split the MetalLB pool:
+
+- `ingress-pool` — `10.0.0.240/32`, **`autoAssign: false`**. Only claimable by explicit
+  `metallb.io/loadBalancerIPs` annotation.
+- `homelab-pool` — `10.0.0.241-10.0.0.250`, auto-assigning, for everything else.
+
+`autoAssign: false` is the enforcement: MetalLB will never hand `.240` to a Service that did not
+ask for it by name. Use the **`metallb.io/loadBalancerIPs` annotation**, not `spec.loadBalancerIP` —
+that field is deprecated upstream and MetalLB reads the annotation.
+
+> The slice-0 smoke Service currently holds `.240`. Delete it first
+> (`k3s kubectl delete deploy/smoke svc/smoke pvc/smoke-pvc`) or the pool split won't apply cleanly.
+
+### 2. Certificates — Traefik's own ACME resolver, its own account, staging first
+
+Keep Traefik's built-in `certificatesResolvers.cloudflare` (DNS-01 via `cloudflare_dns_token`)
+rather than introducing cert-manager. Reasons: it is the config that already works, DNS-01 needs no
+inbound reachability — which is precisely why a LAN-only VIP can still get a real certificate — and
+adding cert-manager during a migration that already has enough moving parts is exactly the kind of
+substitution `design.md` §7 avoided for secrets.
+
+**Both Traefiks will request the same SAN set** (`*.<domain>`, `*.local.<domain>`). Let's Encrypt
+allows 5 duplicate certificates per exact SAN set per week; two instances renewing costs 2. That is
+fine steady-state and *not* fine while iterating on a broken config.
+
+**So: point the resolver at the LE staging directory until the chain works, then flip to
+production.** Make it a variable, not an edit:
+
+```yaml
+# k3s_traefik_acme_ca_server: https://acme-staging-v02.api.letsencrypt.org/directory
+k3s_traefik_acme_ca_server: ""   # empty => production
+```
+
+`acme.json` lives on its own Longhorn PVC, so flipping staging→production means deleting that one
+file, not rebuilding the pod.
+
+### 3. Authelia storage — own PVC, **shared encryption key**
+
+The named hazard in `design.md` §8: *"Do not run the k3s Authelia and the Docker Authelia against
+the same storage backend."* Concretely, that backend is **SQLite at `/config/db.sqlite3`** — the
+file holding TOTP secrets, WebAuthn devices, and regulation records. Two processes writing one
+SQLite file corrupts it.
+
+- **Own storage:** a dedicated Longhorn PVC mounted at `/config`. Nothing is shared with
+  daniel-server's bind mount.
+- **Same `storage.encryption_key`** — reuse the existing `authelia_storage` secret. This is
+  deliberate: it makes the slice-6 cutover a **plain file copy** of `db.sqlite3` with no
+  re-encryption step. It also means **no new SOPS entry and no `secret_rotation.py sync`** — worth
+  stating, because `authelia_storage` is a `pinned` DANGER secret in
+  [`docs/secret-rotation.md`](../secret-rotation.md) and adding a second one would double that
+  procedure's surface for no gain.
+- **Same `authelia_secret`** (session secret), same reasoning.
+
+### 4. Session cookie — a distinct **name**, or the two portals fight
+
+This is not in `design.md` and it will bite otherwise. Both Authelias serve the cookie domain
+`local.<domain>`. The browser holds **one** cookie per (domain, name) pair — so with the current
+`name: 'authelia_session_local'` on both, whichever portal logs in last overwrites the other's
+cookie. Sessions are held in-memory per instance (no Redis), so the overwritten side then bounces
+the user back to login. Symptom: logging into the k8s portal silently signs you out of everything
+on daniel-server.
+
+Fix in the k8s Authelia's config:
+
+```yaml
+session:
+  cookies:
+    - domain: 'local.<domain>'
+      authelia_url: 'https://auth-k8s.local.<domain>'
+      name: 'authelia_session_k8s'     # NOT authelia_session_local
+```
+
+**TOTP consequence.** A fresh DB means no enrolments, so the public `two_factor` path cannot be
+exercised in slice 1 without re-enrolling on a database that gets thrown away at cutover. Don't.
+The test hostnames are `*.local.<domain>`, which `access_control` already scores `one_factor` from
+RFC1918 — the full redirect → login → session → forward-auth chain runs without TOTP. Storage is
+still proven: Task 6 enrols one throwaway TOTP device purely to confirm the PVC and encryption key
+work, then discards it. The real user database is copied at slice 6.
+
+### 5. CrowdSec — out of scope
+
+`design.md` schedules the CrowdSec LAPI at **slice 6**. Its acquisition also has to be rebuilt
+(Docker socket → file-based over `/var/log/pods`), which is a slice of its own. So the k3s Traefik
+ships **without** the bouncer plugin and without `crowdsec@file` on its entrypoints.
+
+This is only acceptable because of the LAN-only constraint. **Adding a public DNS record for a
+`*-k8s` hostname before slice 6 would expose an unprotected ingress.** Don't.
+
+### 6. Uptime-Kuma monitor — added by hand, once
+
+AutoKuma reads Docker labels off the socket; there are no Docker labels in k8s, and the AutoKuma
+rework is **slice 3**. So slice 1 adds **one HTTP monitor by hand** in Uptime-Kuma against the new
+hostname. Note it as a known-temporary mechanism rather than building a bridge that slice 3
+replaces.
+
+Related, not slice-1 work: `scripts/probe.py health <svc>` shells to `docker inspect` and will not
+work for k8s services. It needs a k8s branch eventually — file it, don't fix it here.
+
+### 7. Manifest rendering — follow the slice-0 convention
+
+Slice 0 renders to `/etc/rancher/k3s/*.yaml` and runs an explicit `k3s kubectl apply -f`. Keep that.
+
+Specifically **do not** use k3s's auto-deploy directory (`/var/lib/rancher/k3s/server/manifests/`):
+it re-applies on every k3s restart, which fights Ansible for ownership, and it makes "what is
+deployed" depend on file-tree state the playbook doesn't fully control.
+
+Pinned upstream manifests (Traefik CRDs + RBAC) are applied by URL, exactly as slice 0 does for
+Longhorn and MetalLB. Only the Deployment/Service/ConfigMap are hand-authored — the CRD set is
+large, versioned, and not ours to maintain.
+
+---
+
+## File structure
+
+```
+ansible/
+  deploy.yml                                         # + second play, platform: k8s
+  inventory/host_vars/daniel-box.yml                 # containers_list gains 3 entries
+  roles/setup/k3s/
+    defaults/main.yml                                # pool split, traefik/authelia versions, ACME CA
+    templates/metallb-pool.yaml.j2                   # two pools (Task 1)
+  roles/k8s/
+    common/tasks/main.yml                            # render → apply → wait-for-rollout
+    traefik/
+      tasks/main.yml
+      templates/{static-config.yaml,deployment.yaml,service.yaml,cf-token-secret.yaml,acme-pvc.yaml}.j2
+    authelia/
+      tasks/main.yml
+      templates/{config-secret.yaml,users-secret.yaml,pvc.yaml,deployment.yaml,service.yaml,ingressroute.yaml,forwardauth-middleware.yaml}.j2
+    bento-pdf/
+      tasks/main.yml
+      templates/{deployment.yaml,service.yaml,ingressroute.yaml}.j2
+  roles/containers/pihole/templates/dnsmasq.yml.j2   # 2 override lines — deployed to daniel-server
+  tests/test_k8s_manifests.py                        # guards (below)
+docs/k3s-migration/slice-1-ingress-sso-leaf.md       # this file
+```
+
+`containers_list` keys carry over unchanged — that is the whole point of the `platform` key:
+
+```yaml
+containers_list:
+  - name: traefik
+    platform: k8s
+    port: 8080
+  - name: authelia
+    platform: k8s
+    hostname: auth-k8s
+    port: 9091
+    use_authelia: false
+  - name: bento-pdf
+    platform: k8s
+    hostname: bento-pdf-k8s
+    port: 8080
+    use_authelia: true
+```
+
+`networks:` is absent and unused — k8s has a flat pod network, so the `proxy`/`apps` split
+dissolves. `use_authelia` keeps its meaning: it decides whether the IngressRoute carries the
+forward-auth Middleware.
+
+---
+
+## Tasks — sequenced as thin, exercisable slices
+
+Each task ends in something you can run. Do not proceed past a failing step.
+
+### Task 1: Split the MetalLB pool and reserve the VIP
+
+Delete the slice-0 smoke resources first, then rewrite `metallb-pool.yaml.j2` as two
+`IPAddressPool`s (per *Decision 1*) with the `L2Advertisement` listing both.
+
+```bash
+sudo k3s kubectl delete deploy/smoke svc/smoke pvc/smoke-pvc --ignore-not-found
+uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s
+sudo k3s kubectl -n metallb-system get ipaddresspool -o wide
+```
+
+**Prove it:** `ingress-pool` shows `AUTO ASSIGN: false`.
+
+### Task 2: k8s deploy plumbing
+
+Add a second play to `deploy.yml` filtering `platform: k8s`, and `roles/k8s/common` to hold the
+render → apply → `rollout status` cycle every service repeats. Guard the play on the host actually
+running k3s so it no-ops on daniel-server.
+
+**Prove it:** `uv run ansible-playbook ansible/deploy.yml` on daniel-box reaches the new play and
+reports `ok`; the same command on daniel-server skips it and still shows `changed=0`.
+
+### Task 3: bento-pdf in the cluster — no ingress yet
+
+Deployment + Service only. Carry across the security posture from the compose template, which is
+already tight and translates directly: `readOnlyRootFilesystem`, `drop: [ALL]`,
+`allowPrivilegeEscalation: false`, and `emptyDir` volumes for `/var/cache/nginx` and
+`/etc/nginx/tmp` (the compose `tmpfs` entries — the image is nginx-unprivileged UID 101 and cannot
+write to a root-owned default).
+
+```bash
+sudo k3s kubectl run curl-probe --rm -it --image=curlimages/curl --restart=Never -- \
+  -sS -o /dev/null -w '%{http_code}\n' http://bento-pdf.default.svc.cluster.local:8080/
+```
+
+**Prove it:** `200`, with no ingress in the path at all.
+
+### Task 4: Traefik on the VIP, plain HTTP
+
+Apply pinned upstream CRDs + RBAC by URL. Hand-author the static config (a ConfigMap, adapted from
+`traefik.yml.j2`), Deployment, and a `LoadBalancer` Service annotated onto `10.0.0.240`.
+
+Adapt, don't copy, the static config:
+
+- **Drop** the `docker` provider; add `providers.kubernetesCRD`.
+- **Drop** `crowdsec@file` from both entrypoints (*Decision 5*) and the `experimental.plugins`
+  block with it.
+- **Keep** `forwardedHeaders.trustedIPs` and its reasoning verbatim — the analysis in that comment
+  (why not `10.0.0.0/8`, why not the docker ranges) is about X-Forwarded-For trust and is unchanged
+  by the platform.
+- **Drop** the `terraria` entrypoint; nothing on this VIP serves it.
+- **Keep** `metrics.prometheus`, and the `ping` entrypoint — the latter becomes the pod's readiness
+  probe, which is cleaner than the Docker healthcheck.
+
+Add the bento-pdf IngressRoute on the `web` entrypoint only, no TLS yet.
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  -H 'Host: bento-pdf-k8s.local.<domain>' http://10.0.0.240/
+```
+
+**Prove it from daniel-server, not daniel-box.** Slice 0's LoadBalancer criterion was ambiguous for
+exactly this reason: `externalTrafficPolicy: Cluster` masquerades external traffic, so an on-host
+curl and a LAN curl are indistinguishable in the access log. Running it from another machine is the
+only thing that proves L2 advertisement works.
+
+### Task 5: DNS overrides, then TLS
+
+Two lines in Pi-hole's `dnsmasq.yml.j2` — dnsmasq prefers the most specific `address=` match, so
+these override the existing `address=/local.<domain>/{{ server_ip }}` wildcard for these two names
+only:
+
+```
+address=/bento-pdf-k8s.local.<domain>/10.0.0.240
+address=/auth-k8s.local.<domain>/10.0.0.240
+```
+
+Deploy to daniel-server (`--tags pihole`). Then add TLS to the IngressRoute with
+`certResolver: cloudflare`, mount `cloudflare_dns_token` as a **file-backed Secret** —
+`CF_DNS_API_TOKEN_FILE`, not `CF_DNS_API_TOKEN`, keeping the token out of `kubectl describe` for
+the same reason the compose template keeps it out of container metadata — and give `acme.json` its
+own Longhorn PVC.
+
+**Run against LE staging first.** Once a staging cert appears, delete `acme.json`, clear
+`k3s_traefik_acme_ca_server`, and let it re-issue against production.
+
+```bash
+dig +short bento-pdf-k8s.local.<domain>                    # expect 10.0.0.240
+curl -sS -o /dev/null -w '%{http_code}\n' https://bento-pdf-k8s.local.<domain>/
+echo | openssl s_client -connect bento-pdf-k8s.local.<domain>:443 2>/dev/null \
+  | openssl x509 -noout -issuer -dates
+```
+
+**Prove it:** `200`, issuer is Let's Encrypt **production**, and `curl` does not need `-k`.
+
+### Task 6: Authelia with its own storage
+
+PVC → Secrets (config + users database, both `no_log: true`) → Deployment → Service →
+IngressRoute for `auth-k8s.local.<domain>`.
+
+Config is adapted from `configuration.yml.j2` with three changes and nothing else: the cookie block
+from *Decision 4*, `authelia_url` pointing at the new portal, and the `identity_providers.oidc`
+clients trimmed to nothing — no OIDC client points at this instance yet, and carrying dead client
+registrations into a throwaway database is how stale redirect URIs survive a migration.
+
+Keep `access_control` **byte-identical** to daniel-server's. It is the security policy; slice 1 is
+not the place to redesign it.
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' https://auth-k8s.local.<domain>/
+sudo k3s kubectl exec deploy/authelia -- ls -l /config/db.sqlite3
+```
+
+**Prove it:** portal returns `200` and renders; log in as a real user; enrol one throwaway TOTP
+device to confirm the PVC and `storage.encryption_key` work, then delete it.
+
+### Task 7: Gate bento-pdf behind forward-auth
+
+The `authelia@docker` middleware becomes a `Middleware` CRD — this is the substitution that repeats
+~33 more times in slice 2, so get the shape right:
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authelia
+spec:
+  forwardAuth:
+    address: http://authelia.default.svc.cluster.local:9091/api/authz/forward-auth
+    trustForwardHeader: true
+    authResponseHeaders:
+      - Remote-User
+      - Remote-Groups
+      - Remote-Name
+      - Remote-Email
+```
+
+Attach it to bento-pdf's IngressRoute alongside a `rate-limit` Middleware — the docker `labels()`
+macro applies `rate-limit@file` to every authed router, and dropping it silently would remove
+brute-force protection.
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://bento-pdf-k8s.local.<domain>/
+```
+
+**Prove it:** unauthenticated request returns `302` to `auth-k8s.local.<domain>` (**not**
+`auth.local.<domain>` — a redirect to the Docker portal means the config still carries
+daniel-server's `authelia_url`); after logging in, the browser reaches bento-pdf.
+
+### Task 8: Uptime-Kuma monitor
+
+Add one HTTP monitor by hand against `https://bento-pdf-k8s.local.<domain>/`, expecting `302`
+(it is behind forward-auth now, so `200` is the wrong assertion and will flap).
+
+**Prove it:** monitor is green in Uptime-Kuma.
+
+### Task 9: The backup gate
+
+**bento-pdf is stateless** — read-only rootfs, tmpfs only, no volumes. It contributes nothing to
+back up. (`speedtest` would have been the same.) The state slice 1 actually creates is
+**Authelia's `/config` PVC** and **Traefik's `acme.json` PVC**, so that is where the §6 gate lands.
+
+Add a Longhorn `RecurringJob` (daily, `backup` task) targeting both PVCs, trigger one immediately,
+then verify from **outside the cluster** — asking Longhorn whether its own backup exists is not
+independent evidence, which is the whole point of this gate:
+
+```bash
+bash /home/ubuntu/.claude/jobs/95fc95ed/tmp/b2-list-longhorn.sh   # run on daniel-server
+```
+
+**Prove it:** `.blk` data blocks exist alongside `backup_*.cfg` for the Authelia volume. Metadata
+without blocks is the "reports success while storing nothing" failure this gate exists to catch.
+
+---
+
+## Tests to add (`ansible/tests/test_k8s_manifests.py`)
+
+Per the repo's escalation ladder — a check a machine enforces beats a paragraph an agent has to
+remember:
+
+1. `ingress-pool` is a `/32` with `autoAssign: false`, and `homelab-pool` does **not** contain the
+   ingress address. Guards *Decision 1* against a future pool edit.
+2. The k8s Authelia's session cookie `name` differs from the Docker one, and its storage path is
+   backed by a PVC. Guards *Decisions 3 and 4* — the two silent-corruption cases.
+3. Every k8s IngressRoute whose `containers_list` entry has `use_authelia: true` carries both the
+   forward-auth and rate-limit Middlewares. This is the check that scales to slice 2's ~33
+   hand-authored routes.
+4. The k8s Traefik static config contains no `crowdsec` reference while `k3s_crowdsec_enabled` is
+   false — so slice 6 turning it on is a deliberate flip, not a silent gap nobody notices.
+
+Plus a `validate-manifests` prek hook mirroring `validate-compose`: re-render every
+`roles/k8s/*/templates/*.yaml.j2` and fail on malformed YAML. Jinja indent bugs in k8s manifests
+fail exactly as quietly as they do in compose files, and `ansible-lint` misses both.
+
+---
+
+## Exit criteria
+
+Slice 1 is done when every one of these has been run and its output read. No `--check` substitutes.
+
+- [ ] `k3s kubectl -n metallb-system get ipaddresspool` — `ingress-pool` is `/32`, `autoAssign: false`
+- [ ] `k3s kubectl get svc traefik` — `EXTERNAL-IP` is `10.0.0.240`
+- [ ] `curl -H 'Host: bento-pdf-k8s.local.<domain>' http://10.0.0.240/` **from daniel-server** → `200`
+- [ ] `dig +short bento-pdf-k8s.local.<domain>` → `10.0.0.240`
+- [ ] `openssl s_client` — certificate issued by Let's Encrypt **production**, not staging
+- [ ] `curl https://bento-pdf-k8s.local.<domain>/` unauthenticated → `302` to `auth-k8s.local.<domain>`
+- [ ] Browser: log in at the k8s portal, reach bento-pdf, **and confirm an existing daniel-server
+      session is still valid** — the cookie-collision check from *Decision 4*
+- [ ] TOTP enrolment succeeds and survives an Authelia pod restart (proves the PVC, not just the pod)
+- [ ] Uptime-Kuma monitor green
+- [ ] `b2-list-longhorn.sh` shows `.blk` blocks for the Authelia volume
+- [ ] `uv run pytest` and `prek run --all-files` both clean
+- [ ] daniel-server unchanged: `docker ps -q | wc -l` still 66, `uptime` shows no reboot
+
+---
+
+## Explicitly out of scope
+
+| Deferred to | What |
+|---|---|
+| Slice 2 | The other ~33 leaf services; stopping any Docker copy |
+| Slice 3 | AutoKuma rework; `probe.py health` gaining a k8s branch |
+| Slice 6 | CrowdSec LAPI + bouncer; router forward → VIP; public DNS; copying the real Authelia DB; the `two_factor` public path |
+| Slice 7 | Second Longhorn replica (still 1 until daniel-server joins) |
+
+**Known risk carried forward:** Longhorn and Kopia share the `daniel-server-kopia` bucket,
+separated only by the `longhorn/` prefix. Nothing enforces that a future lifecycle rule stays
+prefix-scoped. Flagged in slice 0, still open, and slice 1 is the first time real service state
+depends on it.
