@@ -24,7 +24,12 @@ traefik_k8s_acme_ca_server: ""
 # small and not the volume the slice-1 backup gate turns on.
 traefik_k8s_acme_storage: 128Mi
 
-traefik_k8s_cpu_limit: "1.0"
+# "1", not "1.0" — Kubernetes canonicalises quantities, so a manifest saying 1.0 produces a live
+# object saying 1. The values match, but kubectl's last-applied-configuration annotation does not,
+# so every `kubectl apply` patches the annotation and reports the Deployment "configured" forever.
+# `kubectl diff` shows nothing (it compares the canonicalised objects), which is what makes this
+# hard to see. Keep resource quantities in the form the API server stores.
+traefik_k8s_cpu_limit: "1"
 traefik_k8s_mem_limit: 512Mi
 traefik_k8s_cpu_request: "100m"
 traefik_k8s_mem_request: 128Mi
