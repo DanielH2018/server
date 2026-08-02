@@ -73,6 +73,27 @@ services:
       # Kuma probe egresses as the server IP, which the Pi's DOCKER-USER :9001 allow permits.
       {{ kuma('daniel-pi-portainer-agent', name='Daniel Pi Portainer Agent', monitor_type='port',
               hostname=hostvars['daniel-pi'].server_ip, port=9001) }}
+      # k3s ingress monitors (static, same reason as the Pi block above): AutoKuma reads only the
+      # SERVER's docker socket, and the k8s workloads on daniel-box have no container here at all,
+      # so the kuma() labels their compose templates would carry are never seen. Probe the MetalLB
+      # ingress VIP over the LAN instead — same path a browser takes, through real DNS.
+      #
+      # auth-k8s answers 200: it is the login portal, unauthenticated by definition. A green here
+      # means the VIP holds, Traefik routes, the LE cert validates and Authelia is serving.
+      {{ kuma('auth-k8s', name='k3s Authelia Portal', monitor_type='http',
+              url='https://auth' ~ k8s_hostname_suffix ~ '.local.' ~ domain) }}
+      # A protected route answers 302 to an unauthenticated prober — that redirect IS the signal:
+      # it proves the route exists, the forward-auth middleware is attached, and Authelia issued a
+      # challenge. Kuma accepts 200-299 by default, so the expected code has to be stated or this
+      # monitor is permanently red.
+      #
+      # NOTE what this does NOT prove: forward-auth runs BEFORE the backend, so bento-pdf itself
+      # could be dead and this stays green. Backend health is only visible from inside the cluster,
+      # which nothing on this host can currently see — see docs/b2-transaction-cap-monitoring-gaps.md,
+      # same cross-host gap as the Longhorn backup target.
+      {{ kuma('bento-pdf-k8s', name='k3s Ingress (bento-pdf)', monitor_type='http',
+              url='https://bento-pdf' ~ k8s_hostname_suffix ~ '.local.' ~ domain,
+              accepted_statuscodes=['302']) }}
       # Pi SD-card health: SD cards have no SMART, so a dying card only announces
       # itself via ext4 errors. The Pi's pi-sd-health.sh cron (optimize_pi role)
       # pushes errors_count every 5 min through the LAN-bypassed push API
