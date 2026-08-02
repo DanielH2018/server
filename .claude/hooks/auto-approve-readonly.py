@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""PreToolUse(Bash) classifier: auto-approve provably read-only commands.
+"""Bash classifier: auto-approve provably read-only commands.
 
 Reads the hook JSON on stdin. Prints a PreToolUse "allow" decision iff the WHOLE
 command line is read-only: a single read-only command, or a pipeline whose every
 stage is read-only. Anything else -> no output -> normal permission flow (an
 allow-list match or an interactive prompt).
+
+With --permission-request it answers a PermissionRequest instead, and only for
+commands that reach a homelab host over ssh (see SSH_HOSTS). That entry point
+exists because ask rules -- `Bash(ssh:*)` is one -- are evaluated whatever a
+PreToolUse hook returns, so the PreToolUse decision alone never reaches them.
 
 Safety model (deny by default):
   * Substitution is rejected outright -- $(...), backticks, ${...} -- because a
@@ -26,7 +31,7 @@ import re
 import shlex
 import sys
 
-from _hook_common import emit_pretooluse_decision
+from _hook_common import emit_permissionrequest_allow, emit_pretooluse_decision
 
 # --- Programs that cannot write or exec under ANY arguments --------------------
 # Deliberately excludes commands with a write/exec mode: env (`env CMD`),
@@ -661,7 +666,91 @@ def _sensors(argv):
     return None if any(a in ("-s", "--set") for a in argv[1:]) else "sensors"
 
 
+# Homelab hosts whose read-only commands may auto-approve. Anything else falls
+# through to a prompt: reaching an unknown host is itself worth confirming.
+SSH_HOSTS = {"daniel-server", "daniel-pi"}
+
+# ssh flags that change only how we connect, never what runs. Everything absent
+# is refused, which is what keeps -L/-R/-D (forwarding), -F (alternate config),
+# -A (agent forwarding) and -J/-W (proxying) out.
+_SSH_FLAGS = {"-q", "-T", "-n", "-4", "-6"}
+_SSH_VALUE_FLAGS = {"-i", "-p", "-l", "-o"}
+
+# -o takes arbitrary config, including ProxyCommand/LocalCommand — which execute
+# a command on THIS machine. Whitelisting the key is what makes -o safe.
+_SSH_OPTIONS = {
+    "batchmode",
+    "connectionattempts",
+    "connecttimeout",
+    "identitiesonly",
+    "loglevel",
+    "serveralivecountmax",
+    "serveraliveinterval",
+    "stricthostkeychecking",
+}
+
+# Reading a secret over ssh dumps it into the transcript, so the remote side is
+# held to a stricter standard than the local one (local `cat ~/.ssh/id_ed25519`
+# is already TIER1-approved). Mirrors the SECRET_RE in the user-level
+# allow-readonly-remote.sh, which governs the same traffic.
+_SSH_SECRET = re.compile(
+    r"\.env|\.ssh(/|\s|$)|id_rsa|id_ed25519|id_ecdsa|\.aws/credentials|\.aws/config"
+    r"|\.gnupg(/|\s|$)|\.netrc|\.pypirc|\.npmrc|/secrets(/|\s|$)|\.git-credentials"
+    r"|\.kube/config|\.docker/config\.json|\.config/gh/hosts\.yml|\.config/gcloud/"
+    r"|\.config/rclone/rclone\.conf|terraform\.tfstate|\.bash_history|\.claude\.json"
+    r"|/etc/shadow|/etc/gshadow|/proc/\S*environ|\.pem($|[^a-z])|\.key($|[^a-z])"
+    r"|\.p12($|[^a-z])|\.pfx($|[^a-z])",
+    re.IGNORECASE,
+)
+
+# A glob is expanded by the REMOTE shell, after our checks have run, so a literal
+# that _SSH_SECRET doesn't match (`/proc/self/enviro?`) can still become a secret
+# path over there. We can't see the remote filesystem, so we refuse the pattern.
+_SSH_GLOB = re.compile(r"[*?\[\]\\]")
+
+
+def _ssh(argv):
+    # `ssh [opts] [user@]host CMD...` where CMD is itself read-only. ssh joins its
+    # remaining arguments with spaces and hands the result to the remote shell, so
+    # reconstructing the string and re-running classify() on it is exactly what the
+    # far side sees -- and it reuses every guard the local path already has.
+    i, n = 1, len(argv)
+    while i < n:
+        a = argv[i]
+        if a in _SSH_FLAGS:
+            i += 1
+        elif a in _SSH_VALUE_FLAGS:
+            if i + 1 >= n:
+                return None
+            if a == "-o" and _ssh_option_key(argv[i + 1]) not in _SSH_OPTIONS:
+                return None
+            i += 2
+        elif a.startswith("-"):
+            return None  # unknown flag, or a glued form we can't read
+        else:
+            break
+    if i >= n:
+        return None
+    host = argv[i].split("@", 1)[-1]
+    if host not in SSH_HOSTS:
+        return None
+    remote = " ".join(argv[i + 1 :])
+    if not remote.strip():
+        return None  # no command means an interactive shell
+    if remote.split()[0].rsplit("/", 1)[-1] == "ssh":
+        return None  # a second hop is a shape worth confirming, not recursing into
+    if _SSH_SECRET.search(remote) or _SSH_GLOB.search(remote):
+        return None
+    return "ssh {}".format(host) if classify(remote) else None
+
+
+def _ssh_option_key(opt):
+    # `-o BatchMode=yes` and `-o "BatchMode yes"` are both accepted by ssh.
+    return re.split(r"[=\s]", opt.strip(), maxsplit=1)[0].lower()
+
+
 HANDLERS = {
+    "ssh": _ssh,
     "git": _git,
     "find": _find,
     "sort": _sort,
@@ -801,12 +890,30 @@ def classify(command):
     return "read-only: " + " | ".join(reasons)
 
 
+def classify_remote(command):
+    """Return classify()'s reason if the command line is read-only AND runs over ssh.
+
+    The PermissionRequest entry point is deliberately narrower than the PreToolUse one: it can
+    answer `ask` rules, so it only speaks for the traffic that needs it (`Bash(ssh:*)`) rather
+    than for every read-only command.
+    """
+    reason = classify(command)
+    if not reason:
+        return None
+    stages = reason.split(": ", 1)[1].split(" | ")
+    return reason if any(s.startswith("ssh ") for s in stages) else None
+
+
 def main():
     try:
         data = json.load(sys.stdin)
     except Exception:
         return 0
     command = ((data.get("tool_input") or {}).get("command")) or ""
+    if "--permission-request" in sys.argv[1:]:
+        if classify_remote(command):
+            emit_permissionrequest_allow()
+        return 0
     reason = classify(command)
     if reason:
         emit_pretooluse_decision("allow", reason)
