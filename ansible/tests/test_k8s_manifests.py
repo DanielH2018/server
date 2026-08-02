@@ -50,7 +50,8 @@ def _ip_to_int(addr: str) -> int:
 # --- 1. the ingress VIP is reserved, structurally -----------------------------------------
 
 
-def _pools() -> dict[str, dict]:
+def _pool_docs() -> list[dict]:
+    """IPAddressPool documents in FILE order — the order kubectl applies them in."""
     rendered = _render(
         K3S / "templates" / "metallb-pool.yaml.j2",
         k3s_metallb_ingress_vip=ALL_VARS["k3s_metallb_ingress_vip"],
@@ -59,7 +60,11 @@ def _pools() -> dict[str, dict]:
         ],
     )
     docs = [d for d in yaml.safe_load_all(rendered) if d]
-    return {d["metadata"]["name"]: d for d in docs if d["kind"] == "IPAddressPool"}
+    return [d for d in docs if d["kind"] == "IPAddressPool"]
+
+
+def _pools() -> dict[str, dict]:
+    return {d["metadata"]["name"]: d for d in _pool_docs()}
 
 
 def test_ingress_pool_is_a_single_address_that_is_never_auto_assigned():
@@ -76,6 +81,21 @@ def test_general_pool_does_not_contain_the_ingress_vip():
     start, end = _pools()["homelab-pool"]["spec"]["addresses"][0].split("-")
     vip = _ip_to_int(ALL_VARS["k3s_metallb_ingress_vip"])
     assert not (_ip_to_int(start) <= vip <= _ip_to_int(end))
+
+
+def test_the_general_pool_narrows_before_the_ingress_pool_is_created():
+    """kubectl applies documents in file order and MetalLB's validating webhook rejects
+    overlapping pools, so the wide pool has to narrow first. Applying ingress-pool ahead of it
+    failed on daniel-box (2026-08-02) with:
+
+        CIDR "10.0.0.240/32" in pool "ingress-pool" overlaps with already
+        defined CIDR "10.0.0.240/29"
+
+    — homelab-pool still covered .240-.250 at validation time. Reordering the file is the whole
+    fix, which is exactly why it is worth a guard: nothing about the YAML looks order-sensitive.
+    """
+    names = [d["metadata"]["name"] for d in _pool_docs()]
+    assert names.index("homelab-pool") < names.index("ingress-pool")
 
 
 # --- 2. the two Authelias never share state ------------------------------------------------

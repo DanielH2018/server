@@ -4,6 +4,24 @@
 # MetalLB will never hand this address out except to a Service that names it via the
 # metallb.io/loadBalancerIPs annotation. A comment saying "don't use .240" would not
 # survive the next service that asks for a LoadBalancer.
+#
+# ORDER MATTERS. `kubectl apply -f` processes documents in file order, and MetalLB's
+# validating webhook rejects any pool overlapping an already-defined one. homelab-pool has to
+# narrow FIRST: when this file was introduced it still covered 10.0.0.240-250, so applying
+# ingress-pool ahead of it was denied with
+#   CIDR "10.0.0.240/32" in pool "ingress-pool" overlaps with already defined CIDR "10.0.0.240/29"
+# (MetalLB normalises the old range into CIDRs, and .240/29 is the first of them). Narrowing
+# homelab-pool first makes the ingress /32 free by the time it is validated, on a fresh cluster
+# and on the upgrade path alike.
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: homelab-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - {{ k3s_metallb_pool }}
+---
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
@@ -13,15 +31,6 @@ spec:
   addresses:
     - {{ k3s_metallb_ingress_vip }}/32
   autoAssign: false
----
-apiVersion: metallb.io/v1beta1
-kind: IPAddressPool
-metadata:
-  name: homelab-pool
-  namespace: metallb-system
-spec:
-  addresses:
-    - {{ k3s_metallb_pool }}
 ---
 apiVersion: metallb.io/v1beta1
 kind: L2Advertisement
