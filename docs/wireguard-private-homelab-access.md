@@ -150,10 +150,25 @@ Some Mullvad builds drop secondary-tunnel traffic even with local sharing on. If
 is unreachable while Mullvad is up: re-check "Local network sharing"; test with lockdown
 mode off; otherwise fall back to the toggle approach (Part B) on desktop too.
 
-**Mullvad blocks port 53 specifically** — its DNS-leak protection rejects `:53` to any
-resolver but its own, and "Local network sharing" does **not** exempt it. That setting
-permits LAN traffic generally, so this presents as a very confusing split: `curl` to
-`10.0.0.161:80` works while `dig @10.0.0.161` returns `connection refused`.
+**Mullvad rejects port 53 to every resolver but its own, and enabling "Local network
+sharing" does not change that.** The LAN-sharing rule exists, but it is ordered *below* the
+DNS reject, and nftables stops at the first terminal match. From a real ruleset
+(`sudo nft list ruleset`), in evaluation order:
+
+```
+oif "wg0-mullvad" udp dport 53 ip daddr 10.64.0.1 accept   # Mullvad's own resolver only
+oif "wg0-mullvad" tcp dport 53 ip daddr 10.64.0.1 accept
+udp dport 53 reject                                        # everything else
+tcp dport 53 reject with tcp reset                         # -> "connection refused"
+oif "wg0-mullvad" accept
+ip daddr 10.0.0.0/8 accept                                 # local network sharing, too late
+```
+
+So LAN **HTTP** to `10.0.0.161:80` falls through to the `10.0.0.0/8` accept and works, while
+LAN **DNS** to `10.0.0.161:53` is rejected two rules earlier and never reaches it. That
+asymmetry is the whole confusion: the resolver looks dead while every other port on the same
+host answers. `reject with tcp reset` is what produces `connection refused` rather than a
+timeout.
 
 The diagnostic that identifies it in one step is **to probe `:53` on a host the homelab
 doesn't control** — the ISP gateway:
