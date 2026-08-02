@@ -3,15 +3,19 @@
 #
 # Included by roles/k8s/<service>/tasks/main.yml, which must set:
 #   manifests_service       service name (also the manifest subdirectory)
-#   manifests_role_path     the CALLING role's role_path — `template:` resolves a relative
-#                           src against the role that owns this task file, not the caller,
-#                           so callers pass their own path and we build an absolute src
 #   manifests_files         list of template basenames rendered world-readable
 #   manifests_secret_files  list rendered 0600 with no_log (anything carrying a secret)
 #   manifests_rollout       Deployment to wait on; set '' to skip the wait entirely
 #
 # Named `manifests` rather than `common` so its ansible-lint variable prefix does not
 # collide with the Docker-side roles/containers/common namespace.
+#
+# `src` is derived from manifests_service rather than passed in. A relative src resolves
+# against the role owning this task file — this one — so the caller's templates are invisible
+# to it. Passing `{{ role_path }}` through `vars:` does not work either: include_role vars are
+# templated lazily in the INCLUDED role's context, so role_path resolves right back to this
+# role and every render fails with "Could not find or access
+# .../k8s/manifests/templates/<name>.j2".
 #
 # Manifests land under /etc/rancher/k3s/manifests/ and are applied explicitly. NOT
 # /var/lib/rancher/k3s/server/manifests/ — k3s's auto-deploy controller re-applies that
@@ -31,7 +35,7 @@
 - name: Render manifests for {{ manifests_service }}
   tags: [config]
   ansible.builtin.template:
-    src: "{{ manifests_role_path }}/templates/{{ item }}.j2"
+    src: "{{ playbook_dir }}/roles/k8s/{{ manifests_service }}/templates/{{ item }}.j2"
     dest: "/etc/rancher/k3s/manifests/{{ manifests_service }}/{{ item }}"
     mode: "0644"
     owner: root
@@ -47,7 +51,7 @@
   # later edit to the ordinary manifest list.
   no_log: true
   ansible.builtin.template:
-    src: "{{ manifests_role_path }}/templates/{{ item }}.j2"
+    src: "{{ playbook_dir }}/roles/k8s/{{ manifests_service }}/templates/{{ item }}.j2"
     dest: "/etc/rancher/k3s/manifests/{{ manifests_service }}/{{ item }}"
     mode: "0600"
     owner: root
