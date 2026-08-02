@@ -172,6 +172,21 @@ re-running the `dig`.
 This is worth internalising: Pi-hole is a single-host service, so a `:53` failure that
 reproduces against *multiple* IPs was never Pi-hole. Diagnose the client first.
 
+Once identified, pick one:
+
+1. **Toggle Mullvad off** while using the homelab. Everything resolves via Pi-hole with no
+   config, migrated services included. Simplest, and the desktop equivalent of Part B.
+2. **Hosts file** for the few names you always need. Works with Mullvad *up*, because a
+   hosts entry emits no DNS query and so never meets the `:53` block. Costs a line per
+   service — see A3 for the two-IP split.
+3. **Mullvad → custom DNS = `10.0.0.161`.** Works with Mullvad up, but **avoid it**: all
+   DNS then exits via the LAN to unbound, which recurses from the home IP while HTTP still
+   exits via Mullvad. That correlation is exactly what A3's split-DNS design prevents.
+
+**On the home LAN, don't run the tunnel at all.** Both `10.0.0.161` and `10.0.0.240` are
+directly reachable there, so `wg0` adds nothing and brings the A2 hairpin hazard with it.
+Part A is for remote access.
+
 ---
 
 ## Part B — Mobile: one VPN at a time → toggle
