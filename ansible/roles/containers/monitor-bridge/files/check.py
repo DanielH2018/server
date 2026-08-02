@@ -172,6 +172,11 @@ PROWLARR_INDEXER_MIN_DOWN_MIN = float(_env("PROWLARR_INDEXER_MIN_DOWN_MIN", "30"
 PROWLARR_INDEXER_IGNORE = _env("PROWLARR_INDEXER_IGNORE", "")
 GITOPS_STATE_DIR = _env("GITOPS_STATE_DIR", "/gitops-state")
 GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
+# How long the host may sit behind origin before GitOps Status pages. Generous on purpose: the
+# deployer ticks every 30 min, and the dirty-tree path (operator mid-edit) is behind by design for
+# as long as the edit lasts. 6 h pages a genuinely-stuck host well inside a day while never firing
+# on a normal push or a long editing session.
+GITOPS_BEHIND_MAX_S = float(_env("GITOPS_BEHIND_MAX_MIN", "360")) * 60
 RENOVATE_STATE_DIR = _env("RENOVATE_STATE_DIR", "/renovate-state")
 RENOVATE_MAX_AGE_S = float(_env("RENOVATE_MAX_AGE_MIN", "2160")) * 60
 
@@ -1173,12 +1178,45 @@ def gitops_alive(age_s, max_age_s):
     return False, "deployer last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
 
 
-def gitops_status(hold_sha, diverged_sha=None):
+def _parse_behind(marker):
+    """Split the deployer's "<origin_sha> <unix_ts_first_seen>" marker. Returns (sha, since) with
+    since=None when absent or unparseable — an unreadable marker must read as "not behind" rather
+    than page forever on garbage."""
+    if not marker:
+        return "", None
+    parts = marker.split()
+    if len(parts) != 2:
+        return "", None
+    try:
+        return parts[0], float(parts[1])
+    except ValueError:
+        return "", None
+
+
+def gitops_status(
+    hold_sha,
+    diverged_sha=None,
+    behind_since=None,
+    now=None,
+    max_behind_s=GITOPS_BEHIND_MAX_S,
+):
     """Pure: is the deploy pipeline in a state needing operator action? Returns (ok, msg).
 
-    Two down states share this monitor: a rolled-back commit HELD pending a revert, and a
-    local↔origin DIVERGENCE where the deployer can't fast-forward and silently noops forever while
-    origin's new commits never deploy (both other GitOps signals stay green — 2026-07-15 review L3).
+    Three down states share this monitor, most-specific first: a rolled-back commit HELD pending a
+    revert, a local↔origin DIVERGENCE where the deployer can't fast-forward and silently noops
+    forever while origin's new commits never deploy (2026-07-15 review L3), and the host simply
+    sitting BEHIND origin for too long.
+
+    Behind-ness is the general case the other two are specific instances of, and it is the one that
+    caught nothing before: a deferred BROAD change never fast-forwards, so the host parks on an old
+    tree while last_run keeps ticking (Alive green) and is_diverged stays false (origin is a strict
+    descendant, so Status green too). daniel-server ran a 12-commit-old tree for hours that way on
+    2026-08-02, all signals green, until un-deployed DNS records were noticed by hand.
+
+    It is age-gated because being behind is normal in the small: a push is behind for one tick, and
+    the dirty-tree path is behind for a whole edit session by design. Only sustained behind-ness is
+    a fault. hold/diverged are still reported ahead of it — they name the actual cause, where
+    "behind" only names the symptom.
     """
     if hold_sha:
         return False, "deploy held at %s — revert the offending PR" % hold_sha[:8]
@@ -1187,6 +1225,15 @@ def gitops_status(hold_sha, diverged_sha=None):
             "local diverged from origin at %s — deployer can't fast-forward, new commits "
             "aren't deploying; reconcile the host tree" % diverged_sha[:8]
         )
+    sha, since = _parse_behind(behind_since)
+    if since is not None:
+        age_s = (time.time() if now is None else now) - since
+        if age_s > max_behind_s:
+            return False, (
+                "host %.0fh behind origin at %s (> %.0fh) — deploy deferred (broad change / "
+                "dirty tree); run the manual deploy on the host"
+                % (age_s / 3600, sha[:8], max_behind_s / 3600)
+            )
     return True, "no held deploy"
 
 
@@ -1403,7 +1450,9 @@ def _read_gitops_marker(name):
 
 def check_gitops_status():
     return gitops_status(
-        _read_gitops_marker("hold_sha"), _read_gitops_marker("diverged_sha")
+        _read_gitops_marker("hold_sha"),
+        _read_gitops_marker("diverged_sha"),
+        _read_gitops_marker("behind_since"),
     )
 
 

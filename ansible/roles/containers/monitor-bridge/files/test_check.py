@@ -3706,3 +3706,56 @@ def test_check_promtail_dropped_uses_increase(monkeypatch):
         "increase(" in q and "promtail_dropped_entries_total" in q and "reason" not in q
         for q in queries
     )
+
+
+# --- gitops_status: behind-origin arm ----------------------------------------
+# The case that caught nothing before: a deferred BROAD change never fast-forwards, so the host
+# parks on an old tree while last_run keeps ticking and is_diverged stays false. daniel-server ran
+# a 12-commit-old tree for hours that way on 2026-08-02 with every GitOps signal green.
+
+
+def test_gitops_status_behind_briefly_is_ok():
+    # A routine push leaves the host behind for one tick. That must never page.
+    ok, msg = check.gitops_status(None, None, "abc123def4567890 1000.0", now=1600.0)
+    assert ok
+    assert msg == "no held deploy"
+
+
+def test_gitops_status_behind_too_long_pages():
+    ok, msg = check.gitops_status(
+        None, None, "abc123def4567890 1000.0", now=1000.0 + 7 * 3600
+    )
+    assert not ok
+    assert "behind origin" in msg
+    assert "abc123de" in msg
+
+
+def test_gitops_status_behind_respects_threshold_argument():
+    ok, _ = check.gitops_status(
+        None, None, "abc123def4567890 1000.0", now=1000.0 + 120, max_behind_s=60
+    )
+    assert not ok
+
+
+def test_gitops_status_hold_wins_over_behind():
+    # A hold leaves the host behind too, but names the actual cause — report that, not the symptom.
+    ok, msg = check.gitops_status(
+        "held123abc456789", None, "abc123def4567890 1.0", now=1e9
+    )
+    assert not ok
+    assert "held" in msg
+
+
+def test_gitops_status_diverged_wins_over_behind():
+    ok, msg = check.gitops_status(
+        None, "div123abc4567890", "abc123def4567890 1.0", now=1e9
+    )
+    assert not ok
+    assert "diverged" in msg
+
+
+def test_gitops_status_unparseable_behind_marker_is_ok():
+    # A garbled marker must read as "not behind" rather than page forever on garbage.
+    for marker in ("garbage", "abc123 notanumber", "abc123", ""):
+        ok, _ = check.gitops_status(None, None, marker, now=1e9)
+        assert ok, marker
