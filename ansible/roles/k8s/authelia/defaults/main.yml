@@ -17,7 +17,10 @@ authelia_k8s_cookie_name: authelia_session_k8s
 # so this adds no second `pinned` secret to the rotation registry.
 authelia_k8s_storage: 1Gi
 
-authelia_k8s_cpu_limit: "1.0"
+# "1", not "1.0" — see the same note in the traefik role. Kubernetes canonicalises quantities, so
+# 1.0 in the manifest and 1 in the live object never match in last-applied-configuration and every
+# apply reports the Deployment "configured".
+authelia_k8s_cpu_limit: "1"
 authelia_k8s_mem_limit: 512Mi
 authelia_k8s_cpu_request: "100m"
 authelia_k8s_mem_request: 64Mi
