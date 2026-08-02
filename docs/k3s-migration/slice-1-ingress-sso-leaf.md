@@ -75,9 +75,25 @@ inbound reachability — which is precisely why a LAN-only VIP can still get a r
 adding cert-manager during a migration that already has enough moving parts is exactly the kind of
 substitution `design.md` §7 avoided for secrets.
 
-**Both Traefiks will request the same SAN set** (`*.<domain>`, `*.local.<domain>`). Let's Encrypt
-allows 5 duplicate certificates per exact SAN set per week; two instances renewing costs 2. That is
-fine steady-state and *not* fine while iterating on a broken config.
+**Both Traefiks request the same SAN set only if the IngressRoute says so.** In the Docker stack the
+wildcard comes from the `labels()` macro's `tls.domains[0].main` / `sans` lines. IngressRoute
+expresses this as `spec.tls.domains`, and **omitting it makes Traefik request a certificate for the
+literal Host rule instead** — a separate cert per hostname, a separate LE issuance, and different
+rate-limit arithmetic. Carry the block across explicitly:
+
+```yaml
+  tls:
+    certResolver: cloudflare
+    domains:
+      - main: <domain>
+        sans:
+          - "*.<domain>"
+          - "*.local.<domain>"
+```
+
+With that in place both instances share one SAN set. Let's Encrypt allows 5 duplicate certificates
+per exact SAN set per week; two instances renewing costs 2. That is fine steady-state and *not* fine
+while iterating on a broken config.
 
 **So: point the resolver at the LE staging directory until the chain works, then flip to
 production.** Make it a variable, not an edit:
@@ -115,6 +131,14 @@ This is not in `design.md` and it will bite otherwise. Both Authelias serve the 
 cookie. Sessions are held in-memory per instance (no Redis), so the overwritten side then bounces
 the user back to login. Symptom: logging into the k8s portal silently signs you out of everything
 on daniel-server.
+
+> **Treat this mechanism as a hypothesis until the exit criterion runs.** Authelia selects a cookie
+> config by matching the *request's* domain against `cookies[].domain`, not by which portal issued
+> the cookie — both instances match `local.<domain>` for a `*-k8s` host. They never cross in slice 1
+> only because the k8s IngressRoute points exclusively at the k8s Authelia Service. The
+> "log in on k8s, confirm the daniel-server session survives" check is what actually settles it.
+> **Fallback if it fails:** give the k8s instance its own cookie *domain* (`k8s.local.<domain>`),
+> which costs a certificate SAN — decided now so it isn't invented under pressure.
 
 Fix in the k8s Authelia's config:
 
@@ -247,8 +271,12 @@ reports `ok`; the same command on daniel-server skips it and still shows `change
 Deployment + Service only. Carry across the security posture from the compose template, which is
 already tight and translates directly: `readOnlyRootFilesystem`, `drop: [ALL]`,
 `allowPrivilegeEscalation: false`, and `emptyDir` volumes for `/var/cache/nginx` and
-`/etc/nginx/tmp` (the compose `tmpfs` entries — the image is nginx-unprivileged UID 101 and cannot
-write to a root-owned default).
+`/etc/nginx/tmp` (the compose `tmpfs` entries).
+
+The `mode=1777` on those compose entries does **not** translate one-to-one: `emptyDir` also mounts
+`0755` root-owned, and the image runs as nginx-unprivileged UID 101, so it will `EPERM` exactly as
+it would have on a default tmpfs. Set `securityContext.fsGroup: 101` on the pod so the volumes come
+up group-writable by the running user.
 
 ```bash
 sudo k3s kubectl run curl-probe --rm -it --image=curlimages/curl --restart=Never -- \
@@ -297,8 +325,9 @@ address=/bento-pdf-k8s.local.<domain>/10.0.0.240
 address=/auth-k8s.local.<domain>/10.0.0.240
 ```
 
-Deploy to daniel-server (`--tags pihole`). Then add TLS to the IngressRoute with
-`certResolver: cloudflare`, mount `cloudflare_dns_token` as a **file-backed Secret** —
+Deploy to daniel-server (`--tags pihole`). Then add TLS to the IngressRoute — with the explicit
+`spec.tls.domains` block from *Decision 2*, not just `certResolver` — and mount
+`cloudflare_dns_token` as a **file-backed Secret** —
 `CF_DNS_API_TOKEN_FILE`, not `CF_DNS_API_TOKEN`, keeping the token out of `kubectl describe` for
 the same reason the compose template keeps it out of container metadata — and give `acme.json` its
 own Longhorn PVC.
@@ -382,16 +411,20 @@ Add one HTTP monitor by hand against `https://bento-pdf-k8s.local.<domain>/`, ex
 back up. (`speedtest` would have been the same.) The state slice 1 actually creates is
 **Authelia's `/config` PVC** and **Traefik's `acme.json` PVC**, so that is where the §6 gate lands.
 
-Add a Longhorn `RecurringJob` (daily, `backup` task) targeting both PVCs, trigger one immediately,
-then verify from **outside the cluster** — asking Longhorn whether its own backup exists is not
-independent evidence, which is the whole point of this gate:
+Add a Longhorn `RecurringJob` (daily, `backup` task). It binds to volumes by **group label**, not by
+a list of PVC names — label both volumes into a shared `recurring-job-group`. Trigger one backup
+immediately, then verify from **outside the cluster**; asking Longhorn whether its own backup exists
+is not independent evidence, which is the whole point of this gate:
 
 ```bash
 bash /home/ubuntu/.claude/jobs/95fc95ed/tmp/b2-list-longhorn.sh   # run on daniel-server
 ```
 
-**Prove it:** `.blk` data blocks exist alongside `backup_*.cfg` for the Authelia volume. Metadata
+**Prove it:** `.blk` data blocks exist alongside `backup_*.cfg` for the **Authelia** volume. Metadata
 without blocks is the "reports success while storing nothing" failure this gate exists to catch.
+
+Only the Authelia volume is load-bearing. `acme.json` is regenerable — losing it costs one ACME
+re-issue, not data — so it is backed up for tidiness, and a failure there is not a slice blocker.
 
 ---
 
@@ -432,7 +465,9 @@ Slice 1 is done when every one of these has been run and its output read. No `--
 - [ ] Uptime-Kuma monitor green
 - [ ] `b2-list-longhorn.sh` shows `.blk` blocks for the Authelia volume
 - [ ] `uv run pytest` and `prek run --all-files` both clean
-- [ ] daniel-server unchanged: `docker ps -q | wc -l` still 66, `uptime` shows no reboot
+- [ ] daniel-server carries no *unexpected* change: `docker ps -q | wc -l` matches whatever it was at
+      slice-1 start, and `uptime` shows no reboot (the count is a snapshot, not an invariant — it
+      legitimately moves as services are added)
 
 ---
 
