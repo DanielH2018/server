@@ -478,18 +478,33 @@ bugs that matter most. It caught one in the `ingressroute()` macro on its first 
 
 Slice 1 is done when every one of these has been run and its output read. No `--check` substitutes.
 
-- [ ] `k3s kubectl -n metallb-system get ipaddresspool` — `ingress-pool` is `/32`, `autoAssign: false`
-- [ ] `k3s kubectl get svc traefik` — `EXTERNAL-IP` is `10.0.0.240`
-- [ ] `curl -H 'Host: bento-pdf-k8s.local.<domain>' http://10.0.0.240/` **from daniel-server** → `200`
-- [ ] `dig +short bento-pdf-k8s.local.<domain>` → `10.0.0.240`
-- [ ] `openssl s_client` — certificate issued by Let's Encrypt **production**, not staging
-- [ ] `curl https://bento-pdf-k8s.local.<domain>/` unauthenticated → `302` to `auth-k8s.local.<domain>`
-- [ ] Browser: log in at the k8s portal, reach bento-pdf, **and confirm an existing daniel-server
+- [x] `k3s kubectl -n metallb-system get ipaddresspool` — `ingress-pool` is `/32`, `autoAssign: false`
+      → `ingress-pool  [10.0.0.240/32]  autoAssign false`
+- [x] `k3s kubectl get svc traefik` — `EXTERNAL-IP` is `10.0.0.240`
+- [x] `curl -H 'Host: bento-pdf-k8s.local.<domain>' http://10.0.0.240/` **from daniel-server** → `200`
+      → **`301`**, and that is correct: this criterion was written before Traefik's HTTP→HTTPS
+      redirect existed. Re-run over HTTPS from daniel-server: bento-pdf-k8s `302`, auth-k8s `200`.
+- [x] `dig +short bento-pdf-k8s.local.<domain>` → `10.0.0.240`
+- [x] `openssl s_client` — certificate issued by Let's Encrypt **production**, not staging
+      → `issuer=C = US, O = Let's Encrypt, CN = YR2`, valid to 2026-10-31
+- [x] `curl https://bento-pdf-k8s.local.<domain>/` unauthenticated → `302` to `auth-k8s.local.<domain>`
+- [x] Browser: log in at the k8s portal, reach bento-pdf, **and confirm an existing daniel-server
       session is still valid** — the cookie-collision check from *Decision 4*
+      → **Passed 2026-08-02.** Both directions exercised: a Docker login does not disturb the k3s
+      session and vice versa; `authelia_session_local` and `authelia_session_k8s` coexist on
+      `local.<domain>`. Decision 4's hypothesis holds — the distinct cookie *name* is sufficient
+      and the fallback cookie *domain* is not needed.
 - [ ] TOTP enrolment succeeds and survives an Authelia pod restart (proves the PVC, not just the pod)
-- [ ] Uptime-Kuma monitor green
+      → **Not exercised, and normal use will not exercise it.** `*.local.<domain>` is `one_factor`
+      from RFC1918, so logging in never touches TOTP; only the public `*.<domain>` rule is
+      `two_factor`, and `k8s_public_route` is false. Enrolment has to be done deliberately from the
+      portal's settings, then `kubectl delete pod` the Authelia pod and confirm the enrolment
+      survived. Until then the PVC is unproven — the pod restarting is not the same test.
+- [x] Uptime-Kuma monitor green
 - [ ] `b2-list-longhorn.sh` shows `.blk` blocks for the Authelia volume
-- [ ] `uv run pytest` and `prek run --all-files` both clean
+      → **Blocked** by the Backblaze B2 transaction-cap outage; every backup tier is down. See
+      `docs/b2-transaction-cap-monitoring-gaps.md`.
+- [x] `uv run pytest` and `prek run --all-files` both clean → 1339 passed
 - [ ] daniel-server carries no *unexpected* change: `docker ps -q | wc -l` matches whatever it was at
       slice-1 start, and `uptime` shows no reboot (the count is a snapshot, not an invariant — it
       legitimately moves as services are added)
