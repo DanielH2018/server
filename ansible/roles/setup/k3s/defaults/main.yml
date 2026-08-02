@@ -67,6 +67,24 @@ k3s_metallb_pool: 10.0.0.241-10.0.0.250
 # numberOfReplicas — so raising this at slice 7 stays a settings patch.
 k3s_longhorn_replica_count: 1
 
+# How often Longhorn lists the B2 backup store, in seconds. Upstream default is 300, which
+# cost us an outage: `backup ls` is an S3 LIST, LIST is a Backblaze Class C transaction, and
+# the free allowance is 2,500 Class C/day. At 300s that is 288 polls a day, each issuing
+# several LISTs (volumes, then backups per volume) — enough to exhaust the cap on its own.
+# On 2026-08-02 it did, and B2 then refused every request account-wide: Kopia could not read
+# its own repository blob and every backup tier went down for 13h+, with the bucket at
+# 6.05/10 GB. Storage was never the constraint.
+#
+# 3600 cuts that 12x, to 24 polls/day. What it costs is freshness of the backup *list* in the
+# Longhorn UI, which is worth nothing here — backups are driven by a recurring job, not by
+# someone watching the list. 0 disables polling entirely, but then the UI never reflects
+# reality without a manual sync, which is a worse trade than an hour of staleness.
+#
+# The failure mode this guards against is a ratchet: once the cap trips, Longhorn keeps
+# polling and Kopia retries each GetBlob 10 times, so the failed state itself burns
+# transactions and eats into the next day's allowance.
+k3s_longhorn_backupstore_poll_interval: 3600
+
 # Read-only cluster access for {{ sys_user }}. The admin kubeconfig k3s writes is root:root
 # 0640, so every `kubectl` otherwise goes through sudo — which is passworded on this host and
 # therefore needs a TTY, blocking anything unattended (diagnostics, health checks, an agent
