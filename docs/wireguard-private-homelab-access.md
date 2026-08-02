@@ -83,12 +83,20 @@ PersistentKeepalive = 25
 ```
 The `AllowedIPs` narrowing is what makes it a split tunnel: only the home LAN and WG peers
 route into this tunnel; everything else keeps Mullvad's default route. The whole `/24` is
-the right default now that services live on two IPs (`10.0.0.161` and the k3s VIP
-`10.0.0.240`) — it also survives the next migration, and costs no privacy since the range
-is entirely private. Listing single hosts (`10.0.0.161/32, 10.0.0.240/32`) works too, but a
-service that later moves to a third IP then fails with a **timeout**, not a DNS error:
-`AllowedIPs` decides what enters the tunnel, so an IP missing here leaks out via Mullvad's
-default route and never reaches home.
+the right default **when away from home**, now that services live on two IPs (`10.0.0.161`
+and the k3s VIP `10.0.0.240`) — it survives the next migration, and costs no privacy since
+the range is entirely private. `AllowedIPs` decides what enters the tunnel, so an IP
+missing here leaks out via Mullvad's default route and fails with a **timeout**, not a DNS
+error.
+
+> **Do not use `10.0.0.0/24` on a client that is itself on the home LAN.** `wg-quick`
+> installs that route at metric 0, which beats the connected route on the physical NIC
+> (metric ~100). Every LAN destination — including the gateway `10.0.0.1`, and `10.0.0.240`
+> which was directly reachable to begin with — then hairpins out to the WireGuard endpoint
+> and back. On a LAN client, either bring the tunnel down (nothing needs it; both IPs are
+> directly reachable) or list single hosts: `AllowedIPs = 10.0.0.161/32, 10.0.0.240/32,
+> 10.8.0.0/24`. The `/32` form costs one line per future migration, which is the correct
+> trade here.
 
 ### A3. DNS — pick ONE (both keep general DNS on Mullvad → no leak)
 - **Strict, any OS — hosts file.** Delete the `DNS =` line. Add to the OS hosts file
@@ -141,6 +149,28 @@ the client separates them: an answer means Pi-hole is fine and the problem is on
 Some Mullvad builds drop secondary-tunnel traffic even with local sharing on. If `.local`
 is unreachable while Mullvad is up: re-check "Local network sharing"; test with lockdown
 mode off; otherwise fall back to the toggle approach (Part B) on desktop too.
+
+**Mullvad blocks port 53 specifically** — its DNS-leak protection rejects `:53` to any
+resolver but its own, and "Local network sharing" does **not** exempt it. That setting
+permits LAN traffic generally, so this presents as a very confusing split: `curl` to
+`10.0.0.161:80` works while `dig @10.0.0.161` returns `connection refused`.
+
+The diagnostic that identifies it in one step is **to probe `:53` on a host the homelab
+doesn't control** — the ISP gateway:
+
+```bash
+dig +short +time=3 @10.0.0.1 example.com     # refused too? → it's local, not the homelab
+dig +short +time=3 @10.0.0.161 jellyfin.local.daniel-hunter.com
+```
+
+If *both* refuse, nothing server-side is wrong: no homelab config can make `10.0.0.1`
+refuse. `connection refused` (rather than a timeout) confirms it further — that RST is
+generated locally, by the client's own packet filter. Check with
+`sudo nft list ruleset | grep -B2 -A2 'dport 53'`, and confirm by disconnecting Mullvad and
+re-running the `dig`.
+
+This is worth internalising: Pi-hole is a single-host service, so a `:53` failure that
+reproduces against *multiple* IPs was never Pi-hole. Diagnose the client first.
 
 ---
 
