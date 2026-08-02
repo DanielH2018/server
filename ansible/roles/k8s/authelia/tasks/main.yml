@@ -1,4 +1,66 @@
 ---
+# The password hash is generated at deploy time rather than stored, matching the Docker role
+# — but that role shells `docker run`, and daniel-box deliberately has no Docker (it is the
+# k3s node). A one-shot pod is the equivalent.
+#
+# Read-back first, because argon2 salts are random: regenerating on every run would change
+# the Secret every deploy and trigger a rollout restart that changes nothing. This is the k8s
+# form of the Docker role's first-run-only users_database.yml guard.
+- name: Look for an existing Authelia users database in the cluster
+  tags: [config]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get secret authelia-config
+      -o jsonpath={.data.users_database\.yml}
+  register: authelia_k8s_existing
+  become: true
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Reuse the password hash already in the cluster
+  tags: [config]
+  ansible.builtin.set_fact:
+    authelia_password_hash: >-
+      {{ authelia_k8s_existing.stdout | b64decode | regex_search('\$argon2[^\s\']+') }}
+  when: authelia_k8s_existing.stdout | default('') | length > 0
+  no_log: true
+
+- name: Hash the Authelia password
+  tags: [config]
+  # Same algorithm and parameters as the Docker role, so the two instances' users databases
+  # stay interchangeable for the slice-6 cutover.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} run authelia-hash
+      --rm --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
+      authelia crypto hash generate argon2 --password {{ authelia_password }}
+      --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32
+  register: authelia_k8s_hash
+  become: true
+  changed_when: false
+  no_log: true
+  when: authelia_password_hash is not defined
+
+- name: Extract the digest
+  tags: [config]
+  # regex_search rather than stripping a "Digest: " prefix: `kubectl run --attach` can
+  # interleave its own lines with the container's output, so anchor on the hash itself.
+  ansible.builtin.set_fact:
+    authelia_password_hash: "{{ authelia_k8s_hash.stdout | regex_search('\\$argon2[^\\s]+') }}"
+  when: authelia_password_hash is not defined
+  no_log: true
+
+- name: Fail if no password hash could be obtained
+  tags: [config]
+  # Without this the template renders an empty password and Authelia starts with an account
+  # nobody can log into — a green deploy with a locked portal.
+  ansible.builtin.assert:
+    that: authelia_password_hash | default('') | length > 0
+    fail_msg: >-
+      Could not read or generate the Authelia password hash. Check that the authelia-hash
+      pod could pull {{ authelia_k8s_image }}.
+
 - name: Deploy Authelia to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
