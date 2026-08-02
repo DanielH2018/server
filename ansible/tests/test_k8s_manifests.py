@@ -299,3 +299,100 @@ def test_routes_stay_lan_only_while_the_k8s_edge_has_no_crowdsec():
         "k8s_public_route is only safe once the k8s Traefik runs the CrowdSec bouncer "
         "(slice 6) — flip both or neither"
     )
+
+
+# --- 5. the read-only cluster identity really is read-only --------------------------------
+#
+# This one exists because the failure is invisible in exactly the wrong direction. A binding
+# that grants too much does not error, does not warn, and does not change any output — the
+# kubeconfig keeps working, it just quietly carries more authority than the comment above it
+# claims. The whole reason this identity exists instead of copying the admin kubeconfig is
+# that its ceiling is enforced, so the ceiling needs a test.
+
+K3S_DEFAULTS = yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+READ_VERBS = {"get", "list", "watch"}
+
+
+def _readonly_rbac_docs() -> list[dict]:
+    rendered = _render(
+        K3S / "templates" / "readonly-rbac.yaml.j2",
+        sys_user=ALL_VARS["sys_user"],
+        k3s_readonly_sa_name=K3S_DEFAULTS["k3s_readonly_sa_name"],
+        k3s_readonly_sa_namespace=K3S_DEFAULTS["k3s_readonly_sa_namespace"],
+        k3s_readonly_crd_api_groups=K3S_DEFAULTS["k3s_readonly_crd_api_groups"],
+    )
+    return [d for d in yaml.safe_load_all(rendered) if d]
+
+
+def _readonly_rules() -> list[dict]:
+    return [
+        rule
+        for doc in _readonly_rbac_docs()
+        if doc["kind"] == "ClusterRole"
+        for rule in doc["rules"]
+    ]
+
+
+# Resources that turn cluster read access into cluster compromise. `secrets` is every
+# credential the cluster holds — the built-in `view` role excludes it deliberately and the
+# additive role must not put it back. `pods/exec` and its siblings are arbitrary code
+# execution inside a running workload, which RBAC models as a subresource `create` but which
+# reads, in a list of get/list/watch, like just more access.
+FORBIDDEN_RESOURCES = {"secrets", "pods/exec", "pods/attach", "pods/portforward"}
+
+
+def _grant_violations(rules: list[dict]) -> list[str]:
+    """Every way a rule list exceeds read-only. Empty means the ceiling holds."""
+    problems = []
+    for rule in rules:
+        groups = set(rule.get("apiGroups", []))
+        named = set(rule.get("resources", []))
+        extra = set(rule.get("verbs", [])) - READ_VERBS
+        if extra:
+            problems.append(f"verbs {sorted(extra)} on {sorted(named)}")
+        if named & FORBIDDEN_RESOURCES:
+            problems.append(f"resource {sorted(named & FORBIDDEN_RESOURCES)}")
+        # A bare wildcard over the core group sweeps secrets back in without naming them.
+        if "*" in named and ("" in groups or "*" in groups):
+            problems.append(f"wildcard resources over apiGroups {sorted(groups)}")
+    return problems
+
+
+def test_readonly_role_stays_read_only():
+    assert _grant_violations(_readonly_rules()) == []
+
+
+def test_the_read_only_check_rejects_a_widened_role():
+    """The guard above only means something if it fails on a role that oversteps. These are
+    the three shapes a widening actually takes — a write verb, a named secret read, and a
+    wildcard that never says "secrets" out loud."""
+    for rule in (
+        {"apiGroups": [""], "resources": ["pods"], "verbs": ["get", "delete"]},
+        {"apiGroups": [""], "resources": ["secrets"], "verbs": ["get"]},
+        {"apiGroups": [""], "resources": ["*"], "verbs": ["get"]},
+        {"apiGroups": [""], "resources": ["pods/exec"], "verbs": ["get"]},
+    ):
+        assert _grant_violations([rule]), f"widening not caught: {rule}"
+
+
+def test_readonly_bindings_never_reference_a_writing_clusterrole():
+    """The additive ClusterRole is audited by the tests above; a roleRef pointing somewhere
+    else routes around all of them. Only `view` and this role's own name are permitted."""
+    allowed = {"view", K3S_DEFAULTS["k3s_readonly_sa_name"]}
+    bindings = [d for d in _readonly_rbac_docs() if d["kind"] == "ClusterRoleBinding"]
+    assert bindings, "no ClusterRoleBinding rendered"
+    for binding in bindings:
+        name = binding["roleRef"]["name"]
+        assert name in allowed, f"{binding['metadata']['name']} binds to '{name}'"
+
+
+def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
+    """`view` covers no CRDs and nothing aggregates into it, so a group missing from the
+    list degrades silently: the kubeconfig still works, that one `kubectl get` says
+    Forbidden, and the caller falls back to sudo — which is the thing this replaced."""
+    groups = set(K3S_DEFAULTS["k3s_readonly_crd_api_groups"])
+    route = (ANSIBLE / "templates" / "ingressroute.yml.j2").read_text()
+    assert "traefik.io" in route, (
+        "ingressroute macro no longer uses the traefik.io group"
+    )
+    assert "traefik.io" in groups, "IngressRoute/Middleware unreadable without sudo"
