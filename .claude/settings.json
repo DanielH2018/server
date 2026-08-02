@@ -47,6 +47,16 @@
             "async": true
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/auto-approve-remote-ssh.sh",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "Notification": [
