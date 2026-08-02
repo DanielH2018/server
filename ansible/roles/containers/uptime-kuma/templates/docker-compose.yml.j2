@@ -87,13 +87,19 @@ services:
       # challenge. Kuma accepts 200-299 by default, so the expected code has to be stated or this
       # monitor is permanently red.
       #
+      # max_redirects=0 is load-bearing, not tuning. Kuma FOLLOWS redirects by default, so it would
+      # chase the 302 to the Authelia portal and grade the resulting 200 — which is both the wrong
+      # assertion and a dangerous one: if the forward-auth middleware ever silently detached,
+      # bento-pdf would answer 200 directly and a follow-redirects monitor would stay green over an
+      # ungated service. Refusing to follow is what makes "302" mean "still protected".
+      #
       # NOTE what this does NOT prove: forward-auth runs BEFORE the backend, so bento-pdf itself
       # could be dead and this stays green. Backend health is only visible from inside the cluster,
       # which nothing on this host can currently see — see docs/b2-transaction-cap-monitoring-gaps.md,
       # same cross-host gap as the Longhorn backup target.
       {{ kuma('bento-pdf-k8s', name='k3s Ingress (bento-pdf)', monitor_type='http',
               url='https://bento-pdf' ~ k8s_hostname_suffix ~ '.local.' ~ domain,
-              accepted_statuscodes=['302']) }}
+              accepted_statuscodes=['302'], max_redirects=0) }}
       # Pi SD-card health: SD cards have no SMART, so a dying card only announces
       # itself via ext4 errors. The Pi's pi-sd-health.sh cron (optimize_pi role)
       # pushes errors_count every 5 min through the LAN-bypassed push API
