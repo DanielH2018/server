@@ -7,6 +7,15 @@
       ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
       tags: always
 
+    # Snapshot before the filter below overwrites it. set_fact persists for the host across
+    # plays and takes precedence over the inventory var, so without this the k8s play would
+    # filter the ALREADY-Docker-filtered list — on daniel-box, where every entry is k8s, that
+    # is an empty list, and the play runs to completion having deployed nothing.
+    - name: Preserve the unfiltered container list for the k8s play
+      ansible.builtin.set_fact:
+        containers_list_unfiltered: "{{ containers_list }}"
+      tags: always
+
     # Must precede build_dep_map: a k8s-platform entry should never reach
     # dependency resolution, the dep closure, or the docker_container_info
     # state check below.
@@ -92,8 +101,10 @@
       # the traefik role installs the Traefik CRDs that every other service's IngressRoute
       # and Middleware depend on, so traefik is listed first. Three services do not justify
       # a second dependency graph; revisit if slice 2 makes the ordering non-obvious.
+      # Sourced from the snapshot, NOT from containers_list — the Docker play above has already
+      # overwritten that fact with its own filtered subset.
       ansible.builtin.set_fact:
-        containers_list: "{{ containers_list | filter_by_platform('k8s') }}"
+        containers_list: "{{ containers_list_unfiltered | filter_by_platform('k8s') }}"
       tags: always
 
     - name: Create the workload namespace
