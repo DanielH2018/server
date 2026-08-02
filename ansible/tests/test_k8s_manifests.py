@@ -396,3 +396,25 @@ def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
         "ingressroute macro no longer uses the traefik.io group"
     )
     assert "traefik.io" in groups, "IngressRoute/Middleware unreadable without sudo"
+
+
+# --- 6. no jsonpath can address a Secret key containing a dot ------------------------------
+
+
+def test_no_task_reads_a_dotted_secret_key_by_jsonpath():
+    """`kubectl get secret -o jsonpath={.data.users_database\\.yml}` does not error on a key
+    whose name contains a dot — it prints nothing and exits 0.
+
+    Authelia's read-back guard used that form, so it saw "no existing hash" on every run,
+    regenerated the argon2 hash with a fresh salt, rewrote the Secret and rolled the pod.
+    Nothing in the deploy output said so; it just never converged. Fetch {.data} and index
+    the map in Ansible instead, where a missing key is visible.
+    """
+    for tasks in sorted((ANSIBLE / "roles" / "k8s").glob("*/tasks/main.yml")):
+        for line in tasks.read_text().splitlines():
+            body = line.split("#", 1)[0]
+            if "jsonpath={.data." in body and "\\." in body:
+                raise AssertionError(
+                    f"{tasks.relative_to(ANSIBLE)}: jsonpath cannot address a dotted key — "
+                    f"it returns empty and exits 0. Fetch {{.data}} and index it. Line: {line.strip()}"
+                )
