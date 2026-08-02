@@ -120,7 +120,9 @@ read-only commands to fit it. Anything that writes or executes still prompts —
 Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hooks/test_auto_approve_readonly.py`.
 The ssh case is wired separately, via `auto-approve-remote-ssh.sh` on **PermissionRequest**: Claude Code
 evaluates `ask` rules whatever a PreToolUse hook returns, and `Bash(ssh:*)` is one, so the PreToolUse
-decision alone would never reach it.
+decision alone would never reach it. Registered in the *user-level* settings (chezmoi
+`settings.base.json`), not this repo's — a project's settings may only tighten what is auto-approved,
+never widen it, so that a repo can't grant itself permissions merely by being opened.
 
 ## Claude Tooling in This Repo (`.claude/`)
 - **`scripts/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt). Resolves the

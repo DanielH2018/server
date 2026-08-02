@@ -680,7 +680,6 @@ _SSH_VALUE_FLAGS = {"-i", "-p", "-l", "-o"}
 # a command on THIS machine. Whitelisting the key is what makes -o safe.
 _SSH_OPTIONS = {
     "batchmode",
-    "connectattempts",
     "connectionattempts",
     "connecttimeout",
     "identitiesonly",
