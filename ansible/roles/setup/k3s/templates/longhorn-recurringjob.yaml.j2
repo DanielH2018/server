@@ -16,6 +16,10 @@ metadata:
   name: daily-backup
   namespace: longhorn-system
 spec:
+  # Required, and separate from metadata.name — Longhorn uses spec.name to label the volumes
+  # a job claims. Omitting it is rejected with "invalid job {Name: ...}", where the empty Name
+  # is the whole complaint.
+  name: daily-backup
   cron: "{{ k3s_longhorn_backup_cron }}"
   task: backup
   groups:
