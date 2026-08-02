@@ -418,3 +418,24 @@ def test_no_task_reads_a_dotted_secret_key_by_jsonpath():
                     f"{tasks.relative_to(ANSIBLE)}: jsonpath cannot address a dotted key — "
                     f"it returns empty and exits 0. Fetch {{.data}} and index it. Line: {line.strip()}"
                 )
+
+
+# --- 7. MetalLB Service annotations use the namespace MetalLB actually reads ---------------
+
+
+def test_metallb_service_annotations_use_the_universe_tf_namespace():
+    """metallb.io is the API GROUP of the CRDs; Service annotations keep metallb.universe.tf.
+
+    Kubernetes accepts any annotation key and MetalLB ignores unrecognised ones, so the wrong
+    prefix is completely silent — the Service is created, an address is assigned from the
+    auto-assign pool instead of the reserved VIP, and the deploy is green. Traefik ran on
+    10.0.0.241 instead of 10.0.0.240 through an entire slice-1 bring-up because of this.
+    """
+    for tpl in sorted((K8S).glob("*/templates/service.yaml.j2")):
+        for i, line in enumerate(tpl.read_text().splitlines(), 1):
+            body = line.split("#", 1)[0]
+            if "metallb.io/" in body:
+                raise AssertionError(
+                    f"{tpl.relative_to(ANSIBLE)}:{i} uses a metallb.io/ Service annotation, "
+                    f"which MetalLB silently ignores — use metallb.universe.tf/. Line: {line.strip()}"
+                )
