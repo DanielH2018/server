@@ -3,8 +3,9 @@
 
 The hook must: stay silent when all-green, surface unhealthy/restarting
 containers and down scrape targets when they exist, treat a wedged dockerd as a
-(reported) signal rather than a crash, and never raise. We exercise the pure
-helpers directly and stub `_run` so the suite needs no live docker/Prometheus.
+(reported) signal rather than a crash, treat a host with no docker binary as
+expected rather than broken, and never raise. We exercise the pure helpers
+directly and stub `_run` so the suite needs no live docker/Prometheus.
 
 Run: uv run pytest .claude/hooks
 """
@@ -12,6 +13,7 @@ Run: uv run pytest .claude/hooks
 import importlib.util
 import io
 import os
+import subprocess
 import types
 
 _HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session-health.py")
@@ -64,14 +66,34 @@ def test_docker_problems_all_green(monkeypatch):
     assert ok is True
 
 
-def test_docker_unreachable_is_reported_not_raised(monkeypatch):
+def test_wedged_dockerd_is_reported_not_raised(monkeypatch):
+    """A docker that hangs is the signal the banner exists for."""
+
     def boom(*a, **k):
-        raise FileNotFoundError("docker")
+        raise subprocess.TimeoutExpired("docker", 5)
 
     monkeypatch.setattr(_mod, "_run", boom)
     lines, ok = _mod.docker_problems()
     assert ok is False
     assert any("docker unreachable" in l for l in lines)
+
+
+def test_missing_docker_binary_is_silent(monkeypatch):
+    """daniel-box runs k3s with has_docker: false — no binary is expected, not broken.
+
+    Warning here would put a false '✗ docker unreachable' on every session open on that
+    host, forever, which is exactly the context noise the all-green contract avoids.
+    """
+
+    def boom(*a, **k):
+        raise FileNotFoundError("docker")
+
+    monkeypatch.setattr(_mod, "_run", boom)
+    lines, ok = _mod.docker_problems()
+    assert lines == []
+    # Still False: the Prometheus probe shells out to `docker inspect` for the container
+    # IP, so it cannot work on a host without docker either.
+    assert ok is False
 
 
 # --- target_problems ---------------------------------------------------------

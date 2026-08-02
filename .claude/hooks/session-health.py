@@ -8,8 +8,10 @@ Design contract (mirrors the other hooks here):
   - SILENT when all-green: prints nothing, so it adds zero context noise on a
     healthy day. Set SESSION_HEALTH_VERBOSE=1 to force an all-clear line (demo/test).
   - READ-ONLY and NEVER BLOCKS: every external call is timeout-bounded and wrapped;
-    any failure degrades to a quiet skip (or, for docker itself, a one-line warning
-    — a wedged dockerd IS the signal). Always exits 0.
+    any failure degrades to a quiet skip (or, for a wedged dockerd, a one-line
+    warning — a dockerd that hangs IS the signal). Always exits 0.
+  - A host with no docker binary is not a broken Docker host: daniel-box runs k3s
+    and sets has_docker: false. Both checks skip silently there.
   - The docker check is local + sub-second and always runs. The Prometheus check
     goes through `uv run probe.py` (one subprocess, bounded) — SessionStart fires
     once per session, so the small cost is paid rarely; it's skipped on any error so
@@ -65,9 +67,15 @@ def docker_problems():
     # session-health.sh), and ruff (3.14 target) rewrites a parenthesized tuple into the 3.14-only
     # `except A, B:` that SyntaxErrors on 3.12. See ansible/tests/test_host_scripts_py312.py.
     except subprocess.TimeoutExpired:
-        return ["  ✗ docker unreachable (dockerd wedged or not installed)"], False
-    except OSError:  # FileNotFoundError (docker binary absent) is an OSError subclass
-        return ["  ✗ docker unreachable (dockerd wedged or not installed)"], False
+        return ["  ✗ docker unreachable (dockerd wedged)"], False
+    except OSError:
+        # FileNotFoundError (docker binary absent) is an OSError subclass. No docker binary
+        # means this host is not a Docker host at all — daniel-box runs k3s and sets
+        # has_docker: false — not that a Docker host is broken. Staying silent is the whole
+        # point of the all-green contract; warning here would fire on every session open
+        # forever. docker_ok=False still skips the Prometheus probe, which needs `docker
+        # inspect` to resolve the container IP and so cannot work here either.
+        return [], False
     lines = []
     for label, res in (("unhealthy", unhealthy), ("restarting", restarting)):
         for row in res.stdout.splitlines():
