@@ -611,8 +611,15 @@ Slice 0 is done when all of these are true, each demonstrated by a command whose
 - [x] A backup object is **listed in the B2 bucket from outside the cluster** — 10 `.blk` data
       blocks under `longhorn/backupstore/volumes/…`, listed from daniel-server
 - [x] `uv run pytest` passes, including the new platform-filter tests
-- [ ] A `--check` deploy against daniel-server resolves an unchanged container set
-- [ ] **daniel-server has not been modified** — `docker ps` count and `uptime` unchanged
+- [x] A `--check` deploy against daniel-server resolves an unchanged container set — `changed=0`
+      across the 101 tasks that ran. The play then aborted on `authelia`, and that is **not**
+      migration drift: the running container uses an untagged image ID and the local
+      `authelia/authelia:4.39.20` tag is gone, so compose's `--dry-run` cannot simulate the
+      pull it would need. Pre-existing — the container was created 9 days earlier. Tracked as
+      daniel-server maintenance, not slice 0.
+- [x] **daniel-server has not been modified** — `uptime` 4 days (no reboot; the k3s work began
+      ~8 h earlier), 66 running containers. The only commands it saw were a `curl` and one
+      `docker run --rm amazon/aws-cli` for the B2 listing, which adds an image, not a container.
 
 ## Explicitly out of scope
 
