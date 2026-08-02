@@ -67,6 +67,23 @@ k3s_metallb_pool: 10.0.0.241-10.0.0.250
 # numberOfReplicas — so raising this at slice 7 stays a settings patch.
 k3s_longhorn_replica_count: 1
 
+# Read-only cluster access for {{ sys_user }}. The admin kubeconfig k3s writes is root:root
+# 0640, so every `kubectl` otherwise goes through sudo — which is passworded on this host and
+# therefore needs a TTY, blocking anything unattended (diagnostics, health checks, an agent
+# reading pod logs). This ServiceAccount closes that gap without handing out cluster-admin:
+# it can read, and only read. Writes keep going through Ansible, which escalates properly.
+k3s_readonly_sa_name: homelab-readonly
+k3s_readonly_sa_namespace: kube-system
+k3s_readonly_kubeconfig_server: https://127.0.0.1:6443
+
+# CRD API groups the read-only role can read. The built-in `view` ClusterRole covers none of
+# them and nothing here aggregates into it, so a group left off this list means `kubectl get`
+# on that resource falls back to sudo. Add a group when a new operator's CRDs need inspecting.
+k3s_readonly_crd_api_groups:
+  - traefik.io
+  - metallb.io
+  - longhorn.io
+
 # Longhorn writes under this prefix inside the existing Kopia B2 bucket, so the two tools
 # never share a namespace and a lifecycle rule written for one cannot expire the other's
 # data. Kopia's own snapshots live at the bucket root.
