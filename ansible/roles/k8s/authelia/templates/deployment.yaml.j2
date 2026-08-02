@@ -52,6 +52,11 @@ spec:
               readOnly: true
             - name: config
               mountPath: /config
+            # readOnlyRootFilesystem is a tightening past the Docker copy, which sets no
+            # read_only. Scratch space has to come from somewhere, and the failure mode
+            # without it is the portal never starting.
+            - name: tmp
+              mountPath: /tmp
           readinessProbe:
             httpGet:
               path: /api/health
@@ -79,3 +84,5 @@ spec:
         - name: config
           persistentVolumeClaim:
             claimName: authelia-config
+        - name: tmp
+          emptyDir: {}

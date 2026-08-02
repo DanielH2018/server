@@ -199,21 +199,25 @@ ansible/
   roles/setup/k3s/
     defaults/main.yml                                # pool split, traefik/authelia versions, ACME CA
     templates/metallb-pool.yaml.j2                   # two pools (Task 1)
+  templates/ingressroute.yml.j2                      # the labels() replacement (below)
   roles/k8s/
-    common/tasks/main.yml                            # render → apply → wait-for-rollout
+    manifests/tasks/main.yml                         # render → apply → roll → wait
     traefik/
-      tasks/main.yml
-      templates/{static-config.yaml,deployment.yaml,service.yaml,cf-token-secret.yaml,acme-pvc.yaml}.j2
+      files/rbac.yaml                                # upstream ClusterRole, vendored
+      templates/{rbac-binding,acme-pvc,static-config,dynamic,deployment,service,cf-token-secret}.yaml.j2
     authelia/
-      tasks/main.yml
-      templates/{config-secret.yaml,users-secret.yaml,pvc.yaml,deployment.yaml,service.yaml,ingressroute.yaml,forwardauth-middleware.yaml}.j2
+      templates/{pvc,deployment,service,ingressroute,forwardauth-middleware,config-secret}.yaml.j2
     bento-pdf/
-      tasks/main.yml
-      templates/{deployment.yaml,service.yaml,ingressroute.yaml}.j2
-  roles/containers/pihole/templates/dnsmasq.yml.j2   # 2 override lines — deployed to daniel-server
+      templates/{deployment,service,ingressroute}.yaml.j2
+  roles/containers/pihole/templates/dnsmasq.yml.j2   # DNS overrides — deployed to daniel-server
   tests/test_k8s_manifests.py                        # guards (below)
+scripts/validate_k8s_manifests.py                    # render-and-parse hook (below)
 docs/k3s-migration/slice-1-ingress-sso-leaf.md       # this file
 ```
+
+The shared role is `manifests`, not `common` as the Docker side names its equivalent:
+ansible-lint derives a role's required variable prefix from its directory, and `common_` is
+already `roles/containers/common`'s namespace.
 
 `containers_list` keys carry over unchanged — that is the whole point of the `platform` key:
 
@@ -459,9 +463,14 @@ remember:
 4. The k8s Traefik static config contains no `crowdsec` reference while `k3s_crowdsec_enabled` is
    false — so slice 6 turning it on is a deliberate flip, not a silent gap nobody notices.
 
-Plus a `validate-manifests` prek hook mirroring `validate-compose`: re-render every
+Plus a `validate-k8s-manifests` prek hook mirroring `validate-compose`: re-render every
 `roles/k8s/*/templates/*.yaml.j2` and fail on malformed YAML. Jinja indent bugs in k8s manifests
 fail exactly as quietly as they do in compose files, and `ansible-lint` misses both.
+
+It also parses the YAML **embedded in ConfigMap and Secret values**. The manifest wrapping
+Traefik's static config and Authelia's `configuration.yml` is valid whatever those block scalars
+contain — they are opaque to the outer document — so an outer-only check would miss precisely the
+bugs that matter most. It caught one in the `ingressroute()` macro on its first run.
 
 ---
 

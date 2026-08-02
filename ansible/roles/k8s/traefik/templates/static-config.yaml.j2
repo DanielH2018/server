@@ -10,7 +10,13 @@ data:
       dashboard: true
       insecure: false
       debug: false
-    ping: {}
+    # entryPoint is explicit, not inherited. It defaults to `traefik` — the internal
+    # entrypoint — so merely declaring an entrypoint NAMED ping does not bind the handler to
+    # it, and both probes below would poll a port serving nothing. The Docker instance sidesteps
+    # this by shelling `traefik healthcheck`, which reads the config itself; a k8s httpGet
+    # probe names the port, so the binding has to be real.
+    ping:
+      entryPoint: ping
 
     entryPoints:
       http:
