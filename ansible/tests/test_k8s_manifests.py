@@ -439,3 +439,47 @@ def test_metallb_service_annotations_use_the_universe_tf_namespace():
                     f"{tpl.relative_to(ANSIBLE)}:{i} uses a metallb.io/ Service annotation, "
                     f"which MetalLB silently ignores — use metallb.universe.tf/. Line: {line.strip()}"
                 )
+
+
+# --- 8. the TLS options the routes name must actually exist under that name ---------------
+
+
+def _tlsoption_names() -> set:
+    rendered = _render(
+        K8S / "traefik" / "templates" / "dynamic.yaml.j2",
+        **ALL_VARS,
+        **yaml.safe_load((K8S / "traefik" / "defaults" / "main.yml").read_text()),
+    )
+    return {
+        d["metadata"]["name"]
+        for d in yaml.safe_load_all(rendered)
+        if d and d.get("kind") == "TLSOption"
+    }
+
+
+def test_routes_reference_a_tlsoption_that_exists_and_is_not_named_default():
+    """`default` is reserved: Traefik registers a TLSOption of that name as the global default
+    options, never under <namespace>-default@kubernetescrd. An IngressRoute naming it
+    explicitly therefore fails to build, while the object sits there looking perfectly valid:
+
+        error "unknown TLS options: homelab-default@kubernetescrd"
+
+    Every router carrying that reference stops serving. Guard both halves — the name is not
+    the reserved one, and the name the macro asks for is one the traefik role defines.
+    """
+    defined = _tlsoption_names()
+    assert defined, "the traefik role no longer defines any TLSOption"
+    assert "default" not in defined, (
+        "a TLSOption named 'default' is registered as Traefik's global default and cannot be "
+        "referenced by name from an IngressRoute"
+    )
+    for entry in _k8s_entries():
+        tpl = K8S / entry["name"] / "templates" / "ingressroute.yaml.j2"
+        if not tpl.exists():
+            continue
+        doc = yaml.safe_load(_render(tpl, container_item=entry, **ALL_VARS))
+        named = doc["spec"]["tls"]["options"]["name"]
+        assert named in defined, (
+            f"{entry['name']} references TLS options '{named}', which the traefik role does "
+            f"not define (it defines {sorted(defined)})"
+        )

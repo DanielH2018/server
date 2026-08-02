@@ -49,12 +49,18 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: TLSOption
 metadata:
-  name: default
+  # NOT `default`. That name is reserved: Traefik registers a TLSOption called `default` as
+  # the global default options rather than under <namespace>-default@kubernetescrd, so an
+  # IngressRoute that names it explicitly can never resolve it and every affected router
+  # fails to build:
+  #   error "unknown TLS options: homelab-default@kubernetescrd"
+  # The object exists and is valid the whole time, which is what makes it confusing — the
+  # reference is looking up a key the provider never registered.
+  name: modern
   namespace: {{ k8s_namespace }}
 spec:
-  # Referenced explicitly by the ingressroute() macro. A TLSOption is only picked up
-  # implicitly when it is named `default` in the `default` namespace — and the CRD provider
-  # is scoped to this namespace — so the reference is what makes it apply, not the name.
+  # Referenced by name from the ingressroute() macro. Keep that reference and this name in
+  # step — a mismatch is caught by test_k8s_manifests.py, not by the deploy.
   minVersion: VersionTLS12
   cipherSuites:
     - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256

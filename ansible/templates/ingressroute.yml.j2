@@ -49,10 +49,11 @@ spec:
           port: {{ port }}
   tls:
     certResolver: cloudflare
-    # Explicit: a TLSOption applies implicitly only when named `default` in the `default`
-    # namespace, and Traefik's CRD provider is scoped to the workload namespace.
+    # Explicit, and deliberately not named `default` — Traefik reserves that name for the
+    # global default options and never registers it under a namespaced key, so referencing
+    # `default` here fails with "unknown TLS options". See the traefik role's dynamic.yaml.j2.
     options:
-      name: default
+      name: modern
     domains:
       - main: "{{ domain }}"
         sans:

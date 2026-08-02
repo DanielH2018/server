@@ -26,6 +26,35 @@ spec:
         runAsUser: {{ traefik_k8s_uid }}
         runAsGroup: {{ traefik_k8s_uid }}
         fsGroup: {{ traefik_k8s_uid }}
+      initContainers:
+        # Traefik creates acme.json 0600 itself, but kubelet's fsGroup handling ORs group bits
+        # into every file on the volume at mount time, so it comes back 0660 on every start.
+        # Traefik then refuses to load the ACME account and drops the entire resolver:
+        #   unable to get ACME account: permissions 660 for /data/acme.json are too open,
+        #   please use 600
+        #   -> The ACME resolve is skipped from the resolvers list
+        # after which every router asking for that resolver fails with "Router uses a
+        # nonexistent certificate resolver" and nothing serves TLS at all. The deploy stays
+        # green throughout: the pod is healthy, it is just not serving HTTPS.
+        #
+        # This has to run on every start rather than being fixed once, because it is the mount
+        # that widens the file. Reuses the Traefik image (it carries /bin/sh) so there is no
+        # second image to pin and no version skew.
+        - name: fix-acme-permissions
+          image: {{ traefik_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            - touch /data/acme.json && chmod 600 /data/acme.json
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: acme
+              mountPath: /data
       containers:
         - name: traefik
           image: {{ traefik_k8s_image }}
