@@ -54,6 +54,25 @@ lan_subnet: "10.0.0.0/24"
 has_code_server: false
 # The host Uptime Kuma / the Pi's push-monitor heartbeats resolve to.
 monitoring_controller_host: daniel-server
+# The k3s cluster's ingress VIP, served by MetalLB from a dedicated autoAssign: false pool.
+# Global rather than a k3s role default because two hosts consume it: daniel-box's k8s
+# Traefik Service claims it, and daniel-server's Pi-hole answers the *-k8s hostnames with
+# it. The router's port-forward moves here at slice 6 — until then this is LAN-only.
+k3s_metallb_ingress_vip: 10.0.0.240
+# Suffix distinguishing a k8s-hosted service's hostname from its Docker twin while both
+# run. Single-label on purpose: `bento-pdf-k8s.local.<domain>` is covered by the existing
+# *.local.<domain> wildcard cert, whereas a nested `bento-pdf.k8s.local.<domain>` would
+# not be (wildcards match one label) and would need a new SAN.
+k8s_hostname_suffix: "-k8s"
+# Namespace every migrated workload lands in. One namespace rather than one per service:
+# Traefik Middleware references are namespace-scoped, and cross-namespace references cost a
+# qualified name on all ~33 routes that follow for no isolation this homelab needs.
+k8s_namespace: homelab
+# Whether k8s IngressRoutes also match the PUBLIC host (`<svc>.<domain>`) alongside the LAN
+# `<svc>.local.<domain>`. False until slice 6 puts CrowdSec in front of the k8s edge: the
+# missing Host rule — not merely the missing DNS record — is what keeps an unprotected
+# ingress from being one Cloudflare entry away.
+k8s_public_route: false
 # The one host that pulls daniel-pi's wg-easy peer configs into its own Kopia backup
 # scope (see wg-easy CLAUDE.md) — daniel-pi itself is not parameterized here, it's the
 # one confirmed satellite with no sibling expected.

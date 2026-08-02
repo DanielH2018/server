@@ -1,0 +1,63 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bento-pdf
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bento-pdf
+  template:
+    metadata:
+      labels:
+        app: bento-pdf
+    spec:
+      securityContext:
+        runAsUser: {{ bento_pdf_k8s_uid }}
+        runAsGroup: {{ bento_pdf_k8s_uid }}
+        fsGroup: {{ bento_pdf_k8s_uid }}
+      containers:
+        - name: bento-pdf
+          image: {{ bento_pdf_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            # The compose template's tmpfs entries. Everything else the image writes is
+            # either cosmetic in-place /etc/nginx edits that fail soft, or nothing — it is a
+            # static SPA with its config baked in, so there is no state to persist.
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-tmp
+              mountPath: /etc/nginx/tmp
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ bento_pdf_k8s_cpu_limit }}"
+              memory: {{ bento_pdf_k8s_mem_limit }}
+            requests:
+              cpu: "{{ bento_pdf_k8s_cpu_request }}"
+              memory: {{ bento_pdf_k8s_mem_request }}
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-tmp
+          emptyDir: {}

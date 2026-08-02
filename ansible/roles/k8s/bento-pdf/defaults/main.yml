@@ -1,0 +1,14 @@
+---
+# Same image the Docker role runs — both copies stay on the same tag through coexistence so
+# a difference in behaviour between them is never the image.
+bento_pdf_k8s_image: ghcr.io/alam00000/bentopdf:latest
+# Mirrors resources('0.50', '256M', '0.05', '32M') in the compose template.
+bento_pdf_k8s_cpu_limit: "500m"
+bento_pdf_k8s_mem_limit: 256Mi
+bento_pdf_k8s_cpu_request: "50m"
+bento_pdf_k8s_mem_request: 32Mi
+# nginx-unprivileged runs as this UID. It is also the fsGroup: the compose template gets
+# writable scratch dirs from `tmpfs: ... mode=1777`, and emptyDir has no such knob — it
+# mounts 0755 root-owned, so without an fsGroup the container EPERMs exactly as it would
+# have on a default tmpfs.
+bento_pdf_k8s_uid: 101

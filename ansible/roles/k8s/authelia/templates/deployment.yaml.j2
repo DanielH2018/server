@@ -1,0 +1,81 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authelia
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # The SQLite database is a ReadWriteOnce volume and two Authelias writing it is the exact
+  # corruption this instance exists to avoid — the old pod must stop before the new one starts.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: authelia
+  template:
+    metadata:
+      labels:
+        app: authelia
+    spec:
+      securityContext:
+        # Starting as UID 1000 rather than root is why this needs none of the SETUID/SETGID
+        # capabilities the compose template grants: the image's entrypoint only su-execs down
+        # to the authelia user when it starts as root, and skips that path entirely otherwise.
+        # fsGroup makes the config PVC writable for the SQLite database and notification file.
+        runAsUser: {{ puid }}
+        runAsGroup: {{ pgid }}
+        fsGroup: {{ pgid }}
+      containers:
+        - name: authelia
+          image: {{ authelia_k8s_image }}
+          args:
+            - --config
+            - /secrets/configuration.yml
+          ports:
+            - name: http
+              containerPort: {{ container_item.port }}
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            # Config and the users database come from the Secret, mounted OUTSIDE /config so
+            # the PVC can own /config for the database Authelia writes.
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+            - name: config
+              mountPath: /config
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ authelia_k8s_cpu_limit }}"
+              memory: {{ authelia_k8s_mem_limit }}
+            requests:
+              cpu: "{{ authelia_k8s_cpu_request }}"
+              memory: {{ authelia_k8s_mem_request }}
+      volumes:
+        - name: secrets
+          secret:
+            secretName: authelia-config
+            defaultMode: 0400
+        - name: config
+          persistentVolumeClaim:
+            claimName: authelia-config

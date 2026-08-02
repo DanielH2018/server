@@ -1,0 +1,23 @@
+---
+# Same tag the Docker instance runs, so a behavioural difference between the two portals is
+# never the version.
+authelia_k8s_image: authelia/authelia:4.39.20
+
+# Session cookie name. MUST differ from the Docker instance's `authelia_session_local`.
+# Both portals serve the cookie domain local.<domain>, and a browser holds one cookie per
+# (domain, name) pair — with a shared name, logging in at one portal overwrites the other's
+# cookie, and since sessions are in-memory per instance the overwritten side then bounces the
+# user back to login. Symptom: signing in here silently signs you out of daniel-server.
+authelia_k8s_cookie_name: authelia_session_k8s
+
+# Its own SQLite database on its own volume. This is the slice-1 hazard named in
+# docs/k3s-migration/design.md: two Authelias writing one SQLite file corrupts it for both.
+# The storage ENCRYPTION KEY is deliberately shared with the Docker instance
+# (authelia_storage) so the slice-6 cutover is a plain file copy with no re-encryption, and
+# so this adds no second `pinned` secret to the rotation registry.
+authelia_k8s_storage: 1Gi
+
+authelia_k8s_cpu_limit: "1.0"
+authelia_k8s_mem_limit: 512Mi
+authelia_k8s_cpu_request: "100m"
+authelia_k8s_mem_request: 64Mi

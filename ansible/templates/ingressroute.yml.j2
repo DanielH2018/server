@@ -1,0 +1,61 @@
+{#
+  IngressRoute for a k8s-hosted service — the replacement for traefik.yml.j2's labels()
+  macro, which cannot survive the migration: there are no Docker labels in k8s and the
+  docker provider is gone. Everything labels() encoded (host rule, entrypoint, TLS resolver
+  and SAN set, service port, rate-limit, optional Authelia) is encoded here instead.
+
+  Written once so slice 2's ~33 remaining services are a one-line call each, not 33
+  hand-authored routes that drift from one another.
+
+  Arguments mirror labels() where they can:
+    name               Service (and IngressRoute) name; matches the k8s Service
+    hostname           Host label, WITHOUT the domain. Callers pass the -k8s-suffixed name
+                       while the Docker twin still serves the unsuffixed one.
+    port               Service port to route to
+    authelia           attach the forward-auth Middleware (containers_list use_authelia)
+    extra_middlewares  additional Middleware names, applied after the standard two
+
+  The TLS block is explicit rather than relying on the TLSStore default. Omitting it makes
+  Traefik request a certificate for the literal Host rule — a separate cert per hostname,
+  a separate Let's Encrypt issuance, and rate-limit arithmetic that no longer matches the
+  Docker instance's. The Docker side repeats the same block on each hand-rolled file-provider
+  router for the same reason.
+#}
+{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[]) -%}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ name }}
+  namespace: {{ k8s_namespace }}
+spec:
+  entryPoints:
+    - https
+  routes:
+    - kind: Rule
+      # LAN-only until slice 6: k8s_public_route stays false while the k8s edge has no
+      # CrowdSec bouncer. The absent public Host rule is the guard — not the absent DNS
+      # record, which is one Cloudflare entry away from existing.
+      match: "{% if k8s_public_route %}Host(`{{ hostname }}.{{ domain }}`) || {% endif %}Host(`{{ hostname }}.local.{{ domain }}`)"
+      middlewares:
+        - name: rate-limit
+{% if authelia %}
+        - name: authelia
+{% endif %}
+{% for middleware in extra_middlewares %}
+        - name: {{ middleware }}
+{% endfor %}
+      services:
+        - name: {{ name }}
+          port: {{ port }}
+  tls:
+    certResolver: cloudflare
+    # Explicit: a TLSOption applies implicitly only when named `default` in the `default`
+    # namespace, and Traefik's CRD provider is scoped to the workload namespace.
+    options:
+      name: default
+    domains:
+      - main: "{{ domain }}"
+        sans:
+          - "*.{{ domain }}"
+          - "*.local.{{ domain }}"
+{%- endmacro %}

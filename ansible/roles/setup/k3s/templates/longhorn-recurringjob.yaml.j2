@@ -1,0 +1,24 @@
+---
+# Daily backup of every Longhorn volume to B2.
+#
+# groups: [default] rather than a bespoke group label. Longhorn applies a `default`-group job
+# to any volume that has no job of its own, so a new PVC is backed up without anyone
+# remembering to label it — and the labels Longhorn reads live on its Volume CRs, not on the
+# PVC, so a PVC-level label would have been silently inert.
+#
+# The trade is that an opt-out is now the explicit act: slice 4's media volumes are large and
+# already covered by Kopia on host paths, so they get their own group to keep them out of this
+# one. Design doc §6 gate: a service's data must be visible in its NEW backup path before the
+# Docker copy is decommissioned.
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: daily-backup
+  namespace: longhorn-system
+spec:
+  cron: "{{ k3s_longhorn_backup_cron }}"
+  task: backup
+  groups:
+    - default
+  retain: {{ k3s_longhorn_backup_retain }}
+  concurrency: 1

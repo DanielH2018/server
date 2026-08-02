@@ -1,0 +1,92 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traefik
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # acme.json is a ReadWriteOnce volume and two Traefiks racing to write it corrupt the
+  # account registration, so the rollout must stop the old pod before starting the new one.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: traefik
+  template:
+    metadata:
+      labels:
+        app: traefik
+    spec:
+      serviceAccountName: traefik-ingress-controller
+      securityContext:
+        runAsUser: {{ traefik_k8s_uid }}
+        runAsGroup: {{ traefik_k8s_uid }}
+        fsGroup: {{ traefik_k8s_uid }}
+      containers:
+        - name: traefik
+          image: {{ traefik_k8s_image }}
+          args:
+            - --configFile=/config/traefik.yml
+          ports:
+            - name: http
+              containerPort: {{ traefik_k8s_http_port }}
+            - name: https
+              containerPort: {{ traefik_k8s_https_port }}
+            - name: ping
+              containerPort: {{ traefik_k8s_ping_port }}
+          env:
+            # Not sensitive — the token itself is file-mounted below.
+            - name: CF_API_EMAIL
+              value: "{{ email }}"
+            - name: CF_DNS_API_TOKEN_FILE
+              value: /run/secrets/cf_dns_token
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: cloudflare
+              mountPath: /run/secrets
+              readOnly: true
+            - name: acme
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: ping
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: ping
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ traefik_k8s_cpu_limit }}"
+              memory: {{ traefik_k8s_mem_limit }}
+            requests:
+              cpu: "{{ traefik_k8s_cpu_request }}"
+              memory: {{ traefik_k8s_mem_request }}
+      volumes:
+        - name: config
+          configMap:
+            name: traefik-static
+        - name: cloudflare
+          secret:
+            secretName: traefik-cloudflare
+            defaultMode: 0400
+        - name: acme
+          persistentVolumeClaim:
+            claimName: traefik-acme
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,65 @@
+{#
+  The middlewares and TLS options carried over from the Docker instance's config.yml.j2.
+
+  Deliberately NOT carried over for slice 1:
+    crowdsec            bouncer plugin + LAPI, slice 6
+    csp-karakeep        that service has not migrated
+    rate-limit-livesync ditto
+  No TLSStore either: every IngressRoute states its own tls.domains via the ingressroute()
+  macro, so a store's defaultGeneratedCert would be a second source of truth for the SAN set.
+#}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: default-headers
+  namespace: {{ k8s_namespace }}
+spec:
+  headers:
+    customResponseHeaders:
+      Permissions-Policy: "geolocation=(self), microphone=(), camera=(), fullscreen=(self), usb=()"
+      # No global Content-Security-Policy, same as the Docker side: customResponseHeaders
+      # REPLACES the backend's header, so a blanket CSP clobbers the stricter per-app ones
+      # (FreshRSS even detects the weakened header and warns). Clickjacking is covered by
+      # X-Frame-Options SAMEORIGIN below; set CSP per-app where the origins are known-good.
+    referrerPolicy: "strict-origin-when-cross-origin"
+    browserXssFilter: true
+    contentTypeNosniff: true
+    forceSTSHeader: true
+    stsIncludeSubdomains: true
+    # No stsPreload: browsers only honour preload at max-age >= 1 year, so at 180 days it
+    # advertises an intent we do not fulfil — and preloading is a hard-to-reverse commitment
+    # across every subdomain.
+    stsSeconds: 15552000
+    customFrameOptionsValue: SAMEORIGIN
+    customRequestHeaders:
+      X-Forwarded-Proto: https
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit
+  namespace: {{ k8s_namespace }}
+spec:
+  rateLimit:
+    average: 300
+    burst: 150
+    period: 1m
+---
+apiVersion: traefik.io/v1alpha1
+kind: TLSOption
+metadata:
+  name: default
+  namespace: {{ k8s_namespace }}
+spec:
+  # Referenced explicitly by the ingressroute() macro. A TLSOption is only picked up
+  # implicitly when it is named `default` in the `default` namespace — and the CRD provider
+  # is scoped to this namespace — so the reference is what makes it apply, not the name.
+  minVersion: VersionTLS12
+  cipherSuites:
+    - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+    - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+    - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+    - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+    - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+    - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305

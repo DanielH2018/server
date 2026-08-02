@@ -1,4 +1,19 @@
 ---
+# Two pools, not one. The ingress VIP has to be an address no ordinary LoadBalancer
+# Service can take, and autoAssign: false is the only thing that actually enforces that —
+# MetalLB will never hand this address out except to a Service that names it via the
+# metallb.io/loadBalancerIPs annotation. A comment saying "don't use .240" would not
+# survive the next service that asks for a LoadBalancer.
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: ingress-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - {{ k3s_metallb_ingress_vip }}/32
+  autoAssign: false
+---
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
@@ -15,4 +30,5 @@ metadata:
   namespace: metallb-system
 spec:
   ipAddressPools:
+    - ingress-pool
     - homelab-pool

@@ -1,0 +1,30 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik
+  namespace: {{ k8s_namespace }}
+  annotations:
+    # The annotation, not spec.loadBalancerIP — that field is deprecated upstream and MetalLB
+    # reads this. This is the only way to claim an address out of the autoAssign: false
+    # ingress-pool (roles/setup/k3s/templates/metallb-pool.yaml.j2).
+    metallb.io/loadBalancerIPs: {{ k3s_metallb_ingress_vip }}
+spec:
+  type: LoadBalancer
+  # Local, NOT the Cluster default, and this is a security control rather than a tuning knob.
+  # Under Cluster the node masquerades inbound traffic, so Traefik sees every client as
+  # cni0's 10.42.0.1 — which is inside 10.0.0.0/8, so Authelia's access_control rules would
+  # score ALL traffic, including public traffic after slice 6, as RFC1918 LAN and hand it the
+  # one_factor policy meant for the local network. Local preserves the real client address.
+  # Safe here because Traefik is the only ingress and the cluster is single-node; revisit the
+  # scheduling implications when daniel-server joins at slice 7.
+  externalTrafficPolicy: Local
+  selector:
+    app: traefik
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+    - name: https
+      port: 443
+      targetPort: https

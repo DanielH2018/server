@@ -354,6 +354,24 @@
   delay: 10
   until: k3s_backup_available.stdout == "true"
 
+- name: Render the Longhorn recurring backup job
+  tags: [longhorn_backup]
+  ansible.builtin.template:
+    src: longhorn-recurringjob.yaml.j2
+    dest: /etc/rancher/k3s/longhorn-recurringjob.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Apply the Longhorn recurring backup job
+  tags: [longhorn_backup]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/longhorn-recurringjob.yaml
+  register: k3s_longhorn_recurringjob
+  become: true
+  changed_when: "'created' in k3s_longhorn_recurringjob.stdout or 'configured' in k3s_longhorn_recurringjob.stdout"
+
 - name: Report what still needs proving by hand
   tags: [longhorn_backup]
   # available:true proves credentials and reachability. It does NOT prove an object was

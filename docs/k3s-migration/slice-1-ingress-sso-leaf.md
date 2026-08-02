@@ -309,10 +309,17 @@ curl -sS -o /dev/null -w '%{http_code}\n' \
   -H 'Host: bento-pdf-k8s.local.<domain>' http://10.0.0.240/
 ```
 
-**Prove it from daniel-server, not daniel-box.** Slice 0's LoadBalancer criterion was ambiguous for
-exactly this reason: `externalTrafficPolicy: Cluster` masquerades external traffic, so an on-host
-curl and a LAN curl are indistinguishable in the access log. Running it from another machine is the
-only thing that proves L2 advertisement works.
+**Set `externalTrafficPolicy: Local` on the Traefik Service, and treat it as a security control.**
+This is the slice-0 `RemoteAddr` trap, and it is worse than a verification nuisance. Under the
+`Cluster` default the node masquerades inbound traffic, so Traefik sees every client as cni0's
+`10.42.0.1` — which is inside `10.0.0.0/8`, so **Authelia's `access_control` rules would score all
+traffic, including public traffic after slice 6, as RFC1918 LAN** and hand it the `one_factor`
+policy meant for the local network. `Local` preserves the real client address. Safe here because
+Traefik is the only ingress on a single-node cluster; revisit when daniel-server joins at slice 7.
+
+**Then prove it from daniel-server, not daniel-box.** With `Local` the source address is real, so
+an on-host curl and a LAN curl are finally distinguishable — but only a curl from another machine
+proves L2 advertisement works at all.
 
 ### Task 5: DNS overrides, then TLS
 
@@ -411,10 +418,19 @@ Add one HTTP monitor by hand against `https://bento-pdf-k8s.local.<domain>/`, ex
 back up. (`speedtest` would have been the same.) The state slice 1 actually creates is
 **Authelia's `/config` PVC** and **Traefik's `acme.json` PVC**, so that is where the §6 gate lands.
 
-Add a Longhorn `RecurringJob` (daily, `backup` task). It binds to volumes by **group label**, not by
-a list of PVC names — label both volumes into a shared `recurring-job-group`. Trigger one backup
-immediately, then verify from **outside the cluster**; asking Longhorn whether its own backup exists
-is not independent evidence, which is the whole point of this gate:
+Add a Longhorn `RecurringJob` (daily, `backup` task) in the **`default` group**.
+
+Two things about the mechanism, both discovered while implementing it. A RecurringJob does not take
+a list of PVC names — it selects volumes by group. And **the labels it reads live on Longhorn's own
+`Volume` CRs, not on the PVC**: a `recurring-job-group.longhorn.io/...` label on the PVC does not
+propagate and is silently inert, which is a backup that never runs while looking configured. The
+`default` group sidesteps both: Longhorn applies it to any volume with no job of its own, so a new
+PVC is covered without anyone remembering to label it. The cost is that opting *out* becomes the
+explicit act — slice 4's media volumes are large and already covered by Kopia on host paths, so they
+will need their own group.
+
+Trigger one backup immediately, then verify from **outside the cluster**; asking Longhorn whether
+its own backup exists is not independent evidence, which is the whole point of this gate:
 
 ```bash
 bash /home/ubuntu/.claude/jobs/95fc95ed/tmp/b2-list-longhorn.sh   # run on daniel-server

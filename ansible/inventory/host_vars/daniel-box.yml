@@ -5,9 +5,32 @@ server_ip: 10.0.0.215
 # 50-cloud-init.conf. The SSH-hardening tasks have no `create:` fallback, so a wrong value
 # here fails initial_setup.yml outright.
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
-# Nothing runs here yet — populate as services move onto this host (CLAUDE.md → "Adding a
-# New Container Service"). deploy.yml dies in its first pre_task if this is undefined.
-containers_list: []
+# Slice 1 of the k3s migration (docs/k3s-migration/slice-1-ingress-sso-leaf.md). Every entry
+# is platform: k8s, so deploy.yml's Docker play filters them all out and its k8s play picks
+# them up — the keys are otherwise the same ones the Docker entries use, which is the point
+# of the platform key.
+#
+# ORDER IS LOAD-BEARING and there is no toposort on this play: the traefik role installs the
+# Traefik CRDs that every IngressRoute and Middleware below depends on, and bento-pdf's route
+# references the `authelia` Middleware the authelia role creates.
+#
+# `hostname` carries the -k8s suffix while the Docker twin still serves the unsuffixed name.
+# Single-label on purpose — bento-pdf-k8s.local.<domain> is covered by the existing
+# *.local.<domain> wildcard cert; a nested bento-pdf.k8s.local.<domain> would not be.
+containers_list:
+  - name: traefik
+    platform: k8s
+    port: 8080
+  - name: authelia
+    platform: k8s
+    hostname: "auth{{ k8s_hostname_suffix }}"
+    port: 9091
+    use_authelia: false
+  - name: bento-pdf
+    platform: k8s
+    hostname: "bento-pdf{{ k8s_hostname_suffix }}"
+    port: 8080
+    use_authelia: true
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the

@@ -1,0 +1,12 @@
+{% from 'ingressroute.yml.j2' import ingressroute with context %}
+---
+{# use_authelia is false for the portal itself: gating the login page behind the login page
+   is a redirect loop. rate-limit still applies — it is the brute-force protection for the
+   portal, which is the one route that most needs it. #}
+{{ ingressroute(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    false
+  )
+}}

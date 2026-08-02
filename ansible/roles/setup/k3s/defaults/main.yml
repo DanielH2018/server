@@ -42,9 +42,19 @@ k3s_server_args: >-
   --write-kubeconfig-mode 0640
   --node-ip {{ server_ip }} --advertise-address {{ server_ip }}
 
-# LoadBalancer address pool. Must sit OUTSIDE the router's DHCP scope, or MetalLB will
-# hand out addresses the router also leases.
-k3s_metallb_pool: 10.0.0.240-10.0.0.250
+# LoadBalancer addresses. Must sit OUTSIDE the router's DHCP scope, or MetalLB will hand
+# out addresses the router also leases.
+#
+# The ingress VIP is carved out into its own autoAssign: false pool (see
+# templates/metallb-pool.yaml.j2) so it can only be claimed by the Service that names it
+# in a metallb.io/loadBalancerIPs annotation. Ingress is the one address that appears in
+# DNS and, eventually, in the router's port-forward — it must not move because some other
+# Service happened to ask for a LoadBalancer first.
+#
+# k3s_metallb_ingress_vip itself lives in group_vars/all.yml, not here: Pi-hole on
+# daniel-server points the *-k8s hostnames at it, so it is consumed on a host that never
+# runs this role.
+k3s_metallb_pool: 10.0.0.241-10.0.0.250
 
 # One replica until daniel-server joins the cluster (slice 7). More replicas than nodes leaves
 # every volume permanently "degraded", which buries a real fault in expected noise — and
@@ -61,3 +71,10 @@ k3s_longhorn_replica_count: 1
 # never share a namespace and a lifecycle rule written for one cannot expire the other's
 # data. Kopia's own snapshots live at the bucket root.
 k3s_longhorn_backup_prefix: longhorn
+
+# Daily volume backup to that target. 03:30 keeps it clear of the Kopia run and of the daily
+# secret-rotation cron. 14 retained backups per volume is two weeks of daily recovery points
+# — Longhorn backups are incremental at the block level, so the marginal cost of depth here is
+# small compared to the first full.
+k3s_longhorn_backup_cron: "30 3 * * *"
+k3s_longhorn_backup_retain: 14

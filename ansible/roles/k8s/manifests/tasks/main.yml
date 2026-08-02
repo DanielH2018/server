@@ -1,0 +1,95 @@
+---
+# Shared render -> apply -> wait cycle for every k8s workload role.
+#
+# Included by roles/k8s/<service>/tasks/main.yml, which must set:
+#   manifests_service       service name (also the manifest subdirectory)
+#   manifests_role_path     the CALLING role's role_path — `template:` resolves a relative
+#                           src against the role that owns this task file, not the caller,
+#                           so callers pass their own path and we build an absolute src
+#   manifests_files         list of template basenames rendered world-readable
+#   manifests_secret_files  list rendered 0600 with no_log (anything carrying a secret)
+#   manifests_rollout       Deployment to wait on; set '' to skip the wait entirely
+#
+# Named `manifests` rather than `common` so its ansible-lint variable prefix does not
+# collide with the Docker-side roles/containers/common namespace.
+#
+# Manifests land under /etc/rancher/k3s/manifests/ and are applied explicitly. NOT
+# /var/lib/rancher/k3s/server/manifests/ — k3s's auto-deploy controller re-applies that
+# directory on every restart and takes ownership of what it finds, which fights Ansible
+# for the same resources.
+
+- name: Create the manifest directory for {{ manifests_service }}
+  tags: [config]
+  ansible.builtin.file:
+    path: "/etc/rancher/k3s/manifests/{{ manifests_service }}"
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+
+- name: Render manifests for {{ manifests_service }}
+  tags: [config]
+  ansible.builtin.template:
+    src: "{{ manifests_role_path }}/templates/{{ item }}.j2"
+    dest: "/etc/rancher/k3s/manifests/{{ manifests_service }}/{{ item }}"
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ manifests_files | default([]) }}"
+  become: true
+  register: manifests_render
+
+- name: Render secret manifests for {{ manifests_service }}
+  tags: [config]
+  # Separate loop rather than a conditional no_log: these carry decrypted SOPS values, and
+  # keeping them in their own task makes the 0600 + no_log pair impossible to lose in a
+  # later edit to the ordinary manifest list.
+  no_log: true
+  ansible.builtin.template:
+    src: "{{ manifests_role_path }}/templates/{{ item }}.j2"
+    dest: "/etc/rancher/k3s/manifests/{{ manifests_service }}/{{ item }}"
+    mode: "0600"
+    owner: root
+    group: root
+  loop: "{{ manifests_secret_files | default([]) }}"
+  become: true
+  register: manifests_secret_render
+
+- name: Apply manifests for {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/{{ manifests_service }}/"
+  register: manifests_apply
+  become: true
+  changed_when: "'created' in manifests_apply.stdout or 'configured' in manifests_apply.stdout"
+
+- name: Roll the deployment after a config change for {{ manifests_service }}
+  tags: [deploy]
+  # A ConfigMap/Secret edit does not restart the pods consuming it — `kubectl apply` updates
+  # the object and nothing else. Without this a config change deploys green and only takes
+  # effect at the next unrelated restart. Same failure the docker_deploy role's
+  # common_config_changed wiring exists to prevent (roles/containers/common/CLAUDE.md).
+  #
+  # Skipped when this run created the Deployment: it is already running the new config, and
+  # `rollout restart` on one whose pods have not appeared yet races the initial rollout.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout restart
+      deploy/{{ manifests_rollout | default(manifests_service) }}
+  become: true
+  changed_when: true
+  when:
+    - manifests_rollout | default(manifests_service) | length > 0
+    - manifests_render is changed or manifests_secret_render is changed
+    - not manifests_apply.stdout is search('deployment.apps/' ~ (manifests_rollout | default(manifests_service)) ~ ' created')
+
+- name: Wait for the rollout of {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout status
+      deploy/{{ manifests_rollout | default(manifests_service) }} --timeout=300s
+  become: true
+  changed_when: false
+  when: manifests_rollout | default(manifests_service) | length > 0

@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: traefik-acme
+  namespace: {{ k8s_namespace }}
+spec:
+  # Backed up by the `default`-group RecurringJob the k3s role installs, but not load-bearing:
+  # acme.json is regenerable, and losing it costs one ACME re-issue rather than data.
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: {{ traefik_k8s_acme_storage }}

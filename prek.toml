@@ -125,6 +125,22 @@ pass_filenames = false
 # edit there can change what these templates render to, same as the compose hook's scope.
 files = "^(ansible/roles/containers/(authelia/templates/configuration|traefik/templates/(config|traefik)|prometheus/templates/prometheus|grafana/templates/(loki-config|promtail-config))\\.yml\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate_config_templates\\.py)$"
 
+# Same render-then-parse guard as the two above, for the k8s manifests the k3s migration adds.
+# Also parses the YAML *embedded* in ConfigMap/Secret values — the manifest wrapping Traefik's
+# static config and Authelia's configuration.yml is trivially valid whatever those opaque block
+# scalars contain, so an outer-only check would miss the indentation bugs that matter most. A
+# broken manifest otherwise first shows up as `error validating data` partway through a kubectl
+# apply, with some objects applied and some not.
+[[repos.hooks]]
+id = "validate-k8s-manifests"
+name = "Validate rendered k8s manifest templates"
+entry = "uv run python scripts/validate_k8s_manifests.py"
+language = "system"
+pass_filenames = false
+# daniel-box's host_vars is in scope because the validator renders each role with that host's
+# real containers_list entry (port, hostname) rather than a stub.
+files = "^(ansible/roles/k8s/.*\\.j2|ansible/templates/ingressroute\\.yml\\.j2|ansible/inventory/(group_vars/all|host_vars/daniel-box)\\.yml|scripts/validate_k8s_manifests\\.py)$"
+
 # Render every Jinja-templated shell script (*.sh.j2) with stubbed vars and lint the OUTPUT
 # (bash -n + shellcheck) — the same render-then-lint pattern as validate-compose-templates /
 # validate-config-templates, but for shell instead of YAML. identify tags a `.sh.j2` file as

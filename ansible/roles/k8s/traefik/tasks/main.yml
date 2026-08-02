@@ -1,0 +1,59 @@
+---
+# CRDs come from the pinned upstream by URL, exactly as the k3s setup role installs Longhorn
+# and MetalLB. They are a large, versioned, third-party set — not ours to hand-maintain. Only
+# the ClusterRoleBinding is authored locally (see files/rbac.yaml for why).
+- name: Install the Traefik CRDs
+  tags: [config]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      https://raw.githubusercontent.com/traefik/traefik/{{ traefik_k8s_crd_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
+  register: traefik_k8s_crd_apply
+  become: true
+  changed_when: "'created' in traefik_k8s_crd_apply.stdout or 'configured' in traefik_k8s_crd_apply.stdout"
+
+- name: Wait for the Traefik CRDs to be established
+  tags: [config]
+  # Without this the first run races: the Middleware and TLSOption objects in dynamic.yaml
+  # are applied against an API server that has not finished registering their kinds yet, and
+  # fail with "no matches for kind".
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl wait --for condition=established --timeout=60s
+      crd/ingressroutes.traefik.io crd/middlewares.traefik.io crd/tlsoptions.traefik.io
+  become: true
+  changed_when: false
+
+- name: Install the Traefik ClusterRole
+  tags: [config]
+  ansible.builtin.copy:
+    src: rbac.yaml
+    dest: /etc/rancher/k3s/traefik-clusterrole.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Apply the Traefik ClusterRole
+  tags: [config]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/traefik-clusterrole.yaml
+  register: traefik_k8s_rbac_apply
+  become: true
+  changed_when: "'created' in traefik_k8s_rbac_apply.stdout or 'configured' in traefik_k8s_rbac_apply.stdout"
+
+- name: Deploy Traefik to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: traefik
+    manifests_role_path: "{{ role_path }}"
+    manifests_files:
+      - rbac-binding.yaml
+      - acme-pvc.yaml
+      - static-config.yaml
+      - dynamic.yaml
+      - deployment.yaml
+      - service.yaml
+    manifests_secret_files:
+      - cf-token-secret.yaml

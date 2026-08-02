@@ -1,0 +1,11 @@
+---
+- name: Deploy bento-pdf to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: bento-pdf
+    manifests_role_path: "{{ role_path }}"
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
