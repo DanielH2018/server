@@ -144,11 +144,12 @@ never widen it, so that a repo can't grant itself permissions merely by being op
   un-escaped `$` in a `command`/`entrypoint`/`healthcheck.test` (Compose interpolates a lone
   `$VAR`/`$(…)` at parse time — shell `$` must be doubled `$$`; legit `${VAR-…}` in
   `environment:` is not flagged).
-- **log-permission** (PreToolUse / PermissionRequest / Notification, `async`) — observability-only.
-  Aggregates per-host tool-call + prompt *counts* → `.claude/logs/permissions.json` (gitignored).
-  `audit-permissions.py` reports prompt rate, per-tool split, **suggested allowlist rules** +
-  **redundant existing rules** (hook-covered / subsumed / dup — safe to prune); `/audit-permissions`
-  turns that into `settings.local.json` edits. Pairs w/ `auto-approve-readonly.py` (decides vs measures).
+- **permission auditing** — no longer lives here. A `log-permission` hook used to count tool calls
+  and prompts into `.claude/logs/permissions.json` for `audit-permissions.py` to read; Claude Code's
+  own OTEL `tool_decision` events carry that now, and name the deciding authority (`config` rule,
+  `hook`, `user`) instead of leaving it inferred. This host exports to the `otel-collector`
+  container, which ships events to Loki. The reader is the `claude-permission-audit` plugin
+  (`/audit-permissions`), installed globally rather than vendored per-repo.
 - **session-health** (SessionStart) — on opening a session here, prints a banner of any unhealthy/
   restarting containers + down Prometheus targets (silent when all-green; read-only, timeout-bounded).
 - **homelab-network-diagnostician** agent — connectivity/DNS/Traefik/WireGuard/CrowdSec triage (read-only).
