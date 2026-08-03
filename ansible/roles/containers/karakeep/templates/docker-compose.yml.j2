@@ -193,7 +193,7 @@ services:
     # custom manager in renovate.json, manual-bump group) so they age visibly, bumped alongside the
     # digest-pinned karakeep app whose API the client talks to.
     command: >-
-      bash -c "uv pip install karakeep-python-api==1.8.0 fire==0.7.1 tqdm==4.68.4 beautifulsoup4==4.15.0 loguru==0.7.3 -q --system && while true; do find / -maxdepth 1 -name 'karakeep-time-tagger.*.log' -mtime +2 -delete 2>/dev/null; python /script/karakeep-time-tagger.py --cache_file /tmp/bookmarks.temp --reset_all=True && touch /tmp/healthy; sleep 900; done"
+      bash -c "uv pip install karakeep-python-api==1.8.0 fire==0.7.1 tqdm==4.69.0 beautifulsoup4==4.15.0 loguru==0.7.3 -q --system && while true; do find / -maxdepth 1 -name 'karakeep-time-tagger.*.log' -mtime +2 -delete 2>/dev/null; python /script/karakeep-time-tagger.py --cache_file /tmp/bookmarks.temp --reset_all=True && touch /tmp/healthy; sleep 900; done"
     # start_period covers the uv pip install + the first tagging run; the loop sleeps
     # 900s, so <2100 allows one missed cycle before going unhealthy.
     {{ healthcheck("[\"CMD\", \"python3\", \"-c\", \"import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/healthy').st_mtime<2100 else 1)\"]", start_period='600s', interval='60s') }}
