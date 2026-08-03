@@ -75,6 +75,15 @@ data:
         # someone drops in kube-system or longhorn-system.
         namespaces:
           - {{ k8s_namespace }}
+          # Telemetry stack (claude-otel). A namespace absent from this list is not merely
+          # unrouted — Traefik never sees its IngressRoutes at all, so the route applies
+          # cleanly, reports nothing wrong, and the host simply 404s. Adding it is additive:
+          # existing routes are unaffected.
+          #
+          # `allowCrossNamespace` stays OFF. That namespace carries its own copies of the
+          # rate-limit and authelia Middlewares rather than reaching into this one, which
+          # keeps a route in any watched namespace from referencing another's middlewares.
+          - {{ k8s_observability_namespace }}
 
     certificatesResolvers:
       cloudflare:

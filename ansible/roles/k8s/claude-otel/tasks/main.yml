@@ -13,6 +13,12 @@
       - collector.yaml
       - loki.yaml
       - prometheus.yaml
+      - middlewares.yaml
+      - grafana.yaml
+      - grafana-dashboard.yaml
+      - ingressroute.yaml
+    manifests_secret_files:
+      - grafana-secret.yaml
     # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has three,
     # in a different namespace. Skip its wait and roll our own below.
     manifests_rollout: ''
@@ -28,15 +34,16 @@
   # `rollout restart` races the initial rollout.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ claude_otel_namespace }} rollout restart deploy/{{ item }}
+      k3s kubectl -n {{ k8s_observability_namespace }} rollout restart deploy/{{ item }}
   loop:
     - loki
     - prometheus
     - otel-collector
+    - grafana
   become: true
   changed_when: true
   when:
-    - manifests_render is changed
+    - manifests_render is changed or manifests_secret_render is changed
     - not manifests_apply.stdout is search('deployment.apps/' ~ item ~ ' created')
 
 - name: Wait for the telemetry workloads to roll out
@@ -46,12 +53,13 @@
   # Ordering here makes the first-deploy logs readable rather than alarming.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ claude_otel_namespace }} rollout status
+      k3s kubectl -n {{ k8s_observability_namespace }} rollout status
       deploy/{{ item }} --timeout=300s
   loop:
     - loki
     - prometheus
     - otel-collector
+    - grafana
   become: true
   changed_when: false
 
@@ -63,7 +71,7 @@
   # and responses verbatim to the whole LAN. Assert it rather than trust the manifest.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ claude_otel_namespace }} get deploy otel-collector
+      k3s kubectl -n {{ k8s_observability_namespace }} get deploy otel-collector
       -o jsonpath={.spec.template.spec.containers[0].ports[0].hostIP}
   register: claude_otel_bind
   become: true

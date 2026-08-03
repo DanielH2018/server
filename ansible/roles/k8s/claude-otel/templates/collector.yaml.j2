@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: otel-collector-config
-  namespace: {{ claude_otel_namespace }}
+  namespace: {{ k8s_observability_namespace }}
 data:
   config.yaml: |
     receivers:
@@ -60,7 +60,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: otel-collector
-  namespace: {{ claude_otel_namespace }}
+  namespace: {{ k8s_observability_namespace }}
 spec:
   replicas: 1
   strategy:
@@ -118,7 +118,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: otel-collector
-  namespace: {{ claude_otel_namespace }}
+  namespace: {{ k8s_observability_namespace }}
 spec:
   selector:
     app: otel-collector
