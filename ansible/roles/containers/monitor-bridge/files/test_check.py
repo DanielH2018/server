@@ -3759,3 +3759,103 @@ def test_gitops_status_unparseable_behind_marker_is_ok():
     for marker in ("garbage", "abc123 notanumber", "abc123", ""):
         ok, _ = check.gitops_status(None, None, marker, now=1e9)
         assert ok, marker
+
+
+# --- fetch-failure messages -------------------------------------------------
+#
+# The 2026-08-02 B2 transaction-cap outage paged for 13h as "backup check error: timed out",
+# which names neither the service nor the cause. These cover what the message must now carry —
+# and, just as importantly, what it must never carry.
+
+
+def test_endpoint_label_keeps_host_and_port():
+    assert check.endpoint_label("http://kopia:51515/api/v1/sources") == "kopia:51515"
+
+
+def test_endpoint_label_omits_the_path():
+    """The Discord webhook probe goes through _get_json and its token lives in the PATH.
+
+    Including the path would publish that token into the Kuma message and therefore into
+    the very Discord channel it authenticates.
+    """
+    url = "https://discord.com/api/webhooks/123456789/s3cr3t-token-value"
+    label = check.endpoint_label(url)
+    assert label == "discord.com"
+    assert "s3cr3t" not in label
+
+
+def test_endpoint_label_omits_query_and_userinfo():
+    assert "key" not in check.endpoint_label("http://h:1/p?api_key=key")
+    assert check.endpoint_label("http://user:pw@h:1/p") == "h:1"
+
+
+def test_endpoint_label_survives_a_junk_url():
+    assert check.endpoint_label("") == "unknown host"
+
+
+def test_describe_fetch_failure_names_the_endpoint():
+    msg = check.describe_fetch_failure(
+        "http://kopia:51515/api/v1/sources", TimeoutError("timed out")
+    )
+    assert msg == "kopia:51515: timed out"
+
+
+def test_describe_fetch_failure_surfaces_the_server_body():
+    """The body is where the real cause lives — urllib discards it unless read explicitly."""
+    msg = check.describe_fetch_failure(
+        "http://kopia:51515/api/v1/sources",
+        "HTTP 500",
+        "AccessDenied: Transaction cap exceeded, see the Caps & Alerts page",
+    )
+    assert "kopia:51515" in msg
+    assert "Transaction cap exceeded" in msg
+
+
+def test_describe_fetch_failure_collapses_whitespace_and_truncates():
+    msg = check.describe_fetch_failure(
+        "http://h:1/p", "HTTP 500", "a\n\n  b" + "c" * 500
+    )
+    assert "a b" in msg  # newlines collapsed — Kuma messages are single-line
+    assert len(msg) < 260
+
+
+def test_describe_fetch_failure_ignores_a_blank_body():
+    msg = check.describe_fetch_failure("http://h:1/p", "boom", "   \n ")
+    assert msg == "h:1: boom"
+
+
+def test_get_json_attaches_the_error_body_to_httperror(monkeypatch):
+    """The cap string only ever reaches an operator if the body is read off HTTPError.
+
+    urllib exposes it as a one-shot file object that nothing reads by default, so the
+    server's own explanation is discarded and the alert says only "HTTP Error 403".
+    """
+    import io
+
+    body = b'{"error":"AccessDenied: Transaction cap exceeded, see Caps & Alerts"}'
+
+    def boom(*_a, **_k):
+        raise urllib.error.HTTPError(
+            "http://kopia:51515/api/v1/sources", 403, "Forbidden", {}, io.BytesIO(body)
+        )
+
+    monkeypatch.setattr(check.urllib.request, "urlopen", boom)
+    with pytest.raises(urllib.error.HTTPError) as ei:
+        check._get_json("http://kopia:51515/api/v1/sources")
+    # Same type, and .code intact: check_discord branches on it to tell a revoked webhook
+    # (decisive 404) from a transient network blip.
+    assert ei.value.code == 403
+    assert "kopia:51515" in str(ei.value)
+    assert "Transaction cap exceeded" in str(ei.value)
+
+
+def test_get_json_wraps_non_http_errors_without_leaking_the_url(monkeypatch):
+    def boom(*_a, **_k):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(check.urllib.request, "urlopen", boom)
+    url = "https://discord.com/api/webhooks/123/s3cr3t-token"
+    with pytest.raises(RuntimeError) as ei:
+        check._get_json(url)
+    assert "discord.com: timed out" == str(ei.value)
+    assert "s3cr3t" not in str(ei.value)
