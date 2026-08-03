@@ -437,7 +437,7 @@ Trigger one backup immediately, then verify from **outside the cluster**; asking
 its own backup exists is not independent evidence, which is the whole point of this gate:
 
 ```bash
-bash /home/ubuntu/.claude/jobs/95fc95ed/tmp/b2-list-longhorn.sh   # run on daniel-server
+uv run python scripts/probe.py b2-longhorn   # run on daniel-server
 ```
 
 **Prove it:** `.blk` data blocks exist alongside `backup_*.cfg` for the **Authelia** volume. Metadata
@@ -501,9 +501,22 @@ Slice 1 is done when every one of these has been run and its output read. No `--
       portal's settings, then `kubectl delete pod` the Authelia pod and confirm the enrolment
       survived. Until then the PVC is unproven — the pod restarting is not the same test.
 - [x] Uptime-Kuma monitor green
-- [ ] `b2-list-longhorn.sh` shows `.blk` blocks for the Authelia volume
-      → **Blocked** by the Backblaze B2 transaction-cap outage; every backup tier is down. See
-      `docs/b2-transaction-cap-monitoring-gaps.md`.
+- [x] `b2-list-longhorn.sh` shows `.blk` blocks for the Authelia volume
+      → **Passed 2026-08-03.** The original script lived only in an agent scratch directory and
+      was deleted with it, so this was unverifiable for a while; rebuilt as
+      `uv run python scripts/probe.py b2-longhorn` (run on daniel-server), which reports data
+      blocks vs metadata per volume and exits non-zero if any volume has metadata but no blocks.
+      `pvc-4ee9f2af…` = `authelia-config`: **11 `.blk` blocks**, 2 cfg. `pvc-1f29a849…` =
+      `traefik-acme`: 7 blocks. Both volumes' Aug-3 backups are real data, not just metadata.
+
+      **Finding, not a slice-1 blocker — orphaned backup sets accumulate in B2.** That run
+      listed **five** volumes while only **two** Longhorn volumes exist. Three are backups of
+      PVCs that have since been deleted: two are the previous authelia/traefik PVCs (recreated
+      during the from-scratch Authelia verification and the acme.json wipe) and one is slice 0's
+      smoke volume. Longhorn's `retain:` is per-volume, so once a volume is gone nothing prunes
+      its backups — they stay in B2 indefinitely. Currently trivial (~0.1 MB each), but it is
+      unbounded growth with no reaper, on a bucket at 60% of a 10 GB free tier, and slice 2
+      recreates a PVC per migrated service. Worth a cleanup path before that.
 - [x] `uv run pytest` and `prek run --all-files` both clean → 1339 passed
 - [ ] daniel-server carries no *unexpected* change: `docker ps -q | wc -l` matches whatever it was at
       slice-1 start, and `uptime` shows no reboot (the count is a snapshot, not an invariant — it
