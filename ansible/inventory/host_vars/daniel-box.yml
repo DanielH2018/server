@@ -31,6 +31,16 @@ containers_list:
     hostname: "bento-pdf{{ k8s_hostname_suffix }}"
     port: 8080
     use_authelia: true
+  # Claude Code telemetry sink. No `port` and no `hostname` on purpose: it has no Traefik
+  # route at all. Claude Code runs on this HOST and exports to 127.0.0.1:4317, reaching the
+  # collector through a hostPort rather than the ingress — content logging is on, so nothing
+  # here should be reachable from the LAN. Grafana (slice 2) is what will earn a hostname.
+  #
+  # Ordering is load-bearing on this list (no toposort in the k8s play), but this entry has
+  # no dependency on the three above and none of them depend on it — it lives in its own
+  # `observability` namespace.
+  - name: claude-otel
+    platform: k8s
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the

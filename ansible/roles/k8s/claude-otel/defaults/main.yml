@@ -1,0 +1,37 @@
+---
+# Claude Code telemetry stack, slice 1: collector + Loki + Prometheus.
+#
+# Claude Code runs on the daniel-box HOST and exports to localhost:4317 — that endpoint is
+# fixed by the chezmoi settings template, which enables telemetry on every host except
+# daniel-pi and states the intent plainly: "Every host exports to localhost:4317 and every
+# host keeps its own data."
+#
+# Tempo (traces) and Grafana are deliberately out of slice 1. Data lands and is queryable
+# without them; adding either changes nothing about whether collection works.
+claude_otel_namespace: observability
+
+# Pinned, Renovate-tracked. Same collector build the Docker side runs so config stays portable.
+claude_otel_collector_image: otel/opentelemetry-collector-contrib:0.157.0
+claude_otel_loki_image: grafana/loki:3.3.0
+claude_otel_prometheus_image: prom/prometheus:v3.0.1
+
+# longhorn-nobackup, NOT longhorn. Two reasons, either sufficient on its own:
+#   - Volume: Loki with content logging on grows fast, and Prometheus TSDB is high-churn.
+#     Both are the "bulky, regenerable state" the Docker side already keeps out of Kopia.
+#   - Sensitivity: content logging is ON, so Loki holds prompts, responses and tool output
+#     verbatim. The default class would copy transcript-grade data into B2 automatically.
+claude_otel_storage_class: longhorn-nobackup
+claude_otel_loki_storage: 10Gi
+claude_otel_prometheus_storage: 5Gi
+
+# OTLP gRPC, bound to loopback ON THE NODE via hostPort. Deliberately not a MetalLB VIP:
+# with content logging on, this must not be reachable from the LAN. Loopback is the whole
+# access control, exactly as the chezmoi bundle intends.
+claude_otel_otlp_port: 4317
+claude_otel_otlp_host_ip: 127.0.0.1
+
+# 744h (31d), carried over from the bundle's loki-config.yaml along with the compactor that
+# enforces it. Retention matters more here than in a normal log store: every prompt and
+# response is retained verbatim for this window.
+claude_otel_loki_retention: 744h
+claude_otel_prometheus_retention: 30d

@@ -287,6 +287,29 @@
   become: true
   changed_when: "'created' in k3s_longhorn_sc_apply.stdout or 'configured' in k3s_longhorn_sc_apply.stdout"
 
+- name: Render the no-backup Longhorn StorageClass
+  tags: [longhorn]
+  # Opt-in class for bulky, high-churn or sensitive state that must stay out of B2. It has
+  # to be a StorageClass rather than a PVC label: Longhorn reads recurring-job labels off its
+  # own Volume CRs, and PVC labels do not reach them. Reasoning in the file header.
+  ansible.builtin.copy:
+    src: longhorn-storageclass-nobackup.yaml
+    dest: /etc/rancher/k3s/longhorn-storageclass-nobackup.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Apply the no-backup Longhorn StorageClass
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/longhorn-storageclass-nobackup.yaml
+  register: k3s_longhorn_nobackup_sc_apply
+  become: true
+  changed_when: >-
+    'created' in k3s_longhorn_nobackup_sc_apply.stdout
+    or 'configured' in k3s_longhorn_nobackup_sc_apply.stdout
+
 - name: Derive the B2 region from the Kopia endpoint
   tags: [longhorn_backup]
   # Longhorn's S3 target is s3://<bucket>@<region>/<prefix>; Kopia stores a hostname.

@@ -1,0 +1,106 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: {{ claude_otel_namespace }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      # The collector re-exposes Claude Code's OTLP metrics here. This is the only source of
+      # session/token/cost data — nothing else produces it.
+      - job_name: otel-collector
+        static_configs:
+          - targets: ['otel-collector:8889']
+      # The collector's OWN metrics, on a different port. These carry the send_failed_*
+      # counters that are the only evidence a batch was dropped en route to Loki. Without
+      # this scrape a silent export failure is indistinguishable from "Claude Code was idle".
+      - job_name: otel-collector-internal
+        static_configs:
+          - targets: ['otel-collector:8888']
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: {{ claude_otel_namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ claude_otel_storage_class }}
+  resources:
+    requests:
+      storage: {{ claude_otel_prometheus_storage }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: {{ claude_otel_namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # ReadWriteOnce PVC — see the note on the loki Deployment
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+        - name: prometheus
+          image: {{ claude_otel_prometheus_image }}
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time={{ claude_otel_prometheus_retention }}
+          ports:
+            - name: http
+              containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: {{ claude_otel_namespace }}
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090

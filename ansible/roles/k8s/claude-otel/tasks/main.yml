@@ -1,0 +1,80 @@
+---
+# Slice 1 of the Claude Code telemetry stack: collector + Loki + Prometheus.
+# Grafana (slice 2) and Tempo (slice 3) are deliberately absent — data lands and is
+# queryable without either.
+
+- name: Render and apply the Claude Code telemetry manifests
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: claude-otel
+    manifests_files:
+      - 00-namespace.yaml
+      - collector.yaml
+      - loki.yaml
+      - prometheus.yaml
+    # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has three,
+    # in a different namespace. Skip its wait and roll our own below.
+    manifests_rollout: ''
+
+- name: Restart the telemetry workloads after a config change
+  tags: [deploy]
+  # `manifests_rollout: ''` above skips the shared role's WAIT, and skipping it also skips
+  # its rollout-restart — so without this a ConfigMap edit applies to the object, reports
+  # changed, and never reaches the running pod. Caught on the first config edit: the
+  # collector kept serving the previous config with the deploy fully green.
+  #
+  # Skipped for a Deployment this run created — its pods are already on the new config, and
+  # `rollout restart` races the initial rollout.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ claude_otel_namespace }} rollout restart deploy/{{ item }}
+  loop:
+    - loki
+    - prometheus
+    - otel-collector
+  become: true
+  changed_when: true
+  when:
+    - manifests_render is changed
+    - not manifests_apply.stdout is search('deployment.apps/' ~ item ~ ' created')
+
+- name: Wait for the telemetry workloads to roll out
+  tags: [deploy]
+  # Loki first: the collector's log pipeline exports to it, and a collector that starts
+  # against a missing Loki logs export failures until it happens to retry successfully.
+  # Ordering here makes the first-deploy logs readable rather than alarming.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ claude_otel_namespace }} rollout status
+      deploy/{{ item }} --timeout=300s
+  loop:
+    - loki
+    - prometheus
+    - otel-collector
+  become: true
+  changed_when: false
+
+- name: Read back the OTLP listener's bind address
+  tags: [deploy]
+  # The one property that cannot be inferred from a green rollout. hostPort/hostIP is what
+  # makes the collector reachable from the HOST (Claude Code is not a container), and a
+  # missing hostIP would silently bind 0.0.0.0 — publishing a receiver that carries prompts
+  # and responses verbatim to the whole LAN. Assert it rather than trust the manifest.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ claude_otel_namespace }} get deploy otel-collector
+      -o jsonpath={.spec.template.spec.containers[0].ports[0].hostIP}
+  register: claude_otel_bind
+  become: true
+  changed_when: false
+
+- name: Fail if the OTLP receiver is not pinned to loopback
+  tags: [deploy]
+  ansible.builtin.assert:
+    that: claude_otel_bind.stdout == claude_otel_otlp_host_ip
+    fail_msg: >-
+      OTLP receiver is bound to '{{ claude_otel_bind.stdout | default('(unset)') }}',
+      expected '{{ claude_otel_otlp_host_ip }}'. With content logging enabled this
+      receiver must not be reachable off the node.
+    quiet: true
