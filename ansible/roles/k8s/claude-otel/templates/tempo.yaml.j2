@@ -1,0 +1,130 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo-config
+  namespace: {{ k8s_observability_namespace }}
+data:
+  config.yaml: |
+    server:
+      http_listen_port: 3200
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              # In-cluster only. No hostPort here: Claude Code exports everything to the
+              # collector, which fans out — nothing sends spans to Tempo directly.
+              endpoint: 0.0.0.0:4317
+    ingester:
+      # Flush blocks often so a span is queryable minutes after the turn that produced it,
+      # rather than at the 30m default. This stack gets read interactively while working,
+      # so a trace that only appears half an hour later is a trace nobody looks at.
+      max_block_duration: 5m
+    compactor:
+      compaction:
+        block_retention: {{ claude_otel_tempo_retention }}
+    storage:
+      trace:
+        backend: local
+        local:
+          path: /var/tempo/blocks
+        wal:
+          path: /var/tempo/wal
+    # Tempo posts anonymous usage stats to grafana.com by default. Nothing in this stack
+    # reaches the internet by design; opt out rather than leave it on.
+    usage_report:
+      reporting_enabled: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tempo-data
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ claude_otel_storage_class }}
+  resources:
+    requests:
+      storage: {{ claude_otel_tempo_storage }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tempo
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # ReadWriteOnce PVC — see the note on the loki Deployment
+  selector:
+    matchLabels:
+      app: tempo
+  template:
+    metadata:
+      labels:
+        app: tempo
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        # The compose bundle needs a `tempo-init` sidecar that runs `chown -R 10001:10001
+        # /var/tempo` before Tempo starts. k8s does that natively: the kubelet applies fsGroup
+        # ownership to the volume at mount time, so the init container has no equivalent here.
+        #
+        # fsGroup ORs group bits onto everything on the volume, which bit Traefik's acme.json
+        # (it requires 0600 and refuses group-readable). Tempo wants group ownership, so this
+        # is the case fsGroup is for.
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: tempo
+          image: {{ claude_otel_tempo_image }}
+          args: ["-config.file=/etc/tempo/config.yaml"]
+          ports:
+            - name: http
+              containerPort: 3200
+            - name: otlp-grpc
+              containerPort: 4317
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tempo
+            - name: data
+              mountPath: /var/tempo
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3200
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: config
+          configMap:
+            name: tempo-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: tempo-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  selector:
+    app: tempo
+  ports:
+    - name: http
+      port: 3200
+      targetPort: 3200
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317

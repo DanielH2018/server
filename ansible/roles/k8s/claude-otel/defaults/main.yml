@@ -39,3 +39,12 @@ claude_otel_otlp_host_ip: 127.0.0.1
 # response is retained verbatim for this window.
 claude_otel_loki_retention: 744h
 claude_otel_prometheus_retention: 30d
+
+# Traces (slice 3). Claude Code emits spans only with both CLAUDE_CODE_ENHANCED_TELEMETRY_BETA
+# and OTEL_TRACES_EXPORTER set — the chezmoi settings template already sets both, so this is
+# purely a matter of giving them somewhere to land.
+claude_otel_tempo_image: grafana/tempo:2.8.1
+claude_otel_tempo_storage: 5Gi
+# 720h (30d). Shorter than the metrics retention on purpose: spans are per-turn and far
+# bulkier than counters, and trace-level debugging is retrospective by days, not months.
+claude_otel_tempo_retention: 720h

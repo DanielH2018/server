@@ -29,6 +29,12 @@ data:
       otlp_http/loki:
         # Loki 3.x native OTLP ingest; the exporter appends /v1/logs.
         endpoint: http://loki:3100/otlp
+      otlp/tempo:
+        endpoint: tempo:4317
+        tls:
+          # Plaintext in-cluster. Both ends are pods in this namespace and the port is not
+          # published anywhere, so this never leaves the node.
+          insecure: true
     service:
       telemetry:
         logs:
@@ -52,9 +58,10 @@ data:
           receivers: [otlp]
           processors: [batch]
           exporters: [otlp_http/loki]
-        # No traces pipeline: Tempo is slice 3. Claude Code's trace export is already on in
-        # the chezmoi settings, so those spans are received and dropped here for now — the
-        # collector does not error on a signal with no pipeline.
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlp/tempo]
 ---
 apiVersion: apps/v1
 kind: Deployment

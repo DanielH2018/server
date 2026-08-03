@@ -21,8 +21,24 @@ data:
         type: loki
         access: proxy
         url: http://loki:3100
-      # No Tempo datasource: Tempo is slice 3. Provisioning one now would show a permanently
-      # failing datasource in the UI and break any panel that referenced it.
+      - name: Tempo
+        uid: tempo
+        type: tempo
+        access: proxy
+        url: http://tempo:3200
+        jsonData:
+          # Claude Code stamps trace_id/span_id onto its log events, so a span can jump
+          # straight to the events emitted inside it. This is the pairing that makes traces
+          # worth having: the span says a tool took 40s, the linked logs say which tool and
+          # what it returned.
+          tracesToLogsV2:
+            datasourceUid: loki
+            spanStartTimeShift: '-5m'
+            spanEndTimeShift: '5m'
+            filterByTraceID: true
+            customQuery: false
+          nodeGraph:
+            enabled: true
   dashboards.yaml: |
     apiVersion: 1
     providers:
