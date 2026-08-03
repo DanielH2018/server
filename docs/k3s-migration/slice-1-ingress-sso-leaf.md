@@ -494,12 +494,22 @@ Slice 1 is done when every one of these has been run and its output read. No `--
       session and vice versa; `authelia_session_local` and `authelia_session_k8s` coexist on
       `local.<domain>`. Decision 4's hypothesis holds — the distinct cookie *name* is sufficient
       and the fallback cookie *domain* is not needed.
-- [ ] TOTP enrolment succeeds and survives an Authelia pod restart (proves the PVC, not just the pod)
-      → **Not exercised, and normal use will not exercise it.** `*.local.<domain>` is `one_factor`
-      from RFC1918, so logging in never touches TOTP; only the public `*.<domain>` rule is
-      `two_factor`, and `k8s_public_route` is false. Enrolment has to be done deliberately from the
-      portal's settings, then `kubectl delete pod` the Authelia pod and confirm the enrolment
-      survived. Until then the PVC is unproven — the pod restarting is not the same test.
+- [x] TOTP enrolment succeeds and survives an Authelia pod restart (proves the PVC, not just the pod)
+      → **Passed 2026-08-03.** Normal use will never exercise this: `*.local.<domain>` is
+      `one_factor` from RFC1918, so logging in never touches TOTP, and the only `two_factor` rule
+      is the public `*.<domain>` one with `k8s_public_route` false. So it was done deliberately —
+      enrol a throwaway device from the portal's settings, `kubectl delete pod -l app=authelia`,
+      then generate a code on the enrolled device against the new pod. **The code validated.**
+      That is the strongest form of this test: not "the row is still in the table" but "a secret
+      written by the previous pod was read back and used successfully by a fresh one", which
+      exercises the Longhorn PVC and the shared `storage.encryption_key` together. The new pod
+      remounted the same `authelia-config` PVC and served the portal at `200`.
+
+      **Trap for whoever repeats this.** The notifier is `filesystem`
+      (`/config/notification.txt`), not email. Authelia 4.39 gates adding a 2FA device behind an
+      identity-verification code delivered *through the notifier* — so the code is written to a
+      file inside the pod and nobody ever receives mail. Read it with
+      `sudo k3s kubectl -n homelab exec deploy/authelia -- tail -20 /config/notification.txt`.
 - [x] Uptime-Kuma monitor green
 - [x] `b2-list-longhorn.sh` shows `.blk` blocks for the Authelia volume
       → **Passed 2026-08-03.** The original script lived only in an agent scratch directory and
@@ -518,9 +528,19 @@ Slice 1 is done when every one of these has been run and its output read. No `--
       unbounded growth with no reaper, on a bucket at 60% of a 10 GB free tier, and slice 2
       recreates a PVC per migrated service. Worth a cleanup path before that.
 - [x] `uv run pytest` and `prek run --all-files` both clean → 1339 passed
-- [ ] daniel-server carries no *unexpected* change: `docker ps -q | wc -l` matches whatever it was at
+- [x] daniel-server carries no *unexpected* change: `docker ps -q | wc -l` matches whatever it was at
       slice-1 start, and `uptime` shows no reboot (the count is a snapshot, not an invariant — it
       legitimately moves as services are added)
+      → **Passed 2026-08-03, with one half proven and the other half only partly.** No reboot:
+      `uptime -s` is `2026-08-02 07:37:10`, and the first slice-1 PR merged at 12:53 UTC that day,
+      so the boot predates every slice-1 change and nothing since has restarted the host.
+      Containers: **66** running, all healthy.
+
+      The count half is **unverifiable as written** — no baseline was recorded at slice-1 start,
+      so "matches whatever it was" has nothing to match against. Stating that rather than
+      back-filling a number nobody measured. For slice 2, capture the count *before* touching
+      anything; a criterion that depends on a baseline has to record the baseline to mean
+      anything.
 
 ---
 
