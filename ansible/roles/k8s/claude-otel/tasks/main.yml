@@ -1,7 +1,6 @@
 ---
-# Slice 1 of the Claude Code telemetry stack: collector + Loki + Prometheus.
-# Grafana (slice 2) and Tempo (slice 3) are deliberately absent — data lands and is
-# queryable without either.
+# The Claude Code telemetry stack: collector + Loki + Prometheus (slice 1), Grafana behind
+# Authelia (slice 2), Tempo + the traces pipeline (slice 3).
 
 - name: Render and apply the Claude Code telemetry manifests
   ansible.builtin.include_role:
@@ -13,6 +12,7 @@
       - collector.yaml
       - loki.yaml
       - prometheus.yaml
+      - tempo.yaml
       - middlewares.yaml
       - grafana.yaml
       - grafana-dashboard.yaml
@@ -38,6 +38,7 @@
   loop:
     - loki
     - prometheus
+    - tempo
     - otel-collector
     - grafana
   become: true
@@ -58,6 +59,7 @@
   loop:
     - loki
     - prometheus
+    - tempo
     - otel-collector
     - grafana
   become: true
