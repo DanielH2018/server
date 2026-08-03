@@ -1,0 +1,8 @@
+---
+# Named to sort first: the shared manifests role runs `kubectl apply -f <dir>/`, which
+# applies in filename order, and every other object here is namespaced. Relying on
+# "collector" happening to sort before "loki" would break the first time a file is renamed.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ k8s_observability_namespace }}

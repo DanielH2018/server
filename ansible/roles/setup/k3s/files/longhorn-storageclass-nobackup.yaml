@@ -1,0 +1,45 @@
+---
+# A second Longhorn StorageClass for volumes that must NOT be backed up to B2.
+#
+# Why this exists rather than a label on the PVC: Longhorn reads recurring-job labels from
+# its own Volume CRs, and PVC labels do not propagate to them (see the note in
+# roles/k8s/authelia/templates/pvc.yaml.j2). The StorageClass `recurringJobSelector`
+# parameter is the declarative way to get the label onto the Volume at provision time —
+# anything else means labelling volumes by hand after the fact, which drifts the first time
+# a PVC is recreated.
+#
+# How the exclusion actually works: the `daily-backup` RecurringJob claims group `default`,
+# and Longhorn applies a default-group job to any volume carrying NO recurring-job label at
+# all. Naming a different group here means the volume is no longer label-less, so the
+# default job stops claiming it. The group `no-backup` deliberately has no RecurringJob of
+# its own — it exists purely to occupy that slot.
+#
+# What belongs here: bulky, high-churn, regenerable state. The Claude Code OTEL stack's
+# Loki/Prometheus/Tempo volumes are the first users. That mirrors how the Docker side already
+# treats this class of data — prometheus_data, loki and the other named volumes are
+# deliberately outside Kopia's scope (see .claude/rules/docker.md) for the same reasons.
+#
+# For the OTEL volumes there is a second reason beyond size: content logging is on, so Loki
+# holds prompts, responses and tool output verbatim. Backing that up would copy
+# transcript-grade data into B2.
+#
+# Mirrors the default class in every other respect, and for the same reason: numberOfReplicas
+# is deliberately ABSENT so `default-replica-count` stays the single source of truth. Do not
+# paste it back in when re-syncing from upstream.
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: longhorn-nobackup
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: "Delete"
+volumeBindingMode: Immediate
+parameters:
+  staleReplicaTimeout: "30"
+  fromBackup: ""
+  fsType: "ext4"
+  dataLocality: "disabled"
+  unmapMarkSnapChainRemoved: "ignored"
+  disableRevisionCounter: "true"
+  dataEngine: "v1"
+  recurringJobSelector: '[{"name":"no-backup","isGroup":true}]'

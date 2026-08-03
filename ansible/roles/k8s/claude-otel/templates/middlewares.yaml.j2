@@ -1,0 +1,59 @@
+---
+# Local copies of the two Middlewares every protected route uses. They are duplicated rather
+# than referenced across namespaces because Traefik's `allowCrossNamespace` stays off — with
+# it on, a route in ANY watched namespace could borrow another's middlewares, including the
+# authelia one, which is the control standing between the LAN and every protected service.
+#
+# Duplication has a cost: these can drift from the homelab originals
+# (roles/k8s/traefik/templates/dynamic.yaml.j2 and roles/k8s/authelia/templates/
+# forwardauth-middleware.yaml.j2). Two copies is worth it; thirty would not be, and if the
+# telemetry stack ever grows more routed services this should become a shared template.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  rateLimit:
+    average: 300
+    burst: 150
+    period: 1m
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authelia
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  forwardAuth:
+    # Points at the Authelia Service in the workload namespace by FQDN. Only the Middleware
+    # object has to be local; what it forwards to does not.
+    address: http://authelia.{{ k8s_namespace }}.svc.cluster.local:9091/api/authz/forward-auth
+    trustForwardHeader: true
+    authResponseHeaders:
+      - Remote-User
+      - Remote-Groups
+      - Remote-Name
+      - Remote-Email
+    maxResponseBodySize: 1048576
+---
+# A TLSOption is resolved in the ROUTE's namespace, not globally: an IngressRoute here that
+# names `modern` looks up observability-modern@kubernetescrd, and the homelab copy does not
+# satisfy it. Without this the router fails to build entirely — Traefik answers the TLS
+# handshake with a reset, so curl reports SSL_ERROR_SYSCALL rather than anything naming a
+# certificate or a route. Same family as the reserved-`default` trap the homelab copy
+# documents; this is its cross-namespace variant.
+apiVersion: traefik.io/v1alpha1
+kind: TLSOption
+metadata:
+  name: modern
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  minVersion: VersionTLS12
+  cipherSuites:
+    - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+    - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+    - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+    - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+    - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+    - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305

@@ -1,0 +1,131 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: {{ k8s_observability_namespace }}
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            # 0.0.0.0 INSIDE the container. Reachability is controlled by the hostPort's
+            # hostIP below, which pins the node-side listener to loopback.
+            endpoint: 0.0.0.0:4317
+    processors:
+      batch:
+        timeout: 5s
+    exporters:
+      prometheus:
+        endpoint: 0.0.0.0:8889
+        # Keep each counter's last value long after activity stops. The 5m default drops
+        # idle metrics, so cumulative-counter panels flicker to "No data" between sessions.
+        metric_expiration: 168h
+        # Promote OTLP resource attributes (model, terminal, ...) to metric labels so token
+        # usage can be broken down by model.
+        resource_to_telemetry_conversion:
+          enabled: true
+      otlp_http/loki:
+        # Loki 3.x native OTLP ingest; the exporter appends /v1/logs.
+        endpoint: http://loki:3100/otlp
+    service:
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    # 0.0.0.0 so Prometheus can scrape it in-cluster; the default localhost
+                    # bind makes it unreachable from anywhere. No hostPort, so it stays
+                    # inside the cluster.
+                    host: 0.0.0.0
+                    port: 8888
+      pipelines:
+        metrics:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [prometheus]
+        logs:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlp_http/loki]
+        # No traces pipeline: Tempo is slice 3. Claude Code's trace export is already on in
+        # the chezmoi settings, so those spans are received and dropped here for now — the
+        # collector does not error on a signal with no pipeline.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  replicas: 1
+  strategy:
+    # Recreate, not RollingUpdate. hostPort is a NODE-level exclusive resource: under a
+    # rolling update the new pod cannot bind 4317 while the old one holds it, so it sits
+    # Pending forever and the old pod never terminates — a deadlock that leaves the previous
+    # config serving indefinitely while the deploy reports a stuck rollout. Same reasoning as
+    # the ReadWriteOnce PVCs on loki/prometheus, different exclusive resource.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: otel-collector
+          image: {{ claude_otel_collector_image }}
+          args: ["--config=/conf/config.yaml"]
+          ports:
+            # hostPort + hostIP is what puts this on the NODE's loopback, which is where
+            # Claude Code (a host process, not a container) exports to. A ClusterIP Service
+            # alone would be unreachable from the host.
+            #
+            # hostIP 127.0.0.1 is load-bearing: without it the port binds 0.0.0.0 and the
+            # collector — which receives prompts, responses and tool output verbatim —
+            # becomes reachable from the LAN.
+            - name: otlp-grpc
+              containerPort: {{ claude_otel_otlp_port }}
+              hostPort: {{ claude_otel_otlp_port }}
+              hostIP: {{ claude_otel_otlp_host_ip }}
+            - name: prom-export
+              containerPort: 8889
+            - name: self-metrics
+              containerPort: 8888
+          volumeMounts:
+            - name: config
+              mountPath: /conf
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: prom-export
+      port: 8889
+      targetPort: 8889
+    - name: self-metrics
+      port: 8888
+      targetPort: 8888
