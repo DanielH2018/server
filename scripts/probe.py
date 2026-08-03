@@ -710,6 +710,15 @@ def _build_parser():
         "--json", action="store_true", help="print episodes as JSON (epoch-ns times)"
     )
     sub.add_parser("scrutiny", help="disk SMART summary")
+    b2l = sub.add_parser(
+        "b2-longhorn",
+        help="Longhorn backup objects in B2, per volume — proves DATA blocks landed, "
+        "not just metadata (exit 1 if any volume has none)",
+    )
+    b2l.add_argument("--bucket", help="override the bucket from kopia's repo config")
+    b2l.add_argument(
+        "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
+    )
     pi = sub.add_parser("pi", help="Pi glances API")
     pi.add_argument("subpath", help="e.g. fs, quicklook, mem, cpu")
     ct = sub.add_parser(
@@ -1099,6 +1108,8 @@ def main(argv=None):
         return run_arr(ns)
     if ns.cmd == "alerts":
         return run_alerts(ns)
+    if ns.cmd == "b2-longhorn":
+        return run_b2_longhorn(ns)
     if ns.cmd == "ha-state":
         return run_ha_state(ns)
     # metric / loki-query default to a formatted view; --json and --dry-run fall
@@ -1111,6 +1122,157 @@ def main(argv=None):
             print(" ".join(stage))
         return 0
     return run_pipeline(stages)
+
+
+# --- B2 / Longhorn backup objects -------------------------------------------
+
+LONGHORN_PREFIX = "longhorn"
+KOPIA_REPO_CONFIG = "/app/config/repository.config"
+
+
+def longhorn_lsf_argv(bucket, prefix=LONGHORN_PREFIX):
+    """`rclone lsf` inside the kopia container, listing the Longhorn backup prefix.
+
+    The B2 key is deliberately NOT in argv: `docker exec -e VAR` with no `=value` makes
+    Docker inherit the value from this process's environment, so the secret never reaches
+    the host process table (where `ps` would show it) nor this tool's own --dry-run output.
+    """
+    return [
+        "docker",
+        "exec",
+        "-e",
+        "RCLONE_CONFIG_B2_TYPE",
+        "-e",
+        "RCLONE_CONFIG_B2_ACCOUNT",
+        "-e",
+        "RCLONE_CONFIG_B2_KEY",
+        "kopia",
+        "rclone",
+        "lsf",
+        f"b2:{bucket}/{prefix}",
+        "--recursive",
+        "--files-only",
+        "--format",
+        "ps",
+        "--separator",
+        ";",
+    ]
+
+
+def parse_longhorn_listing(lines):
+    """Aggregate `rclone lsf --format ps` output per Longhorn volume.
+
+    Longhorn lays a backup out as
+    `backupstore/volumes/<aa>/<bb>/<volume>/{volume.cfg,backups/*.cfg,blocks/**/*.blk}`.
+    The `.blk` files are the actual DATA; the `.cfg` files are only metadata, and that
+    distinction is the entire point of this tool — a backup can be registered and report
+    `Completed` in Longhorn while what actually landed in B2 is metadata describing blocks
+    that are not there. Counting blocks is what makes "the data really is in B2" checkable.
+    """
+    vols = {}
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        path, _, size = line.rpartition(";")
+        if not path:
+            continue
+        parts = path.split("/")
+        if "volumes" not in parts:
+            continue
+        i = parts.index("volumes")
+        if len(parts) < i + 4:  # volumes/<aa>/<bb>/<volume>/...
+            continue
+        v = vols.setdefault(parts[i + 3], {"blocks": 0, "block_bytes": 0, "cfgs": 0})
+        try:
+            nbytes = int(size)
+        except ValueError:
+            nbytes = 0
+        if path.endswith(".blk"):
+            v["blocks"] += 1
+            v["block_bytes"] += nbytes
+        elif path.endswith(".cfg"):
+            v["cfgs"] += 1
+    return vols
+
+
+def format_longhorn_summary(vols):
+    """Render the per-volume table; non-zero exit if any volume has metadata but no data."""
+    if not vols:
+        return "no Longhorn backup objects found under the prefix", 1
+    width = max(len(n) for n in vols)
+    rows, bad = [], []
+    for name in sorted(vols):
+        v = vols[name]
+        rows.append(
+            "%-*s  %6d blocks  %8.1f MB  %3d cfg"
+            % (width, name, v["blocks"], v["block_bytes"] / 1e6, v["cfgs"])
+        )
+        if v["blocks"] == 0:
+            bad.append(name)
+    out = "\n".join(rows)
+    if bad:
+        out += "\n\nNO DATA BLOCKS for: %s — metadata only, not restorable" % ", ".join(
+            bad
+        )
+    return out, (1 if bad else 0)
+
+
+def run_b2_longhorn(ns):
+    """Prove Longhorn's backups hold real data blocks in B2, not just metadata.
+
+    The design doc's §6 gate is that a service's data must be visible in its NEW backup
+    path before the Docker copy is decommissioned, so slice 2 needs this per service.
+
+    Costs a handful of transactions (one listing, paged at 1000 objects) — negligible
+    against the daily free allowance, but not free: don't put it in a loop.
+    """
+    # Ahead of the config read: --dry-run exists to show the command WITHOUT touching
+    # anything, so it must not require a running kopia container (or any Docker at all —
+    # daniel-box has none).
+    if ns.dry_run:
+        print(
+            " ".join(
+                longhorn_lsf_argv(ns.bucket or "<bucket-from-repo-config>", ns.prefix)
+            )
+        )
+        return 0
+
+    conf = subprocess.run(
+        ["docker", "exec", "kopia", "cat", KOPIA_REPO_CONFIG],
+        capture_output=True,
+        text=True,
+    )
+    if conf.returncode != 0:
+        raise SystemExit(
+            "cannot read kopia's repository config: " + conf.stderr.strip()
+        )
+    try:
+        cfg = json.loads(conf.stdout)["storage"]["config"]
+    except (json.JSONDecodeError, KeyError) as e:
+        raise SystemExit(f"unexpected repository config shape: {e}")
+
+    bucket = ns.bucket or cfg.get("bucket")
+    if not bucket:
+        raise SystemExit(
+            "no bucket in the repository config and none passed with --bucket"
+        )
+
+    argv = longhorn_lsf_argv(bucket, ns.prefix)
+    env = dict(os.environ)
+    env["RCLONE_CONFIG_B2_TYPE"] = "b2"
+    env["RCLONE_CONFIG_B2_ACCOUNT"] = cfg.get("accessKeyID", "")
+    env["RCLONE_CONFIG_B2_KEY"] = cfg.get("secretAccessKey", "")
+    out = subprocess.run(argv, capture_output=True, text=True, env=env)
+    if out.returncode != 0:
+        # rclone echoes B2's own refusal here — including "Transaction cap exceeded".
+        raise SystemExit("rclone listing failed: " + out.stderr.strip()[:400])
+
+    text, code = format_longhorn_summary(
+        parse_longhorn_listing(out.stdout.splitlines())
+    )
+    print(text)
+    return code
 
 
 if __name__ == "__main__":
