@@ -3,6 +3,30 @@
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
   gather_facts: true
   pre_tasks:
+    # `-e target=<other host>` looks like it drives that host remotely. For daniel-server and
+    # daniel-box it does not: both are `ansible_connection=local` in hosts.ini, so the target
+    # only selects whose *variables* to use — every task still executes HERE. Ansible reports
+    # the run against the named host either way, so nothing in the output says otherwise.
+    #
+    # Left unguarded that silently writes the other host's containers/ tree, secrets included,
+    # onto the local disk before dying on a missing docker CLI. That happened on 2026-08-03:
+    # `-e target=daniel-server` from daniel-box wrote daniel-server's uptime-kuma compose file
+    # and its Kuma ADMIN password onto daniel-box. Fail before any task can write instead.
+    #
+    # daniel-pi is `ansible_connection=ssh` and genuinely remote, so it stays allowed — the
+    # documented `-e target=daniel-pi` workflow is unaffected.
+    - name: Refuse a local-connection deploy aimed at a different host
+      ansible.builtin.assert:
+        that: ansible_connection | default('smart') != 'local' or inventory_hostname == _local_hostname
+        fail_msg: >-
+          Refusing to deploy: target '{{ inventory_hostname }}' is ansible_connection=local, so
+          its tasks would run on '{{ _local_hostname }}' and write that host's files here.
+          Run the deploy on {{ inventory_hostname }} itself.
+        quiet: true
+      vars:
+        _local_hostname: "{{ lookup('pipe', 'hostname') }}"
+      tags: always
+
     - name: Load encrypted secrets and set the become password (shared preamble)
       ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
       tags: always
@@ -50,6 +74,20 @@
       tags: always
 
     - name: Expand tagged deployment to include unmet dependencies
+      # `selectattr('container', 'defined')` before the none-check is load-bearing, not
+      # belt-and-braces: the state task above is `ignore_errors`, and a FAILED result has no
+      # `container` key at all, so `rejectattr('container', 'none')` raises
+      # "object of type 'dict' has no attribute 'container'" and takes the whole play down.
+      #
+      # It fails that way whenever community.docker cannot import its `docker`/`requests` deps
+      # on the target. Running on the host itself that never happens — uv's venv supplies them
+      # (repo CLAUDE.md) — but driving the play from another host over SSH selects the target's
+      # SYSTEM python, which has neither. So a cross-host `-e target=` deploy died here while
+      # the identical local run was fine.
+      #
+      # A container whose state could not be read is treated as not-running, which expands its
+      # dependencies. That errs toward deploying more, and deploying an already-running
+      # dependency is idempotent — the safe direction to be wrong in.
       ansible.builtin.set_fact:
         containers_list: >-
           {{
@@ -58,6 +96,7 @@
               ansible_run_tags,
               _container_state_results.results
                 | default([])
+                | selectattr('container', 'defined')
                 | rejectattr('container', 'none')
                 | selectattr('container.State.Running', 'equalto', true)
                 | map(attribute='item.name')
