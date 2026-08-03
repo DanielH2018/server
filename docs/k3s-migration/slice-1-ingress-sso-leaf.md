@@ -510,7 +510,7 @@ Slice 1 is done when every one of these has been run and its output read. No `--
       `traefik-acme`: 7 blocks. Both volumes' Aug-3 backups are real data, not just metadata.
 
       **Finding, not a slice-1 blocker — orphaned backup sets accumulate in B2.** That run
-      listed **five** volumes while only **two** Longhorn volumes exist. Three are backups of
+      listed **five** volumes while only **two** Longhorn volumes existed at the time. Three are backups of
       PVCs that have since been deleted: two are the previous authelia/traefik PVCs (recreated
       during the from-scratch Authelia verification and the acme.json wipe) and one is slice 0's
       smoke volume. Longhorn's `retain:` is per-volume, so once a volume is gone nothing prunes
