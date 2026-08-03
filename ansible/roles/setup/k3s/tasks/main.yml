@@ -399,6 +399,29 @@
       and confirm the object exists under the '{{ k3s_longhorn_backup_prefix }}/' prefix in
       bucket '{{ kopia_b2_bucket }}' by listing it from outside the cluster.
 
+- name: Deploy the Longhorn backup-plane heartbeat
+  tags: [backup-health]
+  # Runs as {{ sys_user }}, not root: it reads the cluster through that user's read-only
+  # kubeconfig, which is the whole point — the cron cannot mutate anything.
+  ansible.builtin.template:
+    src: longhorn-backup-health.sh.j2
+    dest: /usr/local/bin/longhorn-backup-health.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Schedule the Longhorn backup-plane heartbeat
+  tags: [backup-health]
+  ansible.builtin.cron:
+    name: "Longhorn backup health"
+    minute: "{{ k3s_longhorn_backup_health_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: "/usr/local/bin/longhorn-backup-health.sh"
+    cron_file: longhorn-backup-health
+  become: true
+
 - name: Render the read-only cluster identity
   tags: [kubeconfig]
   ansible.builtin.template:

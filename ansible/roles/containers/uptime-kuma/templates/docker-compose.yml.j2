@@ -100,6 +100,18 @@ services:
       {{ kuma('bento-pdf-k8s', name='k3s Ingress (bento-pdf)', monitor_type='http',
               url='https://bento-pdf' ~ k8s_hostname_suffix ~ '.local.' ~ domain,
               accepted_statuscodes=['302'], max_redirects=0) }}
+      # k3s backup plane: the cluster's ONLY backup path, and until 2026-08-02 it had no monitor
+      # at all — Longhorn's backup target went unavailable for 13h and nothing noticed. It
+      # surfaced only because Kopia shares the same B2 account and tripped its own freshness
+      # check; had the transaction cap been hit by Longhorn alone, nothing would have alerted.
+      #
+      # Push, not poll: monitor-bridge reads daniel-server's Docker socket and cannot see the
+      # cluster, so daniel-box's own cron pushes here (k3s role,
+      # templates/longhorn-backup-health.sh.j2) — the same shape as the Pi crons above.
+      # interval 1200 = 2x the */10 cron, so a dead cron or a dead daniel-box also trips this.
+      # Unwrapped on purpose: test_push_monitor_retries greps per LINE for max_retries=0, so a
+      # wrapped kuma() call reads as missing it. Same reason the Pi push monitors above are one-liners.
+      {{ kuma('longhorn-backup', name='k3s Longhorn Backup', monitor_type='push', interval=1200, max_retries=0, push_token=longhorn_backup_push_token) }}
       # Pi SD-card health: SD cards have no SMART, so a dying card only announces
       # itself via ext4 errors. The Pi's pi-sd-health.sh cron (optimize_pi role)
       # pushes errors_count every 5 min through the LAN-bypassed push API

@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Longhorn backup-plane heartbeat — managed by Ansible (k3s role); edits overwritten.
+#
+# Until this existed, the cluster's backup path had no monitor at all: `grep -ic longhorn` over
+# monitor-bridge's check.py returned 0. On 2026-08-02 the Longhorn backup target went
+# unavailable at 10:02 and nothing anywhere noticed — the outage surfaced only because Kopia,
+# sharing the same B2 account, tripped its own freshness check nine minutes later. Had the cap
+# been hit by Longhorn alone, nothing would have alerted.
+#
+# monitor-bridge runs on the SERVER and cannot see this cluster, so this pushes rather than
+# being polled — the same shape as the Pi's health crons (optimize_pi role), for the same
+# reason. The curl is inlined rather than sharing optimize_pi's pi-kuma-push-lib.sh: that lib
+# lives in a Pi-only role, and promoting it to a shared location is a refactor worth doing
+# when monitoring itself moves onto this host, not before.
+#
+# Reads the cluster through the read-only ServiceAccount kubeconfig (k3s role), so the cron
+# needs no sudo and cannot mutate anything.
+set -uo pipefail
+
+export KUBECONFIG=/home/{{ sys_user }}/.kube/config
+KUBECTL="k3s kubectl -n longhorn-system"
+AGE_S=0
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+KUMA_RESOLVE_IP="{{ hostvars[monitoring_controller_host].server_ip }}"
+PUSH_URL="https://${KUMA_HOST}/api/push/{{ longhorn_backup_push_token }}"
+MAX_AGE_S=$(( {{ k3s_longhorn_backup_max_age_hours }} * 3600 ))
+
+PROBLEMS=""
+add() { PROBLEMS="${PROBLEMS:+$PROBLEMS; }$1"; }
+
+# 1. Is the backup store reachable at all? This is the condition that was false for 13h on
+#    2026-08-02. Note what it does NOT prove — slice 0 flagged this — reachability is not
+#    evidence any object was ever written, which is what check 2 is for.
+AVAILABLE=$($KUBECTL get backuptarget default -o jsonpath='{.status.available}' 2>&1)
+if [[ "$AVAILABLE" != "true" ]]; then
+  REASON=$($KUBECTL get backuptarget default -o jsonpath='{.status.conditions[0].message}' 2>/dev/null | head -c 160)
+  add "backup target unavailable: ${REASON:-$AVAILABLE}"
+fi
+
+# 2. Has anything actually landed recently? A recurring job that silently stops producing
+#    backups leaves the target perfectly "available" and the backup plane perfectly dead.
+NEWEST=$($KUBECTL get backups.longhorn.io \
+  -o jsonpath='{range .items[*]}{.status.snapshotCreatedAt}{"\n"}{end}' 2>/dev/null \
+  | grep -v '^$' | sort -r | head -1)
+
+if [[ -z "$NEWEST" ]]; then
+  add "no backups exist"
+else
+  NEWEST_S=$(date -d "$NEWEST" +%s 2>/dev/null)
+  if [[ -z "$NEWEST_S" ]]; then
+    add "unparseable backup timestamp: $NEWEST"
+  else
+    AGE_S=$(( $(date +%s) - NEWEST_S ))
+    if (( AGE_S > MAX_AGE_S )); then
+      add "newest backup is $(( AGE_S / 3600 ))h old (limit {{ k3s_longhorn_backup_max_age_hours }}h)"
+    fi
+  fi
+fi
+
+# 3. A backup that reached Error state is a failure the two checks above both miss: the target
+#    stays available, and an older Completed backup keeps the freshness check green.
+ERRORED=$($KUBECTL get backups.longhorn.io \
+  -o jsonpath='{range .items[?(@.status.state=="Error")]}{.metadata.name}{" "}{end}' 2>/dev/null)
+if [[ -n "${ERRORED// /}" ]]; then
+  add "backups in Error state: ${ERRORED% }"
+fi
+
+if [[ -z "$PROBLEMS" ]]; then
+  STATUS=up
+  MSG="backup target available, newest backup $(( AGE_S / 3600 ))h old"
+else
+  STATUS=down
+  MSG="$PROBLEMS"
+fi
+
+curl -fsS --max-time 10 -G \
+  --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
+  --data-urlencode "status=${STATUS}" \
+  --data-urlencode "msg=${MSG}" \
+  "$PUSH_URL" >/dev/null \
+  || logger -t longhorn-backup-health "push failed (status=${STATUS}: ${MSG})"

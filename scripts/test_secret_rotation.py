@@ -200,6 +200,10 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
         "pi_sd_health_push_token",
         "pi_recovery_push_token",
         "secret_rotation_push_token",
+        # Same cross-host shape as the two Pi tokens: the pusher is a cron on daniel-box (k3s
+        # role) while the AutoKuma label lives on daniel-server's uptime-kuma compose file, so
+        # one redeploy cannot update both and consumer_tag correctly returns None.
+        "longhorn_backup_push_token",
     }
     reg = sr.load_registry()
     auto = [n for n, m in reg["secrets"].items() if m.get("tier") == "auto"]
