@@ -727,3 +727,64 @@ def test_format_alert_episodes_renders_name_and_msg():
     eps = [{"name": "n8n", "first_ns": 0, "last_ns": 0, "cycles": 1, "msg": "boom"}]
     out = probe.format_alert_episodes(eps, 7)
     assert "1 DOWN episode(s)" in out and "n8n" in out and "boom" in out
+
+
+# --- b2-longhorn ------------------------------------------------------------
+#
+# Longhorn reports a backup `Completed` once its metadata is written, so "Completed" is not
+# evidence the DATA reached B2. These cover the distinction the command exists to make, and
+# the credential-handling that keeps it safe to run.
+
+LSF = [
+    "backupstore/volumes/aa/bb/pvc-authelia/volume.cfg;120",
+    "backupstore/volumes/aa/bb/pvc-authelia/backups/backup_x.cfg;340",
+    "backupstore/volumes/aa/bb/pvc-authelia/blocks/1a/2b/deadbeef.blk;2097152",
+    "backupstore/volumes/aa/bb/pvc-authelia/blocks/1a/2c/cafebabe.blk;1048576",
+    "backupstore/volumes/cc/dd/pvc-bento/blocks/0f/0e/f00d.blk;524288",
+]
+
+
+def test_longhorn_argv_passes_credentials_by_name_only():
+    """`-e VAR` with no value makes Docker inherit it, keeping the key out of argv.
+
+    argv is visible in `ps` and is printed verbatim by --dry-run, so a value here would
+    publish the B2 key to anyone on the host and to this tool's own output.
+    """
+    argv = probe.longhorn_lsf_argv("some-bucket")
+    assert "-e" in argv and "RCLONE_CONFIG_B2_KEY" in argv
+    assert not [a for a in argv if "=" in a and a.startswith("RCLONE")]
+    assert "b2:some-bucket/longhorn" in argv
+
+
+def test_parse_longhorn_listing_separates_data_from_metadata():
+    vols = probe.parse_longhorn_listing(LSF)
+    assert vols["pvc-authelia"]["blocks"] == 2
+    assert vols["pvc-authelia"]["block_bytes"] == 2097152 + 1048576
+    assert vols["pvc-authelia"]["cfgs"] == 2
+    assert vols["pvc-bento"]["blocks"] == 1
+
+
+def test_parse_longhorn_listing_ignores_unrelated_and_malformed_lines():
+    vols = probe.parse_longhorn_listing(
+        ["", "   ", "kopia/p1234.f;99", "backupstore/volumes/aa;10", "no-semicolon"]
+    )
+    assert vols == {}
+
+
+def test_format_longhorn_summary_fails_when_a_volume_has_no_data_blocks():
+    """Metadata without blocks is the silent-corruption case worth exiting non-zero on."""
+    vols = {"pvc-empty": {"blocks": 0, "block_bytes": 0, "cfgs": 3}}
+    text, code = probe.format_longhorn_summary(vols)
+    assert code == 1
+    assert "NO DATA BLOCKS" in text and "pvc-empty" in text
+
+
+def test_format_longhorn_summary_passes_when_every_volume_has_blocks():
+    text, code = probe.format_longhorn_summary(probe.parse_longhorn_listing(LSF))
+    assert code == 0
+    assert "pvc-authelia" in text and "NO DATA BLOCKS" not in text
+
+
+def test_format_longhorn_summary_treats_no_objects_as_failure():
+    text, code = probe.format_longhorn_summary({})
+    assert code == 1 and "no Longhorn backup objects" in text
