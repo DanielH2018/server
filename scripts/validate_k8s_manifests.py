@@ -100,7 +100,15 @@ def main() -> int:
     )
     checked = failures = 0
     for role in roles:
-        templates = sorted((K8S_ROLES / role / "templates").glob("*.j2"))
+        # Not every .j2 in a k8s role's templates/ is a manifest — a role may also ship a
+        # helper script (claude-otel's telemetry-health.sh.j2). Those are shell, not YAML, and
+        # validate_shell_templates.py already renders and lints them; parsing one here reports
+        # a bash comment as malformed YAML.
+        templates = sorted(
+            p
+            for p in (K8S_ROLES / role / "templates").glob("*.j2")
+            if not p.name.endswith(".sh.j2")
+        )
         if not templates:
             print(f"  [FAIL] {role}: no manifest templates found", file=sys.stderr)
             failures += 1

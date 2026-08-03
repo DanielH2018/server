@@ -204,6 +204,11 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
         # role) while the AutoKuma label lives on daniel-server's uptime-kuma compose file, so
         # one redeploy cannot update both and consumer_tag correctly returns None.
         "longhorn_backup_push_token",
+        # Identical shape again — cron on daniel-box (k8s/claude-otel), label on
+        # daniel-server. Four of the five entries here are now this same cross-host case;
+        # if a fifth lands, derive the exemption from the pusher/label host pair instead of
+        # extending this list by hand.
+        "claude_otel_push_token",
     }
     reg = sr.load_registry()
     auto = [n for n, m in reg["secrets"].items() if m.get("tier") == "auto"]

@@ -88,3 +88,26 @@
       expected '{{ claude_otel_otlp_host_ip }}'. With content logging enabled this
       receiver must not be reachable off the node.
     quiet: true
+
+- name: Deploy the telemetry-stack heartbeat
+  tags: [cron]
+  # Runs as {{ sys_user }}, not root: it reads the cluster through that user's read-only
+  # kubeconfig, which is the whole point — the cron cannot mutate anything.
+  ansible.builtin.template:
+    src: telemetry-health.sh.j2
+    dest: /usr/local/bin/claude-otel-health.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Schedule the telemetry-stack heartbeat
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "Claude Code telemetry health"
+    minute: "{{ claude_otel_health_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: "/usr/local/bin/claude-otel-health.sh"
+    cron_file: claude-otel-health
+  become: true
