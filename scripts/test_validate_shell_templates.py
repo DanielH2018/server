@@ -33,6 +33,7 @@ def test_discover_templates_finds_the_known_set():
         "portainer-agent-firewall.sh.j2",
         "autofix-disk-prune.sh.j2",
         "longhorn-backup-health.sh.j2",
+        "telemetry-health.sh.j2",
     }
 
 

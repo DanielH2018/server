@@ -49,3 +49,12 @@ claude_otel_tempo_storage: 5Gi
 # variable rather than a shared one because spans are per-turn and far bulkier than counters,
 # so this is the value most likely to need cutting first if the PVC fills.
 claude_otel_tempo_retention: 720h
+
+# Self-monitoring (templates/telemetry-health.sh.j2). Pushes to a static Kuma monitor rather
+# than being polled, because monitor-bridge runs on daniel-server and cannot see this cluster.
+#
+# */10, matching the Longhorn backup heartbeat: this queries the k8s API and Prometheus rather
+# than reading a local file, and the fastest thing it watches (a 15m export-failure window)
+# does not move faster than that. The Kuma monitor's heartbeat interval must stay above this
+# (see the uptime-kuma role) so a dead cron trips the watchdog.
+claude_otel_health_cron_minute: "*/10"

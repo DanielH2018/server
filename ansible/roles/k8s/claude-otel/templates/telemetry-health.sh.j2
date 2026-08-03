@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Claude Code telemetry-stack heartbeat — managed by Ansible (k8s/claude-otel role); edits overwritten.
+#
+# The stack watches Claude Code. Nothing watched the stack: if the collector crashed, the
+# hostPort DNAT broke, or Loki started rejecting writes, export would stop and the first
+# symptom would be an empty dashboard days later — the same shape as the Longhorn backup
+# target that sat unavailable for 13h on 2026-08-02 because nothing polled it.
+#
+# Push, not poll: monitor-bridge reads daniel-server's Docker socket and cannot see this
+# cluster. Same reasoning, and the same curl, as longhorn-backup-health.sh (k3s role).
+#
+# Reads the cluster through the read-only ServiceAccount kubeconfig, so the cron needs no
+# sudo and cannot mutate anything. The two in-cluster HTTP calls go to ClusterIPs resolved at
+# runtime — a ClusterIP is stable for the Service's life but is NOT stable across a delete,
+# so resolving beats hardcoding.
+set -uo pipefail
+
+export KUBECONFIG=/home/{{ sys_user }}/.kube/config
+KUBECTL="k3s kubectl -n {{ k8s_observability_namespace }}"
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+KUMA_RESOLVE_IP="{{ hostvars[monitoring_controller_host].server_ip }}"
+PUSH_URL="https://${KUMA_HOST}/api/push/{{ claude_otel_push_token }}"
+
+PROBLEMS=""
+add() { PROBLEMS="${PROBLEMS:+$PROBLEMS; }$1"; }
+
+# 1. Are the workloads actually up? readyReplicas is absent (not 0) on a Deployment whose
+#    pods have never become ready, so the ${:-0} default matters — a bare comparison against
+#    an empty string succeeds and reports a dead Deployment as healthy.
+for DEP in loki prometheus tempo otel-collector grafana; do
+  READY=$($KUBECTL get deploy "$DEP" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
+  WANT=$($KUBECTL get deploy "$DEP" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+  if [[ -z "$WANT" ]]; then
+    add "$DEP missing"
+  elif (( ${READY:-0} < WANT )); then
+    add "$DEP ${READY:-0}/$WANT ready"
+  fi
+done
+
+# 2. Is the ingest door open? This is the one property no k8s object reports: hostPort is an
+#    iptables DNAT installed by the CNI portmap plugin, not a socket, so it is invisible to
+#    `ss` and a broken rule leaves every pod Running and Ready while Claude Code — a HOST
+#    process, not a container — silently fails to export.
+if ! timeout 5 bash -c "exec 3<>/dev/tcp/{{ claude_otel_otlp_host_ip }}/{{ claude_otel_otlp_port }}" 2>/dev/null; then
+  add "OTLP receiver unreachable on {{ claude_otel_otlp_host_ip }}:{{ claude_otel_otlp_port }}"
+fi
+
+# 3. Is anything being dropped between the collector and its backends? send_failed_* is the
+#    ONLY evidence of this: a failed export leaves no trace in Loki or Tempo by definition,
+#    and the receiver counters keep climbing, so from every other angle a stack dropping 100%
+#    of its data looks identical to one working perfectly.
+#
+#    increase() over 15m rather than the raw counter: the counters are cumulative, so a single
+#    failure during a restart would otherwise hold this DOWN forever.
+PROM_IP=$($KUBECTL get svc prometheus -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+if [[ -z "$PROM_IP" ]]; then
+  add "prometheus Service has no ClusterIP"
+else
+  FAILED=$(curl -fsS --max-time 10 -G "http://${PROM_IP}:9090/api/v1/query" \
+    --data-urlencode 'query=sum(increase({__name__=~"otelcol_exporter_send_failed_.*"}[15m])) or vector(0)' \
+    2>/dev/null | sed -n 's/.*"value":\[[^,]*,"\([^"]*\)".*/\1/p')
+
+  if [[ -z "$FAILED" ]]; then
+    add "prometheus not answering queries"
+  elif [[ "${FAILED%%.*}" -gt 0 ]]; then
+    add "collector dropped ${FAILED%%.*} item(s) in 15m"
+  fi
+fi
+
+if [[ -z "$PROBLEMS" ]]; then
+  STATUS=up
+  MSG="5 workloads ready, OTLP receiver reachable, no export failures"
+else
+  STATUS=down
+  MSG="$PROBLEMS"
+fi
+
+curl -fsS --max-time 10 -G \
+  --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
+  --data-urlencode "status=${STATUS}" \
+  --data-urlencode "msg=${MSG}" \
+  "$PUSH_URL" >/dev/null \
+  || logger -t claude-otel-health "push failed (status=${STATUS}: ${MSG})"
