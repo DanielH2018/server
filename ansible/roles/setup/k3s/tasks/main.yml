@@ -206,6 +206,21 @@
   become: true
   changed_when: "'no change' not in k3s_longhorn_replicas.stdout"
 
+- name: Set the Longhorn backup-store poll interval
+  tags: [longhorn]
+  # Rate-limits the only recurring B2 caller in the cluster. See the variable's comment in
+  # defaults/main.yml — at upstream's 300s this exhausted Backblaze's Class C transaction
+  # allowance and took every backup tier down for 13h.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch settings.longhorn.io backupstore-poll-interval
+      --type=merge -p {{ poll_patch | quote }}
+  vars:
+    poll_patch: '{"value":"{{ k3s_longhorn_backupstore_poll_interval }}"}'
+  register: k3s_longhorn_poll_interval
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_poll_interval.stdout"
+
 - name: Render the Longhorn StorageClass
   tags: [longhorn]
   # The setting patched above only governs volumes whose StorageClass stays quiet about
