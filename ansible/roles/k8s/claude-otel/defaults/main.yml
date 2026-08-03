@@ -45,6 +45,7 @@ claude_otel_prometheus_retention: 30d
 # purely a matter of giving them somewhere to land.
 claude_otel_tempo_image: grafana/tempo:2.8.1
 claude_otel_tempo_storage: 5Gi
-# 720h (30d). Shorter than the metrics retention on purpose: spans are per-turn and far
-# bulkier than counters, and trace-level debugging is retrospective by days, not months.
+# 720h (30d) — the same window as the Prometheus retention, a day under Loki's 744h. Its own
+# variable rather than a shared one because spans are per-turn and far bulkier than counters,
+# so this is the value most likely to need cutting first if the PVC fills.
 claude_otel_tempo_retention: 720h
