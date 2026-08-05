@@ -344,6 +344,39 @@ original wildcard-DNS finding behind decision 1. Anything on daniel-box or insid
 needs a homelab hostname must pin it explicitly. Slice 3 moves the monitoring stack, which is
 full of cross-service hostnames — expect this again there.
 
+### Check what depends on a service before retiring it, not just what it depends on
+
+Retiring `speedtest` and `freshrss` broke Homepage's widgets for both, and it took an hour to
+notice. Homepage called them container-to-container — `http://freshrss:80`, `http://speedtest:80`
+— over a Docker network, and that name stopped resolving the moment the container went:
+
+```
+<freshrssProxyHandler> Error: queryAaaa ENOTFOUND freshrss
+<credentialedProxyHandler> HTTP Error 500 calling http://speedtest/api/speedtest/latest
+```
+
+Nothing else showed it. Both services were healthy, every bridge check was green, and the
+`href` links worked — the only evidence was in the *caller's* logs, which nothing was watching.
+That is the shape of the failure: it is silent at the thing being migrated and visible only at
+something else entirely.
+
+The pre-cutover checklist was asking what a service depends on. It also has to ask what depends
+on it:
+
+```bash
+grep -rnE "https?://<service>[:/]" ansible/roles/containers/
+```
+
+Run against the *other* roles, not the service's own. Doing this for all five migrated services
+found Homepage and nothing else, so the fix was contained — but it was found after the fact
+rather than before.
+
+Two things follow. A caller inside the homelab cannot pass Authelia, which is why
+`bridge_lan_prefixes` exists; and it will not usually be able to, so expect to add one per
+in-house consumer rather than treating it as an exception. **Slice 3 is where this gets
+expensive** — the monitoring stack is mostly cross-service calls, and Prometheus scraping a
+migrated target by container name fails exactly this quietly.
+
 ### 5. Image registry — in-cluster, decided 2026-08-05
 
 Some services build their image from a local context rather than pulling a published one.
