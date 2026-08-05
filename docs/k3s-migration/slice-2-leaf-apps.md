@@ -5,7 +5,7 @@ Authelia. Slice 2 is the first slice that moves **real user data** and the first
 **turns Docker services off**. Those two facts, not the service count, are what make it
 harder than slice 1.
 
-Nine services move. The per-service authoring cost is genuinely low — `ansible/templates/
+Eight services move. The per-service authoring cost is genuinely low — `ansible/templates/
 ingressroute.yml.j2` was written during slice 1 specifically so that "slice 2's ~33
 remaining services are a one-line call each" — so batch size here is a scheduling choice,
 not a risk decision. The risk lives entirely in data migration and cutover.
@@ -35,7 +35,7 @@ service leaves nothing behind.
 (slice 6 owns CrowdSec/Pi-hole/router), or resilience — Longhorn still runs at one replica
 until daniel-server joins the cluster at slice 7.
 
-## Scope — nine services
+## Scope — eight services
 
 | Service | State | StorageClass | Why |
 |---|---|---|---|
@@ -44,13 +44,12 @@ until daniel-server joins the cluster at slice 7.
 | `speedtest` | 23M SQLite | `longhorn-nobackup` | Real `database.sqlite`, not a cache — but it is observational history, and the Laravel `APP_KEY` lives in SOPS so a rebuilt instance works. **Judgment call:** losing it loses history, not function. One-line change to `longhorn` if that trade is wrong |
 | `freshrss` | DB | `longhorn` | Feed subscriptions and read state are not reconstructible |
 | `healthchecks` | DB | `longhorn` | Check definitions + ping history |
-| `code-server` | workspace | `longhorn` | Working files |
 | `n8n` | DB + credentials | `longhorn` | Encrypted credentials; losing them means re-authing every integration |
 | `karakeep` | DB + Meilisearch index | `longhorn` | Multi-container; the index is rebuildable but the bookmark DB is not |
 | `livesync` | CouchDB | `longhorn` | **Obsidian notes.** Highest-value data in the slice |
 
-Six new backed-up volumes — `freshrss`, `healthchecks`, `code-server`, `n8n`, `karakeep`'s
-`./data`, and `livesync`. See *B2 transaction budget* below — that is the constraint most
+Five new backed-up volumes — `freshrss`, `healthchecks`, `n8n`, `karakeep`'s `./data`, and
+`livesync`. See *B2 transaction budget* below — that is the constraint most
 likely to bite silently.
 
 ### Mounts, read from the compose templates
@@ -63,7 +62,6 @@ are relative to `server/containers/<service>/` on daniel-server.
 | `speedtest` | `./config` (23M; `database.sqlite`, `keys`) | — |
 | `freshrss` | `./config` | `nginx-feed-cache.conf` → ConfigMap |
 | `healthchecks` | `./config` | — |
-| `code-server` | `./config` | — |
 | `n8n` | `./data` (→ `/home/node/.n8n`), `./local-files` | — |
 | `karakeep` | `./data`, and the named volume `karakeep_meili` | `time-tagger/script` → ConfigMap; `time-tagger/uv-cache` → `emptyDir` |
 | `livesync` | `./couchdb-data` | `./couchdb-etc` (CouchDB `local.ini`) → ConfigMap/Secret |
@@ -83,6 +81,7 @@ bookmark DB, so it goes to `longhorn-nobackup` while `./data` goes to `longhorn`
 | `pihole`, `wg-easy`, `homelab-mcp` | Last — they are the instruments used to operate the migration |
 | `terraria`, `terraria-stats` | Deferred — `terraria` is a raw-TCP rework, and `terraria-stats` reads its console from Loki, which moves in slice 3 |
 | `ical-proxy` | **Removed from this slice 2026-08-05** — moves *with* `homepage`. See below |
+| `code-server` | **Removed from this slice 2026-08-05** — it is a rework, not a port. See below |
 | `portainer`, `docker-proxy`×3, `autoheal`, `watchtower`, `glances` | Dissolve into platform primitives |
 | `peanut`, `scrutiny` | Pinned by hardware |
 | `kopia` | Rework |
@@ -101,6 +100,14 @@ blockers, neither visible from the design doc:
    on daniel-box, so migrating `ical-proxy` alone breaks the homepage calendar widgets.
 
 Both dissolve if it moves together with `homepage`, so that is where it goes.
+
+**`code-server` was removed on 2026-08-05 for a reason the registry does not fix.** It sets
+`DOCKER_HOST: tcp://docker-proxy-codeserver:2375` — a dedicated read-only Docker socket proxy
+on a private network — and `docker-proxy` is on the *dissolve* list, replaced by RBAC and
+ServiceAccounts. So porting code-server means answering a design question first: what does a
+code-server pod talk to instead, and with what permissions? That is a rework, and reworks are
+not what this slice is for. Its heavy image (LaTeX, Node 22, a Python venv, Claude Code CLI,
+VSIX extensions baked at build time) will still need the registry when it does move.
 
 ## Decisions settled here
 
@@ -201,9 +208,10 @@ which is the whole problem: the cap is enforced by Backblaze, and exceeding it d
 backups silently.
 
 **Checkpoint:** after Batch C lands (the first two backed-up volumes), re-read Class C from
-the B2 console before starting Batch D. If the projection exceeds ~2,000/day, move
-`code-server` to `longhorn-nobackup` and revisit the recurring-job schedule rather than
-pushing on.
+the B2 console before starting Batch D. If the projection exceeds ~2,000/day, revisit the
+recurring-job schedule before adding more backed-up volumes rather than pushing on — of what
+remains, only `karakeep`'s Meilisearch index is genuinely droppable, and it is already on
+`longhorn-nobackup`.
 
 ## Batches — thin, each independently exercisable
 
@@ -215,26 +223,49 @@ trusted with data that would.
 | **A** | `littlelink` | The stateless path end-to-end on a public, no-Authelia route whose hostname (`www`) differs from the service name. `ical-proxy` was dropped from this batch on contact with the code. |
 | **B** | `cloudflare-ddns`, `speedtest` | Secrets as k8s Secrets, and **`seed-volume` is built and first exercised here** — against a 23M SQLite DB on `longhorn-nobackup`, where a botched copy costs nothing. |
 | **C** | `freshrss`, `healthchecks` | `seed-volume` against data that matters, on `longhorn`, with backup verified in B2. **B2 checkpoint here.** |
-| **D** | `code-server`, `n8n` | Larger state; n8n's encrypted credentials survive the move. **Blocked — see *Open: image registry*.** |
+| **R** | `registry` + builder | Infrastructure, not a migration: `registry:2` plus an in-cluster build Job. Must land before D, which is the first batch needing a built image. |
+| **D** | `n8n` | Larger state, and the first built image — two of them, main and task runners. n8n's encrypted credentials survive the move. |
 | **E** | `karakeep`, `livesync` | Multi-container workload, and the highest-value data in the slice, moved last with every mechanic already proven. |
 
 One PR per batch.
 
-## Open: image registry — blocks Batch D
+### 5. Image registry — in-cluster, decided 2026-08-05
 
-Three services in this slice build their image from a local context rather than pulling a
-published one: `code-server`, `n8n`, and `ical-proxy` (already removed for a second reason).
-Docker Compose builds them in place; k8s has no build step and must pull from a registry.
+Some services build their image from a local context rather than pulling a published one.
+Docker Compose builds them in place; k8s has no build step and must pull from somewhere.
+Checked rather than assumed, that is **four images**, not three:
 
-Batch D cannot start until this is answered. Three options, none obviously right:
+| Image | What the build does |
+|---|---|
+| `n8n` | `npm install -g fuzzball` on `n8nio/n8n:latest` |
+| `n8n` task runners | `pnpm add fuzzball` into `/opt/runners/task-runner-javascript`, plus a config file |
+| `code-server` | LaTeX, Node 22, a Python venv, Claude Code CLI, VSIX extensions fetched at build time |
+| `ical-proxy` | A small Python app from `files/app.py` |
 
-| Option | Cost | Note |
-|---|---|---|
-| Build and push to GHCR | CI job per image; images become public unless a pull secret is added | Fits the repo's existing GitHub tooling |
-| Run an in-cluster registry | One more service to run, back up, and secure | Keeps everything on-LAN |
-| Leave those three in Docker | Zero | Concedes that daniel-server keeps a role past slice 7 |
+Only n8n's *main* image is plausibly replaceable by an initContainer. The runners image
+installs into a path **inside** the image, which an overlay mount would shadow — faking that
+is fragile. Building is the honest answer.
 
-This does not block Batches A, B, C, or E.
+**Decision: run a registry in the cluster.** GHCR was the alternative and was rejected to keep
+build artefacts on-LAN. Three things this settles:
+
+- **`registry:2` on a Longhorn PVC, `longhorn-nobackup`.** Contents are reproducible from the
+  Dockerfiles in this repo, so backing them up would spend B2 transactions — already at ~62%
+  of the cap — on regenerable data.
+- **k3s must be told to trust it**, via `/etc/rancher/k3s/registries.yaml`. Plain HTTP is
+  acceptable while the cluster is single-node, because the traffic never leaves the box. That
+  stops being true when daniel-server joins at slice 7, so write the role with TLS in mind
+  rather than retrofitting it under time pressure.
+- **A registry does not build.** The builder is the other half: an in-cluster Kaniko or
+  BuildKit Job, driven by the same Ansible role that renders the Dockerfile today. Building on
+  daniel-server with Docker and pushing would work now and die at slice 7 — so build in-cluster
+  from the start.
+
+Cold-boot behaviour, so it is not a surprise: pods referencing the local registry
+`ImagePullBackOff` until the registry pod is up, then retry and recover unattended.
+
+This lands as **Batch R**, before Batch D. It is infrastructure, not a service migration, and
+it blocks nothing else.
 
 ## Per-service work
 
@@ -252,7 +283,7 @@ Authelia 2FA), and that reasoning must not be lost in translation.
 
 ## Exit criteria
 
-Per service (all nine):
+Per service (all eight):
 
 - [ ] `kubectl -n homelab get deploy <name>` — desired replicas ready
 - [ ] `curl -H 'Host: <name>-k8s.local.<domain>' http://10.0.0.240/` → expected status
@@ -266,7 +297,7 @@ Per service (all nine):
       (one portal, one cookie)
 - [ ] Docker copy removed from `containers_list` and the container gone from `docker ps`
 
-Per stateful service (seven):
+Per stateful service (six):
 
 - [ ] `seed-volume` reported matching file count, byte count, and checksum
 - [ ] The application reads its migrated data — feeds present, checks present, workflows
@@ -278,7 +309,7 @@ Per stateful service (seven):
 
 Slice-wide:
 
-- [ ] daniel-server container count is **66 − 9 = 57**, and `uptime -s` is still
+- [ ] daniel-server container count is **66 − 8 = 58**, and `uptime -s` is still
       `2026-08-02 07:37:10` (no reboot)
 - [ ] `docker ps --filter health=unhealthy -q | wc -l` → `0`
 - [ ] B2 Class C daily projection re-read after Batch C and again at slice end, both under
