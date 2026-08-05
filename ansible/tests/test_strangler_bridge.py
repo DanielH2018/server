@@ -74,6 +74,28 @@ TWO_SERVICES = [
 ]
 
 
+# Public, unauthenticated paths reproduced on the bridge, keyed by (service, prefix) with the
+# reason each one has to stay open. A bypass is a deliberate hole in the edge's authentication,
+# so adding one is an edit HERE as well as in inventory — the same shape as
+# AUTHELIA_BYPASS_ROUTES in test_k8s_manifests.py.
+BRIDGE_BYPASS_PREFIXES = {
+    ("healthchecks", "/ping/"): (
+        "Every monitored cron POSTs to /ping/<uuid> with no credentials, including two in "
+        "initial_setup that hardcode the public URL. Gating it would not fail loudly — every "
+        "check would go red while the jobs kept succeeding. Reproduces the healthchecks-ping "
+        "Docker label, which died with the container."
+    ),
+}
+
+
+def _bypass_routers(config: dict) -> dict[str, dict]:
+    return {
+        name: router
+        for name, router in config["http"]["routers"].items()
+        if "-bridge-bypass-" in name
+    }
+
+
 def _probe_routers(config: dict) -> dict[str, dict]:
     return {
         name: router
@@ -196,6 +218,11 @@ def test_an_authed_bridge_authenticates_at_the_docker_edge(containers):
         # depending on the LAN-only rule would be an unauthenticated public path.
         if name in _probe_routers(config):
             continue
+        # Likewise for a bypass router, and test_a_bypass_prefix_is_declared_with_a_reason is
+        # what earns it. Keep them inseparable: an exemption that stopped depending on the
+        # allow-list would let inventory alone open a public unauthenticated path.
+        if name in _bypass_routers(config):
+            continue
         assert "authelia" in router["middlewares"], (
             f"{name} is the only gate for a use_authelia service and has no forward-auth"
         )
@@ -232,3 +259,41 @@ def test_a_probe_route_matches_one_exact_path_at_a_stated_priority(containers):
         assert "PathPrefix(" not in router["rule"], name
         assert router["rule"].count("Path(") == 1, name
         assert router.get("priority", 0) > 0, f"{name} states no priority"
+
+
+def test_a_bypass_prefix_is_declared_with_a_reason():
+    """A bypass router is public AND unauthenticated — the only routes here that are both. It
+    exists because something automated calls the path without a session, which is a real
+    reason, but it has to be a written one rather than a line of inventory nobody reviewed."""
+    for svc in _bridged():
+        for prefix in svc.get("bridge_bypass_prefixes", []):
+            assert (svc["name"], prefix) in BRIDGE_BYPASS_PREFIXES, (
+                f"{svc['name']} opens {prefix} publicly with no forward-auth and no entry in "
+                "BRIDGE_BYPASS_PREFIXES explaining why it cannot be gated"
+            )
+
+
+def test_a_bypass_prefix_anchors_to_a_path_segment():
+    """PathPrefix(`/ping`) also matches /pingXYZ, so the trailing slash is what keeps the hole
+    the size it is meant to be. Carried across from the Docker label this replaces, where the
+    same reasoning is written out."""
+    for svc in _bridged():
+        for prefix in svc.get("bridge_bypass_prefixes", []):
+            assert prefix.startswith("/") and prefix.endswith("/"), (
+                f"{svc['name']}'s bypass prefix {prefix!r} does not anchor to a path segment"
+            )
+
+
+def test_a_bypass_router_serves_the_hostname_it_names():
+    """Same 421 exposure as the main routers: a bypass reuses the per-hostname service, so
+    pointing the public router at the LAN transport would send a mismatched SNI."""
+    config = _dynamic_config()
+    services = config["http"]["services"]
+    transports = config["http"]["serversTransports"]
+
+    for name, router in _bypass_routers(config).items():
+        host = router["rule"].split("`")[1]
+        backend = services[router["service"]]["loadBalancer"]
+        assert transports[backend["serversTransport"]]["serverName"] == host, name
+        assert "authelia" not in router["middlewares"], name
+        assert router["priority"] > 0, name

@@ -106,6 +106,13 @@ containers_list:
     hostname: "healthchecks{{ k8s_hostname_suffix }}"
     port: 8000
     use_authelia: true
+    bridge_hostname: healthchecks
+    # No bridge_probe_path: the bypass below already reaches the app without a session, so a
+    # second unauthenticated route would be a second hole for no extra signal. The monitor
+    # probes /ping/<all-zero uuid> and treats 404 as healthy — Django answering 404 for an
+    # unknown check proves the app ran, and a 400 instead would mean ALLOWED_HOSTS is wrong.
+    bridge_bypass_prefixes:
+      - /ping/
   # Slice 2, batch R. No hostname/port and no Traefik route on purpose: this is an
   # unauthenticated plain-HTTP registry, reachable only on the node's loopback via hostPort
   # and in-cluster via its Service. Giving it an ingress would put push access on the LAN.
