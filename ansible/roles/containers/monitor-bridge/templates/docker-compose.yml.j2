@@ -80,6 +80,7 @@ services:
       - KUMA_PUSH_CPU={{ monitor_bridge_cpu_push_token }}
       - KUMA_PUSH_TARGETS={{ monitor_bridge_targets_push_token }}
       - KUMA_PUSH_TRAEFIK={{ monitor_bridge_traefik_push_token }}
+      - KUMA_PUSH_TRAEFIK_LATENCY={{ monitor_bridge_traefik_latency_push_token }}
       # Prometheus reachability gate: probed once per cycle BEFORE the prom-dependent metric
       # checks. When Prometheus is unreachable they're suppressed (pushed `up` w/ a skip msg,
       # heartbeat kept alive) and only THIS monitor pages — one outage is one alert, not a storm.
@@ -416,6 +417,9 @@ services:
       {{ kuma('monitor-bridge-prometheus', monitor_type='push', name='Prometheus Reachable', interval=600, max_retries=0, push_token=monitor_bridge_prometheus_push_token) }}
       {{ kuma('monitor-bridge-targets', monitor_type='push', name='Scrape Targets', interval=600, max_retries=0, push_token=monitor_bridge_targets_push_token) }}
       {{ kuma('monitor-bridge-traefik', monitor_type='push', name='Traefik 5xx', interval=600, max_retries=0, push_token=monitor_bridge_traefik_push_token) }}
+      {# Latency, not errors: a slow route still answers 200, so the 5xx monitor above stays
+         green while a service is unusable. Nothing watched latency at all before this. -#}
+      {{ kuma('monitor-bridge-traefik-latency', monitor_type='push', name='Traefik Latency', interval=600, max_retries=0, push_token=monitor_bridge_traefik_latency_push_token) }}
       {{ kuma('monitor-bridge-n8n', monitor_type='push', name='n8n Prod Workflows', interval=600, max_retries=0, push_token=monitor_bridge_n8n_push_token) }}
       {# Arr Queue Warnings: check_arr_queue polls sonarr+radarr's own /queue for a
          trackedDownloadStatus "warning" or blocked import (2026-07-01 poisoned-.exe

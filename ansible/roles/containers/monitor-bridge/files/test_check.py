@@ -352,6 +352,54 @@ def test_traefik_high_ratio_below_floor_is_ok(monkeypatch):
     assert ok
 
 
+# --- check_traefik_latency --------------------------------------------------
+# Per-service: 1st prom_vector call = total rps by service, 2nd = p95 seconds by service.
+
+
+def test_traefik_latency_names_slow_service(monkeypatch):
+    # A degraded backend answering 200 slowly: invisible to every error-ratio check, which is
+    # the whole reason this one exists.
+    rps = [({"service": "slow@docker"}, 1.0), ({"service": "sonarr@docker"}, 2.0)]
+    p95 = [({"service": "slow@docker"}, 9.5), ({"service": "sonarr@docker"}, 0.3)]
+    monkeypatch.setattr(check, "prom_vector", _seq(rps, p95))
+    ok, msg = check.check_traefik_latency()
+    assert not ok
+    assert "slow@docker" in msg
+    assert "sonarr" not in msg
+
+
+def test_traefik_latency_tolerates_a_slow_tail(monkeypatch):
+    # p95, not max: a dashboard polling widgets several times a second always has a slow tail
+    # (homepage ran ~25 calls over 1.5s out of 2169 on 2026-08-05). p95 stays well under the
+    # threshold there, and alerting on the tail would page for entirely normal behaviour.
+    rps = [({"service": "homepage@docker"}, 3.6)]
+    p95 = [({"service": "homepage@docker"}, 0.4)]
+    monkeypatch.setattr(check, "prom_vector", _seq(rps, p95))
+    ok, _ = check.check_traefik_latency()
+    assert ok
+
+
+def test_traefik_latency_below_floor_is_ok(monkeypatch):
+    # Very slow but near-idle (< 0.05 rps floor) -> must NOT alert, same rule as 5xx.
+    rps = [({"service": "quiet@docker"}, 0.01)]
+    p95 = [({"service": "quiet@docker"}, 30.0)]
+    monkeypatch.setattr(check, "prom_vector", _seq(rps, p95))
+    ok, _ = check.check_traefik_latency()
+    assert ok
+
+
+def test_traefik_latency_ignores_nan_quantile(monkeypatch):
+    # histogram_quantile returns NaN when a service has no observations in the window. NaN
+    # comparisons are always False, so a naive `> threshold` would silently never alert and
+    # the service would also be counted as healthy. It must be skipped explicitly.
+    rps = [({"service": "idle@docker"}, 1.0)]
+    p95 = [({"service": "idle@docker"}, float("nan"))]
+    monkeypatch.setattr(check, "prom_vector", _seq(rps, p95))
+    ok, msg = check.check_traefik_latency()
+    assert ok
+    assert "0 service(s)" in msg
+
+
 def test_traefik_low_5xx_is_ok(monkeypatch):
     total = [({"service": "sonarr@docker"}, 1.0)]
     errs = [({"service": "sonarr@docker"}, 0.01)]  # 1% < 5%
