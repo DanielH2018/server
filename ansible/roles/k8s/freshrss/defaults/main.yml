@@ -1,0 +1,23 @@
+---
+# Same images the Docker role runs — both copies stay on the same tags through coexistence so
+# a difference in behaviour between them is never the image.
+freshrss_k8s_image: lscr.io/linuxserver/freshrss:latest
+freshrss_k8s_cache_image: nginx:alpine
+# Mirrors resources('1.0', '512M', '0.10', '64M') in the compose template.
+freshrss_k8s_cpu_limit: "1"
+freshrss_k8s_mem_limit: 512Mi
+freshrss_k8s_cpu_request: "100m"
+freshrss_k8s_mem_request: 64Mi
+# Mirrors resources('0.50', '128M', '0.05', '16M') for the nginx sidecar.
+freshrss_k8s_cache_cpu_limit: "500m"
+freshrss_k8s_cache_mem_limit: 128Mi
+freshrss_k8s_cache_cpu_request: "50m"
+freshrss_k8s_cache_mem_request: 16Mi
+
+# 86M and 730 files at migration time — mostly the extensions unpacked under
+# config/www/freshrss/extensions, which seeding carries across for free because they live
+# inside the same directory. Sized with room for the feed database to grow.
+freshrss_k8s_claim: freshrss-config
+freshrss_k8s_storage_class: longhorn
+freshrss_k8s_size: 2Gi
+freshrss_k8s_source_path: /home/ubuntu/server/containers/freshrss/config

@@ -1,0 +1,106 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: healthchecks
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # The PVC is ReadWriteOnce and Longhorn runs one replica, so a rolling update would deadlock:
+  # the new pod waits for a volume the old pod still holds.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: healthchecks
+  template:
+    metadata:
+      labels:
+        app: healthchecks
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: healthchecks
+          image: {{ healthchecks_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - SETUID
+                - SETGID
+                - FOWNER
+                - DAC_OVERRIDE
+                - NET_BIND_SERVICE
+          env:
+            - name: PUID
+              value: "{{ puid }}"
+            - name: PGID
+              value: "{{ pgid }}"
+            - name: TZ
+              value: "{{ tz }}"
+            - name: SITE_NAME
+              value: Home Server healthchecks
+            # Follows the inventory hostname: while both copies run, this one answers on the
+            # -k8s host, and Django builds ping URLs from SITE_ROOT.
+            - name: SITE_ROOT
+              value: "https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
+            # Django rejects any request whose Host header is not listed here with a bare 400,
+            # which reads as a Traefik or ingress fault rather than an application setting.
+            # The -k8s host is what the k8s copy is reached on today; the public and LAN names
+            # are kept so the list does not have to change again at cutover.
+            - name: ALLOWED_HOSTS
+              value: "localhost,{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }},{{ container_item.name }}.{{ domain }},{{ container_item.name }}.local.{{ domain }}"
+            - name: DEFAULT_FROM_EMAIL
+              value: "{{ email }}"
+            - name: EMAIL_HOST
+              value: smtp.gmail.com
+            - name: EMAIL_PORT
+              value: "587"
+            - name: EMAIL_USE_TLS
+              value: "True"
+            - name: SUPERUSER_EMAIL
+              value: "{{ email }}"
+            - name: REGISTRATION_OPEN
+              value: "False"
+          envFrom:
+            - secretRef:
+                name: healthchecks
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+              httpHeaders:
+                # The probe's default Host header is the pod IP, which ALLOWED_HOSTS rejects
+                # with a 400 — the probe would fail against a perfectly healthy app.
+                - name: Host
+                  value: localhost
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+              httpHeaders:
+                - name: Host
+                  value: localhost
+            initialDelaySeconds: 90
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ healthchecks_k8s_cpu_limit }}"
+              memory: {{ healthchecks_k8s_mem_limit }}
+            requests:
+              cpu: "{{ healthchecks_k8s_cpu_request }}"
+              memory: {{ healthchecks_k8s_mem_request }}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ healthchecks_k8s_claim }}

@@ -1,0 +1,25 @@
+---
+# Seed BEFORE the workload starts. Django runs migrations against whatever database it finds
+# on boot, so an empty volume would produce a fresh, empty install that then gets overwritten.
+- name: Seed the healthchecks config volume
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/seed-volume
+  vars:
+    seed_volume_service: healthchecks
+    seed_volume_claim: "{{ healthchecks_k8s_claim }}"
+    seed_volume_source_path: "{{ healthchecks_k8s_source_path }}"
+    seed_volume_storage_class: "{{ healthchecks_k8s_storage_class }}"
+    seed_volume_size: "{{ healthchecks_k8s_size }}"
+
+- name: Deploy healthchecks to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: healthchecks
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
+    manifests_secret_files:
+      - secret.yaml

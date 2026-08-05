@@ -21,3 +21,15 @@ seed_volume_image: alpine:3.22
 seed_volume_pod_ttl: 3600
 # Bypass the .seeded marker and re-copy. The cutover run sets this; see tasks/main.yml.
 seed_volume_force: false
+
+# Whether a source that changes mid-copy is acceptable. Derived from seed_volume_force rather
+# than set independently, because the two always want opposite answers and tying them removes
+# a flag someone has to remember:
+#
+#   coexistence seed (force=false) — the Docker service is still running and still writing, so
+#   a torn snapshot is unavoidable and fine. The k8s copy is not authoritative yet.
+#
+#   cutover seed (force=true) — the Docker service has been stopped precisely so the source
+#   holds still. A source that moves here means it was NOT stopped, and accepting that copy
+#   would silently lose whatever was written after the read began.
+seed_volume_allow_moving_source: "{{ not (seed_volume_force | default(false) | bool) }}"

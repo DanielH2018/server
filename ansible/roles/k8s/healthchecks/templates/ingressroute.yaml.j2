@@ -1,0 +1,48 @@
+{% from 'ingressroute.yml.j2' import ingressroute with context %}
+---
+{{ ingressroute(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    container_item.use_authelia
+  )
+}}
+---
+# Ping bypass, carried over from the Docker role's hand-rolled `healthchecks-ping` router.
+# Monitored jobs POST to /ping/<uuid> with no credentials — an Authelia gate here would not
+# fail loudly, it would silently turn every check red while the jobs themselves keep working.
+#
+# A second IngressRoute rather than an extra route inside the macro's object: the macro emits
+# one route with a fixed middleware set, and this one needs a DIFFERENT set (rate-limit, no
+# authelia) plus a priority. Traefik merges routers across IngressRoute objects, so the two
+# coexist exactly as the two Docker routers do.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ container_item.name }}-ping
+  namespace: {{ k8s_namespace }}
+spec:
+  entryPoints:
+    - https
+  routes:
+    - kind: Rule
+      # Trailing slash anchors to the /ping/ path SEGMENT (pings are /ping/<uuid>): a bare
+      # PathPrefix(`/ping`) also matches sibling paths like /pingXYZ, extending this public
+      # no-Authelia bypass to them.
+      match: "{% if k8s_public_route %}(Host(`{{ container_item.hostname | default(container_item.name) }}.{{ domain }}`) || {% else %}({% endif %}Host(`{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}`)) && PathPrefix(`/ping/`)"
+      # Priority must be higher than the UI router so Traefik matches this first.
+      priority: 100
+      middlewares:
+        - name: rate-limit
+      services:
+        - name: {{ container_item.name }}
+          port: {{ container_item.port }}
+  tls:
+    certResolver: cloudflare
+    options:
+      name: modern
+    domains:
+      - main: "{{ domain }}"
+        sans:
+          - "*.{{ domain }}"
+          - "*.local.{{ domain }}"

@@ -80,9 +80,25 @@ def yaml_error(rendered: str) -> str | None:
     return None
 
 
+def ansible_lookup(kind: str, *args: str) -> str:
+    """Minimal stand-in for Ansible's ``lookup``, supporting the ``file`` plugin only.
+
+    A ConfigMap that embeds a config file the Docker role already owns reads it with
+    ``lookup('file', ...)`` rather than keeping a second copy. Stubbing the result would let a
+    malformed embed through, so the real file is read here — the whole point of this guard is
+    that what renders in CI is what a deploy renders.
+    """
+    if kind != "file":
+        raise ValueError(
+            f"validate_k8s_manifests only implements lookup('file'), got {kind!r}"
+        )
+    return Path(args[0]).read_text().rstrip("\n")
+
+
 def check_template(role: str, tpl: Path, ctx: dict) -> str | None:
     """Render one manifest template; return an error string or None on success."""
     env = make_env([K8S_ROLES / role / "templates", SHARED_TPL])
+    env.globals["lookup"] = ansible_lookup
     rendered, err = render_or_error(env, tpl.name, ctx)
     if err:
         return err
@@ -95,7 +111,9 @@ def check_template(role: str, tpl: Path, ctx: dict) -> str | None:
 
 
 def main() -> int:
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS)}
+    # playbook_dir is real, not stubbed: templates use it to build lookup('file', ...) paths
+    # into the Docker roles, and a stubbed value would make those paths unreadable.
+    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
     entries = k8s_entries()
 
     roles = sorted(

@@ -1,0 +1,14 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: freshrss-feed-cache
+  namespace: {{ k8s_namespace }}
+data:
+  default.conf: |
+{#
+  Read from the Docker role's files/ rather than copied here. The two deployments must serve
+  byte-identical nginx config through coexistence — a cache that behaves differently on one
+  side is exactly the kind of difference that gets blamed on k8s. One source of truth.
+#}
+{{ lookup('file', playbook_dir + '/roles/containers/freshrss/files/nginx-feed-cache.conf') | indent(4, true) }}

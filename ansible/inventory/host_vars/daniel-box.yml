@@ -69,6 +69,21 @@ containers_list:
   # values to the same records, which is idempotent at Cloudflare.
   - name: cloudflare-ddns
     platform: k8s
+  # Slice 2, batch C — the first services whose data actually matters. Both seed a
+  # `longhorn` (backed-up) PVC from daniel-server.
+  - name: freshrss
+    platform: k8s
+    hostname: "freshrss{{ k8s_hostname_suffix }}"
+    port: 80
+    use_authelia: true
+  # port 8000, not 80 — uWSGI serves directly, there is no nginx in front of it. The Docker
+  # entry has said 8000 all along; assuming 80 here cost a five-minute rollout timeout with a
+  # perfectly healthy app behind a probe pointed at a closed port.
+  - name: healthchecks
+    platform: k8s
+    hostname: "healthchecks{{ k8s_hostname_suffix }}"
+    port: 8000
+    use_authelia: true
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the
