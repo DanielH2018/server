@@ -84,6 +84,11 @@ containers_list:
     hostname: "healthchecks{{ k8s_hostname_suffix }}"
     port: 8000
     use_authelia: true
+  # Slice 2, batch R. No hostname/port and no Traefik route on purpose: this is an
+  # unauthenticated plain-HTTP registry, reachable only on the node's loopback via hostPort
+  # and in-cluster via its Service. Giving it an ingress would put push access on the LAN.
+  - name: registry
+    platform: k8s
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the

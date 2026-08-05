@@ -71,6 +71,22 @@
   become: true
   changed_when: false
 
+# containerd reads this only at startup, so a change needs k3s restarted — see the restart
+# task below. Written here rather than in the registry role because it is node configuration,
+# not a workload, and because it has to exist before any pod references a built image.
+- name: Configure containerd's view of the in-cluster registry
+  tags: [k3s_server]
+  ansible.builtin.template:
+    src: registries.yaml.j2
+    dest: /etc/rancher/k3s/registries.yaml
+    mode: "0600"
+    owner: root
+    group: root
+  become: true
+  notify:
+    - Restart k3s
+    - Wait for the node to report Ready again
+
 - name: Read the node's registered internal IP
   tags: [k3s_server]
   ansible.builtin.command:
