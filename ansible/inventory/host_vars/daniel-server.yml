@@ -363,11 +363,11 @@ containers_list:
     use_authelia: false
     networks:
       - homepage_private
-  - name: speedtest
-    port: 80
-    use_authelia: true
-    networks:
-      - monitoring
+  # speedtest moved to k3s on 2026-08-05 — the first service retired behind a strangler
+  # bridge. Its hostnames still arrive here and are forwarded to the cluster VIP by the
+  # <name>-bridge-* routers in the traefik role's config.yml.j2, which are generated from
+  # daniel-box's inventory. Rolling back is re-adding this entry and removing bridge_hostname
+  # from that one; both must move together, which test_strangler_bridge.py enforces.
   # Organization: Game servers (apps network)
   - name: terraria
     # No HTTP port — exposed over a dedicated raw-TCP Traefik entrypoint (terraria,

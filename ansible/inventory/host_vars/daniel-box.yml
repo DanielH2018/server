@@ -64,6 +64,10 @@ containers_list:
     hostname: "speedtest{{ k8s_hostname_suffix }}"
     port: 80
     use_authelia: true
+    # First service behind the strangler bridge. Setting this adds a second, ClientIP-guarded
+    # IngressRoute route for the UNSUFFIXED hostnames, which daniel-server forwards here once
+    # its Docker copy is gone. Unset for a service whose Docker twin is still serving them.
+    bridge_hostname: speedtest
   # No hostname/port: two headless DDNS clients with no web UI and no Traefik route, the
   # same shape as claude-otel's collector. Both copies run until cutover and write the same
   # values to the same records, which is idempotent at Cloudflare.

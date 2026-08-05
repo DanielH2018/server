@@ -104,10 +104,81 @@ http:
               - "*.{{ domain }}"
               - "*.local.{{ domain }}"
 
+{#
+  Strangler-bridge routers (docs/k3s-migration/slice-2-leaf-apps.md, decision 1). A service that
+  has moved to k3s keeps its real hostnames pointing here — public DNS is Cloudflare-proxied to
+  the home IP and the router forwards :443 to daniel-server until slice 6 — so retiring its
+  Docker container means replacing it with a route to the cluster, not repointing a name.
+
+  The list comes from daniel-box's inventory rather than a second list here, so "which services
+  are bridged" has one source of truth. A bridge whose k8s side is missing would 404, and one
+  whose Docker container is still running would give two routers the same Host rule; both are
+  asserted against in ansible/tests/test_strangler_bridge.py.
+
+  ONE ROUTER PER HOSTNAME, not one router with an || rule, because the backend is HTTPS: Traefik
+  rejects a request whose Host header disagrees with the TLS SNI it sent, with 421 Misdirected
+  Request, and serversTransport.serverName is a single value. Verified against the live cluster
+  — an apex serverName with a per-service Host 421s on both h2 and http/1.1, while SNI matching
+  the Host returns the app. So each hostname gets its own router, service and transport.
+#}
+{% set bridged = hostvars['daniel-box'].containers_list | default([]) | selectattr('bridge_hostname', 'defined') | list %}
+{% for svc in bridged %}
+{% for host in [svc.bridge_hostname ~ '.' ~ domain, svc.bridge_hostname ~ '.local.' ~ domain] %}
+    {{ svc.name }}-bridge-{{ loop.index }}:
+      entryPoints:
+        - https
+      rule: "Host(`{{ host }}`)"
+      service: {{ svc.name }}-bridge-{{ loop.index }}
+      middlewares:
+        - rate-limit
+{% if svc.use_authelia | default(false) %}
+        # Authelia is applied HERE and nowhere downstream. The k8s copy's bridged route
+        # deliberately carries no forward-auth: each portal sets its own cookie, so gating both
+        # ends means two logins, and the k8s portal has no public DNS record while
+        # k8s_public_route is false. This is the only publicly reachable portal, so it is the
+        # one that authenticates.
+        - authelia
+{% endif %}
+      tls:
+        certResolver: cloudflare
+        domains:
+          - main: "{{ domain }}"
+            sans:
+              - "*.{{ domain }}"
+              - "*.local.{{ domain }}"
+{% endfor %}
+{% endfor %}
+
 #endregion
 #region services
   services:
-    # (Empty for now, as api@internal is built-in)
+    # (Empty but for the strangler bridges below — api@internal is built-in.)
+{% for svc in bridged %}
+{% for host in [svc.bridge_hostname ~ '.' ~ domain, svc.bridge_hostname ~ '.local.' ~ domain] %}
+    {{ svc.name }}-bridge-{{ loop.index }}:
+      loadBalancer:
+        servers:
+          # The MetalLB ingress VIP, by address: the hostname would resolve either to Cloudflare
+          # (public) or back to this host (LAN), and both are loops.
+          - url: "https://{{ k3s_metallb_ingress_vip }}"
+        # Default, but stated: the cluster routes on Host, and the apps build redirects from it.
+        passHostHeader: true
+        serversTransport: {{ svc.name }}-bridge-{{ loop.index }}
+{% endfor %}
+{% endfor %}
+
+#endregion
+#region serversTransports
+  serversTransports:
+{% for svc in bridged %}
+{% for host in [svc.bridge_hostname ~ '.' ~ domain, svc.bridge_hostname ~ '.local.' ~ domain] %}
+    {{ svc.name }}-bridge-{{ loop.index }}:
+      # Sets the SNI, which does double duty: it selects the cluster's wildcard certificate and
+      # it has to equal the Host header or Traefik answers 421. Certificate verification stays
+      # ON — the cluster serves the same Let's Encrypt wildcard this host does.
+      serverName: "{{ host }}"
+{% endfor %}
+{% endfor %}
 
 #endregion
   middlewares:
