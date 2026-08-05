@@ -128,6 +128,13 @@ services:
       {{ kuma('healthchecks-k8s', name='k3s healthchecks', monitor_type='http',
               url='https://healthchecks' ~ k8s_hostname_suffix ~ '.local.' ~ domain ~ '/ping/00000000-0000-0000-0000-000000000000',
               accepted_statuscodes=['404'], max_redirects=0) }}
+      # freshrss's user-facing hostname, probed on its bridge_probe_path for the same reason
+      # speedtest is: on `/` the edge answers 302 before the bridge is consulted. /api/greader.php
+      # returns the bare string `OK`, so a 200 here means PHP ran on the other side of the bridge.
+      {% set freshrss_k8s = (hostvars['daniel-box'].containers_list | selectattr('name', 'equalto', 'freshrss') | first) -%}
+      {{ kuma('freshrss-bridge', name='FreshRSS (via bridge)', monitor_type='http',
+              url='https://freshrss.local.' ~ domain ~ freshrss_k8s.bridge_probe_path,
+              max_redirects=0) }}
       # littlelink's user-facing hostname, after its Docker copy was retired behind the bridge.
       #
       # This is the bridge's canary, and the only monitor here that earns that on its own.

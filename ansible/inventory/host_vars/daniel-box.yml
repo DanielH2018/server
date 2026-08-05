@@ -89,6 +89,15 @@ containers_list:
     hostname: "freshrss{{ k8s_hostname_suffix }}"
     port: 80
     use_authelia: true
+    # Cut over 2026-08-05. Nothing else changes: FreshRSS keeps its base_url in the seeded
+    # config.php, which already reads https://freshrss.<domain> — it was written by the Docker
+    # copy, so the cutover makes it correct rather than requiring an edit.
+    bridge_hostname: freshrss
+    # Returns the bare string `OK` without a session, so it proves PHP is executing while
+    # exposing nothing. Safe ONLY because the probe router matches an exact Path: the GReader
+    # API's real endpoints live at /api/greader.php/reader/api/0/..., which do not match and
+    # so still fall through to the main router and Authelia.
+    bridge_probe_path: /api/greader.php
   # port 8000, not 80 — uWSGI serves directly, there is no nginx in front of it. The Docker
   # entry has said 8000 all along; assuming 80 here cost a five-minute rollout timeout with a
   # perfectly healthy app behind a probe pointed at a closed port.
