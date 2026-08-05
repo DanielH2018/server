@@ -102,10 +102,15 @@ containers_list:
     networks:
       # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
       - lifecycle
-  - name: cloudflare-ddns
-    use_authelia: false
-    networks:
-      - monitoring
+  # cloudflare-ddns was retired from this host on 2026-08-05 — the first service slice 2
+  # actually cut over. It now runs in k3s (roles/k8s/cloudflare-ddns), and its two Kuma
+  # dead-man's-switches moved to uptime-kuma's own compose because AutoKuma derives monitors
+  # from a running container's labels.
+  #
+  # It went first because it is the only migrated service with no Traefik route: no hostname
+  # to repoint, no public path, and so none of the ingress work the others are still waiting
+  # on. The role under roles/containers/cloudflare-ddns is deliberately left in place — it is
+  # the rollback, and re-adding an entry here is the whole of it.
   # Organization: Apps network
   - name: peanut
     port: 8080
