@@ -38,20 +38,21 @@
             icon: speedtest-tracker.png
             href: https://speedtest.{{ domain }}/
             description: Internet tracking
-            server: my-docker
-            container: speedtest
+            # No server/container: speedtest runs in k3s now, so there is no Docker container
+            # for the status dot. The widget reaches it through the bridge on the LAN hostname
+            # rather than by container name, over the bridge_lan_prefixes route.
             widget:
                 type: speedtest
-                url: http://speedtest:80
+                url: https://speedtest.local.{{ domain }}
         - FreshRSS:
             icon: freshrss.png
             href: https://freshrss.{{ domain }}/
             description: RSS Link Aggregator
-            server: my-docker
-            container: freshrss
+            # No server/container: freshrss runs in k3s now. Same as speedtest above — the
+            # widget goes through the bridge on the LAN hostname.
             widget:
                 type: freshrss
-                url: http://freshrss:80
+                url: https://freshrss.local.{{ domain }}
                 username: {{ freshrss_username }}
                 password: {{ freshrss_password }}
         - Karakeep:
