@@ -123,12 +123,12 @@ http:
 #}
 {% set bridged = hostvars['daniel-box'].containers_list | default([]) | selectattr('bridge_hostname', 'defined') | list %}
 {% for svc in bridged %}
-{% for host in [svc.bridge_hostname ~ '.' ~ domain, svc.bridge_hostname ~ '.local.' ~ domain] %}
-    {{ svc.name }}-bridge-{{ loop.index }}:
+{% for key, host in [('public', svc.bridge_hostname ~ '.' ~ domain), ('local', svc.bridge_hostname ~ '.local.' ~ domain)] %}
+    {{ svc.name }}-bridge-{{ key }}:
       entryPoints:
         - https
       rule: "Host(`{{ host }}`)"
-      service: {{ svc.name }}-bridge-{{ loop.index }}
+      service: {{ svc.name }}-bridge-{{ key }}
       middlewares:
         - rate-limit
 {% if svc.use_authelia | default(false) %}
@@ -147,6 +147,40 @@ http:
               - "*.{{ domain }}"
               - "*.local.{{ domain }}"
 {% endfor %}
+{% if svc.bridge_probe_path is defined %}
+    {{ svc.name }}-bridge-probe:
+      # The only route that exercises the whole bridge. Every other monitor of an
+      # Authelia-gated bridged service stops at the 302 the edge returns, BEFORE the bridge is
+      # consulted, so it stays green whether or not daniel-server can still reach the cluster.
+      # This one skips forward-auth, so the request traverses the transport, the cluster's
+      # Traefik and the app itself, and only the app can answer it.
+      #
+      # LAN-ONLY, and that is the security boundary rather than a detail: there is deliberately
+      # no `{{ svc.bridge_hostname }}.{{ domain }}` sibling, so this is unreachable from the
+      # internet. test_strangler_bridge.py fails if a probe router ever matches a host without
+      # `.local.` — the same shape as the ClientIP guard, where the exemption from auth and the
+      # thing that makes it safe cannot be separated.
+      #
+      # Path, not PathPrefix: an exact match cannot widen to whatever else lives underneath it.
+      entryPoints:
+        - https
+      rule: "Host(`{{ svc.bridge_hostname }}.local.{{ domain }}`) && Path(`{{ svc.bridge_probe_path }}`)"
+      # Explicit rather than inherited. This rule is longer than the plain Host one so
+      # rule-length ordering would pick it anyway, but a length tie is a silent inversion
+      # waiting for someone to rename a host — the livesync-utils router states its priority
+      # for the same reason.
+      priority: 200
+      service: {{ svc.name }}-bridge-local
+      middlewares:
+        - rate-limit
+      tls:
+        certResolver: cloudflare
+        domains:
+          - main: "{{ domain }}"
+            sans:
+              - "*.{{ domain }}"
+              - "*.local.{{ domain }}"
+{% endif %}
 {% endfor %}
 
 #endregion
@@ -154,8 +188,8 @@ http:
   services:
     # (Empty but for the strangler bridges below — api@internal is built-in.)
 {% for svc in bridged %}
-{% for host in [svc.bridge_hostname ~ '.' ~ domain, svc.bridge_hostname ~ '.local.' ~ domain] %}
-    {{ svc.name }}-bridge-{{ loop.index }}:
+{% for key, host in [('public', svc.bridge_hostname ~ '.' ~ domain), ('local', svc.bridge_hostname ~ '.local.' ~ domain)] %}
+    {{ svc.name }}-bridge-{{ key }}:
       loadBalancer:
         servers:
           # The MetalLB ingress VIP, by address: the hostname would resolve either to Cloudflare
@@ -163,7 +197,7 @@ http:
           - url: "https://{{ k3s_metallb_ingress_vip }}"
         # Default, but stated: the cluster routes on Host, and the apps build redirects from it.
         passHostHeader: true
-        serversTransport: {{ svc.name }}-bridge-{{ loop.index }}
+        serversTransport: {{ svc.name }}-bridge-{{ key }}
 {% endfor %}
 {% endfor %}
 
@@ -171,8 +205,8 @@ http:
 #region serversTransports
   serversTransports:
 {% for svc in bridged %}
-{% for host in [svc.bridge_hostname ~ '.' ~ domain, svc.bridge_hostname ~ '.local.' ~ domain] %}
-    {{ svc.name }}-bridge-{{ loop.index }}:
+{% for key, host in [('public', svc.bridge_hostname ~ '.' ~ domain), ('local', svc.bridge_hostname ~ '.local.' ~ domain)] %}
+    {{ svc.name }}-bridge-{{ key }}:
       # Sets the SNI, which does double duty: it selects the cluster's wildcard certificate and
       # it has to equal the Host header or Traefik answers 421. Certificate verification stays
       # ON — the cluster serves the same Let's Encrypt wildcard this host does.

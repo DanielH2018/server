@@ -129,17 +129,21 @@ services:
               url='https://healthchecks' ~ k8s_hostname_suffix ~ '.local.' ~ domain ~ '/ping/00000000-0000-0000-0000-000000000000',
               accepted_statuscodes=['404'], max_redirects=0) }}
       # speedtest's user-facing hostname, which AutoKuma stopped providing when the Docker copy
-      # was retired behind the strangler bridge. This watches the whole edge path a person
-      # actually uses: Docker Traefik -> bridge router -> cluster VIP.
+      # was retired behind the strangler bridge.
       #
-      # Be clear about what green means here — Authelia answers the 302 at the Docker edge,
-      # BEFORE the bridge is consulted, so this proves the route and the middleware, not that
-      # the cluster is reachable. speedtest-k8s above is what proves the backend, and a bridge
-      # that broke between them would surface as 502s on the speedtest-bridge-* Traefik
-      # service, which monitor-bridge's check_traefik_5xx already watches.
+      # It probes the LAN-only bridge_probe_path rather than `/`, and that is the difference
+      # between a monitor and a decoration. On `/`, Authelia answers 302 at the edge BEFORE the
+      # bridge is consulted, so the monitor would stay green whether or not daniel-server could
+      # still reach the cluster. The probe path skips forward-auth, so a 200 here means the
+      # request crossed the bridge transport, the cluster's Traefik and the app — the one thing
+      # no other monitor in this file can see.
+      #
+      # The path comes from daniel-box's inventory, the same place the router's rule does, so
+      # the two cannot drift into a monitor probing a path no router matches.
+      {% set speedtest_k8s = (hostvars['daniel-box'].containers_list | selectattr('name', 'equalto', 'speedtest') | first) -%}
       {{ kuma('speedtest-bridge', name='speedtest (via bridge)', monitor_type='http',
-              url='https://speedtest.local.' ~ domain,
-              accepted_statuscodes=['302'], max_redirects=0) }}
+              url='https://speedtest.local.' ~ domain ~ speedtest_k8s.bridge_probe_path,
+              max_redirects=0) }}
       # cloudflare-ddns dead-man's-switches, moved here from the Docker role's compose when
       # that copy was retired (slice 2, first cutover). AutoKuma derives monitors from the
       # labels on a running container, so deleting the Docker copy deletes its monitors — and
