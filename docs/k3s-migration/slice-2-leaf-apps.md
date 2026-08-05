@@ -284,16 +284,21 @@ send an SNI matching the Host it serves.
 
 ### Where it stands, 2026-08-05
 
-Six workloads in the cluster. **`cloudflare-ddns`, `speedtest` and `littlelink` have cut
-over**; `freshrss` and `healthchecks` still run alongside their Docker twins, which serve all
-their real traffic. daniel-server is down to 43 managed containers from 46.
+Six workloads in the cluster. **`cloudflare-ddns`, `speedtest`, `littlelink` and `freshrss`
+have cut over**; only `healthchecks` still runs alongside its Docker twin. daniel-server is
+down to 42 managed containers from 46.
+
+`freshrss` needed no config change at all, which is worth recording because it was the one
+expected to: FreshRSS keeps its `base_url` in the seeded `config.php`, and that file was
+written by the Docker copy, so it already read `https://freshrss.<domain>`. The cutover made
+it correct rather than requiring an edit.
 
 | Service | Seeded | Route (at the VIP) | Monitor |
 |---|---|---|---|
 | `littlelink` | — | **cut over** — bridged, 200 (public, no Authelia) | `littlelink-k8s`, `littlelink-bridge` |
 | `speedtest` | 43 files, identical digest | **cut over** — bridged | `speedtest-k8s`, `speedtest-bridge` |
 | `cloudflare-ddns` | — | no route (headless) | shares the Docker twin's push token — see below |
-| `freshrss` | **730 files, identical digest** | 302 | `freshrss-k8s` |
+| `freshrss` | **730 files, identical digest** | **cut over** — bridged | `freshrss-k8s`, `freshrss-bridge` |
 | `healthchecks` | 2 files, identical digest | 302 UI, 404 on `/ping/` | `healthchecks-k8s`, on `/ping/` |
 | `registry` | — | loopback only, refused on LAN | none — see below |
 

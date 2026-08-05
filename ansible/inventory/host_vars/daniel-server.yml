@@ -197,11 +197,9 @@ containers_list:
     networks:
       - apps
   # Organization: Media
-  - name: freshrss
-    port: 80
-    use_authelia: true
-    networks:
-      - apps
+  # freshrss moved to k3s on 2026-08-05 behind the strangler bridge, taking its feed-cache
+  # sidecar with it — that was a second service inside this one compose, never its own entry.
+  # Rolling back is re-adding this entry and removing bridge_hostname from daniel-box's.
   - name: qbittorrent
     port: 8080
     use_authelia: true
