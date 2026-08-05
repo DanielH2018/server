@@ -1,0 +1,108 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: littlelink
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: littlelink
+  template:
+    metadata:
+      labels:
+        app: littlelink
+    spec:
+      # No legacy Docker-link env vars for every Service in the namespace. Harmless clutter
+      # here, fatal for Authelia — see that role's deployment for the failure it causes.
+      enableServiceLinks: false
+      # No securityContext.runAsUser on purpose: the compose template sets no `user:` either,
+      # so the image's own default user is what has been serving this page. Pinning a UID here
+      # would be a behaviour change smuggled in under a platform move.
+      containers:
+        - name: littlelink
+          image: {{ littlelink_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: META_TITLE
+              value: Daniel Hunter
+            - name: META_DESCRIPTION
+              value: Software Engineer
+            - name: META_AUTHOR
+              value: Daniel Hunter
+            - name: META_KEYWORDS
+              value: Engineering
+            - name: LANG
+              value: en
+            - name: META_INDEX_STATUS
+              value: all
+            - name: OG_SITE_NAME
+              value: Daniel Hunter
+            - name: OG_TITLE
+              value: Daniel Hunter
+            - name: OG_DESCRIPTION
+              value: The home of Daniel Hunter
+            - name: OG_URL
+              value: https://www.{{ domain }}
+            - name: OG_IMAGE
+              value: https://i.imgur.com/HAq1SNZ.jpg
+            - name: OG_IMAGE_WIDTH
+              value: "400"
+            - name: OG_IMAGE_HEIGHT
+              value: "400"
+            - name: THEME
+              value: Dark
+            - name: FAVICON_URL
+              value: https://i.imgur.com/HAq1SNZ.jpg
+            - name: AVATAR_URL
+              value: https://i.imgur.com/HAq1SNZ.jpg
+            - name: AVATAR_2X_URL
+              value: https://i.imgur.com/HAq1SNZ.jpg
+            - name: AVATAR_ALT
+              value: Daniel Hunter Profile Pic
+            - name: NAME
+              value: Daniel Hunter
+            - name: BIO
+              value: Software Engineer @ Lithic Inc.
+            # use ENV variable names for order, listed buttons will be boosted to the top
+            - name: BUTTON_ORDER
+              value: GITHUB,LINKED_IN
+            - name: GITHUB
+              value: https://github.com/DanielH2018
+            - name: LINKED_IN
+              value: https://www.linkedin.com/in/danielrhunter/
+          volumeMounts:
+            # The compose template's `tmpfs: - /tmp`, kept for the same reason it was added
+            # there: defensive cover for Node's os.tmpdir under a read-only rootfs.
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ littlelink_k8s_cpu_limit }}"
+              memory: {{ littlelink_k8s_mem_limit }}
+            requests:
+              cpu: "{{ littlelink_k8s_cpu_request }}"
+              memory: {{ littlelink_k8s_mem_request }}
+      volumes:
+        - name: tmp
+          emptyDir: {}

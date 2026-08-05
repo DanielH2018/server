@@ -1,0 +1,15 @@
+---
+# Same image the Docker role runs — both copies stay on the same tag through coexistence so
+# a difference in behaviour between them is never the image.
+#
+# `:latest` is inherited from the Docker role rather than chosen. It is the one thing here
+# worth pinning to a digest once this service is the only copy: a k8s rollout re-pulls on
+# every pod recreate, so an upstream push silently changes what runs. Left matching the
+# Docker twin for now, because a version skew between the two during coexistence is exactly
+# what this comment block exists to prevent.
+littlelink_k8s_image: ghcr.io/techno-tim/littlelink-server:latest
+# Mirrors resources('0.50', '128M', '0.05', '16M') in the compose template.
+littlelink_k8s_cpu_limit: "500m"
+littlelink_k8s_mem_limit: 128Mi
+littlelink_k8s_cpu_request: "50m"
+littlelink_k8s_mem_request: 16Mi

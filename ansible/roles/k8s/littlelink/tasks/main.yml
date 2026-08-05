@@ -1,0 +1,10 @@
+---
+- name: Deploy littlelink to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: littlelink
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
