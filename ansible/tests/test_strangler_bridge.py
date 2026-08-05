@@ -63,10 +63,23 @@ def _dynamic_config(containers: list[dict] | None = None) -> dict:
 # Two bridged services, one of them with a hostname that differs from its name (littlelink
 # answers on `www`) and one unauthenticated, which is the shape the remaining cutovers take.
 TWO_SERVICES = [
-    {"name": "alpha", "bridge_hostname": "alpha", "use_authelia": True},
+    {
+        "name": "alpha",
+        "bridge_hostname": "alpha",
+        "use_authelia": True,
+        "bridge_probe_path": "/api/healthcheck",
+    },
     {"name": "beta", "bridge_hostname": "www", "use_authelia": False},
     {"name": "unbridged", "use_authelia": True},
 ]
+
+
+def _probe_routers(config: dict) -> dict[str, dict]:
+    return {
+        name: router
+        for name, router in config["http"]["routers"].items()
+        if name.endswith("-bridge-probe")
+    }
 
 
 def _bridge_routers(config: dict) -> dict[str, dict]:
@@ -144,21 +157,24 @@ def test_bridging_several_services_keeps_their_routers_distinct():
     routers = _bridge_routers(config)
 
     assert set(routers) == {
-        "alpha-bridge-1",
-        "alpha-bridge-2",
-        "beta-bridge-1",
-        "beta-bridge-2",
+        "alpha-bridge-public",
+        "alpha-bridge-local",
+        "alpha-bridge-probe",
+        "beta-bridge-public",
+        "beta-bridge-local",
     }
+    # beta has no bridge_probe_path, so it gets no probe router — the flag is per service.
     hosts = sorted(r["rule"].split("`")[1] for r in routers.values())
     assert hosts == [
         f"alpha.{DOMAIN}",
+        f"alpha.local.{DOMAIN}",
         f"alpha.local.{DOMAIN}",
         f"www.{DOMAIN}",
         f"www.local.{DOMAIN}",
     ]
     # use_authelia is per service, not per bridge: beta is public by design.
-    assert "authelia" in routers["alpha-bridge-1"]["middlewares"]
-    assert "authelia" not in routers["beta-bridge-1"]["middlewares"]
+    assert "authelia" in routers["alpha-bridge-public"]["middlewares"]
+    assert "authelia" not in routers["beta-bridge-public"]["middlewares"]
 
 
 @pytest.mark.parametrize("containers", [None, TWO_SERVICES], ids=["inventory", "two"])
@@ -175,6 +191,44 @@ def test_an_authed_bridge_authenticates_at_the_docker_edge(containers):
         service = name.rsplit("-bridge-", 1)[0]
         if service not in authed:
             continue
+        # A probe router is exempt, and test_a_probe_route_is_never_reachable_from_the_internet
+        # is what earns the exemption. Keep the two inseparable: an exemption that stopped
+        # depending on the LAN-only rule would be an unauthenticated public path.
+        if name in _probe_routers(config):
+            continue
         assert "authelia" in router["middlewares"], (
             f"{name} is the only gate for a use_authelia service and has no forward-auth"
         )
+
+
+@pytest.mark.parametrize("containers", [None, TWO_SERVICES], ids=["inventory", "two"])
+def test_a_probe_route_is_never_reachable_from_the_internet(containers):
+    """A probe route is the one bridged route with no forward-auth on either side, so the
+    LAN-only host rule is the whole of its protection. There must be no public sibling.
+
+    This is what earns the exemption in the forward-auth test above; the two only make sense
+    together, the same way the ClientIP guard and the k8s route's missing authelia do.
+    """
+    config = _dynamic_config(containers)
+    for name, router in _probe_routers(config).items():
+        hosts = [h for h in router["rule"].split("`")[1::2] if DOMAIN in h]
+        assert hosts, name
+        for host in hosts:
+            assert host.endswith(f".local.{DOMAIN}"), (
+                f"{name} matches {host}, which resolves publicly — an unauthenticated route "
+                "on a public hostname"
+            )
+        assert "authelia" not in router["middlewares"], name
+        assert "rate-limit" in router["middlewares"], name
+
+
+@pytest.mark.parametrize("containers", [None, TWO_SERVICES], ids=["inventory", "two"])
+def test_a_probe_route_matches_one_exact_path_at_a_stated_priority(containers):
+    """PathPrefix would widen an unauthenticated route to everything beneath it, and an
+    unstated priority leaves the probe competing with the plain Host router on rule length —
+    a tie that inverts silently the next time a hostname changes."""
+    config = _dynamic_config(containers)
+    for name, router in _probe_routers(config).items():
+        assert "PathPrefix(" not in router["rule"], name
+        assert router["rule"].count("Path(") == 1, name
+        assert router.get("priority", 0) > 0, f"{name} states no priority"
