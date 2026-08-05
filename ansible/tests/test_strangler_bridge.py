@@ -88,6 +88,31 @@ BRIDGE_BYPASS_PREFIXES = {
 }
 
 
+# LAN-only API paths another homelab service calls directly, keyed by (service, prefix). Same
+# declare-with-a-reason rule as BRIDGE_BYPASS_PREFIXES; these are narrower (never public) but
+# they are still routes that skip forward-auth.
+BRIDGE_LAN_PREFIXES = {
+    ("freshrss", "/api/greader.php/"): (
+        "Homepage's FreshRSS widget calls the GReader API for unread counts. It sends a "
+        "username and password, and the API answers 401 without them — measured — so "
+        "FreshRSS's own auth is the gate, not this route."
+    ),
+    ("speedtest", "/api/"): (
+        "Homepage's speedtest widget reads /api/speedtest/latest. Unlike FreshRSS it passes no "
+        "credentials, so this really is unauthenticated: any LAN host can read the speed-test "
+        "history. Accepted deliberately — the data is low-sensitivity and it is never public."
+    ),
+}
+
+
+def _lan_routers(config: dict) -> dict[str, dict]:
+    return {
+        name: router
+        for name, router in config["http"]["routers"].items()
+        if "-bridge-lan-" in name
+    }
+
+
 def _bypass_routers(config: dict) -> dict[str, dict]:
     return {
         name: router
@@ -223,6 +248,10 @@ def test_an_authed_bridge_authenticates_at_the_docker_edge(containers):
         # allow-list would let inventory alone open a public unauthenticated path.
         if name in _bypass_routers(config):
             continue
+        # And likewise for a LAN API route, earned by
+        # test_a_lan_prefix_is_declared_and_never_public.
+        if name in _lan_routers(config):
+            continue
         assert "authelia" in router["middlewares"], (
             f"{name} is the only gate for a use_authelia service and has no forward-auth"
         )
@@ -297,3 +326,28 @@ def test_a_bypass_router_serves_the_hostname_it_names():
         assert transports[backend["serversTransport"]]["serverName"] == host, name
         assert "authelia" not in router["middlewares"], name
         assert router["priority"] > 0, name
+
+
+def test_a_lan_prefix_is_declared_and_never_public():
+    """A LAN API route skips forward-auth like a bypass, but for a caller inside the homelab
+    rather than a public one. Both halves are load-bearing: declared with a reason, and never
+    reachable from the internet. Losing the second turns an app-auth-protected endpoint into a
+    public one, which for speedtest — which passes no credentials at all — would be an open API.
+    """
+    config = _dynamic_config()
+    for svc in _bridged():
+        for prefix in svc.get("bridge_lan_prefixes", []):
+            assert (svc["name"], prefix) in BRIDGE_LAN_PREFIXES, (
+                f"{svc['name']} opens {prefix} without forward-auth and has no entry in "
+                "BRIDGE_LAN_PREFIXES explaining what does protect it"
+            )
+            assert prefix.startswith("/") and prefix.endswith("/"), (
+                f"{svc['name']}'s LAN prefix {prefix!r} does not anchor to a path segment"
+            )
+
+    for name, router in _lan_routers(config).items():
+        host = router["rule"].split("`")[1]
+        assert host.endswith(f".local.{DOMAIN}"), (
+            f"{name} matches {host}, which resolves publicly — this route has no forward-auth"
+        )
+        assert "authelia" not in router["middlewares"], name

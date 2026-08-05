@@ -77,6 +77,12 @@ containers_list:
     # bridge instead of stopping at Authelia's 302. Verified against the running container:
     # `{"message":"Speedtest Tracker is running!"}`, no data in it. Exposed LAN-only.
     bridge_probe_path: /api/healthcheck
+    # Homepage's speedtest widget reads /api/speedtest/latest, the same container-to-container
+    # call that broke at cutover. Worth being straight about the trade: homepage passes no
+    # credentials, so unlike freshrss this really is unauthenticated and any LAN host can read
+    # the speed-test history. Accepted deliberately — low-sensitivity data, and never public.
+    bridge_lan_prefixes:
+      - /api/
   # No hostname/port: two headless DDNS clients with no web UI and no Traefik route, the
   # same shape as claude-otel's collector. Both copies run until cutover and write the same
   # values to the same records, which is idempotent at Cloudflare.
@@ -98,6 +104,12 @@ containers_list:
     # API's real endpoints live at /api/greader.php/reader/api/0/..., which do not match and
     # so still fall through to the main router and Authelia.
     bridge_probe_path: /api/greader.php
+    # Homepage's FreshRSS widget reads unread counts over the GReader API. That call used to go
+    # container-to-container on the `apps` network and had no way to survive the move — it
+    # failed with ENOTFOUND the moment the container was retired. The API answers 401 without
+    # the username and password homepage sends, so FreshRSS's own auth is the gate here.
+    bridge_lan_prefixes:
+      - /api/greader.php/
   # port 8000, not 80 — uWSGI serves directly, there is no nginx in front of it. The Docker
   # entry has said 8000 all along; assuming 80 here cost a five-minute rollout timeout with a
   # perfectly healthy app behind a probe pointed at a closed port.
