@@ -54,8 +54,14 @@ metadata:
   # source criterion (the remote address) would put every user of a bridged service into a
   # single 300/min bucket and let one of them 429 the rest.
   #
-  # depth: 1 takes the rightmost X-Forwarded-For entry, which is the real client: the Docker
-  # edge sets XFF and, for public traffic, trusts Cloudflare's rather than appending to it.
+  # excludedIPs rather than depth, because the chain is not a fixed length. Measured on the
+  # first real request through the bridge, X-Forwarded-For arrived as
+  # `<real client>, <cloudflare edge>` — so depth: 1 would have keyed on Cloudflare and put
+  # everyone behind one POP in a single bucket. LAN traffic reaches the same route with a
+  # one-entry chain and no Cloudflare hop, so no single depth is right for both. Traefik walks
+  # the chain from the right and skips excluded addresses, which lands on the real client
+  # either way.
+  #
   # Trusting XFF here is sound only because the bridged routes are ClientIP-guarded to the
   # edge — nothing else can reach them to forge it. Do not reuse this middleware on a route
   # that is directly reachable.
@@ -68,7 +74,11 @@ spec:
     period: 1m
     sourceCriterion:
       ipStrategy:
-        depth: 1
+        excludedIPs:
+{% for ip in cloudflare_ips %}
+          - "{{ ip }}"
+{% endfor %}
+          - "{{ k8s_bridge_client_ip }}/32"
 ---
 apiVersion: traefik.io/v1alpha1
 kind: TLSOption
