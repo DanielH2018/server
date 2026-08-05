@@ -127,6 +127,11 @@ RESTART_WINDOW = _env("RESTART_WINDOW", "15m")
 RESTART_MAX = float(_env("RESTART_MAX", "3"))
 TRAEFIK_5XX_PCT = float(_env("TRAEFIK_5XX_PCT", "5"))
 TRAEFIK_MIN_RPS = float(_env("TRAEFIK_MIN_RPS", "0.05"))
+# p95 seconds per Traefik service before a route counts as slow. 3s is the point where a page
+# reads as broken rather than sluggish, and where clients start abandoning: on 2026-08-05
+# homepage served 2.4-9.5s and ten clients gave up (Traefik logged them as 499) while every
+# 5xx-based check stayed green, because slow-but-successful is still a 200.
+TRAEFIK_P95_SECONDS = float(_env("TRAEFIK_P95_SECONDS", "3"))
 N8N_URL = _env("N8N_URL", "http://n8n:5678").rstrip("/")
 N8N_API_KEY = _env("N8N_API_KEY", "")
 # n8n hides successful executions (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none, kept that way to bound
@@ -1131,6 +1136,57 @@ def check_traefik_5xx():
     return True, "5xx ok: %d service(s) above floor, %.2f rps total" % (
         eligible,
         total_rps,
+    )
+
+
+def check_traefik_latency():
+    """Elevated p95 latency per Traefik service, naming each offender.
+
+    The gap check_traefik_5xx cannot close: a slow route still answers 200, so an error-ratio
+    check stays green while the service is unusable. That is exactly what happened on
+    2026-08-05 — homepage served 2.4-9.5s, ten clients abandoned their requests, and nothing
+    alerted. Latency is also the leading indicator; the 499s it produces are the lagging one,
+    and alerting on those directly is noisy because a closed tab is a legitimate 499.
+
+    Same shape as check_traefik_5xx deliberately: per-service so the alert names the offender,
+    and behind the same TRAEFIK_MIN_RPS floor so one slow request on a near-idle route is not
+    an alarm.
+    """
+    rps = dict(
+        (m.get("service", "?"), v)
+        for m, v in prom_vector(
+            "sum(rate(traefik_service_requests_total[5m])) by (service)"
+        )
+    )
+    p95 = prom_vector(
+        "histogram_quantile(0.95, sum(rate("
+        "traefik_service_request_duration_seconds_bucket[5m])) by (service, le))"
+    )
+    offenders = []
+    eligible = 0
+    for m, seconds in p95:
+        svc = m.get("service", "?")
+        if rps.get(svc, 0.0) < TRAEFIK_MIN_RPS:
+            continue
+        # histogram_quantile returns NaN for a service with no observations in the window;
+        # NaN comparisons are always False, so it would silently never alert. Skip explicitly
+        # rather than relying on that.
+        if seconds != seconds:
+            continue
+        eligible += 1
+        if seconds > TRAEFIK_P95_SECONDS:
+            offenders.append((svc, seconds, rps.get(svc, 0.0)))
+    offenders.sort(key=lambda spr: -spr[1])
+    if offenders:
+        desc = ", ".join("%s (p95 %.1fs at %.2f rps)" % o for o in offenders[:5])
+        return False, "%d service(s) slower than %.0fs p95: %s" % (
+            len(offenders),
+            TRAEFIK_P95_SECONDS,
+            desc,
+        )
+    return True, "latency ok: %d service(s) above floor, all under %.0fs p95" % (
+        eligible,
+        TRAEFIK_P95_SECONDS,
     )
 
 
@@ -2636,6 +2692,11 @@ CHECKS = [
     ("cpu", _env("KUMA_PUSH_CPU", ""), check_cpu_throttle),
     ("targets", _env("KUMA_PUSH_TARGETS", ""), check_targets_down),
     ("traefik5xx", _env("KUMA_PUSH_TRAEFIK", ""), check_traefik_5xx),
+    (
+        "traefik_latency",
+        _env("KUMA_PUSH_TRAEFIK_LATENCY", ""),
+        check_traefik_latency,
+    ),
     ("n8n", _env("KUMA_PUSH_N8N", ""), check_n8n),
     ("arr_queue", _env("KUMA_PUSH_ARR_QUEUE", ""), check_arr_queue),
     (

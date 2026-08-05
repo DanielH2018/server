@@ -10,6 +10,22 @@ server:
     # long URIs — Traefik packs the full original URI + cookies into the subrequest
     # headers (seen: Pi-hole v6 query log, ~2.4KB DataTables query string).
     read: 16384
+  timeouts:
+    # Traefik keeps idle keep-alive connections to backends for 90s — its default
+    # forwardingTimeouts.idleConnTimeout, which traefik.yml deliberately leaves unset. fasthttp
+    # waits for the NEXT request on such a connection for `idle`, falling back to `read` when
+    # idle is unset. With only the 6s read default, Authelia reaped every pooled connection
+    # Traefik was holding and logged each one as a 408 "request timeout" on path "/".
+    #
+    # Nothing was failing — but it is the first thing that looks broken when you go digging, and
+    # on 2026-08-05 it cost a full misdiagnosis of an unrelated outage: a stopped uptime-kuma, a
+    # ten-minute monitoring gap, and half an hour spent on a red herring. The tell was that the
+    # ONLY "/" entries in Authelia's log were 408s, with no successful requests to match.
+    #
+    # 120s so Traefik closes its own idle connections first. `read` is deliberately left at its
+    # default: this governs the wait BETWEEN requests on an established connection, so
+    # slow-request protection is unchanged.
+    idle: '120s'
 
 log:
   level: info
