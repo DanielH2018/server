@@ -36,8 +36,11 @@ from _render_guard import (
 
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
 HOST_VARS = ANSIBLE / "inventory" / "host_vars" / "daniel-box.yml"
-# Holds the shared render/apply tasks, not manifests of its own.
-SKIP_ROLES = {"manifests"}
+# Helper roles, included by service roles rather than deployed on their own. They have no
+# containers_list entry because they are not services, so the platform check below would
+# always fail for them. seed-volume's templates still render — they just render with vars the
+# calling role supplies, not from an inventory entry.
+SKIP_ROLES = {"manifests", "seed-volume"}
 
 
 def k8s_entries() -> dict[str, dict]:

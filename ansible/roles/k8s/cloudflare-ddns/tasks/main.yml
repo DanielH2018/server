@@ -1,0 +1,26 @@
+---
+- name: Deploy cloudflare-ddns to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: cloudflare-ddns
+    manifests_files:
+      - deployment-proxied.yaml
+      - deployment-direct.yaml
+    manifests_secret_files:
+      - secret.yaml
+    # This role ships two Deployments and neither is named after the service, so the shared
+    # wait cannot find one. Skipped here and both waited on explicitly below.
+    manifests_rollout: ""
+
+- name: Wait for the cloudflare-ddns rollouts
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout status
+      deploy/cloudflare-ddns-{{ item }} --timeout=300s
+  loop:
+    - proxied
+    - direct
+  become: true
+  changed_when: false

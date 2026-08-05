@@ -197,6 +197,12 @@ least proven. Use the mechanism slice 1 and the telemetry heartbeat already use:
 call on the **uptime-kuma container's own compose file**, which AutoKuma reads normally.
 One line per migrated service, deleted when slice 3 reworks the path.
 
+**A push monitor cannot referee dual-run.** Where a service pushes its own heartbeat —
+`cloudflare-ddns` is the only one in this slice — both copies push the same token to the same
+monitor, so either one alone keeps it green. During coexistence that monitor proves "at least
+one copy is alive" and nothing more. Verify the k8s copy from its own pod logs instead, and
+treat the monitor as meaningful again only once the Docker copy is gone.
+
 ### 4. B2 transaction budget — a checkpoint, not an assumption
 
 Class C transactions were reported at **1,400 by 21.7h into 2026-08-02**, projecting

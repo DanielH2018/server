@@ -1,0 +1,174 @@
+---
+# Copy a Docker bind-mount directory from another host into a Longhorn PVC, and prove the
+# copy landed before saying so.
+#
+# Callers set:
+#   seed_volume_service        service name (labels the manifest directory)
+#   seed_volume_claim          PVC name
+#   seed_volume_source_path    absolute path on seed_volume_source_host
+#   seed_volume_size / _storage_class   as needed
+#
+# The verification is the point of this role. A partial copy is the failure mode that matters
+# — livesync losing notes, n8n losing credentials — and it is invisible without an explicit
+# comparison, because a half-populated volume mounts and starts perfectly well.
+#
+# ONE-SHOT AND IDEMPOTENT. A `.seeded` marker inside the volume makes a rerun a no-op. That
+# marker is load-bearing in the other direction too: rerunning against a volume the
+# application has since written to would overwrite live data with a stale snapshot.
+#
+# EXCEPT AT CUTOVER, which is why seed_volume_force exists. Slice 2 seeds each volume twice:
+# once while both copies run, so the k8s workload has real data to be exercised against, and
+# again at cutover once the Docker service is stopped and the source has stopped moving. Only
+# the second copy is authoritative. Pass seed_volume_force=true for it — the marker alone
+# would make the run that actually matters a silent no-op.
+#
+# THE SOURCE MUST BE QUIESCENT. Stop the Docker service before running this. Nothing here can
+# detect a file being rewritten mid-stream; it would checksum the copy against a source that
+# has since moved and report a mismatch it cannot explain.
+
+# k8s/manifests creates this too, but seed-volume deliberately runs BEFORE it — the workload
+# must not start against an unseeded claim — so it cannot rely on that. Both are idempotent.
+- name: Create the manifest directory for {{ seed_volume_service }}
+  tags: [config]
+  ansible.builtin.file:
+    path: "/etc/rancher/k3s/manifests/{{ seed_volume_service }}"
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+
+- name: Render the volume manifests for {{ seed_volume_service }}
+  tags: [config]
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/rancher/k3s/manifests/{{ seed_volume_service }}/{{ item }}"
+    mode: "0644"
+    owner: root
+    group: root
+  loop:
+    - pvc.yaml
+    - seed-pod.yaml
+  become: true
+
+- name: Create the PVC for {{ seed_volume_claim }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/{{ seed_volume_service }}/pvc.yaml"
+  register: seed_volume_pvc
+  become: true
+  changed_when: "'created' in seed_volume_pvc.stdout"
+
+- name: Start the seed pod for {{ seed_volume_claim }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/{{ seed_volume_service }}/seed-pod.yaml"
+  register: seed_volume_pod
+  become: true
+  changed_when: "'created' in seed_volume_pod.stdout"
+
+- name: Wait for the seed pod to be ready
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=Ready
+      pod/seed-{{ seed_volume_claim }} --timeout=180s
+  become: true
+  changed_when: false
+
+- name: Check the seed marker on {{ seed_volume_claim }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec seed-{{ seed_volume_claim }} --
+      test -f {{ seed_volume_mount }}/.seeded
+  register: seed_volume_marker
+  become: true
+  failed_when: false
+  changed_when: false
+
+- name: Stream the source tree into {{ seed_volume_claim }}
+  tags: [deploy]
+  when: seed_volume_marker.rc != 0 or seed_volume_force | default(false) | bool
+  # -p --numeric-owner so the workload finds the UIDs it had under Docker; the destination
+  # container is root precisely so it can restore them.
+  #
+  # The two halves of this pipe need DIFFERENT users, which is why the sudo is written out
+  # rather than left to `become`. `k3s kubectl` needs root; the ssh does not — the SSH trust
+  # to the source host belongs to {{ sys_user }}, and root has no key there, so a plain
+  # become:true shell would fail on the read half with a permission error that looks like a
+  # k8s problem.
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail &&
+      sudo -u {{ sys_user }} ssh {{ seed_volume_source_host }}
+      "tar -C {{ seed_volume_source_path }} -cf - ." |
+      k3s kubectl -n {{ k8s_namespace }} exec -i seed-{{ seed_volume_claim }} --
+      tar -C {{ seed_volume_mount }} -xf - -p --numeric-owner
+    executable: /bin/bash
+  become: true
+  changed_when: true
+
+# ── verification ────────────────────────────────────────────────────────────
+# `find . -type f -exec sha256sum {} +  | sort | sha256sum` runs identically under GNU
+# coreutils on the source and busybox in the pod, and covers content AND the set of paths.
+# Deliberately not xargs -0 / sort -z: busybox's support for those is inconsistent, and a
+# verification step that fails for its own reasons is worse than none. The trade is that a
+# filename containing a newline would break it — none of the migrated services has one.
+- name: Checksum the source tree
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      ssh {{ seed_volume_source_host }}
+      "cd {{ seed_volume_source_path }} && find . -type f | wc -l &&
+       find . -type f -exec sha256sum {} + | sort | sha256sum"
+  register: seed_volume_src_sum
+  changed_when: false
+
+- name: Checksum the seeded volume
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec seed-{{ seed_volume_claim }} -- sh -c
+      "cd {{ seed_volume_mount }} && find . -type f ! -name .seeded | wc -l &&
+       find . -type f ! -name .seeded -exec sha256sum {} + | sort | sha256sum"
+  register: seed_volume_dst_sum
+  become: true
+  changed_when: false
+
+- name: Fail if the seeded volume does not match the source
+  tags: [deploy]
+  ansible.builtin.assert:
+    that:
+      - seed_volume_src_sum.stdout_lines[0] | trim == seed_volume_dst_sum.stdout_lines[0] | trim
+      - seed_volume_src_sum.stdout_lines[1] | trim == seed_volume_dst_sum.stdout_lines[1] | trim
+    fail_msg: >-
+      Seeding {{ seed_volume_claim }} did not reproduce {{ seed_volume_source_path }}.
+      Source: {{ seed_volume_src_sum.stdout_lines[0] | trim }} files,
+      digest {{ seed_volume_src_sum.stdout_lines[1] | trim }}.
+      Volume: {{ seed_volume_dst_sum.stdout_lines[0] | trim }} files,
+      digest {{ seed_volume_dst_sum.stdout_lines[1] | trim }}.
+      The PVC has been left in place and the marker NOT written, so a rerun retries the copy.
+    success_msg: >-
+      {{ seed_volume_claim }} matches {{ seed_volume_source_path }}:
+      {{ seed_volume_src_sum.stdout_lines[0] | trim }} files, identical digest.
+
+# Written only after the assert passes, so a failed copy never looks seeded on the next run.
+- name: Write the seed marker to {{ seed_volume_claim }}
+  tags: [deploy]
+  when: seed_volume_marker.rc != 0 or seed_volume_force | default(false) | bool
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec seed-{{ seed_volume_claim }} --
+      touch {{ seed_volume_mount }}/.seeded
+  become: true
+  changed_when: true
+
+- name: Remove the seed pod
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete pod seed-{{ seed_volume_claim }}
+      --ignore-not-found --wait=false
+  become: true
+  changed_when: true

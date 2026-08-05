@@ -1,0 +1,20 @@
+---
+# Same image the Docker role runs — both copies stay on the same tag through coexistence so
+# a difference in behaviour between them is never the image.
+cloudflare_ddns_k8s_image: favonia/cloudflare-ddns:latest
+# Mirrors resources('0.25', '64M', '0.05', '16M') in the compose template, per container.
+cloudflare_ddns_k8s_cpu_limit: "250m"
+cloudflare_ddns_k8s_mem_limit: 64Mi
+cloudflare_ddns_k8s_cpu_request: "50m"
+cloudflare_ddns_k8s_mem_request: 16Mi
+
+# Uptime-Kuma still runs in Docker on daniel-server until slice 3, and the compose template
+# reaches it as `http://uptime-kuma:3001` over a Docker bridge that does not exist here.
+# Kuma publishes no host port, so the only route in is through daniel-server's Traefik.
+#
+# Pinned with hostAliases rather than left to cluster DNS: k3s CoreDNS forwards to the node's
+# /etc/resolv.conf, which is the systemd-resolved stub at 127.0.0.53 — a loopback address that
+# means something different inside a pod. An explicit alias makes the heartbeat independent of
+# how that resolves.
+cloudflare_ddns_k8s_kuma_host: "uptime-kuma.local.{{ domain }}"
+cloudflare_ddns_k8s_kuma_ip: "{{ hostvars['daniel-server'].server_ip }}"

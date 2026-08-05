@@ -1,0 +1,100 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: speedtest
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # The PVC is ReadWriteOnce and Longhorn runs one replica, so a rolling update would deadlock:
+  # the new pod waits for a volume the old pod still holds.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: speedtest
+  template:
+    metadata:
+      labels:
+        app: speedtest
+    spec:
+      # No legacy Docker-link env vars for every Service in the namespace. Harmless clutter
+      # here, fatal for Authelia — see that role's deployment for the failure it causes.
+      enableServiceLinks: false
+      # No fsGroup on purpose. seed-volume restores the source's ownership with
+      # `tar -p --numeric-owner`, and this LSIO image starts as root and chowns /config to
+      # PUID/PGID itself. An fsGroup would recursively rewrite group ownership at mount time,
+      # fighting both.
+      containers:
+        - name: speedtest
+          image: {{ speedtest_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # The compose template's cap_drop/cap_add pair, carried over verbatim: the s6
+              # privilege-drop set plus NET_BIND_SERVICE for :80.
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - SETUID
+                - SETGID
+                - FOWNER
+                - DAC_OVERRIDE
+                - NET_BIND_SERVICE
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            - name: PUID
+              value: "{{ puid }}"
+            - name: PGID
+              value: "{{ pgid }}"
+            # Follows the inventory hostname rather than being hardcoded to the public name:
+            # while both copies run this one answers on the -k8s host, and Laravel builds
+            # redirects and asset URLs from APP_URL. At cutover the inventory changes and
+            # this follows it.
+            - name: APP_URL
+              value: "https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
+            # Results are stored in UTC by design (APP_TIMEZONE stays default); this is
+            # the UI-display timezone, which otherwise also defaults to Etc/UTC.
+            - name: DISPLAY_TIMEZONE
+              value: "{{ tz }}"
+            - name: OOKLA_EULA_GDPR
+              value: "true"
+            - name: SPEEDTEST_SCHEDULE
+              value: "0 */6 * * *"
+            - name: SPEEDTEST_SERVERS
+              value: "1775"
+            - name: PRUNE_RESULTS_OLDER_THAN
+              value: "30"
+          envFrom:
+            - secretRef:
+                name: speedtest
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ speedtest_k8s_cpu_limit }}"
+              memory: {{ speedtest_k8s_mem_limit }}
+            requests:
+              cpu: "{{ speedtest_k8s_cpu_request }}"
+              memory: {{ speedtest_k8s_mem_request }}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ speedtest_k8s_claim }}

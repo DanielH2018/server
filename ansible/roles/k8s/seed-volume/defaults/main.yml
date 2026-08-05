@@ -1,0 +1,23 @@
+---
+# Where the data comes from. daniel-server is the only source in slice 2 — every Docker
+# service being migrated lives there — but it is a variable because slice 5 moves services
+# off the Pi.
+seed_volume_source_host: daniel-server
+# Absolute path on the source host. No default: a wrong guess here silently seeds the wrong
+# directory, and the failure only shows up as an application that has lost its data.
+# seed_volume_source_path: /home/ubuntu/server/containers/<svc>/config
+
+# PVC. seed_volume_claim defaults to <service>-data in the calling role.
+seed_volume_size: 1Gi
+seed_volume_storage_class: longhorn
+# Mount point inside the short-lived seed pod. Not the application's mount path — nothing in
+# this role knows or cares where the real workload will mount the claim.
+seed_volume_mount: /data
+# busybox tar + sha256sum are enough, and a small image keeps the seed pod's own startup off
+# the critical path of a migration window where the Docker service is already stopped.
+seed_volume_image: alpine:3.22
+# How long the seed pod lingers before its own timeout kills it, in case a play dies between
+# creating the pod and deleting it. Long enough for a slow copy, short enough not to leak.
+seed_volume_pod_ttl: 3600
+# Bypass the .seeded marker and re-copy. The cutover run sets this; see tasks/main.yml.
+seed_volume_force: false
