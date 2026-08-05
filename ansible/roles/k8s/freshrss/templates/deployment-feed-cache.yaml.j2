@@ -1,0 +1,78 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: freshrss-feed-cache
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: freshrss-feed-cache
+  template:
+    metadata:
+      labels:
+        app: freshrss-feed-cache
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: nginx
+          image: {{ freshrss_k8s_cache_image }}
+          ports:
+            - containerPort: 80
+          securityContext:
+            # Read-only rootfs: root nginx writes only its pidfile (/var/run) — the cache is
+            # its own volume (use_temp_path=off) and logs go to the image's stdout symlinks.
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              # nginx binds :80 and forks workers — needs NET_BIND_SERVICE + SETUID/SETGID/CHOWN.
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - SETUID
+                - SETGID
+                - NET_BIND_SERVICE
+          volumeMounts:
+            - name: conf
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+            - name: cache
+              mountPath: /var/cache/nginx
+            - name: run
+              mountPath: /var/run
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ freshrss_k8s_cache_cpu_limit }}"
+              memory: {{ freshrss_k8s_cache_mem_limit }}
+            requests:
+              cpu: "{{ freshrss_k8s_cache_cpu_request }}"
+              memory: {{ freshrss_k8s_cache_mem_request }}
+      volumes:
+        - name: conf
+          configMap:
+            name: freshrss-feed-cache
+        # The compose side uses a named volume so the cache survives a recreate. Here it is an
+        # emptyDir on purpose: this is an HTTP cache in front of one upstream, it refills
+        # itself, and a PVC for it would spend Longhorn capacity on regenerable bytes.
+        - name: cache
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

@@ -87,9 +87,33 @@
   failed_when: false
   changed_when: false
 
+# Everything below runs only when a copy actually happens. Verifying on a run that copied
+# nothing compares a point-in-time snapshot against a source the Docker twin is still writing
+# to, so it fails the moment the two diverge — which, for a service under coexistence, is
+# within minutes. That made every later deploy of an already-seeded service fail on a
+# difference that is expected and correct.
+- name: Decide whether this run copies
+  tags: [deploy]
+  ansible.builtin.set_fact:
+    seed_volume_copying: "{{ seed_volume_marker.rc != 0 or seed_volume_force | default(false) | bool }}"
+
+# Taken BEFORE the copy so it can be compared with the same reading afterwards. Without this
+# there is no way to tell a corrupted copy from a source that simply moved while being read,
+# and those need opposite responses: one is a bug, the other is a live service doing its job.
+- name: Checksum the source tree before copying
+  tags: [deploy]
+  when: seed_volume_copying | bool
+  ansible.builtin.command:
+    cmd: >-
+      ssh {{ seed_volume_source_host }}
+      "cd {{ seed_volume_source_path }} && find . -type f | wc -l &&
+       find . -type f -exec sha256sum {} + | LC_ALL=C sort | sha256sum"
+  register: seed_volume_src_before
+  changed_when: false
+
 - name: Stream the source tree into {{ seed_volume_claim }}
   tags: [deploy]
-  when: seed_volume_marker.rc != 0 or seed_volume_force | default(false) | bool
+  when: seed_volume_copying | bool
   # -p --numeric-owner so the workload finds the UIDs it had under Docker; the destination
   # container is root precisely so it can restore them.
   #
@@ -110,41 +134,75 @@
   changed_when: true
 
 # ── verification ────────────────────────────────────────────────────────────
-# `find . -type f -exec sha256sum {} +  | sort | sha256sum` runs identically under GNU
+# `find . -type f -exec sha256sum {} + | LC_ALL=C sort | sha256sum` runs identically under GNU
 # coreutils on the source and busybox in the pod, and covers content AND the set of paths.
 # Deliberately not xargs -0 / sort -z: busybox's support for those is inconsistent, and a
 # verification step that fails for its own reasons is worse than none. The trade is that a
 # filename containing a newline would break it — none of the migrated services has one.
-- name: Checksum the source tree
+#
+# LC_ALL=C is load-bearing, not decoration. The source sorts with GNU sort under
+# LANG=en_US.UTF-8, which collates by locale rules; the alpine seed pod sorts with busybox
+# in byte order. Identical trees then hash differently, and the guard reports a copy failure
+# that never happened — which is what freshrss's 730 files did, while speedtest's 43 and
+# healthchecks' 2 passed only because their names happened to sort the same under both.
+- name: Checksum the source tree after copying
   tags: [deploy]
+  when: seed_volume_copying | bool
   ansible.builtin.command:
     cmd: >-
       ssh {{ seed_volume_source_host }}
       "cd {{ seed_volume_source_path }} && find . -type f | wc -l &&
-       find . -type f -exec sha256sum {} + | sort | sha256sum"
+       find . -type f -exec sha256sum {} + | LC_ALL=C sort | sha256sum"
   register: seed_volume_src_sum
   changed_when: false
 
+- name: Note whether the source held still
+  tags: [deploy]
+  when: seed_volume_copying | bool
+  ansible.builtin.set_fact:
+    seed_volume_source_stable: "{{ seed_volume_src_before.stdout | trim == seed_volume_src_sum.stdout | trim }}"
+
 - name: Checksum the seeded volume
   tags: [deploy]
+  when: seed_volume_copying | bool
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec seed-{{ seed_volume_claim }} -- sh -c
       "cd {{ seed_volume_mount }} && find . -type f ! -name .seeded | wc -l &&
-       find . -type f ! -name .seeded -exec sha256sum {} + | sort | sha256sum"
+       find . -type f ! -name .seeded -exec sha256sum {} + | LC_ALL=C sort | sha256sum"
   register: seed_volume_dst_sum
   become: true
   changed_when: false
 
-- name: Fail if the seeded volume does not match the source
+# A moving source and a broken copy look identical in the final digests but need opposite
+# responses. Reported separately so the operator is not left guessing which one happened.
+- name: Fail if the source moved while it was being copied
   tags: [deploy]
+  when:
+    - seed_volume_copying | bool
+    - not seed_volume_source_stable | bool
+    - not seed_volume_allow_moving_source | default(false) | bool
+  ansible.builtin.fail:
+    msg: >-
+      {{ seed_volume_source_path }} changed while it was being read, so the copy is a torn
+      snapshot rather than a bad one. Stop the Docker service on
+      {{ seed_volume_source_host }} and rerun with seed_volume_force=true. This is expected
+      during coexistence — pass seed_volume_allow_moving_source=true to accept a
+      point-in-time copy, but never for the cutover seed.
+
+- name: Fail if the seeded volume does not match a source that held still
+  tags: [deploy]
+  when:
+    - seed_volume_copying | bool
+    - seed_volume_source_stable | bool
   ansible.builtin.assert:
     that:
       - seed_volume_src_sum.stdout_lines[0] | trim == seed_volume_dst_sum.stdout_lines[0] | trim
       - seed_volume_src_sum.stdout_lines[1] | trim == seed_volume_dst_sum.stdout_lines[1] | trim
     fail_msg: >-
-      Seeding {{ seed_volume_claim }} did not reproduce {{ seed_volume_source_path }}.
-      Source: {{ seed_volume_src_sum.stdout_lines[0] | trim }} files,
+      Seeding {{ seed_volume_claim }} did not reproduce {{ seed_volume_source_path }}, and the
+      source did NOT change while it was read — so this is a real copy failure, not a torn
+      snapshot. Source: {{ seed_volume_src_sum.stdout_lines[0] | trim }} files,
       digest {{ seed_volume_src_sum.stdout_lines[1] | trim }}.
       Volume: {{ seed_volume_dst_sum.stdout_lines[0] | trim }} files,
       digest {{ seed_volume_dst_sum.stdout_lines[1] | trim }}.
@@ -156,7 +214,7 @@
 # Written only after the assert passes, so a failed copy never looks seeded on the next run.
 - name: Write the seed marker to {{ seed_volume_claim }}
   tags: [deploy]
-  when: seed_volume_marker.rc != 0 or seed_volume_force | default(false) | bool
+  when: seed_volume_copying | bool
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec seed-{{ seed_volume_claim }} --

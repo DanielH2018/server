@@ -267,27 +267,47 @@ def test_every_deployment_disables_service_link_env_vars():
 # --- 3. protected services are actually protected -------------------------------------------
 
 
+# IngressRoutes that deliberately skip forward-auth on a service whose `use_authelia` is true.
+# Keyed by the IngressRoute's metadata.name so adding another unauthenticated route to an
+# otherwise-gated service has to be a conscious edit here, with a reason, rather than something
+# that slips in behind a passing test.
+AUTHELIA_BYPASS_ROUTES = {
+    "healthchecks-ping": (
+        "Monitored jobs POST to /ping/<uuid> with no credentials. Gating it would not fail "
+        "loudly — every check would silently go red while the jobs kept working. Carried over "
+        "from the Docker role's hand-rolled healthchecks-ping router."
+    ),
+}
+
+
 def test_every_authed_service_carries_forward_auth_and_rate_limit():
     """The check that has to scale: slice 2 hand-authors ~33 more IngressRoutes, and a
-    missing middleware is an ungated service that returns 200 and looks fine."""
+    missing middleware is an ungated service that returns 200 and looks fine.
+
+    Iterates every document, not just the first: a role may ship more than one IngressRoute
+    (healthchecks ships its ping bypass alongside the UI route), and reading only the first
+    would leave the extra ones unchecked — exactly where an ungated route would hide.
+    """
     for entry in _k8s_entries():
         route_tpl = K8S / entry["name"] / "templates" / "ingressroute.yaml.j2"
         if not route_tpl.exists():
             continue
-        doc = yaml.safe_load(
-            _render(
-                route_tpl,
-                container_item=entry,
-                domain="example.com",
-                **ALL_VARS,
-            )
+        rendered = _render(
+            route_tpl,
+            container_item=entry,
+            domain="example.com",
+            **ALL_VARS,
         )
-        middlewares = [m["name"] for m in doc["spec"]["routes"][0]["middlewares"]]
-        # rate-limit is unconditional — it is the brute-force protection, and the login
-        # portal (use_authelia: false) is the route that needs it most.
-        assert "rate-limit" in middlewares, entry["name"]
-        if entry.get("use_authelia"):
-            assert "authelia" in middlewares, entry["name"]
+        for doc in (d for d in yaml.safe_load_all(rendered) if d):
+            name = doc["metadata"]["name"]
+            for route in doc["spec"]["routes"]:
+                middlewares = [m["name"] for m in route["middlewares"]]
+                # rate-limit is unconditional — it is the brute-force protection, and the
+                # login portal (use_authelia: false) is the route that needs it most. It
+                # applies to bypass routes too: skipping auth never means skipping this.
+                assert "rate-limit" in middlewares, name
+                if entry.get("use_authelia") and name not in AUTHELIA_BYPASS_ROUTES:
+                    assert "authelia" in middlewares, name
 
 
 def test_routes_stay_lan_only_while_the_k8s_edge_has_no_crowdsec():
@@ -477,9 +497,12 @@ def test_routes_reference_a_tlsoption_that_exists_and_is_not_named_default():
         tpl = K8S / entry["name"] / "templates" / "ingressroute.yaml.j2"
         if not tpl.exists():
             continue
-        doc = yaml.safe_load(_render(tpl, container_item=entry, **ALL_VARS))
-        named = doc["spec"]["tls"]["options"]["name"]
-        assert named in defined, (
-            f"{entry['name']} references TLS options '{named}', which the traefik role does "
-            f"not define (it defines {sorted(defined)})"
-        )
+        rendered = _render(tpl, container_item=entry, **ALL_VARS)
+        # Every document: a role may ship more than one IngressRoute, and a second one naming
+        # a TLSOption that does not exist fails exactly as loudly as the first would.
+        for doc in (d for d in yaml.safe_load_all(rendered) if d):
+            named = doc["spec"]["tls"]["options"]["name"]
+            assert named in defined, (
+                f"{doc['metadata']['name']} references TLS options '{named}', which the "
+                f"traefik role does not define (it defines {sorted(defined)})"
+            )

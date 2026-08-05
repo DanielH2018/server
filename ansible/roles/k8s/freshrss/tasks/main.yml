@@ -1,0 +1,25 @@
+---
+# Seed BEFORE the workload starts, so FreshRSS never runs its first-boot setup against an
+# empty /config that is about to be overwritten.
+- name: Seed the freshrss config volume
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/seed-volume
+  vars:
+    seed_volume_service: freshrss
+    seed_volume_claim: "{{ freshrss_k8s_claim }}"
+    seed_volume_source_path: "{{ freshrss_k8s_source_path }}"
+    seed_volume_storage_class: "{{ freshrss_k8s_storage_class }}"
+    seed_volume_size: "{{ freshrss_k8s_size }}"
+
+- name: Deploy freshrss to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: freshrss
+    manifests_files:
+      - configmap.yaml
+      - deployment.yaml
+      - deployment-feed-cache.yaml
+      - service.yaml
+      - ingressroute.yaml

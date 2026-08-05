@@ -1,0 +1,15 @@
+---
+# Same image the Docker role runs — both copies stay on the same tag through coexistence so
+# a difference in behaviour between them is never the image.
+healthchecks_k8s_image: lscr.io/linuxserver/healthchecks:latest
+# Mirrors resources('0.50', '512M', '0.05', '64M') in the compose template.
+healthchecks_k8s_cpu_limit: "500m"
+healthchecks_k8s_mem_limit: 512Mi
+healthchecks_k8s_cpu_request: "50m"
+healthchecks_k8s_mem_request: 64Mi
+
+# 532K and 2 files at migration time — the check definitions and ping history.
+healthchecks_k8s_claim: healthchecks-config
+healthchecks_k8s_storage_class: longhorn
+healthchecks_k8s_size: 1Gi
+healthchecks_k8s_source_path: /home/ubuntu/server/containers/healthchecks/config

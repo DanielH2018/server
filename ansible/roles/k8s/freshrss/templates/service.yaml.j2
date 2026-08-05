@@ -1,0 +1,29 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: freshrss
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: freshrss
+  ports:
+    - port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}
+---
+# THE NAME IS LOAD-BEARING. FreshRSS stores the subscription URL in its database, and the
+# seeded database holds `http://feed-cache/w/atom.xml` — Docker Compose's service key, not the
+# container_name. A k8s Service called anything else leaves that feed resolving to nothing,
+# and FreshRSS reports it as an ordinary fetch failure, so it looks like the upstream is down.
+# Same class of trap as the *arr absolute-path footgun waiting in slice 4.
+apiVersion: v1
+kind: Service
+metadata:
+  name: feed-cache
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: freshrss-feed-cache
+  ports:
+    - port: 80
+      targetPort: 80
