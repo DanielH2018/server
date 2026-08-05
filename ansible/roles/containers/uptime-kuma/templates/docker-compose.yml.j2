@@ -100,6 +100,34 @@ services:
       {{ kuma('bento-pdf-k8s', name='k3s Ingress (bento-pdf)', monitor_type='http',
               url='https://bento-pdf' ~ k8s_hostname_suffix ~ '.local.' ~ domain,
               accepted_statuscodes=['302'], max_redirects=0) }}
+      # Slice 2 migrations. Each k8s copy runs alongside its Docker twin, and the twin keeps its
+      # own AutoKuma-generated monitor — so these watch the NEW copy specifically. Without them a
+      # migrated service can be dead for hours while its Docker monitor stays green, which is the
+      # blind spot the whole coexistence period would otherwise carry. Deleted when slice 3
+      # reworks the monitor-generation path.
+      #
+      # littlelink is the public landing page (use_authelia: false), so 200 is the expected code
+      # and no accepted_statuscodes override is needed. It is also the only one of these whose
+      # green means the BACKEND is serving, not merely that the route exists.
+      {{ kuma('littlelink-k8s', name='k3s littlelink', monitor_type='http',
+              url='https://www' ~ k8s_hostname_suffix ~ '.local.' ~ domain) }}
+      {{ kuma('speedtest-k8s', name='k3s speedtest', monitor_type='http',
+              url='https://speedtest' ~ k8s_hostname_suffix ~ '.local.' ~ domain,
+              accepted_statuscodes=['302'], max_redirects=0) }}
+      {{ kuma('freshrss-k8s', name='k3s FreshRSS', monitor_type='http',
+              url='https://freshrss' ~ k8s_hostname_suffix ~ '.local.' ~ domain,
+              accepted_statuscodes=['302'], max_redirects=0) }}
+      # healthchecks is probed on its /ping/ bypass rather than its UI, and that is deliberate:
+      # /ping/ skips forward-auth, so the request reaches the Django app itself and a 404 for an
+      # unknown UUID proves the BACKEND is alive. A 302 on the UI would only prove the route and
+      # the middleware, which is exactly the limitation called out for bento-pdf above.
+      #
+      # It doubles as a guard on the bypass. If the ping route were ever lost, this would answer
+      # 302 instead of 404 and go red — and a silently-gated /ping/ turns every check in
+      # healthchecks red while the jobs themselves keep succeeding.
+      {{ kuma('healthchecks-k8s', name='k3s healthchecks', monitor_type='http',
+              url='https://healthchecks' ~ k8s_hostname_suffix ~ '.local.' ~ domain ~ '/ping/00000000-0000-0000-0000-000000000000',
+              accepted_statuscodes=['404'], max_redirects=0) }}
       # k3s backup plane: the cluster's ONLY backup path, and until 2026-08-02 it had no monitor
       # at all — Longhorn's backup target went unavailable for 13h and nothing noticed. It
       # surfaced only because Kopia shares the same B2 account and tripped its own freshness

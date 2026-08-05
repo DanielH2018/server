@@ -224,16 +224,62 @@ remains, only `karakeep`'s Meilisearch index is genuinely droppable, and it is a
 Ordered so the mechanics are proven on services whose loss would not matter before they are
 trusted with data that would.
 
-| Batch | Services | What it proves |
-|---|---|---|
-| **A** | `littlelink` | The stateless path end-to-end on a public, no-Authelia route whose hostname (`www`) differs from the service name. `ical-proxy` was dropped from this batch on contact with the code. |
-| **B** | `cloudflare-ddns`, `speedtest` | Secrets as k8s Secrets, and **`seed-volume` is built and first exercised here** — against a 23M SQLite DB on `longhorn-nobackup`, where a botched copy costs nothing. |
-| **C** | `freshrss`, `healthchecks` | `seed-volume` against data that matters, on `longhorn`, with backup verified in B2. **B2 checkpoint here.** |
-| **R** | `registry` + builder | Infrastructure, not a migration: `registry:2` plus an in-cluster build Job. Must land before D, which is the first batch needing a built image. |
-| **D** | `n8n` | Larger state, and the first built image — two of them, main and task runners. n8n's encrypted credentials survive the move. |
-| **E** | `karakeep`, `livesync` | Multi-container workload, and the highest-value data in the slice, moved last with every mechanic already proven. |
+| Batch | Status | Services | What it proves |
+|---|---|---|---|
+| **A** | **Done 2026-08-05** (#81) | `littlelink` | The stateless path end-to-end on a public, no-Authelia route whose hostname (`www`) differs from the service name. `ical-proxy` was dropped from this batch on contact with the code. |
+| **B** | **Done 2026-08-05** (#83) | `cloudflare-ddns`, `speedtest` | Secrets as k8s Secrets, and **`seed-volume` is built and first exercised here** — against a 23M SQLite DB on `longhorn-nobackup`, where a botched copy costs nothing. |
+| **C** | **Done 2026-08-05** (#84) | `freshrss`, `healthchecks` | `seed-volume` against data that matters, on `longhorn`, with backup verified in B2. **B2 checkpoint here.** |
+| **R** | **Registry done 2026-08-05** (#86); builder deferred to D | `registry` + builder | Infrastructure, not a migration: `registry:2` plus an in-cluster build Job. Must land before D, which is the first batch needing a built image. |
+| **D** | Blocked — B2 checkpoint | `n8n` | Larger state, and the first built image — two of them, main and task runners. n8n's encrypted credentials survive the move. |
+| **E** | Blocked — B2 checkpoint | `karakeep`, `livesync` | Multi-container workload, and the highest-value data in the slice, moved last with every mechanic already proven. |
 
 One PR per batch.
+
+### Where it stands, 2026-08-05
+
+Six workloads in the cluster, each running alongside its Docker twin. **Nothing has cut over**
+— every service is still served to real clients by daniel-server, and the baseline is
+unchanged at 66 containers, 0 unhealthy, no reboot.
+
+| Service | Seeded | Route (at the VIP) | Monitor |
+|---|---|---|---|
+| `littlelink` | — | 200 (public, no Authelia) | `littlelink-k8s` |
+| `speedtest` | 43 files, identical digest | 302 | `speedtest-k8s` |
+| `cloudflare-ddns` | — | no route (headless) | shares the Docker twin's push token — see below |
+| `freshrss` | **730 files, identical digest** | 302 | `freshrss-k8s` |
+| `healthchecks` | 2 files, identical digest | 302 UI, 404 on `/ping/` | `healthchecks-k8s`, on `/ping/` |
+| `registry` | — | loopback only, refused on LAN | none — see below |
+
+Two services have no monitor of their own, both for the same structural reason: nothing on
+daniel-server can see inside the cluster.
+
+- **`cloudflare-ddns`** pushes its own heartbeat, and both copies push the *same* token to the
+  same monitor, so either one alone keeps it green. During coexistence that monitor means "at
+  least one copy is alive" and nothing more.
+- **`registry`** is bound to daniel-box's loopback and is unreachable from the monitoring host
+  by construction. Watching it needs a push cron on daniel-box, the shape
+  `longhorn-backup-health.sh` and `telemetry-health.sh` already use. Deferred deliberately: a
+  dead registry fails a deploy loudly, at the moment of the deploy, so it is not the silent
+  class of failure those crons exist to catch.
+
+### Still missing before any cutover can happen
+
+- **The strangler bridge is a decision, not code.** Decision 1 settles *how* cutover works;
+  no file-provider router has been written. Nothing can cut over until it exists.
+- **The builder.** Batch R shipped the registry alone. Nothing has been built or pushed, so
+  containerd's pull path through `registries.yaml` is configured but unproven.
+- **The B2 checkpoint.** Blocks D *and* E — E adds `karakeep`'s `./data` and `livesync`, so
+  both batches grow the backed-up set.
+
+### A property of the cluster node worth remembering
+
+daniel-box does not resolve through Pi-hole — its resolver is the ISP's, so it gets the public
+wildcard answer for any `*.local.<domain>` name and lands on daniel-server. This has now caused
+three separate confusions: services appearing to 404 when probed from the node, `cloudflare-ddns`
+being unable to reach `uptime-kuma.local.<domain>` from a pod (fixed with `hostAliases`), and the
+original wildcard-DNS finding behind decision 1. Anything on daniel-box or inside a pod that
+needs a homelab hostname must pin it explicitly. Slice 3 moves the monitoring stack, which is
+full of cross-service hostnames — expect this again there.
 
 ### 5. Image registry — in-cluster, decided 2026-08-05
 
