@@ -127,10 +127,10 @@ RESTART_WINDOW = _env("RESTART_WINDOW", "15m")
 RESTART_MAX = float(_env("RESTART_MAX", "3"))
 TRAEFIK_5XX_PCT = float(_env("TRAEFIK_5XX_PCT", "5"))
 TRAEFIK_MIN_RPS = float(_env("TRAEFIK_MIN_RPS", "0.05"))
-# p95 seconds per Traefik service before a route counts as slow. 3s is the point where a page
-# reads as broken rather than sluggish, and where clients start abandoning: on 2026-08-05
-# homepage served 2.4-9.5s and ten clients gave up (Traefik logged them as 499) while every
-# 5xx-based check stayed green, because slow-but-successful is still a 200.
+# p95 seconds per Traefik service before a route counts as slow. 3s is where a page reads as
+# broken rather than sluggish. p95 rather than max on purpose: a dashboard that polls widgets
+# several times a second will always have a slow tail, and alerting on the tail would page for
+# normal behaviour.
 TRAEFIK_P95_SECONDS = float(_env("TRAEFIK_P95_SECONDS", "3"))
 N8N_URL = _env("N8N_URL", "http://n8n:5678").rstrip("/")
 N8N_API_KEY = _env("N8N_API_KEY", "")
@@ -1143,10 +1143,13 @@ def check_traefik_latency():
     """Elevated p95 latency per Traefik service, naming each offender.
 
     The gap check_traefik_5xx cannot close: a slow route still answers 200, so an error-ratio
-    check stays green while the service is unusable. That is exactly what happened on
-    2026-08-05 — homepage served 2.4-9.5s, ten clients abandoned their requests, and nothing
-    alerted. Latency is also the leading indicator; the 499s it produces are the lagging one,
-    and alerting on those directly is noisy because a closed tab is a legitimate 499.
+    check stays green while a service is unusable. Nothing here watched latency at all before
+    this, so a backend could degrade indefinitely without any monitor noticing.
+
+    Latency rather than the 499s that slow routes produce: a 499 only means the client
+    disconnected first, which is also what happens every time someone closes a tab with
+    in-flight requests. On a polling dashboard that is constant and entirely normal, so a
+    499-based alert would page for ordinary browsing.
 
     Same shape as check_traefik_5xx deliberately: per-service so the alert names the offender,
     and behind the same TRAEFIK_MIN_RPS floor so one slow request on a near-idle route is not

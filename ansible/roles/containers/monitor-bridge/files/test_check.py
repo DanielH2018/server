@@ -357,15 +357,26 @@ def test_traefik_high_ratio_below_floor_is_ok(monkeypatch):
 
 
 def test_traefik_latency_names_slow_service(monkeypatch):
-    # The 2026-08-05 case: homepage served ~9.5s while every 5xx check stayed green,
-    # because a slow response is still a 200.
-    rps = [({"service": "homepage@docker"}, 1.0), ({"service": "sonarr@docker"}, 2.0)]
-    p95 = [({"service": "homepage@docker"}, 9.5), ({"service": "sonarr@docker"}, 0.3)]
+    # A degraded backend answering 200 slowly: invisible to every error-ratio check, which is
+    # the whole reason this one exists.
+    rps = [({"service": "slow@docker"}, 1.0), ({"service": "sonarr@docker"}, 2.0)]
+    p95 = [({"service": "slow@docker"}, 9.5), ({"service": "sonarr@docker"}, 0.3)]
     monkeypatch.setattr(check, "prom_vector", _seq(rps, p95))
     ok, msg = check.check_traefik_latency()
     assert not ok
-    assert "homepage@docker" in msg
+    assert "slow@docker" in msg
     assert "sonarr" not in msg
+
+
+def test_traefik_latency_tolerates_a_slow_tail(monkeypatch):
+    # p95, not max: a dashboard polling widgets several times a second always has a slow tail
+    # (homepage ran ~25 calls over 1.5s out of 2169 on 2026-08-05). p95 stays well under the
+    # threshold there, and alerting on the tail would page for entirely normal behaviour.
+    rps = [({"service": "homepage@docker"}, 3.6)]
+    p95 = [({"service": "homepage@docker"}, 0.4)]
+    monkeypatch.setattr(check, "prom_vector", _seq(rps, p95))
+    ok, _ = check.check_traefik_latency()
+    assert ok
 
 
 def test_traefik_latency_below_floor_is_ok(monkeypatch):

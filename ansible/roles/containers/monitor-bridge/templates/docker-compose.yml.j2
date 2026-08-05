@@ -418,8 +418,7 @@ services:
       {{ kuma('monitor-bridge-targets', monitor_type='push', name='Scrape Targets', interval=600, max_retries=0, push_token=monitor_bridge_targets_push_token) }}
       {{ kuma('monitor-bridge-traefik', monitor_type='push', name='Traefik 5xx', interval=600, max_retries=0, push_token=monitor_bridge_traefik_push_token) }}
       {# Latency, not errors: a slow route still answers 200, so the 5xx monitor above stays
-         green while a service is unusable. On 2026-08-05 homepage served 2.4-9.5s and ten
-         clients gave up, and nothing alerted. -#}
+         green while a service is unusable. Nothing watched latency at all before this. -#}
       {{ kuma('monitor-bridge-traefik-latency', monitor_type='push', name='Traefik Latency', interval=600, max_retries=0, push_token=monitor_bridge_traefik_latency_push_token) }}
       {{ kuma('monitor-bridge-n8n', monitor_type='push', name='n8n Prod Workflows', interval=600, max_retries=0, push_token=monitor_bridge_n8n_push_token) }}
       {# Arr Queue Warnings: check_arr_queue polls sonarr+radarr's own /queue for a
