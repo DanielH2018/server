@@ -48,6 +48,14 @@ containers_list:
     hostname: "grafana{{ k8s_hostname_suffix }}"
     port: 3000
     use_authelia: true
+  # Slice 2, batch A (docs/k3s-migration/slice-2-leaf-apps.md). The Docker twin serves `www`;
+  # this one answers on www-k8s until cutover. use_authelia mirrors the Docker entry and its
+  # reason: this is the public link-in-bio landing page, so a login gate would break it.
+  - name: littlelink
+    platform: k8s
+    hostname: "www{{ k8s_hostname_suffix }}"
+    port: 3000
+    use_authelia: false
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the
