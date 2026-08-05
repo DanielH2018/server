@@ -273,6 +273,16 @@ auth-skipping router on one exact path, so a 200 can only have come from the app
 LAN-only by enforcement rather than by comment: there is no public sibling, and the
 forward-auth test's exemption for probe routers is conditional on the test that asserts it.
 
+A service can also arrive with an unauthenticated path it needs to *keep*.
+`bridge_bypass_prefixes` reproduces one on the bridge: public, `PathPrefix`, no forward-auth,
+one router per hostname. healthchecks' `/ping/` is the case — every monitored cron posts to it
+without credentials, and two crons in `initial_setup` hardcode the public URL — and it was a
+Docker label on the container, so it died with the container rather than degrading. Unlike a
+probe path this is a deliberate hole in the edge, so each prefix must also be declared in
+`BRIDGE_BYPASS_PREFIXES` in the test with a written reason; inventory alone cannot open one.
+The trailing slash is part of the contract, since `PathPrefix('/ping')` would also match
+`/pingXYZ`.
+
 `littlelink` needs none of that, and is worth keeping in mind for it. Being public and
 un-gated, its ordinary bridge monitor already reaches the app, so it is the canary for the
 bridge mechanism itself — it goes red if the mechanism breaks, independently of whether the
@@ -284,9 +294,10 @@ send an SNI matching the Host it serves.
 
 ### Where it stands, 2026-08-05
 
-Six workloads in the cluster. **`cloudflare-ddns`, `speedtest`, `littlelink` and `freshrss`
-have cut over**; only `healthchecks` still runs alongside its Docker twin. daniel-server is
-down to 42 managed containers from 46.
+**Every routed service in the slice has cut over** — `cloudflare-ddns`, `speedtest`,
+`littlelink`, `freshrss` and `healthchecks`. daniel-server is down to 41 managed containers
+from 46, and none of the six workloads in the cluster has a Docker twin serving traffic any
+more. What remains of slice 2 is batches D and E, which are gated on the B2 checkpoint.
 
 `freshrss` needed no config change at all, which is worth recording because it was the one
 expected to: FreshRSS keeps its `base_url` in the seeded `config.php`, and that file was
@@ -299,7 +310,7 @@ it correct rather than requiring an edit.
 | `speedtest` | 43 files, identical digest | **cut over** — bridged | `speedtest-k8s`, `speedtest-bridge` |
 | `cloudflare-ddns` | — | no route (headless) | shares the Docker twin's push token — see below |
 | `freshrss` | **730 files, identical digest** | **cut over** — bridged | `freshrss-k8s`, `freshrss-bridge` |
-| `healthchecks` | 2 files, identical digest | 302 UI, 404 on `/ping/` | `healthchecks-k8s`, on `/ping/` |
+| `healthchecks` | 2 files, identical digest | **cut over** — bridged, `/ping/` bypassed | `healthchecks-k8s`, `healthchecks-bridge` |
 | `registry` | — | loopback only, refused on LAN | none — see below |
 
 Two services have no monitor of their own, both for the same structural reason: nothing on

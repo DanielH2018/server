@@ -128,6 +128,19 @@ services:
       {{ kuma('healthchecks-k8s', name='k3s healthchecks', monitor_type='http',
               url='https://healthchecks' ~ k8s_hostname_suffix ~ '.local.' ~ domain ~ '/ping/00000000-0000-0000-0000-000000000000',
               accepted_statuscodes=['404'], max_redirects=0) }}
+      # healthchecks' user-facing hostname. Its old monitor was `docker`-type, queried through
+      # the socket, so retiring the container took it away entirely rather than merely leaving
+      # it stale.
+      #
+      # Probed on the /ping/ bypass, which is the same route every monitored cron uses — so
+      # this watches the path that actually matters, end to end, with no forward-auth in the
+      # way. 404 is the healthy answer: Django returning "no such check" for an all-zero UUID
+      # proves the app ran. A 400 would mean ALLOWED_HOSTS no longer lists the bridged
+      # hostname, and a 302 would mean the bypass was lost and every cron is now being sent to
+      # a login page.
+      {{ kuma('healthchecks-bridge', name='healthchecks (via bridge)', monitor_type='http',
+              url='https://healthchecks.local.' ~ domain ~ '/ping/00000000-0000-0000-0000-000000000000',
+              accepted_statuscodes=['404'], max_redirects=0) }}
       # freshrss's user-facing hostname, probed on its bridge_probe_path for the same reason
       # speedtest is: on `/` the edge answers 302 before the bridge is consulted. /api/greader.php
       # returns the bare string `OK`, so a 200 here means PHP ran on the other side of the bridge.

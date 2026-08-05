@@ -323,19 +323,12 @@ containers_list:
       - media
       - monitoring
   # Organization: Miscellaneous (apps network)
-  - name: healthchecks
-    port: 8000
-    use_authelia: true
-    # `apps`, not `monitoring` (Security finding, 2026-07-02): docker-proxy sits on
-    # `proxy` + `monitoring` (env API, secrets in every container's Env). healthchecks is
-    # internet-reachable unauthed on its /ping/ path (Traefik bypass), so it shouldn't
-    # share a net with docker-proxy. All real pings to it are public HTTPS
-    # (healthchecks.<domain>/ping/<uuid>) via Traefik, never in-cluster by container name,
-    # and its Uptime-Kuma monitor is `docker`-type (queried via the docker socket, not the
-    # network) — so it needs no `monitoring` access. Traefik is also on `apps`, so routing
-    # is unaffected.
-    networks:
-      - apps
+  # healthchecks moved to k3s on 2026-08-05, the last of slice 2's routed services. Its
+  # /ping/ bypass moved with it: that was a Docker label on this container, so it died with
+  # the container and is reproduced by the bridge's bridge_bypass_prefixes. The note this
+  # replaces explained why it sat on `apps` rather than `monitoring` — it was
+  # internet-reachable unauthenticated on /ping/ and so must not share a net with
+  # docker-proxy. That reasoning now applies to the bypass routers instead.
   - name: bento-pdf
     port: 8080
     use_authelia: true
