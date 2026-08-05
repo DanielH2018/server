@@ -128,6 +128,18 @@ services:
       {{ kuma('healthchecks-k8s', name='k3s healthchecks', monitor_type='http',
               url='https://healthchecks' ~ k8s_hostname_suffix ~ '.local.' ~ domain ~ '/ping/00000000-0000-0000-0000-000000000000',
               accepted_statuscodes=['404'], max_redirects=0) }}
+      # cloudflare-ddns dead-man's-switches, moved here from the Docker role's compose when
+      # that copy was retired (slice 2, first cutover). AutoKuma derives monitors from the
+      # labels on a running container, so deleting the Docker copy deletes its monitors — and
+      # the k3s copy would have gone on pushing to an id that no longer existed, which looks
+      # exactly like everything being fine.
+      #
+      # Same ids and same tokens as the labels they replace: the k3s Deployment reads those
+      # tokens from SOPS, so changing them here would mean redeploying it for no reason. Only
+      # ONE source may define a given id at a time, which is why these land after the Docker
+      # container is gone rather than alongside it.
+      {{ kuma('cloudflare-ddns-proxied-push', name='Cloudflare DDNS Proxied', monitor_type='push', interval=300, max_retries=0, push_token=cloudflare_ddns_proxied_push_token) }}
+      {{ kuma('cloudflare-ddns-direct-push', name='Cloudflare DDNS Direct', monitor_type='push', interval=300, max_retries=0, push_token=cloudflare_ddns_direct_push_token) }}
       # k3s backup plane: the cluster's ONLY backup path, and until 2026-08-02 it had no monitor
       # at all — Longhorn's backup target went unavailable for 13h and nothing noticed. It
       # surfaced only because Kopia shares the same B2 account and tripped its own freshness
