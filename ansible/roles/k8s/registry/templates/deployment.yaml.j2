@@ -1,0 +1,77 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # Recreate, for two independent reasons that both bite here: the PVC is ReadWriteOnce, and
+  # the hostPort below is node-exclusive. A rolling update would leave the new pod Pending on
+  # a port the old pod still holds, and the rollout would sit there until it timed out.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: registry
+  template:
+    metadata:
+      labels:
+        app: registry
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        # The registry image runs as root by default and writes to /var/lib/registry. fsGroup
+        # gives the unprivileged user access to the Longhorn volume at mount time, so it does
+        # not need to chown a volume it does not own.
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: registry
+          image: {{ registry_k8s_image }}
+          ports:
+            - containerPort: {{ k8s_registry_port }}
+              # Loopback only. Without hostIP this binds 0.0.0.0 and an unauthenticated,
+              # plain-HTTP registry becomes writable by anything on the LAN.
+              hostIP: {{ k8s_registry_host_ip }}
+              hostPort: {{ k8s_registry_port }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
+              value: /var/lib/registry
+            # Without this a deleted tag leaves its blobs behind forever, and the volume only
+            # ever grows. n8n rebuilds on every image bump, so that is a steady leak.
+            - name: REGISTRY_STORAGE_DELETE_ENABLED
+              value: "true"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/registry
+          readinessProbe:
+            httpGet:
+              path: /v2/
+              port: {{ k8s_registry_port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v2/
+              port: {{ k8s_registry_port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "500m"
+              memory: 512Mi
+            requests:
+              cpu: "50m"
+              memory: 64Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ registry_k8s_claim }}

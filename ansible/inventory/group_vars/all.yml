@@ -79,6 +79,24 @@ k8s_observability_namespace: observability
 # missing Host rule — not merely the missing DNS record — is what keeps an unprotected
 # ingress from being one Cloudflare entry away.
 k8s_public_route: false
+# In-cluster image registry (slice 2, batch R). Two addresses for the same registry, and both
+# are needed because the two consumers sit on opposite sides of the pod boundary:
+#
+#   PUSH  — a builder pod reaches it over the Service, `registry.<namespace>.svc:<port>`.
+#           `localhost` inside a pod means that pod, not the node.
+#   PULL  — containerd reaches it at k8s_registry_pull_host, through a loopback hostPort.
+#           containerd is a host process with no route to a ClusterIP by name.
+#
+# Here rather than in the registry role's defaults because roles/setup/k3s also needs them, to
+# write the containerd trust config — a role cannot read another role's defaults.
+k8s_registry_port: 5000
+# Loopback for the same reason claude-otel's OTLP receiver is: this registry has no auth and
+# no TLS, so it must not be reachable from the LAN.
+k8s_registry_host_ip: 127.0.0.1
+# Image references in manifests are `{{ k8s_registry_pull_host }}/<name>:<tag>`, which only
+# resolves on a node running this registry. Correct while the cluster is one node; it breaks
+# when daniel-server joins at slice 7, which is when this needs TLS and a real hostname.
+k8s_registry_pull_host: "localhost:{{ k8s_registry_port }}"
 # The one host that pulls daniel-pi's wg-easy peer configs into its own Kopia backup
 # scope (see wg-easy CLAUDE.md) — daniel-pi itself is not parameterized here, it's the
 # one confirmed satellite with no sibling expected.
