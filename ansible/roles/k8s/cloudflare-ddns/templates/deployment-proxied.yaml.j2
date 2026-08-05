@@ -1,0 +1,60 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflare-ddns-proxied
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflare-ddns-proxied
+  template:
+    metadata:
+      labels:
+        app: cloudflare-ddns-proxied
+    spec:
+      enableServiceLinks: false
+      hostAliases:
+        - ip: "{{ cloudflare_ddns_k8s_kuma_ip }}"
+          hostnames:
+            - "{{ cloudflare_ddns_k8s_kuma_host }}"
+      containers:
+        - name: cloudflare-ddns
+          image: {{ cloudflare_ddns_k8s_image }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: CLOUDFLARE_API_TOKEN_FILE
+              value: /run/secrets/cf_dns_token
+            - name: DOMAINS
+              value: "{{ domain }}"
+            - name: PROXIED
+              value: "true"
+            - name: IP6_PROVIDER
+              value: none
+            # Dead-man's-switch: ping a Kuma push monitor after each successful update.
+            - name: UPTIMEKUMA
+              value: "https://{{ cloudflare_ddns_k8s_kuma_host }}/api/push/{{ cloudflare_ddns_proxied_push_token }}"
+          volumeMounts:
+            - name: token
+              mountPath: /run/secrets
+              readOnly: true
+          resources:
+            limits:
+              cpu: "{{ cloudflare_ddns_k8s_cpu_limit }}"
+              memory: {{ cloudflare_ddns_k8s_mem_limit }}
+            requests:
+              cpu: "{{ cloudflare_ddns_k8s_cpu_request }}"
+              memory: {{ cloudflare_ddns_k8s_mem_request }}
+      volumes:
+        - name: token
+          secret:
+            secretName: cloudflare-ddns
+            items:
+              - key: cf_dns_token
+                path: cf_dns_token

@@ -1,0 +1,19 @@
+---
+# Same image the Docker role runs — both copies stay on the same tag through coexistence so
+# a difference in behaviour between them is never the image.
+speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest
+# Mirrors resources('1.0', '512M', '0.10', '64M') in the compose template.
+speedtest_k8s_cpu_limit: "1"
+speedtest_k8s_mem_limit: 512Mi
+speedtest_k8s_cpu_request: "100m"
+speedtest_k8s_mem_request: 64Mi
+
+# Volume. `longhorn-nobackup` on purpose: /config holds a real database.sqlite (23M at
+# migration time), but it is observational speed-test history and the Laravel APP_KEY that
+# decrypts it lives in SOPS, so a rebuilt instance works. Backing it up would spend B2
+# Class C transactions — already near two thirds of the daily cap — on regenerable data.
+# Losing it loses history, not function. Change the class here if that trade stops holding.
+speedtest_k8s_claim: speedtest-config
+speedtest_k8s_storage_class: longhorn-nobackup
+speedtest_k8s_size: 1Gi
+speedtest_k8s_source_path: /home/ubuntu/server/containers/speedtest/config
