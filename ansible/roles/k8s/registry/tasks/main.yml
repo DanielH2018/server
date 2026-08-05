@@ -1,0 +1,10 @@
+---
+- name: Deploy the image registry to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: registry
+    manifests_files:
+      - pvc.yaml
+      - deployment.yaml
+      - service.yaml

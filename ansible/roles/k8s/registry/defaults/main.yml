@@ -1,0 +1,12 @@
+---
+registry_k8s_image: registry:3.0.0
+
+# The address vars (k8s_registry_port / _host_ip / _pull_host) live in group_vars/all.yml
+# because roles/setup/k3s needs them too, to write containerd's trust config.
+
+# longhorn-nobackup on purpose. Every image here is reproducible from a Dockerfile in this
+# repo, so backing them up would spend B2 Class C transactions — already ~60% of the daily cap
+# — on bytes a rebuild regenerates. Losing this volume costs a rebuild, not data.
+registry_k8s_claim: registry-data
+registry_k8s_storage_class: longhorn-nobackup
+registry_k8s_size: 10Gi

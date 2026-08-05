@@ -1,0 +1,17 @@
+---
+# Handlers run in the order they are DEFINED, not the order they are notified, so the wait
+# below is guaranteed to follow the restart regardless of how the notifying task lists them.
+- name: Restart k3s
+  # Restarting takes the API server away for a few seconds. Running pods survive it —
+  # containerd keeps them up — but anything talking to the API in that window gets a refusal,
+  # which is why this is notified rather than run unconditionally.
+  ansible.builtin.systemd_service:
+    name: k3s
+    state: restarted
+  become: true
+
+- name: Wait for the node to report Ready again
+  ansible.builtin.command:
+    cmd: k3s kubectl wait --for=condition=Ready node --all --timeout=300s
+  become: true
+  changed_when: false

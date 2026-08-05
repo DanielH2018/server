@@ -1,0 +1,16 @@
+# Managed by Ansible (roles/setup/k3s) — do not edit on the host.
+#
+# Tells containerd how to reach the in-cluster registry. Without this entry containerd tries
+# HTTPS against localhost:5000, gets a plain-HTTP response, and every pod referencing a
+# locally-built image sits in ImagePullBackOff with a TLS handshake error that reads like a
+# certificate problem rather than a scheme mismatch.
+#
+# Plain HTTP is acceptable ONLY because both ends are on this node: the registry publishes its
+# port on {{ k8s_registry_host_ip }} via hostPort, so the traffic never crosses a wire. That
+# stops being true when daniel-server joins the cluster at slice 7 — at that point this needs a
+# real certificate and the pull host stops being `localhost`, because a second node has no
+# registry on its own loopback.
+mirrors:
+  "{{ k8s_registry_pull_host }}":
+    endpoint:
+      - "http://{{ k8s_registry_pull_host }}"
