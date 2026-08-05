@@ -128,6 +128,18 @@ services:
       {{ kuma('healthchecks-k8s', name='k3s healthchecks', monitor_type='http',
               url='https://healthchecks' ~ k8s_hostname_suffix ~ '.local.' ~ domain ~ '/ping/00000000-0000-0000-0000-000000000000',
               accepted_statuscodes=['404'], max_redirects=0) }}
+      # speedtest's user-facing hostname, which AutoKuma stopped providing when the Docker copy
+      # was retired behind the strangler bridge. This watches the whole edge path a person
+      # actually uses: Docker Traefik -> bridge router -> cluster VIP.
+      #
+      # Be clear about what green means here — Authelia answers the 302 at the Docker edge,
+      # BEFORE the bridge is consulted, so this proves the route and the middleware, not that
+      # the cluster is reachable. speedtest-k8s above is what proves the backend, and a bridge
+      # that broke between them would surface as 502s on the speedtest-bridge-* Traefik
+      # service, which monitor-bridge's check_traefik_5xx already watches.
+      {{ kuma('speedtest-bridge', name='speedtest (via bridge)', monitor_type='http',
+              url='https://speedtest.local.' ~ domain,
+              accepted_statuscodes=['302'], max_redirects=0) }}
       # cloudflare-ddns dead-man's-switches, moved here from the Docker role's compose when
       # that copy was retired (slice 2, first cutover). AutoKuma derives monitors from the
       # labels on a running container, so deleting the Docker copy deletes its monitors — and

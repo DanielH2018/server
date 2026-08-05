@@ -79,6 +79,15 @@ k8s_observability_namespace: observability
 # missing Host rule — not merely the missing DNS record — is what keeps an unprotected
 # ingress from being one Cloudflare entry away.
 k8s_public_route: false
+# The Docker edge's address as the k8s cluster sees it on the wire — daniel-server. Slice 2
+# retires each Docker copy behind a strangler bridge rather than a DNS change, so its real
+# hostnames keep arriving at daniel-server and are forwarded here; the bridged IngressRoute
+# routes match on this address so that an un-Authelia'd route is reachable from the edge and
+# from nowhere else on the LAN. See ingressroute.yml.j2 for why ClientIP is sound here.
+#
+# A literal rather than hostvars['daniel-server'].server_ip: the k8s play runs against
+# daniel-box, and daniel-server is not necessarily in its play's hostvars.
+k8s_bridge_client_ip: 10.0.0.161
 # In-cluster image registry (slice 2, batch R). Two addresses for the same registry, and both
 # are needed because the two consumers sit on opposite sides of the pod boundary:
 #

@@ -235,16 +235,51 @@ trusted with data that would.
 
 One PR per batch.
 
+### The bridge, as built
+
+Decision 1 above is implemented. Setting `bridge_hostname` on a service's daniel-box inventory
+entry does two things, and the pair is what a cutover *is*:
+
+- the `ingressroute()` macro emits a **second route** on that service's IngressRoute, matching
+  the unsuffixed hostnames — the ones the Docker copy used to answer;
+- the traefik role's `config.yml.j2` reads that same inventory and emits a **file-provider
+  router per hostname** on daniel-server, forwarding to the VIP.
+
+Two things were settled by measurement rather than design, and both changed the shape:
+
+- **The bridged k8s route carries no forward-auth, and is guarded by `ClientIP` instead.**
+  Gating both ends means two portals and two cookies; worse, the k8s portal is
+  `auth-k8s.<domain>`, which has no public DNS record while `k8s_public_route` is false, so a
+  public visitor would be redirected somewhere that does not resolve. Authelia therefore stays
+  at the Docker edge. That leaves an un-gated route on the cluster, which `ClientIP` closes:
+  only daniel-server can reach it. The matcher is sound because Traefik implements it with
+  `ip.RemoteAddrStrategy` — the TCP peer, not `X-Forwarded-For`, which matters because
+  `lan_subnet` *is* a trusted forwarded-header source and an XFF-based matcher would have been
+  forgeable by exactly the hosts it keeps out.
+- **One router per hostname, not one router with an `||` rule.** The backend is HTTPS, and
+  Traefik answers 421 when the Host header disagrees with the SNI. Measured against the live
+  cluster: an apex `serverName` with a per-service Host 421s on both HTTP/2 *and* HTTP/1.1,
+  and so does an IP URL with no SNI at all. `serversTransport.serverName` holds one value, so
+  two hostnames need two routers.
+
+Bridged routes also use `rate-limit-bridge` rather than `rate-limit`: every request arrives
+from one peer by construction, so the default source criterion would meter all users of a
+bridged service into a single bucket.
+
+`ansible/tests/test_strangler_bridge.py` holds the parts that span both inventories — a
+bridged service must have no Docker container left, must have a k8s route behind it, and must
+send an SNI matching the Host it serves.
+
 ### Where it stands, 2026-08-05
 
-Six workloads in the cluster, each running alongside its Docker twin. **Nothing has cut over**
-— every service is still served to real clients by daniel-server, and the baseline is
-unchanged at 66 containers, 0 unhealthy, no reboot.
+Six workloads in the cluster. **`cloudflare-ddns` and `speedtest` have cut over**; the rest
+still run alongside their Docker twins, which serve all real traffic. daniel-server is down to
+44 managed containers from 46.
 
 | Service | Seeded | Route (at the VIP) | Monitor |
 |---|---|---|---|
 | `littlelink` | — | 200 (public, no Authelia) | `littlelink-k8s` |
-| `speedtest` | 43 files, identical digest | 302 | `speedtest-k8s` |
+| `speedtest` | 43 files, identical digest | **cut over** — bridged | `speedtest-k8s`, `speedtest-bridge` |
 | `cloudflare-ddns` | — | no route (headless) | shares the Docker twin's push token — see below |
 | `freshrss` | **730 files, identical digest** | 302 | `freshrss-k8s` |
 | `healthchecks` | 2 files, identical digest | 302 UI, 404 on `/ping/` | `healthchecks-k8s`, on `/ping/` |

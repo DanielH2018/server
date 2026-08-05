@@ -54,9 +54,16 @@ spec:
             # Follows the inventory hostname rather than being hardcoded to the public name:
             # while both copies run this one answers on the -k8s host, and Laravel builds
             # redirects and asset URLs from APP_URL. At cutover the inventory changes and
-            # this follows it.
+            # this follows it — which is what bridge_hostname does. Once the bridge is
+            # carrying the real hostnames, the -k8s URL is the wrong canonical: Laravel would
+            # hand a public visitor asset and redirect URLs on a LAN-only host that does not
+            # resolve for them. Bridged, this matches the Docker copy's APP_URL exactly.
             - name: APP_URL
+{% if container_item.bridge_hostname is defined %}
+              value: "https://{{ container_item.bridge_hostname }}.{{ domain }}"
+{% else %}
               value: "https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
+{% endif %}
             # Results are stored in UTC by design (APP_TIMEZONE stays default); this is
             # the UI-display timezone, which otherwise also defaults to Etc/UTC.
             - name: DISPLAY_TIMEZONE

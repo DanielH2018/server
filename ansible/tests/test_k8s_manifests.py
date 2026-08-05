@@ -10,6 +10,7 @@ either way) — hence a separate suite from scripts/validate_k8s_manifests.py.
 Run: uv run pytest ansible/tests/test_k8s_manifests.py
 """
 
+import re
 from pathlib import Path
 
 import yaml
@@ -305,7 +306,15 @@ def test_every_authed_service_carries_forward_auth_and_rate_limit():
                 # rate-limit is unconditional — it is the brute-force protection, and the
                 # login portal (use_authelia: false) is the route that needs it most. It
                 # applies to bypass routes too: skipping auth never means skipping this.
-                assert "rate-limit" in middlewares, name
+                assert any(m.startswith("rate-limit") for m in middlewares), name
+                # A strangler-bridge route carries no forward-auth on purpose — the Docker
+                # edge it is reachable from has already applied Authelia. Exempting it by
+                # metadata.name would exempt the service's normal route too, since both live
+                # in one document, so the exemption is the ClientIP clause itself. That makes
+                # the two conditions inseparable: drop the guard and this test starts
+                # demanding the auth back.
+                if "ClientIP(" in route["match"]:
+                    continue
                 if entry.get("use_authelia") and name not in AUTHELIA_BYPASS_ROUTES:
                     assert "authelia" in middlewares, name
 
@@ -319,6 +328,35 @@ def test_routes_stay_lan_only_while_the_k8s_edge_has_no_crowdsec():
         "k8s_public_route is only safe once the k8s Traefik runs the CrowdSec bouncer "
         "(slice 6) — flip both or neither"
     )
+
+
+def test_every_public_host_rule_is_reachable_only_from_the_docker_edge():
+    """The companion to the test above, for the hole the strangler bridge opens in it.
+
+    That test guards a variable; this one guards the rendered rules, which is where the
+    exposure actually lives. A bridged route matches the real public hostname while
+    k8s_public_route is still false, so the variable check stays green either way — and a
+    bridged route that lost its ClientIP clause would be an un-Authelia'd service answering
+    the public name to anything on the LAN that can spell `curl --resolve`.
+    """
+    domain = "example.com"
+    for entry in _k8s_entries():
+        route_tpl = K8S / entry["name"] / "templates" / "ingressroute.yaml.j2"
+        if not route_tpl.exists():
+            continue
+        rendered = _render(route_tpl, container_item=entry, domain=domain, **ALL_VARS)
+        for doc in (d for d in yaml.safe_load_all(rendered) if d):
+            for route in doc["spec"]["routes"]:
+                match = route["match"]
+                hosts = re.findall(r"Host\(`([^`]+)`\)", match)
+                public = [h for h in hosts if not h.endswith(f".local.{domain}")]
+                if not public or ALL_VARS["k8s_public_route"]:
+                    continue
+                assert "ClientIP(" in match, (
+                    f"{doc['metadata']['name']} matches {public} on the public domain with "
+                    "no ClientIP guard, so it is reachable from the whole LAN without "
+                    "passing the Docker edge's Authelia and CrowdSec"
+                )
 
 
 # --- 5. the read-only cluster identity really is read-only --------------------------------

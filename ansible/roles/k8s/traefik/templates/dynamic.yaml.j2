@@ -47,6 +47,30 @@ spec:
     period: 1m
 ---
 apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  # Same ceiling as rate-limit, keyed differently. A strangler-bridge route only ever sees one
+  # peer address — daniel-server — because that is what the bridge is, so the default
+  # source criterion (the remote address) would put every user of a bridged service into a
+  # single 300/min bucket and let one of them 429 the rest.
+  #
+  # depth: 1 takes the rightmost X-Forwarded-For entry, which is the real client: the Docker
+  # edge sets XFF and, for public traffic, trusts Cloudflare's rather than appending to it.
+  # Trusting XFF here is sound only because the bridged routes are ClientIP-guarded to the
+  # edge — nothing else can reach them to forge it. Do not reuse this middleware on a route
+  # that is directly reachable.
+  name: rate-limit-bridge
+  namespace: {{ k8s_namespace }}
+spec:
+  rateLimit:
+    average: 300
+    burst: 150
+    period: 1m
+    sourceCriterion:
+      ipStrategy:
+        depth: 1
+---
+apiVersion: traefik.io/v1alpha1
 kind: TLSOption
 metadata:
   # NOT `default`. That name is reserved: Traefik registers a TLSOption called `default` as

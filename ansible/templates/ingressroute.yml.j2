@@ -21,7 +21,7 @@
   Docker instance's. The Docker side repeats the same block on each hand-rolled file-provider
   router for the same reason.
 #}
-{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none) -%}
+{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, bridge_hostname=none) -%}
 {#
   namespace defaults to k8s_namespace — every slice-2 service wants that. It is overridable
   because the telemetry stack runs in its own namespace, and an IngressRoute must live
@@ -54,6 +54,40 @@ spec:
       services:
         - name: {{ name }}
           port: {{ port }}
+{% if bridge_hostname %}
+    # The strangler-bridge route (docs/k3s-migration/slice-2-leaf-apps.md, decision 1). Once
+    # the Docker copy is retired, its two real host rules keep resolving to daniel-server,
+    # which forwards them here. So this route answers the UNSUFFIXED names, unlike the one
+    # above.
+    #
+    # It deliberately carries NO authelia, and that is not an oversight. Both portals set
+    # their own cookie, so gating here as well would bounce the user to a second login — and
+    # for public traffic to `auth{{ k8s_hostname_suffix }}.{{ domain }}`, which has no DNS
+    # record and no route while k8s_public_route is false. The Docker edge is the only
+    # publicly reachable portal, so it is the one that authenticates; requests arrive here
+    # already through it, and through its CrowdSec bouncer.
+    #
+    # ClientIP is what makes that safe. Without it, any LAN host could curl the VIP with
+    # `Host: {{ bridge_hostname }}.{{ domain }}` and reach an un-Authelia'd route — a real
+    # bypass, since `--resolve` is all it takes. The matcher is not spoofable: Traefik
+    # implements ClientIP with ip.RemoteAddrStrategy (pkg/muxer/http/matcher.go), i.e. the TCP
+    # peer address, NOT X-Forwarded-For. That distinction is load-bearing here, because
+    # lan_subnet IS in the https entrypoint's forwardedHeaders.trustedIPs, so an XFF-based
+    # matcher would be forgeable by exactly the hosts this is keeping out. The address is
+    # preserved end-to-end because the Service runs externalTrafficPolicy: Local.
+    - kind: Rule
+      match: "(Host(`{{ bridge_hostname }}.{{ domain }}`) || Host(`{{ bridge_hostname }}.local.{{ domain }}`)) && ClientIP(`{{ k8s_bridge_client_ip }}/32`)"
+      middlewares:
+        # rate-limit-bridge, not rate-limit: every request on this route arrives from the same
+        # peer, so the default limiter would meter all users as one. See dynamic.yaml.j2.
+        - name: rate-limit-bridge
+{% for middleware in extra_middlewares %}
+        - name: {{ middleware }}
+{% endfor %}
+      services:
+        - name: {{ name }}
+          port: {{ port }}
+{% endif %}
   tls:
     certResolver: cloudflare
     # Explicit, and deliberately not named `default` — Traefik reserves that name for the
