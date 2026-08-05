@@ -266,19 +266,31 @@ Bridged routes also use `rate-limit-bridge` rather than `rate-limit`: every requ
 from one peer by construction, so the default source criterion would meter all users of a
 bridged service into a single bucket.
 
+A bridged service that sits behind Authelia has a monitoring problem the bridge creates: the
+edge answers 302 *before* consulting the bridge, so a monitor on `/` stays green whether or not
+daniel-server can still reach the cluster. `bridge_probe_path` closes it — a LAN-only,
+auth-skipping router on one exact path, so a 200 can only have come from the app. It is
+LAN-only by enforcement rather than by comment: there is no public sibling, and the
+forward-auth test's exemption for probe routers is conditional on the test that asserts it.
+
+`littlelink` needs none of that, and is worth keeping in mind for it. Being public and
+un-gated, its ordinary bridge monitor already reaches the app, so it is the canary for the
+bridge mechanism itself — it goes red if the mechanism breaks, independently of whether the
+gated services' probe paths are still right.
+
 `ansible/tests/test_strangler_bridge.py` holds the parts that span both inventories — a
 bridged service must have no Docker container left, must have a k8s route behind it, and must
 send an SNI matching the Host it serves.
 
 ### Where it stands, 2026-08-05
 
-Six workloads in the cluster. **`cloudflare-ddns` and `speedtest` have cut over**; the rest
-still run alongside their Docker twins, which serve all real traffic. daniel-server is down to
-44 managed containers from 46.
+Six workloads in the cluster. **`cloudflare-ddns`, `speedtest` and `littlelink` have cut
+over**; `freshrss` and `healthchecks` still run alongside their Docker twins, which serve all
+their real traffic. daniel-server is down to 43 managed containers from 46.
 
 | Service | Seeded | Route (at the VIP) | Monitor |
 |---|---|---|---|
-| `littlelink` | — | 200 (public, no Authelia) | `littlelink-k8s` |
+| `littlelink` | — | **cut over** — bridged, 200 (public, no Authelia) | `littlelink-k8s`, `littlelink-bridge` |
 | `speedtest` | 43 files, identical digest | **cut over** — bridged | `speedtest-k8s`, `speedtest-bridge` |
 | `cloudflare-ddns` | — | no route (headless) | shares the Docker twin's push token — see below |
 | `freshrss` | **730 files, identical digest** | 302 | `freshrss-k8s` |
