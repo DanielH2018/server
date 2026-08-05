@@ -343,14 +343,11 @@ containers_list:
     use_authelia: true
     networks:
       - apps
-  - name: littlelink
-    port: 3000
-    hostname: www
-    # Public by design: this is the public-facing link-in-bio landing page (www),
-    # so it must be reachable without Authelia.
-    use_authelia: false
-    networks:
-      - apps
+  # littlelink moved to k3s on 2026-08-05, behind the same strangler bridge as speedtest. It
+  # stays public and un-gated there — the reason the Docker entry carried use_authelia: false
+  # is unchanged by the platform: this is the public link-in-bio landing page (www), so a login
+  # gate would break it. Rolling back is re-adding this entry and removing bridge_hostname from
+  # daniel-box's.
   - name: livesync
     port: 5984
     # CouchDB enforces its own auth (require_valid_user = true in local.ini); the

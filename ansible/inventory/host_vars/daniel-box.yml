@@ -56,6 +56,11 @@ containers_list:
     hostname: "www{{ k8s_hostname_suffix }}"
     port: 3000
     use_authelia: false
+    # Cut over 2026-08-05. No bridge_probe_path, and that is not an omission: with no
+    # forward-auth in front of it, the ordinary littlelink-bridge monitor already reaches the
+    # app itself, so this is the one bridged service whose normal monitor is end-to-end. That
+    # makes it the canary for the bridge mechanism the gated services depend on.
+    bridge_hostname: www
   # Slice 2, batch B. First PVC seeded from daniel-server, and the first k8s Secret
   # (Laravel's APP_KEY) — deliberately on a service whose data is disposable, so the
   # seed-volume mechanic is proven where a botched copy costs nothing.

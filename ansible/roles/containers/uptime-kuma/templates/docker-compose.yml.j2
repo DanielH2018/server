@@ -128,6 +128,16 @@ services:
       {{ kuma('healthchecks-k8s', name='k3s healthchecks', monitor_type='http',
               url='https://healthchecks' ~ k8s_hostname_suffix ~ '.local.' ~ domain ~ '/ping/00000000-0000-0000-0000-000000000000',
               accepted_statuscodes=['404'], max_redirects=0) }}
+      # littlelink's user-facing hostname, after its Docker copy was retired behind the bridge.
+      #
+      # This is the bridge's canary, and the only monitor here that earns that on its own.
+      # littlelink is public with no forward-auth, so nothing intercepts the probe: a 200 comes
+      # from the app, having crossed the edge router, the bridge transport, the cluster's
+      # Traefik and the pod. Every gated service needs a dedicated bridge_probe_path to say as
+      # much; this one says it for free, so if the bridge mechanism itself breaks, this goes red
+      # whether or not the gated services' probe paths are still configured correctly.
+      {{ kuma('littlelink-bridge', name='littlelink (via bridge)', monitor_type='http',
+              url='https://www.local.' ~ domain) }}
       # speedtest's user-facing hostname, which AutoKuma stopped providing when the Docker copy
       # was retired behind the strangler bridge.
       #
