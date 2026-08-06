@@ -16,6 +16,26 @@ services:
       # private path — Homepage rejects any Host header not listed here.
       - HOMEPAGE_ALLOWED_HOSTS=homepage.{{ domain }},homepage.local.{{ domain }}
     restart: unless-stopped
+    # Widget calls to a MIGRATED service must go straight to the cluster, because the obvious
+    # path does not work: `<svc>.local.<domain>` resolves to daniel-server, and a container on
+    # daniel-server cannot reach daniel-server's own LAN address (measured 2026-08-06 —
+    # 10.0.0.161:443 times out from a container while 10.0.0.240:443 connects). Every widget for
+    # a cut-over service was failing with ETIMEDOUT; homepage's own log named freshrss outright.
+    #
+    # This grants NO new access. Any container here can already dial the VIP with any Host header
+    # it likes, so the cluster's bridge route was always reachable from daniel-server — that route
+    # carries no Authelia BY DESIGN and is guarded by ClientIP(10.0.0.161/32), which this traffic
+    # satisfies because Docker SNATs it to the host's LAN address on the way out. All this does is
+    # fix the name resolution; the trust boundary is unchanged, and it is the boundary the bridge
+    # was built with.
+    #
+    # Generated from the same inventory the bridge routers are generated from, so a service
+    # migrating in slice 3+ needs no edit here — the alternative was three hand-maintained lines
+    # that silently go stale, which is how these widgets broke in the first place.
+    extra_hosts:
+{% for svc in hostvars['daniel-box'].containers_list | default([]) | selectattr('bridge_hostname', 'defined') | list %}
+      - "{{ svc.bridge_hostname }}.local.{{ domain }}:{{ k3s_metallb_ingress_vip }}"
+{% endfor %}
     cap_drop:
       - ALL
     cap_add:
