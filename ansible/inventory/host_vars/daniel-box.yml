@@ -194,6 +194,8 @@ containers_list:
     # karakeep has always run under the shared 300/min `rate-limit`, and rate-limit-bridge is
     # the same 300/150/1m keyed the same way, so the double-metering the macro guards against
     # meters it at the ceiling it already lives under.
+    bridge_bypass_prefixes:
+      - /api/
   # Slice 2, batch R. No hostname/port and no Traefik route on purpose: this is an
   # unauthenticated plain-HTTP registry, reachable only on the node's loopback via hostPort
   # and in-cluster via its Service. Giving it an ingress would put push access on the LAN.

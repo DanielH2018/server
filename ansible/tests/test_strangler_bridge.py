@@ -323,6 +323,27 @@ def test_a_bypass_prefix_is_declared_with_a_reason():
             )
 
 
+def test_every_declared_bypass_is_actually_configured():
+    """The reverse of the test above, and the direction that fails silently. Writing the
+    allow-list entry and the inventory comment while forgetting the inventory KEY leaves the
+    bypass ungenerated: every request falls through to the Authelia-gated router, and the only
+    symptom is a 302 where the caller expected its own auth. karakeep's /api/ shipped that way
+    — the declaration read as done, and nothing pointed at the missing four lines."""
+    declared = {
+        (svc["name"], prefix)
+        for svc in _bridged()
+        for prefix in svc.get("bridge_bypass_prefixes", [])
+    }
+
+    missing = set(BRIDGE_BYPASS_PREFIXES) - declared
+
+    assert not missing, (
+        f"{sorted(missing)} are declared in BRIDGE_BYPASS_PREFIXES but no bridged service asks "
+        "for them. Either the service's bridge_bypass_prefixes is missing the entry, or the "
+        "allow-list is carrying a hole nothing opens any more — remove it."
+    )
+
+
 def test_a_bypass_prefix_anchors_to_a_path_segment():
     """PathPrefix(`/ping`) also matches /pingXYZ, so the trailing slash is what keeps the hole
     the size it is meant to be. Carried across from the Docker label this replaces, where the
