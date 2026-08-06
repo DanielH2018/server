@@ -5,6 +5,12 @@ Claude Code runs on the **host**, not in a container, and exports to `127.0.0.1:
 a `hostPort` bound to loopback, so the collector never becomes LAN-reachable. See
 `defaults/main.yml` for why that IP is not a MetalLB VIP.
 
+Loki, Prometheus and Tempo carry the same treatment on 3100/9090/3200 (added
+2026-08-05) so `otelq` — also a host process, and one that hardcodes 127.0.0.1 — can
+read them. Their Services stay ClusterIP; the `hostIP` pin is what keeps the node-side
+listener off the LAN. Tempo's second port (otlp-grpc 4317) has no `hostPort` on purpose:
+the collector owns 4317, and two hostPorts on one number wedge a pod in `Pending`.
+
 ## The trap: an idle stack is indistinguishable from a broken one
 
 Verified 2026-08-05. The stack ran 47h with every pod Ready, zero export failures, and the
@@ -18,10 +24,18 @@ Nothing was wrong. Two behaviours combine to produce that appearance:
    configures its own SDK rather than exporting that block, so a correctly-configured
    session showed just one OTEL var there
    (`OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta`, itself contradicting the
-   `cumulative` in settings). Compare process start time against the settings mtime instead.
+   `cumulative` in settings). Compare process start time against the settings mtime
+   instead — and against the collector's own start time
+   (`kubectl -n observability get pod -l app=otel-collector -o jsonpath='{.items[0].status.startTime}'`),
+   since a session that began after the config landed but before the collector was up
+   also exports nothing for its whole life. The 08-02 18:41 session above predated both.
 2. **An idle session emits only `claude_code.session.count`.** It is a cumulative counter
    re-sent every `OTEL_METRIC_EXPORT_INTERVAL`, so `otelcol_receiver_accepted_metric_points`
    climbs steadily and the pipeline looks busy while carrying nothing of substance.
+
+3. **A restarted session's events arrive under a new `session_id`.** `claude --resume`
+   mints a fresh id even without `--fork-session`, so a query pinned to the old id reads
+   as dead while the session is exporting normally.
 
 So: **do not diagnose this stack from counters alone.** Rising metric points prove the
 transport works, not that anything useful is flowing. `telemetry-health.sh` deliberately
@@ -37,7 +51,18 @@ claude -p "Run the bash command: echo otel-probe-marker. Then reply with only th
   --allowedTools Bash --model claude-haiku-4-5-20251001
 ```
 
-Then read the three backends. ClusterIPs change on recreate, so resolve them first:
+Then read the three backends. They are published on the node's loopback, so `otelq`
+reaches them with no plumbing:
+
+```bash
+otelq ready                       # expect 200 from loki, prometheus and tempo
+otelq labels --name service_name  # expect claude-code
+otelq logs '{service_name="claude-code"}' --stream --since 1h --limit 5
+otelq metric 'group by (__name__) ({__name__=~"claude.*"})' --rows
+```
+
+`otelq` ships with the workstation dotfiles, not with this role, so on a host without it
+fall back to curling the ClusterIPs — resolve them first, they change on recreate:
 
 ```bash
 kubectl -n observability get svc -o custom-columns=NAME:.metadata.name,IP:.spec.clusterIP

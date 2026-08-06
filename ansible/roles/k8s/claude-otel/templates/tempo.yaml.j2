@@ -85,6 +85,10 @@ spec:
           ports:
             - name: http
               containerPort: 3200
+              # On the node's loopback so otelq can reach it; see
+              # claude_otel_query_host_ip in defaults/main.yml.
+              hostPort: 3200
+              hostIP: {{ claude_otel_query_host_ip }}
             - name: otlp-grpc
               containerPort: 4317
           volumeMounts:

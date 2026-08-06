@@ -41,8 +41,9 @@ containers_list:
   # whose Service the forward-auth Middleware points at.
   #
   # `hostname`/`port` describe Grafana specifically — the only routed workload here. The
-  # collector is reached on the node's loopback via hostPort, not through the ingress, and
-  # Loki/Prometheus have no route at all.
+  # collector, Loki, Prometheus and Tempo are all reached on the node's loopback via
+  # hostPort rather than the ingress — the three query backends so that `otelq`, which
+  # hardcodes 127.0.0.1, can read them from the host. None of them has an ingress route.
   - name: claude-otel
     platform: k8s
     hostname: "grafana{{ k8s_hostname_suffix }}"
