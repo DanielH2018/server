@@ -1,0 +1,26 @@
+---
+# The build context, as a ConfigMap.
+#
+# This is the whole answer to "how does the build context reach daniel-box", and it is small
+# because the contexts are small: n8n's Dockerfile has no COPY at all, and the runners'
+# Dockerfile copies exactly one 914-byte file. A git-clone initContainer — the option that looks
+# rigorous — would fetch a whole repository to reach two files Ansible already holds rendered,
+# and would make the clone a SECOND source of truth for a file this play templates. A hostPath
+# would couple the build to whatever happens to be checked out on the node.
+#
+# Rendering here also means the context is templated exactly like the compose build's context
+# is: same variables, same secrets, one definition. The 1 MiB ConfigMap ceiling is not close.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: build-context-{{ image_builder_name }}
+  namespace: {{ k8s_namespace }}
+data:
+  # `Dockerfile` is the literal name buildctl looks for under --local dockerfile=…, so this key
+  # is not free to rename.
+  Dockerfile: |
+{{ lookup('template', image_builder_dockerfile) | indent(4, true) }}
+{% for src, dest in image_builder_context.items() %}
+  {{ dest }}: |
+{{ lookup('template', src) | indent(4, true) }}
+{% endfor %}

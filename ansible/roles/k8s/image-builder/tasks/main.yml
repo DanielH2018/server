@@ -1,0 +1,138 @@
+---
+# Build one image inside the cluster and push it to the in-cluster registry.
+#
+# Written generically because three services in this fleet are built rather than pulled (n8n,
+# n8n-runners, and metabase/code-server behind them), and because the alternative — a build
+# block inside each service's role — would copy the securityContext reasoning into every one of
+# them, where it would drift.
+#
+# Callers set image_builder_name / _dockerfile / _context / _tag; see defaults/main.yml.
+
+- name: Assert the builder was given something to build
+  tags: [config]
+  ansible.builtin.assert:
+    that:
+      - image_builder_name is defined
+      - image_builder_dockerfile is defined
+    fail_msg: >-
+      k8s/image-builder needs image_builder_name and image_builder_dockerfile. Without them it
+      would render a Job that builds nothing and reports success.
+
+- name: Create the build manifest directory for {{ image_builder_name }}
+  tags: [config]
+  ansible.builtin.file:
+    path: "/etc/rancher/k3s/manifests/build-{{ image_builder_name }}"
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+
+- name: Render the build context and job for {{ image_builder_name }}
+  tags: [config]
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/rancher/k3s/manifests/build-{{ image_builder_name }}/{{ item }}"
+    # 0600 and no_log because a build context is templated with the same variables everything
+    # else here is, so it CAN carry a secret even though neither of n8n's two files does today.
+    # Treated like a rendered Secret manifest rather than the 0644 a plain manifest gets, so the
+    # first context that does carry one is already handled.
+    mode: "0600"
+    owner: root
+    group: root
+  loop:
+    - context-configmap.yaml
+    - build-job.yaml
+  become: true
+  no_log: true
+
+- name: Apply the build context for {{ image_builder_name }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      /etc/rancher/k3s/manifests/build-{{ image_builder_name }}/context-configmap.yaml
+  become: true
+  changed_when: true
+
+# A Job's pod template is immutable, so an existing Job cannot be re-applied — and re-applying
+# a COMPLETED one would report success from the previous run's result, which is the failure
+# this whole role exists to make impossible.
+- name: Clear the previous build of {{ image_builder_name }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete job build-{{ image_builder_name }}
+      --ignore-not-found
+  become: true
+  changed_when: true
+
+- name: Build and push {{ image_builder_name }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      /etc/rancher/k3s/manifests/build-{{ image_builder_name }}/build-job.yaml
+  become: true
+  changed_when: true
+
+# --for=condition=complete alone hangs until the deadline when a build FAILS, because a failed
+# Job never gets that condition. Waiting on either resolves immediately in both directions; the
+# assert below is what turns "finished" into "succeeded".
+- name: Wait for the build to finish for {{ image_builder_name }}
+  tags: [deploy]
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail &&
+      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
+      job/build-{{ image_builder_name }} --timeout={{ image_builder_timeout }}s ||
+      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=failed
+      job/build-{{ image_builder_name }} --timeout=10s
+    executable: /bin/bash
+  become: true
+  changed_when: false
+
+- name: Read the build result for {{ image_builder_name }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get job build-{{ image_builder_name }}
+      -o jsonpath={.status.succeeded}
+  register: image_builder_result
+  become: true
+  changed_when: false
+
+# The build log is the only place a Dockerfile error is explained, and the pod is garbage
+# collected with the Job on the next run — so it is pulled out here rather than left for an
+# operator to find after it is gone.
+- name: Show the failed build log for {{ image_builder_name }}
+  tags: [deploy]
+  when: image_builder_result.stdout | trim != "1"
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} logs job/build-{{ image_builder_name }} --tail=50
+  register: image_builder_log
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Fail on an unsuccessful build of {{ image_builder_name }}
+  tags: [deploy]
+  when: image_builder_result.stdout | trim != "1"
+  ansible.builtin.fail:
+    msg: >-
+      Building {{ image_builder_name }}:{{ image_builder_tag }} failed. Last lines of the build
+      log:
+      {{ image_builder_log.stdout | default('(no log — the pod never started; check the Job events)') }}
+
+# The build reporting success proves buildkit exited 0, not that the image is retrievable under
+# the name a manifest will reference. Those differ whenever the push half is misconfigured, so
+# the registry is asked directly.
+- name: Confirm the registry now serves the built tag for {{ image_builder_name }}
+  tags: [deploy]
+  ansible.builtin.uri:
+    url: "http://{{ k8s_registry_host_ip }}:{{ k8s_registry_port }}/v2/{{ image_builder_name }}/tags/list"
+    return_content: true
+  register: image_builder_tags
+  failed_when: image_builder_tag not in (image_builder_tags.json.tags | default([]))
+  changed_when: false
