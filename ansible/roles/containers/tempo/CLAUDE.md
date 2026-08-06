@@ -57,7 +57,9 @@ changes only apply to **new** Claude Code sessions.
   binary (no shell), same as loki and otel-collector, so the `kuma()` label points an HTTP
   monitor at `http://tempo:3200/ready`. `/ready` 503s for a few seconds after a restart while
   the ingester warms up — brief PENDING in Kuma after a deploy is normal.
-- **Retention is 30d** (`block_retention: 720h`), deliberately shorter than the metrics side:
+- **Retention is configured at 30d** (`block_retention: 720h`) — parsed and accepted by the
+  pinned binary, but not yet observed enforcing (that takes 30 days). Deliberately shorter
+  than the metrics side:
   spans are per-turn and far bulkier than counters, and trace debugging is retrospective by
   days. `max_block_duration: 5m` (vs the 30m default) makes a span queryable minutes after the
   turn that produced it, which is the difference between this being usable mid-session or not.
