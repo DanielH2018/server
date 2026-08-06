@@ -18,6 +18,11 @@ cached_ics = {"1": "", "2": "", "4": ""}
 # closing quote of the malformed ALTREP the obsidian-ical-plugin puts in LOCATION.
 OBSIDIAN_URI_RE = re.compile(r'obsidian://[^\s"]+')
 
+# Home Page time-block tags (#tod/morning, …). They drive Obsidian's own Tasks queries
+# and are noise in a calendar row. The leading \s* keeps a mid-summary tag from leaving
+# a double space behind.
+TOD_TAG_RE = re.compile(r"\s*#tod/\S+")
+
 
 def parse_vevent_blocks(ics_text):
     """Split ICS into header, list of VEVENT strings, and footer."""
@@ -176,12 +181,23 @@ def process_obsidian_ics(raw_ics):
     churns. Hoist the obsidian:// link into a real URL property (Homepage then wraps
     the row in an <a href>), replace the UID with a stable hash (see stable_uid), and
     remove LOCATION so hover shows the task title instead.
+
+    Time-block tags come off the SUMMARY first, before the UID is hashed: stable_uid
+    derives from the summary, so retagging a task would otherwise mint a new UID and
+    leave the old row behind as a duplicate.
     """
 
     def rewrite_todo(match):
         block = match.group(0)
         source = get_prop(block, "DESCRIPTION") or get_prop(block, "LOCATION") or ""
         link = OBSIDIAN_URI_RE.search(source)
+        block = re.sub(
+            r"^SUMMARY:[^\r\n]*",
+            lambda m: TOD_TAG_RE.sub("", m.group(0)),
+            block,
+            count=1,
+            flags=re.MULTILINE,
+        )
         block = re.sub(
             r"^UID:[^\r\n]*",
             f"UID:{stable_uid(block)}",
