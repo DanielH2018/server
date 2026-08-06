@@ -26,13 +26,15 @@ source /usr/local/lib/kopia-lib.sh
 
 # Stateful services worth proving restorable, each paired with a service-SPECIFIC state
 # file that must reappear after restore. All verified present in the snapshot.
-SVCS=(authelia traefik n8n karakeep freshrss grafana pihole home-assistant zigbee2mqtt wg-easy sonarr jellyfin)
+# freshrss dropped 2026-08-06 — it cut over to k3s on 08-05, so this drill would have restored a
+# frozen directory and passed, proving nothing about the live data (now a Longhorn PVC, covered by
+# longhorn-backup-health.sh's per-volume check). Drop a service here when it migrates.
+SVCS=(authelia traefik n8n karakeep grafana pihole home-assistant zigbee2mqtt wg-easy sonarr jellyfin)
 declare -A SENTINEL=(
   [authelia]=config/configuration.yml
   [traefik]=data/acme.json
   [n8n]=data/config
   [karakeep]=data/db.db
-  [freshrss]=config/www/freshrss/data/config.php
   [grafana]=data/grafana.db
   [pihole]=data/etc-pihole/pihole.toml
   # jellyfin's primary DB (users / watch history / API keys / library defs) — kept in Kopia

@@ -98,7 +98,13 @@ _DEFAULT_BACKUP_SENTINELS = [
     "traefik/data/acme.json",
     "n8n/data/config",
     "karakeep/data/db.db",
-    "freshrss/config/www/freshrss/data/config.php",
+    # freshrss was removed 2026-08-06, on its cutover to k3s (2026-08-05). The directory is
+    # still on disk and Kopia still backs it up, which is exactly the problem: it stopped
+    # receiving writes when the container was retired, so the sentinel kept resolving and this
+    # check kept reporting green for a frozen copy while the live data moved to a Longhorn PVC.
+    # False assurance, not a false alarm. Per-volume coverage for the migrated services is
+    # asserted cluster-side instead, by longhorn-backup-health.sh (k3s role) — a service must
+    # be verified in exactly one plane, and after a cutover that plane is Longhorn's.
     "grafana/data/grafana.db",
     "pihole/data/etc-pihole/pihole.toml",
     "jellyfin/config/data/data/jellyfin.db",

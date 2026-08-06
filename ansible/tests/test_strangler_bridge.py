@@ -351,3 +351,74 @@ def test_a_lan_prefix_is_declared_and_never_public():
             f"{name} matches {host}, which resolves publicly — this route has no forward-auth"
         )
         assert "authelia" not in router["middlewares"], name
+
+
+# --- Backup verification must follow the service across the migration --------------------
+#
+# A migrated service's data leaves daniel-server's disk, but the directory it left behind does
+# not: Kopia keeps backing up a frozen copy, so any check asserting on that path keeps passing.
+# freshrss sat in both Docker-side lists for a day after its 2026-08-05 cutover, reporting green
+# for data that had stopped changing. That is worse than an outright gap, because it looks like
+# coverage. Second occurrence of the same class as the homepage-widget regression — check what
+# depends on a service, not just what it depends on — so it is a test rather than another note.
+
+MONITOR_BRIDGE_CHECK = (
+    ANSIBLE / "roles" / "containers" / "monitor-bridge" / "files" / "check.py"
+)
+RESTORE_DRILL = (
+    ANSIBLE / "roles" / "containers" / "kopia" / "files" / "restore-drill.sh"
+)
+
+
+def _migrated_service_names() -> set[str]:
+    """Services that RETIRED from daniel-server, not merely ones that also exist in the cluster.
+
+    The difference is the whole test. `traefik` and `authelia` run in both places during
+    coexistence — daniel-server's Docker copies are still the public edge and still gate the
+    bridged services — so their Kopia sentinels point at files that very much still change.
+    Only a service absent from daniel-server's containers_list has left a frozen directory
+    behind, and only then does a Docker-side backup assertion become a lie.
+    """
+    in_cluster = {
+        c["name"] for c in _containers("daniel-box") if c.get("platform") == "k8s"
+    }
+    still_on_server = {c["name"] for c in _containers("daniel-server")}
+    return in_cluster - still_on_server
+
+
+def _kopia_sentinel_services() -> set[str]:
+    import re
+
+    block = re.search(
+        r"_DEFAULT_BACKUP_SENTINELS = \[(.*?)\n\]",
+        MONITOR_BRIDGE_CHECK.read_text(),
+        re.S,
+    )
+    assert block, "could not find _DEFAULT_BACKUP_SENTINELS — regex drift?"
+    return {m.group(1) for m in re.finditer(r'"([^"/]+)/', block.group(1))}
+
+
+def _restore_drill_services() -> set[str]:
+    import re
+
+    block = re.search(r"^SVCS=\((.*?)\)", RESTORE_DRILL.read_text(), re.M | re.S)
+    assert block, "could not find the SVCS array — regex drift?"
+    return set(block.group(1).split())
+
+
+@pytest.mark.parametrize(
+    "reader",
+    [_kopia_sentinel_services, _restore_drill_services],
+    ids=["monitor-bridge-sentinels", "kopia-restore-drill"],
+)
+def test_a_migrated_service_is_not_still_verified_on_the_docker_side(reader):
+    """Once a service runs in k3s, its data is a Longhorn PVC and Longhorn's per-volume check
+    owns proving it restorable. Leaving it in a Kopia-side list means that list is asserting on
+    an abandoned directory — it passes forever, and it passes for the wrong reason."""
+    stale = _migrated_service_names() & reader()
+
+    assert not stale, (
+        f"{', '.join(sorted(stale))} migrated to k3s but is still verified against "
+        "containers/ on daniel-server, where the data no longer changes. Drop it from that "
+        "list — longhorn-backup-health.sh asserts per-volume freshness cluster-side."
+    )
