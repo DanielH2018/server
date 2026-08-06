@@ -1,3 +1,10 @@
+{#
+  Which services have been cut over to k3s. Defined up here rather than beside the generated
+  bridge block below because the hand-written livesync routers need it too, and Jinja evaluates
+  top-to-bottom.
+#}
+{% set bridged = hostvars['daniel-box'].containers_list | default([]) | selectattr('bridge_hostname', 'defined') | list %}
+{% set bridged_names = bridged | map(attribute='name') | list %}
 http:
  #region routers
   routers:
@@ -15,21 +22,35 @@ http:
         - authelia
       tls: {}
 
-    livesync:
-      # Obsidian LiveSync sync API — defined HERE (traefik file provider, mode 0600, so only
-      # the traefik process reads it) instead of as a Docker label on the couchdb container,
-      # so the secret X-Sync-Token stays OUT of container metadata. Any container on the shared
-      # `apps` network can read every container's labels via the docker-proxy (CONTAINERS=1),
-      # which would have leaked the token from the old label form. A request must carry the
-      # matching token or it matches NO router for the host and 404s before reaching CouchDB;
-      # CouchDB's own require_valid_user is the second layer (defence in depth). The couchdb
-      # service is referenced cross-provider (livesync@docker) — the role still publishes it via
-      # its one remaining service label. Default (rule-length) priority is preserved from the old
-      # label, so the priority=200 livesync-utils router still wins for /_utils.
+{#
+  Obsidian LiveSync, bridged to k3s on 2026-08-06. Both routers are defined HERE (traefik file
+  provider, mode 0600, so only the traefik process reads it) rather than as Docker labels, so the
+  secret X-Sync-Token stays OUT of container metadata: any container on the shared `apps` network
+  can read every container's labels via the docker-proxy (CONTAINERS=1). That reason is why the
+  token does not follow the service into the cluster either — a k8s Secret is base64 and readable
+  by anything with namespace API access, so the gate stays at this edge and the cluster-side route
+  is guarded by ClientIP instead.
+
+  A request without the matching token matches NO router for the host and 404s before reaching
+  CouchDB; CouchDB's own require_valid_user is the second layer.
+
+  ONE ROUTER PER HOSTNAME, where both of these used to be a single `||` rule. The backend is now
+  HTTPS to the cluster VIP, and serversTransport.serverName is a single value, so a rule spanning
+  two hosts 421s on whichever host disagrees with the SNI. Same reason the generated bridge
+  routers split — see the bridge block below.
+
+  livesync-utils was a Docker label until this cutover, so it would have disappeared with the
+  container. priority 200 keeps /_utils winning over the token-gated router for a request that
+  carries both a valid token and that path. PathPrefix(`/_utils/`) segment-anchors it, and
+  Path(`/_utils`) keeps the bare browser entry working (CouchDB 301s it to /_utils/).
+#}
+{% if 'livesync' in bridged_names %}
+{% for key, host in [('public', 'livesync.' ~ domain), ('local', 'livesync.local.' ~ domain)] %}
+    livesync-sync-{{ key }}:
       entryPoints:
         - https
-      rule: "(Host(`livesync.{{ domain }}`) || Host(`livesync.local.{{ domain }}`)) && Header(`X-Sync-Token`, `{{ livesync_sync_token }}`)"
-      service: livesync@docker
+      rule: "Host(`{{ host }}`) && Header(`X-Sync-Token`, `{{ livesync_sync_token }}`)"
+      service: livesync-bridge-{{ key }}
       middlewares:
         - rate-limit-livesync
       tls:
@@ -39,6 +60,25 @@ http:
             sans:
               - "*.{{ domain }}"
               - "*.local.{{ domain }}"
+
+    livesync-utils-{{ key }}:
+      entryPoints:
+        - https
+      rule: "Host(`{{ host }}`) && (PathPrefix(`/_utils/`) || Path(`/_utils`))"
+      service: livesync-bridge-{{ key }}
+      middlewares:
+        - rate-limit
+        - authelia
+      priority: 200
+      tls:
+        certResolver: cloudflare
+        domains:
+          - main: "{{ domain }}"
+            sans:
+              - "*.{{ domain }}"
+              - "*.local.{{ domain }}"
+{% endfor %}
+{% endif %}
 
     homelab-mcp:
       # Read-only homelab MCP server (roles/containers/homelab-mcp). LAN-ONLY: matches only
@@ -121,8 +161,19 @@ http:
   — an apex serverName with a per-service Host 421s on both h2 and http/1.1, while SNI matching
   the Host returns the app. So each hostname gets its own router, service and transport.
 #}
-{% set bridged = hostvars['daniel-box'].containers_list | default([]) | selectattr('bridge_hostname', 'defined') | list %}
 {% for svc in bridged %}
+{#
+  bridge_custom_routers suppresses the generic Host router below, and ONLY that — the service and
+  serversTransport are still generated, because the point is to hand-write routers that reference
+  them. It exists for a service whose edge routing is not "everything on this host, optionally
+  behind Authelia": livesync gates its sync API on a secret header and carves /_utils out behind
+  Authelia at a higher priority, so an unconditional Host router would forward straight past the
+  token check. See the hand-written livesync routers above.
+
+  A bridge that sets this and then has no router pointing at it is silently unreachable, so
+  test_strangler_bridge.py requires at least one.
+#}
+{% if not svc.bridge_custom_routers | default(false) %}
 {% for key, host in [('public', svc.bridge_hostname ~ '.' ~ domain), ('local', svc.bridge_hostname ~ '.local.' ~ domain)] %}
     {{ svc.name }}-bridge-{{ key }}:
       entryPoints:
@@ -147,6 +198,7 @@ http:
               - "*.{{ domain }}"
               - "*.local.{{ domain }}"
 {% endfor %}
+{% endif %}
 {% for prefix in svc.bridge_bypass_prefixes | default([]) %}
 {% set slug = prefix | trim('/') | replace('/', '-') %}
 {% for key, host in [('public', svc.bridge_hostname ~ '.' ~ domain), ('local', svc.bridge_hostname ~ '.local.' ~ domain)] %}

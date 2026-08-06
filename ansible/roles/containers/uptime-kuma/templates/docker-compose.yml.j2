@@ -156,6 +156,18 @@ services:
       {{ kuma('freshrss-bridge', name='FreshRSS (via bridge)', monitor_type='http',
               url='https://freshrss.local.' ~ domain ~ freshrss_k8s.bridge_probe_path,
               max_redirects=0) }}
+      # livesync's user-facing hostname, after its Docker copy was retired behind the bridge. Its
+      # old monitor was AutoKuma-generated from the container, so it went with it.
+      #
+      # Probed on bridge_probe_path, and this one is end-to-end in a way the other gated services'
+      # probes have to be engineered into: CouchDB answers 401 to any unauthenticated request
+      # rather than redirecting, so a 401 here was produced by the app itself after crossing the
+      # bridge transport and the cluster's Traefik. A 302 would mean Authelia had somehow been
+      # attached to a client that cannot satisfy it, and a 502 means the pod is gone.
+      {% set livesync_k8s = (hostvars['daniel-box'].containers_list | selectattr('name', 'equalto', 'livesync') | first) -%}
+      {{ kuma('livesync-bridge', name='LiveSync (via bridge)', monitor_type='http',
+              url='https://livesync.local.' ~ domain ~ livesync_k8s.bridge_probe_path,
+              accepted_statuscodes=['401'], max_redirects=0) }}
       # littlelink's user-facing hostname, after its Docker copy was retired behind the bridge.
       #
       # This is the bridge's canary, and the only monitor here that earns that on its own.

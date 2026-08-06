@@ -130,10 +130,18 @@ def _probe_routers(config: dict) -> dict[str, dict]:
 
 
 def _bridge_routers(config: dict) -> dict[str, dict]:
+    """Every router pointing at a bridge service, selected by TARGET rather than by its own name.
+
+    Selecting on the router's name would have let livesync's four hand-written routers
+    (livesync-sync-*, livesync-utils-*) escape every invariant below — and they need them most:
+    they cross the same HTTPS-to-the-VIP transport, so the 421 trap applies to them exactly as it
+    does to a generated one. Anything that forwards to the cluster is checked here, whoever wrote
+    it.
+    """
     return {
         name: router
         for name, router in config["http"]["routers"].items()
-        if "-bridge-" in name
+        if "-bridge-" in router.get("service", "")
     }
 
 
@@ -171,7 +179,12 @@ def test_every_bridge_has_a_k8s_route_behind_it():
 def test_each_bridge_router_matches_exactly_one_host(containers):
     """The 421 trap. The backend is HTTPS, and Traefik rejects a request whose Host header
     disagrees with the SNI it sent upstream. serversTransport.serverName holds one value, so a
-    router matching two hostnames can only ever get one of them right."""
+    router matching two hostnames can only ever get one of them right.
+
+    Exactly one Host() IS the invariant. This used to also reject any `||` in the rule, which was
+    a proxy for the same thing and too broad: livesync's /_utils router alternates two PATH
+    matchers, which cannot disagree with an SNI. The Host count catches `Host(a) || Host(b)`
+    on its own."""
     config = _dynamic_config(containers)
     for name, router in _bridge_routers(config).items():
         rule = router["rule"]
@@ -179,7 +192,6 @@ def test_each_bridge_router_matches_exactly_one_host(containers):
             f"{name} matches more than one hostname; each needs its own router and "
             "serversTransport or one of them answers 421"
         )
-        assert "||" not in rule, name
 
 
 @pytest.mark.parametrize("containers", [None, TWO_SERVICES], ids=["inventory", "two"])
@@ -235,7 +247,9 @@ def test_an_authed_bridge_authenticates_at_the_docker_edge(containers):
     }
 
     for name, router in _bridge_routers(config).items():
-        service = name.rsplit("-bridge-", 1)[0]
+        # From the TARGET, not the router name — a hand-written router is not named after the
+        # service it bridges (livesync-sync-public -> livesync-bridge-public).
+        service = router["service"].rsplit("-bridge-", 1)[0]
         if service not in authed:
             continue
         # A probe router is exempt, and test_a_probe_route_is_never_reachable_from_the_internet
@@ -422,3 +436,29 @@ def test_a_migrated_service_is_not_still_verified_on_the_docker_side(reader):
         "containers/ on daniel-server, where the data no longer changes. Drop it from that "
         "list — longhorn-backup-health.sh asserts per-volume freshness cluster-side."
     )
+
+
+def test_a_bridge_that_suppresses_its_router_is_still_reachable():
+    """bridge_custom_routers turns off the generated Host router so hand-written ones can gate
+    the traffic. The generated SERVICE and serversTransport remain, and if nothing references
+    them the service is simply unreachable — a 404 on the real hostname, with every other guard
+    here still green because they only check routers that exist.
+
+    Both hostnames must be covered, not just one. Writing the public router and forgetting the
+    LAN one is the natural mistake, and it fails only for in-homelab callers.
+    """
+    config = _dynamic_config()
+    routers = config["http"]["routers"]
+
+    for svc in _bridged():
+        if not svc.get("bridge_custom_routers"):
+            continue
+        for key in ("public", "local"):
+            generated = f"{svc['name']}-bridge-{key}"
+            assert generated not in routers, (
+                f"{svc['name']} sets bridge_custom_routers but {generated} was still generated"
+            )
+            assert any(r.get("service") == generated for r in routers.values()), (
+                f"{svc['name']} suppressed its generated router and nothing references "
+                f"{generated}, so that hostname 404s"
+            )
