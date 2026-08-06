@@ -1,0 +1,120 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: karakeep
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # The PVC is ReadWriteOnce and Longhorn runs one replica, so a rolling update would deadlock:
+  # the new pod waits for a volume the old pod still holds.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: karakeep
+  template:
+    metadata:
+      labels:
+        app: karakeep
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: karakeep
+          image: {{ karakeep_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # The compose template's cap_drop: ALL with no cap_add — a Node app on a high
+              # port. The seeded tree is root-owned and this image runs as root, so nothing
+              # here needs CHOWN or DAC_OVERRIDE.
+              drop:
+                - ALL
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            - name: DATA_DIR
+              value: /data
+            # Service names, not container names. These resolve through the cluster's DNS the
+            # same way Compose's service keys resolved on the shared network.
+            - name: MEILI_ADDR
+              value: http://karakeep-meilisearch:7700
+            - name: BROWSER_WEB_URL
+              value: http://karakeep-chrome:9222
+            # NextAuth builds sign-in redirects and callback URLs from this, so it has to be the
+            # hostname a browser actually arrives on. Before cutover that is the -k8s LAN name;
+            # after it, the bridged public one. Getting it wrong does not fail at startup — the
+            # pod goes ready and login breaks, bouncing users to a host that will not resolve
+            # for them. Same treatment as speedtest's APP_URL.
+            - name: NEXTAUTH_URL
+{% if container_item.bridge_hostname is defined %}
+              value: "https://{{ container_item.bridge_hostname }}.{{ domain }}"
+{% else %}
+              value: "https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
+{% endif %}
+            - name: DISABLE_NEW_USERS_REGISTRATION
+              value: "true"
+            - name: OPENAI_BASE_URL
+              value: https://generativelanguage.googleapis.com/v1beta
+            - name: INFERENCE_TEXT_MODEL
+              value: gemini-2.5-flash-lite
+            - name: INFERENCE_IMAGE_MODEL
+              value: gemini-2.5-flash-lite
+            - name: INFERENCE_TAGS_ENABLED
+              value: "true"
+            - name: MEILI_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: karakeep
+                  key: MEILI_MASTER_KEY
+            - name: NEXTAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: karakeep
+                  key: NEXTAUTH_SECRET
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: karakeep
+                  key: OPENAI_API_KEY
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: next-cache
+              mountPath: /app/apps/web/.next/cache
+          # `/` answers 307 (measured against the running container), and k8s counts 2xx-3xx as
+          # success, so httpGet is safe here — unlike livesync, whose endpoints answer 401.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 90
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ karakeep_k8s_cpu_limit }}"
+              memory: {{ karakeep_k8s_mem_limit }}
+            requests:
+              cpu: "{{ karakeep_k8s_cpu_request }}"
+              memory: {{ karakeep_k8s_mem_request }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ karakeep_k8s_claim }}
+        # The compose template's tmpfs, same 256 MiB. Next.js's image-optimisation cache: the
+        # image dir is node-owned but the container runs as root with no DAC_OVERRIDE, so
+        # thumbnail writes EACCESed and every request re-optimised. medium: Memory reproduces
+        # tmpfs, and the pages count against the container's memory limit exactly as they did
+        # against the compose mem cap.
+        - name: next-cache
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi

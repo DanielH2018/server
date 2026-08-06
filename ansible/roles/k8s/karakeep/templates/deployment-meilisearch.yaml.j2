@@ -1,0 +1,71 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: karakeep-meilisearch
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # ReadWriteOnce PVC, single Longhorn replica: a rolling update would deadlock on the volume.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: karakeep-meilisearch
+  template:
+    metadata:
+      labels:
+        app: karakeep-meilisearch
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: meilisearch
+          image: {{ karakeep_k8s_meili_image }}
+          ports:
+            - containerPort: 7700
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # The compose template's cap_drop: ALL — a Rust binary on a high port whose data
+              # is its own volume.
+              drop:
+                - ALL
+          env:
+            - name: MEILI_NO_ANALYTICS
+              value: "true"
+            - name: MEILI_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: karakeep
+                  key: MEILI_MASTER_KEY
+          volumeMounts:
+            - name: data
+              mountPath: /meili_data
+          # /health answers 200 without the master key (measured against the running container),
+          # which is what makes an httpGet probe usable on an otherwise key-protected service.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 7700
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 7700
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ karakeep_k8s_meili_cpu_limit }}"
+              memory: {{ karakeep_k8s_meili_mem_limit }}
+            requests:
+              cpu: "{{ karakeep_k8s_meili_cpu_request }}"
+              memory: {{ karakeep_k8s_meili_mem_request }}
+      volumes:
+        # Starts EMPTY and is never seeded — see the role defaults. The index is derived from
+        # karakeep's db.db, so it is rebuilt with "Reindex All Bookmarks" rather than copied.
+        # Until that runs, karakeep works and search returns nothing.
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ karakeep_k8s_meili_claim }}

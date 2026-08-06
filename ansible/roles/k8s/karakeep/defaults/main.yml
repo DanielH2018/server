@@ -1,0 +1,54 @@
+---
+# Same images the Docker role runs, digests included — both copies stay identical through
+# coexistence so a difference in behaviour between them is never the image. The karakeep app and
+# the uv base keep their repo:tag@sha256 form so Renovate's docker manager still tracks them;
+# see the compose template for why the tag must be kept alongside the digest.
+karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release@sha256:64d6a9bbf2d37b5c808cf06b5d87f1f1c7846fdd3844724145a9741aeb06fd31
+karakeep_k8s_chrome_image: gcr.io/zenika-hub/alpine-chrome:124
+karakeep_k8s_meili_image: getmeili/meilisearch:v1.41.0
+karakeep_k8s_tagger_image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58
+
+# Mirrors resources('2.0', '2048M', '0.10', '128M') in the compose template.
+karakeep_k8s_cpu_limit: "2"
+karakeep_k8s_mem_limit: 2048Mi
+karakeep_k8s_cpu_request: "100m"
+karakeep_k8s_mem_request: 128Mi
+# Headless Chrome spikes; same generous cap the compose template gives it.
+karakeep_k8s_chrome_cpu_limit: "2"
+karakeep_k8s_chrome_mem_limit: 2048Mi
+karakeep_k8s_chrome_cpu_request: "100m"
+karakeep_k8s_chrome_mem_request: 128Mi
+# Mirrors resources('1.0', '1024M', '0.10', '128M').
+karakeep_k8s_meili_cpu_limit: "1"
+karakeep_k8s_meili_mem_limit: 1024Mi
+karakeep_k8s_meili_cpu_request: "100m"
+karakeep_k8s_meili_mem_request: 128Mi
+# Mirrors resources('1.0', '512M', '0.05', '64M'). cpu 1.0 is deliberate: the boot-time
+# `uv pip install` plus the per-cycle tag burst CFS-throttled ~67% of periods at the old 0.5.
+karakeep_k8s_tagger_cpu_limit: "1"
+karakeep_k8s_tagger_mem_limit: 512Mi
+karakeep_k8s_tagger_cpu_request: "50m"
+karakeep_k8s_tagger_mem_request: 64Mi
+
+# 487M at migration time — the bookmark library, archived page snapshots and db.db. On
+# `longhorn` (backed up), matching the Docker side, where the bind mount under containers/ is
+# deliberately in Kopia scope for exactly this reason.
+karakeep_k8s_claim: karakeep-data
+karakeep_k8s_storage_class: longhorn
+karakeep_k8s_size: 4Gi
+karakeep_k8s_source_path: /home/ubuntu/server/containers/karakeep/data
+
+# The Meilisearch index: 286M today, and deliberately NOT seeded and NOT backed up. It is a
+# derived artifact — the compose template calls it "rebuildable by reindexing from this data"
+# and keeps it in a named volume outside Kopia for the same reason. Copying it would mean
+# reading a root-owned Docker volume out of /var/lib/docker, to reproduce state that karakeep
+# regenerates from db.db on request. The upgrade runbook in the role's CLAUDE.md already ends
+# in "Reindex All Bookmarks"; a migration is the same situation.
+karakeep_k8s_meili_claim: karakeep-meili
+karakeep_k8s_meili_storage_class: longhorn-nobackup
+karakeep_k8s_meili_size: 2Gi
+
+# The time-tagger's script is vendored at files/karakeep-time-tagger.py rather than downloaded,
+# because a ConfigMap must render from something that exists at render time and CI renders every
+# template on a machine that has never deployed. It is 17K, far inside the 1M ConfigMap ceiling.
+# test_karakeep_time_tagger_script.py pins it to the Docker role's get_url checksum.

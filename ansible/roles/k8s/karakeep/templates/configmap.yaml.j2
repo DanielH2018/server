@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: karakeep-time-tagger
+  namespace: {{ k8s_namespace }}
+data:
+  karakeep-time-tagger.py: |
+{#
+  Vendored rather than downloaded at deploy time, unlike the Docker role's get_url. A ConfigMap
+  has to be rendered from something that exists when the manifest renders, and CI renders every
+  template on a machine that has never run a deploy — a lookup on a downloaded path can only
+  ever fail there, which would mean this manifest is the one nothing validates.
+
+  Vendoring trades that for a copy that could drift from the Docker role's pin, so
+  test_karakeep_time_tagger_script.py asserts this file's sha256 equals the checksum in that
+  role's get_url. The two are provably the same bytes or the tests fail.
+#}
+{{ lookup('file', playbook_dir + '/roles/k8s/karakeep/files/karakeep-time-tagger.py') | indent(4, true) }}

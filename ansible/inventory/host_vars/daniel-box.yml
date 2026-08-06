@@ -164,6 +164,15 @@ containers_list:
     # here the cluster's default 300/min silently re-imposed exactly what that exemption existed
     # to remove, and a phone mid-pull got 429s within the hour of cutover.
     bridge_rate_limit: rate-limit-bridge-livesync
+  # Slice 2, batch E. Four workloads — the app, headless Chrome, Meilisearch and the time-tagger
+  # — which is the largest single service in the slice. Only the app is routed; the other three
+  # are reached in-cluster by Service name, and those names are load-bearing because karakeep
+  # addresses them exactly as it addressed the Compose service keys.
+  - name: karakeep
+    platform: k8s
+    hostname: "karakeep{{ k8s_hostname_suffix }}"
+    port: 3000
+    use_authelia: true
   # Slice 2, batch R. No hostname/port and no Traefik route on purpose: this is an
   # unauthenticated plain-HTTP registry, reachable only on the node's loopback via hostPort
   # and in-cluster via its Service. Giving it an ingress would put push access on the LAN.

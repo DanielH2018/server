@@ -1,0 +1,41 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: karakeep
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: karakeep
+  ports:
+    - port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}
+---
+# THE NAMES ARE LOAD-BEARING. karakeep reaches these by Compose service key today
+# (MEILI_ADDR=http://karakeep-meilisearch:7700, BROWSER_WEB_URL=http://karakeep-chrome:9222), so
+# the k8s Services have to answer to the same names or the app starts fine and then fails at the
+# first search or the first page snapshot — neither of which is a startup error. Same class of
+# trap as freshrss's feed-cache.
+apiVersion: v1
+kind: Service
+metadata:
+  name: karakeep-chrome
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: karakeep-chrome
+  ports:
+    - port: 9222
+      targetPort: 9222
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: karakeep-meilisearch
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: karakeep-meilisearch
+  ports:
+    - port: 7700
+      targetPort: 7700

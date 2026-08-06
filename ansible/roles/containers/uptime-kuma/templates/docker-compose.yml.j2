@@ -156,6 +156,12 @@ services:
       {{ kuma('freshrss-bridge', name='FreshRSS (via bridge)', monitor_type='http',
               url='https://freshrss.local.' ~ domain ~ freshrss_k8s.bridge_probe_path,
               max_redirects=0) }}
+      # karakeep is Authelia-gated, so 302 is the edge answering and this proves the route and
+      # the middleware, not the app — the bento-pdf limitation. Its four workloads are watched
+      # from inside the cluster instead, by liveness probes; what this adds is the outside view.
+      {{ kuma('karakeep-k8s', name='k3s karakeep', monitor_type='http',
+              url='https://karakeep' ~ k8s_hostname_suffix ~ '.local.' ~ domain,
+              accepted_statuscodes=['302'], max_redirects=0) }}
       # livesync's user-facing hostname, after its Docker copy was retired behind the bridge. Its
       # old monitor was AutoKuma-generated from the container, so it went with it.
       #
