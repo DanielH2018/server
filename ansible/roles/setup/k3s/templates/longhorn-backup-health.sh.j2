@@ -66,9 +66,61 @@ if [[ -n "${ERRORED// /}" ]]; then
   add "backups in Error state: ${ERRORED% }"
 fi
 
+# 4. Is every backed-up volume covered, or just the loud ones? Checks 2 and 3 are fleet-wide:
+#    a volume whose recurring job silently stops producing backups emits NO Backup object, so
+#    there is nothing to reach Error state, and the other volumes keep newest-overall fresh.
+#    Nothing goes red. That is exactly how freshrss sat unverified after its 2026-08-05 cutover
+#    — its Kopia sentinel still resolved against a frozen directory on the server while the live
+#    PVC had no per-volume assertion at all. This is the Longhorn analogue of monitor-bridge's
+#    BACKUP_SENTINELS guard, and it is DERIVED from the cluster rather than hand-listed: a
+#    service that migrates onto `longhorn` is covered the moment its PVC binds, with no list to
+#    remember to edit. (`longhorn-nobackup` is excluded by the exact-match filter, which is the
+#    whole point of the two classes — see the storageclass in the k3s role.)
+COVERAGE=$($KUBECTL get backups.longhorn.io \
+  -o jsonpath='{range .items[*]}{.status.volumeName}{" "}{.status.snapshotCreatedAt}{"\n"}{end}' 2>/dev/null)
+NOW_S=$(date +%s)
+UNCOVERED=""
+CHECKED=0
+
+while read -r VOL CREATED CLAIM; do
+  # A Pending PVC has no volumeName yet — nothing to back up, and not a fault.
+  [[ -z "$VOL" ]] && continue
+
+  LATEST=$(printf '%s\n' "$COVERAGE" | awk -v v="$VOL" '$1 == v && $2 != "" { print $2 }' | sort -r | head -1)
+
+  # Grace applies ONLY to a volume with no backup at all, and only until it has had time for a
+  # scheduled run — a service deployed this afternoon must not redden the backup plane before
+  # its first 03:30. It deliberately does NOT extend to a volume that HAS a backup: freshrss and
+  # healthchecks bound their PVCs 21h before this check was written and were already backed up,
+  # so a blanket young-PVC skip would have excused the two volumes the check exists for.
+  if [[ -z "$LATEST" ]]; then
+    CREATED_S=$(date -d "$CREATED" +%s 2>/dev/null) || CREATED_S=0
+    if (( CREATED_S > 0 && NOW_S - CREATED_S < MAX_AGE_S )); then
+      continue
+    fi
+    UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} (no backup)"
+    continue
+  fi
+
+  CHECKED=$(( CHECKED + 1 ))
+  LATEST_S=$(date -d "$LATEST" +%s 2>/dev/null) || LATEST_S=0
+  if (( LATEST_S == 0 )); then
+    UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} (unparseable timestamp)"
+  elif (( NOW_S - LATEST_S > MAX_AGE_S )); then
+    UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} ($(( (NOW_S - LATEST_S) / 3600 ))h)"
+  fi
+done < <(k3s kubectl get pvc --all-namespaces \
+  -o jsonpath='{range .items[?(@.spec.storageClassName=="longhorn")]}{.spec.volumeName}{" "}{.metadata.creationTimestamp}{" "}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' 2>/dev/null)
+
+if [[ -n "$UNCOVERED" ]]; then
+  add "backed-up volumes stale or missing: ${UNCOVERED}"
+fi
+
 if [[ -z "$PROBLEMS" ]]; then
   STATUS=up
-  MSG="backup target available, newest backup $(( AGE_S / 3600 ))h old"
+  # The volume count is in the green message on purpose: "newest backup 8h old" was true even
+  # while a volume had no backup at all, so the number is what makes this green mean something.
+  MSG="backup target available, newest backup $(( AGE_S / 3600 ))h old, ${CHECKED} backed-up volume(s) covered"
 else
   STATUS=down
   MSG="$PROBLEMS"
