@@ -158,6 +158,12 @@ containers_list:
     # It is exposed LAN-only, like every probe route, and it exposes nothing: an unauthenticated
     # caller gets the 401 and stops there.
     bridge_probe_path: /
+    # A bridged request is metered TWICE — the Docker edge router and this cluster route — and
+    # the tighter ceiling wins. The Docker side gave livesync a 20x limiter (rate-limit-livesync,
+    # 6000/min) because CouchDB replication is extremely chatty; without the matching override
+    # here the cluster's default 300/min silently re-imposed exactly what that exemption existed
+    # to remove, and a phone mid-pull got 429s within the hour of cutover.
+    bridge_rate_limit: rate-limit-bridge-livesync
   # Slice 2, batch R. No hostname/port and no Traefik route on purpose: this is an
   # unauthenticated plain-HTTP registry, reachable only on the node's loopback via hostPort
   # and in-cluster via its Service. Giving it an ingress would put push access on the LAN.
