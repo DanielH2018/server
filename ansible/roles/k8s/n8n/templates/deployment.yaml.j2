@@ -1,0 +1,152 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # Both PVCs are ReadWriteOnce and Longhorn runs one replica, so a rolling update would
+  # deadlock: the new pod waits for a volume the old pod still holds.
+  #
+  # Recreate is also the only safe strategy for a SQLite writer. Two n8n processes against one
+  # database.sqlite is corruption, and DB_SQLITE_VACUUM_ON_STARTUP rewrites the whole file.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: n8n
+  template:
+    metadata:
+      labels:
+        app: n8n
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: n8n
+          image: {{ n8n_k8s_image }}
+          # The registry tag is mutable by design (see defaults). Without Always, a rebuilt
+          # image is never picked up: the node already has something called :latest.
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ container_item.port }}
+            - containerPort: {{ n8n_k8s_broker_port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # The compose template's cap_drop: ALL with no cap_add. The image runs as `node`
+              # (uid 1000) and the seeded tree is uid 1000 too — tar restored it with
+              # --numeric-owner — so nothing here needs CHOWN or DAC_OVERRIDE.
+              drop:
+                - ALL
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            - name: GENERIC_TIMEZONE
+              value: "{{ tz }}"
+            - name: NODE_ENV
+              value: production
+            # n8n builds absolute URLs from these, so both must be the hostname a browser and an
+            # external webhook caller actually arrive on. WEBHOOK_URL is the load-bearing one:
+            # third parties have already registered URLs against https://n8n.{{ domain }}/, and a
+            # wrong value here does not fail at startup — the pod goes ready and every inbound
+            # webhook is registered against a name nobody calls. Same treatment as karakeep's
+            # NEXTAUTH_URL.
+{% if container_item.bridge_hostname is defined %}
+            - name: N8N_HOST
+              value: "{{ container_item.bridge_hostname }}.{{ domain }}"
+            - name: WEBHOOK_URL
+              value: "https://{{ container_item.bridge_hostname }}.{{ domain }}/"
+{% else %}
+            - name: N8N_HOST
+              value: "{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
+            - name: WEBHOOK_URL
+              value: "https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}/"
+{% endif %}
+            - name: N8N_PORT
+              value: "{{ container_item.port }}"
+            - name: N8N_PROTOCOL
+              value: https
+            # TWO proxies once bridged, not one: the Docker edge Traefik forwards to the cluster
+            # Traefik, which forwards here. The compose value of 1 was correct when Docker
+            # Traefik was the only hop. Getting this wrong does not break routing — it makes n8n
+            # attribute every request to the wrong client IP, which is what its login throttling
+            # and audit log key on. Conditional so the pre-cutover -k8s route, which really does
+            # have one proxy, is also right.
+            - name: N8N_PROXY_HOPS
+{% if container_item.bridge_hostname is defined %}
+              value: "2"
+{% else %}
+              value: "1"
+{% endif %}
+            - name: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
+              value: "true"
+            - name: N8N_RUNNERS_ENABLED
+              value: "true"
+            - name: NODE_RUNNERS_ENABLED
+              value: "true"
+            - name: N8N_RUNNERS_MODE
+              value: external
+            # Binds the broker on all interfaces (n8n has no per-interface bind option). Under
+            # Compose that exposed it to `apps` siblings; here it would be every pod in
+            # {{ k8s_namespace }}. networkpolicy.yaml.j2 is what actually narrows that to the
+            # runners pod — the auth token below is the second layer, not the only one.
+            - name: N8N_RUNNERS_BROKER_LISTEN_ADDRESS
+              value: 0.0.0.0
+            - name: N8N_NATIVE_PYTHON_RUNNER
+              value: "true"
+            - name: N8N_RUNNERS_TASK_REQUEST_TIMEOUT
+              value: "300"
+            # Keeps database.sqlite small (it once hit 840M of execution history, and its daily
+            # page churn was the biggest single driver of B2 billable growth). Carried across
+            # verbatim from the compose template, where the full reasoning lives.
+            - name: EXECUTIONS_DATA_SAVE_ON_SUCCESS
+              value: none
+            - name: EXECUTIONS_DATA_PRUNE
+              value: "true"
+            - name: EXECUTIONS_DATA_MAX_AGE
+              value: "72"
+            - name: DB_SQLITE_VACUUM_ON_STARTUP
+              value: "true"
+            - name: N8N_RUNNERS_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: n8n
+                  key: N8N_RUNNERS_AUTH_TOKEN
+          volumeMounts:
+            - name: data
+              mountPath: /home/node/.n8n
+            - name: files
+              mountPath: /files
+          # The compose healthcheck's endpoint, as an httpGet. /healthz answers 200 without
+          # credentials — it is n8n's own liveness endpoint, not a routed one, so Authelia is
+          # not in the path here.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ container_item.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          # Generous initialDelay because DB_SQLITE_VACUUM_ON_STARTUP rewrites the whole
+          # database before n8n listens. Killing it mid-vacuum is the one restart that can
+          # leave the file in a state a restart does not fix.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ container_item.port }}
+            initialDelaySeconds: 120
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ n8n_k8s_cpu_limit }}"
+              memory: {{ n8n_k8s_mem_limit }}
+            requests:
+              cpu: "{{ n8n_k8s_cpu_request }}"
+              memory: {{ n8n_k8s_mem_request }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ n8n_k8s_claim }}
+        - name: files
+          persistentVolumeClaim:
+            claimName: {{ n8n_k8s_files_claim }}

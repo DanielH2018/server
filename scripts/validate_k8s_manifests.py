@@ -52,8 +52,35 @@ def k8s_entries() -> dict[str, dict]:
     return {c["name"]: c for c in entries if c.get("platform") == "k8s"}
 
 
-def role_defaults(role: str) -> dict:
-    return load_yaml(K8S_ROLES / role / "defaults" / "main.yml")
+def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
+    """Expand ``{{ ... }}`` inside variable VALUES, the way Ansible does before templating.
+
+    Ansible resolves a variable's value recursively, so a role default like
+    ``n8n_k8s_image: "{{ k8s_registry_pull_host }}/n8n:latest"`` reaches a manifest already
+    expanded — and ``k8s_registry_pull_host`` is itself ``"localhost:{{ k8s_registry_port }}"``,
+    so one substitution is not enough. Loading the YAML raw expands nothing, and the literal
+    braces survive into the rendered manifest, where ``{`` opens a flow mapping and the document
+    fails to parse. That surfaces as "invalid YAML" pointing at a perfectly good template, which
+    is precisely the diagnosis this guard exists to give correctly.
+
+    Bounded rather than looped-to-fixpoint so a self-referential value fails the render with a
+    recursion the operator can see, instead of hanging CI.
+    """
+    env = make_env([SHARED_TPL])
+    resolved = dict(values)
+    for _ in range(passes):
+        pending = {
+            k: v for k, v in resolved.items() if isinstance(v, str) and "{{" in v
+        }
+        if not pending:
+            break
+        for key, value in pending.items():
+            resolved[key] = env.from_string(value).render({**context, **resolved})
+    return resolved
+
+
+def role_defaults(role: str, base: dict) -> dict:
+    return resolve_vars(load_yaml(K8S_ROLES / role / "defaults" / "main.yml"), base)
 
 
 def yaml_error(rendered: str) -> str | None:
@@ -130,7 +157,11 @@ def check_template(role: str, tpl: Path, ctx: dict) -> str | None:
 def main() -> int:
     # playbook_dir is real, not stubbed: templates use it to build lookup('file', ...) paths
     # into the Docker roles, and a stubbed value would make those paths unreadable.
+    # group_vars values are resolved against each other first — several reference siblings
+    # (k8s_registry_pull_host is "localhost:{{ k8s_registry_port }}"), and a role default that
+    # reaches one of those needs it already expanded.
     base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
+    base = resolve_vars(base, base)
     entries = k8s_entries()
 
     roles = sorted(
@@ -166,7 +197,7 @@ def main() -> int:
             failures += 1
             continue
 
-        ctx = {**base, **role_defaults(role), "container_item": entries[role]}
+        ctx = {**base, **role_defaults(role, base), "container_item": entries[role]}
         for tpl in templates:
             checked += 1
             err = check_template(role, tpl, ctx)

@@ -1,0 +1,24 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ n8n_k8s_files_claim }}
+  namespace: {{ k8s_namespace }}
+spec:
+  # A plain claim rather than a seeded one: the source directory
+  # (containers/n8n/local-files) is empty and has been since Oct 2025, so there is nothing to
+  # copy and a seed pod would verify an empty tree against an empty tree.
+  #
+  # But still a CLAIM, not an emptyDir — a workflow references /files/PAL_E4389.pdf, so the
+  # path is live. An emptyDir would quietly convert "written files persist" into "written files
+  # vanish on the next restart", and that failure surfaces at workflow-run time, long after the
+  # deploy that caused it.
+  #
+  # `longhorn` (backed up) rather than longhorn-nobackup: unlike a search index, nothing
+  # regenerates a file a workflow wrote here.
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ n8n_k8s_files_storage_class }}
+  resources:
+    requests:
+      storage: {{ n8n_k8s_files_size }}

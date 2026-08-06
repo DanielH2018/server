@@ -43,6 +43,29 @@ def _k8s_entries() -> list[dict]:
     return [c for c in BOX_VARS["containers_list"] if c.get("platform") == "k8s"]
 
 
+def _role_defaults(role: str) -> dict:
+    """A role's defaults with `{{ ... }}` inside VALUES expanded, as Ansible expands them.
+
+    n8n's image defaults are `"{{ k8s_registry_pull_host }}/n8n:latest"`, and that var is
+    itself `"localhost:{{ k8s_registry_port }}"` — so the raw YAML carries braces two levels
+    deep. Passed through unexpanded they reach the rendered manifest, where `{` opens a flow
+    mapping and the whole document fails to parse for a reason that has nothing to do with the
+    template being tested.
+    """
+    values = {
+        **ALL_VARS,
+        **yaml.safe_load((K8S / role / "defaults" / "main.yml").read_text()),
+    }
+    env = Environment(loader=FileSystemLoader([str(ANSIBLE / "templates")]))
+    for _ in range(5):
+        pending = {k: v for k, v in values.items() if isinstance(v, str) and "{{" in v}
+        if not pending:
+            break
+        for key, value in pending.items():
+            values[key] = env.from_string(value).render(values)
+    return values
+
+
 def _ip_to_int(addr: str) -> int:
     parts = [int(p) for p in addr.split(".")]
     return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]
@@ -219,10 +242,7 @@ def test_nothing_mounts_over_the_serviceaccount_token_path():
             _render(
                 tpl,
                 container_item=entry,
-                **ALL_VARS,
-                **yaml.safe_load(
-                    (K8S / entry["name"] / "defaults" / "main.yml").read_text()
-                ),
+                **_role_defaults(entry["name"]),
             )
         )
         for container in doc["spec"]["template"]["spec"]["containers"]:
@@ -254,10 +274,7 @@ def test_every_deployment_disables_service_link_env_vars():
             _render(
                 tpl,
                 container_item=entry,
-                **ALL_VARS,
-                **yaml.safe_load(
-                    (K8S / entry["name"] / "defaults" / "main.yml").read_text()
-                ),
+                **_role_defaults(entry["name"]),
             )
         )
         assert doc["spec"]["template"]["spec"].get("enableServiceLinks") is False, (
@@ -277,6 +294,15 @@ AUTHELIA_BYPASS_ROUTES = {
         "Monitored jobs POST to /ping/<uuid> with no credentials. Gating it would not fail "
         "loudly — every check would silently go red while the jobs kept working. Carried over "
         "from the Docker role's hand-rolled healthchecks-ping router."
+    ),
+    "n8n-monitoring": (
+        "monitor-bridge's check_n8n polls /api/v1/workflows and /api/v1/executions every "
+        "cycle and has no way to pass Authelia. It cannot use the bridge like the other "
+        "cross-service calls either: containers on daniel-server cannot reach daniel-server's "
+        "own LAN address, so it talks to this -k8s route via the cluster VIP instead. "
+        "X-N8N-API-KEY is the gate. Scoped to those two paths rather than /api/v1/, because "
+        "n8n's API is read-WRITE — it can create, modify and delete workflows, unlike the "
+        "read-only widget endpoints the LAN bypasses on the Docker side expose."
     ),
 }
 

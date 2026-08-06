@@ -1,0 +1,62 @@
+{% from 'ingressroute.yml.j2' import ingressroute with context %}
+---
+{#
+  The UI route, plus the strangler-bridge route once bridge_hostname is set. /webhook/ needs no
+  route of its own here: the bridge route the macro emits carries no Authelia at all, and the
+  Docker edge's half of the bypass is generated from bridge_bypass_prefixes. That pairing is
+  what reproduces the compose template's `n8n-webhook` router — see daniel-box.yml.
+#}
+{{ ingressroute(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    container_item.use_authelia,
+    bridge_hostname=container_item.bridge_hostname | default(none)
+  )
+}}
+---
+# The monitoring read path, and the reason it cannot go through the bridge like everything else.
+#
+# monitor-bridge's check_n8n polls n8n's API every cycle. Under Compose that was a
+# container-to-container call to http://n8n:5678 on the `apps` network, which the migration
+# removes outright. The obvious replacement — bridge_lan_prefixes, the mechanism freshrss and
+# speedtest use for exactly this — does not work here: containers on daniel-server cannot reach
+# daniel-server's own LAN address (measured 2026-08-06, `monitor-bridge` → 10.0.0.161:443 times
+# out while → 10.0.0.240:443 connects), so anything routed via the Docker edge is unreachable
+# from the very container that needs it. The cluster VIP is reachable, so the check talks to the
+# -k8s name directly and this route is what admits it.
+#
+# NARROW ON PURPOSE. n8n's /api/v1 is READ-WRITE — it can create, modify, activate and delete
+# workflows — which is a categorically larger blast radius than the read-only widget endpoints
+# the two existing LAN prefixes expose. So this matches the two exact paths check.py fetches,
+# not /api/v1/. X-N8N-API-KEY is the gate; this route only decides who may present one.
+#
+# LAN-only: the -k8s hostname has no public DNS record and the macro's route is .local while
+# k8s_public_route is false. Not reachable from the internet, and must not become so.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ container_item.name }}-monitoring
+  namespace: {{ k8s_namespace }}
+spec:
+  entryPoints:
+    - https
+  routes:
+    - kind: Rule
+      match: "Host(`{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}`) && (PathPrefix(`/api/v1/workflows`) || PathPrefix(`/api/v1/executions`))"
+      # Higher than the UI route so Traefik matches this first.
+      priority: 100
+      middlewares:
+        - name: rate-limit
+      services:
+        - name: {{ container_item.name }}
+          port: {{ container_item.port }}
+  tls:
+    certResolver: cloudflare
+    options:
+      name: modern
+    domains:
+      - main: "{{ domain }}"
+        sans:
+          - "*.{{ domain }}"
+          - "*.local.{{ domain }}"

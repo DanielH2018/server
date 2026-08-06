@@ -1,0 +1,77 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n-runners
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: n8n-runners
+  template:
+    metadata:
+      labels:
+        app: n8n-runners
+    spec:
+      enableServiceLinks: false
+      initContainers:
+        # The compose template's `depends_on: n8n: condition: service_healthy`, which k8s has no
+        # equivalent for. Connecting to the SERVICE rather than the pod is what makes this a gate
+        # on readiness: a Service has no endpoints until its probe passes, so this cannot succeed
+        # until n8n's /healthz does.
+        #
+        # Port 5679 rather than 5678 deliberately — that is the port the runner actually needs,
+        # so this also proves the NetworkPolicy admits this pod. A gate on 5678 would pass while
+        # the thing it is gating stayed unreachable.
+        - name: wait-for-broker
+          image: {{ n8n_k8s_wait_image }}
+          command:
+            - sh
+            - -c
+            - until nc -z n8n {{ n8n_k8s_broker_port }}; do sleep 5; done
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      containers:
+        - name: n8n-runners
+          image: {{ n8n_k8s_runners_image }}
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # Executes arbitrary workflow code — the most code-exposed workload in the fleet,
+              # so drop everything. The image ends `USER runner`, talks only to the broker, and
+              # binds no port, so it needs none.
+              drop:
+                - ALL
+          env:
+            # Byte-identical to the compose template. `n8n` is a Service name here rather than a
+            # Compose service key, and resolves the same way.
+            - name: N8N_RUNNERS_TASK_BROKER_URI
+              value: "http://n8n:{{ n8n_k8s_broker_port }}"
+            - name: N8N_RUNNERS_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: n8n
+                  key: N8N_RUNNERS_AUTH_TOKEN
+          # The compose healthcheck is `pgrep -f task-runner-launcher` — a liveness test with no
+          # network component, which translates directly to exec. There is no HTTP endpoint to
+          # probe: this workload listens on nothing.
+          livenessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - task-runner-launcher
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ n8n_k8s_cpu_limit }}"
+              memory: {{ n8n_k8s_mem_limit }}
+            requests:
+              cpu: "{{ n8n_k8s_cpu_request }}"
+              memory: {{ n8n_k8s_mem_request }}

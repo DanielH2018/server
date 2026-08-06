@@ -203,10 +203,32 @@ containers_list:
     platform: k8s
   # Slice 2, batch D. Not a service — a deploy-time image build, entered here because that is
   # how a k8s role gets invoked and tagged. No hostname, no port, no route: it produces the two
-  # images n8n will run and exits. It stays separate from a k8s/n8n role because n8n has not
-  # migrated yet, and nothing could migrate it without an image to run.
+  # images n8n runs and exits. Separate from k8s/n8n rather than folded into it because a
+  # BuildKit rebuild is minutes of work that every n8n redeploy would otherwise pay.
   - name: n8n-images
     platform: k8s
+  # Migrated 2026-08-06, batch D. THE ONLY SERVICE IN THIS SLICE WITH NO COEXISTENCE WINDOW:
+  # its scheduled workflows (RSS polls, a daily email, a TickTick calendar sync) would each
+  # fire twice with both copies running, and the TickTick sync writes to a third party. So the
+  # Docker copy was stopped before the seed and the first deploy WAS the cutover — hence
+  # bridge_hostname being set from the outset, unlike every entry above it.
+  - name: n8n
+    platform: k8s
+    hostname: "n8n{{ k8s_hostname_suffix }}"
+    port: 5678
+    use_authelia: true
+    bridge_hostname: n8n
+    # Reproduces the compose template's `n8n-webhook` router. External services POST here with
+    # no session — Authelia would not fail loudly, it would silently break every registered
+    # webhook while the callers keep reporting success. Public on purpose; the trailing slash
+    # keeps /webhook-test/ (the dev-only endpoint) out, exactly as the Docker rule did.
+    bridge_bypass_prefixes:
+      - /webhook/
+    # No bridge_lan_prefixes for monitor-bridge's check_n8n API poll, and that is not an
+    # omission. Containers on daniel-server cannot reach daniel-server's own LAN address, so a
+    # route via the Docker edge is unreachable from the container that needs it. The check
+    # talks to the -k8s name and the cluster VIP directly instead — see the -monitoring
+    # IngressRoute in the role's ingressroute.yaml.j2.
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the

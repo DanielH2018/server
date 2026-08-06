@@ -1,0 +1,24 @@
+---
+# ONE Service carrying both ports, not two Services. The runners reach the broker at
+# `http://n8n:5679` under Compose, and keeping that exact URL means the runners image and its
+# env need no cluster-specific variant.
+#
+# A second `n8n-broker` Service would look like isolation and provide none — any pod can dial
+# a ClusterIP whatever it is named. networkpolicy.yaml.j2 is the control.
+#
+# Ports are named because k8s requires names once a Service has more than one.
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: n8n
+  ports:
+    - name: http
+      port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}
+    - name: broker
+      port: {{ n8n_k8s_broker_port }}
+      targetPort: {{ n8n_k8s_broker_port }}

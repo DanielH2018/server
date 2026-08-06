@@ -152,6 +152,20 @@ def test_every_deployed_image_is_renovate_tracked() -> None:
     )
 
 
+# Images BUILT by this repo and pushed to the node-local registry, not pulled from an upstream
+# registry — so there is no upstream ref for Renovate to compare against and no version for it to
+# offer. Exempt by variable name rather than by pattern, so adding one is a deliberate act with a
+# reviewer looking at it, the same rule the bridge allow-lists use.
+#
+# These are NOT untracked in practice: what actually moves is the FROM line in the Dockerfile each
+# is built from, and Renovate's built-in dockerfile manager already watches those
+# (test_every_dockerfile_is_renovate_visible asserts it sees them).
+REGISTRY_BUILT_IMAGES = {
+    "n8n_k8s_image",  # ansible/roles/containers/n8n/templates/Dockerfile.j2
+    "n8n_k8s_runners_image",  # ansible/roles/containers/n8n/templates/Dockerfile-runners.j2
+}
+
+
 def test_every_k8s_role_image_is_renovate_tracked() -> None:
     """The sibling of the test above, for the cluster.
 
@@ -173,6 +187,8 @@ def test_every_k8s_role_image_is_renovate_tracked() -> None:
     for f in defaults:
         for line in f.read_text().splitlines():
             if not re.match(r"\s*\w*_image:\s*\S", line):
+                continue
+            if line.split(":", 1)[0].strip() in REGISTRY_BUILT_IMAGES:
                 continue
             if not any(r.search(line) for r in match_res):
                 untracked.append(f"{f.relative_to(_REPO)}: {line.strip()}")
