@@ -126,6 +126,19 @@ containers_list:
     # unknown check proves the app ran, and a 400 instead would mean ALLOWED_HOSTS is wrong.
     bridge_bypass_prefixes:
       - /ping/
+  # Slice 2, batch E. CouchDB for Obsidian LiveSync. use_authelia mirrors the Docker entry and
+  # its reason: the LiveSync client uses non-interactive basic auth and cannot pass 2FA, so
+  # CouchDB's own require_valid_user is the gate.
+  #
+  # Its data volume is longhorn-NOBACKUP (see the role's defaults), which makes this the first
+  # migrated service whose PVC the backup plane deliberately ignores — kopiaignore.j2 excludes
+  # the same directory today, for the B2-churn reason recorded there. The slice-2 doc's claim
+  # that batch E "grows the backed-up set" is therefore wrong for livesync.
+  - name: livesync
+    platform: k8s
+    hostname: "livesync{{ k8s_hostname_suffix }}"
+    port: 5984
+    use_authelia: false
   # Slice 2, batch R. No hostname/port and no Traefik route on purpose: this is an
   # unauthenticated plain-HTTP registry, reachable only on the node's loopback via hostPort
   # and in-cluster via its Service. Giving it an ingress would put push access on the LAN.
