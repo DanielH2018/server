@@ -230,8 +230,8 @@ trusted with data that would.
 | **B** | **Done 2026-08-05** (#83) | `cloudflare-ddns`, `speedtest` | Secrets as k8s Secrets, and **`seed-volume` is built and first exercised here** — against a 23M SQLite DB on `longhorn-nobackup`, where a botched copy costs nothing. |
 | **C** | **Done 2026-08-05** (#84) | `freshrss`, `healthchecks` | `seed-volume` against data that matters, on `longhorn`, with backup verified in B2. **B2 checkpoint here.** |
 | **R** | **Registry done 2026-08-05** (#86); builder deferred to D | `registry` + builder | Infrastructure, not a migration: `registry:2` plus an in-cluster build Job. Must land before D, which is the first batch needing a built image. |
-| **D** | Blocked — B2 checkpoint | `n8n` | Larger state, and the first built image — two of them, main and task runners. n8n's encrypted credentials survive the move. |
-| **E** | Blocked — B2 checkpoint | `karakeep`, `livesync` | Multi-container workload, and the highest-value data in the slice, moved last with every mechanic already proven. |
+| **D** | Blocked — the builder | `n8n` | Larger state, and the first built image — two of them, main and task runners. n8n's encrypted credentials survive the move. |
+| **E** | `livesync` **done 2026-08-06** (#100, #101); `karakeep` remaining | `karakeep`, `livesync` | Multi-container workload, and the highest-value data in the slice, moved last with every mechanic already proven. `livesync` proved the bridge can carry a service whose edge routing is not generatable. |
 
 One PR per batch.
 
@@ -292,12 +292,13 @@ gated services' probe paths are still right.
 bridged service must have no Docker container left, must have a k8s route behind it, and must
 send an SNI matching the Host it serves.
 
-### Where it stands, 2026-08-05
+### Where it stands, 2026-08-06
 
 **Every routed service in the slice has cut over** — `cloudflare-ddns`, `speedtest`,
-`littlelink`, `freshrss` and `healthchecks`. daniel-server is down to 41 managed containers
-from 46, and none of the six workloads in the cluster has a Docker twin serving traffic any
-more. What remains of slice 2 is batches D and E, which are gated on the B2 checkpoint.
+`littlelink`, `freshrss`, `healthchecks` and now `livesync`. daniel-server is at 41 managed
+containers (46 at the start, less six cut over, plus `tempo` added in parallel), and none of the
+seven workloads in the cluster has a Docker twin serving traffic. What remains of slice 2 is
+`karakeep` and batch D.
 
 `freshrss` needed no config change at all, which is worth recording because it was the one
 expected to: FreshRSS keeps its `base_url` in the seeded `config.php`, and that file was
@@ -311,7 +312,38 @@ it correct rather than requiring an edit.
 | `cloudflare-ddns` | — | no route (headless) | shares the Docker twin's push token — see below |
 | `freshrss` | **730 files, identical digest** | **cut over** — bridged | `freshrss-k8s`, `freshrss-bridge` |
 | `healthchecks` | 2 files, identical digest | **cut over** — bridged, `/ping/` bypassed | `healthchecks-k8s`, `healthchecks-bridge` |
+| `livesync` | source held still, digests matched | **cut over** — bridged, four hand-written routers | `livesync-k8s`, `livesync-bridge` |
 | `registry` | — | loopback only, refused on LAN | none — see below |
+
+`livesync` is the one bridge whose edge routing could not be generated, and the shape is worth
+recording because `karakeep` has a milder version of the same problem. Its sync API is gated on a
+secret `X-Sync-Token` header and `/_utils` is carved out behind Authelia at priority 200, so the
+generic `Host(...)` router would have forwarded traffic straight past the token check.
+`bridge_custom_routers` suppresses that router *and only that router* — the service and
+`serversTransport` are still generated, and a guard test requires something to reference them for
+both hostnames, because a suppressed router with no replacement is unreachable in a way every
+other guard reads as green.
+
+The token deliberately did **not** follow the service into the cluster. `config.yml.j2` is mode
+0600, and the reason that router lives there rather than on a container label is that any
+container on `apps` can read labels through the docker-proxy; a k8s Secret is base64 and readable
+by anything with namespace API access. The gate stays at the Docker edge and the cluster-side
+route is guarded by `ClientIP`.
+
+Measured after cutover, on both hostnames:
+
+| request | answer | what it proves |
+|---|---|---|
+| no token | 404 | no router matches — the gate holds |
+| with token | 401 | matched, crossed the bridge, and CouchDB demanded its own auth |
+| `/_utils` | 302 | Authelia still wins at priority 200 |
+| `/` on `.local` | 401 | the probe route, end to end |
+| `/` public | 404 | the probe route is LAN-only, enforced rather than asserted |
+
+Its `bridge_probe_path` is `/`, and it is the only gated service whose probe is end-to-end
+without being engineered to be. `require_valid_user` makes CouchDB answer 401 rather than
+redirect, so a 401 on that route was produced by the app, in the cluster, across the bridge —
+the quality of signal only `littlelink` otherwise gives.
 
 Two services have no monitor of their own, both for the same structural reason: nothing on
 daniel-server can see inside the cluster.
@@ -325,14 +357,77 @@ daniel-server can see inside the cluster.
   dead registry fails a deploy loudly, at the moment of the deploy, so it is not the silent
   class of failure those crons exist to catch.
 
-### Still missing before any cutover can happen
+### Still missing
 
-- **The strangler bridge is a decision, not code.** Decision 1 settles *how* cutover works;
-  no file-provider router has been written. Nothing can cut over until it exists.
 - **The builder.** Batch R shipped the registry alone. Nothing has been built or pushed, so
-  containerd's pull path through `registries.yaml` is configured but unproven.
-- **The B2 checkpoint.** Blocks D *and* E — E adds `karakeep`'s `./data` and `livesync`, so
-  both batches grow the backed-up set.
+  containerd's pull path through `registries.yaml` is configured but unproven. This is now the
+  only thing blocking D. Two design questions are still open: the push has to use the ClusterIP
+  Service name while `image:` stays `localhost:5000/...` to match `registries.yaml`, which one
+  variable cannot serve; and how the build context reaches daniel-box (ConfigMap, hostPath, or a
+  git-clone initContainer) is unwritten.
+- **`karakeep`**, the remainder of batch E. It needs no built image — every one of its four
+  images is upstream — so it is not behind the builder.
+
+The strangler bridge was the other entry here and is built; see *The bridge, as built* above.
+
+### The B2 checkpoint — resolved 2026-08-06, passed
+
+Read twice on the day, against the ~2,000/day threshold and the 2,500 cap:
+
+| | Class C | Notes |
+|---|---|---|
+| 02:47 UTC | 155 | before the 03:30 UTC Longhorn run |
+| 12:06 UTC | 1,000 | after it, and after the day's Kopia jobs |
+
+Two ways of projecting, both under: scaling 1,000 uniformly over 12.1h gives ~1,983/day, and
+adding the remaining 11.9h at the pre-backup drip rate to a day whose scheduled work is already
+spent gives ~1,660. The verdict does not depend on which is right.
+
+That reading is also the **worst case for the batch-C volumes**: the 03:30 run backed up four
+volumes where every prior day backed up two, and both additions were first-fulls
+(`freshrss-config` 324 MiB, `healthchecks-config` 74 MiB, both `Completed`). Every subsequent
+run is a block-level incremental.
+
+Two caveats worth carrying:
+
+- It was a **light Kopia day** — no weekly verify (Wednesday), no monthly restore drill (1st), no
+  quarterly deep verify. The real stress test is a Wednesday, where the weekly verify overlaps a
+  steady-state four-volume Longhorn run.
+- **`b2-usage.sh` exports bytes, not transactions** (`kopia_b2_billable_bytes` is the only gauge),
+  so this checkpoint needs a human reading the B2 console. A Class C gauge would make it a
+  Prometheus query with an alert threshold.
+
+**Batch E does not grow the backed-up set**, which contradicts what the entry here used to say.
+`livesync`'s data is on `longhorn-nobackup` — `kopiaignore.j2` already excludes
+`livesync/couchdb-data/`, and every reason carries over to Longhorn: a CouchDB B-tree rewritten
+daily dedupes poorly, and it is named there as the engine behind the B2 hidden-version churn that
+tripped the 85% alert (66M → 1.1G after the 2026-06-23 rebuild). The vault's source of truth is
+the markdown on each Obsidian client. `karakeep` still adds one backed-up volume (`./data`); its
+Meilisearch index is already destined for `longhorn-nobackup`.
+
+### Two things a compose file implies that a manifest does not
+
+Both cost time on `livesync` and both will recur — `karakeep` has four containers and `n8n` two,
+each carrying the same assumptions.
+
+**A capability set copied from `cap_add` can still be short, because the volume is different.**
+livesync crash-looped with exit 1 and *no log output at all*, which reads like a broken image.
+`bash -x` on the entrypoint put the last line at
+`find /opt/couchdb/data -type d ! -perm 0755 -exec chmod -f 0755 {} +`. An ext4 Longhorn PVC
+carries a `lost+found` at mode 0700; the entrypoint's preceding pass chowns it to the app user,
+so root stops owning it, and chmod on a file you do not own needs `FOWNER`. chmod fails EPERM,
+`-f` suppresses the message but *not* the exit status, find propagates it, and `set -e` ends the
+script before the app writes a line. daniel-server never hits this because a bind-mounted tree is
+already all-0755, so the predicate matches nothing. Any image whose entrypoint normalises
+ownership or permissions on its data directory is exposed to this the moment the directory
+becomes a PVC.
+
+**A compose `healthcheck` is not a k8s probe, and the gap is silent.** livesync's healthcheck is
+`curl -s .../` with no `-f`, so it passes on ANY response — including the 401 that
+`require_valid_user` returns for every endpoint. Translating it to an `httpGet` probe would have
+left the pod permanently not-ready, because k8s treats 401 as failure. Check what the endpoint
+actually returns rather than what the healthcheck tolerates; where credentials are needed, an
+`exec` probe can read them from the container's own env and keep them out of the manifest.
 
 ### A property of the cluster node worth remembering
 
