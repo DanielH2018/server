@@ -112,6 +112,37 @@ def test_uid_differs_for_different_tasks():
     assert shave != mow
 
 
+def test_strips_time_of_day_tag_from_summary():
+    # Real shape: the tag sits between the description and the priority emoji
+    out = app.process_obsidian_ics(
+        _calendar(_todo("🔲 Clean PC & Screens #tod/afternoon ⬆️", OBS))
+    )
+    assert "SUMMARY:🔲 Clean PC & Screens ⬆️" in out
+    assert "#tod/" not in out
+
+
+def test_strips_trailing_time_of_day_tag_without_leaving_whitespace():
+    out = app.process_obsidian_ics(_calendar(_todo("🔲 Shave #tod/evening", OBS)))
+    assert f"SUMMARY:🔲 Shave{CRLF}" in out
+
+
+def test_uid_is_stable_when_time_of_day_tag_changes():
+    # Retagging a task must not mint a new UID — Homepage merges refetched events
+    # without clearing state, so a changed UID leaves the old row behind as a duplicate.
+    morning = app.process_obsidian_ics(
+        _calendar(_todo("🔲 Clean Retainer #tod/morning", OBS))
+    )
+    evening = app.process_obsidian_ics(
+        _calendar(_todo("🔲 Clean Retainer #tod/evening", OBS))
+    )
+    assert _extract_uid(morning) == _extract_uid(evening)
+
+
+def test_leaves_unrelated_tags_alone():
+    out = app.process_obsidian_ics(_calendar(_todo("🔲 Buy onions #produce", OBS)))
+    assert "#produce" in out
+
+
 def test_obsidian_deep_link_encodes_only_file_ampersands():
     assert app.obsidian_deep_link(OBS) == OBS_ENCODED
     # no file marker → returned unchanged
