@@ -397,6 +397,26 @@ def test_a_lan_prefix_is_declared_and_never_public():
         assert "authelia" not in router["middlewares"], name
 
 
+def test_every_declared_lan_prefix_is_actually_configured():
+    """The half BRIDGE_BYPASS_PREFIXES has had all along and this ledger did not. Without it a
+    LAN prefix can be removed from inventory while its entry stays behind, and the ledger reads
+    as a live inventory of unauthenticated routes when some of them no longer exist. Both
+    entries outlived their route that way on 2026-08-06."""
+    declared = {
+        (svc["name"], prefix)
+        for svc in _bridged()
+        for prefix in svc.get("bridge_lan_prefixes", [])
+    }
+
+    missing = set(BRIDGE_LAN_PREFIXES) - declared
+
+    assert not missing, (
+        f"{sorted(missing)} are declared in BRIDGE_LAN_PREFIXES but no bridged service asks for "
+        "them. Either the service's bridge_lan_prefixes is missing the entry, or the allow-list "
+        "is describing a route that no longer exists — remove it."
+    )
+
+
 # --- Backup verification must follow the service across the migration --------------------
 #
 # A migrated service's data leaves daniel-server's disk, but the directory it left behind does
