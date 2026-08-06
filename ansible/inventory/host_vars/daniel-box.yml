@@ -201,6 +201,12 @@ containers_list:
   # and in-cluster via its Service. Giving it an ingress would put push access on the LAN.
   - name: registry
     platform: k8s
+  # Slice 2, batch D. Not a service — a deploy-time image build, entered here because that is
+  # how a k8s role gets invoked and tagged. No hostname, no port, no route: it produces the two
+  # images n8n will run and exits. It stays separate from a k8s/n8n role because n8n has not
+  # migrated yet, and nothing could migrate it without an image to run.
+  - name: n8n-images
+    platform: k8s
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the

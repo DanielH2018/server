@@ -1,0 +1,101 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: build-{{ image_builder_name }}
+  namespace: {{ k8s_namespace }}
+spec:
+  activeDeadlineSeconds: {{ image_builder_timeout }}
+  # No retry. A failed build is a Dockerfile or a registry problem, and both fail again
+  # identically — a second attempt only doubles the time before the deploy says so.
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: build-{{ image_builder_name }}
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      containers:
+        - name: buildkit
+          image: {{ image_builder_image }}
+          env:
+            # Upstream's own kubernetes/job.rootless.yaml sets exactly this. It drops the
+            # per-build-step nested user namespace, so a RUN step is not sandboxed from the
+            # buildkitd process beside it — the POD is the boundary instead, which is the trade
+            # upstream makes for k8s and is sound here: the pod is single-purpose, short-lived,
+            # and already running the arbitrary code in question.
+            #
+            # It does NOT remove the namespace rootlesskit sets up for the DAEMON, which is a
+            # separate thing that happens before buildkitd starts. See the securityContext.
+            - name: BUILDKITD_FLAGS
+              value: --oci-worker-no-process-sandbox
+          # buildctl-daemonless.sh starts a buildkitd for the life of the command, which is what
+          # makes a one-shot Job possible without running a daemon Deployment nothing else uses.
+          command:
+            - buildctl-daemonless.sh
+          args:
+            - build
+            - --frontend
+            - dockerfile.v0
+            # Context and Dockerfile are the same directory: the ConfigMap mount.
+            - --local
+            - context=/workspace
+            - --local
+            - dockerfile=/workspace
+            # registry.insecure=true because the registry serves plain HTTP, which is only
+            # acceptable while it is unreachable off the node (hostPort on
+            # {{ k8s_registry_host_ip }}). Pushed to the SERVICE address — `localhost` in here
+            # would mean this pod. See group_vars/all.yml for the address pair.
+            - --output
+            - type=image,name={{ k8s_registry_push_host }}/{{ image_builder_name }}:{{ image_builder_tag }},push=true,registry.insecure=true
+          # Rootless BuildKit needs these two, and this is the least-confined workload in the
+          # fleet — everything else runs cap_drop: ALL and nothing else relaxes seccomp. Stated
+          # plainly rather than buried: building an image means unpacking arbitrary base-image
+          # layers and running arbitrary RUN steps, so the builder is a code-execution surface
+          # by construction. What is bought by rootless is that it is NOT privileged and does
+          # NOT run as uid 0 — the usual in-cluster build setup is both.
+          #
+          # It runs only during a deploy, has no Service and no ingress, and the thing it builds
+          # is a Dockerfile from this repo. The exposure is the deploy path itself, which is
+          # already trusted with far more.
+          #
+          # allowPrivilegeEscalation is NOT set false here, and it is the one place in this
+          # fleet that is true. Setting it false was tried first and fails before buildkitd
+          # starts, with `newuidmap: Could not set caps`: rootlesskit puts the DAEMON in a user
+          # namespace, and mapping subuids into one goes through the setuid newuidmap helper,
+          # whose whole job is to raise capabilities. Blocking that does not make the builder
+          # safer — it makes rootless impossible, leaving only a root or privileged builder,
+          # which is strictly worse. Upstream's k8s example omits the field for this reason.
+          #
+          # What it does not grant: root on the node. The container is uid 1000, adds no
+          # capabilities, and is not privileged.
+          securityContext:
+            seccompProfile:
+              type: Unconfined
+            appArmorProfile:
+              type: Unconfined
+            runAsUser: 1000
+            runAsGroup: 1000
+          volumeMounts:
+            - name: context
+              mountPath: /workspace
+              readOnly: true
+            # buildkitd's state. An emptyDir, not a PVC: the layer cache is worth keeping for a
+            # single build's duration and not worth a Longhorn volume, since every base layer is
+            # re-pullable and the images are rebuilt from scratch on demand anyway.
+            - name: buildkitd
+              mountPath: /home/user/.local/share/buildkit
+          resources:
+            limits:
+              cpu: "2"
+              memory: 2048Mi
+            requests:
+              cpu: "200m"
+              memory: 256Mi
+      volumes:
+        - name: context
+          configMap:
+            name: build-context-{{ image_builder_name }}
+        - name: buildkitd
+          emptyDir: {}
