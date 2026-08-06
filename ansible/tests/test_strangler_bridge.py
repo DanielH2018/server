@@ -107,18 +107,11 @@ BRIDGE_BYPASS_PREFIXES = {
 # LAN-only API paths another homelab service calls directly, keyed by (service, prefix). Same
 # declare-with-a-reason rule as BRIDGE_BYPASS_PREFIXES; these are narrower (never public) but
 # they are still routes that skip forward-auth.
-BRIDGE_LAN_PREFIXES = {
-    ("freshrss", "/api/greader.php/"): (
-        "Homepage's FreshRSS widget calls the GReader API for unread counts. It sends a "
-        "username and password, and the API answers 401 without them — measured — so "
-        "FreshRSS's own auth is the gate, not this route."
-    ),
-    ("speedtest", "/api/"): (
-        "Homepage's speedtest widget reads /api/speedtest/latest. Unlike FreshRSS it passes no "
-        "credentials, so this really is unauthenticated: any LAN host can read the speed-test "
-        "history. Accepted deliberately — the data is low-sensitivity and it is never public."
-    ),
-}
+#
+# Empty since 2026-08-06: the freshrss and speedtest entries existed for homepage's widgets,
+# which now resolve those .local names to the cluster VIP and never reach the Docker edge. The
+# mechanism and this guard stay — the next service that needs one must still justify it here.
+BRIDGE_LAN_PREFIXES: dict[tuple[str, str], str] = {}
 
 
 def _lan_routers(config: dict) -> dict[str, dict]:

@@ -241,6 +241,10 @@ http:
       # the caller has no way to pass Authelia. Homepage's widgets are the case that found
       # this — they failed with ENOTFOUND the moment the container was retired.
       #
+      # No service declares one as of 2026-08-06: homepage's widgets, the only caller this ever
+      # had, now resolve the .local name to the cluster VIP instead (extra_hosts), which is the
+      # better answer where the caller can be pointed. Kept for a caller that cannot be.
+      #
       # LAN-ONLY, unlike a bypass: the callers are containers on daniel-server, so there is no
       # reason for the internet to reach these. The app's own API auth is the second layer and
       # the reason this is acceptable at all — the posture livesync already uses (network
