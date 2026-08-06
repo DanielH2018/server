@@ -85,6 +85,13 @@ BRIDGE_BYPASS_PREFIXES = {
         "check would go red while the jobs kept succeeding. Reproduces the healthchecks-ping "
         "Docker label, which died with the container."
     ),
+    ("karakeep", "/api/"): (
+        "Reproduces the karakeep-api Docker router, public since it was written: /api/v1 is "
+        "Bearer-token authenticated and the browser extension and mobile app cannot pass 2FA. "
+        "Measured unauthenticated: /api/v1/users/me and /api/v1/bookmarks both 401, so "
+        "karakeep's own token check is the gate. This carries an existing hole across rather "
+        "than opening one."
+    ),
 }
 
 

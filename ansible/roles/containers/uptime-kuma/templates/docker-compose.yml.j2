@@ -162,6 +162,24 @@ services:
       {{ kuma('karakeep-k8s', name='k3s karakeep', monitor_type='http',
               url='https://karakeep' ~ k8s_hostname_suffix ~ '.local.' ~ domain,
               accepted_statuscodes=['302'], max_redirects=0) }}
+      # karakeep's user-facing hostname, after its Docker copy was retired behind the bridge.
+      #
+      # Probed on /api/health, which sits under the /api/ bypass the browser extension and mobile
+      # app already need — so this reuses an existing hole rather than adding a probe route. It
+      # answers 200 unauthenticated (measured; /api/v1/* return 401 beside it), which makes this
+      # end-to-end like littlelink's: the 200 came from the app, having crossed the edge router,
+      # the bridge transport, the cluster's Traefik and the pod. A 302 would mean the bypass
+      # router stopped matching and Authelia caught it.
+      #
+      # ALERTING GAP, deliberate and recorded: karakeep-chrome, karakeep-meilisearch and
+      # karakeep-time-tagger had `docker`-type AutoKuma monitors that died with their containers.
+      # In-cluster their liveness probes restart them, which is better than autoheal was, but
+      # nothing pages — a crash-looping Meilisearch degrades search silently and this monitor
+      # stays green. Folded into the pending "Kuma monitors for unrouted k8s workloads" item,
+      # which already covers registry and cloudflare-ddns; see the slice-2 doc.
+      {{ kuma('karakeep-bridge', name='karakeep (via bridge)', monitor_type='http',
+              url='https://karakeep.local.' ~ domain ~ '/api/health',
+              accepted_statuscodes=['200'], max_redirects=0) }}
       # livesync's user-facing hostname, after its Docker copy was retired behind the bridge. Its
       # old monitor was AutoKuma-generated from the container, so it went with it.
       #

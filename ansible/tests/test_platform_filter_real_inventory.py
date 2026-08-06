@@ -60,8 +60,10 @@ def test_daniel_server_is_still_wholly_docker():
     # The migration HAS started: cloudflare-ddns was cut over to k3s on 2026-08-05 (46 -> 45),
     # then speedtest (45 -> 44), littlelink (44 -> 43), freshrss (43 -> 42) and healthchecks
     # (42 -> 41) the same day, all behind the strangler bridge. Then tempo was ADDED on
-    # 2026-08-06 (41 -> 42), the trace sink for Claude Code's spans, and livesync was cut over
-    # the same day (42 -> 41). The count
+    # 2026-08-06 (41 -> 42), the trace sink for Claude Code's spans, and livesync (42 -> 41) and
+    # karakeep (41 -> 40) were cut over the same day. karakeep took three helper containers with
+    # it that were never separate entries here, so the drop is 1 while four containers left. The
+    # count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -70,6 +72,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 41
-    assert len(filter_by_platform(containers, "docker")) == 41
+    assert len(containers) == 40
+    assert len(filter_by_platform(containers, "docker")) == 40
     assert filter_by_platform(containers, "k8s") == []

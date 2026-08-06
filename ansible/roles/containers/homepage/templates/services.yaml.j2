@@ -59,11 +59,12 @@
             icon: karakeep.png
             href: https://karakeep.{{ domain }}/
             description: Karakeep
-            server: my-docker
-            container: karakeep
+            # No server/container: karakeep runs in k3s now. Same as speedtest and freshrss
+            # above — the widget goes through the bridge on the LAN hostname. It calls /api/,
+            # so the bridge's existing bypass carries it; no extra route was needed.
             widget:
                 type: karakeep
-                url: "http://karakeep:3000"
+                url: https://karakeep.local.{{ domain }}
                 key: {{ karakeep_homepage_api_key }}
         - UPS:
             icon: apc.png
