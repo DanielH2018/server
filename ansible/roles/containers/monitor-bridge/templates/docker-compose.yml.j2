@@ -94,7 +94,18 @@ services:
       # its latest error ages past N8N_FAIL_WINDOW (recovered/idle). Systemic catch:
       # N8N_SYSTEMIC_MAX+ workflows each failing N8N_SYSTEMIC_STREAK+ times = n8n-wide → page now
       # as one alert, without waiting for each to hit N8N_CONSECUTIVE_MAX.
-      - N8N_URL=http://n8n:5678
+      # n8n moved to k3s on 2026-08-06, so the old container-to-container `http://n8n:5678` over
+      # `apps` no longer resolves. Pointed at the -k8s name, which Pi-hole answers with the
+      # cluster ingress VIP, NOT at the bridged `n8n.local.<domain>` — that resolves to
+      # daniel-server, and a container here cannot reach this host's own LAN address (measured:
+      # 10.0.0.161:443 times out from monitor-bridge while 10.0.0.240:443 connects). Routing the
+      # check through the Docker edge would make it unreachable from the one container that
+      # needs it, and the check would go dark reading as "all healthy".
+      #
+      # Authelia is not in this path: the k8s/n8n role's `n8n-monitoring` IngressRoute matches
+      # the two API prefixes below at priority 100 with rate-limit only. X-N8N-API-KEY is still
+      # the gate.
+      - N8N_URL=https://n8n{{ k8s_hostname_suffix }}.local.{{ domain }}
       - N8N_API_KEY={{ n8n_api_key }}
       - N8N_FAIL_WINDOW=2h
       - N8N_CONSECUTIVE_MAX=3

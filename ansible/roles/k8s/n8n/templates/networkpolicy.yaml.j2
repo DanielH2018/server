@@ -1,0 +1,43 @@
+---
+# THE FIRST NetworkPolicy IN THIS CLUSTER. k3s runs kube-router's netpol controller (it is on
+# unless --disable-network-policy is passed, and k3s_server_args does not pass it; the log line
+# "Starting network policy controller" is there from cluster bringup), so this is enforced
+# rather than decorative — but nothing had exercised it before, which is why the deploy verifies
+# both directions instead of trusting that.
+#
+# WHAT IT IS FOR. n8n's task-runner broker binds 0.0.0.0:5679 because n8n has no per-interface
+# bind option, and a client that can reach it AND holds N8N_RUNNERS_AUTH_TOKEN can register a
+# runner — which is arbitrary code execution. Under Compose the exposure was `apps` siblings.
+# Moving to one flat namespace would have WIDENED it to every workload in {{ k8s_namespace }},
+# including karakeep's headless Chrome, which renders attacker-supplied pages. This policy makes
+# the move a narrowing instead: the runners pod, and nothing else.
+#
+# The token is still a gate, not a replacement for one. This is the layer Compose could not
+# express.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: n8n-broker
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: n8n
+  policyTypes:
+    - Ingress
+  ingress:
+    # 5678 stays open to all sources, deliberately. It is what Traefik routes to and what the
+    # kubelet probes, and kube-router's handling of node-sourced probe traffic is exactly the
+    # thing that turns a "tighten it a little more" edit into a pod that never goes ready.
+    # Narrowing this would buy nothing either — 5678 is reachable from the whole network today.
+    - ports:
+        - protocol: TCP
+          port: {{ container_item.port }}
+    # 5679 is the point of the file.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: n8n-runners
+      ports:
+        - protocol: TCP
+          port: {{ n8n_k8s_broker_port }}

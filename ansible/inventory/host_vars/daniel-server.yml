@@ -186,11 +186,12 @@ containers_list:
     networks:
       - apps
       - codeserver
-  - name: n8n
-    port: 5678
-    use_authelia: true
-    networks:
-      - apps
+  # n8n moved to k3s on 2026-08-06 behind the strangler bridge, taking its task-runner sidecar
+  # with it (n8n-runners was never its own entry here). Unlike the earlier migrations there was
+  # no coexistence window — two schedulers against one database would double-fire every
+  # scheduled workflow — so the Docker copy was stopped before the seed rather than after.
+  # Rolling back is re-adding this entry, restoring N8N_URL in the monitor-bridge template, and
+  # removing bridge_hostname from daniel-box's; containers/n8n/data is still on disk.
   # karakeep moved to k3s on 2026-08-06 behind the strangler bridge, taking three helper
   # workloads with it (headless Chrome, Meilisearch, the time-tagger) — none of which were ever
   # their own entry here. Rolling back is re-adding this entry and removing bridge_hostname from

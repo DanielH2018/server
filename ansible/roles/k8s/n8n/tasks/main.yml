@@ -1,0 +1,95 @@
+---
+# n8n is the first migration in this slice with NO coexistence window, and that is a property of
+# the app rather than a shortcut. Its 7 workflows include scheduled ones — RSS polls, a daily
+# email, a TickTick calendar sync — and two n8n processes against the same seeded database each
+# run their own scheduler. Coexistence would double-fire every schedule and double-write to
+# TickTick. So the Docker copy is stopped BEFORE the seed, and this role's first run is also the
+# cutover run. See docs/k3s-migration/slice-2-leaf-apps.md.
+
+- name: Seed the n8n data volume
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/seed-volume
+  vars:
+    seed_volume_service: n8n
+    seed_volume_claim: "{{ n8n_k8s_claim }}"
+    seed_volume_source_path: "{{ n8n_k8s_source_path }}"
+    seed_volume_storage_class: "{{ n8n_k8s_storage_class }}"
+    seed_volume_size: "{{ n8n_k8s_size }}"
+    # n8n itself is the only writer of this claim; the runners hold no volume. Empty on the
+    # first run, when no Deployment exists yet, and correct on any re-seed.
+    seed_volume_quiesce:
+      - n8n
+    # The source is a live SQLite database with DB_SQLITE_VACUUM_ON_STARTUP, so a torn copy is
+    # not an acceptable outcome at any point here — there is no "the k8s copy is not
+    # authoritative yet" phase for this service. Stop the Docker containers first; this makes a
+    # source that moved a hard failure rather than a warning.
+    seed_volume_force: true
+
+- name: Deploy n8n to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: n8n
+    manifests_files:
+      - pvc-files.yaml
+      - networkpolicy.yaml
+      - service.yaml
+      - deployment.yaml
+      - deployment-runners.yaml
+      - ingressroute.yaml
+    manifests_secret_files:
+      - secret.yaml
+
+# ── prove the NetworkPolicy, rather than assuming it ────────────────────────────────────────
+# This is the cluster's first NetworkPolicy. kube-router's controller has been running since
+# bringup with nothing to enforce, so "the controller is up" is not evidence that a policy has
+# any effect — and a policy that silently does nothing is worse than no policy, because it gets
+# described as a control. The positive half is already covered: the runners' wait-for-broker
+# initContainer connects to n8n:5679, so a Running runners pod proves the allow rule works.
+# This is the negative half.
+- name: Render the broker-isolation probe
+  tags: [deploy]
+  ansible.builtin.template:
+    src: netpol-probe-job.yaml.j2
+    dest: /etc/rancher/k3s/manifests/n8n/netpol-probe-job.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Remove any previous broker-isolation probe
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete job n8n-netpol-probe
+      --ignore-not-found --wait=true
+  become: true
+  changed_when: true
+
+- name: Run the broker-isolation probe
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/n8n/netpol-probe-job.yaml"
+  become: true
+  changed_when: true
+
+- name: Wait for the broker-isolation probe to finish
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
+      job/n8n-netpol-probe --timeout=120s
+  become: true
+  changed_when: false
+  # The Job succeeds only when the connection is REFUSED or times out. A pod that is not the
+  # runners reaching 5679 fails the Job, and therefore the deploy.
+  register: n8n_netpol_probe
+  failed_when: n8n_netpol_probe.rc != 0
+
+- name: Report the broker-isolation result
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: >-
+      NetworkPolicy n8n-broker verified: a pod without app=n8n-runners cannot reach
+      n8n:{{ n8n_k8s_broker_port }}, and the runners' initContainer proves the runners can.

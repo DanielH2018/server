@@ -96,8 +96,7 @@ BACKUP_SIZE_MIN_HISTORY = int(_env("BACKUP_SIZE_MIN_HISTORY", "3"))
 _DEFAULT_BACKUP_SENTINELS = [
     "authelia/config/configuration.yml",
     "traefik/data/acme.json",
-    "n8n/data/config",
-    # freshrss and karakeep were removed 2026-08-06, on their cutovers to k3s. The directory is
+    # freshrss, karakeep and n8n were removed 2026-08-06, on their cutovers to k3s. The directory is
     # still on disk and Kopia still backs it up, which is exactly the problem: it stopped
     # receiving writes when the container was retired, so the sentinel kept resolving and this
     # check kept reporting green for a frozen copy while the live data moved to a Longhorn PVC.

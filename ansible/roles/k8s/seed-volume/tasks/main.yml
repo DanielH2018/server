@@ -108,6 +108,11 @@
 # checksum below must see a volume nothing is writing to. Leaving the workload up does not
 # corrupt anything — the verification catches it — but it makes the cutover seed fail every
 # time, and the failure reads as a copy bug rather than a running pod.
+# A Deployment that does not exist yet is the normal FIRST seed: the workload is applied after
+# this role runs, precisely so it never starts against an unseeded claim. `kubectl scale` has no
+# --ignore-not-found (checked against v1.36), so NotFound is tolerated explicitly. Only that one
+# string — any other scale failure is still fatal, because silently continuing would seed a
+# volume the workload is still writing to.
 - name: Quiesce the workloads writing to {{ seed_volume_claim }}
   tags: [deploy]
   when: seed_volume_copying | bool
@@ -116,8 +121,14 @@
       k3s kubectl -n {{ k8s_namespace }} scale deploy/{{ item }} --replicas=0 --timeout=120s
   loop: "{{ seed_volume_quiesce | default([]) }}"
   become: true
-  changed_when: true
+  register: seed_volume_scaled
+  changed_when: seed_volume_scaled.rc == 0
+  failed_when:
+    - seed_volume_scaled.rc != 0
+    - '"NotFound" not in seed_volume_scaled.stderr'
 
+# Same reasoning, plus one of its own: with no pods matching the selector, `kubectl wait` exits
+# non-zero with "no matching resources found" — which is the state this is waiting FOR.
 - name: Wait for the quiesced pods to be gone
   tags: [deploy]
   when: seed_volume_copying | bool
@@ -127,7 +138,11 @@
       -l app={{ item }} --timeout=120s
   loop: "{{ seed_volume_quiesce | default([]) }}"
   become: true
+  register: seed_volume_gone
   changed_when: false
+  failed_when:
+    - seed_volume_gone.rc != 0
+    - '"no matching resources found" not in seed_volume_gone.stderr'
 
 # always, because a failed copy that left the app scaled to zero is a silent outage: the play
 # aborts before k8s/manifests would re-apply the Deployment and put the replicas back.
@@ -148,7 +163,14 @@
           k3s kubectl -n {{ k8s_namespace }} scale deploy/{{ item }} --replicas=1
       loop: "{{ seed_volume_quiesce | default([]) }}"
       become: true
-      changed_when: true
+      register: seed_volume_restored
+      changed_when: seed_volume_restored.rc == 0
+      # NotFound tolerated for the same reason as the quiesce above — on a first seed there is
+      # nothing to restore, and failing here would abort the play in its `always`, which is the
+      # one place a failure hides the real one.
+      failed_when:
+        - seed_volume_restored.rc != 0
+        - '"NotFound" not in seed_volume_restored.stderr'
 - name: Remove the seed pod
   tags: [deploy]
   ansible.builtin.command:

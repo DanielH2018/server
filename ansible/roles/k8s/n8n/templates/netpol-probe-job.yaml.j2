@@ -1,0 +1,59 @@
+---
+# The negative test for networkpolicy.yaml.j2: a pod that is NOT the runners must not reach the
+# task-runner broker. It carries no app=n8n-runners label, which is the only thing the policy
+# admits on {{ n8n_k8s_broker_port }}.
+#
+# Inverted on purpose — this Job SUCCEEDS when the connection fails. `nc -w 5 -z` exits non-zero
+# on refused or timed-out, so `if ... then exit 1 else exit 0`. Reading it the other way round
+# would make a broken policy look like a passing test, which is the exact failure this exists to
+# rule out.
+#
+# It checks 5678 first, as a control. Without that, a probe pod with no network at all, a wrong
+# Service name, or a DNS failure would "pass" the isolation test for reasons that have nothing
+# to do with the policy.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: n8n-netpol-probe
+  namespace: {{ k8s_namespace }}
+spec:
+  activeDeadlineSeconds: 120
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: n8n-netpol-probe
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      containers:
+        - name: probe
+          image: {{ n8n_k8s_wait_image }}
+          command:
+            - sh
+            - -c
+            - |
+              if ! nc -w 5 -z n8n {{ container_item.port }}; then
+                echo "CONTROL FAILED: cannot reach n8n:{{ container_item.port }} either, so this"
+                echo "probe proves nothing about the policy. Check DNS and the Service."
+                exit 1
+              fi
+              echo "control ok: n8n:{{ container_item.port }} reachable"
+              if nc -w 5 -z n8n {{ n8n_k8s_broker_port }}; then
+                echo "POLICY NOT ENFORCED: reached broker port {{ n8n_k8s_broker_port }} from a"
+                echo "pod without app=n8n-runners. NetworkPolicy n8n-broker is not taking effect."
+                exit 1
+              fi
+              echo "isolated: broker port {{ n8n_k8s_broker_port }} refused, as intended"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: "200m"
+              memory: 64Mi
+            requests:
+              cpu: "10m"
+              memory: 16Mi

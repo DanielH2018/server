@@ -1,0 +1,53 @@
+---
+# Built in-cluster by the n8n-images role and pulled from the node-local registry — unlike every
+# other k8s role here, which pulls a published image. The Docker side builds these two from
+# templates/Dockerfile.j2 and Dockerfile-runners.j2 (an extra JS package, the runners config
+# file); no upstream tag carries either, so the cluster has to build them too.
+#
+# ORDERING: deploy the `n8n-images` tag before this one on a fresh cluster, or both pods sit in
+# ImagePullBackOff. Not an include_role here on purpose — a rebuild is minutes of BuildKit work
+# and every redeploy of n8n would pay it.
+#
+# `:latest` is correct rather than lazy: the tag is mutable by design, a rebuild pushes over it,
+# and imagePullPolicy: Always in the manifests is what makes a redeploy pick the new one up.
+# Renovate cannot track these (they are not upstream refs) — the FROM lines in the Dockerfiles
+# are what actually moves, and Renovate's built-in dockerfile manager already watches those.
+# test_renovate_managers.py exempts them by name for that reason.
+n8n_k8s_image: "{{ k8s_registry_pull_host }}/n8n:latest"
+n8n_k8s_runners_image: "{{ k8s_registry_pull_host }}/n8n-runners:latest"
+
+# Mirrors resources('2.0', '2048M', '0.10', '128M') in the compose template, for both workloads.
+n8n_k8s_cpu_limit: "2"
+n8n_k8s_mem_limit: 2048Mi
+n8n_k8s_cpu_request: "100m"
+n8n_k8s_mem_request: 128Mi
+
+# 225M at migration time: workflows, execution history, the encrypted credentials in
+# database.sqlite AND the key that decrypts them in `config`. On `longhorn` (backed up to B2),
+# matching the Docker side, where the bind mount under containers/ is deliberately in Kopia's
+# scope for exactly this reason.
+#
+# Losing this claim loses the credentials AND the key together — they are co-located by design
+# (see the role's CLAUDE.md on why the key is deliberately NOT also in SOPS).
+n8n_k8s_claim: n8n-data
+n8n_k8s_storage_class: longhorn
+n8n_k8s_size: 4Gi
+n8n_k8s_source_path: /home/ubuntu/server/containers/n8n/data
+
+# The `/files` mount. EMPTY at migration time (last written Oct 2025), but a claim rather than an
+# emptyDir because a workflow references /files/PAL_E4389.pdf — so the path is live, and an
+# emptyDir would silently turn "the file persists" into "the file vanishes on restart", which
+# fails at workflow-run time rather than at deploy time. Nothing to seed; created empty.
+n8n_k8s_files_claim: n8n-files
+n8n_k8s_files_storage_class: longhorn
+n8n_k8s_files_size: 1Gi
+
+# The task-runner broker port. Not container_item.port (5678, the UI) — a second port on the
+# same Service, so N8N_RUNNERS_TASK_BROKER_URI stays byte-identical to the compose template's
+# http://n8n:5679 and the runners image needs no change.
+n8n_k8s_broker_port: 5679
+
+# The runners' readiness gate (see deployment-runners.yaml.j2). alpine because busybox `nc -z`
+# is all it needs and the image is already the fleet's small-utility choice — seed-volume uses
+# the same one.
+n8n_k8s_wait_image: alpine:3.22

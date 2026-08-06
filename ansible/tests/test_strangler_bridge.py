@@ -92,6 +92,15 @@ BRIDGE_BYPASS_PREFIXES = {
         "karakeep's own token check is the gate. This carries an existing hole across rather "
         "than opening one."
     ),
+    ("n8n", "/webhook/"): (
+        "Reproduces the n8n-webhook Docker router, public since it was written: third-party "
+        "services POST to /webhook/<id> with no session, and several have the URL registered "
+        "on their side already. Gating it would not fail loudly — n8n would look healthy while "
+        "every inbound webhook 302'd to a login page the caller cannot answer. The path itself "
+        "is the credential: the id is an unguessable per-workflow UUID, and an unregistered one "
+        "404s. /webhook-test/ is deliberately NOT here — it is the dev-only endpoint, and the "
+        "trailing slash on /webhook/ is what keeps it out."
+    ),
 }
 
 

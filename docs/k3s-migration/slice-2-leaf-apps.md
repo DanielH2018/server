@@ -332,11 +332,22 @@ send an SNI matching the Host it serves.
 ### Where it stands, 2026-08-06
 
 **Every routed service in the slice has cut over** — `cloudflare-ddns`, `speedtest`,
-`littlelink`, `freshrss`, `healthchecks`, `livesync` and now `karakeep`. daniel-server is at 40
-managed containers (46 at the start, less seven cut over, plus `tempo` added in parallel) — but
-that drop counts entries, not containers: `karakeep` took four with it, only one of which was
-ever its own entry. None of the ten workloads in the cluster has a Docker twin serving traffic.
-**Batch D is all that remains of slice 2**, and it is blocked on the builder alone.
+`littlelink`, `freshrss`, `healthchecks`, `livesync`, `karakeep` and now `n8n`. daniel-server is
+at 39 managed containers (46 at the start, less eight cut over, plus `tempo` added in parallel)
+— but that drop counts entries, not containers: `karakeep` took four with it and `n8n` two, and
+in both cases only one was ever its own entry. None of the twelve workloads in the cluster has a
+Docker twin serving traffic. **Batch D is done, and with it slice 2**: the in-cluster registry
+and the BuildKit image-builder landed first, because `n8n` is the one service here whose images
+this repo builds rather than pulls.
+
+`n8n` was the only migration in the slice with **no coexistence window**, and that is worth
+recording as a category rather than a quirk. Every service before it could run both copies for
+hours — the k8s twin served nothing until the bridge pointed at it, so a mistake cost nothing.
+`n8n` runs a scheduler. Two copies against one seeded database each fire the same RSS polls,
+the same daily email, and the same TickTick calendar sync, and the last of those writes to a
+third party. So the sequence inverts: stop Docker first, then seed, then deploy, then bridge —
+and the first deploy IS the cutover. Any future service with a scheduler, a cron, or a queue
+consumer belongs in this category; "deploy alongside and verify" is not available to it.
 
 `freshrss` needed no config change at all, which is worth recording because it was the one
 expected to: FreshRSS keeps its `base_url` in the seeded `config.php`, and that file was
@@ -404,9 +415,11 @@ daniel-server can see inside the cluster.
   Service name while `image:` stays `localhost:5000/...` to match `registries.yaml`, which one
   variable cannot serve; and how the build context reaches daniel-box (ConfigMap, hostPath, or a
   git-clone initContainer) is unwritten.
-- **A cluster-side pod-health alert.** Six migrated workloads are unrouted and now have no alert
-  at all — `registry`, `cloudflare-ddns`, and karakeep's chrome, meilisearch and time-tagger.
-  See decision 3.
+- **A cluster-side pod-health alert.** Seven migrated workloads are unrouted and now have no
+  alert at all — `registry`, `cloudflare-ddns`, karakeep's chrome, meilisearch and time-tagger,
+  and now `n8n-runners`. See decision 3. `n8n-runners` is the sharpest case yet: it executes
+  every workflow's code, so a crash-looping runner means workflows silently stop running while
+  `n8n` itself stays green and routed.
 
 The strangler bridge was the other entry here and is built; see *The bridge, as built* above.
 `karakeep` was the last of batch E and cut over on 2026-08-06.
@@ -544,6 +557,52 @@ being unable to reach `uptime-kuma.local.<domain>` from a pod (fixed with `hostA
 original wildcard-DNS finding behind decision 1. Anything on daniel-box or inside a pod that
 needs a homelab hostname must pin it explicitly. Slice 3 moves the monitoring stack, which is
 full of cross-service hostnames — expect this again there.
+
+### A container cannot reach its own host's LAN address
+
+Found while repointing monitor-bridge's `check_n8n` at the migrated service, and it invalidates
+the obvious answer. Containers on daniel-server **cannot** reach `10.0.0.161` — daniel-server's
+own LAN address — on 80 or 443: measured from `monitor-bridge`, both time out, while the cluster
+VIP `10.0.0.240:443` connects immediately from the same container. DNS is not the problem; the
+names resolve correctly and the connection is what fails.
+
+This matters because `bridge_lan_prefixes` — the mechanism built for exactly this problem, and
+used by `freshrss` and `speedtest` — routes the caller through the Docker edge, i.e. through
+`10.0.0.161`. **For a caller that is itself a container on daniel-server, that path does not
+work.** It works for a LAN browser, which is what the existing two serve. So a cross-service call
+from a container has to address the cluster directly: point it at the `-k8s` hostname (Pi-hole
+answers with the VIP) and admit it with a narrow, LAN-only IngressRoute on the cluster side.
+
+Worth checking whether the freshrss and speedtest homepage widgets actually work, since they use
+the path this finding says is unavailable to them. Not investigated here — it is a separate bug
+from the migration if it is one.
+
+### The cluster's first NetworkPolicy, and why it is verified rather than asserted
+
+`n8n`'s task-runner broker binds `0.0.0.0:5679` because n8n has no per-interface bind option, and
+anything that can reach it plus `N8N_RUNNERS_AUTH_TOKEN` can register a runner — which is
+arbitrary code execution. Under Compose the exposure was `apps` siblings. **One flat namespace
+would have made the migration a widening**: every workload in `homelab`, including karakeep's
+headless Chrome, which renders attacker-supplied pages. A NetworkPolicy narrows it to the runners
+pod, so the move is a tightening instead.
+
+Two things generalise:
+
+- **A second Service is not isolation.** Splitting the broker onto its own Service name looks like
+  a control and is not — any pod can dial a ClusterIP whatever it is called. The policy is the
+  control; one Service with both ports also keeps `N8N_RUNNERS_TASK_BROKER_URI` byte-identical to
+  the compose value.
+- **"The controller is running" is not "the policy is enforced."** k3s runs kube-router's netpol
+  controller (it is on unless `--disable-network-policy`, which `k3s_server_args` does not pass),
+  and it had been running since bringup with zero policies to enforce. A policy that silently does
+  nothing is worse than none, because it gets described as a control. So the deploy proves both
+  directions: the runners' initContainer connects on 5679 (positive), and a Job that must FAIL to
+  connect runs as the negative — with a control probe on 5678 first, so a pod with no network, a
+  wrong Service name, or a DNS failure cannot pass by accident.
+
+Leave `5678` open to all sources. Narrowing it to a Traefik selector buys nothing (it is reachable
+from the whole network today) and risks the kubelet's probe traffic, which is the edit that turns
+this into a pod that never goes ready.
 
 ### Check what depends on a service before retiring it, not just what it depends on
 
