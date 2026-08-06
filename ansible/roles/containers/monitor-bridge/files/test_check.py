@@ -353,51 +353,56 @@ def test_traefik_high_ratio_below_floor_is_ok(monkeypatch):
 
 
 # --- check_traefik_latency --------------------------------------------------
-# Per-service: 1st prom_vector call = total rps by service, 2nd = p95 seconds by service.
+# Per-service: 1st prom_vector call = total request rate by service (the histogram's own _count),
+# 2nd = the rate under the TRAEFIK_SLOW_BUCKET boundary. The check alerts on the share ABOVE it.
 
 
 def test_traefik_latency_names_slow_service(monkeypatch):
     # A degraded backend answering 200 slowly: invisible to every error-ratio check, which is
-    # the whole reason this one exists.
-    rps = [({"service": "slow@docker"}, 1.0), ({"service": "sonarr@docker"}, 2.0)]
-    p95 = [({"service": "slow@docker"}, 9.5), ({"service": "sonarr@docker"}, 0.3)]
-    monkeypatch.setattr(check, "prom_vector", _seq(rps, p95))
+    # the whole reason this one exists. 0.8 of 1.0 rps under 5s = 20% over -> named.
+    total = [({"service": "slow@docker"}, 1.0), ({"service": "sonarr@docker"}, 2.0)]
+    under = [({"service": "slow@docker"}, 0.8), ({"service": "sonarr@docker"}, 2.0)]
+    monkeypatch.setattr(check, "prom_vector", _seq(total, under))
     ok, msg = check.check_traefik_latency()
     assert not ok
     assert "slow@docker" in msg
     assert "sonarr" not in msg
 
 
-def test_traefik_latency_tolerates_a_slow_tail(monkeypatch):
-    # p95, not max: a dashboard polling widgets several times a second always has a slow tail
-    # (homepage ran ~25 calls over 1.5s out of 2169 on 2026-08-05). p95 stays well under the
-    # threshold there, and alerting on the tail would page for entirely normal behaviour.
-    rps = [({"service": "homepage@docker"}, 3.6)]
-    p95 = [({"service": "homepage@docker"}, 0.4)]
-    monkeypatch.setattr(check, "prom_vector", _seq(rps, p95))
-    ok, _ = check.check_traefik_latency()
+def test_traefik_latency_does_not_alert_on_a_sub_boundary_tail(monkeypatch):
+    # The regression this check was rewritten for. homepage@docker on 2026-08-06 13:15-13:20 UTC:
+    # 114 requests (0.38 rps), 24 of them over 1.2s, max 3.063s, real p95 1.576s. The old check
+    # asked histogram_quantile for a p95 that fell in Traefik's empty 1.2s-5.0s bucket and got an
+    # interpolated 4.058s, over its 3s threshold. Counting at the 5.0s edge instead: nothing
+    # crossed it, so a heavy-but-healthy sub-boundary tail must read clean.
+    total = [({"service": "homepage@docker"}, 0.38)]
+    under = [({"service": "homepage@docker"}, 0.38)]
+    monkeypatch.setattr(check, "prom_vector", _seq(total, under))
+    ok, msg = check.check_traefik_latency()
     assert ok
+    assert "worst 0.0%" in msg
 
 
 def test_traefik_latency_below_floor_is_ok(monkeypatch):
     # Very slow but near-idle (< 0.05 rps floor) -> must NOT alert, same rule as 5xx.
-    rps = [({"service": "quiet@docker"}, 0.01)]
-    p95 = [({"service": "quiet@docker"}, 30.0)]
-    monkeypatch.setattr(check, "prom_vector", _seq(rps, p95))
+    total = [({"service": "quiet@docker"}, 0.01)]
+    under = [({"service": "quiet@docker"}, 0.0)]
+    monkeypatch.setattr(check, "prom_vector", _seq(total, under))
     ok, _ = check.check_traefik_latency()
     assert ok
 
 
-def test_traefik_latency_ignores_nan_quantile(monkeypatch):
-    # histogram_quantile returns NaN when a service has no observations in the window. NaN
-    # comparisons are always False, so a naive `> threshold` would silently never alert and
-    # the service would also be counted as healthy. It must be skipped explicitly.
-    rps = [({"service": "idle@docker"}, 1.0)]
-    p95 = [({"service": "idle@docker"}, float("nan"))]
-    monkeypatch.setattr(check, "prom_vector", _seq(rps, p95))
+def test_traefik_latency_reports_a_missing_bucket_boundary(monkeypatch):
+    # A cumulative histogram emits every bucket for any service that served a request, so an
+    # eligible service absent from the le= vector means the boundary itself is gone (Traefik's
+    # buckets reconfigured). Reading that as "0 rps under the boundary" would compute 100% slow
+    # for every service at once; it has to surface as a config fault instead.
+    total = [({"service": "sonarr@docker"}, 1.0)]
+    monkeypatch.setattr(check, "prom_vector", _seq(total, []))
     ok, msg = check.check_traefik_latency()
-    assert ok
-    assert "0 service(s)" in msg
+    assert not ok
+    assert "bucket" in msg
+    assert "sonarr@docker" in msg
 
 
 def test_traefik_low_5xx_is_ok(monkeypatch):

@@ -132,11 +132,20 @@ RESTART_WINDOW = _env("RESTART_WINDOW", "15m")
 RESTART_MAX = float(_env("RESTART_MAX", "3"))
 TRAEFIK_5XX_PCT = float(_env("TRAEFIK_5XX_PCT", "5"))
 TRAEFIK_MIN_RPS = float(_env("TRAEFIK_MIN_RPS", "0.05"))
-# p95 seconds per Traefik service before a route counts as slow. 3s is where a page reads as
-# broken rather than sluggish. p95 rather than max on purpose: a dashboard that polls widgets
-# several times a second will always have a slow tail, and alerting on the tail would page for
-# normal behaviour.
-TRAEFIK_P95_SECONDS = float(_env("TRAEFIK_P95_SECONDS", "3"))
+# Slowness is measured at a histogram BUCKET BOUNDARY, not with histogram_quantile. Traefik's
+# default buckets are 0.1 / 0.3 / 1.2 / 5.0 / +Inf, so between 1.2s and 5.0s there is nothing to
+# interpolate from and a quantile landing there is invented, not measured. The old check compared
+# histogram_quantile(0.95, ...) against 3s — a threshold sitting inside that empty 3.8s-wide gap.
+# Measured on homepage@docker 2026-08-06 13:15-13:20 UTC: Prometheus reported p95 4.058s while the
+# Traefik access log for the same window showed a real p95 of 1.576s (114 requests, 24 over 1.2s,
+# max 3.063s). Every firing was that arithmetic. Across all 42,598 homepage requests that day only
+# 8 exceeded 3s, never more than 2 in a 5-minute window, so no window's real p95 came near it.
+#
+# The bucket counts themselves are exact, so "more than 5% of requests exceeded 5.0s" IS "p95 above
+# 5.0s", stated without interpolation. Keep TRAEFIK_SLOW_BUCKET on a boundary Traefik actually
+# emits — an le= that matches no series selects nothing (see the unmeasurable branch below).
+TRAEFIK_SLOW_BUCKET = _env("TRAEFIK_SLOW_BUCKET", "5.0")
+TRAEFIK_SLOW_PCT = float(_env("TRAEFIK_SLOW_PCT", "5"))
 N8N_URL = _env("N8N_URL", "http://n8n:5678").rstrip("/")
 N8N_API_KEY = _env("N8N_API_KEY", "")
 # n8n hides successful executions (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none, kept that way to bound
@@ -1145,7 +1154,7 @@ def check_traefik_5xx():
 
 
 def check_traefik_latency():
-    """Elevated p95 latency per Traefik service, naming each offender.
+    """Share of slow requests per Traefik service, naming each offender.
 
     The gap check_traefik_5xx cannot close: a slow route still answers 200, so an error-ratio
     check stays green while a service is unusable. Nothing here watched latency at all before
@@ -1158,43 +1167,72 @@ def check_traefik_latency():
 
     Same shape as check_traefik_5xx deliberately: per-service so the alert names the offender,
     and behind the same TRAEFIK_MIN_RPS floor so one slow request on a near-idle route is not
-    an alarm.
+    an alarm. It shares the 5xx check's ratio form too, for the reason in TRAEFIK_SLOW_BUCKET:
+    a share of requests past a real bucket edge is exact where an interpolated quantile is not.
+
+    Both rates come from the histogram's own series (_count, not traefik_service_requests_total)
+    so numerator and denominator are always the same scrape of the same metric family — mixing
+    the two counters lets a ratio drift outside 0-100% between scrapes.
     """
-    rps = dict(
+    total = dict(
         (m.get("service", "?"), v)
         for m, v in prom_vector(
-            "sum(rate(traefik_service_requests_total[5m])) by (service)"
+            "sum(rate(traefik_service_request_duration_seconds_count[5m])) by (service)"
         )
     )
-    p95 = prom_vector(
-        "histogram_quantile(0.95, sum(rate("
-        "traefik_service_request_duration_seconds_bucket[5m])) by (service, le))"
+    under = dict(
+        (m.get("service", "?"), v)
+        for m, v in prom_vector(
+            'sum(rate(traefik_service_request_duration_seconds_bucket{le="%s"}[5m])) '
+            "by (service)" % TRAEFIK_SLOW_BUCKET
+        )
     )
     offenders = []
+    unmeasurable = []
     eligible = 0
-    for m, seconds in p95:
-        svc = m.get("service", "?")
-        if rps.get(svc, 0.0) < TRAEFIK_MIN_RPS:
+    worst = 0.0
+    for svc, rps in total.items():
+        if rps < TRAEFIK_MIN_RPS:
             continue
-        # histogram_quantile returns NaN for a service with no observations in the window;
-        # NaN comparisons are always False, so it would silently never alert. Skip explicitly
-        # rather than relying on that.
-        if seconds != seconds:
+        # A cumulative histogram emits every bucket for any service that served a request, so a
+        # service missing from `under` means the le= selected nothing at all — Traefik's buckets
+        # were reconfigured out from under this check. Report that rather than reading the
+        # absent series as 0 requests under the boundary, which would page every service at once.
+        if svc not in under:
+            unmeasurable.append(svc)
             continue
         eligible += 1
-        if seconds > TRAEFIK_P95_SECONDS:
-            offenders.append((svc, seconds, rps.get(svc, 0.0)))
+        pct = 100.0 * (1.0 - under[svc] / rps)
+        worst = max(worst, pct)
+        if pct > TRAEFIK_SLOW_PCT:
+            offenders.append((svc, pct, rps))
+    if unmeasurable:
+        return (
+            False,
+            "no %ss bucket for %d service(s) (%s) — check Traefik's histogram buckets"
+            % (
+                TRAEFIK_SLOW_BUCKET,
+                len(unmeasurable),
+                ", ".join(sorted(unmeasurable)[:5]),
+            ),
+        )
     offenders.sort(key=lambda spr: -spr[1])
     if offenders:
-        desc = ", ".join("%s (p95 %.1fs at %.2f rps)" % o for o in offenders[:5])
-        return False, "%d service(s) slower than %.0fs p95: %s" % (
-            len(offenders),
-            TRAEFIK_P95_SECONDS,
-            desc,
+        desc = ", ".join("%s (%.0f%% of %.2f rps)" % o for o in offenders[:5])
+        return (
+            False,
+            "%d service(s) with over %.0f%% of requests slower than %ss: %s"
+            % (
+                len(offenders),
+                TRAEFIK_SLOW_PCT,
+                TRAEFIK_SLOW_BUCKET,
+                desc,
+            ),
         )
-    return True, "latency ok: %d service(s) above floor, all under %.0fs p95" % (
+    return True, "latency ok: %d service(s) above floor, worst %.1f%% over %ss" % (
         eligible,
-        TRAEFIK_P95_SECONDS,
+        worst,
+        TRAEFIK_SLOW_BUCKET,
     )
 
 

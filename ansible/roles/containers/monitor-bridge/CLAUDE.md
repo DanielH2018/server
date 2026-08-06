@@ -77,6 +77,17 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   - **Traefik 5xx** (5xx ratio over 5m **per service**, naming each offender, gated by a
     per-service `TRAEFIK_MIN_RPS` volume floor — per-service so the alert points at the
     erroring backend and a broken low-traffic service can't hide diluted in the aggregate)
+  - **Traefik Latency** (share of requests slower than a histogram BUCKET BOUNDARY, per service,
+    behind the same `TRAEFIK_MIN_RPS` floor — the gap the 5xx check can't close, since a degraded
+    backend still answers 200. **Not `histogram_quantile`**: Traefik's default buckets are
+    0.1/0.3/1.2/5.0/+Inf, so a quantile landing between 1.2s and 5.0s is interpolated across an
+    empty 3.8s-wide gap, and the old 3s threshold sat inside it. Every firing was that arithmetic —
+    homepage@docker read 4.058s on 2026-08-06 where the Traefik access log for the same window
+    showed a real p95 of 1.576s. Bucket counts are exact, so ">`TRAEFIK_SLOW_PCT` (5%) of requests
+    over `TRAEFIK_SLOW_BUCKET` (5.0s)" IS "p95 over 5.0s" without interpolation. Keep
+    `TRAEFIK_SLOW_BUCKET` on a boundary Traefik actually emits: an `le=` matching no series is
+    reported as a config fault rather than read as 0 requests under the boundary, which would page
+    every service at once.)
   - **n8n Prod Workflows** (n8n public API: per-*active*-workflow **consecutive-failure
     streak**. n8n doesn't save successful executions (`EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`, to
     bound `database.sqlite` + its B2 backup churn — 2026-07-03), so "consecutive" can't be read
@@ -493,7 +504,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 - Thresholds are env-tunable in the compose template (`GRACE_CYCLES` (startup/redeploy grace),
   `BACKUP_MAX_AGE_H`, `DISK_MAX_PCT`,
   `CERT_MIN_DAYS`, `MEM_MAX_PCT`, `RESTART_WINDOW`/`RESTART_MAX`, `OOM_WINDOW`,
-  `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`/`CPU_CONSECUTIVE`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`,
+  `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`/`CPU_CONSECUTIVE`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`/`TRAEFIK_SLOW_BUCKET`/`TRAEFIK_SLOW_PCT`,
   `N8N_FAIL_WINDOW`/`N8N_CONSECUTIVE_MAX`/`N8N_SYSTEMIC_STREAK`/`N8N_SYSTEMIC_MAX`; n8n connection
   config: `N8N_URL`/`N8N_API_KEY`; arr queue
   connection config: `SONARR_URL`/`SONARR_API_KEY`/`RADARR_URL`/`RADARR_API_KEY`; GitOps
