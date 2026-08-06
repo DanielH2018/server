@@ -255,6 +255,14 @@ containers_list:
     use_authelia: true
     networks:
       - monitoring
+  - name: tempo
+    port: false
+    use_authelia: false
+    networks:
+      # monitoring only: the otel-collector exports Claude Code spans to tempo:4317 and
+      # Grafana's Tempo datasource queries tempo:3200 over this net. No web UI of its own
+      # (traces are read through Grafana), so no port/Authelia and nothing published.
+      - monitoring
   - name: otel-collector
     port: false
     use_authelia: false

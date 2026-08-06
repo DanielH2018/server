@@ -1,0 +1,62 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+---
+
+services:
+  tempo:
+    # PINNED to the 2.x line on purpose — Tempo 3.0 is a breaking architectural change
+    # (legacy ingesters removed, block_builder/live_store replace them, `ingester:` and
+    # `compactor:` are no longer valid config keys and Tempo refuses to start). A Renovate
+    # major bump needs the config migrated first; see CLAUDE.md.
+    image: grafana/tempo:2.10.7
+    container_name: tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    # Single distroless Go binary; it only ever writes to the tempo_data volume below.
+    # /tmp tmpfs covers transient scratch.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - TZ={{ tz }}
+    # NB no PUID/PGID: this image is not LSIO-style and runs as its own baked-in uid
+    # 10001:10001. That is why tasks/main.yml copies the config world-readable (0644) —
+    # 10001 is not in group 1000, so a 0640 config would fail with "permission denied"
+    # before Tempo ever starts. Same as otel-collector, which also runs as 10001.
+    volumes:
+      - ./tempo-config.yaml:/etc/tempo/config.yaml:ro
+      # Blocks + WAL. A NAMED volume, deliberately: trace data is bulky and regenerable
+      # (spans re-arrive from the collector), so it stays out of Kopia's containers/ scope —
+      # the same documented exception as loki's volume. Docker seeds a fresh named volume
+      # from the image's /var/tempo, which ships owned by 10001:10001, so no chown init
+      # container is needed (the upstream example's tempo-init exists for older tags).
+      - tempo_data:/var/tempo
+    expose:
+      # 3200 = query API (Grafana's Tempo datasource) + /ready; 4317 = OTLP gRPC ingest
+      # (the otel-collector's traces pipeline). Both reachable only over `monitoring` —
+      # nothing is published to the host or LAN.
+      - 3200
+      - 4317
+    {{ service_networks() }}
+    labels:
+      # Distroless image — no shell or HTTP client for a Docker healthcheck (same as loki
+      # and otel-collector), so Kuma HTTP-probes /ready over the shared monitoring net.
+      # NB /ready 503s briefly after a restart while the ingester warms up, exactly like loki.
+      {{ kuma('tempo', monitor_type='http', name='Tempo', url='http://tempo:3200/ready', interval=60, max_retries=2) }}
+      # Watchtower: version-pinned image (see the 3.x note above), skip auto-update.
+      - "com.centurylinklabs.watchtower.enable=false"
+    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana. Sized
+    # above the collector's 256M — Tempo holds the live block in memory before flushing.
+    {{ resources('0.50', '512M', '0.05', '64M') }}
+
+{{ external_networks() }}
+
+volumes:
+    # Trace blocks + WAL — regenerable and bulky, deliberately out of Kopia's bind-mount
+    # scope (same rationale as loki's volume).
+    tempo_data:

@@ -43,9 +43,13 @@ def test_dedupes():
 
 
 def test_skips_config_mandatory_images():
-    # authelia + couchdb crash on a bare `docker run` (no config/creds), so image-smoke
+    # authelia + couchdb + tempo crash on a bare `docker run` (no config/creds), so image-smoke
     # must not try to boot them or the required check false-fails; any tag is skipped.
-    diff = "+    image: authelia/authelia:4.39.20\n+    image: couchdb:3.5.2\n"
+    diff = (
+        "+    image: authelia/authelia:4.39.20\n"
+        "+    image: couchdb:3.5.2\n"
+        "+    image: grafana/tempo:2.10.7\n"
+    )
     assert extract_changed_images(diff) == []
 
 

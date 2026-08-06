@@ -5,3 +5,5 @@
 role_deps:
   - prometheus
   - grafana
+  # The traces pipeline exports to tempo:4317 — bring the sink up first.
+  - tempo

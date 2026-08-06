@@ -3,10 +3,18 @@
 A single OpenTelemetry collector that gives Claude Code's OTLP export a sink and wires it
 into the observability stack already running here. Claude Code (on the host) exports OTLP/gRPC
 to `localhost:4317` (`settings.json`); this collector receives it, re-exposes the metrics for
-Prometheus, and forwards the event logs to the existing Loki — rather than standing up the
-portable `~/claude-otel` bundle, which ships its own Grafana/Loki/Prometheus and would collide
-on 3000/9090/3100. **Metrics + event logs only — no prompt/response/tool content.** See
-repo-root `CLAUDE.md`.
+Prometheus, forwards the event logs to the existing Loki, and forwards spans to `tempo` —
+rather than standing up the portable `~/claude-otel` bundle, which ships its own
+Grafana/Loki/Prometheus and would collide on 3000/9090/3100. See repo-root `CLAUDE.md`.
+
+**All three signals, and content IS included.** `~/.claude/settings.json` sets
+`OTEL_LOG_USER_PROMPTS`, `OTEL_LOG_ASSISTANT_RESPONSES`, `OTEL_LOG_TOOL_DETAILS` and
+`OTEL_LOG_TOOL_CONTENT` to `1`, so prompts, assistant responses, and tool arguments/output are
+stored verbatim — in Loki as event attributes and in Tempo as span attributes. (This file
+previously claimed "metrics + event logs only — no prompt/response/tool content"; that was
+stale, corrected 2026-08-06 after reading a live `user_prompt` event back out of Loki.) Treat
+the Loki and Tempo stores as being as sensitive as the transcripts themselves. Nothing is
+published off `monitoring` / host loopback.
 
 ## At a glance
 - **Image:** `otel/opentelemetry-collector-contrib:0.157.0` (pinned; Renovate-tracked via the
@@ -17,7 +25,7 @@ repo-root `CLAUDE.md`.
   container). `:8889` (Prometheus scrape) and `:13133` (health) are reachable only over the
   `monitoring` net.
 - **Networks:** monitoring
-- **Depends on:** prometheus, grafana (loki lives in the grafana compose) — deploy ordering via
+- **Depends on:** prometheus, grafana (loki lives in the grafana compose), tempo — deploy ordering via
   `meta/deps.yml` toposort, not compose `depends_on` (the collector queues its Loki export if
   Loki isn't up yet)
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`, and
@@ -32,8 +40,13 @@ repo-root `CLAUDE.md`.
   image is a distroless single Go binary, no shell). The `health_check` extension listens on
   `:13133` and the `kuma()` label points an HTTP monitor at `http://otel-collector:13133/`.
   Prometheus also scrapes `:8889`, so Scrape Targets double-covers the collector's death.
-- **Config choices** (`files/otel-collector-config.yaml`): `memory_limiter` is first in both
-  pipelines so an OTLP burst is shed before hitting the 256M cgroup cap; `metric_expiration:
+- **The traces pipeline is what makes spans exist at all.** An `otlp` receiver only registers
+  the gRPC TraceService when some pipeline consumes traces — so before `traces:` was added
+  (2026-08-06), Claude Code was exporting `claude_code.interaction` spans to 4317 and having
+  every one of them refused, silently. Client-side the two required env vars were already set
+  (`CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` + `OTEL_TRACES_EXPORTER=otlp`). See `tempo/CLAUDE.md`.
+- **Config choices** (`files/otel-collector-config.yaml`): `memory_limiter` is first in all
+  three pipelines so an OTLP burst is shed before hitting the 256M cgroup cap; `metric_expiration:
   168h` keeps idle cumulative counters from flickering to "No data" between usage bursts;
   `resource_to_telemetry_conversion` turns bounded OTLP resource attrs (model, terminal) into
   metric labels for the by-model breakdown.

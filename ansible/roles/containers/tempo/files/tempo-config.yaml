@@ -1,0 +1,42 @@
+# Grafana Tempo — trace backend for Claude Code's enhanced-telemetry spans
+# (claude_code.interaction -> llm_request / tool -> tool.blocked_on_user + tool.execution,
+# plus subagent.spawn / bash.subprocess / compaction / mcp.rpc).
+#
+# Spans arrive from the otel-collector's traces pipeline, NOT directly from Claude Code —
+# the host exporter only ever talks to the collector on 127.0.0.1:4317.
+# Adapted from the portable chezmoi ~/claude-otel bundle's tempo-config.yaml.
+
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        # gRPC only — the single producer is the collector's otlp_grpc/tempo exporter.
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+ingester:
+  # Flush blocks often so a span is queryable minutes after the turn that made it, rather
+  # than at the 30m default — these traces are read interactively, while still working.
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    # 30d. Deliberately shorter than Prometheus' retention: spans are per-turn, far bulkier
+    # than counters, and trace-level debugging is retrospective by days, not months.
+    block_retention: 720h
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/blocks
+    wal:
+      path: /var/tempo/wal
+
+# Tempo posts anonymous usage stats to grafana.com by default. Nothing else in this stack
+# phones home (see grafana's GF_ANALYTICS_* and the collector), so opt out.
+usage_report:
+  reporting_enabled: false

@@ -1,0 +1,29 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}"
+
+- name: Deploy the Tempo config
+  tags: [config]
+  ansible.builtin.copy:
+    src: tempo-config.yaml
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/tempo-config.yaml"
+    # 0644, NOT the repo's usual 0664: Tempo runs as uid 10001 (not PUID 1000), so it reads
+    # this only via the world bit. Verified with `-config.verify=true` on the pinned tag.
+    mode: "0644"
+  register: tempo_cfg
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+  vars:
+    # The config is bind-mounted and read once at startup, so a config-only edit must force
+    # a recreate — recreate: auto wouldn't otherwise notice. Same idiom as otel-collector.
+    common_config_changed: "{{ tempo_cfg is changed }}"
