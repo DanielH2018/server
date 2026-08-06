@@ -1,0 +1,120 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: karakeep-time-tagger
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: karakeep-time-tagger
+  template:
+    metadata:
+      labels:
+        app: karakeep-time-tagger
+    spec:
+      enableServiceLinks: false
+      initContainers:
+        # The compose template gates this container on `depends_on: karakeep: condition:
+        # service_healthy`, which has NO k8s equivalent — pods start in parallel. Without this
+        # the tagger raced the app, failed its initial connection check against
+        # /api/v1/users/me with ECONNREFUSED, and crashed; observed on the first deploy.
+        #
+        # It does not merely fail once. The script's loop only touches /tmp/healthy after a
+        # SUCCESSFUL run, so the liveness probe finds no file, restarts the pod, and the whole
+        # `uv pip install` runs again — a restart loop that resolves only when a run happens to
+        # land after the app is up.
+        #
+        # A TCP connect to the SERVICE is the faithful translation, not an approximation: a k8s
+        # Service routes only to READY endpoints, so this connects exactly when karakeep's
+        # readiness probe passes, which is what service_healthy meant.
+        - name: wait-for-karakeep
+          image: {{ karakeep_k8s_tagger_image }}
+          command:
+            - python3
+            - -c
+            - |
+              import socket, time
+              while True:
+                  try:
+                      socket.create_connection(("karakeep", {{ container_item.port }}), 5).close()
+                      break
+                  except OSError:
+                      time.sleep(5)
+      containers:
+        - name: time-tagger
+          image: {{ karakeep_k8s_tagger_image }}
+          # Runtime deps are version-pinned rather than floating so a container start does not
+          # silently re-resolve them to whatever is newest on PyPI — the same silent drift the
+          # base-image digest pin closes, one layer down. Renovate tracks each pin via a custom
+          # manager, so they age visibly. Kept identical to the compose command, minus the
+          # rotated-log prune: the script's loguru sink rotates into the working directory, which
+          # on Docker was the container's writable layer that nothing cleaned. Here the working
+          # directory is an emptyDir that dies with the pod, so the prune has nothing to do.
+          command:
+            - bash
+            - -c
+            - >-
+              uv pip install karakeep-python-api==1.8.0 fire==0.7.1 tqdm==4.68.4
+              beautifulsoup4==4.15.0 loguru==0.7.3 -q --system &&
+              while true; do
+              python /script/karakeep-time-tagger.py --cache_file /tmp/bookmarks.temp --reset_all=True
+              && touch /tmp/healthy;
+              sleep 900;
+              done
+          workingDir: /work
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # No DAC_OVERRIDE, unlike the compose template. That cap existed only because the
+              # uv cache was a bind mount owned by uid 1000 while the container ran as root; an
+              # emptyDir is created root-owned, so the reason is gone with the bind mount.
+              drop:
+                - ALL
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            - name: KARAKEEP_PYTHON_API_ENDPOINT
+              value: http://karakeep:{{ container_item.port }}/api/v1/
+            - name: KARAKEEP_PYTHON_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: karakeep
+                  key: KARAKEEP_PYTHON_API_KEY
+          volumeMounts:
+            - name: script
+              mountPath: /script
+              readOnly: true
+            - name: uv-cache
+              mountPath: /root/.cache/uv
+            - name: work
+              mountPath: /work
+          # The compose healthcheck, unchanged: /tmp/healthy is touched only after a SUCCESSFUL
+          # run, so a hung or persistently failing tagger goes stale even though the process is
+          # alive. The loop sleeps 900s, so <2100 allows one missed cycle. No readiness probe —
+          # nothing routes to this and nothing waits on it, so readiness would only add a state
+          # that means nothing.
+          livenessProbe:
+            exec:
+              command:
+                - python3
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/healthy').st_mtime<2100 else 1)"
+            initialDelaySeconds: 600
+            periodSeconds: 60
+          resources:
+            limits:
+              cpu: "{{ karakeep_k8s_tagger_cpu_limit }}"
+              memory: {{ karakeep_k8s_tagger_mem_limit }}
+            requests:
+              cpu: "{{ karakeep_k8s_tagger_cpu_request }}"
+              memory: {{ karakeep_k8s_tagger_mem_request }}
+      volumes:
+        - name: script
+          configMap:
+            name: karakeep-time-tagger
+        - name: uv-cache
+          emptyDir: {}
+        - name: work
+          emptyDir: {}

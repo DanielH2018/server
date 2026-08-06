@@ -1,0 +1,32 @@
+---
+# Seed BEFORE the workload starts, so karakeep never runs its first-boot setup against an empty
+# /data that is about to be overwritten.
+- name: Seed the karakeep data volume
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/seed-volume
+  vars:
+    seed_volume_service: karakeep
+    seed_volume_claim: "{{ karakeep_k8s_claim }}"
+    seed_volume_source_path: "{{ karakeep_k8s_source_path }}"
+    seed_volume_storage_class: "{{ karakeep_k8s_storage_class }}"
+    seed_volume_size: "{{ karakeep_k8s_size }}"
+
+- name: Deploy karakeep to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: karakeep
+    manifests_files:
+      - configmap.yaml
+      - middleware.yaml
+      # The Meilisearch index gets a claim but no seed — see pvc-meili.yaml.j2.
+      - pvc-meili.yaml
+      - deployment.yaml
+      - deployment-chrome.yaml
+      - deployment-meilisearch.yaml
+      - deployment-time-tagger.yaml
+      - service.yaml
+      - ingressroute.yaml
+    manifests_secret_files:
+      - secret.yaml

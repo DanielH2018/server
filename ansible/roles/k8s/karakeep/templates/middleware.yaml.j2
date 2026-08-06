@@ -1,0 +1,28 @@
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  # The k8s copy of csp-karakeep (traefik role's config.yml.j2). Duplicated rather than shared
+  # because Traefik's allowCrossNamespace stays off and a Middleware must live beside the
+  # IngressRoute referencing it — the same trade the telemetry stack makes for rate-limit and
+  # authelia.
+  #
+  # Values are byte-identical to the Docker side on purpose: karakeep is served through both
+  # during coexistence, and a CSP that differs between them turns into "the k8s copy breaks the
+  # UI" reports that are really a header diff. karakeep's own inline scripts need
+  # 'unsafe-inline'/'unsafe-eval', so this does not stop inline-script injection — it stops
+  # EXTERNAL script loading, plugin objects, <base> hijacking, cross-origin exfil via
+  # fetch/websocket/form-post, and clickjacking. img-src allows https: so cached-page and
+  # favicon art still render.
+  name: csp-karakeep
+  namespace: {{ k8s_namespace }}
+spec:
+  headers:
+    customResponseHeaders:
+      Content-Security-Policy: >-
+        default-src 'self'; base-uri 'self'; object-src 'none';
+        script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob: https:; font-src 'self' data:;
+        connect-src 'self'; media-src 'self' data: blob:; frame-src 'self' blob:;
+        worker-src 'self' blob:; manifest-src 'self'; frame-ancestors 'self';
+        form-action 'self'
