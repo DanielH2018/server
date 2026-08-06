@@ -15,6 +15,33 @@ spec:
         app: karakeep-time-tagger
     spec:
       enableServiceLinks: false
+      initContainers:
+        # The compose template gates this container on `depends_on: karakeep: condition:
+        # service_healthy`, which has NO k8s equivalent — pods start in parallel. Without this
+        # the tagger raced the app, failed its initial connection check against
+        # /api/v1/users/me with ECONNREFUSED, and crashed; observed on the first deploy.
+        #
+        # It does not merely fail once. The script's loop only touches /tmp/healthy after a
+        # SUCCESSFUL run, so the liveness probe finds no file, restarts the pod, and the whole
+        # `uv pip install` runs again — a restart loop that resolves only when a run happens to
+        # land after the app is up.
+        #
+        # A TCP connect to the SERVICE is the faithful translation, not an approximation: a k8s
+        # Service routes only to READY endpoints, so this connects exactly when karakeep's
+        # readiness probe passes, which is what service_healthy meant.
+        - name: wait-for-karakeep
+          image: {{ karakeep_k8s_tagger_image }}
+          command:
+            - python3
+            - -c
+            - |
+              import socket, time
+              while True:
+                  try:
+                      socket.create_connection(("karakeep", {{ container_item.port }}), 5).close()
+                      break
+                  except OSError:
+                      time.sleep(5)
       containers:
         - name: time-tagger
           image: {{ karakeep_k8s_tagger_image }}

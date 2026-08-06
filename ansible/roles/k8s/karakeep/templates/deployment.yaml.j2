@@ -19,6 +19,29 @@ spec:
         app: karakeep
     spec:
       enableServiceLinks: false
+      initContainers:
+        # The compose template's `depends_on: {karakeep-chrome, karakeep-meilisearch}:
+        # condition: service_healthy`, which k8s has no equivalent for. Milder than the
+        # time-tagger's version of this — karakeep starts either way — but its comment is
+        # explicit that the gate is on health rather than start order, because meili's index
+        # must be ready or the app logs search errors on a cold start until it catches up.
+        #
+        # Connecting to the Services rather than the pods is what makes this a gate on
+        # readiness: a Service has no endpoints until its probe passes.
+        - name: wait-for-deps
+          image: {{ karakeep_k8s_tagger_image }}
+          command:
+            - python3
+            - -c
+            - |
+              import socket, time
+              for host, port in (("karakeep-chrome", 9222), ("karakeep-meilisearch", 7700)):
+                  while True:
+                      try:
+                          socket.create_connection((host, port), 5).close()
+                          break
+                      except OSError:
+                          time.sleep(5)
       containers:
         - name: karakeep
           image: {{ karakeep_k8s_image }}
