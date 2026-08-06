@@ -225,10 +225,12 @@ containers_list:
     bridge_bypass_prefixes:
       - /webhook/
     # No bridge_lan_prefixes for monitor-bridge's check_n8n API poll, and that is not an
-    # omission. Containers on daniel-server cannot reach daniel-server's own LAN address, so a
-    # route via the Docker edge is unreachable from the container that needs it. The check
-    # talks to the -k8s name and the cluster VIP directly instead — see the -monitoring
-    # IngressRoute in the role's ingressroute.yaml.j2.
+    # omission. A route via the Docker edge is unreachable from the container that needs it:
+    # Traefik publishes its ports from the `apps` network, and a container cannot reach
+    # hostIP:publishedPort when the publishing container shares its own bridge (same-bridge
+    # hairpin NAT — see docs/k3s-migration/slice-2-leaf-apps.md). The check talks to the -k8s
+    # name and the cluster VIP directly instead — see the -monitoring IngressRoute in the
+    # role's ingressroute.yaml.j2.
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the

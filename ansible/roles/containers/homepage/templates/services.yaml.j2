@@ -39,8 +39,10 @@
             href: https://speedtest.{{ domain }}/
             description: Internet tracking
             # No server/container: speedtest runs in k3s now, so there is no Docker container
-            # for the status dot. The widget reaches it through the bridge on the LAN hostname
-            # rather than by container name, over the bridge_lan_prefixes route.
+            # for the status dot. The widget does NOT go through the Docker bridge — compose
+            # maps this .local name straight to the cluster ingress VIP via extra_hosts,
+            # because the Docker edge is unreachable from this container (same-bridge hairpin
+            # NAT; the reasoning is in docker-compose.yml.j2).
             widget:
                 type: speedtest
                 url: https://speedtest.local.{{ domain }}
@@ -49,7 +51,7 @@
             href: https://freshrss.{{ domain }}/
             description: RSS Link Aggregator
             # No server/container: freshrss runs in k3s now. Same as speedtest above — the
-            # widget goes through the bridge on the LAN hostname.
+            # widget resolves this .local name straight to the cluster VIP.
             widget:
                 type: freshrss
                 url: https://freshrss.local.{{ domain }}
@@ -60,8 +62,8 @@
             href: https://karakeep.{{ domain }}/
             description: Karakeep
             # No server/container: karakeep runs in k3s now. Same as speedtest and freshrss
-            # above — the widget goes through the bridge on the LAN hostname. It calls /api/,
-            # so the bridge's existing bypass carries it; no extra route was needed.
+            # above — the widget resolves this .local name straight to the cluster VIP, where
+            # the bridge IngressRoute serves it without Authelia; no extra route was needed.
             widget:
                 type: karakeep
                 url: https://karakeep.local.{{ domain }}
