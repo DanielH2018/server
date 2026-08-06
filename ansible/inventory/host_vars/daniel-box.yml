@@ -139,6 +139,25 @@ containers_list:
     hostname: "livesync{{ k8s_hostname_suffix }}"
     port: 5984
     use_authelia: false
+    # Cut over 2026-08-06.
+    bridge_hostname: livesync
+    # The only bridge so far that suppresses the generic Host router. livesync's edge routing is
+    # not "everything on this host": the sync API is gated on a secret header and /_utils is
+    # carved out behind Authelia at priority 200, so an unconditional Host router would forward
+    # traffic straight past the token check. The four replacements are hand-written in the
+    # traefik role's config.yml.j2; the service and serversTransport are still generated, and a
+    # guard test fails if nothing references them.
+    bridge_custom_routers: true
+    # `/` and it is genuinely end-to-end, which no other gated service manages. Everywhere else
+    # the probe path has to be an endpoint that answers without a session; here EVERY endpoint
+    # answers without one, because require_valid_user means CouchDB replies 401 rather than
+    # redirecting. So a 401 through this route was produced by CouchDB, in the cluster, having
+    # crossed the bridge — the same quality of signal littlelink's 200 gives. Measured: `/` and
+    # `/_up` both return 401 unauthenticated.
+    #
+    # It is exposed LAN-only, like every probe route, and it exposes nothing: an unauthenticated
+    # caller gets the 401 and stops there.
+    bridge_probe_path: /
   # Slice 2, batch R. No hostname/port and no Traefik route on purpose: this is an
   # unauthenticated plain-HTTP registry, reachable only on the node's loopback via hostPort
   # and in-cluster via its Service. Giving it an ingress would put push access on the LAN.

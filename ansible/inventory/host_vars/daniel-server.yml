@@ -347,13 +347,12 @@ containers_list:
   # is unchanged by the platform: this is the public link-in-bio landing page (www), so a login
   # gate would break it. Rolling back is re-adding this entry and removing bridge_hostname from
   # daniel-box's.
-  - name: livesync
-    port: 5984
-    # CouchDB enforces its own auth (require_valid_user = true in local.ini); the
-    # Obsidian LiveSync replication client uses basic auth and can't pass Authelia 2FA.
-    use_authelia: false
-    networks:
-      - apps
+  # livesync moved to k3s on 2026-08-06, behind the strangler bridge. Its edge routers are the
+  # only hand-written ones in the bridge — the sync API's X-Sync-Token gate and the Authelia'd
+  # /_utils carve-out both live in the traefik role's config.yml.j2 now, the latter having moved
+  # off this container's labels, where it would have died with it. Rolling back is re-adding this
+  # entry, removing bridge_hostname/bridge_custom_routers from daniel-box's, and restoring the
+  # livesync-utils labels in the livesync role's compose template.
   - name: ical-proxy
     port: false
     use_authelia: false
