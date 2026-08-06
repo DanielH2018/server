@@ -258,7 +258,7 @@ trusted with data that would.
 | **C** | **Done 2026-08-05** (#84) | `freshrss`, `healthchecks` | `seed-volume` against data that matters, on `longhorn`, with backup verified in B2. **B2 checkpoint here.** |
 | **R** | **Registry done 2026-08-05** (#86); builder deferred to D | `registry` + builder | Infrastructure, not a migration: `registry:2` plus an in-cluster build Job. Must land before D, which is the first batch needing a built image. |
 | **D** | Blocked — the builder | `n8n` | Larger state, and the first built image — two of them, main and task runners. n8n's encrypted credentials survive the move. |
-| **E** | `livesync` **done 2026-08-06** (#100, #101); `karakeep` remaining | `karakeep`, `livesync` | Multi-container workload, and the highest-value data in the slice, moved last with every mechanic already proven. `livesync` proved the bridge can carry a service whose edge routing is not generatable. |
+| **E** | **done 2026-08-06** — `livesync` (#100, #101), `karakeep` (#105, #106) | `karakeep`, `livesync` | Multi-container workload, and the highest-value data in the slice, moved last with every mechanic already proven. `livesync` proved the bridge can carry a service whose edge routing is not generatable; `karakeep` proved it can carry four workloads where only one is routed. |
 
 One PR per batch.
 
@@ -310,6 +310,16 @@ probe path this is a deliberate hole in the edge, so each prefix must also be de
 The trailing slash is part of the contract, since `PathPrefix('/ping')` would also match
 `/pingXYZ`.
 
+karakeep's `/api/` is the second case, and it also showed how this can fail quietly. The
+allow-list entry and the inventory comment explaining the bypass both shipped; the inventory
+**key** did not. No bypass router was generated, every `/api/` request fell through to the
+Authelia-gated router and answered 302, and both things pointed at that path on the strength of
+the comment — homepage's widget and the Kuma bridge monitor — broke together. The guard only
+checked inventory against the allow-list, which is the direction that cannot fail this way; it
+now checks both, so a declared bypass nothing asks for is an error rather than a silent no-op.
+A bypass earns a second monitor for the same reason: karakeep's bridge monitor probes
+`/api/health`, so the route that carries the automated callers is the one being watched.
+
 `littlelink` needs none of that, and is worth keeping in mind for it. Being public and
 un-gated, its ordinary bridge monitor already reaches the app, so it is the canary for the
 bridge mechanism itself — it goes red if the mechanism breaks, independently of whether the
@@ -322,10 +332,11 @@ send an SNI matching the Host it serves.
 ### Where it stands, 2026-08-06
 
 **Every routed service in the slice has cut over** — `cloudflare-ddns`, `speedtest`,
-`littlelink`, `freshrss`, `healthchecks` and now `livesync`. daniel-server is at 41 managed
-containers (46 at the start, less six cut over, plus `tempo` added in parallel), and none of the
-seven workloads in the cluster has a Docker twin serving traffic. What remains of slice 2 is
-`karakeep` and batch D.
+`littlelink`, `freshrss`, `healthchecks`, `livesync` and now `karakeep`. daniel-server is at 40
+managed containers (46 at the start, less seven cut over, plus `tempo` added in parallel) — but
+that drop counts entries, not containers: `karakeep` took four with it, only one of which was
+ever its own entry. None of the ten workloads in the cluster has a Docker twin serving traffic.
+**Batch D is all that remains of slice 2**, and it is blocked on the builder alone.
 
 `freshrss` needed no config change at all, which is worth recording because it was the one
 expected to: FreshRSS keeps its `base_url` in the seeded `config.php`, and that file was
@@ -340,6 +351,7 @@ it correct rather than requiring an edit.
 | `freshrss` | **730 files, identical digest** | **cut over** — bridged | `freshrss-k8s`, `freshrss-bridge` |
 | `healthchecks` | 2 files, identical digest | **cut over** — bridged, `/ping/` bypassed | `healthchecks-k8s`, `healthchecks-bridge` |
 | `livesync` | source held still, digests matched | **cut over** — bridged, four hand-written routers | `livesync-k8s`, `livesync-bridge` |
+| `karakeep` | re-seeded quiescent both ends, digests matched | **cut over** — bridged, `/api/` bypassed | `karakeep-k8s`, `karakeep-bridge`; three helpers lost theirs |
 | `registry` | — | loopback only, refused on LAN | none — see below |
 
 `livesync` is the one bridge whose edge routing could not be generated, and the shape is worth
@@ -392,10 +404,12 @@ daniel-server can see inside the cluster.
   Service name while `image:` stays `localhost:5000/...` to match `registries.yaml`, which one
   variable cannot serve; and how the build context reaches daniel-box (ConfigMap, hostPath, or a
   git-clone initContainer) is unwritten.
-- **`karakeep`**, the remainder of batch E. It needs no built image — every one of its four
-  images is upstream — so it is not behind the builder.
+- **A cluster-side pod-health alert.** Six migrated workloads are unrouted and now have no alert
+  at all — `registry`, `cloudflare-ddns`, and karakeep's chrome, meilisearch and time-tagger.
+  See decision 3.
 
 The strangler bridge was the other entry here and is built; see *The bridge, as built* above.
+`karakeep` was the last of batch E and cut over on 2026-08-06.
 
 ### The B2 checkpoint — resolved 2026-08-06, passed
 
