@@ -34,7 +34,12 @@ Metabase dashboard.
   `cscli appsec-rules` loaded and pages monitor-bridge's "CrowdSec AppSec" monitor on failure. Manual
   verify: `docker exec crowdsec cscli appsec-configs list` (non-empty) + `metrics` shows an `appsec`
   acquisition source.
-- **Host crons (state-file → monitor-bridge):** `crowdsec-update-home-allowlist.sh` (every 5 min),
+- **Host crons (state-file → monitor-bridge):** `crowdsec-update-home-allowlist.sh` (every 5 min —
+  keeps **both** the home public IPv4 *address* and the home LAN's IPv6 **/64 prefix** in the
+  `home-ips` allowlist. The prefix, not a /128, is the point: IPv6 has no NAT, so every device gets
+  its own routable address and privacy extensions rotate it — a /128 would cover one interface of one
+  machine for a few hours. It was IPv4-only until 2026-08-06, when a burst test egressing over IPv6
+  got the homelab's own address banned and 403'd every public hostname for everyone at home),
   `docker-user-verify.sh` (every 15 min), `appsec-verify.sh` (every 15 min, asserts the inline WAF is
   actually loaded — the fail-open blind spot), and `cloudflare-ip-drift.sh` (weekly) — the last diffs
   the hardcoded `cloudflare_ips` (`group_vars/all.yml`, which gates trustedIPs + the DOCKER-USER DROP)

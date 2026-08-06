@@ -163,8 +163,13 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   - **CrowdSec Home Allowlist** (reads `/home-allowlist/state.json`, written **every 5 min** by the
     **traefik** role's `crowdsec-update-home-allowlist.sh` host cron — `down` on a FAILED run (ipify
     unreachable / malformed IP / cscli error) or >30 min staleness (cron broken / never ran), a
-    missing/corrupt state file included. That cron keeps the operator's current home public IP in
-    CrowdSec's `home-ips` allowlist so browsing the public path from home doesn't trip the WAF; it
+    missing/corrupt state file included. That cron keeps the operator's current home public IPv4
+    address AND the home LAN's IPv6 /64 prefix in
+    CrowdSec's `home-ips` allowlist so browsing the public path from home doesn't trip the WAF
+    (IPv4-only until 2026-08-06 — the IPv6 half was the gap that let a burst test ban the homelab's
+    own address); a v4-only host skips the IPv6 half and stays green, but a host that HAS global
+    IPv6 and cannot resolve it pages, since a stale prefix 403s everyone at home on the next
+    rotation; it
     writes state on EVERY run incl. the common IP-unchanged fast path, so a healthy no-op keeps the
     monitor green and only a real failure/stall pages. It was the last self-`logger`ing cron with no
     watchdog — the twin of the WG Pi Peer Backup gap (2026-07-05). Same state-file idiom; pure
