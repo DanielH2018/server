@@ -558,24 +558,50 @@ original wildcard-DNS finding behind decision 1. Anything on daniel-box or insid
 needs a homelab hostname must pin it explicitly. Slice 3 moves the monitoring stack, which is
 full of cross-service hostnames — expect this again there.
 
-### A container cannot reach its own host's LAN address
+### Some containers cannot reach the host's own LAN address — and which ones is not obvious
 
-Found while repointing monitor-bridge's `check_n8n` at the migrated service, and it invalidates
-the obvious answer. Containers on daniel-server **cannot** reach `10.0.0.161` — daniel-server's
-own LAN address — on 80 or 443: measured from `monitor-bridge`, both time out, while the cluster
-VIP `10.0.0.240:443` connects immediately from the same container. DNS is not the problem; the
-names resolve correctly and the connection is what fails.
+Found while repointing monitor-bridge's `check_n8n`, then corrected when the homepage widgets were
+investigated on 2026-08-06. The first version of this section said "containers on daniel-server
+cannot reach 10.0.0.161". **That is too broad and acting on it would break working things.**
 
-This matters because `bridge_lan_prefixes` — the mechanism built for exactly this problem, and
-used by `freshrss` and `speedtest` — routes the caller through the Docker edge, i.e. through
-`10.0.0.161`. **For a caller that is itself a container on daniel-server, that path does not
-work.** It works for a LAN browser, which is what the existing two serve. So a cross-service call
-from a container has to address the cluster directly: point it at the `-k8s` hostname (Pi-hole
-answers with the VIP) and admit it with a narrow, LAN-only IngressRoute on the cluster side.
+What is measured:
 
-Worth checking whether the freshrss and speedtest homepage widgets actually work, since they use
-the path this finding says is unavailable to them. Not investigated here — it is a separate bug
-from the migration if it is one.
+| Container | Networks | Egress route to 10.0.0.161 | Result |
+|---|---|---|---|
+| `uptime-kuma` | `monitoring` only | via `172.19.0.1`, src `172.19.0.3` | **works** (200) |
+| `monitor-bridge` | `apps`,`kopia`,`media`,`monitoring` | via `172.21.0.1`, src `172.21.0.6` | **times out** |
+| `homepage` | `apps`,`homepage_private`,`media`,`monitoring`,`proxy` | via the `apps` bridge | **timed out** |
+
+So the failure tracks the interface the traffic actually LEAVES BY, not "being a container". The
+multi-homed containers default-route out `apps` (172.21) and hang; the single-homed one on
+`monitoring` (172.19) succeeds. The mechanism was not pinned down — it is NOT UFW (default-deny
+INPUT, and Docker's nat/FORWARD bypasses INPUT anyway), NOT the DOCKER-USER origin lock (it allows
+`172.16.0.0/12` and only governs forwarded traffic), and NOT Traefik missing from the network
+(it is attached to both `apps` and `monitoring`). The most likely remaining explanation is
+reply-path asymmetry on a multi-homed container, but that is a hypothesis, not a finding.
+
+**Why it still matters, unchanged:** `bridge_lan_prefixes` — the mechanism built for exactly this
+problem — routes the caller through the Docker edge at `10.0.0.161`. For `homepage` and
+`monitor-bridge`, the two containers that actually make cross-service calls, that path does not
+work. It DOES work for a LAN browser and for `uptime-kuma`, which is why the `*-bridge` Kuma
+monitors are healthy and must not be "fixed".
+
+**The fix that works regardless of which side of this line a container falls on** is to address
+the cluster directly instead of round-tripping through the host. Two shapes, both now in use:
+
+- `homepage` gets `extra_hosts` mapping each bridged `<svc>.local.<domain>` to the ingress VIP,
+  generated from the same inventory the bridge routers come from. Docker SNATs container egress to
+  the host's LAN address, so the request arrives satisfying the bridge route's
+  `ClientIP(10.0.0.161/32)` guard — which deliberately carries no Authelia. This grants no new
+  access: any container could already dial the VIP with any Host header, so only name resolution
+  was ever wrong.
+- `monitor-bridge`'s `check_n8n` points at the `-k8s` hostname with a narrow LAN-only IngressRoute
+  on the cluster side, because it needs a path Authelia does not gate and n8n's API is read-write.
+
+**Every homepage widget for a migrated service had been broken since that service cut over**, with
+`ETIMEDOUT` in homepage's own log naming freshrss outright. Fixed 2026-08-06; verified by real data
+(`speedtest` returning a live result, `karakeep` `status: ok`) and by the error rate going from
+roughly one per minute to zero.
 
 ### The cluster's first NetworkPolicy, and why it is verified rather than asserted
 
