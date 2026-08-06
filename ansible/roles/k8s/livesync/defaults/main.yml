@@ -1,0 +1,24 @@
+---
+# Same image the Docker role runs — both copies stay on the same tag through coexistence so a
+# difference in behaviour between them is never the image.
+livesync_k8s_image: couchdb:3.5.2
+# Mirrors resources('1.0', '1024M', '0.10', '128M') in the compose template.
+livesync_k8s_cpu_limit: "1"
+livesync_k8s_mem_limit: 1024Mi
+livesync_k8s_cpu_request: "100m"
+livesync_k8s_mem_request: 128Mi
+
+# 50M at migration time. On longhorn-NOBACKUP, and that is the deliberate part: kopiaignore.j2
+# excludes livesync/couchdb-data/ from Kopia for reasons that carry over unchanged to Longhorn.
+# It is a CouchDB B-tree rewritten daily — a new content-defined object every snapshot, so it
+# dedupes poorly — and it is named there as the engine behind the B2 hidden-version churn that
+# tripped the 85% usage alert (66M -> 1.1G, ~17x, after the 2026-06-23 rebuild). The vault's
+# source of truth is the markdown on each Obsidian client, and LiveSync's "Rebuild everything"
+# re-uploads the DB from a device, so the server copy is regenerable.
+#
+# Backing it up here would therefore ADD recurring B2 load that the Docker side deliberately
+# refused, against a Class C budget measured at ~1,660/day on 2026-08-06 with a 2,500 cap.
+livesync_k8s_claim: livesync-data
+livesync_k8s_storage_class: longhorn-nobackup
+livesync_k8s_size: 2Gi
+livesync_k8s_source_path: /home/ubuntu/server/containers/livesync/couchdb-data

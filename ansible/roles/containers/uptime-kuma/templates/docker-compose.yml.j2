@@ -128,6 +128,14 @@ services:
       {{ kuma('healthchecks-k8s', name='k3s healthchecks', monitor_type='http',
               url='https://healthchecks' ~ k8s_hostname_suffix ~ '.local.' ~ domain ~ '/ping/00000000-0000-0000-0000-000000000000',
               accepted_statuscodes=['404'], max_redirects=0) }}
+      # livesync has no forward-auth (the Obsidian client can't pass 2FA), so 401 is the healthy
+      # answer and a strong one: CouchDB itself produced it, having been reached through the
+      # route, so this proves the backend the way littlelink's 200 does rather than merely
+      # proving a middleware answered. 302 would mean Authelia had crept in front of a client
+      # that cannot satisfy it, and 502 means the pod is gone.
+      {{ kuma('livesync-k8s', name='k3s LiveSync', monitor_type='http',
+              url='https://livesync' ~ k8s_hostname_suffix ~ '.local.' ~ domain ~ '/',
+              accepted_statuscodes=['401'], max_redirects=0) }}
       # healthchecks' user-facing hostname. Its old monitor was `docker`-type, queried through
       # the socket, so retiring the container took it away entirely rather than merely leaving
       # it stale.

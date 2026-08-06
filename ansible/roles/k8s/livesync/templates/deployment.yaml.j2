@@ -1,0 +1,130 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: livesync
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # The PVC is ReadWriteOnce and Longhorn runs one replica, so a rolling update would deadlock:
+  # the new pod waits for a volume the old pod still holds.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: livesync
+  template:
+    metadata:
+      labels:
+        app: livesync
+    spec:
+      enableServiceLinks: false
+      initContainers:
+        # local.d must be WRITABLE, which is why it is an emptyDir with a copy rather than the
+        # ConfigMap mounted straight onto /opt/couchdb/etc/local.d. CouchDB's entrypoint writes
+        # the admin credential from COUCHDB_USER/COUCHDB_PASSWORD into local.d/docker.ini on
+        # startup, and a read-only mount makes that fail. Verified on daniel-server, where the
+        # bind mount holds exactly two files: local.ini (Ansible, mtime Jun 29) and docker.ini
+        # (the entrypoint, mtime Aug 2 = last container restart).
+        #
+        # Nothing in there needs to persist: local.ini is regenerated from the ConfigMap every
+        # start, docker.ini from the env. That is also why this directory is NOT one of the
+        # seeded volumes — copying it would freeze a stale docker.ini into the PVC.
+        - name: seed-config
+          image: {{ livesync_k8s_image }}
+          command:
+            - sh
+            - -c
+            - cp /config/local.ini /opt/couchdb/etc/local.d/local.ini
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: local-d
+              mountPath: /opt/couchdb/etc/local.d
+      containers:
+        - name: couchdb
+          image: {{ livesync_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # The compose template's cap_drop/cap_add pair: CouchDB's entrypoint chowns
+              # /opt/couchdb/data and then drops to the couchdb user via setpriv.
+              #
+              # FOWNER is the one addition, and it is required HERE and not in Docker because
+              # the volume is an ext4 Longhorn PVC rather than a bind mount, so it carries a
+              # lost+found at mode 0700. The entrypoint's second pass is
+              #   find /opt/couchdb/data -type d ! -perm 0755 -exec chmod -f 0755 {} +
+              # which on daniel-server matches nothing (that tree is already all 0755). Here it
+              # matches lost+found — which the entrypoint's PRECEDING chown pass has just handed
+              # to couchdb, so root is no longer its owner, and chmod on a file you do not own
+              # needs FOWNER. Without it the chmod fails with EPERM, `-f` suppresses the message
+              # but NOT the exit status, find propagates it, and `set -e` kills the entrypoint.
+              #
+              # The failure mode is worth recording because it is invisible: the container exits
+              # 1 having logged absolutely nothing, which reads like a crashed image rather than
+              # a permission error. Found with `bash -x` on the entrypoint. The compose template
+              # predicted it — "Add FOWNER if it complains".
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - SETUID
+                - SETGID
+                - DAC_OVERRIDE
+                - FOWNER
+          env:
+            - name: COUCHDB_USER
+              value: admin
+            - name: COUCHDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: livesync
+                  key: COUCHDB_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /opt/couchdb/data
+            - name: local-d
+              mountPath: /opt/couchdb/etc/local.d
+          # An exec probe, not httpGet, because local.ini sets require_valid_user = true: BOTH
+          # `/` and `/_up` answer 401 to an unauthenticated request. Measured against the running
+          # Docker container, which is why this is not the compose healthcheck's shape — that one
+          # is `curl -s` with no -f, so it passes on the 401 and proves only that a socket
+          # answered. A k8s httpGet treats 401 as failure, so the pod would never go ready.
+          #
+          # The credential comes from the container's own env, so it appears in no manifest.
+          # `/_up` is CouchDB's health endpoint and returns {"status":"ok"} once the node is
+          # serving, which is a real readiness signal rather than a liveness one.
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - curl -sf -u "admin:$COUCHDB_PASSWORD" http://127.0.0.1:{{ container_item.port }}/_up
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - curl -sf -u "admin:$COUCHDB_PASSWORD" http://127.0.0.1:{{ container_item.port }}/_up
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ livesync_k8s_cpu_limit }}"
+              memory: {{ livesync_k8s_mem_limit }}
+            requests:
+              cpu: "{{ livesync_k8s_cpu_request }}"
+              memory: {{ livesync_k8s_mem_request }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ livesync_k8s_claim }}
+        - name: config
+          configMap:
+            name: livesync-config
+        - name: local-d
+          emptyDir: {}

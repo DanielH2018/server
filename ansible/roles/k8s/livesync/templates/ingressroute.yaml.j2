@@ -1,0 +1,20 @@
+{% from 'ingressroute.yml.j2' import ingressroute with context %}
+---
+{#
+  use_authelia is false, matching the Docker entry and for the same reason: the Obsidian
+  LiveSync client uses non-interactive basic auth and cannot pass 2FA. CouchDB's own
+  require_valid_user (local.ini) is the gate on this route.
+
+  The bridge route this emits is permissive by design — it carries whatever daniel-server
+  forwards. The X-Sync-Token gate and the Authelia'd /_utils carve-out both live at the Docker
+  edge, upstream of here, and ClientIP is what stops anything else reaching this route. See
+  the hand-written livesync routers in roles/containers/traefik/templates/config.yml.j2.
+#}
+{{ ingressroute(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    container_item.use_authelia,
+    bridge_hostname=container_item.bridge_hostname | default(none)
+  )
+}}

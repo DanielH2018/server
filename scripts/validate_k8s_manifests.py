@@ -80,25 +80,39 @@ def yaml_error(rendered: str) -> str | None:
     return None
 
 
-def ansible_lookup(kind: str, *args: str) -> str:
-    """Minimal stand-in for Ansible's ``lookup``, supporting the ``file`` plugin only.
+def make_lookup(ctx: dict):
+    """Minimal stand-in for Ansible's ``lookup``, supporting the ``file`` and ``template`` plugins.
 
-    A ConfigMap that embeds a config file the Docker role already owns reads it with
-    ``lookup('file', ...)`` rather than keeping a second copy. Stubbing the result would let a
-    malformed embed through, so the real file is read here — the whole point of this guard is
-    that what renders in CI is what a deploy renders.
+    A ConfigMap that embeds a config file the Docker role already owns reads it with a lookup
+    rather than keeping a second copy. Stubbing the result would let a malformed embed through,
+    so the real file is read here — the whole point of this guard is that what renders in CI is
+    what a deploy renders.
+
+    ``template`` needs the render context, hence the closure: livesync's CouchDB local.ini is a
+    Jinja template on the Docker side, and reading it with ``file`` would leave any variable
+    added to it later embedded as literal ``{{ ... }}`` in the ConfigMap.
     """
-    if kind != "file":
+
+    def lookup(kind: str, *args: str) -> str:
+        path = Path(args[0])
+        if kind == "file":
+            return path.read_text().rstrip("\n")
+        if kind == "template":
+            env = make_env([path.parent])
+            env.globals["lookup"] = lookup
+            return env.get_template(path.name).render(ctx).rstrip("\n")
         raise ValueError(
-            f"validate_k8s_manifests only implements lookup('file'), got {kind!r}"
+            "validate_k8s_manifests implements lookup('file') and lookup('template'), "
+            f"got {kind!r}"
         )
-    return Path(args[0]).read_text().rstrip("\n")
+
+    return lookup
 
 
 def check_template(role: str, tpl: Path, ctx: dict) -> str | None:
     """Render one manifest template; return an error string or None on success."""
     env = make_env([K8S_ROLES / role / "templates", SHARED_TPL])
-    env.globals["lookup"] = ansible_lookup
+    env.globals["lookup"] = make_lookup(ctx)
     rendered, err = render_or_error(env, tpl.name, ctx)
     if err:
         return err
