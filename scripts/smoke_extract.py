@@ -22,6 +22,9 @@ _SKIP_BARE_BOOT = frozenset(
     {
         "authelia/authelia",  # fatal without /config/configuration.yml
         "couchdb",  # aborts without COUCHDB_USER/PASSWORD ("Admin Party" refused)
+        # exits immediately with `failed to create store: unknown backend ""` — the storage
+        # backend has no default, so it cannot boot without its bind-mounted config.yaml
+        "grafana/tempo",
         # boots fine but its baked /api/health check is still "starting" past the ~60s poll window
         # (only reports "unhealthy" at ~t=69s) — false-fails on every Renovate digest-bump PR.
         "ghcr.io/karakeep-app/karakeep",
