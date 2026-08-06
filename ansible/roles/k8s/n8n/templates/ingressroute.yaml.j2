@@ -19,17 +19,21 @@
 #
 # monitor-bridge's check_n8n polls n8n's API every cycle. Under Compose that was a
 # container-to-container call to http://n8n:5678 on the `apps` network, which the migration
-# removes outright. The obvious replacement — bridge_lan_prefixes, the mechanism freshrss and
-# speedtest use for exactly this — does not work here: containers on daniel-server cannot reach
-# daniel-server's own LAN address (measured 2026-08-06, `monitor-bridge` → 10.0.0.161:443 times
-# out while → 10.0.0.240:443 connects), so anything routed via the Docker edge is unreachable
-# from the very container that needs it. The cluster VIP is reachable, so the check talks to the
-# -k8s name directly and this route is what admits it.
+# removes outright. The obvious replacement — bridge_lan_prefixes, then still in use for
+# freshrss and speedtest — does not work here: a container cannot reach hostIP:publishedPort
+# when the publishing container shares its own Docker bridge, and Traefik publishes from `apps`
+# (measured 2026-08-06, `monitor-bridge` → 10.0.0.161:443 times out while → 10.0.0.240:443
+# connects; full evidence in docs/k3s-migration/slice-2-leaf-apps.md). So anything routed via
+# the Docker edge is unreachable from the very container that needs it. The cluster VIP is
+# reachable, so the check talks to the -k8s name directly and this route is what admits it.
+#
+# That turned out to be the general answer, not a workaround for this one case: both LAN
+# prefixes were removed on 2026-08-06 once homepage was likewise repointed at the VIP.
 #
 # NARROW ON PURPOSE. n8n's /api/v1 is READ-WRITE — it can create, modify, activate and delete
-# workflows — which is a categorically larger blast radius than the read-only widget endpoints
-# the two existing LAN prefixes expose. So this matches the two exact paths check.py fetches,
-# not /api/v1/. X-N8N-API-KEY is the gate; this route only decides who may present one.
+# workflows — a categorically larger blast radius than the read-only widget endpoints those LAN
+# prefixes exposed. So this matches the two exact paths check.py fetches, not /api/v1/.
+# X-N8N-API-KEY is the gate; this route only decides who may present one.
 #
 # LAN-only: the -k8s hostname has no public DNS record and the macro's route is .local while
 # k8s_public_route is false. Not reachable from the internet, and must not become so.
