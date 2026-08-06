@@ -30,3 +30,36 @@ datasources:
     access: proxy
     url: http://loki:3100
     editable: true
+    jsonData:
+      # Logs -> traces. Claude Code stamps trace_id/span_id onto every event it logs, and
+      # the OTLP ingest path lands them as structured metadata, so `trace_id` is a real
+      # field on the log line rather than something to regex out of the body. This turns it
+      # into a "View trace" button in Explore. matcherRegex is required even for a
+      # structured-metadata field; datasourceUid points at the Tempo datasource below.
+      derivedFields:
+        - name: TraceID
+          datasourceUid: tempo
+          matcherType: label
+          matcherRegex: trace_id
+          url: "${__value.raw}"
+
+  # New datasource (no hand-created predecessor to adopt), so the uid is simply `tempo`.
+  # Backs the Claude Code spans the otel-collector's traces pipeline forwards.
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: true
+    jsonData:
+      # Traces -> logs, the reverse of loki's derivedFields above: from a span, jump to the
+      # events emitted inside it, matched on the same trace_id. The time shifts widen the
+      # window because a span's logs can be written either side of its own start/end.
+      tracesToLogsV2:
+        datasourceUid: bf4q19tuivta8e
+        spanStartTimeShift: '-5m'
+        spanEndTimeShift: '5m'
+        filterByTraceID: true
+        customQuery: false
+      nodeGraph:
+        enabled: true

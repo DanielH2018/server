@@ -1,0 +1,5 @@
+---
+# Intentionally empty: Tempo is the trace SINK and depends on nothing. The ordering that
+# matters is the reverse — otel-collector declares `tempo` so the sink is up before the
+# producer starts exporting to it.
+role_deps: []

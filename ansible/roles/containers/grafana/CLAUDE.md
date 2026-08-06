@@ -12,10 +12,15 @@ Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md
 ## Notable
 - **Datasources + dashboards are provisioned as code** (not hand-clicked in the UI):
   - `templates/provisioning/datasources.yml.j2` — **Prometheus** (uid `EGdsQqhVk`,
-    default) and **Loki** (uid `bf4q19tuivta8e`). Both `editable: true`. **The uids are
-    adopted from the original hand-created datasources** so the 9 pre-existing dashboards
-    (Crowdsec/Traefik/logs) keep resolving — provisioning updates them in place by uid
-    rather than delete/recreate.
+    default), **Loki** (uid `bf4q19tuivta8e`) and **Tempo** (uid `tempo`). All
+    `editable: true`. **The Prometheus/Loki uids are adopted from the original
+    hand-created datasources** so the 9 pre-existing dashboards (Crowdsec/Traefik/logs)
+    keep resolving — provisioning updates them in place by uid rather than
+    delete/recreate. Tempo is new (nothing to adopt), so its uid is just `tempo`.
+    - **The two are cross-linked** for Claude Code telemetry: Tempo carries
+      `tracesToLogsV2` → Loki, and Loki carries a `derivedFields` **TraceID** link →
+      Tempo. Both match on the `trace_id` Claude Code stamps onto every event it logs, so
+      a span jumps to its events and a log line jumps to its trace. See `tempo/CLAUDE.md`.
   - `templates/provisioning/dashboards.yml.j2` — a file provider with `allowUiUpdates: true`
     and `foldersFromFilesStructure: true` pointing at `/var/lib/grafana/dashboards`. Each
     subdirectory becomes a Grafana folder of the same name (e.g. `dashboards/Security/`).

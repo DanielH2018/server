@@ -59,15 +59,16 @@ def test_every_entry_lands_in_exactly_one_platform(path):
 def test_daniel_server_is_still_wholly_docker():
     # The migration HAS started: cloudflare-ddns was cut over to k3s on 2026-08-05 (46 -> 45),
     # then speedtest (45 -> 44), littlelink (44 -> 43), freshrss (43 -> 42) and healthchecks
-    # (42 -> 41) the same day, all behind the strangler bridge. The count
+    # (42 -> 41) the same day, all behind the strangler bridge. Then tempo was ADDED on
+    # 2026-08-06 (41 -> 42), the trace sink for Claude Code's spans. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
-    # retired", and a drop nobody edited means the default regressed and production services
-    # silently stopped being managed.
+    # retired" (or added), and a drop nobody edited means the default regressed and production
+    # services silently stopped being managed.
     #
     # Every remaining entry must still be `docker`. daniel-server does not run k3s and will
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 41
-    assert len(filter_by_platform(containers, "docker")) == 41
+    assert len(containers) == 42
+    assert len(filter_by_platform(containers, "docker")) == 42
     assert filter_by_platform(containers, "k8s") == []

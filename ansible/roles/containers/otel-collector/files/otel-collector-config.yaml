@@ -41,6 +41,17 @@ exporters:
   otlp_http/loki:
     endpoint: http://loki:3100/otlp
 
+  # Spans (claude_code.interaction and its children) -> Tempo's own OTLP receiver. Claude
+  # Code emits these only with CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1 + OTEL_TRACES_EXPORTER=otlp
+  # (both set in the host settings.json); before this pipeline existed they were exported to
+  # 4317 and refused, because an otlp receiver only registers the gRPC TraceService when some
+  # pipeline consumes traces. Plaintext: both ends are containers on the private `monitoring`
+  # net, the same trust boundary as the Loki push above.
+  otlp_grpc/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
 extensions:
   # The otelcol-contrib image is a distroless single Go binary (no shell), so a docker
   # healthcheck is impossible — like loki. Expose a health endpoint the Kuma http monitor
@@ -62,3 +73,7 @@ service:
       receivers: [otlp]
       processors: [memory_limiter, batch]
       exporters: [otlp_http/loki]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc/tempo]
