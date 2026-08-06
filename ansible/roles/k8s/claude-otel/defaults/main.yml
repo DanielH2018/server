@@ -33,6 +33,12 @@ claude_otel_grafana_storage: 1Gi
 # access control, exactly as the chezmoi bundle intends.
 claude_otel_otlp_port: 4317
 claude_otel_otlp_host_ip: 127.0.0.1
+# Query-side twin of claude_otel_otlp_host_ip, for Loki/Prometheus/Tempo. `otelq` is a
+# host process and hardcodes 127.0.0.1 on 3100/9090/3200, so a ClusterIP-only Service is
+# unreachable to it. Loopback is load-bearing for the same reason as the collector's:
+# these backends hold prompts, responses and tool output verbatim, so the node-side
+# listener must never bind 0.0.0.0.
+claude_otel_query_host_ip: 127.0.0.1
 
 # 744h (31d), carried over from the bundle's loki-config.yaml along with the compactor that
 # enforces it. Retention matters more here than in a normal log store: every prompt and

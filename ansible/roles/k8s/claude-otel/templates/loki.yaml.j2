@@ -95,6 +95,10 @@ spec:
           ports:
             - name: http
               containerPort: 3100
+              # On the node's loopback so otelq can reach it; see
+              # claude_otel_query_host_ip in defaults/main.yml.
+              hostPort: 3100
+              hostIP: {{ claude_otel_query_host_ip }}
           volumeMounts:
             - name: config
               mountPath: /etc/loki
