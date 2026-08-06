@@ -405,6 +405,25 @@ tripped the 85% alert (66M → 1.1G after the 2026-06-23 rebuild). The vault's s
 the markdown on each Obsidian client. `karakeep` still adds one backed-up volume (`./data`); its
 Meilisearch index is already destined for `longhorn-nobackup`.
 
+### A bridged request is metered twice
+
+The one that actually reached a user. A bridged request passes the Docker edge router's
+middlewares *and* the cluster route's, and where both impose a rate limit the tighter ceiling
+wins. `livesync` carries `rate-limit-livesync` at 6000/min at the edge — a deliberate 20x, because
+CouchDB replication is extremely chatty — and then met `rate-limit-bridge`'s 300/min inside the
+cluster. A phone doing a full pull got 429s within the hour of cutover.
+
+So a service the Docker side exempted from the default ceiling needs the same exemption on its
+bridge route, or the migration silently reinstates exactly what the exemption existed to remove.
+`bridge_rate_limit` names the cluster-side middleware; a guard derives the requirement from the
+rendered edge config, so any bridged service with a `rate-limit-<name>` of its own must set it.
+
+The verification lesson is the sharper half. Every *routing* property was tested before this was
+called done — token gate, Authelia carve-out, probe path, SNI, public-vs-LAN — and all of it was
+correct. A rate limiter is invisible to single-request checks. **A cutover is not verified until
+something has been sent through it at volume**; for anything replication-shaped, a burst of a few
+hundred requests is the check that would have caught this.
+
 ### Two things a compose file implies that a manifest does not
 
 Both cost time on `livesync` and both will recur — `karakeep` has four containers and `n8n` two,
