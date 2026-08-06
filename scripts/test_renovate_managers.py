@@ -78,11 +78,27 @@ def test_custom_manager_matches_live_targets(mgr: dict, tracked: list[str]) -> N
     )
 
 
-def _docker_manager() -> dict:
+def _manager_covering(path_fragment: str) -> dict:
+    """Selected by the paths a manager watches, not by its datasource.
+
+    There is more than one `docker`-datasource manager now — the compose templates and the k8s
+    role defaults — so picking the first match on datasource alone would silently hand back the
+    wrong one and make a coverage test assert against files it never looks at.
+    """
     for m in _MANAGERS:
-        if m.get("datasourceTemplate") == "docker":
+        if m.get("datasourceTemplate") != "docker":
+            continue
+        if any(path_fragment in p for p in m["managerFilePatterns"]):
             return m
-    raise AssertionError("no docker customManager in renovate.json")
+    raise AssertionError(f"no docker customManager covering {path_fragment!r}")
+
+
+def _docker_manager() -> dict:
+    return _manager_covering("docker-compose")
+
+
+def _k8s_image_manager() -> dict:
+    return _manager_covering("roles/k8s")
 
 
 # Digest-pinned (no tag) BY DESIGN — Renovate cannot version-track a bare digest, and the
@@ -133,6 +149,37 @@ def test_every_deployed_image_is_renovate_tracked() -> None:
     assert not untracked, (
         "Deployed image line(s) NOT matched by the Renovate docker manager (untagged / digest-only "
         "/ templated) — they will age silently:\n" + "\n".join(untracked)
+    )
+
+
+def test_every_k8s_role_image_is_renovate_tracked() -> None:
+    """The sibling of the test above, for the cluster.
+
+    A k8s role has no compose template to read: the `*_image:` vars in its defaults ARE the
+    source of truth for what every pod runs. Nothing watched them until 2026-08-06 — 21 pins
+    across 13 roles, the entire cluster fleet, ageing with no update signal — which surfaced
+    only when pinning littlelink's `:latest` would otherwise have frozen it outright.
+
+    Per-var rather than aggregate, for the same reason as the compose guard: the manager
+    matching SOMETHING passes even when one role's image slips the regex. An untagged or
+    digest-only pin does exactly that, because the matchString requires an explicit :tag.
+    """
+    match_res = [
+        re.compile(_to_python_regex(ms)) for ms in _k8s_image_manager()["matchStrings"]
+    ]
+    defaults = sorted((_REPO / "ansible/roles/k8s").glob("*/defaults/main.yml"))
+    assert defaults, "no k8s role defaults found"
+    untracked = []
+    for f in defaults:
+        for line in f.read_text().splitlines():
+            if not re.match(r"\s*\w*_image:\s*\S", line):
+                continue
+            if not any(r.search(line) for r in match_res):
+                untracked.append(f"{f.relative_to(_REPO)}: {line.strip()}")
+    assert not untracked, (
+        "k8s role image pin(s) NOT matched by the Renovate k8s-defaults manager (untagged / "
+        "digest-only / templated) — the pods run them and nothing will ever offer a bump:\n"
+        + "\n".join(untracked)
     )
 
 

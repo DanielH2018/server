@@ -1,13 +1,14 @@
 ---
-# Same image the Docker role runs — both copies stay on the same tag through coexistence so
-# a difference in behaviour between them is never the image.
+# Digest-pinned 2026-08-06, once the Docker twin was retired and this became the only copy.
+# `:latest` was inherited from the Docker role rather than chosen, and a k8s rollout re-pulls
+# on every pod recreate, so an upstream push silently changed what ran. The digest is the one
+# taken from the running pod at cutover.
 #
-# `:latest` is inherited from the Docker role rather than chosen. It is the one thing here
-# worth pinning to a digest once this service is the only copy: a k8s rollout re-pulls on
-# every pod recreate, so an upstream push silently changes what runs. Left matching the
-# Docker twin for now, because a version skew between the two during coexistence is exactly
-# what this comment block exists to prevent.
-littlelink_k8s_image: ghcr.io/techno-tim/littlelink-server:latest
+# The tag is KEPT (repo:latest@sha256) so Renovate's docker manager still tracks it and opens
+# digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal, which is worse
+# than the floating tag it replaces. That tracking is what the k8s-defaults custom manager in
+# renovate.json provides; before it existed no image in any k8s role was watched at all.
+littlelink_k8s_image: ghcr.io/techno-tim/littlelink-server:latest@sha256:e84ea9d93b60362cf9e292dba43adb604e375d9206d5fcf1de6bb766a20aabd1
 # Mirrors resources('0.50', '128M', '0.05', '16M') in the compose template.
 littlelink_k8s_cpu_limit: "500m"
 littlelink_k8s_mem_limit: 128Mi

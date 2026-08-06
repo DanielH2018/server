@@ -6,22 +6,33 @@
     ":semanticCommitsDisabled",
     "helpers:pinGitHubActionDigests"
   ],
-  "labels": ["dependencies"],
-  "schedule": ["before 6am on monday"],
+  "labels": [
+    "dependencies"
+  ],
+  "schedule": [
+    "before 6am on monday"
+  ],
   "prHourlyLimit": 4,
   "rebaseWhen": "behind-base-branch",
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
-    "description": "CVE-driven bumps bypass the Monday-only window (schedule: at any time) so security PRs are RAISED immediately, and minimumReleaseAge shortens their auto-merge soak to 1 day — overriding the 7-day non-major default below, which otherwise made 'land ASAP' a misnomer (the PR appeared at once but still soaked a week). 1 day is fast enough to patch a live CVE while leaving a 24h window to catch a yanked/poisoned upstream release; the post-merge gitops-deploy host health gate + rollback is the final backstop. osvVulnerabilityAlerts adds OSV-database scanning for the version-pinned Docker images (GitHub-native Dependabot doesn't cover Docker), closing the one dependency axis without a 'silence != up-to-date' backstop. Requires repo Dependabot *alerts* (not PRs) enabled so Renovate can read the advisory feed.",
+    "description": "CVE-driven bumps bypass the Monday-only window (schedule: at any time) so security PRs are RAISED immediately, and minimumReleaseAge shortens their auto-merge soak to 1 day \u2014 overriding the 7-day non-major default below, which otherwise made 'land ASAP' a misnomer (the PR appeared at once but still soaked a week). 1 day is fast enough to patch a live CVE while leaving a 24h window to catch a yanked/poisoned upstream release; the post-merge gitops-deploy host health gate + rollback is the final backstop. osvVulnerabilityAlerts adds OSV-database scanning for the version-pinned Docker images (GitHub-native Dependabot doesn't cover Docker), closing the one dependency axis without a 'silence != up-to-date' backstop. Requires repo Dependabot *alerts* (not PRs) enabled so Renovate can read the advisory feed.",
     "enabled": true,
-    "schedule": ["at any time"],
+    "schedule": [
+      "at any time"
+    ],
     "minimumReleaseAge": "1 day",
-    "labels": ["dependencies", "security"]
+    "labels": [
+      "dependencies",
+      "security"
+    ]
   },
   "lockFileMaintenance": {
-    "description": "pyproject.toml uses unbounded ranges (ansible-core >=2.18 etc.), so Renovate sees nothing to bump while uv.lock keeps exact pins frozen forever — silence ≠ up-to-date. A weekly lock refresh PR rides the same CI gate. NO automerge: >= ranges mean a refresh can contain major jumps (ansible-core 3.x one day); those deserve a deliberate look.",
+    "description": "pyproject.toml uses unbounded ranges (ansible-core >=2.18 etc.), so Renovate sees nothing to bump while uv.lock keeps exact pins frozen forever \u2014 silence \u2260 up-to-date. A weekly lock refresh PR rides the same CI gate. NO automerge: >= ranges mean a refresh can contain major jumps (ansible-core 3.x one day); those deserve a deliberate look.",
     "enabled": true,
-    "schedule": ["before 6am on monday"]
+    "schedule": [
+      "before 6am on monday"
+    ]
   },
   "customManagers": [
     {
@@ -48,7 +59,7 @@
     },
     {
       "customType": "regex",
-      "description": "Ansible Galaxy collection pins in ansible/requirements.yml. The built-in ansible-galaxy manager isn't reliably matching this path here, so pin them explicitly — otherwise the collections age silently (silence != up-to-date, the same failure mode as the lockFileMaintenance note). Each name/version pair maps to the galaxy-collection datasource.",
+      "description": "Ansible Galaxy collection pins in ansible/requirements.yml. The built-in ansible-galaxy manager isn't reliably matching this path here, so pin them explicitly \u2014 otherwise the collections age silently (silence != up-to-date, the same failure mode as the lockFileMaintenance note). Each name/version pair maps to the galaxy-collection datasource.",
       "managerFilePatterns": [
         "/(^|/)ansible/requirements\\.yml$/"
       ],
@@ -83,7 +94,7 @@
     },
     {
       "customType": "regex",
-      "description": "CrowdSec bouncer Traefik plugin pin in traefik.yml.j2 (Traefik static config). None of the other custom managers match this file, so this WAF-enforcement plugin would age silently — a stale version can lag Traefik API changes or miss plugin security fixes. depName is read from the moduleName line; track GitHub releases.",
+      "description": "CrowdSec bouncer Traefik plugin pin in traefik.yml.j2 (Traefik static config). None of the other custom managers match this file, so this WAF-enforcement plugin would age silently \u2014 a stale version can lag Traefik API changes or miss plugin security fixes. depName is read from the moduleName line; track GitHub releases.",
       "managerFilePatterns": [
         "/(^|/)ansible/roles/containers/traefik/templates/traefik\\.yml\\.j2$/"
       ],
@@ -94,7 +105,7 @@
     },
     {
       "customType": "regex",
-      "description": "SOPS binary pin in sops_setup/tasks/main.yml. SOPS is the root of the secret-decryption trust chain and is the one version pin no other manager covers, so it would age silently (silence != up-to-date, same failure mode as the galaxy/crowdsec pins). getsops/sops publishes real GitHub releases, so github-releases is the right datasource. The paired per-arch sops_sha256 can't be auto-computed by a regex manager, so no automerge (packageRule below) — Renovate opens the version-bump PR, then finish the sha256 from the release's sops-<ver>.checksums.txt.",
+      "description": "SOPS binary pin in sops_setup/tasks/main.yml. SOPS is the root of the secret-decryption trust chain and is the one version pin no other manager covers, so it would age silently (silence != up-to-date, same failure mode as the galaxy/crowdsec pins). getsops/sops publishes real GitHub releases, so github-releases is the right datasource. The paired per-arch sops_sha256 can't be auto-computed by a regex manager, so no automerge (packageRule below) \u2014 Renovate opens the version-bump PR, then finish the sha256 from the release's sops-<ver>.checksums.txt.",
       "managerFilePatterns": [
         "/(^|/)ansible/roles/setup/sops_setup/tasks/main\\.yml$/"
       ],
@@ -118,7 +129,7 @@
     },
     {
       "customType": "regex",
-      "description": "CI Node pin (`node-version:` input in ci.yml) — the other silently-aging setup-* version input; it only feeds renovate-config-validator, so stakes are low, but the tracking doctrine applies uniformly. Majors (22 -> 24) stay manual per the default automerge rules.",
+      "description": "CI Node pin (`node-version:` input in ci.yml) \u2014 the other silently-aging setup-* version input; it only feeds renovate-config-validator, so stakes are low, but the tracking doctrine applies uniformly. Majors (22 -> 24) stay manual per the default automerge rules.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
@@ -130,7 +141,7 @@
     },
     {
       "customType": "regex",
-      "description": "karakeep-time-tagger runtime pip deps pinned inside its docker-compose command (`uv pip install <pkg>==<ver>`). The uv base image is digest-pinned, but its runtime deps would otherwise re-resolve to newest PyPI on every container start with no update signal (2026-07-16 review M3) — the same silent-drift the image pin closes, one layer down. Track each pin on PyPI; the packageRule below keeps them manual so a client bump is reviewed alongside the digest-pinned karakeep app it talks to.",
+      "description": "karakeep-time-tagger runtime pip deps pinned inside its docker-compose command (`uv pip install <pkg>==<ver>`). The uv base image is digest-pinned, but its runtime deps would otherwise re-resolve to newest PyPI on every container start with no update signal (2026-07-16 review M3) \u2014 the same silent-drift the image pin closes, one layer down. Track each pin on PyPI; the packageRule below keeps them manual so a client bump is reviewed alongside the digest-pinned karakeep app it talks to.",
       "managerFilePatterns": [
         "/(^|/)ansible/roles/containers/karakeep/templates/docker-compose\\.yml\\.j2$/"
       ],
@@ -138,18 +149,34 @@
         "(?<depName>[A-Za-z0-9._-]+)==(?<currentValue>[0-9][^\\s\"']*)"
       ],
       "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml). The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal.",
+      "managerFilePatterns": [
+        "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "_image:\\s*[\"']?(?<depName>[^:\\s\"'@]+):(?<currentValue>[^\\s\"'@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
+      ],
+      "datasourceTemplate": "docker"
     }
   ],
   "packageRules": [
     {
-      "description": "Watchtower owns mutable :latest tags — Renovate manages only version-pinned images, so leave latest alone",
+      "description": "Watchtower owns mutable :latest tags \u2014 Renovate manages only version-pinned images, so leave latest alone",
       "matchCurrentValue": "/^latest$/",
       "enabled": false
     },
     {
-      "description": "Bundle minor + patch image bumps into a single weekly PR to cut noise; majors stay separate so they get a deliberate look. Auto-merge once CI (prek + image-smoke) is green and the release has soaked 7 days (mirrors watchtower's COOLDOWN_DELAY — filters fresh upstream breakage); the host health gate is the post-merge safety net.",
-      "matchManagers": ["custom.regex"],
-      "matchUpdateTypes": ["minor", "patch"],
+      "description": "Bundle minor + patch image bumps into a single weekly PR to cut noise; majors stay separate so they get a deliberate look. Auto-merge once CI (prek + image-smoke) is green and the release has soaked 7 days (mirrors watchtower's COOLDOWN_DELAY \u2014 filters fresh upstream breakage); the host health gate is the post-merge safety net.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
       "groupName": "container images (non-major)",
       "automerge": true,
       "platformAutomerge": true,
@@ -157,69 +184,107 @@
     },
     {
       "description": "LinuxServer.io images tag as <upstream-version>-lsNN (e.g. 4.0.17.2952-ls312). Regex versioning both orders these correctly and rejects non-release tags (commit hashes like 438eee94-ls46, nightlies) as invalid, so they're never offered. Optional 4th version part -> build, OS suffix (ubu2404) -> compatibility, -lsNN -> revision.",
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["/linuxserver/"],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "/linuxserver/"
+      ],
       "versioning": "regex:^v?(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:\\.(?<build>\\d+))?(?<compatibility>[a-z]+\\d+)?-ls(?<revision>\\d+)$"
     },
     {
       "description": "Keep prek.toml hook bumps in their own weekly group, separate from the container-image group. They match the custom.regex manager, so the non-major auto-merge + 7-day soak rule above already applies; this only overrides the group name. Majors stay manual (no automerge rule matches them).",
-      "matchFileNames": ["prek.toml"],
+      "matchFileNames": [
+        "prek.toml"
+      ],
       "groupName": "prek hooks"
     },
     {
-      "description": "Kill the general prek.toml manager's github-releases duplicate of shellcheck-py (that repo publishes no releases — the dedicated github-tags manager above is the live tracker). Without this the dead lookup still runs and could one day double-report.",
-      "matchDatasources": ["github-releases"],
-      "matchPackageNames": ["shellcheck-py/shellcheck-py"],
+      "description": "Kill the general prek.toml manager's github-releases duplicate of shellcheck-py (that repo publishes no releases \u2014 the dedicated github-tags manager above is the live tracker). Without this the dead lookup still runs and could one day double-report.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "shellcheck-py/shellcheck-py"
+      ],
       "enabled": false
     },
     {
-      "description": "shellcheck-py is pinned TWICE by design — prek.toml rev (github-tags, hook env) and pyproject.toml `shellcheck-py==` (pypi, validate_shell_templates' uv env) — and the two must move in lockstep (scripts/test_renovate_managers.py asserts it). One group = one PR touching both files, so neither PR is ever blocked by the lockstep test seeing half an update. Overrides the prek-hooks group above for this package.",
-      "matchPackageNames": ["shellcheck-py/shellcheck-py", "shellcheck-py"],
+      "description": "shellcheck-py is pinned TWICE by design \u2014 prek.toml rev (github-tags, hook env) and pyproject.toml `shellcheck-py==` (pypi, validate_shell_templates' uv env) \u2014 and the two must move in lockstep (scripts/test_renovate_managers.py asserts it). One group = one PR touching both files, so neither PR is ever blocked by the lockstep test seeing half an update. Overrides the prek-hooks group above for this package.",
+      "matchPackageNames": [
+        "shellcheck-py/shellcheck-py",
+        "shellcheck-py"
+      ],
       "groupName": "shellcheck-py (lockstep: prek.toml + pyproject.toml)"
     },
     {
-      "description": "Meilisearch (karakeep's search index) changes its on-disk DB format between MINOR versions and refuses to boot on an old database; the dumpless-upgrade flag is still experimental with a documented corruption risk, so upgrades are manual (snapshot first, then flag or dump/restore). Own PR + no automerge — and kept out of the non-major group so it can't block that bundle's automerge.",
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["getmeili/meilisearch"],
-      "groupName": "meilisearch (manual upgrade — DB format migration)",
+      "description": "Meilisearch (karakeep's search index) changes its on-disk DB format between MINOR versions and refuses to boot on an old database; the dumpless-upgrade flag is still experimental with a documented corruption risk, so upgrades are manual (snapshot first, then flag or dump/restore). Own PR + no automerge \u2014 and kept out of the non-major group so it can't block that bundle's automerge.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "getmeili/meilisearch"
+      ],
+      "groupName": "meilisearch (manual upgrade \u2014 DB format migration)",
       "automerge": false
     },
     {
-      "description": "influxdb (scrutiny's TSDB) is watchtower-tier — it stays on the pinned 2.9 line and watchtower patches within it (scrutiny/CLAUDE.md). It's the ONE watchtower-tier image on a non-`latest` mutable tag, so the '/^latest$/' disable above doesn't cover it and Renovate's docker manager would otherwise offer 2.10+/3.x (Renovate PR #8 already walked it 2.2->2.9 once), marching a stateful DB off its pinned major.minor. Disable Renovate here so the two update planes agree — watchtower owns it.",
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["influxdb"],
+      "description": "influxdb (scrutiny's TSDB) is watchtower-tier \u2014 it stays on the pinned 2.9 line and watchtower patches within it (scrutiny/CLAUDE.md). It's the ONE watchtower-tier image on a non-`latest` mutable tag, so the '/^latest$/' disable above doesn't cover it and Renovate's docker manager would otherwise offer 2.10+/3.x (Renovate PR #8 already walked it 2.2->2.9 once), marching a stateful DB off its pinned major.minor. Disable Renovate here so the two update planes agree \u2014 watchtower owns it.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "influxdb"
+      ],
       "enabled": false
     },
     {
-      "description": "Ansible Galaxy collections (requirements.yml). The in-file comment requires bumping them in lockstep with ansible-core, so these need a deliberate look — own group, no automerge (overrides the custom.regex non-major automerge rule above).",
-      "matchManagers": ["custom.regex"],
-      "matchDatasources": ["galaxy-collection"],
-      "groupName": "ansible galaxy collections (manual — lockstep with ansible-core)",
+      "description": "Ansible Galaxy collections (requirements.yml). The in-file comment requires bumping them in lockstep with ansible-core, so these need a deliberate look \u2014 own group, no automerge (overrides the custom.regex non-major automerge rule above).",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "galaxy-collection"
+      ],
+      "groupName": "ansible galaxy collections (manual \u2014 lockstep with ansible-core)",
       "automerge": false
     },
     {
-      "description": "CrowdSec bouncer Traefik plugin — a WAF-enforcement component whose bump requires a deliberate traefik redeploy (CI can't prove the plugin loads). Own group, no automerge, so it overrides the custom.regex non-major automerge rule above and gets an operator review.",
-      "matchDatasources": ["github-releases"],
-      "matchPackageNames": ["maxlerebourg/crowdsec-bouncer-traefik-plugin"],
-      "groupName": "crowdsec bouncer plugin (manual — needs traefik redeploy)",
+      "description": "CrowdSec bouncer Traefik plugin \u2014 a WAF-enforcement component whose bump requires a deliberate traefik redeploy (CI can't prove the plugin loads). Own group, no automerge, so it overrides the custom.regex non-major automerge rule above and gets an operator review.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "maxlerebourg/crowdsec-bouncer-traefik-plugin"
+      ],
+      "groupName": "crowdsec bouncer plugin (manual \u2014 needs traefik redeploy)",
       "automerge": false
     },
     {
-      "description": "Portainer server (portainer/portainer-ce, daniel-server, GitOps-auto-deployed) and the Pi agent (portainer/agent, daniel-pi, MANUAL deploy only) MUST run the same version — the agent API tracks the Portainer server it connects to (portainer-agent/CLAUDE.md). One group = one PR touching both, and NO automerge: the Pi has no GitOps path, so if this auto-merged the server would deploy ahead while the un-deployed Pi agent silently lags (broken environment, no alert — Pi-only changes phantom-succeed). Merge, then redeploy the Pi by hand: deploy.yml --tags portainer-agent -e target=daniel-pi. scripts/test_renovate_managers.py asserts the two tags stay in lockstep. Overrides the non-major automerge group.",
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["portainer/portainer-ce", "portainer/agent"],
+      "description": "Portainer server (portainer/portainer-ce, daniel-server, GitOps-auto-deployed) and the Pi agent (portainer/agent, daniel-pi, MANUAL deploy only) MUST run the same version \u2014 the agent API tracks the Portainer server it connects to (portainer-agent/CLAUDE.md). One group = one PR touching both, and NO automerge: the Pi has no GitOps path, so if this auto-merged the server would deploy ahead while the un-deployed Pi agent silently lags (broken environment, no alert \u2014 Pi-only changes phantom-succeed). Merge, then redeploy the Pi by hand: deploy.yml --tags portainer-agent -e target=daniel-pi. scripts/test_renovate_managers.py asserts the two tags stay in lockstep. Overrides the non-major automerge group.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "portainer/portainer-ce",
+        "portainer/agent"
+      ],
       "groupName": "portainer (lockstep: server portainer-ce + Pi agent)",
       "automerge": false
     },
     {
-      "description": "SOPS binary (getsops/sops) — the secret-decryption root of trust; its paired per-arch sops_sha256 needs a manual bump from the release checksums, so NO automerge (same manual-finish class as the galaxy collections + crowdsec plugin). Own group, so it overrides the custom.regex non-major automerge rule above and gets a deliberate operator review + sha256 finish.",
-      "matchDatasources": ["github-releases"],
-      "matchPackageNames": ["getsops/sops"],
-      "groupName": "sops binary (manual — finish the per-arch sha256 from checksums.txt)",
+      "description": "SOPS binary (getsops/sops) \u2014 the secret-decryption root of trust; its paired per-arch sops_sha256 needs a manual bump from the release checksums, so NO automerge (same manual-finish class as the galaxy collections + crowdsec plugin). Own group, so it overrides the custom.regex non-major automerge rule above and gets a deliberate operator review + sha256 finish.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "getsops/sops"
+      ],
+      "groupName": "sops binary (manual \u2014 finish the per-arch sha256 from checksums.txt)",
       "automerge": false
     },
     {
-      "description": "karakeep-time-tagger's pinned runtime pip deps (2026-07-16 review M3). karakeep-python-api tracks the digest-pinned karakeep app's API and the uv base image is a manual bump too, so a client/dep bump wants a deliberate look alongside them rather than auto-merging on the 7-day soak. Own group, no automerge — overrides the custom.regex non-major automerge rule above.",
+      "description": "karakeep-time-tagger's pinned runtime pip deps (2026-07-16 review M3). karakeep-python-api tracks the digest-pinned karakeep app's API and the uv base image is a manual bump too, so a client/dep bump wants a deliberate look alongside them rather than auto-merging on the 7-day soak. Own group, no automerge \u2014 overrides the custom.regex non-major automerge rule above.",
       "matchPackageNames": [
         "karakeep-python-api",
         "fire",
@@ -227,7 +292,7 @@
         "beautifulsoup4",
         "loguru"
       ],
-      "groupName": "karakeep time-tagger pip deps (manual — track the pinned app)",
+      "groupName": "karakeep time-tagger pip deps (manual \u2014 track the pinned app)",
       "automerge": false
     }
   ]
