@@ -1,0 +1,51 @@
+---
+# Proves the PUSH half of the registry: a pod reaching the registry over its Service.
+#
+# This is the address a builder will use, and it is NOT the one manifests reference. `localhost`
+# inside a pod means that pod, so a builder cannot use the pull host; containerd is a host
+# process with no route to a ClusterIP by name, so the node cannot use the push host. The two
+# vars in group_vars/all.yml exist for that reason, and this Job is what proves the first one
+# actually resolves and accepts a write.
+#
+# crane copy is idempotent — it re-pushes only layers the destination lacks — so a rerun against
+# an already-seeded registry is a no-op rather than an error.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: registry-selftest-push
+  namespace: {{ k8s_namespace }}
+spec:
+  # The pod is deleted with the Job by the task that runs it; this bounds a hung attempt so a
+  # failing deploy reports the failure rather than waiting out the wait's own timeout.
+  activeDeadlineSeconds: 180
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: registry-selftest-push
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      containers:
+        - name: crane
+          image: {{ registry_k8s_crane_image }}
+          args:
+            - copy
+            - {{ registry_k8s_probe_source }}
+            # --insecure applies to the DESTINATION as well as the source, and it has to: the
+            # registry serves plain HTTP, which is safe only because it is unreachable off the
+            # node (hostPort on {{ k8s_registry_host_ip }}). That stops being true at slice 7.
+            - {{ k8s_registry_push_host }}/{{ registry_k8s_probe_repo }}:probe
+            - --insecure
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+            requests:
+              cpu: "50m"
+              memory: 64Mi

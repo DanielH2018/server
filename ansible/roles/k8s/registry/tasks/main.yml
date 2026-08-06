@@ -8,3 +8,88 @@
       - pvc.yaml
       - deployment.yaml
       - service.yaml
+
+# ── proof of loop ───────────────────────────────────────────────────────────
+# The registry ran for a day with an empty catalog: healthy by every signal, and unproven. Its
+# readiness probe only says the process answers, which is true of a registry that no builder can
+# reach and no node can pull from. Nothing else in the fleet exercises it until n8n depends on
+# it, and discovering a broken push path while also debugging a first build is the situation
+# this exists to avoid.
+#
+# Runs on every deploy rather than once, and the reason is the same as docker-user-verify's: the
+# two things it checks are host and cluster state that can regress without anyone touching this
+# role. registries.yaml is written by roles/setup/k3s, so a change there — or a containerd
+# restart that never re-read it — breaks the pull path silently.
+- name: Render the registry self-test jobs
+  tags: [config]
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/rancher/k3s/manifests/registry/{{ item }}"
+    mode: "0644"
+    owner: root
+    group: root
+  loop:
+    - selftest-push-job.yaml
+    - selftest-pull-job.yaml
+  become: true
+
+# Deleted first because a Job's pod template is immutable: re-applying a completed Job is either
+# a no-op or an error, and in both cases it proves nothing about today.
+- name: Clear the previous registry self-test run
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete job
+      registry-selftest-push registry-selftest-pull --ignore-not-found
+  become: true
+  changed_when: true
+
+- name: Prove a pod can PUSH to the registry over its Service
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      /etc/rancher/k3s/manifests/registry/selftest-push-job.yaml
+  become: true
+  changed_when: true
+
+- name: Wait for the push self-test
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
+      job/registry-selftest-push --timeout=180s
+  become: true
+  changed_when: false
+  register: registry_push_probe
+  failed_when: registry_push_probe.rc != 0
+
+# Ordered after the push on purpose: it pulls what the push just wrote, so running them
+# concurrently would race and a first-ever run would fail on a tag that does not exist yet.
+- name: Prove containerd can PULL from the registry through registries.yaml
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      /etc/rancher/k3s/manifests/registry/selftest-pull-job.yaml
+  become: true
+  changed_when: true
+
+- name: Wait for the pull self-test
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
+      job/registry-selftest-pull --timeout=180s
+  become: true
+  changed_when: false
+  register: registry_pull_probe
+  failed_when: registry_pull_probe.rc != 0
+
+- name: Report the proven registry loop
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: >-
+      Registry loop proven: pushed {{ registry_k8s_probe_source }} to
+      {{ k8s_registry_push_host }}/{{ registry_k8s_probe_repo }}:probe over the Service, and
+      containerd pulled it back as {{ k8s_registry_pull_host }}/{{ registry_k8s_probe_repo }}:probe.

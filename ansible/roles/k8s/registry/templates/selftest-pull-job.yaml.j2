@@ -1,0 +1,45 @@
+---
+# Proves the PULL half: containerd resolving a {{ k8s_registry_pull_host }}/… reference through
+# the mirror entry in registries.yaml.
+#
+# There is no command worth running here — the proof is that the pod STARTS AT ALL, because
+# starting means containerd found the mirror, spoke plain HTTP to it, and got the layers. A pod
+# that reaches Completed has already proven everything this Job exists to prove.
+#
+# Kept separate from the push Job rather than folded into it as a second container, so a failure
+# names its own half. Both in one pod would report "the Job failed" for two very different
+# faults: a Service that does not resolve, and a containerd mirror that was never written.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: registry-selftest-pull
+  namespace: {{ k8s_namespace }}
+spec:
+  activeDeadlineSeconds: 180
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: registry-selftest-pull
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      containers:
+        - name: pulled
+          image: {{ k8s_registry_pull_host }}/{{ registry_k8s_probe_repo }}:probe
+          # imagePullPolicy: Always defeats the point. A cached layer from a previous run would
+          # let this pass while the registry was down, which is the one thing it must not do.
+          imagePullPolicy: Always
+          command: ["/bin/true"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: "500m"
+              memory: 128Mi
+            requests:
+              cpu: "10m"
+              memory: 16Mi
