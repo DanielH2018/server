@@ -186,8 +186,16 @@ Step 4 is the point of the role. A silent partial copy is the failure mode that 
 comparison.
 
 Every stateful migration is: stop the Docker service → seed → start the k8s workload →
-verify the app reads its data → cut over. The Docker service stays stopped-but-defined until
-the service is verified, so rollback is `docker compose up`.
+verify the app reads its data → cut over.
+
+**Then `docker rm` the containers — stopping is not enough.** This paragraph used to say the
+Docker service stays stopped-but-defined for rollback, and that is wrong in a way nothing caught
+for five cutovers: AutoKuma generates a monitor from a **stopped** container just as readily as a
+running one, and it then fails every beat with `Container State is exited`. The earlier cutovers
+never showed it because those containers happened to be removed, at which point AutoKuma deletes
+the monitor within a couple of minutes. karakeep stopped two and immediately had two monitors
+paging. Rollback is unaffected by the removal: the compose file and the data directory both stay
+on disk, so `docker compose up -d` under `containers/<service>/` still rebuilds it.
 
 ### 3. Uptime-Kuma monitors — the same by-hand pattern as slice 1
 
@@ -202,6 +210,25 @@ One line per migrated service, deleted when slice 3 reworks the path.
 monitor, so either one alone keeps it green. During coexistence that monitor proves "at least
 one copy is alive" and nothing more. Verify the k8s copy from its own pod logs instead, and
 treat the monitor as meaningful again only once the Docker copy is gone.
+
+**Unrouted workloads lose their alert entirely, and karakeep made that a fleet.** The by-hand
+pattern above only works for something an HTTP monitor can reach. `registry` and
+`cloudflare-ddns` were the first cases; `karakeep` retired three at once — `karakeep-chrome`,
+`karakeep-meilisearch` and `karakeep-time-tagger` all had `docker`-type AutoKuma monitors that
+died with their containers. In-cluster their liveness probes restart them, which is strictly
+better than autoheal was, but *nothing pages*: a crash-looping Meilisearch degrades search while
+`karakeep (via bridge)` stays green.
+
+Ruled out explicitly, so nobody reaches for it later: giving `karakeep-chrome` an ingress to
+make it probeable would put Chrome DevTools Protocol on port 9222 on the LAN, which is arbitrary
+code execution and local file read for anyone who can reach it. The helpers are unrouted on
+purpose.
+
+The general answer is a cluster-side pod-health push — one cron in the `k3s` role reading pod
+readiness and pushing a single Kuma monitor, the same state-file-to-monitor idiom
+`longhorn-backup-health.sh` already uses. Deliberately **not** built under karakeep's cutover:
+built for one service it would take that service's shape and need redoing for the other five.
+Pending, and now covering six workloads rather than two.
 
 ### 4. B2 transaction budget — a checkpoint, not an assumption
 
@@ -424,10 +451,10 @@ correct. A rate limiter is invisible to single-request checks. **A cutover is no
 something has been sent through it at volume**; for anything replication-shaped, a burst of a few
 hundred requests is the check that would have caught this.
 
-### Two things a compose file implies that a manifest does not
+### Three things a compose file implies that a manifest does not
 
-Both cost time on `livesync` and both will recur — `karakeep` has four containers and `n8n` two,
-each carrying the same assumptions.
+The first two cost time on `livesync`, the third on `karakeep`, and all three will recur —
+`n8n` carries the same assumptions.
 
 **A capability set copied from `cap_add` can still be short, because the volume is different.**
 livesync crash-looped with exit 1 and *no log output at all*, which reads like a broken image.
@@ -447,6 +474,52 @@ becomes a PVC.
 left the pod permanently not-ready, because k8s treats 401 as failure. Check what the endpoint
 actually returns rather than what the healthcheck tolerates; where credentials are needed, an
 `exec` probe can read them from the container's own env and keep them out of the manifest.
+
+**`depends_on: condition: service_healthy` has no k8s equivalent, and its absence is not a
+one-off error.** karakeep's time-tagger is gated on the app being healthy; k8s starts pods in
+parallel, so the tagger raced it and died with `[Errno 111] Connection refused` against
+`http://karakeep:3000/api/v1/users/me`. It would not have stayed one error either: the script
+touches `/tmp/healthy` only after a *successful* run, so the liveness probe finds no file,
+restarts the pod, and re-runs its `uv pip install` — a restart loop that only resolves if a run
+happens to land after the app comes up.
+
+The faithful translation is an initContainer that TCP-connects to the dependency's **Service**,
+not to a pod. A Service has no endpoints until readiness passes, so the connect succeeds exactly
+when `service_healthy` would have — it is the same gate, not an approximation of it. Both
+karakeep deployments that had a `depends_on` health gate now carry one. `n8n` has task runners
+with the same shape.
+
+### A re-seed has to quiesce the destination, not just the source
+
+`seed-volume`'s header has always said the source must be stopped. It said nothing about the
+destination, which is fine for a first seed — the workload does not exist yet — and wrong for
+the cutover seed, by which point the k8s copy has been serving and writing for hours. karakeep
+made this concrete: the app writes `db.db` continuously and the tagger wakes every 15 minutes.
+
+The failure would not have been corruption. The role checksums the volume after copying, so a
+destination that kept writing fails the comparison and the marker is never written — it just
+fails every time, and the message reads as a copy bug rather than a running pod. `seed_volume_quiesce`
+takes the Deployments that write to the claim and scales them to zero across the copy. The
+restore is in an `always`, because a copy that fails with the app scaled to zero is a silent
+outage: the play aborts before `k8s/manifests` would re-apply the Deployment.
+
+Also worth stating plainly, since both taggers ran against the same Gemini key during
+coexistence: the cutover re-seed **discards** the k8s tagger's work. Docker stayed the source of
+truth until the moment it stopped, so that is correct rather than data loss — but it is a reason
+not to linger in coexistence longer than the verification needs.
+
+### A `-k8s` hostname is not created by adding it to inventory
+
+Pi-hole's dnsmasq records for `*-k8s.local.<domain>` are generated from **daniel-box's**
+`containers_list`, but the template lives in the **pihole role on daniel-server**. Adding the
+inventory entry does not create the record; deploying pihole does. Until that ran, both
+`livesync-k8s` and `karakeep-k8s` resolved to 10.0.0.161 through the `local.<domain>` wildcard
+instead of the ingress VIP, and their Kuma monitors 404'd against daniel-server.
+
+**`curl --resolve` cannot catch this, and is how it survived verification.** `--resolve` bypasses
+DNS, so it proves the route works and never that the name points at it. Check the name and the
+route separately: `dig +short <name> A @10.0.0.161` should return the VIP, and the request should
+be made from a host that resolves through Pi-hole.
 
 ### A property of the cluster node worth remembering
 

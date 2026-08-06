@@ -3,8 +3,8 @@
 
   Deliberately NOT carried over for slice 1:
     crowdsec            bouncer plugin + LAPI, slice 6
-    csp-karakeep        that service has not migrated
-    rate-limit-livesync ditto
+    csp-karakeep        lives in the karakeep role instead, beside the Service it applies to
+    rate-limit-livesync superseded here by rate-limit-bridge-livesync, below
   No TLSStore either: every IngressRoute states its own tls.domains via the ingressroute()
   macro, so a store's defaultGeneratedCert would be a second source of truth for the SAN set.
 #}

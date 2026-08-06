@@ -173,6 +173,27 @@ containers_list:
     hostname: "karakeep{{ k8s_hostname_suffix }}"
     port: 3000
     use_authelia: true
+    # Cut over 2026-08-06. NEXTAUTH_URL follows this (see the role's deployment template): the
+    # sign-in redirect has to name the hostname the browser actually arrived on, and getting it
+    # wrong does not fail at startup — the pod goes ready and login bounces users somewhere that
+    # does not resolve for them.
+    bridge_hostname: karakeep
+    # Reproduces the karakeep-api Docker router, which has always been public: /api/v1 is
+    # Bearer-token authenticated, and the browser extension and mobile app cannot pass 2FA. This
+    # carries an existing hole across rather than opening one — but it is still public, hence the
+    # entry in BRIDGE_BYPASS_PREFIXES.
+    #
+    # The trailing slash is load-bearing, carried across from that label: PathPrefix(`/api`)
+    # would also match siblings like /api-docs and widen the bypass to them.
+    #
+    # No bridge_lan_prefixes for homepage's widget: this bypass generates a `.local` router as
+    # well as a public one, and the widget calls /api/. A second route would be a second hole
+    # for nothing.
+    #
+    # No bridge_rate_limit either. Unlike livesync there is no rate-limit-karakeep at the edge —
+    # karakeep has always run under the shared 300/min `rate-limit`, and rate-limit-bridge is
+    # the same 300/150/1m keyed the same way, so the double-metering the macro guards against
+    # meters it at the ceiling it already lives under.
   # Slice 2, batch R. No hostname/port and no Traefik route on purpose: this is an
   # unauthenticated plain-HTTP registry, reachable only on the node's loopback via hostPort
   # and in-cluster via its Service. Giving it an ingress would put push access on the LAN.

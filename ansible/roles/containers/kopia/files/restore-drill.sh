@@ -28,13 +28,13 @@ source /usr/local/lib/kopia-lib.sh
 # file that must reappear after restore. All verified present in the snapshot.
 # freshrss dropped 2026-08-06 — it cut over to k3s on 08-05, so this drill would have restored a
 # frozen directory and passed, proving nothing about the live data (now a Longhorn PVC, covered by
-# longhorn-backup-health.sh's per-volume check). Drop a service here when it migrates.
-SVCS=(authelia traefik n8n karakeep grafana pihole home-assistant zigbee2mqtt wg-easy sonarr jellyfin)
+# longhorn-backup-health.sh's per-volume check). karakeep dropped the same day, on its own cutover,
+# for the same reason. Drop a service here when it migrates.
+SVCS=(authelia traefik n8n grafana pihole home-assistant zigbee2mqtt wg-easy sonarr jellyfin)
 declare -A SENTINEL=(
   [authelia]=config/configuration.yml
   [traefik]=data/acme.json
   [n8n]=data/config
-  [karakeep]=data/db.db
   [grafana]=data/grafana.db
   [pihole]=data/etc-pihole/pihole.toml
   # jellyfin's primary DB (users / watch history / API keys / library defs) — kept in Kopia
@@ -102,7 +102,7 @@ docker exec kopia kopia restore "$ROOT/$SVC" "$DEST" >/dev/null 2>&1 \
 docker exec kopia sh -c "test -f '$DEST/$SENT'" \
   || fail "$SVC restore missing service-specific sentinel '$SENT' (from $WHICH snapshot)"
 
-# For SQLite sentinels (karakeep db.db, grafana grafana.db) confirm the restored file is a
+# For SQLite sentinels (grafana grafana.db, jellyfin jellyfin.db, …) confirm the restored file is a
 # structurally valid database, not just present — guards against a wrong/empty/truncated file
 # landing at the sentinel path. The image has no sqlite3 for a PRAGMA integrity_check, so
 # check the 16-byte header magic ("SQLite format 3\0"); the restore already re-decrypts every
