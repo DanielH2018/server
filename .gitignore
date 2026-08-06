@@ -60,3 +60,7 @@ id_ed25519
 # Permission-audit hook store — per-host runtime state written by
 # .claude/hooks/log-permission.py; counts are machine-local by design.
 .claude/logs/
+
+# Ephemeral per-session git worktrees (.claude/worktrees/<name>). Session state, not repo
+# content — and each is itself a git repo, so committing one adds a gitlink nothing can clone.
+.claude/worktrees/
