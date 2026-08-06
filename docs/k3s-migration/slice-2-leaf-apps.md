@@ -664,11 +664,30 @@ Run against the *other* roles, not the service's own. Doing this for all five mi
 found Homepage and nothing else, so the fix was contained — but it was found after the fact
 rather than before.
 
-Two things follow. A caller inside the homelab cannot pass Authelia, which is why
-`bridge_lan_prefixes` exists; and it will not usually be able to, so expect to add one per
-in-house consumer rather than treating it as an exception. **Slice 3 is where this gets
-expensive** — the monitoring stack is mostly cross-service calls, and Prometheus scraping a
-migrated target by container name fails exactly this quietly.
+Grep the hostname too, not just the service name — a caller dials `<svc>.local.<domain>`, which
+the recipe above misses:
+
+```bash
+grep -rn 'local\.{{ domain }}' ansible/roles/containers/*/templates/ | grep -v 'Host(\|ALLOWED_HOSTS\|rule:\|sans\|main:'
+```
+
+Read the hits: a URL the *container* dials is a caller, a URL handed to a **browser** is not.
+`happy`'s `PUBLIC_URL` and `HAPPY_SERVER_URL` look like callers and are not — the browser
+resolves those.
+
+**Repoint the caller before opening a route.** A caller inside the homelab cannot pass Authelia,
+which is why `bridge_lan_prefixes` exists — but reaching for it first is the wrong instinct, and
+this doc said otherwise until 2026-08-06. The cheaper fix is to send the caller **straight to the
+cluster VIP**, where the ClientIP-guarded bridge IngressRoute already answers without Authelia:
+homepage does it with `extra_hosts` generated from inventory, monitor-bridge by addressing the
+`-k8s` hostname Pi-hole already maps to the VIP. Both scale to future migrations with no per-service
+edit. A `bridge_lan_prefixes` entry, by contrast, is a `PathPrefix` — strictly wider than the
+`Path()` the probe router matches — and it is per-service, hand-maintained, and easy to orphan.
+Both entries that existed were removed once homepage stopped using them; the mechanism is kept for
+a caller that genuinely cannot be repointed.
+
+**Slice 3 is where this gets expensive** — the monitoring stack is mostly cross-service calls, and
+Prometheus scraping a migrated target by container name fails exactly this quietly.
 
 ### 5. Image registry — in-cluster, decided 2026-08-05
 
