@@ -10,3 +10,13 @@ registry_k8s_image: registry:3.0.0
 registry_k8s_claim: registry-data
 registry_k8s_storage_class: longhorn-nobackup
 registry_k8s_size: 10Gi
+
+# The proof-of-loop pair (see tasks/main.yml). crane rather than docker or skopeo: it is a
+# static binary in a distroless image, needs no daemon, and copies between registries directly
+# without a local store to fill the node's disk.
+registry_k8s_crane_image: gcr.io/go-containerregistry/crane:v0.21.9
+# Deliberately tiny and deliberately not something the fleet runs — the point is to move bytes
+# through the registry, and a real image would make a failure ambiguous between "the registry
+# is broken" and "that image changed".
+registry_k8s_probe_source: alpine:3.22
+registry_k8s_probe_repo: registry-selftest

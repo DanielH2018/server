@@ -106,6 +106,11 @@ k8s_registry_host_ip: 127.0.0.1
 # resolves on a node running this registry. Correct while the cluster is one node; it breaks
 # when daniel-server joins at slice 7, which is when this needs TLS and a real hostname.
 k8s_registry_pull_host: "localhost:{{ k8s_registry_port }}"
+# The PUSH half of the pair described above. Fully qualified rather than bare `registry`,
+# because a builder Job's pod may not carry a search domain that resolves the short name, and a
+# wrong namespace here surfaces inside the pod as a DNS failure that reads like a network fault
+# rather than a config one.
+k8s_registry_push_host: "registry.{{ k8s_namespace }}.svc.cluster.local:{{ k8s_registry_port }}"
 # The one host that pulls daniel-pi's wg-easy peer configs into its own Kopia backup
 # scope (see wg-easy CLAUDE.md) — daniel-pi itself is not parameterized here, it's the
 # one confirmed satellite with no sibling expected.
