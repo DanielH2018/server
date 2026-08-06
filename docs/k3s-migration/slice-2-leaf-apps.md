@@ -558,50 +558,57 @@ original wildcard-DNS finding behind decision 1. Anything on daniel-box or insid
 needs a homelab hostname must pin it explicitly. Slice 3 moves the monitoring stack, which is
 full of cross-service hostnames — expect this again there.
 
-### Some containers cannot reach the host's own LAN address — and which ones is not obvious
+### A container cannot reach a published port of a container on its own bridge
 
-Found while repointing monitor-bridge's `check_n8n`, then corrected when the homepage widgets were
-investigated on 2026-08-06. The first version of this section said "containers on daniel-server
-cannot reach 10.0.0.161". **That is too broad and acting on it would break working things.**
+Root-caused 2026-08-06, after two silent breakages traced to it. Earlier versions of this section
+guessed twice and were wrong both times — first "containers cannot reach the host's LAN address"
+(too broad), then "it tracks the egress bridge" (true but not the cause). The actual rule is
+mechanical and predictive:
 
-What is measured:
+> A container reaching `hostIP:publishedPort` fails when the **publishing container is on the same
+> Docker bridge the source egresses from**, and succeeds from every other bridge.
 
-| Container | Networks | Egress route to 10.0.0.161 | Result |
+This is Docker's same-bridge hairpin-NAT asymmetry. The packet is DNATed to the target container's
+IP. If the target is on the source's own bridge, the reply goes back container-to-container
+directly, bypassing the NAT — the source sees a reply from `172.21.0.19` rather than from
+`10.0.0.161`, and the connection never establishes. From a different bridge the packet is
+MASQUERADEd leaving the source bridge, so the reply returns through the NAT and is rewritten.
+
+Measured, including the mirror-image case that rules out "the `apps` network is cursed":
+
+| Published service | Publishes from | Fails from | Works from |
 |---|---|---|---|
-| `uptime-kuma` | `monitoring` only | via `172.19.0.1`, src `172.19.0.3` | **works** (200) |
-| `monitor-bridge` | `apps`,`kopia`,`media`,`monitoring` | via `172.21.0.1`, src `172.21.0.6` | **times out** |
-| `homepage` | `apps`,`homepage_private`,`media`,`monitoring`,`proxy` | via the `apps` bridge | **timed out** |
+| `traefik` :80/:443/:7777 | `apps` | `apps` | `proxy`, `monitoring`, `media`, `kopia` |
+| `pihole` :53 | `apps` | `apps` | `monitoring`, `proxy` |
+| `portainer` :9000 | `proxy` | **`proxy`** | `apps`, `monitoring`, `media` |
 
-So the failure tracks the interface the traffic actually LEAVES BY, not "being a container". The
-multi-homed containers default-route out `apps` (172.21) and hang; the single-homed one on
-`monitoring` (172.19) succeeds. The mechanism was not pinned down — it is NOT UFW (default-deny
-INPUT, and Docker's nat/FORWARD bypasses INPUT anyway), NOT the DOCKER-USER origin lock (it allows
-`172.16.0.0/12` and only governs forwarded traffic), and NOT Traefik missing from the network
-(it is attached to both `apps` and `monitoring`). The most likely remaining explanation is
-reply-path asymmetry on a multi-homed container, but that is a hypothesis, not a finding.
+Ruled out along the way, all worth not re-testing: UFW (default-deny INPUT, and Docker's
+nat/FORWARD bypasses INPUT — the host's own `:22` is reachable from every bridge), the DOCKER-USER
+origin lock (allows `172.16.0.0/12`, and governs forwarded traffic only), network options (`apps`
+and `monitoring` are byte-identical: `{}`, `internal=false`, `bridge`), route conflicts (one clean
+route per subnet), and Traefik's network attachment (it is on all of them). `kopia:51515` failing
+from everywhere was a red herring — `docker port kopia` is empty, it publishes nothing.
 
-**Why it still matters, unchanged:** `bridge_lan_prefixes` — the mechanism built for exactly this
-problem — routes the caller through the Docker edge at `10.0.0.161`. For `homepage` and
-`monitor-bridge`, the two containers that actually make cross-service calls, that path does not
-work. It DOES work for a LAN browser and for `uptime-kuma`, which is why the `*-bridge` Kuma
-monitors are healthy and must not be "fixed".
+**What this means for the migration.** Traefik publishes from `apps`, and `apps` is where the
+app-fleet containers live — so any container on `apps` calling a bridged `<svc>.local.<domain>`
+hits this, because that name resolves to daniel-server. That is exactly `homepage` (every widget
+for a migrated service) and `monitor-bridge` (`check_n8n`). Both were broken silently.
 
-**The fix that works regardless of which side of this line a container falls on** is to address
-the cluster directly instead of round-tripping through the host. Two shapes, both now in use:
+The rule to carry into slice 3 and beyond:
 
-- `homepage` gets `extra_hosts` mapping each bridged `<svc>.local.<domain>` to the ingress VIP,
-  generated from the same inventory the bridge routers come from. Docker SNATs container egress to
-  the host's LAN address, so the request arrives satisfying the bridge route's
-  `ClientIP(10.0.0.161/32)` guard — which deliberately carries no Authelia. This grants no new
-  access: any container could already dial the VIP with any Host header, so only name resolution
-  was ever wrong.
-- `monitor-bridge`'s `check_n8n` points at the `-k8s` hostname with a narrow LAN-only IngressRoute
-  on the cluster side, because it needs a path Authelia does not gate and n8n's API is read-write.
+- **A consumer that wants DATA from a migrated service must address the cluster VIP**, not the
+  bridged `.local` name — the VIP is a different host, so no hairpin exists. `homepage` does this
+  with `extra_hosts` generated from daniel-box's inventory; `monitor-bridge` does it with the
+  `-k8s` hostname plus a scoped IngressRoute.
+- **A MONITOR that is deliberately testing the bridge must keep resolving to daniel-server.** The
+  `*-bridge` Kuma monitors exist to prove the Docker edge still forwards correctly, and they work
+  because `uptime-kuma` is single-homed on `monitoring` while Traefik publishes from `apps`. Giving
+  uptime-kuma the same `extra_hosts` treatment would silently convert them into tests of the
+  cluster alone. Do not "fix" them.
 
-**Every homepage widget for a migrated service had been broken since that service cut over**, with
-`ETIMEDOUT` in homepage's own log naming freshrss outright. Fixed 2026-08-06; verified by real data
-(`speedtest` returning a live result, `karakeep` `status: ok`) and by the error rate going from
-roughly one per minute to zero.
+That distinction is semantic rather than mechanical, which is why this is written down rather than
+enforced by a lint — a guard that simply required `extra_hosts` everywhere would break the
+monitors. A lint with an explicit monitors allow-list is a reasonable follow-up.
 
 ### The cluster's first NetworkPolicy, and why it is verified rather than asserted
 
