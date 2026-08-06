@@ -462,3 +462,49 @@ def test_a_bridge_that_suppresses_its_router_is_still_reachable():
                 f"{svc['name']} suppressed its generated router and nothing references "
                 f"{generated}, so that hostname 404s"
             )
+
+
+# --- A per-router rate limit has to survive the migration ---------------------------------
+#
+# A bridged request is metered twice: once by the Docker edge router, once by the cluster route
+# it forwards to. The TIGHTER ceiling wins, so a service the Docker side deliberately exempted
+# from the default limit is silently put back under it unless the bridge route is given the same
+# exemption. livesync 429'd a phone mid-replication within the hour of cutover for exactly this:
+# it passed the edge's 6000/min and then hit the cluster's 300/min.
+
+K8S_DYNAMIC = ANSIBLE / "roles" / "k8s" / "traefik" / "templates" / "dynamic.yaml.j2"
+
+
+def test_a_service_with_its_own_edge_rate_limit_keeps_it_across_the_bridge():
+    """The Docker side names a per-service limiter `rate-limit-<service>`. If one exists for a
+    bridged service, that service had a documented reason to be exempt from the default ceiling,
+    and the reason does not stop applying because the workload moved."""
+    config = _dynamic_config()
+    edge_limiters = set(config["http"]["middlewares"])
+
+    for svc in _bridged():
+        if f"rate-limit-{svc['name']}" not in edge_limiters:
+            continue
+        override = svc.get("bridge_rate_limit")
+        assert override and override != "rate-limit-bridge", (
+            f"{svc['name']} has a per-router rate-limit-{svc['name']} at the Docker edge but "
+            "its bridge route falls back to rate-limit-bridge, whose lower ceiling wins — the "
+            "exemption is undone by the migration. Set bridge_rate_limit."
+        )
+
+
+def test_a_bridge_rate_limit_override_names_a_middleware_that_exists():
+    """A typo here does not fail the deploy loudly: Traefik drops the route whose middleware it
+    cannot resolve, so the service 404s on its real hostname instead."""
+    import re
+
+    declared = set(re.findall(r"^\s*name: (\S+)", K8S_DYNAMIC.read_text(), re.M))
+
+    for svc in _bridged():
+        override = svc.get("bridge_rate_limit")
+        if not override:
+            continue
+        assert override in declared, (
+            f"{svc['name']} routes through {override}, which no Middleware in "
+            "roles/k8s/traefik/templates/dynamic.yaml.j2 defines"
+        )
