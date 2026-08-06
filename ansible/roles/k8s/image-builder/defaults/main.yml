@@ -1,0 +1,26 @@
+---
+# BuildKit rather than kaniko. kaniko is the obvious first reach for building in-cluster and it
+# is ARCHIVED — GitHub reports archived: true, last release v1.24.0 in May 2025. BuildKit is
+# maintained (v0.32.2, 2026-08-04) and is what Docker itself builds with, so a Dockerfile that
+# works locally works here.
+#
+# The `-rootless` variant specifically: the daemonful one wants a privileged pod. This runs as
+# uid 1000 with no added capabilities. It is still the least-confined workload in the fleet —
+# see the securityContext comment in build-job.yaml.j2, which is the honest version of that.
+image_builder_image: moby/buildkit:v0.32.2-rootless
+
+# Caller-supplied; listed here so the contract is readable in one place rather than inferred
+# from the templates.
+#
+#   image_builder_name        image name pushed to the registry, e.g. n8n
+#   image_builder_tag         tag to push, e.g. latest
+#   image_builder_dockerfile  template rendered into the context as `Dockerfile`
+#   image_builder_context     extra templates in the context, {src: dest} — dest is the path
+#                             a COPY in the Dockerfile refers to
+image_builder_tag: latest
+image_builder_context: {}
+
+# A build pulls base layers over the internet and can be slow on a cold cache; a rebuild with
+# warm layers is quick. Bounds a wedged build so a deploy fails with a message instead of
+# hanging on the wait's own timeout.
+image_builder_timeout: 900

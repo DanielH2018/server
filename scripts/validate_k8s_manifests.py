@@ -40,7 +40,10 @@ HOST_VARS = ANSIBLE / "inventory" / "host_vars" / "daniel-box.yml"
 # containers_list entry because they are not services, so the platform check below would
 # always fail for them. seed-volume's templates still render — they just render with vars the
 # calling role supplies, not from an inventory entry.
-SKIP_ROLES = {"manifests", "seed-volume"}
+# image-builder is the third of these: its Job and ConfigMap render from vars a caller passes
+# (which image, which Dockerfile), so there is nothing to render standalone and no service to
+# have an entry.
+SKIP_ROLES = {"manifests", "seed-volume", "image-builder"}
 
 
 def k8s_entries() -> dict[str, dict]:
@@ -145,6 +148,11 @@ def main() -> int:
             if not p.name.endswith(".sh.j2")
         )
         if not templates:
+            # A role that only delegates — n8n-images calls image-builder twice and owns no
+            # manifests of its own. Not a failure, but it must still have an inventory entry,
+            # so the check below is deliberately not skipped with it.
+            if role in entries:
+                continue
             print(f"  [FAIL] {role}: no manifest templates found", file=sys.stderr)
             failures += 1
             continue
