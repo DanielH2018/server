@@ -386,9 +386,18 @@ services:
       # fails quietly — it buffers, retries, then drops — and a stale copy answers queries exactly
       # like a current one, so nothing downstream can tell. 300s tolerates a cluster rollout at a 1m
       # scrape interval without flapping. Read from THIS Prometheus' own gauges: Prom-dependent.
+      # Three arms: lag (receiver down/queue stalled), failed (permanent rejection), and retries
+      # (enqueue backpressure — the one lag CANNOT see, because an overflowing queue discards its
+      # oldest samples while the newest keep flowing, leaving the lag healthy and the copy holed).
+      # Overflow tolerance is 0: in normal operation this counter never moves.
       - REMOTE_WRITE_MAX_LAG=300
       - REMOTE_WRITE_WINDOW=1h
       - REMOTE_WRITE_MAX_FAILED=1000
+      - REMOTE_WRITE_MAX_RETRIES=0
+      # The sent-timestamp gauge is 0 until the first successful send, so time()-0 is ~1.8e9 and
+      # the first cycle after every `prometheus` deploy would page. Graced on the sender's own
+      # uptime rather than STARTUP_GRACE, which must stay disjoint from PROM_DEPENDENT.
+      - REMOTE_WRITE_MIN_UPTIME=300
       - KUMA_PUSH_REMOTE_WRITE={{ monitor_bridge_remote_write_push_token }}
       # Discord delivery: GET-verify Kuma's own notification webhook is still valid — a
       # rotated/revoked/deleted webhook makes Kuma's alert POSTs silently fail while every

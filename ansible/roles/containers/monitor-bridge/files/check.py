@@ -498,8 +498,23 @@ PROMTAIL_DROPPED_MAX = float(_env("PROMTAIL_DROPPED_MAX", "1000"))
 # would bite, so the lag is monitored BEFORE anything depends on it.
 #
 # Read from the SENDER, which self-scrapes as job="prometheus" — hence Prom-dependent, not
-# cluster-dependent. The lag gauge is the primary signal because it catches every failure mode
-# including the silent ones; the failure counter only catches outright rejection.
+# cluster-dependent.
+#
+# THREE arms, because they fail independently and no one of them sees the other two:
+#   lag      — the receiver is down, or the queue is stalled. Catches the common case.
+#   failed   — sends rejected permanently after retries. Outright refusal, e.g. a protocol or
+#              out-of-order rejection the lag arm would never notice because nothing is stuck.
+#   retries  — enqueue backpressure. This is the arm the lag gauge structurally CANNOT cover:
+#              when the shard queue overflows, the OLDEST samples are discarded while the newest
+#              keep flowing, so highest_sent_timestamp goes on advancing and the lag reads healthy
+#              while data is being lost. Same lesson as the promtail M2 review — every drop reason
+#              is a real drop, and an alert scoped to one of them silently misses the others.
+#
+# Deliberately NOT prometheus_remote_storage_samples_dropped_total, which is the metric this
+# check would obviously reach for: it does not exist in the sender's Prometheus build (enumerated
+# 2026-08-07 — 34 prometheus_remote_storage_* series, no _dropped_total among them). An absent
+# selector yields an empty vector that reads as 0 forever, so it would have been a dead arm
+# indistinguishable from health — the exact failure this whole check exists to prevent.
 REMOTE_WRITE_LAG_QUERY = _env(
     "REMOTE_WRITE_LAG_QUERY",
     "time() - max(prometheus_remote_storage_queue_highest_sent_timestamp_seconds)",
@@ -508,8 +523,25 @@ REMOTE_WRITE_MAX_LAG = float(_env("REMOTE_WRITE_MAX_LAG", "300"))
 REMOTE_WRITE_FAILED_SELECTOR = _env(
     "REMOTE_WRITE_FAILED_SELECTOR", "prometheus_remote_storage_samples_failed_total"
 )
+REMOTE_WRITE_RETRIES_SELECTOR = _env(
+    "REMOTE_WRITE_RETRIES_SELECTOR", "prometheus_remote_storage_enqueue_retries_total"
+)
 REMOTE_WRITE_WINDOW = _env("REMOTE_WRITE_WINDOW", "1h")
 REMOTE_WRITE_MAX_FAILED = float(_env("REMOTE_WRITE_MAX_FAILED", "1000"))
+REMOTE_WRITE_MAX_RETRIES = float(_env("REMOTE_WRITE_MAX_RETRIES", "0"))
+
+# Restart grace, and not optional: queue_highest_sent_timestamp_seconds is registered at 0 before
+# the first successful send, so `time() - 0` is ~1.8e9 and the FIRST cycle after every `prometheus`
+# deploy would page — guaranteed, with max_retries=0 on the monitor. This cannot be solved by
+# adding remote_write to STARTUP_GRACE: that set is required to stay disjoint from PROM_DEPENDENT
+# (a graced check must still reach its eval path), and this check is Prom-dependent. So the gate
+# is the sender's own uptime instead, mirroring janitorr's container_start_time_seconds gate.
+# If the uptime series is missing we do NOT grace — an unreadable gate must not suppress an alarm.
+REMOTE_WRITE_UPTIME_QUERY = _env(
+    "REMOTE_WRITE_UPTIME_QUERY",
+    'time() - process_start_time_seconds{job="prometheus"}',
+)
+REMOTE_WRITE_MIN_UPTIME = float(_env("REMOTE_WRITE_MIN_UPTIME", "300"))
 
 # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
 # 2026-06-11 (fwupd): hourly load5/core >1.7 episodes with healthcheck-timeout storms
@@ -2616,19 +2648,32 @@ def check_promtail_dropped():
     return promtail_dropped(count, PROMTAIL_DROPPED_WINDOW, PROMTAIL_DROPPED_MAX)
 
 
-def remote_write_healthy(lag, failed, max_lag, window, max_failed):
+def remote_write_healthy(
+    lag, failed, retries, uptime, max_lag, window, max_failed, max_retries, min_uptime
+):
     """Pure: is the northbound remote-write to the cluster Prometheus keeping up? (ok, msg).
 
     `lag` = seconds between now and the newest sample the sender has successfully shipped, None
-    when the gauge has no series. `failed` = increase(samples_failed_total[window]), None when the
-    counter has never incremented.
+    when the gauge has no series. `failed` / `retries` = increase(...[window]) of the permanent-
+    failure and enqueue-backpressure counters, None when a counter has never incremented.
+    `uptime` = seconds since the sender process started, None when unreadable.
 
     An ABSENT lag gauge is DOWN, not OK. It means this Prometheus is running no remote-write queue
     at all — the config was dropped, the reload never happened, the flag was lost — which is the
     total-failure case and the one most likely to read as silence. Treating no-series as healthy
     is how a monitor reports OK on a pipe that is not merely behind but missing. An absent FAILED
-    counter is genuinely 0 (nothing has ever failed) and is fine.
+    or RETRIES counter is genuinely 0 (it has never incremented) and is fine — the asymmetry with
+    the lag gauge is deliberate: a counter that never fired and a gauge that does not exist mean
+    opposite things.
+
+    Uptime is checked FIRST because a freshly restarted sender legitimately has no successful send
+    yet, so every other arm reads catastrophic for a few seconds through no fault.
     """
+    if uptime is not None and uptime < min_uptime:
+        return True, (
+            "sender restarted %.0fs ago (< %.0fs) — remote-write not yet expected to have caught up"
+            % (uptime, min_uptime)
+        )
     if lag is None:
         return False, (
             "no remote-write queue on this Prometheus (%s returned no series) — the cluster copy "
@@ -2646,10 +2691,16 @@ def remote_write_healthy(lag, failed, max_lag, window, max_failed):
             "remote-write permanently dropped %.0f samples in %s (> %.0f) — gaps in the cluster copy"
             % (n, window, max_failed)
         )
-    return True, "remote-write current (%.0fs behind, %.0f samples lost in %s)" % (
-        lag,
-        n,
-        window,
+    r = retries or 0.0
+    if r > max_retries:
+        return False, (
+            "remote-write queue overflowed %.0f times in %s (> %.0f) — the sender is discarding "
+            "its oldest samples while the newest keep flowing, so the lag reads healthy and the "
+            "cluster copy has holes anyway" % (r, window, max_retries)
+        )
+    return True, (
+        "remote-write current (%.0fs behind, %.0f lost + %.0f overflows in %s)"
+        % (lag, n, r, window)
     )
 
 
@@ -2659,8 +2710,20 @@ def check_remote_write():
     failed = prom_scalar(
         "sum(increase(%s[%s]))" % (REMOTE_WRITE_FAILED_SELECTOR, REMOTE_WRITE_WINDOW)
     )
+    retries = prom_scalar(
+        "sum(increase(%s[%s]))" % (REMOTE_WRITE_RETRIES_SELECTOR, REMOTE_WRITE_WINDOW)
+    )
+    uptime = prom_scalar(REMOTE_WRITE_UPTIME_QUERY)
     return remote_write_healthy(
-        lag, failed, REMOTE_WRITE_MAX_LAG, REMOTE_WRITE_WINDOW, REMOTE_WRITE_MAX_FAILED
+        lag,
+        failed,
+        retries,
+        uptime,
+        REMOTE_WRITE_MAX_LAG,
+        REMOTE_WRITE_WINDOW,
+        REMOTE_WRITE_MAX_FAILED,
+        REMOTE_WRITE_MAX_RETRIES,
+        REMOTE_WRITE_MIN_UPTIME,
     )
 
 

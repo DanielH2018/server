@@ -471,14 +471,53 @@ without the sender's own health changing, and a stale cluster copy answers queri
 current one. B5's exit test could therefore pass at the moment it is run and be false an hour
 later. An absent lag gauge reads as **DOWN**, for the same reason the k8s workload check treats
 absent series as UNKNOWN: no queue at all is the total-failure case and the one most likely to
-look like silence. Live: `remote-write current (22s behind, 0 samples lost in 1h)`.
+look like silence.
 
-**Found while here, and a B5 landmine:** `check_targets_down` issues a bare `up` query and
-`down_exporters` matches on the `job` label. After the B5 repoint those read the cluster
-Prometheus, where `up` now returns *both* estates' targets. The check does not become wrong, but
-it silently widens to cover cluster-native scrape targets too, and `EXPORTER_DEPENDENT` job names
-would match either estate's job of that name. Decide that deliberately in B5 rather than
-discovering it from a page.
+It has **three** arms, because they fail independently: lag (receiver down or queue stalled),
+`samples_failed_total` (permanent rejection after retries), and `enqueue_retries_total`
+(backpressure). The third is the arm lag structurally cannot cover — an overflowing queue discards
+its *oldest* samples while the newest keep flowing, so `highest_sent_timestamp` advances normally
+and the lag reads healthy while the cluster copy develops holes. Same lesson as the promtail M2
+review: an alert scoped to one drop reason silently misses the others.
+
+Deliberately **not** `prometheus_remote_storage_samples_dropped_total`, which is the obvious
+metric to reach for: enumerating the sender's 34 `prometheus_remote_storage_*` series showed it
+does not exist in this Prometheus build. An absent selector yields an empty vector that reads as
+0 forever, so it would have been a dead arm indistinguishable from health — the exact failure the
+check exists to prevent. `samples_failed_total` was confirmed present the same way rather than
+assumed.
+
+The check is also graced on the sender's own uptime, which is not a nicety: the sent-timestamp
+gauge is registered at 0 before the first successful send, so `time() - 0` is ~1.8e9 and the first
+cycle after **every** `prometheus` deploy would page, with `max_retries=0` on the monitor. It
+cannot go in `STARTUP_GRACE` — that set must stay disjoint from `PROM_DEPENDENT` — so it reads
+`process_start_time_seconds` instead, mirroring janitorr's uptime gate. An unreadable uptime does
+**not** grace.
+
+Live: `remote-write current (22s behind, 0 samples lost in 1h)`.
+
+**Found while here, and the sharpest B5 landmine: after the repoint, unqualified queries silently
+span both estates.** The cluster Prometheus holds daniel-server's series alongside its own, so
+every monitor-bridge query that does not pin `origin` widens the moment B5 repoints it:
+
+- `container_*` is the big one. Docker's `cadvisor` job and the cluster's `kubernetes-cadvisor`
+  job both produce it, so `check_restarts`, `check_oom` and `check_cpu` would start covering k8s
+  pods and naming them as offenders — plausible-looking output from a check that silently changed
+  scope.
+- `check_targets_down`'s bare `up` gains the cluster's own scrape targets, and `down_exporters`
+  matches on `job`, so an `EXPORTER_DEPENDENT` name would match either estate's job of that name.
+
+None of these is *wrong* — arguably some are improvements — but every one is a scope change
+arriving by accident. **B5 must decide per query whether it wants one estate or both**, and the
+decision belongs in the query (`origin="daniel-server"` where the old semantics are intended),
+not in a note. This is the whole reason `origin` exists as a label rather than the series being
+merged.
+
+The way this was found is worth keeping: reading `prometheus_tsdb_head_series` post-B3 returned
+**two** series, and taking `result[0]` gave a number that could have been either estate's. The
+committed figures above were re-derived with an explicit `{origin=""}` (cluster-native: 38 573
+series, 1341.6 samples/s) rather than left to result ordering. The same ambiguity is exactly what
+bites the checks above.
 
 ---
 
