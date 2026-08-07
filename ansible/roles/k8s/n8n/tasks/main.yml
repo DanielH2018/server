@@ -20,11 +20,23 @@
     # first run, when no Deployment exists yet, and correct on any re-seed.
     seed_volume_quiesce:
       - n8n
-    # The source is a live SQLite database with DB_SQLITE_VACUUM_ON_STARTUP, so a torn copy is
-    # not an acceptable outcome at any point here — there is no "the k8s copy is not
-    # authoritative yet" phase for this service. Stop the Docker containers first; this makes a
-    # source that moved a hard failure rather than a warning.
-    seed_volume_force: true
+    # NO seed_volume_force here, and the marker is the only thing standing between a routine
+    # `--tags n8n` deploy and data loss. `seed_volume_force: true` was hardcoded at this point
+    # for the cutover run, and it was right for exactly that one run: the source is a live
+    # SQLite database with DB_SQLITE_VACUUM_ON_STARTUP, there is no "the k8s copy is not
+    # authoritative yet" phase for this service, and forcing the copy made a source that moved
+    # a hard failure rather than a warning.
+    #
+    # It stopped being right the moment the cutover completed, because force bypasses the
+    # `.seeded` marker unconditionally (seed-volume/tasks/main.yml:105). The Docker source is
+    # now frozen at the 2026-08-06 17:53 shutdown while the cluster copy has been the only
+    # writer since 17:56, so a rerun would quiesce n8n and `tar -x` that stale snapshot over
+    # the live PVC — overwriting database.sqlite and its 218 MB WAL. The copy.yml assert does
+    # fail afterwards (the destination keeps the files the source lacks, so the counts differ),
+    # but it fails AFTER the overwrite: loud, not safe.
+    #
+    # A deliberate re-seed is still available and is now opt-in per run, as seed-volume's own
+    # header documents: pass `-e seed_volume_force=true`.
 
 - name: Deploy n8n to the cluster
   ansible.builtin.include_role:
