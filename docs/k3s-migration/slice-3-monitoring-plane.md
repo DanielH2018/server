@@ -1,6 +1,28 @@
 # k3s Slice 3 — The Monitoring Plane
 
-**Status:** plan, not yet executed. Written 2026-08-07.
+**Status:** plan, not yet executed. Written 2026-08-07, **revised the same day before execution.**
+
+**Revision — D3 inverted, and the slice got smaller.** The first draft assumed the cluster Kuma
+could reach daniel-server's docker-proxy over TCP. It cannot, and must not. No docker-proxy
+publishes a host port (`docker ps` shows an empty `PORTS` column for all four), and
+`host_vars/daniel-server.yml:71-75` records why, verbatim:
+
+> NOT on `apps` (Security M1, 2026-07-01): this read-only proxy runs CONTAINERS=1, and
+> `GET /containers/{id}/json` returns EVERY container's Env (secrets). haproxy can't body-filter,
+> so the only lever is who can reach it.
+
+Reachability *is* the access control. Publishing it to serve a cluster Kuma would expose every
+container's environment — including secrets — to the LAN. That is not a trade-off to weigh.
+
+The consequence is that **Kuma's Docker-daemon coupling is collector-side**, the same class as
+node-exporter, cadvisor and promtail — so this slice's own seam puts Kuma on the
+stays-until-slice-7 side. Kuma and AutoKuma no longer move in slice 3. D4 (recreate Kuma state) and
+the parallel-Kuma machinery in D7 drop out with it; both are recorded below rather than deleted,
+because a future reader needs to know they were considered and why they became slice-7 concerns.
+
+What replaces the move is smaller and lands sooner: AutoKuma gains the **Files** source *alongside*
+its existing Docker source, in the one instance it already runs, and that closes the
+seven-unmonitored-workload gap without touching where anything runs.
 
 Design doc §8 gives this slice one line: *"Monitoring cluster + bridges (incl. the AutoKuma
 rework) — dashboards and alerts equivalent to today's."* That understates it in one direction and
@@ -53,14 +75,23 @@ volume, and a database. The monitoring plane has none of that shape.
   stdout streams.
 - `monitor-bridge` reaches `kopia:51515`, `sonarr:8989`, `radarr:7878`, `prowlarr`, and
   `docker-proxy` over **Docker networks that only exist on daniel-server**.
+- `uptime-kuma` + `autokuma` both read the Docker daemon through `docker-proxy:2375` — Kuma to
+  answer "is this container running", AutoKuma to discover the labels that define the monitors.
+  That proxy is unpublished by deliberate security decision (see the revision note), so this
+  coupling is not stretchable across hosts.
 
 daniel-server does not join the cluster until **slice 7**. So the slice splits along that seam:
 
 | | Can move now | Must stay until slice 7 |
 |---|---|---|
-| **What** | Storage, query, dashboards, alerting | Collectors and Docker-facing reach-outs |
-| **Which** | Prometheus TSDB, Loki, Grafana, Kuma, AutoKuma | node-exporter, cadvisor, promtail, monitor-bridge |
+| **What** | Storage, query, dashboards | Collectors, the alert brain, Docker-facing reach-outs |
+| **Which** | Prometheus TSDB, Loki, Grafana | node-exporter, cadvisor, promtail, monitor-bridge, **uptime-kuma, autokuma** |
 | **How it connects** | — | Remote-write / remote-ship northbound to the cluster |
+
+The test for which side a service lands on is **not** "is it stateful" or "is it infrastructure" —
+it is **does it read something only daniel-server has**. Kuma looked like alerting (movable) and is
+actually a Docker-daemon client (not movable). That the first draft put it on the wrong side is the
+seam working, not the seam failing.
 
 This is a tighter boundary than design §5's reworks-vs-ports split, and it corrects that doc in one
 place: **`monitor-bridge` is listed as a "straight port" and it is not.** Its *code* ports cleanly
@@ -88,7 +119,7 @@ Claude-specific. Renaming an Ansible role with a live PVC is not free — the PV
 from role defaults, so a rename must preserve `claim` names explicitly or it orphans the volumes.
 Decide before the first commit, not after.
 
-### D2 — AutoKuma moves to the **Files** provider, not the Kubernetes CRD provider
+### D2 — AutoKuma **adds** the Files source alongside Docker, in the instance it already runs
 
 AutoKuma supports three sources. From the upstream README, verbatim:
 
@@ -106,18 +137,44 @@ run it and is asking for a maintainer. The Files provider is fully supported and
 what this repo already does — `ansible/templates/autokuma.yml.j2` generates monitor definitions
 from inventory, and it does not care whether the output is a label or a file.
 
-**The rework is therefore a change of emission target, not of authorship.** The `kuma()` macro
-keeps its signature; the Docker branch emits `kuma.<id>.<type>.<field>=<value>` labels, and a new
-file branch emits the same fields as TOML/JSON into a mounted directory. Both stacks can run at
-once during the migration, which is what makes the cutover reversible.
+**The two sources are independent toggles, not alternatives** — verified against the upstream
+configuration reference (`autokuma.bigboot.dev/dev/autokuma/configuration/`):
 
-**To verify before building on it:** that all four monitor types the macro emits (`docker`, `push`,
-`port`, `http`) are expressible as static files. The file format is a generic `type = "..."` plus
-the type's fields, and the label form is the same entity model with a different transport, so this
-is expected to hold — but the static-monitors page does not state it explicitly, and `docker`-type
-is the one worth actually testing (see D3).
+| Variable | Purpose |
+|---|---|
+| `AUTOKUMA__DOCKER__ENABLED` | Docker label source — what we use today |
+| `AUTOKUMA__FILES__ENABLED` | Files source on/off |
+| `AUTOKUMA__STATIC_MONITORS` | Folder AutoKuma scans for `.json`/`.toml` definitions |
 
-### D3 — The `docker`-type monitors are the largest hidden item, and they gate where Kuma runs
+So **one AutoKuma instance serves both**, and the first draft's "run a second AutoKuma against a
+second Kuma" is unnecessary. The docs do not state the defaults for either `ENABLED` flag, so set
+both explicitly rather than inheriting an unknown.
+
+**Authorship does not change; only the emission target for the k8s half.** The `kuma()` macro keeps
+its signature and its Docker branch. A new file branch renders the same fields as JSON into the
+mounted directory. Per the upstream static-monitors page, **the filename without its extension
+becomes the AutoKuma id** — the same identity the label form spells as `kuma.<id>.`:
+
+```json
+{ "type": "http", "name": "Example", "url": "https://example.com", "interval": 60, "max_retries": 3 }
+```
+
+**Watch the field-name skew.** Our Docker labels use `maxretries` for the `docker`/`http`/`port`
+branches but `max_retries` for `push`, and the documented file example uses `max_retries`. Confirm
+against a real created monitor rather than assuming the label spelling carries over.
+
+**Cross-host authorship is already precedented.** The file branch renders on daniel-server from
+daniel-box's inventory, which is exactly what Docker Traefik already does for bridged routes —
+`ansible/roles/containers/traefik/templates/config.yml.j2:6`:
+
+```jinja
+{% set bridged = hostvars['daniel-box'].containers_list | default([]) | selectattr('bridge_hostname', 'defined') | list %}
+```
+
+Same `hostvars['daniel-box']` read, same "one host's role renders from another host's inventory"
+shape. No new plumbing to invent.
+
+### D3 — Kuma stays on daniel-server; the `docker`-type monitors are why *(inverted from draft 1)*
 
 `labels()` defaults to `monitor_type='docker'` and emits
 `kuma.<id>.docker.docker_host={{ kuma_docker_host }}`, where `kuma_docker_host: 1` is the numeric
@@ -127,20 +184,30 @@ then asks that daemon whether the container is running.
 So most per-container monitors depend on Kuma being able to reach a Docker daemon. Moving Kuma into
 the cluster does not remove that dependency — it stretches it across hosts.
 
-Two options, and this needs deciding before the Kuma move, not during:
+The draft weighed two options — expose docker-proxy over TCP, or convert ~40 monitors to another
+type. **The first is closed on security grounds** (see the revision note: reachability is the only
+control preventing secret enumeration, and no proxy publishes a port). The second is ~40 monitors of
+churn against a target that changes again at slice 7, when those containers stop being Docker
+containers at all.
 
-- **Keep the Docker Host entry, point it at daniel-server's docker-proxy over TCP.** Smallest
-  change; every `docker`-type monitor keeps working unmodified. Cost: the cluster Kuma now depends
-  on a daniel-server service, and the docker-proxy must be reachable from the cluster network.
-- **Convert Docker monitors to another type.** Larger change (~40 monitors), but it removes the
-  cross-host dependency and is the shape those monitors need after slice 7 anyway, when the
-  containers stop being Docker containers at all.
+**Both options existed only to enable a Kuma move that this slice no longer needs.** Kuma stays
+where it is. Its Docker coupling is collector-side, it sits on the stays-until-slice-7 side of the
+seam, and every `docker`-type monitor keeps working unmodified because nothing about them changes.
 
-**Recommendation: keep the Docker Host entry for slice 3.** The conversion is really part of each
-service's own migration — a container that becomes a Pod needs a k8s-shaped monitor, and inventing
-that mapping now, for services that have not moved, is work done against a target that will change.
+What this slice *does* add is the Files source (D2) for the workloads that have **no** Docker
+container to watch — the k8s pods. Those get `http`/`push` monitors, which need neither a Docker
+daemon nor a metrics pipeline. The `docker`-type conversion question is deferred to each service's
+own migration, which is where it belongs.
 
-### D4 — Recreate Kuma's state declaratively; do not migrate the SQLite database
+**Consequence worth stating:** slice 3 no longer migrates the alert brain. That removes the
+slice's single largest continuity risk, and it is why the batch order below changes.
+
+### D4 — *(deferred to slice 7)* Recreate Kuma's state declaratively; do not migrate the SQLite database
+
+**Not part of slice 3 any more** — D3 keeps Kuma on daniel-server, so there is no state to move and
+no Discord notification or Docker Host entry to re-create. Kept here because the analysis stays
+correct and slice 7 will need it; the reasoning below is what makes a Kuma rebuild cheap whenever
+it does happen.
 
 Kuma's entire state is one bind mount (`./data:/app/data`). It holds monitors, notification
 config, heartbeat history, the Docker Host entry, and the UI's own 2FA.
@@ -195,18 +262,32 @@ week by monitoring that read green while broken — the B2 transaction cap (2026
 the gitops-behind defer (2026-08-07, 11 h). A slice that migrates the alert brain must say what
 watches the watchers during the window.
 
-What survives a Kuma outage:
+**Rescoped by D3, not dropped.** The alert brain no longer moves, so the parallel-Kuma machinery
+the draft prescribed is gone — and with it the slice's largest continuity risk. But the *metrics
+path* still moves, and that carries a continuity risk of its own with a nastier failure shape.
+
+**The risky step is pointing `monitor-bridge` at a cluster Prometheus, not moving Kuma.**
+`check.py:2896` defines `PROM_DEPENDENT` as exactly twelve checks — `disk`, `cert`, `memory`,
+`restarts`, `oom`, `cpu`, `targets`, `traefik5xx`, `b2_trend`, `ups`, `janitorr`,
+`promtail_dropped`. When the Prometheus Reachable gate reads down, all twelve are **suppressed**:
+pushed `up` with a "skipped" message so their heartbeats stay alive.
+
+That gate is doing exactly what it was built to do. But it means a cluster Prometheus that is
+*reachable yet incompletely populated* is the worst case available: the gate passes, the twelve
+checks run against a Prometheus missing their series, and each one reads whatever an empty query
+result decodes to. Green, silent, wrong — the same shape as the B2 transaction cap (2026-08-02,
+9.5 h) and the gitops-behind defer (2026-08-07, 11 h), twice in one week.
+
+**Therefore: both Prometheus instances stay scrapeable, and `monitor-bridge` keeps pointing at the
+Docker one, until the cluster Prometheus demonstrably serves every series those twelve checks
+query.** Not "until it's up" — until the series exist. That is B2's exit test, and it is the one
+gate in this slice worth being pedantic about.
+
+What survives a monitoring outage regardless:
 
 - the **off-box UptimeRobot dead-man** on the host itself,
 - the **email backstop** attached to the Discord Delivery monitor (an independent SMTP path),
 - `monitor-bridge`'s own container healthcheck and autoheal.
-
-What does **not**: everything else. Every threshold alert in the homelab is a Kuma push monitor.
-
-**Therefore: both Kuma instances run in parallel for the whole slice, and the Docker one stays
-authoritative until the cluster one has demonstrated a full alert round-trip.** The bridge can push
-to both — the tokens are client-supplied and pushing twice costs one extra HTTP call per check.
-Cut over only after B4 below passes.
 
 ---
 
@@ -215,6 +296,24 @@ Cut over only after B4 below passes.
 The default shape for this slice is horizontal (Prometheus → Loki → Grafana → Kuma → AutoKuma), and
 it is wrong: nothing is checkable until the end. Sequenced so each batch ends in something
 observable.
+
+**Order changed in revision.** Closing the seven-workload gap was B5 in the draft, behind the whole
+metrics migration. With Kuma staying put (D3) and one AutoKuma serving both sources (D2), it needs
+neither — `http`/`push` monitors against cluster services touch no Docker daemon and no Prometheus.
+So it moves to **B0**: it is now the cheapest item in the slice, it closes the live coverage gap
+first instead of last, and it exercises the Files source on the easy half before anything depends
+on it.
+
+### B0 — Close the seven-workload gap *(was B5)*
+
+Enable `AUTOKUMA__FILES__ENABLED` + `AUTOKUMA__STATIC_MONITORS` on the existing AutoKuma, add the
+file branch to the `kuma()` macro, and generate monitors for the workloads that have never had one:
+`registry`, `cloudflare-ddns`, karakeep's `chrome` / `meilisearch` / `time-tagger`, and
+`n8n-runners` — the last of which executes every workflow's code.
+
+**Prove it:** the monitors appear in the existing Kuma, green. Then `kubectl delete pod` on one and
+confirm it goes red. Nothing else in the slice is touched, and this is where D2's field-name skew
+(`maxretries` vs `max_retries`) gets settled against a real created monitor.
 
 ### B1 — One cluster metric, end to end
 
@@ -233,36 +332,32 @@ daniel-server's exporters from the cluster — decide by which survives slice 7 
 existing Docker Grafana is still serving the same series. Both stacks now see the same data, which
 is the property that makes the rest of the slice reversible.
 
-### B3 — AutoKuma emits files
+**Do not repoint `monitor-bridge` here.** See B4.
 
-Add the file-emitting branch to `autokuma.yml.j2`. Run a **second** AutoKuma against the **second**
-Kuma, sourcing from files only, generating a small subset — the push monitors, which have no Docker
-dependency.
+### B3 — Dashboards onto the cluster Grafana
 
-**Prove it:** the cluster Kuma shows those monitors, and `monitor-bridge` — pushing to both — turns
-them green. This is where the D2 assumption about type coverage gets tested for real.
+Provision the cluster Grafana with the three pinned UIDs from D6 and load the existing dashboards
+unmodified.
 
-### B4 — One full alert round-trip, then cut over
+**Prove it:** every dashboard renders against cluster-side data with **no dashboard edits**. A panel
+that renders empty is a missing series, which is exactly the signal B4 needs — so record which
+panels are empty rather than fixing them here.
 
-Widen the file-sourced set to all monitors, re-create the Discord notification and the Docker Host
-entry (D3, D4).
+### B4 — Repoint `monitor-bridge`, behind an explicit series check
 
-**Prove it, and this is the slice's real exit criterion:** stop a container on daniel-server and
-confirm a Discord message arrives *from the cluster Kuma*. Then stop the Docker Kuma for an hour
-and confirm nothing goes dark.
+The slice's one genuinely risky step (D7). Before changing `PROM_URL`, confirm the cluster
+Prometheus actually returns a non-empty result for the query behind **each of the twelve
+`PROM_DEPENDENT` checks**. Reachable is not sufficient; populated is the bar.
 
-### B5 — Close the seven-workload gap
+**Prove it:** run `check.py --once` against the cluster Prometheus and diff its 42-line output
+against the same run on the Docker Prometheus. Identical verdicts, no check newly reporting
+"skipped". Any divergence is a missing series, not a passing test.
 
-With cluster scraping live, add pod-health monitors for the workloads that have never had one:
-`registry`, `cloudflare-ddns`, karakeep's `chrome`/`meilisearch`/`time-tagger`, `n8n-runners`.
+### B5 — Retire the Docker query layer
 
-**Prove it:** `kubectl delete pod` on `n8n-runners` produces an alert. This is the gap that
-motivated scoping the cluster pod-health alert into slice 3 in the first place.
-
-### B6 — Retire the Docker query layer
-
-Stop the Docker `prometheus`, `grafana` and `uptime-kuma`. Leave `node-exporter`, `cadvisor`,
-`promtail`, `monitor-bridge` and `autofix-bridge` running — they are the slice-7 residue by design.
+Stop the Docker `prometheus` and `grafana`. **`uptime-kuma`, `autokuma`, `node-exporter`,
+`cadvisor`, `promtail`, `monitor-bridge` and `autofix-bridge` all keep running** — they are the
+slice-7 residue by design, and per D3 the first two are now part of it.
 
 ---
 
@@ -274,10 +369,16 @@ the seam in D-above is applied: Loki (storage/query) moves, promtail (collector)
 role that currently ships three services is the concrete work, and `--tags grafana` will not mean
 what it used to.
 
-**Kuma needs `NET_RAW`.** The Docker compose grants it explicitly so ping monitors
-(`daniel-pi-host`) can open raw ICMP sockets. A Pod needs the same capability added, and the
-cluster's default `securityContext` drops ALL. A ping monitor that can never succeed looks like a
-down host.
+**Kuma needs `NET_RAW` — *deferred to slice 7 with the Kuma move*.** The Docker compose grants it
+explicitly so ping monitors (`daniel-pi-host`) can open raw ICMP sockets. A Pod needs the same
+capability added, and the cluster's default `securityContext` drops ALL. A ping monitor that can
+never succeed looks like a down host. Recorded here so slice 7 does not rediscover it.
+
+**The Files source must not disturb the Docker source.** AutoKuma reconciles monitors against its
+own DB (`AUTOKUMA__DB_PATH=/data/autokuma.db`). Enabling a second source on a live instance that
+already owns ~40 monitors is the one step in B0 that can do damage — a static file colliding with
+an existing Docker-derived id would have AutoKuma reconcile one against the other. Namespace the
+generated filenames (the filename *is* the id) so no k8s monitor can collide with a container name.
 
 **The self-monitoring recursion.** The cluster Prometheus scraping itself, and the cluster Kuma
 monitoring the cluster Prometheus, means a single Longhorn or node failure takes out both the
@@ -291,24 +392,49 @@ parallel period is what makes B2 reversible.
 
 ## Exit criteria
 
+- [ ] The seven previously-unmonitored k8s workloads each have a monitor that fires on pod deletion
+- [ ] AutoKuma runs Docker and Files sources simultaneously; no existing monitor is disturbed
 - [ ] A daniel-server metric and a cluster-pod metric are both queryable from the cluster Prometheus
 - [ ] Every dashboard renders in the cluster Grafana **with no dashboard edits** (D6 held)
-- [ ] Every monitor that exists in the Docker Kuma exists in the cluster Kuma, generated from files
-- [ ] Stopping a container produces a Discord alert originating from the cluster Kuma
-- [ ] The Docker Kuma is stopped for 1 h with no loss of alerting
-- [ ] The seven previously-unmonitored k8s workloads each have a monitor that fires on pod deletion
+- [ ] All twelve `PROM_DEPENDENT` queries return non-empty against the cluster Prometheus
+- [ ] `check.py --once` gives identical verdicts against both Prometheus instances
+- [ ] The Docker `prometheus` + `grafana` are stopped for 1 h with no loss of alerting
 - [ ] `monitor-bridge` is unchanged except for its northbound targets — no check logic edited
+
+**Explicitly *not* in this slice** (moved to slice 7 by D3): Kuma or AutoKuma running in the
+cluster, Kuma state recreation, the Discord notification and Docker Host re-creation, and any
+conversion of `docker`-type monitors.
 
 ---
 
 ## Unverified — resolve during execution, not by assuming
 
-- **Static-file coverage of `docker`-type monitors** (D2). Expected to work; not confirmed by the
-  upstream static-monitors page. B3 tests it against push monitors first, which is the cheap half.
-- **Whether the cluster can reach daniel-server's docker-proxy** (D3). Nothing has needed that path
-  yet, and the same-bridge hairpin-NAT constraint from slice 2 means the reverse direction has
-  already surprised us once.
+### Resolved 2026-08-07, before execution
+
+- **Whether the cluster can reach daniel-server's docker-proxy** (D3) — **RESOLVED: it cannot, and
+  must not.** No docker-proxy publishes a host port (empty `PORTS` for all four of `docker-proxy`,
+  `docker-proxy-portainer`, `docker-proxy-codeserver`, `docker-proxy-lifecycle`), and
+  `host_vars/daniel-server.yml:71-75` documents reachability as the *only* control preventing
+  `GET /containers/{id}/json` from enumerating every container's secrets. This inverted D3 and
+  reshaped the slice.
+- **PVC naming across the `claude-otel` rename** (D1) — **RESOLVED: safe.** Claim names are
+  literal in the templates, not role-derived (`name: prometheus-data` at `prometheus.yaml.j2:27`,
+  `claimName: prometheus-data` at `:97`). Live PVCs `grafana-data` (1Gi), `loki-data` (10Gi),
+  `prometheus-data` (5Gi), `tempo-data` (5Gi) are all `longhorn-nobackup` and Bound. A role rename
+  does not touch them.
+- **Whether AutoKuma can run Docker and Files sources at once** (D2) — **RESOLVED: yes**, they are
+  independent toggles (`AUTOKUMA__DOCKER__ENABLED` / `AUTOKUMA__FILES__ENABLED` +
+  `AUTOKUMA__STATIC_MONITORS`). This removed the draft's second-AutoKuma-instance requirement.
+
+### Still open
+
+- **Static-file coverage of `docker`-type monitors** (D2). Now largely moot — D3 keeps every
+  `docker`-type monitor on the label path, and B0 only needs `http`/`push`. Becomes a slice-7
+  question.
+- **Exact field-name spelling in static files** (D2). Our labels use `maxretries` for
+  `docker`/`http`/`port` but `max_retries` for `push`; the documented file example uses
+  `max_retries`. Settle it against a created monitor in B0, not by reading the macro.
+- **Default values of the two `ENABLED` flags** (D2). The upstream config page lists the variables
+  but not their defaults. Set both explicitly rather than inheriting an unknown.
 - **Whether remote-write or cluster-side scraping is the better northbound** (B2). Remote-write
   survives daniel-server joining the cluster more gracefully; scraping is simpler now.
-- **PVC naming across the `claude-otel` rename** (D1). Verify the claim names are preserved before
-  the first apply, or the existing telemetry volumes orphan.
