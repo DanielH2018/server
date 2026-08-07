@@ -546,12 +546,36 @@ Two datasources over one backend also turns out to be *correct* rather than mere
 returns empty), while the cluster's own series are scraped at 15s and want it unset. One shared
 datasource could not have been right for both estates now that they coexist in one TSDB.
 
-**`AI/claude-code.json` was deliberately not ported.** Its dashboard uid `claude-code-otel` is the
-same uid this cluster's vendored Claude Code board already claims, and the two have diverged (25
-datasource refs vs 12). Loading both would let the provisioner resolve the collision by
-last-writer-wins, silently, on a 30s timer. Reconciling them is content work with no test, and
-doing it here would contradict B4's own criterion that no dashboard was edited. Sixteen ported,
-one deferred.
+**`AI/claude-code.json` was deliberately not ported** — and was **reconciled separately on
+2026-08-07**, after B5. Its dashboard uid `claude-code-otel` was the same uid the cluster's
+vendored board already claimed, and the two had diverged, so loading both would have let the
+provisioner resolve the collision by last-writer-wins, silently, on a 30s timer. Doing it inside
+B4 would also have contradicted B4's own criterion that no dashboard was edited.
+
+The reconcile was one-sided in the end. The cluster copy was the superset by a wide margin — **30
+panels against 11**, adding Tempo traces, tool activity, hooks, session lifecycle and content rows
+— and the single panel unique to the Docker copy was not additive: *"Recent events (tool
+decisions, api requests/errors, MCP)"* runs `{service_name=~".+"}`, the identical query to the
+cluster copy's *"Recent events (all types)"*, under a title claiming a filter it never applied. So
+there was nothing to merge, only to retag: `prometheus` → `EGdsQqhVk`, `loki` → `bf4q19tuivta8e`,
+`tempo` unchanged.
+
+That direction is what makes one file work in **both** Grafanas, since the cluster has carried
+aliases for those uids since B4. Each Grafana resolves them against its own backend, and because
+both hosts run Claude Code and export to their own collector, the board is meaningful in both —
+the cluster's view spans both estates thanks to remote-write. The vendored ConfigMap and its
+provider are gone, so the board now arrives through the same file-structure provider as every
+other one, moving it from the `Claude Code` folder to `AI` and matching where it already sat in
+the Docker Grafana. **Seventeen dashboards, one source of truth.**
+
+Verified live: 10 of its 12 Prometheus queries return data; the other two are untestable outside
+Grafana because they contain `$__rate_interval`, which only Grafana substitutes — and those two
+are exactly the panels the `timeInterval: "1m"` alias setting above exists for.
+
+One trap worth keeping: removing a file from `manifests_files` only stops it being *re-rendered*.
+The manifests role applies its whole directory, so the previously written copy would have gone on
+being applied every deploy. The retired manifest and the ConfigMap it created both had to be
+removed explicitly.
 
 **The real delivery constraint was not the one expected.** The plan assumed the 1 MiB ConfigMap
 cap; the deploy failed on a different limit:
