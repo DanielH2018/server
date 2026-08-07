@@ -717,13 +717,14 @@ slice-7 residue by design, and per D3 the first two are now part of it.
 Prometheus is the point of no return for 90 days of history, so none of these is deferrable past
 it.**
 
-1. **Nothing watches the cluster's own scrape targets.** B5 pinned `check_targets_down` to
-   `origin="daniel-server"`, which preserves today's semantics exactly — and means the cluster's
-   own five targets are unwatched. `cluster_prometheus` only probes reachability and
-   `k8s_workloads` reads deployment replicas, not scrape health. `kube-state-metrics` going
-   unscraped is covered (the workload check treats absent series as DOWN), but **`otel-collector`
-   and `otel-collector-internal` going down would be silent.** Either give `targets` a second
-   cluster-pinned arm or add a sibling check — decide, don't inherit it.
+1. ~~**Nothing watches the cluster's own scrape targets.**~~ **Done 2026-08-07.** Added
+   `cluster_targets`, a sibling check selecting `up{origin=""}` — series where the label is
+   absent, which is exactly the cluster-native set since every remote-written series carries it.
+   Reuses `targets_verdict`, so it inherits the same floor: an emptied vector reads as UNKNOWN,
+   not as nothing being wrong. Live: `cluster_targets - all 5 targets up`, alongside
+   `targets - all 11 targets up`. This closed a gap that was live from the B5 flip onward, not
+   only at retirement — `otel-collector` and `otel-collector-internal` carry the only copy of
+   Claude Code's session/token/cost telemetry and their loss was silent.
 2. **Wait for history before retiring.** `b2_trend` fits `predict_linear` over 7 days and its
    projection is currently suppressed (61 samples vs daniel-server's 10 077 at the flip). It
    self-heals ~7 days after B3, i.e. on or after **2026-08-14**. Retiring the Docker Prometheus
@@ -732,9 +733,13 @@ it.**
    the configured 30 d at the post-B3 ingest rate. Fine for every monitor-bridge query (longest
    lookback is 7 d), but it is a real loss for ad-hoc Grafana browsing. Raise the PVC on a
    measurement — by B6 the cluster will have compacted blocks, so measure rather than re-estimate.
-4. **`Prometheus Reachable` and `Cluster Prometheus Reachable` now watch the same instance.** B5
-   pointed `PROMETHEUS_URL` at the cluster, so the two monitors are redundant. Collapse them, or
-   repurpose the first — two green monitors for one fact reads as more coverage than exists.
+4. ~~**Two reachability monitors watch the same instance.**~~ **Partly done 2026-08-07.** The
+   duplicate *probe* is gone: the cluster gate now reuses the Prometheus gate's verdict when the
+   two URLs match, and only probes separately when they genuinely differ. The monitor itself is
+   **kept deliberately** — if the URLs ever diverge again the gate needs somewhere to page — but
+   its message now names the redundancy rather than presenting itself as independent coverage
+   (`same instance as the Prometheus gate (Prometheus reachable)`). If B6 makes the cluster the
+   only Prometheus permanently, delete it then.
 
 ---
 
