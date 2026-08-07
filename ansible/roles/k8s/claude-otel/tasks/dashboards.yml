@@ -102,4 +102,10 @@
       -f /etc/rancher/k3s/dashboard-manifests/
   become: true
   register: claude_otel_dashboards_applied
-  changed_when: "'serverside-applied' in claude_otel_dashboards_applied.stdout"
+  # Server-side apply prints `serverside-applied` for every object whether or not it changed
+  # anything, so its output cannot be read for a changed verdict the way the client-side apply's
+  # created/configured/unchanged can. The manifest write above is the honest signal: these
+  # ConfigMaps' contents change exactly when the files generated from the dashboard JSON change.
+  # The apply itself still runs unconditionally, so drift is corrected either way — this only
+  # governs what gets REPORTED as changed.
+  changed_when: claude_otel_dashboard_manifests is changed
