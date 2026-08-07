@@ -1,0 +1,80 @@
+---
+# Proves /data/torrents and /data/media are one filesystem, by hardlinking across them.
+#
+# BE HONEST ABOUT WHAT THIS PROVES TODAY. With a single PVC mounted once, `ln` cannot fail —
+# this is a regression guard for the day someone gives torrents and media separate volumes,
+# not evidence the import path works. That evidence is B3/B4: a hardlink between the root
+# folders sonarr is actually configured with. What it does prove on a first run is real
+# though: this is the first pod to mount the claim, so a green run means the static PV binds,
+# the nodeAffinity resolves, and uid 1000 can write to it.
+#
+# Failure mode it exists for: sonarr and radarr fall back to COPYING when an import crosses a
+# filesystem boundary. No error, no warning — just double the space and slower imports, found
+# months later.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: media-volume-hardlink-probe
+  namespace: {{ k8s_namespace }}
+spec:
+  # No retries: a second attempt of a deterministic filesystem test tells you nothing the
+  # first did not, and it would mask which run produced the log being read.
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        # The uid the media stack runs as, so this also proves the volume is writable by the
+        # user that will own it. Deliberately NO fsGroup: it would make the kubelet recursively
+        # chown the whole library on every mount, and the files are already 1000:1000.
+        runAsUser: {{ puid }}
+        runAsGroup: {{ pgid }}
+      containers:
+        - name: probe
+          image: {{ media_volume_probe_image }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              T=/data/torrents/.hardlink-probe
+              M=/data/media/.hardlink-probe
+              rm -f "$T" "$M"
+              mkdir -p /data/torrents /data/media
+              # Creating and deleting a file bumps its directory's mtime, and the volume is
+              # verified against daniel-server with `rsync -n`, which reports a changed
+              # directory time as a difference. Without this the probe leaves a clean volume
+              # looking permanently out of sync — measured: `.d..t...... media/` and
+              # `.d..t...... torrents/` on the very first run after B2's copy.
+              touch -r /data/torrents /tmp/ref-torrents
+              touch -r /data/media /tmp/ref-media
+              echo probe > "$T"
+              # Fails with EXDEV if these are two filesystems, which is the whole test.
+              ln "$T" "$M"
+              LINKS=$(stat -c %h "$M")
+              rm -f "$T" "$M"
+              touch -r /tmp/ref-torrents /data/torrents
+              touch -r /tmp/ref-media /data/media
+              if [ "$LINKS" != "2" ]; then
+                echo "HARDLINK PROBE FAILED: link count $LINKS, expected 2"
+                exit 1
+              fi
+              echo "hardlink probe OK: /data/torrents <-> /data/media are one filesystem"
+          volumeMounts:
+            - name: media
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+      volumes:
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ media_volume_claim }}

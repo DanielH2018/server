@@ -214,6 +214,38 @@ where they will fail at playback rather than at startup.
 So: migrate the config, then explicitly switch acceleration to VAAPI in the UI, then verify a real
 playback. Treat "the pod is Running" as meaning nothing at all here.
 
+### D9 — The media volume is a *static* `local` PV, not a dynamic `local-path` PVC *(added by B2, 2026-08-07)*
+
+D6 chose `local-path` for the media. Writing B2 turned up three things dynamic provisioning gets
+wrong for this particular volume, none of which contradict D6's reasoning — it is still node-local
+and still unreplicated:
+
+1. **The path has to be nameable before the volume exists.** `local-path` names its directory
+   `pvc-<uuid>_<ns>_<claim>`. The seeding rsync, this document and an Ansible task all need to say
+   where the bytes go, and a UUID minted at bind time cannot be any of those.
+2. **`local-path` reclaims `Delete`.** One mistyped `kubectl delete pvc` would take the library with
+   it — and `kopiaignore.j2` excludes `containers/data/`, so **the media has no backup**, before or
+   after this migration. `Retain` makes the destructive act require two steps instead of one.
+3. **`WaitForFirstConsumer` is a chicken-and-egg for a volume that must be filled first.** A dynamic
+   claim does not bind, and its directory does not exist, until a pod mounts it. B2's whole purpose
+   is to fill the volume *before* any workload exists.
+
+So: a hand-declared `PersistentVolume` of type `local` at **`/srv/media`**, `Retain`, pinned to
+daniel-box by `nodeAffinity`, pre-bound by `claimRef`, under a no-provisioner StorageClass
+`media-local`. `local` rather than `hostPath` because it is the node-local type that supports
+`nodeAffinity` — the scheduler then enforces the pin that D6 accepts, instead of it being left to
+hope.
+
+**Access mode is `ReadWriteMany`**, because nine pods mount it simultaneously. That is not a
+distributed-filesystem claim: `nodeAffinity` puts all nine on the one node, where the kubelet
+bind-mounts the same directory into each. `ReadWriteOnce` would also work — it means one *node*,
+not one pod — but would misdescribe the intent.
+
+**The trap this buys**, recorded in the manifest as well: the binding controller stamps the PVC's
+UID into `claimRef`. Delete the PVC and the PV goes `Released` holding a UID that no longer exists,
+so a same-named PVC will **not** rebind — the data is intact and the volume silently refuses to
+mount. Recover with `kubectl patch pv media-data -p '{"spec":{"claimRef":null}}'`.
+
 ---
 
 ## Batches — vertical, each independently exercisable
@@ -260,15 +292,53 @@ while jellyfin and tdarr sit Pending forever, unschedulable for a resource nothi
   `XDG_CACHE_HOME` at a writable path in the real manifests so the shader cache is not disabled on
   every start.
 
-### B2 — Media volume and a first bulk copy, online
+### B2 done — 2026-08-07 — the volume exists and holds the library
 
-Create the media PV on `local-path` and rsync 19 G from daniel-server while everything keeps
-running. Repeatable and interruptible; nothing cuts over.
+Shipped as `roles/k8s/media-volume`: a static `local` PV at `/srv/media` (D9), its no-provisioner
+StorageClass, the claim, and a hardlink probe Job. The 19 G copy is `rsync` over ssh, gated behind
+`-e media_volume_sync=true` — **never automatic**, because it mirrors with `--delete` and running it
+after cutover would erase whatever qbittorrent had downloaded since.
 
-**Prove it:** the trees match by `rsync -n` diff, and a hardlink created between `/data/torrents`
-and `/data/media` inside the volume **succeeds** — the single check that the import path will not
-silently degrade to copying. Record how long a delta sync takes; that number sets the cutover
-window.
+| Measured | |
+|---|---|
+| Tree | 19 G in **26 files** — few, very large. No hardlinks and no symlinks exist yet. |
+| Full copy | **168 s**, ≈121 MB/s — essentially gigabit line rate |
+| No-change delta sync | **0.25–0.73 s** across three runs ← *the cutover window starts here* |
+| Full-checksum verification | 19 s |
+| Hardlink probe | `OK: /data/torrents <-> /data/media are one filesystem` |
+| PV / PVC | `media-data` Bound, RWX, Retain, `media-local` |
+
+**The verification is by content, not by timestamp.** The plan said `rsync -n`, which compares size
+and mtime and would call a truncated or bit-rotted file identical. It runs `-n -c` instead — a full
+read of both sides — for one reason: `kopiaignore.j2` excludes `containers/data/`, so this library
+has no backup, and once daniel-server's copy goes there is no second copy to compare against later.
+The cost is small and was checked rather than assumed: `-c` takes 18.6 s against 0.5 s for the
+metadata-only comparison, a 36× gap with 6.9 s of system time, so it is demonstrably reading the
+bytes. That pass is deliberately **excluded from the delta measurement** above, which it would
+otherwise inflate by two orders of magnitude.
+
+**Two numbers, not one.** The full copy is a one-off; the delta is what a cutover actually pays,
+plus whatever qbittorrent wrote since the last sync — at 121 MB/s that is roughly a second per
+100 MB of new downloads.
+
+**The exit test immediately caught two bugs, both mine, both in this role:**
+
+1. The hardlink probe created and deleted a file in `media/` and `torrents/`, which bumped those
+   directories' mtimes and left a freshly-synced volume reporting `.d..t...... media/` forever
+   after. The probe now saves and restores both directory times, so it leaves no trace.
+2. The Ansible task creating the directories set `mode: 0775`, which fought rsync's `-p`: every
+   deploy flipped them to 775, every sync flipped them back to 755. Non-idempotent, and it would
+   have shown up in the verification as a `.d..p......` phantom difference meaning "the copy is
+   wrong". The task now sets ownership only and leaves the mode to the source.
+
+Both were invisible to "the deploy went green" and both were found by running the check twice.
+
+**What B2 does NOT prove.** With one PVC mounted once, `ln` cannot fail — the probe is a regression
+guard for the day someone splits torrents and media onto separate volumes, not evidence that the
+import path works. That evidence is B3/B4: a hardlink between the root folders sonarr is actually
+configured with. What the probe does prove on a first run is real, though — it is the first pod to
+mount the claim, so a green run means the static PV binds, the `nodeAffinity` resolves, and uid 1000
+can write.
 
 ### B3 — One \*arr, on the real path contract, still not authoritative
 
@@ -354,9 +424,15 @@ against the new endpoints.
 - ~~Which device plugin, and what it costs~~ — **answered: `generic-device-plugin`**, one
   privileged DaemonSet holding the privilege in a single auditable place so all nine media
   workloads stay unprivileged. Approved and shipped.
-- **How long a delta rsync takes** once the bulk copy is warm (B2). This is the cutover window and
-  it should be a measured number before B4 is scheduled.
-- **Whether `local-path` on daniel-box has an eviction/size policy** that a growing media library
-  would eventually meet.
+- ~~How long a delta rsync takes once the bulk copy is warm~~ — **measured 2026-08-07: 0.25–0.73 s**
+  for a source that has not moved, against 168 s for the full 19 G copy at ≈121 MB/s. The cutover
+  window is that delta plus the bytes qbittorrent adds between the last sync and the stop, so it is
+  bounded by the download rate, not by the library size. Re-measure at B4; it is cheap.
+- ~~Whether `local-path` on daniel-box has an eviction/size policy~~ — **moot as of D9.** The media
+  no longer goes through the `local-path` provisioner at all; it is a hand-declared `local` PV whose
+  declared capacity is advisory, because a directory on ext4 has no quota behind it. What is left
+  is the ordinary one: the library shares daniel-box's 914 G root with everything else, and nothing
+  watches that headroom yet. **`local-path` still provisions no volumes on this cluster** — every
+  other PVC is Longhorn — so its storage directory does not even exist.
 - **The duplicate default StorageClass** (D5) — decide which one keeps the annotation, separately
   from this slice.

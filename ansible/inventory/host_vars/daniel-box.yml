@@ -49,6 +49,16 @@ containers_list:
   # No port/hostname — nothing routes to it.
   - name: dri-device-plugin
     platform: k8s
+  # The shared /data volume the nine media workloads mount (slice 4, B2). Storage, not a
+  # service: no port, no hostname, nothing routes to it. Must precede every media workload —
+  # a pod that mounts an undeclared claim stays Pending, and WaitForFirstConsumer makes that
+  # look like a scheduling problem rather than a missing volume.
+  #
+  # Its 19 G seeding copy does NOT run on an ordinary deploy. It is gated behind
+  # `-e media_volume_sync=true` because the rsync mirrors with --delete: harmless before
+  # cutover, and after cutover it would erase whatever qbittorrent has downloaded since.
+  - name: media-volume
+    platform: k8s
 
   - name: claude-otel
     platform: k8s

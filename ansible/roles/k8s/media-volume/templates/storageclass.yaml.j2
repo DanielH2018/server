@@ -1,0 +1,15 @@
+---
+# A no-provisioner class, so that D5 ("every PVC names its storage class explicitly") holds for
+# a statically provisioned volume too, and so `kubectl get sc` says where media actually lives.
+# Nothing provisions into this class — the single PV beside it is hand-declared.
+#
+# WaitForFirstConsumer is not a formality for a local volume: it makes the scheduler bind the
+# claim only once it knows which node the consuming pod lands on, so a pod that cannot run on
+# {{ inventory_hostname }} fails as Pending rather than binding first and mounting nothing.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ media_volume_storage_class }}
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain

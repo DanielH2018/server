@@ -1,0 +1,17 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ media_volume_claim }}
+  namespace: {{ k8s_namespace }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  # Named explicitly (D5). Two StorageClasses on this cluster are both marked default, so an
+  # omitted class is non-deterministic — and here it would also let a dynamic provisioner
+  # answer the claim with an empty volume somewhere else entirely.
+  storageClassName: {{ media_volume_storage_class }}
+  # Matches the PV exactly; binding requires the request to be no larger than the capacity.
+  resources:
+    requests:
+      storage: {{ media_volume_size }}

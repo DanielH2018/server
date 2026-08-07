@@ -1,0 +1,111 @@
+---
+# The shared media volume for slice 4's nine workloads. Creates it; does NOT fill it — the
+# 19 G copy is opt-in, see sync.yml.
+
+# noqa risky-file-permissions: the omitted `mode` is the point — see the comment below.
+- name: Create the media volume directories on the node # noqa risky-file-permissions
+  tags: [config]
+  # media/ and torrents/ are created here rather than left to the first rsync, so the hardlink
+  # probe below has somewhere to link between on a fresh volume that has never been synced.
+  #
+  # DELIBERATELY NO `mode:`. rsync runs with -p and imposes daniel-server's directory modes;
+  # a mode here would fight it, flipping 0775 <-> 0755 on every deploy and — worse — showing up
+  # as a `.d..p......` phantom difference in the verification that is supposed to mean "the
+  # copy is wrong". Ownership does not have the same problem: the copy runs unprivileged and so
+  # cannot chown, which is why {{ puid }}:{{ pgid }} is safe to enforce.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ puid }}"
+    group: "{{ pgid }}"
+  loop:
+    - "{{ media_volume_host_path }}"
+    - "{{ media_volume_host_path }}/media"
+    - "{{ media_volume_host_path }}/torrents"
+  become: true
+
+- name: Declare the media volume to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: media-volume
+    manifests_files:
+      - storageclass.yaml
+      - pv.yaml
+      - pvc.yaml
+    # No Deployment in this role — it is storage, not a workload.
+    manifests_rollout: ""
+
+- name: Copy the media tree from {{ media_volume_source_host }}
+  ansible.builtin.include_tasks: sync.yml
+  when: media_volume_sync | bool
+
+# ── hardlink probe ──────────────────────────────────────────────────────────────────────────
+# Rendered into its OWN directory, not media-volume/. `kubectl apply -f <dir>` is
+# non-recursive but does read every file in the directory it is given, so a Job left beside
+# the PV manifests would be re-applied by the include above — and a Job's pod template is
+# immutable, so that is either a no-op that proves nothing or an outright error.
+- name: Create the probe manifest directory
+  tags: [config]
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/manifests/media-volume-probe
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+
+- name: Render the hardlink probe job
+  tags: [config]
+  ansible.builtin.template:
+    src: hardlink-probe-job.yaml.j2
+    dest: /etc/rancher/k3s/manifests/media-volume-probe/hardlink-probe-job.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Clear the previous hardlink probe run
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete job media-volume-hardlink-probe
+      --ignore-not-found --wait=true
+  become: true
+  changed_when: true
+
+- name: Run the hardlink probe
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      /etc/rancher/k3s/manifests/media-volume-probe/hardlink-probe-job.yaml
+  become: true
+  changed_when: true
+
+- name: Wait for the hardlink probe
+  tags: [deploy]
+  # This is also what proves the PVC binds at all: with WaitForFirstConsumer the claim stays
+  # Pending until this pod is scheduled, so a Pending timeout here means the PV/nodeAffinity
+  # pair is wrong, not that hardlinks are.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
+      job/media-volume-hardlink-probe --timeout=120s
+  become: true
+  changed_when: false
+  register: media_volume_probe
+  failed_when: media_volume_probe.rc != 0
+
+- name: Report the hardlink probe
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/media-volume-hardlink-probe"
+  become: true
+  changed_when: false
+  register: media_volume_probe_log
+
+- name: Show the hardlink probe result
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: "{{ media_volume_probe_log.stdout }}"

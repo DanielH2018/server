@@ -1,0 +1,48 @@
+---
+# The one volume the whole media stack shares (slice 4, B2). Nine workloads mount it at /data,
+# and they must all see ONE filesystem or sonarr/radarr imports silently become copies instead
+# of hardlinks — see docs/k3s-migration/slice-4-media-cluster.md, "the seam that shapes this
+# slice".
+media_volume_claim: media-data
+
+# ── why a STATIC local PV rather than a dynamic local-path PVC (D9) ─────────────────────────
+# D6 said "media on local-path". This satisfies D6's reasoning — node-local, unreplicated —
+# while fixing three things dynamic provisioning gets wrong for THIS volume:
+#
+#   1. local-path names its directory pvc-<uuid>_<ns>_<claim>. The seeding rsync needs a path
+#      that a human, a doc and an Ansible task can all name before the volume exists.
+#   2. local-path's class reclaims Delete. A mistyped `kubectl delete pvc` would take the
+#      library with it, and kopia excludes containers/data/ — there is no second copy.
+#   3. WaitForFirstConsumer means a dynamic PVC does not bind, and its directory does not
+#      exist, until a pod mounts it. That is a chicken-and-egg for a volume whose whole
+#      purpose in B2 is to be filled BEFORE any workload exists.
+media_volume_storage_class: media-local
+media_volume_host_path: /srv/media
+
+# ADVISORY ONLY. This is a directory on the node's ext4 root with no quota behind it, so
+# nothing enforces the number — it exists to satisfy the PV/PVC binding contract. Sized as
+# headroom against 838 G free and a 19 G library, not as a limit.
+media_volume_size: 400Gi
+
+# ── the seeding rsync ───────────────────────────────────────────────────────────────────────
+media_volume_source_host: daniel-server
+# The PARENT of media/ and torrents/, not media/ itself: the hardlink seam requires both trees
+# inside one volume, so the whole `data` directory is what maps to /data in the pods.
+media_volume_source_path: /home/ubuntu/server/containers/data
+
+# OPT-IN, and deliberately never automatic — see the warning in tasks/sync.yml.
+media_volume_sync: false
+
+# ONE definition, used by the copy AND by the verification. They must be byte-identical: run
+# the check with `-a` (which implies -o -g) against a copy made as an unprivileged user and
+# the root-owned `media/media` directory reports a permanent phantom difference that reads as
+# a failed copy.
+#
+# -rlptD is -a minus -o -g on purpose: rsync runs as {{ sys_user }}, which cannot chown, and
+# 1000:1000 is what the destination wants anyway. -H preserves hardlinks between torrents/ and
+# media/ — none exist today (torrents is empty) but the copy must not be what breaks them.
+media_volume_rsync_flags: "-rlptDH --delete"
+
+# busybox `stat`/`ln` are all the hardlink probe needs, and a tiny image keeps it off the
+# critical path of a cutover window.
+media_volume_probe_image: alpine:3.22

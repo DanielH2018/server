@@ -1,0 +1,42 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ media_volume_claim }}
+spec:
+  capacity:
+    # Advisory. See media_volume_size in the role defaults — no quota enforces this.
+    storage: {{ media_volume_size }}
+  accessModes:
+    # RWX because nine pods mount this at once. Safe, and not a distributed-filesystem claim:
+    # nodeAffinity below pins every one of them to this node, where the kubelet simply
+    # bind-mounts the same directory into each. RWO would also work (it means one NODE, not one
+    # pod) but would misdescribe the intent to the next reader.
+    - ReadWriteMany
+  # Retain, not Delete: deleting the claim must not delete a library that nothing backs up
+  # (kopia excludes containers/data/).
+  #
+  # THE RECOVERY TRAP that buys: the binding controller stamps the PVC's UID into claimRef at
+  # bind time. Delete the PVC and this PV goes Released holding a UID that no longer exists, so
+  # recreating a same-named PVC will NOT rebind — the data is intact and the volume silently
+  # refuses to mount. Clear the stale reference to recover:
+  #   k3s kubectl patch pv {{ media_volume_claim }} -p '{"spec":{"claimRef":null}}'
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ media_volume_storage_class }}
+  # `local` rather than `hostPath`: it is the node-local volume type that supports nodeAffinity,
+  # which is what makes the scheduler enforce the pin instead of leaving it to hope.
+  local:
+    path: {{ media_volume_host_path }}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - {{ inventory_hostname }}
+  # Pre-bound to its claim by name, so this PV can never be captured by some other PVC that
+  # happens to ask for the same class and size.
+  claimRef:
+    namespace: {{ k8s_namespace }}
+    name: {{ media_volume_claim }}

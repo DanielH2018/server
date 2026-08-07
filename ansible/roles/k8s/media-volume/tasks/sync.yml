@@ -1,0 +1,115 @@
+---
+# Bulk-copy the media tree from daniel-server into the volume, over rsync.
+#
+# OPT-IN, never automatic: `-e media_volume_sync=true`. That gate is not caution, it is
+# correctness. `--delete` makes the destination a mirror of daniel-server, so running this
+# AFTER cutover would delete everything qbittorrent has downloaded since and restore whatever
+# the stale source still holds. Before cutover it is safe to run as often as you like.
+#
+# NOT roles/k8s/seed-volume, which is the repo's normal way to fill a PVC. That role tars the
+# whole tree through `kubectl exec` and sha256s both ends on every run — right for a 640 M
+# config directory, wrong for 19 G that needs to be re-run several times and resumed after an
+# interruption. rsync gives delta transfer; the checksum verification below keeps what
+# seed-volume's assert was protecting.
+#
+# Runs as {{ sys_user }}, NOT root: the SSH trust to {{ media_volume_source_host }} belongs to
+# that user, and root has no key there. The destination is owned by {{ puid }}:{{ pgid }} by
+# tasks/main.yml precisely so no privilege is needed here.
+
+- name: Count the files at the source
+  tags: [deploy]
+  # A guard against --delete, which would otherwise interpret an unreachable or renamed source
+  # as "the library is empty" and faithfully mirror that emptiness onto the destination.
+  ansible.builtin.command:
+    cmd: >-
+      ssh {{ media_volume_source_host }}
+      "find {{ media_volume_source_path }} -type f | wc -l"
+  become: false
+  changed_when: false
+  register: media_volume_src_files
+
+- name: Refuse to mirror an empty source
+  tags: [deploy]
+  ansible.builtin.assert:
+    that:
+      - media_volume_src_files.stdout | trim | int > 0
+    fail_msg: >-
+      {{ media_volume_source_host }}:{{ media_volume_source_path }} reports
+      {{ media_volume_src_files.stdout | trim }} files. Syncing with --delete from an empty or
+      unreachable source would erase {{ media_volume_host_path }}. Nothing was copied.
+
+# The three rsync tasks below skip command-instead-of-module deliberately.
+# ansible.posix.synchronize syncs between the CONTROLLER and the play's target host. Here the
+# controller and the target are the same machine (daniel-box is ansible_connection=local) and
+# the data lives on a third host that is not in this play at all, which is the one topology
+# synchronize cannot express. It also hides the flags this file depends on: `.delta` for the
+# cutover-window measurement, `-n -c --itemize-changes` for the verification, and a single
+# shared flag string that keeps the copy and the check byte-identical.
+- name: Copy the media tree into {{ media_volume_host_path }} # noqa command-instead-of-module
+  tags: [deploy]
+  # Trailing slashes on BOTH sides: copy the CONTENTS of data/ into the volume root, so the
+  # volume presents media/ and torrents/ as siblings — the /data contract of D4. Drop either
+  # slash and the tree lands one level deep, which mounts and starts perfectly well and breaks
+  # every absolute path in sonarr's database.
+  ansible.builtin.command:
+    cmd: >-
+      rsync {{ media_volume_rsync_flags }} --stats
+      {{ media_volume_source_host }}:{{ media_volume_source_path }}/
+      {{ media_volume_host_path }}/
+  become: false
+  changed_when: true
+  register: media_volume_copy
+
+- name: Measure a no-change delta sync # noqa command-instead-of-module
+  tags: [deploy]
+  # Immediately re-run against a source that has not moved. THIS is the number that sizes the
+  # cutover window — the first copy's wall time is a one-off, but every cutover pays this plus
+  # whatever qbittorrent wrote since. Deliberately before the checksum pass below, which reads
+  # all 19 G and would inflate the measurement by an order of magnitude.
+  ansible.builtin.command:
+    cmd: >-
+      rsync {{ media_volume_rsync_flags }} --stats
+      {{ media_volume_source_host }}:{{ media_volume_source_path }}/
+      {{ media_volume_host_path }}/
+  become: false
+  changed_when: false
+  register: media_volume_delta
+
+- name: Verify the copy by content, not by timestamp # noqa command-instead-of-module
+  tags: [deploy]
+  # -c reads and checksums both sides in full. Without it rsync compares size+mtime, which
+  # would call a truncated or bit-rotted file identical. Worth the full read here for one
+  # reason: kopia excludes containers/data/, so once daniel-server's copy goes there is no
+  # other copy of this library.
+  #
+  # Same flags as the copy, from the same variable. Verifying with `-a` instead would add
+  # -o -g and report a permanent phantom difference on the root-owned media/media directory,
+  # because the copy above ran unprivileged and could not preserve ownership.
+  ansible.builtin.command:
+    cmd: >-
+      rsync -n -c {{ media_volume_rsync_flags }} --itemize-changes
+      {{ media_volume_source_host }}:{{ media_volume_source_path }}/
+      {{ media_volume_host_path }}/
+  become: false
+  changed_when: false
+  register: media_volume_verify
+
+- name: Fail if the volume does not match the source byte for byte
+  tags: [deploy]
+  ansible.builtin.assert:
+    that:
+      - media_volume_verify.stdout | trim | length == 0
+    fail_msg: >-
+      {{ media_volume_host_path }} differs from
+      {{ media_volume_source_host }}:{{ media_volume_source_path }} by content. rsync would
+      still transfer: {{ media_volume_verify.stdout_lines | join(' | ') }}
+    success_msg: >-
+      {{ media_volume_host_path }} matches {{ media_volume_source_path }} by full checksum
+      ({{ media_volume_src_files.stdout | trim }} files).
+
+- name: Report the copy and the cutover-window number
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg:
+      - "full copy: {{ media_volume_copy.delta }} — {{ media_volume_copy.stdout_lines | select('search', 'bytes/sec') | first | default('rate not reported') }}"
+      - "no-change delta sync: {{ media_volume_delta.delta }} (the cutover window starts here)"
