@@ -3093,7 +3093,19 @@ def test_b2_authorize_ok_on_account_id(monkeypatch):
     assert ok is True and "reachable" in msg
 
 
-def test_b2_authorize_rejects_response_without_account_id(monkeypatch):
+def test_b2_authorize_accepts_authorization_token_only(monkeypatch):
+    # Version-tolerant: Backblaze publishes a v4 body example (accountId top-level) but none for
+    # v3, so either field proves it's B2. Pinning one shape would page every cycle if it moved.
+    monkeypatch.setattr(check, "B2_PROBE_KEY_ID", "kid")
+    monkeypatch.setattr(check, "B2_PROBE_APPLICATION_KEY", "akey")
+    monkeypatch.setattr(
+        check, "_get_json", lambda url, headers=None: {"authorizationToken": "t"}
+    )
+    ok, _ = check.b2_authorize()
+    assert ok is True
+
+
+def test_b2_authorize_rejects_unrecognised_response(monkeypatch):
     # A 200 from something that isn't B2 must not read as healthy.
     monkeypatch.setattr(check, "B2_PROBE_KEY_ID", "kid")
     monkeypatch.setattr(check, "B2_PROBE_APPLICATION_KEY", "akey")

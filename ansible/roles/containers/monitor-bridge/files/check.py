@@ -2601,9 +2601,13 @@ def b2_authorize():
         ("%s:%s" % (B2_PROBE_KEY_ID, B2_PROBE_APPLICATION_KEY)).encode()
     ).decode()
     data = _get_json(B2_PROBE_URL, headers={"Authorization": "Basic %s" % token})
-    # A 200 with no accountId would mean we authenticated against something that isn't B2.
-    if not data.get("accountId"):
-        return False, "B2 auth returned no accountId (unexpected response shape)"
+    # A 200 from something that isn't B2 must not read as healthy. Accept EITHER field rather than
+    # pinning the response shape: Backblaze publishes a body example for v4 (accountId top-level)
+    # but not for v3, whose documented change was to group endpoint info under `apiInfo`. Both
+    # fields have been present since v1, so this survives a version bump either way — and a wrong
+    # guess here would page every cycle rather than fail safe.
+    if not (data.get("accountId") or data.get("authorizationToken")):
+        return False, "B2 auth returned neither accountId nor authorizationToken"
     return True, "B2 reachable"
 
 
