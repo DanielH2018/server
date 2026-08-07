@@ -10,6 +10,7 @@ the Kuma push monitor's heartbeat interval is the backstop for "the bridge itsel
 Design: docs/superpowers/specs/2026-06-06-monitor-bridge-alerting-design.md
 """
 
+import base64
 import json
 import os
 import smtplib
@@ -329,6 +330,42 @@ B2_TREND_MTIME_QUERY = _env(
     "B2_TREND_MTIME_QUERY", 'node_textfile_mtime_seconds{file=~".*kopia_b2.*"}'
 )
 B2_TREND_MAX_AGE_S = float(_env("B2_TREND_MAX_AGE_D", "2.5")) * 86400
+
+# B2 REACHABILITY — the gate for every B2-backed check, and the gap the 2026-08-02 transaction-cap
+# incident exposed (docs/b2-transaction-cap-monitoring-gaps.md). B2 caps TRANSACTIONS separately
+# from storage bytes, and the two checks above track only bytes: both reported
+# "B2 6.05/10GB billable (60% of plan)" for nine and a half hours while B2 refused every request.
+# Worse than absent — an operator triaging the one true alert was told by these that B2 was fine.
+#
+# The probe authenticates against B2's native API. A cap breach answers b2_authorize_account with
+# HTTP 403 and error code `transaction_cap_exceeded`, which _get_json's HTTPError detail carries
+# verbatim into the alert message — so this monitor names the CAUSE where the backup check could
+# only report the symptom ("backup check error: timed out").
+#
+# ASSUMPTION, stated because it is load-bearing and cannot be tested without a live breach:
+# that b2_authorize_account is itself subject to the cap. Backblaze's endpoint documentation lists
+# 403/transaction_cap_exceeded among its errors, which is the basis. If a future breach shows THIS
+# monitor stayed green while the backup check paged, the assumption was wrong — point B2_PROBE_URL
+# at a Class C call (b2_list_buckets, which needs the account id from the auth response) instead.
+# It is a URL swap, not a rewrite, deliberately.
+B2_PROBE_URL = _env(
+    "B2_PROBE_URL", "https://api.backblazeb2.com/b2api/v3/b2_authorize_account"
+)
+# Read through _env_file for the same reason as HA_TOKEN: inlined in the compose environment a
+# secret lands in the container's Config.Env, which the read-only docker-proxy exposes to any
+# monitoring-net neighbor (2026-07-15 review H2). Named B2_PROBE_* rather than KOPIA_B2_* even
+# though the compose currently feeds it Kopia's credentials — this probe only needs to
+# authenticate, so swapping in a scoped read-only key later is an inventory edit, not a code one.
+B2_PROBE_KEY_ID = _env_file("B2_PROBE_KEY_ID")
+B2_PROBE_APPLICATION_KEY = _env_file("B2_PROBE_APPLICATION_KEY")
+# Probe at most this often, and cache BOTH outcomes until it expires. Every other gate re-probes
+# each cycle; this one must not, because the failure it detects is a transaction cap and an
+# uncached probe would add 288 calls/day (INTERVAL=300) to the very budget it is watching. Caching
+# only successes — the EMAIL_PROBE_INTERVAL_S idiom — would be worse than useless here: it retries
+# on failure, so a cap breach would drive the full 288 rejected calls/day into an exhausted cap.
+# At 1800s this is 48 calls/day flat, and detection lands within 30 min of a breach that last time
+# went 9.5 hours unactioned.
+B2_PROBE_INTERVAL_S = float(_env("B2_PROBE_INTERVAL_S", "1800"))
 
 # Scrutiny SMART freshness + health: the collector cron runs daily (00:00) and has no usable
 # container healthcheck (cron is PID 1) — a silently-dead collector only shows as aging
@@ -2549,6 +2586,60 @@ def check_loki_reachable():
     return True, "Loki reachable"
 
 
+_b2_probe = {"ts": 0.0, "ok": True, "msg": "not yet probed"}
+
+
+def b2_authorize():
+    """Authenticate against B2. (ok, msg) — the msg carries B2's own error text on failure.
+
+    Basic auth with the key id + application key is the whole protocol for b2_authorize_account.
+    _get_json re-raises HTTPError with the response body appended, so a cap breach arrives here as
+    "HTTP Error 403: ... transaction_cap_exceeded ..." and that string is what reaches Kuma and
+    Discord — the named cause G3 asked for.
+    """
+    token = base64.b64encode(
+        ("%s:%s" % (B2_PROBE_KEY_ID, B2_PROBE_APPLICATION_KEY)).encode()
+    ).decode()
+    data = _get_json(B2_PROBE_URL, headers={"Authorization": "Basic %s" % token})
+    # A 200 with no accountId would mean we authenticated against something that isn't B2.
+    if not data.get("accountId"):
+        return False, "B2 auth returned no accountId (unexpected response shape)"
+    return True, "B2 reachable"
+
+
+def b2_reachable(now=None):
+    """Throttled B2 reachability probe — the gate for the B2_DEPENDENT checks. (ok, msg).
+
+    Empty credentials -> disabled (stays up), like check_n8n's empty API key. BOTH outcomes are
+    cached for B2_PROBE_INTERVAL_S: unlike email_backstop, a failure must not re-probe every cycle,
+    because the failure being detected is a transaction cap and retrying would spend more of it.
+    The cached verdict is returned (and pushed) every cycle regardless, so the push monitor's
+    heartbeat stays alive and the dead-bridge watchdog isn't tripped.
+
+    Module-global cache, reset on container restart, like the streak counters.
+    """
+    if not B2_PROBE_KEY_ID or not B2_PROBE_APPLICATION_KEY:
+        return True, "B2 reachability check disabled (no credentials)"
+    now = now if now is not None else time.time()
+    if now - _b2_probe["ts"] < B2_PROBE_INTERVAL_S:
+        return _b2_probe["ok"], "%s (checked %.0fm ago)" % (
+            _b2_probe["msg"],
+            (now - _b2_probe["ts"]) / 60,
+        )
+    try:
+        ok, msg = b2_authorize()
+    except Exception as e:
+        ok, msg = False, "B2 unreachable: %s" % e
+    _b2_probe["ts"] = now
+    _b2_probe["ok"] = ok
+    _b2_probe["msg"] = msg
+    return ok, msg
+
+
+def check_b2_reachable():
+    return b2_reachable()
+
+
 def discord_webhook_ok(status_code, name=None):
     """Pure: does a GET on a Discord webhook return 200 (still valid)? (ok, msg).
 
@@ -2838,6 +2929,32 @@ EXPORTER_DEPENDENT = {
 # surfaces (it evaluates whenever Loki is reachable). Guarded by a test against CHECKS.
 LOKI_DEPENDENT = frozenset({"loki_ingestion", "janitorr"})
 
+# B2-reachability gate — the third peer of the Prometheus and Loki gates, and the fix for G2/G4 of
+# docs/b2-transaction-cap-monitoring-gaps.md. All five describe the state of the B2-backed backup
+# plane and none of them can see B2 directly. The first four read it from state files written by
+# periodic crons, so they report the LAST SUCCESSFUL RUN rather than current health: on 2026-08-02
+# they read 4.7 d / seeded / 0.7 d / 60% — all green — through a nine-and-a-half-hour outage in
+# which B2 refused every request, because their staleness thresholds (10 d / 100 d / 2.5 d / 2.5 d)
+# are far longer than the outage. b2_trend is the fifth and fails the same way from the other
+# direction: it projects a Prometheus gauge the daily cron stopped updating, and a frozen gauge
+# reads FLAT, which is the healthiest possible trend. Under this gate all five are suppressed
+# instead (pushed `up` with a skip msg, heartbeat kept alive), so they stop claiming health for a
+# thing they cannot currently see — and stop actively contradicting the one alert that was right.
+#
+# `backup` is deliberately NOT here, for two independent reasons. It is in STARTUP_GRACE, which must
+# stay disjoint from every skip set (a graced check has to reach the eval path each cycle for its
+# streak to advance) — so including it would break that invariant. And it is the one monitor that
+# behaved correctly during the incident: it polls Kopia live and paged. Suppressing it would delete
+# the only true signal.
+#
+# The consequence, stated rather than left to be rediscovered: a cap breach pages TWICE — once as
+# `backup check error: timed out` and once as B2 Reachable naming transaction_cap_exceeded. That
+# departs from the one-root-cause-one-page shape the other two gates have, and it is the right
+# trade here: the second page is the one that says what to do about the first.
+B2_DEPENDENT = frozenset(
+    {"verify", "content_verify", "maintenance", "b2_usage", "b2_trend"}
+)
+
 # Reach-out checks that poll a live app dependency (kopia/n8n/sonarr/radarr/prowlarr/scrutiny/the Pi
 # glances) with NO reachability gate above them and NO per-check hysteresis of their own — unlike
 # check_ha_heartbeat/check_discord, whose HA_CONSECUTIVE/DISCORD_CONSECUTIVE grace rides out exactly
@@ -2953,12 +3070,24 @@ def run_once():
     log("OK  " if loki_ok else "DOWN", "loki_reachable", "-", loki_msg)
     push(_env("KUMA_PUSH_LOKI_REACHABLE", ""), loki_ok, loki_msg)
 
+    # B2-reachability gate (peer of the two above): the B2-backed backup checks all report the last
+    # successful cron run, so without this they stay green through a B2 outage — the 2026-08-02
+    # transaction-cap incident. The probe is throttled inside b2_reachable (it must not spend the
+    # transaction budget it is watching), but the cached verdict is pushed every cycle so this
+    # monitor's own heartbeat stays alive.
+    b2_ok, b2_msg = _evaluate("b2_reachable", check_b2_reachable)
+    log("OK  " if b2_ok else "DOWN", "b2_reachable", "-", b2_msg)
+    push(_env("KUMA_PUSH_B2_REACHABLE", ""), b2_ok, b2_msg)
+
     for name, token, fn in CHECKS:
         if not prom_ok and name in PROM_DEPENDENT:
             ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
             log("SKIP", name, "-", msg)
         elif not loki_ok and name in LOKI_DEPENDENT:
             ok, msg = True, "skipped — Loki unreachable (see Loki Reachable monitor)"
+            log("SKIP", name, "-", msg)
+        elif not b2_ok and name in B2_DEPENDENT:
+            ok, msg = True, "skipped — B2 unreachable (see B2 Reachable monitor)"
             log("SKIP", name, "-", msg)
         elif name in suppressed:
             ok, msg = True, "skipped — exporter down (see Scrape Targets)"

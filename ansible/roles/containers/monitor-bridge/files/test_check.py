@@ -3052,6 +3052,162 @@ def test_run_once_runs_loki_dependent_when_loki_up(monkeypatch):
     assert "recyclarr" in ran and "janitorr" in ran
 
 
+# ── B2 reachability gate (peer of the Prometheus/Loki gates) ─────────────────
+
+
+def test_b2_dependent_set_matches_real_checks():
+    # Guard (mirrors PROM_DEPENDENT/LOKI_DEPENDENT): every name in B2_DEPENDENT is a real check.
+    names = {name for name, _, _ in check.CHECKS}
+    assert check.B2_DEPENDENT <= names
+
+
+def test_b2_dependent_excludes_backup():
+    # `backup` polls Kopia live and correctly paged through the 2026-08-02 cap breach — it is the
+    # one true signal, so the gate must not suppress it. It is also in STARTUP_GRACE, which has to
+    # stay disjoint from every skip set (see test_startup_grace_disjoint_from_run_once_skip_sets).
+    assert "backup" not in check.B2_DEPENDENT
+
+
+def _reset_b2_probe(monkeypatch, key_id="kid", app_key="akey", interval=1800):
+    monkeypatch.setattr(check, "B2_PROBE_KEY_ID", key_id)
+    monkeypatch.setattr(check, "B2_PROBE_APPLICATION_KEY", app_key)
+    monkeypatch.setattr(check, "B2_PROBE_INTERVAL_S", interval)
+    monkeypatch.setattr(
+        check, "_b2_probe", {"ts": 0.0, "ok": True, "msg": "not yet probed"}
+    )
+
+
+def test_b2_reachable_disabled_without_credentials(monkeypatch):
+    _reset_b2_probe(monkeypatch, key_id="", app_key="")
+    ok, msg = check.b2_reachable(now=10_000)
+    assert ok is True and "disabled" in msg
+
+
+def test_b2_authorize_ok_on_account_id(monkeypatch):
+    monkeypatch.setattr(check, "B2_PROBE_KEY_ID", "kid")
+    monkeypatch.setattr(check, "B2_PROBE_APPLICATION_KEY", "akey")
+    monkeypatch.setattr(
+        check, "_get_json", lambda url, headers=None: {"accountId": "a1"}
+    )
+    ok, msg = check.b2_authorize()
+    assert ok is True and "reachable" in msg
+
+
+def test_b2_authorize_rejects_response_without_account_id(monkeypatch):
+    # A 200 from something that isn't B2 must not read as healthy.
+    monkeypatch.setattr(check, "B2_PROBE_KEY_ID", "kid")
+    monkeypatch.setattr(check, "B2_PROBE_APPLICATION_KEY", "akey")
+    monkeypatch.setattr(check, "_get_json", lambda url, headers=None: {"unexpected": 1})
+    ok, msg = check.b2_authorize()
+    assert ok is False and "accountId" in msg
+
+
+def test_b2_reachable_surfaces_the_cap_error_text(monkeypatch):
+    # G3: the alert must name the CAUSE. B2 answers a cap breach with transaction_cap_exceeded,
+    # and _get_json appends the response body to the HTTPError, so it has to reach the message.
+    _reset_b2_probe(monkeypatch)
+
+    def _boom(url, headers=None):
+        raise RuntimeError("HTTP Error 403: transaction_cap_exceeded")
+
+    monkeypatch.setattr(check, "_get_json", _boom)
+    ok, msg = check.b2_reachable(now=10_000)
+    assert ok is False and "transaction_cap_exceeded" in msg
+
+
+def test_b2_reachable_caches_failure_and_does_not_reprobe(monkeypatch):
+    # THE cost-critical property. The fault being detected is a transaction cap, so a failure must
+    # NOT re-probe every cycle the way email_backstop does — that would spend the exhausted budget.
+    _reset_b2_probe(monkeypatch)
+    calls = []
+
+    def _boom(url, headers=None):
+        calls.append(url)
+        raise RuntimeError("HTTP Error 403: transaction_cap_exceeded")
+
+    monkeypatch.setattr(check, "_get_json", _boom)
+    first_ok, _ = check.b2_reachable(now=10_000)
+    # five more cycles inside the interval (INTERVAL=300 -> 25 min of cycles)
+    for offset in (300, 600, 900, 1200, 1500):
+        ok, msg = check.b2_reachable(now=10_000 + offset)
+        assert ok is False
+        assert (
+            "transaction_cap_exceeded" in msg
+        )  # cached verdict still reported every cycle
+    assert first_ok is False
+    assert len(calls) == 1, "a cached failure must not re-probe: %d calls" % len(calls)
+
+
+def test_b2_reachable_reprobes_after_the_interval(monkeypatch):
+    _reset_b2_probe(monkeypatch, interval=1800)
+    calls = []
+
+    def _ok(url, headers=None):
+        calls.append(url)
+        return {"accountId": "a1"}
+
+    monkeypatch.setattr(check, "_get_json", _ok)
+    check.b2_reachable(now=10_000)
+    check.b2_reachable(now=10_000 + 1799)  # still cached
+    assert len(calls) == 1
+    check.b2_reachable(now=10_000 + 1801)  # interval elapsed
+    assert len(calls) == 2
+
+
+def _wire_run_once_b2(monkeypatch, b2_result, checks, b2_dependent):
+    """Drive run_once with Prometheus+Loki UP and a stubbed B2-reachability result."""
+    ran, pushes = [], []
+    monkeypatch.setattr(check, "push", lambda t, ok, m: pushes.append((t, ok, m)))
+    monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
+    monkeypatch.setattr(check, "prom_vector", lambda q: [])
+    monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
+    monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset())
+    monkeypatch.setattr(check, "LOKI_DEPENDENT", frozenset())
+    monkeypatch.setattr(check, "STARTUP_GRACE", frozenset())
+    monkeypatch.setattr(check, "B2_DEPENDENT", frozenset(b2_dependent))
+    monkeypatch.setattr(check, "check_b2_reachable", lambda: b2_result)
+
+    def _mk(name):
+        def fn():
+            ran.append(name)
+            return True, "%s ok" % name
+
+        return fn
+
+    monkeypatch.setattr(check, "CHECKS", [(n, "tok_%s" % n, _mk(n)) for n in checks])
+    check.run_once()
+    return ran, pushes
+
+
+def test_run_once_suppresses_b2_dependent_when_b2_down(monkeypatch):
+    ran, pushes = _wire_run_once_b2(
+        monkeypatch,
+        (False, "B2 unreachable: HTTP Error 403: transaction_cap_exceeded"),
+        ["b2_usage", "verify", "backup"],
+        {"b2_usage", "verify"},
+    )
+    # The four state-file checks stop reporting their last-successful-run as current health...
+    assert not ({"b2_usage", "verify"} & set(ran))
+    by_tok = {t: (ok, m) for t, ok, m in pushes}
+    assert by_tok["tok_b2_usage"][0] is True
+    assert "b2" in by_tok["tok_b2_usage"][1].lower()
+    # ...while Backup Freshness still runs and can page — it is the signal that was right.
+    assert "backup" in ran
+    assert any(
+        ok is False and "transaction_cap_exceeded" in m for _, ok, m in pushes
+    ), "the B2 Reachable monitor must page with B2's own error text"
+
+
+def test_run_once_runs_b2_dependent_when_b2_up(monkeypatch):
+    ran, _ = _wire_run_once_b2(
+        monkeypatch,
+        (True, "B2 reachable"),
+        ["b2_usage", "verify"],
+        {"b2_usage", "verify"},
+    )
+    assert "b2_usage" in ran and "verify" in ran
+
+
 # ── Exporter-reachability gate (node-exporter / cadvisor) — Backups M3 ───────
 
 
@@ -3528,6 +3684,7 @@ def test_startup_grace_disjoint_from_run_once_skip_sets():
     # every run_once skip set (else the streak wouldn't advance while the dependency was down).
     assert check.STARTUP_GRACE.isdisjoint(check.PROM_DEPENDENT)
     assert check.STARTUP_GRACE.isdisjoint(check.LOKI_DEPENDENT)
+    assert check.STARTUP_GRACE.isdisjoint(check.B2_DEPENDENT)
     for deps in check.EXPORTER_DEPENDENT.values():
         assert check.STARTUP_GRACE.isdisjoint(deps)
 
@@ -3541,7 +3698,9 @@ def test_startup_grace_covers_every_ungated_reach_out_check():
     # a conscious classify (add to STARTUP_GRACE, or to the self-hysteresis allowlist below).
     import inspect
 
-    gated = set(check.PROM_DEPENDENT) | set(check.LOKI_DEPENDENT)
+    gated = (
+        set(check.PROM_DEPENDENT) | set(check.LOKI_DEPENDENT) | set(check.B2_DEPENDENT)
+    )
     for deps in check.EXPORTER_DEPENDENT.values():
         gated |= set(deps)
     # These ride out the reboot blip with their own down-streak hysteresis instead of the

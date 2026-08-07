@@ -259,6 +259,25 @@ services:
       - B2_TREND_WINDOW=7d
       - B2_TREND_HORIZON_D=7
       - KUMA_PUSH_B2_TREND={{ monitor_bridge_b2_trend_push_token }}
+      # B2 REACHABILITY — the gate above the four state-file backup checks AND the two B2 byte
+      # checks. B2 caps transactions separately from storage, and on 2026-08-02 every one of those
+      # six read green for 9.5h while B2 refused all requests (docs/b2-transaction-cap-monitoring-
+      # gaps.md). This authenticates against B2 directly, so a cap breach reports B2's own
+      # `transaction_cap_exceeded` instead of the backup check's "timed out".
+      #
+      # Throttled to one call per B2_PROBE_INTERVAL_S and BOTH outcomes cached: the fault being
+      # detected is a transaction cap, so an every-cycle probe (288/day at INTERVAL=300) would feed
+      # the budget it watches. 1800s = 48 calls/day.
+      #
+      # Kopia's credentials, under probe-specific names: the check only needs to authenticate, so
+      # pointing these at a scoped read-only key later is an inventory edit, not a code change. The
+      # application key is FILE-mounted, not inlined — an inlined secret lands in the container's
+      # Config.Env, which the read-only docker-proxy exposes to any monitoring-net neighbor
+      # (2026-07-15 review H2). The key id is an identifier and cannot authenticate on its own.
+      - B2_PROBE_KEY_ID={{ kopia_b2_key_id }}
+      - B2_PROBE_APPLICATION_KEY_FILE=/run/secrets/b2_probe_application_key
+      - B2_PROBE_INTERVAL_S=1800
+      - KUMA_PUSH_B2_REACHABLE={{ monitor_bridge_b2_reachable_push_token }}
       # Scrutiny SMART freshness + health: the collector (cron-as-PID1, daily 00:00, no usable
       # healthcheck) only shows death as aging collector_date in the web API; on TOP of freshness
       # the check asserts each device's SMART/threshold status (device_status == 0), so a drive
@@ -391,6 +410,7 @@ services:
     volumes:
       - ./check.py:/app/check.py:ro
       - ./ha_token:/run/secrets/ha_token:ro
+      - ./b2_probe_application_key:/run/secrets/b2_probe_application_key:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
       - /var/lib/renovate-notify:/renovate-state:ro
       - /var/lib/kopia-restore-drill:/restore-drill:ro
@@ -493,6 +513,11 @@ services:
       {# B2 growth trend: predict_linear projection of the billable-bytes gauge — runway warning
          before the absolute 85% B2 Storage Usage monitor fires. Prom-dependent. -#}
       {{ kuma('monitor-bridge-b2-trend', monitor_type='push', name='B2 Usage Trend', interval=600, max_retries=0, push_token=monitor_bridge_b2_trend_push_token) }}
+      {# B2 reachability — the root-cause monitor gating the six B2-backed checks (the four
+         state-file ones plus the two byte ones): when it's down they're suppressed and this one
+         names the cause. Unlike the Prometheus/Loki gates it does NOT gate Backup Freshness,
+         which polls Kopia live and correctly paged through the 2026-08-02 cap breach. -#}
+      {{ kuma('monitor-bridge-b2-reachable', monitor_type='push', name='B2 Reachable', interval=600, max_retries=0, push_token=monitor_bridge_b2_reachable_push_token) }}
       {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data / Health', interval=600, max_retries=0, push_token=monitor_bridge_scrutiny_push_token) }}
       {# UPS Battery Health: check_ups pages on a low battery RUNWAY (charge or estimated runtime under
          the floor) from HA's Prometheus-scraped APC sensors — the slowly-degrading-battery signal the

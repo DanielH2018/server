@@ -30,6 +30,20 @@
     mode: "0600"
   register: monitor_bridge_ha_token_file
 
+- name: Render the B2 probe application key to a file (kept out of the container's Env)
+  tags: [config]
+  # Same reasoning as the HA token above: monitor-bridge sits on the `monitoring` network, where
+  # the read-only docker-proxy exposes every container's Env to its neighbors, so a B2 credential
+  # must not be inlined there (2026-07-15 review H2). The paired B2_PROBE_KEY_ID stays inline — an
+  # id cannot authenticate on its own. 0600 owned by sys_user (UID 1000): the container runs as
+  # 1000:1000 with NO become, so a root-owned 0600 file would be unreadable to it.
+  no_log: true
+  ansible.builtin.copy:
+    content: "{{ kopia_b2_application_key }}"
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/b2_probe_application_key"
+    mode: "0600"
+  register: monitor_bridge_b2_probe_key_file
+
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:
@@ -39,6 +53,6 @@
     # check.py is bind-mounted (./check.py:/app/check.py); the loop reads it once at
     # startup, so only a recreate applies a code change. Without this, a check.py-only
     # edit (no compose change) leaves recreate: auto and the new logic silently never
-    # deploys. The ha_token file is bind-mounted + read once at startup too, so a rotation
-    # must recreate as well. See repo-root CLAUDE.md + common/CLAUDE.md.
-    common_config_changed: "{{ (monitor_bridge_check is changed) or (monitor_bridge_ha_token_file is changed) }}"
+    # deploys. The ha_token and b2_probe_application_key files are bind-mounted + read once at
+    # startup too, so a rotation must recreate as well. See repo-root CLAUDE.md + common/CLAUDE.md.
+    common_config_changed: "{{ (monitor_bridge_check is changed) or (monitor_bridge_ha_token_file is changed) or (monitor_bridge_b2_probe_key_file is changed) }}"

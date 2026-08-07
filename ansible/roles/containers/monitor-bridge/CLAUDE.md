@@ -16,7 +16,8 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **forty checks** and pushes `status=up|down&msg=…` to one Kuma push
+  `INTERVAL` (300 s) it runs **forty-two checks** (39 in `CHECKS` plus the three reachability
+  gates evaluated ahead of them) and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the twelve
@@ -272,6 +273,32 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     suppressed under the Prometheus Reachable gate. Pure `b2_trend()` is unit-tested. node-exporter
     serves the last textfile value every scrape, so predict_linear has a dense series even between
     the cron's daily writes — a stalled cron reads flat here (its staleness is B2 Storage Usage's job).)
+  - **B2 Reachable** (authenticates against B2's native API (`b2_authorize_account`, Basic auth
+    with `B2_PROBE_KEY_ID` + the file-mounted `B2_PROBE_APPLICATION_KEY_FILE`) — the root-cause
+    GATE for the five `B2_DEPENDENT` checks (**Backup Verify**, **Backup Content Verify**,
+    **Backup Maintenance**, **B2 Storage Usage**, **B2 Usage Trend**), which are suppressed when
+    it's down. Added after the 2026-08-02 transaction-cap incident
+    (`docs/b2-transaction-cap-monitoring-gaps.md`): B2 caps **transactions** separately from
+    storage bytes, and for nine and a half hours all five read green — 4.7 d / seeded / 0.7 d /
+    60% / flat — while B2 refused every request, because the first four report their cron's LAST
+    SUCCESSFUL RUN against 10 d/100 d/2.5 d/2.5 d staleness windows and the fifth projects a
+    frozen gauge, which reads as the healthiest possible trend. They didn't just fail to alert,
+    they actively contradicted the one true page. This check reports B2's own
+    `transaction_cap_exceeded` error text, so the alert names the CAUSE where **Backup Freshness**
+    could only say `backup check error: timed out`. **Backup Freshness is deliberately NOT gated**
+    — it polls Kopia live, it paged correctly during the incident, and it's in `STARTUP_GRACE`,
+    which must stay disjoint from every skip set. So a cap breach pages twice; the second page is
+    the one that says what to do about the first. **Throttled**, unlike the other two gates: the
+    probe runs at most once per `B2_PROBE_INTERVAL_S` (1800 s = 48 calls/day) and **both** outcomes
+    are cached, because the fault being detected is a transaction cap and an every-cycle probe
+    (288/day) — or `email_backstop`'s cache-successes-only idiom, which retries on failure — would
+    spend the budget it's watching. The cached verdict is still pushed every cycle so the push
+    monitor's heartbeat stays alive. Empty credentials = disabled (stays up). `B2_DEPENDENT` is
+    guarded by tests against the live `CHECKS` and against `STARTUP_GRACE` so it can't drift.
+    **Assumption, stated in the code because it can't be tested without a live breach:** that
+    `b2_authorize_account` is itself subject to the cap — Backblaze's endpoint docs list
+    403/`transaction_cap_exceeded` among its errors. If a future breach leaves this monitor green,
+    point `B2_PROBE_URL` at a Class C call instead; it's a URL swap by design.)
   - **SMART Data / Health** (scrutiny web API `/api/summary` over `monitoring`: every
     non-archived device must have a `collector_date` within 26 h **AND a passing `device_status`**
     (0 = SMART self-assessment + Scrutiny's attribute thresholds both OK; non-zero decodes to
@@ -464,7 +491,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,appsec,b2,b2_trend,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,fake_remux,fake_remux_replace,configarr,maintenance,discord,janitorr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,appsec,b2,b2_trend,b2_reachable,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,fake_remux,fake_remux_replace,configarr,maintenance,discord,janitorr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -474,6 +501,11 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   `_env_file`) — an unscoped full-access token must NOT sit inline in the container Env the
   docker-proxy exposes to monitoring-net neighbors (2026-07-15 review H2). An empty token file
   disables the check (falls back to the `HA_TOKEN` env, also empty = disabled).
+- The **B2 Reachable** check reuses that same file-mount pattern for its B2 credential — Kopia's
+  existing application key, rendered 0600 to `./b2_probe_application_key` and read via
+  `B2_PROBE_APPLICATION_KEY_FILE`. No new secret is minted for it; the probe-specific env name
+  means pointing it at a scoped read-only key later is an inventory edit rather than a code change.
+  The paired `B2_PROBE_KEY_ID` stays inline, since an id can't authenticate on its own.
 - The two GitOps monitors read host state via a **read-only bind-mount**
   `/var/lib/gitops-deploy:/gitops-state:ro` (written by the `gitops_deploy` host role) — no
   Prometheus/Kopia/n8n source. That dir must exist owned by the deploy user before deploy; the
@@ -521,7 +553,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the forty push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the forty-two push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI
