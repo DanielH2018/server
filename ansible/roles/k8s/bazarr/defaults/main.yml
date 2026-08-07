@@ -1,0 +1,28 @@
+---
+# HELD UNTIL B4c. See the qbittorrent role's defaults for why this flag exists rather than the
+# entry simply being absent.
+#
+# bazarr has a coexistence hazard the \*arrs do not: it addresses sonarr and radarr by bare name,
+# and `sonarr` ALREADY resolves in this namespace (B3 deployed it). A cluster bazarr would
+# therefore connect to the cluster sonarr immediately and start writing subtitle files into
+# /srv/media — diverging the B2 copy from daniel-server, which the next delta sync would then
+# either revert or, with --delete, remove.
+bazarr_k8s_enabled: false
+
+bazarr_k8s_image: lscr.io/linuxserver/bazarr:v1.5.6-ls350
+
+# 3.7 M at B4a — the smallest config in the slice, but still the database holding the paths.
+bazarr_k8s_claim: bazarr-config
+bazarr_k8s_storage_class: longhorn
+bazarr_k8s_size: 1Gi
+bazarr_k8s_source_path: /home/ubuntu/server/containers/bazarr/config
+
+# Mounted at /data/media via subPath — NOT the whole tree. bazarr never imports, so it has no
+# hardlink seam to preserve and no reason to see /data/torrents.
+bazarr_k8s_media_claim: media-data
+
+# Mirrors resources('1.0', '1024M', '0.10', '128M').
+bazarr_k8s_cpu_limit: "1"
+bazarr_k8s_mem_limit: 1024Mi
+bazarr_k8s_cpu_request: "100m"
+bazarr_k8s_mem_request: 128Mi

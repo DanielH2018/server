@@ -1,0 +1,30 @@
+---
+# Reproduces the `prowlarr-flaresolverr` Docker network, which existed so that a headless browser
+# rendering attacker-supplied Cloudflare pages was reachable by prowlarr and nothing else.
+# Collapsing the fleet into one namespace would have widened that to every workload in
+# {{ k8s_namespace }} — including qbittorrent's untrusted payloads and jellyfin. This makes the
+# move a NARROWING instead, which is the same argument n8n-broker's policy makes.
+#
+# INGRESS, and that word is doing work. Measured on this cluster 2026-08-07 (slice 4, B3): an
+# Egress policy selects pods correctly and blocks nothing. Ingress policies ARE enforced —
+# n8n-broker relies on one and probes it. So this is written in the direction that holds, and
+# netpol-probe-job.yaml.j2 checks it on every deploy rather than trusting the asymmetry.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flaresolverr
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: flaresolverr
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prowlarr
+      ports:
+        - protocol: TCP
+          port: {{ prowlarr_k8s_flaresolverr_port }}

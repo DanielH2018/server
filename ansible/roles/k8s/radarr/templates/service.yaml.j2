@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: radarr
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: radarr
+  ports:
+    - port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}

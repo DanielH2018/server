@@ -1,0 +1,31 @@
+---
+# HELD UNTIL B4c — see the qbittorrent role's defaults for why the flag has to exist: the
+# inventory entry is mandatory (validate_k8s_manifests.py), and gitops runs deploy.yml as a plain
+# containers_list loop, so the entry alone would deploy this unattended.
+#
+# Unlike sonarr there is no rehearsal mode here. B3 already rehearsed the \*arr path footgun on
+# one service and it passed; repeating it three more times would buy a second copy of the same
+# answer while giving three more live databases something to act on.
+radarr_k8s_enabled: false
+
+radarr_k8s_image: lscr.io/linuxserver/radarr:6.1.1.10360-ls304
+
+# 30 M at B4a. longhorn, not longhorn-nobackup: radarr.db holds the library and the absolute
+# root-folder paths this slice is careful about.
+radarr_k8s_claim: radarr-config
+radarr_k8s_storage_class: longhorn
+radarr_k8s_size: 2Gi
+radarr_k8s_source_path: /home/ubuntu/server/containers/radarr/config
+
+# The WHOLE data tree at /data, exactly as sonarr mounts it — radarr imports by hardlink from
+# /data/torrents into /data/media, and that link() only works if one mount spans both.
+radarr_k8s_media_claim: media-data
+
+# radarr-striptracks, the same mod the compose template runs.
+radarr_k8s_docker_mods: linuxserver/mods:radarr-striptracks
+
+# Mirrors resources('1.0', '1024M', '0.10', '128M').
+radarr_k8s_cpu_limit: "1"
+radarr_k8s_mem_limit: 1024Mi
+radarr_k8s_cpu_request: "100m"
+radarr_k8s_mem_request: 128Mi

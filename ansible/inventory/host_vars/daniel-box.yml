@@ -89,6 +89,32 @@ containers_list:
     hostname: "qbittorrent{{ k8s_hostname_suffix }}"
     port: 8080
     use_authelia: true
+  # Slice 4, B4a — the three remaining \*arrs, ALL held by their own `<svc>_k8s_enabled: false`
+  # for the same reason as qbittorrent above: the entry is mandatory for
+  # validate_k8s_manifests.py, and gitops would otherwise deploy them unattended.
+  #
+  # They also cannot be deployed one at a time, and the reason is worth keeping: standing up
+  # prowlarr makes the bare name `prowlarr` resolve, which is exactly what the rehearsing
+  # sonarr's isolation probe fails on. D3's "one window" is enforced, not remembered.
+  - name: radarr
+    platform: k8s
+    hostname: "radarr{{ k8s_hostname_suffix }}"
+    port: 7878
+    use_authelia: true
+  # Brings a second workload with it — flaresolverr, which renders attacker-supplied Cloudflare
+  # pages. Under Compose that sat on its own network; here an INGRESS NetworkPolicy keeps it
+  # reachable from prowlarr alone, so the move to one namespace is a narrowing rather than a
+  # widening. Ingress is the direction that is actually enforced on this cluster (B3).
+  - name: prowlarr
+    platform: k8s
+    hostname: "prowlarr{{ k8s_hostname_suffix }}"
+    port: 9696
+    use_authelia: true
+  - name: bazarr
+    platform: k8s
+    hostname: "bazarr{{ k8s_hostname_suffix }}"
+    port: 6767
+    use_authelia: true
 
   - name: claude-otel
     platform: k8s

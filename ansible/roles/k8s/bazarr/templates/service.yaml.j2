@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bazarr
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: bazarr
+  ports:
+    - port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}

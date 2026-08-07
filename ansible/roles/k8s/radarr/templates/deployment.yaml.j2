@@ -1,0 +1,85 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: radarr
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
+  # the new pod waits for a volume the old pod has not released. (The media PVC is RWX and does
+  # not have this problem — this is about /config.)
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: radarr
+  template:
+    metadata:
+      labels:
+        app: radarr
+    spec:
+      enableServiceLinks: false
+      # No fsGroup: seed-volume restores ownership with `tar -p --numeric-owner`, the LSIO image
+      # chowns /config itself on startup, and an fsGroup here would make the kubelet recursively
+      # chown the 19 G media volume on every mount.
+      containers:
+        - name: radarr
+          image: {{ radarr_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set. No
+              # NET_BIND_SERVICE: radarr listens on 8989, which needs no privilege.
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - SETUID
+                - SETGID
+                - FOWNER
+                - DAC_OVERRIDE
+          env:
+            - name: PUID
+              value: "{{ puid }}"
+            - name: PGID
+              value: "{{ pgid }}"
+            - name: TZ
+              value: "{{ tz }}"
+            - name: DOCKER_MODS
+              value: "{{ radarr_k8s_docker_mods }}"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            # THE PATH CONTRACT (D4). radarr.db stores absolute in-container paths. Mount this anywhere else and the
+            # library still loads, the UI still works, and every import silently fails.
+            - name: media
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: {{ container_item.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: {{ container_item.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ radarr_k8s_cpu_limit }}"
+              memory: {{ radarr_k8s_mem_limit }}
+            requests:
+              cpu: "{{ radarr_k8s_cpu_request }}"
+              memory: {{ radarr_k8s_mem_request }}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ radarr_k8s_claim }}
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ radarr_k8s_media_claim }}

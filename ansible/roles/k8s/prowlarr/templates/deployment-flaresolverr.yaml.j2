@@ -1,0 +1,67 @@
+---
+# Its own Deployment rather than a container in prowlarr's pod, deliberately: a sidecar shares the
+# pod's network namespace, and "reachable only on localhost by its own pod" would be tighter than
+# Compose but would also mean prowlarr and a headless browser rendering hostile pages share a
+# netns and a lifecycle. Kept separate, with the NetworkPolicy beside it doing the isolation.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flaresolverr
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: flaresolverr
+  template:
+    metadata:
+      labels:
+        app: flaresolverr
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: flaresolverr
+          image: {{ prowlarr_k8s_flaresolverr_image }}
+          ports:
+            - containerPort: {{ prowlarr_k8s_flaresolverr_port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # cap_drop: ALL with nothing added back, matching the compose template. Unlike the
+              # LSIO images this one does not chown a config tree on startup, so it needs none of
+              # the s6 privilege-drop set.
+              drop:
+                - ALL
+          env:
+            - name: LOG_LEVEL
+              value: info
+            - name: TZ
+              value: "{{ tz }}"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ prowlarr_k8s_flaresolverr_port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ prowlarr_k8s_flaresolverr_port }}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ prowlarr_k8s_fs_cpu_limit }}"
+              memory: {{ prowlarr_k8s_fs_mem_limit }}
+            requests:
+              cpu: "{{ prowlarr_k8s_fs_cpu_request }}"
+              memory: {{ prowlarr_k8s_fs_mem_request }}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ prowlarr_k8s_flaresolverr_claim }}

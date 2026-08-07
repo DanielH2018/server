@@ -1,0 +1,79 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prowlarr
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
+  # the new pod waits for a volume the old pod has not released.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: prowlarr
+  template:
+    metadata:
+      labels:
+        app: prowlarr
+    spec:
+      enableServiceLinks: false
+      # No fsGroup: seed-volume restores ownership with `tar -p --numeric-owner` and the LSIO
+      # image chowns /config itself on startup.
+      #
+      # NO MEDIA MOUNT AT ALL. prowlarr is an indexer proxy — it moves search results between the
+      # \*arrs and trackers and never touches a file on disk. Mounting the media volume "for
+      # consistency" would hand the fleet's most externally-connected service write access to the
+      # library for nothing.
+      containers:
+        - name: prowlarr
+          image: {{ prowlarr_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set. No
+              # NET_BIND_SERVICE: prowlarr listens on 8989, which needs no privilege.
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - SETUID
+                - SETGID
+                - FOWNER
+                - DAC_OVERRIDE
+          env:
+            - name: PUID
+              value: "{{ puid }}"
+            - name: PGID
+              value: "{{ pgid }}"
+            - name: TZ
+              value: "{{ tz }}"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: {{ container_item.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: {{ container_item.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ prowlarr_k8s_cpu_limit }}"
+              memory: {{ prowlarr_k8s_mem_limit }}
+            requests:
+              cpu: "{{ prowlarr_k8s_cpu_request }}"
+              memory: {{ prowlarr_k8s_mem_request }}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ prowlarr_k8s_claim }}

@@ -1,0 +1,16 @@
+---
+# THE NAME IS LOAD-BEARING. prowlarr's seeded database stores the FlareSolverr URL as
+# `http://flaresolverr:8191`, which was the Compose service key. A Service called anything else
+# leaves prowlarr reporting an ordinary connection failure against every Cloudflare-protected
+# indexer — the same class of trap as freshrss's feed-cache.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flaresolverr
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: flaresolverr
+  ports:
+    - port: {{ prowlarr_k8s_flaresolverr_port }}
+      targetPort: {{ prowlarr_k8s_flaresolverr_port }}

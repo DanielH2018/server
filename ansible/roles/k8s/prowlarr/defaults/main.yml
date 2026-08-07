@@ -1,0 +1,45 @@
+---
+# HELD UNTIL B4c, and this one holds harder than the others. Standing prowlarr up makes the bare
+# name `prowlarr` resolve in {{ k8s_namespace }} — which is exactly what sonarr's isolation probe
+# fails the deploy on, because a resolving `prowlarr` is the moment the rehearsing sonarr can
+# reach its real indexers. That is D3's "one window" enforced by something executable.
+prowlarr_k8s_enabled: false
+
+prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.4.0.5397-ls150
+
+# 84 M at B4a. Holds the indexer definitions and their API keys.
+prowlarr_k8s_claim: prowlarr-config
+prowlarr_k8s_storage_class: longhorn
+prowlarr_k8s_size: 2Gi
+prowlarr_k8s_source_path: /home/ubuntu/server/containers/prowlarr/config
+
+# ── flaresolverr ────────────────────────────────────────────────────────────────────────────
+# Solves Cloudflare challenges for the indexers, which means it RENDERS ATTACKER-SUPPLIED PAGES
+# in a headless browser. Under Compose it sits on its own `prowlarr-flaresolverr` network,
+# reachable by prowlarr and nothing else — a deliberate isolation, not an accident of layout.
+#
+# One flat namespace would silently WIDEN that to every workload in {{ k8s_namespace }}. So the
+# move is made a narrowing instead, by networkpolicy.yaml.j2: ingress on 8191 from pods labelled
+# app=prowlarr only. INGRESS is the enforced direction on this cluster — n8n-broker proves it,
+# and B3 proved egress policies here do nothing — so this is a control that actually holds, and
+# the probe beside it says so rather than assuming.
+prowlarr_k8s_flaresolverr_image: ghcr.io/flaresolverr/flaresolverr:latest
+prowlarr_k8s_flaresolverr_port: 8191
+prowlarr_k8s_flaresolverr_claim: prowlarr-flaresolverr-config
+# longhorn-nobackup: a browser profile cache, regenerated on first use. Losing it costs nothing.
+prowlarr_k8s_flaresolverr_storage_class: longhorn-nobackup
+prowlarr_k8s_flaresolverr_size: 1Gi
+
+# busybox nc is all the isolation probe needs.
+prowlarr_k8s_probe_image: alpine:3.22
+
+# Mirrors resources('1.0', '1024M', '0.10', '128M') for prowlarr and
+# resources('2.0', '1024M', '0.10', '128M') for flaresolverr.
+prowlarr_k8s_cpu_limit: "1"
+prowlarr_k8s_mem_limit: 1024Mi
+prowlarr_k8s_cpu_request: "100m"
+prowlarr_k8s_mem_request: 128Mi
+prowlarr_k8s_fs_cpu_limit: "2"
+prowlarr_k8s_fs_mem_limit: 1024Mi
+prowlarr_k8s_fs_cpu_request: "100m"
+prowlarr_k8s_fs_mem_request: 128Mi

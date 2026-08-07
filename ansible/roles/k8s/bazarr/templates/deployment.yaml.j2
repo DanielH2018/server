@@ -1,0 +1,86 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bazarr
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
+  # the new pod waits for a volume the old pod has not released. (The media PVC is RWX and does
+  # not have this problem — this is about /config.)
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: bazarr
+  template:
+    metadata:
+      labels:
+        app: bazarr
+    spec:
+      enableServiceLinks: false
+      # No fsGroup: seed-volume restores ownership with `tar -p --numeric-owner`, the LSIO image
+      # chowns /config itself on startup, and an fsGroup here would make the kubelet recursively
+      # chown the 19 G media volume on every mount.
+      containers:
+        - name: bazarr
+          image: {{ bazarr_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set. No
+              # NET_BIND_SERVICE: bazarr listens on 8989, which needs no privilege.
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - SETUID
+                - SETGID
+                - FOWNER
+                - DAC_OVERRIDE
+          env:
+            - name: PUID
+              value: "{{ puid }}"
+            - name: PGID
+              value: "{{ pgid }}"
+            - name: TZ
+              value: "{{ tz }}"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            # /data/media ONLY, via subPath — narrower than the \*arrs on purpose, and it is
+            # what the compose template mounts. bazarr writes subtitle files beside the media it
+            # subtitles; it never imports, so it has no reason to see /data/torrents and no
+            # hardlink seam to preserve.
+            - name: media
+              mountPath: /data/media
+              subPath: media
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: {{ container_item.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: {{ container_item.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ bazarr_k8s_cpu_limit }}"
+              memory: {{ bazarr_k8s_mem_limit }}
+            requests:
+              cpu: "{{ bazarr_k8s_cpu_request }}"
+              memory: {{ bazarr_k8s_mem_request }}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ bazarr_k8s_claim }}
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ bazarr_k8s_media_claim }}

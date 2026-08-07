@@ -1,0 +1,57 @@
+---
+# The negative test for networkpolicy.yaml.j2: a pod that is not prowlarr must not reach
+# flaresolverr.
+#
+# INVERTED — this Job SUCCEEDS when the connection FAILS. And it leads with a CONTROL, because
+# B3 produced three probes in a row that were green before they were correct: one tested a port
+# nothing published, one tested a policy that did nothing, and one used a resolver that could
+# never have returned an answer. The control here reaches a Service that IS open to everything,
+# so a failure below is attributable to the policy rather than to DNS, the image, or a pod with
+# no network.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: flaresolverr-netpol-probe
+  namespace: {{ k8s_namespace }}
+spec:
+  activeDeadlineSeconds: 120
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: flaresolverr-netpol-probe
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      containers:
+        - name: probe
+          image: {{ prowlarr_k8s_probe_image }}
+          command:
+            - sh
+            - -c
+            - |
+              if ! nc -w 5 -z prowlarr {{ container_item.port }}; then
+                echo "CONTROL FAILED: cannot reach prowlarr:{{ container_item.port }} either, so"
+                echo "this probe proves nothing about the policy. Check DNS and the Service."
+                exit 1
+              fi
+              echo "control ok: prowlarr:{{ container_item.port }} reachable from this pod"
+              if nc -w 5 -z flaresolverr {{ prowlarr_k8s_flaresolverr_port }}; then
+                echo "POLICY NOT ENFORCED: reached flaresolverr:{{ prowlarr_k8s_flaresolverr_port }}"
+                echo "from a pod that is not prowlarr. The headless browser that renders hostile"
+                echo "pages is exposed to the whole namespace — this is WIDER than the Docker"
+                echo "network it replaced."
+                exit 1
+              fi
+              echo "isolated: flaresolverr:{{ prowlarr_k8s_flaresolverr_port }} unreachable except from prowlarr"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi

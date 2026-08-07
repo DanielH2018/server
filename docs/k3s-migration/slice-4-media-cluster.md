@@ -511,16 +511,36 @@ rehearsal:
 A control that used an FQDN would not have caught #3, and a probe without a control would not have
 caught #1 or #2.
 
-### B4a — The three remaining \*arrs, built but not deployed
+### B4a built — 2026-08-07 — three roles, all held
 
-`radarr`, `prowlarr`, `bazarr` — near-clones of the sonarr role, differing only in port, claim and
-(for prowlarr) the absence of a media mount.
+`roles/k8s/{radarr,bazarr,prowlarr}`. All render, lint, and pass a **server-side dry-run**; all
+three are held by `<svc>_k8s_enabled: false`, confirmed by running the deploy and watching each
+report itself held rather than acting.
 
-**They cannot be deployed incrementally, and the guard is what says so.** Bringing prowlarr up in
-the cluster makes the bare name `prowlarr` resolve, which is exactly what sonarr's isolation probe
-fails on. That is not an obstacle to work around — it is D3 ("the nine cut over in one window")
-being enforced by something executable instead of remembered. So these are written, rendered and
-linted, and applied only in the cutover window.
+**Each mounts only what it actually uses**, which is where the three stop being clones:
+
+| | media mount | why |
+|---|---|---|
+| `radarr` | whole tree at `/data` | imports by hardlink from `/data/torrents` into `/data/media`; `link()` needs one mount spanning both |
+| `bazarr` | `/data/media` only, via `subPath` | writes subtitles beside media, never imports — no hardlink seam to preserve |
+| `prowlarr` | **none** | an indexer proxy that never touches a file. Mounting the volume "for consistency" would hand the fleet's most externally-connected service write access to the library for nothing |
+
+**prowlarr brings a second workload, and it is the interesting one.** `flaresolverr` solves
+Cloudflare challenges, which means it renders **attacker-supplied pages** in a headless browser.
+Under Compose it sat on its own `prowlarr-flaresolverr` network — reachable by prowlarr and nothing
+else, deliberately. Collapsing into one namespace would have silently widened that to every
+workload in `homelab`, including qbittorrent's untrusted payloads.
+
+So the move is made a **narrowing** instead: an `Ingress` NetworkPolicy admitting port 8191 from
+`app=prowlarr` alone. Ingress is chosen with evidence, not by habit — B3 measured egress policies
+here doing nothing, while `n8n-broker` proves ingress is enforced. And it is probed on every
+deploy, inverted, control first: reach `prowlarr` (must succeed) then `flaresolverr` (must fail).
+After B3 produced three green-but-wrong probes in a row, a control is not optional.
+
+**Why none of the three could be deployed now.** Standing up prowlarr makes the bare name
+`prowlarr` resolve, which is exactly what the rehearsing sonarr's isolation probe fails on. That is
+not an obstacle to work around — it is D3 ("the nine cut over in one window") enforced by something
+executable instead of remembered.
 
 ### B4b built — 2026-08-07 — deployed in B4c, not before
 
