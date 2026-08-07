@@ -594,6 +594,53 @@ Loki-backed boards (`Logs/logs.json`, `Infrastructure/alert-history.json`) repor
 clean provisioning run (`starting` → `finished to provision dashboards`, no errors) rather than
 from looking at the UI, which needs credentials this session does not hold.
 
+### B5 done — 2026-08-07 — repointed, and the diff was not the evidence it looked like
+
+`PROMETHEUS_URL` now points at the cluster Prometheus. The exit test passed — 45 lines, every
+verdict `OK` on both instances, **zero checks newly skipped** — but taking that diff as proof
+would have shipped a silent scope change, and this is the batch where that mattered most.
+
+**A verdict diff only diverges when something is unhealthy.** Everything was green, so a widened
+query looked identical to a correct one. Measuring `count by (origin)` instead showed four metric
+families genuinely present in *both* estates: `container_start_time_seconds` (99 cluster-native vs
+53 here), `container_oom_events_total`, the `container_cpu_cfs_*` trio, and `up` (5 vs 11). Five
+checks — restarts, oom, cpu, janitorr, targets — would have quietly started reporting k8s pods as
+daniel-server offenders. The other seven read metrics only this host produces and needed nothing.
+
+`{name!=""}` does **not** already scope those, which was my first assumption and was wrong: the
+kubelet's cAdvisor emits a `name` label too, so 99 cluster-native series survive that filter.
+
+The fix is an `origin` pin, **derived** from `PROMETHEUS_URL == CLUSTER_PROMETHEUS_URL` rather than
+configured. A compose variable that had to be flipped in lockstep is exactly the drift worth
+designing out — point one at the cluster and forget the other and the selector matches nothing,
+which every one of these checks decodes as healthy. Verified equal before flipping: each affected
+selector returns the same count on the Docker instance unpinned as on the cluster pinned —
+**53/53** containers, **11/11** targets, **1/1** janitorr. Live after the flip, `targets` reports
+`all 11 targets up`, not 16.
+
+A systematic sweep of every metric `check.py` queries then caught one the targeted checks missed:
+**`process_start_time_seconds` is dual-estate**, and *both* Prometheus instances self-scrape as
+`job="prometheus"`. The remote-write uptime grace would have keyed off the cluster's uptime instead
+of the sender's, chosen nondeterministically by `result[0]`.
+
+**Two holes the repoint itself opened, both closed here.**
+
+- **`targets` could report "all 0 targets up".** Before, an empty `up` could only mean the queried
+  Prometheus was down, and the `PROM_DEPENDENT` gate suppressed the check before it ran. Pointed at
+  the cluster those two facts come apart: the gate probes the cluster, which is up and answering,
+  while `up{origin="daniel-server"}` empties the moment this host stops remote-writing — and
+  `len(down) == 0` is then trivially true. Now floored, same fail-closed shape as the k8s workload
+  check. This check is also the sentinel for the other estate-pinned ones: restarts/oom/cpu
+  legitimately return empty when nothing is wrong, so they cannot tell *quiet* from *gone*.
+- **`b2_trend` was projecting from 0.6% of its data.** Remote-write moves series forward and does
+  not backfill, and this is the only check with a multi-day lookback. Its 7 d window held **61
+  samples** against daniel-server's **10 077**, and the two instances duly disagreed — 5.87 GB vs
+  5.14 GB. The series-count check could not see this: counts of *current* series matched exactly,
+  because **depth is a different property from presence**. Now suppressed below a sample floor,
+  reporting `OK` with an explicit message rather than `DOWN` — the condition is temporary and
+  self-healing, paging for a week would be noise, and the absolute side of the same risk already
+  has an independent monitor in B2 Storage Usage.
+
 ---
 
 ## Batches — vertical, each independently exercisable
@@ -665,6 +712,29 @@ against the same run on the Docker Prometheus. Identical verdicts, no check newl
 Stop the Docker `prometheus` and `grafana`. **`uptime-kuma`, `autokuma`, `node-exporter`,
 `cadvisor`, `promtail`, `monitor-bridge` and `autofix-bridge` all keep running** — they are the
 slice-7 residue by design, and per D3 the first two are now part of it.
+
+**Four preconditions, all discovered during B3–B5 rather than planned for. Stopping the Docker
+Prometheus is the point of no return for 90 days of history, so none of these is deferrable past
+it.**
+
+1. **Nothing watches the cluster's own scrape targets.** B5 pinned `check_targets_down` to
+   `origin="daniel-server"`, which preserves today's semantics exactly — and means the cluster's
+   own five targets are unwatched. `cluster_prometheus` only probes reachability and
+   `k8s_workloads` reads deployment replicas, not scrape health. `kube-state-metrics` going
+   unscraped is covered (the workload check treats absent series as DOWN), but **`otel-collector`
+   and `otel-collector-internal` going down would be silent.** Either give `targets` a second
+   cluster-pinned arm or add a sibling check — decide, don't inherit it.
+2. **Wait for history before retiring.** `b2_trend` fits `predict_linear` over 7 days and its
+   projection is currently suppressed (61 samples vs daniel-server's 10 077 at the flip). It
+   self-heals ~7 days after B3, i.e. on or after **2026-08-14**. Retiring the Docker Prometheus
+   before then destroys the only copy of that history.
+3. **Retention drops from 90 d to ~15 d.** `--storage.tsdb.retention.size=3GB` binds well before
+   the configured 30 d at the post-B3 ingest rate. Fine for every monitor-bridge query (longest
+   lookback is 7 d), but it is a real loss for ad-hoc Grafana browsing. Raise the PVC on a
+   measurement — by B6 the cluster will have compacted blocks, so measure rather than re-estimate.
+4. **`Prometheus Reachable` and `Cluster Prometheus Reachable` now watch the same instance.** B5
+   pointed `PROMETHEUS_URL` at the cluster, so the two monitors are redundant. Collapse them, or
+   repurpose the first — two green monitors for one fact reads as more coverage than exists.
 
 ---
 
