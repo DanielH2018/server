@@ -275,7 +275,7 @@ visible from the service list:
 |---|---|
 | `network_mode: service:wireguard` | Two containers in **one pod** — shared netns is native here, and this part is genuinely *easier* than Compose |
 | `NET_ADMIN` + `NET_RAW` on wireguard | Container `securityContext.capabilities` — the kill-switch installs rules in the `raw` table |
-| `sysctls: src_valid_mark=1`, ipv6 off | Pod `securityContext.sysctls`; `net.ipv4.conf.all.src_valid_mark` is **unsafe-listed** in kubelet and needs `--allowed-unsafe-sysctls` |
+| `sysctls: src_valid_mark=1`, ipv6 off | **One** pod sysctl + one kubelet allow-list entry — measured, see below |
 | `dns: [pi-hole, 1.1.1.1]` | `dnsPolicy: None` + explicit `dnsConfig` — the mod resolves `api.mullvad.net` *before* the tunnel exists |
 | Mullvad key/account file-mounted | A k8s Secret, `FILE__MULLVAD_*`, values `\| trim`med (a trailing newline corrupts the key) |
 | `depends_on: service_healthy` | No equivalent — needs an init container or a qbittorrent-side wait |
@@ -289,6 +289,51 @@ than a firewall doing its job.
 
 This is why B4 splits: the four remaining \*arrs are near-clones of the sonarr role, while
 qbittorrent is a genuinely new shape with its own risk surface.
+
+#### The sysctls, measured rather than assumed (2026-08-07)
+
+A credential-free probe pod — no tunnel, no Mullvad key, just `NET_ADMIN`/`NET_RAW` and the same
+capability set the real container would carry:
+
+```
+/proc/sys mounted  ro,nosuid,nodev,noexec        <- NET_ADMIN cannot write it
+src_valid_mark = 0    rp_filter = 2 (loose)
+IPv6: ::1/128 (host) + fe80::…/64 (link)         routes: fe80::/64 dev eth0 only
+write to src_valid_mark -> Read-only file system
+```
+
+Three things fall out, and two of them shrink the ask:
+
+- **The choice really is binary.** `/proc/sys` is read-only even with `NET_ADMIN`, so the value has
+  to arrive from the pod spec (kubelet allow-list) or from a privileged init container. There is no
+  third way where the container sets it itself.
+- **The two `disable_ipv6` sysctls are not needed.** IPv6 is *enabled* in the pod, but its only
+  addresses are loopback and link-local and its only route is `fe80::/64` — nothing can leave the
+  link, so there is no leak path for the kill-switch to close. Drop them; do not allow-list them.
+- **`src_valid_mark` IS needed, for a reason that is not routing.** `rp_filter` is 2 (loose), so
+  strict reverse-path filtering — the thing the sysctl exists for — is not in play. But `wg-quick`
+  line 240 reads:
+
+  ```bash
+  [[ $proto == -4 ]] && [[ $(sysctl -n net.ipv4.conf.all.src_valid_mark) != 1 ]] && cmd sysctl -q …=1
+  ```
+
+  Conditional: it writes **only when the value is not already 1**. At 0 it will attempt the write,
+  hit read-only `/proc/sys`, and abort the tunnel bring-up. Pre-set it to 1 and wg-quick skips the
+  write entirely and proceeds. So the sysctl is required to stop wg-quick from trying, not to make
+  the routing work.
+
+**Decided: one kubelet allow-list entry, no privileged container.**
+`--kubelet-arg=allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark` in `k3s_server_args`, plus
+`securityContext.sysctls` on the pod. The alternative — a privileged init container — would put a
+second privileged component into the media stack that B1 deliberately designed to have exactly one,
+and it would put it in the workload handling the fleet's largest untrusted-input surface. "Unsafe"
+here is a conservative kubelet label, not a risk ranking: this sysctl is namespaced, so a pod
+setting it affects its own netns and nothing else.
+
+**One caveat when backing it out:** `roles/setup/k3s` detects a flag *added* to `k3s_server_args`
+but explicitly does not detect one *removed*, so deleting this line later needs a deliberate
+reinstall rather than just an edit.
 
 ---
 
