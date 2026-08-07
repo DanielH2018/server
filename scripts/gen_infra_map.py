@@ -225,6 +225,35 @@ def find_tool(name: str) -> str | None:
     return shutil.which(name, path=search)
 
 
+# k3s ships kubectl as a symlink to itself and defaults it at this file, which is
+# root-owned 0640. An interactive shell exports KUBECONFIG to the user copy, so
+# `kubectl get` works by hand and fails under cron — the same ambient-environment
+# trap as PATH, one variable over.
+K3S_KUBECONFIG = Path("/etc/rancher/k3s/k3s.yaml")
+USER_KUBECONFIG = Path.home() / ".kube" / "config"
+
+
+def find_kubeconfig() -> Path | None:
+    """Pick a kubeconfig this process can actually read.
+
+    Returned explicitly and passed as ``--kubeconfig`` rather than left to
+    kubectl's own lookup, so the answer does not change with the caller's
+    environment. Readability is checked here, not assumed: the k3s default is
+    root-only, and discovering that at exec time yields a warning on stderr and
+    an empty result, which reads exactly like a cluster with no deployments.
+    """
+    candidates = []
+    env_path = os.environ.get("KUBECONFIG", "").strip()
+    if env_path:
+        # KUBECONFIG is a path LIST; kubectl merges the entries left to right.
+        candidates.extend(Path(p) for p in env_path.split(os.pathsep) if p)
+    candidates.extend((USER_KUBECONFIG, K3S_KUBECONFIG))
+    for candidate in candidates:
+        if os.access(candidate, os.R_OK):
+            return candidate
+    return None
+
+
 def _run(cmd: list[str], timeout: int) -> tuple[bool, str]:
     """Run *cmd*, returning ``(ok, stdout-or-error)``. Never raises."""
     try:
@@ -327,7 +356,24 @@ def collect_k8s(host: str, local_hostname: str) -> tuple[bool, dict, str]:
     kubectl = find_tool("kubectl")
     if kubectl is None:
         raise MissingToolError("kubectl not found on this host")
-    ok, out = _run([kubectl, "get", "deployments", "-A", "-o", "json"], LOCAL_TIMEOUT)
+    kubeconfig = find_kubeconfig()
+    if kubeconfig is None:
+        raise MissingToolError(
+            f"no readable kubeconfig (tried $KUBECONFIG, {USER_KUBECONFIG}, {K3S_KUBECONFIG})"
+        )
+    ok, out = _run(
+        [
+            kubectl,
+            "--kubeconfig",
+            str(kubeconfig),
+            "get",
+            "deployments",
+            "-A",
+            "-o",
+            "json",
+        ],
+        LOCAL_TIMEOUT,
+    )
     if not ok:
         return False, {}, out
     return True, parse_kubectl_deployments(out), ""

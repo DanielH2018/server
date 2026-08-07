@@ -514,8 +514,65 @@ def test_main_leaves_the_previous_page_untouched_when_a_tool_is_missing(
     assert page.read_text() == "PREVIOUS RENDER"
 
 
-def test_refresh_cron_puts_usr_local_bin_on_the_path():
-    """Second layer of the same guard, pinned where the regression happened."""
+def test_find_kubeconfig_prefers_an_explicit_kubeconfig_env(monkeypatch, tmp_path):
+    explicit = tmp_path / "explicit.yaml"
+    explicit.write_text("cfg")
+    monkeypatch.setenv("KUBECONFIG", str(explicit))
+    assert g.find_kubeconfig() == explicit
+
+
+def test_find_kubeconfig_reads_kubeconfig_as_a_path_list(monkeypatch, tmp_path):
+    """KUBECONFIG is a colon-separated list; a bare Path() of it opens nothing."""
+    first, second = tmp_path / "a.yaml", tmp_path / "b.yaml"
+    second.write_text("cfg")
+    monkeypatch.setenv("KUBECONFIG", f"{first}:{second}")
+    assert g.find_kubeconfig() == second
+
+
+def test_find_kubeconfig_skips_an_unreadable_candidate(monkeypatch, tmp_path):
+    """The actual cron failure: the k3s default exists but is root-only 0640."""
+    unreadable = tmp_path / "root-only.yaml"
+    unreadable.write_text("cfg")
+    unreadable.chmod(0o000)
+    readable = tmp_path / "mine.yaml"
+    readable.write_text("cfg")
+    monkeypatch.setenv("KUBECONFIG", f"{unreadable}:{readable}")
+    assert g.find_kubeconfig() == readable
+
+
+def test_collect_k8s_raises_when_no_kubeconfig_is_readable(monkeypatch):
+    """Must not degrade to 'declared only' — that renders as a healthy page."""
+    monkeypatch.setattr(g, "find_tool", lambda name: "/usr/local/bin/kubectl")
+    monkeypatch.setattr(g, "find_kubeconfig", lambda: None)
+    with pytest.raises(g.MissingToolError):
+        g.collect_k8s("box", "box")
+
+
+def test_collect_k8s_passes_the_resolved_kubeconfig_to_kubectl(monkeypatch, tmp_path):
+    """Explicit --kubeconfig is the point: kubectl's own lookup varies by caller."""
+    cfg = tmp_path / "kube.yaml"
+    cfg.write_text("cfg")
+    seen = {}
+
+    def fake_run(cmd, timeout):
+        seen["cmd"] = cmd
+        return True, json.dumps({"items": []})
+
+    monkeypatch.setattr(g, "find_tool", lambda name: "/usr/local/bin/kubectl")
+    monkeypatch.setattr(g, "find_kubeconfig", lambda: cfg)
+    monkeypatch.setattr(g, "_run", fake_run)
+    g.collect_k8s("box", "box")
+    assert "--kubeconfig" in seen["cmd"]
+    assert str(cfg) in seen["cmd"]
+
+
+def test_refresh_cron_sets_kubeconfig():
+    """Second layer, same as PATH: pin it where the regression actually happened."""
+    job = _refresh_cron_job()
+    assert "KUBECONFIG=" in job, "kubectl would fall back to the root-only k3s config"
+
+
+def _refresh_cron_job():
     tasks = REPO_ROOT / "ansible/roles/setup/initial_setup/tasks/main.yml"
     if not tasks.is_file():
         pytest.skip("ansible role tree not present")
@@ -526,7 +583,13 @@ def test_refresh_cron_puts_usr_local_bin_on_the_path():
         if isinstance(t, dict) and "infra-map" in (t.get("tags") or [])
     ]
     assert jobs, "the infra-map refresh cron has gone missing"
-    assert "/usr/local/bin" in jobs[0], "kubectl would not resolve under cron's PATH"
+    return jobs[0]
+
+
+def test_refresh_cron_puts_usr_local_bin_on_the_path():
+    """Second layer of the same guard, pinned where the regression happened."""
+    job = _refresh_cron_job()
+    assert "/usr/local/bin" in job, "kubectl would not resolve under cron's PATH"
 
 
 # --- load_roles (reads the real repo) ---------------------------------------
