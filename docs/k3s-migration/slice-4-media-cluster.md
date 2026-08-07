@@ -246,23 +246,49 @@ UID into `claimRef`. Delete the PVC and the PV goes `Released` holding a UID tha
 so a same-named PVC will **not** rebind — the data is intact and the volume silently refuses to
 mount. Recover with `kubectl patch pv media-data -p '{"spec":{"claimRef":null}}'`.
 
-### D10 — qbittorrent's router forward moves early, before the cutover *(resolved 2026-08-07)*
+### D10 — ~~qbittorrent's router forward moves early~~ *(the question was wrong — 2026-08-07)*
 
-qbittorrent's inbound listen port is forwarded by the router to daniel-server. Nothing about that
-survives the move, and an unreachable listen port does not fail loudly — torrents stay
-*connectable-but-slow*, seeding suffers, and the only symptom is a number nobody is watching.
+**There is no router forward, and there never was.** Asked and answered "move it early"; then
+checking the compose before acting on that showed the premise does not hold:
 
-**Chosen: give qbittorrent a MetalLB `LoadBalancer` VIP and repoint the forward at it before the
-cutover**, so peering never degrades. The cost is honest and accepted: one piece of slice-6 edge
-config is pulled forward, and for the length of the window the forward points at the cluster while
-the Docker copy is still the authoritative one — inbound peers reach a qbittorrent that is not yet
-the live one. That is the *right* way round: a brief loss of inbound peers for the copy that is
-about to be retired, rather than for the one taking over.
+```
+docker inspect qbittorrent → NetworkMode=container:<wireguard>   ports=map[]
+6881 closed on daniel-server's host
+```
 
-Rejected: accepting degraded peering through the window (cheaper, but the degradation is silent and
-the window is not sharply bounded), and leaving qbittorrent on Docker past slice 4 — which is not
-actually available, because it writes `/data/torrents` and the hardlink seam requires it to sit in
-the same volume as the \*arrs at the same moment (§"the seam that shapes this slice").
+qbittorrent publishes **no host port at all**. It runs in the `wireguard` container's network
+namespace, behind a Mullvad tunnel with a kill-switch (iptables REJECT for anything not leaving via
+`wg0`). Every packet it sends or receives goes through Mullvad. A router forward to daniel-server
+would land on a closed port.
+
+So the hazard this decision was answering — "the listen port stops being reachable at cutover" —
+describes a setup this homelab does not have. Peering is whatever Mullvad gives it today, and that
+is unchanged by which host runs the container. **Nothing to move, nothing to decide, no degradation
+to accept.** The real question was never the forward; it is D11.
+
+### D11 — qbittorrent moves as a two-container pod, VPN sidecar and all *(2026-08-07)*
+
+What the plan called "one of the nine" is the slice's most intricate port, and none of it was
+visible from the service list:
+
+| Docker | What it needs in k8s |
+|---|---|
+| `network_mode: service:wireguard` | Two containers in **one pod** — shared netns is native here, and this part is genuinely *easier* than Compose |
+| `NET_ADMIN` + `NET_RAW` on wireguard | Container `securityContext.capabilities` — the kill-switch installs rules in the `raw` table |
+| `sysctls: src_valid_mark=1`, ipv6 off | Pod `securityContext.sysctls`; `net.ipv4.conf.all.src_valid_mark` is **unsafe-listed** in kubelet and needs `--allowed-unsafe-sysctls` |
+| `dns: [pi-hole, 1.1.1.1]` | `dnsPolicy: None` + explicit `dnsConfig` — the mod resolves `api.mullvad.net` *before* the tunnel exists |
+| Mullvad key/account file-mounted | A k8s Secret, `FILE__MULLVAD_*`, values `\| trim`med (a trailing newline corrupts the key) |
+| `depends_on: service_healthy` | No equivalent — needs an init container or a qbittorrent-side wait |
+
+**The trap that is not in that table:** `LAN_NETWORKS=192.168.0.0/24,<lan>,172.16.0.0/12` is the
+kill-switch's allow-list. The k3s pod CIDR (`10.42.0.0/16`) and Service CIDR (`10.43.0.0/16`) are in
+none of those ranges, so as written the kill-switch would REJECT the return path for Traefik's
+requests to the WebUI *and* for the kubelet's probes. The pod would come up, the tunnel would be
+healthy, and the container would be unreachable — a failure that reads as a broken Service rather
+than a firewall doing its job.
+
+This is why B4 splits: the four remaining \*arrs are near-clones of the sonarr role, while
+qbittorrent is a genuinely new shape with its own risk surface.
 
 ---
 
@@ -440,10 +466,30 @@ rehearsal:
 A control that used an FQDN would not have caught #3, and a probe without a control would not have
 caught #1 or #2.
 
-### B4 — The cutover window
+### B4a — The three remaining \*arrs, built but not deployed
 
-Stop the Docker nine → final delta rsync → start the cluster nine (`qbittorrent`, `sonarr`,
-`radarr`, `prowlarr`, `bazarr`) with their seeded config PVCs.
+`radarr`, `prowlarr`, `bazarr` — near-clones of the sonarr role, differing only in port, claim and
+(for prowlarr) the absence of a media mount.
+
+**They cannot be deployed incrementally, and the guard is what says so.** Bringing prowlarr up in
+the cluster makes the bare name `prowlarr` resolve, which is exactly what sonarr's isolation probe
+fails on. That is not an obstacle to work around — it is D3 ("the nine cut over in one window")
+being enforced by something executable instead of remembered. So these are written, rendered and
+linted, and applied only in the cutover window.
+
+### B4b — qbittorrent and the VPN sidecar
+
+The new shape, not a clone: a two-container pod sharing a netns, `NET_ADMIN`/`NET_RAW`, unsafe
+sysctls, a Mullvad Secret, and a kill-switch allow-list that must learn the cluster CIDRs (D11).
+
+**Prove it:** the WebUI answers *through Traefik* (which proves the kill-switch is not eating the
+return path), and egress leaves via the tunnel — `wg show wg0` plus a reachability check that can
+only have gone through Mullvad, the same two-signal test the Docker healthcheck uses.
+
+### B4c — The cutover window
+
+Stop the Docker five → final delta rsync → re-seed every config with `force=true` against the
+stopped source → flip `<svc>_k8s_rehearsal` to false → deploy.
 
 **Prove it:** a real import end to end — add a torrent, let it complete, confirm the \*arr imports
 it **by hardlink** (link count 2, no space growth) into `/data/media`.
@@ -486,10 +532,10 @@ against the new endpoints.
   `prowlarr`). Those names stop resolving at cutover, exactly as `n8n` did in slice 2 — and the
   same trap applies: point it at the `-k8s` hostname via the ingress VIP, **not** at a bridged
   `*.local` name, which resolves to daniel-server and is unreachable from a container on that host.
-- **`qbittorrent` needs its listen port reachable** or torrents go connectable-but-slow. A
-  `LoadBalancer` VIP plus the router forward, which is edge config that otherwise belongs with
-  slice 6. **Decided 2026-08-07: move the forward early** (D10) — peering does not degrade at any
-  point, at the cost of pulling one piece of slice-6 edge config forward.
+- ~~**`qbittorrent` needs its listen port reachable**~~ — **withdrawn 2026-08-07, the premise was
+  wrong.** It publishes no host port and runs inside the Mullvad tunnel, so there is no forward to
+  move and no peering change at cutover. See D10. What replaces it as the qbittorrent hazard is
+  D11's kill-switch allow-list, which does not know the cluster CIDRs.
 - **19 G is today's number.** Re-measure before the cutover; the window scales with the delta, not
   the total.
 - **`sonarr-k8s.local` is a live Authelia-gated route to a pod holding the real database** (B3).
