@@ -487,14 +487,22 @@ does not exist in this Prometheus build. An absent selector yields an empty vect
 check exists to prevent. `samples_failed_total` was confirmed present the same way rather than
 assumed.
 
-The check is also graced on the sender's own uptime, which is not a nicety: the sent-timestamp
-gauge is registered at 0 before the first successful send, so `time() - 0` is ~1.8e9 and the first
-cycle after **every** `prometheus` deploy would page, with `max_retries=0` on the monitor. It
-cannot go in `STARTUP_GRACE` — that set must stay disjoint from `PROM_DEPENDENT` — so it reads
-`process_start_time_seconds` instead, mirroring janitorr's uptime gate. An unreadable uptime does
-**not** grace.
+The check is also graced on the sender's own uptime, reading `process_start_time_seconds` rather
+than joining `STARTUP_GRACE` (which must stay disjoint from `PROM_DEPENDENT`), and mirroring
+janitorr's uptime gate. An unreadable uptime does **not** grace.
 
-Live: `remote-write current (22s behind, 0 samples lost in 1h)`.
+**The failure it guards against is narrower than it first appeared, and the live test is what
+showed that.** The reasoning was that `queue_highest_sent_timestamp_seconds` is registered at 0
+before the first successful send, so `time() - 0` ≈ 1.8e9 would page on the first cycle after
+every `prometheus` deploy. Restarting the container to confirm produced
+`remote-write current (79s behind...)` instead — no page. The reason is that a PromQL instant
+query looks back five minutes, so it serves the *pre-restart* gauge value until the restarted
+Prometheus scrapes itself again, and remote-write has normally sent by then. The zero-gauge case
+is therefore only reachable when the receiver is *also* unavailable at sender startup, which is
+precisely when a bounded grace is wanted. The gate stays, its justification is narrower than
+claimed, and the unit tests cover the logic directly.
+
+Live, all three arms: `remote-write current (46s behind, 0 lost + 0 overflows in 1h)`.
 
 **Found while here, and the sharpest B5 landmine: after the repoint, unqualified queries silently
 span both estates.** The cluster Prometheus holds daniel-server's series alongside its own, so
