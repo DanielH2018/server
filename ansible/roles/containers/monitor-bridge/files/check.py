@@ -107,7 +107,6 @@ _DEFAULT_BACKUP_SENTINELS = [
     "grafana/data/grafana.db",
     "pihole/data/etc-pihole/pihole.toml",
     "jellyfin/config/data/data/jellyfin.db",
-    "sonarr/config/sonarr.db",
     "wg-easy/pi-peers/wg0.json",
     "home-assistant/config/.storage/core.device_registry",
     "zigbee2mqtt/data/coordinator_backup.json",

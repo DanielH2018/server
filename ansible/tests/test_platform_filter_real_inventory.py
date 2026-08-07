@@ -63,7 +63,11 @@ def test_daniel_server_is_still_wholly_docker():
     # 2026-08-06 (41 -> 42), the trace sink for Claude Code's spans, and livesync (42 -> 41) and
     # karakeep (41 -> 40) were cut over the same day. karakeep took three helper containers with
     # it that were never separate entries here, so the drop is 1 while four containers left.
-    # Then n8n (40 -> 39), which took n8n-runners with it the same way. The count
+    # Then n8n (40 -> 39), which took n8n-runners with it the same way. Then slice 4's B4c
+    # cutover (39 -> 34), which moved five AT ONCE — qbittorrent, sonarr, radarr, prowlarr,
+    # bazarr — taking wireguard and flaresolverr with them as sidecars that were never their
+    # own entries. Five together and not one at a time because they share the hardlink seam:
+    # split them across hosts and every import silently becomes a copy. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -72,6 +76,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 39
-    assert len(filter_by_platform(containers, "docker")) == 39
+    assert len(containers) == 34
+    assert len(filter_by_platform(containers, "docker")) == 34
     assert filter_by_platform(containers, "k8s") == []

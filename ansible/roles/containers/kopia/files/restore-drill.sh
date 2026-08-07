@@ -30,7 +30,7 @@ source /usr/local/lib/kopia-lib.sh
 # frozen directory and passed, proving nothing about the live data (now a Longhorn PVC, covered by
 # longhorn-backup-health.sh's per-volume check). karakeep and n8n dropped the same day, on their own
 # cutovers, for the same reason. Drop a service here when it migrates.
-SVCS=(authelia traefik grafana pihole home-assistant zigbee2mqtt wg-easy sonarr jellyfin)
+SVCS=(authelia traefik grafana pihole home-assistant zigbee2mqtt wg-easy jellyfin)
 declare -A SENTINEL=(
   [authelia]=config/configuration.yml
   [traefik]=data/acme.json
@@ -40,10 +40,12 @@ declare -A SENTINEL=(
   # scope by kopiaignore since 2026-07-15 (a blanket data*/ used to drop it). A real SQLite file,
   # so it also exercises the SQLite-magic header check below.
   [jellyfin]=config/data/data/jellyfin.db
-  # sonarr's config DB (quality profiles / indexer config, kept in Kopia scope by kopiaignore)
-  # proves an *arr config restores. A real SQLite file, so it also exercises the SQLite-magic
-  # header check below — unlike the JSON/plain sentinels above.
-  [sonarr]=config/sonarr.db
+  # sonarr was the *arr sentinel here until slice 4's B4c cutover (2026-08-07) moved it to
+  # k3s. Dropped rather than repointed: this drill restores from the daniel-server snapshot,
+  # where sonarr.db no longer changes, so it would have gone on passing against a frozen file
+  # forever — a green check asserting nothing. The cluster's config PVCs are Longhorn-backed
+  # and longhorn-backup-health.sh asserts their freshness cluster-side instead. jellyfin above
+  # still exercises the SQLite-magic branch, so that coverage is not lost.
   # wg-easy's sentinel is the PULLED Pi peer config (pi-peers/, filled by the daniel-server
   # wg-easy-pull-pi-peers cron) — the one un-rebuildable secret backup, so prove IT restores,
   # not just the server's own re-templatable config. wg0.json is a real JSON file, so it skips

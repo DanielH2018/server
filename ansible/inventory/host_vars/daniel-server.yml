@@ -200,34 +200,22 @@ containers_list:
   # freshrss moved to k3s on 2026-08-05 behind the strangler bridge, taking its feed-cache
   # sidecar with it — that was a second service inside this one compose, never its own entry.
   # Rolling back is re-adding this entry and removing bridge_hostname from daniel-box's.
-  - name: qbittorrent
-    port: 8080
-    use_authelia: true
-    networks:
-      - media
-  - name: sonarr
-    port: 8989
-    use_authelia: true
-    networks:
-      - media
-  - name: radarr
-    port: 7878
-    use_authelia: true
-    networks:
-      - media
+  # ── slice 4, B4c: the five that share the hardlink seam moved to k3s 2026-08-07 ──────────
+  # qbittorrent (with its wireguard sidecar), sonarr, radarr, prowlarr (with flaresolverr) and
+  # bazarr now run on daniel-box. Removed from this list rather than merely stopped, because
+  # gitops runs deploy.yml as a plain containers_list loop and would otherwise recreate and
+  # restart every one of them on the next tick.
+  #
+  # They moved TOGETHER and had to: sonarr and radarr import by hardlink from /data/torrents
+  # into /data/media, and link() only works when one filesystem holds both. Splitting them
+  # across hosts would have turned every import into a silent copy.
+  #
+  # Rolling back is re-adding these five entries and setting <svc>_k8s_enabled: false on
+  # daniel-box. The config directories under containers/ are untouched — the migration only
+  # ever read them.
   - name: jellyfin
     port: 8096
     use_authelia: false
-    networks:
-      - media
-  - name: prowlarr
-    port: 9696
-    use_authelia: true
-    networks:
-      - media
-  - name: bazarr
-    port: 6767
-    use_authelia: true
     networks:
       - media
   - name: tdarr
