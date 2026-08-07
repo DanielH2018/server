@@ -374,7 +374,34 @@ deployments reporting, and **all seven previously-unmonitored workloads returnin
 `kube_deployment_status_replicas_unavailable` through the exact path monitor-bridge will use**.
 `/graph` returns 404 through that route, as intended.
 
-Two things bit during execution, both now encoded in the templates:
+**B2 — done 2026-08-07** (`9f93cf7d`). One `monitor-bridge` check (`k8s_workloads`) reading
+kube-state-metrics through the cluster Prometheus, plus its own `cluster_prometheus` reachability
+gate and `CLUSTER_DEPENDENT` skip set. D8's open question resolved as approved — **both** arms,
+because they cover different faults: the gate covers "cluster Prometheus unreachable" (a root
+cause, correctly suppressed) and the check's series-count floor covers "cluster Prometheus fine but
+kube-state-metrics not scraped" (which the gate structurally cannot see, and where suppression
+would turn a blind monitor green).
+
+Verified live in both directions: `OK k8s_workloads - 34 k8s workloads healthy`, and with the floor
+forced above the live count, `DOWN … UNKNOWN, not OK`. Kuma monitors created, pushes landing.
+
+**The rollout gate (`08ccbbd6`) was fixed first, and needed two attempts.** The first version
+compared `readyReplicas` to `spec.replicas` and did *not* catch the bug it was written for —
+re-breaking the probe deliberately showed the Deployment reading `desired=1 ready=1 updated=1`
+while the pod sat at `READY 1/1 RESTARTS 3`. A crashloop that recovers between kills is invisible
+to every readiness-derived field, so the gate now samples **restart counts** across the window.
+Both directions tested.
+
+**Unplanned: a live docker-proxy outage, found and fixed.** All four proxies had been
+`Up 5 days (unhealthy)` for ~1.5 h — dockerd restarted at 14:55 UTC and replaced
+`/var/run/docker.sock`, and the containers still bind-mounted the old inode (host `2834440` vs
+container `1565`). AutoKuma had been 503ing throughout, so **no monitor changes had applied** —
+including `monitor-bridge-b2-reachable` from earlier the same day, which had never actually been
+created in Kuma despite the deploy reporting success. `autoheal` cannot recover this: a restart
+does not re-mount, only a recreate does. Fixed by force-recreating all four. Written up as a
+memory, since the class recurs on every dockerd restart.
+
+Two things bit during the B1 kube-state-metrics work, both now encoded in the templates:
 
 - **kube-state-metrics' probes use two different ports.** `/livez` is on the metrics port (8080),
   `/readyz` on the telemetry port (8081). Pointing liveness at 8081 returns 404, the kubelet

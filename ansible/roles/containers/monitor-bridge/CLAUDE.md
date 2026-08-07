@@ -372,6 +372,29 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     pages. Without it one Loki outage fired both at once. Loki being UP but promtail not
     shipping is a different signal Loki Log Ingestion still surfaces. `LOKI_DEPENDENT` is guarded by
     a test against the live `CHECKS` so it can't drift.)
+  - **Cluster Prometheus Reachable** (a `vector(1)` probe against the **k3s cluster's** Prometheus
+    at `prometheus-k8s.local.<domain>` — a SECOND instance on daniel-box, not the one `PROM_URL`
+    points at. Its own gate rather than an arm of `PROM_DEPENDENT`, because they are two instances
+    on two hosts reached by two paths: the Docker Prometheus being up says nothing about whether
+    the cluster one is, and a gate that isn't watching a check's real source reports confidence it
+    doesn't have. Gates `CLUSTER_DEPENDENT`. Empty `CLUSTER_PROMETHEUS_URL` = disabled.)
+  - **k3s Workload Health** (`kube_deployment_status_replicas_unavailable` from kube-state-metrics
+    via the cluster Prometheus — the only monitor the seven routeless k8s workloads have, and the
+    reason the metric exists at all: `registry`, both `cloudflare-ddns` copies, karakeep's
+    `chrome`/`meilisearch`/`time-tagger`, and `n8n-runners`, which executes every workflow's code.
+    Three expose only a ClusterIP (unreachable from daniel-server), four expose **no Service at
+    all**, and none has an ingress route — so their health is a Kubernetes API property, not an
+    HTTP one, and nothing here can probe them directly. **Fails closed on an absent series, and
+    this is the whole point:** `unavailable > 0` returns an empty vector both when every workload
+    is healthy AND when there are no series at all, so the check `count()`s the series FIRST and
+    reports `UNKNOWN, not OK` when the count is missing or below `K8S_MIN_WORKLOADS` (5). Reading
+    the healthy meaning onto both is how a monitor goes green while blind — the shape of the B2
+    transaction cap (2026-08-02) and the gitops-behind defer (2026-08-07). The floor also covers a
+    partially-loaded kube-state-metrics: its ClusterRole is deliberately scoped, so dropping `apps`
+    would take every deployment series away while the pod stays up and Ready. That fault is
+    invisible to the reachability gate above, which is why both exist. Pure
+    `k8s_workloads_verdict()` is unit-tested; `CLUSTER_DEPENDENT` is guarded against the live
+    `CHECKS` and asserted disjoint from the other three skip sets.)
   - **Loki Log Ingestion** (two-arm LogQL freshness against `loki:3100` over `monitoring`, `down`
     if EITHER arm is silent — a silently-dead promtail→Loki pipeline (docker-proxy break,
     positions-file corruption, relabel regression) that Loki's `/ready` Kuma probe stays green
