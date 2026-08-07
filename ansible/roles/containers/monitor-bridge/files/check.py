@@ -317,6 +317,11 @@ B2_USAGE_MAX_PCT = float(_env("B2_USAGE_MAX_PCT", "85"))
 # distinct from B2_USAGE's state.json staleness.
 B2_TREND_METRIC = _env("B2_TREND_METRIC", "kopia_b2_billable_bytes")
 B2_TREND_WINDOW = _env("B2_TREND_WINDOW", "7d")
+# Below this many samples in B2_TREND_WINDOW, predict_linear is extrapolating rather than fitting
+# and its projection is suppressed — see check_b2_trend. node-exporter scrapes at 1m, so a filled
+# 7d window holds ~10000 samples (measured: 10077); 5000 is half a window, enough for a slope that
+# means something while still tripping on the ~61 the cluster copy had at the B5 flip.
+B2_TREND_MIN_SAMPLES = int(_env("B2_TREND_MIN_SAMPLES", "5000"))
 B2_TREND_HORIZON_D = float(_env("B2_TREND_HORIZON_D", "7"))
 # Textfile-freshness guard for the trend gauge. node-exporter serves the last written textfile
 # value on EVERY scrape, so if b2-usage.sh's atomic .prom write fails (mv into a re-rooted/full
@@ -2554,6 +2559,29 @@ def check_b2_trend():
     case where the cron runs but ONLY its .prom write fails: state.json stays fresh (B2_USAGE
     green) while the gauge freezes here.
     """
+    # History-depth guard (slice 3, B5). This is the ONLY check with a multi-day lookback, and
+    # remote-write moves series FORWARD without backfilling — so repointing at the cluster copy
+    # left predict_linear extrapolating 7 days from whatever had accumulated since B3. Measured at
+    # the flip: 61 samples in the cluster's 7d window against 10077 in daniel-server's, i.e. 0.6%
+    # of the data, and the two instances duly disagreed about the projection (5.87GB vs 5.14GB).
+    #
+    # A series-count comparison cannot see this — the counts of *current* series matched exactly.
+    # Depth is a separate property from presence, and only this check cares about it.
+    #
+    # Reports OK rather than DOWN on purpose: the condition is temporary and self-healing (the
+    # window fills ~7 days after B3), so paging for a week would be pure noise, and the absolute
+    # side of the same risk is already covered independently by the B2 Storage Usage check. The
+    # message says plainly that the projection is not to be trusted meanwhile.
+    samples = prom_scalar(
+        "count_over_time(%s[%s])" % (B2_TREND_METRIC, B2_TREND_WINDOW)
+    )
+    if samples is not None and samples < B2_TREND_MIN_SAMPLES:
+        return True, (
+            "B2 trend projection SUPPRESSED — only %d samples in the %s window (need %d). The "
+            "series was remote-written forward without history; this self-heals as the window "
+            "fills. Absolute usage is still covered by the B2 Storage Usage check."
+            % (int(samples), B2_TREND_WINDOW, B2_TREND_MIN_SAMPLES)
+        )
     current = prom_scalar(B2_TREND_METRIC)
     predicted = prom_scalar(
         "predict_linear(%s[%s], %d)"

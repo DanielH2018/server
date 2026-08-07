@@ -3167,6 +3167,33 @@ def test_origin_pin_absent_when_reading_the_docker_prometheus(monkeypatch):
         importlib.reload(check)
 
 
+def test_b2_trend_suppressed_on_shallow_history(monkeypatch):
+    # Repointing at the cluster copy left predict_linear fitting 61 samples of a 7d window, because
+    # remote-write moves series forward and does not backfill. The two instances then disagreed
+    # about the projection. Non-paging on purpose: temporary, self-healing, and the absolute risk
+    # is covered by the separate B2 Storage Usage check.
+    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: 61.0)
+    ok, msg = check.check_b2_trend()
+    assert ok is True
+    assert "SUPPRESSED" in msg
+    assert "61 samples" in msg
+
+
+def test_b2_trend_runs_normally_on_deep_history(monkeypatch):
+    # A filled window must NOT be suppressed — the guard has to stop applying once history exists,
+    # or the projection is off forever.
+    calls = []
+
+    def fake_scalar(q, *a, **k):
+        calls.append(q)
+        return 9000.0 if q.startswith("count_over_time") else 1.0
+
+    monkeypatch.setattr(check, "prom_scalar", fake_scalar)
+    ok, msg = check.check_b2_trend()
+    assert "SUPPRESSED" not in msg
+    assert any(c.startswith("predict_linear") for c in calls)
+
+
 def test_targets_empty_vector_is_down_not_all_clear():
     # THE hole B5 opens. Before the repoint an empty `up` could only mean the queried Prometheus
     # was down, and the PROM_DEPENDENT gate suppressed this check first. Against the cluster copy
