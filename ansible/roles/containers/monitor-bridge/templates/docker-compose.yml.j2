@@ -407,7 +407,12 @@ services:
       # oldest samples while the newest keep flowing, leaving the lag healthy and the copy holed).
       # Overflow tolerance is 0: in normal operation this counter never moves.
       - REMOTE_WRITE_MAX_LAG=300
-      - REMOTE_WRITE_WINDOW=1h
+      # 15m, not 1h. A receiver restart makes the sender replay its backlog and the receiver
+      # reject the overlap it already holds — 9656 "failed" samples with zero retries on one
+      # claude-otel deploy (2026-08-07), while a per-minute count showed no hole in the data at
+      # all. Truthful counter, false conclusion; a 1h window let that hold the check DOWN for an
+      # hour. The rejection arms are additionally graced until the receiver is a full window old.
+      - REMOTE_WRITE_WINDOW=15m
       - REMOTE_WRITE_MAX_FAILED=1000
       - REMOTE_WRITE_MAX_RETRIES=0
       # The sent-timestamp gauge is 0 until the first successful send, so time()-0 is ~1.8e9 and

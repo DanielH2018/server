@@ -3286,11 +3286,52 @@ def test_dual_estate_checks_all_pin_the_origin():
 # --- northbound remote-write freshness (slice 3, B3) -------------------------
 
 
-def _rw(lag, failed=0, retries=0, uptime=9999):
+def _rw(lag, failed=0, retries=0, uptime=9999, receiver_uptime=9999):
     """remote_write_healthy with the thresholds pinned, so each test varies one thing."""
     return check.remote_write_healthy(
-        lag, failed, retries, uptime, 300, "1h", 1000, 0, 300
+        lag, failed, retries, uptime, receiver_uptime, 300, "15m", 1000, 0, 300
     )
+
+
+def test_duration_seconds_parses_prometheus_durations():
+    assert check.duration_seconds("15m") == 900
+    assert check.duration_seconds("1h") == 3600
+    assert check.duration_seconds("90s") == 90
+    assert check.duration_seconds("1d") == 86400
+    for bad in ("", "15", "m", "1y", "abc"):
+        with pytest.raises(ValueError):
+            check.duration_seconds(bad)
+
+
+def test_remote_write_rejections_graced_while_receiver_is_young():
+    # Measured 2026-08-07: one claude-otel deploy produced 9656 "failed" samples with zero
+    # retries, and a per-minute count showed NO hole in the data — the receiver restarted, the
+    # sender replayed its backlog, and the overlap was rejected as already-held. Truthful counter,
+    # false conclusion. Without this the check goes DOWN for a full window after every deploy.
+    ok, msg = _rw(30, failed=9656, receiver_uptime=120)
+    assert ok is True
+    assert "receiver restarted" in msg
+
+
+def test_remote_write_rejections_armed_once_a_window_has_passed():
+    # The grace must expire with the window, or a genuinely rejecting receiver is never reported.
+    ok, msg = _rw(30, failed=9656, receiver_uptime=1000)
+    assert ok is False
+    assert "9656 samples" in msg
+
+
+def test_remote_write_lag_stays_armed_during_the_receiver_grace():
+    # The grace covers ONLY the rejection arms. Lag is what detects genuine non-delivery, so a
+    # restarting receiver must not be able to hide a stalled queue behind it.
+    ok, msg = _rw(900, failed=9656, receiver_uptime=10)
+    assert ok is False
+    assert "behind" in msg
+
+
+def test_remote_write_unreadable_receiver_uptime_does_not_grace():
+    ok, msg = _rw(30, failed=9656, receiver_uptime=None)
+    assert ok is False
+    assert "9656 samples" in msg
 
 
 def test_remote_write_absent_queue_is_down_not_up():

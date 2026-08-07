@@ -579,9 +579,43 @@ REMOTE_WRITE_FAILED_SELECTOR = _env(
 REMOTE_WRITE_RETRIES_SELECTOR = _env(
     "REMOTE_WRITE_RETRIES_SELECTOR", "prometheus_remote_storage_enqueue_retries_total"
 )
-REMOTE_WRITE_WINDOW = _env("REMOTE_WRITE_WINDOW", "1h")
+# 15m, not 1h. A RECEIVER restart makes the sender replay its buffered backlog, and the receiver
+# rejects the overlap it already holds as out-of-order — counted as permanently failed. Measured
+# 2026-08-07: a single claude-otel deploy produced 9656 "failed" samples with ZERO retries (a
+# retryable 5xx would have retried; 0 retries means a non-retryable 4xx, i.e. rejection, not an
+# outage), and a per-minute count of the daniel-server `up` series across the whole window showed
+# no hole at all — every one of the 11 series present every minute. So the counter was truthful
+# and the conclusion "gaps in the cluster copy" was false: those samples were duplicates the
+# receiver already had. A 1h window let one routine deploy hold this DOWN for a full hour.
+REMOTE_WRITE_WINDOW = _env("REMOTE_WRITE_WINDOW", "15m")
 REMOTE_WRITE_MAX_FAILED = float(_env("REMOTE_WRITE_MAX_FAILED", "1000"))
 REMOTE_WRITE_MAX_RETRIES = float(_env("REMOTE_WRITE_MAX_RETRIES", "0"))
+
+# The receiver's own uptime, read from the cluster Prometheus about itself (origin="" = the series
+# with no origin label, i.e. cluster-native). The rejection arms above cannot mean anything until a
+# full window has elapsed since the receiver restarted, because the burst stays inside the window
+# until it ages out — the same reasoning as the b2_trend history guard. The LAG arm is deliberately
+# left armed throughout: it is the arm that detects genuine non-delivery, and it read a healthy 40s
+# through the incident that prompted all this.
+REMOTE_WRITE_RECEIVER_UPTIME_QUERY = _env(
+    "REMOTE_WRITE_RECEIVER_UPTIME_QUERY",
+    'time() - max(process_start_time_seconds{job="prometheus", origin=""})',
+)
+
+
+def duration_seconds(spec):
+    """Seconds in a Prometheus duration like `15m` / `2h` / `90s` / `1d`. Unit-tested.
+
+    Exists so the receiver grace can be derived from REMOTE_WRITE_WINDOW rather than configured
+    beside it — a grace shorter than the window leaves exactly the blind gap this guards against,
+    and two independent knobs is how that regression gets reintroduced.
+    """
+    units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+    spec = spec.strip()
+    if not spec or spec[-1] not in units or not spec[:-1].isdigit():
+        raise ValueError("not a Prometheus duration: %r" % spec)
+    return int(spec[:-1]) * units[spec[-1]]
+
 
 # Restart grace, and not optional: queue_highest_sent_timestamp_seconds is registered at 0 before
 # the first successful send, so `time() - 0` is ~1.8e9 and the FIRST cycle after every `prometheus`
@@ -2755,7 +2789,16 @@ def check_promtail_dropped():
 
 
 def remote_write_healthy(
-    lag, failed, retries, uptime, max_lag, window, max_failed, max_retries, min_uptime
+    lag,
+    failed,
+    retries,
+    uptime,
+    receiver_uptime,
+    max_lag,
+    window,
+    max_failed,
+    max_retries,
+    min_uptime,
 ):
     """Pure: is the northbound remote-write to the cluster Prometheus keeping up? (ok, msg).
 
@@ -2791,6 +2834,16 @@ def remote_write_healthy(
             "remote-write is %.0fs behind (> %.0fs) — the cluster Prometheus is serving stale "
             "data and will keep answering queries while it does" % (lag, max_lag)
         )
+    # The two rejection arms, and only these, are suppressed while the receiver is younger than one
+    # window. A restart makes the sender replay its backlog and the receiver reject the overlap it
+    # already holds; those rejections sit inside the window until they age out. The lag arm above
+    # has already run, so genuine non-delivery is still caught throughout.
+    if receiver_uptime is not None and receiver_uptime < duration_seconds(window):
+        return True, (
+            "receiver restarted %.0fs ago (< the %s window) — its rejection counters still hold "
+            "the replayed-backlog burst, so they are not evidence of loss yet. Delivery is "
+            "current: %.0fs behind." % (receiver_uptime, window, lag)
+        )
     n = failed or 0.0
     if n > max_failed:
         return False, (
@@ -2820,11 +2873,21 @@ def check_remote_write():
         "sum(increase(%s[%s]))" % (REMOTE_WRITE_RETRIES_SELECTOR, REMOTE_WRITE_WINDOW)
     )
     uptime = prom_scalar(REMOTE_WRITE_UPTIME_QUERY)
+    receiver_uptime = (
+        prom_scalar(
+            REMOTE_WRITE_RECEIVER_UPTIME_QUERY,
+            base=CLUSTER_PROM_URL,
+            source="cluster prometheus",
+        )
+        if CLUSTER_PROM_URL
+        else None
+    )
     return remote_write_healthy(
         lag,
         failed,
         retries,
         uptime,
+        receiver_uptime,
         REMOTE_WRITE_MAX_LAG,
         REMOTE_WRITE_WINDOW,
         REMOTE_WRITE_MAX_FAILED,
