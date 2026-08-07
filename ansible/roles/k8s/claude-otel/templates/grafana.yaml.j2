@@ -40,17 +40,15 @@ data:
           nodeGraph:
             enabled: true
       # --- Aliases carrying daniel-server's Grafana uids (slice 3, B4) ------------------
-      # The sixteen dashboards ported from the Docker Grafana reference their datasources by
-      # UID — `EGdsQqhVk` and `bf4q19tuivta8e`, baked into every panel (checked: all 16
-      # bare-string refs in the set are that Prometheus uid, and none reference a datasource
-      # by NAME, so these aliases are free to be named whatever reads clearly). D6's lever is
-      # that a matching uid makes every one of those boards work with no edit at all.
+      # Every dashboard in roles/containers/grafana/files/dashboards references its datasource
+      # by UID — `EGdsQqhVk` and `bf4q19tuivta8e`, baked into each panel; none references one by
+      # NAME, so these aliases are free to be named whatever reads clearly. D6's lever is that a
+      # matching uid makes all of them work here with no edit at all.
       #
-      # ADDITIVE rather than renaming the two above, which is the whole trick here. Retagging
-      # `Prometheus` from uid `prometheus` to `EGdsQqhVk` would instantly break this cluster's
-      # own Claude Code dashboard, which references the current uids in 24 panels. Two
-      # datasources over one backend costs nothing and lets BOTH dashboard sets load
-      # unmodified — which is precisely what B4 asks to prove.
+      # ADDITIVE rather than renaming the two above. The two cluster-native uids are still in
+      # use — `prometheus` is the default datasource and `loki` is what the Tempo datasource's
+      # tracesToLogsV2 points at — so retagging rather than adding would break both. Two
+      # datasources over one backend costs nothing.
       #
       # Names must differ from the two above: Grafana keys update-vs-insert on orgId+name, so
       # reusing `Prometheus` would UPDATE that datasource's uid rather than insert a second.
@@ -77,21 +75,12 @@ data:
   dashboards.yaml: |
     apiVersion: 1
     providers:
-      # This cluster's own Claude Code board, kept on its own provider and its own directory.
-      # foldersFromFilesStructure is false here so `folder:` decides where it lands, unchanged.
-      - name: claude-code
-        orgId: 1
-        folder: "Claude Code"
-        type: file
-        disableDeletion: false
-        updateIntervalSeconds: 30
-        allowUiUpdates: true
-        options:
-          path: /var/lib/grafana/dashboards/claude-code
-          foldersFromFilesStructure: false
-      # The boards ported from daniel-server. foldersFromFilesStructure derives the Grafana
-      # folder from the directory name, so the Apps/Infrastructure/Logs/Networking/Security
-      # layout is reproduced without naming any of them here.
+      # Every board, from roles/containers/grafana/files/dashboards — one provider, because
+      # foldersFromFilesStructure derives the Grafana folder from the directory name and so
+      # reproduces the AI/Apps/Infrastructure/Logs/Networking/Security layout without naming any
+      # of them here. The Claude Code board had its own provider until the two copies were
+      # reconciled (2026-08-07); it now arrives through this one like everything else, which is
+      # why it moved from the "Claude Code" folder to "AI".
       - name: homelab
         orgId: 1
         type: file
@@ -164,8 +153,6 @@ spec:
               mountPath: /etc/grafana/provisioning/datasources
             - name: provisioning-dashboards
               mountPath: /etc/grafana/provisioning/dashboards
-            - name: dashboards
-              mountPath: /var/lib/grafana/dashboards/claude-code
 {% for folder in claude_otel_dashboard_folders %}
             - name: dashboards-{{ folder | lower }}
               mountPath: /var/lib/grafana/dashboards/homelab/{{ folder }}
@@ -202,9 +189,6 @@ spec:
             items:
               - key: dashboards.yaml
                 path: dashboards.yaml
-        - name: dashboards
-          configMap:
-            name: grafana-dashboards
         # One ConfigMap per dashboard folder, not one for all of them. A ConfigMap is capped at
         # 1 MiB and the ported set is ~730 KB, with Infrastructure alone at 538 KB — a single
         # object would fit today and silently stop fitting the first time a large board is

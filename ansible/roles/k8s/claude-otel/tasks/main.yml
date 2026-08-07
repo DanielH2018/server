@@ -21,7 +21,6 @@
       - tempo.yaml
       - middlewares.yaml
       - grafana.yaml
-      - grafana-dashboard.yaml
       - ingressroute.yaml
       # Must follow middlewares.yaml — it references the `rate-limit` Middleware, which
       # Traefik will not resolve across namespaces.

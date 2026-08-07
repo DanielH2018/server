@@ -52,13 +52,15 @@ claude_otel_loki_retention: 744h
 # subdirectories of roles/containers/grafana/files/dashboards, which stays the single source of
 # truth for the JSON — the cluster mounts the same files rather than keeping a second copy.
 #
-# `AI` is deliberately absent. Its only board is claude-code.json, whose dashboard uid
-# (claude-code-otel) is the SAME uid this cluster's own vendored Claude Code board already
-# claims, and the two have diverged. Loading both would let Grafana's provisioner resolve the
-# collision by last-writer-wins, silently, on a 30s timer. Reconciling them is content work with
-# no test and belongs in its own change, not in the batch whose success criterion is that no
-# dashboard was edited.
+# `AI` was excluded during B4 because its claude-code.json claimed the same dashboard uid as this
+# cluster's separately-vendored copy and the two had diverged. Reconciled 2026-08-07: the cluster
+# copy was the superset (30 panels vs 11 — traces, tool activity, hooks, session lifecycle,
+# content), and the one panel unique to the Docker copy turned out to run the identical LogQL
+# query under a title claiming a filter it did not apply. So the cluster copy won on content, was
+# retagged to the daniel-server datasource uids, and now lives with the others in
+# containers/grafana/files/dashboards. The vendored ConfigMap is gone: one file, both Grafanas.
 claude_otel_dashboard_folders:
+  - AI
   - Apps
   - Infrastructure
   - Logs

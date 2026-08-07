@@ -50,6 +50,28 @@
   loop: "{{ claude_otel_dashboard_folders }}"
   become: true
 
+- name: Remove the retired vendored Claude Code dashboard manifest
+  tags: [config]
+  # The manifests role applies its whole directory, so dropping a file from `manifests_files`
+  # only stops it being RE-RENDERED — the previously written copy keeps getting applied on every
+  # deploy, forever. The vendored grafana-dashboard.yaml is gone (its board is now the shared
+  # AI/claude-code.json), so the file and the object it created both have to be removed
+  # explicitly rather than merely un-listed.
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/manifests/claude-otel/grafana-dashboard.yaml
+    state: absent
+  become: true
+
+- name: Remove the retired vendored Claude Code dashboard ConfigMap
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl delete configmap grafana-dashboards
+      --namespace {{ k8s_observability_namespace }} --ignore-not-found
+  become: true
+  register: claude_otel_vendored_cm_removed
+  changed_when: "'deleted' in claude_otel_vendored_cm_removed.stdout"
+
 - name: Stage the shared Grafana dashboards on the node
   tags: [config]
   ansible.builtin.copy:
