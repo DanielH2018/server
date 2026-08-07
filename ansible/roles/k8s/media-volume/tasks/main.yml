@@ -1,6 +1,11 @@
 ---
 # The shared media volume for slice 4's nine workloads. Creates it; does NOT fill it — the
 # 19 G copy is opt-in, see sync.yml.
+#
+# An ordinary deploy reports changed=2, not changed=0, and that is deliberate: the hardlink
+# probe re-runs every time, for the same reason the registry role's self-test does. What it
+# checks is cluster state that can regress without anyone editing this role — a split volume,
+# a claim rebound to something else — so a run that skipped it would prove nothing about today.
 
 # noqa risky-file-permissions: the omitted `mode` is the point — see the comment below.
 - name: Create the media volume directories on the node # noqa risky-file-permissions

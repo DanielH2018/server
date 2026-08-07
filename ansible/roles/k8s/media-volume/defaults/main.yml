@@ -17,6 +17,8 @@ media_volume_claim: media-data
 #      exist, until a pod mounts it. That is a chicken-and-egg for a volume whose whole
 #      purpose in B2 is to be filled BEFORE any workload exists.
 media_volume_storage_class: media-local
+# Its MODE is inherited from daniel-server's containers/data (0755, owner {{ puid }}) and is
+# deliberately not enforced here — see tasks/main.yml for why pinning it breaks the copy.
 media_volume_host_path: /srv/media
 
 # ADVISORY ONLY. This is a directory on the node's ext4 root with no quota behind it, so

@@ -400,6 +400,11 @@ against the new endpoints.
   decide in B4 whether to move the forward early or accept degraded peering meanwhile.
 - **19 G is today's number.** Re-measure before the cutover; the window scales with the delta, not
   the total.
+- **`/srv/media` is a point-in-time copy taken 2026-08-07 20:14 UTC, and nothing reconciles it.**
+  Every byte qbittorrent writes on daniel-server between then and cutover leaves the two trees
+  further apart, silently — the B4 delta sync is what closes the gap, and it is the only thing that
+  does. Not worth monitoring for a coexistence window measured in days, but do not read a green
+  `media-volume` deploy as "the copy is current": an ordinary deploy does not sync at all.
 
 ---
 
