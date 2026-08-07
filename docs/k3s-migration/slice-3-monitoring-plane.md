@@ -665,6 +665,38 @@ of the sender's, chosen nondeterministically by `result[0]`.
   self-healing, paging for a week would be noise, and the absolute side of the same risk already
   has an independent monitor in B2 Storage Usage.
 
+### B5 follow-up — 2026-08-07 — the remote-write check fired, and was half right
+
+An hour after the repoint the new monitor went DOWN for real:
+`remote-write permanently dropped 9736 samples in 1h`. The counter was truthful; the conclusion
+was not.
+
+What settled it, in order. Every failure landed in a **single 5-minute bucket** coinciding with a
+`claude-otel` deploy, and `samples_retried_total` was **zero** — a retryable 5xx would have
+retried, so zero retries means a non-retryable 4xx, i.e. *rejection*, not an outage. A per-minute
+count of the daniel-server `up` series across the window then showed **no hole at all**: 11 of 11
+series present every minute, including the affected bucket. The "failed" samples were duplicates
+the receiver already held, replayed by the sender after the receiver restarted and rejected as
+out-of-order.
+
+So it was a guaranteed page on every deploy that restarts the cluster Prometheus — the kind of
+alarm that gets muted and then misses something real. Two narrow changes: the window drops from
+1 h to **15 m** so a one-off burst ages out instead of holding the check DOWN for an hour, and the
+two *rejection* arms are suppressed while the receiver is younger than one window, since the burst
+necessarily sits inside the window until it ages out (the same reasoning as the `b2_trend` history
+guard).
+
+**The lag arm stays armed throughout, deliberately** — it is the arm that detects genuine
+non-delivery, and it read a healthy 40 s through the entire incident. Suppressing it too would
+have converted a noisy-but-honest check into a blind one.
+
+The grace is *derived* from the window rather than configured beside it: a grace shorter than the
+window leaves exactly the gap it guards against. Confirmed live at the handoff — receiver uptime
+939 s against a 900 s window, with the 15 m counter reading 0 while the 1 h counter still read
+9702. The two numbers cannot drift apart because they come from the same one.
+
+---
+
 ---
 
 ## Batches — vertical, each independently exercisable
