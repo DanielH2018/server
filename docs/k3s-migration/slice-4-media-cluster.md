@@ -81,24 +81,49 @@ If AMD VAAPI cannot be made to work in a pod on this node, the whole slice needs
 transcode, or Jellyfin stays on daniel-server until slice 7). Finding that out after a 19 G data
 migration would be the expensive ordering.
 
-### D2 — `/dev/dri` reaches the pod by hostPath + `supplementalGroups`, not by a device plugin
+### D2 — `/dev/dri` needs a device plugin *(INVERTED by B1, 2026-08-07)*
 
 **Kubernetes has no `devices:` field.** The Compose `devices: - /dev/dri:/dev/dri` has no direct
-translation, and this is the single most mechanical difference in the slice. The options:
+translation, and this is the single most mechanical difference in the slice.
+
+The plan originally chose **hostPath + `supplementalGroups`** as the smallest change, while noting
+that the device cgroup — not file permissions — is what actually decides, and that it had to be
+verified rather than assumed. B1 verified it, and **it does not work.**
+
+Probe result, running the production Jellyfin image as uid 1000 with `supplementalGroups: [993]`:
+
+```
+uid=1000 gid=1000 groups=1000,993
+crw-rw---- 1 root 993 226, 128 /dev/dri/renderD128      <- visible, group matches, mode is rw
+head: cannot open '/dev/dri/renderD128': Operation not permitted
+```
+
+**`Operation not permitted` is EPERM, not EACCES.** A POSIX permission failure would say
+"Permission denied". EPERM, with the right group and a readable mode, is the **cgroup v2 eBPF
+device filter** refusing the container (`stat -fc %T /sys/fs/cgroup` → `cgroup2fs`; there is no
+`devices.list` to read on v2). hostPath bind-mounts the *directory*, so the node appears — but
+nothing ever declared the device to the CRI, so it is absent from the container's device allowlist
+and every `open()` fails.
+
+This is a property of Kubernetes, not of this cluster, and no amount of GID or permission tuning
+changes it.
 
 | Option | Verdict |
 |---|---|
-| `hostPath: /dev/dri` + `securityContext.supplementalGroups: [993]` | **Chosen.** Smallest change, no extra component, matches how the repo already thinks about `/dev/dri` |
-| A GPU device plugin (Intel/AMD) | Rejected for now — a DaemonSet and a scheduling extension to solve a problem one node and one hostPath already solve |
-| `privileged: true` | Rejected outright — it grants the whole device cgroup to serve one render node |
+| A **device plugin** advertising `/dev/dri` as an extended resource | **Chosen.** The only non-privileged path: the plugin declares the device through the CRI, which is what adds it to the cgroup allowlist. `smarter-device-manager` exposes arbitrary `/dev` nodes and is the usual choice for exactly this; a vendor AMD plugin is the alternative |
+| `hostPath` + `supplementalGroups` | **Disproven by B1.** Device visible, open denied |
+| `privileged: true` | Rejected — grants the whole device cgroup to serve one render node |
 
-**993 is a host-specific GID and must be treated as one.** It is `render` on daniel-box; nothing
-guarantees the same number elsewhere, and daniel-server joining at slice 7 is exactly when a
-hardcoded 993 would become wrong. Put it in `host_vars`, not in the manifest.
+**The GID still matters, just not on its own.** `render` is **993** on daniel-box, and it is
+host-specific: nothing guarantees the number elsewhere, and daniel-server joining at slice 7 is
+exactly when a hardcoded 993 would become wrong. It belongs in `host_vars`. A device plugin gets
+the container past the cgroup; group membership is still what gets it past the file mode.
 
-**Verify rather than assume that a hostPath device node is usable from a non-privileged pod.** The
-device cgroup, not the file permissions, is what decides — and this session's read-only kubeconfig
-cannot create a pod to test it. It is the first thing B1 must establish.
+**Good news from the same probe:** the driver is *not* the problem. The production image already
+ships `radeonsi_drv_video.so` in both `/usr/lib/x86_64-linux-gnu/dri` and
+`/usr/lib/jellyfin-ffmpeg/lib/dri`, alongside the Intel `iHD`/`i965` ones. So once the device is
+reachable, the AMD VAAPI path has the driver it needs — which removes one of the slice's open
+questions and narrows the remaining risk to the plugin.
 
 ### D3 — The nine cut over in one window, not service by service
 
@@ -193,16 +218,22 @@ playback. Treat "the pod is Running" as meaning nothing at all here.
 
 ## Batches — vertical, each independently exercisable
 
-### B1 — Prove VAAPI in a pod, with no data moved
+### B1 — Prove VAAPI in a pod, with no data moved *(partially done 2026-08-07)*
 
-A throwaway pod on daniel-box: hostPath `/dev/dri`, `supplementalGroups: [993]`, a small sample
-file, one `ffmpeg -hwaccel vaapi` transcode.
+A throwaway pod on daniel-box running the production Jellyfin image as a non-root user, one
+`ffmpeg -init_hw_device vaapi` encode. `-init_hw_device` rather than `-hwaccel` on purpose: it
+fails loudly when VAAPI is unavailable instead of silently falling back to software.
 
-**Prove it:** the transcode completes and `radeontop`/`amdgpu_top` shows the VCN engine busy during
-it — not merely that ffmpeg exited 0, which it will do after silently falling back to software.
-Record the working device path, GID and driver package.
+**Done so far — and it inverted D2.** hostPath + `supplementalGroups` gets the device *visible* to
+a non-root pod but not *openable*: `Operation not permitted`, which is the cgroup v2 device filter,
+not permissions. Also established: the image already ships `radeonsi_drv_video.so`, so the driver
+is not a blocker.
 
-**If this fails, stop and re-plan.** Everything after it assumes hardware transcode on this node.
+**Still to prove, once the device plugin lands:** the encode completes *and* the VCN engine shows
+busy — not merely that ffmpeg exited 0.
+
+**If VAAPI still fails with the device reachable, stop and re-plan.** Everything after this assumes
+hardware transcode on this node.
 
 ### B2 — Media volume and a first bulk copy, online
 
@@ -291,11 +322,12 @@ against the new endpoints.
 
 ## Unverified — resolve during execution, not by assuming
 
-- **Whether a non-privileged pod can use a hostPath `/dev/dri`** on this node (D2). The device
-  cgroup decides, not file permissions. This session's kubeconfig is read-only and could not test
-  it. B1's first job.
-- **Which VAAPI driver package the Jellyfin and tdarr images ship for AMD**, and whether the
-  linuxserver images need a mod equivalent to the Intel one they currently use.
+- ~~Whether a non-privileged pod can use a hostPath `/dev/dri`~~ — **answered 2026-08-07: no.**
+  EPERM from the cgroup v2 device filter. D2 inverted to a device plugin.
+- ~~Which VAAPI driver the Jellyfin image ships for AMD~~ — **answered: `radeonsi_drv_video.so` is
+  already present.** Still unverified for the **tdarr** image, which is a different base.
+- **Which device plugin, and what it costs.** Most run a privileged DaemonSet; the question is
+  whether that is an acceptable trade for keeping the *workloads* unprivileged.
 - **How long a delta rsync takes** once the bulk copy is warm (B2). This is the cutover window and
   it should be a measured number before B4 is scheduled.
 - **Whether `local-path` on daniel-box has an eviction/size policy** that a growing media library
