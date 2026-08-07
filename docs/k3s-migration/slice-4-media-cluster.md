@@ -604,6 +604,44 @@ symlinks resolve **inside Jellyfin's namespace** (the D4 double-mount, verified 
 from the host), and `monitor-bridge`'s `arr_queue` / `janitorr` / `fake_remux` checks stay green
 against the new endpoints.
 
+#### Open: monitor-bridge's \*arr checks are still DOWN
+
+The cutover moved the three \*arrs off the `media` Docker network, so `SONARR_URL`,
+`RADARR_URL` and `PROWLARR_URL` stopped resolving. Repointed at the `-k8s` names — the suffixed
+ones, not the bridged `*.local` ones, which resolve to daniel-server and are unreachable from a
+container on that host (same-bridge hairpin NAT).
+
+**DNS is fixed** (Pi-hole now answers `sonarr-k8s.local` with the cluster VIP rather than the
+`*.local` wildcard pointing at daniel-server) and the three `<svc>-monitoring` IngressRoutes
+exist. **The routes do not win.** monitor-bridge's requests still match the service's plain
+`Host(...)` router and come back as Authelia 401s, so `arr_queue` and `prowlarr_indexers` remain
+DOWN in Kuma.
+
+Ruled out, in order:
+
+| Hypothesis | Test | Result |
+|---|---|---|
+| Priority | raised the route to `priority: 1000` | no change |
+| ClientIP matcher | removed it, then re-added as whole-LAN `10.0.0.0/24` | no change |
+| Traefik reconciliation lag | retested several minutes later | no change |
+| The pattern itself is broken | called the two existing monitoring routes from the same container | **both work** — `n8n-k8s/api/v1/workflows` returns the app's own 401, `prometheus-k8s/api/v1/query` returns 200 |
+
+The live object is structurally identical to `n8n-monitoring` — same shape of rule, same
+`priority: 100`, same `rate-limit` middleware, same namespace, a main route with no explicit
+priority in both cases. The difference has not been found, and guessing further was the wrong
+use of the window.
+
+Worth noting what the access log says, because it is the most confusing part: for the failing
+requests Traefik logs `ClientHost: 10.0.0.161` — the address the ClientIP matcher was supposed
+to admit — while selecting `RouterName: homelab-prowlarr-…`, the main router. So the value the
+log calls the client and the value the matcher compares are not obviously the same thing here.
+
+**Impact while it is open:** two Kuma monitors are red. Nothing else depends on them, and the
+underlying services are healthy — the cutover's own checks all pass. **Next step:** compare the
+rendered `n8n` and `prowlarr` IngressRoute objects field by field (not just the route rules),
+and check Traefik's own router list (`/api/http/routers`) for what it thinks the priorities and
+match order are, rather than inferring from the access log.
+
 ---
 
 ## Hazards
