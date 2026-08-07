@@ -1,0 +1,67 @@
+---
+# Advertises the AMD render node as the schedulable resource `devic.es/dri` (slice 4, B1).
+#
+# kube-system rather than the workload namespace: extended resources are a NODE property, not a
+# namespace one, and every namespace's pods can request this once it is advertised.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dri-device-plugin
+  namespace: kube-system
+  labels:
+    app: dri-device-plugin
+spec:
+  selector:
+    matchLabels:
+      app: dri-device-plugin
+  template:
+    metadata:
+      labels:
+        app: dri-device-plugin
+    spec:
+      # Losing this plugin makes jellyfin and tdarr unschedulable rather than merely degraded, so
+      # it must not be the thing evicted to make room for them.
+      priorityClassName: system-node-critical
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: generic-device-plugin
+          image: {{ dri_device_plugin_image }}
+          args:
+            - --device
+            - |
+              name: dri
+              groups:
+                - count: {{ dri_device_plugin_count }}
+                  paths:
+                    - path: /dev/dri/renderD128
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            # The ONE privileged component in the media stack, and the reason none of the nine
+            # media workloads has to be. It registers a gRPC socket in the kubelet's
+            # device-plugin directory and hands the kubelet device file descriptors; both need
+            # privilege. Consumers then just request `devic.es/dri` and stay unprivileged.
+            privileged: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 20Mi
+            limits:
+              cpu: 100m
+              memory: 60Mi
+          volumeMounts:
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+            - name: dev
+              mountPath: /dev
+      volumes:
+        # The kubelet's plugin-registration socket directory — how the plugin announces itself.
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+        - name: dev
+          hostPath:
+            path: /dev

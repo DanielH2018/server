@@ -44,6 +44,12 @@ containers_list:
   # collector, Loki, Prometheus and Tempo are all reached on the node's loopback via
   # hostPort rather than the ingress — the three query backends so that `otelq`, which
   # hardcodes 127.0.0.1, can read them from the host. None of them has an ingress route.
+  # Cluster infrastructure, not a service: makes /dev/dri/renderD128 schedulable as
+  # `devic.es/dri` so jellyfin and tdarr can request it without being privileged (slice 4, B1).
+  # No port/hostname — nothing routes to it.
+  - name: dri-device-plugin
+    platform: k8s
+
   - name: claude-otel
     platform: k8s
     hostname: "grafana{{ k8s_hostname_suffix }}"

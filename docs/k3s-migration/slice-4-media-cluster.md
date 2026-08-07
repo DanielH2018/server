@@ -218,22 +218,47 @@ playback. Treat "the pod is Running" as meaning nothing at all here.
 
 ## Batches — vertical, each independently exercisable
 
-### B1 — Prove VAAPI in a pod, with no data moved *(partially done 2026-08-07)*
+### B1 done — 2026-08-07 — and it inverted D2 on the way
 
-A throwaway pod on daniel-box running the production Jellyfin image as a non-root user, one
+A throwaway pod running the production Jellyfin image as a non-root user, one
 `ffmpeg -init_hw_device vaapi` encode. `-init_hw_device` rather than `-hwaccel` on purpose: it
 fails loudly when VAAPI is unavailable instead of silently falling back to software.
 
-**Done so far — and it inverted D2.** hostPath + `supplementalGroups` gets the device *visible* to
-a non-root pod but not *openable*: `Operation not permitted`, which is the cgroup v2 device filter,
-not permissions. Also established: the image already ships `radeonsi_drv_video.so`, so the driver
-is not a blocker.
+**First attempt failed, and that was the point of running it first.** hostPath +
+`supplementalGroups` made the device *visible* but not *openable* — `Operation not permitted`,
+which is EPERM from the cgroup v2 device filter, not a permissions problem. D2 inverted to a device
+plugin as a direct result. Had this been discovered after the 19 G migration it would have been the
+expensive ordering.
 
-**Still to prove, once the device plugin lands:** the encode completes *and* the VCN engine shows
-busy — not merely that ffmpeg exited 0.
+**Second attempt, with `generic-device-plugin` advertising the render node as `devic.es/dri`:**
 
-**If VAAPI still fails with the device reachable, stop and re-plan.** Everything after this assumes
-hardware transcode on this node.
+```
+OPEN OK — the device cgroup now permits this container
+vainfo: Driver version: Mesa Gallium driver 25.0.7 for AMD Radeon 780M Graphics (radeonsi, phoenix, ACO)
+      VAProfileH264High     : VAEntrypointEncSlice
+      VAProfileHEVCMain10   : VAEntrypointEncSlice
+      VAProfileAV1Profile0  : VAEntrypointEncSlice
+frame=  150 fps=0.0 q=-0.0 time=00:00:04.96 speed=10.9x
+```
+
+Five seconds of 1080p30 encoded at **10.9× realtime**, with H.264, HEVC Main10 **and AV1** encode
+entrypoints available — AV1 encode being something the outgoing Intel XE part does not offer, so
+this is a capability gain rather than only a migration.
+
+**Shipped as `roles/k8s/dri-device-plugin`**, image pinned by digest to exactly what the probe
+validated, deploy idempotent at `changed=0`. The role asserts the node is *advertising* the
+resource rather than merely that the DaemonSet is Running — without that, the plugin can be healthy
+while jellyfin and tdarr sit Pending forever, unschedulable for a resource nothing offers.
+
+**Two things worth carrying into B5/B6:**
+
+- The plugin injects **only** `renderD128`. `card0` is no longer in the container at all, which is
+  tighter isolation than the hostPath approach would have given — worth keeping rather than
+  "fixing" if something later expects `card0`.
+- `Failed to create /root/.cache for shader cache (Permission denied)` — cosmetic, and the encode
+  works regardless, but `HOME` is `/root` while the container runs as uid 1000. Point
+  `XDG_CACHE_HOME` at a writable path in the real manifests so the shader cache is not disabled on
+  every start.
 
 ### B2 — Media volume and a first bulk copy, online
 
@@ -326,8 +351,9 @@ against the new endpoints.
   EPERM from the cgroup v2 device filter. D2 inverted to a device plugin.
 - ~~Which VAAPI driver the Jellyfin image ships for AMD~~ — **answered: `radeonsi_drv_video.so` is
   already present.** Still unverified for the **tdarr** image, which is a different base.
-- **Which device plugin, and what it costs.** Most run a privileged DaemonSet; the question is
-  whether that is an acceptable trade for keeping the *workloads* unprivileged.
+- ~~Which device plugin, and what it costs~~ — **answered: `generic-device-plugin`**, one
+  privileged DaemonSet holding the privilege in a single auditable place so all nine media
+  workloads stay unprivileged. Approved and shipped.
 - **How long a delta rsync takes** once the bulk copy is warm (B2). This is the cutover window and
   it should be a measured number before B4 is scheduled.
 - **Whether `local-path` on daniel-box has an eviction/size policy** that a growing media library

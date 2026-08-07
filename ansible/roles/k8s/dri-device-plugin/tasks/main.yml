@@ -1,0 +1,61 @@
+---
+# Makes /dev/dri/renderD128 schedulable as `devic.es/dri` (slice 4, B1).
+#
+# WHY THIS EXISTS AT ALL, since a hostPath looks simpler and was the original plan: Kubernetes has
+# no Compose-style `devices:` field, and a hostPath mount of /dev/dri is NOT enough. Measured
+# 2026-08-07 — the device node appears in the container with the right group and mode, and every
+# open() still fails with EPERM, because cgroup v2 governs device access via an eBPF filter and
+# nothing had declared the device to the CRI. A device plugin is what declares it, which is what
+# populates the allowlist. See docs/k3s-migration/slice-4-media-cluster.md D2.
+#
+# It is also the only privileged component in the media stack, and deliberately so: it holds the
+# privilege in one small auditable DaemonSet instead of spreading it across long-running media
+# services. Consumers stay unprivileged and just request the resource.
+- name: Render and apply the DRI device plugin
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: dri-device-plugin
+    manifests_files:
+      - daemonset.yaml
+    manifests_rollout: ''
+
+- name: Wait for the device plugin to roll out
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n kube-system rollout status ds/dri-device-plugin --timeout=180s
+  become: true
+  changed_when: false
+
+- name: Read back the advertised device resource
+  tags: [deploy]
+  # NOT `-o jsonpath`: escaping the dot in `devic.es/dri` needs a backslash that does not survive
+  # the YAML -> Ansible -> argv path. It arrived as `devic.es/dri`, which jsonpath reads as three
+  # separate keys and quietly returns empty — a false negative that looked exactly like a broken
+  # plugin. Match on the whole allocatable map instead.
+  ansible.builtin.shell:
+    # pipefail so a kubectl failure surfaces instead of being masked by grep's exit status.
+    executable: /bin/bash
+    cmd: >-
+      set -o pipefail &&
+      k3s kubectl get node {{ inventory_hostname }} -o json
+      | grep -o '"devic.es/dri": *"[0-9]*"'
+  become: true
+  register: dri_plugin_allocatable
+  changed_when: false
+  retries: 24
+  delay: 5
+  until: dri_plugin_allocatable.stdout | default('') | length > 0
+
+- name: Fail if the node is not advertising the render device
+  tags: [deploy]
+  # A running DaemonSet is not the property that matters — the node advertising the resource is.
+  # Without this the plugin can be healthy while jellyfin/tdarr sit Pending forever, unschedulable
+  # for a resource nothing offers.
+  ansible.builtin.assert:
+    that: dri_plugin_allocatable.stdout | length > 0
+    fail_msg: >-
+      {{ inventory_hostname }} is not advertising devic.es/dri. Any workload requesting it will
+      stay Pending.
+    quiet: true

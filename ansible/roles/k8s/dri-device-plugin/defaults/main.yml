@@ -1,0 +1,19 @@
+---
+# generic-device-plugin advertises arbitrary /dev nodes as schedulable extended resources.
+# Chosen over the vendor AMD plugin (which targets ROCm compute, not the render node VAAPI uses)
+# and over smarter-device-manager (same idea, larger config surface).
+# Pinned by digest, Renovate-trackable. This is the exact image the B1 probe validated the
+# whole path against — VAAPI encode at 10.9x realtime — so the version that was proven is
+# the version that ships.
+# `:latest` plus a digest, not a version tag, because upstream publishes no version tags at all
+# — 100 tags, all `latest` or a commit SHA, zero semver (checked against the ghcr API
+# 2026-08-07). The digest is what actually pins: it is the exact image the B1 probe validated
+# the whole VAAPI path against, at 10.9x realtime. The `:latest` is there so Renovate's
+# k8s-defaults manager matches the line and can offer digest bumps — a digest-only pin slips
+# its regex and would age forever with no update signal, which the repo's own guard test
+# (test_every_k8s_role_image_is_renovate_tracked) refuses.
+dri_device_plugin_image: ghcr.io/squat/generic-device-plugin:latest@sha256:dc192e164c69b03f156765793a1be62ca437709ae477b27ca7d8f3dcf5021576
+
+# How many pods may hold the render node at once. It is one physical device; this is a scheduling
+# allowance, not a hardware fact — jellyfin and tdarr both want it, and the GPU multiplexes fine.
+dri_device_plugin_count: 4
