@@ -10,6 +10,7 @@ and the Kopia /api/v1/sources age/error extraction. The HTTP glue is exercised l
 via `check.py --once` at deploy time.
 """
 
+import importlib
 import os
 import re
 import time
@@ -303,6 +304,9 @@ def test_cpu_throttle_below_cores_floor_is_ok(monkeypatch):
 
 def test_targets_names_down_target(monkeypatch):
     vec = [({"job": "node"}, 1.0), ({"job": "cadvisor"}, 0.0)]
+    # Floor lowered so this keeps testing what it was written for — which job gets named — rather
+    # than tripping the separate "estate vanished" guard on a deliberately tiny fixture.
+    monkeypatch.setattr(check, "TARGETS_MIN", 1)
     monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vec)
     ok, msg = check.check_targets_down()
     assert not ok
@@ -312,6 +316,7 @@ def test_targets_names_down_target(monkeypatch):
 
 def test_targets_all_up_is_ok(monkeypatch):
     vec = [({"job": "node"}, 1.0), ({"job": "cadvisor"}, 1.0)]
+    monkeypatch.setattr(check, "TARGETS_MIN", 1)
     monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vec)
     ok, _ = check.check_targets_down()
     assert ok
@@ -3115,6 +3120,102 @@ def test_k8s_workloads_names_the_offenders():
     assert ok is False
     # Sorted, so the message is stable rather than dependent on Prometheus' series order.
     assert "n8n-runners(1), registry(2)" in msg
+
+
+# --- estate pinning once one Prometheus holds two estates (slice 3, B5) ------
+
+
+def test_origin_sel_is_empty_without_a_pin(monkeypatch):
+    # Against the Docker Prometheus there is no `origin` label at all — external_labels apply on
+    # remote-write and never to local storage — so a pin there would select NOTHING and read as
+    # healthy. Empty must stay empty.
+    monkeypatch.setattr(check, "PROM_ORIGIN", "")
+    assert check.origin_sel() == ""
+    assert check.origin_sel('name!=""') == '{name!=""}'
+
+
+def test_origin_sel_appends_the_pin(monkeypatch):
+    monkeypatch.setattr(check, "PROM_ORIGIN", 'origin="daniel-server"')
+    assert check.origin_sel() == '{origin="daniel-server"}'
+    assert check.origin_sel('name!=""') == '{name!="", origin="daniel-server"}'
+
+
+def test_origin_pin_derives_from_the_prometheus_url(monkeypatch):
+    # THE regression this guards. PROM_ORIGIN is derived rather than configured precisely so it
+    # cannot drift out of lockstep with PROMETHEUS_URL: pointing one at the cluster and forgetting
+    # the other selects nothing, which every one of these checks decodes as healthy.
+    monkeypatch.setenv("PROMETHEUS_URL", "https://prom-k8s.example")
+    monkeypatch.setenv("CLUSTER_PROMETHEUS_URL", "https://prom-k8s.example")
+    monkeypatch.delenv("PROM_ORIGIN", raising=False)
+    reloaded = importlib.reload(check)
+    try:
+        assert reloaded.PROM_ORIGIN == 'origin="daniel-server"'
+    finally:
+        monkeypatch.undo()
+        importlib.reload(check)
+
+
+def test_origin_pin_absent_when_reading_the_docker_prometheus(monkeypatch):
+    monkeypatch.setenv("PROMETHEUS_URL", "http://prometheus:9090")
+    monkeypatch.setenv("CLUSTER_PROMETHEUS_URL", "https://prom-k8s.example")
+    monkeypatch.delenv("PROM_ORIGIN", raising=False)
+    reloaded = importlib.reload(check)
+    try:
+        assert reloaded.PROM_ORIGIN == ""
+    finally:
+        monkeypatch.undo()
+        importlib.reload(check)
+
+
+def test_targets_empty_vector_is_down_not_all_clear():
+    # THE hole B5 opens. Before the repoint an empty `up` could only mean the queried Prometheus
+    # was down, and the PROM_DEPENDENT gate suppressed this check first. Against the cluster copy
+    # the gate passes (that Prometheus is fine) while `up{origin="daniel-server"}` is empty, and
+    # the old code returned "all 0 targets up".
+    ok, msg = check.targets_verdict([], 5)
+    assert ok is False
+    assert "UNKNOWN" in msg
+
+
+def test_targets_below_floor_is_down():
+    vec = [({"job": "node"}, 1.0), ({"job": "cadvisor"}, 1.0)]
+    ok, msg = check.targets_verdict(vec, 5)
+    assert ok is False
+    assert "below the floor" in msg
+
+
+def test_targets_names_down_jobs_above_the_floor():
+    vec = [({"job": "node"}, 0.0)] + [({"job": "j%d" % i}, 1.0) for i in range(5)]
+    ok, msg = check.targets_verdict(vec, 5)
+    assert ok is False
+    assert "1 target(s) down: node" in msg
+
+
+def test_targets_all_up_above_the_floor():
+    vec = [({"job": "j%d" % i}, 1.0) for i in range(11)]
+    ok, msg = check.targets_verdict(vec, 5)
+    assert ok is True
+    assert msg == "all 11 targets up"
+
+
+def test_dual_estate_checks_all_pin_the_origin():
+    # The five checks whose metrics genuinely exist in BOTH estates (container_start_time_seconds,
+    # container_oom_events_total, the container_cpu_cfs_* pair, and `up`). If a new call site is
+    # added to one of these without origin_sel, it widens to the whole homelab the moment
+    # PROMETHEUS_URL moves — and reports k8s pods as daniel-server offenders.
+    source = Path(check.__file__).read_text()
+    for metric in (
+        "container_start_time_seconds",
+        "container_oom_events_total",
+        "container_cpu_cfs_throttled_periods_total",
+        "container_cpu_cfs_periods_total",
+        "container_cpu_cfs_throttled_seconds_total",
+    ):
+        # A hardcoded `{` straight after the metric name means the matchers bypassed origin_sel.
+        assert metric + "{" not in source, (
+            "%s uses a literal label block; it must go through origin_sel() so the estate pin "
+            "is applied" % metric
+        )
 
 
 # --- northbound remote-write freshness (slice 3, B3) -------------------------

@@ -378,6 +378,50 @@ B2_PROBE_INTERVAL_S = float(_env("B2_PROBE_INTERVAL_S", "1800"))
 # /api/v1/query. Not the ClusterIP (unreachable from this host) and not the node's :9090, which is
 # pinned to the cluster node's loopback. Empty = disabled (stays up), like N8N_API_KEY.
 CLUSTER_PROM_URL = _env("CLUSTER_PROMETHEUS_URL", "").rstrip("/")
+
+# Which estate the host-health checks mean, when one Prometheus holds two (slice 3, B5).
+#
+# Since B3 the cluster Prometheus carries daniel-server's whole TSDB alongside its own, tagged with
+# `origin` (Prometheus external_labels). Three metric families genuinely exist on BOTH sides —
+# measured 2026-08-07: container_start_time_seconds (99 cluster-native / 53 here),
+# container_memory_failcnt and the container_cpu_cfs_* pair, plus `up` (5 / 11). So the moment
+# PROMETHEUS_URL points at the cluster, restarts / oom / cpu / janitorr / targets silently widen
+# from "daniel-server's containers" to "every container in the homelab", and would start naming k8s
+# pods as offenders. The other seven PROM_DEPENDENT checks read metrics only this host produces
+# (node_*, traefik_*, kopia_b2_*, promtail_*) and need no pin.
+#
+# `{name!=""}` does NOT already scope this, which is the obvious assumption and a wrong one: the
+# kubelet's cAdvisor emits `name` too, so 99 cluster-native series survive that filter.
+#
+# DERIVED, not configured. The pin is required when reading the cluster copy and WRONG when
+# reading the Docker instance — whose own storage has no `origin` label at all, because
+# external_labels are applied on remote-write and never to local queries. A compose variable that
+# had to be flipped in lockstep with PROMETHEUS_URL is precisely the drift this avoids: pointing
+# one at the cluster and forgetting the other would silently select nothing and read as healthy.
+# The _env override stays so a third estate is not blocked by the derivation.
+PROM_ORIGIN = _env(
+    "PROM_ORIGIN",
+    'origin="daniel-server"' if PROM_URL and PROM_URL == CLUSTER_PROM_URL else "",
+)
+
+# Floor below which the `up` vector is treated as missing rather than clean — see
+# targets_verdict. daniel-server scrapes 11 jobs; 5 leaves room for a couple of legitimately
+# retired exporters without ever getting close to the "estate vanished" case this guards.
+TARGETS_MIN = int(_env("TARGETS_MIN", "5"))
+
+
+def origin_sel(*matchers):
+    """A `{...}` label-matcher block: the given matchers plus the origin pin, when one applies.
+
+    Returns "" when there is nothing to select on, so `"up%s" % origin_sel()` is a bare `up`
+    against the Docker Prometheus and `up{origin="daniel-server"}` against the cluster copy.
+    """
+    parts = [m for m in matchers if m]
+    if PROM_ORIGIN:
+        parts.append(PROM_ORIGIN)
+    return "{%s}" % ", ".join(parts) if parts else ""
+
+
 # The floor below which the deployment series is treated as missing rather than healthy. THE
 # FAILURE THIS EXISTS TO PREVENT: an absent series makes `unavailable > 0` return an empty vector,
 # which reads exactly like "nothing is unavailable" — green, silent, and wrong, the same shape as
@@ -537,9 +581,14 @@ REMOTE_WRITE_MAX_RETRIES = float(_env("REMOTE_WRITE_MAX_RETRIES", "0"))
 # (a graced check must still reach its eval path), and this check is Prom-dependent. So the gate
 # is the sender's own uptime instead, mirroring janitorr's container_start_time_seconds gate.
 # If the uptime series is missing we do NOT grace — an unreadable gate must not suppress an alarm.
+# Estate-pinned (B5). process_start_time_seconds is dual-estate — measured 2026-08-07: 1
+# cluster-native series plus 9 from here — and BOTH Prometheus instances self-scrape as
+# job="prometheus". Unpinned, this matches two series once PROMETHEUS_URL points at the cluster
+# and prom_scalar takes whichever came first, so the grace would key off the CLUSTER's uptime
+# rather than the sender's. `max` collapses the remaining per-job series deterministically.
 REMOTE_WRITE_UPTIME_QUERY = _env(
     "REMOTE_WRITE_UPTIME_QUERY",
-    'time() - process_start_time_seconds{job="prometheus"}',
+    "time() - max(process_start_time_seconds%s)" % origin_sel('job="prometheus"'),
 )
 REMOTE_WRITE_MIN_UPTIME = float(_env("REMOTE_WRITE_MIN_UPTIME", "300"))
 
@@ -1091,7 +1140,8 @@ def check_restarts():
     Catches crash-loops that an intermittent up-check can miss.
     """
     vec = prom_vector(
-        'changes(container_start_time_seconds{name!=""}[%s])' % RESTART_WINDOW
+        "changes(container_start_time_seconds%s[%s])"
+        % (origin_sel('name!=""'), RESTART_WINDOW)
     )
     offenders = _top_offenders(vec, "name", lambda v: v > RESTART_MAX)
     if offenders:
@@ -1112,7 +1162,8 @@ def check_oom():
     doesn't expose container_oom_events_total the query is empty and this stays green.
     """
     vec = prom_vector(
-        'sum(increase(container_oom_events_total{name!=""}[%s])) by (name)' % OOM_WINDOW
+        "sum(increase(container_oom_events_total%s[%s])) by (name)"
+        % (origin_sel('name!=""'), OOM_WINDOW)
     )
     offenders = _top_offenders(vec, "name", lambda v: v > 0)
     if offenders:
@@ -1155,16 +1206,17 @@ def check_cpu_throttle():
     the evidence stays in the bridge log without paging. A clean cycle resets the streak.
     """
     global _cpu_breach_streak
+    sel = origin_sel('name!=""')
     ratio_vec = prom_vector(
-        'sum(rate(container_cpu_cfs_throttled_periods_total{name!=""}[%s])) by (name) '
-        '/ sum(rate(container_cpu_cfs_periods_total{name!=""}[%s])) by (name)'
-        % (CPU_WINDOW, CPU_WINDOW)
+        "sum(rate(container_cpu_cfs_throttled_periods_total%s[%s])) by (name) "
+        "/ sum(rate(container_cpu_cfs_periods_total%s[%s])) by (name)"
+        % (sel, CPU_WINDOW, sel, CPU_WINDOW)
     )
     lost_cores = dict(
         (m.get("name", "?"), v)
         for m, v in prom_vector(
-            'sum(rate(container_cpu_cfs_throttled_seconds_total{name!=""}[%s])) by (name)'
-            % CPU_WINDOW
+            "sum(rate(container_cpu_cfs_throttled_seconds_total%s[%s])) by (name)"
+            % (sel, CPU_WINDOW)
         )
     )
     threshold = CPU_THROTTLE_PCT / 100.0
@@ -1218,13 +1270,35 @@ def check_prometheus():
     return True, "Prometheus reachable"
 
 
-def check_targets_down():
-    """Any Prometheus scrape target reporting up==0 (monitoring going blind)."""
-    vec = prom_vector("up")
+def targets_verdict(vec, min_targets):
+    """Pure: (ok, msg) from an `up` vector, failing closed when too few targets are visible.
+
+    THE HOLE THIS CLOSES, opened by B5. Before the repoint an empty `up` could only mean the
+    Prometheus being queried was down, and the PROM_DEPENDENT gate suppressed this check before it
+    ran. Pointed at the cluster copy those two facts come apart: the gate probes the CLUSTER, which
+    is up and answering, while `up{origin="daniel-server"}` goes empty the moment daniel-server's
+    Prometheus stops remote-writing. `len(down) == 0` is then trivially true and this reports
+    "all 0 targets up" — green, and blind to an entire estate having vanished.
+
+    Same fail-closed shape as the k8s workload floor: count first, and treat "fewer series than
+    could possibly be right" as UNKNOWN rather than healthy. This check is also the sentinel for
+    the other estate-pinned checks — restarts/oom/cpu legitimately return empty when nothing is
+    wrong, so they cannot tell "quiet" from "gone", and this one can.
+    """
+    if len(vec) < min_targets:
+        return False, (
+            "only %d scrape targets visible, below the floor of %d — the metrics estate is "
+            "missing, so target health is UNKNOWN, not OK" % (len(vec), min_targets)
+        )
     down = sorted({m.get("job") or m.get("instance") or "?" for m, v in vec if v == 0})
     if down:
         return False, "%d target(s) down: %s" % (len(down), ", ".join(down))
     return True, "all %d targets up" % len(vec)
+
+
+def check_targets_down():
+    """Any Prometheus scrape target reporting up==0 (monitoring going blind)."""
+    return targets_verdict(prom_vector("up%s" % origin_sel()), TARGETS_MIN)
 
 
 def check_traefik_5xx():
@@ -3034,7 +3108,7 @@ def check_janitorr():
     """Loki+Prometheus janitorr cleanup-error watchdog (see janitorr_errors_ok / the JANITORR_*
     config block). Prom-dependent (uptime gate) AND Loki-dependent (error count)."""
     uptime_s = prom_scalar(
-        'time() - max(container_start_time_seconds{name="janitorr"})'
+        "time() - max(container_start_time_seconds%s)" % origin_sel('name="janitorr"')
     )
     window_s = parse_duration(JANITORR_WINDOW)
     grace_s = JANITORR_STARTUP_GRACE_S
@@ -3311,7 +3385,7 @@ def run_once():
     suppressed = set()
     if prom_ok:
         try:
-            for job in down_exporters(prom_vector("up")):
+            for job in down_exporters(prom_vector("up%s" % origin_sel())):
                 suppressed |= EXPORTER_DEPENDENT[job]
         except Exception as e:
             log("WARN: exporter-health probe failed:", e)

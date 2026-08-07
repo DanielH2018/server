@@ -37,7 +37,16 @@ services:
       # holds them `up` for the first GRACE_CYCLES-1 consecutive down cycles; only the
       # GRACE_CYCLES'th straight down pages a genuinely-dead dependency (like HA_CONSECUTIVE=2).
       - GRACE_CYCLES=2
-      - PROMETHEUS_URL=http://prometheus:9090
+      # Repointed to the k3s cluster Prometheus (slice 3, B5). It holds this host's whole TSDB via
+      # remote-write since B3, so the twelve PROM_DEPENDENT checks read the same series they always
+      # did — verified before the flip by counting each affected selector on both instances and
+      # getting identical numbers (53/53 containers, 11/11 targets, 1/1 janitorr).
+      #
+      # Matching CLUSTER_PROMETHEUS_URL below is what switches PROM_ORIGIN on in check.py, so the
+      # container/`up` queries stay scoped to this host rather than widening to every workload in
+      # the homelab. That derivation is deliberate — see the PROM_ORIGIN comment — so these two
+      # URLs can never be pointed at different places by accident.
+      - PROMETHEUS_URL=https://prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}
       - KOPIA_URL=http://kopia:51515
       - KUMA_URL=http://uptime-kuma:3001
       - BACKUP_SOURCE_PATH=/data/home/{{ sys_user }}/server/containers
