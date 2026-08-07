@@ -3167,6 +3167,44 @@ def test_origin_pin_absent_when_reading_the_docker_prometheus(monkeypatch):
         importlib.reload(check)
 
 
+def test_cluster_targets_is_cluster_dependent_not_prom_dependent():
+    # It reads the CLUSTER Prometheus, so a Docker-side outage must not suppress it and vice
+    # versa — the same separation k8s_workloads has.
+    assert "cluster_targets" in check.CLUSTER_DEPENDENT
+    assert "cluster_targets" not in check.PROM_DEPENDENT
+
+
+def test_cluster_targets_selects_only_cluster_native_series(monkeypatch):
+    # origin="" matches series where the label is ABSENT. daniel-server's remote-written series
+    # all carry it, so this is exactly the cluster's own set — without the filter this check would
+    # re-report the 11 targets its sibling already covers.
+    seen = {}
+
+    def fake_vector(promql, base=None, source="prometheus"):
+        seen["q"], seen["base"] = promql, base
+        return [({"job": "j%d" % i}, 1.0) for i in range(5)]
+
+    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "https://cluster")
+    monkeypatch.setattr(check, "prom_vector", fake_vector)
+    ok, _ = check.check_cluster_targets()
+    assert ok is True
+    assert seen["q"] == 'up{origin=""}'
+    assert seen["base"] == "https://cluster"
+
+
+def test_cluster_targets_empty_is_down():
+    ok, msg = check.targets_verdict([], check.CLUSTER_TARGETS_MIN)
+    assert ok is False
+    assert "UNKNOWN" in msg
+
+
+def test_cluster_targets_disabled_without_cluster_url(monkeypatch):
+    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "")
+    ok, msg = check.check_cluster_targets()
+    assert ok is True
+    assert "disabled" in msg
+
+
 def test_b2_trend_suppressed_on_shallow_history(monkeypatch):
     # Repointing at the cluster copy left predict_linear fitting 61 samples of a 7d window, because
     # remote-write moves series forward and does not backfill. The two instances then disagreed

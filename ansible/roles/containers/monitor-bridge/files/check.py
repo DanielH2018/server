@@ -413,6 +413,10 @@ PROM_ORIGIN = _env(
 # targets_verdict. daniel-server scrapes 11 jobs; 5 leaves room for a couple of legitimately
 # retired exporters without ever getting close to the "estate vanished" case this guards.
 TARGETS_MIN = int(_env("TARGETS_MIN", "5"))
+# Same floor idea for the cluster's own scrape targets (see check_cluster_targets). It runs five —
+# prometheus, otel-collector, otel-collector-internal, kube-state-metrics, kubernetes-cadvisor —
+# so 3 tolerates a deliberate removal without ever mistaking an empty vector for a clean one.
+CLUSTER_TARGETS_MIN = int(_env("CLUSTER_TARGETS_MIN", "3"))
 
 
 def origin_sel(*matchers):
@@ -2958,6 +2962,29 @@ def check_k8s_workloads():
     return k8s_workloads_verdict(total, offenders, K8S_MIN_WORKLOADS)
 
 
+def check_cluster_targets():
+    """Scrape targets of the CLUSTER's own Prometheus (the other half of Scrape Targets).
+
+    B5 pinned check_targets_down to origin="daniel-server" so it kept meaning exactly what it
+    always meant. The cost of that, unpaid until now, is that the cluster's own five targets were
+    watched by nothing: cluster_prometheus probes only reachability, and k8s_workloads reads
+    deployment replicas rather than scrape health. kube-state-metrics failing is covered by
+    accident (its series vanish and the workload check fails closed on the floor), but
+    otel-collector and otel-collector-internal going down was silent — and those two carry the
+    only copy of Claude Code's session/token/cost telemetry.
+
+    `origin=""` selects series where the label is ABSENT, which is exactly the cluster-native set:
+    daniel-server's remote-written series all carry it. The same floor logic as its sibling, so an
+    emptied `up` reads as UNKNOWN rather than as nothing being wrong.
+    """
+    if not CLUSTER_PROM_URL:
+        return True, "cluster target check disabled (no CLUSTER_PROMETHEUS_URL)"
+    vec = prom_vector(
+        'up{origin=""}', base=CLUSTER_PROM_URL, source="cluster prometheus"
+    )
+    return targets_verdict(vec, CLUSTER_TARGETS_MIN)
+
+
 def check_cluster_prometheus():
     """Reachability gate for the cluster Prometheus — the peer of check_prometheus.
 
@@ -3218,6 +3245,7 @@ CHECKS = [
     ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
     ("janitorr", _env("KUMA_PUSH_JANITORR", ""), check_janitorr),
     ("k8s_workloads", _env("KUMA_PUSH_K8S_WORKLOADS", ""), check_k8s_workloads),
+    ("cluster_targets", _env("KUMA_PUSH_CLUSTER_TARGETS", ""), check_cluster_targets),
 ]
 
 # Checks that query Prometheus. A single Prometheus outage would fail every one of them at once
@@ -3307,7 +3335,7 @@ B2_DEPENDENT = frozenset(
 # this gate structurally cannot see, because the Prometheus answering `vector(1)` is perfectly
 # healthy. Suppression is right for the first and would be dangerous for the second: it would turn
 # a blind monitor green.
-CLUSTER_DEPENDENT = frozenset({"k8s_workloads"})
+CLUSTER_DEPENDENT = frozenset({"k8s_workloads", "cluster_targets"})
 
 # Reach-out checks that poll a live app dependency (kopia/n8n/sonarr/radarr/prowlarr/scrutiny/the Pi
 # glances) with NO reachability gate above them and NO per-check hysteresis of their own — unlike
@@ -3433,11 +3461,25 @@ def run_once():
     log("OK  " if b2_ok else "DOWN", "b2_reachable", "-", b2_msg)
     push(_env("KUMA_PUSH_B2_REACHABLE", ""), b2_ok, b2_msg)
 
-    # Cluster-Prometheus gate (peer of the Prometheus gate, for the OTHER instance): the k8s
-    # workload check reads daniel-box's Prometheus over the cluster ingress, a path none of the
-    # other gates covers. Without this, a cluster ingress/Traefik outage would page as a workload
-    # fault rather than as what it is.
-    cluster_ok, cluster_msg = _evaluate("cluster_prometheus", check_cluster_prometheus)
+    # Cluster-Prometheus gate (peer of the Prometheus gate, for the OTHER instance): the cluster
+    # checks read daniel-box's Prometheus over the cluster ingress, a path none of the other gates
+    # covers. Without this, a cluster ingress/Traefik outage would page as a workload fault rather
+    # than as what it is.
+    #
+    # Since B5 that is usually the SAME instance the `prometheus` gate just probed — PROMETHEUS_URL
+    # and CLUSTER_PROMETHEUS_URL both point at the cluster. Re-probing would spend a second request
+    # on an answered question and, worse, light up two Kuma monitors for one fact, which reads as
+    # more coverage than exists. So the verdict is reused when the URLs match, and only genuinely
+    # separate endpoints get a separate probe and a separate page.
+    if CLUSTER_PROM_URL and CLUSTER_PROM_URL == PROM_URL:
+        cluster_ok, cluster_msg = (
+            prom_ok,
+            "same instance as the Prometheus gate (%s)" % prom_msg,
+        )
+    else:
+        cluster_ok, cluster_msg = _evaluate(
+            "cluster_prometheus", check_cluster_prometheus
+        )
     log("OK  " if cluster_ok else "DOWN", "cluster_prometheus", "-", cluster_msg)
     push(_env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""), cluster_ok, cluster_msg)
 
