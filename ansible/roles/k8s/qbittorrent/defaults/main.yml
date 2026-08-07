@@ -10,7 +10,7 @@
 #
 # Flip to true (`-e qbittorrent_k8s_enabled=true`, then in host_vars) as part of B4c, once the
 # Docker copy is stopped.
-qbittorrent_k8s_enabled: false
+qbittorrent_k8s_enabled: true  # flipped 2026-08-07 by B4c — the Docker copy is stopped and unmanaged
 
 # Same tags the Docker copies run, so a behavioural difference between the two is never the image.
 qbittorrent_k8s_image: lscr.io/linuxserver/qbittorrent:latest
@@ -42,15 +42,22 @@ qbittorrent_k8s_mullvad_mod: linuxserver/mods:wireguard-mullvad
 
 # THE KILL-SWITCH ALLOW-LIST, and the one line in this file most likely to cause a silent
 # outage. The mod installs iptables rules that REJECT anything not leaving via wg0, except to
-# these ranges. The Compose value has three entries; the cluster needs two more:
+# these ranges. The Compose value has three entries; the cluster needs the pod CIDR
+# (10.42.0.0/16 — where Traefik's requests and the kubelet's probes come from, so their replies
+# must be allowed back) and the Service CIDR (10.43.0.0/16 — cluster DNS).
 #
-#   10.42.0.0/16  pod CIDR      — Traefik's requests to the WebUI, and the kubelet's probes,
-#                                 arrive from here and their replies must be allowed back
-#   10.43.0.0/16  Service CIDR  — cluster DNS (kube-dns) lives here
+# WRITTEN AS ONE /15, AND THAT IS NOT A TIDY-UP. 10.42.0.0/15 spans exactly those two /16s.
+# Listing them separately fails, because the mod turns every entry into BOTH an iptables ACCEPT
+# and an `ip route add ... via <gw>` — and flannel has already installed
+# `10.42.0.0/16 via 10.42.0.1` in every pod. The duplicate route returns
 #
-# Without those the pod comes up, `wg show wg0` looks perfectly healthy, and the container is
-# simply unreachable — which reads as a broken Service rather than a firewall doing its job.
-qbittorrent_k8s_lan_networks: "192.168.0.0/24,{{ lan_subnet }},172.16.0.0/12,10.42.0.0/16,10.43.0.0/16"
+#     RTNETLINK answers: File exists
+#
+# which wg-quick treats as fatal: it tears the interface back down and reports
+# "Tunnel /config/wg_confs/wg0.conf failed", with nothing in the message about routes. Measured
+# 2026-08-07 during B4c. The Compose value never hit this because Docker's bridge installs no
+# matching supernet route. The /15 duplicates nothing and yields the same ACCEPT coverage.
+qbittorrent_k8s_lan_networks: "192.168.0.0/24,{{ lan_subnet }},172.16.0.0/12,10.42.0.0/15"
 
 # NOT /run/secrets, which is the Compose convention and does not survive the port:
 # /var/run/secrets is where Kubernetes projects the ServiceAccount token, and a read-only

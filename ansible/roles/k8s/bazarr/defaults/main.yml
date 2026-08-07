@@ -7,7 +7,7 @@
 # therefore connect to the cluster sonarr immediately and start writing subtitle files into
 # /srv/media — diverging the B2 copy from daniel-server, which the next delta sync would then
 # either revert or, with --delete, remove.
-bazarr_k8s_enabled: false
+bazarr_k8s_enabled: true  # flipped 2026-08-07 by B4c — the Docker copy is stopped and unmanaged
 
 bazarr_k8s_image: lscr.io/linuxserver/bazarr:v1.5.6-ls350
 

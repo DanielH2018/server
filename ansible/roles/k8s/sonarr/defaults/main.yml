@@ -29,7 +29,7 @@ sonarr_k8s_media_claim: media-data
 # NetworkPolicy is NOT what does this, and for the measurement behind that.
 #
 # Set false at B4, when this copy becomes the authoritative one.
-sonarr_k8s_rehearsal: true
+sonarr_k8s_rehearsal: false  # flipped 2026-08-07 by B4c — the Docker copy is stopped and unmanaged
 
 # The hostnames that must NOT resolve while the rehearsal is running, read off the seeded
 # database's download-client and indexer configuration. B4-B7 bring both into the cluster under

@@ -13,6 +13,33 @@
   register: seed_volume_src_before
   changed_when: false
 
+# ── the destination must be EMPTY for a re-seed, not merely written over ─────────────────────
+# tar extracts over what is already there; it does not remove files the destination has and the
+# source does not. On a FIRST seed that is invisible, because the volume is empty. On the CUTOVER
+# re-seed it is not: by then the k8s workload has been running for hours and has written its own
+# logs and journals into the claim.
+#
+# Found the hard way (slice 4, B4c, 2026-08-07): re-seeding sonarr-config compared 221 source
+# files against 223 in the volume and failed the verification below — correctly, but with a
+# message that reads as a broken copy rather than a stale destination.
+#
+# Scoped to force runs on purpose. A force seed is BY DEFINITION the authoritative one, taken
+# against a stopped source, so "replace the volume's contents" is exactly what is meant. A
+# non-force seed never reaches here with anything to clear, because the marker makes it a no-op.
+#
+# -mindepth 1 so the mount point itself survives, and so dotfiles go with everything else.
+- name: Empty the volume before an authoritative re-seed of {{ seed_volume_claim }}
+  tags: [deploy]
+  when:
+    - seed_volume_copying | bool
+    - seed_volume_force | default(false) | bool
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec seed-{{ seed_volume_claim }} --
+      find {{ seed_volume_mount }} -mindepth 1 -delete
+  become: true
+  changed_when: true
+
 - name: Stream the source tree into {{ seed_volume_claim }}
   tags: [deploy]
   when: seed_volume_copying | bool

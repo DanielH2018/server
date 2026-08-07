@@ -66,6 +66,7 @@
 
 - name: Count the series the Docker copy knows about
   tags: [deploy]
+  when: sonarr_k8s_rehearsal | bool
   # Over ssh because Docker's sonarr publishes no host port — it is reachable only through
   # Traefik (behind Authelia) or from inside its own network. probe.py reads the API key from
   # SOPS and passes it to curl via stdin, never argv, so nothing lands in a process list.
@@ -85,17 +86,19 @@
   tags: [deploy]
   ansible.builtin.assert:
     that:
-      - sonarr_k8s_series.json | length | int == sonarr_docker_count.stdout | trim | int
+      # The cross-instance comparison only when there IS another instance.
+      - not (sonarr_k8s_rehearsal | bool)
+        or sonarr_k8s_series.json | length | int == sonarr_docker_count.stdout | trim | int
       - sonarr_k8s_series.json | selectattr('path', 'match', '^/data/') | list | length
         == sonarr_k8s_series.json | length
       - sonarr_k8s_series.json | map(attribute='statistics.sizeOnDisk') | select | list | length > 0
     fail_msg: >-
       The cluster copy reports {{ sonarr_k8s_series.json | length }} series against
-      {{ sonarr_docker_count.stdout | trim }} on daniel-server, or holds a series path outside
-      /data. Do not proceed to B4 — re-seed and re-check before anything cuts over.
+      {{ sonarr_docker_count.stdout | default('n/a — no Docker copy') | trim }} on
+      daniel-server, or holds a series path outside /data. Re-seed and re-check before trusting
+      this library.
     success_msg: >-
-      {{ sonarr_k8s_series.json | length }} series, matching daniel-server, every path under
-      /data, and
+      {{ sonarr_k8s_series.json | length }} series, every path under /data, and
       {{ (sonarr_k8s_series.json | map(attribute='statistics.sizeOnDisk') | select | sum / 1073741824) | round(1) }}
       GiB of episode files measured THROUGH the mount — so the pod is reading real files, not an
       empty tree that happens to exist.

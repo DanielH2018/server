@@ -6,7 +6,7 @@
 # Unlike sonarr there is no rehearsal mode here. B3 already rehearsed the \*arr path footgun on
 # one service and it passed; repeating it three more times would buy a second copy of the same
 # answer while giving three more live databases something to act on.
-radarr_k8s_enabled: false
+radarr_k8s_enabled: true  # flipped 2026-08-07 by B4c — the Docker copy is stopped and unmanaged
 
 radarr_k8s_image: lscr.io/linuxserver/radarr:6.1.1.10360-ls304
 

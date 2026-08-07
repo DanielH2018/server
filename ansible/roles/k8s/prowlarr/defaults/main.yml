@@ -3,7 +3,7 @@
 # name `prowlarr` resolve in {{ k8s_namespace }} — which is exactly what sonarr's isolation probe
 # fails the deploy on, because a resolving `prowlarr` is the moment the rehearsing sonarr can
 # reach its real indexers. That is D3's "one window" enforced by something executable.
-prowlarr_k8s_enabled: false
+prowlarr_k8s_enabled: true  # flipped 2026-08-07 by B4c — the Docker copy is stopped and unmanaged
 
 prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.4.0.5397-ls150
 
