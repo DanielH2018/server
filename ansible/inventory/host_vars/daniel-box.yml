@@ -76,6 +76,10 @@ containers_list:
     hostname: "sonarr{{ k8s_hostname_suffix }}"
     port: 8989
     use_authelia: true
+    # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
+    # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
+    # at sonarr.local, which 404'd between the cutover and this.
+    bridge_hostname: sonarr
   # Slice 4, B4b — BUILT BUT NOT DEPLOYED. The entry has to exist (a k8s role without one fails
   # validate_k8s_manifests.py), but `qbittorrent_k8s_enabled` defaults to FALSE and every task
   # in the role is gated on it. Without that gate this entry alone would be enough: gitops runs
@@ -89,6 +93,10 @@ containers_list:
     hostname: "qbittorrent{{ k8s_hostname_suffix }}"
     port: 8080
     use_authelia: true
+    # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
+    # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
+    # at qbittorrent.local, which 404'd between the cutover and this.
+    bridge_hostname: qbittorrent
   # Slice 4, B4a — the three remaining \*arrs, ALL held by their own `<svc>_k8s_enabled: false`
   # for the same reason as qbittorrent above: the entry is mandatory for
   # validate_k8s_manifests.py, and gitops would otherwise deploy them unattended.
@@ -101,6 +109,10 @@ containers_list:
     hostname: "radarr{{ k8s_hostname_suffix }}"
     port: 7878
     use_authelia: true
+    # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
+    # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
+    # at radarr.local, which 404'd between the cutover and this.
+    bridge_hostname: radarr
   # Brings a second workload with it — flaresolverr, which renders attacker-supplied Cloudflare
   # pages. Under Compose that sat on its own network; here an INGRESS NetworkPolicy keeps it
   # reachable from prowlarr alone, so the move to one namespace is a narrowing rather than a
@@ -110,11 +122,19 @@ containers_list:
     hostname: "prowlarr{{ k8s_hostname_suffix }}"
     port: 9696
     use_authelia: true
+    # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
+    # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
+    # at prowlarr.local, which 404'd between the cutover and this.
+    bridge_hostname: prowlarr
   - name: bazarr
     platform: k8s
     hostname: "bazarr{{ k8s_hostname_suffix }}"
     port: 6767
     use_authelia: true
+    # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
+    # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
+    # at bazarr.local, which 404'd between the cutover and this.
+    bridge_hostname: bazarr
 
   - name: claude-otel
     platform: k8s
