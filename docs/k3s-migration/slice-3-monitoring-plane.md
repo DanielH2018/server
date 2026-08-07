@@ -364,6 +364,36 @@ so these sets cannot drift.
 
 ---
 
+## Execution log
+
+**B1 — done 2026-08-07** (`1e10ad12`). kube-state-metrics deployed to `observability`; Prometheus
+gained a ServiceAccount + list/watch ClusterRole and a cadvisor job via the API-server proxy; a
+query-only LAN-only IngressRoute (`prometheus-k8s.local.<domain>`, `PathPrefix(/api/v1/query)`)
+makes it reachable from daniel-server. Verified: all four scrape targets up, all 18 `homelab`
+deployments reporting, and **all seven previously-unmonitored workloads returning
+`kube_deployment_status_replicas_unavailable` through the exact path monitor-bridge will use**.
+`/graph` returns 404 through that route, as intended.
+
+Two things bit during execution, both now encoded in the templates:
+
+- **kube-state-metrics' probes use two different ports.** `/livez` is on the metrics port (8080),
+  `/readyz` on the telemetry port (8081). Pointing liveness at 8081 returns 404, the kubelet
+  restarts the container ~35 s after each start, and the result is a CrashLoopBackOff with a
+  completely clean application log — the app logs a successful startup every time.
+- **Pi-hole only emits a VIP record per `containers_list` entry that has a `hostname`.**
+  `claude-otel`'s names Grafana, so `prometheus-k8s` fell through the `local.<domain>` wildcard to
+  daniel-server and collected *that* Traefik's 404 — which reads like a broken IngressRoute rather
+  than a missing DNS record. Added `extra_hostnames` for entries fronting several routed workloads.
+
+**Also observed, not fixed (pre-existing, out of scope):** `--check` on this role fails at the
+OTLP bind assert, because check mode skips the `command` task that reads the value and the assert
+then compares against an empty string. Same class as the `seed_volume` check-mode failure. And the
+role's `rollout status` gate did **not** catch the crashlooping kube-state-metrics: readiness
+passed, the Deployment went Available, `rollout status` returned success, and only then did the
+liveness probe start failing. A delayed liveness failure is invisible to that gate.
+
+---
+
 ## Batches — vertical, each independently exercisable
 
 The default shape for this slice is horizontal (Prometheus → Loki → Grafana → Kuma → AutoKuma), and
