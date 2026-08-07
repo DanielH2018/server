@@ -1,0 +1,52 @@
+---
+# The one door that lets monitor-bridge (daniel-server) query this cluster's Prometheus.
+#
+# Slice 3, D8. Prometheus' node-side listener is pinned to 127.0.0.1 by claude_otel_query_host_ip
+# — deliberately, so `otelq` can reach it while the LAN cannot — and its Service is ClusterIP.
+# Both are correct and neither is changed here: monitor-bridge runs on daniel-server, so it can
+# reach neither, and the k3s API server's own :6443 is firewalled off from daniel-server too
+# (measured 2026-08-07: connect fails outright). This route is the deliberate exception.
+#
+# Modelled on the n8n-monitoring route (roles/k8s/n8n/templates/ingressroute.yaml.j2), which
+# exists for exactly this problem and is the pattern to copy rather than invent from: LAN-only
+# host, matched paths only, rate-limited.
+#
+# NARROW ON PURPOSE — three separate reasons this is a query-only door:
+#   1. PathPrefix `/api/v1/query` is the ONLY path check.py fetches (check.py:644 and :658 both
+#      call _instant_query(PROM_URL, "/api/v1/query", ...)). It also admits /api/v1/query_range,
+#      which is a prefix match and is likewise read-only.
+#   2. Prometheus' admin API (/api/v1/admin/tsdb/delete_series) requires --web.enable-admin-api
+#      and the lifecycle endpoints (/-/reload, /-/quit) require --web.enable-lifecycle. Neither
+#      flag is set on the Deployment, so those endpoints do not exist to be reached.
+#   3. No `/graph`, `/targets` or `/metrics`. Browsing the TSDB is Grafana's job and it already
+#      has an authenticated route.
+#
+# LAN-ONLY, and unlike the shared ingressroute() macro this does NOT honour k8s_public_route.
+# That is intentional: when slice 6 flips that flag for the app routes, this one must not follow
+# them onto the public internet. There is no authentication in front of it — the guard is that
+# the hostname resolves only on the LAN and the paths are read-only.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: prometheus-monitoring
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  entryPoints:
+    - https
+  routes:
+    - kind: Rule
+      match: "Host(`prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}`) && PathPrefix(`/api/v1/query`)"
+      middlewares:
+        - name: rate-limit
+      services:
+        - name: prometheus
+          port: 9090
+  tls:
+    certResolver: cloudflare
+    options:
+      name: modern
+    domains:
+      - main: "{{ domain }}"
+        sans:
+          - "*.{{ domain }}"
+          - "*.local.{{ domain }}"

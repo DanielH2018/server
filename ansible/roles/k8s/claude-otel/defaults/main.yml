@@ -14,6 +14,10 @@ claude_otel_collector_image: otel/opentelemetry-collector-contrib:0.157.0
 claude_otel_loki_image: grafana/loki:3.3.0
 claude_otel_prometheus_image: prom/prometheus:v3.0.1
 claude_otel_grafana_image: grafana/grafana:11.4.0
+# Slice 3 (D8). Distinct from the metrics-server k3s already bundles: that serves the
+# resource-metrics API for `kubectl top`/HPA, while this exports kube_pod_status_ready and
+# kube_deployment_status_* — the only readiness signal the seven routeless workloads have.
+claude_otel_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.14.0
 
 # longhorn-nobackup, NOT longhorn. Two reasons, either sufficient on its own:
 #   - Volume: Loki with content logging on grows fast, and Prometheus TSDB is high-churn.

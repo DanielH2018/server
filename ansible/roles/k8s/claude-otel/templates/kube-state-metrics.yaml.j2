@@ -1,0 +1,136 @@
+---
+# kube-state-metrics — the ONLY source of workload-readiness metrics in this cluster.
+#
+# Added for slice 3 batch B1 (docs/k3s-migration/slice-3-monitoring-plane.md, D8). Seven k8s
+# workloads have run since slice 2 with no monitor of any kind — registry, both cloudflare-ddns
+# copies, karakeep's chrome/meilisearch/time-tagger, and n8n-runners, which executes every
+# workflow's code. They are unmonitorable by every other means available:
+#
+#   - Three expose only a ClusterIP, which daniel-server cannot reach.
+#   - Four (cloudflare-ddns-direct, cloudflare-ddns-proxied, karakeep-time-tagger, n8n-runners)
+#     expose NO Service at all — there is no port to probe.
+#   - None has an IngressRoute.
+#
+# So "is this workload healthy" is not an HTTP property here; it is a Kubernetes API property,
+# and this is what turns it into a metric monitor-bridge can query.
+#
+# NOT metrics-server, which the cluster already runs. That serves the resource-metrics API
+# (`kubectl top`, HPA) and exports no kube_pod_status_ready / kube_deployment_status_* series.
+# The two are complementary, not alternatives.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-state-metrics
+  namespace: {{ k8s_observability_namespace }}
+automountServiceAccountToken: true
+---
+# Scoped to the four resource types --resources= below actually collects, rather than the
+# upstream manifest's blanket grant across ~20 API groups. kube-state-metrics reads object
+# SPEC and STATUS cluster-wide, so every resource added here is a resource it can enumerate;
+# a Secret or ConfigMap grant would let it read their contents. Keep this list and the
+# --resources flag in step — a grant without a matching flag is unused privilege, and a flag
+# without a grant makes the collector log list/watch RBAC errors every resync.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-state-metrics
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-state-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-state-metrics
+subjects:
+  - kind: ServiceAccount
+    name: kube-state-metrics
+    namespace: {{ k8s_observability_namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-state-metrics
+  template:
+    metadata:
+      labels:
+        app: kube-state-metrics
+    spec:
+      serviceAccountName: kube-state-metrics
+      enableServiceLinks: false
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+      containers:
+        - name: kube-state-metrics
+          image: {{ claude_otel_kube_state_metrics_image }}
+          args:
+            # Must match the ClusterRole above. Restricting the set also drops the metric
+            # cardinality this stack has no use for.
+            - --resources=pods,deployments,statefulsets,daemonsets
+            - --metric-labels-allowlist=pods=[app],deployments=[app]
+          ports:
+            - name: metrics
+              containerPort: 8080
+            - name: telemetry
+              containerPort: 8081
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          # The two probes deliberately hit DIFFERENT ports, matching upstream: /livez is served
+          # by the main metrics server on 8080 and /readyz by the self-telemetry server on 8081.
+          # Neither path exists on the other port — pointing liveness at 8081 returns 404, which
+          # the kubelet reads as a failed probe and restarts the container ~35s after every
+          # start, producing a CrashLoopBackOff with a completely clean application log.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 192Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-state-metrics
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  selector:
+    app: kube-state-metrics
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: 8080
+    - name: telemetry
+      port: 8081
+      targetPort: 8081

@@ -12,11 +12,17 @@
       - collector.yaml
       - loki.yaml
       - prometheus.yaml
+      # After prometheus.yaml: that file now carries the ServiceAccount/ClusterRole the
+      # cadvisor discovery needs, and kube-state-metrics is a scrape target of it.
+      - kube-state-metrics.yaml
       - tempo.yaml
       - middlewares.yaml
       - grafana.yaml
       - grafana-dashboard.yaml
       - ingressroute.yaml
+      # Must follow middlewares.yaml — it references the `rate-limit` Middleware, which
+      # Traefik will not resolve across namespaces.
+      - prometheus-ingressroute.yaml
     manifests_secret_files:
       - grafana-secret.yaml
     # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has three,
@@ -38,6 +44,7 @@
   loop:
     - loki
     - prometheus
+    - kube-state-metrics
     - tempo
     - otel-collector
     - grafana
@@ -59,6 +66,7 @@
   loop:
     - loki
     - prometheus
+    - kube-state-metrics
     - tempo
     - otel-collector
     - grafana

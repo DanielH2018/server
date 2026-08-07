@@ -9,10 +9,20 @@ address=/local.{{ domain }}/::
 # services, and a hand-maintained list here is a second source of truth that silently rots
 # the first time someone forgets it. Entries without a `hostname` (traefik itself) have no
 # route of their own and are skipped.
+#
+# `extra_hostnames` covers an entry that fronts MORE THAN ONE routed workload — claude-otel
+# runs Grafana, Prometheus, Loki and Tempo under a single containers_list entry, so its
+# `hostname` can only name one of them. Without this, a second workload's IngressRoute exists
+# in the cluster but its name falls through to the local.<domain> wildcard above, resolves to
+# daniel-server, and the Docker Traefik answers its own 404 — which reads like a broken route
+# rather than a missing DNS record.
 {% for svc in hostvars['daniel-box'].containers_list | default([]) | filter_by_platform('k8s') %}
 {% if svc.hostname is defined %}
 address=/{{ svc.hostname }}.local.{{ domain }}/{{ k3s_metallb_ingress_vip }}
 {% endif %}
+{% for extra in svc.extra_hostnames | default([]) %}
+address=/{{ extra }}.local.{{ domain }}/{{ k3s_metallb_ingress_vip }}
+{% endfor %}
 {% endfor %}
 
 # daniel-pi is LAN-only. Use a private `.lan` TLD (resolves only here, via Pi-hole) instead

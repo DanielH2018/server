@@ -20,6 +20,75 @@ data:
       - job_name: otel-collector-internal
         static_configs:
           - targets: ['otel-collector:8888']
+      # Workload readiness for every Pod/Deployment in the cluster (slice 3, D8). This is what
+      # gives the seven previously-unmonitorable workloads a health signal at all — see the
+      # header of kube-state-metrics.yaml.j2.
+      - job_name: kube-state-metrics
+        static_configs:
+          - targets: ['kube-state-metrics:8080']
+      # Per-pod CPU/memory from each kubelet's cAdvisor, reached through the API server proxy
+      # rather than the kubelet's own :10250. The proxy path needs only nodes/proxy RBAC and no
+      # kubelet client certificate, which is why it is the usual choice for a single-node k3s.
+      #
+      # insecure_skip_verify is on the API server hop: k3s serves it with a cert whose SANs do
+      # not include the in-cluster Service name this relabels to. The bearer token is still
+      # verified by the API server, so this weakens transport identity inside the cluster, not
+      # authn.
+      - job_name: kubernetes-cadvisor
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+---
+# Prometheus authenticates to the API server as itself for the kubernetes_sd_configs discovery
+# above. Read-only and list/watch-only: it enumerates nodes to discover scrape targets and
+# proxies to their cAdvisor endpoints. It cannot mutate anything, and it is deliberately NOT
+# granted secrets or configmaps.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: {{ k8s_observability_namespace }}
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+  - apiGroups: [""]
+    resources: [nodes, nodes/metrics, services, endpoints, pods]
+    verbs: [get, list, watch]
+  # The cAdvisor scrape above goes through /api/v1/nodes/<name>/proxy/, which is authorized as
+  # a `get` on this subresource rather than on the node object.
+  - apiGroups: [""]
+    resources: [nodes/proxy]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: {{ k8s_observability_namespace }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -51,6 +120,10 @@ spec:
       labels:
         app: prometheus
     spec:
+      # Without this the pod runs as the namespace `default` SA, whose token cannot list nodes —
+      # kubernetes_sd_configs then discovers zero targets and the cadvisor job silently reports
+      # no series rather than erroring.
+      serviceAccountName: prometheus
       enableServiceLinks: false
       securityContext:
         runAsUser: 65534

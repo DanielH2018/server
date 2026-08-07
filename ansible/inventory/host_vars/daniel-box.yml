@@ -49,6 +49,13 @@ containers_list:
     hostname: "grafana{{ k8s_hostname_suffix }}"
     port: 3000
     use_authelia: true
+    # Slice 3 (D8). Prometheus' own name, so Pi-hole answers it with the cluster VIP instead of
+    # the local.<domain> wildcard that points at daniel-server. monitor-bridge runs there and
+    # cannot reach this host's ClusterIP or its loopback-pinned hostPort, so this name plus the
+    # role's query-only `prometheus-monitoring` IngressRoute is the whole path in. Keep the two
+    # in step: the route matches this exact host, hardcoded as prometheus{{ k8s_hostname_suffix }}.
+    extra_hostnames:
+      - "prometheus{{ k8s_hostname_suffix }}"
   # Slice 2, batch A (docs/k3s-migration/slice-2-leaf-apps.md). The Docker twin serves `www`;
   # this one answers on www-k8s until cutover. use_authelia mirrors the Docker entry and its
   # reason: this is the public link-in-bio landing page, so a login gate would break it.
