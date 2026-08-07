@@ -126,9 +126,20 @@ services:
       # trackedDownloadStatus "warning", but nothing paged, so it sat seeding for a day
       # before a manual review caught it). Empty key = that app skipped; both empty =
       # disabled, like N8N_API_KEY.
-      - SONARR_URL=http://sonarr:8989
+      # Repointed at the cluster 2026-08-07 (slice 4, B4c). These were http://<name>:<port> on
+      # the `media` Docker network until sonarr/radarr/prowlarr moved to daniel-box.
+      #
+      # The `-k8s` hostname, NOT a bridged `*.local` name: the bridged names resolve to
+      # daniel-server, and a container on that host cannot reach a port its neighbour publishes
+      # on the same Docker bridge (same-bridge hairpin NAT — the failure that broke homepage's
+      # widgets and check_n8n). The suffixed name resolves to the cluster VIP, a different host.
+      #
+      # Each is served by a query-only `<svc>-monitoring` IngressRoute, guarded by ClientIP to
+      # this host and scoped to the one path the check reads. The X-Api-Key below is still the
+      # authentication; the route is the network gate in front of it.
+      - SONARR_URL=https://sonarr{{ k8s_hostname_suffix }}.local.{{ domain }}
       - SONARR_API_KEY={{ sonarr_api_key }}
-      - RADARR_URL=http://radarr:7878
+      - RADARR_URL=https://radarr{{ k8s_hostname_suffix }}.local.{{ domain }}
       - RADARR_API_KEY={{ radarr_api_key }}
       - KUMA_PUSH_ARR_QUEUE={{ monitor_bridge_arr_queue_push_token }}
       # Prowlarr sustained-indexer watchdog: Prowlarr's in-app health notification is binary
@@ -139,7 +150,7 @@ services:
       # Set to a full week (10080 min) deliberately: only a genuinely long outage should page here —
       # short/flaky drops are noise. Prowlarr's own all-indexers-down onHealthIssue is the fast backstop.
       # Empty key = disabled (stays up), like N8N_API_KEY. Already on `media`, reaches prowlarr:9696.
-      - PROWLARR_URL=http://prowlarr:9696
+      - PROWLARR_URL=https://prowlarr{{ k8s_hostname_suffix }}.local.{{ domain }}
       - PROWLARR_API_KEY={{ prowlarr_api_key }}
       - PROWLARR_INDEXER_MIN_DOWN_MIN=10080
       # Comma-separated indexer names never paged (case-insensitive) — chronically-flaky public

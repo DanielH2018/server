@@ -1,0 +1,7 @@
+{% from 'ingressroute.yml.j2' import monitoring_route with context %}
+---
+{#
+  check_arr_queue reads /api/v3/queue only (check.py). Nothing else on the sonarr API is
+  reachable through this route.
+#}
+{{ monitoring_route(container_item.name, container_item.hostname, container_item.port, '/api/v3/queue') }}

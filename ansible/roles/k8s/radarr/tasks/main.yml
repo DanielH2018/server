@@ -39,3 +39,5 @@
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
+      # The query-only door for monitor-bridge on daniel-server (slice 4, B4c).
+      - ingressroute-monitoring.yaml

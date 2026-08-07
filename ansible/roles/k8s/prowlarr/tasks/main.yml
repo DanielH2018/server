@@ -49,6 +49,8 @@
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
+      # The query-only door for monitor-bridge on daniel-server (slice 4, B4c).
+      - ingressroute-monitoring.yaml
 
 # ── prove the flaresolverr isolation survived the move ──────────────────────────────────────
 # Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and

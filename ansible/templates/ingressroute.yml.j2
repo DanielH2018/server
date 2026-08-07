@@ -107,3 +107,43 @@ spec:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
 {%- endmacro %}
+
+{% macro monitoring_route(name, hostname, port, path_prefix, namespace=none) -%}
+{#
+  A query-only door for monitor-bridge, which runs in Docker on daniel-server and lost its
+  route to these services when they left that host (slice 4, B4c). Modelled on
+  prometheus-monitoring / n8n-monitoring, which exist for exactly this problem.
+
+  IT MUST BE THE `-k8s` HOSTNAME, not a bridged `*.local` name. The bridged names resolve to
+  daniel-server, and a container ON that host cannot reach a port its neighbour publishes on
+  the same Docker bridge (same-bridge hairpin NAT — it broke homepage's widgets and check_n8n).
+  The suffixed name resolves to the cluster VIP, which is a different machine entirely.
+
+  NARROW ON THREE AXES, because there is no forward-auth in front of it:
+    1. ClientIP — daniel-server alone. monitor-bridge is the only intended caller.
+    2. PathPrefix — only the endpoint the check actually reads. The *arr APIs are wide, and
+       a bare Host rule here would expose every write endpoint they have to that address.
+    3. LAN-only. Unlike ingressroute() above this does NOT honour k8s_public_route, so when
+       slice 6 flips that flag for the app routes this one does not follow them onto the
+       public internet.
+
+  The app's own X-Api-Key is still the authentication; this is the network gate in front of it,
+  not a replacement for it.
+#}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ name }}-monitoring
+  namespace: {{ namespace | default(k8s_namespace, true) }}
+spec:
+  entryPoints:
+    - https
+  routes:
+    - kind: Rule
+      match: "Host(`{{ hostname }}.local.{{ domain }}`) && PathPrefix(`{{ path_prefix }}`) && ClientIP(`{{ k8s_bridge_client_ip }}/32`)"
+      middlewares:
+        - name: rate-limit
+      services:
+        - name: {{ name }}
+          port: {{ port }}
+{%- endmacro %}

@@ -1,0 +1,8 @@
+{% from 'ingressroute.yml.j2' import monitoring_route with context %}
+---
+{#
+  check_prowlarr_indexers reads /api/v1/indexerstatus and /api/v1/indexer. One prefix covers
+  both, and covers nothing else — /api/v1/indexer is not a prefix of any write endpoint the
+  check does not use.
+#}
+{{ monitoring_route(container_item.name, container_item.hostname, container_item.port, '/api/v1/indexer') }}
