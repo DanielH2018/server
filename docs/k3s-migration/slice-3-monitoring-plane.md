@@ -20,9 +20,29 @@ stays-until-slice-7 side. Kuma and AutoKuma no longer move in slice 3. D4 (recre
 the parallel-Kuma machinery in D7 drop out with it; both are recorded below rather than deleted,
 because a future reader needs to know they were considered and why they became slice-7 concerns.
 
-What replaces the move is smaller and lands sooner: AutoKuma gains the **Files** source *alongside*
-its existing Docker source, in the one instance it already runs, and that closes the
-seven-unmonitored-workload gap without touching where anything runs.
+**Second revision — the gap-closure reorder was wrong, reverted.** Between the two revisions this
+doc briefly moved the seven-workload gap to the front, on the theory that `http`/`push` monitors
+against cluster services need neither a Docker daemon nor a metrics pipeline. Checked against the
+live cluster, that is false:
+
+| Workload | Exposes | Reachable from daniel-server? |
+|---|---|---|
+| `registry` | ClusterIP `10.43.51.14:5000` | No — cluster-internal |
+| `karakeep-chrome` | ClusterIP `10.43.225.164:9222` | No — cluster-internal |
+| `karakeep-meilisearch` | ClusterIP `10.43.192.233:7700` | No — cluster-internal |
+| `cloudflare-ddns-direct` | **no Service** | Nothing to probe |
+| `cloudflare-ddns-proxied` | **no Service** | Nothing to probe |
+| `karakeep-time-tagger` | **no Service** | Nothing to probe |
+| `n8n-runners` | **no Service** | Nothing to probe |
+
+None of the seven has an IngressRoute (only 11 other workloads do). So there is no endpoint to
+`http`, and nothing in-cluster pushing. **Pod readiness for these seven is only available from the
+Kubernetes API**, which means kube-state-metrics → Prometheus → a `monitor-bridge` check — and that
+is downstream of cluster scraping, exactly where the first draft put it. The original ordering
+stands; what was missing was the *reason*, now recorded as D8.
+
+The AutoKuma Files source (D2) is still correct and still verified, but it is no longer what closes
+the gap, and it is no longer the front of the slice.
 
 Design doc §8 gives this slice one line: *"Monitoring cluster + bridges (incl. the AutoKuma
 rework) — dashboards and alerts equivalent to today's."* That understates it in one direction and
@@ -289,6 +309,59 @@ What survives a monitoring outage regardless:
 - the **email backstop** attached to the Discord Delivery monitor (an independent SMTP path),
 - `monitor-bridge`'s own container healthcheck and autoheal.
 
+### D8 — Pod health comes from kube-state-metrics, and it needs two things that do not exist yet
+
+The seven-workload gap is the reason cluster pod-health was scoped into this slice, and the table in
+the revision note above is why it cannot be closed cheaply. Four of the seven expose no Service at
+all, so their health is not an HTTP property — it is "does the Kubernetes API consider this pod
+ready". Two ways to read that:
+
+- **kube-state-metrics → cluster Prometheus → one `monitor-bridge` check.** One check covers all
+  workloads, present and future, with no per-service wiring, and it is the repo's dominant idiom
+  (42 checks already work this way).
+- **An in-cluster CronJob pushing per-workload to Kuma.** Independent of the metrics pipeline, but
+  it needs seven new push tokens, seven monitors, and readiness logic per workload — which is
+  reimplementing kube-state-metrics by hand.
+
+**Take the first.** But it has two prerequisites that are not in place, and both must be done before
+the check is worth writing:
+
+1. **kube-state-metrics is not deployed.** The cluster runs `metrics-server` (the resource-metrics
+   API, for `kubectl top` and HPA) — that is a different thing and does not export
+   `kube_pod_status_ready` or `kube_deployment_status_replicas_unavailable`.
+2. **The cluster Prometheus is not reachable from daniel-server.** Its hostPort is pinned to
+   loopback — live: `{"containerPort":9090,"hostIP":"127.0.0.1","hostPort":9090}`, set from
+   `claude_otel_query_host_ip` — and it has no IngressRoute (only `grafana` does in that
+   namespace). `monitor-bridge` runs on daniel-server, so it cannot query `10.43.39.218:9090`.
+
+   **The precedent is `n8n-monitoring`**, an IngressRoute that exists for exactly this problem —
+   monitor-bridge needing to reach a cluster service. It is narrowly scoped, and that scoping is
+   the part to copy:
+
+   ```
+   match: Host(`n8n-k8s.local.daniel-hunter.com`) && (PathPrefix(`/api/v1/workflows`) || PathPrefix(`/api/v1/executions`))
+   middlewares: [rate-limit]
+   ```
+
+   LAN-only (`.local.`), path-restricted to the two endpoints actually needed, rate-limited. A
+   Prometheus route should be the same shape — not a blanket `:9090`.
+
+**Open decision, resolve before writing the check — which Prometheus does it query?** `check.py`'s
+single `prom_ok` gate currently describes one dependency. A `k8s_pods` check querying the *cluster*
+Prometheus while the other twelve query the *Docker* one breaks that: the gate would be watching a
+source the new check does not use. Two ways out, and one must be picked deliberately:
+
+- Give the gate a **second arm** (cluster Prometheus reachable) with its own skip set, mirroring
+  `B2_DEPENDENT`; or
+- Have the check **fail closed on an absent series** rather than inheriting a gate that is not
+  watching its source.
+
+The failure mode being avoided is specific: an empty query result decoding to "0 unavailable
+replicas → up". Green, silent, wrong — the same shape as the B2 transaction cap and the
+gitops-behind defer. Whichever arm is chosen, add the disjointness test alongside the existing
+`PROM_DEPENDENT` / `LOKI_DEPENDENT` / `B2_DEPENDENT` / `STARTUP_GRACE` guards, which exist precisely
+so these sets cannot drift.
+
 ---
 
 ## Batches — vertical, each independently exercisable
@@ -297,33 +370,35 @@ The default shape for this slice is horizontal (Prometheus → Loki → Grafana 
 it is wrong: nothing is checkable until the end. Sequenced so each batch ends in something
 observable.
 
-**Order changed in revision.** Closing the seven-workload gap was B5 in the draft, behind the whole
-metrics migration. With Kuma staying put (D3) and one AutoKuma serving both sources (D2), it needs
-neither — `http`/`push` monitors against cluster services touch no Docker daemon and no Prometheus.
-So it moves to **B0**: it is now the cheapest item in the slice, it closes the live coverage gap
-first instead of last, and it exercises the Files source on the easy half before anything depends
-on it.
+**Order note.** Gap closure stays *after* cluster scraping, where the first draft had it. A
+mid-session attempt to move it to the front was reverted on the reachability evidence in the
+revision note — the seven workloads have no endpoint to probe, so their health is only readable via
+kube-state-metrics (D8), which is downstream of B1.
 
-### B0 — Close the seven-workload gap *(was B5)*
+### B1 — One cluster metric, end to end, and a reachable cluster Prometheus
 
-Enable `AUTOKUMA__FILES__ENABLED` + `AUTOKUMA__STATIC_MONITORS` on the existing AutoKuma, add the
-file branch to the `kuma()` macro, and generate monitors for the workloads that have never had one:
-`registry`, `cloudflare-ddns`, karakeep's `chrome` / `meilisearch` / `time-tagger`, and
-`n8n-runners` — the last of which executes every workflow's code.
+Add `kubernetes_sd_configs` to the cluster Prometheus, deploy **kube-state-metrics** (D8), and
+scrape **one** workload. Expose the cluster Prometheus to daniel-server via a narrow LAN-only
+IngressRoute on the `n8n-monitoring` pattern — path-restricted and rate-limited, not a blanket
+`:9090`. Point the existing cluster Grafana at it with the D6 UIDs.
 
-**Prove it:** the monitors appear in the existing Kuma, green. Then `kubectl delete pod` on one and
-confirm it goes red. Nothing else in the slice is touched, and this is where D2's field-name skew
-(`maxretries` vs `max_retries`) gets settled against a real created monitor.
+**Prove it:** a panel in the cluster Grafana shows that pod's memory, **and** `curl` from
+daniel-server returns a non-empty `kube_pod_status_ready` series. The second half is the one that
+unblocks everything downstream; the loopback-pinned hostPort means it is currently impossible.
 
-### B1 — One cluster metric, end to end
+Nothing else changes; the Docker stack is untouched and still authoritative.
 
-Add `kubernetes_sd_configs` to the cluster Prometheus and scrape **one** workload. Point the
-existing cluster Grafana at it with the D6 UIDs.
+### B2 — Close the seven-workload gap
 
-**Prove it:** a panel in the cluster Grafana shows that pod's memory. Nothing else changes; the
-Docker stack is untouched and still authoritative.
+The moment B1 lands, this is unblocked and it is the highest-value item in the slice — it closes a
+live coverage hole, not a migration step. Add one `monitor-bridge` check reading kube-state-metrics
+for unready pods / unavailable replicas across the cluster, resolving D8's open gate question first.
 
-### B2 — Northbound from daniel-server
+**Prove it:** `kubectl delete pod` on `n8n-runners` — the one that executes every workflow's code —
+produces a Discord alert. Then confirm the check reports **down**, not up, when its series is
+absent entirely (delete kube-state-metrics briefly): an empty result must not decode to healthy.
+
+### B3 — Northbound from daniel-server
 
 Configure remote-write from the Docker Prometheus to the cluster Prometheus (or a scrape of
 daniel-server's exporters from the cluster — decide by which survives slice 7 better).
@@ -334,7 +409,7 @@ is the property that makes the rest of the slice reversible.
 
 **Do not repoint `monitor-bridge` here.** See B4.
 
-### B3 — Dashboards onto the cluster Grafana
+### B4 — Dashboards onto the cluster Grafana
 
 Provision the cluster Grafana with the three pinned UIDs from D6 and load the existing dashboards
 unmodified.
@@ -343,7 +418,7 @@ unmodified.
 that renders empty is a missing series, which is exactly the signal B4 needs — so record which
 panels are empty rather than fixing them here.
 
-### B4 — Repoint `monitor-bridge`, behind an explicit series check
+### B5 — Repoint `monitor-bridge`, behind an explicit series check
 
 The slice's one genuinely risky step (D7). Before changing `PROM_URL`, confirm the cluster
 Prometheus actually returns a non-empty result for the query behind **each of the twelve
@@ -353,7 +428,7 @@ Prometheus actually returns a non-empty result for the query behind **each of th
 against the same run on the Docker Prometheus. Identical verdicts, no check newly reporting
 "skipped". Any divergence is a missing series, not a passing test.
 
-### B5 — Retire the Docker query layer
+### B6 — Retire the Docker query layer
 
 Stop the Docker `prometheus` and `grafana`. **`uptime-kuma`, `autokuma`, `node-exporter`,
 `cadvisor`, `promtail`, `monitor-bridge` and `autofix-bridge` all keep running** — they are the
@@ -392,18 +467,24 @@ parallel period is what makes B2 reversible.
 
 ## Exit criteria
 
-- [ ] The seven previously-unmonitored k8s workloads each have a monitor that fires on pod deletion
-- [ ] AutoKuma runs Docker and Files sources simultaneously; no existing monitor is disturbed
+- [ ] kube-state-metrics is deployed and the cluster Prometheus is reachable from daniel-server via
+      a path-scoped, LAN-only IngressRoute (D8)
+- [ ] The seven previously-unmonitored k8s workloads are covered by a check that fires on pod
+      deletion — **and reports down, not up, when its series is absent**
 - [ ] A daniel-server metric and a cluster-pod metric are both queryable from the cluster Prometheus
 - [ ] Every dashboard renders in the cluster Grafana **with no dashboard edits** (D6 held)
 - [ ] All twelve `PROM_DEPENDENT` queries return non-empty against the cluster Prometheus
 - [ ] `check.py --once` gives identical verdicts against both Prometheus instances
 - [ ] The Docker `prometheus` + `grafana` are stopped for 1 h with no loss of alerting
-- [ ] `monitor-bridge` is unchanged except for its northbound targets — no check logic edited
+- [ ] `monitor-bridge`'s check logic is unchanged apart from the one new pod-health check
 
 **Explicitly *not* in this slice** (moved to slice 7 by D3): Kuma or AutoKuma running in the
 cluster, Kuma state recreation, the Discord notification and Docker Host re-creation, and any
 conversion of `docker`-type monitors.
+
+**Not required by this slice, though verified as available** (D2): the AutoKuma Files source. It
+turned out not to be what closes the coverage gap — D8 does — so enabling it is optional here and
+naturally belongs with the slice-7 Kuma move.
 
 ---
 
@@ -436,5 +517,11 @@ conversion of `docker`-type monitors.
   `max_retries`. Settle it against a created monitor in B0, not by reading the macro.
 - **Default values of the two `ENABLED` flags** (D2). The upstream config page lists the variables
   but not their defaults. Set both explicitly rather than inheriting an unknown.
-- **Whether remote-write or cluster-side scraping is the better northbound** (B2). Remote-write
+- **Whether remote-write or cluster-side scraping is the better northbound** (B3). Remote-write
   survives daniel-server joining the cluster more gracefully; scraping is simpler now.
+- **Which Prometheus the pod-health check queries, and how its gate is scoped** (D8). The open
+  decision with the sharpest failure mode in the slice — an absent series must not decode to
+  healthy. Resolve before writing the check, not after.
+- **How narrowly the cluster Prometheus IngressRoute can be path-scoped** (D8). `n8n-monitoring`
+  restricts to two `PathPrefix`es; the equivalent for Prometheus is probably `/api/v1/query`, but
+  confirm what `check.py`'s `prom_scalar`/`prom_vector` actually call before locking the rule down.
