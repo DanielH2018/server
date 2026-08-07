@@ -59,6 +59,23 @@ containers_list:
   # cutover, and after cutover it would erase whatever qbittorrent has downloaded since.
   - name: media-volume
     platform: k8s
+  # Slice 4, B3 — the first \*arr in the cluster, and NOT the authoritative one. Runs a copy of
+  # the live config against the B2 media volume while Docker's sonarr keeps serving, to rehearse
+  # the footgun this slice is built around: sonarr stores ABSOLUTE in-container paths, so the
+  # library looks intact right up until an import fails.
+  #
+  # Must follow media-volume: it mounts that claim at /data, and a pod whose claim does not exist
+  # stays Pending.
+  #
+  # It holds the real indexers and download client, so what keeps it from acting on them matters:
+  # every one of those targets is a DOCKER network name that does not resolve in the cluster. An
+  # egress NetworkPolicy was tried first and is NOT enforced here — see the role's
+  # isolation-probe-job.yaml.j2, which asserts the boundary that actually holds on every deploy.
+  - name: sonarr
+    platform: k8s
+    hostname: "sonarr{{ k8s_hostname_suffix }}"
+    port: 8989
+    use_authelia: true
 
   - name: claude-otel
     platform: k8s

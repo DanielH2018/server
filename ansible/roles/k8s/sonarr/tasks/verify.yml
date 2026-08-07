@@ -1,0 +1,101 @@
+---
+# B3's actual deliverable. Everything above only establishes that a pod is running, which for
+# this batch means nothing: the failure being rehearsed is a library that looks intact until an
+# import silently fails, and it is invisible from the outside.
+#
+# Read over the Service ClusterIP, not the ingress hostname: the route is behind Authelia, which
+# answers an API call carrying X-Api-Key with a 302 to a login page.
+
+- name: Resolve the sonarr Service address
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: "k3s kubectl -n {{ k8s_namespace }} get svc sonarr -o jsonpath={.spec.clusterIP}"
+  become: true
+  changed_when: false
+  register: sonarr_k8s_svc
+
+- name: Read the cluster copy's root folders
+  tags: [deploy]
+  # The seeded config.xml carries the same API key as the Docker copy, which is why one SOPS
+  # value serves both.
+  no_log: true
+  ansible.builtin.uri:
+    url: "http://{{ sonarr_k8s_svc.stdout }}:{{ container_item.port }}/api/v3/rootfolder"
+    headers:
+      X-Api-Key: "{{ sonarr_api_key }}"
+    return_content: true
+  register: sonarr_k8s_rootfolders
+  until: sonarr_k8s_rootfolders.status | default(0) == 200
+  retries: 12
+  delay: 10
+
+- name: Fail if a root folder does not resolve inside the pod
+  tags: [deploy]
+  # `accessible` is sonarr's own answer to "can I stat this path right now", so it is the direct
+  # test of the D4 mount contract. freeSpace is the corroborating one: it is read from the
+  # filesystem the mount actually leads to, and on daniel-box it must be far larger than
+  # daniel-server's 334 G — a value that matched the old host would mean the pod is somehow
+  # reading the wrong tree.
+  ansible.builtin.assert:
+    that:
+      - sonarr_k8s_rootfolders.json | length > 0
+      - sonarr_k8s_rootfolders.json | rejectattr('accessible') | list | length == 0
+      - sonarr_k8s_rootfolders.json | selectattr('path', 'match', '^/data/') | list | length
+        == sonarr_k8s_rootfolders.json | length
+      - sonarr_k8s_rootfolders.json | selectattr('freeSpace', 'defined') | list | length
+        == sonarr_k8s_rootfolders.json | length
+    fail_msg: >-
+      A root folder does not resolve in the cluster pod:
+      {{ sonarr_k8s_rootfolders.json | default([]) }}. This is the \*arr path footgun — sonarr
+      stores ABSOLUTE in-container paths, so the pod must present the media tree at exactly the
+      path the database names.
+    success_msg: >-
+      Root folders resolve inside the pod:
+      {{ sonarr_k8s_rootfolders.json | map(attribute='path') | join(', ') }}
+      (free space {{ (sonarr_k8s_rootfolders.json | map(attribute='freeSpace') | first / 1073741824) | round | int }} GiB).
+
+- name: Read the cluster copy's series
+  tags: [deploy]
+  no_log: true
+  ansible.builtin.uri:
+    url: "http://{{ sonarr_k8s_svc.stdout }}:{{ container_item.port }}/api/v3/series"
+    headers:
+      X-Api-Key: "{{ sonarr_api_key }}"
+    return_content: true
+  register: sonarr_k8s_series
+
+- name: Count the series the Docker copy knows about
+  tags: [deploy]
+  # Over ssh because Docker's sonarr publishes no host port — it is reachable only through
+  # Traefik (behind Authelia) or from inside its own network. probe.py reads the API key from
+  # SOPS and passes it to curl via stdin, never argv, so nothing lands in a process list.
+  # Counted on the far side so a 14-series JSON body does not travel just to be measured.
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: >-
+      set -o pipefail &&
+      ssh {{ seed_volume_source_host | default('daniel-server') }}
+      'cd /home/{{ sys_user }}/server && uv run python scripts/probe.py arr sonarr series --json'
+      | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))'
+  become: false
+  changed_when: false
+  register: sonarr_docker_count
+
+- name: Fail if the cluster library is not the Docker library
+  tags: [deploy]
+  ansible.builtin.assert:
+    that:
+      - sonarr_k8s_series.json | length | int == sonarr_docker_count.stdout | trim | int
+      - sonarr_k8s_series.json | selectattr('path', 'match', '^/data/') | list | length
+        == sonarr_k8s_series.json | length
+      - sonarr_k8s_series.json | map(attribute='statistics.sizeOnDisk') | select | list | length > 0
+    fail_msg: >-
+      The cluster copy reports {{ sonarr_k8s_series.json | length }} series against
+      {{ sonarr_docker_count.stdout | trim }} on daniel-server, or holds a series path outside
+      /data. Do not proceed to B4 — re-seed and re-check before anything cuts over.
+    success_msg: >-
+      {{ sonarr_k8s_series.json | length }} series, matching daniel-server, every path under
+      /data, and
+      {{ (sonarr_k8s_series.json | map(attribute='statistics.sizeOnDisk') | select | sum / 1073741824) | round(1) }}
+      GiB of episode files measured THROUGH the mount — so the pod is reading real files, not an
+      empty tree that happens to exist.

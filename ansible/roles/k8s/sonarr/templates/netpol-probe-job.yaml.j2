@@ -1,0 +1,68 @@
+---
+# The negative test for networkpolicy.yaml.j2: a pod inside the fence must not reach daniel-server.
+#
+# INVERTED ON PURPOSE — this Job SUCCEEDS when the connection FAILS. Written the other way round,
+# a fence that was never applied would look like a passing test, which is the exact thing this
+# rules out. Same shape as n8n-netpol-probe, and for the same reason.
+#
+# TWO CONTROLS, because one is not enough — learned the hard way on 2026-08-07. The first version
+# of this probe tested port {{ container_item.port }} on daniel-server and reported "fence ok".
+# It proved nothing: the Docker sonarr publishes NO host port (it is reachable only through
+# Traefik), so that connection fails whether the policy exists or not. A DNS control cannot catch
+# that — the pod's network stack was fine; the target was simply never reachable.
+#
+#   1. DNS resolves          -> this pod has a working network stack (checked here)
+#   2. the target IS reachable from an UNFENCED pod -> netpol-control-job.yaml.j2, run first
+#
+# Hence port {{ sonarr_k8s_fence_probe_port }}: Traefik on daniel-server, which is genuinely
+# listening on the LAN, so "unreachable" can only be the policy.
+#
+# It carries the fence label but NOT app=sonarr, so the policy selects it while sonarr's Service
+# does not.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sonarr-netpol-probe
+  namespace: {{ k8s_namespace }}
+spec:
+  activeDeadlineSeconds: 120
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: sonarr-netpol-probe
+        netfence: {{ sonarr_k8s_fence_label }}
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      containers:
+        - name: probe
+          image: {{ sonarr_k8s_probe_image }}
+          command:
+            - sh
+            - -c
+            - |
+              if ! nslookup kubernetes.default.svc.cluster.local >/dev/null 2>&1; then
+                echo "CONTROL FAILED: DNS does not resolve from inside the fence, so this probe"
+                echo "proves nothing about the policy — a pod with no network would pass it."
+                exit 1
+              fi
+              echo "control ok: DNS resolves, so this pod has a working network stack"
+              if nc -w 5 -z {{ k8s_bridge_client_ip }} {{ sonarr_k8s_fence_probe_port }}; then
+                echo "FENCE NOT ENFORCED: reached {{ k8s_bridge_client_ip }}:{{ sonarr_k8s_fence_probe_port }}"
+                echo "from inside the fence. The rehearsal copy can reach the LAN, which means it"
+                echo "can reach the live qbittorrent and the indexers. Do NOT leave sonarr running."
+                exit 1
+              fi
+              echo "fence ok: {{ k8s_bridge_client_ip }}:{{ sonarr_k8s_fence_probe_port }} unreachable from inside it"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi

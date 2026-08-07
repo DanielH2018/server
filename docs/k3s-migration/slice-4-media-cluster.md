@@ -246,6 +246,24 @@ UID into `claimRef`. Delete the PVC and the PV goes `Released` holding a UID tha
 so a same-named PVC will **not** rebind — the data is intact and the volume silently refuses to
 mount. Recover with `kubectl patch pv media-data -p '{"spec":{"claimRef":null}}'`.
 
+### D10 — qbittorrent's router forward moves early, before the cutover *(resolved 2026-08-07)*
+
+qbittorrent's inbound listen port is forwarded by the router to daniel-server. Nothing about that
+survives the move, and an unreachable listen port does not fail loudly — torrents stay
+*connectable-but-slow*, seeding suffers, and the only symptom is a number nobody is watching.
+
+**Chosen: give qbittorrent a MetalLB `LoadBalancer` VIP and repoint the forward at it before the
+cutover**, so peering never degrades. The cost is honest and accepted: one piece of slice-6 edge
+config is pulled forward, and for the length of the window the forward points at the cluster while
+the Docker copy is still the authoritative one — inbound peers reach a qbittorrent that is not yet
+the live one. That is the *right* way round: a brief loss of inbound peers for the copy that is
+about to be retired, rather than for the one taking over.
+
+Rejected: accepting degraded peering through the window (cheaper, but the degradation is silent and
+the window is not sharply bounded), and leaving qbittorrent on Docker past slice 4 — which is not
+actually available, because it writes `/data/torrents` and the hardlink seam requires it to sit in
+the same volume as the \*arrs at the same moment (§"the seam that shapes this slice").
+
 ---
 
 ## Batches — vertical, each independently exercisable
@@ -340,14 +358,79 @@ configured with. What the probe does prove on a first run is real, though — it
 mount the claim, so a green run means the static PV binds, the `nodeAffinity` resolves, and uid 1000
 can write.
 
-### B3 — One \*arr, on the real path contract, still not authoritative
+### B3 done — 2026-08-07 — the path footgun does not fire, and three probes lied on the way
 
-Bring up `sonarr` in the cluster against a **copy** of its config PVC and the B2 media volume, with
-Docker's sonarr still the live one.
+`roles/k8s/sonarr`, running a seeded copy of the live config against the B2 media volume while
+Docker's sonarr stays authoritative.
 
-**Prove it:** its root folders resolve, a library scan finds the same series count as the Docker
-instance, and no path appears as missing. This is the footgun rehearsal — do it while a wrong
-answer costs nothing.
+**The rehearsal passed on the first deploy, and cleanly:**
+
+```
+Root folders resolve inside the pod: /data/media/tv (free space 818 GiB)
+14 series, matching daniel-server, every path under /data, and 15.0 GiB of episode
+files measured THROUGH the mount
+```
+
+**818 GiB is the load-bearing number**, not the 14. daniel-server's root folder reports 334 G free;
+818 G is daniel-box's disk. Sonarr is therefore stat'ing the *cluster's* filesystem through the
+`/data` mount, which is the thing the \*arr absolute-path footgun would have broken. The 15.0 GiB
+of episode files is the same argument from the other side: the pod is reading real files, not an
+empty tree that happens to exist at the right path.
+
+#### What actually isolates the rehearsal copy — and what does not
+
+This copy holds the **live** database: the real indexers, the real download client, the real
+release profiles. Unrestrained it would grab into the live qbittorrent, fail to import (the
+completed files are on daniel-server, not in this volume), and then act on that failure — sonarr
+removes downloads it has given up on, which would delete a torrent the authoritative copy is
+waiting for.
+
+The plan was a deny-all-egress `NetworkPolicy`. **Measured: it does not work on this cluster.** The
+policy selected the pod correctly (`netfence=media-rehearsal`, confirmed on the pod and in the
+policy's `podSelector`), and a pod carrying that label still reached `10.0.0.161:443` with the
+policy in force. Worth flagging loudly because the asymmetry is a trap: the same cluster's
+**Ingress** policy, `n8n-broker`, *is* verifiably enforced, and k3s's kube-router netpol controller
+(`v2.6.3-k3s1`) is running and logs a clean start. Do not assume an egress policy here does
+anything without probing it.
+
+What actually holds is the **name-resolution boundary**. Every outbound target in sonarr's database
+is a Docker network name:
+
+```
+download client   qBittorrent    wireguard:8080
+indexers (x7)     via Prowlarr   http://prowlarr:9696/...
+```
+
+None resolve in the cluster — confirmed independently by sonarr's own log, `Unable to retrieve
+queue and history items from qBittorrent`. So the unenforced policy was never what protected
+anything. It has been **deleted rather than left in place**: an unenforced control that a probe
+reports "ok" on is worse than no control, because it reads as protection.
+
+In its place, `isolation-probe-job.yaml.j2` asserts the boundary that does hold, on every deploy.
+That is not a formality — **B4–B7 bring prowlarr and qbittorrent into this cluster under exactly
+those Service names**, and on that day the names start resolving and a still-rehearsing sonarr
+would find them. The probe turns that from a silent change into a failed deploy.
+
+#### Three probes that passed for the wrong reason
+
+Every one of these was green before it was correct, which is the whole reason B3 exists as a
+rehearsal:
+
+1. **The fence probe tested a port nothing listens on.** It checked `daniel-server:8989` and
+   reported `fence ok`. But the Docker sonarr publishes **no host port** — Traefik reaches it over
+   a Docker network — so that connection fails whether a policy exists or not. Fixed by testing
+   `:443` (Traefik, genuinely listening) *and* pairing it with an unfenced control job that must
+   reach the same target. The control is what exposed the policy as unenforced.
+2. **The NetworkPolicy itself.** Covered above — correct in every observable way except effect.
+3. **The isolation probe used `nslookup`.** busybox's `nslookup` ignores the `search` list in
+   `/etc/resolv.conf`, so a **bare Service name never resolves through it**. Every host came back
+   "isolated" unconditionally — including `sonarr`, which demonstrably exists. Fixed by using
+   `getent hosts`, which goes through musl's resolver and honours the search path, i.e. asks the
+   question sonarr's own HTTP client asks. The guard was then **tested in both directions**: it
+   passes on `prowlarr`/`wireguard` and fails the deploy on `sonarr`.
+
+A control that used an FQDN would not have caught #3, and a probe without a control would not have
+caught #1 or #2.
 
 ### B4 — The cutover window
 
@@ -396,8 +479,9 @@ against the new endpoints.
   same trap applies: point it at the `-k8s` hostname via the ingress VIP, **not** at a bridged
   `*.local` name, which resolves to daniel-server and is unreachable from a container on that host.
 - **`qbittorrent` needs its listen port reachable** or torrents go connectable-but-slow. A
-  `LoadBalancer` VIP plus the router forward, which is edge config and belongs with slice 6 —
-  decide in B4 whether to move the forward early or accept degraded peering meanwhile.
+  `LoadBalancer` VIP plus the router forward, which is edge config that otherwise belongs with
+  slice 6. **Decided 2026-08-07: move the forward early** (D10) — peering does not degrade at any
+  point, at the cost of pulling one piece of slice-6 edge config forward.
 - **19 G is today's number.** Re-measure before the cutover; the window scales with the delta, not
   the total.
 - **`/srv/media` is a point-in-time copy taken 2026-08-07 20:14 UTC, and nothing reconciles it.**
@@ -441,3 +525,7 @@ against the new endpoints.
   other PVC is Longhorn — so its storage directory does not even exist.
 - **The duplicate default StorageClass** (D5) — decide which one keeps the annotation, separately
   from this slice.
+- **Why an Egress `NetworkPolicy` is not enforced on this cluster** (found in B3). Ingress policies
+  are; the netpol controller is running and healthy. Not chased down, because B3 did not need it —
+  but it is a cluster-wide capability gap, not a sonarr one, and the next person to reach for
+  egress isolation will assume it works. Probe before relying on it.

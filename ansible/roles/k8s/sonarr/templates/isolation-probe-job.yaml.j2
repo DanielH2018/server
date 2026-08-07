@@ -1,0 +1,87 @@
+---
+# What actually keeps the B3 rehearsal copy from acting on the world — and it is not what the
+# first attempt assumed.
+#
+# THE STORY, because the conclusion is worthless without it. This copy runs the LIVE sonarr
+# database, so it knows the real download client and the real indexers. The plan was to fence it
+# with a deny-all-egress NetworkPolicy. Measured 2026-08-07: that policy selected the pod
+# correctly and did NOT block anything — a pod carrying the fence label reached daniel-server:443
+# with the policy in force. (The same cluster's INGRESS policy, n8n-broker, is verifiably
+# enforced, which makes the asymmetry a trap for the next person who reaches for egress.)
+#
+# WHAT DOES HOLD is the name-resolution boundary. Every outbound target in sonarr's database is a
+# DOCKER NETWORK NAME, not an IP:
+#
+#     download client   qBittorrent   wireguard:8080
+#     indexers (x7)     via Prowlarr  http://prowlarr:9696/...
+#
+# None of those resolve in the cluster, so the copy cannot reach them however hard it tries —
+# confirmed by sonarr's own log: "Unable to retrieve queue and history items from qBittorrent".
+#
+# THIS PROBE ASSERTS THAT BOUNDARY, rather than trusting it. It is not a formality: B4-B7 bring
+# prowlarr and qbittorrent INTO this cluster under exactly these Service names, and on that day
+# the names start resolving. A still-rehearsing sonarr would then find them. This Job is what
+# turns that from a silent change into a failed deploy.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sonarr-isolation-probe
+  namespace: {{ k8s_namespace }}
+spec:
+  activeDeadlineSeconds: 120
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: sonarr-isolation-probe
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      containers:
+        - name: probe
+          image: {{ sonarr_k8s_probe_image }}
+          command:
+            - sh
+            - -c
+            - |
+              # `getent hosts`, NOT nslookup. busybox's nslookup ignores the `search` list in
+              # /etc/resolv.conf, so a BARE Service name never resolves through it — which made
+              # the first version of this probe report every host "isolated" unconditionally,
+              # including one that demonstrably existed. getent goes through musl's resolver,
+              # which honours the search path, so it answers the question sonarr's own HTTP
+              # client asks.
+              #
+              # The control is a bare Service name in this namespace, resolved the same way and
+              # over the same single search-domain hop as the hosts below. A control using an
+              # FQDN would not have caught the nslookup bug at all.
+              if ! getent hosts sonarr >/dev/null 2>&1; then
+                echo "CONTROL FAILED: the bare name 'sonarr' does not resolve in {{ k8s_namespace }},"
+                echo "so short-name lookup is broken in this pod and every result below would say"
+                echo "'isolated' regardless. This probe proves nothing."
+                exit 1
+              fi
+              echo "control ok: bare Service names resolve in this namespace"
+              RC=0
+              for h in {{ sonarr_k8s_isolation_hosts | join(' ') }}; do
+                if getent hosts "$h" >/dev/null 2>&1; then
+                  echo "ISOLATION BROKEN: '$h' now resolves in {{ k8s_namespace }}."
+                  echo "  The rehearsal sonarr can reach its real download client or indexers,"
+                  echo "  and it holds the live database. Either cut it over (set"
+                  echo "  sonarr_k8s_rehearsal=false) or stop it — do not leave it running."
+                  RC=1
+                else
+                  echo "isolated: '$h' does not resolve"
+                fi
+              done
+              exit $RC
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi

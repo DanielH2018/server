@@ -1,0 +1,57 @@
+---
+# Same tag the Docker copy runs. Both stay on it through coexistence so a behavioural difference
+# between the two is never attributable to the image.
+sonarr_k8s_image: lscr.io/linuxserver/sonarr:4.0.17.2952-ls312
+
+# ── the config database ─────────────────────────────────────────────────────────────────────
+# 85 M / 221 files at B3. `longhorn`, not longhorn-nobackup: sonarr.db holds the library and the
+# absolute root-folder paths that this whole slice is careful about — it is exactly the state
+# worth snapshotting.
+sonarr_k8s_claim: sonarr-config
+sonarr_k8s_storage_class: longhorn
+sonarr_k8s_size: 2Gi
+sonarr_k8s_source_path: /home/ubuntu/server/containers/sonarr/config
+
+# The B2 volume, mounted at /data — byte-for-byte the Docker path contract (D4). Getting this
+# wrong does not fail at startup; it fails as a library that looks intact until an import.
+sonarr_k8s_media_claim: media-data
+
+# ── B3 rehearsal isolation ──────────────────────────────────────────────────────────────────
+# TRUE UNTIL B4. This copy runs the REAL sonarr database, so it knows the indexers, the download
+# client and the release profiles of the live instance. Acting on any of them would be bad: it
+# would grab into the live qbittorrent, fail to import (the completed files are on daniel-server,
+# not in this volume), and sonarr removes downloads it has given up on — deleting a torrent the
+# AUTHORITATIVE copy is still waiting for.
+#
+# What stops it is that every outbound target in its database is a DOCKER NETWORK NAME
+# (`wireguard:8080`, `prowlarr:9696`) which does not resolve in the cluster. That boundary is
+# asserted on every deploy by isolation-probe-job.yaml.j2 — see its header for why a
+# NetworkPolicy is NOT what does this, and for the measurement behind that.
+#
+# Set false at B4, when this copy becomes the authoritative one.
+sonarr_k8s_rehearsal: true
+
+# The hostnames that must NOT resolve while the rehearsal is running, read off the seeded
+# database's download-client and indexer configuration. B4-B7 bring both into the cluster under
+# these exact Service names, at which point this list is what fails the deploy instead of letting
+# a rehearsing sonarr quietly find them.
+sonarr_k8s_isolation_hosts:
+  - prowlarr
+  - wireguard
+
+# TheCaptain989's striptracks mod, as the compose template runs it (there is no separate
+# `sonarr-striptracks` — the radarr-named image auto-detects which app it is in).
+#
+# Applied only when the fence is OFF. LSIO downloads mods at container start, which needs
+# egress the rehearsal deliberately does not have — leaving it set would trade a clean startup
+# for a mod that cannot affect anything while the copy is unable to import.
+sonarr_k8s_docker_mods: linuxserver/mods:radarr-striptracks
+
+# Mirrors resources('1.0', '1024M', '0.10', '128M') in the compose template.
+sonarr_k8s_cpu_limit: "1"
+sonarr_k8s_mem_limit: 1024Mi
+sonarr_k8s_cpu_request: "100m"
+sonarr_k8s_mem_request: 128Mi
+
+# busybox nslookup is all the isolation probe needs.
+sonarr_k8s_probe_image: alpine:3.22
