@@ -154,7 +154,7 @@ writes several. Name the class in every one, and separately fix the duplicate de
   `emptyDir` or a `longhorn-nobackup` volume, on the same reasoning that keeps `prometheus_data`
   out of Kopia.
 
-### D7 — Jellyfin's LAN and DLNA ports need a decision, and DLNA may not survive
+### D7 — The DLNA discovery ports are dropped *(resolved 2026-08-07)*
 
 Today Jellyfin binds three ports **to the host LAN IP specifically**, not `0.0.0.0`:
 
@@ -166,15 +166,17 @@ Today Jellyfin binds three ports **to the host LAN IP specifically**, not `0.0.0
 
 8096 ports cleanly to a MetalLB `LoadBalancer` on its own VIP. **The two UDP discovery ports do
 not** — both are multicast/broadcast protocols, and MetalLB in L2 mode does not carry multicast to
-pods. Decide deliberately:
+pods.
 
-1. Accept losing auto-discovery; clients use the hostname. Simplest, and the Traefik route already
-   exists.
-2. `hostNetwork: true` for Jellyfin. Restores discovery, costs the pod its network isolation.
-3. Keep a discovery shim on daniel-server until slice 7.
+**Resolved by asking: nobody uses DLNA.** So both UDP ports are simply dropped. Clients reach
+Jellyfin by hostname over the route that already exists, and the manifest carries one
+`LoadBalancer` for 8096 and nothing else.
 
-Recommend **(1)** unless a client actually depends on it — check before assuming, and check with
-the people using it, not the config.
+This is worth recording as more than a deletion, because it removes the slice's only pressure
+toward `hostNetwork: true` — the alternative that would have restored discovery at the cost of the
+pod's network isolation. The rejected options are kept here so a future reader does not re-derive
+them: `hostNetwork` for Jellyfin, or a discovery shim left on daniel-server until slice 7. Neither
+is needed.
 
 ### D8 — Jellyfin's transcode settings are database state and must be reconfigured by hand
 
@@ -294,7 +296,6 @@ against the new endpoints.
   it. B1's first job.
 - **Which VAAPI driver package the Jellyfin and tdarr images ship for AMD**, and whether the
   linuxserver images need a mod equivalent to the Intel one they currently use.
-- **Whether anything actually uses DLNA/auto-discovery** (D7). Ask, do not infer from config.
 - **How long a delta rsync takes** once the bulk copy is warm (B2). This is the cutover window and
   it should be a measured number before B4 is scheduled.
 - **Whether `local-path` on daniel-box has an eviction/size policy** that a growing media library
