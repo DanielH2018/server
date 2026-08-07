@@ -1,0 +1,105 @@
+---
+# Ports daniel-server's Grafana dashboards into the cluster Grafana (slice 3, B4).
+#
+# The JSON is NOT copied into this role. roles/containers/grafana/files/dashboards stays the one
+# source of truth and both Grafanas mount the same files, so a board edited for one is not
+# silently stale in the other — a second copy is how the two Claude Code boards diverged in the
+# first place (see claude_otel_dashboard_folders for why `AI` is excluded).
+#
+# Built with `kubectl create configmap --from-file --dry-run=client` rather than a Jinja template.
+# The role's other ConfigMap (grafana-dashboard.yaml.j2) inlines its JSON in a raw block, and that
+# does not scale here: ~730 KB across sixteen files, none of which contains any Jinja to render.
+# Generating the YAML instead keeps the dashboards as dashboards and leaves nothing to escape.
+#
+# Applied SERVER-SIDE, in their own directory, deliberately kept out of the one the manifests role
+# applies. Client-side `kubectl apply` records the whole object in the
+# kubectl.kubernetes.io/last-applied-configuration annotation, and annotations are capped at
+# 262144 bytes — so the first attempt failed with:
+#
+#   The ConfigMap "grafana-dashboards-infrastructure" is invalid:
+#   metadata.annotations: Too long: may not be more than 262144 bytes
+#
+# The cap is on the ANNOTATION, not the ConfigMap (1 MiB), so splitting the folder further does not
+# help: node-exporter-full.json is 442 KB on its own and would breach it alone. Server-side apply
+# does not write that annotation at all, which is precisely the problem it was introduced to solve.
+# Scoped to these objects rather than switching the shared manifests role wholesale — every other
+# manifest in this repo is small and client-side apply is fine for them.
+
+- name: Create the directories for the dashboard ConfigMap manifests
+  tags: [config]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  loop:
+    - /etc/rancher/k3s/manifests/claude-otel
+    - /etc/rancher/k3s/dashboard-manifests
+  become: true
+
+- name: Remove dashboard ConfigMaps from the client-side apply directory
+  tags: [config]
+  # They were briefly written here, where the manifests role's client-side `apply -f <dir>/` picks
+  # up everything present — which is exactly what hit the annotation cap. Leaving one behind fails
+  # every subsequent deploy of this role, so the removal has to be explicit rather than implied by
+  # the new path.
+  ansible.builtin.file:
+    path: "/etc/rancher/k3s/manifests/claude-otel/grafana-dashboards-{{ item | lower }}.yaml"
+    state: absent
+  loop: "{{ claude_otel_dashboard_folders }}"
+  become: true
+
+- name: Stage the shared Grafana dashboards on the node
+  tags: [config]
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/roles/containers/grafana/files/dashboards/{{ item }}/"
+    dest: "/etc/rancher/k3s/dashboards/{{ item }}/"
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ claude_otel_dashboard_folders }}"
+  become: true
+  register: claude_otel_dashboards_staged
+
+- name: Build a ConfigMap manifest per dashboard folder
+  tags: [config]
+  # Generation only — writes nothing and touches no cluster state, hence changed_when: false.
+  # The apply that follows (in the manifests role) is what can change anything.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl create configmap grafana-dashboards-{{ item | lower }}
+      --namespace {{ k8s_observability_namespace }}
+      --from-file=/etc/rancher/k3s/dashboards/{{ item }}
+      --dry-run=client -o yaml
+  loop: "{{ claude_otel_dashboard_folders }}"
+  become: true
+  changed_when: false
+  register: claude_otel_dashboard_configmaps
+
+- name: Write the dashboard ConfigMap manifests
+  tags: [config]
+  ansible.builtin.copy:
+    content: "{{ item.stdout }}\n"
+    dest: "/etc/rancher/k3s/dashboard-manifests/grafana-dashboards-{{ item.item | lower }}.yaml"
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ claude_otel_dashboard_configmaps.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  become: true
+  register: claude_otel_dashboard_manifests
+
+- name: Apply the dashboard ConfigMaps
+  tags: [deploy]
+  # --force-conflicts because the four folders small enough to succeed on the first (client-side)
+  # attempt are already owned by that field manager; server-side apply refuses to take fields from
+  # another owner without it. Harmless for the rest — this role is the only writer of these.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply --server-side --force-conflicts
+      -f /etc/rancher/k3s/dashboard-manifests/
+  become: true
+  register: claude_otel_dashboards_applied
+  changed_when: "'serverside-applied' in claude_otel_dashboards_applied.stdout"

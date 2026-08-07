@@ -48,6 +48,23 @@ claude_otel_query_host_ip: 127.0.0.1
 # enforces it. Retention matters more here than in a normal log store: every prompt and
 # response is retained verbatim for this window.
 claude_otel_loki_retention: 744h
+# Dashboard folders ported from daniel-server's Grafana (slice 3, B4). These are the
+# subdirectories of roles/containers/grafana/files/dashboards, which stays the single source of
+# truth for the JSON — the cluster mounts the same files rather than keeping a second copy.
+#
+# `AI` is deliberately absent. Its only board is claude-code.json, whose dashboard uid
+# (claude-code-otel) is the SAME uid this cluster's own vendored Claude Code board already
+# claims, and the two have diverged. Loading both would let Grafana's provisioner resolve the
+# collision by last-writer-wins, silently, on a 30s timer. Reconciling them is content work with
+# no test and belongs in its own change, not in the batch whose success criterion is that no
+# dashboard was edited.
+claude_otel_dashboard_folders:
+  - Apps
+  - Infrastructure
+  - Logs
+  - Networking
+  - Security
+
 claude_otel_prometheus_retention: 30d
 # Deliberately well under claude_otel_prometheus_storage (5Gi), not close to it. The cap bounds
 # persisted BLOCKS only — the WAL, the in-memory head as it flushes, and compaction (which needs

@@ -39,9 +39,46 @@ data:
             customQuery: false
           nodeGraph:
             enabled: true
+      # --- Aliases carrying daniel-server's Grafana uids (slice 3, B4) ------------------
+      # The sixteen dashboards ported from the Docker Grafana reference their datasources by
+      # UID — `EGdsQqhVk` and `bf4q19tuivta8e`, baked into every panel (checked: all 16
+      # bare-string refs in the set are that Prometheus uid, and none reference a datasource
+      # by NAME, so these aliases are free to be named whatever reads clearly). D6's lever is
+      # that a matching uid makes every one of those boards work with no edit at all.
+      #
+      # ADDITIVE rather than renaming the two above, which is the whole trick here. Retagging
+      # `Prometheus` from uid `prometheus` to `EGdsQqhVk` would instantly break this cluster's
+      # own Claude Code dashboard, which references the current uids in 24 panels. Two
+      # datasources over one backend costs nothing and lets BOTH dashboard sets load
+      # unmodified — which is precisely what B4 asks to prove.
+      #
+      # Names must differ from the two above: Grafana keys update-vs-insert on orgId+name, so
+      # reusing `Prometheus` would UPDATE that datasource's uid rather than insert a second.
+      # (`loki` vs `Loki` already differ, but only by case — spelled out to keep it obvious.)
+      - name: Prometheus (daniel-server uid)
+        uid: EGdsQqhVk
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        jsonData:
+          httpMethod: POST
+          # Load-bearing, and the reason to have a second datasource rather than one shared:
+          # daniel-server's series are scraped at 1m, this cluster's at 15s. Grafana derives
+          # $__rate_interval from this, and at the 15s default every rate() panel over
+          # 1m-scraped data returns EMPTY — which in B4 would read as "missing series" and be
+          # recorded as a migration gap that is really a datasource setting. The cluster-native
+          # datasource above correctly leaves it unset.
+          timeInterval: "1m"
+      - name: loki
+        uid: bf4q19tuivta8e
+        type: loki
+        access: proxy
+        url: http://loki:3100
   dashboards.yaml: |
     apiVersion: 1
     providers:
+      # This cluster's own Claude Code board, kept on its own provider and its own directory.
+      # foldersFromFilesStructure is false here so `folder:` decides where it lands, unchanged.
       - name: claude-code
         orgId: 1
         folder: "Claude Code"
@@ -50,8 +87,20 @@ data:
         updateIntervalSeconds: 30
         allowUiUpdates: true
         options:
-          path: /var/lib/grafana/dashboards
+          path: /var/lib/grafana/dashboards/claude-code
           foldersFromFilesStructure: false
+      # The boards ported from daniel-server. foldersFromFilesStructure derives the Grafana
+      # folder from the directory name, so the Apps/Infrastructure/Logs/Networking/Security
+      # layout is reproduced without naming any of them here.
+      - name: homelab
+        orgId: 1
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards/homelab
+          foldersFromFilesStructure: true
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -116,7 +165,11 @@ spec:
             - name: provisioning-dashboards
               mountPath: /etc/grafana/provisioning/dashboards
             - name: dashboards
-              mountPath: /var/lib/grafana/dashboards
+              mountPath: /var/lib/grafana/dashboards/claude-code
+{% for folder in claude_otel_dashboard_folders %}
+            - name: dashboards-{{ folder | lower }}
+              mountPath: /var/lib/grafana/dashboards/homelab/{{ folder }}
+{% endfor %}
             - name: data
               mountPath: /var/lib/grafana
           readinessProbe:
@@ -152,6 +205,17 @@ spec:
         - name: dashboards
           configMap:
             name: grafana-dashboards
+        # One ConfigMap per dashboard folder, not one for all of them. A ConfigMap is capped at
+        # 1 MiB and the ported set is ~730 KB, with Infrastructure alone at 538 KB — a single
+        # object would fit today and silently stop fitting the first time a large board is
+        # added. These are built from the JSON files by the role's tasks (see
+        # dashboards.yml), not templated, because the JSON carries no Jinja and inlining
+        # 730 KB into a template would be unreadable.
+{% for folder in claude_otel_dashboard_folders %}
+        - name: dashboards-{{ folder | lower }}
+          configMap:
+            name: grafana-dashboards-{{ folder | lower }}
+{% endfor %}
         - name: data
           persistentVolumeClaim:
             claimName: grafana-data

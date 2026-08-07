@@ -2,6 +2,9 @@
 # The Claude Code telemetry stack: collector + Loki + Prometheus (slice 1), Grafana behind
 # Authelia (slice 2), Tempo + the traces pipeline (slice 3).
 
+- name: Build the ported Grafana dashboard ConfigMaps
+  ansible.builtin.include_tasks: dashboards.yml
+
 - name: Render and apply the Claude Code telemetry manifests
   ansible.builtin.include_role:
     name: k8s/manifests

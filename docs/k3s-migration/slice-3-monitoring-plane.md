@@ -527,6 +527,73 @@ committed figures above were re-derived with an explicit `{origin=""}` (cluster-
 series, 1341.6 samples/s) rather than left to result ordering. The same ambiguity is exactly what
 bites the checks above.
 
+### B4 done — 2026-08-07 — sixteen dashboards, no dashboard edited
+
+**Aliased the datasources rather than renaming them.** D6's lever is that a matching UID makes a
+ported board work untouched, and every one of the sixteen references its datasource by UID
+(checked: all 16 bare-string refs in the set are the Prometheus UID `EGdsQqhVk`, and not one board
+references a datasource by *name*). But retagging the cluster's `Prometheus` from uid `prometheus`
+to `EGdsQqhVk` would have broken this cluster's own Claude Code board, which uses the current uids
+in 24 panels. So the two Docker uids were added as **additional** datasources over the same
+backends — `Prometheus (daniel-server uid)`/`EGdsQqhVk` and `loki`/`bf4q19tuivta8e`. Tempo already
+shared the uid `tempo`. Both dashboard sets now load unmodified, which is exactly what B4 asks to
+prove. Confirmed in the provisioning log:
+`inserting datasource from configuration name="Prometheus (daniel-server uid)" uid=EGdsQqhVk`.
+
+Two datasources over one backend also turns out to be *correct* rather than merely convenient:
+`timeInterval: "1m"` is load-bearing on the daniel-server alias (Grafana derives
+`$__rate_interval` from it, and at the 15s default every `rate()` panel over 1m-scraped data
+returns empty), while the cluster's own series are scraped at 15s and want it unset. One shared
+datasource could not have been right for both estates now that they coexist in one TSDB.
+
+**`AI/claude-code.json` was deliberately not ported.** Its dashboard uid `claude-code-otel` is the
+same uid this cluster's vendored Claude Code board already claims, and the two have diverged (25
+datasource refs vs 12). Loading both would let the provisioner resolve the collision by
+last-writer-wins, silently, on a 30s timer. Reconciling them is content work with no test, and
+doing it here would contradict B4's own criterion that no dashboard was edited. Sixteen ported,
+one deferred.
+
+**The real delivery constraint was not the one expected.** The plan assumed the 1 MiB ConfigMap
+cap; the deploy failed on a different limit:
+
+```
+The ConfigMap "grafana-dashboards-infrastructure" is invalid:
+metadata.annotations: Too long: may not be more than 262144 bytes
+```
+
+That is the `kubectl.kubernetes.io/last-applied-configuration` annotation that **client-side**
+`kubectl apply` writes — a 256 KiB cap, and splitting folders further cannot fix it because
+`node-exporter-full.json` is 442 KB and would breach it alone. Server-side apply does not write
+that annotation at all. The dashboard ConfigMaps therefore get their own directory and their own
+`kubectl apply --server-side --force-conflicts`, scoped to them; every other manifest in the repo
+is small and client-side apply remains fine. `--force-conflicts` is needed because the four
+folders small enough to succeed on the first attempt are already owned by the client-side field
+manager.
+
+The JSON is **not** copied into the k8s role. `roles/containers/grafana/files/dashboards` stays
+the single source of truth and both Grafanas mount the same files — a second copy is precisely how
+the two Claude Code boards diverged.
+
+**Proof — which panels render empty.** Rather than clicking through the UI, every metric name
+referenced by the sixteen boards was checked against the cluster Prometheus (1474 distinct names).
+13 of 16 are fully covered. The three with gaps reference 7 distinct missing metrics:
+
+| Dashboard | Missing |
+|---|---|
+| `Infrastructure/node-exporter-full.json` (216/220) | `node_hwmon_temp_crit_hyst_celsius`, `node_netstat_Tcp_MaxConn`, `node_pressure_irq_stalled_seconds_total`, plus `chip_name` (a label, not a metric — a false positive of the extractor) |
+| `Security/crowdsec-*.json` | `cs_bucket_created_total`, `cs_cloudwatch_stream_hits_total`, `cs_journalctlsource_hits_total`, `cs_syslogsource_hits_total` |
+
+**None of these is a migration gap.** Querying all eight names against daniel-server's own
+Prometheus returns `no data` — they are absent there too, so those panels are equally empty on the
+Grafana they came from. They are unconfigured CrowdSec acquisition sources (journald, syslog,
+cloudwatch) and hardware/kernel counters this host does not expose. Nothing was lost in the port.
+
+Two honest limits on that proof: the extractor reads PromQL `expr` fields only, so the two
+Loki-backed boards (`Logs/logs.json`, `Infrastructure/alert-history.json`) report 0/0 and are
+**not** validated by it; and folder placement follows from `foldersFromFilesStructure: true` and a
+clean provisioning run (`starting` → `finished to provision dashboards`, no errors) rather than
+from looking at the UI, which needs credentials this session does not hold.
+
 ---
 
 ## Batches — vertical, each independently exercisable
