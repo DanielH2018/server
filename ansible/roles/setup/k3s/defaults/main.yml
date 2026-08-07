@@ -41,6 +41,28 @@ k3s_server_args: >-
   server --cluster-init --disable=traefik --disable=servicelb
   --write-kubeconfig-mode 0640
   --node-ip {{ server_ip }} --advertise-address {{ server_ip }}
+  --kubelet-arg=allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark
+
+# ── why one unsafe sysctl is allow-listed (slice 4, D11) ────────────────────────────────
+# qbittorrent runs inside a WireGuard/Mullvad netns, and wg-quick refuses to bring the tunnel
+# up without net.ipv4.conf.all.src_valid_mark=1. Measured on this node: /proc/sys is mounted
+# `ro` in a pod even with NET_ADMIN, so the container cannot set it itself; and wg-quick's
+# line 240 only ATTEMPTS the write when the value is not already 1, so pre-setting it from the
+# pod spec makes wg-quick skip the write and proceed.
+#
+# Narrow on purpose. This sysctl is NAMESPACED — a pod setting it affects its own network
+# namespace and nothing else, so allow-listing it grants no reach over the node or its
+# neighbours. "Unsafe" is kubelet's conservative default list, not a risk ranking. The two
+# net.ipv6.conf.*.disable_ipv6 sysctls the Compose file also sets are deliberately NOT here:
+# a pod's only v6 addresses are ::1 and a link-local, with no route off-link, so there is no
+# leak path for them to close.
+#
+# The alternative was a privileged init container, rejected because slice 4 concentrates
+# privilege in exactly one component (roles/k8s/dri-device-plugin) and qbittorrent — which
+# handles arbitrary torrent payloads — is the worst place to add a second.
+#
+# REMOVING THIS NEEDS A MANUAL INSTALLER RE-RUN. The install task above detects an argument
+# that was ADDED but not one that was removed; see its comment.
 
 # LoadBalancer addresses. Must sit OUTSIDE the router's DHCP scope, or MetalLB will hand
 # out addresses the router also leases.
