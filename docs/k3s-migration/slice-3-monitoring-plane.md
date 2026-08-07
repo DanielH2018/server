@@ -419,6 +419,67 @@ role's `rollout status` gate did **not** catch the crashlooping kube-state-metri
 passed, the Deployment went Available, `rollout status` returned success, and only then did the
 liveness probe start failing. A delayed liveness failure is invisible to that gate.
 
+### B3 done — 2026-08-07 — northbound, and the collision it exposed
+
+Remote-write, not cluster-side scraping. The deciding evidence was that **all eleven Docker scrape
+jobs target a container name on the internal `monitoring` network and none is published to the
+host** — scraping inward would mean exposing eleven jobs' worth of ports to the LAN, against one
+outbound connection. Verified live: 11 jobs and 1326 distinct metric names now arrive in the
+cluster Prometheus.
+
+Three things were found by checking rather than assuming, and each changed the design:
+
+- **`external_labels` is mandatory here, not hygiene.** Both instances genuinely produce
+  `job="otel-collector", instance="otel-collector:8889"` for two *different* collectors, and the
+  new self-scrape adds a second such pair on `job="prometheus", instance="localhost:9090"`.
+  Unlabelled, the two sources collide into one series and the receiver rejects half the samples as
+  out-of-order — corrupting both sides, not just one. Confirmed working afterwards: each pair now
+  resolves to two distinct series separated by `origin`. External labels apply only on
+  remote-write, so the Docker Prometheus still serves those series **unlabelled** locally (checked
+  via `probe.py metric`) — which is what keeps this reversible rather than a cutover.
+- **The write path is a second IngressRoute, not a widened query rule.** Folding `/api/v1/write`
+  into the existing `PathPrefix('/api/v1/query')` rule would have made every LAN host able to
+  inject metrics into the instance B5 makes authoritative. It is guarded by
+  `ClientIP(k8s_bridge_client_ip/32)`, and the guard is real rather than decorative for a reason
+  worth recording: the cluster Traefik Service is `externalTrafficPolicy=Local`, so the source IP
+  is the true TCP peer. Under `Cluster`, kube-proxy would SNAT it to a node IP and the matcher
+  would silently match nothing. Tested from daniel-box (not the permitted host): read route 200,
+  write route **404** — no rule matched. No rate-limit on the write route, deliberately: a sender
+  replaying a backlog is exactly what would trip a limiter, and remote-write treats 429s as
+  failures, so limiting it converts a brief outage into permanent gaps.
+- **The cluster Prometheus had no self-scrape at all.** `prometheus_tsdb_head_series` returned an
+  empty vector. B5 promotes this instance to the one alerting reads from, so its own ingestion
+  rate and footprint had to be answerable first. Added.
+
+**Capacity — the configured 30 d retention is now aspirational, and B6 needs to know that.**
+Post-B3 the cluster Prometheus carries 38 568 head series (up from 23 617) at ~1350 samples/s.
+At a typical ~1.7 bytes/sample that is roughly 200 MB/day, so the new
+`--storage.tsdb.retention.size=3GB` cap binds at **about 15 days**, well before
+`retention.time=30d` does. This is an estimate, not a measurement — no blocks have been compacted
+yet. It does **not** block B5: the longest lookback any monitor-bridge query uses is
+`B2_TREND_WINDOW=7d`, comfortably inside 15 days. It does bear on **B6**, which retires a
+Prometheus holding 90 d in favour of one holding ~15 d; raising the PVC is a B6 decision, taken
+with a real measurement rather than this estimate.
+
+The size cap itself is not optional. `retention.time` bounds how *old* a block may get, not how
+much it holds, so doubling the ingest rate grows the footprint without aging anything out — and a
+full Prometheus PVC wedges rather than degrades, with the instance that would alert on it being
+the one that filled up.
+
+**New monitor: `Prometheus Remote-Write Lag`.** Remote-write buffers, retries, then drops, all
+without the sender's own health changing, and a stale cluster copy answers queries exactly like a
+current one. B5's exit test could therefore pass at the moment it is run and be false an hour
+later. An absent lag gauge reads as **DOWN**, for the same reason the k8s workload check treats
+absent series as UNKNOWN: no queue at all is the total-failure case and the one most likely to
+look like silence. Live: `remote-write current (22s behind, 0 samples lost in 1h)`.
+
+**Found while here, and a B5 landmine:** `check_targets_down` issues a bare `up` query and
+`down_exporters` matches on the `job` label. After the B5 repoint those read the cluster
+Prometheus, where `up` now returns *both* estates' targets. The check does not become wrong, but
+it silently widens to cover cluster-native scrape targets too, and `EXPORTER_DEPENDENT` job names
+would match either estate's job of that name. Decide that deliberately in B5 rather than
+discovering it from a page.
+
 ---
 
 ## Batches — vertical, each independently exercisable
@@ -564,6 +625,11 @@ naturally belongs with the slice-7 Kuma move.
   independent toggles (`AUTOKUMA__DOCKER__ENABLED` / `AUTOKUMA__FILES__ENABLED` +
   `AUTOKUMA__STATIC_MONITORS`). This removed the draft's second-AutoKuma-instance requirement.
 
+- **Northbound = remote-write, resolved in B3 by measurement.** Not the "survives slice 7 better"
+  argument the draft expected to decide it: none of the eleven Docker scrape targets is published
+  to the host, so cluster-side scraping meant exposing eleven jobs' worth of ports to the LAN
+  against one outbound connection. See the B3 execution log.
+
 ### Still open
 
 - **Static-file coverage of `docker`-type monitors** (D2). Now largely moot — D3 keeps every
@@ -574,8 +640,6 @@ naturally belongs with the slice-7 Kuma move.
   `max_retries`. Settle it against a created monitor in B0, not by reading the macro.
 - **Default values of the two `ENABLED` flags** (D2). The upstream config page lists the variables
   but not their defaults. Set both explicitly rather than inheriting an unknown.
-- **Whether remote-write or cluster-side scraping is the better northbound** (B3). Remote-write
-  survives daniel-server joining the cluster more gracefully; scraping is simpler now.
 - **Which Prometheus the pod-health check queries, and how its gate is scoped** (D8). The open
   decision with the sharpest failure mode in the slice — an absent series must not decode to
   healthy. Resolve before writing the check, not after.
