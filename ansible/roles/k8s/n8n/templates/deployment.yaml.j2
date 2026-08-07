@@ -47,20 +47,28 @@ spec:
             - name: NODE_ENV
               value: production
             # n8n builds absolute URLs from these, so both must be the hostname a browser and an
-            # external webhook caller actually arrive on. WEBHOOK_URL is the load-bearing one:
+            # external webhook caller actually arrive on. N8N_WEBHOOK_URL is the load-bearing one:
             # third parties have already registered URLs against https://n8n.{{ domain }}/, and a
             # wrong value here does not fail at startup — the pod goes ready and every inbound
             # webhook is registered against a name nobody calls. Same treatment as karakeep's
             # NEXTAUTH_URL.
+            #
+            # N8N_WEBHOOK_URL, not WEBHOOK_URL: 2.33.5 logs `WEBHOOK_URL -> Use N8N_WEBHOOK_URL
+            # instead, which sets the base URL for both test and production webhooks`. That wider
+            # scope is safe here and does NOT re-expose /webhook-test/ — the dev endpoint is kept
+            # off the public edge by a Traefik rule (bridge_bypass_prefixes lists /webhook/ only),
+            # never by this variable. What it can change is the Test URL shown in the editor,
+            # which n8n previously derived from N8N_HOST/N8N_PROTOCOL/N8N_PORT and now takes from
+            # here; the production URL is unchanged because the value is the same.
 {% if container_item.bridge_hostname is defined %}
             - name: N8N_HOST
               value: "{{ container_item.bridge_hostname }}.{{ domain }}"
-            - name: WEBHOOK_URL
+            - name: N8N_WEBHOOK_URL
               value: "https://{{ container_item.bridge_hostname }}.{{ domain }}/"
 {% else %}
             - name: N8N_HOST
               value: "{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
-            - name: WEBHOOK_URL
+            - name: N8N_WEBHOOK_URL
               value: "https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}/"
 {% endif %}
             - name: N8N_PORT
