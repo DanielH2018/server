@@ -2,6 +2,32 @@
 global:
   scrape_interval:     1m
   evaluation_interval: 1m
+  # Stamped onto every series leaving this instance via remote_write below, and onto nothing
+  # else — external_labels do not touch local storage or local queries, so the Docker Grafana
+  # keeps seeing exactly the label sets it saw before. That is what makes the k3s northbound
+  # reversible rather than a cutover.
+  #
+  # Mandatory, not decorative. The cluster Prometheus independently scrapes a job named
+  # `otel-collector` at `otel-collector:8889` and (since slice 3 B3) itself as `prometheus` at
+  # `localhost:9090` — both live, both verified 2026-08-07. This instance produces those exact
+  # two (job, instance) pairs for entirely different processes. Written across unlabelled, the
+  # two sources collide into one series and the receiver rejects half the samples as
+  # out-of-order, corrupting both sides rather than either.
+  external_labels:
+    origin: "{{ inventory_hostname }}"
+
+# Northbound to the k3s cluster Prometheus (slice 3, B3). Both stacks hold the same data, which
+# is the property that makes the rest of slice 3 reversible: B5 repoints monitor-bridge at the
+# cluster and B6 retires this instance, and until B6 either one can serve.
+#
+# Chosen over having the cluster scrape daniel-server: every job above targets a container name
+# on the internal `monitoring` network and NONE is published to the host, so scraping inward
+# would mean exposing eleven jobs' worth of ports to the LAN. This is one outbound connection.
+#
+# The receiving route admits this host only (ClientIP), so the URL is not a shared secret and
+# there is no credential here to leak.
+remote_write:
+  - url: "https://prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}/api/v1/write"
 
 # No Alertmanager: alerting is handled out-of-band by the monitor-bridge sidecar
 # (Prometheus metrics -> Uptime Kuma push monitors -> Discord), not by Prometheus

@@ -488,6 +488,29 @@ PROMTAIL_DROPPED_SELECTOR = _env(
 PROMTAIL_DROPPED_WINDOW = _env("PROMTAIL_DROPPED_WINDOW", "1h")
 PROMTAIL_DROPPED_MAX = float(_env("PROMTAIL_DROPPED_MAX", "1000"))
 
+# Remote-write northbound watchdog (slice 3, B3). This Prometheus now forwards every series to the
+# k3s cluster Prometheus, and B5 makes that copy the one monitor-bridge alerts from. Remote-write
+# is asynchronous and lossy under pressure: it buffers, retries, and eventually gives up, all
+# without the sender's own health changing. So "the cluster answers a query" is NOT evidence the
+# cluster's data is current — the query succeeds identically against an hour-stale copy. That is
+# the same shape as the two false-greens found on 2026-08-07 (a readiness field that stayed green
+# through a crashloop; a push monitor that logged OK while 404ing), and B5 is exactly where it
+# would bite, so the lag is monitored BEFORE anything depends on it.
+#
+# Read from the SENDER, which self-scrapes as job="prometheus" — hence Prom-dependent, not
+# cluster-dependent. The lag gauge is the primary signal because it catches every failure mode
+# including the silent ones; the failure counter only catches outright rejection.
+REMOTE_WRITE_LAG_QUERY = _env(
+    "REMOTE_WRITE_LAG_QUERY",
+    "time() - max(prometheus_remote_storage_queue_highest_sent_timestamp_seconds)",
+)
+REMOTE_WRITE_MAX_LAG = float(_env("REMOTE_WRITE_MAX_LAG", "300"))
+REMOTE_WRITE_FAILED_SELECTOR = _env(
+    "REMOTE_WRITE_FAILED_SELECTOR", "prometheus_remote_storage_samples_failed_total"
+)
+REMOTE_WRITE_WINDOW = _env("REMOTE_WRITE_WINDOW", "1h")
+REMOTE_WRITE_MAX_FAILED = float(_env("REMOTE_WRITE_MAX_FAILED", "1000"))
+
 # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
 # 2026-06-11 (fwupd): hourly load5/core >1.7 episodes with healthcheck-timeout storms
 # that no other monitor saw (containers stayed "restarting", never down long enough).
@@ -2593,6 +2616,54 @@ def check_promtail_dropped():
     return promtail_dropped(count, PROMTAIL_DROPPED_WINDOW, PROMTAIL_DROPPED_MAX)
 
 
+def remote_write_healthy(lag, failed, max_lag, window, max_failed):
+    """Pure: is the northbound remote-write to the cluster Prometheus keeping up? (ok, msg).
+
+    `lag` = seconds between now and the newest sample the sender has successfully shipped, None
+    when the gauge has no series. `failed` = increase(samples_failed_total[window]), None when the
+    counter has never incremented.
+
+    An ABSENT lag gauge is DOWN, not OK. It means this Prometheus is running no remote-write queue
+    at all — the config was dropped, the reload never happened, the flag was lost — which is the
+    total-failure case and the one most likely to read as silence. Treating no-series as healthy
+    is how a monitor reports OK on a pipe that is not merely behind but missing. An absent FAILED
+    counter is genuinely 0 (nothing has ever failed) and is fine.
+    """
+    if lag is None:
+        return False, (
+            "no remote-write queue on this Prometheus (%s returned no series) — the cluster copy "
+            "is NOT being fed, so its freshness is UNKNOWN, not OK"
+            % REMOTE_WRITE_LAG_QUERY
+        )
+    if lag > max_lag:
+        return False, (
+            "remote-write is %.0fs behind (> %.0fs) — the cluster Prometheus is serving stale "
+            "data and will keep answering queries while it does" % (lag, max_lag)
+        )
+    n = failed or 0.0
+    if n > max_failed:
+        return False, (
+            "remote-write permanently dropped %.0f samples in %s (> %.0f) — gaps in the cluster copy"
+            % (n, window, max_failed)
+        )
+    return True, "remote-write current (%.0fs behind, %.0f samples lost in %s)" % (
+        lag,
+        n,
+        window,
+    )
+
+
+def check_remote_write():
+    """Northbound remote-write freshness (see REMOTE_WRITE_LAG_QUERY). Prom-dependent."""
+    lag = prom_scalar(REMOTE_WRITE_LAG_QUERY)
+    failed = prom_scalar(
+        "sum(increase(%s[%s]))" % (REMOTE_WRITE_FAILED_SELECTOR, REMOTE_WRITE_WINDOW)
+    )
+    return remote_write_healthy(
+        lag, failed, REMOTE_WRITE_MAX_LAG, REMOTE_WRITE_WINDOW, REMOTE_WRITE_MAX_FAILED
+    )
+
+
 def loki_reachable():
     """Is Loki itself reachable and answering queries? (the LOKI_DEPENDENT gate).
 
@@ -2978,6 +3049,7 @@ CHECKS = [
         _env("KUMA_PUSH_PROMTAIL_DROPPED", ""),
         check_promtail_dropped,
     ),
+    ("remote_write", _env("KUMA_PUSH_REMOTE_WRITE", ""), check_remote_write),
     ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
     ("janitorr", _env("KUMA_PUSH_JANITORR", ""), check_janitorr),
     ("k8s_workloads", _env("KUMA_PUSH_K8S_WORKLOADS", ""), check_k8s_workloads),
@@ -3002,6 +3074,10 @@ PROM_DEPENDENT = frozenset(
         "ups",  # queries HA's Prometheus-scraped UPS battery sensors
         "janitorr",  # reads container_start_time_seconds for its startup-race uptime gate
         "promtail_dropped",  # increase(promtail_dropped_entries_total) instant query
+        # Reads the SENDER's own remote-write gauges, which live in THIS Prometheus. If it is
+        # unreachable the lag gauge is unreadable too, and an unreadable gauge is DOWN by design
+        # — without this gate a Prometheus outage would page as "remote-write missing" as well.
+        "remote_write",
     }
 )
 

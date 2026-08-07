@@ -381,6 +381,15 @@ services:
       - PROMTAIL_DROPPED_WINDOW=1h
       - PROMTAIL_DROPPED_MAX=1000
       - KUMA_PUSH_PROMTAIL_DROPPED={{ monitor_bridge_promtail_dropped_push_token }}
+      # Northbound remote-write freshness (slice 3, B3). This Prometheus forwards everything to the
+      # k3s cluster Prometheus, and B5 makes that copy the one alerting reads from. Remote-write
+      # fails quietly — it buffers, retries, then drops — and a stale copy answers queries exactly
+      # like a current one, so nothing downstream can tell. 300s tolerates a cluster rollout at a 1m
+      # scrape interval without flapping. Read from THIS Prometheus' own gauges: Prom-dependent.
+      - REMOTE_WRITE_MAX_LAG=300
+      - REMOTE_WRITE_WINDOW=1h
+      - REMOTE_WRITE_MAX_FAILED=1000
+      - KUMA_PUSH_REMOTE_WRITE={{ monitor_bridge_remote_write_push_token }}
       # Discord delivery: GET-verify Kuma's own notification webhook is still valid — a
       # rotated/revoked/deleted webhook makes Kuma's alert POSTs silently fail while every
       # monitor stays green-in-UI (the alert chain's delivery hop no other monitor, not even
@@ -555,6 +564,7 @@ services:
       {# Loki reachability — the root-cause monitor that gates the Loki-querying checks: when it's
          down they're suppressed and only this one pages (no Loki-Ingestion/Janitorr storm). -#}
       {{ kuma('monitor-bridge-loki-reachable', monitor_type='push', name='Loki Reachable', interval=600, max_retries=0, push_token=monitor_bridge_loki_reachable_push_token) }}
+      {{ kuma('monitor-bridge-remote-write', monitor_type='push', name='Prometheus Remote-Write Lag', interval=600, max_retries=0, push_token=monitor_bridge_remote_write_push_token) }}
       {# Discord delivery: check_discord GET-verifies Kuma's notification webhook is still valid —
          the alert chain's delivery hop that no other monitor (incl. UptimeRobot) exercises. -#}
       {# extra_notifications=['email']: the ONLY monitor with the independent 2nd (Gmail) channel —

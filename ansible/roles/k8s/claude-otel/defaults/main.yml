@@ -49,6 +49,11 @@ claude_otel_query_host_ip: 127.0.0.1
 # response is retained verbatim for this window.
 claude_otel_loki_retention: 744h
 claude_otel_prometheus_retention: 30d
+# Deliberately well under claude_otel_prometheus_storage (5Gi), not close to it. The cap bounds
+# persisted BLOCKS only — the WAL, the in-memory head as it flushes, and compaction (which needs
+# room for the output block alongside its inputs) all consume the same PVC on top of this number.
+# Sizing it near the volume is how a size-capped Prometheus still fills its disk.
+claude_otel_prometheus_retention_size: 3GB
 
 # Traces (slice 3). Claude Code emits spans only with both CLAUDE_CODE_ENHANCED_TELEMETRY_BETA
 # and OTEL_TRACES_EXPORTER set — the chezmoi settings template already sets both, so this is

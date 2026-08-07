@@ -3117,6 +3117,54 @@ def test_k8s_workloads_names_the_offenders():
     assert "n8n-runners(1), registry(2)" in msg
 
 
+# --- northbound remote-write freshness (slice 3, B3) -------------------------
+
+
+def test_remote_write_absent_queue_is_down_not_up():
+    # The failure this check exists for. A missing queue produces no gauge, exactly like a missing
+    # kube-state-metrics produced no deployment series — and the cluster Prometheus keeps answering
+    # queries from stale data throughout, so nothing else notices.
+    ok, msg = check.remote_write_healthy(None, None, 300, "1h", 1000)
+    assert ok is False
+    assert "UNKNOWN" in msg
+
+
+def test_remote_write_lagging_is_down():
+    ok, msg = check.remote_write_healthy(900, 0, 300, "1h", 1000)
+    assert ok is False
+    assert "900s behind" in msg
+
+
+def test_remote_write_lost_samples_is_down():
+    ok, msg = check.remote_write_healthy(30, 5000, 300, "1h", 1000)
+    assert ok is False
+    assert "5000 samples" in msg
+
+
+def test_remote_write_healthy_when_current():
+    # An absent failure counter means it has never incremented, which is genuinely zero — unlike
+    # the absent lag gauge above, this one really does read as healthy.
+    ok, msg = check.remote_write_healthy(30, None, 300, "1h", 1000)
+    assert ok is True
+    assert "remote-write current" in msg
+
+
+def test_remote_write_lag_takes_priority_over_losses():
+    # Both arms failing is one root cause: the receiver stopped accepting. Report the lag, which
+    # is the ongoing condition, rather than the sample count, which is a consequence of it.
+    ok, msg = check.remote_write_healthy(900, 5000, 300, "1h", 1000)
+    assert ok is False
+    assert "behind" in msg
+
+
+def test_remote_write_is_prom_dependent_not_cluster_dependent():
+    # It reads the SENDER's gauges out of the Docker Prometheus. Putting it in CLUSTER_DEPENDENT
+    # would gate the staleness alarm on the very instance whose staleness it measures — so an
+    # unreachable cluster would silence the check that reports the cluster unreachable.
+    assert "remote_write" in check.PROM_DEPENDENT
+    assert "remote_write" not in check.CLUSTER_DEPENDENT
+
+
 def test_k8s_workloads_disabled_without_cluster_url(monkeypatch):
     monkeypatch.setattr(check, "CLUSTER_PROM_URL", "")
     ok, msg = check.check_k8s_workloads()

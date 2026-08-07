@@ -9,6 +9,15 @@ data:
     global:
       scrape_interval: 15s
     scrape_configs:
+      # Prometheus scraping itself. Added in slice 3 B3, and not cosmetic: until now this
+      # instance had no self-scrape at all, so its own ingestion rate, TSDB footprint and
+      # remote-write receive errors were unreadable — measured 2026-08-07, a query for
+      # prometheus_tsdb_head_series returned an empty vector. B5 promotes this instance to
+      # monitor-bridge's only Prometheus, so "how full is it and is it keeping up" has to be
+      # answerable from inside it before anything depends on it.
+      - job_name: prometheus
+        static_configs:
+          - targets: ['localhost:9090']
       # The collector re-exposes Claude Code's OTLP metrics here. This is the only source of
       # session/token/cost data — nothing else produces it.
       - job_name: otel-collector
@@ -136,6 +145,17 @@ spec:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.path=/prometheus
             - --storage.tsdb.retention.time={{ claude_otel_prometheus_retention }}
+            # A SECOND cap, on bytes. The time cap alone does not bound the PVC: retention.time
+            # says how old a block may get, not how much a block holds, so an ingest-rate rise
+            # (slice 3 B3 doubles it — daniel-server now remote-writes its whole TSDB here) grows
+            # the footprint without aging anything out. A full Prometheus PVC does not degrade,
+            # it wedges — and the instance that would alert on it is this one. Whichever cap binds
+            # first wins, which is the intended behaviour.
+            - --storage.tsdb.retention.size={{ claude_otel_prometheus_retention_size }}
+            # Accepts the Prometheus remote-write protocol on /api/v1/write (slice 3, B3). Off by
+            # default in Prometheus 3.x, which is why the endpoint 404s without it. The write door
+            # is opened no wider than daniel-server — see prometheus-ingressroute.yaml.j2.
+            - --web.enable-remote-write-receiver
           ports:
             - name: http
               containerPort: 9090
