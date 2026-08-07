@@ -197,6 +197,34 @@ def declared_services(host: str, host_vars: dict, global_vars: dict) -> list[dic
 # --------------------------------------------------------------------------
 
 
+# Directories searched for the collector binaries, on top of whatever PATH the
+# caller happens to have. cron runs with PATH=/usr/bin:/bin, which omits
+# /usr/local/bin — where kubectl lives as a symlink to k3s. Resolving tools here
+# rather than trusting PATH is what stops an impoverished environment from
+# silently blinding half the map; see MissingToolError for the other half.
+TOOL_DIRS = ("/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/snap/bin")
+
+
+class MissingToolError(Exception):
+    """A collector binary is absent — a broken setup, not a host being down.
+
+    Kept distinct from an unreachable host on purpose. A host that is down is an
+    observation worth rendering; a missing binary means this run could never
+    have seen anything, and a page that quietly reports declared-only in that
+    case looks identical to a healthy one. This escalates to a non-zero exit so
+    cron surfaces it instead of overwriting the page with a half-blind copy.
+    """
+
+
+def find_tool(name: str) -> str | None:
+    """Resolve a binary by absolute path, searching beyond the inherited PATH."""
+    found = shutil.which(name)
+    if found:
+        return found
+    search = os.pathsep.join(TOOL_DIRS)
+    return shutil.which(name, path=search)
+
+
 def _run(cmd: list[str], timeout: int) -> tuple[bool, str]:
     """Run *cmd*, returning ``(ok, stdout-or-error)``. Never raises."""
     try:
@@ -233,18 +261,21 @@ def parse_docker_ps(output: str) -> dict[str, dict]:
 
 def collect_docker(host: str, local_hostname: str) -> tuple[bool, dict[str, dict], str]:
     """Collect Docker state for *host*, locally or over a single ssh call."""
-    docker_cmd = ["docker", "ps", "-a", "--format", DOCKER_PS_FORMAT]
     if host == local_hostname:
-        if not shutil.which("docker"):
-            return False, {}, "docker not installed on this host"
-        cmd = docker_cmd
+        docker = find_tool("docker")
+        if docker is None:
+            raise MissingToolError("docker not found on this host")
+        cmd = [docker, "ps", "-a", "--format", DOCKER_PS_FORMAT]
         timeout = LOCAL_TIMEOUT
     else:
+        ssh = find_tool("ssh")
+        if ssh is None:
+            raise MissingToolError("ssh not found on this host")
         # One ssh invocation, not one per service: `ufw limit ssh` rejects
         # 6+ connections per 30s and would ban an over-eager generator.
         remote = "docker ps -a --format '%s'" % DOCKER_PS_FORMAT
         cmd = [
-            "ssh",
+            ssh,
             "-o",
             "BatchMode=yes",
             "-o",
@@ -293,9 +324,10 @@ def collect_k8s(host: str, local_hostname: str) -> tuple[bool, dict, str]:
     """Collect Deployment state from the cluster (local kubectl only)."""
     if host != local_hostname:
         return False, {}, f"kubectl only queried locally; run this on {host}"
-    if not shutil.which("kubectl"):
-        return False, {}, "kubectl not installed on this host"
-    ok, out = _run(["kubectl", "get", "deployments", "-A", "-o", "json"], LOCAL_TIMEOUT)
+    kubectl = find_tool("kubectl")
+    if kubectl is None:
+        raise MissingToolError("kubectl not found on this host")
+    ok, out = _run([kubectl, "get", "deployments", "-A", "-o", "json"], LOCAL_TIMEOUT)
     if not ok:
         return False, {}, out
     return True, parse_kubectl_deployments(out), ""
@@ -848,11 +880,18 @@ def main(argv: list[str] | None = None) -> int:
 
     global_vars, host_vars = load_inventory()
     local_hostname = socket.gethostname()
-    live = (
-        {h: {"ok": False, "data": {}, "error": "--no-live"} for h in HOSTS}
-        if args.no_live
-        else collect_live(local_hostname)
-    )
+    try:
+        live = (
+            {h: {"ok": False, "data": {}, "error": "--no-live"} for h in HOSTS}
+            if args.no_live
+            else collect_live(local_hostname)
+        )
+    except MissingToolError as exc:
+        # Deliberately leave the existing page alone. Overwriting it with a
+        # declared-only render would replace real data with a page that looks
+        # healthy and reports nothing wrong.
+        print(f"error: {exc}; leaving the previous map in place", file=sys.stderr)
+        return 2
     generated_at = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M %Z")
     model = build_model(global_vars, host_vars, live, generated_at, load_roles())
 

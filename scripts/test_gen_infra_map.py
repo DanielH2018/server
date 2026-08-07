@@ -18,10 +18,14 @@ Run: uv run pytest scripts/test_gen_infra_map.py
 """
 
 import json
+from pathlib import Path
 
 import pytest
+import yaml
 
 import gen_infra_map as g
+
+REPO_ROOT = g.REPO_ROOT
 
 GLOBALS = {
     "k8s_hostname_suffix": "-k8s",
@@ -458,6 +462,71 @@ def test_render_html_names_an_unreachable_host_in_the_page():
         }
     )
     assert "ssh timed out" in g.render_html(model)
+
+
+# --- tool resolution ---------------------------------------------------------
+#
+# These guard a bug that already happened once: cron runs with PATH=/usr/bin:/bin,
+# which omits /usr/local/bin where kubectl lives. The run still exited 0 and wrote
+# a page — it just quietly reported declared-only for every k8s service while the
+# Docker half kept working. A healthy-looking, half-blind page that alerts nobody.
+
+
+def test_find_tool_looks_beyond_an_impoverished_path(monkeypatch):
+    """The cron-PATH case: /usr/local/bin must be searched even when PATH omits it."""
+    kubectl = Path("/usr/local/bin/kubectl")
+    if not kubectl.exists():
+        pytest.skip("kubectl not installed at the path this guards")
+    monkeypatch.setenv("PATH", "/nonexistent")
+    assert g.find_tool("kubectl") == str(kubectl)
+
+
+def test_find_tool_returns_none_for_a_genuinely_absent_binary(monkeypatch):
+    monkeypatch.setenv("PATH", "/nonexistent")
+    assert g.find_tool("definitely-not-a-real-binary") is None
+
+
+def test_collect_k8s_raises_rather_than_reporting_a_clean_empty_result(monkeypatch):
+    """A missing binary is a broken setup, not 'the cluster has no deployments'."""
+    monkeypatch.setattr(g, "find_tool", lambda name: None)
+    with pytest.raises(g.MissingToolError):
+        g.collect_k8s("box", "box")
+
+
+def test_collect_docker_raises_when_ssh_is_absent(monkeypatch):
+    monkeypatch.setattr(g, "find_tool", lambda name: None)
+    with pytest.raises(g.MissingToolError):
+        g.collect_docker("daniel-server", "daniel-box")
+
+
+def test_main_leaves_the_previous_page_untouched_when_a_tool_is_missing(
+    monkeypatch, tmp_path
+):
+    """Overwriting a real map with a declared-only render would hide the fault."""
+    page = tmp_path / "map.html"
+    page.write_text("PREVIOUS RENDER")
+    monkeypatch.setattr(
+        g,
+        "collect_live",
+        lambda _: (_ for _ in ()).throw(g.MissingToolError("kubectl")),
+    )
+    assert g.main(["-o", str(page)]) == 2
+    assert page.read_text() == "PREVIOUS RENDER"
+
+
+def test_refresh_cron_puts_usr_local_bin_on_the_path():
+    """Second layer of the same guard, pinned where the regression happened."""
+    tasks = REPO_ROOT / "ansible/roles/setup/initial_setup/tasks/main.yml"
+    if not tasks.is_file():
+        pytest.skip("ansible role tree not present")
+    loaded = yaml.safe_load(tasks.read_text())
+    jobs = [
+        t["ansible.builtin.cron"]["job"]
+        for t in loaded
+        if isinstance(t, dict) and "infra-map" in (t.get("tags") or [])
+    ]
+    assert jobs, "the infra-map refresh cron has gone missing"
+    assert "/usr/local/bin" in jobs[0], "kubectl would not resolve under cron's PATH"
 
 
 # --- load_roles (reads the real repo) ---------------------------------------
