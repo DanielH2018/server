@@ -68,6 +68,13 @@ k8s_hostname_suffix: "-k8s"
 # Traefik Middleware references are namespace-scoped, and cross-namespace references cost a
 # qualified name on all ~33 routes that follow for no isolation this homelab needs.
 k8s_namespace: homelab
+# How long a k8s role holds after `rollout status` returns before declaring the deploy healthy
+# (roles/k8s/manifests/tasks/assert_stable.yml). `rollout status` returns on Available, which
+# READINESS alone satisfies, so a container killed by a failing LIVENESS probe reports a clean
+# deploy and then crashloops — observed 2026-08-07 with kube-state-metrics. Must exceed a probe's
+# initialDelaySeconds + failureThreshold x periodSeconds; the slowest in the repo is ~35s.
+# Global rather than a role default because the shared role and claude-otel's own loop both use it.
+k8s_rollout_stabilise_seconds: 60
 
 # Telemetry lives apart from the service workloads. Global rather than a role default because
 # TWO roles need it: claude-otel puts its workloads here, and the traefik role must list it

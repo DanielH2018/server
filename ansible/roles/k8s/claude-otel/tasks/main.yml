@@ -73,6 +73,30 @@
   become: true
   changed_when: false
 
+- name: Confirm the telemetry workloads stayed healthy after their rollout
+  tags: [deploy]
+  # This role skips the shared role's wait (manifests_rollout: '') and rolls its own above, so it
+  # must also opt into the shared stabilisation gate explicitly — the wait it replaced is exactly
+  # the one that cannot see a post-readiness liveness failure. kube-state-metrics crashlooped
+  # through a green deploy here on 2026-08-07; see assert_stable.yml.
+  #
+  # include_role/tasks_from, not include_tasks with a path: a bare relative include would resolve
+  # against THIS role's tasks dir, and a {{ playbook_dir }} path resolves at runtime but not for
+  # ansible-lint, which reads it as a missing file.
+  ansible.builtin.include_role:
+    name: k8s/manifests
+    tasks_from: assert_stable
+  vars:
+    manifests_stabilise_namespace: "{{ k8s_observability_namespace }}"
+    manifests_stabilise_deployments:
+      - loki
+      - prometheus
+      - kube-state-metrics
+      - tempo
+      - otel-collector
+      - grafana
+  when: manifests_render is changed or manifests_secret_render is changed
+
 - name: Read back the OTLP listener's bind address
   tags: [deploy]
   # The one property that cannot be inferred from a green rollout. hostPort/hostIP is what

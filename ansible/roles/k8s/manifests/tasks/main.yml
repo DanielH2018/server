@@ -97,3 +97,18 @@
   become: true
   changed_when: false
   when: manifests_rollout | default(manifests_service) | length > 0
+
+- name: Confirm the rollout stayed healthy for {{ manifests_service }}
+  tags: [deploy]
+  # The wait above returns on Available, which readiness alone satisfies — see assert_stable.yml
+  # for the failure it therefore cannot see. Only run when this deploy actually changed
+  # something: an unchanged run has nothing new to destabilise, and the gate costs a
+  # k8s_rollout_stabilise_seconds pause every time it runs.
+  ansible.builtin.include_tasks: assert_stable.yml
+  vars:
+    manifests_stabilise_namespace: "{{ k8s_namespace }}"
+    manifests_stabilise_deployments:
+      - "{{ manifests_rollout | default(manifests_service) }}"
+  when:
+    - manifests_rollout | default(manifests_service) | length > 0
+    - manifests_render is changed or manifests_secret_render is changed
