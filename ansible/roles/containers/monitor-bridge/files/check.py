@@ -367,6 +367,27 @@ B2_PROBE_APPLICATION_KEY = _env_file("B2_PROBE_APPLICATION_KEY")
 # went 9.5 hours unactioned.
 B2_PROBE_INTERVAL_S = float(_env("B2_PROBE_INTERVAL_S", "1800"))
 
+# k3s workload health, via the CLUSTER's Prometheus — a SECOND Prometheus, not the one PROM_URL
+# points at. Slice 3 D8 (docs/k3s-migration/slice-3-monitoring-plane.md). Seven k8s workloads ran
+# from slice 2 with no monitor of any kind, n8n-runners among them, because none of them is
+# probeable from here: three expose only a ClusterIP, four expose no Service at all, and none has
+# an ingress route. Their health is a Kubernetes API property, so kube-state-metrics is the only
+# thing that can express it as something this bridge can query.
+#
+# Reached over the cluster ingress at prometheus-k8s.local.<domain>, whose IngressRoute admits only
+# /api/v1/query. Not the ClusterIP (unreachable from this host) and not the node's :9090, which is
+# pinned to the cluster node's loopback. Empty = disabled (stays up), like N8N_API_KEY.
+CLUSTER_PROM_URL = _env("CLUSTER_PROMETHEUS_URL", "").rstrip("/")
+# The floor below which the deployment series is treated as missing rather than healthy. THE
+# FAILURE THIS EXISTS TO PREVENT: an absent series makes `unavailable > 0` return an empty vector,
+# which reads exactly like "nothing is unavailable" — green, silent, and wrong, the same shape as
+# the B2 transaction cap (2026-08-02) and the gitops-behind defer (2026-08-07). So the check
+# COUNTS the series first and fails closed when the count is short, instead of inferring health
+# from an empty result. The floor also covers a partially-loaded kube-state-metrics: its
+# ClusterRole is deliberately scoped, so dropping `apps` from it would take every deployment series
+# away while the pod stays up and Ready.
+K8S_MIN_WORKLOADS = int(_env("K8S_MIN_WORKLOADS", "5"))
+
 # Scrutiny SMART freshness + health: the collector cron runs daily (00:00) and has no usable
 # container healthcheck (cron is PID 1) — a silently-dead collector only shows as aging
 # collector_date values in the web API. 26h allows one run + slack. On TOP of freshness we assert
@@ -639,15 +660,20 @@ def _instant_query(base_url, path, query, source):
     return data.get("data", {}).get("result", [])
 
 
-def prom_scalar(promql):
-    """Run an instant query; return the first result's value as float, or None if empty."""
-    result = _instant_query(PROM_URL, "/api/v1/query", promql, "prometheus")
+def prom_scalar(promql, base=None, source="prometheus"):
+    """Run an instant query; return the first result's value as float, or None if empty.
+
+    `base` selects which Prometheus: the default (PROM_URL) is the Docker one every
+    PROM_DEPENDENT check reads. CLUSTER_PROM_URL is a genuinely different instance with a
+    different reachability gate — see check_k8s_workloads.
+    """
+    result = _instant_query(base or PROM_URL, "/api/v1/query", promql, source)
     if not result:
         return None
     return float(result[0]["value"][1])
 
 
-def prom_vector(promql):
+def prom_vector(promql, base=None, source="prometheus"):
     """Run an instant query; return [(labels: dict, value: float), ...] (empty if none).
 
     Unlike prom_scalar this keeps each series' labels, so checks can name *which*
@@ -655,7 +681,7 @@ def prom_vector(promql):
     """
     return [
         (series.get("metric", {}), float(series["value"][1]))
-        for series in _instant_query(PROM_URL, "/api/v1/query", promql, "prometheus")
+        for series in _instant_query(base or PROM_URL, "/api/v1/query", promql, source)
     ]
 
 
@@ -2644,6 +2670,74 @@ def check_b2_reachable():
     return b2_reachable()
 
 
+def k8s_workloads_verdict(total, offenders, min_workloads):
+    """Pure: (ok, msg) from the deployment-series COUNT and the unavailable-replica offenders.
+
+    The count argument is what makes this fail closed. `unavailable > 0` returning nothing is
+    ambiguous — it means either "every workload is healthy" or "there are no series at all" —
+    and only the second is a fault. Reading the first interpretation onto both is how a monitor
+    goes green while blind, so the count is checked BEFORE the offender list is trusted.
+    """
+    if total is None:
+        return False, (
+            "kube_deployment_status_replicas_unavailable is absent from the cluster Prometheus "
+            "— kube-state-metrics is not being scraped, so workload health is UNKNOWN, not OK"
+        )
+    if total < min_workloads:
+        return False, (
+            "only %d deployment series in the cluster Prometheus, below the floor of %d — "
+            "kube-state-metrics is partially loaded, so workload health is UNKNOWN, not OK"
+            % (int(total), min_workloads)
+        )
+    if offenders:
+        named = ", ".join(
+            "%s(%d)" % (labels.get("deployment", "?"), int(value))
+            for labels, value in sorted(
+                offenders, key=lambda o: o[0].get("deployment", "")
+            )
+        )
+        return False, "k8s workloads with unavailable replicas: %s" % named
+    return True, "%d k8s workloads healthy" % int(total)
+
+
+def check_k8s_workloads():
+    """Deployment readiness for every workload in the k3s cluster.
+
+    Gated by check_cluster_prometheus rather than the ordinary Prometheus gate: this is the one
+    check reading the CLUSTER Prometheus, so the `prom_ok` gate is not watching its source. See
+    CLUSTER_DEPENDENT.
+    """
+    if not CLUSTER_PROM_URL:
+        return True, "k8s workload check disabled (no CLUSTER_PROMETHEUS_URL)"
+    total = prom_scalar(
+        "count(kube_deployment_status_replicas_unavailable)",
+        base=CLUSTER_PROM_URL,
+        source="cluster prometheus",
+    )
+    offenders = prom_vector(
+        "kube_deployment_status_replicas_unavailable > 0",
+        base=CLUSTER_PROM_URL,
+        source="cluster prometheus",
+    )
+    return k8s_workloads_verdict(total, offenders, K8S_MIN_WORKLOADS)
+
+
+def check_cluster_prometheus():
+    """Reachability gate for the cluster Prometheus — the peer of check_prometheus.
+
+    Kept separate from the Docker Prometheus gate on purpose. They are different instances on
+    different hosts reached by different paths, so one `prom_ok` cannot describe both: a gate
+    that is not watching a check's actual source is worse than no gate, because it reports
+    confidence it does not have.
+    """
+    if not CLUSTER_PROM_URL:
+        return True, "cluster Prometheus check disabled (no CLUSTER_PROMETHEUS_URL)"
+    value = prom_scalar("vector(1)", base=CLUSTER_PROM_URL, source="cluster prometheus")
+    if value is None:
+        return False, "cluster Prometheus returned no result for vector(1)"
+    return True, "cluster Prometheus reachable"
+
+
 def discord_webhook_ok(status_code, name=None):
     """Pure: does a GET on a Discord webhook return 200 (still valid)? (ok, msg).
 
@@ -2886,6 +2980,7 @@ CHECKS = [
     ),
     ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
     ("janitorr", _env("KUMA_PUSH_JANITORR", ""), check_janitorr),
+    ("k8s_workloads", _env("KUMA_PUSH_K8S_WORKLOADS", ""), check_k8s_workloads),
 ]
 
 # Checks that query Prometheus. A single Prometheus outage would fail every one of them at once
@@ -2958,6 +3053,20 @@ LOKI_DEPENDENT = frozenset({"loki_ingestion", "janitorr"})
 B2_DEPENDENT = frozenset(
     {"verify", "content_verify", "maintenance", "b2_usage", "b2_trend"}
 )
+
+# Checks that read the CLUSTER Prometheus (daniel-box) rather than the Docker one. Its own gate,
+# not an arm of PROM_DEPENDENT, because they are two instances on two hosts reached by two paths —
+# the Docker Prometheus being up says nothing about whether the cluster one is, and a gate that
+# is not watching a check's real source reports confidence it does not have.
+#
+# The division of labour with check_k8s_workloads' own fail-closed logic is deliberate and the two
+# halves are not interchangeable. THIS gate covers "the cluster Prometheus is unreachable", which
+# is a root cause that would otherwise page as a workload fault. The check's series-count floor
+# covers "the cluster Prometheus is reachable but kube-state-metrics is not being scraped" — which
+# this gate structurally cannot see, because the Prometheus answering `vector(1)` is perfectly
+# healthy. Suppression is right for the first and would be dangerous for the second: it would turn
+# a blind monitor green.
+CLUSTER_DEPENDENT = frozenset({"k8s_workloads"})
 
 # Reach-out checks that poll a live app dependency (kopia/n8n/sonarr/radarr/prowlarr/scrutiny/the Pi
 # glances) with NO reachability gate above them and NO per-check hysteresis of their own — unlike
@@ -3083,6 +3192,14 @@ def run_once():
     log("OK  " if b2_ok else "DOWN", "b2_reachable", "-", b2_msg)
     push(_env("KUMA_PUSH_B2_REACHABLE", ""), b2_ok, b2_msg)
 
+    # Cluster-Prometheus gate (peer of the Prometheus gate, for the OTHER instance): the k8s
+    # workload check reads daniel-box's Prometheus over the cluster ingress, a path none of the
+    # other gates covers. Without this, a cluster ingress/Traefik outage would page as a workload
+    # fault rather than as what it is.
+    cluster_ok, cluster_msg = _evaluate("cluster_prometheus", check_cluster_prometheus)
+    log("OK  " if cluster_ok else "DOWN", "cluster_prometheus", "-", cluster_msg)
+    push(_env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""), cluster_ok, cluster_msg)
+
     for name, token, fn in CHECKS:
         if not prom_ok and name in PROM_DEPENDENT:
             ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
@@ -3092,6 +3209,12 @@ def run_once():
             log("SKIP", name, "-", msg)
         elif not b2_ok and name in B2_DEPENDENT:
             ok, msg = True, "skipped — B2 unreachable (see B2 Reachable monitor)"
+            log("SKIP", name, "-", msg)
+        elif not cluster_ok and name in CLUSTER_DEPENDENT:
+            ok, msg = (
+                True,
+                "skipped — cluster Prometheus unreachable (see Cluster Prometheus monitor)",
+            )
             log("SKIP", name, "-", msg)
         elif name in suppressed:
             ok, msg = True, "skipped — exporter down (see Scrape Targets)"

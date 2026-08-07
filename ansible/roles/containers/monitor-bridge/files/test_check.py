@@ -3068,6 +3068,117 @@ def test_b2_dependent_excludes_backup():
     assert "backup" not in check.B2_DEPENDENT
 
 
+def test_cluster_dependent_set_matches_real_checks():
+    # Guard (mirrors PROM_DEPENDENT/LOKI_DEPENDENT/B2_DEPENDENT): every name is a real check.
+    names = {name for name, _, _ in check.CHECKS}
+    assert check.CLUSTER_DEPENDENT <= names
+
+
+def test_cluster_dependent_disjoint_from_prom_dependent():
+    # The whole point of a second gate: k8s_workloads reads the CLUSTER Prometheus, so it must not
+    # also be suppressed by the DOCKER Prometheus gate. Being in both would mean a Docker-side
+    # outage silences a check whose source is fine, and vice versa.
+    assert check.CLUSTER_DEPENDENT.isdisjoint(check.PROM_DEPENDENT)
+    assert check.CLUSTER_DEPENDENT.isdisjoint(check.LOKI_DEPENDENT)
+    assert check.CLUSTER_DEPENDENT.isdisjoint(check.B2_DEPENDENT)
+
+
+def test_k8s_workloads_absent_series_is_down_not_up():
+    # THE regression this check exists to prevent. `unavailable > 0` returns an empty vector both
+    # when everything is healthy and when there are no series at all; reading the healthy meaning
+    # onto both is how a monitor goes green while blind.
+    ok, msg = check.k8s_workloads_verdict(None, [], 5)
+    assert ok is False
+    assert "UNKNOWN" in msg
+
+
+def test_k8s_workloads_partial_series_is_down():
+    # A partially-loaded kube-state-metrics — e.g. `apps` dropped from its scoped ClusterRole,
+    # which takes every deployment series away while the pod stays up and Ready.
+    ok, msg = check.k8s_workloads_verdict(2, [], 5)
+    assert ok is False
+    assert "below the floor" in msg
+
+
+def test_k8s_workloads_healthy_when_series_present_and_none_unavailable():
+    ok, msg = check.k8s_workloads_verdict(18, [], 5)
+    assert ok is True
+    assert "18 k8s workloads healthy" == msg
+
+
+def test_k8s_workloads_names_the_offenders():
+    offenders = [
+        ({"deployment": "n8n-runners"}, 1.0),
+        ({"deployment": "registry"}, 2.0),
+    ]
+    ok, msg = check.k8s_workloads_verdict(18, offenders, 5)
+    assert ok is False
+    # Sorted, so the message is stable rather than dependent on Prometheus' series order.
+    assert "n8n-runners(1), registry(2)" in msg
+
+
+def test_k8s_workloads_disabled_without_cluster_url(monkeypatch):
+    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "")
+    ok, msg = check.check_k8s_workloads()
+    assert ok is True
+    assert "disabled" in msg
+
+
+def test_cluster_prometheus_gate_down_when_no_result(monkeypatch):
+    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "https://prom-k8s.example")
+    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: None)
+    ok, msg = check.check_cluster_prometheus()
+    assert ok is False
+    assert "no result" in msg
+
+
+def test_run_once_suppresses_cluster_dependent_when_cluster_prometheus_down(
+    monkeypatch,
+):
+    # A cluster-side outage must page ONCE, as Cluster Prometheus — not as a workload fault.
+    pushed = _run_once_with_gates(
+        monkeypatch,
+        cluster_ok=False,
+        checks=[("k8s_workloads", "tok", lambda: (False, "should not run"))],
+        cluster_dependent={"k8s_workloads"},
+    )
+    assert pushed["tok"][0] is True
+    assert "cluster Prometheus unreachable" in pushed["tok"][1]
+
+
+def test_run_once_runs_cluster_dependent_when_cluster_prometheus_up(monkeypatch):
+    pushed = _run_once_with_gates(
+        monkeypatch,
+        cluster_ok=True,
+        checks=[("k8s_workloads", "tok", lambda: (False, "real failure"))],
+        cluster_dependent={"k8s_workloads"},
+    )
+    assert pushed["tok"][0] is False
+    assert pushed["tok"][1] == "real failure"
+
+
+def _run_once_with_gates(monkeypatch, cluster_ok, checks, cluster_dependent):
+    """Drive run_once with every gate but the cluster one forced healthy."""
+    pushed = {}
+    monkeypatch.setattr(check, "CHECKS", checks)
+    monkeypatch.setattr(check, "STARTUP_GRACE", frozenset())
+    monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset())
+    monkeypatch.setattr(check, "LOKI_DEPENDENT", frozenset())
+    monkeypatch.setattr(check, "B2_DEPENDENT", frozenset())
+    monkeypatch.setattr(check, "CLUSTER_DEPENDENT", frozenset(cluster_dependent))
+    monkeypatch.setattr(check, "check_prometheus", lambda: (True, "up"))
+    monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "up"))
+    monkeypatch.setattr(check, "check_b2_reachable", lambda: (True, "up"))
+    monkeypatch.setattr(check, "check_cluster_prometheus", lambda: (cluster_ok, "gate"))
+    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    monkeypatch.setattr(
+        check, "push", lambda token, ok, msg: pushed.__setitem__(token, (ok, msg))
+    )
+    monkeypatch.setattr(check, "log", lambda *a, **k: None)
+    check.run_once()
+    return pushed
+
+
 def _reset_b2_probe(monkeypatch, key_id="kid", app_key="akey", interval=1800):
     monkeypatch.setattr(check, "B2_PROBE_KEY_ID", key_id)
     monkeypatch.setattr(check, "B2_PROBE_APPLICATION_KEY", app_key)

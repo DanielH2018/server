@@ -278,6 +278,21 @@ services:
       - B2_PROBE_APPLICATION_KEY_FILE=/run/secrets/b2_probe_application_key
       - B2_PROBE_INTERVAL_S=1800
       - KUMA_PUSH_B2_REACHABLE={{ monitor_bridge_b2_reachable_push_token }}
+      # k3s workload health via the CLUSTER's Prometheus — a second instance on daniel-box, not
+      # PROMETHEUS_URL. Closes the gap where seven k8s workloads (n8n-runners among them, which
+      # executes every workflow's code) had no monitor at all: three expose only a ClusterIP, four
+      # expose no Service, and none has an ingress route, so nothing here can probe them directly.
+      #
+      # The -k8s name, NOT the bridged one, for the same reason as N8N_URL above: a container here
+      # cannot reach this host's own LAN address, so anything routed via the Docker edge is
+      # unreachable from the very container that needs it. Pi-hole answers this name with the
+      # cluster VIP. The claude-otel role's `prometheus-monitoring` IngressRoute admits only
+      # /api/v1/query on it, and Prometheus runs without the admin/lifecycle flags, so the path is
+      # read-only by construction rather than by convention.
+      - CLUSTER_PROMETHEUS_URL=https://prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}
+      - K8S_MIN_WORKLOADS=5
+      - KUMA_PUSH_K8S_WORKLOADS={{ monitor_bridge_k8s_workloads_push_token }}
+      - KUMA_PUSH_CLUSTER_PROMETHEUS={{ monitor_bridge_cluster_prometheus_push_token }}
       # Scrutiny SMART freshness + health: the collector (cron-as-PID1, daily 00:00, no usable
       # healthcheck) only shows death as aging collector_date in the web API; on TOP of freshness
       # the check asserts each device's SMART/threshold status (device_status == 0), so a drive
@@ -518,6 +533,8 @@ services:
          names the cause. Unlike the Prometheus/Loki gates it does NOT gate Backup Freshness,
          which polls Kopia live and correctly paged through the 2026-08-02 cap breach. -#}
       {{ kuma('monitor-bridge-b2-reachable', monitor_type='push', name='B2 Reachable', interval=600, max_retries=0, push_token=monitor_bridge_b2_reachable_push_token) }}
+      {{ kuma('monitor-bridge-k8s-workloads', monitor_type='push', name='k3s Workload Health', interval=600, max_retries=0, push_token=monitor_bridge_k8s_workloads_push_token) }}
+      {{ kuma('monitor-bridge-cluster-prometheus', monitor_type='push', name='Cluster Prometheus Reachable', interval=600, max_retries=0, push_token=monitor_bridge_cluster_prometheus_push_token) }}
       {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data / Health', interval=600, max_retries=0, push_token=monitor_bridge_scrutiny_push_token) }}
       {# UPS Battery Health: check_ups pages on a low battery RUNWAY (charge or estimated runtime under
          the floor) from HA's Prometheus-scraped APC sensors — the slowly-degrading-battery signal the
