@@ -387,6 +387,23 @@
   become: true
   tags: [crons]
 
+- name: Schedule the infrastructure-map refresh (box only)
+  tags: [crons, infra-map]
+  # Regenerates the declared-vs-live HTML map (scripts/gen_infra_map.py). Runs on daniel-box
+  # because that is where kubectl is local; the daniel-server half arrives over ONE ssh call
+  # per run, well clear of the `ufw limit ssh` 6-connections-per-30s reject threshold.
+  #
+  # No Healthchecks ping, unlike the crons above: a failed run leaves the previous page in
+  # place rather than corrupting anything, and the page prints the timestamp it was generated
+  # at — so a run that stops working shows up as a visibly stale date on the artifact itself.
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.cron:
+    name: "Refresh homelab infrastructure map"
+    minute: "*/15"
+    job: "cd /home/{{ sys_user }}/server && /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/gen_infra_map.py -o /home/{{ sys_user }}/.claude/artifacts/homelab-infra-map.html"
+    user: "{{ sys_user }}"
+  become: true
+
 - name: Create journald drop-in directory
   ansible.builtin.file:
     path: /etc/systemd/journald.conf.d

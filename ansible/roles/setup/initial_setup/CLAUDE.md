@@ -16,8 +16,9 @@ Every task carries a block tag (placed right under `name:`), so e.g.
 `--tags fail2ban` or `--tags "ssh,firewall"` runs just that slice:
 `pi-swap` (Pi swapfile + watchdog-stop preamble) · `apt-upgrade` (the full dist-upgrade)
 · `packages` · `tooling` (uv + CLI tools) · `unattended-upgrades` · `fail2ban` · `ssh`
-· `crons` (restart / prune / log-truncate / autoremove / dpkg-purge; the prune cron also
-answers to `prune`) · `journald` · `tuning` (server CPU governor + swappiness) · `debloat`
+· `crons` (restart / prune / log-truncate / autoremove / dpkg-purge / infra-map; the prune cron
+also answers to `prune`, and the daniel-box-only infrastructure-map refresh to `infra-map`)
+· `journald` · `tuning` (server CPU governor + swappiness) · `debloat`
 (server LXD-snap removal + both-hosts networkd-dispatcher mask) · `git-hooks` · `sysctl` · `firewall` (UFW) · `audit` ·
 `file-perms` · `kernel-modules` (blacklist + wireguard) · `igpu` (i915 GuC for QuickSync,
 `has_igpu` hosts only) · `accounting` (sysstat + acct) ·
@@ -55,7 +56,9 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   `0.0.0.0:25` listener off the network surface; `notify: Restart Postfix`, a reload won't
   rebind sockets), hide the OS banner, disable `VRFY` (`notify: Reload Postfix`).
 - **Cron/maintenance:** weekly reboot, Docker image cleanup, ansible.log rotation, weekly
-  autoremove + config-remnant purge, and install of the repo Git hooks.
+  autoremove + config-remnant purge, install of the repo Git hooks, and (daniel-box only) the
+  15-minute infrastructure-map refresh that regenerates the HTML artifact from
+  `scripts/gen_infra_map.py`.
 - **Unattended upgrades:** enable periodic security upgrades + local policy.
 
 ## Notable
