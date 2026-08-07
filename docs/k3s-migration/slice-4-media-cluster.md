@@ -377,6 +377,14 @@ files measured THROUGH the mount
 of episode files is the same argument from the other side: the pod is reading real files, not an
 empty tree that happens to exist at the right path.
 
+**The 14-series match establishes the path contract, NOT database integrity**, and the difference
+matters. This config was seeded with `seed_volume_force: false` from a `sonarr.db` that Docker's
+sonarr was actively writing — SQLite in WAL mode, copied along with its `-wal` and `-shm`. That
+snapshot is torn by construction, and `seed-volume` tolerates it deliberately during coexistence.
+A count that matches proves no series was added mid-stream; it does not prove the database is
+sound. Integrity is B4's job: a `force=true` re-seed against a **stopped** source, where
+`seed-volume`'s sha256 assert is the check that actually covers it.
+
 #### What actually isolates the rehearsal copy — and what does not
 
 This copy holds the **live** database: the real indexers, the real download client, the real
@@ -484,6 +492,12 @@ against the new endpoints.
   point, at the cost of pulling one piece of slice-6 edge config forward.
 - **19 G is today's number.** Re-measure before the cutover; the window scales with the delta, not
   the total.
+- **`sonarr-k8s.local` is a live Authelia-gated route to a pod holding the real database** (B3).
+  The isolation probe asserts only what sonarr can reach *by name*; it says nothing about what a
+  human does through the UI. Anyone who logs in can change a root folder, trigger a mass rename,
+  or add a download client **by IP** — which would work, because egress is unenforced here. That
+  is acceptable for a rehearsal someone is driving deliberately; it is the hazard the probe does
+  not cover, and it ends when B4 makes this copy the authoritative one.
 - **`/srv/media` is a point-in-time copy taken 2026-08-07 20:14 UTC, and nothing reconciles it.**
   Every byte qbittorrent writes on daniel-server between then and cutover leaves the two trees
   further apart, silently — the B4 delta sync is what closes the gap, and it is the only thing that
