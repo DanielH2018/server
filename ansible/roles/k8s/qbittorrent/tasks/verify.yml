@@ -1,0 +1,81 @@
+---
+# B4b's two proofs. Neither is "the pod is Running", which for this service means very little:
+# a healthy-looking tunnel with a kill-switch that has eaten the cluster's return path, or a
+# dead tunnel leaking in the clear, both present as a green rollout.
+
+- name: Find the qbittorrent pod
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get pod -l app=qbittorrent
+      -o jsonpath={.items[0].metadata.name}
+  become: true
+  changed_when: false
+  register: qbittorrent_k8s_pod
+
+# ── proof 1: egress really leaves through Mullvad ───────────────────────────────────────────
+# Comparing the two public addresses is a stronger statement than `wg show wg0`, which only says
+# an interface exists. It is also the same question am.i.mullvad.net answers, without depending
+# on Mullvad's API being up — the transient failures of which used to restart this tunnel
+# needlessly under Docker.
+- name: Read this host's public address
+  tags: [deploy]
+  ansible.builtin.uri:
+    url: https://api.ipify.org
+    return_content: true
+  become: false
+  register: qbittorrent_k8s_host_ip
+
+- name: Read the public address the tunnel presents
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec {{ qbittorrent_k8s_pod.stdout }} -c wireguard --
+      curl -fsm 15 https://api.ipify.org
+  become: true
+  changed_when: false
+  register: qbittorrent_k8s_tunnel_ip
+
+- name: Fail if qbittorrent's traffic is not going through the tunnel
+  tags: [deploy]
+  ansible.builtin.assert:
+    that:
+      - qbittorrent_k8s_tunnel_ip.stdout | trim | length > 0
+      - qbittorrent_k8s_tunnel_ip.stdout | trim != qbittorrent_k8s_host_ip.content | trim
+    fail_msg: >-
+      The pod's public address ({{ qbittorrent_k8s_tunnel_ip.stdout | trim }}) matches this
+      host's, so traffic is LEAVING IN THE CLEAR rather than through Mullvad. Scale qbittorrent
+      to zero before doing anything else — this is the failure the kill-switch exists to make
+      impossible, and it means the kill-switch is not installed either.
+    success_msg: >-
+      Egress leaves through the tunnel: the pod presents
+      {{ qbittorrent_k8s_tunnel_ip.stdout | trim }}, this host presents
+      {{ qbittorrent_k8s_host_ip.content | trim }}.
+
+# ── proof 2: the kill-switch has not eaten the cluster's return path ────────────────────────
+# From INSIDE the cluster, not from this host. The host's address sits in lan_subnet, which the
+# Compose allow-list already covered, so a request from here would pass even with the pod-CIDR
+# entry missing — and pod CIDR is exactly what Traefik and the kubelet's probes arrive from.
+# This is the D11 trap, tested at the only source address that can detect it.
+- name: Reach the WebUI from a pod, as Traefik does
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} run qbittorrent-reach-probe
+      --rm -i --restart=Never --image={{ sonarr_k8s_probe_image | default('alpine:3.22') }}
+      --command -- sh -c
+      "wget -q -T 10 -O /dev/null http://qbittorrent:{{ container_item.port }}/ && echo REACHED"
+  become: true
+  changed_when: false
+  register: qbittorrent_k8s_reach
+  failed_when: "'REACHED' not in qbittorrent_k8s_reach.stdout"
+
+- name: Report the tunnel and the return path
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: >-
+      qbittorrent is reachable from the pod network on
+      {{ container_item.port }} and its egress presents
+      {{ qbittorrent_k8s_tunnel_ip.stdout | trim }}, not
+      {{ qbittorrent_k8s_host_ip.content | trim }} — so the kill-switch allows the cluster in
+      while still forcing traffic out through Mullvad.

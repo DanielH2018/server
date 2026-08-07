@@ -76,6 +76,19 @@ containers_list:
     hostname: "sonarr{{ k8s_hostname_suffix }}"
     port: 8989
     use_authelia: true
+  # Slice 4, B4b — BUILT BUT NOT DEPLOYED. The entry has to exist (a k8s role without one fails
+  # validate_k8s_manifests.py), but `qbittorrent_k8s_enabled` defaults to FALSE and every task
+  # in the role is gated on it. Without that gate this entry alone would be enough: gitops runs
+  # ansible/deploy.yml, which is a plain containers_list loop, so the next tick would stand up a
+  # second qbittorrent holding the same torrent state. Released in B4c.
+  #
+  # The slice's only genuinely new shape — a WireGuard/Mullvad sidecar sharing the pod's netns,
+  # gating qbittorrent's start so it cannot talk to a tracker before the kill-switch exists.
+  - name: qbittorrent
+    platform: k8s
+    hostname: "qbittorrent{{ k8s_hostname_suffix }}"
+    port: 8080
+    use_authelia: true
 
   - name: claude-otel
     platform: k8s

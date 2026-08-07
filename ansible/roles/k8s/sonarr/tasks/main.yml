@@ -19,6 +19,18 @@
   become: true
   changed_when: true
 
+# The jobs that tested that fence, and the pods they left behind. Nothing manages these any
+# more, so without this they sit in the namespace as an Error pod forever — indistinguishable
+# at a glance from a workload that is actually broken.
+- name: Remove the fence probe jobs from the first B3 attempt
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete job
+      sonarr-netpol-probe sonarr-netpol-control --ignore-not-found
+  become: true
+  changed_when: true
+
 # ── the config database ─────────────────────────────────────────────────────────────────────
 # Seeded BEFORE the workload, so sonarr never runs its first-boot setup against an empty /config
 # that is about to be overwritten.

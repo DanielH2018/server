@@ -1,0 +1,70 @@
+---
+# HELD UNTIL THE CUTOVER WINDOW, and this flag is what holds it.
+#
+# The role has to appear in containers_list — a k8s role without an inventory entry fails
+# scripts/validate_k8s_manifests.py, which is how the repo notices a role nobody deploys. But
+# daniel-box runs has_gitops: true, and the gitops deployer runs `ansible/deploy.yml`, which is a
+# plain containers_list loop. So the entry alone would stand this pod up unattended on the next
+# tick — two qbittorrents holding the same torrent state, announcing to trackers from different
+# addresses.
+#
+# Flip to true (`-e qbittorrent_k8s_enabled=true`, then in host_vars) as part of B4c, once the
+# Docker copy is stopped.
+qbittorrent_k8s_enabled: false
+
+# Same tags the Docker copies run, so a behavioural difference between the two is never the image.
+qbittorrent_k8s_image: lscr.io/linuxserver/qbittorrent:latest
+qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest
+
+# ── one config volume, two containers ───────────────────────────────────────────────────────
+# Reproduces the Compose file exactly: wireguard and qbittorrent both mount `./config` at
+# /config. It looks like a mistake and is not — they write different subtrees of it, and
+# splitting them would strand wg0.conf away from the mod that regenerates it.
+qbittorrent_k8s_claim: qbittorrent-config
+qbittorrent_k8s_storage_class: longhorn
+qbittorrent_k8s_size: 1Gi
+qbittorrent_k8s_source_path: /home/ubuntu/server/containers/qbittorrent/config
+
+# torrents/ ONLY, via subPath — NOT the whole media tree. Carried across from the Compose
+# comment and its reason (2026-07-02 review M2): qbittorrent handles the fleet's largest
+# untrusted-input surface, and it has no business with write access to the book and film
+# library. The hardlink-import concern that unifies the \*arr mounts is theirs alone — link()
+# happens inside sonarr/radarr, whose single mount spans torrents/ AND media/.
+qbittorrent_k8s_media_claim: media-data
+qbittorrent_k8s_torrents_subpath: torrents
+
+qbittorrent_k8s_webui_port: 8080
+qbittorrent_k8s_torrenting_port: 6881
+
+# ── the tunnel ──────────────────────────────────────────────────────────────────────────────
+qbittorrent_k8s_mullvad_location: us-qas
+qbittorrent_k8s_mullvad_mod: linuxserver/mods:wireguard-mullvad
+
+# THE KILL-SWITCH ALLOW-LIST, and the one line in this file most likely to cause a silent
+# outage. The mod installs iptables rules that REJECT anything not leaving via wg0, except to
+# these ranges. The Compose value has three entries; the cluster needs two more:
+#
+#   10.42.0.0/16  pod CIDR      — Traefik's requests to the WebUI, and the kubelet's probes,
+#                                 arrive from here and their replies must be allowed back
+#   10.43.0.0/16  Service CIDR  — cluster DNS (kube-dns) lives here
+#
+# Without those the pod comes up, `wg show wg0` looks perfectly healthy, and the container is
+# simply unreachable — which reads as a broken Service rather than a firewall doing its job.
+qbittorrent_k8s_lan_networks: "192.168.0.0/24,{{ lan_subnet }},172.16.0.0/12,10.42.0.0/16,10.43.0.0/16"
+
+# NOT /run/secrets, which is the Compose convention and does not survive the port:
+# /var/run/secrets is where Kubernetes projects the ServiceAccount token, and a read-only
+# Secret volume over it leaves runc unable to create the mountpoint. There is a guard test for
+# exactly this (ansible/tests/test_k8s_manifests.py).
+qbittorrent_k8s_secret_mount: /mullvad
+
+# Mirrors resources('1.0', '256M', '0.05', '32M') for wireguard and
+# resources('2.0', '2048M', '0.10', '256M') for qbittorrent in the compose template.
+qbittorrent_k8s_wg_cpu_limit: "1"
+qbittorrent_k8s_wg_mem_limit: 256Mi
+qbittorrent_k8s_wg_cpu_request: "50m"
+qbittorrent_k8s_wg_mem_request: 32Mi
+qbittorrent_k8s_cpu_limit: "2"
+qbittorrent_k8s_mem_limit: 2048Mi
+qbittorrent_k8s_cpu_request: "100m"
+qbittorrent_k8s_mem_request: 256Mi

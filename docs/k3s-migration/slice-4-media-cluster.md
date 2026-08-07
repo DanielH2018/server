@@ -522,14 +522,34 @@ fails on. That is not an obstacle to work around — it is D3 ("the nine cut ove
 being enforced by something executable instead of remembered. So these are written, rendered and
 linted, and applied only in the cutover window.
 
-### B4b — qbittorrent and the VPN sidecar
+### B4b built — 2026-08-07 — deployed in B4c, not before
 
-The new shape, not a clone: a two-container pod sharing a netns, `NET_ADMIN`/`NET_RAW`, unsafe
-sysctls, a Mullvad Secret, and a kill-switch allow-list that must learn the cluster CIDRs (D11).
+`roles/k8s/qbittorrent`. The kubelet allow-list is applied and verified; the role renders, lints,
+and passes a **server-side dry-run** (`deployment.apps/qbittorrent created (server dry run)`), which
+is what confirms the API accepts the two novel pieces — a native sidecar and a pod sysctl.
 
-**Prove it:** the WebUI answers *through Traefik* (which proves the kill-switch is not eating the
-return path), and egress leaves via the tunnel — `wg show wg0` plus a reachability check that can
-only have gone through Mullvad, the same two-signal test the Docker healthcheck uses.
+**`--kubelet-arg=allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark` is live.** The k3s role
+reinstalled and restarted the server; **all 50 running pods survived**. Verified end to end rather
+than by reading the unit: a probe pod declaring the sysctl now starts with `src_valid_mark = 1`,
+while `/proc/sys` stays read-only — so the pod-spec route is both necessary and sufficient.
+
+**`depends_on: {condition: service_healthy}` ports to a native sidecar**, and this is the one piece
+that is not cosmetic. Ordinary pod containers all start in parallel, so qbittorrent could reach a
+tracker in the seconds before the tunnel and its kill-switch exist — traffic that leaves over
+`eth0` in the clear. As an `initContainer` with `restartPolicy: Always`, the wireguard sidecar's
+`startupProbe` (`wg show wg0`) gates the main container, so that window cannot open.
+
+**The role is held shut by `qbittorrent_k8s_enabled: false`, and the flag is load-bearing.** The
+inventory entry has to exist — a k8s role without one fails `validate_k8s_manifests.py` — but
+daniel-box runs `has_gitops: true` and the deployer runs `ansible/deploy.yml`, a plain
+`containers_list` loop. The entry *alone* would stand up a second qbittorrent on the next tick,
+unattended, holding the same torrent state and announcing to trackers from a second address.
+
+**Prove it, at B4c:** the WebUI answers **from a pod**, not from this host — the host's address is
+already inside the Compose allow-list, so a request from here would pass even with the pod-CIDR
+entry missing, which is precisely the D11 trap. And egress presents a **different public address
+than daniel-box does**, which is a stronger statement than `wg show wg0` (an interface can exist
+while the kill-switch is absent) and does not depend on Mullvad's own API being up.
 
 ### B4c — The cutover window
 

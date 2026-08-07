@@ -1,0 +1,180 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qbittorrent
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks on
+  # a volume the outgoing pod still holds.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: qbittorrent
+  template:
+    metadata:
+      labels:
+        app: qbittorrent
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        # The whole reason for the kubelet allow-list (D11). wg-quick attempts to set this
+        # itself and aborts the tunnel when it cannot — /proc/sys is mounted read-only in a pod
+        # even with NET_ADMIN. Pre-set here, wg-quick finds it already 1 and skips the write.
+        sysctls:
+          - name: net.ipv4.conf.all.src_valid_mark
+            value: "1"
+      initContainers:
+        # A NATIVE SIDECAR — an initContainer with restartPolicy: Always. This is the k8s
+        # translation of Compose's `depends_on: {wireguard: {condition: service_healthy}}`, and
+        # it is not cosmetic: ordinary pod containers all start in parallel, so qbittorrent
+        # could begin talking to trackers in the seconds before the tunnel and its kill-switch
+        # exist — traffic that would leave over eth0 in the clear. A sidecar's startupProbe
+        # gates the main containers, so qbittorrent cannot start until wg0 is up.
+        - name: wireguard
+          image: {{ qbittorrent_k8s_wireguard_image }}
+          restartPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                # NET_ADMIN for the tunnel interface and its routing/fwmark rules; NET_RAW
+                # because the Mullvad mod's kill-switch initialises the iptables `raw` table,
+                # which fails with "unable to initialize table 'raw'" without it. Plus the LSIO
+                # s6 set to chown /config and drop privileges. NOT privileged, and no
+                # SYS_MODULE — the wireguard module is loaded on the host.
+                - NET_ADMIN
+                - NET_RAW
+                - CHOWN
+                - SETUID
+                - SETGID
+                - FOWNER
+                - DAC_OVERRIDE
+          env:
+            - name: PUID
+              value: "{{ puid }}"
+            - name: PGID
+              value: "{{ pgid }}"
+            - name: TZ
+              value: "{{ tz }}"
+            - name: DOCKER_MODS
+              value: "{{ qbittorrent_k8s_mullvad_mod }}"
+            - name: FILE__MULLVAD_PRIVATE_KEY
+              value: "{{ qbittorrent_k8s_secret_mount }}/key"
+            - name: FILE__MULLVAD_ACCOUNT
+              value: "{{ qbittorrent_k8s_secret_mount }}/account"
+            - name: MULLVAD_LOCATION
+              value: "{{ qbittorrent_k8s_mullvad_location }}"
+            - name: LAN_NETWORKS
+              value: "{{ qbittorrent_k8s_lan_networks }}"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: mullvad
+              mountPath: {{ qbittorrent_k8s_secret_mount }}
+              readOnly: true
+          startupProbe:
+            # THE GATE. Nothing else in this pod runs until this passes, so it must assert the
+            # tunnel exists — not that the process started. `wg show wg0` fails while the
+            # interface is absent, which is exactly the window qbittorrent must not run in.
+            exec:
+              command: ["sh", "-c", "wg show wg0 >/dev/null 2>&1"]
+            periodSeconds: 5
+            # 5 min. The mod resolves api.mullvad.net and negotiates a relay on first start,
+            # and a cold pull of the mod makes that slower still.
+            failureThreshold: 60
+          livenessProbe:
+            # Both signals, as the Compose healthcheck does, and for its reason: if the mod
+            # fails at boot then wg0 AND the kill-switch are never installed, so a bare reach
+            # for 1.1.1.1 LEAKS out eth0 and false-passes while the tunnel is dead. Asserting
+            # wg0 first makes that state fail instead. Tolerant — only a sustained outage
+            # restarts the tunnel.
+            exec:
+              command:
+                - sh
+                - -c
+                - wg show wg0 >/dev/null 2>&1 && curl -fsm 10 https://1.1.1.1 >/dev/null
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 15
+            failureThreshold: 6
+          resources:
+            limits:
+              cpu: "{{ qbittorrent_k8s_wg_cpu_limit }}"
+              memory: {{ qbittorrent_k8s_wg_mem_limit }}
+            requests:
+              cpu: "{{ qbittorrent_k8s_wg_cpu_request }}"
+              memory: {{ qbittorrent_k8s_wg_mem_request }}
+      containers:
+        - name: qbittorrent
+          image: {{ qbittorrent_k8s_image }}
+          # No network configuration of its own: containers in a pod share one network
+          # namespace, which IS `network_mode: service:wireguard`. The one place this port is
+          # genuinely simpler than Compose.
+          ports:
+            - containerPort: {{ qbittorrent_k8s_webui_port }}
+              name: webui
+            - containerPort: {{ qbittorrent_k8s_torrenting_port }}
+              name: torrent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # No NET_ADMIN. Networking belongs to the sidecar; this container only needs the
+              # LSIO s6 set to chown /config and /data and drop to PUID/PGID.
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - SETUID
+                - SETGID
+                - FOWNER
+                - DAC_OVERRIDE
+          env:
+            - name: PUID
+              value: "{{ puid }}"
+            - name: PGID
+              value: "{{ pgid }}"
+            - name: TZ
+              value: "{{ tz }}"
+            - name: UMASK_SET
+              value: "022"
+            - name: WEBUI_PORT
+              value: "{{ qbittorrent_k8s_webui_port }}"
+            - name: TORRENTING_PORT
+              value: "{{ qbittorrent_k8s_torrenting_port }}"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            # subPath, so this container sees ONLY torrents/ out of the shared media volume —
+            # the Compose mount's scoping, reproduced.
+            - name: media
+              mountPath: /data/torrents
+              subPath: {{ qbittorrent_k8s_torrents_subpath }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ qbittorrent_k8s_webui_port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: "{{ qbittorrent_k8s_cpu_limit }}"
+              memory: {{ qbittorrent_k8s_mem_limit }}
+            requests:
+              cpu: "{{ qbittorrent_k8s_cpu_request }}"
+              memory: {{ qbittorrent_k8s_mem_request }}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ qbittorrent_k8s_claim }}
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ qbittorrent_k8s_media_claim }}
+        - name: mullvad
+          secret:
+            secretName: qbittorrent-mullvad
+            defaultMode: 0400
