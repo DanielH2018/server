@@ -400,7 +400,11 @@
   ansible.builtin.cron:
     name: "Refresh homelab infrastructure map"
     minute: "*/15"
-    job: "cd /home/{{ sys_user }}/server && /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/gen_infra_map.py -o /home/{{ sys_user }}/.claude/artifacts/homelab-infra-map.html"
+    # PATH is set explicitly because cron's default is `/usr/bin:/bin`, which omits
+    # /usr/local/bin — where kubectl lives (a symlink to k3s). Without it the k3s half of
+    # the map degrades to declared-only every run while the Docker half keeps working, so
+    # the page looks fine and is quietly half-blind. ssh is /usr/bin, uv is called absolute.
+    job: "cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/gen_infra_map.py -o /home/{{ sys_user }}/.claude/artifacts/homelab-infra-map.html"
     user: "{{ sys_user }}"
   become: true
 

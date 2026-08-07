@@ -47,9 +47,10 @@ DEFAULT_OUTPUT = Path.home() / ".claude" / "artifacts" / "homelab-infra-map.html
 # The two hosts this map covers. daniel-pi is deliberately out of scope.
 HOSTS = ("daniel-box", "daniel-server")
 
-# How long the rendered page waits before reloading itself, in seconds. Only
-# meaningful in combination with a cron entry that regenerates the file.
-PAGE_REFRESH_SECONDS = 300
+# How long the rendered page waits before reloading itself, in seconds. Matches
+# the refresh cron's 15-minute period (initial_setup's `infra-map` task) — a
+# shorter reload would imply the data is fresher than it is.
+PAGE_REFRESH_SECONDS = 900
 
 # Live-collection timeouts. Short on purpose: an unattended run must not hang.
 LOCAL_TIMEOUT = 20
