@@ -163,37 +163,39 @@ k3s_longhorn_backup_health_cron_minute: "*/10"
 # budget is deliberately well under what Longhorn alone could consume — the headroom left over is
 # for the other two consumers.
 #
-# 10, set against the 7 volumes left in the backup group after the 2026-08-08 cut (the eight
-# slice-4 config volumes moved to the no-backup group). 7 is the level that was working on 08-07,
-# so this leaves room for a couple of additions and fires well before the 15 that ended in a 403.
+# 17, set against the 15 volumes in the backup group after the eight slice-4 config volumes were
+# returned to it on 2026-08-08 (see below), leaving room for a couple of additions.
+#
+# It was 10 for a few hours, against the reduced set of 7. Raising it back is NOT silencing the
+# warning — this arm counts backups, not what they cost, so at 15/day it would fire every morning
+# on a condition deliberately created, and a monitor that pages daily for an expected reason is one
+# nobody reads. What detects the thing actually feared — the cap firing again — is **B2 Reachable**,
+# which probes b2_authorize_account and reports B2's own `transaction_cap_exceeded`. That is the
+# instrument for the re-add; this one stays a growth tripwire and is set above the new normal.
 #
 # A tripwire on GROWTH, not a derived ceiling: Longhorn's per-backup transaction cost was never
 # measured, so no threshold here can come from first principles. What is evidenced is the trend
 # (4 -> 7 -> 15 in three days) and where it ended.
 #
 # Raise it only together with a decision about the cap itself, never to silence the warning.
-k3s_longhorn_daily_backup_budget: 10
+k3s_longhorn_daily_backup_budget: 17
 
-# Bound volumes forced OUT of the backup set, as `namespace/pvcName`. Needed as well as the
-# no-backup StorageClass because storageClassName is immutable: these eight were provisioned onto
-# `longhorn` and cannot be reclassified without destroying and re-seeding them, so the recurring-
-# job label is the only lever. Their roles' *_k8s_storage_class defaults were switched too, so a
-# volume rebuilt from scratch lands in the right group without needing this list.
+# Bound volumes forced OUT of the backup set, as `namespace/pvcName` — an override for volumes
+# whose StorageClass says `longhorn` (back me up) but which should not be. Needed as a separate
+# lever because storageClassName is immutable: a volume that must leave the backup set after it is
+# bound cannot be moved by editing the class.
 #
-# THESE VOLUMES ARE NO LONGER BACKED UP ON A SCHEDULE. What they keep is a single frozen restore
-# point: the 2026-08-08 03:30 backup each already had, which survives because retention is
-# enforced by the recurring job and there is no longer a job to enforce it — so it is never pruned
-# and never refreshed. It ages from here.
+# EMPTY as of 2026-08-08. It held the eight slice-4 config volumes for a few hours after the B2
+# transaction cap fired, and they are back in the backup group now. The exclusion was the right
+# call under a live cap and the wrong one to leave standing: it bought quiet by leaving
+# sonarr/radarr/prowlarr/bazarr/qbittorrent/jellyfin-config and tdarr-server/tdarr-configs with a
+# single frozen 2026-08-08 restore point that is never pruned and never refreshed.
 #
-# kopia's containers/<svc>/config trees on daniel-server are NOT a fallback: they are frozen at
-# the 2026-08-07 cutover, a day older still. Removing a name from this list is what restores
-# scheduled protection.
-k3s_longhorn_nobackup_volumes:
-  - homelab/sonarr-config
-  - homelab/radarr-config
-  - homelab/prowlarr-config
-  - homelab/bazarr-config
-  - homelab/qbittorrent-config
-  - homelab/jellyfin-config
-  - homelab/tdarr-server
-  - homelab/tdarr-configs
+# Re-added as a measurement, because the cost could not be looked up. Longhorn's first backup of a
+# volume is a full and later ones ship only changed blocks, so the 08-08 spike was plausibly a
+# one-time migration cost — but nothing exposed measures it. `Backup.status.size` is the backup's
+# LOGICAL volume size, not blocks uploaded (traefik-acme reports 35 -> 48 MB across daily backups of
+# a 25 MB volume), and B2 publishes no cap-headroom endpoint, which is gap G2's whole premise. So
+# the 03:30 run is the experiment and **B2 Reachable** is the readout. If the cap fires again, the
+# eight names go back in here and the answer is a staggered weekly group, not a permanent exclusion.
+k3s_longhorn_nobackup_volumes: []

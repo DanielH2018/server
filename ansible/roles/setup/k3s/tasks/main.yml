@@ -366,6 +366,67 @@
   become: true
   changed_when: true
 
+# The move above is one-way, and the defaults file used to claim otherwise ("removing a name from
+# this list is what restores scheduled protection"). It did not: the query feeding it selects on
+# `default=enabled`, so a volume that has already left never comes back from it and nothing returns
+# it. That made the list a trapdoor rather than a declaration. These two tasks are the other
+# direction, so the list means what it says.
+#
+# The reverse CANNOT be "anything labelled no-backup and absent from the list" — most of the
+# no-backup volumes (prometheus-data, loki-data, registry-data, tempo-data, karakeep-meili, …) were
+# never in it. They are excluded by their StorageClass at creation, and sweeping them into the
+# backup set is precisely the transaction blowup this file exists to prevent. So the intent is read
+# from the class: `longhorn` asks for backups, `longhorn-nobackup` does not, and the list overrides
+# the class for volumes bound before the distinction existed.
+- name: Find PVCs whose StorageClass asks for backups
+  tags: [longhorn]
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - get
+      - pvc
+      - --all-namespaces
+      - -o
+      - 'jsonpath={range .items[?(@.spec.storageClassName=="longhorn")]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}'
+  become: true
+  changed_when: false
+  register: k3s_longhorn_backup_class_pvcs
+
+- name: Find excluded Longhorn volumes that should be backed up again
+  tags: [longhorn]
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - -l
+      - recurring-job-group.longhorn.io/no-backup=enabled
+      - -o
+      - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}'
+  become: true
+  changed_when: false
+  register: k3s_longhorn_excluded
+
+# Idempotent for the same reason as its mirror: a volume that has moved back no longer carries the
+# `no-backup` label, so the query above stops returning it.
+- name: Return volumes to the default recurring-job group
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
+      recurring-job-group.longhorn.io/default=enabled
+      recurring-job-group.longhorn.io/no-backup- --overwrite
+  loop: "{{ k3s_longhorn_excluded.stdout_lines }}"
+  when:
+    - item.split(' ')[1] in k3s_longhorn_backup_class_pvcs.stdout_lines
+    - item.split(' ')[1] not in k3s_longhorn_nobackup_volumes
+  become: true
+  changed_when: true
+
 - name: Derive the B2 region from the Kopia endpoint
   tags: [longhorn_backup]
   # Longhorn's S3 target is s3://<bucket>@<region>/<prefix>; Kopia stores a hostname.

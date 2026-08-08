@@ -8,16 +8,13 @@ sonarr_k8s_image: lscr.io/linuxserver/sonarr:4.0.17.2952-ls312
 # absolute root-folder paths that this whole slice is careful about — it is exactly the state
 # worth snapshotting.
 sonarr_k8s_claim: sonarr-config
-# longhorn-nobackup since 2026-08-08: B2's TRANSACTION cap fired twice in a week (08-02, 08-08)
-# as slice 4 took Longhorn's daily run from 4 to 15 backups, and incremental backups bound
-# bandwidth, not transactions. Operator's call, taken with the cost stated: this volume keeps only
-# the frozen 08-08 03:30 restore point it already had (never pruned, never refreshed), and kopia's
-# copy under containers/ on daniel-server is older still, frozen at the 08-07 cutover.
-#
-# The live PVC was provisioned on `longhorn` and storageClassName is immutable, so this default
-# only governs a volume rebuilt from scratch; the existing one is held out of the backup set by
-# k3s_longhorn_nobackup_volumes. See docs/b2-transaction-cap-monitoring-gaps.md.
-sonarr_k8s_storage_class: longhorn-nobackup
+# `longhorn` — backed up. Briefly `longhorn-nobackup` on 2026-08-08, after B2's TRANSACTION cap
+# fired twice in a week (08-02, 08-08) as slice 4 took Longhorn's daily run from 4 to 15 backups and
+# incremental backups bound bandwidth, not transactions. Returned the same day: the exclusion left
+# this volume with a single frozen 08-08 restore point, and whether steady-state incrementals are
+# actually the problem cannot be read off anything Longhorn or B2 expose. So it is being tested
+# rather than assumed, with B2 Reachable as the readout. docs/b2-transaction-cap-monitoring-gaps.md.
+sonarr_k8s_storage_class: longhorn
 sonarr_k8s_size: 2Gi
 sonarr_k8s_source_path: /home/ubuntu/server/containers/sonarr/config
 
