@@ -958,7 +958,8 @@ daniel-box now, and the two crons are gone from daniel-server's crontab.
 **Drift found while reading the role, resolved as documented not as coded:** its CLAUDE.md said the
 reconciler "ships as `shadow`", but `host_vars/daniel-server.yml` has
 `autofix_fake_remux_replace_mode: live` and that is intended — it deletes and re-grabs for real.
-The CLAUDE.md was corrected; the mode was not. It was inert before the cutover only because it could
+The CLAUDE.md now records the mismatch (template default `shadow`, host_vars runs it `live`) rather
+than resolving it; the mode itself was not changed. It was inert before the cutover only because it could
 not resolve `sonarr`, so this is the first time it runs live against the cluster.
 
 **ffmpeg on daniel-box is declared now.** It was hand-installed to exercise the probe path; the new

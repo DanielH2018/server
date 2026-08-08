@@ -197,3 +197,37 @@ creation-time proxy, the label is what `daily-backup` actually reads. Verified a
 
 `k3s_longhorn_daily_backup_budget` dropped 18 → 10 to match the smaller set. It reads red until the
 08-08 03:30 run rolls out of the 24 h window, which is correct — 15 backups did happen today.
+
+## Open at 2026-08-08 19:26 UTC
+
+**The retry storm is still running, and its self-termination is untested.** Longhorn's backup-target
+controller has hot-retried against a capped B2 since the breach; `backupstore-poll-interval: 0` did
+not stop it (the CR accepted `pollInterval: "0s"` and the rate held), because the loop is the error
+requeue, not the poll. Baseline taken now, so the post-reset check is a comparison and not an
+impression:
+
+```
+kubectl -n longhorn-system logs -l app=longhorn-manager --since=2m --tail=-1 \
+  | grep -c "Failed to get info from backup store"
+```
+
+**384 over 2 minutes — 192/min**, across the manager pods, all from
+`BackupTargetController.reconcile`. The expectation is that the first successful list after B2's
+00:00 UTC reset clears the error condition and the rate falls to ~0. That is an inference from where
+the retry originates; it has not been observed. Re-run the same command after the reset. If the rate
+holds, the storm is not cap-driven and the poll interval was never the lever.
+
+**Eight config volumes are unprotected, and the cost of fixing it cannot be measured.** The
+exclusion was the right call under a live cap, but it is a standing gap, not a resolution:
+`sonarr`/`radarr`/`prowlarr`/`bazarr`/`qbittorrent`/`jellyfin`-config plus `tdarr-server`/
+`tdarr-configs`, ~2 GB actual, one frozen restore point each.
+
+The obvious question — would re-adding them cost what the first run cost? — has no measurable
+answer here. Longhorn's first backup of a volume is a full and later ones ship changed blocks only,
+so the 08-08 spike was plausibly a one-time migration cost that will not recur. But nothing exposed
+by the cluster measures it: `Backup.status.size` is the backup's LOGICAL volume size, not blocks
+uploaded (traefik-acme reports 35 → 48 MB across daily backups of a 25 MB volume), and B2 publishes
+no cap-headroom endpoint — which is gap G2's whole premise. Treat "incrementals are cheap" as
+documented upstream behavior that is unverified on this repo, against a cap that has now fired
+twice. Deciding it needs a decision about the cap itself, per the note on
+`k3s_longhorn_daily_backup_budget`.
