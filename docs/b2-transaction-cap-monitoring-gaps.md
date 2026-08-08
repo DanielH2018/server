@@ -231,3 +231,31 @@ no cap-headroom endpoint — which is gap G2's whole premise. Treat "incremental
 documented upstream behavior that is unverified on this repo, against a cap that has now fired
 twice. Deciding it needs a decision about the cap itself, per the note on
 `k3s_longhorn_daily_backup_budget`.
+
+### Done at 19:34 UTC, and the one step that could not be
+
+The eight are back in the `default` recurring-job group, and the list is declarative in both
+directions now — the reconcile was one-way, and the defaults file claimed the opposite. The reverse
+reads intent from the **StorageClass**, not from absence in the list: most no-backup volumes
+(prometheus, loki, registry, tempo, karakeep-meili, grafana, livesync, speedtest,
+prowlarr-flaresolverr) were never in the list, and sweeping those in is the exact blowup being
+guarded against. Verified against live state before applying — 15 PVCs on class `longhorn`, 17
+volumes labelled no-backup, intersection exactly the eight — then confirmed idempotent on a re-run.
+
+**`--tags longhorn_backup` cannot complete until the cap resets.** It renders the health script, but
+it sits behind *Check whether Longhorn can reach the backup target*, which polls
+`backuptarget/default .status.available` and gives up after 12 attempts — `false`, because B2 is
+still refusing. The gate is right and should not be worked around; it is the same signal
+`k3s Longhorn Backup` is pushing (`backup target unavailable: failed to list backup volumes in
+s3://…`). The consequence is that the **deployed script still carries `budget 10`** while the group
+is back to 15, so the monitor stays red on an expected condition.
+
+**After 00:00 UTC, before 03:30 UTC** (the `daily-backup` cron is `30 3 * * *`, so there is a
+three-and-a-half hour window):
+
+1. Re-check the storm against the 192/min baseline above.
+2. `uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn_backup -e target=daniel-box` —
+   now that the target is reachable it gets past the gate and deploys `budget 17`.
+3. After 03:30, read **B2 Reachable**. Green means 15 volumes/day fits and the exclusion was
+   avoidable; `transaction_cap_exceeded` again means incrementals are not the cheap part, the eight
+   names go back into `k3s_longhorn_nobackup_volumes`, and the answer is a staggered weekly group.
