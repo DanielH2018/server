@@ -47,6 +47,11 @@ spec:
             - /bin/sh
             - -c
             - |
+              # set -e is not decoration here. Without it the first version of this script
+              # printed "converted" after a sed that had failed with EACCES, so the deploy
+              # reported a conversion that had not happened — the exact false-green this file
+              # exists to avoid. The explicit re-read at the end is the second half of that fix.
+              set -eu
               f=/config/encoding.xml
               if [ ! -f "$f" ]; then
                 echo "no encoding.xml yet — Jellyfin will write defaults, nothing to convert"
@@ -62,12 +67,22 @@ spec:
                 -e 's|<HardwareAccelerationType>qsv</HardwareAccelerationType>|<HardwareAccelerationType>vaapi</HardwareAccelerationType>|' \
                 -e 's|<EnableVppTonemapping>true</EnableVppTonemapping>|<EnableVppTonemapping>false</EnableVppTonemapping>|' \
                 "$f"
+              grep -q '<HardwareAccelerationType>vaapi</HardwareAccelerationType>' "$f"
               echo "converted encoding.xml: qsv -> vaapi, VppTonemapping off"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop:
                 - ALL
+            # As the OWNER of /config, not as root. The LSIO image's default user is root, and
+            # `sed -i` writes a temp file in the target directory — with every capability
+            # dropped, a root process has no DAC_OVERRIDE and cannot write into a directory
+            # owned by uid {{ puid }}. It failed with
+            #     sed: couldn't open temporary file /config/sedUo9qXt: Permission denied
+            # which reads like a read-only mount and is not one. Running as the owner needs no
+            # capability at all.
+            runAsUser: {{ puid }}
+            runAsGroup: {{ pgid }}
           volumeMounts:
             - name: config
               mountPath: /config

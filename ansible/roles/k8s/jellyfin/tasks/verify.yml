@@ -17,13 +17,19 @@
 
 # The exact failure B1 caught: the device NODE is visible via the plugin, but an open() returns
 # EPERM ("Operation not permitted") when the cgroup v2 device filter has not admitted it. A
-# permission problem would say "Permission denied" instead. Reading one byte is the whole test.
+# permission problem would say "Permission denied" instead.
+#
+# `: < dev` OPENS AND CLOSES WITHOUT READING, and that distinction is the whole task. B1's probe
+# used `head -c 1`, which is fine while open() is what fails — it never got as far as the read.
+# Once the device plugin makes open() succeed, that same command blocks forever: a DRM render
+# node has no bytes to hand a sequential read, so the read never returns and the deploy hangs
+# with no output. Measured 2026-08-08, after ~15 minutes of a wedged play.
 - name: Prove the render node can actually be opened
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec {{ jellyfin_k8s_pod.stdout }} --
-      sh -c "id; ls -l /dev/dri/renderD128; head -c 1 /dev/dri/renderD128 >/dev/null && echo OPEN_OK"
+      sh -c "id; ls -l /dev/dri/renderD128; : < /dev/dri/renderD128 && echo OPEN_OK"
   become: true
   changed_when: false
   register: jellyfin_k8s_device
@@ -58,25 +64,34 @@
       ({{ 'no stderr' if not jellyfin_k8s_vaapi.stderr else jellyfin_k8s_vaapi.stderr }})
 
 # Reported, NOT enforced. Removing the opencl-intel mod removes the Intel OpenCL ICD, and OpenCL
-# is what Jellyfin uses for HDR tone-mapping. If no ICD is present the loss is confined to HDR
-# transcodes — so a green non-HDR playback proves nothing either way about it, and failing the
+# is what Jellyfin uses for HDR tone-mapping. If OpenCL cannot initialise, the loss is confined to
+# HDR transcodes — so a green SDR playback proves nothing either way about it, and failing the
 # deploy over it would block a migration that is otherwise correct.
-- name: Check whether any OpenCL driver is present for tone-mapping
+#
+# This INITIALISES OpenCL rather than listing /etc/OpenCL/vendors. The first version listed the
+# directory and reported "HDR tone-mapping should work" on finding `nvidia.icd` — a stray ICD the
+# LSIO image ships, naming a driver that does not exist on an AMD box. An ICD file is a claim
+# that a driver might be installed, not evidence that a platform loads. Asking ffmpeg to build
+# the device is the only answer that means anything.
+- name: Test whether OpenCL initialises for HDR tone-mapping
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec {{ jellyfin_k8s_pod.stdout }} --
-      sh -c "ls /etc/OpenCL/vendors/ 2>/dev/null || echo NONE"
+      /usr/lib/jellyfin-ffmpeg/ffmpeg -v error -init_hw_device opencl=ocl
+      -f lavfi -i nullsrc -frames:v 1 -f null -
   become: true
   changed_when: false
   register: jellyfin_k8s_opencl
+  failed_when: false
 
 - name: Report the tone-mapping situation
   tags: [deploy]
   ansible.builtin.debug:
     msg: >-
-      OpenCL ICDs present: {{ jellyfin_k8s_opencl.stdout | trim | default('none', true) }}.
-      {{ 'HDR tone-mapping should work.'
-         if jellyfin_k8s_opencl.stdout | trim not in ['', 'NONE']
-         else 'NO OpenCL ICD — HDR tone-mapping will fall back to software or fail. SDR
-               transcoding is unaffected, and a passing SDR playback does not cover this.' }}
+      {{ 'OpenCL initialises — HDR tone-mapping has a backend.'
+         if jellyfin_k8s_opencl.rc == 0
+         else 'NO WORKING OPENCL (' ~ (jellyfin_k8s_opencl.stderr | trim | truncate(160)) ~ ').
+               HDR tone-mapping will fall back to software or fail outright. SDR transcoding is
+               unaffected, so a passing SDR playback does NOT cover this — test an HDR title
+               separately before assuming it works.' }}
