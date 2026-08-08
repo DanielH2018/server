@@ -7,14 +7,22 @@
 # take the new digest.
 janitorr_k8s_image: ghcr.io/schaka/janitorr:jvm-stable@sha256:6becfbed9098d27e6bf81a114976394a091d095ee5aba3ae8d86a4fd94af8e7a
 
-# THE SAFETY GATE. Ships dry — the cluster copy proves it can reach the *arrs and that its
-# leaving-soon symlinks resolve inside Jellyfin's namespace BEFORE it is allowed to delete
-# anything. Flipping this is a separate, deliberate step taken after that evidence exists, not
-# part of the port. Overrides the Docker template's default via lookup('template').
+# Flipped to "false" 2026-08-08 (operator decision), after the port shipped dry and verify.yml
+# produced the evidence it exists for: the config the JVM loaded read dry-run: true, sonarr,
+# radarr and jellyfin all accepted connections, and a probe symlink written the way janitorr
+# writes them resolved AND read from inside the jellyfin pod.
+#
+# What no amount of dry running could show, recorded rather than implied: media-deletion is keyed
+# on free-disk percentage and its loosest rung is 20%. daniel-box is at 9% used / 805 G free, so
+# no rung applies and the deletion pass does not execute at all — there was never going to be a
+# dry "would delete" line to wait for, on this host or the old one.
+#
 # A STRING, not a YAML bool: it is substituted straight into application.yml, and the shared
 # template must render under plain Jinja too (the validate-k8s-manifests hook has no `bool`
 # filter). Ansible's `| bool` still reads it correctly where verify.yml compares it.
-janitorr_k8s_dry_run: "true"
+#
+# Set back to "true" to make janitorr inert again; verify.yml asserts the live file matches.
+janitorr_k8s_dry_run: "false"
 
 # The WHOLE tree at /data, no subPath — the *arr side of the D4 contract, not the jellyfin side.
 # It is load-bearing here rather than incidental: janitorr writes symlinks whose TARGETS are
