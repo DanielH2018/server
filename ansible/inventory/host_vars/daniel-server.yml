@@ -234,10 +234,12 @@ containers_list:
   # cluster CronJob, and putting the `configarr` AutoKuma label back on monitor-bridge (it now
   # lives on uptime-kuma, pushed by a health cron on daniel-box; the token is unchanged, so the
   # monitor and its history are the same object either way).
-  - name: janitorr
-    use_authelia: false
-    networks:
-      - media
+  # janitorr moved to daniel-box on 2026-08-08 (slice 4, B7b) — the LAST of the nine, and the only
+  # one that deletes real media, so it went dry first and was flipped live only after its symlinks
+  # were proven to resolve inside Jellyfin's namespace. Rolling back is re-adding this entry,
+  # scaling the cluster Deployment to 0, and putting the `Janitorr Errors` AutoKuma label back on
+  # monitor-bridge (it now lives on uptime-kuma, pushed by a health cron on daniel-box; the token
+  # is unchanged, so the monitor and its history are the same object either way).
   # Organization: Monitoring
   - name: prometheus
     port: 9090

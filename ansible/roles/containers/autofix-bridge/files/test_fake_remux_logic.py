@@ -226,3 +226,40 @@ def test_parse_keyframe_csv_keeps_only_keyframe_times():
 # --- sanitize ----------------------------------------------------------------
 def test_sanitize_defuses_mentions_and_backticks():
     assert "@" not in frl.sanitize("@everyone `rm -rf`")
+
+
+# --- host_path: Sonarr's /data view -> a path an ffprobe on this host can open ----------------
+# Shared by both crons since 2026-08-08: the reconciler always probed on the host, and the scan
+# does too now that it runs on daniel-box, which has no Docker to exec into.
+
+
+def test_host_path_rewrites_only_the_leading_data():
+    assert (
+        frl.host_path("/data/media/tv/Show/E01.mkv", "/srv/media")
+        == "/srv/media/media/tv/Show/E01.mkv"
+    )
+
+
+def test_host_path_handles_the_download_tree_too():
+    assert (
+        frl.host_path("/data/torrents/X.mkv", "/srv/media")
+        == "/srv/media/torrents/X.mkv"
+    )
+
+
+def test_host_path_without_a_root_is_unchanged_so_the_probe_fails_safe():
+    # An unmapped path opens nothing, ffprobe returns "", and the file is SKIPPED. A path-mapping
+    # mistake must never manufacture a fake — false negatives cost a missed fake, false positives
+    # cost a real file, and the reconciler downstream is live.
+    assert frl.host_path("/data/media/tv/E.mkv", "") == "/data/media/tv/E.mkv"
+
+
+def test_host_path_leaves_a_non_data_path_alone():
+    assert (
+        frl.host_path("/srv/media/media/tv/E.mkv", "/srv/media")
+        == "/srv/media/media/tv/E.mkv"
+    )
+
+
+def test_host_path_tolerates_a_trailing_slash_on_the_root():
+    assert frl.host_path("/data/media/x.mkv", "/srv/media/") == "/srv/media/media/x.mkv"

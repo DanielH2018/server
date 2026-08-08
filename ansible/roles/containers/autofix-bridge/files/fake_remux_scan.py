@@ -113,17 +113,32 @@ class Sonarr:
 
 
 def ffprobe(jellyfin: str, ffprobe_bin: str, path: str, args, timeout: int) -> str:
-    """Run ffprobe inside the jellyfin container against a library path. Returns stdout, or "" on any
-    failure (a probe glitch / jellyfin down must SKIP a file, never flag it)."""
+    """Probe a library file. Returns stdout, or "" on any failure — a probe glitch, a missing
+    binary, or a wrong path SKIPS the file, never flags it. That asymmetry is the whole safety
+    property: this scan seeds a ledger the LIVE reconciler acts on, so a false negative costs one
+    missed fake and a false positive costs a real file.
+
+    Two modes, selected by `jellyfin` being set:
+
+      - **host** (jellyfin empty): run `ffprobe_bin` directly against the translated path. This is
+        the daniel-box mode and the one that will remain — that node runs no Docker, so there is no
+        container to exec into, and the library is a plain local directory there.
+      - **docker exec** (jellyfin set): the original daniel-server path, kept so the old host can
+        still run this unchanged during the coexistence window.
+
+    In host mode the caller has already mapped Sonarr's `/data` view through
+    `frl.host_path`; under `docker exec` the path was used verbatim, because jellyfin mounted the
+    library at the same `/data/media` Sonarr reports.
+    """
+    argv = (
+        [ffprobe_bin, "-v", "error", *args, path]
+        if not jellyfin
+        else ["docker", "exec", jellyfin, ffprobe_bin, "-v", "error", *args, path]
+    )
     try:
-        out = subprocess.run(
-            ["docker", "exec", jellyfin, ffprobe_bin, "-v", "error", *args, path],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+        out = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as e:
-        log("ffprobe exec failed for %s: %s" % (path, e))
+        log("ffprobe failed for %s: %s" % (path, e))
         return ""
     if out.returncode != 0:
         log("ffprobe error for %s: %s" % (path, out.stderr.strip()[:200]))
@@ -131,13 +146,22 @@ def ffprobe(jellyfin: str, ffprobe_bin: str, path: str, args, timeout: int) -> s
     return out.stdout
 
 
-def probe_candidate(cand, jellyfin, ffprobe_bin, window_s, timeout):
+def probe_candidate(cand, jellyfin, ffprobe_bin, window_s, timeout, host_data_root=""):
     """Enrich one remux candidate with its ENCODER tag + keyframe times. Returns None when the file
-    couldn't be probed (skipped, not flagged)."""
+    couldn't be probed (skipped, not flagged).
+
+    `cand["path"]` is Sonarr's own `/data/...` view. Under `docker exec jellyfin` that resolved
+    unchanged, because jellyfin mounted the library at the same path. Probing on the host does not:
+    host_data_root maps it (an empty value leaves it alone, so the probe simply finds nothing and
+    the file is skipped).
+    """
+    probe_path = (
+        frl.host_path(cand["path"], host_data_root) if not jellyfin else cand["path"]
+    )
     stream_json = ffprobe(
         jellyfin,
         ffprobe_bin,
-        cand["path"],
+        probe_path,
         [
             "-select_streams",
             "v:0",
@@ -157,7 +181,7 @@ def probe_candidate(cand, jellyfin, ffprobe_bin, window_s, timeout):
         kf_csv = ffprobe(
             jellyfin,
             ffprobe_bin,
-            cand["path"],
+            probe_path,
             [
                 "-select_streams",
                 "v:0",
@@ -194,18 +218,29 @@ def scan(cfg):
     window_s = int(cfg.get("PROBE_WINDOW_S", "40"))
     max_per_scan = int(cfg.get("MAX_PER_SCAN", "5"))
     timeout = int(cfg.get("PROBE_TIMEOUT_S", "60"))
+    # Empty JELLYFIN_CONTAINER selects host-ffprobe mode (daniel-box: no Docker, library is local).
+    # Non-empty keeps the original `docker exec jellyfin` path for daniel-server.
     jellyfin = cfg.get("JELLYFIN_CONTAINER", "jellyfin")
-    ffprobe_bin = cfg.get("FFPROBE_BIN", "/usr/lib/jellyfin-ffmpeg/ffprobe")
+    ffprobe_bin = cfg.get(
+        "FFPROBE_BIN", "ffprobe" if not jellyfin else "/usr/lib/jellyfin-ffmpeg/ffprobe"
+    )
+    host_data_root = cfg.get("HOST_DATA_ROOT", "")
     webhook = cfg.get("ARR_DISCORD_WEBHOOK_URL", "")
     ledger_file = cfg.get(
         "LEDGER_FILE", "/var/lib/autofix-fake-remux/replacements.json"
     )
 
-    ip = resolve_ip(cfg.get("SONARR_CONTAINER", "sonarr"))
-    port = cfg.get("SONARR_PORT", "8989")
-    sonarr = Sonarr(
-        "http://%s:%s" % (ip, port), api_key, int(cfg.get("HTTP_TIMEOUT", "15"))
-    )
+    # SONARR_URL wins when set. On daniel-box there is no Docker to inspect, so the address comes
+    # from the cluster Service — resolved at deploy time into this config rather than hardcoded,
+    # for the reason telemetry-health.sh gives: a ClusterIP is stable for the Service's life but
+    # not across a delete. resolve_ip stays as the fallback so daniel-server is unchanged.
+    base = cfg.get("SONARR_URL", "").rstrip("/")
+    if not base:
+        base = "http://%s:%s" % (
+            resolve_ip(cfg.get("SONARR_CONTAINER", "sonarr")),
+            cfg.get("SONARR_PORT", "8989"),
+        )
+    sonarr = Sonarr(base, api_key, int(cfg.get("HTTP_TIMEOUT", "15")))
 
     candidates = []
     file_to_episode = {}
@@ -218,7 +253,9 @@ def scan(cfg):
 
     probed, skipped = [], 0
     for cand in candidates:
-        p = probe_candidate(cand, jellyfin, ffprobe_bin, window_s, timeout)
+        p = probe_candidate(
+            cand, jellyfin, ffprobe_bin, window_s, timeout, host_data_root
+        )
         if p is None:
             skipped += 1
         else:

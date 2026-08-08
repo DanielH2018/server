@@ -220,3 +220,21 @@ def seed_ledger(ledger, fakes, max_concurrent, now):
             "reason": "",
         }
     return out, False
+
+
+def host_path(path, host_data_root):
+    """Map a Sonarr path (its `/data` container view) to the host path an ffprobe can open.
+
+    Lives here rather than in either caller because BOTH host crons need it once the scan stops
+    probing via `docker exec jellyfin`: the reconciler always did (downloads land in /data/torrents,
+    which jellyfin does not mount), and after the move to daniel-box the scan does too — that node
+    runs no Docker at all, so there is no container to exec into and the library is simply a local
+    directory.
+
+    Only the leading `/data` is rewritten. An empty host_data_root leaves the path unchanged, which
+    makes the probe fail safe: it opens nothing, returns "", and the file is SKIPPED rather than
+    flagged. That direction matters — a path-mapping mistake must never manufacture a fake.
+    """
+    if host_data_root and path.startswith("/data/"):
+        return host_data_root.rstrip("/") + path[len("/data") :]
+    return path

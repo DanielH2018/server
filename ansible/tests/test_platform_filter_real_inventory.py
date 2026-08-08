@@ -72,8 +72,9 @@ def test_daniel_server_is_still_wholly_docker():
     # the library, so it shares no seam with the five. Then tdarr the same day (33 -> 32), B6,
     # alone again — no seam either, but it needs the GPU. Then configarr (32 -> 31), B7a, the
     # first of the nine that is not a service at all: it ports to a CronJob, so what left this
-    # host is a nightly `compose run --rm` and the state file monitor-bridge read beside it. The
-    # count
+    # host is a nightly `compose run --rm` and the state file monitor-bridge read beside it. Then
+    # janitorr (31 -> 30), B7b — the LAST of the nine, so the media set is now wholly off this
+    # host. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -82,6 +83,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 31
-    assert len(filter_by_platform(containers, "docker")) == 31
+    assert len(containers) == 30
+    assert len(filter_by_platform(containers, "docker")) == 30
     assert filter_by_platform(containers, "k8s") == []

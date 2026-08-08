@@ -162,13 +162,9 @@ def _try_grab(sonarr, cand):
         raise
 
 
-def _host_path(path, host_data_root):
-    """Map a Sonarr download path (its /data container view, e.g. /data/torrents/X.mkv) to the host
-    path the reconciler ffprobes directly. Only the leading /data is rewritten; an empty
-    host_data_root leaves the path unchanged (the probe then fails safe)."""
-    if host_data_root and path.startswith("/data/"):
-        return host_data_root.rstrip("/") + path[len("/data") :]
-    return path
+# Moved to fake_remux_logic.host_path (2026-08-08) so the scan can use the same mapping: it stopped
+# probing via `docker exec jellyfin` when it moved to daniel-box, which runs no Docker.
+_host_path = frl.host_path
 
 
 def _host_ffprobe(ffprobe_bin, path, args, timeout):
