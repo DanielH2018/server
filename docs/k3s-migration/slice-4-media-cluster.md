@@ -654,12 +654,37 @@ settling before calling this closed, and neither should be guessed at:
 
 Test with a real HDR title before deciding.
 
-### B6 — tdarr
+### B6 deployed — 2026-08-08 — GPU and library proven, a real transcode still open
 
-The heaviest transcode consumer, and the one that will find VAAPI's edges. Same `/dev/dri` wiring
-as B5, its cache on a regenerable volume.
+tdarr runs on daniel-box with the same `/dev/dri` wiring as B5 and its cache on an emptyDir.
 
-**Prove it:** one file transcodes to completion on the AMD path and the output plays.
+**Verified:**
+
+| Claim | Evidence |
+|---|---|
+| The render node opens in its pod | `crw-rw---- root video31030 226,128`, `groups=…,993` → `OPEN_OK` |
+| VAAPI encode works with **tdarr's own** ffmpeg | `using /usr/local/bin/ffmpeg` → `VAAPI_OK`. A different binary from Jellyfin's, built against different libraries — B5's result does not carry over |
+| The library is mounted **and writable** | `books leaving-soon media movies tv` → `WRITABLE_OK`. Writability is checked because tdarr is the one consumer that rewrites in place, and a read-only `/media` would read as "no work to do" rather than as a fault |
+| Config survived | `tdarr-server matches …/containers/tdarr/server: 1338 files, identical digest` |
+| Routes | `tdarr-k8s.local` → 302 (Authelia) · `tdarr.local` (bridge) → 302 |
+| The node rename was a non-event | `/api/v2/get-nodes` returns exactly one node, unpaused — the `daniel-server` → `daniel-box` nodeID change did not strand a second registration |
+
+**NOT verified, and it is B6's stated proof:** one real library file transcoding to completion on
+the AMD path with the output playing. That needs a job run against files that get **rewritten in
+place**, which is not something to start unattended.
+
+**The transcode cache carries a `sizeLimit` and that is not tidiness.** An unbounded `emptyDir` is
+backed by the node's root filesystem, and tdarr's cache holds whole intermediate video files —
+unlike Jellyfin's scratch, which is bounded by one client's stream. A stuck job would fill `/` on
+daniel-box and take k3s, Longhorn and every other pod with it. Bounded, the kubelet evicts this pod
+instead: one recoverable service failure rather than a node. 100Gi, against 815 G free and a 6.1 G
+largest library file measured the same day.
+
+**Operational note — the SSH rate-limiter bit the two-seed deploy.** This role seeds two claims,
+and `ufw limit ssh` on daniel-server REJECTs the 6th connection in 30 s, so the second seed died on
+`ssh: connect to host 10.0.0.161 port 22: Connection refused` after the first had succeeded. Not a
+role bug and it self-clears in ~60 s — re-running **without** `seed_volume_force` resumes correctly,
+because the completed claim's marker makes it skip while the unseeded one still copies.
 
 #### Known-red from 2026-08-08 04:45: autofix-bridge's fake-remux crons
 

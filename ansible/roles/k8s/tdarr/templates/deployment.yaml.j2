@@ -63,10 +63,11 @@ spec:
               value: "true"
             - name: maxLogSizeMB
               value: "10"
-            # Follows the host, as it did under Compose — so it now registers as `daniel-box`.
-            # EXPECT THE OLD NODE TO LINGER: the seeded database still holds a `daniel-server`
-            # node registration, which will show offline in the UI. It is stale bookkeeping, not
-            # a failed migration; delete it by hand once this node is confirmed healthy.
+            # Follows the host, as it did under Compose — so it now registers as `daniel-box`
+            # where the seeded database was written by a node called `daniel-server`.
+            # Measured after the move: `/api/v2/get-nodes` returns exactly ONE node, unpaused, so
+            # the rename did not strand a second registration. Worth re-checking if node-assigned
+            # work ever appears stuck, since that is where a stale ID would show up.
             - name: nodeID
               value: "{{ inventory_hostname }}"
           volumeMounts:
