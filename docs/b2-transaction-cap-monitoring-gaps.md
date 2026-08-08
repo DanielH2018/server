@@ -259,3 +259,42 @@ three-and-a-half hour window):
 3. After 03:30, read **B2 Reachable**. Green means 15 volumes/day fits and the exclusion was
    avoidable; `transaction_cap_exceeded` again means incrementals are not the cheap part, the eight
    names go back into `k3s_longhorn_nobackup_volumes`, and the answer is a staggered weekly group.
+
+### Both error loops quieted at 20:00 UTC — and one of them may be why the cap looked self-sustaining
+
+Reviewing every red monitor turned up a second consumer nobody was counting. **kopia was
+crash-looping**: 275 restarts, ~58 connect attempts an hour, each one a B2 call that 403s. Its
+wrapper also logs `Repository not found in bucket, creating...` on every pass — it infers "absent"
+from a read that merely *failed*, which is a bad inference to leave running against a bucket holding
+the only backups. (`kopia repository create` refuses a bucket that already has a format blob, so
+this is a hazard to note, not damage taken.)
+
+Together with Longhorn's ~192 failed list calls/min, that is on the order of 11,500 calls an hour
+against a **2500/day** cap. If B2 counts a 403'd call as a transaction — unverified, and the reason
+to act rather than a thing established here — the reset allowance is gone within minutes of 00:00
+UTC every day, before the 03:30 run, and the outage sustains itself. Both were doing zero useful
+work: neither can back up while the cap is on.
+
+**And blanking the target is the lever the poll interval was not.**
+
+```
+k3s kubectl -n longhorn-system patch settings.longhorn.io backup-target --type=merge -p '{"value":""}'
+```
+
+**192/min to 0 in 75 seconds.** The controller has nothing to poll, so the error requeue has nothing
+to requeue on — which is consistent with the earlier finding that `backupstore-poll-interval: 0`
+changed nothing, since that treats a timer that was never driving the loop. Run it through Ansible
+with `become`; the session kubeconfig is read-only and cannot patch. `docker stop kopia` handled the
+other one.
+
+**Revised sequence, after 00:00 UTC and before 03:30 UTC:**
+
+1. `uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn_backup -e target=daniel-box` —
+   restores the backup target *and* deploys `budget 17`, now that the availability gate can pass.
+2. `ssh daniel-server docker start kopia` — it should connect on the first try rather than loop.
+3. Re-check the storm; it should stay at 0 now that reconciles succeed.
+4. After 03:30, read **B2 Reachable**. Green means 15 volumes/day fits. Red means the eight names go
+   back into `k3s_longhorn_nobackup_volumes` and the answer is a staggered weekly group.
+
+Note that while the target is blank Longhorn lists no backups — the B2 data is untouched, and step 1
+re-syncs it.
