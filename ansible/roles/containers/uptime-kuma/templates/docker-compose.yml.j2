@@ -264,6 +264,16 @@ services:
       # proves the JVM is alive, so this is the only signal that a cleanup threw.
       # interval 1200 = 2x the */10 cron, so a dead cron or a dead daniel-box also trips this.
       {{ kuma('monitor-bridge-janitorr', name='Janitorr Errors', monitor_type='push', interval=1200, max_retries=0, push_token=monitor_bridge_janitorr_push_token) }}
+      # The fake-remux detector + reconciler, moved here from monitor-bridge on 2026-08-08 (slice
+      # 4, B7c) with the crons themselves. Their {ts,ok,msg} state files are host-local and the
+      # crons now run on daniel-box, so a cron there pushes both through a generic state-file
+      # reader. Same tokens, so both monitors keep their history.
+      #
+      # Intervals differ because the crons do: the scan is daily (26h staleness gate), the
+      # reconciler every 20 min (1.2h gate). Both are pushed by the same */10 cron, so 1200 keeps
+      # the "dead cron / dead daniel-box" watchdog on each.
+      {{ kuma('autofix-fake-remux', name='Fake Remux Scan', monitor_type='push', interval=1200, max_retries=0, push_token=monitor_bridge_fake_remux_push_token) }}
+      {{ kuma('autofix-fake-remux-replace', name='Fake Remux Replace', monitor_type='push', interval=1200, max_retries=0, push_token=monitor_bridge_fake_remux_replace_push_token) }}
       # Pi SD-card health: SD cards have no SMART, so a dying card only announces
       # itself via ext4 errors. The Pi's pi-sd-health.sh cron (optimize_pi role)
       # pushes errors_count every 5 min through the LAN-bypassed push API

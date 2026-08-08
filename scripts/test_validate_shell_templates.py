@@ -36,6 +36,7 @@ def test_discover_templates_finds_the_known_set():
         "telemetry-health.sh.j2",
         "configarr-health.sh.j2",
         "janitorr-health.sh.j2",
+        "fake-remux-health.sh.j2",
     }
 
 

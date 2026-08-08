@@ -1,0 +1,64 @@
+---
+# Slice 4, B7c. The fake-remux pair — detector + reconciler — moved off daniel-server when the
+# media stack did. Not a rehost of a container: daniel-box runs no Docker, so `docker inspect
+# sonarr` and `docker exec jellyfin ffprobe` had nothing to talk to. Both scripts gained a
+# Docker-free mode (SONARR_URL, host ffprobe + HOST_DATA_ROOT) and this role is where that mode is
+# configured.
+#
+# The two crons move TOGETHER and cannot be split: they share one ledger
+# (replacements.json), the scan seeding entries the reconciler acts on. The role's own docs warned
+# about repointing one half without the other.
+#
+# Scripts and the config template are sourced from roles/containers/autofix-bridge — that role
+# still owns them (and still runs the sidecar + disk-prune on daniel-server), so there is one copy
+# and no drift. Same cross-role idiom as host_lib.py.
+# fake_remux_host lives in group_vars/all.yml — initial_setup.yml's role `when:` needs it before
+# this file is in scope.
+
+# Where the media PV is mounted on the node. Sonarr reports its own `/data` view; both /data/media
+# and /data/torrents live under this root, so one value covers the library and the download dir.
+# Verified on daniel-box: /srv/media/media and /srv/media/torrents both exist.
+fake_remux_host_data_root: /srv/media
+
+# Empty selects host-ffprobe mode in fake_remux_scan.py. It is not an omission — there is no
+# container on this node to exec into, and none is needed: the library is a local directory here.
+fake_remux_jellyfin_container: ""
+
+# Resolved at deploy time from the cluster Service rather than hardcoded. A ClusterIP is stable for
+# a Service's life but NOT across a delete, which is the same reasoning telemetry-health.sh gives
+# for resolving rather than pinning. The *arr is not reachable by name from the host (no cluster
+# DNS) and the `-k8s` ingress name mis-resolves on this node specifically, so the ClusterIP is the
+# honest path — see the -k8s aside in docs/k3s-migration/slice-4-media-cluster.md.
+fake_remux_sonarr_namespace: homelab
+fake_remux_sonarr_service: sonarr
+fake_remux_sonarr_port: 8989
+
+# Unchanged from the autofix-bridge role: daily detect, 20-minute reconcile.
+fake_remux_scan_cron_hour: "4"
+fake_remux_scan_cron_minute: "45"
+fake_remux_replace_cron_minute: "*/20"
+
+# Health push. monitor-bridge read these two state files over a `:ro` bind mount on daniel-server;
+# that stops working when the cron changes host, so a cron here pushes the same two Kuma monitors
+# with the same tokens. Max-ages match the ones check.py applied (26h / 1.2h).
+fake_remux_scan_max_age_hours: 26
+fake_remux_replace_max_age_hours: 1.2
+fake_remux_health_cron_minute: "*/10"
+
+# The SAME three paths the autofix-bridge role used on daniel-server, and that is load-bearing
+# rather than tidy: both scripts fall back to /etc/autofix-fake-remux/config.env when their
+# FAKE_REMUX_CONFIG / FAKE_REMUX_REPLACE_CONFIG env vars are unset, so keeping the paths means the
+# cron lines need no override at all.
+#
+# A first attempt renamed two of the three. The scan then read a config that did not exist and
+# reported `disabled (no Sonarr API key)` — exit 0, monitor green, scanning nothing. Worth the
+# comment: the failure mode of a wrong path here is silence, not an error.
+fake_remux_opt_dir: /opt/autofix-fake-remux
+fake_remux_config_dir: /etc/autofix-fake-remux
+fake_remux_state_dir: /var/lib/autofix-fake-remux
+
+# ONE lock shared by both crons, carried over from daniel-server. Not decoration: they share
+# replacements.json — the scan seeds entries the reconciler acts on — and the daily 04:45 scan
+# lands inside the */20 reconcile's schedule, so without it they race on the ledger a few times
+# a week. -w 600 waits rather than skipping, because a skipped reconcile tick is invisible.
+fake_remux_lock: /var/lock/autofix-fake-remux.lock

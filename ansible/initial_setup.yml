@@ -31,6 +31,10 @@
     - { role: claude_code, tags: ["claude_code"], when: has_claude_code }
     - { role: renovate_notify, tags: ["renovate_notify"], when: inventory_hostname == renovate_notify_host }
     - { role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == 'daniel-pi' }
+    # Slice 4, B7c: the fake-remux detector + reconciler follow the media stack onto daniel-box.
+    # Host-conditional like optimize_pi/renovate_notify — the scripts still live in the
+    # autofix-bridge role, which keeps its sidecar and disk-prune on daniel-server.
+    - { role: fake_remux, tags: ["fake_remux"], when: inventory_hostname == fake_remux_host }
   handlers:
     - name: Restart fail2ban
       ansible.builtin.service:

@@ -130,6 +130,11 @@ portainer_manager_host: daniel-server
 # anything host-local), so running it on more than one host would just duplicate
 # every notification. Doesn't matter which host, but must be exactly one.
 renovate_notify_host: daniel-server
+# Slice 4, B7c. Which host runs the fake-remux detector + reconciler — daniel-box since the media
+# stack moved there. Lives here rather than in the role's defaults because initial_setup.yml's
+# `when:` on the role entry is evaluated before that role's defaults are in scope, the same reason
+# renovate_notify_host does.
+fake_remux_host: daniel-box
 # Whether this host runs its own gitops_deploy pull-based auto-deployer. True by
 # default — every full host redeploys its own containers_list independently on a
 # git push (see gitops_deploy CLAUDE.md). daniel-pi overrides this false: it's

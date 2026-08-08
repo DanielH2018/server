@@ -27,6 +27,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/containers/configarr/files",
   "ansible/roles/k8s/configarr/files",             # cluster-side configarr health-reader logic
   "ansible/roles/k8s/janitorr/files",              # cluster-side janitorr health-reader logic
+  "ansible/roles/setup/fake_remux/files",          # generic {ts,ok,msg} state-file pusher
   "ansible/roles/containers/terraria-stats/files",
   "ansible/roles/containers/ical-proxy/files",
   "ansible/roles/containers/homelab-mcp/files",

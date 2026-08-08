@@ -56,6 +56,9 @@ HOST_RUN_SCRIPTS = [
     # /usr/local/bin/janitorr-health.sh (a templated wrapper, so neither scan can derive them).
     "ansible/roles/k8s/janitorr/files/janitorr_health.py",
     "ansible/roles/k8s/janitorr/files/janitorr_health_logic.py",
+    # Generic {ts,ok,msg} state-file pusher, run on daniel-box by /usr/local/bin/fake-remux-health.sh
+    # (a templated wrapper, so neither scan can derive it).
+    "ansible/roles/setup/fake_remux/files/state_push.py",
     # .claude/hooks/*.sh wrappers run these under a BARE python3 (for hook latency — not `uv run`), so
     # they face the same host 3.12 floor. The ExecStart scan can't see a .sh-wrapped invocation;
     # _host_python_scripts_in_hooks() below re-derives the requirement. session-health.py had a live

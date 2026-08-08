@@ -17,6 +17,32 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # `hostname` carries the -k8s suffix while the Docker twin still serves the unsuffixed name.
 # Single-label on purpose — bento-pdf-k8s.local.<domain> is covered by the existing
 # *.local.<domain> wildcard cert; a nested bento-pdf.k8s.local.<domain> would not be.
+# fake-remux detector + reconciler, moved here from daniel-server on 2026-08-08 (slice 4, B7c)
+# with the media stack they read. The scripts still live in the autofix-bridge role, which keeps
+# its sidecar and disk-prune on that host; only these two crons and their tunables moved.
+# Reconciler mode: live = grab a genuine replacement, verify (host ffprobe), delete the fake + import.
+# Pre-live-tested end-to-end on 2026-07-17 (4 blocking bugs found + fixed). off/shadow also available.
+autofix_fake_remux_replace_mode: live
+# fake-remux reconciler's git-tracked selection policy, rendered to policy.json (autofix-bridge
+# role). Quality range is deferred to Sonarr's profile — no resolution floor, no codec ban;
+# authenticity is enforced post-download, codec-agnostically. See the 2026-07-17 design doc.
+autofix_fake_remux_policy:
+  deny_release_groups: [NTRX]
+  prefer_release_groups: [VARYG]
+  prefer_indexers: [Nyaa.si, Knaben]
+  depreference_codecs: [av1]
+  gop_max_s: 5
+  min_size_gb: 0.4
+  max_size_gb: 8.0  # sanity ceiling — wide enough for a genuine 2160p WEB-DL episode (no quality cap)
+  max_concurrent_replacements: 5
+  searches_per_tick: 2
+  search_spacing_s: 20
+  download_stall_hours: 12
+  import_timeout_s: 3600
+  grab_grace_s: 300
+  max_attempts: 3
+  history_retention_days: 14
+
 containers_list:
   - name: traefik
     platform: k8s

@@ -17,28 +17,6 @@ long: -77.08
 slzb_ip: 10.0.0.127
 zigbee_pan_id: 6754
 zigbee_ext_pan_id: [221, 187, 17, 34, 51, 68, 85, 102]
-# Reconciler mode: live = grab a genuine replacement, verify (host ffprobe), delete the fake + import.
-# Pre-live-tested end-to-end on 2026-07-17 (4 blocking bugs found + fixed). off/shadow also available.
-autofix_fake_remux_replace_mode: live
-# fake-remux reconciler's git-tracked selection policy, rendered to policy.json (autofix-bridge
-# role). Quality range is deferred to Sonarr's profile — no resolution floor, no codec ban;
-# authenticity is enforced post-download, codec-agnostically. See the 2026-07-17 design doc.
-autofix_fake_remux_policy:
-  deny_release_groups: [NTRX]
-  prefer_release_groups: [VARYG]
-  prefer_indexers: [Nyaa.si, Knaben]
-  depreference_codecs: [av1]
-  gop_max_s: 5
-  min_size_gb: 0.4
-  max_size_gb: 8.0  # sanity ceiling — wide enough for a genuine 2160p WEB-DL episode (no quality cap)
-  max_concurrent_replacements: 5
-  searches_per_tick: 2
-  search_spacing_s: 20
-  download_stall_hours: 12
-  import_timeout_s: 3600
-  grab_grace_s: 300
-  max_attempts: 3
-  history_retention_days: 14
 # Self-hosted happy (slopus/happy, standalone shape) — pinned upstream commit for the
 # ansible.builtin.git checkout that becomes the Docker build context (see
 # roles/containers/happy). No usable release tag exists yet: the newest tag (v3) predates

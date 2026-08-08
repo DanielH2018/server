@@ -1,0 +1,148 @@
+---
+# Slice 4, B7c — the fake-remux detector + reconciler on daniel-box.
+#
+# Scripts and the config template are sourced from roles/containers/autofix-bridge rather than
+# copied: that role still owns them and still runs the sidecar + disk-prune on daniel-server, so a
+# second copy here would be two versions of a thing that deletes and re-grabs media.
+
+- name: Ensure ffprobe is installed
+  tags: [fake_remux]
+  # Both crons probe on this host now. The scan used to reach jellyfin's bundled ffmpeg through
+  # `docker exec`; there is no Docker here, and the library is a local directory, so the probe is
+  # a plain binary against a plain path.
+  ansible.builtin.apt:
+    name: ffmpeg
+    state: present
+  become: true
+
+- name: Create fake-remux directories
+  tags: [fake_remux]
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ fake_remux_opt_dir }}", mode: "0750" } # scripts
+    - { path: "{{ fake_remux_config_dir }}", mode: "0750" } # config.env (0600 inside)
+    - { path: "{{ fake_remux_state_dir }}", mode: "0755" } # ledger + the two state files
+  become: true
+
+- name: Install the fake-remux scripts
+  tags: [fake_remux]
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ fake_remux_opt_dir }}/{{ item | basename }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  loop:
+    - state_push.py
+    - "{{ role_path }}/../../containers/autofix-bridge/files/fake_remux_scan.py"
+    - "{{ role_path }}/../../containers/autofix-bridge/files/fake_remux_logic.py"
+    - "{{ role_path }}/../../containers/autofix-bridge/files/fake_remux_replace.py"
+    - "{{ role_path }}/../../containers/autofix-bridge/files/fake_remux_replace_logic.py"
+    # Runtime sibling both entry scripts `from host_lib import`.
+    - "{{ role_path }}/../common/files/host_lib.py"
+  become: true
+
+- name: Resolve Sonarr's ClusterIP
+  tags: [fake_remux]
+  # Resolved every deploy rather than pinned: a ClusterIP is stable for the Service's life but not
+  # across a delete. Fails the play if the Service is gone, which is the right outcome — a cron
+  # pointed at a stale IP would fail silently at 04:45 instead.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ fake_remux_sonarr_namespace }} get svc {{ fake_remux_sonarr_service }}
+      -o jsonpath={.spec.clusterIP}
+  become: true
+  changed_when: false
+  register: fake_remux_sonarr_ip
+
+- name: Assert Sonarr resolved to an address
+  tags: [fake_remux]
+  ansible.builtin.assert:
+    that: fake_remux_sonarr_ip.stdout | length > 0
+    fail_msg: >-
+      {{ fake_remux_sonarr_service }} has no ClusterIP in {{ fake_remux_sonarr_namespace }} —
+      both crons would be pointed at nothing.
+    quiet: true
+
+- name: Render the fake-remux config
+  tags: [fake_remux]
+  # The autofix-bridge role's template, rendered with this host's overrides. no_log: it embeds the
+  # Sonarr API key and the *arr Discord webhook.
+  ansible.builtin.template:
+    src: "{{ role_path }}/../../containers/autofix-bridge/templates/fake-remux.config.env.j2"
+    dest: "{{ fake_remux_config_dir }}/config.env"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  vars:
+    autofix_fake_remux_host_data_root: "{{ fake_remux_host_data_root }}"
+    autofix_fake_remux_jellyfin_container: "{{ fake_remux_jellyfin_container }}"
+    autofix_fake_remux_sonarr_url: "http://{{ fake_remux_sonarr_ip.stdout }}:{{ fake_remux_sonarr_port }}"
+  become: true
+  no_log: true
+
+- name: Render the fake-remux replacement policy
+  tags: [fake_remux]
+  ansible.builtin.copy:
+    content: "{{ autofix_fake_remux_policy | to_nice_json }}\n"
+    dest: "{{ fake_remux_config_dir }}/policy.json"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0644"
+  become: true
+
+- name: Schedule the fake-remux scan
+  tags: [fake_remux]
+  ansible.builtin.cron:
+    name: "fake-remux scan"
+    hour: "{{ fake_remux_scan_cron_hour }}"
+    minute: "{{ fake_remux_scan_cron_minute }}"
+    user: "{{ sys_user }}"
+    # No config override: the script's own default IS fake_remux_config_dir/config.env. An earlier
+    # version passed CONFIG_PATH=, which is not the variable either script reads (they use
+    # FAKE_REMUX_CONFIG / FAKE_REMUX_REPLACE_CONFIG) — so it read nothing and reported "disabled".
+    job: >-
+      /usr/bin/flock -w 600 {{ fake_remux_lock }}
+      /usr/bin/python3 {{ fake_remux_opt_dir }}/fake_remux_scan.py
+      >/dev/null 2>&1 || logger -t fake-remux-scan 'scan wrapper failed'
+    cron_file: fake-remux-scan
+  become: true
+
+- name: Schedule the fake-remux reconcile
+  tags: [fake_remux]
+  ansible.builtin.cron:
+    name: "fake-remux reconcile"
+    minute: "{{ fake_remux_replace_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: >-
+      /usr/bin/flock -w 600 {{ fake_remux_lock }}
+      /usr/bin/python3 {{ fake_remux_opt_dir }}/fake_remux_replace.py
+      >/dev/null 2>&1 || logger -t fake-remux-reconcile 'reconcile wrapper failed'
+    cron_file: fake-remux-reconcile
+  become: true
+
+- name: Deploy the fake-remux heartbeats
+  tags: [fake_remux]
+  ansible.builtin.template:
+    src: fake-remux-health.sh.j2
+    dest: /usr/local/bin/fake-remux-health.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders both Kuma push tokens
+
+- name: Schedule the fake-remux heartbeats
+  tags: [fake_remux]
+  ansible.builtin.cron:
+    name: "fake-remux health"
+    minute: "{{ fake_remux_health_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: "/usr/local/bin/fake-remux-health.sh"
+    cron_file: fake-remux-health
+  become: true
