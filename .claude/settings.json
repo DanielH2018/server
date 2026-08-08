@@ -4,7 +4,40 @@
     "allow": [
       "Bash(ansible-lint *)",
       "Bash(git check-ignore *)",
-      "Bash(uv run python scripts/probe.py:*)"
+      "Bash(uv run python scripts/probe.py:*)",
+      "Bash(kubectl get *)",
+      "Bash(kubectl logs *)",
+      "Bash(kubectl describe *)",
+      "Bash(kubectl top *)",
+      "Bash(kubectl explain *)",
+      "Bash(kubectl events *)",
+      "Bash(kubectl api-resources *)",
+      "Bash(kubectl api-versions *)",
+      "Bash(kubectl version *)",
+      "Bash(kubectl cluster-info)",
+      "Bash(kubectl auth can-i *)",
+      "Bash(kubectl auth whoami)",
+      "Bash(kubectl diff *)",
+      "Bash(kubectl wait *)",
+      "Bash(kubectl rollout status *)",
+      "Bash(kubectl rollout history *)",
+      "Bash(kubectl config view *)",
+      "Bash(kubectl config get-contexts *)",
+      "Bash(kubectl config current-context)",
+      "Bash(kubectl apply *)",
+      "Bash(kubectl scale *)",
+      "Bash(kubectl rollout restart *)",
+      "Bash(kubectl rollout undo *)",
+      "Bash(kubectl rollout pause *)",
+      "Bash(kubectl rollout resume *)",
+      "Bash(kubectl label *)",
+      "Bash(kubectl annotate *)",
+      "Bash(kubectl cordon *)",
+      "Bash(kubectl uncordon *)",
+      "Bash(kubectl create job *)"
+    ],
+    "ask": [
+      "Bash(kubectl apply --prune*)"
     ]
   },
   "hooks": {

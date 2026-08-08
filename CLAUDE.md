@@ -124,6 +124,28 @@ decision alone would never reach it. Registered in the *user-level* settings (ch
 `settings.base.json`), not this repo's — a project's settings may only tighten what is auto-approved,
 never widen it, so that a repo can't grant itself permissions merely by being opened.
 
+### `kubectl` — which verbs auto-approve
+`kubectl` is **not** handled by `auto-approve-readonly.py`; it is allow-listed by verb in this repo's
+`.claude/settings.json`. Claude Code normalises flag position before matching, so `Bash(kubectl get *)`
+also covers `kubectl -n homelab get pods` — a rule is needed per *verb*, not per flag order (verified
+2026-08-08 against the OTEL `tool_decision` stream).
+
+- **Auto-approved, read-only:** `get`, `logs`, `describe`, `top`, `explain`, `events`, `api-resources`,
+  `api-versions`, `version`, `cluster-info`, `auth can-i`, `auth whoami`, `diff`, `wait`,
+  `rollout status|history`, `config view|get-contexts|current-context`.
+- **Auto-approved, reversible writes:** `apply`, `scale`, `rollout restart|undo|pause|resume`, `label`,
+  `annotate`, `cordon`, `uncordon`, `create job`. Each is re-appliable from the Ansible-rendered
+  manifests, so a bad one is undone by redeploying the role.
+- **Still prompts, deliberately:** `delete`, `drain`, `taint` (destroy state — Longhorn PVCs and their
+  B2 backups sit behind them), `exec`, `run`, `attach`, `debug`, `cp`, `port-forward`, `proxy`
+  (arbitrary code execution inside a container — a security boundary, not a reversibility one),
+  `edit`, `replace`, `patch`, `set`. `kubectl apply --prune` is explicitly `ask`-listed because the
+  broader `apply` allow would otherwise swallow it, and it deletes.
+- `sudo k3s kubectl …` still prompts — `sudo` is ask-listed user-side and that is unaffected here.
+
+Hand-running an auto-approved *write* verb creates drift from the Ansible source of truth; prefer
+`uv run ansible-playbook … --tags <svc>`. The write tier exists for iteration, not for deploys.
+
 ## Claude Tooling in This Repo (`.claude/`)
 - **`scripts/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt). Resolves the
   live container IP via `docker inspect`, so prefer it over curling bridge IPs (which change on
