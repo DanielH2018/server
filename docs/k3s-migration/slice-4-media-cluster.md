@@ -892,6 +892,47 @@ monitor-bridge reading the Docker container, then `13:42 startup grace — up 58
 cron reading the pod, then `no janitorr errors (up 0.2h)` once grace expired. monitor-bridge is down
 to 40 checks with `janitorr` absent from `CHECKS`.
 
+#### B7c — autofix-bridge's fake-remux pair: scan half done in code, 2026-08-08
+
+Not one of the nine, and not fixable by changing a hostname: **daniel-box runs no Docker at all**
+(there is a guard test for it), so `docker inspect sonarr` and `docker exec jellyfin ffprobe` have
+nothing to talk to there. Both are structural, not config.
+
+It turned out smaller than estimated, because the reconciler had already solved half of it. It has
+always ffprobed **on the host** — downloads land in `/data/torrents`, which jellyfin does not mount
+— and already carried a `/data` → host path mapping. That mapping moved into the shared pure core
+both crons import, so there is one copy and it is tested rather than duplicated.
+
+| Change | Shape |
+|---|---|
+| ffprobe | empty `JELLYFIN_CONTAINER` selects host mode + `HOST_DATA_ROOT` translation; non-empty keeps `docker exec` for daniel-server |
+| Sonarr address | `SONARR_URL` wins when set; `resolve_ip` stays as the fallback |
+
+Defaults are unchanged, so daniel-server behaves byte-identically today.
+
+**Proven on daniel-box against a real library file**, which is the part worth having rather than
+asserting: Sonarr's `/data/media/tv/…` view mapped through `HOST_DATA_ROOT=/srv/media` to a path
+that exists, `ffprobe` returned rc 0 and a real `ENCODER` tag (`Lavc61.19.101 hevc_qsv`), and the
+keyframe read parsed. The **failure direction** was proven too: with `HOST_DATA_ROOT` empty the path
+is left alone, ffprobe exits nonzero, and the file is SKIPPED. A mapping mistake must never
+manufacture a fake — a false negative costs one missed fake, a false positive costs a real file.
+
+**Why it is not deployed.** The scan and the reconciler share one ledger
+(`/var/lib/autofix-fake-remux/replacements.json`), and the role's own docs warn against repointing
+one half without the other. Splitting them across hosts would split the ledger. So the cutover is
+both crons at once, plus a third instance of the monitor-bridge state-file problem: `Fake Remux
+Scan` and `Fake Remux Replace` read that directory over a `:ro` bind mount on daniel-server, exactly
+as configarr and janitorr did. That is now a **class**, not a coincidence — three host-plane state
+files that could not survive a host move.
+
+**Drift found while reading the role, worth fixing separately:** its CLAUDE.md says the reconciler
+"ships as `shadow`", but `host_vars/daniel-server.yml` has `autofix_fake_remux_replace_mode: live`.
+It deletes and re-grabs for real. It is inert only because it currently cannot resolve `sonarr`.
+
+**ffmpeg is now installed on daniel-box** so the probe path could be exercised. It is not yet
+declared in Ansible for that host — the autofix-bridge role's existing "Ensure ffmpeg (ffprobe) is
+installed" task covers it, and travels with the role at cutover. Until then it is undeclared drift.
+
 #### Resolved 2026-08-07: monitor-bridge's \*arr checks — a route with no `tls:` is a dead route
 
 The cutover moved the three \*arrs off the `media` Docker network, so `SONARR_URL`,
