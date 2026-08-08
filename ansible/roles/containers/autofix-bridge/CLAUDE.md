@@ -22,9 +22,11 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
   replacement is ffprobe-verified genuine, **never** a legit in-progress download (VPN/client-outage
   patterns are held out).
 - **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live) · disk
-  `autofix_disk_dry_run` · fake-remux `FAKE_REMUX_REPLACE_MODE` (off/shadow/live; ships `shadow`).
+  `autofix_disk_dry_run` · fake-remux `FAKE_REMUX_REPLACE_MODE` (off/shadow/live; template default
+  `shadow`, but **host_vars runs it `live`** — see the reconciler bullet below).
   Returning any plane to report-only is one env flip + redeploy — preserve that.
-- **Authoritative sources:** sonarr/radarr `/api/v3/queue`, ffprobe truth via `docker exec jellyfin`,
+- **Authoritative sources:** sonarr/radarr `/api/v3/queue`, ffprobe truth (via `docker exec jellyfin`
+  on daniel-server; directly on the host wherever `JELLYFIN_CONTAINER` is empty, e.g. daniel-box),
   `/` used-%. Never a doc or a cached guess.
 - **Abort valves:** `GRACE_CYCLES`, `MAX_ACTIONS_PER_CYCLE` / `MAX_PER_SCAN` (a mass-match = systemic
   cause → act on **none** + alert), the disk threshold gate.
@@ -79,7 +81,11 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
      file DELETE API, so whether the fake lands in the OS trash or is removed outright is entirely
      Sonarr's own Media Management → Recycling Bin setting, not something this policy controls.
      `FAKE_REMUX_REPLACE_MODE` is the gate: `off` = detect only, `shadow` = log intended grabs to
-     `outcomes.jsonl` with zero Sonarr mutations (**ships as this**), `live` = grab+delete+import.
+     `outcomes.jsonl` with zero Sonarr mutations, `live` = grab+delete+import. **daniel-server
+     runs `live`** (`autofix_fake_remux_replace_mode` in host_vars) — it deletes and re-grabs for
+     real. This line claimed it shipped as `shadow` until 2026-08-08; the template default is
+     `shadow`, but the inventory has overridden it to `live` and that is the intended setting,
+     confirmed by the operator. Don't "restore" it to shadow.
      Ledger/outcome state all live under `/var/lib/autofix-fake-remux/`. See
      `docs/superpowers/specs/2026-07-17-fake-remux-auto-replacer-design.md` for the full design.
 

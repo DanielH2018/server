@@ -92,10 +92,17 @@ class Sonarr(scan.Sonarr):
 
 
 def _make_sonarr(cfg):
-    ip = scan.resolve_ip(cfg.get("SONARR_CONTAINER", "sonarr"))
-    port = cfg.get("SONARR_PORT", "8989")
+    # Same rule as the scan: SONARR_URL wins when set, resolve_ip is the fallback. This was the
+    # reconciler's LAST Docker coupling — everything else it does already runs on the host, because
+    # it has always had to ffprobe downloads jellyfin does not mount.
+    base = cfg.get("SONARR_URL", "").rstrip("/")
+    if not base:
+        base = "http://%s:%s" % (
+            scan.resolve_ip(cfg.get("SONARR_CONTAINER", "sonarr")),
+            cfg.get("SONARR_PORT", "8989"),
+        )
     timeout = int(cfg.get("HTTP_TIMEOUT", "15"))
-    s = Sonarr("http://%s:%s" % (ip, port), cfg.get("SONARR_API_KEY", ""), timeout)
+    s = Sonarr(base, cfg.get("SONARR_API_KEY", ""), timeout)
     s.search_timeout = int(cfg.get("SEARCH_TIMEOUT_S", "180"))
     return s
 
