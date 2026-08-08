@@ -1066,10 +1066,29 @@ in Traefik's access log (previously the plain routers), and the checks themselve
    bt709 in any case. tdarr's own AMD transcode is proven at 17.4x realtime (B6).
 2. **MET 2026-08-07 (B4c).** An end-to-end import completes **by hardlink** — link count 2, same
    inode 6029478 across qbittorrent's `subPath` mount and sonarr's full-tree mount.
-3. All four \*arr libraries report the same item counts as before the move, with no missing paths.
-4. `configarr` syncs clean and `janitorr`'s symlinks resolve inside Jellyfin's namespace.
-5. The nine Docker services are stopped, and monitor-bridge's media checks are green against the
-   cluster.
+3. **MET 2026-08-08, three of four measured directly.** Counted the live cluster libraries through
+   the *arr APIs against the frozen daniel-server databases: sonarr **14 = 14**, radarr **1 = 1**,
+   prowlarr **8 = 8** indexers. **bazarr's live count was not measured** — no `bazarr_api_key`
+   exists anywhere in the repo, so there is no credential to query it with, and the read-only
+   kubeconfig cannot exec into the pod. What it has instead: its frozen DB held 14 shows and 1
+   movie, exactly mirroring sonarr and radarr, and its pod log shows it indexing existing movie
+   subtitles from disk and completing both series and movie subtitle searches today — so its paths
+   resolve. Stated rather than rounded up, since it is the one library not counted.
+4. **MET 2026-08-08.** configarr's last scheduled Job (`configarr-29769690`) succeeded at 09:30 UTC,
+   and janitorr's symlinks were proven resolvable inside Jellyfin's namespace by the B7b round trip
+   — written from janitorr, `readlink` + `head -c 1024` from inside the jellyfin pod.
+5. **MET 2026-08-08.** All nine are gone from daniel-server — the last two, `qbittorrent` and its
+   `wireguard` sidecar, were stopped at the B4c cutover but never removed as containers, so they
+   sat pushing DOWN Kuma monitors for 22 h; removed. monitor-bridge's media checks are green
+   against the cluster: Arr Queue Warnings, Prowlarr Indexers, Configarr Sync, Janitorr Errors,
+   both Fake Remux monitors, and Arr Auto-Block.
+
+   **Arr Auto-Block was the one that was not green, and it was not cosmetic.** autofix-bridge — the
+   sidecar that blocklists poisoned releases, the 2026-07-01 `.exe` incident's remediation — still
+   pointed at `http://sonarr:8989`, which stopped resolving when B4c moved the *arrs. It had been
+   down since **2026-08-07 21:38, 398 consecutive beats**, so the monitor did its job and the gap
+   was 22 h of the auto-blocker not running rather than 22 h of nobody being told. Repointed at the
+   `-k8s` names, the same repoint monitor-bridge got at the time and this role did not.
 
 ---
 
