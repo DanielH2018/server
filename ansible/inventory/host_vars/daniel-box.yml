@@ -403,6 +403,14 @@ containers_list:
     # hairpin NAT — see docs/k3s-migration/slice-2-leaf-apps.md). The check talks to the -k8s
     # name and the cluster VIP directly instead — see the -monitoring IngressRoute in the
     # role's ingressroute.yaml.j2.
+
+  # Slice 5, B1. Shadow broker: deployed alongside the Docker mosquitto, serving nobody until
+  # the clients (z2m, HA) repoint one at a time. No port/hostname/route — MQTT is raw TCP and
+  # crosses hosts on the role's pinned MetalLB VIP (mosquitto_k8s_lan_ip), not through Traefik.
+  # The Docker copy on daniel-server retires only after the B1 gates in
+  # docs/k3s-migration/slice-5-smart-home.md pass.
+  - name: mosquitto
+    platform: k8s
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the

@@ -1,0 +1,21 @@
+---
+# Same image the Docker role runs — both copies stay on the same tag through coexistence so a
+# difference in behaviour between them is never the image.
+mosquitto_k8s_image: eclipse-mosquitto:2.1.2-alpine
+
+# Mirrors resources('0.25', '64M', '0.02', '16M') in the compose template.
+mosquitto_k8s_cpu_limit: "250m"
+mosquitto_k8s_mem_limit: 64Mi
+mosquitto_k8s_cpu_request: "25m"
+mosquitto_k8s_mem_request: 16Mi
+
+# MQTT crosses hosts on this pinned VIP (slice-5 D2): raw TCP with its own auth, so the HTTP
+# ingress machinery has nothing to offer it. .240 is the Traefik ingress VIP, .241 jellyfin-lan.
+mosquitto_k8s_lan_ip: 10.0.0.242
+
+mosquitto_k8s_claim: mosquitto-data
+# nobackup regardless of the D6 verdict for the other slice-5 PVCs: the persistence file holds
+# only retained messages and queued QoS state, all of which the three known clients republish on
+# reconnect. Nothing here is worth a B2 transaction.
+mosquitto_k8s_storage_class: longhorn-nobackup
+mosquitto_k8s_size: 1Gi

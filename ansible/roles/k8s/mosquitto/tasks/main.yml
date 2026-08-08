@@ -1,0 +1,12 @@
+---
+- name: Deploy mosquitto to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: mosquitto
+    manifests_files:
+      - pvc.yaml
+      - deployment.yaml
+      - service.yaml
+    manifests_secret_files:
+      - config-secret.yaml

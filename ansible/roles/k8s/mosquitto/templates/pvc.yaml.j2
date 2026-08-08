@@ -1,0 +1,16 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ mosquitto_k8s_claim }}
+  namespace: {{ k8s_namespace }}
+spec:
+  # Not seeded from the Docker copy: the broker's persistence file is retained/queued state the
+  # clients rebuild on their first reconnect, and during coexistence the interesting retained
+  # topics still live on the Docker broker anyway. A fresh store is correct here.
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ mosquitto_k8s_storage_class }}
+  resources:
+    requests:
+      storage: {{ mosquitto_k8s_size }}

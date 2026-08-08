@@ -1,0 +1,36 @@
+---
+# In-cluster name for the clients that will live here later (z2m, HA reach the broker as
+# plain `mosquitto`, the same string the Docker network resolved).
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: mosquitto
+  ports:
+    - name: mqtt
+      port: 1883
+      targetPort: 1883
+---
+# The cross-host seam (slice-5 D2): one pinned VIP serving 1883 to Docker clients during
+# coexistence, to the operator's shell, and to anything that stays outside the cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto-lan
+  namespace: {{ k8s_namespace }}
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: {{ mosquitto_k8s_lan_ip }}
+spec:
+  type: LoadBalancer
+  # Preserves the real client address in broker logs — the B1 exit gate reads the connection
+  # log to prove no unknown client still points at the Docker broker. Safe on a single node.
+  externalTrafficPolicy: Local
+  selector:
+    app: mosquitto
+  ports:
+    - name: mqtt
+      port: 1883
+      targetPort: 1883

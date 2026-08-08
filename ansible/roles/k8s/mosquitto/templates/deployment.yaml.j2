@@ -1,0 +1,81 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # ReadWriteOnce PVC on single-replica Longhorn — a rolling update would deadlock on the volume.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mosquitto
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsUser: {{ puid }}
+        runAsGroup: {{ pgid }}
+        fsGroup: {{ pgid }}
+      containers:
+        - name: mosquitto
+          image: {{ mosquitto_k8s_image }}
+          ports:
+            - containerPort: 1883
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+          volumeMounts:
+            - name: config
+              mountPath: /mosquitto/config
+              readOnly: true
+            - name: data
+              mountPath: /mosquitto/data
+            # Image declares VOLUME /mosquitto/log; mount scratch over it so the read-only
+            # rootfs doesn't block the implicit volume. Stays empty (log_dest is stdout) —
+            # same reason the compose template bind-mounts ./log.
+            - name: log
+              mountPath: /mosquitto/log
+          # TCP probes, not the compose healthcheck's authenticated $SYS subscribe: an exec
+          # probe would embed the SOPS MQTT password in the pod spec, which the read-only
+          # kubeconfig can read. A listener that accepts TCP is what the clients need anyway.
+          readinessProbe:
+            tcpSocket:
+              port: 1883
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 1883
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ mosquitto_k8s_cpu_limit }}"
+              memory: {{ mosquitto_k8s_mem_limit }}
+            requests:
+              cpu: "{{ mosquitto_k8s_cpu_request }}"
+              memory: {{ mosquitto_k8s_mem_request }}
+      volumes:
+        - name: config
+          secret:
+            secretName: mosquitto-config
+            # 288 = 0440: mosquitto refuses a world-readable password_file. Decimal because
+            # the YAML-1.1 parser behind kubectl reads 0o440 as a string.
+            defaultMode: 288
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ mosquitto_k8s_claim }}
+        - name: log
+          emptyDir: {}
