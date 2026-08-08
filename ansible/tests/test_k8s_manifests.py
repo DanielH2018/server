@@ -345,6 +345,36 @@ def test_every_authed_service_carries_forward_auth_and_rate_limit():
                     assert "authelia" in middlewares, name
 
 
+def test_every_https_route_carries_tls():
+    """An IngressRoute on the `https` entrypoint with no `spec.tls` is a NON-TLS router, and
+    the k8s Traefik sets no entrypoint-level TLS — so TLS is decided per router and an HTTPS
+    request is only ever matched against TLS routers.
+
+    The route still applies cleanly, `kubectl get` still shows it, and Traefik logs nothing.
+    Requests just fall through to whatever other router matches the host. That is how the three
+    `-monitoring` routes were dead from B4c until 2026-08-07 while looking correct, and it cost
+    an investigation that chased priority and ClientIP instead. Globs `ingressroute*` so a
+    route in a second template is covered too — the monitoring routes live in their own file.
+    """
+    for entry in _k8s_entries():
+        for route_tpl in sorted(
+            (K8S / entry["name"] / "templates").glob("ingressroute*.j2")
+        ):
+            rendered = _render(
+                route_tpl,
+                container_item=entry,
+                domain="example.com",
+                **ALL_VARS,
+            )
+            for doc in (d for d in yaml.safe_load_all(rendered) if d):
+                if "https" not in doc["spec"].get("entryPoints", []):
+                    continue
+                assert doc["spec"].get("tls"), (
+                    f"{doc['metadata']['name']} ({route_tpl.parent.parent.name}) serves the "
+                    "https entrypoint without a tls block — it will never match a request"
+                )
+
+
 def test_routes_stay_lan_only_while_the_k8s_edge_has_no_crowdsec():
     """k8s_public_route and the CrowdSec bouncer have to move together. A public Host rule
     while the k8s Traefik carries no bouncer is an unprotected edge one DNS record away."""

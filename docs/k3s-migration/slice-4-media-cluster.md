@@ -604,43 +604,58 @@ symlinks resolve **inside Jellyfin's namespace** (the D4 double-mount, verified 
 from the host), and `monitor-bridge`'s `arr_queue` / `janitorr` / `fake_remux` checks stay green
 against the new endpoints.
 
-#### Open: monitor-bridge's \*arr checks are still DOWN
+#### Resolved 2026-08-07: monitor-bridge's \*arr checks — a route with no `tls:` is a dead route
 
 The cutover moved the three \*arrs off the `media` Docker network, so `SONARR_URL`,
 `RADARR_URL` and `PROWLARR_URL` stopped resolving. Repointed at the `-k8s` names — the suffixed
 ones, not the bridged `*.local` ones, which resolve to daniel-server and are unreachable from a
 container on that host (same-bridge hairpin NAT).
 
-**DNS is fixed** (Pi-hole now answers `sonarr-k8s.local` with the cluster VIP rather than the
-`*.local` wildcard pointing at daniel-server) and the three `<svc>-monitoring` IngressRoutes
-exist. **The routes do not win.** monitor-bridge's requests still match the service's plain
-`Host(...)` router and come back as Authelia 401s, so `arr_queue` and `prowlarr_indexers` remain
-DOWN in Kuma.
+DNS was fixed and the three `<svc>-monitoring` IngressRoutes existed, but requests kept matching
+the service's plain `Host(...)` router and coming back as Authelia 401s.
 
-Ruled out, in order:
+**Cause: `monitoring_route()` emitted no `spec.tls`.** An IngressRoute on the `https` entrypoint
+without one becomes a **non-TLS router**, and the k8s Traefik sets no entrypoint-level TLS — so
+TLS is decided per router and an HTTPS request is only matched against TLS routers. The
+monitoring routes were never candidates. They were not losing the match; they were not in it.
+Every request therefore fell through to the plain router, which is Authelia-gated.
+
+That is why the first investigation found nothing: it was tuning inputs to a rule that was
+never evaluated.
 
 | Hypothesis | Test | Result |
 |---|---|---|
-| Priority | raised the route to `priority: 1000` | no change |
-| ClientIP matcher | removed it, then re-added as whole-LAN `10.0.0.0/24` | no change |
+| Priority | raised the route to `priority: 1000` | no change — could not have helped |
+| ClientIP matcher | removed it, then re-added as whole-LAN `10.0.0.0/24` | no change — could not have helped |
 | Traefik reconciliation lag | retested several minutes later | no change |
-| The pattern itself is broken | called the two existing monitoring routes from the same container | **both work** — `n8n-k8s/api/v1/workflows` returns the app's own 401, `prometheus-k8s/api/v1/query` returns 200 |
+| The pattern itself is broken | called the two existing monitoring routes from the same container | **both work** — and this was the clue: `n8n-monitoring` and `prometheus-monitoring` both carry `tls:` |
 
-The live object is structurally identical to `n8n-monitoring` — same shape of rule, same
-`priority: 100`, same `rate-limit` middleware, same namespace, a main route with no explicit
-priority in both cases. The difference has not been found, and guessing further was the wrong
-use of the window.
+What isolated it was a field-by-field diff of the two live objects. The correlation is exact —
+every IngressRoute in the cluster carrying `tls:` routed, and the only three without it were
+the three broken ones.
 
-Worth noting what the access log says, because it is the most confusing part: for the failing
-requests Traefik logs `ClientHost: 10.0.0.161` — the address the ClientIP matcher was supposed
-to admit — while selecting `RouterName: homelab-prowlarr-…`, the main router. So the value the
-log calls the client and the value the matcher compares are not obviously the same thing here.
+**Why it was hard to see.** The failure is invisible from the object: the route applies cleanly,
+`kubectl get` lists it, and Traefik logs nothing at all. The access log compounded it by
+reporting `ClientHost: 10.0.0.161` — the address the ClientIP matcher was meant to admit — while
+selecting the main router, which reads as "the matcher is being ignored" rather than "this
+router does not exist for TLS traffic".
 
-**Impact while it is open:** two Kuma monitors are red. Nothing else depends on them, and the
-underlying services are healthy — the cutover's own checks all pass. **Next step:** compare the
-rendered `n8n` and `prowlarr` IngressRoute objects field by field (not just the route rules),
-and check Traefik's own router list (`/api/http/routers`) for what it thinks the priorities and
-match order are, rather than inferring from the access log.
+**Fix:** `monitoring_route()` now emits the same `tls:` block as `ingressroute()`, guarded by
+`test_every_https_route_carries_tls` in `ansible/tests/test_k8s_manifests.py`, which fails any
+rendered IngressRoute serving the https entrypoint without one.
+
+**Verified end to end** — a tagged probe from the monitor-bridge container now selects
+`homelab-sonarr-monitoring-…`, `homelab-radarr-monitoring-…` and `homelab-prowlarr-monitoring-…`
+in Traefik's access log (previously the plain routers), and the checks themselves return
+`arr_queue -> (True, 'queue clean (Sonarr, Radarr)')` and
+`prowlarr_indexers -> (True, 'all 8 indexer(s) ok')`.
+
+> **Aside — `-k8s` names do not resolve from a daniel-server *host* shell.** daniel-server's own
+> systemd-resolved forwards to the ISP resolver, so `dig sonarr-k8s.local.<domain>` there returns
+> `10.0.0.161` (the public `*.local` wildcard) and curling it 404s. Containers on that host are
+> unaffected — Docker's embedded resolver forwards to the LAN DNS on `10.0.0.161:53`, which
+> answers `10.0.0.240`. Test these routes **from inside a container**, or with
+> `dig @10.0.0.161`; a host-shell 404 means nothing.
 
 ---
 

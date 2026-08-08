@@ -119,14 +119,22 @@ spec:
   the same Docker bridge (same-bridge hairpin NAT — it broke homepage's widgets and check_n8n).
   The suffixed name resolves to the cluster VIP, which is a different machine entirely.
 
-  KNOWN NOT WORKING AS OF 2026-08-07 — this macro's routes do not win against the service's
-  plain Host router, and monitor-bridge still receives Authelia 401s through them. What was
-  ruled out, in order: priority (raised to 1000, no change); the ClientIP matcher (removed
-  entirely, and with a whole-LAN CIDR, no change); Traefik reconciliation lag (retested minutes
-  later). The live object is structurally identical to n8n-monitoring, which DOES work from the
-  same caller — verified in the same session: n8n-k8s/api/v1/workflows returns the app's own
-  401 and prometheus-k8s/api/v1/query returns 200, while all three routes below return
-  Authelia's 401. The difference has not been found. See the slice-4 doc's B4c section.
+  THE `tls:` BLOCK AT THE BOTTOM IS LOAD-BEARING, and its absence is what broke this macro for
+  most of 2026-08-07. An IngressRoute on the `https` entrypoint with no `spec.tls` becomes a
+  NON-TLS router: this entrypoint sets no entrypoint-level TLS, so TLS is decided per router,
+  and an HTTPS request is only ever matched against TLS routers. The route was therefore not
+  losing to the service's plain Host router — it was never a candidate at all, so every request
+  fell through to that router and monitor-bridge got Authelia's 401.
+
+  That failure mode is invisible from the object: the route applies cleanly, `kubectl get`
+  shows it, and Traefik logs nothing. It also makes the rule look irrelevant, which sent the
+  first investigation down three dead ends — priority (raised to 1000), the ClientIP matcher
+  (removed entirely, then widened to the whole LAN), and reconciliation lag. None of them could
+  have changed anything. What finally isolated it was a field-by-field diff against
+  n8n-monitoring, which works from the same caller and carries `tls:`.
+
+  Guard: ansible/tests/test_k8s_manifests.py fails any rendered IngressRoute that serves the
+  https entrypoint without a tls block, so this cannot regress silently again.
 
   The guards it is MEANT to provide, kept in the rule so they are real once it routes:
     1. ClientIP — daniel-server alone, the only intended caller.
@@ -156,4 +164,15 @@ spec:
       services:
         - name: {{ name }}
           port: {{ port }}
+  # Not optional, and not boilerplate — see the header. Without this the router is non-TLS and
+  # never matches an HTTPS request. Identical to ingressroute()'s block above.
+  tls:
+    certResolver: cloudflare
+    options:
+      name: modern
+    domains:
+      - main: "{{ domain }}"
+        sans:
+          - "*.{{ domain }}"
+          - "*.local.{{ domain }}"
 {%- endmacro %}
