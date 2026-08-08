@@ -79,7 +79,14 @@ def main() -> int:
 
     # A failed Job's pod exits nonzero, so `kubectl logs` still returns its output — the read is
     # not conditional on success. An empty result is handled as its own failure in decide().
-    log_rc, logs = kubectl("logs", "job/%s" % name, "--tail=200")
+    #
+    # DELIBERATELY NOT `--tail`. has_error_line() scans the whole output for an ERROR/FATAL line,
+    # and that scan is the backstop for a soft failure that still exits 0 — the entire reason
+    # configarr_status exists. configarr logs its ERROR per instance and then keeps going, so a
+    # night with large diff reports would push an early ERROR out of any tail window and
+    # evaluate(0, <tail>) would return clean. Same false-green class as the empty-logs gate.
+    # The volume is bounded by activeDeadlineSeconds anyway.
+    log_rc, logs = kubectl("logs", "job/%s" % name)
     ok, msg = logic.decide(job, logs if log_rc == 0 else "", age_s, MAX_AGE_S)
     print("%s\t%s" % ("up" if ok else "down", msg))
     return 0

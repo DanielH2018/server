@@ -55,6 +55,10 @@
     'Complete' in configarr_k8s_job.stdout or 'Failed' in configarr_k8s_job.stdout
   retries: "{{ (configarr_k8s_timeout | int / 10) | round | int }}"
   delay: 10
+  # A sync that hangs to its activeDeadlineSeconds would otherwise exhaust the retries and fail the
+  # play, while one that fails FAST would report DOWN and leave the play green — the same outcome
+  # reached two opposite ways. Paging is the monitor's job in both cases.
+  failed_when: false
 
 - name: Install the configarr health reader
   tags: [config]
