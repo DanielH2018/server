@@ -1,0 +1,34 @@
+---
+# Slice 4, B7b — the last of the nine, and the only one that deletes real media.
+#
+# Digest-pinned and watchtower-irrelevant here, but kept identical to the Docker role's pin so the
+# two copies are the same binary during coexistence: `jvm-stable` is a floating non-semver alias
+# Renovate cannot version-track. Manual update: `docker pull ghcr.io/schaka/janitorr:jvm-stable`,
+# take the new digest.
+janitorr_k8s_image: ghcr.io/schaka/janitorr:jvm-stable@sha256:6becfbed9098d27e6bf81a114976394a091d095ee5aba3ae8d86a4fd94af8e7a
+
+# THE SAFETY GATE. Ships dry — the cluster copy proves it can reach the *arrs and that its
+# leaving-soon symlinks resolve inside Jellyfin's namespace BEFORE it is allowed to delete
+# anything. Flipping this is a separate, deliberate step taken after that evidence exists, not
+# part of the port. Overrides the Docker template's default via lookup('template').
+# A STRING, not a YAML bool: it is substituted straight into application.yml, and the shared
+# template must render under plain Jinja too (the validate-k8s-manifests hook has no `bool`
+# filter). Ansible's `| bool` still reads it correctly where verify.yml compares it.
+janitorr_k8s_dry_run: "true"
+
+# The WHOLE tree at /data, no subPath — the *arr side of the D4 contract, not the jellyfin side.
+# It is load-bearing here rather than incidental: janitorr writes symlinks whose TARGETS are
+# absolute `/data/media/...` paths, and Jellyfin resolves them through its own second
+# `/data/media` mount. Mount this one level deeper and every symlink it writes would point at a
+# path that exists in neither namespace.
+janitorr_k8s_media_claim: media-data
+
+# No PVC. janitorr keeps no state of its own — config comes from a Secret, everything else it
+# needs is in /data. That also keeps it out of the Longhorn backup set, which matters more than
+# usual right now (docs/b2-transaction-cap-monitoring-gaps.md).
+
+# Mirrors resources('1.0', '1024M', '0.10', '128M') from the Docker template.
+janitorr_k8s_cpu_limit: "1"
+janitorr_k8s_mem_limit: 1024Mi
+janitorr_k8s_cpu_request: "100m"
+janitorr_k8s_mem_request: 128Mi

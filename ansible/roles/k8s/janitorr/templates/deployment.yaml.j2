@@ -1,0 +1,74 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: janitorr
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # Recreate, not RollingUpdate: two janitorrs running at once would both walk the library and
+  # both act on it. Harmless while dry-run is on and not worth relying on afterwards.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: janitorr
+  template:
+    metadata:
+      labels:
+        app: janitorr
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsUser: {{ puid }}
+        runAsGroup: {{ pgid }}
+        runAsNonRoot: true
+        fsGroup: {{ pgid }}
+      containers:
+        - name: janitorr
+          image: {{ janitorr_k8s_image }}
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /config/application.yml
+              subPath: application.yml
+              readOnly: true
+            # READ-WRITE, and the whole tree. janitorr creates the leaving-soon symlinks and
+            # deletes files here; a readOnly mount would fail the first cleanup rather than
+            # making it safe. `dry-run` is what makes it safe.
+            - name: media
+              mountPath: /data
+            # The JVM writes /tmp/hsperfdata_* and a truststore even with everything else
+            # read-only — the same two paths the Docker copy covers with a tmpfs.
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            limits:
+              cpu: "{{ janitorr_k8s_cpu_limit }}"
+              memory: {{ janitorr_k8s_mem_limit }}
+            requests:
+              cpu: "{{ janitorr_k8s_cpu_request }}"
+              memory: {{ janitorr_k8s_mem_request }}
+          livenessProbe:
+            # Same assertion as the Docker healthcheck: PID 1 is the JVM. It proves the process
+            # is alive and nothing more — janitorr's real failures are logged, not exposed.
+            exec:
+              command: [sh, -c, "grep -q java /proc/1/comm"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: config
+          secret:
+            secretName: janitorr-config
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ janitorr_k8s_media_claim }}
+        - name: tmp
+          emptyDir: {}

@@ -13,7 +13,11 @@ application:
   # Live since 2026-06-10 (operator call after a dry-run trial period since the role
   # was added) — janitorr now actually deletes per the rules below. The *arr tags
   # janitorr-keep / janitorr-keep-too exclude media from cleanup.
-  dry-run: false
+  #
+  # Templated rather than hardcoded so the k3s port can run dry while it proves the path
+  # contract, without forking this file — the k8s role renders it through lookup('template')
+  # and overrides the default. The Docker copy is unaffected: nothing else defines the var.
+  dry-run: {{ janitorr_dry_run | default('false') }}
   run-once: false
   whole-tv-show: false
   whole-show-seeding-check: false

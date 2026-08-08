@@ -1,0 +1,138 @@
+---
+# THE GATE, and for this service it is the point of the whole batch. janitorr deletes real media,
+# so "the pod is Running" proves nothing worth having. Three claims, in the order that matters:
+# it is dry, it can reach the *arrs, and the symlinks it writes resolve where Jellyfin reads them.
+
+- name: Wait for the janitorr pod to be ready
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=ready pod
+      -l app=janitorr --timeout=180s
+  become: true
+  changed_when: false
+
+- name: Find the running janitorr pod
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get pod -l app=janitorr
+      --field-selector status.phase=Running -o jsonpath={.items[0].metadata.name}
+  become: true
+  changed_when: false
+  register: janitorr_k8s_pod
+
+# Asserted against the file the JVM actually read, not against the variable that was supposed to
+# produce it. The whole safety argument for deploying a live-deletion service into a cluster whose
+# path contract is unproven rests on this one line being `true`.
+- name: Prove janitorr is running dry
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec {{ janitorr_k8s_pod.stdout }} --
+      grep -E "^  dry-run:" /config/application.yml
+  become: true
+  changed_when: false
+  register: janitorr_k8s_dryrun
+  failed_when: >-
+    janitorr_k8s_dry_run | bool and 'dry-run: true' not in janitorr_k8s_dryrun.stdout
+
+- name: Report the dry-run state
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: "janitorr config says '{{ janitorr_k8s_dryrun.stdout | trim }}'"
+
+# bash's /dev/tcp rather than curl: the image ships neither curl nor wget, and it does ship bash
+# (the Docker healthcheck uses it). This proves name resolution + a TCP accept, which is the half
+# that the host move actually broke — the Docker copy still points at `sonarr:8989` on a bridge
+# where nothing answers. It does NOT prove the API keys, which are unchanged because the config
+# is rendered from the same template against the same instances.
+- name: Prove janitorr can reach the cluster *arrs and jellyfin
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec {{ janitorr_k8s_pod.stdout }} --
+      bash -c "for hp in sonarr/8989 radarr/7878 jellyfin/8096; do
+      timeout 5 bash -c \"exec 3<>/dev/tcp/${hp}\" && echo \"OK ${hp}\" || echo \"FAIL ${hp}\"; done"
+  become: true
+  changed_when: false
+  register: janitorr_k8s_reach
+  failed_when: "'FAIL' in janitorr_k8s_reach.stdout"
+
+- name: Report reachability
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: "{{ janitorr_k8s_reach.stdout_lines }}"
+
+- name: Find the running jellyfin pod
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get pod -l app=jellyfin
+      --field-selector status.phase=Running -o jsonpath={.items[0].metadata.name}
+  become: true
+  changed_when: false
+  register: janitorr_k8s_jellyfin_pod
+
+# ── the exit criterion ───────────────────────────────────────────────────────────────────────
+# janitorr writes leaving-soon entries as symlinks whose targets are ABSOLUTE `/data/media/...`
+# paths, and it writes them from its own namespace, where the whole tree is at /data. Jellyfin
+# mounts the media subdirectory at /data — one level deeper — so `/data/media/tv/...` would not
+# exist for it at all, and every leaving-soon entry would be a dangling link that Jellyfin lists
+# and cannot play. That is why the jellyfin Deployment carries a SECOND mount of the same claim
+# at /data/media (D4). Nothing else in the fleet needs it, so nothing else would notice if it
+# were dropped.
+#
+# Constructed rather than waited for: `leaving-soon` currently holds no symlinks at all, only the
+# `empty-file.media` placeholders, so there is nothing live to check. Building the exact artefact
+# janitorr would build makes the test deterministic and independent of whether a cleanup has run.
+- name: Write a probe symlink the way janitorr would
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec {{ janitorr_k8s_pod.stdout }} --
+      bash -c "set -eu;
+      f=$(find /data/media/tv -type f -name '*.mkv' | head -1);
+      test -n \"$f\";
+      mkdir -p /data/media/leaving-soon/tv;
+      ln -sfn \"$f\" /data/media/leaving-soon/tv/zz-k8s-verify-probe.mkv;
+      echo \"target=$f\""
+  become: true
+  changed_when: true
+  register: janitorr_k8s_symlink
+
+- name: Resolve and read that symlink from inside Jellyfin's namespace
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec {{ janitorr_k8s_jellyfin_pod.stdout }} -c jellyfin --
+      sh -c "p=/data/media/leaving-soon/tv/zz-k8s-verify-probe.mkv;
+      test -L \"$p\" && echo IS_SYMLINK;
+      echo resolves-to=$(readlink \"$p\");
+      test -e \"$p\" && echo TARGET_RESOLVES;
+      head -c 1024 \"$p\" > /dev/null && echo TARGET_READABLE"
+  become: true
+  changed_when: false
+  register: janitorr_k8s_jellyfin_read
+  # All three, because they fail separately: the link can exist while its target does not
+  # (the mount-depth bug), and the target can resolve while being unreadable (permissions).
+  failed_when: >-
+    'IS_SYMLINK' not in janitorr_k8s_jellyfin_read.stdout or
+    'TARGET_RESOLVES' not in janitorr_k8s_jellyfin_read.stdout or
+    'TARGET_READABLE' not in janitorr_k8s_jellyfin_read.stdout
+
+- name: Report the symlink round trip
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: "{{ janitorr_k8s_symlink.stdout_lines + janitorr_k8s_jellyfin_read.stdout_lines }}"
+
+# Always, including after a failure above — a probe left in leaving-soon would be picked up by
+# Jellyfin's "Leaving Soon" collection as a real entry.
+- name: Remove the probe symlink
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec {{ janitorr_k8s_pod.stdout }} --
+      rm -f /data/media/leaving-soon/tv/zz-k8s-verify-probe.mkv
+  become: true
+  changed_when: true

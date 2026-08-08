@@ -1,0 +1,27 @@
+---
+# Slice 4, B7b — the last of the nine. No Service, no route, no PVC: janitorr has no web UI and
+# keeps no state of its own. What it has is write access to the whole media tree, which is why it
+# ships with dry-run on and why verify.yml is a gate rather than a formality.
+
+# Read by the Docker role's application.yml.j2 through lookup('template'), which defaults it to
+# false so only this side runs dry. A set_fact rather than an include_role var because the render
+# happens inside the manifests role, and an include var there would have to carry that role's
+# `manifests_` prefix to satisfy ansible-lint — which would put janitorr's deletion switch under
+# a name that says nothing about janitorr.
+- name: Select the dry-run mode janitorr's config renders with
+  tags: [config]
+  ansible.builtin.set_fact:
+    janitorr_dry_run: "{{ janitorr_k8s_dry_run }}"
+
+- name: Deploy janitorr to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: janitorr
+    manifests_files:
+      - deployment.yaml
+    manifests_secret_files:
+      - config-secret.yaml
+
+- name: Verify janitorr
+  ansible.builtin.import_tasks: verify.yml

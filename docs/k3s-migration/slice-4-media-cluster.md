@@ -829,6 +829,50 @@ is made, the guides stop tracking upstream — that is the cost of holding.
 **Also stopped:** the `configarr-sync` cron on daniel-server, whose compose file pointed at
 containers that had already left the host.
 
+#### B7b — janitorr, ported DRY 2026-08-08 (the flip is a separate decision)
+
+The last of the nine, and the only one that deletes real media. Ported with
+`janitorr_k8s_dry_run: true` so it proves the path contract before it is allowed to act; the Docker
+copy keeps running meanwhile. No Service, no route, no PVC — it has no web UI and no state of its
+own, which also keeps it out of the Longhorn backup set.
+
+**Why the mount depth is the whole story here.** janitorr mounts the **whole** tree at `/data`, the
+\*arr side of the D4 contract, because it writes leaving-soon entries as symlinks whose targets are
+absolute `/data/media/...` paths. Jellyfin mounts the media subdirectory at `/data` — one level
+deeper — so those targets would not exist in its namespace at all, and every leaving-soon entry
+would be a link Jellyfin lists and cannot play. That is what Jellyfin's **second** mount of the same
+claim at `/data/media` is for. Nothing else in the fleet needs it, so nothing else would notice if
+it were dropped.
+
+`dry-run` was made a template variable rather than forked, so both copies still render from one
+`application.yml.j2` — the file is the deletion *policy*, and two drifting copies would mean two
+different sets of media getting deleted.
+
+| Gate | Evidence |
+|---|---|
+| It is actually dry | read back from the file the JVM loaded, not the variable meant to produce it: `dry-run: true` |
+| It reaches the cluster services | `OK sonarr/8989`, `OK radarr/7878`, `OK jellyfin/8096` (bash `/dev/tcp` — the image has neither curl nor wget) |
+| Symlinks resolve where Jellyfin reads them | probe link written from janitorr, then from **inside the jellyfin pod**: `IS_SYMLINK`, `TARGET_RESOLVES`, `TARGET_READABLE` |
+
+The symlink test is **constructed, not observed**: `leaving-soon` holds no symlinks at all today,
+only the `empty-file.media` placeholders, so there was nothing live to check. Building the exact
+artefact janitorr would build makes it deterministic instead of dependent on a cleanup having run.
+The probe is removed afterwards, including on failure — a stray link would show up in Jellyfin's
+"Leaving Soon" collection as a real entry.
+
+**What dry-run cannot tell us, and it matters for the flip.** `media-deletion` is keyed on
+free-disk percentage, and its loosest rung is 20%. daniel-box is at **9% used, 805 G free**, so no
+rung applies and the deletion pass does not run — on either host. Waiting for dry-run to log a
+"would delete" decision would be waiting forever, and the Docker copy shows no such line in 48 h
+either. So the flip cannot be justified by observing a dry deletion; it rests on the three gates
+above plus the free-space gate being nowhere near tripping.
+
+**Before the flip, one thing must move:** monitor-bridge's `janitorr` check counts ERROR lines in
+**Loki** and reads `container_start_time_seconds{name="janitorr"}` from Prometheus. Cluster pod
+logs do not reach Loki (the `pod` label has zero values) and that cAdvisor metric is daniel-server's
+Docker. Both signals die the moment the Docker copy stops — the same coupling configarr's state file
+had, needing the same fix: a cluster-side reader pushing the existing monitor.
+
 #### Resolved 2026-08-07: monitor-bridge's \*arr checks — a route with no `tls:` is a dead route
 
 The cutover moved the three \*arrs off the `media` Docker network, so `SONARR_URL`,

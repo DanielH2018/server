@@ -170,6 +170,16 @@ containers_list:
   - name: configarr
     platform: k8s
 
+  # Slice 4, B7b. Like configarr: no port, no hostname, no route — janitorr has no web UI. Order
+  # is load-bearing on this list (no toposort in the k8s play) and it must follow sonarr, radarr
+  # AND jellyfin: it addresses all three by bare Service name, and its verify step reads a
+  # symlink from inside the jellyfin pod.
+  #
+  # Ships with janitorr_k8s_dry_run true. It deletes real media, and the Docker copy is still
+  # running, so nothing here is allowed to act until the path contract is proven.
+  - name: janitorr
+    platform: k8s
+
   - name: claude-otel
     platform: k8s
     hostname: "grafana{{ k8s_hostname_suffix }}"
