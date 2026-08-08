@@ -1,0 +1,50 @@
+---
+# Slice 4, B5 — the media server, and the slice's exit criterion.
+#
+# jellyfin shares no hardlink seam with the B4c five (it only reads), so it does not need their
+# one-window cutover. What it does need is the GPU: this is the first workload to request the
+# `devic.es/dri` resource the B1 device plugin advertises.
+
+- name: Report that jellyfin is held
+  tags: [always]
+  when: not jellyfin_k8s_enabled | bool
+  ansible.builtin.debug:
+    msg: >-
+      jellyfin is built but NOT deployed (jellyfin_k8s_enabled is false). daniel-box runs
+      has_gitops, and deploy.yml is a plain containers_list loop, so the inventory entry alone
+      would stand this up unattended alongside a running Docker copy.
+
+# Seeded BEFORE the workload, so Jellyfin never runs its first-boot setup against an empty
+# /config that is about to be overwritten. Only a force=true seed against a STOPPED Docker copy
+# is authoritative — the library database is SQLite and a running source is torn by construction.
+- name: Seed the jellyfin config volume
+  tags: [deploy]
+  when: jellyfin_k8s_enabled | bool
+  ansible.builtin.include_role:
+    name: k8s/seed-volume
+  vars:
+    seed_volume_service: jellyfin
+    seed_volume_claim: "{{ jellyfin_k8s_claim }}"
+    seed_volume_source_path: "{{ jellyfin_k8s_source_path }}"
+    seed_volume_storage_class: "{{ jellyfin_k8s_storage_class }}"
+    seed_volume_size: "{{ jellyfin_k8s_size }}"
+    seed_volume_quiesce:
+      - jellyfin
+
+- name: Deploy jellyfin to the cluster
+  when: jellyfin_k8s_enabled | bool
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: jellyfin
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+      # The direct-by-IP LAN address the Compose host binding used to provide (D7).
+      - service-lan.yaml
+      - ingressroute.yaml
+
+- name: Prove the GPU is reachable from inside the pod
+  tags: [deploy]
+  when: jellyfin_k8s_enabled | bool
+  ansible.builtin.include_tasks: verify.yml

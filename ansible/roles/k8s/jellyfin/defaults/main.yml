@@ -1,0 +1,51 @@
+---
+# Slice 4, B5 — the media server, and the slice's exit criterion.
+#
+# Unlike the five that cut over in B4c, jellyfin has no hardlink seam to share: it only READS the
+# library. What makes it the exit criterion is the GPU — it is the first workload to request the
+# `devic.es/dri` extended resource the B1 device plugin advertises, so a wrong answer here is a
+# wrong answer about the whole media plane on this host.
+jellyfin_k8s_enabled: true
+
+# The same tag the Docker copy ran, so a behavioural difference between the two is never the
+# image. NOT the opencl-intel DOCKER_MODS variant — see D8/D12.
+jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:10.11.10ubu2404-ls35
+
+# 206 M at B5, of which ~180 M is data/ (the library database, artwork, trickplay). longhorn, not
+# longhorn-nobackup: re-scanning a library rebuilds the metadata but loses watch state, user
+# accounts and API keys.
+jellyfin_k8s_claim: jellyfin-config
+jellyfin_k8s_storage_class: longhorn
+jellyfin_k8s_size: 3Gi
+jellyfin_k8s_source_path: /home/ubuntu/server/containers/jellyfin/config
+
+# READ-ONLY, and mounted TWICE — see the deployment template. Not a tidy-up target.
+jellyfin_k8s_media_claim: media-data
+
+# ── the GPU ─────────────────────────────────────────────────────────────────────────────────
+# The extended resource the B1 device plugin advertises. Requesting it is what gets the render
+# node into the container's cgroup device allowlist; `hostPath` alone does not, which B1 proved
+# with an EPERM (not EACCES) on open(). The GID below is the other half — the plugin gets the
+# container past the cgroup, group membership gets it past the file mode.
+jellyfin_k8s_dri_resource: devic.es/dri
+
+# ── the LAN address (D7) ────────────────────────────────────────────────────────────────────
+# The Docker copy bound 8096 to daniel-server's LAN IP for direct-by-IP clients. That becomes a
+# MetalLB LoadBalancer, PINNED rather than pool-assigned: `homelab-pool` has autoAssign, so an
+# unpinned Service takes whatever is free and can move on recreate — and this address is typed
+# into TV and phone clients by hand. A moving one is worse than a chosen one.
+#
+# The two UDP discovery ports (1900 SSDP, 7359 auto-discovery) are deliberately NOT here. Both
+# are multicast/broadcast and MetalLB in L2 mode does not carry multicast to pods; D7 resolved
+# this by establishing nobody uses DLNA. That is what keeps this pod off `hostNetwork`.
+jellyfin_k8s_lan_ip: 10.0.0.241
+
+# What the server advertises to clients as its own address. Was `{{ server_ip }}` (daniel-server)
+# under Compose; the LAN VIP above is the same idea on the new host.
+jellyfin_k8s_published_url: "http://{{ jellyfin_k8s_lan_ip }}:8096"
+
+# Mirrors resources('4.0', '4096M', '0.25', '256M') in the compose template.
+jellyfin_k8s_cpu_limit: "4"
+jellyfin_k8s_mem_limit: 4096Mi
+jellyfin_k8s_cpu_request: "250m"
+jellyfin_k8s_mem_request: 256Mi

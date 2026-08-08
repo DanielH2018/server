@@ -650,12 +650,13 @@ in Traefik's access log (previously the plain routers), and the checks themselve
 `arr_queue -> (True, 'queue clean (Sonarr, Radarr)')` and
 `prowlarr_indexers -> (True, 'all 8 indexer(s) ok')`.
 
-> **Aside — `-k8s` names do not resolve from a daniel-server *host* shell.** daniel-server's own
-> systemd-resolved forwards to the ISP resolver, so `dig sonarr-k8s.local.<domain>` there returns
-> `10.0.0.161` (the public `*.local` wildcard) and curling it 404s. Containers on that host are
-> unaffected — Docker's embedded resolver forwards to the LAN DNS on `10.0.0.161:53`, which
-> answers `10.0.0.240`. Test these routes **from inside a container**, or with
-> `dig @10.0.0.161`; a host-shell 404 means nothing.
+> **Aside — `-k8s` names do not resolve from a shell on daniel-box.** The cluster node itself is
+> the one host that gets this wrong: its systemd-resolved forwards to the ISP resolver, so
+> `dig sonarr-k8s.local.<domain>` there returns `10.0.0.161` (the public `*.local` wildcard) and
+> curling it 404s. daniel-server and its containers are unaffected — they use the LAN DNS, which
+> answers `10.0.0.240`. Since agent sessions typically run **on daniel-box**, this is the default
+> shell: test these routes from `ssh daniel-server`, from inside a container, or with
+> `dig @10.0.0.161`. A 404 from a daniel-box shell means nothing.
 
 ---
 

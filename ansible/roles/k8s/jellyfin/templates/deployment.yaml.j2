@@ -1,0 +1,165 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jellyfin
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
+  # the new pod waits for a volume the old pod has not released.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: jellyfin
+  template:
+    metadata:
+      labels:
+        app: jellyfin
+    spec:
+      enableServiceLinks: false
+      # THE OTHER HALF OF THE GPU WIRING (D2). The device plugin gets the container past the
+      # cgroup v2 device filter; this gets it past the file mode — /dev/dri/renderD128 is
+      # crw-rw---- root:render, and the container runs as uid {{ puid }}. Host-specific by
+      # nature, which is why it lives in host_vars rather than here: nothing guarantees 993
+      # elsewhere, and daniel-server joining the cluster is exactly when a hardcoded one breaks.
+      securityContext:
+        supplementalGroups:
+          - {{ render_gid }}
+      # ── the one-time Intel → AMD conversion (D12) ─────────────────────────────────────────
+      # D8 assumed these settings were opaque database state needing a manual UI pass. They are
+      # not: they are elements in /config/encoding.xml, so the conversion is deterministic.
+      #
+      # It runs HERE, as an initContainer, for two reasons. Jellyfin reads this file at startup
+      # and rewrites the whole file on any admin save, so an edit made against a running pod is
+      # clobbered — this is the last moment nothing is attached. And it shares the pod, so it
+      # never contends for the ReadWriteOnce volume the way a separate Job would once the
+      # Deployment is up.
+      #
+      # Guarded on the value being `qsv` so it converges exactly once and then leaves the file
+      # alone. That is what keeps it from fighting the UI: templating the whole file would
+      # revert every setting the user changes on the next deploy.
+      initContainers:
+        - name: convert-encoding-settings
+          image: {{ jellyfin_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              f=/config/encoding.xml
+              if [ ! -f "$f" ]; then
+                echo "no encoding.xml yet — Jellyfin will write defaults, nothing to convert"
+                exit 0
+              fi
+              if ! grep -q '<HardwareAccelerationType>qsv</HardwareAccelerationType>' "$f"; then
+                echo "already converted (or never Intel) — leaving encoding.xml alone"
+                exit 0
+              fi
+              # VppTonemapping is the Intel QSV VPP filter specifically and has no AMD
+              # equivalent; leaving it on asks ffmpeg for a filter this hardware cannot build.
+              sed -i \
+                -e 's|<HardwareAccelerationType>qsv</HardwareAccelerationType>|<HardwareAccelerationType>vaapi</HardwareAccelerationType>|' \
+                -e 's|<EnableVppTonemapping>true</EnableVppTonemapping>|<EnableVppTonemapping>false</EnableVppTonemapping>|' \
+                "$f"
+              echo "converted encoding.xml: qsv -> vaapi, VppTonemapping off"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          resources:
+            limits:
+              cpu: "500m"
+              memory: 128Mi
+            requests:
+              cpu: "10m"
+              memory: 32Mi
+      containers:
+        - name: jellyfin
+          image: {{ jellyfin_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # The compose template's cap_drop/cap_add pair MINUS FOWNER and DAC_OVERRIDE.
+              # Those two existed only so the opencl-intel DOCKER_MODS installer's root dpkg
+              # unpack could chmod files it did not own. That mod is gone (D8), so the caps go
+              # with it rather than being carried over out of habit.
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - SETUID
+                - SETGID
+          env:
+            - name: PUID
+              value: "{{ puid }}"
+            - name: PGID
+              value: "{{ pgid }}"
+            - name: TZ
+              value: "{{ tz }}"
+            - name: JELLYFIN_PublishedServerUrl
+              value: "{{ jellyfin_k8s_published_url }}"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            # BOTH media mounts are read-only, carried over from the Compose template (2026-07-03):
+            # jellyfin only READS the library. SaveLocalMetadata is off in every library, artwork
+            # and trickplay live in /config, and every writer has its own mount. This caps the
+            # blast radius of the one internet-facing, Authelia-less media parser.
+            - name: media
+              mountPath: /data
+              readOnly: true
+            # THE SAME TREE AGAIN, DELIBERATELY (D4 / compose review M4). janitorr mounts the
+            # data root at /data and hands Jellyfin a leaving-soon dir of /data/media/leaving-soon,
+            # whose symlink TARGETS are /data/media/tv/... — those resolve only if /data/media/*
+            # exists in THIS namespace too. Reproduce it; do not tidy it. Moving the libraries
+            # instead would mean editing paths in Jellyfin's own database.
+            - name: media
+              mountPath: /data/media
+              readOnly: true
+            # Transcode scratch, off Longhorn (D6). TranscodingTempPath is unset in encoding.xml,
+            # so Jellyfin uses its default of <cache>/transcodes — mounting the emptyDir at that
+            # exact path keeps the write-heavy scratch on node storage without editing the XML to
+            # relocate it. The rest of /config/cache stays on the PVC.
+            - name: transcodes
+              mountPath: /config/cache/transcodes
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ container_item.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          # start-up on a slow or post-update boot runs a library scan and hardware-init before
+          # /health answers; the compose healthcheck allows 60s for the same reason.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ container_item.port }}
+            initialDelaySeconds: 90
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ jellyfin_k8s_cpu_limit }}"
+              memory: {{ jellyfin_k8s_mem_limit }}
+              {{ jellyfin_k8s_dri_resource }}: 1
+            requests:
+              cpu: "{{ jellyfin_k8s_cpu_request }}"
+              memory: {{ jellyfin_k8s_mem_request }}
+              # Extended resources must request exactly what they limit — Kubernetes rejects a
+              # mismatch, and omitting the request entirely defaults it to the limit anyway.
+              {{ jellyfin_k8s_dri_resource }}: 1
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ jellyfin_k8s_claim }}
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ jellyfin_k8s_media_claim }}
+        - name: transcodes
+          emptyDir: {}

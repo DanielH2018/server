@@ -213,11 +213,16 @@ containers_list:
   # Rolling back is re-adding these five entries and setting <svc>_k8s_enabled: false on
   # daniel-box. The config directories under containers/ are untouched — the migration only
   # ever read them.
-  - name: jellyfin
-    port: 8096
-    use_authelia: false
-    networks:
-      - media
+  # jellyfin moved to daniel-box on 2026-08-08 (slice 4, B5). Not part of the five above — it
+  # only READS the library, so it shares no hardlink seam and needed no shared window. What it
+  # needed was the GPU: it is the first workload to request the `devic.es/dri` resource the B1
+  # device plugin advertises, which is why it is the slice's exit criterion.
+  #
+  # Rolling back is re-adding this entry and setting jellyfin_k8s_enabled: false on daniel-box.
+  # containers/jellyfin/config is untouched — the migration only ever read it. One caveat the
+  # other five do not have: the cluster copy converts /config/encoding.xml from qsv to vaapi
+  # (D12) on its own volume, so a rollback returns to an Intel-configured Docker copy correctly,
+  # but re-seeding the cluster from a rolled-back source would need that conversion again.
   - name: tdarr
     port: 8265
     use_authelia: true

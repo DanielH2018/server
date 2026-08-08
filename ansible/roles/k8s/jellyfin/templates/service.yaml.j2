@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: jellyfin
+  ports:
+    - port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}

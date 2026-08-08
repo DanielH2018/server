@@ -1,0 +1,26 @@
+---
+# Direct-by-IP LAN access, replacing the Compose `{{ server_ip }}:8096:8096` host binding (D7).
+# Separate from the ClusterIP Service above on purpose: Traefik reaches jellyfin by cluster DNS
+# and has no use for a VIP, and merging the two would put the LoadBalancer in the path of every
+# routed request for no gain.
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin-lan
+  namespace: {{ k8s_namespace }}
+  annotations:
+    # MetalLB's supported way to pin an address. `spec.loadBalancerIP` is deprecated upstream and
+    # MetalLB honours this annotation instead. Pinned rather than pool-assigned because clients
+    # have this address typed in by hand — see the role defaults.
+    metallb.universe.tf/loadBalancerIPs: {{ jellyfin_k8s_lan_ip }}
+spec:
+  type: LoadBalancer
+  # Preserves the real client address, matching the Traefik Service. Safe here because the pod
+  # runs on the only node that advertises this VIP.
+  externalTrafficPolicy: Local
+  selector:
+    app: jellyfin
+  ports:
+    - name: http
+      port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}

@@ -136,6 +136,21 @@ containers_list:
     # at bazarr.local, which 404'd between the cutover and this.
     bridge_hostname: bazarr
 
+  # The slice's exit criterion (B5), and the first workload anywhere to request the
+  # `devic.es/dri` extended resource the B1 device plugin advertises.
+  #
+  # use_authelia stays FALSE, as it was under Compose, and that is load-bearing rather than an
+  # oversight: Jellyfin's clients are TV and phone apps that cannot complete a web SSO flow. The
+  # public route keeps flowing through daniel-server's Traefik and CrowdSec while
+  # k8s_public_route is false, and the bridge only applies Authelia when use_authelia is true —
+  # so the unsuffixed name below stays open to those clients exactly as before.
+  - name: jellyfin
+    platform: k8s
+    hostname: "jellyfin{{ k8s_hostname_suffix }}"
+    port: 8096
+    use_authelia: false
+    bridge_hostname: jellyfin
+
   - name: claude-otel
     platform: k8s
     hostname: "grafana{{ k8s_hostname_suffix }}"
@@ -355,4 +370,18 @@ has_claude_code: true
 # already exists, and `has_igpu` means "pass /dev/dri through", which AMD uses for VAAPI too
 # (README §7). It gates nothing while containers_list is empty; set it when jellyfin/tdarr
 # land here. The i915 modprobe task self-skips on a non-Intel GPU either way.
+#
+# Superseded for the k8s workloads by render_gid below: in the cluster a container reaches the
+# render node through the device plugin plus group membership, not through a device passthrough
+# flag. has_igpu remains the Docker-side switch.
 # has_igpu: true
+
+# The `render` group's GID on THIS host, verified 2026-08-08 (`getent group render` → 993).
+#
+# Host-specific by nature, which is why it is here rather than in a role default. The device
+# plugin gets a container past the cgroup v2 device filter; this gets it past the file mode
+# (/dev/dri/renderD128 is crw-rw---- root:render and the pods run as uid 1000). Nothing
+# guarantees 993 on another machine, and daniel-server joining the cluster at slice 7 is exactly
+# when a hardcoded one would silently become wrong — the symptom would be EACCES on open,
+# distinct from the EPERM that means the cgroup filter refused (B1/D2).
+render_gid: 993

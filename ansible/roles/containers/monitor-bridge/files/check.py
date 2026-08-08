@@ -106,7 +106,10 @@ _DEFAULT_BACKUP_SENTINELS = [
     # be verified in exactly one plane, and after a cutover that plane is Longhorn's.
     "grafana/data/grafana.db",
     "pihole/data/etc-pihole/pihole.toml",
-    "jellyfin/config/data/data/jellyfin.db",
+    # jellyfin/config/data/data/jellyfin.db was here until 2026-08-08, when B5 moved jellyfin to
+    # k3s. Removed for the same reason as the four above: the directory stays on disk and Kopia
+    # keeps backing it up, so the sentinel would keep resolving against a copy that stopped
+    # receiving writes — green for a frozen file. Longhorn covers the live PVC now.
     "wg-easy/pi-peers/wg0.json",
     "home-assistant/config/.storage/core.device_registry",
     "zigbee2mqtt/data/coordinator_backup.json",

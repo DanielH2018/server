@@ -30,22 +30,23 @@ source /usr/local/lib/kopia-lib.sh
 # frozen directory and passed, proving nothing about the live data (now a Longhorn PVC, covered by
 # longhorn-backup-health.sh's per-volume check). karakeep and n8n dropped the same day, on their own
 # cutovers, for the same reason. Drop a service here when it migrates.
-SVCS=(authelia traefik grafana pihole home-assistant zigbee2mqtt wg-easy jellyfin)
+SVCS=(authelia traefik grafana pihole home-assistant zigbee2mqtt wg-easy)
 declare -A SENTINEL=(
   [authelia]=config/configuration.yml
   [traefik]=data/acme.json
   [grafana]=data/grafana.db
   [pihole]=data/etc-pihole/pihole.toml
-  # jellyfin's primary DB (users / watch history / API keys / library defs) — kept in Kopia
-  # scope by kopiaignore since 2026-07-15 (a blanket data*/ used to drop it). A real SQLite file,
-  # so it also exercises the SQLite-magic header check below.
-  [jellyfin]=config/data/data/jellyfin.db
   # sonarr was the *arr sentinel here until slice 4's B4c cutover (2026-08-07) moved it to
-  # k3s. Dropped rather than repointed: this drill restores from the daniel-server snapshot,
-  # where sonarr.db no longer changes, so it would have gone on passing against a frozen file
-  # forever — a green check asserting nothing. The cluster's config PVCs are Longhorn-backed
-  # and longhorn-backup-health.sh asserts their freshness cluster-side instead. jellyfin above
-  # still exercises the SQLite-magic branch, so that coverage is not lost.
+  # k3s. jellyfin followed on 2026-08-08 (B5) — its sentinel was config/data/data/jellyfin.db,
+  # the users / watch history / API keys / library definitions. Both dropped rather than
+  # repointed, for the same reason: this drill restores from the daniel-server snapshot, where
+  # those databases no longer change, so it would have gone on passing against a frozen file
+  # forever — a green check asserting nothing. The cluster's config PVCs are Longhorn-backed and
+  # longhorn-backup-health.sh asserts their freshness cluster-side instead.
+  #
+  # jellyfin used to be what exercised the SQLite-magic branch below. grafana's data/grafana.db
+  # still does, so that coverage survives its departure — but it is now the ONLY sentinel that
+  # does, so don't drop it without providing another.
   # wg-easy's sentinel is the PULLED Pi peer config (pi-peers/, filled by the daniel-server
   # wg-easy-pull-pi-peers cron) — the one un-rebuildable secret backup, so prove IT restores,
   # not just the server's own re-templatable config. wg0.json is a real JSON file, so it skips

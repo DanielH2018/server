@@ -67,7 +67,9 @@ def test_daniel_server_is_still_wholly_docker():
     # cutover (39 -> 34), which moved five AT ONCE — qbittorrent, sonarr, radarr, prowlarr,
     # bazarr — taking wireguard and flaresolverr with them as sidecars that were never their
     # own entries. Five together and not one at a time because they share the hardlink seam:
-    # split them across hosts and every import silently becomes a copy. The count
+    # split them across hosts and every import silently becomes a copy. Then jellyfin on
+    # 2026-08-08 (34 -> 33), B5, which moved ALONE for the mirror-image reason: it only reads
+    # the library, so it shares no seam with the five. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -76,6 +78,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 34
-    assert len(filter_by_platform(containers, "docker")) == 34
+    assert len(containers) == 33
+    assert len(filter_by_platform(containers, "docker")) == 33
     assert filter_by_platform(containers, "k8s") == []

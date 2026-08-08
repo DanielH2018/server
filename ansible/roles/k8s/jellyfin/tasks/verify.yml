@@ -1,0 +1,82 @@
+---
+# The GATE, not the exit criterion. These prove the render node is reachable and that VAAPI
+# encode works from inside the running Jellyfin pod — which is what the B1 probe proved for a
+# throwaway pod. They do NOT prove Jellyfin's own transcode path works: that needs a real
+# playback with a bitrate that forces a transcode, and it is checked by hand. Keep the two
+# claims apart; a green run here is a starting line.
+
+- name: Find the running jellyfin pod
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get pod -l app=jellyfin
+      --field-selector status.phase=Running -o jsonpath={.items[0].metadata.name}
+  become: true
+  changed_when: false
+  register: jellyfin_k8s_pod
+
+# The exact failure B1 caught: the device NODE is visible via the plugin, but an open() returns
+# EPERM ("Operation not permitted") when the cgroup v2 device filter has not admitted it. A
+# permission problem would say "Permission denied" instead. Reading one byte is the whole test.
+- name: Prove the render node can actually be opened
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec {{ jellyfin_k8s_pod.stdout }} --
+      sh -c "id; ls -l /dev/dri/renderD128; head -c 1 /dev/dri/renderD128 >/dev/null && echo OPEN_OK"
+  become: true
+  changed_when: false
+  register: jellyfin_k8s_device
+  failed_when: "'OPEN_OK' not in jellyfin_k8s_device.stdout"
+
+- name: Show the device check
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: "{{ jellyfin_k8s_device.stdout_lines }}"
+
+# Jellyfin's OWN bundled ffmpeg, not the system one — that is the binary a transcode actually
+# runs, and it carries its own driver directory (/usr/lib/jellyfin-ffmpeg/lib/dri).
+- name: Encode through VAAPI with Jellyfin's own ffmpeg
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec {{ jellyfin_k8s_pod.stdout }} --
+      /usr/lib/jellyfin-ffmpeg/ffmpeg -v error
+      -init_hw_device vaapi=va:/dev/dri/renderD128 -filter_hw_device va
+      -f lavfi -i testsrc=size=1280x720:rate=30:duration=3
+      -vf format=nv12,hwupload -c:v h264_vaapi -f null -
+  become: true
+  changed_when: false
+  register: jellyfin_k8s_vaapi
+  failed_when: jellyfin_k8s_vaapi.rc != 0
+
+- name: Report the VAAPI encode
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: >-
+      VAAPI h264 encode succeeded inside the jellyfin pod
+      ({{ 'no stderr' if not jellyfin_k8s_vaapi.stderr else jellyfin_k8s_vaapi.stderr }})
+
+# Reported, NOT enforced. Removing the opencl-intel mod removes the Intel OpenCL ICD, and OpenCL
+# is what Jellyfin uses for HDR tone-mapping. If no ICD is present the loss is confined to HDR
+# transcodes — so a green non-HDR playback proves nothing either way about it, and failing the
+# deploy over it would block a migration that is otherwise correct.
+- name: Check whether any OpenCL driver is present for tone-mapping
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec {{ jellyfin_k8s_pod.stdout }} --
+      sh -c "ls /etc/OpenCL/vendors/ 2>/dev/null || echo NONE"
+  become: true
+  changed_when: false
+  register: jellyfin_k8s_opencl
+
+- name: Report the tone-mapping situation
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: >-
+      OpenCL ICDs present: {{ jellyfin_k8s_opencl.stdout | trim | default('none', true) }}.
+      {{ 'HDR tone-mapping should work.'
+         if jellyfin_k8s_opencl.stdout | trim not in ['', 'NONE']
+         else 'NO OpenCL ICD — HDR tone-mapping will fall back to software or fail. SDR
+               transcoding is unaffected, and a passing SDR playback does not cover this.' }}
