@@ -214,6 +214,11 @@ where they will fail at playback rather than at startup.
 So: migrate the config, then explicitly switch acceleration to VAAPI in the UI, then verify a real
 playback. Treat "the pod is Running" as meaning nothing at all here.
 
+> **Half of this is wrong — see D12.** The settings are in `/config/encoding.xml`, a plain file,
+> not the database, so the switch is deterministic and belongs in the deploy rather than in a UI
+> pass. What survives is the second half: "the pod is Running" still means nothing, and a real
+> playback is still the only proof.
+
 ### D9 — The media volume is a *static* `local` PV, not a dynamic `local-path` PVC *(added by B2, 2026-08-07)*
 
 D6 chose `local-path` for the media. Writing B2 turned up three things dynamic provisioning gets
@@ -334,6 +339,34 @@ setting it affects its own netns and nothing else.
 **One caveat when backing it out:** `roles/setup/k3s` detects a flag *added* to `k3s_server_args`
 but explicitly does not detect one *removed*, so deleting this line later needs a deliberate
 reinstall rather than just an edit.
+
+### D12 — Jellyfin's transcode settings are a FILE, so the Intel→AMD switch is automated *(added by B5, 2026-08-08)*
+
+D8 assumed the hardware-acceleration settings were opaque database state and scheduled a manual UI
+pass after the migration. Checking before building found them in `/config/encoding.xml`:
+
+```xml
+<HardwareAccelerationType>qsv</HardwareAccelerationType>
+<VaapiDevice>/dev/dri/renderD128</VaapiDevice>
+<EnableVppTonemapping>true</EnableVppTonemapping>
+```
+
+A plain file, so the conversion is deterministic and belongs in the deploy. It runs as an
+**initContainer** on the Jellyfin pod, for two reasons that both rule out the alternatives:
+Jellyfin reads this file at startup and rewrites it whole on any admin save, so an edit against a
+running pod is clobbered — the initContainer is the last moment nothing is attached; and it shares
+the pod, so it never contends for the ReadWriteOnce config volume the way a separate Job would once
+the Deployment is up.
+
+It is **guarded on the value still being `qsv`**, so it converges exactly once and then leaves the
+file alone. That is the difference between converting a setting and owning it: templating the whole
+file would revert every change the operator later makes in the UI.
+
+`EnableVppTonemapping` goes false in the same pass — it is the Intel QSV VPP filter specifically,
+and leaving it on asks ffmpeg for a filter this hardware cannot build.
+
+**What D8 got right and D12 does not repeal:** "the pod is Running" still proves nothing. The
+config being correct is the starting line, not the finish.
 
 ---
 
@@ -579,14 +612,47 @@ stopped source → flip `<svc>_k8s_rehearsal` to false → deploy.
 **Prove it:** a real import end to end — add a torrent, let it complete, confirm the \*arr imports
 it **by hardlink** (link count 2, no space growth) into `/data/media`.
 
-### B5 — Jellyfin, and the slice's exit criterion
+### B5 deployed — 2026-08-08 — GPU proven, playback still unverified
 
-Deploy Jellyfin with the media mounts read-only at both paths, `/dev/dri`, and the Intel mods
-removed. Reconfigure acceleration to VAAPI (D8).
+Jellyfin runs on daniel-box with both media mounts read-only, the Intel mods removed, and the
+`devic.es/dri` resource requested — the first workload anywhere to request it. Acceleration was
+converted to VAAPI in the deploy rather than by hand (D12).
 
-**Prove it:** a **hardware-transcoded playback succeeds** — a client forcing a bitrate that
-requires transcoding, with the VCN engine measurably busy and Jellyfin's own playback info
-reporting hardware, not software.
+**Verified:**
+
+| Claim | Evidence |
+|---|---|
+| The render node opens in the pod | `crw-rw---- root group95c5 226,128` with `groups=…,993` → `OPEN_OK` |
+| VAAPI encode works there | `h264_vaapi` encode of a 1280×720 test source through Jellyfin's own `/usr/lib/jellyfin-ffmpeg/ffmpeg`, exit 0 |
+| The Intel→AMD conversion applied | initContainer log: `converted encoding.xml: qsv -> vaapi, VppTonemapping off` |
+| All three access paths answer | `jellyfin-k8s.local` → 200 · `jellyfin.local` (bridge) → 200 · `10.0.0.241:8096` (pinned LAN VIP) → 200 · public `jellyfin.<domain>` → 200 |
+
+**NOT verified, and it is the exit criterion:** a real hardware-transcoded playback — a client
+forcing a bitrate that requires transcoding, with the VCN engine measurably busy and Jellyfin's own
+playback info reporting hardware rather than software. The ffmpeg encode above proves the *device*
+is reachable through the plugin; it does not prove *Jellyfin's* transcode path works. Those are two
+claims and only one is settled.
+
+**Open — HDR tone-mapping has no backend.** Removing `DOCKER_MODS=…opencl-intel` removed the Intel
+OpenCL ICD, and asking ffmpeg to build an OpenCL device in the running pod fails:
+
+```
+[AVHWDeviceContext] Failed to get number of OpenCL platforms
+```
+
+(The image ships an `nvidia.icd`, which is why a naive "is there an ICD file" check reported this
+as healthy — it names a driver that does not exist on this box.) The loss is confined to **HDR**
+transcodes; SDR is unaffected, so a green SDR playback does **not** cover it. Two things are worth
+settling before calling this closed, and neither should be guessed at:
+
+1. Whether AMD VAAPI can tone-map at all here — `EnableVppTonemapping` was switched off as an
+   Intel-only filter, and if Jellyfin drives `tonemap_vaapi` from that same toggle on VAAPI, that
+   was the wrong call and it should go back on.
+2. Whether `EnableTonemapping` should stay `true` with no backend. It is unchanged from the Docker
+   config, where it worked; here it may make HDR titles fail outright rather than merely look
+   washed out.
+
+Test with a real HDR title before deciding.
 
 ### B6 — tdarr
 
@@ -666,7 +732,10 @@ in Traefik's access log (previously the plain routers), and the checks themselve
   by pinning the mount path, never by re-scanning. B3 exists to catch this early.
 - **Hardlink degradation is silent.** Imports keep working as copies. Check link counts, not
   success.
-- **Jellyfin config carries Intel settings onto AMD** (D8). Fails at playback, not at startup.
+- ~~**Jellyfin config carries Intel settings onto AMD** (D8)~~ — **handled 2026-08-08 by D12.** The
+  settings are elements in `/config/encoding.xml`, not database state, so an initContainer converts
+  them once at deploy time. The residual hazard is narrower and real: **HDR** tone-mapping has no
+  OpenCL backend on this host, and that still fails at playback rather than at startup.
 - **`monitor-bridge` reaches the \*arrs over Docker networks** (`sonarr:8989`, `radarr:7878`,
   `prowlarr`). Those names stop resolving at cutover, exactly as `n8n` did in slice 2 — and the
   same trap applies: point it at the `-k8s` hostname via the ingress VIP, **not** at a bridged
@@ -693,9 +762,12 @@ in Traefik's access log (previously the plain routers), and the checks themselve
 
 ## Exit criteria
 
-1. A **hardware-transcoded Jellyfin playback succeeds** on daniel-box, verified by GPU engine
-   activity and Jellyfin's own playback info — not by the pod being Ready.
-2. An end-to-end import completes **by hardlink**, with link count 2 and no space growth.
+1. **OPEN.** A **hardware-transcoded Jellyfin playback succeeds** on daniel-box, verified by GPU
+   engine activity and Jellyfin's own playback info — not by the pod being Ready. B5 got the device
+   proven reachable (VAAPI encode inside the pod) and the config converted; the playback itself is
+   the remaining step, and it needs a human with a client.
+2. **MET 2026-08-07 (B4c).** An end-to-end import completes **by hardlink** — link count 2, same
+   inode 6029478 across qbittorrent's `subPath` mount and sonarr's full-tree mount.
 3. All four \*arr libraries report the same item counts as before the move, with no missing paths.
 4. `configarr` syncs clean and `janitorr`'s symlinks resolve inside Jellyfin's namespace.
 5. The nine Docker services are stopped, and monitor-bridge's media checks are green against the
