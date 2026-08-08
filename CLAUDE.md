@@ -126,22 +126,35 @@ never widen it, so that a repo can't grant itself permissions merely by being op
 
 ### `kubectl` — which verbs auto-approve
 `kubectl` is **not** handled by `auto-approve-readonly.py`; it is allow-listed by verb in this repo's
-`.claude/settings.json`. Claude Code normalises flag position before matching, so `Bash(kubectl get *)`
-also covers `kubectl -n homelab get pods` — a rule is needed per *verb*, not per flag order (verified
-2026-08-08 against the OTEL `tool_decision` stream).
+`.claude/settings.json`.
 
-- **Auto-approved, read-only:** `get`, `logs`, `describe`, `top`, `explain`, `events`, `api-resources`,
-  `api-versions`, `version`, `cluster-info`, `auth can-i`, `auth whoami`, `diff`, `wait`,
-  `rollout status|history`, `config view|get-contexts|current-context`.
-- **Auto-approved, reversible writes:** `apply`, `scale`, `rollout restart|undo|pause|resume`, `label`,
-  `annotate`, `cordon`, `uncordon`, `create job`. Each is re-appliable from the Ansible-rendered
-  manifests, so a bad one is undone by redeploying the role.
-- **Still prompts, deliberately:** `delete`, `drain`, `taint` (destroy state — Longhorn PVCs and their
-  B2 backups sit behind them), `exec`, `run`, `attach`, `debug`, `cp`, `port-forward`, `proxy`
-  (arbitrary code execution inside a container — a security boundary, not a reversibility one),
-  `edit`, `replace`, `patch`, `set`. `kubectl apply --prune` is explicitly `ask`-listed because the
-  broader `apply` allow would otherwise swallow it, and it deletes.
-- `sudo k3s kubectl …` still prompts — `sudo` is ask-listed user-side and that is unaffected here.
+**A `Bash()` rule matches on `kubectl <verb>` and nothing finer — flags and sub-subcommands in the
+rule are decorative.** Measured 2026-08-08 against the OTEL `tool_decision` stream:
+
+- `Bash(kubectl get *)` matches `kubectl -n homelab get pods` — flag *position* is normalised away,
+  so a rule is needed per verb, not per flag order. This part is convenient.
+- `Bash(kubectl create job *)` also permitted `kubectl create namespace`, and
+  `Bash(kubectl config view *)` also permitted `kubectl config get-clusters`. The trailing
+  sub-subcommand does not narrow anything.
+- A flag-level guard **cannot be written at all**: `Bash(kubectl apply --prune*)` failed to fire as
+  an `ask` rule *and* as a `deny` rule, while `kubectl apply --prune …` ran unprompted.
+
+So: only allow-list a verb whose **entire** surface is acceptable. Never write a rule that looks like
+it narrows a verb — it doesn't, and it reads as a guarantee that isn't there.
+
+- **Auto-approved, read-only:** `get`, `logs`, `describe`, `top`, `explain`, `events`,
+  `api-resources`, `api-versions`, `version`, `diff`, `wait`.
+- **Auto-approved, reversible writes:** `scale`, `rollout` (restart/undo/pause/resume, and the
+  read-only status/history that come with the verb), `label`, `annotate`, `cordon`, `uncordon`.
+  Each is undone by redeploying the role from the Ansible-rendered manifests.
+- **Deliberately still prompts:** `delete`, `drain`, `taint` (destroy state — Longhorn PVCs and their
+  B2 backups sit behind them); `exec`, `run`, `attach`, `debug`, `cp`, `port-forward`, `proxy`
+  (arbitrary code execution inside a container — a security boundary, not a reversibility one);
+  `edit`, `replace`, `patch`, `set`; and `apply`, which is excluded *only* because `--prune` deletes
+  and no rule can carve it out. `auth` (i.e. `auth can-i`) and `create` are likewise excluded
+  because allowing the verb would also allow `auth reconcile` (rewrites RBAC) and every other
+  `create`; both are reasonable to add if that breadth is acceptable.
+- `sudo k3s kubectl …` still prompts — `sudo` is ask-listed user-side and is unaffected here.
 
 Hand-running an auto-approved *write* verb creates drift from the Ansible source of truth; prefer
 `uv run ansible-playbook … --tags <svc>`. The write tier exists for iteration, not for deploys.
