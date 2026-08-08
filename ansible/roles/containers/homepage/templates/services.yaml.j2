@@ -137,49 +137,35 @@
                       showName: true
 
 - Media:
+    # The four media services moved to the k8s cluster (slice 4), so the Docker-DNS widget URLs
+    # (http://jellyfin:8096, …) stopped resolving — each dashboard load burned ~15 widget-proxy
+    # 500s (the Traefik `homepage@docker` 5xx signal, 2026-08-08). Jellyfin's -k8s route carries
+    # no Authelia, so its widget follows the service. The sonarr/radarr/qbittorrent -k8s routes
+    # are Authelia-gated and their monitoring IngressRoutes deliberately expose only
+    # /api/v3/queue — restoring those widgets means consciously widening the route path list
+    # (see ansible/templates/ingressroute.yml.j2 monitoring_route), so they are dropped, not
+    # repointed. The `server:`/`container:` docker-status pairs referenced containers that no
+    # longer exist on this host.
     - Jellyfin:
         href: https://jellyfin.{{ domain }}
         icon: jellyfin.png
         description: Mediaserver
-        server: my-docker
-        container: jellyfin
         widget:
             type: jellyfin
-            url: http://jellyfin:8096
+            url: https://jellyfin{{ k8s_hostname_suffix }}.local.{{ domain }}
             key: {{ jellyfin_api_key }}
     - Sonarr:
         icon: sonarr.png
         href: https://sonarr.{{ domain }}/
         description: Series management
-        server: my-docker
-        container: sonarr
-        widget:
-            type: sonarr
-            fields: ["wanted", "queued"]
-            url: http://sonarr:8989
-            key: {{ sonarr_api_key }}
     - Radarr:
         icon: radarr.png
         href: https://radarr.{{ domain }}/
         description: Movie management
-        server: my-docker
-        container: radarr
-        widget:
-            type: radarr
-            fields: ["wanted", "queued"]
-            url: http://radarr:7878
-            key: {{ radarr_api_key }}
     - qBittorrent:
         icon: qbittorrent.png
         href: https://qBittorrent.{{ domain }}
         description: Download management
-        server: my-docker
-        container: qbittorrent
-        widget:
-            type: qbittorrent
-            url: http://wireguard:8080
-            username: {{ qbittorrent_username }}
-            password: {{ qbittorrent_password }}
 
 - Monitoring:
     - CPU Usage:
