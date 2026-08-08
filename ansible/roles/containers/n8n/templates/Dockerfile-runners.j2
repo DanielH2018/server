@@ -4,20 +4,29 @@ USER root
 
 # Install JS packages.
 #
-# `pnpm install` first, and it is not redundant. The base image ships node_modules linked from a
-# pnpm store at .../store/v10, while the pnpm its corepack resolves at build time is now 11.20.0
-# and wants .../store/v11 — so `pnpm add` alone aborts with ERR_PNPM_UNEXPECTED_STORE. Installing
-# relinks the dependencies into the store the current pnpm expects, which is what pnpm's own
-# error text tells you to do.
+# Match pnpm to the store the base image was built with, rather than reinstalling into a new one.
+# The base ships node_modules linked from a pnpm store at .../store/v10, while the pnpm corepack
+# resolves by default is 11.20.0 and wants .../store/v11 — so a bare `pnpm add` aborts with
+# ERR_PNPM_UNEXPECTED_STORE.
 #
-# CI=true because that reinstall PURGES node_modules first, and pnpm refuses to do that without
-# a TTY (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY) — a prompt no image build can ever answer.
-# It is the variable pnpm's message names, and it is true here in the literal sense.
+# The 2026-08-06 answer to that was `CI=true pnpm install` first, following pnpm's own error text.
+# It was wrong in a way the build itself could not show: that reinstall PURGES node_modules and
+# restores only what the lockfile declares, and the base's `@n8n/{di,config,errors,utils}` are
+# workspace packages absent from it. The build stayed green (rc=0) and produced an image whose
+# runner process died on every task offer with `Cannot find module '@n8n/di'` — so every Code-node
+# workflow failed with `Task request timed out`, 100+ failed executions in 9 h, while the pod
+# stayed Ready the whole time because the launcher survives its crashing child.
 #
-# Found 2026-08-06 by building this in-cluster. The running image was built 2026-07-03, so this
-# has been latent since a `:latest` push between those dates and would fail an ordinary
-# `docker compose build` on daniel-server identically.
-RUN cd /opt/runners/task-runner-javascript && CI=true pnpm install && pnpm add fuzzball
+# Pinned exact. If the base image's store moves to v11 this fails at BUILD time with
+# ERR_PNPM_UNEXPECTED_STORE, and that is the failure worth having: the bug above was a loud build
+# error traded for a silent runtime one. The fix then is to bump this pin, not to reinstall.
+RUN cd /opt/runners/task-runner-javascript \
+    && corepack prepare pnpm@10.15.0 --activate \
+    && pnpm add fuzzball
+
+# Fails the build if the base's workspace packages or the added one cannot be resolved. One line,
+# and it is the check that would have caught 2026-08-06 at build time instead of in production.
+RUN cd /opt/runners/task-runner-javascript && node -e "require('@n8n/di'); require('fuzzball')"
 
 # Install Python packages
 #RUN cd /opt/runners/task-runner-python && uv pip install numpy pandas
