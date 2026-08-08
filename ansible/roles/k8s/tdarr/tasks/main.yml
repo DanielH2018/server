@@ -1,0 +1,62 @@
+---
+# Slice 4, B6 — tdarr.
+#
+# It moves alone, like jellyfin. What makes it its own batch is not the seam but the workload:
+# it holds the GPU for minutes at a time on real files and rewrites the library IN PLACE, so it
+# is the one media service where a wrong mount does lasting damage rather than a failed request.
+
+- name: Report that tdarr is held
+  tags: [always]
+  when: not tdarr_k8s_enabled | bool
+  ansible.builtin.debug:
+    msg: >-
+      tdarr is built but NOT deployed (tdarr_k8s_enabled is false). daniel-box runs has_gitops
+      and deploy.yml is a plain containers_list loop, so the inventory entry alone would stand
+      this up unattended alongside a running Docker copy — two transcoders rewriting one library.
+
+# Two claims, two seeds. Both BEFORE the workload, so tdarr never runs its first-boot setup
+# against an empty /app/server that is about to be overwritten. Only a force=true seed against a
+# STOPPED source is authoritative.
+- name: Seed the tdarr server database
+  tags: [deploy]
+  when: tdarr_k8s_enabled | bool
+  ansible.builtin.include_role:
+    name: k8s/seed-volume
+  vars:
+    seed_volume_service: tdarr
+    seed_volume_claim: "{{ tdarr_k8s_server_claim }}"
+    seed_volume_source_path: "{{ tdarr_k8s_server_source_path }}"
+    seed_volume_storage_class: "{{ tdarr_k8s_storage_class }}"
+    seed_volume_size: "{{ tdarr_k8s_server_size }}"
+    seed_volume_quiesce:
+      - tdarr
+
+- name: Seed the tdarr flow and plugin configs
+  tags: [deploy]
+  when: tdarr_k8s_enabled | bool
+  ansible.builtin.include_role:
+    name: k8s/seed-volume
+  vars:
+    seed_volume_service: tdarr
+    seed_volume_claim: "{{ tdarr_k8s_configs_claim }}"
+    seed_volume_source_path: "{{ tdarr_k8s_configs_source_path }}"
+    seed_volume_storage_class: "{{ tdarr_k8s_storage_class }}"
+    seed_volume_size: "{{ tdarr_k8s_configs_size }}"
+    seed_volume_quiesce:
+      - tdarr
+
+- name: Deploy tdarr to the cluster
+  when: tdarr_k8s_enabled | bool
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: tdarr
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
+
+- name: Prove the GPU and the library are reachable from inside the pod
+  tags: [deploy]
+  when: tdarr_k8s_enabled | bool
+  ansible.builtin.include_tasks: verify.yml

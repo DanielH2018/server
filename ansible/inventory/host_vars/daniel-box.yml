@@ -151,6 +151,17 @@ containers_list:
     use_authelia: false
     bridge_hostname: jellyfin
 
+  # B6. Alone like jellyfin, and for a related reason — it shares no hardlink seam. What sets it
+  # apart is that it holds the GPU for minutes at a time on real files and rewrites the library
+  # IN PLACE: the one media service where a wrong mount does lasting damage rather than a failed
+  # request. Its /media mount is consequently the only read-write one among the consumers.
+  - name: tdarr
+    platform: k8s
+    hostname: "tdarr{{ k8s_hostname_suffix }}"
+    port: 8265
+    use_authelia: true
+    bridge_hostname: tdarr
+
   - name: claude-otel
     platform: k8s
     hostname: "grafana{{ k8s_hostname_suffix }}"

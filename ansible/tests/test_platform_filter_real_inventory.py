@@ -69,7 +69,8 @@ def test_daniel_server_is_still_wholly_docker():
     # own entries. Five together and not one at a time because they share the hardlink seam:
     # split them across hosts and every import silently becomes a copy. Then jellyfin on
     # 2026-08-08 (34 -> 33), B5, which moved ALONE for the mirror-image reason: it only reads
-    # the library, so it shares no seam with the five. The count
+    # the library, so it shares no seam with the five. Then tdarr the same day (33 -> 32), B6,
+    # alone again — no seam either, but it needs the GPU. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -78,6 +79,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 33
-    assert len(filter_by_platform(containers, "docker")) == 33
+    assert len(containers) == 32
+    assert len(filter_by_platform(containers, "docker")) == 32
     assert filter_by_platform(containers, "k8s") == []

@@ -1,0 +1,136 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tdarr
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # Both config PVCs are ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
+  # the new pod waits for volumes the old pod has not released.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tdarr
+  template:
+    metadata:
+      labels:
+        app: tdarr
+    spec:
+      enableServiceLinks: false
+      # The file-mode half of the GPU wiring (D2) — the device plugin below handles the cgroup
+      # half. Same pair as jellyfin; see that role for why the GID lives in host_vars.
+      securityContext:
+        supplementalGroups:
+          - {{ render_gid }}
+      containers:
+        - name: tdarr
+          image: {{ tdarr_k8s_image }}
+          ports:
+            - containerPort: {{ tdarr_k8s_webui_port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # The compose template's cap_drop/cap_add pair, unchanged. FOWNER and DAC_OVERRIDE
+              # stay here, unlike jellyfin where they were dropped with the Intel mod: this image
+              # chowns its own mounts on startup before dropping to PUID/PGID, and the compose
+              # comment records that they were established by watching it fail without them.
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - SETUID
+                - SETGID
+                - FOWNER
+                - DAC_OVERRIDE
+          env:
+            - name: PUID
+              value: "{{ puid }}"
+            - name: PGID
+              value: "{{ pgid }}"
+            - name: TZ
+              value: "{{ tz }}"
+            - name: serverIP
+              value: "0.0.0.0"
+            - name: serverPort
+              value: "{{ tdarr_k8s_server_port }}"
+            - name: webUIPort
+              value: "{{ tdarr_k8s_webui_port }}"
+            - name: internalNode
+              value: "true"
+            - name: inContainer
+              value: "true"
+            - name: maxLogSizeMB
+              value: "10"
+            # Follows the host, as it did under Compose — so it now registers as `daniel-box`.
+            # EXPECT THE OLD NODE TO LINGER: the seeded database still holds a `daniel-server`
+            # node registration, which will show offline in the UI. It is stale bookkeeping, not
+            # a failed migration; delete it by hand once this node is confirmed healthy.
+            - name: nodeID
+              value: "{{ inventory_hostname }}"
+          volumeMounts:
+            - name: server
+              mountPath: /app/server
+            - name: configs
+              mountPath: /app/configs
+            # THE PATH CONTRACT (D4), and the one mount here that is read-write.
+            - name: media
+              mountPath: /media
+              subPath: {{ tdarr_k8s_media_subpath }}
+            # Neither of these belongs on Longhorn (D6). The transcode cache holds whole
+            # intermediate video files and is rewritten constantly; the logs are capped at
+            # maxLogSizeMB and rotate. Both are regenerable, and replicating either would spend
+            # the cluster's storage on data nothing would ever restore.
+            - name: transcode-cache
+              mountPath: /temp
+            - name: logs
+              mountPath: /app/logs
+          readinessProbe:
+            httpGet:
+              path: /api/v2/status
+              port: {{ tdarr_k8s_webui_port }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          # 120s before the first liveness check, against the compose healthcheck's 60s
+          # start_period: this pod also has to attach a 400 G RWX volume and let the internal
+          # node register itself before the API answers.
+          livenessProbe:
+            httpGet:
+              path: /api/v2/status
+              port: {{ tdarr_k8s_webui_port }}
+            initialDelaySeconds: 120
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ tdarr_k8s_cpu_limit }}"
+              memory: {{ tdarr_k8s_mem_limit }}
+              devic.es/dri: 1
+            requests:
+              cpu: "{{ tdarr_k8s_cpu_request }}"
+              memory: {{ tdarr_k8s_mem_request }}
+              # Extended resources must request exactly what they limit.
+              devic.es/dri: 1
+      volumes:
+        - name: server
+          persistentVolumeClaim:
+            claimName: {{ tdarr_k8s_server_claim }}
+        - name: configs
+          persistentVolumeClaim:
+            claimName: {{ tdarr_k8s_configs_claim }}
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ tdarr_k8s_media_claim }}
+        # sizeLimit IS THE POINT, not tidiness. An unbounded emptyDir is backed by the node's
+        # root filesystem, and tdarr's cache holds whole intermediate video files — unlike
+        # jellyfin's scratch, which is bounded by one client's stream. A stuck or pathological
+        # job would otherwise fill `/` on daniel-box and take k3s, Longhorn and every other pod
+        # with it. With a limit the kubelet evicts this pod instead, which is a recoverable
+        # failure affecting one service. 100Gi against 815G free and a 6.1G largest library file
+        # (measured 2026-08-08) is ample headroom for concurrent jobs while still bounding it.
+        - name: transcode-cache
+          emptyDir:
+            sizeLimit: 100Gi
+        - name: logs
+          emptyDir:
+            sizeLimit: 2Gi

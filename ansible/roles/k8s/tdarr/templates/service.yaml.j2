@@ -1,0 +1,13 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tdarr
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: tdarr
+  ports:
+    # The web UI only. tdarr_k8s_server_port is deliberately absent — see the role defaults.
+    - port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}

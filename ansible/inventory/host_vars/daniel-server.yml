@@ -223,11 +223,11 @@ containers_list:
   # other five do not have: the cluster copy converts /config/encoding.xml from qsv to vaapi
   # (D12) on its own volume, so a rollback returns to an Intel-configured Docker copy correctly,
   # but re-seeding the cluster from a rolled-back source would need that conversion again.
-  - name: tdarr
-    port: 8265
-    use_authelia: true
-    networks:
-      - media
+  # tdarr moved to daniel-box on 2026-08-08 (slice 4, B6), the day after jellyfin. Same reason it
+  # went alone: no hardlink seam, but it needs the GPU. Rolling back is re-adding this entry and
+  # setting tdarr_k8s_enabled: false on daniel-box — but note the cluster copy registers its
+  # internal node as `daniel-box`, so a rollback leaves a stale node of that name in the seeded
+  # database exactly as the migration left a stale `daniel-server` one.
   - name: configarr
     use_authelia: false
     networks:
