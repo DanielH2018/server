@@ -15,6 +15,41 @@
   changed_when: false
   register: jellyfin_k8s_pod
 
+# ── the check whose absence let B5 ship a broken library ────────────────────────────────────
+# Every other probe in this file passed while playback failed on every title, because they all
+# ask about the GPU and none of them asked whether the media is where Jellyfin's database says
+# it is. The pod was Ready, the UI listed the full library from its own tables, and each play
+# died with an IO error on /data/tv/... — a mount one level too shallow.
+#
+# Asserting BOTH directions is what makes this precise rather than decorative: the library roots
+# must be present, AND `torrents` must be absent from /data. Presence of the latter is the exact
+# signature of mounting the volume root instead of its `media` subdirectory, and it is the thing
+# that is easy to get wrong here because the *arrs legitimately DO mount the root.
+- name: Prove the library is where Jellyfin's database expects it
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec {{ jellyfin_k8s_pod.stdout }} -c jellyfin --
+      sh -c "test -d /data/tv && test -d /data/movies && test -d /data/media/tv
+      && ! test -e /data/torrents && echo LIBRARY_PATHS_OK;
+      f=$(find /data/tv -type f -name '*.mkv' | head -1);
+      echo probing ${f:-NONE};
+      head -c 1024 \"$f\" > /dev/null && echo LIBRARY_READ_OK; ls /data"
+  become: true
+  changed_when: false
+  register: jellyfin_k8s_library
+  # Both, because they are different claims. The paths existing says the mount is at the right
+  # depth; reading a byte out of a real library file is what the failing playback was actually
+  # doing when it raised its IO error.
+  failed_when: >-
+    'LIBRARY_PATHS_OK' not in jellyfin_k8s_library.stdout or
+    'LIBRARY_READ_OK' not in jellyfin_k8s_library.stdout
+
+- name: Show the library check
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: "{{ jellyfin_k8s_library.stdout_lines }}"
+
 # The exact failure B1 caught: the device NODE is visible via the plugin, but an open() returns
 # EPERM ("Operation not permitted") when the cgroup v2 device filter has not admitted it. A
 # permission problem would say "Permission denied" instead.

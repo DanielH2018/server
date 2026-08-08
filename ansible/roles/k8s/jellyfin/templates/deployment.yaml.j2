@@ -127,16 +127,31 @@ spec:
             # jellyfin only READS the library. SaveLocalMetadata is off in every library, artwork
             # and trickplay live in /config, and every writer has its own mount. This caps the
             # blast radius of the one internet-facing, Authelia-less media parser.
+            #
+            # subPath `media`, NOT the volume root — and this is where B5 first got it wrong.
+            # The *arrs mount the WHOLE tree at /data because their databases store
+            # /data/media/tv/... and they hardlink from /data/torrents. jellyfin's Compose mount
+            # was `containers/data/media:/data`, one level DEEPER, so its library paths are
+            # /data/tv and /data/movies with no `media` component. Mounting the root here put
+            # /data/media and /data/torrents in front of it, the libraries pointed at paths that
+            # no longer existed, and every playback failed with an IO error on
+            # /data/tv/... while the pod stayed Ready and the UI listed the whole library from
+            # its database. D4 is about the *arrs; this is the same trap with a different depth.
             - name: media
               mountPath: /data
+              subPath: media
               readOnly: true
             # THE SAME TREE AGAIN, DELIBERATELY (D4 / compose review M4). janitorr mounts the
             # data root at /data and hands Jellyfin a leaving-soon dir of /data/media/leaving-soon,
             # whose symlink TARGETS are /data/media/tv/... — those resolve only if /data/media/*
             # exists in THIS namespace too. Reproduce it; do not tidy it. Moving the libraries
             # instead would mean editing paths in Jellyfin's own database.
+            # Same subPath again, at the deeper path — reproducing Compose's second
+            # `containers/data/media:/data/media` mount exactly, which lands the media directory
+            # on top of the real `media` subdirectory that already exists inside it.
             - name: media
               mountPath: /data/media
+              subPath: media
               readOnly: true
             # Transcode scratch, off Longhorn (D6). TranscodingTempPath is unset in encoding.xml,
             # so Jellyfin uses its default of <cache>/transcodes — mounting the emptyDir at that
