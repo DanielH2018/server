@@ -16,13 +16,13 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **forty-one checks** (38 in `CHECKS` plus the three reachability
+  `INTERVAL` (300 s) it runs **forty checks** (37 in `CHECKS` plus the three reachability
   gates evaluated ahead of them) and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the twelve
     prom-dependent checks (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/b2_trend/ups/
-    janitorr/promtail_dropped) are
+    promtail_dropped/remote_write) are
     **suppressed** — pushed `up` with a "skipped — Prometheus unreachable" msg so their push-monitor
     heartbeats stay alive — and only THIS monitor pages. Without the gate one Prometheus outage
     fired all twelve at once: one root cause, a twelve-monitor alert storm. A single scrape target down
@@ -367,9 +367,10 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     monitors. Spec: `docs/superpowers/specs/2026-06-19-renovate-manual-action-notifier-design.md`.)
   - **Loki Reachable** (a fixed `/loki/api/v1/labels` probe — the root-cause GATE for the
     Loki-querying checks, the peer of Prometheus Reachable. Evaluated each cycle: when Loki is
-    unreachable the two `LOKI_DEPENDENT` checks (loki_ingestion/janitorr) are
+    unreachable the `LOKI_DEPENDENT` check (loki_ingestion) is
     **suppressed** — pushed `up` with a "skipped — Loki unreachable" msg — and only THIS monitor
-    pages. Without it one Loki outage fired both at once. Loki being UP but promtail not
+    pages. It was two until janitorr's watchdog moved to the cluster (2026-08-08); one Loki outage
+    firing both at once is why the gate exists. Loki being UP but promtail not
     shipping is a different signal Loki Log Ingestion still surfaces. `LOKI_DEPENDENT` is guarded by
     a test against the live `CHECKS` so it can't drift.)
   - **Cluster Prometheus Reachable** (a `vector(1)` probe against the **k3s cluster's** Prometheus
@@ -462,20 +463,15 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     history are unchanged — the AutoKuma label moved to the uptime-kuma role, alongside the other
     two cluster-side push monitors. The exit-code + output verdict still runs `configarr_status.py`
     verbatim; only where it runs changed.)*
-  - **Janitorr Errors** (counts janitorr scheduled-task ERROR lines in Loki over the post-startup
-    window — janitorr's healthcheck only proves the JVM is alive, so an internal cleanup error
-    (failed delete, bad config, a bug) logs ERROR and is otherwise invisible, and **janitorr deletes
-    real media**. The one benign, recurring ERROR is the documented post-boot race — an `@Scheduled`
-    cleanup fires before jellyfin/sonarr/radarr finish loading → `FeignException` 503, self-heals
-    next cycle (janitorr's CLAUDE.md). That ERROR line is generic ("Unexpected error occurred in
-    scheduled task"), identical to a real failure, with the exception type on a separate Loki line —
-    so it can't be filtered by content. We discriminate by **TIME** via the container's Prometheus
-    uptime (`time() - max(container_start_time_seconds{name="janitorr"})`): within
-    `JANITORR_STARTUP_GRACE_S` (600 s) of startup we don't count, and past it we count only over the
-    post-startup slice (`min(JANITORR_WINDOW=12h, uptime − grace)`) so the boot race can never be
-    in-window. Absent uptime metric (janitorr stopped) → up (Container Restarts/Scrape Targets owns
-    that). **Prom-dependent** (uptime, in `PROM_DEPENDENT`) AND **Loki-dependent** (count, in
-    `LOKI_DEPENDENT`) — suppressed under either gate. Pure `janitorr_errors_ok()` is unit-tested.)
+  - *(**Janitorr Errors** moved out on 2026-08-08, slice 4 B7b, with the workload. It read the
+    error count from Loki and the uptime from `container_start_time_seconds{name="janitorr"}`;
+    cluster pod logs never reach Loki and that cAdvisor series is this host's Docker container, so
+    both signals died at the port. The k8s/janitorr role's `janitorr-health.sh` cron reads the pod
+    through the read-only kubeconfig and pushes the SAME monitor with the same token — the 12 h
+    window, the 600 s startup grace and the uptime-minus-grace cap on the counting slice are all
+    preserved, so the verdict does not change with the host. The AutoKuma label moved to the
+    uptime-kuma role.)*
+
 - The restart/OOM/cpu/target/5xx checks use `prom_vector()` (keeps series labels) so the alert
   names *which* container / target / route is failing; the others use `prom_scalar()`.
 - Explicit `down` = fast, descriptive alert; the push monitor's heartbeat interval (600 s,
@@ -510,7 +506,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,appsec,b2,b2_trend,b2_reachable,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,fake_remux,fake_remux_replace,maintenance,discord,janitorr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,appsec,b2,b2_trend,b2_reachable,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,fake_remux,fake_remux_replace,maintenance,discord}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -572,7 +568,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the forty-one push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the forty push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI

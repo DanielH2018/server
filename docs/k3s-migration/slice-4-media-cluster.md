@@ -867,11 +867,30 @@ rung applies and the deletion pass does not run — on either host. Waiting for 
 either. So the flip cannot be justified by observing a dry deletion; it rests on the three gates
 above plus the free-space gate being nowhere near tripping.
 
-**Before the flip, one thing must move:** monitor-bridge's `janitorr` check counts ERROR lines in
-**Loki** and reads `container_start_time_seconds{name="janitorr"}` from Prometheus. Cluster pod
-logs do not reach Loki (the `pod` label has zero values) and that cAdvisor metric is daniel-server's
-Docker. Both signals die the moment the Docker copy stops — the same coupling configarr's state file
-had, needing the same fix: a cluster-side reader pushing the existing monitor.
+**The monitor moved with it, 2026-08-08.** monitor-bridge's `janitorr` check counted ERROR lines in
+**Loki** and read `container_start_time_seconds{name="janitorr"}` from Prometheus. Cluster pod logs
+do not reach Loki (the `pod` label has zero values) and that cAdvisor series is daniel-server's
+Docker container, so both signals died at the port — the same coupling configarr's state file had,
+and left alone it would have kept reporting on a copy about to stop while going blind on the one
+that deletes media.
+
+A `*/10` cron on daniel-box now reads the pod through the read-only kubeconfig and pushes the same
+monitor with the same token. In-cluster both facts come from **one** `kubectl` read, which is less
+machinery than the two-source version it replaces. Semantics are preserved deliberately — the 12 h
+window, the 600 s startup grace, and the cap of the counting slice to `uptime - grace` so the
+documented boot race can never be in-window — so the verdict does not change with the host. "No
+running pod" still defers to `k8s Workload Health` rather than paging twice for one outage.
+
+Two details worth keeping: uptime comes from the **container's** `startedAt`, not the pod's, because
+a container that crash-loops inside a long-lived pod restarts the boot race with its own clock; and
+`janitorr_errors_ok` is a re-tested port rather than an import, because the original lives inside
+`check.py`, which configures itself from ~200 environment variables at import time and cannot be
+loaded on a host.
+
+The handover is visible in Kuma's own history: `13:39 no janitorr errors (up 575.9h)` from
+monitor-bridge reading the Docker container, then `13:42 startup grace — up 581s` from the cluster
+cron reading the pod, then `no janitorr errors (up 0.2h)` once grace expired. monitor-bridge is down
+to 40 checks with `janitorr` absent from `CHECKS`.
 
 #### Resolved 2026-08-07: monitor-bridge's \*arr checks — a route with no `tls:` is a dead route
 
