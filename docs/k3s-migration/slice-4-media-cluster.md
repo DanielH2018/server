@@ -917,21 +917,52 @@ keyframe read parsed. The **failure direction** was proven too: with `HOST_DATA_
 is left alone, ffprobe exits nonzero, and the file is SKIPPED. A mapping mistake must never
 manufacture a fake — a false negative costs one missed fake, a false positive costs a real file.
 
-**Why it is not deployed.** The scan and the reconciler share one ledger
-(`/var/lib/autofix-fake-remux/replacements.json`), and the role's own docs warn against repointing
-one half without the other. Splitting them across hosts would split the ledger. So the cutover is
-both crons at once, plus a third instance of the monitor-bridge state-file problem: `Fake Remux
-Scan` and `Fake Remux Replace` read that directory over a `:ro` bind mount on daniel-server, exactly
-as configarr and janitorr did. That is now a **class**, not a coincidence — three host-plane state
-files that could not survive a host move.
+**Cut over 2026-08-08, both crons together.** They could not be split: scan and reconciler share
+`replacements.json`, the scan seeding entries the reconciler acts on. New role
+`roles/setup/fake_remux`, host-conditional in `initial_setup.yml` the way `optimize_pi` is, sourcing
+the scripts and the config template **from** `roles/containers/autofix-bridge` — that role still owns
+them and keeps its sidecar and disk-prune on daniel-server, so there is one copy and the rollback is
+re-adding the removed tasks.
 
-**Drift found while reading the role, worth fixing separately:** its CLAUDE.md says the reconciler
-"ships as `shadow`", but `host_vars/daniel-server.yml` has `autofix_fake_remux_replace_mode: live`.
-It deletes and re-grabs for real. It is inert only because it currently cannot resolve `sonarr`.
+Sonarr's ClusterIP is resolved at every deploy and asserted non-empty rather than pinned: stable for
+a Service's life, not across a delete. The play failing beats a cron silently pointed at nothing.
 
-**ffmpeg is now installed on daniel-box** so the probe path could be exercised. It is not yet
-declared in Ansible for that host — the autofix-bridge role's existing "Ensure ffmpeg (ffprobe) is
-installed" task covers it, and travels with the role at cutover. Until then it is undeclared drift.
+**Third instance of the state-file coupling, so it got the generic answer.** `state_push.py` takes
+`(label, state-file, max-age)` triples and prints a verdict line each — the shape `disk_prune`,
+`verify`, `pi_peers` and a dozen more checks in check.py all share. Both monitors keep their tokens
+and history; the AutoKuma labels moved to uptime-kuma. monitor-bridge is down to **38 checks**.
+
+**Two bugs that only running it would have found:**
+
+The cron passed `CONFIG_PATH=`, which neither script reads — they use `FAKE_REMUX_CONFIG` /
+`FAKE_REMUX_REPLACE_CONFIG`. The scan read a config that did not exist and reported
+`disabled (no Sonarr API key)`: exit 0, monitor green, scanning nothing. Fixed by keeping all three
+original paths so the scripts' own defaults apply and no override is needed. The failure mode of a
+wrong path here is silence.
+
+The daniel-server crons wrapped both scripts in **one `flock`** and the new ones did not. That is
+correctness, not tidiness: the 04:45 scan lands inside the `*/20` reconciler's schedule and they
+share the ledger. Carried over.
+
+**Verification, and its limit.** The scan reaches the cluster Sonarr (14 series) and reports
+`library clean` — but with **0 Remux candidates** today that run never touches ffprobe, so
+`probe_candidate` was driven directly against a real file instead: `PROBED` with a real `ENCODER`
+tag through `HOST_DATA_ROOT`, and `SKIPPED` with the root unset. Fails safe in the direction that
+matters. Kuma shows the handover: `19:11` monitor-bridge pushing both DOWN with the Docker errors,
+`19:17` the daniel-box cron pushing Scan up.
+
+At `19:20` the reconciler's first tick on this host wrote `replace_state.json`
+(`0 replaced / 0 in-flight / 0 held`) and Replace went green too. Both monitors are pushed by
+daniel-box now, and the two crons are gone from daniel-server's crontab.
+
+**Drift found while reading the role, resolved as documented not as coded:** its CLAUDE.md said the
+reconciler "ships as `shadow`", but `host_vars/daniel-server.yml` has
+`autofix_fake_remux_replace_mode: live` and that is intended — it deletes and re-grabs for real.
+The CLAUDE.md was corrected; the mode was not. It was inert before the cutover only because it could
+not resolve `sonarr`, so this is the first time it runs live against the cluster.
+
+**ffmpeg on daniel-box is declared now.** It was hand-installed to exercise the probe path; the new
+role's "Ensure ffprobe is installed" task adopts it, closing the drift.
 
 #### Resolved 2026-08-07: monitor-bridge's \*arr checks — a route with no `tls:` is a dead route
 
