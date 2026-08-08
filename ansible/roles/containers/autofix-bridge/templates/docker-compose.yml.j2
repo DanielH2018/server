@@ -48,10 +48,17 @@ services:
       # (qBittorrent/VPN outage) that would otherwise wrongly blocklist a legit in-progress
       # download. importBlocked/importFailed + malware-signature items are still auto-blocked.
       - CLIENT_ERROR_PATTERNS=unable to communicate,not responding,failed to connect,connection refused,download client is unavailable
-      # Same URLs/keys as monitor-bridge's read-only check_arr_queue; reached over `media`.
-      - SONARR_URL=http://sonarr:8989
+      # Same URLs/keys as monitor-bridge's read-only check_arr_queue. The `-k8s` names, not the
+      # bridged `*.local` ones: those resolve to daniel-server and are unreachable from a container
+      # on that host (same-bridge hairpin NAT). Repointed 2026-08-08 — slice 4 took both *arrs to
+      # the cluster and `http://sonarr:8989` stopped resolving, which this sidecar reported as
+      # `<urlopen error [Errno -2] Name does not resolve>` on the Arr Auto-Block monitor. Missed
+      # when monitor-bridge got the same repoint: the monitor did its job — 398 consecutive down
+      # beats from 2026-08-07 21:38, the B4c cutover, to the fix — so the gap was 22 h of the
+      # auto-blocker not running, not 22 h of nobody being told.
+      - SONARR_URL=https://sonarr{{ k8s_hostname_suffix }}.local.{{ domain }}
       - SONARR_API_KEY={{ sonarr_api_key }}
-      - RADARR_URL=http://radarr:7878
+      - RADARR_URL=https://radarr{{ k8s_hostname_suffix }}.local.{{ domain }}
       - RADARR_API_KEY={{ radarr_api_key }}
       # Direct Discord POST for the action log (the same channel the *arr post health to). urllib
       # POSTs 403 silently via Cloudflare 1010 without a User-Agent — autofix.py sets one.
