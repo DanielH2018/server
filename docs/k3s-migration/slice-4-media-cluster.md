@@ -633,26 +633,42 @@ playback info reporting hardware rather than software. The ffmpeg encode above p
 is reachable through the plugin; it does not prove *Jellyfin's* transcode path works. Those are two
 claims and only one is settled.
 
-**Open — HDR tone-mapping has no backend.** Removing `DOCKER_MODS=…opencl-intel` removed the Intel
-OpenCL ICD, and asking ffmpeg to build an OpenCL device in the running pod fails:
+#### HDR tone-mapping — investigated 2026-08-08, NOT broken. The earlier entry was wrong.
+
+B5 originally recorded HDR tone-mapping as a regression, on the grounds that removing
+`DOCKER_MODS=…opencl-intel` removed the OpenCL ICD and `ffmpeg -init_hw_device opencl` fails with
+`Failed to get number of OpenCL platforms`. **OpenCL is the wrong dependency.** On AMD VAAPI,
+Jellyfin tone-maps with **libplacebo over Vulkan**. Its own startup log says so:
 
 ```
-[AVHWDeviceContext] Failed to get number of OpenCL platforms
+VAAPI device "/dev/dri/renderD128" is AMD GPU
+VAAPI device "/dev/dri/renderD128" supports Vulkan DRM interop
+Available filters: [... "libplacebo", "tonemapx", "tonemap_opencl", "tonemap_vaapi" ...]
 ```
 
-(The image ships an `nvidia.icd`, which is why a naive "is there an ICD file" check reported this
-as healthy — it names a driver that does not exist on this box.) The loss is confined to **HDR**
-transcodes; SDR is unaffected, so a green SDR playback does **not** cover it. Two things are worth
-settling before calling this closed, and neither should be guessed at:
+and every transcode it launches carries `-init_hw_device vulkan=vk@dr -filter_hw_device vk`. OpenCL
+is the Intel/NVIDIA path; its absence costs nothing here.
 
-1. Whether AMD VAAPI can tone-map at all here — `EnableVppTonemapping` was switched off as an
-   Intel-only filter, and if Jellyfin drives `tonemap_vaapi` from that same toggle on VAAPI, that
-   was the wrong call and it should go back on.
-2. Whether `EnableTonemapping` should stay `true` with no backend. It is unchanged from the Docker
-   config, where it worked; here it may make HDR titles fail outright rather than merely look
-   washed out.
+Measured, by running the graph Jellyfin itself would build:
 
-Test with a real HDR title before deciding.
+| Path | Result |
+|---|---|
+| **libplacebo / Vulkan** (what Jellyfin uses on AMD) | **works** — synthetic PQ/bt2020 source and a real library file both tone-map and encode through VAAPI |
+| `tonemapx` (SIMD software fallback) | works |
+| `tonemap_vaapi` — Jellyfin's "VPP tone mapping" | **fails: `VAAPI driver doesn't support HDR`.** Mesa's radeonsi exposes `VAEntrypointVideoProc` but no HDR processing |
+| `tonemap_opencl` | unavailable — no ICD, and not needed |
+
+So the settings the D12 conversion writes are right as they stand: `EnableTonemapping: true`
+(libplacebo backs it) and `EnableVppTonemapping: false` (the one path that genuinely does not work
+on this GPU). **Nothing to change.**
+
+**Worth knowing regardless: the library contains no HDR content.** Every file reports
+`color_transfer=bt709, color_primaries=bt709` — 16 of 17 are 10-bit SDR, which is not the same
+thing as HDR. So tone-mapping is not exercised by anything currently in the library either way.
+
+The lesson for the next probe of this kind: an absent capability is only a regression if something
+depends on it. The OpenCL check tested a real absence and drew a false conclusion from it, because
+nothing had established that Jellyfin's AMD path used OpenCL. `verify.yml` now tests libplacebo.
 
 ### B6 deployed — 2026-08-08 — GPU and library proven, a real transcode still open
 
@@ -783,8 +799,11 @@ in Traefik's access log (previously the plain routers), and the checks themselve
   success.
 - ~~**Jellyfin config carries Intel settings onto AMD** (D8)~~ — **handled 2026-08-08 by D12.** The
   settings are elements in `/config/encoding.xml`, not database state, so an initContainer converts
-  them once at deploy time. The residual hazard is narrower and real: **HDR** tone-mapping has no
-  OpenCL backend on this host, and that still fails at playback rather than at startup.
+  them once at deploy time. A follow-up claim that HDR tone-mapping had regressed was **also
+  withdrawn** (2026-08-08) — it tested OpenCL, which is not the backend Jellyfin uses on AMD;
+  libplacebo over Vulkan works. See the B5 section. What remains is narrow and real: Jellyfin's
+  "VPP tone mapping" genuinely cannot work on this GPU (`VAAPI driver doesn't support HDR`), which
+  is why the conversion switches it off.
 - **`monitor-bridge` reaches the \*arrs over Docker networks** (`sonarr:8989`, `radarr:7878`,
   `prowlarr`). Those names stop resolving at cutover, exactly as `n8n` did in slice 2 — and the
   same trap applies: point it at the `-k8s` hostname via the ingress VIP, **not** at a bridged

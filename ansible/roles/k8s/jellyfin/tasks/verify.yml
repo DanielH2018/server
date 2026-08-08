@@ -98,35 +98,45 @@
       VAAPI h264 encode succeeded inside the jellyfin pod
       ({{ 'no stderr' if not jellyfin_k8s_vaapi.stderr else jellyfin_k8s_vaapi.stderr }})
 
-# Reported, NOT enforced. Removing the opencl-intel mod removes the Intel OpenCL ICD, and OpenCL
-# is what Jellyfin uses for HDR tone-mapping. If OpenCL cannot initialise, the loss is confined to
-# HDR transcodes — so a green SDR playback proves nothing either way about it, and failing the
-# deploy over it would block a migration that is otherwise correct.
+# HDR tone-mapping, tested against the backend Jellyfin ACTUALLY uses on this hardware.
 #
-# This INITIALISES OpenCL rather than listing /etc/OpenCL/vendors. The first version listed the
-# directory and reported "HDR tone-mapping should work" on finding `nvidia.icd` — a stray ICD the
-# LSIO image ships, naming a driver that does not exist on an AMD box. An ICD file is a claim
-# that a driver might be installed, not evidence that a platform loads. Asking ffmpeg to build
-# the device is the only answer that means anything.
-- name: Test whether OpenCL initialises for HDR tone-mapping
+# An earlier version of this task initialised OpenCL and reported HDR as broken when it failed.
+# That was the wrong dependency, and the alarm was false. On AMD VAAPI, Jellyfin tone-maps with
+# **libplacebo over Vulkan** — its own logs say `VAAPI device ... supports Vulkan DRM interop`
+# and every transcode it launches carries `-init_hw_device vulkan=vk@dr -filter_hw_device vk`.
+# OpenCL is the Intel/NVIDIA path and its absence here costs nothing.
+#
+# The device setup below is copied from a real Jellyfin command line rather than invented, so
+# this exercises the same graph a genuine HDR playback would build. Measured 2026-08-08: passes.
+#
+# The one thing that genuinely does NOT work on this GPU is `tonemap_vaapi` (Jellyfin's "VPP
+# tone mapping"), which fails with `VAAPI driver doesn't support HDR` — Mesa's radeonsi exposes
+# VAEntrypointVideoProc but no HDR processing. That is why EnableVppTonemapping is switched off
+# by the conversion in the Deployment, and it should stay off.
+#
+# Reported rather than enforced: the library is currently all bt709, so a regression here would
+# cost nothing today and failing an unrelated deploy over it would be disproportionate.
+- name: Test the HDR tone-mapping path (libplacebo over Vulkan)
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} exec {{ jellyfin_k8s_pod.stdout }} --
-      /usr/lib/jellyfin-ffmpeg/ffmpeg -v error -init_hw_device opencl=ocl
-      -f lavfi -i nullsrc -frames:v 1 -f null -
+      k3s kubectl -n {{ k8s_namespace }} exec {{ jellyfin_k8s_pod.stdout }} -c jellyfin --
+      sh -c "/usr/lib/jellyfin-ffmpeg/ffmpeg -v error
+      -init_hw_device drm=dr:/dev/dri/renderD128 -init_hw_device vaapi=va@dr
+      -init_hw_device vulkan=vk@dr -filter_hw_device vk
+      -f lavfi -i testsrc=size=1280x720:rate=30:duration=2
+      -vf 'format=p010,setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc,hwupload=derive_device=vulkan,libplacebo=format=nv12:tonemapping=bt.2390:colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv,hwupload=derive_device=vaapi'
+      -c:v h264_vaapi -f null - && echo TONEMAP_OK"
   become: true
   changed_when: false
-  register: jellyfin_k8s_opencl
+  register: jellyfin_k8s_tonemap
   failed_when: false
 
 - name: Report the tone-mapping situation
   tags: [deploy]
   ansible.builtin.debug:
     msg: >-
-      {{ 'OpenCL initialises — HDR tone-mapping has a backend.'
-         if jellyfin_k8s_opencl.rc == 0
-         else 'NO WORKING OPENCL (' ~ (jellyfin_k8s_opencl.stderr | trim | truncate(160)) ~ ').
-               HDR tone-mapping will fall back to software or fail outright. SDR transcoding is
-               unaffected, so a passing SDR playback does NOT cover this — test an HDR title
-               separately before assuming it works.' }}
+      {{ 'HDR tone-mapping works — libplacebo/Vulkan built the graph and encoded through VAAPI.'
+         if 'TONEMAP_OK' in jellyfin_k8s_tonemap.stdout
+         else 'HDR TONE-MAPPING BROKEN (' ~ (jellyfin_k8s_tonemap.stderr | trim | truncate(200)) ~ ').
+               SDR playback is unaffected and will not show this.' }}
