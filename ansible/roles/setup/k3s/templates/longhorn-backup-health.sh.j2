@@ -116,11 +116,45 @@ if [[ -n "$UNCOVERED" ]]; then
   add "backed-up volumes stale or missing: ${UNCOVERED}"
 fi
 
+# 5. Is the daily backup COUNT outgrowing B2's transaction allowance? Gap G2 in
+#    docs/b2-transaction-cap-monitoring-gaps.md, open until the cap fired a SECOND time on
+#    2026-08-08. Everything above this line is about whether backups happened; none of it can see
+#    the thing that stopped them, because B2 caps TRANSACTIONS separately from bytes and the byte
+#    monitors read 6.22 GB of 10 GB — 62%, comfortably green — throughout.
+#
+#    Deliberately a PROXY, and the message says so. B2 exposes no cap-headroom API, so nothing can
+#    measure the remaining allowance; what CAN be measured is the input that grew. Longhorn's daily
+#    run went 4 -> 7 -> 15 backups over three days as slice 4 moved config PVCs into the cluster,
+#    which is why the free tier's 2500-transaction ceiling stopped absorbing it.
+#
+#    What it cannot see: kopia's and the b2-usage rclone's share of the same ACCOUNT-wide cap. That
+#    is why the budget sits well under what Longhorn alone could spend — the slack is theirs. So a
+#    green reading here is "Longhorn is within its share", never "the account has headroom".
+DAY_AGO_S=$(( NOW_S - 86400 ))
+RECENT_N=0
+RECENT_BYTES=0
+
+while read -r CREATED SIZE; do
+  [[ -z "$CREATED" ]] && continue
+  CREATED_S=$(date -d "$CREATED" +%s 2>/dev/null) || continue
+  (( CREATED_S < DAY_AGO_S )) && continue
+  RECENT_N=$(( RECENT_N + 1 ))
+  RECENT_BYTES=$(( RECENT_BYTES + ${SIZE:-0} ))
+done < <($KUBECTL get backups.longhorn.io \
+  -o jsonpath='{range .items[*]}{.status.snapshotCreatedAt}{" "}{.status.size}{"\n"}{end}' 2>/dev/null)
+
+if (( RECENT_N > {{ k3s_longhorn_daily_backup_budget }} )); then
+  add "$RECENT_N backups in 24h exceeds the {{ k3s_longhorn_daily_backup_budget }} budget \
+($(( RECENT_BYTES / 1048576 )) MiB) — Longhorn's share of B2's transaction cap; \
+cut backup scope or raise the cap before it 403s"
+fi
+
 if [[ -z "$PROBLEMS" ]]; then
   STATUS=up
-  # The volume count is in the green message on purpose: "newest backup 8h old" was true even
-  # while a volume had no backup at all, so the number is what makes this green mean something.
-  MSG="backup target available, newest backup $(( AGE_S / 3600 ))h old, ${CHECKED} backed-up volume(s) covered"
+  # The counts are in the green message on purpose: "newest backup 8h old" was true even while a
+  # volume had no backup at all, and it was true throughout the 2026-08-08 transaction-cap outage.
+  # The two numbers are what make this green mean something.
+  MSG="backup target available, newest backup $(( AGE_S / 3600 ))h old, ${CHECKED} backed-up volume(s) covered, ${RECENT_N} backup(s)/24h (budget {{ k3s_longhorn_daily_backup_budget }})"
 else
   STATUS=down
   MSG="$PROBLEMS"

@@ -103,9 +103,17 @@ once instead of storming — and, critically, so dependents cannot report green 
    - give monitor-bridge read access to the k3s API. The read-only kubeconfig from PR #55 already
      exists and could be scoped and mounted, keeping all monitors in one place.
 
-3. **Track the transaction dimension, not just bytes** (G2). Whether B2's API exposes cap headroom
-   cheaply needs checking; if not, the `B2 Reachable` gate in (1) is the practical substitute,
-   since a cap breach surfaces as a 403 on the next call.
+3. ~~**Track the transaction dimension, not just bytes** (G2).~~ **Addressed 2026-08-08**, after
+   the cap fired a second time. B2 exposes no cap-headroom API, so nothing can measure the
+   remaining allowance — what is measurable is the input that grew. `longhorn-backup-health.sh`
+   gained a fifth arm that counts Longhorn backups created in the last 24 h against
+   `k3s_longhorn_daily_backup_budget`, and reports the count in the green message so the number is
+   visible before it breaches.
+
+   Stated plainly because it bounds the check's worth: it is a **proxy on one consumer**. It cannot
+   see kopia's or the b2-usage rclone's share of the same account-wide cap, and Longhorn's
+   per-backup transaction cost was never measured — so the budget is a tripwire on growth, not a
+   derived ceiling. It does **not** assert that today's 15 backups are within capacity.
 
 ## Not established
 
@@ -114,6 +122,47 @@ once instead of storming — and, critically, so dependents cannot report green 
   Longhorn re-list the backup store. That is a plausible contributor, not a measured one — the
   split needs the B2 console. Deliberately not investigated further from this side to avoid
   spending more of the capped budget.
-- **Whether the cap is daily-resetting or account-lifetime.** Determines whether this self-clears.
+- ~~**Whether the cap is daily-resetting or account-lifetime.**~~ **Answered by the second
+  occurrence: it resets.** Backups ran normally 2026-08-03 through 2026-08-07 after the 08-02
+  breach, and the caps refused again on 08-08. So an outage self-clears at the UTC day boundary
+  without intervention — what does not self-clear is the capacity problem underneath it.
 - **Whether Kopia recovers on its own** once the cap lifts, given it is now panicking on the
   refresh path. It may need a restart.
+
+---
+
+## Second occurrence — 2026-08-08
+
+Class B exhausted at 08:49 UTC, Class C at 10:09. The monitoring behaved as this document's
+recommendations intended: `B2 Reachable` reported `transaction_cap_exceeded` verbatim, the five
+`B2_DEPENDENT` checks were suppressed to a single alert, and `Backup Freshness` — deliberately
+un-gated — paged on its own. Nothing had to be inferred from a timeout this time.
+
+**Longhorn's hourly poll did not cause it.** `backuptarget/default` recorded
+`lastSyncedAt: 09:47:25Z` — a *successful* sync an hour after Class B was already gone — and only
+went `Unavailable` at 10:47:26Z, 38 minutes after Class C. The 2026-08-02 write-up named Longhorn's
+re-listing as a plausible contributor; on this occasion it was demonstrably downstream.
+
+**What Longhorn does do is amplify.** Once the target fails, the backup-target controller retries
+on error at roughly **260 requests/minute** (1176 errors in a 12-minute window; two independent
+60-second samples gave 256 and 263). Setting `backupstore-poll-interval` to `0` did **not** stop it
+— the CR accepted `pollInterval: "0s"` and the rate was unchanged — because the retries come from
+the controller's error requeue, not the poll timer. That lever was reverted to 3600.
+
+Since the loop is error-driven, it should end at the UTC reset: the first list that succeeds stops
+the requeue. That is an inference from the observed behaviour (the storm began only when the target
+started failing, and the controller was quiet at one poll per hour before that), **not** something
+observed — the test is whether the error rate drops to ~0 shortly after 00:00 UTC.
+
+**The load that grew is the k3s migration's.** Longhorn's daily run went **4 → 7 → 15** backups on
+2026-08-06/07/08 as slice 4 moved config PVCs into the cluster; the 08-08 run covered 3.79 GB
+(~1806 2 MiB blocks). Incremental backups bound *bandwidth*, not *transactions*, which is why
+`B2 Storage Usage` sat at 6.22 GB of 10 GB — 62%, green — throughout both outages. That asymmetry
+is the whole of gap G2.
+
+Kopia was a victim rather than a driver: the container stayed `healthy` with 2 cap errors in 10 h,
+while `Backup Freshness` reported `kopia:51515: timed out`.
+
+**Still not established:** the specific Class B consumer before 08:49. longhorn-manager logs had
+rotated past it, and cluster pod logs do not reach Loki (the `pod` label has 0 values), so the
+window is unrecoverable from this side.

@@ -150,3 +150,25 @@ k3s_longhorn_backup_max_age_hours: 30
 # and nothing here changes faster than the daily backup it watches. The Kuma monitor's heartbeat
 # interval must stay above this (see the uptime-kuma role) so a dead cron trips the watchdog.
 k3s_longhorn_backup_health_cron_minute: "*/10"
+
+# Daily-backup-volume budget, added 2026-08-08 after B2's TRANSACTION cap fired for the second
+# time (docs/b2-transaction-cap-monitoring-gaps.md, gap G2 — bytes were monitored, transactions
+# were not). B2 exposes no cap-headroom API, so nothing can measure the remaining allowance
+# directly; what CAN be watched is the input that grew. Longhorn's daily run went 4 -> 7 -> 15
+# backups over three days as slice 4 moved config PVCs into the cluster, and the free tier's
+# 2500-transaction Class B/C ceiling stopped absorbing it.
+#
+# A PROXY, and the health script says so in its message: it counts Longhorn's own daily backups,
+# and cannot see kopia's or the b2-usage rclone's share of the same account-wide cap. So the
+# budget is deliberately well under what Longhorn alone could consume — the headroom left over is
+# for the other two consumers.
+#
+# 18 against today's 15. This is a tripwire on further GROWTH and explicitly NOT a claim that 15
+# is within capacity — 15 is what the account was doing on the day the cap blew, and Longhorn's
+# per-backup transaction cost was never measured, so no threshold here can be derived from first
+# principles. What IS evidenced is the trend (4 -> 7 -> 15 in three days) and that it ended in a
+# 403, so the check watches the next increment rather than pretending to know the ceiling.
+#
+# Slice 4 still has janitorr and autofix-bridge to move, so that increment is close. Raise this
+# only together with a decision about the cap itself, never to silence the warning.
+k3s_longhorn_daily_backup_budget: 18
