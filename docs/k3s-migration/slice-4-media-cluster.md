@@ -670,7 +670,7 @@ The lesson for the next probe of this kind: an absent capability is only a regre
 depends on it. The OpenCL check tested a real absence and drew a false conclusion from it, because
 nothing had established that Jellyfin's AMD path used OpenCL. `verify.yml` now tests libplacebo.
 
-### B6 deployed — 2026-08-08 — GPU and library proven, a real transcode still open
+### B6 done — 2026-08-08 — GPU, library and a real transcode all proven
 
 tdarr runs on daniel-box with the same `/dev/dri` wiring as B5 and its cache on an emptyDir.
 
@@ -685,9 +685,30 @@ tdarr runs on daniel-box with the same `/dev/dri` wiring as B5 and its cache on 
 | Routes | `tdarr-k8s.local` → 302 (Authelia) · `tdarr.local` (bridge) → 302 |
 | The node rename was a non-event | `/api/v2/get-nodes` returns exactly one node, unpaused — the `daniel-server` → `daniel-box` nodeID change did not strand a second registration |
 
-**NOT verified, and it is B6's stated proof:** one real library file transcoding to completion on
-the AMD path with the output playing. That needs a job run against files that get **rewritten in
-place**, which is not something to start unattended.
+**B6's stated proof — met 2026-08-08.** A real library file transcoded to completion on the AMD
+path and the output decodes clean:
+
+| | |
+|---|---|
+| Source | `Rick and Morty S09E08`, 388 M, HEVC 1920×1080 **10-bit**, 1322.656 s |
+| Encode | `hevc_vaapi -qp 24`, tdarr's own ffmpeg, hardware decode → hardware encode |
+| Elapsed | **76 s for 22 minutes of video — 17.4× realtime** |
+| Output | 433 M, HEVC 1080p 10-bit, duration `1322.656` (identical), **every frame decodes with no errors** |
+
+10-bit is worth calling out: `yuv420p10le` in and out means the 780M's HEVC **Main10** encode
+entrypoint works, not just Main.
+
+**Run against a COPY in the scratch volume, not in place.** tdarr rewrites library files, and
+proving the GPU works is not worth re-encoding someone's library. What this therefore does *not*
+exercise is tdarr's job scheduler — plugin stack, queue, worker assignment. The transcode path
+underneath it is proven; the orchestration above it is not.
+
+**Two things the numbers say that are worth keeping.** The output is *larger* than the source
+(433 M vs 388 M) — a flat `-qp 24` re-encode of an already-efficient WEBDL can grow, which is a
+plugin-settings question rather than a fault, but it is exactly how a "space saving" library ends
+up costing space. And tdarr is currently **inert by configuration**: every worker limit on the node
+is 0 (`transcodecpu`, `transcodegpu`, `healthcheckcpu`, `healthcheckgpu`), and the transcode queue
+is empty, so it will not act on the library until someone raises a limit.
 
 **The transcode cache carries a `sizeLimit` and that is not tidiness.** An unbounded `emptyDir` is
 backed by the node's root filesystem, and tdarr's cache holds whole intermediate video files —
@@ -830,10 +851,10 @@ in Traefik's access log (previously the plain routers), and the checks themselve
 
 ## Exit criteria
 
-1. **OPEN.** A **hardware-transcoded Jellyfin playback succeeds** on daniel-box, verified by GPU
-   engine activity and Jellyfin's own playback info — not by the pod being Ready. B5 got the device
-   proven reachable (VAAPI encode inside the pod) and the config converted; the playback itself is
-   the remaining step, and it needs a human with a client.
+1. **MET 2026-08-08.** A **hardware-transcoded Jellyfin playback succeeds** on daniel-box —
+   confirmed by the operator after B5's media mount was corrected to `subPath: media`. HDR
+   tone-mapping was investigated separately and works (libplacebo/Vulkan); the library is all
+   bt709 in any case. tdarr's own AMD transcode is proven at 17.4x realtime (B6).
 2. **MET 2026-08-07 (B4c).** An end-to-end import completes **by hardlink** — link count 2, same
    inode 6029478 across qbittorrent's `subPath` mount and sonarr's full-tree mount.
 3. All four \*arr libraries report the same item counts as before the move, with no missing paths.
