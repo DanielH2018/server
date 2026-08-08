@@ -128,6 +128,14 @@ never widen it, so that a repo can't grant itself permissions merely by being op
 `kubectl` is **not** handled by `auto-approve-readonly.py`; it is allow-listed by verb in this repo's
 `.claude/settings.json`.
 
+**The cluster credential is the real ceiling, not this allow-list.** Plain `kubectl` authenticates as
+`system:serviceaccount:kube-system:homelab-readonly`, which holds `get list watch` and nothing else
+(`k3s_readonly_sa_name` in `ansible/roles/setup/k3s/defaults/main.yml`). Every write verb below is
+therefore refused by RBAC — `kubectl exec` returns *"cannot create resource pods/exec"*, not a
+permission prompt. Allow-listing a write verb only decides whether Claude is prompted *before*
+receiving that refusal. Real writes go through Ansible, or through `sudo k3s kubectl`, which uses the
+root kubeconfig and still prompts because `sudo` is ask-listed.
+
 **A `Bash()` rule matches on `kubectl <verb>` and nothing finer — flags and sub-subcommands in the
 rule are decorative.** Measured 2026-08-08 against the OTEL `tool_decision` stream:
 
@@ -144,16 +152,22 @@ it narrows a verb — it doesn't, and it reads as a guarantee that isn't there.
 
 - **Auto-approved, read-only:** `get`, `logs`, `describe`, `top`, `explain`, `events`,
   `api-resources`, `api-versions`, `version`, `diff`, `wait`.
-- **Auto-approved, reversible writes:** `scale`, `rollout` (restart/undo/pause/resume, and the
-  read-only status/history that come with the verb), `label`, `annotate`, `cordon`, `uncordon`.
-  Each is undone by redeploying the role from the Ansible-rendered manifests.
-- **Deliberately still prompts:** `delete`, `drain`, `taint` (destroy state — Longhorn PVCs and their
-  B2 backups sit behind them); `exec`, `run`, `attach`, `debug`, `cp`, `port-forward`, `proxy`
-  (arbitrary code execution inside a container — a security boundary, not a reversibility one);
-  `edit`, `replace`, `patch`, `set`; and `apply`, which is excluded *only* because `--prune` deletes
-  and no rule can carve it out. `auth` (i.e. `auth can-i`) and `create` are likewise excluded
-  because allowing the verb would also allow `auth reconcile` (rewrites RBAC) and every other
-  `create`; both are reasonable to add if that breadth is acceptable.
+- **Auto-approved, reversible writes:** `apply`, `create`, `patch`, `set`, `scale`, `label`,
+  `annotate`, `cordon`, `uncordon`, `auth`, and `rollout` (restart/undo/pause/resume, plus the
+  read-only status/history that come with the verb). Each is undone by redeploying the role from
+  the Ansible-rendered manifests. Three edges come with the verbs and cannot be carved out:
+  `apply --prune` deletes resources absent from the manifest set, `create token` mints a
+  ServiceAccount credential, and `auth reconcile` rewrites RBAC.
+- **Auto-approved, container access:** `exec`, `cp`, `port-forward`. These are arbitrary code
+  execution inside a container — allowed deliberately (decided 2026-08-08) because in practice they
+  are used for reads, and no rule can distinguish `exec -- cat …` from `exec -- rm -rf …`. Several
+  of these containers mount Longhorn PVCs.
+- **Deliberately still prompts:** `delete`, `drain`, `taint` — they destroy state, and Longhorn PVCs
+  and their B2 backups sit behind them. Note `delete pod` alone is routine and safe (the Deployment
+  recreates it), but per-verb matching means allowing it would also allow `delete pvc|namespace`.
+  Also `replace` (`--force` = delete + recreate), `proxy` (a local API gateway authenticating as
+  you), `debug` (`debug node/…` mounts the host filesystem in a privileged pod), `attach`, `run`,
+  and `edit` (interactive — it just hangs for an agent).
 - `sudo k3s kubectl …` still prompts — `sudo` is ask-listed user-side and is unaffected here.
 
 Hand-running an auto-approved *write* verb creates drift from the Ansible source of truth; prefer
