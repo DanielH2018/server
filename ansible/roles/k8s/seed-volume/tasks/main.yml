@@ -17,6 +17,16 @@
 # marker is load-bearing in the other direction too: rerunning against a volume the
 # application has since written to would overwrite live data with a stale snapshot.
 #
+# A ROLE THAT SEEDS TWO CLAIMS WILL TRIP THE SSH RATE-LIMITER. Each seed opens several
+# connections to the source host, and `ufw limit ssh` there REJECTs the 6th within 30 s, so the
+# second claim dies on
+#     ssh: connect to host 10.0.0.161 port 22: Connection refused
+# after the first has succeeded (measured 2026-08-08 building the tdarr role, which seeds
+# /app/server and /app/configs). It self-clears in ~60 s. Re-run WITHOUT seed_volume_force to
+# resume: the completed claim's marker makes it skip while the unseeded one still copies.
+# Re-running WITH force would re-copy both, which is safe but pointlessly re-transfers the
+# claim that already verified.
+#
 # EXCEPT AT CUTOVER, which is why seed_volume_force exists. Slice 2 seeds each volume twice:
 # once while both copies run, so the k8s workload has real data to be exercised against, and
 # again at cutover once the Docker service is stopped and the source has stopped moving. Only
