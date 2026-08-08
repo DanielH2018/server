@@ -251,13 +251,11 @@ services:
       - FAKE_REMUX_REPLACE_STATE=/fake-remux/replace_state.json
       - FAKE_REMUX_REPLACE_MAX_AGE_H=1.2
       - KUMA_PUSH_FAKE_REMUX_REPLACE={{ monitor_bridge_fake_remux_replace_push_token }}
-      # Daily configarr guide-sync: the configarr role's configarr_sync.py host cron runs the
-      # one-shot sync and writes state.json — down on a failed sync (nonzero exit or error output)
-      # or >26h staleness (a missed daily run) — a direct sync-result check (exit code + output),
-      # replacing the prior Loki-log-scrape sync monitor.
-      - CONFIGARR_STATE=/configarr/state.json
-      - CONFIGARR_MAX_AGE_H=26
-      - KUMA_PUSH_CONFIGARR={{ monitor_bridge_configarr_push_token }}
+      # configarr's guide-sync moved to a k8s CronJob on daniel-box (slice 4, B7a), so this bridge
+      # cannot see it: the state file it used to read lived on this host, next to the sync. The
+      # k8s/configarr role's health cron runs on that node, reads the last Job, and pushes the
+      # SAME Kuma monitor with the same token — the monitor and its history are unchanged, only
+      # the pusher moved. The AutoKuma label went with it, to the uptime-kuma role.
       # Daily kopia FULL-maintenance freshness: the host cron (kopia role) queries `kopia
       # maintenance info --json` and writes state.json. Full maintenance GCs expired blobs from
       # B2, so a stall is the upstream CAUSE the b2_usage check only catches weeks later as the
@@ -484,7 +482,6 @@ services:
       - /var/lib/kopia-verify:/verify:ro
       - /var/lib/autofix-disk-prune:/autofix-disk:ro
       - /var/lib/autofix-fake-remux:/fake-remux:ro
-      - /var/lib/configarr:/configarr:ro
       - /var/lib/kopia-maintenance:/maintenance:ro
       - /var/lib/kopia-b2-usage:/b2-usage:ro
       - /var/lib/docker-user-rules:/docker-user:ro
@@ -572,7 +569,6 @@ services:
          every 20min by the autofix-bridge role's fake_remux_replace.py host cron, same mount as the
          scan above) — down on a held/failed replacement or >1.2h staleness. -#}
       {{ kuma('autofix-fake-remux-replace', monitor_type='push', name='Fake Remux Replace', interval=600, max_retries=0, push_token=monitor_bridge_fake_remux_replace_push_token) }}
-      {{ kuma('configarr', monitor_type='push', name='Configarr Sync', interval=600, max_retries=0, push_token=monitor_bridge_configarr_push_token) }}
       {{ kuma('kopia-maintenance', monitor_type='push', name='Backup Maintenance', interval=600, max_retries=0, push_token=monitor_bridge_maintenance_push_token) }}
       {{ kuma('monitor-bridge-b2', monitor_type='push', name='B2 Storage Usage', interval=600, max_retries=0, push_token=monitor_bridge_b2_push_token) }}
       {# B2 growth trend: predict_linear projection of the billable-bytes gauge — runway warning

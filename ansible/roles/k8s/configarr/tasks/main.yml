@@ -1,0 +1,125 @@
+---
+# Slice 4, B7a — the nightly TRaSH-guide reconcile.
+#
+# No Deployment, no Service, no route: configarr runs, reconciles the two *arrs, and exits. What
+# ports here is the CronJob plus the health cron that reads it; the config itself is rendered from
+# the Docker role's template, so the grab policy has exactly one source.
+
+- name: Deploy configarr to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: configarr
+    manifests_files:
+      - cronjob.yaml
+    manifests_secret_files:
+      - config-secret.yaml
+    # No Deployment to wait on. The manifests role treats '' as "skip the rollout entirely",
+    # which is the whole reason that option exists.
+    manifests_rollout: ""
+
+# Carried over from the Docker role, which reconciled on every deploy: a config.yml edit that only
+# took effect at the next 04:30 would leave a deploy reporting success while the *arrs still run
+# yesterday's policy. Fixed name, deleted first, so deploys do not accumulate Jobs.
+- name: Remove the previous deploy-time reconcile Job
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete job configarr-deploy
+      --ignore-not-found --wait=true
+  become: true
+  changed_when: false
+
+- name: Reconcile now via a one-off Job
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} create job configarr-deploy
+      --from=cronjob/configarr
+  become: true
+  changed_when: true
+
+- name: Wait for the reconcile to finish
+  tags: [deploy]
+  # Polls for EITHER terminal condition rather than `kubectl wait --for=condition=complete`, which
+  # can only name one: with backoffLimit 0 a failed sync settles in seconds but `wait` would sit
+  # there for the full timeout before reporting it.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get job configarr-deploy
+      -o jsonpath={.status.conditions[*].type}
+  become: true
+  changed_when: false
+  register: configarr_k8s_job
+  until: >-
+    'Complete' in configarr_k8s_job.stdout or 'Failed' in configarr_k8s_job.stdout
+  retries: "{{ (configarr_k8s_timeout | int / 10) | round | int }}"
+  delay: 10
+
+- name: Install the configarr health reader
+  tags: [config]
+  ansible.builtin.file:
+    path: /opt/configarr-health
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Install the configarr health reader scripts
+  tags: [config]
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/configarr-health/{{ item | basename }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  loop:
+    - configarr_health.py
+    - configarr_health_logic.py
+    # The verdict logic, unchanged and still owned by the Docker role, whose tests live beside it.
+    # Copied rather than duplicated for the same reason host_lib.py is: the sibling copy is what
+    # `import configarr_status` resolves at runtime, and a second edited copy is how two callers
+    # quietly stop agreeing about what a failed sync looks like.
+    - "{{ role_path }}/../../containers/configarr/files/configarr_status.py"
+  become: true
+
+- name: Deploy the configarr sync heartbeat
+  tags: [cron]
+  ansible.builtin.template:
+    src: configarr-health.sh.j2
+    dest: /usr/local/bin/configarr-health.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Schedule the configarr sync heartbeat
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "configarr sync health"
+    minute: "{{ configarr_k8s_health_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: "/usr/local/bin/configarr-health.sh"
+    cron_file: configarr-health
+  become: true
+
+# Reported, not enforced. A failed guide sync is the monitor's job to page — failing the deploy
+# over a transient *arr outage is exactly what the retired wrapper avoided by always exiting 0.
+# Running the reader here also proves it works, on the deploy that installs it.
+- name: Report what the health reader makes of the reconcile
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: /usr/bin/python3 /opt/configarr-health/configarr_health.py
+  environment:
+    CONFIGARR_NAMESPACE: "{{ k8s_namespace }}"
+    CONFIGARR_MAX_AGE_H: "{{ configarr_k8s_max_age_hours }}"
+  changed_when: false
+  failed_when: false
+  register: configarr_k8s_health
+
+- name: Show the configarr verdict
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: "{{ configarr_k8s_health.stdout_lines | default(['(no output)']) }}"

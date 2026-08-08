@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""configarr health reader — the cluster-side replacement for monitor-bridge's check_configarr.
+
+Reads the last completed configarr Job through the read-only ServiceAccount kubeconfig and prints
+one tab-separated line, `up<TAB>msg` or `down<TAB>msg`, for the wrapper to push to Kuma. It never
+exits nonzero on a bad verdict: a DOWN is data to report, not a crash, and the wrapper needs the
+message either way.
+
+Runs under daniel-box's /usr/bin/python3 (3.12 floor — keep 3.12-clean, see
+ansible/tests/test_host_scripts_py312.py). The push URL carries a token, so it stays in the
+templated wrapper and never appears here; this file is plaintext in git.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import configarr_health_logic as logic  # noqa: E402  (sibling module, via the sys.path insert)
+
+NAMESPACE = os.environ.get("CONFIGARR_NAMESPACE", "homelab")
+CRONJOB = os.environ.get("CONFIGARR_CRONJOB", "configarr")
+MAX_AGE_S = float(os.environ.get("CONFIGARR_MAX_AGE_H", "26")) * 3600
+KUBECTL = os.environ.get("CONFIGARR_KUBECTL", "k3s kubectl").split()
+TIMEOUT = int(os.environ.get("CONFIGARR_KUBECTL_TIMEOUT_S", "30"))
+
+
+def kubectl(*args) -> tuple[int, str]:
+    try:
+        proc = subprocess.run(
+            [*KUBECTL, "-n", NAMESPACE, *args],
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        return 124, "kubectl timed out after %ss" % TIMEOUT
+    except OSError as e:
+        return 125, "could not run kubectl: %s" % e
+    return proc.returncode, proc.stdout if proc.returncode == 0 else proc.stderr
+
+
+def age_seconds(stamp: str) -> float:
+    """Seconds since an RFC 3339 timestamp. Kubernetes always emits UTC with a trailing Z."""
+    finished = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=timezone.utc
+    )
+    return time.time() - finished.timestamp()
+
+
+def main() -> int:
+    rc, out = kubectl("get", "jobs", "-l", "app=%s" % CRONJOB, "-o", "json")
+    if rc != 0:
+        print("down\tcannot read Jobs in %s: %s" % (NAMESPACE, out.strip()[:200]))
+        return 0
+
+    try:
+        jobs = json.loads(out).get("items", [])
+    except ValueError as e:
+        print("down\tunparseable Job list: %s" % e)
+        return 0
+
+    job = logic.latest_finished(jobs, CRONJOB)
+    if job is None:
+        print("down\t%s" % logic.decide(None, "", 0, MAX_AGE_S)[1])
+        return 0
+
+    name = job["metadata"]["name"]
+    try:
+        age_s = age_seconds(logic.finished_at(job))
+    except ValueError as e:
+        print("down\tunparseable finish time on Job %s: %s" % (name, e))
+        return 0
+
+    # A failed Job's pod exits nonzero, so `kubectl logs` still returns its output — the read is
+    # not conditional on success. An empty result is handled as its own failure in decide().
+    log_rc, logs = kubectl("logs", "job/%s" % name, "--tail=200")
+    ok, msg = logic.decide(job, logs if log_rc == 0 else "", age_s, MAX_AGE_S)
+    print("%s\t%s" % ("up" if ok else "down", msg))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

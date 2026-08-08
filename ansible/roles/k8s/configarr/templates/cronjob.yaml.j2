@@ -1,0 +1,74 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: configarr
+  namespace: {{ k8s_namespace }}
+spec:
+  schedule: "{{ configarr_k8s_schedule }}"
+  # Without this the schedule is UTC, which is not what "30 4" meant on daniel-server.
+  timeZone: "{{ tz }}"
+  # Forbid, not Replace: a run that is still going holds the *arrs' custom-format state mid-write,
+  # and a second one starting alongside it would race the same API. Replace would kill the first.
+  concurrencyPolicy: Forbid
+  # A missed schedule is not made up. The health cron's age gate is what notices, and re-running
+  # a guide sync hours late is worth less than knowing it did not run on time.
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: {{ configarr_k8s_successful_history }}
+  failedJobsHistoryLimit: {{ configarr_k8s_failed_history }}
+  jobTemplate:
+    metadata:
+      # On the JOB, not just the pod. `kubectl create job --from=cronjob/configarr` copies this
+      # block, so a deploy-time reconcile carries the same label as a scheduled run and the health
+      # reader counts both — which is what the retired state file did, since the deploy task and
+      # the cron wrote the same file.
+      labels:
+        app: configarr
+    spec:
+      activeDeadlineSeconds: {{ configarr_k8s_timeout }}
+      # No retry, and this one is load-bearing rather than a preference: with a backoffLimit a
+      # failed sync would be retried into an eventual Success, and the health cron reads the Job's
+      # outcome. A transient *arr outage would then look like a clean night.
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: configarr
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          securityContext:
+            runAsUser: {{ puid }}
+            runAsGroup: {{ pgid }}
+            runAsNonRoot: true
+          containers:
+            - name: configarr
+              image: {{ configarr_k8s_image }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                # readOnly because configarr never writes here — the live Docker config dir has
+                # held exactly one file, config.yml, with Ansible's own mtime, since 2026-07-17.
+                - name: config
+                  mountPath: /app/config
+                  readOnly: true
+                - name: repos
+                  mountPath: /app/repos
+              resources:
+                limits:
+                  cpu: "{{ configarr_k8s_cpu_limit }}"
+                  memory: {{ configarr_k8s_mem_limit }}
+                requests:
+                  cpu: "{{ configarr_k8s_cpu_request }}"
+                  memory: {{ configarr_k8s_mem_request }}
+          volumes:
+            - name: config
+              secret:
+                secretName: configarr-config
+            # The TRaSH-guide and recyclarr-template clones. An emptyDir, not a PVC: it is a cache
+            # of two public git repos, re-cloned in seconds, and a Longhorn volume would mean an
+            # attach/detach on every nightly pod for no durability anyone needs.
+            - name: repos
+              emptyDir: {}

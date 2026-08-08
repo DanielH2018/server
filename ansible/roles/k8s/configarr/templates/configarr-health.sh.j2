@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# configarr guide-sync heartbeat — managed by Ansible (k8s/configarr role); edits overwritten.
+#
+# Thin on purpose. Everything that decides up-or-down is in configarr_health.py + its pure core,
+# which are plain files with unit tests and a 3.12 floor check; this exists only because the Kuma
+# push token has to be templated in, and a secret-carrying file should hold as little logic as
+# possible. Same shape as longhorn-backup-health.sh and telemetry-health.sh.
+#
+# Push, not poll: monitor-bridge reads daniel-server's Docker socket and cannot see this cluster.
+# It used to poll a /var/lib/configarr/state.json bind mount, which stopped being possible the
+# moment the sync moved hosts.
+#
+# Reads the cluster through the read-only ServiceAccount kubeconfig, so the cron needs no sudo and
+# cannot mutate anything.
+set -uo pipefail
+
+export KUBECONFIG=/home/{{ sys_user }}/.kube/config
+export CONFIGARR_NAMESPACE={{ k8s_namespace }}
+export CONFIGARR_MAX_AGE_H={{ configarr_k8s_max_age_hours }}
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+KUMA_RESOLVE_IP="{{ hostvars[monitoring_controller_host].server_ip }}"
+PUSH_URL="https://${KUMA_HOST}/api/push/{{ monitor_bridge_configarr_push_token }}"
+
+# The reader prints `up<TAB>msg` or `down<TAB>msg` and always exits 0. A nonzero exit or empty
+# output therefore means the reader ITSELF broke — report that rather than pushing nothing, which
+# would leave the monitor to time out with no explanation.
+if ! OUT=$(/usr/bin/python3 /opt/configarr-health/configarr_health.py 2>&1) || [[ -z "$OUT" ]]; then
+  STATUS=down
+  MSG="configarr health reader failed: ${OUT:-(no output)}"
+else
+  STATUS="${OUT%%$'\t'*}"
+  MSG="${OUT#*$'\t'}"
+fi
+
+curl -fsS --max-time 10 -G \
+  --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
+  --data-urlencode "status=${STATUS}" \
+  --data-urlencode "msg=${MSG}" \
+  "$PUSH_URL" >/dev/null \
+  || logger -t configarr-health "push failed (status=${STATUS}: ${MSG})"

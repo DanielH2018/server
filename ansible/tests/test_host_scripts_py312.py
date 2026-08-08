@@ -46,6 +46,12 @@ HOST_RUN_SCRIPTS = [
     # different role's files/, so the _first_party_imports sibling scan below can't derive it. Listed
     # by hand for the 3.12 parse-check; keep it 3.12-clean.
     "ansible/roles/setup/common/files/host_lib.py",
+    # configarr's cluster-side health reader + its pure core, run on daniel-box by
+    # /usr/local/bin/configarr-health.sh (a templated wrapper, so neither the ExecStart scan nor
+    # the crontab scan can derive them). configarr_health.py `import configarr_health_logic`s,
+    # which in turn `import configarr_status`, already listed above. Keep all three 3.12-clean.
+    "ansible/roles/k8s/configarr/files/configarr_health.py",
+    "ansible/roles/k8s/configarr/files/configarr_health_logic.py",
     # .claude/hooks/*.sh wrappers run these under a BARE python3 (for hook latency — not `uv run`), so
     # they face the same host 3.12 floor. The ExecStart scan can't see a .sh-wrapped invocation;
     # _host_python_scripts_in_hooks() below re-derives the requirement. session-health.py had a live

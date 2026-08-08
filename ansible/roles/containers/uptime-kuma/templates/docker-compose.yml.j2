@@ -249,6 +249,13 @@ services:
       # as the backup monitor above: monitor-bridge cannot see the cluster.
       # interval 1200 = 2x the */10 cron, so a dead cron or a dead daniel-box also trips this.
       {{ kuma('claude-otel-health', name='k3s Telemetry Stack', monitor_type='push', interval=1200, max_retries=0, push_token=claude_otel_push_token) }}
+      # configarr's nightly TRaSH-guide sync. Moved here from monitor-bridge on 2026-08-08 (slice 4,
+      # B7a) along with the sync itself: it is a k8s CronJob now, and the state file monitor-bridge
+      # used to read lived beside the sync on daniel-server. The push token is UNCHANGED, so this is
+      # the same Kuma monitor with its history intact — only the pusher moved (k8s/configarr role,
+      # templates/configarr-health.sh.j2, which reads the last Job through the read-only kubeconfig).
+      # interval 1200 = 2x the */10 cron, so a dead cron or a dead daniel-box also trips this.
+      {{ kuma('configarr', name='Configarr Sync', monitor_type='push', interval=1200, max_retries=0, push_token=monitor_bridge_configarr_push_token) }}
       # Pi SD-card health: SD cards have no SMART, so a dying card only announces
       # itself via ext4 errors. The Pi's pi-sd-health.sh cron (optimize_pi role)
       # pushes errors_count every 5 min through the LAN-bypassed push API

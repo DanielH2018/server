@@ -1579,30 +1579,6 @@ def test_check_fake_remux_replace_missing_state(monkeypatch, tmp_path):
     assert "never ran" in msg
 
 
-def test_configarr_clean_is_ok():
-    ok, msg = check.configarr(
-        {"ok": True, "msg": "configarr sync ok: 2 profiles"}, 3600, 26 * 3600
-    )
-    assert ok and "ok" in msg
-
-
-def test_configarr_failed_sync_pages():
-    ok, msg = check.configarr(
-        {
-            "ok": False,
-            "msg": "configarr sync failed (exit 1): Unable to reach http://radarr:7878",
-        },
-        3600,
-        26 * 3600,
-    )
-    assert not ok and "radarr" in msg
-
-
-def test_configarr_stale_pages():
-    ok, msg = check.configarr({"ok": True, "msg": "x"}, 30 * 3600, 26 * 3600)
-    assert not ok and "ago" in msg
-
-
 # ── CrowdSec home-IP allowlist updater (every-5-min host cron writes state.json; we alert on it) ──
 
 

@@ -1,0 +1,36 @@
+---
+# Slice 4, B7a. configarr is the one of the nine that is not a service: it is a nightly
+# reconcile that reads the *arrs and exits. So it ports to a CronJob, not a Deployment, and
+# its health is reported by a host cron on this node that READS the last Job and pushes Kuma —
+# the same shape as longhorn-backup-health.sh and telemetry-health.sh, and for the same reason
+# (monitor-bridge runs on daniel-server and cannot see this cluster).
+configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.30.0
+
+# Unchanged from the Docker cron. The health cron below reads whatever the last run produced,
+# so the two schedules are independent — this one can move without touching monitoring.
+configarr_k8s_schedule: "30 4 * * *"
+
+# Matches CONFIGARR_TIMEOUT_S in the retired configarr_sync.py.
+configarr_k8s_timeout: 300
+
+# Deliberately kept: `kubectl logs job/<n>` is the only record of what a run did, and the health
+# cron reads it. History limits, not ttlSecondsAfterFinished — a TTL deletes a Succeeded Job on
+# its own clock, and a health cron that finds no Job at all reports DOWN.
+configarr_k8s_successful_history: 3
+configarr_k8s_failed_history: 3
+
+# Same 26 h ceiling monitor-bridge applied to the state file's `ts` (CONFIGARR_MAX_AGE_H=26),
+# so a daily 04:30 sync that skips one night goes red rather than coasting on yesterday's log.
+configarr_k8s_max_age_hours: 26
+
+# */10 like the other two k8s-side health crons, and for a reason that is easy to miss: the
+# Kuma monitor is a PUSH monitor with an interval, so it needs a push far more often than the
+# sync runs. Each tick re-reads the same Job and re-reports it; the age gate above is what
+# turns a stale one red.
+configarr_k8s_health_cron_minute: "*/10"
+
+# Mirrors resources('0.50', '256M', '0.05', '16M') from the Docker template.
+configarr_k8s_cpu_limit: "500m"
+configarr_k8s_mem_limit: 256Mi
+configarr_k8s_cpu_request: "50m"
+configarr_k8s_mem_request: 16Mi

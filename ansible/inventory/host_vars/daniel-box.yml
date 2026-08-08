@@ -162,6 +162,14 @@ containers_list:
     use_authelia: true
     bridge_hostname: tdarr
 
+  # Slice 4, B7a. No `port`, no `hostname`, no `bridge_hostname` — and none of that is an
+  # omission. configarr is a nightly reconcile that reads the two *arrs and exits, so it ports to
+  # a CronJob with no Service and nothing to route to. Must follow sonarr and radarr: it addresses
+  # them by bare Service name, which is why `base_url: http://sonarr:8989` survives the port
+  # unchanged.
+  - name: configarr
+    platform: k8s
+
   - name: claude-otel
     platform: k8s
     hostname: "grafana{{ k8s_hostname_suffix }}"

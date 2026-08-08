@@ -756,6 +756,63 @@ symlinks resolve **inside Jellyfin's namespace** (the D4 double-mount, verified 
 from the host), and `monitor-bridge`'s `arr_queue` / `janitorr` / `fake_remux` checks stay green
 against the new endpoints.
 
+#### B7a — configarr, done 2026-08-08 (the port; its guide content is separately broken upstream)
+
+The one of the nine that is not a service. configarr reads the two \*arrs, reconciles their custom
+formats from the TRaSH guides, and exits — so it ports to a **CronJob**, not a Deployment, and it
+has no Service, no route, and no `port`/`hostname` in `containers_list`.
+
+`base_url: http://sonarr:8989` and `http://radarr:7878` survive the port **unchanged**: those are
+the Service names in the `homelab` namespace, so the same strings resolve in-cluster. Checked
+against `kubectl -n homelab get svc` first rather than assumed. The whole `config.yml` is rendered
+from the Docker role's template through `lookup('template', …)` — the livesync idiom — so ~150
+lines of release-group scoring have one source and cannot drift into two grab policies.
+
+**The monitoring had to move with it, and that is the part worth recording.** `check_configarr`
+read `/var/lib/configarr/state.json` over a `:ro` bind mount — a *host* file written beside the
+sync. That coupling does not survive a host change; it is the same shape that left autofix-bridge's
+crons reaching into a host their targets had already left. So the state file is retired and the
+**Job object is the state**: a `*/10` cron on daniel-box reads the last configarr Job through the
+read-only ServiceAccount kubeconfig and pushes Kuma directly — the established shape of
+`longhorn-backup-health.sh` and `telemetry-health.sh`. The push token is unchanged, so it is the
+same monitor with its history intact; only the pusher moved, and the AutoKuma label with it
+(monitor-bridge → uptime-kuma, where the other two cluster-side push monitors already live).
+
+**Rejected: monitoring it with `kube_job_status_failed` from kube-state-metrics.** Two reasons, in
+order of weight. `configarr_status.evaluate()` exists *because* the exit code alone is not enough —
+recyclarr's process-only healthcheck missed the 2026-06-10 v8 breakage, which failed every nightly
+sync while exiting 0 — so a Job-status metric would reinstate exactly the gap that module was
+written to close. And the metric does not exist here anyway: kube-state-metrics is deliberately
+scoped to `pods,deployments,statefulsets,daemonsets`, with a documented rule that a `--resources`
+flag and its RBAC grant move together. Verified by query before designing around it, not assumed.
+
+The verdict therefore still runs `configarr_status.py` **verbatim**, deployed as a runtime sibling
+the way `host_lib.py` is. Three gates precede it, each covering a way the other two read green
+while the sync is dead: no finished Job at all (suspended/deleted CronJob — nothing fails, there is
+just nothing there), a completion older than 26 h (retained history keeps reporting an old success
+after the schedule stops firing — the gate monitor-bridge applied to the state file's `ts`), and
+**empty logs**, because `evaluate(0, "")` returns `(True, 'configarr sync ok: (no output)')` — a
+clean verdict built from nothing, reachable once a retained Job's pod is garbage collected.
+
+| Claim | Evidence |
+|---|---|
+| CronJob applies and runs | `configarr-deploy` Job created from it, reached `Complete`/`Failed` in ~20 s |
+| The \*arrs are reachable in-cluster | Sonarr 4.0.17.2952 and Radarr 6.1.1.10360 both returned `System status` and their CF counts (95 / 40) |
+| The health reader works end to end | printed `down<TAB>configarr sync logged an error: … SONARR: (0/1/0) - RADARR: (0/1/0)` — it read the Job, fetched the logs, and applied `evaluate()` |
+| Deploy-time reconcile still happens | Job selection is by **label**, not ownerReference: `kubectl create job --from=cronjob/…` sets no owner, so an owner check would silently ignore every deploy-time run |
+
+**Not met yet — and not because of the port. `templates.json` upstream no longer contains any of
+the four `include:` ids this homelab uses.** The sync fails with
+`ENOENT: no such file or directory, scandir '/app/repos/recyclarr-config/sonarr/includes/custom-formats'`,
+because `recyclarr/config-templates` landed a breaking restructure — `feat(radarr)!: convert to
+guide-backed templates`, which deleted the `includes/` tree — and master moved from `4ae377b` to
+`9faf65ff`. daniel-server's clone is simply **stale at `4ae377b`**; that is the only reason its
+last sync was green, and its next fetch would have failed identically. The port surfaced this
+early; it did not cause it. Resolving it means choosing replacement template ids
+(`sonarr-v4-quality-profile-web-1080p` → `web-1080p`, `radarr-quality-profile-hd-bluray-web` →
+`hd-bluray-web`, and the two `custom-formats` ids have no direct successor at all), which changes
+what is written to the operator's live profiles — a grab-policy decision, not a migration one.
+
 #### Resolved 2026-08-07: monitor-bridge's \*arr checks — a route with no `tls:` is a dead route
 
 The cutover moved the three \*arrs off the `media` Docker network, so `SONARR_URL`,

@@ -16,7 +16,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **forty-two checks** (39 in `CHECKS` plus the three reachability
+  `INTERVAL` (300 s) it runs **forty-one checks** (38 in `CHECKS` plus the three reachability
   gates evaluated ahead of them) and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
@@ -455,17 +455,13 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     throttle + the streak wrapper are unit-tested. NOTE: it verifies the webhook is DELIVERABLE
     (catches a rotated/revoked URL); it does NOT assert Kuma still has the notification *attached* to
     each monitor — AutoKuma re-applies that on every deploy via the `kuma()` macro's `notification_name_list`.)
-  - **Configarr Sync** (reads `/configarr/state.json`, written daily by the **configarr** role's
-    `configarr_sync.py` host cron — `down` on a FAILED sync (the wrapper's `configarr_status.py`
-    reads the `compose run`'s exit code + output), >26 h staleness (one daily run + slack), or a
-    missing/corrupt state file. configarr is Sonarr/Radarr's sole guide-syncer (see its CLAUDE.md);
-    a bare container healthcheck can't watch a one-shot `compose run --rm` job, so this is the
-    lateral replacement for the retired recyclarr role's own Loki-based sync check (recyclarr's
-    healthcheck watched only the supercronic scheduler process, not the sync's exit code — the
-    silent 2026-06-10 v8-major breakage that failed every nightly sync with the healthcheck staying
-    green; configarr's wrapper captures the exit code directly instead). Same state-file idiom as
-    Disk Autoprune / Fake Remux Scan; pure `configarr()` is unit-tested. `CONFIGARR_MAX_AGE_H` tunes
-    staleness.)
+  - *(**Configarr Sync** moved out on 2026-08-08, slice 4 B7a. The nightly guide sync is a k8s
+    CronJob on daniel-box now, and the `/configarr/state.json` this bridge read lived beside it on
+    this host. The k8s/configarr role's `configarr-health.sh` cron reads the last Job through the
+    read-only kubeconfig and pushes the SAME monitor with the same token, so the monitor and its
+    history are unchanged — the AutoKuma label moved to the uptime-kuma role, alongside the other
+    two cluster-side push monitors. The exit-code + output verdict still runs `configarr_status.py`
+    verbatim; only where it runs changed.)*
   - **Janitorr Errors** (counts janitorr scheduled-task ERROR lines in Loki over the post-startup
     window — janitorr's healthcheck only proves the JVM is alive, so an internal cleanup error
     (failed delete, bad config, a bug) logs ERROR and is otherwise invisible, and **janitorr deletes
@@ -514,7 +510,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,appsec,b2,b2_trend,b2_reachable,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,fake_remux,fake_remux_replace,configarr,maintenance,discord,janitorr}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,appsec,b2,b2_trend,b2_reachable,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,fake_remux,fake_remux_replace,maintenance,discord,janitorr}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -576,7 +572,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the forty-two push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add the forty-one push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI

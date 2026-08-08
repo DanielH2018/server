@@ -6,4 +6,6 @@ role_deps:
   - prometheus
   - uptime-kuma
   - kopia
-  - configarr
+  # configarr dropped 2026-08-08 (slice 4, B7a): the dependency existed so /var/lib/configarr was
+  # created sys_user-owned before this container bind-mounted it. Both the mount and the Docker
+  # role are gone from this host — the sync is a k8s CronJob now.

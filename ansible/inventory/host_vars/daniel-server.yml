@@ -229,10 +229,11 @@ containers_list:
   # so it registered as `daniel-box` against a database written by `daniel-server` — that turned
   # out to be a non-event (one node listed after the move, not two), and a rollback is the same
   # rename in reverse.
-  - name: configarr
-    use_authelia: false
-    networks:
-      - media
+  # configarr moved to daniel-box on 2026-08-08 (slice 4, B7a), as a CronJob rather than a
+  # Deployment — it was never a service. Rolling back is re-adding this entry, deleting the
+  # cluster CronJob, and putting the `configarr` AutoKuma label back on monitor-bridge (it now
+  # lives on uptime-kuma, pushed by a health cron on daniel-box; the token is unchanged, so the
+  # monitor and its history are the same object either way).
   - name: janitorr
     use_authelia: false
     networks:
