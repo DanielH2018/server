@@ -16,6 +16,22 @@ trashGuideUrl: https://github.com/TRaSH-Guides/Guides
 # repo (the guide-backed WEB-1080p / HD Bluray + WEB profiles recyclarr v8 dropped from `include:`
 # but configarr still pulls). This replaces the retired recyclarr role's trash_id profiles.
 recyclarrConfigUrl: https://github.com/recyclarr/config-templates
+# PINNED 2026-08-08, and this is a hold rather than a preference. Upstream master moved to
+# 9faf65ff with `feat(radarr)!: convert to guide-backed templates`, which DELETED the entire
+# `includes/` tree — so all four template ids below are gone and every sync fails with
+# `ENOENT: ... scandir '/app/repos/recyclarr-config/sonarr/includes/custom-formats'`.
+#
+# 4ae377b is the last commit that still has them, and it is exactly where daniel-server's clone
+# already sat: the 2026-08-07 04:30 sync ran against this tree, so pinning reproduces the last
+# known-good run rather than inventing a new state. It was green only because that clone had not
+# fetched yet — nothing about the k3s port caused this.
+#
+# EXIT CONDITION: the replacements are `web-1080p` (sonarr) and `hd-bluray-web` (radarr), in
+# upstream's new lean guide-backed format; the two `custom-formats` ids have no direct successor.
+# Adopting them changes what is written to the live profiles, so it is a deliberate grab-policy
+# decision, not a version bump — make it, then drop this pin. Until then the guides stop tracking
+# upstream, which is the cost of the hold and the reason it should not be left indefinitely.
+recyclarrRevision: 4ae377bb704fc7fd69a544ad04e91357e0b09f62
 
 customFormatDefinitions:
   # Reject mislabeled "fake remux" groups. With the Anime profile's minFormatScore=0,

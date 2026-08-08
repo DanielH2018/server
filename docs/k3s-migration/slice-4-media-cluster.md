@@ -801,17 +801,33 @@ clean verdict built from nothing, reachable once a retained Job's pod is garbage
 | The health reader works end to end | printed `down<TAB>configarr sync logged an error: … SONARR: (0/1/0) - RADARR: (0/1/0)` — it read the Job, fetched the logs, and applied `evaluate()` |
 | Deploy-time reconcile still happens | Job selection is by **label**, not ownerReference: `kubectl create job --from=cronjob/…` sets no owner, so an owner check would silently ignore every deploy-time run |
 
-**Not met yet — and not because of the port. `templates.json` upstream no longer contains any of
-the four `include:` ids this homelab uses.** The sync fails with
-`ENOENT: no such file or directory, scandir '/app/repos/recyclarr-config/sonarr/includes/custom-formats'`,
-because `recyclarr/config-templates` landed a breaking restructure — `feat(radarr)!: convert to
-guide-backed templates`, which deleted the `includes/` tree — and master moved from `4ae377b` to
-`9faf65ff`. daniel-server's clone is simply **stale at `4ae377b`**; that is the only reason its
-last sync was green, and its next fetch would have failed identically. The port surfaced this
-early; it did not cause it. Resolving it means choosing replacement template ids
-(`sonarr-v4-quality-profile-web-1080p` → `web-1080p`, `radarr-quality-profile-hd-bluray-web` →
-`hd-bluray-web`, and the two `custom-formats` ids have no direct successor at all), which changes
-what is written to the operator's live profiles — a grab-policy decision, not a migration one.
+**The first reconcile failed, for a reason that has nothing to do with the port.**
+`recyclarr/config-templates` landed a breaking restructure — `feat(radarr)!: convert to guide-backed
+templates` — which **deleted the entire `includes/` tree**, moving master from `4ae377b` to
+`9faf65ff`. All four `include:` ids this homelab pins are gone from `templates.json`, and every sync
+against current master dies on
+`ENOENT: no such file or directory, scandir '/app/repos/recyclarr-config/sonarr/includes/custom-formats'`.
+
+daniel-server was green only because its clone had **not fetched yet** — it sat at `4ae377b`, and
+its own 04:30 run would have failed identically a few hours later. A fresh clone in a CronJob's
+`emptyDir` has no such luck, which is why the port surfaced it rather than caused it.
+
+**Held with `recyclarrRevision: 4ae377b…`**, the last commit that still has the `includes/` tree —
+which is precisely where daniel-server's working clone already was, so the pin reproduces the last
+known-good sync rather than inventing a state. The reconcile then reported
+`SONARR: (1/0/0) - RADARR: (1/0/0)` and, importantly, `(up to date - no changes)` on both: 35 and 34
+custom formats untouched, 8 and 7 quality profiles unchanged. **Exit criterion 4's configarr half is
+met, and it is met with zero writes** — the cluster \*arrs already carry the policy, because their
+databases came from daniel-server.
+
+The pin is a hold, not a fix, and it should not outlive the decision it is waiting on. Upstream's
+replacements are `web-1080p` (sonarr) and `hd-bluray-web` (radarr) in the new lean guide-backed
+format; the two `custom-formats` ids have **no direct successor**. Adopting them changes what is
+written to the live profiles, so it is a grab-policy decision rather than a version bump. Until it
+is made, the guides stop tracking upstream — that is the cost of holding.
+
+**Also stopped:** the `configarr-sync` cron on daniel-server, whose compose file pointed at
+containers that had already left the host.
 
 #### Resolved 2026-08-07: monitor-bridge's \*arr checks — a route with no `tls:` is a dead route
 
