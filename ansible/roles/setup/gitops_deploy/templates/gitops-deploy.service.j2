@@ -18,6 +18,12 @@ WorkingDirectory=/home/{{ sys_user }}/server
 # Need ~/.local/bin on PATH for `uv` (the deployer runs `uv run ansible-playbook`,
 # the same repo-pinned env the operator uses); systemd's default PATH omits it.
 Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+# journald stores only notice+ on these hosts (initial_setup caps MaxLevelStore=notice), and a
+# unit's stdout logs at info by default — so every log() line the deployer printed was discarded
+# at the source, leaving nothing to read after the 2026-08-08 false-rollback hold. The output is
+# a handful of lines per eventful tick; store it at notice so failures are diagnosable after the
+# fact.
+SyslogLevel=notice
 # flock serializes against the weekly secret-rotate cron (secret-rotate.sh) — both mutate
 # this same git working tree, and this deployer's `git reset --hard` on a failed health gate
 # could silently discard a half-rotated secret. RUN_START (and so RUN_BUDGET_S, see

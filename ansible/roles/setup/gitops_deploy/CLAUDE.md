@@ -15,7 +15,24 @@ After deploy it polls each container's health (`max(5min)` default, see HEALTH_T
 On failure it `git reset --hard`es to the previous HEAD, redeploys the prior version,
 writes the bad SHA to `/var/lib/gitops-deploy/hold_sha` (so the next tick won't redeploy it),
 and alerts the dedicated Discord webhook. Reverting the offending PR advances `origin` past
-the held SHA and the hold clears automatically.
+the held SHA, which stops the `skip_hold` short-circuit — but the marker itself (and the red
+**GitOps Deploy — Status** monitor, which pages on a non-empty `hold_sha`, no origin
+comparison) only clears when a later tick completes a *successful service deploy on this
+host*: `write_hold(None)` sits in the clean-deploy branch, and noop/docs-only ticks return
+before reaching it. If everything after the held SHA maps to no service here, diagnose the
+hold, then delete `/var/lib/gitops-deploy/hold_sha` by hand.
+
+**A service migrated off this host must take its rendered compose with it.** `containers_for()`
+treats a present `containers/<svc>/docker-compose.yml` as proof the service is deployed here,
+and a compose with no `container_name:` falls back to gating a container named `<svc>`. Removing
+a service from this host's `containers_list` deletes neither — so a later template-only commit
+for the now-other-host service deploys as a no-op, then health-gates a phantom container to the
+run budget and false-rollbacks + holds. That is the 2026-08-08 `configarr` hold (`02360cc3`):
+configarr had moved to a k8s CronJob on daniel-box, its daniel-server compose (a one-shot
+`compose run --rm` with no persistent container by design) was left rendered, and the recyclarr
+pin commit made the gate poll a container that could never exist. When migrating a service off a
+host, delete its `containers/<svc>/docker-compose.yml` on that host (config/ and data dirs can
+stay).
 
 ## Safety
 - Read-only against the repo (no push); rollback is local-only + self-guarding.
