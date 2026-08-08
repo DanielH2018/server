@@ -460,16 +460,12 @@ services:
       # credential, which still pages via the working Discord channel. Reuses the acme `email` var.
       - SMTP_USER={{ email }}
       - SMTP_PASSWORD={{ smtp_notify_app_password }}
-      # Janitorr scheduled-cleanup error watchdog: janitorr's healthcheck only proves the JVM is
-      # alive, so an internal cleanup error (failed delete, bad config, a bug) logs ERROR and is
-      # otherwise invisible — and janitorr DELETES REAL MEDIA. Gated on Prometheus container uptime
-      # to skip the documented post-boot FeignException race (an @Scheduled cleanup firing before
-      # jellyfin/sonarr/radarr are ready); counts errors only over the post-startup slice of the
-      # window. Prom-dependent (uptime) AND Loki-dependent (count) — suppressed under either gate.
-      - JANITORR_LOKI_SELECTOR={container="janitorr"}
-      - JANITORR_WINDOW=12h
-      - JANITORR_STARTUP_GRACE_S=600
-      - KUMA_PUSH_JANITORR={{ monitor_bridge_janitorr_push_token }}
+      # janitorr's cleanup-error watchdog moved to a cluster-side cron on daniel-box (slice 4,
+      # B7b) with the workload itself. It read the error count from Loki and the uptime from
+      # container_start_time_seconds — cluster pod logs never reach Loki, and that cAdvisor series
+      # is the Docker container's, so both signals died with the port. The k8s/janitorr role's
+      # health cron pushes the SAME monitor with the same token; the AutoKuma label moved to the
+      # uptime-kuma role alongside the other cluster-side push monitors.
     volumes:
       - ./check.py:/app/check.py:ro
       - ./ha_token:/run/secrets/ha_token:ro
@@ -609,10 +605,6 @@ services:
          a dead/rotated Discord webhook flips THIS monitor down, and it can't self-report via the
          dead webhook, so it also pages by email. The `email` notification is defined on uptime-kuma. -#}
       {{ kuma('monitor-bridge-discord', monitor_type='push', name='Discord Delivery', interval=600, max_retries=0, push_token=monitor_bridge_discord_push_token, extra_notifications=['email']) }}
-      {# Janitorr scheduled-cleanup error watchdog: check_janitorr counts scheduled-task ERROR lines
-         in Loki over the post-startup window (uptime-gated to skip the documented boot race) —
-         catches an internal cleanup error the JVM-only healthcheck stays green through. -#}
-      {{ kuma('monitor-bridge-janitorr', monitor_type='push', name='Janitorr Errors', interval=600, max_retries=0, push_token=monitor_bridge_janitorr_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 

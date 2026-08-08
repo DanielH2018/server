@@ -25,3 +25,47 @@
 
 - name: Verify janitorr
   ansible.builtin.import_tasks: verify.yml
+
+- name: Install the janitorr health reader directory
+  tags: [config]
+  ansible.builtin.file:
+    path: /opt/janitorr-health
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Install the janitorr health reader scripts
+  tags: [config]
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/janitorr-health/{{ item }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  loop:
+    - janitorr_health.py
+    - janitorr_health_logic.py
+  become: true
+
+- name: Deploy the janitorr error heartbeat
+  tags: [cron]
+  ansible.builtin.template:
+    src: janitorr-health.sh.j2
+    dest: /usr/local/bin/janitorr-health.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Schedule the janitorr error heartbeat
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "janitorr error health"
+    minute: "{{ janitorr_k8s_health_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: "/usr/local/bin/janitorr-health.sh"
+    cron_file: janitorr-health
+  become: true

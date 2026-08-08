@@ -32,3 +32,13 @@ janitorr_k8s_cpu_limit: "1"
 janitorr_k8s_mem_limit: 1024Mi
 janitorr_k8s_cpu_request: "100m"
 janitorr_k8s_mem_request: 128Mi
+
+# Cluster-side replacement for monitor-bridge's check_janitorr, which read the error count from
+# Loki and the uptime from a cAdvisor series — neither reaches this workload. Same values it used
+# (JANITORR_WINDOW=12h, JANITORR_STARTUP_GRACE_S=600), so the verdict does not change with the host.
+janitorr_k8s_error_window_hours: 12
+janitorr_k8s_startup_grace_seconds: 600
+
+# */10 like the other three cluster-side health crons, and the Kuma monitor's interval must stay
+# above it so a dead cron trips the push watchdog.
+janitorr_k8s_health_cron_minute: "*/10"

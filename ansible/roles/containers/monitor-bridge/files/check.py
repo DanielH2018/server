@@ -712,24 +712,6 @@ SMTP_USER = _env("SMTP_USER", "")
 SMTP_PASSWORD = _env("SMTP_PASSWORD", "")
 EMAIL_PROBE_INTERVAL_S = float(_env("EMAIL_PROBE_INTERVAL_S", "21600"))  # 6h
 
-# Janitorr scheduled-cleanup error watchdog: janitorr's healthcheck only proves the JVM is alive
-# (`grep java /proc/1/comm`), so a scheduled cleanup that throws — a failed delete, a bad config, an
-# internal bug — logs ERROR and is otherwise invisible, and janitorr DELETES REAL MEDIA. The one
-# benign, recurring ERROR is the documented post-boot race: an @Scheduled cleanup fires before
-# jellyfin/sonarr/radarr finish loading -> FeignException 503, self-heals next cycle (janitorr's
-# CLAUDE.md; a RestartCount ~4 after a reboot is EXPECTED). That ERROR line is generic ("Unexpected
-# error occurred in scheduled task"), identical to a real failure and with the exception type on a
-# separate Loki line, so it can't be filtered by content — we discriminate by TIME via the
-# container's Prometheus uptime: within JANITORR_STARTUP_GRACE_S of startup we don't count, and past
-# it we count only over the post-startup slice (min(window, uptime - grace)) so the boot race can
-# never be in-window. Prom-dependent (uptime) AND Loki-dependent (count) — suppressed under either gate.
-JANITORR_LOKI_SELECTOR = _env("JANITORR_LOKI_SELECTOR", '{container="janitorr"}')
-JANITORR_ERROR_MATCH = _env(
-    "JANITORR_ERROR_MATCH", "Unexpected error occurred in scheduled task"
-)
-JANITORR_WINDOW = _env("JANITORR_WINDOW", "12h")
-JANITORR_STARTUP_GRACE_S = float(_env("JANITORR_STARTUP_GRACE_S", "600"))
-
 
 # --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
 
@@ -3167,50 +3149,6 @@ def check_discord():
     return ok, msg
 
 
-def janitorr_errors_ok(count, uptime_s, window_s, grace_s):
-    """Pure: decide janitorr scheduled-task health from the post-startup error count. (ok, msg).
-
-    See the JANITORR_* config block for why this gates on Prometheus uptime instead of filtering
-    the (generic, un-discriminable) ERROR line by content:
-      - uptime None (metric absent: janitorr stopped/redeployed) -> ok (a stopped janitorr is
-        Container Restarts'/Scrape Targets' concern, not this check's);
-      - within grace_s of startup -> ok (the documented boot-race window);
-      - otherwise `down` on any scheduled-task error in the post-startup window.
-    """
-    if uptime_s is None:
-        return True, "janitorr uptime unknown (metric absent) — error check skipped"
-    if uptime_s <= grace_s:
-        return True, "startup grace — up %.0fs (<= %.0fs)" % (uptime_s, grace_s)
-    n = int(count or 0)
-    if n:
-        return (
-            False,
-            "%d janitorr scheduled-task error(s) in the last %.0fm — see `docker logs janitorr`"
-            % (n, window_s / 60.0),
-        )
-    return True, "no janitorr errors (up %.1fh)" % (uptime_s / 3600.0)
-
-
-def check_janitorr():
-    """Loki+Prometheus janitorr cleanup-error watchdog (see janitorr_errors_ok / the JANITORR_*
-    config block). Prom-dependent (uptime gate) AND Loki-dependent (error count)."""
-    uptime_s = prom_scalar(
-        "time() - max(container_start_time_seconds%s)" % origin_sel('name="janitorr"')
-    )
-    window_s = parse_duration(JANITORR_WINDOW)
-    grace_s = JANITORR_STARTUP_GRACE_S
-    count, eff_window_s = None, window_s
-    if uptime_s is not None and uptime_s > grace_s:
-        # Count only over the post-startup slice, so the documented boot race (all within the
-        # first ~minute) can never be in-window once we're past grace.
-        eff_window_s = min(window_s, uptime_s - grace_s)
-        count = loki_count(
-            "%s |= `%s`" % (JANITORR_LOKI_SELECTOR, JANITORR_ERROR_MATCH),
-            "%ds" % int(eff_window_s),
-        )
-    return janitorr_errors_ok(count, uptime_s, eff_window_s, grace_s)
-
-
 CHECKS = [
     ("backup", _env("KUMA_PUSH_KOPIA", ""), check_backup),
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
@@ -3274,7 +3212,6 @@ CHECKS = [
     ),
     ("remote_write", _env("KUMA_PUSH_REMOTE_WRITE", ""), check_remote_write),
     ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
-    ("janitorr", _env("KUMA_PUSH_JANITORR", ""), check_janitorr),
     ("k8s_workloads", _env("KUMA_PUSH_K8S_WORKLOADS", ""), check_k8s_workloads),
     ("cluster_targets", _env("KUMA_PUSH_CLUSTER_TARGETS", ""), check_cluster_targets),
 ]
@@ -3296,7 +3233,6 @@ PROM_DEPENDENT = frozenset(
         "traefik5xx",
         "b2_trend",
         "ups",  # queries HA's Prometheus-scraped UPS battery sensors
-        "janitorr",  # reads container_start_time_seconds for its startup-race uptime gate
         "promtail_dropped",  # increase(promtail_dropped_entries_total) instant query
         # Reads the SENDER's own remote-write gauges, which live in THIS Prometheus. If it is
         # unreachable the lag gauge is unreadable too, and an unreadable gauge is DOWN by design
@@ -3326,7 +3262,7 @@ EXPORTER_DEPENDENT = {
 # these (pushes `up` with a skip msg so their push heartbeats stay alive) so only Loki Reachable
 # pages. Loki being UP but promtail not shipping is a different signal Loki Log Ingestion still
 # surfaces (it evaluates whenever Loki is reachable). Guarded by a test against CHECKS.
-LOKI_DEPENDENT = frozenset({"loki_ingestion", "janitorr"})
+LOKI_DEPENDENT = frozenset({"loki_ingestion"})
 
 # B2-reachability gate — the third peer of the Prometheus and Loki gates, and the fix for G2/G4 of
 # docs/b2-transaction-cap-monitoring-gaps.md. All five describe the state of the B2-backed backup
