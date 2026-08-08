@@ -326,6 +326,46 @@
     'created' in k3s_longhorn_nobackup_sc_apply.stdout
     or 'configured' in k3s_longhorn_nobackup_sc_apply.stdout
 
+# The StorageClass above only decides a volume's recurring-job group at PROVISION time, and a
+# PVC's storageClassName is immutable — so a volume that must LEAVE the backup set after it is
+# bound cannot be moved by editing either one. Longhorn reads the group off its own Volume CR
+# label, and that label is mutable, so this reconciles it. Declarative rather than a one-off
+# `kubectl label`, because the alternative is a live cluster that silently disagrees with the repo
+# about what is backed up.
+- name: Find backed-up Longhorn volumes that should be excluded
+  tags: [longhorn]
+  # argv, not cmd: the jsonpath contains spaces, and a folded `cmd` scalar collapses the newlines
+  # into them — command's shell-like split then tears `{range .items[*]}` into two arguments.
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - -l
+      - recurring-job-group.longhorn.io/default=enabled
+      - -o
+      - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}'
+  become: true
+  changed_when: false
+  register: k3s_longhorn_backed_up
+
+# Naturally idempotent: a volume that has already moved no longer carries the `default` label, so
+# it does not come back from the query above and this loop has nothing to do on a second run.
+- name: Move excluded volumes into the no-backup recurring-job group
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
+      recurring-job-group.longhorn.io/no-backup=enabled
+      recurring-job-group.longhorn.io/default- --overwrite
+  loop: "{{ k3s_longhorn_backed_up.stdout_lines }}"
+  when: item.split(' ')[1] in k3s_longhorn_nobackup_volumes
+  become: true
+  changed_when: true
+
 - name: Derive the B2 region from the Kopia endpoint
   tags: [longhorn_backup]
   # Longhorn's S3 target is s3://<bucket>@<region>/<prefix>; Kopia stores a hostname.

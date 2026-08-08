@@ -163,12 +163,37 @@ k3s_longhorn_backup_health_cron_minute: "*/10"
 # budget is deliberately well under what Longhorn alone could consume — the headroom left over is
 # for the other two consumers.
 #
-# 18 against today's 15. This is a tripwire on further GROWTH and explicitly NOT a claim that 15
-# is within capacity — 15 is what the account was doing on the day the cap blew, and Longhorn's
-# per-backup transaction cost was never measured, so no threshold here can be derived from first
-# principles. What IS evidenced is the trend (4 -> 7 -> 15 in three days) and that it ended in a
-# 403, so the check watches the next increment rather than pretending to know the ceiling.
+# 10, set against the 7 volumes left in the backup group after the 2026-08-08 cut (the eight
+# slice-4 config volumes moved to the no-backup group). 7 is the level that was working on 08-07,
+# so this leaves room for a couple of additions and fires well before the 15 that ended in a 403.
 #
-# Slice 4 still has janitorr and autofix-bridge to move, so that increment is close. Raise this
-# only together with a decision about the cap itself, never to silence the warning.
-k3s_longhorn_daily_backup_budget: 18
+# A tripwire on GROWTH, not a derived ceiling: Longhorn's per-backup transaction cost was never
+# measured, so no threshold here can come from first principles. What is evidenced is the trend
+# (4 -> 7 -> 15 in three days) and where it ended.
+#
+# Raise it only together with a decision about the cap itself, never to silence the warning.
+k3s_longhorn_daily_backup_budget: 10
+
+# Bound volumes forced OUT of the backup set, as `namespace/pvcName`. Needed as well as the
+# no-backup StorageClass because storageClassName is immutable: these eight were provisioned onto
+# `longhorn` and cannot be reclassified without destroying and re-seeding them, so the recurring-
+# job label is the only lever. Their roles' *_k8s_storage_class defaults were switched too, so a
+# volume rebuilt from scratch lands in the right group without needing this list.
+#
+# THESE VOLUMES ARE NO LONGER BACKED UP ON A SCHEDULE. What they keep is a single frozen restore
+# point: the 2026-08-08 03:30 backup each already had, which survives because retention is
+# enforced by the recurring job and there is no longer a job to enforce it — so it is never pruned
+# and never refreshed. It ages from here.
+#
+# kopia's containers/<svc>/config trees on daniel-server are NOT a fallback: they are frozen at
+# the 2026-08-07 cutover, a day older still. Removing a name from this list is what restores
+# scheduled protection.
+k3s_longhorn_nobackup_volumes:
+  - homelab/sonarr-config
+  - homelab/radarr-config
+  - homelab/prowlarr-config
+  - homelab/bazarr-config
+  - homelab/qbittorrent-config
+  - homelab/jellyfin-config
+  - homelab/tdarr-server
+  - homelab/tdarr-configs

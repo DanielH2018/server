@@ -73,9 +73,15 @@ fi
 #    — its Kopia sentinel still resolved against a frozen directory on the server while the live
 #    PVC had no per-volume assertion at all. This is the Longhorn analogue of monitor-bridge's
 #    BACKUP_SENTINELS guard, and it is DERIVED from the cluster rather than hand-listed: a
-#    service that migrates onto `longhorn` is covered the moment its PVC binds, with no list to
-#    remember to edit. (`longhorn-nobackup` is excluded by the exact-match filter, which is the
-#    whole point of the two classes — see the storageclass in the k3s role.)
+#    service that joins the backup group is covered the moment its volume binds, with no list to
+#    remember to edit.
+#
+#    Selected by the `default` recurring-job-group LABEL, not by storageClassName. Those agreed
+#    until 2026-08-08, when eight slice-4 config volumes were taken out of the backup set to get
+#    under B2's transaction cap — and a PVC's storageClassName is IMMUTABLE, so they still read
+#    `longhorn` while no longer being backed up. Class is a creation-time proxy; the label is what
+#    `daily-backup` actually selects on, so it is the only filter that cannot drift from reality.
+#    Filtering by class here would have paged all eight as uncovered, forever.
 COVERAGE=$($KUBECTL get backups.longhorn.io \
   -o jsonpath='{range .items[*]}{.status.volumeName}{" "}{.status.snapshotCreatedAt}{"\n"}{end}' 2>/dev/null)
 NOW_S=$(date +%s)
@@ -109,8 +115,8 @@ while read -r VOL CREATED CLAIM; do
   elif (( NOW_S - LATEST_S > MAX_AGE_S )); then
     UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} ($(( (NOW_S - LATEST_S) / 3600 ))h)"
   fi
-done < <(k3s kubectl get pvc --all-namespaces \
-  -o jsonpath='{range .items[?(@.spec.storageClassName=="longhorn")]}{.spec.volumeName}{" "}{.metadata.creationTimestamp}{" "}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' 2>/dev/null)
+done < <($KUBECTL get volumes.longhorn.io -l recurring-job-group.longhorn.io/default=enabled \
+  -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.creationTimestamp}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}' 2>/dev/null)
 
 if [[ -n "$UNCOVERED" ]]; then
   add "backed-up volumes stale or missing: ${UNCOVERED}"

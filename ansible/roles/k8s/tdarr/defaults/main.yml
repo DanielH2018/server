@@ -30,7 +30,16 @@ tdarr_k8s_configs_claim: tdarr-configs
 tdarr_k8s_configs_size: 1Gi
 tdarr_k8s_configs_source_path: /home/ubuntu/server/containers/tdarr/configs
 
-tdarr_k8s_storage_class: longhorn
+# longhorn-nobackup since 2026-08-08: B2's TRANSACTION cap fired twice in a week (08-02, 08-08)
+# as slice 4 took Longhorn's daily run from 4 to 15 backups, and incremental backups bound
+# bandwidth, not transactions. Operator's call, taken with the cost stated: this volume keeps only
+# the frozen 08-08 03:30 restore point it already had (never pruned, never refreshed), and kopia's
+# copy under containers/ on daniel-server is older still, frozen at the 08-07 cutover.
+#
+# The live PVC was provisioned on `longhorn` and storageClassName is immutable, so this default
+# only governs a volume rebuilt from scratch; the existing one is held out of the backup set by
+# k3s_longhorn_nobackup_volumes. See docs/b2-transaction-cap-monitoring-gaps.md.
+tdarr_k8s_storage_class: longhorn-nobackup
 
 # ── the media mount ─────────────────────────────────────────────────────────────────────────
 # READ-WRITE, unlike jellyfin's two read-only mounts, and that asymmetry is the point: tdarr

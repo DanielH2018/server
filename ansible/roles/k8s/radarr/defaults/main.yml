@@ -13,7 +13,16 @@ radarr_k8s_image: lscr.io/linuxserver/radarr:6.1.1.10360-ls304
 # 30 M at B4a. longhorn, not longhorn-nobackup: radarr.db holds the library and the absolute
 # root-folder paths this slice is careful about.
 radarr_k8s_claim: radarr-config
-radarr_k8s_storage_class: longhorn
+# longhorn-nobackup since 2026-08-08: B2's TRANSACTION cap fired twice in a week (08-02, 08-08)
+# as slice 4 took Longhorn's daily run from 4 to 15 backups, and incremental backups bound
+# bandwidth, not transactions. Operator's call, taken with the cost stated: this volume keeps only
+# the frozen 08-08 03:30 restore point it already had (never pruned, never refreshed), and kopia's
+# copy under containers/ on daniel-server is older still, frozen at the 08-07 cutover.
+#
+# The live PVC was provisioned on `longhorn` and storageClassName is immutable, so this default
+# only governs a volume rebuilt from scratch; the existing one is held out of the backup set by
+# k3s_longhorn_nobackup_volumes. See docs/b2-transaction-cap-monitoring-gaps.md.
+radarr_k8s_storage_class: longhorn-nobackup
 radarr_k8s_size: 2Gi
 radarr_k8s_source_path: /home/ubuntu/server/containers/radarr/config
 

@@ -166,3 +166,34 @@ while `Backup Freshness` reported `kopia:51515: timed out`.
 **Still not established:** the specific Class B consumer before 08:49. longhorn-manager logs had
 rotated past it, and cluster pod logs do not reach Loki (the `pod` label has 0 values), so the
 window is unrecoverable from this side.
+
+### Remediation taken 2026-08-08: eight slice-4 config volumes left the backup set
+
+Operator's decision, after the second breach, to cut Longhorn's daily run rather than raise the
+cap. `sonarr`, `radarr`, `prowlarr`, `bazarr`, `qbittorrent`, `jellyfin`, `tdarr-server` and
+`tdarr-configs` moved from the `default` recurring-job group to `no-backup`, taking the daily run
+from **15 back to 7** — the level that was working on 08-07.
+
+**It could not be done by changing the StorageClass.** A PVC's `storageClassName` is immutable, and
+these were provisioned on `longhorn`; reclassifying would mean destroying and re-seeding each
+volume. What actually binds a volume to `daily-backup` is the
+`recurring-job-group.longhorn.io/default` **label on the Longhorn Volume CR**, which is mutable —
+so the k3s role gained a reconcile driven by `k3s_longhorn_nobackup_volumes` (naturally idempotent:
+a volume that has moved no longer matches the query that finds candidates). The roles'
+`*_k8s_storage_class` defaults were switched too, so a volume rebuilt from scratch lands in the
+right group without needing the list.
+
+**What the eight still have.** Retention is enforced by the recurring job, and there is no longer a
+job — so each keeps the single 2026-08-08 03:30 backup it already had, unpruned and unrefreshed. A
+frozen restore point that ages from here, not nothing, and not protection. kopia's
+`containers/<svc>/config` trees are a day older still, frozen at the 08-07 cutover.
+
+**The coverage check had to follow the same signal.** Check 4 selected PVCs by
+`storageClassName == "longhorn"`, which until now agreed with the backup set. Because the class is
+immutable it now says `longhorn` for all eight, so class-based filtering would have paged every one
+of them as uncovered, permanently. It selects on the recurring-job label instead — the class is a
+creation-time proxy, the label is what `daily-backup` actually reads. Verified after the move:
+`CHECKED=7`, none of the eight flagged.
+
+`k3s_longhorn_daily_backup_budget` dropped 18 → 10 to match the smaller set. It reads red until the
+08-08 03:30 run rolls out of the 24 h window, which is correct — 15 backups did happen today.
