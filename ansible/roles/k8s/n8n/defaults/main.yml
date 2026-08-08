@@ -8,8 +8,15 @@
 # ImagePullBackOff. Not an include_role here on purpose — a rebuild is minutes of BuildKit work
 # and every redeploy of n8n would pay it.
 #
-# `:latest` is correct rather than lazy: the tag is mutable by design, a rebuild pushes over it,
-# and imagePullPolicy: Always in the manifests is what makes a redeploy pick the new one up.
+# `:latest` is correct rather than lazy: the tag is mutable by design and a rebuild pushes over it.
+#
+# But a rebuild does NOT reach the running pods on its own, and this comment used to claim it did.
+# `imagePullPolicy: Always` is consulted when a pod is CREATED; the manifests role only rolls a
+# Deployment when a manifest or secret template changed, and rebuilding an image under an unchanged
+# tag changes neither. So `--tags n8n-images` then `--tags n8n` both report green while the old
+# pods keep running the old image — which is how the 2026-08-08 `@n8n/di` fix looked deployed and
+# was not. After a rebuild, roll them explicitly:
+#     k3s kubectl -n homelab rollout restart deploy/n8n deploy/n8n-runners
 # Renovate cannot track these (they are not upstream refs) — the FROM lines in the Dockerfiles
 # are what actually moves, and Renovate's built-in dockerfile manager already watches those.
 # test_renovate_managers.py exempts them by name for that reason.
