@@ -661,6 +661,30 @@ as B5, its cache on a regenerable volume.
 
 **Prove it:** one file transcodes to completion on the AMD path and the output plays.
 
+#### Known-red from 2026-08-08 04:45: autofix-bridge's fake-remux crons
+
+`autofix-bridge` still runs on daniel-server and has not been migrated. Two of its crons reach
+into the media stack that is no longer there:
+
+- `fake_remux_scan.py` resolves the **`sonarr` container's IP** for the API, and ffprobes each
+  candidate via **`docker exec jellyfin`**. Both containers are now exited on that host.
+- `fake_remux_replace.py` drives Sonarr the same way.
+
+Its last state file is from **04:45 on 2026-08-07**, before the B4c cutover, so nothing has
+actually run against the new arrangement yet. The next daily tick pages the **Fake Remux Scan**
+monitor — `resolve_ip("sonarr")` against an exited container fails the scan outright, which the
+script deliberately treats as its own failure rather than a clean library.
+
+Worth knowing about the *other* branch, because it is the more dangerous one: if Sonarr were
+reachable but `docker exec jellyfin` were not, every probe would be **skipped**, and skipped
+candidates are never flagged (by design — a probe glitch must not fabricate a fake). The scan
+would then report `ok` with `library clean (N candidate(s) unprobed — jellyfin unavailable?)`.
+Green, with the caveat only in the message text. Don't repoint one half of this without the other.
+
+**This cannot be fixed by changing a hostname.** The scan ffprobes files by path, and the library
+it needs is now on daniel-box while `containers/data/media` on daniel-server is a stale copy. The
+role has to move hosts, which is why this lands in B7 rather than being patched in place.
+
 ### B7 — configarr, janitorr, and retiring the Docker copies
 
 These read the others, so they go last. Then stop the nine Docker services.
