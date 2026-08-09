@@ -1,6 +1,15 @@
 # k3s Slice 5 — Smart Home
 
-**Status:** B1 executed through the client repoints, 2026-08-09 ~01:25 UTC — cluster broker
+**Status:** B2 executed 2026-08-09 ~02:15 UTC — z2m runs in the cluster: PVC seeded from the
+stopped Docker copy (checksum-verified), ember/SLZB reconnected to the same network, all
+devices publishing with their tuned settings intact, FP300 live in HA, zero re-interviews.
+The mesh gap ran ~17 min, not the target 5: the seed's ssh calls plus operator ssh tripped
+daniel-server's 6/30s rate limiter twice (space them next time), and `slzb_ip`/PAN vars had
+to move host_vars → group_vars mid-cutover (z2m renders on daniel-box now). Docker z2m
+container + rendered compose removed; Kopia sentinel + restore-drill rotation dropped z2m
+(guard tests enforced both); Kuma re-plumbed (VIP port probe, z2m -k8s route, SLZB monitor
+moved). Rollback = re-add the daniel-server entry + deploy (data dir still on disk).
+B1 executed through the client repoints, 2026-08-09 ~01:25 UTC — cluster broker
 deployed and gated (VIP round-trip from daniel-server), HA repointed via the reconfigure flow
 (`reconfigure_successful`, connection validated before commit), z2m repointed and reconnected
 (SLZB/ember link up, bridge online). Docker mosquitto still runs, clientless, pending the soak
