@@ -694,3 +694,32 @@
       fi
     create: false
   become: true
+
+- name: Create the systemd-resolved drop-in directory
+  tags: [node-dns]
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Pin the node's DNS to upstream resolvers
+  tags: [node-dns]
+  ansible.builtin.template:
+    src: node-dns.conf.j2
+    dest: /etc/systemd/resolved.conf.d/50-homelab-upstream.conf
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: k3s_node_dns_dropin
+
+- name: Restart systemd-resolved to apply the pinned upstreams # noqa no-handler
+  tags: [node-dns]
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: restarted
+  become: true
+  when: k3s_node_dns_dropin.changed

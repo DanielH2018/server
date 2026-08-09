@@ -214,3 +214,12 @@ k3s_disk_health_cron_minute: "*/10"
 # the 03:30 run is the experiment and **B2 Reachable** is the readout. If the cap fires again, the
 # eight names go back in here and the answer is a staggered weekly group, not a permanent exclusion.
 k3s_longhorn_nobackup_volumes: []
+
+# Slice-6 D8/A1: upstream resolvers the k3s node is pinned to. The node must NEVER resolve
+# through the in-cluster Pi-hole VIP — a cold cluster start needs DNS (image pulls, Longhorn,
+# MetalLB election) before that VIP exists. Before A1 the node happened to use the ISP's
+# DHCP-supplied resolvers, which was cold-boot-safe by accident; the resolved drop-in below
+# makes it configuration a router or lease change cannot quietly undo.
+k3s_node_dns_upstreams:
+  - 1.1.1.1
+  - 1.0.0.1

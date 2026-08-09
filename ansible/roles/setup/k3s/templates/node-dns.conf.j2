@@ -1,0 +1,6 @@
+# Ansible-managed (setup/k3s, slice-6 D8/A1). Pin this node's DNS to upstream resolvers.
+# Domains=~. routes ALL queries here, overriding DHCP-supplied per-link servers, so the
+# node keeps resolving with the cluster (and any in-cluster Pi-hole) fully down.
+[Resolve]
+DNS={{ k3s_node_dns_upstreams | join(' ') }}
+Domains=~.

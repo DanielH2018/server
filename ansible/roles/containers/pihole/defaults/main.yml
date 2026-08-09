@@ -1,0 +1,6 @@
+---
+# Which resolver daniel-server's /etc/resolv.conf leads with (1.1.1.1 stays as fallback in
+# the template). Defaults to this host's own Docker Pi-hole. Slice-6 B3 flips it to the
+# in-cluster DNS VIP once the k8s Pi-hole answers there — see
+# docs/k3s-migration/slice-6-edge-cutover.md (D8/B3).
+pihole_host_dns_primary: "{{ server_ip }}"
