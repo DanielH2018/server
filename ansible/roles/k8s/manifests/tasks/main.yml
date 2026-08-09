@@ -93,7 +93,8 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} rollout status
-      deploy/{{ manifests_rollout | default(manifests_service) }} --timeout=300s
+      deploy/{{ manifests_rollout | default(manifests_service) }}
+      --timeout={{ manifests_rollout_timeout | default('300s') }}
   become: true
   changed_when: false
   when: manifests_rollout | default(manifests_service) | length > 0

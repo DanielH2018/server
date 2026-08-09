@@ -57,6 +57,10 @@
     name: k8s/manifests
   vars:
     manifests_service: sonarr
+    # The startupProbe allows up to 10 min of first-boot DOCKER_MODS install
+    # (2026-08-09); the default 300s rollout wait times out against it and aborts
+    # the whole deploy while the pod is still coming up healthy.
+    manifests_rollout_timeout: 660s
     manifests_files:
       - deployment.yaml
       - service.yaml
