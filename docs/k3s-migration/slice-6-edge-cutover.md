@@ -18,8 +18,28 @@ inotify-instances-per-uid budget is shared by every root process on the node —
 was the straw (now 1024 via the k3s role). Bonus fix: the http→https redirect had been
 emitting the container-side :8443 into Location since slice 1; now pinned to :443.
 
-Next: B2 (one LAPI — daniel-server demotes to agent, dashboard moves) any time; B3 waits on
-the A1 cold-boot gate.
+**Status — 2026-08-09 (late afternoon). B2 EXECUTED except the dashboard.** One LAPI:
+daniel-server's engine is demoted to agent-only (`78fccfd2` + fixes), its traefik bouncer
+polls the cluster LAPI over TLS via `crowdsec-lapi-k8s.local.<domain>` (D3 IngressRoute,
+`5cf7d626`), and the two-edge gate PASSED — one `cscli decisions add` 403s at the k8s VIP
+*and* the Docker edge, then lifts (`0f3f6433`). The home-allowlist updater followed the LAPI
+to daniel-box (`075d24d5` — `cscli allowlists` is LAPI-machine-only, proven by the deploy
+failure), pushing its Kuma monitor directly; verified live (state files written after a
+successful sync). Cluster Prometheus scrapes the engine's :6060.
+
+Three plugin traps found live, each encoded where it bit: with `crowdsecLapiScheme: https`
+the plugin requires an explicit CA (it ignores system CAs) or the middleware fails and every
+router 404s — the PUBLIC edge went dark for ~10 min; `CrowdsecAppsecScheme` silently
+inherits the LAPI scheme, breaking the plaintext local AppSec listener (fail-open, so the
+only symptom is a log line); and plugin middleware config does NOT reliably hot-reload
+through the directory-mounted dynamic config — a traefik restart is part of any bouncer
+config change. Also of note: the old `crowdsec_bouncer_api_key` and the Docker LAPI's DB
+(crowdsec-db volume) are retained for rollback until the slice closes.
+
+**Still open in B2:** the Metabase dashboard move (Docker `roles/containers/crowdsec` still
+serves the now-frozen old DB; port = stock metabase/metabase + seed-zip initContainer +
+crowdsec-db PVC mount in the engine pod, then archive the Docker role). B3 waits on the A1
+cold-boot gate.
 
 > design.md row: *"Edge cutover: CrowdSec LAPI, Pi-hole, router forward → VIP, flip the four
 > `*_host` flags — exit: external access and LAN DNS on the new path."*

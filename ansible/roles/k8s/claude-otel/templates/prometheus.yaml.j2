@@ -35,6 +35,12 @@ data:
       - job_name: kube-state-metrics
         static_configs:
           - targets: ['kube-state-metrics:8080']
+      # Slice-6 B2: the CrowdSec engine (LAPI+AppSec) moved in-cluster; its :6060 carries the
+      # LAPI/decision metrics the Grafana CrowdSec boards read. The Docker-side scrape that
+      # used to cover this now sees only that host's demoted agent.
+      - job_name: crowdsec
+        static_configs:
+          - targets: ['crowdsec.{{ k8s_namespace }}.svc:6060']
       # Per-pod CPU/memory from each kubelet's cAdvisor, reached through the API server proxy
       # rather than the kubelet's own :10250. The proxy path needs only nodes/proxy RBAC and no
       # kubelet client certificate, which is why it is the usual choice for a single-node k3s.
