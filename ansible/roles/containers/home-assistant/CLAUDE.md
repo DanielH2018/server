@@ -560,15 +560,17 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   class → nightly B2 backup; Kopia stopped covering this at the cutover): the SQLite
   recorder DB, `.storage/`, secrets, automations, and the templated `configuration.yaml`.
   **The "could not validate that the sqlite3 database was shutdown cleanly" warning on every boot is
-  benign and NOT fixable via `stop_grace_period`** — a timed `docker stop` hit the full grace and
-  exited 137 (SIGKILL) at both 30s and 90s, so HA under the LSIO/s6 image is effectively hung on
-  shutdown (HA core / the dreo cloud_push integration never finishes stopping). SQLite WAL auto-
-  recovers, so don't chase it with a longer grace (it only slows deploys). Tested + reverted 2026-06-18.
-- **Bridge networking, not host.** Cloud/API-based integrations work fine. **Local
-  device discovery** (mDNS/SSDP, Bluetooth, Zigbee/Z-Wave USB dongles) generally needs
-  `network_mode: host` and/or `devices:` passthrough — which is incompatible with the
-  Traefik-label + bridge-network setup here. Switching to host mode is a separate,
-  larger change; revisit only if you add local hardware.
+  benign and not worth chasing with a longer shutdown grace** — a timed `docker stop` hit the full
+  grace and exited 137 (SIGKILL) at both 30s and 90s, so HA under the LSIO/s6 image is effectively
+  hung on shutdown (HA core / the dreo cloud_push integration never finishes stopping). SQLite WAL
+  auto-recovers. Tested + reverted 2026-06-18 under Docker; the same holds in k8s, where the knob
+  is `terminationGracePeriodSeconds` and raising it only slows every rollout.
+- **Pod networking, not host** (was bridge networking under Docker — same consequence). Cloud/
+  API-based integrations work fine. **Local device discovery** (mDNS/SSDP, Bluetooth, Zigbee/Z-Wave
+  USB dongles) generally needs host networking and/or device passthrough — which is incompatible
+  with the ingress-routed setup here. It has never been needed: the Zigbee coordinator is
+  network-attached (SLZB-06M over TCP), which is also what let the whole smart-home stack move
+  hosts at slice 5. Revisit only if you add local hardware.
 
 ## Testing
 - **Bedroom Jinja math is unit-tested** (`tests/`, run via `uv run pytest` / the prek `pytest`
