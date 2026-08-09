@@ -1,6 +1,14 @@
 # k3s Slice 5 — Smart Home
 
-**Status:** B2 executed 2026-08-09 ~02:15 UTC — z2m runs in the cluster: PVC seeded from the
+**Status:** B3 prereqs done + role built-and-held, 2026-08-09 ~02:55 UTC — upsd published on
+daniel-server's LAN IP behind a DOCKER-USER lock (daniel-box + local bridges only; a bare
+dport DROP would have severed HA's current container-to-container path), HA's NUT integration
+repointed via reconfigure flow and reading OL on the new path, `trusted_proxies` carries the
+cluster chain, AirGradient entry is `source: user` (manual host — final check at cutover).
+`roles/k8s/home-assistant` is committed but held by `home_assistant_k8s_enabled: false` (the
+B4a pattern). The cutover itself (flip the flag + bridge_hostname + daniel-server entry
+removal + stop/seed/start + the re-plumb inventory) waits for a daytime window.
+B2 executed 2026-08-09 ~02:15 UTC — z2m runs in the cluster: PVC seeded from the
 stopped Docker copy (checksum-verified), ember/SLZB reconnected to the same network, all
 devices publishing with their tuned settings intact, FP300 live in HA, zero re-interviews.
 The mesh gap ran ~17 min, not the target 5: the seed's ssh calls plus operator ssh tripped
