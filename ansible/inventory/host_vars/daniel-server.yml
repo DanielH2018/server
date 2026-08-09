@@ -10,13 +10,9 @@ scrutiny_nvme_device: /dev/nvme0
 # Physical location, feeds the homepage weather widget. Only this host runs homepage.
 lat: 38.89
 long: -77.08
-# SLZB-06M Zigbee coordinator (network-attached) + pinned Zigbee PAN identity. The
-# coordinator is reached over serial-over-TCP; pan_id/ext_pan_id are network identifiers
-# (not secrets) fixed so a templated-config redeploy never regenerates the mesh. The
-# matching network_key IS sensitive and lives in SOPS as zigbee_network_key.
-slzb_ip: 10.0.0.127
-zigbee_pan_id: 6754
-zigbee_ext_pan_id: [221, 187, 17, 34, 51, 68, 85, 102]
+# The SLZB coordinator + PAN identity vars moved to group_vars/all.yml on 2026-08-09
+# (slice 5, B2): z2m's config now renders on daniel-box, and the values were never
+# host-specific — the coordinator is a network device.
 # Self-hosted happy (slopus/happy, standalone shape) — pinned upstream commit for the
 # ansible.builtin.git checkout that becomes the Docker build context (see
 # roles/containers/happy). No usable release tag exists yet: the newest tag (v3) predates
