@@ -38,7 +38,11 @@ data:
         http:
           redirections:
             entryPoint:
-              to: https
+              # NOT `to: https` (the entrypoint name): that emits the entrypoint's LISTEN
+              # port — the container-side 8443 — into the Location header, which the
+              # Service never exposes, so every http→https redirect died on arrival.
+              # ":443" pins the redirect to the port clients actually reach.
+              to: ":443"
               scheme: https
           middlewares:
             # Entrypoint-wide, matching the Docker edge (slice-6 B1). Everything entering

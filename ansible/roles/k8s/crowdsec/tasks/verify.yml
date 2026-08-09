@@ -1,0 +1,58 @@
+---
+# Live enforcement gate (slice-6 B1, reusable at B2/B5): ban a real LAN host, prove the
+# bouncer rejects it at the VIP, lift the ban, prove service resumes. Runs only when asked:
+#   uv run ansible-playbook ansible/deploy.yml --tags b1-gate
+# The probe runs FROM daniel-pi because a ban is enforced against the connecting IP — no
+# way to prove enforcement from an unbanned host. The probe MUST name a Host that matches
+# a real router: "entrypoint-wide" middlewares attach to each router's chain, so a request
+# matching no router 404s without ever consulting the bouncer (learned the hard way — the
+# first version probed the bare VIP and the ban never "enforced"; the second sent a bare
+# Host header, which 421s on the SNI mismatch before routing — hence --resolve). jellyfin's
+# hostname matches from any client IP, unlike unsuffixed names (bridge-ClientIP-gated
+# until k8s_public_route flips).
+
+- name: Ban daniel-pi at the cluster LAPI for the gate window
+  tags: [never, b1-gate]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
+      cscli decisions add --ip {{ hostvars['daniel-pi'].server_ip }} --duration 3m
+      --reason slice6-gate
+  become: true
+  changed_when: true
+
+- name: Probe the VIP from the banned Pi — expect 403
+  tags: [never, b1-gate]
+  # The plugin polls LAPI in stream mode every 60s; retry across one full interval.
+  ansible.builtin.command:
+    cmd: >-
+      ssh daniel-pi curl -sk -o /dev/null -w '%{http_code}'
+      --resolve jellyfin-k8s.local.{{ domain }}:443:{{ k3s_metallb_ingress_vip }}
+      https://jellyfin-k8s.local.{{ domain }}/
+  register: crowdsec_k8s_gate_banned
+  changed_when: false
+  retries: 8
+  delay: 10
+  until: crowdsec_k8s_gate_banned.stdout == "403"
+
+- name: Lift the test ban
+  tags: [never, b1-gate]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
+      cscli decisions delete --ip {{ hostvars['daniel-pi'].server_ip }}
+  become: true
+  changed_when: true
+
+- name: Probe the VIP from the unbanned Pi — expect service to resume
+  tags: [never, b1-gate]
+  ansible.builtin.command:
+    cmd: >-
+      ssh daniel-pi curl -sk -o /dev/null -w '%{http_code}'
+      --resolve jellyfin-k8s.local.{{ domain }}:443:{{ k3s_metallb_ingress_vip }}
+      https://jellyfin-k8s.local.{{ domain }}/
+  register: crowdsec_k8s_gate_unbanned
+  changed_when: false
+  retries: 8
+  delay: 10
+  until: crowdsec_k8s_gate_unbanned.stdout != "403"

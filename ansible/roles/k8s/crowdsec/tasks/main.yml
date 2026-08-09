@@ -28,3 +28,6 @@
   become: true
   no_log: true
   changed_when: "'ADDED' in crowdsec_k8s_machine_add.stdout"
+
+- name: Enforcement gate (opt-in via --tags b1-gate)
+  ansible.builtin.import_tasks: verify.yml
