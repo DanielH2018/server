@@ -135,17 +135,19 @@
   become: true
   changed_when: false
 
-- name: Fail if the bundled Traefik or servicelb is running
+- name: Fail if the bundled Traefik, servicelb or local-path provisioner is running
   tags: [k3s_server]
-  # Both disables are load-bearing: a bundled Traefik would fight the real ingress in
-  # slice 1, and klipper-lb would race MetalLB for LoadBalancer Services.
+  # All three disables are load-bearing: a bundled Traefik would fight the real ingress in
+  # slice 1, klipper-lb would race MetalLB for LoadBalancer Services, and local-path ships
+  # a second default StorageClass next to longhorn (see defaults/main.yml).
   ansible.builtin.assert:
     that:
       - "'traefik' not in k3s_kube_system_pods.stdout"
       - "'svclb' not in k3s_kube_system_pods.stdout"
+      - "'local-path-provisioner' not in k3s_kube_system_pods.stdout"
     fail_msg: >-
-      k3s started with its bundled Traefik and/or servicelb. The --disable flags in
-      k3s_server_args were not applied — check /etc/systemd/system/k3s.service.
+      k3s started with a bundled component the --disable flags in k3s_server_args should
+      have kept off — check /etc/systemd/system/k3s.service.
 
 - name: Install MetalLB
   tags: [metallb]
