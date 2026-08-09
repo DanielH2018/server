@@ -26,6 +26,9 @@ def stub_host(monkeypatch):
     """Every container resolves, and every secret decrypts to a placeholder."""
     monkeypatch.setattr(postflight, "container_ip", lambda name: "10.0.0.1")
     monkeypatch.setattr(postflight, "secret", lambda name: (f"<{name}>", ""))
+    # check_ha_token reaches HA via probe.ha_base(), which decrypts the domain from
+    # SOPS — stub it so no test needs the age key (CI has none).
+    monkeypatch.setattr(postflight.probe, "ha_base", lambda: "https://ha.test")
 
 
 def respond(monkeypatch, status, body=""):

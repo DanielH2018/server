@@ -61,8 +61,20 @@ from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 DEFAULT_TIMEOUT = 10
-HA_PORT = 8123
-HA_CONTAINER = "home-assistant"
+
+
+def ha_host():
+    """HA's bridge hostname. Since slice-5 B3 HA runs in the cluster, so there is no local
+    container to `docker inspect` — the unsuffixed .local name is the endpoint: it resolves
+    from this host's shell (the -k8s names don't — split-horizon DNS), carries no Authelia,
+    and pointed at the same HA before AND after the cutover, so this path never breaks."""
+    return f"home-assistant.local.{sops_extract('domain')}"
+
+
+def ha_base():
+    return f"https://{ha_host()}"
+
+
 # claude_ha_token lives in the SOPS-encrypted secrets file (repo-root relative).
 SECRETS_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -124,17 +136,18 @@ def pi_url(subpath):
 # --- Home Assistant (pure) --------------------------------------------------
 
 
-def ha_state_url(ip, entity_id):
-    return f"http://{ip}:{HA_PORT}/api/states/{entity_id}"
+def ha_state_url(base, entity_id):
+    return f"{base}/api/states/{entity_id}"
 
 
-def ha_get_url(ip, path):
-    """URL for an arbitrary HA REST path. Normalizes a leading `/` and an
-    `api/` prefix so `error_log`, `/error_log`, and `/api/error_log` all work."""
+def ha_get_url(base, path):
+    """URL for an arbitrary HA REST path under `base` (scheme://host, no trailing slash).
+    Normalizes a leading `/` and an `api/` prefix so `error_log`, `/error_log`, and
+    `/api/error_log` all work."""
     path = path.lstrip("/")
     if path.startswith("api/"):
         path = path[len("api/") :]
-    return f"http://{ip}:{HA_PORT}/api/{path}"
+    return f"{base}/api/{path}"
 
 
 def ha_curl_argv(url, timeout=DEFAULT_TIMEOUT):
@@ -305,19 +318,25 @@ def _ws_recv_json(recv_exact):
     return json.loads(_ws_read_frame(recv_exact))
 
 
-def ha_trace(ip, token, automation_id, timeout=DEFAULT_TIMEOUT):
+def ha_trace(host, token, automation_id, timeout=DEFAULT_TIMEOUT):
     """Fetch the latest execution trace for an automation via the HA WebSocket API. Read-only:
-    sends ONLY auth + trace/list + trace/get. Returns the trace dict, or None if no stored trace."""
+    sends ONLY auth + trace/list + trace/get. Returns the trace dict, or None if no stored trace.
+
+    `host` is the bridge hostname (TLS on 443) — since slice-5 B3 HA runs in the cluster, and
+    the unsuffixed .local name via daniel-server's Traefik is the one path that both resolves
+    from this host's shell (the -k8s names don't — split-horizon) and survives cutovers."""
     import base64
     import os
     import socket
+    import ssl
 
-    sock = socket.create_connection((ip, HA_PORT), timeout=timeout)
+    raw = socket.create_connection((host, 443), timeout=timeout)
+    sock = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
     try:
         key = base64.b64encode(os.urandom(16)).decode()
         sock.sendall(
             (
-                f"GET /api/websocket HTTP/1.1\r\nHost: {ip}:{HA_PORT}\r\n"
+                f"GET /api/websocket HTTP/1.1\r\nHost: {host}\r\n"
                 f"Upgrade: websocket\r\nConnection: Upgrade\r\n"
                 f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
             ).encode()
@@ -997,13 +1016,12 @@ def run_ha(ns):
     if ns.ha_cmd in ("trace", "why"):
         if ns.dry_run:
             print(
-                f"ws://<ha-ip>:{HA_PORT}/api/websocket  trace/list+trace/get for {ns.query!r} "
+                f"wss://<ha-bridge-host>/api/websocket  trace/list+trace/get for {ns.query!r} "
                 f"# + auth Bearer <redacted>"
             )
             return 0
-        ip = resolve_ip(HA_CONTAINER)
         token = ha_token()
-        states = json.loads(ha_get(ha_get_url(ip, "states"), token))
+        states = json.loads(ha_get(ha_get_url(ha_base(), "states"), token))
         m = match_automation(states, ns.query)
         if m is None:
             print(
@@ -1014,7 +1032,7 @@ def run_ha(ns):
         if not automation_id:
             print(f"{m['entity_id']}: no config id (cannot fetch trace)")
             return 1
-        print(format_trace(ha_trace(ip, token, automation_id)))
+        print(format_trace(ha_trace(ha_host(), token, automation_id)))
         return 0
     if ns.ha_cmd == "verify-automations":
         if ns.dry_run:
@@ -1023,8 +1041,7 @@ def run_ha(ns):
                 + f"   # + Bearer; compare attributes.id against ids in {AUTOMATIONS_YAML}"
             )
             return 0
-        ip = resolve_ip(HA_CONTAINER)
-        states = json.loads(ha_get(ha_get_url(ip, "states"), ha_token()))
+        states = json.loads(ha_get(ha_get_url(ha_base(), "states"), ha_token()))
         live = [s for s in states if s.get("entity_id", "").startswith("automation.")]
         with open(AUTOMATIONS_YAML, encoding="utf-8") as f:
             expected = expected_automation_ids(f.read())
@@ -1042,7 +1059,7 @@ def run_ha(ns):
             + "   # + Authorization: Bearer <redacted> (via --config stdin)"
         )
         return 0
-    body = ha_get(_ha_url(resolve_ip(HA_CONTAINER), ns), ha_token())
+    body = ha_get(_ha_url(ha_base(), ns), ha_token())
     if ns.ha_cmd == "get":
         print(body, end="")
         return 0
@@ -1081,7 +1098,7 @@ def run_ha_state(ns):
             + "   # + Bearer (stdin)"
         )
         return 0
-    body = ha_get(ha_get_url(resolve_ip(HA_CONTAINER), "states"), ha_token())
+    body = ha_get(ha_get_url(ha_base(), "states"), ha_token())
     states = json.loads(body)
     model = ha_state_model.build_model(ha_state_model.load_role())
     print(ha_state_rows(states, model))

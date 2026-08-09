@@ -146,11 +146,12 @@ HA_TOKENS = [
 
 
 def check_ha_token(name):
-    ip = container_ip(probe.HA_CONTAINER)
+    # Since slice-5 B3 HA runs in the cluster — probe.ha_base() is the bridge URL, the same
+    # endpoint before and after the cutover (no container to inspect).
     token, err = secret(name)
     if not token:
         return FAIL, err
-    status, _ = get(probe.ha_get_url(ip, ""), probe.ha_curl_config(token))
+    status, _ = get(probe.ha_get_url(probe.ha_base(), ""), probe.ha_curl_config(token))
     if status == 200:
         return OK, "token accepted"
     return FAIL, f"HTTP {status} — re-mint under Profile → Security"

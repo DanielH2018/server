@@ -213,24 +213,32 @@ def test_health_not_found_exits_one():
 # --- ha subcommand: URL builders --------------------------------------------
 
 
+def test_ha_base_builds_on_ha_host(monkeypatch):
+    # ha_host() decrypts the domain from SOPS; stub it — CI has no age key.
+    monkeypatch.setattr(probe, "sops_extract", lambda key: "example.test")
+    assert probe.ha_host() == "home-assistant.local.example.test"
+    assert probe.ha_base() == "https://home-assistant.local.example.test"
+
+
 def test_ha_state_url():
+    # The base is the bridge URL since slice-5 B3 (HA in the cluster — no container to inspect).
     assert (
-        probe.ha_state_url("10.1.2.3", "fan.tower_fan")
-        == "http://10.1.2.3:8123/api/states/fan.tower_fan"
+        probe.ha_state_url("https://ha.example", "fan.tower_fan")
+        == "https://ha.example/api/states/fan.tower_fan"
     )
 
 
 def test_ha_get_url_bare_path():
     assert (
-        probe.ha_get_url("10.1.2.3", "error_log")
-        == "http://10.1.2.3:8123/api/error_log"
+        probe.ha_get_url("https://ha.example", "error_log")
+        == "https://ha.example/api/error_log"
     )
 
 
 def test_ha_get_url_normalizes_leading_slash_and_api_prefix():
     # A user may type any of these; all mean the same endpoint.
     for path in ("error_log", "/error_log", "api/error_log", "/api/error_log"):
-        assert probe.ha_get_url("h", path) == "http://h:8123/api/error_log"
+        assert probe.ha_get_url("https://h", path) == "https://h/api/error_log"
 
 
 # --- ha subcommand: match_automation (the alias-slug-vs-id trap) -------------
