@@ -413,6 +413,12 @@ http:
           # secure default (a rule-eval error on a request blocks that one request).
           crowdsecAppsecEnabled: true
           crowdsecAppsecHost: "crowdsec:7422"
+          # Explicit: CrowdsecAppsecScheme DEFAULTS TO THE LAPI SCHEME (plugin bouncer.go
+          # config init), so B2b's https LAPI silently turned this into https://crowdsec:7422
+          # against the plaintext local listener — appsec went unreachable (fail-open, so the
+          # only symptom was the log line and a dead inline WAF). The listener is local to
+          # this host's Docker network; http is correct for it.
+          crowdsecAppsecScheme: http
           crowdsecAppsecUnreachableBlock: false
 
     rate-limit:
