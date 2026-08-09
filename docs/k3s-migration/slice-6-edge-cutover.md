@@ -65,11 +65,12 @@ dropped has no DAC_OVERRIDE, so it cannot write the init container's `/etc/crowd
 `cscli parsers install` dies on mkdir — as the pod's own uid each agent owns its config and log
 outright, and needs no privilege to read a file and post to the LAPI).
 
-**Next:** A1 is COMPLETE (cold-boot gate passed both hosts 2026-08-09; forward table
-confirmed). B3's cutover is done — wg-easy, daniel-server resolv.conf, and the operator's
-per-device repoints all target .243 — and the drain is being observed via the Docker copy's
-query log (the tail is Docker's own containers, whose embedded DNS re-reads resolv.conf at
-recreate). B4 (reverse bridge + public Host rules) is unblocked and next.
+**Next:** A1, B3 (drain observing), and B4 are COMPLETE as of 2026-08-09. Only B5 remains:
+BEFORE the router flip, the unsuffixed public names of k8s services (today answered by the
+ClientIP-guarded bridge routes, auth'd at the Docker edge) must be served natively at the
+cluster with Authelia — external traffic arriving directly at the VIP matches no
+ClientIP-guarded route and would 404. Then the router 80/443 forward moves to 10.0.0.240
+(operator, verify from LTE), a soak, and the bridge teardown lands last.
 
 > design.md row: *"Edge cutover: CrowdSec LAPI, Pi-hole, router forward → VIP, flip the four
 > `*_host` flags — exit: external access and LAN DNS on the new path."*
@@ -255,18 +256,28 @@ itself); `probe.py pi` paths if any assume the Docker container.
 **Rollback:** repoint devices back to 10.0.0.161, resolv.conf revert,
 Docker copy is still running — nothing was destroyed until the drain-and-retire step.
 
-### B4 — Reverse bridge + public Host rules on the cluster edge
+### B4 — Reverse bridge + public Host rules on the cluster edge — DONE 2026-08-09
 
-Mirror of the existing strangler bridge, opposite direction: the k8s Traefik gains generated
-routers for every `platform: docker` service on daniel-server (from hostvars, same idiom as
-`config.yml.j2`'s bridge block), forwarding to https://10.0.0.161 with SNI/Host preserved so
-the wildcard cert verifies; Authelia for those services keeps being applied where it lives
-today (the daniel-server edge — second hop). Flip `k8s_public_route: true` so public Host
-rules exist. Nothing external reaches it yet — the router still forwards to .161 — so this is
-fully testable from the LAN against the VIP.
+Executed as planned (`1960e928`): `roles/k8s/traefik/templates/reverse-bridge.yaml.j2`
+renders one ServersTransport + route per Docker-hosted public hostname (derived from
+daniel-server's inventory: every docker entry with a port, minus `public_route: false`
+opt-outs, plus the Authelia portal whose entry has no port), all forwarding to a
+selector-less `docker-edge` Service whose EndpointSlice is 10.0.0.161:443. SNI = Host per
+transport (the forward bridge's 421 lesson). Authelia stays at the daniel-server edge;
+CrowdSec + AppSec apply here entrypoint-wide. `k8s_public_route: true` flipped with it.
 
-**Gates:** curl against 10.0.0.240 with a Docker service's public Host resolves, redirects to
-SSO, and serves after auth; same for a k8s service; CrowdSec test ban blocks both paths.
+Two exposures caught pre-flip: homelab-mcp (LAN-only by design → the `public_route: false`
+opt-out) and the CrowdSec LAPI, whose macro route would have gained a public Host rule for a
+machine-key-only ban-management API — the ingressroute() macro grew `public=false`, the LAPI
+passes it, and `test_the_lapi_route_never_gains_a_public_host_rule` pins the render. The
+stale bouncer detection in `test_routes_stay_lan_only_*` (grepping the static config for a
+key B1 moved into dynamic.yaml.j2) now requires the Middleware AND its entrypoint attachment.
+
+**Gates passed at the VIP:** homepage (Docker) 302s to the Docker portal through the bridge;
+the portal itself 200s; sonarr-k8s 302s to the k8s public portal; jellyfin-k8s serves;
+www-k8s 200s (bare `www` correctly still travels the forward bridge until B5); the LAPI's
+public name 404s. CrowdSec coverage is inherited: the bouncer is entrypoint-wide on this
+edge and was proven with a live ban at B1 — the bridge adds routes, not entrypoints.
 **Rollback:** unflip `k8s_public_route`, drop the reverse-bridge template — additive change,
 no consumer yet.
 
@@ -308,9 +319,9 @@ the soak.
 - **Router DHCP DNS option value** — RESOLVED 2026-08-09, assumption WRONG: there is no
   DHCP DNS option in play; the operator sets DNS per device. (The forward table IS exactly
   80/443 + 51820/udp → .161 as assumed.)
-- **Cloudflare records per public name** — the k8s ddns manages apex+terraria only; confirm
-  the wildcard/CNAME situation covers every `use_authelia` public hostname before B4's
-  `k8s_public_route` flip makes them answerable.
+- **Cloudflare records per public name** — RESOLVED 2026-08-09: a proxied wildcard exists
+  (an arbitrary made-up name resolves to Cloudflare edge IPs from 1.1.1.1), so every public
+  hostname — including the `-k8s` ones — is covered without per-name records.
 - **Bouncer plugin behaviour against a remote LAPI over TLS** — the plugin config grows
   `crowdsecLapiScheme: https`; verify stream mode + AppSec URL both accept the ingress
   hostname before B2 commits daniel-server to it.
