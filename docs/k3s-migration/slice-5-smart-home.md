@@ -1,6 +1,19 @@
 # k3s Slice 5 — Smart Home
 
-**Status:** B3 prereqs done + role built-and-held, 2026-08-09 ~02:55 UTC — upsd published on
+**Status: B3 executed — HA runs in the cluster, 2026-08-09 03:32 UTC.** Two-act cutover: the
+first window (02:59) seeded and fixed the init-container ownership trap (root-with-no-caps
+can't overwrite the seeded uid-1000 files; runs as PUID now) but stalled on the LSIO image
+pull — 671 MB at 863 KiB/s, the link saturated by the B2 backup uploads re-enabled at 00:00 —
+so it was rolled back to Docker HA after 20 min rather than gambling on bedtime. The re-cut
+once the image was local took **~80 s stop-to-Ready** (forced re-seed included, the recorder
+having diverged during the rollback). Gates: 33/33 automations loaded, a live trace fired and
+evaluated, MQTT/NUT/AirGradient/dreo all live (AirGradient's manual-IP question resolved —
+works from the pod), overrides restored sanely. Also fixed en route: daniel-server's Traefik
+renders bridge routers from daniel-box's containers_list, so bridge additions need a traefik
+redeploy — z2m's unsuffixed route had been silently missing since B2 until that pass.
+Remaining slice work: Docker mosquitto retirement (+ `mqtt`/`ups` net removal) after the soak,
+and the D6 storage-class verdict.
+B3 prereqs done + role built-and-held, 2026-08-09 ~02:55 UTC — upsd published on
 daniel-server's LAN IP behind a DOCKER-USER lock (daniel-box + local bridges only; a bare
 dport DROP would have severed HA's current container-to-container path), HA's NUT integration
 repointed via reconfigure flow and reading OL on the new path, `trusted_proxies` carries the
