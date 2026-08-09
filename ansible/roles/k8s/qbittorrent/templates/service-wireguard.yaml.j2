@@ -1,0 +1,28 @@
+---
+# Compat alias for the Docker-era hostname. NOT a second workload — same selector, same pod as
+# service.yaml; only the name differs.
+#
+# Under Compose, qbittorrent ran with `network_mode: service:wireguard`, so it had no name of its
+# own on the Docker network: everything reached its WebUI as `wireguard:8080`. That string is
+# stored in radarr's and sonarr's SQLite databases as the download client's host, and neither the
+# repo nor configarr templates it — it only exists on their PVCs. slice-4-media-cluster.md:542
+# ("B4-B7 bring prowlarr and qbittorrent into this cluster under exactly those Service names")
+# is the contract; the cutover shipped the Service as `qbittorrent` and left this half undone, so
+# both *arr instances logged `Name does not resolve (wireguard:8080)` from B4c until 2026-08-09
+# and never saw the queue.
+#
+# Kept as an alias rather than repointing the *arr config, because that config is live PVC state:
+# restoring either database from a Docker-era backup would silently reintroduce `wireguard:8080`.
+# A Service costs nothing and makes the name true again.
+apiVersion: v1
+kind: Service
+metadata:
+  name: wireguard
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: qbittorrent
+  ports:
+    - name: webui
+      port: {{ qbittorrent_k8s_webui_port }}
+      targetPort: {{ qbittorrent_k8s_webui_port }}

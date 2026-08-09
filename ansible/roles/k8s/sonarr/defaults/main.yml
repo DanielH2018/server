@@ -41,6 +41,11 @@ sonarr_k8s_rehearsal: false  # flipped 2026-08-07 by B4c — the Docker copy is 
 # database's download-client and indexer configuration. B4-B7 bring both into the cluster under
 # these exact Service names, at which point this list is what fails the deploy instead of letting
 # a rehearsing sonarr quietly find them.
+# BOTH OF THESE NOW RESOLVE — `prowlarr` since B5, `wireguard` since 2026-08-09, when it was
+# added as an alias Service for qbittorrent (the *arr databases address the download client by
+# its Compose name; see qbittorrent/templates/service-wireguard.yaml.j2). The probe is gated on
+# `sonarr_k8s_rehearsal`, which is false, so this list is inert — but it is no longer a boundary
+# that exists. Re-running a rehearsal needs a different isolation mechanism, not this list.
 sonarr_k8s_isolation_hosts:
   - prowlarr
   - wireguard
