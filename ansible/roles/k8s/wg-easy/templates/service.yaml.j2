@@ -1,0 +1,40 @@
+---
+# Admin UI, reached only through the Authelia-gated IngressRoute — the macro targets a
+# Service named after the containers_list entry.
+apiVersion: v1
+kind: Service
+metadata:
+  name: wg-easy
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: wg-easy
+  ports:
+    - name: web
+      port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}
+---
+# The tunnel itself, answered on the NODE's own address: the router's port-forward UI only
+# targets devices from its DHCP/ARP list (the same constraint that gave the traefik Service
+# its externalIP at B5), and its 51820/udp forward points at the device daniel-box. Local
+# policy so the pod sees real client addresses.
+apiVersion: v1
+kind: Service
+metadata:
+  name: wg-easy-udp
+  namespace: {{ k8s_namespace }}
+spec:
+  # LoadBalancer, not ClusterIP: externalTrafficPolicy is only valid on externally-
+  # accessible Service types. MetalLB assigns a VIP from the auto pool that nothing uses —
+  # the router forward arrives via the externalIP below.
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  externalIPs:
+    - {{ hostvars['daniel-box'].server_ip }}
+  selector:
+    app: wg-easy
+  ports:
+    - name: wireguard
+      port: {{ container_item.udp_port }}
+      targetPort: {{ container_item.udp_port }}
+      protocol: UDP

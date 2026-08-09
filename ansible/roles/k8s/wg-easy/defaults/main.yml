@@ -1,0 +1,27 @@
+---
+# Slice-6 B5, pulled forward from slice 7: the operator moved ALL router forwards —
+# including 51820/udp — to the device daniel-box, so wg-easy's move stopped being a
+# slice-7 nicety and became the restoration of remote access.
+
+# The exact pin the Docker role carried, trap included: v14 tag + digest. The `:14` keeps
+# Renovate tracking the major so it can OFFER v15 as a deliberate PR; the digest keeps it
+# immutable within v14.x. MUST NOT float to :latest → v15, which drops PASSWORD_HASH for an
+# interactive setup wizard and would silently reopen the admin API.
+wg_easy_k8s_image: ghcr.io/wg-easy/wg-easy:14@sha256:5f26407fd2ede54df76d63304ef184576a6c1bb73f934a58a11abdd852fab549
+
+wg_easy_k8s_claim: wg-easy-config
+# `longhorn`, NOT nobackup: /etc/wireguard holds the server keypair and every client
+# config — losing it means re-importing every device. Tiny volume, real state.
+wg_easy_k8s_storage_class: longhorn
+wg_easy_k8s_size: 1Gi
+
+# Seed source: the Docker copy's bind mount on daniel-server. The cutover stops (and
+# removes) that container first — the seed demands a quiescent source, and remote access
+# is already down (the forwards left .161), so the stop costs nothing.
+wg_easy_k8s_source_path: /home/ubuntu/server/containers/wg-easy/config
+
+# Resource caps mirrored from the compose template (M1 values, k8s-native units).
+wg_easy_k8s_cpu_limit: 500m
+wg_easy_k8s_mem_limit: 256Mi
+wg_easy_k8s_cpu_request: 50m
+wg_easy_k8s_mem_request: 32Mi

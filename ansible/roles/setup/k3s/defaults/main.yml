@@ -49,9 +49,16 @@ k3s_server_args: >-
   server --cluster-init --disable=traefik --disable=servicelb --disable=local-storage
   --write-kubeconfig-mode 0640
   --node-ip {{ server_ip }} --advertise-address {{ server_ip }}
-  --kubelet-arg=allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark
+  --kubelet-arg=allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
 
-# ── why one unsafe sysctl is allow-listed (slice 4, D11) ────────────────────────────────
+# ── why two unsafe sysctls are allow-listed ─────────────────────────────────────────────
+# net.ipv4.ip_forward (slice-6 B5, wg-easy pulled forward): the wg-easy SERVER routes
+# between wg0 and eth0 inside its pod netns, and /proc/sys is ro in a pod even with
+# NET_ADMIN (measured — see below), so forwarding can only arrive via the pod spec's
+# securityContext.sysctls, which kubelet refuses unless allow-listed. Namespaced, so this
+# enables forwarding for pods that ASK, not for the node.
+#
+# net.ipv4.conf.all.src_valid_mark (slice 4, D11):
 # qbittorrent runs inside a WireGuard/Mullvad netns, and wg-quick refuses to bring the tunnel
 # up without net.ipv4.conf.all.src_valid_mark=1. Measured on this node: /proc/sys is mounted
 # `ro` in a pod even with NET_ADMIN, so the container cannot set it itself; and wg-quick's

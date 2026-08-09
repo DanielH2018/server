@@ -479,7 +479,13 @@ def test_a_migrated_service_is_not_still_verified_on_the_docker_side(reader):
     """Once a service runs in k3s, its data is a Longhorn PVC and Longhorn's per-volume check
     owns proving it restorable. Leaving it in a Kopia-side list means that list is asserting on
     an abandoned directory — it passes forever, and it passes for the wrong reason."""
-    stale = _migrated_service_names() & reader()
+    # wg-easy's Kopia sentinel is NOT the migrated workload's data: it is the PI's WireGuard
+    # peer backup (pi-peers/wg0.json), pulled onto daniel-server by the wg-easy-pull-pi-peers
+    # cron and living under containers/wg-easy/ only by historical placement. That pull, its
+    # checks, and this path re-home in slice-7 Phase G with kopia's shrink to host paths —
+    # until then the sentinel keeps verifying a directory that genuinely still changes.
+    exempt = {"wg-easy"}
+    stale = (_migrated_service_names() - exempt) & reader()
 
     assert not stale, (
         f"{', '.join(sorted(stale))} migrated to k3s but is still verified against "

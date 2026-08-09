@@ -101,33 +101,13 @@ containers_list:
       # unauthenticated (Kopia basic-auth bug workaround); keeping it off `apps`
       # stops other app containers reaching kopia:51515 directly.
       - kopia
-  - name: wg-easy
-    port: 51821
-    udp_port: 51820
-    use_authelia: true
-    # Server-only admin auth: bcrypt hash of the wg-easy admin password (SOPS). Closes the
-    # unauthenticated admin API otherwise reachable to every monitoring-net neighbor (Authelia
-    # only gates the Traefik ingress). The Pi's wg-easy entry omits this — accepted LAN-only risk.
-    password_hash: "{{ wg_easy_password_hash }}"
-    # DNS baked into generated WireGuard client configs → the cluster Pi-hole VIP
-    # (slice-6 B3 cutover, 2026-08-09; was this host's Docker Pi-hole), so
-    # *.local.<domain> resolves over the tunnel (private homelab path that bypasses
-    # Cloudflare/CrowdSec). Mobile full-tunnel clients use it directly; desktop
-    # split-tunnel clients override it (hosts file) to keep general DNS on Mullvad.
-    # NB: the DNS lives in each client's IMPORTED config — existing clients keep the
-    # old .161 until their config is re-exported/re-imported, which must happen (or be
-    # accepted) before the Docker Pi-hole retires at the end of the drain.
-    default_dns: "{{ dns_k8s_vip }}"
-    # On `monitoring`, NOT `apps`: wg-easy must not share a Docker bridge with the
-    # containers behind the host-published ports WG clients reach (Traefik 80/443 ->
-    # apps, Pi-hole 53 -> apps, Portainer 9000 -> proxy, Jellyfin DLNA -> media). Reaching
-    # a same-bridge container via a host-published port hairpins: the DNAT'd reply
-    # returns straight across the bridge, bypassing the host's reverse-NAT, so conntrack
-    # drops it and the WG client times out. `monitoring` is cross-bridge from all of them
-    # (only Traefik is host-published there, and its 80/443 DNAT to its apps IP), and
-    # Traefik is on it so the wg-easy UI still routes. See docs/wireguard-private-homelab-access.md.
-    networks:
-      - monitoring
+  # wg-easy moved to k3s on 2026-08-09 — slice-6 B5, pulled FORWARD from slice 7 by the
+  # operator moving ALL router forwards (51820/udp included) to daniel-box, which took
+  # remote access down until the workload followed. roles/k8s/wg-easy, config volume seeded
+  # from this host's copy so the server keypair (and thus every imported client config)
+  # survived. The hairpin-NAT bridge-topology notes that lived here died with the Docker
+  # placement — in the cluster the tunnel terminates in a pod netns and reaches services
+  # over the CNI, not across shared Docker bridges.
   # Organization: Smart home — fully migrated to the cluster on 2026-08-09 (slice 5).
   # mosquitto retired last (B1's final step): the k8s broker behind the mqtt_k8s_vip
   # LoadBalancer serves z2m, HA, and the operator's mosquitto_pub; nothing pointed at the

@@ -1,0 +1,32 @@
+---
+# Slice-6 B5, pulled forward from slice 7 (2026-08-09): the router's forwards — 51820/udp
+# included — moved to daniel-box, so this move restores remote access.
+
+# The server keypair and client configs MUST survive the move (or every device re-imports).
+# The cutover stops and REMOVES the Docker container before this runs — the seed demands a
+# quiescent source, remote access is already down, and a stopped-but-present container would
+# leave its docker-type Kuma monitor flapping DOWN.
+- name: Seed the wg-easy config volume
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/seed-volume
+  vars:
+    seed_volume_service: wg-easy
+    seed_volume_claim: "{{ wg_easy_k8s_claim }}"
+    seed_volume_source_path: "{{ wg_easy_k8s_source_path }}"
+    seed_volume_storage_class: "{{ wg_easy_k8s_storage_class }}"
+    seed_volume_size: "{{ wg_easy_k8s_size }}"
+
+- name: Deploy wg-easy to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: wg-easy
+    manifests_rollout: wg-easy
+    manifests_files:
+      - pvc.yaml
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
+    manifests_secret_files:
+      - secret.yaml

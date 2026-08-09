@@ -1,0 +1,99 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wg-easy
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # ReadWriteOnce PVC on single-replica Longhorn — a rolling update would deadlock on the volume.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: wg-easy
+  template:
+    metadata:
+      labels:
+        app: wg-easy
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        # Both namespaced; kubelet only admits them because setup/k3s allow-lists them.
+        # ip_forward: the SERVER routes between wg0 and eth0 inside the pod netns, and
+        # /proc/sys is ro in a pod even with NET_ADMIN, so the spec is the only way in.
+        # src_valid_mark: same wg-quick requirement the qbittorrent sidecar documented
+        # (slice 4, D11) — pre-setting it makes wg-quick skip its own doomed write.
+        sysctls:
+          - name: net.ipv4.ip_forward
+            value: "1"
+          - name: net.ipv4.conf.all.src_valid_mark
+            value: "1"
+      containers:
+        - name: wg-easy
+          image: {{ wg_easy_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.udp_port }}
+              protocol: UDP
+            - containerPort: {{ container_item.port }}
+              protocol: TCP
+          env:
+            - name: LANG
+              value: en
+            # The endpoint clients dial: a DIRECT (non-proxied) DNS record on the WAN IP —
+            # UDP cannot ride Cloudflare's proxy. Unchanged by the move; the router's
+            # 51820/udp forward now lands on this node's IP (the Service's externalIP).
+            - name: WG_HOST
+              value: "wireguard.{{ domain }}"
+            - name: WG_PORT
+              value: "{{ container_item.udp_port }}"
+            - name: WG_PERSISTENT_KEEPALIVE
+              value: "25"
+            # DNS baked into GENERATED client configs (existing imports keep whatever they
+            # carry) — the cluster Pi-hole VIP, same value the Docker role moved to at B3.
+            - name: WG_DEFAULT_DNS
+              value: "{{ container_item.default_dns }}"
+          envFrom:
+            # PASSWORD_HASH — the admin UI/API gate (Authelia only fronts the IngressRoute;
+            # in-cluster peers reach :51821 directly, same reasoning as the Docker role's
+            # monitoring-net exposure). envFrom keeps the hash out of the pod spec the
+            # read-only kubeconfig can read.
+            - secretRef:
+                name: wg-easy-env
+          # NET_ADMIN for the wg interface and its routing/fwmark rules; NET_RAW because
+          # wg-quick runs iptables, whose CLI opens a raw socket to init the nat table.
+          # No SYS_MODULE — the wireguard module is loaded on the host.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_ADMIN
+                - NET_RAW
+          volumeMounts:
+            - name: config
+              mountPath: /etc/wireguard
+          # TCP on the admin UI: proves the node app is up. The wg interface itself has no
+          # cheap in-pod probe; the real gate is a client handshake after deploy.
+          readinessProbe:
+            tcpSocket:
+              port: {{ container_item.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: {{ container_item.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ wg_easy_k8s_cpu_limit }}"
+              memory: {{ wg_easy_k8s_mem_limit }}
+            requests:
+              cpu: "{{ wg_easy_k8s_cpu_request }}"
+              memory: {{ wg_easy_k8s_mem_request }}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ wg_easy_k8s_claim }}

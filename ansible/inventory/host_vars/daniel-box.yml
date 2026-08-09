@@ -462,6 +462,22 @@ containers_list:
     hostname: "pihole{{ k8s_hostname_suffix }}"
     port: 80
     use_authelia: true
+
+  # Slice-6 B5, pulled forward from slice 7 (2026-08-09): the operator moved ALL router
+  # forwards — 51820/udp included — to this node, so wg-easy followed its port. The tunnel
+  # answers on the node IP (the wg-easy-udp Service's externalIP; router UIs forward to
+  # devices, and VIPs have no lease). Config volume seeded from daniel-server, so the server
+  # keypair and every imported client config survived. bridge_hostname keeps the unsuffixed
+  # admin-UI name serving (natively, behind the cluster Authelia). password_hash lives in the
+  # role's Secret template, not here.
+  - name: wg-easy
+    platform: k8s
+    hostname: "wg-easy{{ k8s_hostname_suffix }}"
+    port: 51821
+    udp_port: 51820
+    use_authelia: true
+    bridge_hostname: wg-easy
+    default_dns: "{{ dns_k8s_vip }}"
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the
