@@ -1,9 +1,25 @@
 # Slice 6 — Edge Cutover: CrowdSec, Pi-hole, Router → VIP
 
-**Status — 2026-08-09.** Planned, not started. Baseline measured today; A-prerequisites are
-partially met by accident (daniel-box already resolves via upstream DNS) and partially open
-(cold-boot gate never run, daniel-server resolv.conf points at the Pi-hole that is about to
-move). No B-step may start before the A-steps close.
+**Status — 2026-08-09 (evening). A1 partial + B1 EXECUTED.** A1's automatable half is done:
+daniel-box's upstream DNS is pinned by a resolved drop-in (`5ee81f3d` — it was DHCP luck
+before), daniel-server's resolv.conf primary is a role default ready for the B3 flip. Still
+open from A1, both needing the operator: the cold-boot gate (reboots both hosts — pick a
+maintenance evening) and the router-UI reads (DHCP DNS option value, forward table).
+
+B1 is live and gated (`c6ffcae5` + fixes `2163616d`/`510f71b9`/`d43ddc3d`): engine
+(LAPI+AppSec, v1.7.8 pinned, DB PVC) + traefik agent sidecar tailing a real file access log
++ bouncer plugin on both entrypoints in stream mode. The enforcement gate
+(`deploy.yml --tags b1-gate`) proved ban → 403-at-VIP → unban → resume, from the Pi itself.
+Three rollout lessons, each now encoded in comments where it bit: traefik DISABLES plugins
+(rather than failing) when readOnlyRootFilesystem blocks /plugins-storage — every router
+referencing the middleware 404s and the edge goes dark; the crowdsec image refuses to start
+without a /var/lib/crowdsec/data volume even agent-side; and the kernel's 128
+inotify-instances-per-uid budget is shared by every root process on the node — the sidecar
+was the straw (now 1024 via the k3s role). Bonus fix: the http→https redirect had been
+emitting the container-side :8443 into Location since slice 1; now pinned to :443.
+
+Next: B2 (one LAPI — daniel-server demotes to agent, dashboard moves) any time; B3 waits on
+the A1 cold-boot gate.
 
 > design.md row: *"Edge cutover: CrowdSec LAPI, Pi-hole, router forward → VIP, flip the four
 > `*_host` flags — exit: external access and LAN DNS on the new path."*
