@@ -30,11 +30,10 @@ containers_list:
     use_authelia: false
     networks:
       - proxy
-  - name: crowdsec
-    port: 3000
-    use_authelia: true
-    networks:
-      - proxy
+  # crowdsec (the Metabase dashboard — the engine always lived in the traefik role) retired
+  # 2026-08-09 at slice-6 B2c: it rides in the cluster engine pod now, reading the LIVE
+  # decision DB. The Docker copy had been showing the retired local LAPI's frozen DB since
+  # B2b. Role archived at roles/containers/archive/crowdsec.
   - name: portainer
     port: 9000
     use_authelia: true

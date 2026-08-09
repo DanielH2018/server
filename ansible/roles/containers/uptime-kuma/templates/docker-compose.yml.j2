@@ -155,6 +155,11 @@ services:
          the cron follows the LAPI into the cluster and the monitor-bridge state-file hop is
          gone. Label lives HERE (not monitor-bridge) purely to keep the monitor provisioned. -#}
       {{ kuma('crowdsec-home-allowlist', monitor_type='push', name='CrowdSec Home Allowlist', interval=600, max_retries=0, push_token=monitor_bridge_home_allowlist_push_token) }}
+      {# CrowdSec dashboard moved into the cluster engine pod at B2c (Docker role archived);
+         Authelia-gated, so an unauthenticated probe sees the 302 to the portal — same
+         expectation as the other authelia'd -k8s monitors. -#}
+      {{ kuma('crowdsec-dashboard-k8s', name='k3s CrowdSec Dashboard', monitor_type='http',
+              url='https://crowdsec-k8s.local.' ~ domain ~ '/', accepted_statuscodes=['302']) }}
       # HA answers 200 on / (its login page — no Authelia on this route by design, so no 302
       # dance). Probing the -k8s name watches the cluster copy specifically; the companion-app
       # path (the unsuffixed Cloudflare-proxied name via the bridge) shares every hop past

@@ -19,3 +19,22 @@ spec:
     - name: metrics
       port: {{ crowdsec_k8s_metrics_port }}
       targetPort: metrics
+    - name: dashboard
+      port: {{ crowdsec_k8s_dashboard_port }}
+      targetPort: dashboard
+---
+# Second Service over the same pod, existing only because the ingressroute() macro uses one
+# arg for BOTH the IngressRoute name and the Service it targets — the dashboard route needs
+# a distinct resource name or it would overwrite the LAPI route on apply.
+apiVersion: v1
+kind: Service
+metadata:
+  name: crowdsec-dashboard
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: crowdsec
+  ports:
+    - name: dashboard
+      port: {{ crowdsec_k8s_dashboard_port }}
+      targetPort: dashboard

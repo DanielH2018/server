@@ -11,3 +11,15 @@
     false
   )
 }}
+---
+{# The Metabase dashboard (B2c) — human UI, so Authelia-gated like its Docker predecessor.
+   Targets the crowdsec-dashboard Service (same pod; see service.yaml.j2 for why a second
+   Service exists at all); the hostname rides the entry's extra_hostnames for its Pi-hole
+   override. #}
+{{ ingressroute(
+    'crowdsec-dashboard',
+    container_item.extra_hostnames[0],
+    crowdsec_k8s_dashboard_port,
+    true
+  )
+}}

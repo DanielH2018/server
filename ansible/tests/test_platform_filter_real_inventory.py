@@ -77,7 +77,10 @@ def test_daniel_server_is_still_wholly_docker():
     # host. Then zigbee2mqtt on 2026-08-09 (30 -> 29), slice-5 B2 — the SLZB coordinator is
     # network-attached, so nothing tied it here once the broker moved. Then home-assistant the
     # same day (29 -> 28), B3, and finally mosquitto (28 -> 27), the shadow broker's Docker
-    # twin retiring once its connection log proved nothing else ever spoke to it. The count
+    # twin retiring once its connection log proved nothing else ever spoke to it. Then
+    # crowdsec (27 -> 26) later that day, slice-6 B2c — the Metabase dashboard only (the
+    # engine lives in the traefik role, demoted to an agent at B2b); it rides in the
+    # cluster engine pod now, reading the live decision DB. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -86,6 +89,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 27
-    assert len(filter_by_platform(containers, "docker")) == 27
+    assert len(containers) == 26
+    assert len(filter_by_platform(containers, "docker")) == 26
     assert filter_by_platform(containers, "k8s") == []
