@@ -50,5 +50,38 @@
     - "'already exist' not in (crowdsec_k8s_allowlist_create.stderr | default('') | lower)"
   changed_when: crowdsec_k8s_allowlist_create.rc == 0
 
+- name: Create the home-allowlist state directory
+  tags: [cron]
+  ansible.builtin.file:
+    path: /var/lib/crowdsec-home-allowlist
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Deploy the home-allowlist updater
+  tags: [cron]
+  ansible.builtin.template:
+    src: crowdsec-update-home-allowlist.sh.j2
+    dest: /usr/local/bin/crowdsec-update-home-allowlist.sh
+    mode: "0750"
+    owner: root
+    group: root
+  become: true
+
+- name: Schedule the home-allowlist updater
+  tags: [cron]
+  # root, not sys_user: the script execs into the engine pod, which needs the root
+  # kubeconfig — the readonly SA cannot exec. Every 5 min like its daniel-server
+  # predecessor; it pushes the same Kuma monitor directly (no monitor-bridge hop).
+  ansible.builtin.cron:
+    name: "CrowdSec home allowlist"
+    minute: "*/5"
+    user: root
+    job: "/usr/local/bin/crowdsec-update-home-allowlist.sh"
+    cron_file: crowdsec-home-allowlist
+  become: true
+
 - name: Enforcement gate (opt-in via --tags b1-gate)
   ansible.builtin.import_tasks: verify.yml

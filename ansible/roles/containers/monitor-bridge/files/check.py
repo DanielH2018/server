@@ -228,8 +228,6 @@ PI_PEERS_MAX_AGE_S = float(_env("PI_PEERS_MAX_AGE_D", "2.5")) * 86400
 # failure (ipify unreachable, cscli error) just meant occasional 403s on the next IP rotation, invisible
 # until noticed. We alert on a FAILED run or staleness (cron broken / never ran). 30 min = 6 missed
 # 5-min runs; the fast-path heartbeat keeps a healthy no-op green.
-HOME_ALLOWLIST_STATE = _env("HOME_ALLOWLIST_STATE", "/home-allowlist/state.json")
-HOME_ALLOWLIST_MAX_AGE_S = float(_env("HOME_ALLOWLIST_MAX_AGE_MIN", "30")) * 60
 
 # DOCKER-USER origin-lock watchdog: the traefik role's docker-user-verify.sh cron (every 15 min, as
 # root) reads the LIVE iptables DOCKER-USER chain and asserts the terminal DROP for :80/:443 plus a
@@ -2258,36 +2256,6 @@ def check_disk_prune():
     )
 
 
-def home_allowlist(state, age_s, max_age_s):
-    """Pure: did the last CrowdSec home-IP allowlist update run succeed, and recently? (ok, msg).
-
-    Same state-file idiom as pi_peers/verify. The updater writes state on EVERY run (incl. the
-    IP-unchanged fast path), so a stale timestamp means the every-5-min cron stopped running, and
-    ok=false means ipify was unreachable or a cscli call errored — either way the home path may start
-    tripping the WAF on the next IP rotation with no other signal.
-    """
-    if not state.get("ok"):
-        return False, "last home-allowlist update FAILED: %s" % state.get("msg", "?")
-    if age_s > max_age_s:
-        return False, "last home-allowlist update %.0f min ago (max %.0f)" % (
-            age_s / 60,
-            max_age_s / 60,
-        )
-    return True, "home-allowlist ok %.0f min ago: %s" % (
-        age_s / 60,
-        state.get("msg", ""),
-    )
-
-
-def check_home_allowlist():
-    return _check_state_file(
-        HOME_ALLOWLIST_STATE,
-        "no home-allowlist state (updater never ran?)",
-        "home-allowlist state unparseable",
-        lambda state, age_s: home_allowlist(state, age_s, HOME_ALLOWLIST_MAX_AGE_S),
-    )
-
-
 def docker_user(state, age_s, max_age_s):
     """Pure: is the DOCKER-USER origin lock currently applied, per the last live-chain verify? (ok, msg).
 
@@ -3113,11 +3081,6 @@ CHECKS = [
     ("content_verify", _env("KUMA_PUSH_CONTENT_VERIFY", ""), check_content_verify),
     ("pi_peers", _env("KUMA_PUSH_PI_PEERS", ""), check_pi_peers),
     ("disk_prune", _env("KUMA_PUSH_DISK_PRUNE", ""), check_disk_prune),
-    (
-        "home_allowlist",
-        _env("KUMA_PUSH_HOME_ALLOWLIST", ""),
-        check_home_allowlist,
-    ),
     ("docker_user", _env("KUMA_PUSH_DOCKER_USER", ""), check_docker_user),
     (
         "cloudflare_drift",

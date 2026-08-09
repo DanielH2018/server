@@ -396,38 +396,26 @@
     state: present
   become: true
 
-- name: Create the CrowdSec home-allowlist monitor state directory
-  tags: [config]
-  # monitor-bridge bind-mounts this read-only (/home-allowlist) and its `home_allowlist` check alerts
-  # on a failed/stale run. Created here sys_user-owned so the every-5-min cron can write state.json;
-  # deploy traefik before monitor-bridge on a fresh host (traefik deploys first anyway) else Docker
-  # auto-creates the mount source root-owned.
-  ansible.builtin.file:
-    path: /var/lib/crowdsec-home-allowlist
-    state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-
-- name: Deploy home allowlist updater script
-  tags: [config]
-  ansible.builtin.template:
-    src: crowdsec-update-home-allowlist.sh.j2
-    dest: /usr/local/bin/crowdsec-update-home-allowlist.sh
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0750"
-  become: true
-
-- name: Schedule CrowdSec home IP allowlist updater
+# The home-allowlist updater MOVED to daniel-box at slice-6 B2 (k8s/crowdsec role):
+# `cscli allowlists` is LAPI-machine-only and the LAPI lives in the cluster now. These
+# absent-state tombstones unwind the live cron/script/state on this host; drop them once
+# every host has deployed past B2.
+- name: Retire the home-allowlist updater cron (moved to daniel-box at B2)
   tags: [cron]
   ansible.builtin.cron:
     name: "Update CrowdSec home IP allowlist"
-    minute: "*/5"
     user: "{{ sys_user }}"
-    job: /usr/local/bin/crowdsec-update-home-allowlist.sh
-    state: present
+    state: absent
+
+- name: Retire the home-allowlist updater script and state (moved to daniel-box at B2)
+  tags: [config]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/crowdsec-update-home-allowlist.sh
+    - /var/lib/crowdsec-home-allowlist
+  become: true
 
 - name: Create the Cloudflare-IP drift monitor state directory
   tags: [config]

@@ -184,13 +184,6 @@ services:
       - PI_PEERS_STATE=/pi-peers/state.json
       - PI_PEERS_MAX_AGE_D=2.5
       - KUMA_PUSH_PI_PEERS={{ monitor_bridge_pi_peers_push_token }}
-      # Every-5-min CrowdSec home-IP allowlist updater (traefik role) writes state.json on EVERY run
-      # incl. the IP-unchanged fast path; it was the last self-loggering cron with no watchdog — a
-      # silent failure just meant occasional 403s on the next home-IP rotation. Alert on a failed run
-      # or 30-min staleness (6 missed 5-min runs).
-      - HOME_ALLOWLIST_STATE=/home-allowlist/state.json
-      - HOME_ALLOWLIST_MAX_AGE_MIN=30
-      - KUMA_PUSH_HOME_ALLOWLIST={{ monitor_bridge_home_allowlist_push_token }}
       # DOCKER-USER origin-lock watchdog: the traefik role's docker-user-verify.sh cron (every 15 min,
       # as root) re-reads the LIVE iptables DOCKER-USER chain and asserts the terminal DROP for :80/:443
       # + a RETURN allow are present, writing state.json. The seed/re-assert units apply the rules but
@@ -468,7 +461,6 @@ services:
       - /var/lib/renovate-notify:/renovate-state:ro
       - /var/lib/kopia-restore-drill:/restore-drill:ro
       - /var/lib/wg-easy-pi-peers:/pi-peers:ro
-      - /var/lib/crowdsec-home-allowlist:/home-allowlist:ro
       - /var/lib/kopia-verify:/verify:ro
       - /var/lib/autofix-disk-prune:/autofix-disk:ro
       - /var/lib/kopia-maintenance:/maintenance:ro
@@ -521,11 +513,9 @@ services:
          no-delete pull keeps Backup Freshness green even when the un-rebuildable peer keys stop
          refreshing, so this is the dedicated failed/stale/missing watchdog for it. -#}
       {{ kuma('wg-easy-pi-peers', monitor_type='push', name='WG Pi Peer Backup', interval=600, max_retries=0, push_token=monitor_bridge_pi_peers_push_token) }}
-      {# CrowdSec Home Allowlist: check_home_allowlist reads /home-allowlist/state.json (written every
-         5 min by the traefik role's crowdsec-update-home-allowlist.sh) — down on a failed run (ipify
-         unreachable / cscli error) or 30-min staleness (cron broken). The updater's twin of the
-         wg-easy pull watchdog — the other self-loggering cron that had no monitor. -#}
-      {{ kuma('crowdsec-home-allowlist', monitor_type='push', name='CrowdSec Home Allowlist', interval=600, max_retries=0, push_token=monitor_bridge_home_allowlist_push_token) }}
+      {# CrowdSec Home Allowlist moved to the uptime-kuma role's labels at slice-6 B2: the
+         updater cron lives on daniel-box now (k8s/crowdsec role) and pushes the monitor
+         directly — no state file on this host to read. -#}
       {# DOCKER-USER Origin Lock: check_docker_user reads /docker-user/state.json (written every 15 min
          by the traefik role's docker-user-verify.sh, which asserts the LIVE iptables DROP/allow shape)
          — down on a failed live assert (lock flushed → origin reachable direct, Cloudflare/CrowdSec

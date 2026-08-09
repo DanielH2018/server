@@ -1,0 +1,104 @@
+#!/bin/bash
+# Keeps the operator's home public IPs in the cluster LAPI's `home-ips` allowlist so browsing
+# the public path from home doesn't trip the WAF. Every 5 min; most runs are a no-op.
+#
+# MOVED HERE from the containers/traefik role at slice-6 B2: `cscli allowlists` is
+# LAPI-machine-only, and the LAPI lives in this cluster now — so the cron runs on daniel-box
+# and execs into the engine pod. Reporting changed with it: the old script wrote a state file
+# monitor-bridge read (a daniel-server construct); this pushes the SAME Kuma monitor directly,
+# the longhorn-backup-health pattern for daniel-box crons.
+#
+# BOTH FAMILIES, same reasoning as always (proven 2026-08-06 when a burst test egressing over
+# IPv6 banned the homelab's own address): IPv4 is the single NAT'd home address; IPv6 is the
+# home LAN's /64 PREFIX — no NAT, every device routable, privacy extensions rotate addresses
+# within the prefix, so a /128 would cover one interface of one machine for a few hours.
+#
+# set -uo (not -euo): a cscli/exec error must be captured and REPORTED, not swallowed by an
+# early exit.
+set -uo pipefail
+
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin  # cron ships a bare PATH
+
+ALLOWLIST="home-ips"
+STATE_DIR=/var/lib/crowdsec-home-allowlist
+STATE_FILE="$STATE_DIR/ipv4"
+STATE_FILE6="$STATE_DIR/ipv6"
+PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/{{ monitor_bridge_home_allowlist_push_token }}"
+
+push() { # up|down msg
+  curl -fsS --max-time 10 -G "$PUSH_URL" \
+    --data-urlencode "status=$1" --data-urlencode "msg=$2" -o /dev/null \
+    || logger -t crowdsec-home-allowlist "kuma push failed ($1: $2)"
+}
+fail() { push down "$1"; logger -t crowdsec-home-allowlist "$1"; exit 1; }
+
+cscli_lapi() {
+  /usr/local/bin/k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec -- cscli "$@"
+}
+
+if ! CURRENT_IP=$(curl -sf --max-time 10 https://api4.ipify.org); then
+  fail "failed to resolve public IPv4 from ipify"
+fi
+
+# Validate the response is a well-formed IPv4 before using it — guards a malformed/MITM'd
+# response becoming a junk or overly-broad allowlist entry.
+if ! [[ $CURRENT_IP =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; then
+  fail "invalid IPv4 from ipify: $CURRENT_IP"
+fi
+
+# Gated on the host actually HAVING global IPv6 (a v4-only host has nothing to allowlist; a
+# v6-capable host that cannot reach ipify6 is a real degradation — the prefix can rotate under
+# a stale entry and the next rotation 403s everyone at home).
+CURRENT_PREFIX6=""
+if ip -6 addr show scope global 2>/dev/null | grep -q inet6; then
+  if ! CURRENT_IP6=$(curl -sf --max-time 10 https://api6.ipify.org); then
+    fail "host has global IPv6 but failed to resolve public IPv6 from ipify"
+  fi
+  # Validate AND mask to the /64 in one step; ip_network raises on junk, so a bad value fails
+  # loudly instead of becoming an allowlist entry.
+  if ! CURRENT_PREFIX6=$(python3 -c 'import ipaddress,sys; print(ipaddress.ip_network(sys.argv[1] + "/64", strict=False))' "$CURRENT_IP6" 2>/dev/null); then
+    fail "invalid IPv6 from ipify: $CURRENT_IP6"
+  fi
+fi
+
+STORED_IP=$(cat "$STATE_FILE" 2>/dev/null || true)
+STORED_PREFIX6=$(cat "$STATE_FILE6" 2>/dev/null || true)
+
+# Fast path: BOTH families unchanged. The conjunction is load-bearing (an IPv4-only gate would
+# silently skip a rotated IPv6 prefix). Still pushes, so a healthy no-op keeps the monitor green.
+if [ "$CURRENT_IP" = "$STORED_IP" ] && [ "$CURRENT_PREFIX6" = "$STORED_PREFIX6" ]; then
+  push up "home IPs unchanged (${CURRENT_IP}${CURRENT_PREFIX6:+, $CURRENT_PREFIX6})"
+  exit 0
+fi
+
+cscli_lapi allowlists create "$ALLOWLIST" --description "Home IPs" 2>/dev/null || true
+
+# Replace one family's entry, leaving the other's alone. A partial sync must not write state,
+# or the next run's fast path would treat the un-added value as already applied.
+sync_entry() { # stored current state_file label
+  local stored=$1 current=$2 state_file=$3 label=$4 add_out summary
+  [ "$stored" = "$current" ] && return 0
+  if [ -n "$stored" ]; then
+    cscli_lapi allowlists remove "$ALLOWLIST" "$stored" 2>/dev/null || true
+  fi
+  if [ -z "$current" ]; then
+    : > "$state_file"
+    return 0
+  fi
+  if ! add_out=$(cscli_lapi allowlists add "$ALLOWLIST" "$current" 2>&1); then
+    summary=$(printf '%s' "$add_out" | tail -1 | tr -d '"' | tr '\n' ' ')
+    fail "cscli allowlists add failed for $label: ${summary:-see crowdsec-home-allowlist syslog}"
+  fi
+  echo "$current" > "$state_file"
+  return 0
+}
+
+sync_entry "$STORED_IP" "$CURRENT_IP" "$STATE_FILE" IPv4 || exit 1
+sync_entry "$STORED_PREFIX6" "$CURRENT_PREFIX6" "$STATE_FILE6" IPv6 || exit 1
+
+CHANGES=""
+[ "$CURRENT_IP" != "$STORED_IP" ] && CHANGES="IPv4 ${STORED_IP:-<none>} -> $CURRENT_IP"
+if [ "$CURRENT_PREFIX6" != "$STORED_PREFIX6" ]; then
+  CHANGES="${CHANGES:+$CHANGES; }IPv6 ${STORED_PREFIX6:-<none>} -> ${CURRENT_PREFIX6:-<none>}"
+fi
+push up "home allowlist updated: $CHANGES"
