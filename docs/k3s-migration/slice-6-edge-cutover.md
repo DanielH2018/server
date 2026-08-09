@@ -65,10 +65,11 @@ dropped has no DAC_OVERRIDE, so it cannot write the init container's `/etc/crowd
 `cscli parsers install` dies on mkdir — as the pod's own uid each agent owns its config and log
 outright, and needs no privilege to read a file and post to the LAPI).
 
-**Next:** A1 is COMPLETE (cold-boot gate passed both hosts 2026-08-09; router reads
-confirmed). B3's build half is done and its cutover is underway: wg-easy client DNS and
-daniel-server's resolv.conf now point at .243; the router DHCP DNS option flip (operator,
-one UI change) starts the lease drain. B4 is unblocked.
+**Next:** A1 is COMPLETE (cold-boot gate passed both hosts 2026-08-09; forward table
+confirmed). B3's cutover is done — wg-easy, daniel-server resolv.conf, and the operator's
+per-device repoints all target .243 — and the drain is being observed via the Docker copy's
+query log (the tail is Docker's own containers, whose embedded DNS re-reads resolv.conf at
+recreate). B4 (reverse bridge + public Host rules) is unblocked and next.
 
 > design.md row: *"Edge cutover: CrowdSec LAPI, Pi-hole, router forward → VIP, flip the four
 > `*_host` flags — exit: external access and LAN DNS on the new path."*
@@ -128,8 +129,10 @@ dashboard moves with the LAPI (it reads the engine DB) and *stays* Authelia-gate
 ### D4 — Pi-hole is DNS-only on its own VIP (10.0.0.243), Unbound rides in the pod
 
 DHCP measured inactive (see Baseline), so the broadcast problem design.md worried about does
-not exist — the router keeps DHCP and only its *DNS option* changes, which also gives a free
-strangler: both Pi-holes serve simultaneously while leases renew onto the new VIP. Unbound
+not exist. CORRECTED at cutover (2026-08-09): there is no router DHCP *DNS option* either —
+the operator sets DNS **per device**, so the cutover is per-device repoints rather than one
+router change. The strangler property survives unchanged: both Pi-holes serve simultaneously
+and the Docker copy's query log is the drain tracker. Unbound
 moves as a second container in the same pod (localhost upstream, mirroring `pihole_internal`).
 The dnsmasq template (wildcard + per-service overrides + `daniel-pi.lan`) renders into a
 ConfigMap from the same source template. UDP+TCP :53 on VIP 10.0.0.243 from the auto pool.
@@ -181,8 +184,9 @@ down. Both changes land in A1, before any B-step.
   the registry answering. Cold-boot safety is configuration now, not the DHCP accident the
   baseline measured. One transient: authelia's crowdsec-agent sidecar fatals until the LAPI
   finishes starting (~4 restarts), then recovers — the backoff loop IS the retry; no change.
-- Router UI confirmed by the operator: DHCP DNS option and the 80/443/51820 → .161 forward
-  table are as the baseline assumed.
+- Router UI confirmed by the operator: the 80/443 + 51820/udp → .161 forward table is as the
+  baseline assumed. The DHCP *DNS option* assumption was WRONG — DNS is set per device, not
+  at the router (see the corrected D4/B3).
 - systemd-resolved stub vs the :53 VIP: verified live — the stub binds 127.0.0.53, the VIP
   serves 10.0.0.243, both answering simultaneously since the B3 build deploy.
 
@@ -218,7 +222,7 @@ new machine/bouncer keys.
 **Rollback:** the Docker engine's LAPI config is one compose revert away; keys for the old
 topology stay in SOPS until the slice closes.
 
-### B3 — Pi-hole (+Unbound) to the cluster, router DNS option flips
+### B3 — Pi-hole (+Unbound) to the cluster, clients repoint per device
 
 **Build half executed 2026-08-09** (`roles/k8s/pihole`, coexisting per D4 — safe before the
 gate because nothing resolves through the VIP until the DHCP option flips). NOT seeded — see
@@ -231,10 +235,15 @@ Build gates all passed via 10.0.0.243: the `-k8s` override, the wildcard, `danie
 an external name through Unbound (DNSSEC: `fail01.dnssec.works` SERVFAILs), both blocklist
 tiers sinkhole (regex + big.oisd), and the Authelia-gated UI at `pihole-k8s` 302s to SSO.
 
-**Cutover half — gated on A1's cold-boot pass.** Order: wg-easy `WG_DEFAULT_DNS` → .243 →
-daniel-server resolv.conf per D8 → router DHCP DNS option → .243. The Docker Pi-hole keeps
-serving 10.0.0.161:53 while leases drain; retire it only when its query log flatlines (days,
-not minutes — lease time decides).
+**Cutover executed 2026-08-09** (licensed by A1's cold-boot pass): wg-easy `WG_DEFAULT_DNS`
+→ .243, daniel-server resolv.conf per D8 → .243, and — correcting the plan's router-flip
+assumption — the operator repointed their PC per device (no router DHCP DNS option exists;
+DNS is set per computer). The Docker Pi-hole keeps serving 10.0.0.161:53 during the drain;
+its query log is the tracker. Measured right after the cutover, the dominant remaining
+consumer is 10.0.0.161 itself: Docker's embedded DNS snapshots the host resolv.conf at
+CONTAINER START, so every running container keeps forwarding to .161 until it is next
+recreated — the tail of the drain is container churn, not leases. Retire the Docker copy
+only when the log flatlines.
 
 **Gates:** dig via .243 resolves a `-k8s` override, the wildcard, `daniel-pi.lan`, and an
 external name (through Unbound) correctly; a VPN client resolves `*.local.<domain>` after
@@ -243,7 +252,7 @@ cold-restart leaves both nodes reachable (A1's guarantee, re-checked once DNS is
 **Re-plumb inventory:** pihole host_vars entry → daniel-box k8s; Kuma DNS monitor → .243;
 homepage widget; the pihole role's resolv.conf tasks (now daniel-server points *away* from
 itself); `probe.py pi` paths if any assume the Docker container.
-**Rollback:** router DNS option back to 10.0.0.161 (single UI change), resolv.conf revert,
+**Rollback:** repoint devices back to 10.0.0.161, resolv.conf revert,
 Docker copy is still running — nothing was destroyed until the drain-and-retire step.
 
 ### B4 — Reverse bridge + public Host rules on the cluster edge
@@ -283,8 +292,9 @@ the soak.
 1. External HTTPS enters at 10.0.0.240: router forwards there, CrowdSec (cluster LAPI) and
    Authelia enforce on the path, and a Docker-hosted service is reachable from the internet
    through the reverse bridge.
-2. LAN DNS is served in-cluster at 10.0.0.243 by Pi-hole+Unbound; the router's DHCP hands it
-   out; the Docker Pi-hole is retired with its query log observed flat first.
+2. LAN DNS is served in-cluster at 10.0.0.243 by Pi-hole+Unbound; devices are repointed to
+   it (per-device — no router DHCP DNS option exists); the Docker Pi-hole is retired with
+   its query log observed flat first.
 3. One CrowdSec LAPI (in-cluster), two agents (cluster + daniel-server), both Traefik bouncers
    enforcing from it; dashboard and Discord notifications live; old LAPI retired.
 4. Both hosts cold-boot with the cluster down and reach a registry (A1 gate, re-verified after
@@ -295,8 +305,9 @@ the soak.
 
 ## Unverified — resolve during execution, not by assuming
 
-- **Router DHCP DNS option value** — RESOLVED 2026-08-09: operator confirmed the assumption
-  (10.0.0.161, and the forward table is exactly 80/443 + 51820/udp → .161).
+- **Router DHCP DNS option value** — RESOLVED 2026-08-09, assumption WRONG: there is no
+  DHCP DNS option in play; the operator sets DNS per device. (The forward table IS exactly
+  80/443 + 51820/udp → .161 as assumed.)
 - **Cloudflare records per public name** — the k8s ddns manages apex+terraria only; confirm
   the wildcard/CNAME situation covers every `use_authelia` public hostname before B4's
   `k8s_public_route` flip makes them answerable.
