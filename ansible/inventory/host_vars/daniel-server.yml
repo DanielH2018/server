@@ -127,13 +127,11 @@ containers_list:
     # Traefik is on it so the wg-easy UI still routes. See docs/wireguard-private-homelab-access.md.
     networks:
       - monitoring
-  # Organization: Smart home (Zigbee via SLZB-06M → Zigbee2MQTT → Mosquitto → HA)
-  - name: mosquitto
-    # Internal MQTT broker for the Zigbee2MQTT stack. No port/Traefik (not web-facing);
-    # reachable only by zigbee2mqtt + home-assistant on the mqtt isolation net.
-    use_authelia: false
-    networks:
-      - mqtt
+  # Organization: Smart home — fully migrated to the cluster on 2026-08-09 (slice 5).
+  # mosquitto retired last (B1's final step): the k8s broker behind the mqtt_k8s_vip
+  # LoadBalancer serves z2m, HA, and the operator's mosquitto_pub; nothing pointed at the
+  # Docker copy for its whole soak (connection log: only its own healthcheck). The former
+  # `mqtt` and `ups` isolation nets retired with it.
   # zigbee2mqtt moved to daniel-box on 2026-08-09 (slice 5, B2) as a k8s Deployment — the
   # SLZB coordinator is network-attached, so nothing tied it to this host. The containers
   # role stays as the config-template source (the k8s Secret renders it), same split as
