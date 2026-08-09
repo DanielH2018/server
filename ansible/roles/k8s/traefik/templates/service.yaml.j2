@@ -27,6 +27,16 @@ spec:
   # Safe here because Traefik is the only ingress and the cluster is single-node; revisit the
   # scheduling implications when daniel-server joins at slice 7.
   externalTrafficPolicy: Local
+  # The node's OWN address as a second front door (slice-6 B5, 2026-08-09). The router's
+  # port-forward UI only targets devices from its DHCP/ARP list, and the MetalLB VIP has no
+  # lease and never will — so the 80/443 forward points at the DEVICE daniel-box, and
+  # kube-proxy answers on the node IP for this Service. The VIP stays the LAN-facing name
+  # (Pi-hole overrides, wg-easy, bridge transports all keep using .240); this field exists
+  # for the WAN path only. Local policy applies to externalIPs the same way, so client
+  # addresses stay real. Revisit at slice-7 join: the forward follows whichever node this
+  # IP belongs to.
+  externalIPs:
+    - {{ hostvars['daniel-box'].server_ip }}
   selector:
     app: traefik
   ports:
