@@ -136,6 +136,20 @@ services:
       {{ kuma('livesync-k8s', name='k3s LiveSync', monitor_type='http',
               url='https://livesync' ~ k8s_hostname_suffix ~ '.local.' ~ domain ~ '/',
               accepted_statuscodes=['401'], max_redirects=0) }}
+      # Slice 5. The cluster broker is raw TCP behind a pinned MetalLB VIP, so a `port` probe
+      # is the whole truth available from this host: the listener answering on the VIP is
+      # exactly what z2m and HA depend on. Auth can't be probed without embedding the MQTT
+      # password here.
+      {{ kuma('mosquitto-k8s', name='k3s Mosquitto (VIP)', monitor_type='port',
+              hostname=mqtt_k8s_vip, port=1883) }}
+      {{ kuma('zigbee2mqtt-k8s', name='k3s Zigbee2MQTT', monitor_type='http',
+              url='https://zigbee2mqtt' ~ k8s_hostname_suffix ~ '.local.' ~ domain,
+              accepted_statuscodes=['302'], max_redirects=0) }}
+      # Moved here from the Docker z2m's labels at its B2 cutover (same monitor id, so AutoKuma
+      # keeps the monitor and its history) — the coordinator is infra, not a container, and it
+      # needs watching regardless of where z2m runs. Pages even if HA/MQTT are down, catching an
+      # EHOSTUNREACH like the 2026-06-18 unplug.
+      {{ kuma('slzb-coordinator', port=6638, name='SLZB-06M Coordinator', hostname=slzb_ip, monitor_type='port') }}
       # healthchecks' user-facing hostname. Its old monitor was `docker`-type, queried through
       # the socket, so retiring the container took it away entirely rather than merely leaving
       # it stale.
