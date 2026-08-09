@@ -69,6 +69,9 @@ mqtt_k8s_vip: 10.0.0.242
 # Cross-role like mqtt_k8s_vip above — role defaults are invisible across roles.
 crowdsec_k8s_image: crowdsecurity/crowdsec:v1.7.8
 crowdsec_k8s_agent_username: k8s-traefik-agent
+# daniel-server's demoted engine logs in as this machine from B2 on (registered by the
+# k8s/crowdsec role; consumed by the containers/traefik role rendering ON daniel-server).
+crowdsec_k8s_server_agent_machine: daniel-server-agent
 crowdsec_k8s_lapi_port: 8080
 crowdsec_k8s_appsec_port: 7422
 # SLZB-06M Zigbee coordinator (network-attached) + pinned Zigbee PAN identity. Moved here

@@ -1,0 +1,13 @@
+{% from 'ingressroute.yml.j2' import ingressroute with context %}
+---
+{# D3: machine-key API for LAN agents and bouncers (daniel-server's demoted engine + its
+   traefik plugin from B2 on). TLS-terminated at the VIP with the LE wildcard, deliberately
+   NOT Authelia-gated — clients authenticate with LAPI machine/bouncer keys, and forward-auth
+   would break them. No bridge_hostname: nothing ever called an unsuffixed name. #}
+{{ ingressroute(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    false
+  )
+}}

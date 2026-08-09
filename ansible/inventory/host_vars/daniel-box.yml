@@ -51,6 +51,12 @@ containers_list:
   # Traefik CRDs (the LAPI IngressRoute arrives at B2, after traefik has installed them).
   - name: crowdsec
     platform: k8s
+    # B2 (D3): the LAPI's LAN face — daniel-server's demoted agent + its traefik bouncer
+    # authenticate here with machine/bouncer keys. hostname also feeds the Pi-hole
+    # per-service DNS override (→ ingress VIP); use_authelia false is load-bearing.
+    hostname: "crowdsec-lapi{{ k8s_hostname_suffix }}"
+    port: 8080
+    use_authelia: false
   - name: traefik
     platform: k8s
     port: 8080
