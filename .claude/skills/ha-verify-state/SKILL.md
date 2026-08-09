@@ -38,8 +38,11 @@ it advanced. A loaded-but-never-fired automation has an old/`None` `last_trigger
 2. **The recorder DB goes stale after a restart.** Verifying HA state by reading
    `config/home-assistant_v2.db` right after a deploy is **misleading** — entries can predate the
    restart. Discriminate **live vs removed/stale** by comparing the row's `last_updated_ts`
-   against the container's `StartedAt` (`docker inspect -f '{{.State.StartedAt}}' home-assistant`):
-   an entity whose newest row is older than `StartedAt` hasn't reported since the restart.
+   against the pod's start time. HA runs in k3s on daniel-box since slice-5 B3, so that is
+   `kubectl -n homelab get pod -l app=home-assistant -o jsonpath='{.items[0].status.startTime}'`
+   — an entity whose newest row is older than that hasn't reported since the restart. (The DB
+   itself lives on the Longhorn PVC now, not a host bind mount, so reaching it means going
+   through the pod rather than reading a path on daniel-server.)
 3. **The recorder needs its WAL.** If you must read the SQLite recorder, copy `*.db` **plus**
    `*.db-wal` and `*.db-shm` together — opening the `.db` alone (or `immutable=1`) gives a stale
    snapshot missing the most recent writes. A `null` context column does NOT mean "external" —
@@ -50,7 +53,10 @@ it advanced. A loaded-but-never-fired automation has an old/`None` `last_trigger
 
 ## When the API path is unavailable
 
-`probe.py ha` is server-only (needs the host age key to decrypt the token, and the HA container
-running). If HA is down, `probe.py health home-assistant` tells you the container state; the
-recorder-DB rules above are the fallback for historical questions, with the WAL/`StartedAt`
-caveats in mind.
+`probe.py ha` needs a host age key to decrypt the token, so run it on daniel-server or
+daniel-box — it reaches HA at the stable bridge URL `https://home-assistant.local.<domain>`,
+which is the same endpoint before and after the cluster move. If HA is down, ask the cluster:
+`kubectl -n homelab get pods -l app=home-assistant` and
+`kubectl -n homelab logs deploy/home-assistant --tail=50`. (`probe.py health` inspects Docker
+containers, so it has nothing to say about HA any more.) The recorder-DB rules above are the
+fallback for historical questions, with the WAL/start-time caveats in mind.

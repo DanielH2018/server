@@ -9,6 +9,11 @@ is the source of truth — **HA UI edits are overwritten on deploy.** Read the r
 (editing gotchas) and `SETUP.md` (how the bedroom suite fits together) before changing
 interdependent logic. Run everything from `/home/ubuntu/server`.
 
+HA itself moved to the k3s cluster at slice-5 B3, but **the edit path did not change**: the
+`ansible/roles/k8s/home-assistant/` role copies these same files verbatim into ConfigMaps, so
+this role stays the only place to change config. What changed is where you deploy from
+(daniel-box) and how you verify (a rollout and the pod, not a container) — see `ha-deploy`.
+
 ## 1. Pick the right file
 
 All under `ansible/roles/containers/home-assistant/`:
@@ -62,8 +67,8 @@ validation catches Jinja-syntax and structural errors, but NOT HA schema or enti
 
 ## 5. Deploy + confirm it loaded
 
-Invoke **`ha-deploy`** (deploy via Ansible → `probe.py health` → confirm the automation/entity
-actually loaded). Then invoke **`ha-verify-state`** to prove behavior: `probe.py ha automation
+Invoke **`ha-deploy`** (deploy via Ansible on daniel-box → gate on the rollout → confirm the
+automation/entity actually loaded). Then invoke **`ha-verify-state`** to prove behavior: `probe.py ha automation
 <id-or-alias>` exists and `last_triggered` advances when triggered. "Ansible ok" is not done —
 the live evidence is.
 
