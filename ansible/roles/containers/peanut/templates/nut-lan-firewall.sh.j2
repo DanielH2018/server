@@ -1,0 +1,30 @@
+#!/bin/bash
+# Restrict the LAN-published upsd port to daniel-box only, in the DOCKER-USER chain.
+# Docker-published ports BYPASS ufw (Docker inserts its own FORWARD rules ahead of ufw), so a
+# host-firewall lock for a *container* port must live here, not in ufw. Mirrors the
+# portainer-agent lock (see that role's script for the verified no-terminal-RETURN caveat).
+#
+# Why this exists (slice 5, B3 prereq): HA moves to the cluster while the UPS stays on this
+# host by design (design decision 3), so HA's NUT integration reaches upsd over the LAN. The
+# 127.0.0.1 binding stays alongside for the host's own secondary upsmon.
+
+PORT=3493
+# daniel-box's /32 — cluster pod egress NATs to the node address. Deliberately not the LAN /24:
+# upsd auth is a plaintext NUT password, so the reachable set stays exactly one host.
+ALLOW={{ hostvars['daniel-box'].server_ip }}
+# This host's own Docker bridges. Unlike portainer-agent's port, tcp/3493 also flows
+# container-to-container (HA on the ups net until its B3 cutover), and those forwards traverse
+# DOCKER-USER too — a bare DROP on the dport would sever them. The host's loopback upsmon is
+# NOT at risk either way (the 127.0.0.1 publish rides docker-proxy, which originates locally
+# and never enters FORWARD), but the bridge allow keeps every on-host consumer working.
+BRIDGES=172.16.0.0/12
+
+# Remove any previously-added rules for this port (ignore if absent)
+iptables -D DOCKER-USER -p tcp --dport "$PORT" -s "$ALLOW" -j RETURN 2>/dev/null || true
+iptables -D DOCKER-USER -p tcp --dport "$PORT" -s "$BRIDGES" -j RETURN 2>/dev/null || true
+iptables -D DOCKER-USER -p tcp --dport "$PORT" -j DROP 2>/dev/null || true
+
+# Allow daniel-box + this host's containers (RETURN = stop DOCKER-USER processing), drop the rest.
+iptables -I DOCKER-USER -p tcp --dport "$PORT" -s "$ALLOW" -j RETURN
+iptables -I DOCKER-USER -p tcp --dport "$PORT" -s "$BRIDGES" -j RETURN
+iptables -A DOCKER-USER -p tcp --dport "$PORT" -j DROP

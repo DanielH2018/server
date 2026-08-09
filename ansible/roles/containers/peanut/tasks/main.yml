@@ -45,6 +45,52 @@
   no_log: true
   register: peanut_cfg_settings
 
+# --- Host firewall: lock the LAN-published upsd port to daniel-box (DOCKER-USER) ---
+# Slice 5, B3 prereq: HA moves to the cluster while the UPS stays here (design decision 3), so
+# upsd's 3493 gains a LAN binding below — Docker-published ports bypass ufw, so the lock lives
+# in DOCKER-USER, applied by a systemd oneshot that re-asserts after Docker restarts. Applied
+# BEFORE the container deploy so there is no window with :3493 open to the whole LAN. Mirrors
+# portainer-agent's mechanism; see the script for why the bridge range is also allowed.
+- name: Deploy the NUT LAN firewall script
+  tags: [config]
+  ansible.builtin.template:
+    src: nut-lan-firewall.sh.j2
+    dest: /etc/nut-lan-firewall.sh
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+  register: peanut_fw_script
+
+- name: Deploy the NUT LAN firewall systemd service
+  tags: [config]
+  ansible.builtin.template:
+    src: nut-lan-firewall.service.j2
+    dest: /etc/systemd/system/nut-lan-firewall.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: peanut_fw_service
+
+- name: Enable the NUT LAN firewall service
+  tags: [config]
+  ansible.builtin.systemd:
+    name: nut-lan-firewall
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+- name: Re-apply the NUT LAN firewall rules if the script or unit changed
+  tags: [config]
+  ansible.builtin.systemd:
+    name: nut-lan-firewall
+    state: restarted
+    daemon_reload: true
+  become: true
+  when: peanut_fw_script is changed or peanut_fw_service is changed
+
 - name: Install udev rule for APC UPS USB permissions
   tags: [config]
   ansible.builtin.copy:

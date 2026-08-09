@@ -44,6 +44,10 @@ services:
     # the host secondary is what actually runs `systemctl poweroff` when FSD is raised.
     ports:
       - "127.0.0.1:3493:3493"
+      # Slice 5, B3 prereq: HA's NUT integration reaches upsd over the LAN once HA lives in the
+      # cluster (the UPS stays on this host by design). Locked to daniel-box + this host's own
+      # bridges in DOCKER-USER — see nut-lan-firewall.sh.j2, applied before this deploy.
+      - "{{ server_ip }}:3493:3493"
     {{ healthcheck("[\"CMD-SHELL\", \"upsc " ~ (nut_ups_name | default('apc-ups')) ~ "@localhost battery.charge 2>/dev/null || exit 1\"]") }}
     labels:
       {{ kuma('nut', name='NUT') }}

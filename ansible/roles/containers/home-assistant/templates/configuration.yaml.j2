@@ -381,6 +381,16 @@ http:
   # necessary — defense in depth only: MFA, not ip_ban, is the real gate (see below).
   trusted_proxies:
     - 172.16.0.0/12
+    # Slice 5, B3 prereqs — the proxy chain once HA runs in the cluster is
+    # CF -> daniel-server Traefik -> (bridge, egressing as the server's LAN IP) -> cluster
+    # Traefik pod (10.42.x) -> HA. HA walks X-Forwarded-For past every hop it trusts, so both
+    # new hops must be here or ip_ban starts banning the proxies instead of the client.
+    # /16 not the node's /24: the pod CIDR grows a /24 per node and daniel-server joins at
+    # slice 7. Harmless while HA is still on Docker (nothing connects from these ranges).
+    # The /32 is daniel-server's LAN IP, literal because this file is copied verbatim
+    # (validate-ha-config rejects Ansible markers here) — it is `server_ip` in host_vars.
+    - 10.42.0.0/16
+    - 10.0.0.161/32
   # Brute-force defense for the internet-facing login. Authelia is intentionally OFF on this route
   # (it breaks the companion app), so HA's own login is the last gate — CrowdSec + per-router
   # rate-limit front it, this hardens the gate itself. Auto-bans an IP after 5 failed logins (writes
