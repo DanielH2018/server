@@ -29,6 +29,7 @@
   loop:
     - "{{ crowdsec_k8s_agent_username }}"
     - "{{ crowdsec_k8s_server_agent_machine }}"
+    - "{{ crowdsec_k8s_authelia_agent_machine }}"
   register: crowdsec_k8s_machine_add
   become: true
   no_log: true

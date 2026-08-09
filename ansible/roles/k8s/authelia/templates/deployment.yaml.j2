@@ -35,6 +35,42 @@ spec:
         runAsUser: {{ puid }}
         runAsGroup: {{ pgid }}
         fsGroup: {{ pgid }}
+      initContainers:
+        # Seeds the agent sidecar's /etc/crowdsec before its entrypoint fills in defaults:
+        # acquisition pointing at this pod's auth log, plus the same whitelist parsers both
+        # other agents use. Runs as the pod's uid 1000 (NOT root): it creates the log file
+        # Authelia must then write, and root-with-ALL-caps-dropped cannot chown — the same
+        # trap slice 5 hit on Home Assistant's config seed. Owning the file by creating it
+        # sidesteps the capability entirely. The agent reads these as root regardless.
+        - name: crowdsec-config-install
+          image: {{ crowdsec_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            - >-
+              install -m 644 /seed/acquis.yaml /etc/crowdsec/ &&
+              install -d /etc/crowdsec/parsers/s02-enrich &&
+              install -m 644 /seed/whitelist.yaml /seed/trusted-remote-whitelist.yaml
+              /etc/crowdsec/parsers/s02-enrich/ &&
+              install -m 640 /dev/null /var/log/authelia/authelia.log
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: crowdsec-secret
+              mountPath: /seed
+              readOnly: true
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
+            # The log file must EXIST before the agent starts. Pod containers start in
+            # parallel, and crowdsec's file acquisition does not retry a missing file — it
+            # logs one error and drops that datasource for the life of the container, so a
+            # lost race leaves a healthy-looking pod with no detection at all (measured
+            # here on the first rollout). Created uid-1000-owned so Authelia can write it.
+            - name: authelia-logs
+              mountPath: /var/log/authelia
       containers:
         - name: authelia
           image: {{ authelia_k8s_image }}
@@ -78,6 +114,9 @@ spec:
             # from somewhere.
             - name: tmp
               mountPath: /tmp
+            # Shared with the crowdsec-agent sidecar below.
+            - name: authelia-logs
+              mountPath: /var/log/authelia
           readinessProbe:
             httpGet:
               path: /api/health
@@ -97,6 +136,63 @@ spec:
             requests:
               cpu: "{{ authelia_k8s_cpu_request }}"
               memory: {{ authelia_k8s_mem_request }}
+        # Parses THIS pod's auth log into the in-cluster LAPI, so failed-login scenarios
+        # (LePresidente/authelia) cover the cluster portal the way daniel-server's agent
+        # covers the Docker one. Same shape as the traefik pod's sidecar: no readinessProbe
+        # (sidecar readiness would gate the portal's Service endpoints, and a hub hiccup must
+        # not take SSO out of rotation), lenient liveness, emptyDir for the hub datafiles the
+        # image demands.
+        - name: crowdsec-agent
+          image: {{ crowdsec_k8s_image }}
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            - name: DISABLE_LOCAL_API
+              value: "true"
+            - name: LOCAL_API_URL
+              value: "http://crowdsec:{{ crowdsec_k8s_lapi_port }}"
+            - name: AGENT_USERNAME
+              value: "{{ crowdsec_k8s_authelia_agent_machine }}"
+            - name: AGENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: authelia-crowdsec
+                  key: AGENT_PASSWORD
+            - name: COLLECTIONS
+              value: "{{ authelia_k8s_agent_collections }}"
+          # Pod default uid, NOT root. Root here is actively worse: with ALL caps dropped it
+          # has no DAC_OVERRIDE, so it cannot write the /etc/crowdsec tree the init container
+          # owns, and `cscli parsers install` dies on mkdir. As uid 1000 it owns that tree and
+          # the log file outright. The agent needs no privilege — it reads a file and posts
+          # to the LAPI.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
+            - name: crowdsec-data
+              mountPath: /var/lib/crowdsec/data
+            - name: authelia-logs
+              mountPath: /var/log/authelia
+              readOnly: true
+            - name: crowdsec-tmp
+              mountPath: /tmp
+          livenessProbe:
+            exec:
+              command: ["cscli", "lapi", "status"]
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: "{{ authelia_k8s_agent_cpu_limit }}"
+              memory: {{ authelia_k8s_agent_mem_limit }}
+            requests:
+              cpu: "{{ authelia_k8s_agent_cpu_request }}"
+              memory: {{ authelia_k8s_agent_mem_request }}
       volumes:
         - name: secrets
           secret:
@@ -108,4 +204,17 @@ spec:
           persistentVolumeClaim:
             claimName: authelia-config
         - name: tmp
+          emptyDir: {}
+        - name: authelia-logs
+          emptyDir:
+            sizeLimit: {{ authelia_k8s_log_size }}
+        - name: crowdsec-secret
+          secret:
+            secretName: authelia-crowdsec
+            defaultMode: 0440
+        - name: crowdsec-etc
+          emptyDir: {}
+        - name: crowdsec-data
+          emptyDir: {}
+        - name: crowdsec-tmp
           emptyDir: {}

@@ -29,3 +29,15 @@ authelia_k8s_mem_request: 64Mi
 # else at info — the per-provider failures only surface at debug. Raise it for a run with
 # `-e authelia_k8s_log_level=debug` rather than committing a noisy default.
 authelia_k8s_log_level: info
+
+# Slice-6 B2 follow-up — the CrowdSec agent sidecar that parses this portal's auth log.
+# Collections are the authelia-specific subset (the traefik/http ones belong to the agents
+# reading those logs). The machine NAME is crowdsec_k8s_authelia_agent_machine in group_vars —
+# the k8s/crowdsec role registers it, and only group_vars crosses that role boundary.
+authelia_k8s_agent_collections: LePresidente/authelia
+authelia_k8s_agent_cpu_limit: "0.5"
+authelia_k8s_agent_mem_limit: 256Mi
+authelia_k8s_agent_cpu_request: 50m
+authelia_k8s_agent_mem_request: 64Mi
+# Bounds a runaway auth log on the emptyDir shared with the sidecar.
+authelia_k8s_log_size: 512Mi

@@ -67,10 +67,13 @@ spec:
               install -m 644 /seed/acquis.yaml /etc/crowdsec/ &&
               install -d /etc/crowdsec/parsers/s02-enrich &&
               install -m 644 /seed/whitelist.yaml /seed/trusted-remote-whitelist.yaml
-              /etc/crowdsec/parsers/s02-enrich/
+              /etc/crowdsec/parsers/s02-enrich/ &&
+              install -m 640 /dev/null /var/log/traefik/access.log
+          # Pod default uid, not root: it creates the access log traefik must then write,
+          # and root-with-ALL-caps-dropped cannot chown it back (measured on the authelia
+          # pod). Creating the file as that user sidesteps the capability; the agent reads
+          # it as root regardless.
           securityContext:
-            runAsUser: 0
-            runAsGroup: 0
             allowPrivilegeEscalation: false
             capabilities:
               drop:
@@ -81,6 +84,13 @@ spec:
               readOnly: true
             - name: crowdsec-etc
               mountPath: /etc/crowdsec
+            # Pre-create the access log: pod containers start in parallel and crowdsec's
+            # file acquisition does not retry a missing file — it logs one error and drops
+            # the datasource for the container's lifetime, leaving a healthy-looking pod
+            # with no detection. The agent only won this race here because it crash-looped
+            # on its first rollout; the authelia pod lost it outright.
+            - name: traefik-logs
+              mountPath: /var/log/traefik
       containers:
         - name: traefik
           image: {{ traefik_k8s_image }}
@@ -156,10 +166,11 @@ spec:
               cpu: "{{ traefik_k8s_cpu_request }}"
               memory: {{ traefik_k8s_mem_request }}
         # Slice-6 B1 (D1/D2): log-parsing agent, LAPI-less — it tails this pod's access log
-        # and ships signals to the in-cluster engine. Root (runAsUser 0 overrides the pod's
-        # 65532) because the image entrypoint manages /etc/crowdsec and the hub; caps still
-        # drop to nothing — an agent forks no notification plugins, so the engine's
-        # SETUID/SETGID needs don't apply here.
+        # and ships signals to the in-cluster engine. Runs as the pod's uid (65532), NOT
+        # root: root with ALL caps dropped has no DAC_OVERRIDE, so it cannot write the
+        # /etc/crowdsec tree the init container owns and `cscli parsers install` dies on
+        # mkdir (measured on the authelia pod, which has the same shape). The agent needs
+        # no privilege — it reads a file and posts to the LAPI.
         #
         # Deliberately NO readinessProbe: sidecar readiness gates the whole pod's Service
         # endpoints, and a hub download hiccup must not pull the EDGE out of rotation. The
@@ -184,8 +195,6 @@ spec:
             - name: COLLECTIONS
               value: "{{ traefik_k8s_agent_collections }}"
           securityContext:
-            runAsUser: 0
-            runAsGroup: 0
             allowPrivilegeEscalation: false
             capabilities:
               drop:
