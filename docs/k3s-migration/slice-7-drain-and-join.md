@@ -107,13 +107,18 @@ noise, Authelia sessions on both stacks); the forward-bridge teardown landed
 flowing again post-cap with the frozen restore points pruned. Docker Pi-hole retired once
 its query log flatlines — its recreate-driven tail ends as Phases B/C retire containers.
 
-### B — Dissolves and cheap retires
+### B — Dissolves and cheap retires — EXECUTED 2026-08-09 (ahead of Phase A, deliberately:
+none of these depend on the slice-6 close-out)
 
-watchtower (Renovate owns updates; every remaining image is pinned), glances (node-exporter/
-cAdvisor already scraped), the Portainer cohort (D5), docker-proxy-lifecycle if its consumer
-went with slice 6. autoheal stays until the last health-checked Docker service drains, then
-retires with the fleet. Each retire = inventory entry removed + role archived + monitors
-pruned, one commit per service, `probe.py`/Kuma green after each.
+Done, one commit each: **watchtower** (`35c0dc8d` — Renovate owns updates), **glances**
+(`7e6f4453` — node-exporter/cAdvisor already scraped; homepage's whole glances-widget
+Monitoring section went with it), the **Portainer cohort** (`83532b8e`, `580da2dd` — server +
+docker-proxy-portainer, homepage widget AND homepage's proxy-net membership which existed
+only for it, the Pi's agent + DOCKER-USER firewall torn down via a one-shot play,
+`portainer_manager_host`, the Kuma port monitor, the Renovate lockstep rule + its CI test,
+and both dead SOPS secrets). daniel-server: 26 → 23 entries. Still Phase B's tail:
+docker-proxy-lifecycle once its consumers (autoheal, formerly watchtower) resolve, and
+autoheal itself, which stays until the last health-checked Docker service drains.
 
 ### C — Remaining straight ports
 
