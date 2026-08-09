@@ -52,10 +52,20 @@ with its tombstones applied on daniel-server (cron gone, state dir gone). Note t
 Prometheus still scrapes its local agent as `crowdsec_daniel-server` — correct, that agent
 still exists; the LAPI/decision series now come from the cluster job.
 
-**Next:** B3 waits on the A1 cold-boot gate and the router-UI reads. Optional filler
-meanwhile: the cluster Authelia logs to stdout, so no agent feeds `LePresidente/authelia`
-scenarios for the cluster edge — brute-force detection currently covers only the Docker
-portal. Same fix shape as the traefik file log (D2).
+**Cluster SSO detection gap closed — 2026-08-09 (`d1a67d08`).** The k8s Authelia logged only
+to stdout, so nothing fed `LePresidente/authelia` for the cluster edge: every `-k8s` service's
+login page sat behind an unmonitored portal. It now writes a file log (keep_stdout preserved)
+with its own agent sidecar — **one LAPI, four agents**, all four confirmed on
+`cs_lapi_machine_requests_total`. Two container-security lessons, applied to the traefik pod
+too since its shape is identical: the log file must EXIST before the agent starts (crowdsec's
+file acquisition never retries a missing file — one error and that datasource is dead for the
+container's life, leaving a healthy-looking pod with no detection; traefik escaped only by
+crash-looping into a later start), and neither agent runs as root any more (root with ALL caps
+dropped has no DAC_OVERRIDE, so it cannot write the init container's `/etc/crowdsec` tree and
+`cscli parsers install` dies on mkdir — as the pod's own uid each agent owns its config and log
+outright, and needs no privilege to read a file and post to the LAPI).
+
+**Next:** B3 waits on the A1 cold-boot gate and the router-UI reads — both operator tasks.
 
 > design.md row: *"Edge cutover: CrowdSec LAPI, Pi-hole, router forward → VIP, flip the four
 > `*_host` flags — exit: external access and LAN DNS on the new path."*
