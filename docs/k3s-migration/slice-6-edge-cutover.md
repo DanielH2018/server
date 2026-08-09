@@ -36,10 +36,26 @@ through the directory-mounted dynamic config — a traefik restart is part of an
 config change. Also of note: the old `crowdsec_bouncer_api_key` and the Docker LAPI's DB
 (crowdsec-db volume) are retained for rollback until the slice closes.
 
-**Still open in B2:** the Metabase dashboard move (Docker `roles/containers/crowdsec` still
-serves the now-frozen old DB; port = stock metabase/metabase + seed-zip initContainer +
-crowdsec-db PVC mount in the engine pod, then archive the Docker role). B3 waits on the A1
-cold-boot gate.
+**B2 COMPLETE — 2026-08-09 (evening).** The dashboard moved into the engine pod (`0d185f0d`):
+Metabase reads the live decision DB off the shared PVC, seeded by an initContainer (the same
+wget+unzip the Docker image baked at build time), Authelia-gated at
+`crowdsec-k8s.local.<domain>` — verified 302 through the ingress with DNS resolving to the
+VIP. The Docker container is stopped and removed, its role archived, daniel-server's count is
+26, and the Kuma monitor follows.
+
+Verified end-state: **one LAPI, three agents** (`localhost` in-pod, `k8s-traefik-agent`
+sidecar, `daniel-server-agent` — all three authenticating, confirmed both by
+`cs_lapi_machine_requests_total` and by `cscli lapi status` on daniel-server naming the
+cluster URL); both bouncers enforcing from it (two-edge gate passed); cluster Prometheus
+scraping the engine (`up{job="crowdsec"}=1`); the allowlist cron writing state on daniel-box
+with its tombstones applied on daniel-server (cron gone, state dir gone). Note the Docker
+Prometheus still scrapes its local agent as `crowdsec_daniel-server` — correct, that agent
+still exists; the LAPI/decision series now come from the cluster job.
+
+**Next:** B3 waits on the A1 cold-boot gate and the router-UI reads. Optional filler
+meanwhile: the cluster Authelia logs to stdout, so no agent feeds `LePresidente/authelia`
+scenarios for the cluster edge — brute-force detection currently covers only the Docker
+portal. Same fix shape as the traefik file log (D2).
 
 > design.md row: *"Edge cutover: CrowdSec LAPI, Pi-hole, router forward → VIP, flip the four
 > `*_host` flags — exit: external access and LAN DNS on the new path."*
