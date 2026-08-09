@@ -75,7 +75,15 @@ environment:
 
 ### CrowdSec
 
-- Confirm the CrowdSec bouncer middleware is applied on the Traefik entrypoint
+- There are TWO edges and ONE LAPI (slice-6 B2): daniel-server's Docker Traefik and the cluster's.
+  Confirm the bouncer middleware is on **both** entrypoints of **both** — the k8s side attaches it
+  entrypoint-wide in `roles/k8s/traefik/templates/static-config.yaml.j2`, the Docker side in
+  `traefik.yml.j2`. A middleware that fails to construct is not a partial failure: Traefik 404s
+  every router referencing it, so "the edge is down" and "the WAF is off" look different, but
+  "the plugin silently disabled itself" (unwritable `/plugins-storage`) looks like neither.
+- Confirm each agent still reaches the LAPI: `kubectl -n homelab exec deploy/crowdsec -c crowdsec
+  -- cscli machines list` should show four (engine, k8s-traefik, k8s-authelia, daniel-server).
+  A dead agent is invisible from the outside — the pod stays healthy and detection just stops.
 - Flag any service that routes traffic externally without going through Traefik
 
 ---
