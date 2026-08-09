@@ -1,5 +1,8 @@
 FROM python:3.14-slim
 WORKDIR /app
-RUN pip install --no-cache-dir mcp httpx uvicorn
+# mcp pinned <2: 2.0.0 (picked up by the 2026-08-09 Sunday rebuild) removed
+# mcp.server.fastmcp and crash-looped the container. Lift the pin only with an
+# app.py port to the 2.x API.
+RUN pip install --no-cache-dir 'mcp<2' httpx uvicorn
 COPY app/app.py app/safe_reads.py ./
 CMD ["python", "app.py"]
