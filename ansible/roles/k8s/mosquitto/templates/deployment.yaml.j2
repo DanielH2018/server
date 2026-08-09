@@ -22,6 +22,33 @@ spec:
         runAsUser: {{ puid }}
         runAsGroup: {{ pgid }}
         fsGroup: {{ pgid }}
+      # mosquitto 2.1's password-file plugin refuses the pwfile straight off a Secret mount
+      # ("Unable to open pwfile") even though a plain open() of the same path succeeds — the
+      # root-owned ..data symlink farm fails whatever ownership/symlink check the plugin does.
+      # Reproduced 2026-08-08 with a probe pod: secret-mounted copy fails, a cp'd uid-1000 copy
+      # starts clean. So an init container copies both files into an emptyDir the pod owns.
+      initContainers:
+        - name: config-copy
+          image: {{ mosquitto_k8s_image }}
+          command:
+            - sh
+            - -c
+            # install -m 400: mosquitto also refuses a world-readable password file, and cp
+            # would create one via the default umask.
+            - install -m 444 /secret/mosquitto.conf /config/ &&
+              install -m 400 /secret/passwordfile /config/
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config-secret
+              mountPath: /secret
+              readOnly: true
+            - name: config
+              mountPath: /config
       containers:
         - name: mosquitto
           image: {{ mosquitto_k8s_image }}
@@ -68,12 +95,14 @@ spec:
               cpu: "{{ mosquitto_k8s_cpu_request }}"
               memory: {{ mosquitto_k8s_mem_request }}
       volumes:
-        - name: config
+        - name: config-secret
           secret:
             secretName: mosquitto-config
-            # 288 = 0440: mosquitto refuses a world-readable password_file. Decimal because
-            # the YAML-1.1 parser behind kubectl reads 0o440 as a string.
+            # 288 = 0440 (decimal — the YAML-1.1 parser behind kubectl reads 0o440 as a
+            # string). Only the init container reads this; the broker gets the owned copy.
             defaultMode: 288
+        - name: config
+          emptyDir: {}
         - name: data
           persistentVolumeClaim:
             claimName: {{ mosquitto_k8s_claim }}
