@@ -186,6 +186,11 @@ spec:
           volumeMounts:
             - name: crowdsec-etc
               mountPath: /etc/crowdsec
+            # The entrypoint refuses to start without a volume here (it holds the hub's
+            # downloaded datafiles; the sqlite DB lives only in the LAPI pod). emptyDir is
+            # right: everything in it re-downloads from the hub on start.
+            - name: crowdsec-data
+              mountPath: /var/lib/crowdsec/data
             - name: traefik-logs
               mountPath: /var/log/traefik
               readOnly: true
@@ -238,6 +243,8 @@ spec:
               - key: lapi_key
                 path: lapi_key
         - name: crowdsec-etc
+          emptyDir: {}
+        - name: crowdsec-data
           emptyDir: {}
         - name: tmp-agent
           emptyDir: {}

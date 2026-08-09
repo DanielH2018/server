@@ -120,15 +120,9 @@ data:
               - "9.9.9.9:53"
               - "149.112.112.112:53"
 
-    # stdout, not a file. The Docker instance writes to /var/log/traefik with logrotate; in
-    # k8s the kubelet owns log files under /var/log/pods, which is also where slice 6's
-    # CrowdSec acquisition will read from once it stops using the Docker socket.
+    # Process log stays on stdout for kubectl logs. The ACCESS log moved to a file at
+    # slice-6 B1 (see the accessLog block above) — the sidecar agent tails it from the
+    # shared emptyDir, which superseded this comment's /var/log/pods idea (D2).
     log:
       format: json
       level: INFO
-    accessLog:
-      format: json
-      fields:
-        defaultMode: keep
-        names:
-          StartUTC: drop

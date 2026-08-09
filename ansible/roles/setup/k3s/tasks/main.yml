@@ -723,3 +723,18 @@
     state: restarted
   become: true
   when: k3s_node_dns_dropin.changed
+
+- name: Raise the inotify instance limit for pod log tailing
+  tags: [node-sysctl]
+  # Kernel default is 128 instances PER UID — and every root-uid process on the node
+  # (kubelet's log watchers plus each root container) draws from the same budget. The
+  # crowdsec agent sidecar was the straw that broke it at slice-6 B1: its file
+  # acquisition died with "couldn't initialize inotify: too many open files" while the
+  # node sat well under every other limit. 1024 matches what log-shipping DaemonSet
+  # docs (promtail/vector) recommend for container nodes.
+  ansible.posix.sysctl:
+    name: fs.inotify.max_user_instances
+    value: "1024"
+    state: present
+    reload: true
+  become: true
