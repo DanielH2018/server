@@ -4,8 +4,12 @@ description: Persist a Zigbee2MQTT device setting (Aqara/Hue tuning like FP300 m
 allowed-tools: Bash
 ---
 
-Set a Zigbee2MQTT **device** setting at runtime. Z2M (and Mosquitto) run on `daniel-server`;
-the broker requires auth (`allow_anonymous false`). Run from `/home/ubuntu/server`.
+Set a Zigbee2MQTT **device** setting at runtime. Since slice-5 (2026-08-09) Z2M and Mosquitto
+run **in the k3s cluster on daniel-box**; the broker is reachable LAN-wide at the pinned VIP
+`{{ mqtt_k8s_vip }}` = **10.0.0.242:1883** and requires auth (`allow_anonymous false`).
+`mosquitto_pub`/`mosquitto_sub` come from the `mosquitto-clients` host package (install it if
+missing — there is no Docker mosquitto to `docker exec` into anymore). Run from
+`/home/ubuntu/server` on either host.
 
 **Important:** these settings live on the device / in Z2M's runtime state, **not** in git. A
 **re-pair resets them**, so every setting you apply must be recorded (see step 4) to be
@@ -19,7 +23,7 @@ never sit in the command literal or history, then publish to `zigbee2mqtt/<Frien
 ```bash
 u=$(sops -d --extract '["mqtt_username"]' ansible/vars/secrets.yml)
 p=$(sops -d --extract '["mqtt_password"]' ansible/vars/secrets.yml)
-docker exec mosquitto mosquitto_pub -h localhost -u "$u" -P "$p" \
+mosquitto_pub -h 10.0.0.242 -u "$u" -P "$p" \
   -t 'zigbee2mqtt/Aqara FP300/set' -m '{"motion_sensitivity": "high"}'
 ```
 
@@ -27,8 +31,8 @@ docker exec mosquitto mosquitto_pub -h localhost -u "$u" -P "$p" \
   and all, single-quoted.
 - One JSON object; multiple keys are fine: `-m '{"motion_sensitivity":"high","absence_delay_timer":60}'`.
 - `$(...)` forces a permission prompt (and this is a write) — expected. Minor caveat: `-P "$p"`
-  is visible in `ps` on the host for the instant the exec runs (single-user box; accepted, and
-  it's the repo's documented recipe).
+  is visible in `ps` for the instant the publish runs (single-user boxes; accepted, and it's
+  the repo's documented recipe).
 
 ## 2. Verify it applied
 
@@ -38,14 +42,13 @@ is reflected:
 ```bash
 u=$(sops -d --extract '["mqtt_username"]' ansible/vars/secrets.yml)
 p=$(sops -d --extract '["mqtt_password"]' ansible/vars/secrets.yml)
-docker exec mosquitto mosquitto_sub -h localhost -u "$u" -P "$p" \
+mosquitto_sub -h 10.0.0.242 -u "$u" -P "$p" \
   -t 'zigbee2mqtt/Aqara FP300' -C 1
 ```
 
 If the value isn't in the payload, check Z2M logs for a rejected/unknown option:
-`uv run python scripts/probe.py loki-query '{container="zigbee2mqtt"}'` or
-`docker logs --tail 40 zigbee2mqtt`. (Battery devices may need a wake/poll before the change
-takes — some Aqara settings apply on the next check-in.)
+`kubectl -n homelab logs deploy/zigbee2mqtt --tail=40` (from daniel-box). (Battery devices may
+need a wake/poll before the change takes — some Aqara settings apply on the next check-in.)
 
 ## 3. Confirm the HA-visible effect (if relevant)
 

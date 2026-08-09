@@ -5,7 +5,10 @@ allowed-tools: Bash, Glob
 ---
 
 Deploy the `home-assistant` role and **prove the change took**. Run from `/home/ubuntu/server`.
-HA is on `daniel-server`; a recreate is ~120s.
+**Since slice-5 B3 (2026-08-09) HA runs in the k3s cluster on `daniel-box`** — deploy from
+daniel-box; the config-authoring files stay in `roles/containers/home-assistant/`, and the
+`--tags home-assistant` deploy ships them via the k8s role (ConfigMaps + Secret, then a
+rollout restart). A restart is ~60-120s.
 
 ## Steps
 
@@ -14,10 +17,11 @@ HA is on `daniel-server`; a recreate is ~120s.
    `uv run pytest ansible/roles/containers/home-assistant/tests`. Don't deploy a config that
    fails structural validation.
 
-2. **Confirm `common_config_changed` is wired** for any bind-mounted file you edited — otherwise
-   the deploy is idempotent (`recreate: auto`) and your edit won't recreate the container. The
-   automations/scenes/scripts/templates/configuration tasks are already wired; a *new*
-   bind-mounted file needs its config task `register:`ed and OR'd in (see the role `CLAUDE.md`).
+2. **A new config file must be added to the k8s role's ConfigMap + init-container install
+   list** (`roles/k8s/home-assistant/templates/configmap.yaml.j2` + `deployment.yaml.j2`) —
+   the manifests role rolls the deployment when the rendered ConfigMap/Secret changes, so
+   already-listed files redeploy automatically; a file the ConfigMap doesn't carry silently
+   never reaches `/config`.
 
 3. **Deploy:**
    ```
@@ -27,11 +31,11 @@ HA is on `daniel-server`; a recreate is ~120s.
    `--check` first for a dry run if the change is risky. For config-only changes that should NOT
    recreate the container, see the `--skip-tags deploy` note in repo-root `CLAUDE.md`.
 
-4. **Gate on health** (allow-listed, no prompt):
+4. **Gate on health:**
    ```
-   uv run python scripts/probe.py health home-assistant
+   kubectl -n homelab get pods -l app=home-assistant   # 1/1 Running
    ```
-   Exit 0 = running + healthy. The "could not validate that the sqlite3 database was shutdown
+   The "could not validate that the sqlite3 database was shutdown
    cleanly" line on boot is **benign** (WAL auto-recovers) — not a deploy failure.
 
 5. **Prove it loaded** (this is the step the generic `deploy` skill can't do). Use
@@ -50,11 +54,11 @@ HA is on `daniel-server`; a recreate is ~120s.
 
 6. **Report** the deploy result, the health line, and the live load/fire evidence. If health
    fails or the automation didn't load, pull logs
-   (`uv run python scripts/probe.py loki-query '{container="home-assistant"}'`
-   or `docker logs --tail 50 home-assistant`) before declaring success.
+   (`kubectl -n homelab logs deploy/home-assistant --tail=50` from daniel-box) before
+   declaring success.
 
 ## Notes
 - A newly added/renamed entity sits `unknown`/`unavailable` until its first report — re-check
   rather than treating it as a failed deploy (see `ha-verify-state`).
-- Deploy only from `daniel-server` (where HA + the age key live). `probe.py ha`/`health`
-  inspect the local Docker daemon.
+- Deploy from `daniel-box` (the cluster + age key live there). `probe.py ha` works from
+  either host — it reaches HA via the bridge hostname, not a container inspect.
