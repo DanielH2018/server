@@ -65,14 +65,23 @@ ansible/vars/secrets.yml '["<name>"]' '"<new>"'`, update the registry date (`syn
 since the value already existed — set `last_rotated` by hand or re-run after editing), then
 redeploy the app **and** every consumer (e.g. Homepage, monitor-bridge, configarr). Examples:
 - `*_api_key` (sonarr/radarr/jellyfin/prowlarr): Settings → General → regenerate API key.
-- `crowdsec_bouncer_api_key`: generate any new 32+ char value, `sops set` it, then redeploy
-  traefik (`--tags traefik`). The role's registration flow is rotation-safe: it probes LAPI
-  with the configured key and, on mismatch, deletes + re-adds `traefik-bouncer` (cscli has
-  no update flag), then restarts traefik. **Do NOT just `sops set` without the redeploy** —
-  traefik hot-reloads the new key from the file provider while LAPI still holds the old
-  hash, and the bouncer plugin fails OPEN (silent WAF bypass) until re-registration.
-  Verify after: `docker exec crowdsec cscli bouncers list` (fresh `last_pull` on
-  `traefik-bouncer`/its `@<ip>` row) and a `docker logs traefik` free of LAPI 403s.
+- **CrowdSec bouncer keys** (`crowdsec_bouncer_docker_traefik_key` for daniel-server's edge,
+  `crowdsec_k8s_bouncer_api_key` for the cluster's) and the agent password
+  (`crowdsec_k8s_agent_password`, shared by all four agents). Since slice-6 B2 the single
+  LAPI lives in the cluster and registration is DECLARATIVE — the engine's `BOUNCER_KEY_*`
+  env, not `cscli`. Rotation is therefore: `sops set` the new value → delete the old
+  registration on the engine (`kubectl -n homelab exec deploy/crowdsec -c crowdsec --
+  cscli bouncers delete <k8straefik|dockertraefik>`; `cscli machines delete <name>` for the
+  agent password) → redeploy `--tags crowdsec` on daniel-box → redeploy the consumer
+  (`--tags traefik` on daniel-server for its bouncer, `--tags traefik`/`--tags authelia` on
+  daniel-box for the sidecars). The delete is required because re-registration never
+  UPDATES an existing key. **Do NOT just `sops set`**: the plugin hot-reloads the new key
+  while the LAPI still holds the old hash, and it fails OPEN — a silent WAF bypass. The
+  traefik deploy now fails loudly on a rejected key (its probe task), which is the guard.
+  Verify after: `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list`
+  (fresh `last_pull`) and a `docker logs traefik` free of LAPI 403s.
+  `crowdsec_bouncer_api_key` is LEGACY — it authenticated the retired local LAPI and is
+  retained only for the B2 rollback window.
 - `grafana_admin_password`, `*_password`: change in the app (or its env on first run).
 - `authelia_secret` / `authelia_jwt`: rotating forces all users to re-login (not breaking).
 - `authelia_oidc_hmac_secret` / `*_password_hash`: re-issues OIDC — re-pair jellyfin (the
