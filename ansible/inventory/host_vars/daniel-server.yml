@@ -235,11 +235,11 @@ containers_list:
       # event logs to loki:3100 over this net. OTLP 4317/4318 are published to host loopback
       # for Claude Code, which runs on the host (not a container). No web UI, so no port/Authelia.
       - monitoring
-  - name: glances
-    port: 61208
-    use_authelia: true
-    networks:
-      - monitoring
+  # glances retired 2026-08-09 (slice-7 Phase B dissolve): node-exporter + cAdvisor already
+  # feed the same host metrics to Prometheus/Grafana, so this was a second, unscraped copy
+  # of data the monitoring plane owns. Homepage's glances-widget Monitoring section went
+  # with it — those readings live in Grafana. The Pi's own glances copy is untouched (it was
+  # never part of the 46-entry disposition). Role in roles/containers/archive/.
   - name: uptime-kuma
     port: 3001
     use_authelia: true

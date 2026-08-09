@@ -82,7 +82,9 @@ def test_daniel_server_is_still_wholly_docker():
     # engine lives in the traefik role, demoted to an agent at B2b); it rides in the
     # cluster engine pod now, reading the live decision DB. Then watchtower (26 -> 25) on
     # 2026-08-09, slice-7 Phase B's first dissolve — not moved but REPLACED: Renovate owns
-    # image updates, so an unsupervised puller was pure risk. The count
+    # image updates, so an unsupervised puller was pure risk. glances followed the same day
+    # (25 -> 24) — node-exporter + cAdvisor already feed Prometheus the same host metrics,
+    # and homepage's glances widgets retired with it (the readings live in Grafana). The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -91,6 +93,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 25
-    assert len(filter_by_platform(containers, "docker")) == 25
+    assert len(containers) == 24
+    assert len(filter_by_platform(containers, "docker")) == 24
     assert filter_by_platform(containers, "k8s") == []
