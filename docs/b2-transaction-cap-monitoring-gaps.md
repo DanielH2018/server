@@ -298,3 +298,15 @@ other one.
 
 Note that while the target is blank Longhorn lists no backups — the B2 data is untouched, and step 1
 re-syncs it.
+
+## Verdict — 2026-08-09, the first post-reset daily run
+
+**Green, decisively.** The revised sequence ran in the window (target restored 00:01, kopia
+connected first try, storm 0/min throughout), and the 03:30 daily-backup completed **17/17
+volumes in four minutes** (03:34–03:38) with the backup target `available: true` and zero
+`transaction_cap_exceeded` — the set even included the two Longhorn volumes slice-5 added that
+same night (zigbee2mqtt, home-assistant). Incrementals ARE the cheap part: the 08-08 cap hit
+was the PVC-migration full-upload day plus the 403 retry storm feeding itself, not the daily
+volume count. The eight config volumes stay in the backup set, `k3s_longhorn_nobackup_volumes`
+stays empty, and slice-5's D6 resolves to `longhorn` for the z2m/HA claims (mosquitto stays
+nobackup on its own merits — regenerable retained state).
