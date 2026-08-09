@@ -196,20 +196,10 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     # the explicit known-manual allowlist. Without this, a token whose consumer_tag falls
     # through to None silently drops out of rotation and only surfaces months later as an
     # OVERDUE page — exactly how arr_autoblock_push_token slipped in when autofix-bridge landed.
-    known_manual = {
-        "pi_sd_health_push_token",
-        "pi_recovery_push_token",
-        "secret_rotation_push_token",
-        # Same cross-host shape as the two Pi tokens: the pusher is a cron on daniel-box (k3s
-        # role) while the AutoKuma label lives on daniel-server's uptime-kuma compose file, so
-        # one redeploy cannot update both and consumer_tag correctly returns None.
-        "longhorn_backup_push_token",
-        # Identical shape again — cron on daniel-box (k8s/claude-otel), label on
-        # daniel-server. Four of the five entries here are now this same cross-host case;
-        # if a fifth lands, derive the exemption from the pusher/label host pair instead of
-        # extending this list by hand.
-        "claude_otel_push_token",
-    }
+    # Derived from the script's own CROSS_HOST_PUSH_TOKENS (single source — the fifth
+    # cross-host token, daniel_box_disk, is when the hand-list here moved there): each entry
+    # documents its pusher/label host pair beside the name.
+    known_manual = sr.CROSS_HOST_PUSH_TOKENS
     reg = sr.load_registry()
     auto = [n for n, m in reg["secrets"].items() if m.get("tier") == "auto"]
     assert auto  # sanity: the registry has auto-tier tokens

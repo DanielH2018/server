@@ -4,10 +4,13 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
 
 ## At a glance
 - **Images:** `lscr.io/linuxserver/freshrss:latest` + `nginx:alpine` (feed cache)
-- **Host:** daniel-server · **Port:** 80 · **URL:** `freshrss.<domain>` (Authelia: yes)
-- **Networks:** apps
-- **Depends on:** traefik, authelia
-- **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
+- **Host: daniel-box (k8s), since 2026-08-05 — slice 2.** This containers role no longer deploys
+  anywhere; it survives as the **config-source home**: `roles/k8s/freshrss`'s ConfigMap embeds
+  `files/nginx-feed-cache.conf`. Edit the cache conf / extensions HERE; deploy with
+  `--tags freshrss` from daniel-box.
+- **Port:** 80 · **URL:** `freshrss.<domain>` (Authelia: yes; forwards to the cluster via
+  `bridge_hostname`)
+- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 
 ## Notable
 - Bundles FreshRSS extensions shipped in `files/`: Karakeep button, Wallabag button,
@@ -17,5 +20,7 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
   outbound-feed proxy. Adding another cached feed means editing the nginx conf.
 
 ## Editing
-- Compose: `templates/docker-compose.yml.j2` · Extensions/cache: `files/`
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "freshrss"`
+- Extensions/cache: `files/` (the nginx conf is embedded into the k8s ConfigMap by `roles/k8s/freshrss`)
+- Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "freshrss"`
+- `templates/docker-compose.yml.j2` is a frozen rollback artifact — it no longer deploys and
+  Renovate ignores it.

@@ -17,6 +17,14 @@ k3s_longhorn_version: v1.7.2
 #                        Yaegi plugin, Authelia forwardauth, the raw-TCP Terraria
 #                        entrypoint, Cloudflare trustedIPs.
 #   --disable=servicelb  k3s's klipper-lb fights MetalLB for LoadBalancer Services.
+#   --disable=local-storage
+#                        the bundled local-path provisioner shipped a SECOND default
+#                        StorageClass next to longhorn (two defaults make an unclassed PVC's
+#                        placement a k8s-version-dependent coin flip, and local-path data is
+#                        node-local + unbackuped). Un-defaulting it with kubectl patch does
+#                        not stick — k3s reapplies its bundled manifests on every restart —
+#                        so the addon is disabled outright; nothing ever provisioned with it
+#                        (checked 2026-08-09: zero local-path PVCs).
 #   --node-ip,           pin the node's identity to the host's canonical address instead of
 #   --advertise-address  letting k3s autodetect it. daniel-box was multi-homed at install
 #                        time — a USB adapter on 10.0.0.153 alongside eno1 on 10.0.0.215,
@@ -38,7 +46,7 @@ k3s_longhorn_version: v1.7.2
 #                        (the unit is Type=notify with TimeoutStartSec=0). Repair with
 #                        `k3s server --cluster-reset`, or wipe and re-run k3s-bringup.yml.
 k3s_server_args: >-
-  server --cluster-init --disable=traefik --disable=servicelb
+  server --cluster-init --disable=traefik --disable=servicelb --disable=local-storage
   --write-kubeconfig-mode 0640
   --node-ip {{ server_ip }} --advertise-address {{ server_ip }}
   --kubelet-arg=allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark
@@ -179,6 +187,13 @@ k3s_longhorn_backup_health_cron_minute: "*/10"
 #
 # Raise it only together with a decision about the cap itself, never to silence the warning.
 k3s_longhorn_daily_backup_budget: 17
+
+# Root-disk headroom heartbeat (templates/disk-health.sh.j2). 75, not the fleet's 90: Longhorn's
+# storageMinimalAvailablePercentage=25 stops replica scheduling once the disk passes 75% used, so
+# this pages at the line where the storage plane starts degrading, not after. Same */10-cron /
+# 1200s-Kuma-interval pairing as the backup heartbeat above.
+k3s_disk_max_pct: 75
+k3s_disk_health_cron_minute: "*/10"
 
 # Bound volumes forced OUT of the backup set, as `namespace/pvcName` — an override for volumes
 # whose StorageClass says `longhorn` (back me up) but which should not be. Needed as a separate

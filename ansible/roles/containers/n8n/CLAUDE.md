@@ -38,5 +38,8 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
   crashes n8n with a key-mismatch. Don't "harden" this by adding it to secrets.
 
 ## Editing
-- Compose: `templates/docker-compose.yml.j2` · Images: `templates/Dockerfile*.j2`
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "n8n"`
+- Images: `templates/Dockerfile*.j2` + `templates/n8n-task-runners.json.j2` (built/copied by
+  the `n8n-images` k8s role)
+- Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "n8n"`
+- `templates/docker-compose.yml.j2` is a frozen rollback artifact — it no longer deploys and
+  Renovate ignores it (the Dockerfiles stay Renovate-tracked).

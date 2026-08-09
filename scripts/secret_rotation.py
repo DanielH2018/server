@@ -101,6 +101,23 @@ def classify(name: str) -> str:
     return "assisted"
 
 
+# Push tokens whose pusher and AutoKuma `push_token` label live on DIFFERENT hosts, or which
+# reference this script itself — one redeploy cannot update both halves atomically, so these stay
+# MANUAL: consumer_tag returns None, the unattended cron skips them, the audit still reminds.
+# The single source the guard test derives its allowlist from; a new cross-host token is added
+# HERE, with its host pair, not to the test.
+CROSS_HOST_PUSH_TOKENS = frozenset(
+    {
+        "pi_sd_health_push_token",  # Pi cron + daniel-server label
+        "pi_recovery_push_token",  # Pi cron + daniel-server label
+        "longhorn_backup_push_token",  # daniel-box cron (k3s role) + daniel-server label
+        "claude_otel_push_token",  # daniel-box cron (k8s/claude-otel) + daniel-server label
+        "daniel_box_disk_push_token",  # daniel-box cron (k3s role) + daniel-server label
+        "secret_rotation_push_token",  # self-referential
+    }
+)
+
+
 def consumer_tag(name: str) -> str | None:
     """Deploy tag whose redeploy makes a rotated push token take effect — or None when the
     consumer spans hosts / is self-referential (those stay MANUAL: the unattended cron skips
@@ -116,11 +133,8 @@ def consumer_tag(name: str) -> str | None:
         # kept as arr_autoblock_* through the arr-autoblock -> autofix-bridge rename for Kuma
         # history continuity; the consumer is the autofix-bridge deploy tag.)
         return "autofix-bridge"
-    return (
-        # pi_sd_health / pi_recovery (Pi cron + server label, MANUAL Pi deploy),
-        # secret_rotation (self) -> manual
-        None
-    )
+    # CROSS_HOST_PUSH_TOKENS (and anything else unrecognised) -> manual
+    return None
 
 
 def _stable_offset(name: str, span: int) -> int:
