@@ -22,8 +22,9 @@ See repo-root `CLAUDE.md` for shared conventions.
   (`network_key` from SOPS `zigbee_network_key`, `pan_id`/`ext_pan_id` from host_vars) so a
   redeploy can NEVER regenerate it and un-pair every device. Do not switch these to GENERATE.
 - **Device/pairing state is Z2M-owned, NOT templated:** `data/database.db`,
-  `coordinator_backup.json`, `devices.yaml`, `groups.yaml`. All under the `./data` bind mount
-  → Kopia-backed. Losing `./data` = re-pair everything. **Friendly names** (renamed 2026-06-18:
+  `coordinator_backup.json`, `devices.yaml`, `groups.yaml`. All on the `zigbee2mqtt-data`
+  Longhorn PVC (`longhorn` class → nightly B2 backup; Kopia stopped covering this at the
+  cutover). Losing the PVC = re-pair everything. **Friendly names** (renamed 2026-06-18:
   Lamp / Left Light / Right Light / Tap Dial / Aqara FP300) live here too — set via the Z2M UI or
   the `zigbee2mqtt/bridge/request/device/rename` MQTT request `{"from":"<ieee>","to":"<name>"}`.
   **Per-device settings** (exposed as HA number/select entities) are also Z2M-owned device state —
@@ -46,13 +47,13 @@ See repo-root `CLAUDE.md` for shared conventions.
   end-devices (FP300, Tap Dial), judged on last-seen only since pinging a sleeping radio drains it.
   60 min is a STARTING POINT (Z2M default is 1500 min/25h): the Tap Dial self-reports every
   ~7-18 min and the FP300 is very chatty, so 60 min catches a real dropout within the hour without
-  false offline alerts. Tune per observed cadence. Verify after deploy:
-  `docker logs zigbee2mqtt | grep "/availability'"` should show `online` publishes.
+  false offline alerts. Tune per observed cadence. Verify after deploy (from daniel-box):
+  `kubectl -n homelab logs deploy/zigbee2mqtt | grep "/availability'"` should show `online` publishes.
 - **Coordinator monitored at the infra level (since 2026-06-18).** An AutoKuma `port` monitor
-  ("SLZB-06M Coordinator", `{{ slzb_ip }}:6638`) is declared as a SECOND monitor on this container's
-  labels — `kuma('slzb-coordinator', monitor_type='port', hostname=slzb_ip, port=6638)` (AutoKuma keys
-  monitors by id, not container, so the target need not be a container; the `port` type was added to
-  the shared `ansible/templates/autokuma.yml.j2` macro). It pages even if HA/MQTT are down — catching
+  ("SLZB-06M Coordinator", `{{ slzb_ip }}:6638`) — declared on the **uptime-kuma** container's own
+  labels since the k8s cutover (AutoKuma derives monitors from running-container labels, and this
+  role no longer runs a container; same monitor id, so history survived the move). It pages even if
+  HA/MQTT are down — catching
   an `EHOSTUNREACH` like the 2026-06-18 accidental unplug, which the container's own `docker` monitor
   misses (Z2M stays "running" while crash-looping against an unreachable radio). HA layers a second,
   software-side alert on `binary_sensor.zigbee2mqtt_bridge_connection_state` (the home-assistant role's
@@ -61,5 +62,7 @@ See repo-root `CLAUDE.md` for shared conventions.
   (`zigbee2mqtt.<domain>`) when adding devices, then disable.
 
 ## Editing
-- Compose: `templates/docker-compose.yml.j2` · Z2M cfg: `templates/configuration.yaml.j2`
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "zigbee2mqtt"`
+- Z2M cfg: `templates/configuration.yaml.j2` (rendered into the k8s Secret by `roles/k8s/zigbee2mqtt`)
+- Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "zigbee2mqtt"`
+- `templates/docker-compose.yml.j2` is a frozen rollback artifact — it no longer deploys and
+  Renovate ignores it.

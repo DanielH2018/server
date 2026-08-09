@@ -9,7 +9,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   (`watchtower.enable=false`), NOT `:latest`. HA is stateful with monthly, occasionally-breaking
   releases, so it belongs in the critical/stateful tier (like jellyfin/the *arr stack) — bump via
   Renovate PRs (the `/linuxserver/` regex tracks the tag), not watchtower's watch-all `:latest` pool.
-  (LSIO is x86-64-maintained; only the 32-bit ARM variant was deprecated — fine for daniel-server.)
+  (LSIO is x86-64-maintained; only the 32-bit ARM variant was deprecated — fine for daniel-box.)
 - **Host: daniel-box (k8s), since 2026-08-09 — slice 5, B3.** This containers role no longer
   deploys anywhere; it survives as the **config-authoring home** (validate-ha-config, the macro
   tests, `sanctioned_writers.yml`, the skills all anchor here): `roles/k8s/home-assistant`
@@ -38,11 +38,14 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
     Authentication → TOTP (and keep the recovery code from enrolment).
 - **HACS preinstalled** via `DOCKER_MODS=linuxserver/mods:homeassistant-hacs`
   (LSIO Docker mod that drops the Home Assistant Community Store into `/config`).
-- **`configuration.yaml` is templated** from `configuration.yaml.j2` to `./config`.
-  It sets `use_x_forwarded_for: true` + `trusted_proxies: 172.16.0.0/12` so HA honors
+- **`configuration.yaml` is templated** from `configuration.yaml.j2` — since the k8s cutover it
+  renders into the cluster ConfigMap/Secret set (`roles/k8s/home-assistant`), and an init
+  container installs it into `/config` at pod start. It sets `use_x_forwarded_for: true` +
+  `trusted_proxies` covering every hop of the bridge chain (`172.16.0.0/12`, the pod CIDR
+  `10.42.0.0/16`, and daniel-server's LAN IP — the bridge egresses as it) so HA honors
   Traefik's `X-Forwarded-For` (without it HA rejects the proxied request with
-  "400 Bad Request"). The template task is wired to `common_config_changed`, so editing
-  it recreates the container on the next deploy. **Note:** HA may rewrite parts of its
+  "400 Bad Request"). The manifests task rollout-restarts HA when the rendered config changes,
+  so an edit takes effect on the next deploy. **Note:** HA may rewrite parts of its
   own config via the UI, but this file is the Ansible source of truth and is
   overwritten on deploy — keep UI-managed config (integrations, etc.) in the areas HA
   stores separately (`.storage/`, the recorder DB…), which are NOT templated.
@@ -178,7 +181,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   mmwave radar does see a pet as presence, but the room was confirmed pet-free during the incident).
 - **Adaptive Lighting is a HACS dependency (since 2026-06-18).** `configuration.yaml` declares
   `adaptive_lighting:` for the bedroom group; the integration code installs via HACS into
-  `custom_components/adaptive_lighting/` (Kopia-backed, not templated — like `dreo`). Install it
+  `custom_components/adaptive_lighting/` (on the config PVC, not templated — like `dreo`). Install it
   via HACS BEFORE deploying, or HA logs "integration not found" and skips the block. The deploy's
   full restart loads a newly added custom component (a YAML "Quick Reload" does not).
 - **Light/fan mediator — single guarded writer (Phase 2, since 2026-06-22).** AUTO/programmatic
@@ -513,7 +516,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   so an edit recreates HA (~120s). Built-in cards only — no Lovelace `resources:`/`resource_mode:`.
   **The landing dashboard is NOT YAML-configurable:** HA opens its auto-generated areas "Overview"
   unless "Bedroom" is set as default in the UI (Settings → Dashboards → ⋮ → "Set as default for
-  everyone" → persists in `.storage/core.config` `default_panel`, Kopia-backed). **Fast loop for
+  everyone" → persists in `.storage/core.config` `default_panel`, on the config PVC). **Fast loop for
   dashboard-only tweaks:** edit the rendered file and Developer Tools → YAML → **Reload Lovelace**
   (no HA restart). Cards: APC UPS, **AirGradient ONE air quality** (CO₂ gauge +
   pollutant glance — the metrics the threshold alerts fire on), the outdoor weather + AQI cards
@@ -553,7 +556,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   (`forgiving_round`), so the "N° cooler" message renders cleanly. Dashboard:
   `weather.forecast_home` card + an outdoor-AQI glance (US AQI/PM2.5/PM10/ozone) next to the
   indoor AirGradient card in `ui-lovelace.yaml.j2`.
-- **All persistent state is `./config` → `/config`** (Kopia-backed): the SQLite
+- **All persistent state is the `home-assistant-config` Longhorn PVC → `/config`** (`longhorn`
+  class → nightly B2 backup; Kopia stopped covering this at the cutover): the SQLite
   recorder DB, `.storage/`, secrets, automations, and the templated `configuration.yaml`.
   **The "could not validate that the sqlite3 database was shutdown cleanly" warning on every boot is
   benign and NOT fixable via `stop_grace_period`** — a timed `docker stop` hit the full grace and
@@ -648,5 +652,9 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   can't derive. Design + Phase-2 plan: `docs/superpowers/specs/2026-06-21-ha-state-model-phase*`.
 
 ## Editing
-- Compose: `templates/docker-compose.yml.j2` · HA cfg: `templates/configuration.yaml.j2`
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"`
+- HA cfg: `templates/configuration.yaml.j2` + `files/` (shipped into the cluster by
+  `roles/k8s/home-assistant`)
+- Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"`
+  — or the `/ha-deploy` skill, which adds the health + loaded-config gates
+- `templates/docker-compose.yml.j2` is a frozen rollback artifact — it no longer deploys and
+  Renovate ignores it.

@@ -7,11 +7,13 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **Image:** `ghcr.io/schaka/janitorr@sha256:…` — **digest-pinned + `watchtower.enable=false`**
   (currently the `jvm-stable` build pulled 2026-06-28). `jvm-stable` is a floating non-semver
   alias Renovate can't version-track, and janitorr deletes real media, so updates are deliberate.
-  **Manual update:** `docker pull ghcr.io/schaka/janitorr:jvm-stable`, take the new digest, redeploy.
-- **Host:** daniel-server · **No web UI**, no Authelia (background service)
-- **Networks:** media
-- **Depends on:** traefik, **sonarr, radarr** (no Authelia — background service)
-- **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
+  **Manual update:** pull `jvm-stable`, take the new digest, update the k8s role's default, redeploy.
+- **Host: daniel-box (k8s), since 2026-08-08 — slice 4, B7b.** This containers role no longer
+  deploys anywhere; it survives as the **config-source home**: `roles/k8s/janitorr`'s Secret
+  renders `templates/application.yml.j2`. Edit retention rules HERE; deploy with
+  `--tags janitorr` from daniel-box.
+- **No web UI**, no Authelia (background service) · targets the cluster sonarr/radarr/jellyfin
+- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 
 ## Notable
 - Behaviour (retention rules, leaving-soon thresholds, dry-run flag) lives in
@@ -41,5 +43,7 @@ See repo-root `CLAUDE.md` for shared conventions.
   NOT clustered in a post-boot window (check `last reboot` + log timestamps first).
 
 ## Editing
-- Compose: `templates/docker-compose.yml.j2` · Rules: `templates/application.yml.j2`
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "janitorr"`
+- Rules: `templates/application.yml.j2` (rendered into the k8s Secret by `roles/k8s/janitorr`)
+- Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "janitorr"`
+- `templates/docker-compose.yml.j2` is a frozen rollback artifact — it no longer deploys and
+  Renovate ignores it.

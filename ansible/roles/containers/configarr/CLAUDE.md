@@ -15,14 +15,16 @@ can catch a title that lies — the only pre-grab lever is **release-group reput
 
 ## At a glance
 - **Image:** `ghcr.io/raydak-labs/configarr` (version-pinned, Renovate-managed)
-- **Host:** daniel-server · **No web UI**, no Authelia · **Networks:** media
-- **Depends on:** sonarr, radarr (`meta/deps.yml`)
-- **One-shot (ephemeral):** run via `compose run --rm` (a fresh container that auto-removes each
-  sync, so nothing lingers in `docker ps -a`), on deploy + a daily 04:30 cron. No container_name /
-  restart / healthcheck / AutoKuma — a batch job, not a service.
-- **Host-plane cron:** `configarr_sync.py` wraps the `compose run` and writes a
-  `{ts,ok,msg}` state file monitor-bridge reads for its **"Configarr Sync"** monitor (see
-  monitor-bridge's CLAUDE.md) — the healthcheck a one-shot batch job can't have.
+- **Host: daniel-box (k8s CronJob), since 2026-08-08 — slice 4, B7a.** This containers role no
+  longer deploys anywhere; it survives as the **config-source home**: `roles/k8s/configarr`
+  renders `templates/config.yml.j2` and copies `files/configarr_status.py`. Edit configarr
+  config HERE; deploy with `--tags configarr` (the k8s role) from daniel-box.
+- **No web UI**, no Authelia · targets the cluster sonarr/radarr
+- **One-shot (ephemeral):** a nightly k8s CronJob, plus a `configarr-deploy` Job the deploy
+  creates from it so a config change syncs immediately. No healthcheck / AutoKuma — a batch
+  job, not a service; its health signal is a daniel-box host cron (`/opt/configarr-health`)
+  that reads the last Job's outcome via `configarr_status.py` (still owned + tested here) and
+  pushes the "Configarr Sync" Kuma monitor.
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
 
 ## Scope — what configarr manages
@@ -95,14 +97,15 @@ uv run python scripts/probe.py arr sonarr "/api/v3/qualityprofile" --json \
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Sync config: `templates/config.yml.j2`
-- Host cron: `files/configarr_sync.py` (I/O shell) + `files/configarr_status.py` (pure
-  exit-code/output evaluator, unit-tested in `files/test_configarr_status.py`). Both are copied
-  from `roles/setup/common/files/host_lib.py` beside them and run under the host's system
-  Python — kept 3.12-clean and registered in `ansible/tests/test_host_scripts_py312.py`.
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "configarr"`
-- Verify/run a sync manually (no persistent container to `docker logs` — it's `--rm`):
-  `docker compose -f containers/configarr/docker-compose.yml run --rm -T configarr` — a healthy
-  run lists the managed CFs and reports no errors. Or run the state-writing wrapper directly:
-  `CONFIGARR_COMPOSE=containers/configarr/docker-compose.yml python3 /opt/configarr/configarr_sync.py`
-  and check `/var/lib/configarr/state.json`.
+- Health evaluator: `files/configarr_status.py` (pure exit-code/output verdict logic,
+  unit-tested in `files/test_configarr_status.py`) — copied by `roles/k8s/configarr` into
+  `/opt/configarr-health` on daniel-box, where a cron reads the last Job and pushes Kuma.
+  (`files/configarr_sync.py`, the Docker-era compose wrapper, is retired with the host
+  residue it wrote to — `/opt/configarr` and `/var/lib/configarr` were removed 2026-08-09.)
+- Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "configarr"` —
+  the k8s role also runs a one-off `configarr-deploy` Job so the edit syncs immediately.
+- Verify a sync: `kubectl -n homelab logs job/configarr-deploy` (or the latest
+  `configarr-…` CronJob pod) — a healthy run lists the managed CFs and reports no errors.
 - Unit tests: `uv run pytest ansible/roles/containers/configarr/files`.
+- `templates/docker-compose.yml.j2` is a frozen rollback artifact — it no longer deploys and
+  Renovate ignores it.
