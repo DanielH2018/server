@@ -248,6 +248,12 @@ services:
       {{ kuma('speedtest-bridge', name='speedtest (via bridge)', monitor_type='http',
               url='https://speedtest.local.' ~ domain ~ speedtest_k8s.bridge_probe_path,
               max_redirects=0) }}
+      # The cluster Pi-hole's DNS VIP (slice-6 B3). A real query — resolve the LAN wildcard
+      # via 10.0.0.243 — so up means MetalLB + FTL + the dnsmasq ConfigMap all answered, not
+      # merely that something accepted a TCP connection. The Docker Pi-hole keeps its own
+      # docker-type monitor through the drain; this one is what survives its retirement.
+      {{ kuma('pihole-k8s-dns', name='Pi-hole k8s DNS', monitor_type='dns',
+              hostname='homepage.local.' ~ domain, dns_resolve_server=dns_k8s_vip) }}
       # cloudflare-ddns dead-man's-switches, moved here from the Docker role's compose when
       # that copy was retired (slice 2, first cutover). AutoKuma derives monitors from the
       # labels on a running container, so deleting the Docker copy deletes its monitors — and
