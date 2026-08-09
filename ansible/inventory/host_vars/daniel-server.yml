@@ -111,11 +111,15 @@ containers_list:
     # unauthenticated admin API otherwise reachable to every monitoring-net neighbor (Authelia
     # only gates the Traefik ingress). The Pi's wg-easy entry omits this — accepted LAN-only risk.
     password_hash: "{{ wg_easy_password_hash }}"
-    # DNS baked into generated WireGuard client configs → Pi-hole on this host, so
+    # DNS baked into generated WireGuard client configs → the cluster Pi-hole VIP
+    # (slice-6 B3 cutover, 2026-08-09; was this host's Docker Pi-hole), so
     # *.local.<domain> resolves over the tunnel (private homelab path that bypasses
     # Cloudflare/CrowdSec). Mobile full-tunnel clients use it directly; desktop
     # split-tunnel clients override it (hosts file) to keep general DNS on Mullvad.
-    default_dns: "{{ server_ip }}"
+    # NB: the DNS lives in each client's IMPORTED config — existing clients keep the
+    # old .161 until their config is re-exported/re-imported, which must happen (or be
+    # accepted) before the Docker Pi-hole retires at the end of the drain.
+    default_dns: "{{ dns_k8s_vip }}"
     # On `monitoring`, NOT `apps`: wg-easy must not share a Docker bridge with the
     # containers behind the host-published ports WG clients reach (Traefik 80/443 ->
     # apps, Pi-hole 53 -> apps, Portainer 9000 -> proxy, Jellyfin DLNA -> media). Reaching

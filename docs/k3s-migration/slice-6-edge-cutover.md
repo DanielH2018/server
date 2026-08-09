@@ -65,9 +65,10 @@ dropped has no DAC_OVERRIDE, so it cannot write the init container's `/etc/crowd
 `cscli parsers install` dies on mkdir — as the pod's own uid each agent owns its config and log
 outright, and needs no privilege to read a file and post to the LAPI).
 
-**Next:** B3's build half is done (2026-08-09) — the cluster Pi-hole serves on 10.0.0.243 and
-every build gate passed. Its cutover half, and B4/B5, wait on the A1 cold-boot gate and the
-router-UI reads — both operator tasks.
+**Next:** A1 is COMPLETE (cold-boot gate passed both hosts 2026-08-09; router reads
+confirmed). B3's build half is done and its cutover is underway: wg-easy client DNS and
+daniel-server's resolv.conf now point at .243; the router DHCP DNS option flip (operator,
+one UI change) starts the lease drain. B4 is unblocked.
 
 > design.md row: *"Edge cutover: CrowdSec LAPI, Pi-hole, router forward → VIP, flip the four
 > `*_host` flags — exit: external access and LAN DNS on the new path."*
@@ -168,16 +169,22 @@ down. Both changes land in A1, before any B-step.
 
 ## Steps
 
-### A1 — Prerequisites (no service moves)
+### A1 — Prerequisites (no service moves) — COMPLETE 2026-08-09
 
 - Ansible-manage node DNS per D8 (new tasks in `setup/k3s` for daniel-box; extend the pihole
-  role's resolv.conf handling for daniel-server).
-- **Cold-boot gate (design.md:182):** with the cluster stopped and Docker Pi-hole stopped,
-  cold-boot both hosts; both must reach a registry and come up clean. Run it on a maintenance
-  evening — this is the gate that licenses B3, and failing it just means Pi-hole stays Docker.
-- Confirm at the router UI: DHCP scope + its DNS option value; the 80/443/51820 forward table.
-- Confirm the systemd-resolved stub (127.0.0.53:53) coexists with a *VIP* :53 — it binds the
-  node addresses, not 10.0.0.243, so no conflict is expected; verify, don't assume.
+  role's resolv.conf handling for daniel-server). DONE earlier in the slice.
+- **Cold-boot gate (design.md:182): PASSED both hosts, 2026-08-09 evening.** daniel-server:
+  Pi-hole stopped, cold boot, registry resolved via the 1.1.1.1 fallback, `HTTP/2 401` from
+  registry-1.docker.io, Pi-hole stayed down across the boot, all 36 containers back healthy.
+  daniel-box: an `@reboot` probe at 9s uptime, k3s still `activating`, showed the pinned
+  1.1.1.1/1.0.0.1 as the active upstreams (ISP pair present only as the DHCP link entry) and
+  the registry answering. Cold-boot safety is configuration now, not the DHCP accident the
+  baseline measured. One transient: authelia's crowdsec-agent sidecar fatals until the LAPI
+  finishes starting (~4 restarts), then recovers — the backoff loop IS the retry; no change.
+- Router UI confirmed by the operator: DHCP DNS option and the 80/443/51820 → .161 forward
+  table are as the baseline assumed.
+- systemd-resolved stub vs the :53 VIP: verified live — the stub binds 127.0.0.53, the VIP
+  serves 10.0.0.243, both answering simultaneously since the B3 build deploy.
 
 ### B1 — CrowdSec stands up in the cluster (shadow)
 
@@ -288,7 +295,8 @@ the soak.
 
 ## Unverified — resolve during execution, not by assuming
 
-- **Router DHCP DNS option value** — assumed 10.0.0.161; read it in the router UI at A1.
+- **Router DHCP DNS option value** — RESOLVED 2026-08-09: operator confirmed the assumption
+  (10.0.0.161, and the forward table is exactly 80/443 + 51820/udp → .161).
 - **Cloudflare records per public name** — the k8s ddns manages apex+terraria only; confirm
   the wildcard/CNAME situation covers every `use_authelia` public hostname before B4's
   `k8s_public_route` flip makes them answerable.
@@ -306,5 +314,6 @@ the soak.
   from the Docker copy's cAdvisor history at B1.
 - **daniel-pi has no CrowdSec coverage today** — unchanged by this slice; candidate for a
   third agent afterwards, not scope creep now.
-- **k3s stub-resolver interaction with a :53 VIP** — expected non-conflict (stub binds
-  127.0.0.53, kube-dns binds cluster IPs), but A1 verifies on the live node.
+- **k3s stub-resolver interaction with a :53 VIP** — RESOLVED 2026-08-09: non-conflict
+  verified live — the stub answers on 127.0.0.53 while the VIP serves 10.0.0.243, both up
+  since the B3 build deploy and across a cold boot.
