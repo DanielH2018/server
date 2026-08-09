@@ -44,6 +44,13 @@ autofix_fake_remux_policy:
   history_retention_days: 14
 
 containers_list:
+  # Slice 6, B1. BEFORE traefik deliberately: the traefik pod carries a crowdsec agent
+  # sidecar that logs into this engine's LAPI, and the machine credential is registered by
+  # a post-deploy task in this role — so the engine must be up (and the machine exist)
+  # before a traefik rollout starts the sidecar. Safe on fresh bring-up: this role uses no
+  # Traefik CRDs (the LAPI IngressRoute arrives at B2, after traefik has installed them).
+  - name: crowdsec
+    platform: k8s
   - name: traefik
     platform: k8s
     port: 8080

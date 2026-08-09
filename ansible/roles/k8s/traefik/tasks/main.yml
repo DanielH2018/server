@@ -56,6 +56,7 @@
       - service.yaml
     manifests_secret_files:
       - cf-token-secret.yaml
+      - crowdsec-secret.yaml
 
 - name: Read the address MetalLB assigned to the Traefik Service
   tags: [deploy]

@@ -40,8 +40,10 @@ data:
             entryPoint:
               to: https
               scheme: https
-          # No crowdsec middleware here. The bouncer plugin and the LAPI rebuild are slice 6
-          # — safe only while k8s_public_route is false and this VIP is LAN-reachable only.
+          middlewares:
+            # Entrypoint-wide, matching the Docker edge (slice-6 B1). Everything entering
+            # this entrypoint passes the CrowdSec ban-list + AppSec check before routing.
+            - {{ k8s_namespace }}-crowdsec@kubernetescrd
       https:
         address: ":{{ traefik_k8s_https_port }}"
         forwardedHeaders:
@@ -56,6 +58,8 @@ data:
             # Entrypoint-wide, matching the Docker side. rate-limit stays per-router (the
             # ingressroute() macro attaches it) so a future chatty service can opt into a
             # higher ceiling, which an entrypoint-level limiter cannot express.
+            # crowdsec first: a banned IP is rejected before any headers work is done.
+            - {{ k8s_namespace }}-crowdsec@kubernetescrd
             - {{ k8s_namespace }}-default-headers@kubernetescrd
       ping:
         address: ":{{ traefik_k8s_ping_port }}"
@@ -65,6 +69,23 @@ data:
         addEntryPointsLabels: true
         addRoutersLabels: true
         addServicesLabels: true
+
+    # Slice-6 B1 (D2): a real file, not stdout — the crowdsec agent sidecar tails it from
+    # the shared emptyDir. Same json format + dropped StartUTC as the Docker edge, so the
+    # crowdsecurity/traefik parser behaves identically across the cutover.
+    accessLog:
+      filePath: /var/log/traefik/access.log
+      format: json
+      fields:
+        defaultMode: keep
+        names:
+          StartUTC: drop
+
+    experimental:
+      plugins:
+        bouncer:
+          moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+          version: {{ traefik_k8s_bouncer_plugin_version }}
 
     serversTransport:
       insecureSkipVerify: false

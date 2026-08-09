@@ -1,0 +1,21 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: crowdsec
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: crowdsec
+  ports:
+    - name: lapi
+      port: {{ crowdsec_k8s_lapi_port }}
+      targetPort: lapi
+    - name: appsec
+      port: {{ crowdsec_k8s_appsec_port }}
+      targetPort: appsec
+    # Scraped by the cluster Prometheus once the B2 re-plumb moves the crowdsec target
+    # over; exposed now so that is a scrape-config change only.
+    - name: metrics
+      port: {{ crowdsec_k8s_metrics_port }}
+      targetPort: metrics

@@ -55,6 +55,32 @@ spec:
           volumeMounts:
             - name: acme
               mountPath: /data
+        # Seeds the agent sidecar's /etc/crowdsec before its entrypoint fills in defaults —
+        # acquis pointing at the shared access log, and the same whitelist parsers as the
+        # Docker edge (from the traefik-crowdsec Secret). Root like the sidecar itself.
+        - name: crowdsec-config-install
+          image: {{ crowdsec_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            - >-
+              install -m 644 /seed/acquis.yaml /etc/crowdsec/ &&
+              install -d /etc/crowdsec/parsers/s02-enrich &&
+              install -m 644 /seed/whitelist.yaml /seed/trusted-remote-whitelist.yaml
+              /etc/crowdsec/parsers/s02-enrich/
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: crowdsec-secret
+              mountPath: /seed
+              readOnly: true
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
       containers:
         - name: traefik
           image: {{ traefik_k8s_image }}
@@ -91,8 +117,16 @@ spec:
             - name: cloudflare
               mountPath: /secrets
               readOnly: true
+            # The bouncer plugin reads its LAPI key from here (crowdsecLapiKeyFile in the
+            # crowdsec Middleware) — a file, so the key never appears in the CRD.
+            - name: crowdsec-key
+              mountPath: /secrets/crowdsec
+              readOnly: true
             - name: acme
               mountPath: /data
+            # Shared with the crowdsec-agent sidecar, which tails access.log (slice-6 D2).
+            - name: traefik-logs
+              mountPath: /var/log/traefik
             - name: tmp
               mountPath: /tmp
           readinessProbe:
@@ -114,6 +148,64 @@ spec:
             requests:
               cpu: "{{ traefik_k8s_cpu_request }}"
               memory: {{ traefik_k8s_mem_request }}
+        # Slice-6 B1 (D1/D2): log-parsing agent, LAPI-less — it tails this pod's access log
+        # and ships signals to the in-cluster engine. Root (runAsUser 0 overrides the pod's
+        # 65532) because the image entrypoint manages /etc/crowdsec and the hub; caps still
+        # drop to nothing — an agent forks no notification plugins, so the engine's
+        # SETUID/SETGID needs don't apply here.
+        #
+        # Deliberately NO readinessProbe: sidecar readiness gates the whole pod's Service
+        # endpoints, and a hub download hiccup must not pull the EDGE out of rotation. The
+        # bouncer middleware already fails open per its own config; a dead agent costs
+        # detection, not serving. Lenient liveness restarts a truly wedged agent.
+        - name: crowdsec-agent
+          image: {{ crowdsec_k8s_image }}
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            - name: DISABLE_LOCAL_API
+              value: "true"
+            - name: LOCAL_API_URL
+              value: "http://crowdsec:{{ crowdsec_k8s_lapi_port }}"
+            - name: AGENT_USERNAME
+              value: "{{ crowdsec_k8s_agent_username }}"
+            - name: AGENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: traefik-crowdsec
+                  key: AGENT_PASSWORD
+            - name: COLLECTIONS
+              value: "{{ traefik_k8s_agent_collections }}"
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
+            - name: traefik-logs
+              mountPath: /var/log/traefik
+              readOnly: true
+            - name: tmp-agent
+              mountPath: /tmp
+          livenessProbe:
+            # Round-trips the LAPI with the agent's own credentials — alive means "parsing
+            # and able to deliver", the only two things this container is for.
+            exec:
+              command: ["cscli", "lapi", "status"]
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: "{{ traefik_k8s_agent_cpu_limit }}"
+              memory: {{ traefik_k8s_agent_mem_limit }}
+            requests:
+              cpu: "{{ traefik_k8s_agent_cpu_request }}"
+              memory: {{ traefik_k8s_agent_mem_request }}
       volumes:
         - name: config
           configMap:
@@ -130,3 +222,27 @@ spec:
             claimName: traefik-acme
         - name: tmp
           emptyDir: {}
+        - name: crowdsec-secret
+          secret:
+            secretName: traefik-crowdsec
+            # Group-readable for the same kubelet root:fsGroup reason as the cloudflare
+            # Secret above — 0400 would leave the traefik user unable to read lapi_key.
+            defaultMode: 0440
+        # The traefik container gets ONLY the key file; the full Secret (agent password,
+        # acquis, whitelists) is projected separately for the sidecar's initContainer.
+        - name: crowdsec-key
+          secret:
+            secretName: traefik-crowdsec
+            defaultMode: 0440
+            items:
+              - key: lapi_key
+                path: lapi_key
+        - name: crowdsec-etc
+          emptyDir: {}
+        - name: tmp-agent
+          emptyDir: {}
+        # sizeLimit so a runaway access log evicts nothing quietly forever — rotation
+        # proper is a B5-soak follow-up (traefik reopens the file on USR1).
+        - name: traefik-logs
+          emptyDir:
+            sizeLimit: {{ traefik_k8s_access_log_size }}

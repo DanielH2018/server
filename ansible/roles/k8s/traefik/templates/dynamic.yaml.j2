@@ -2,9 +2,9 @@
   The middlewares and TLS options carried over from the Docker instance's config.yml.j2.
 
   Deliberately NOT carried over for slice 1:
-    crowdsec            bouncer plugin + LAPI, slice 6
     csp-karakeep        lives in the karakeep role instead, beside the Service it applies to
     rate-limit-livesync superseded here by rate-limit-bridge-livesync, below
+  crowdsec arrived at slice-6 B1 (bottom of this file), pointed at the in-cluster LAPI.
   No TLSStore either: every IngressRoute states its own tls.domains via the ingressroute()
   macro, so a store's defaultGeneratedCert would be a second source of truth for the SAN set.
 #}
@@ -136,3 +136,33 @@ spec:
     - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
     - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
     - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+---
+# Slice-6 B1 — the CrowdSec bouncer, carried from the Docker edge's config.yml.j2 with two
+# deliberate differences: the LAPI is the in-cluster engine (Service `crowdsec`), and the
+# key is a FILE path, not an inline value — a Middleware CRD is readable by the read-only
+# kubeconfig, so an inline crowdsecLapiKey would hand the ban-management API to anything
+# holding that kubeconfig. The file lives in the traefik-crowdsec Secret, mounted into the
+# traefik container only.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: crowdsec
+  namespace: {{ k8s_namespace }}
+spec:
+  plugin:
+    bouncer:
+      enabled: true
+      crowdsecLapiKeyFile: /secrets/crowdsec/lapi_key
+      crowdsecLapiHost: "crowdsec:{{ crowdsec_k8s_lapi_port }}"
+      crowdsecMode: stream
+      updateIntervalSeconds: 60
+      # AppSec Component — inline L7 WAF. stream mode above is the reactive ban-list (bans
+      # an IP after a pattern of log lines); this inspects each request inline BEFORE the
+      # backend, so a first-hit malicious payload (CVE string / SQLi / path traversal) is
+      # blocked, not merely banned-after-the-fact. UnreachableBlock:false = FAIL OPEN: an
+      # appsec hiccup keeps the edge serving (deferring to the ban-list) instead of 500ing
+      # the fleet — the add-on must not become a new edge SPOF. FailureBlock keeps its
+      # secure default (a rule-eval error on a request blocks that one request).
+      crowdsecAppsecEnabled: true
+      crowdsecAppsecHost: "crowdsec:{{ crowdsec_k8s_appsec_port }}"
+      crowdsecAppsecUnreachableBlock: false

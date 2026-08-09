@@ -1,0 +1,30 @@
+---
+- name: Deploy crowdsec to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: crowdsec
+    manifests_files:
+      - pvc.yaml
+      - deployment.yaml
+      - service.yaml
+    manifests_secret_files:
+      - config-secret.yaml
+
+- name: Register the traefik-sidecar agent machine on the LAPI
+  tags: [deploy]
+  # The image entrypoint only registers ITS OWN pod's agent (AGENT_USERNAME env); the
+  # sidecar in the traefik pod is a second machine and must exist before it can log in.
+  # Password travels over exec stdin so it never appears in argv (host `ps`) or the k8s
+  # audit trail; no_log keeps it out of Ansible output. Idempotent: adds only when the
+  # machine is absent, prints ADDED so changed_when is accurate.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec -i deploy/crowdsec -- sh -c
+      'read -r pw; cscli machines list -o raw | grep -q "^{{ crowdsec_k8s_agent_username }}," ||
+      { cscli machines add {{ crowdsec_k8s_agent_username }} --password "$pw" -f /dev/null && echo ADDED; }'
+    stdin: "{{ crowdsec_k8s_agent_password }}"
+  register: crowdsec_k8s_machine_add
+  become: true
+  no_log: true
+  changed_when: "'ADDED' in crowdsec_k8s_machine_add.stdout"

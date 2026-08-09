@@ -1,0 +1,34 @@
+---
+# Slice 6, B1 — the in-cluster CrowdSec engine: LAPI + AppSec + the decision DB.
+# Log-parsing agents live NEXT TO the logs, not here: the k8s traefik pod carries a
+# tailing sidecar (roles/k8s/traefik), and daniel-server's engine demotes to an agent
+# against this LAPI at B2. See docs/k3s-migration/slice-6-edge-cutover.md (D1-D3).
+
+# crowdsec_k8s_image / crowdsec_k8s_agent_username / crowdsec_k8s_lapi_port /
+# crowdsec_k8s_appsec_port live in group_vars/all.yml — the traefik role's sidecar and
+# bouncer middleware consume them too, and role defaults are invisible across roles.
+crowdsec_k8s_metrics_port: 6060
+
+# Decision DB + hub state. Small: decisions are rows, the hub is megabytes.
+crowdsec_k8s_claim: crowdsec-db
+crowdsec_k8s_storage_class: longhorn
+crowdsec_k8s_size: 1Gi
+
+# Same set as the Docker engine (traefik role compose) — including the two transitive
+# deps `cscli hub upgrade` never auto-installs (http-cve, whitelist-good-actors) and the
+# two AppSec starter collections (deliberately NOT the full OWASP CRS). Kept identical so
+# the B1 "scenario parity" gate is a straight diff.
+crowdsec_k8s_collections: >-
+  crowdsecurity/linux crowdsecurity/traefik LePresidente/authelia crowdsecurity/http-cve
+  crowdsecurity/whitelist-good-actors crowdsecurity/appsec-virtual-patching
+  crowdsecurity/appsec-generic-rules
+
+# The engine pod's own in-pod agent registers itself via the image entrypoint under this
+# name; the traefik-sidecar machine ({{ crowdsec_k8s_agent_username }} from group_vars) is
+# registered by this role's post-deploy task. Both use SOPS crowdsec_k8s_agent_password.
+crowdsec_k8s_engine_machine: engine-local
+
+crowdsec_k8s_cpu_limit: "1"
+crowdsec_k8s_mem_limit: 512Mi
+crowdsec_k8s_cpu_request: 100m
+crowdsec_k8s_mem_request: 128Mi

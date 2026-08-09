@@ -64,6 +64,13 @@ k3s_metallb_ingress_vip: 10.0.0.240
 # Docker-side MQTT clients (z2m, HA) point at it during coexistence. MQTT is raw TCP —
 # this VIP, not a Traefik hostname, is how it crosses hosts.
 mqtt_k8s_vip: 10.0.0.242
+# Slice-6 B1: shared between roles/k8s/crowdsec (the engine that runs LAPI+AppSec) and
+# roles/k8s/traefik (the bouncer plugin middleware + the log-tailing agent sidecar).
+# Cross-role like mqtt_k8s_vip above — role defaults are invisible across roles.
+crowdsec_k8s_image: crowdsecurity/crowdsec:v1.7.8
+crowdsec_k8s_agent_username: k8s-traefik-agent
+crowdsec_k8s_lapi_port: 8080
+crowdsec_k8s_appsec_port: 7422
 # SLZB-06M Zigbee coordinator (network-attached) + pinned Zigbee PAN identity. Moved here
 # from daniel-server's host_vars at slice-5 B2 — z2m's config renders on daniel-box now, and
 # the values were never host-specific. pan_id/ext_pan_id are network identifiers (not

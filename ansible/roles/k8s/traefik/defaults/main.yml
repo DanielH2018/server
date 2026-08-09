@@ -33,3 +33,18 @@ traefik_k8s_cpu_limit: "1"
 traefik_k8s_mem_limit: 512Mi
 traefik_k8s_cpu_request: "100m"
 traefik_k8s_mem_request: 128Mi
+
+# Slice-6 B1 — the CrowdSec bouncer plugin (same pin as the Docker edge's traefik.yml.j2)
+# and the log-tailing agent sidecar. The sidecar parses this pod's access log locally and
+# ships signals to the in-cluster LAPI, so its collections are the HTTP-side subset — the
+# syslog/authelia parsers stay with the agents that read those logs (daniel-server, B2).
+traefik_k8s_bouncer_plugin_version: v1.6.0
+traefik_k8s_agent_collections: >-
+  crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/whitelist-good-actors
+traefik_k8s_agent_cpu_limit: "0.5"
+traefik_k8s_agent_mem_limit: 256Mi
+traefik_k8s_agent_cpu_request: 50m
+traefik_k8s_agent_mem_request: 64Mi
+# The access log lives on an emptyDir shared between traefik and the sidecar. sizeLimit
+# bounds a runaway log; rotation proper is a B5-soak follow-up (traefik rotates on USR1).
+traefik_k8s_access_log_size: 1Gi

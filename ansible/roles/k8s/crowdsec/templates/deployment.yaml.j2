@@ -1,0 +1,120 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crowdsec
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # RWO DB volume — the old engine must release it before a new one opens the SQLite file.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: crowdsec
+  template:
+    metadata:
+      labels:
+        app: crowdsec
+    spec:
+      enableServiceLinks: false
+      initContainers:
+        # /etc/crowdsec is an emptyDir the image entrypoint populates with defaults on
+        # start; this seeds our config first so the entrypoint treats it as existing
+        # config rather than overwriting it. Mirrors the Docker flow, where the image
+        # populated ./crowdsec-config once and Ansible dropped these same files in.
+        - name: config-install
+          image: {{ crowdsec_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            - >-
+              install -m 644 /seed/acquis.yaml /seed/profiles.yaml /etc/crowdsec/ &&
+              install -d /etc/crowdsec/parsers/s02-enrich /etc/crowdsec/notifications &&
+              install -m 644 /seed/whitelist.yaml /seed/trusted-remote-whitelist.yaml
+              /etc/crowdsec/parsers/s02-enrich/ &&
+              install -m 600 /seed/discord.yaml /etc/crowdsec/notifications/
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: seed
+              mountPath: /seed
+              readOnly: true
+            - name: etc-crowdsec
+              mountPath: /etc/crowdsec
+      containers:
+        - name: crowdsec
+          image: {{ crowdsec_k8s_image }}
+          ports:
+            - name: lapi
+              containerPort: {{ crowdsec_k8s_lapi_port }}
+            - name: appsec
+              containerPort: {{ crowdsec_k8s_appsec_port }}
+            - name: metrics
+              containerPort: {{ crowdsec_k8s_metrics_port }}
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            - name: COLLECTIONS
+              value: "{{ crowdsec_k8s_collections }}"
+          envFrom:
+            - secretRef:
+                name: crowdsec-env
+          # Root, as in Docker: the LAPI plugin broker forks the notification plugin and
+          # drops it to 'nobody' (SETUID/SETGID); CHOWN+DAC_OVERRIDE cover first-touch
+          # ownership of the PVC-backed DB dir. No host log mounts here, so the Docker
+          # copy's broad DAC_OVERRIDE rationale shrinks to that.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - DAC_OVERRIDE
+                - SETUID
+                - SETGID
+          volumeMounts:
+            - name: etc-crowdsec
+              mountPath: /etc/crowdsec
+            - name: db
+              mountPath: /var/lib/crowdsec/data
+            - name: tmp
+              mountPath: /tmp
+          # Same rationale as the Docker healthcheck: `cscli lapi status` round-trips the
+          # LAPI with real credentials, so ready means "the WAF/ban chain can answer", not
+          # "the process exists". No secret appears in the probe spec — cscli reads creds
+          # from files inside the pod.
+          readinessProbe:
+            exec:
+              command: ["cscli", "lapi", "status"]
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["cscli", "lapi", "status"]
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: "{{ crowdsec_k8s_cpu_limit }}"
+              memory: {{ crowdsec_k8s_mem_limit }}
+            requests:
+              cpu: "{{ crowdsec_k8s_cpu_request }}"
+              memory: {{ crowdsec_k8s_mem_request }}
+      volumes:
+        - name: seed
+          secret:
+            secretName: crowdsec-config
+        - name: etc-crowdsec
+          emptyDir: {}
+        - name: db
+          persistentVolumeClaim:
+            claimName: {{ crowdsec_k8s_claim }}
+        - name: tmp
+          emptyDir: {}
