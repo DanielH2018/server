@@ -127,6 +127,13 @@ spec:
             # Shared with the crowdsec-agent sidecar, which tails access.log (slice-6 D2).
             - name: traefik-logs
               mountPath: /var/log/traefik
+            # Traefik downloads experimental plugins (the crowdsec bouncer) here at start.
+            # With the read-only rootfs it cannot mkdir this itself — and when that fails
+            # it does not fail the pod: it DISABLES plugins, the crowdsec Middleware never
+            # materializes, and every router referencing it 404s. The whole edge went dark
+            # this way on the first B1 rollout.
+            - name: plugins-storage
+              mountPath: /plugins-storage
             - name: tmp
               mountPath: /tmp
           readinessProbe:
@@ -245,6 +252,8 @@ spec:
         - name: crowdsec-etc
           emptyDir: {}
         - name: crowdsec-data
+          emptyDir: {}
+        - name: plugins-storage
           emptyDir: {}
         - name: tmp-agent
           emptyDir: {}
