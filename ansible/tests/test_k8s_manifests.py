@@ -377,13 +377,47 @@ def test_every_https_route_carries_tls():
 
 def test_routes_stay_lan_only_while_the_k8s_edge_has_no_crowdsec():
     """k8s_public_route and the CrowdSec bouncer have to move together. A public Host rule
-    while the k8s Traefik carries no bouncer is an unprotected edge one DNS record away."""
+    while the k8s Traefik carries no bouncer is an unprotected edge one DNS record away.
+
+    The bouncer is detected where it actually lives since B1: the Middleware CRD in
+    dynamic.yaml.j2 (crowdsecLapiKeyFile — the key moved out of the static config so the
+    read-only kubeconfig can't read it) AND its entrypoint-wide attachment in the static
+    config. Both, because a declared-but-unattached middleware protects nothing."""
     static = (K8S / "traefik" / "templates" / "static-config.yaml.j2").read_text()
-    has_bouncer = "crowdsecLapiKey" in static
+    dynamic = (K8S / "traefik" / "templates" / "dynamic.yaml.j2").read_text()
+    has_bouncer = (
+        "crowdsecLapiKeyFile" in dynamic and "-crowdsec@kubernetescrd" in static
+    )
     assert ALL_VARS["k8s_public_route"] == has_bouncer, (
         "k8s_public_route is only safe once the k8s Traefik runs the CrowdSec bouncer "
         "(slice 6) — flip both or neither"
     )
+
+
+def test_the_lapi_route_never_gains_a_public_host_rule():
+    """The CrowdSec LAPI is machine-key-gated ban management — k8s_public_route flipping
+    true must not drag it onto the public internet. Its route passes public=false to the
+    ingressroute() macro; this pins the rendered result so a macro refactor can't undo it."""
+    entry = next(c for c in _k8s_entries() if c["name"] == "crowdsec")
+    route_tpl = K8S / "crowdsec" / "templates" / "ingressroute.yaml.j2"
+    rendered = _render(
+        route_tpl, container_item=entry, domain="example.com", **ALL_VARS
+    )
+    for doc in (d for d in yaml.safe_load_all(rendered) if d):
+        if doc["metadata"]["name"] != "crowdsec":
+            continue
+        for route in doc["spec"]["routes"]:
+            hosts = re.findall(r"Host\(`([^`]+)`\)", route["match"])
+            public = [h for h in hosts if not h.endswith(".local.example.com")]
+            assert not public, (
+                f"the LAPI IngressRoute matches {public} on the public domain — the "
+                "ban-management API must stay LAN-only whatever k8s_public_route says"
+            )
+        break
+    else:
+        raise AssertionError(
+            "the LAPI IngressRoute (metadata.name crowdsec) not found in the rendered output"
+        )
 
 
 def test_every_public_host_rule_is_reachable_only_from_the_docker_edge():

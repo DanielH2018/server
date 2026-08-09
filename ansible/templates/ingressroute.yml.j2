@@ -21,7 +21,7 @@
   Docker instance's. The Docker side repeats the same block on each hand-rolled file-provider
   router for the same reason.
 #}
-{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, bridge_hostname=none, bridge_rate_limit='rate-limit-bridge') -%}
+{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, bridge_hostname=none, bridge_rate_limit='rate-limit-bridge', public=true) -%}
 {#
   namespace defaults to k8s_namespace — every slice-2 service wants that. It is overridable
   because the telemetry stack runs in its own namespace, and an IngressRoute must live
@@ -39,10 +39,12 @@ spec:
     - https
   routes:
     - kind: Rule
-      # LAN-only until slice 6: k8s_public_route stays false while the k8s edge has no
-      # CrowdSec bouncer. The absent public Host rule is the guard — not the absent DNS
-      # record, which is one Cloudflare entry away from existing.
-      match: "{% if k8s_public_route %}Host(`{{ hostname }}.{{ domain }}`) || {% endif %}Host(`{{ hostname }}.local.{{ domain }}`)"
+      # The public Host rule exists only once k8s_public_route flipped (slice-6 B4, with the
+      # CrowdSec bouncer on this edge) AND the caller didn't opt out. The absent rule is the
+      # guard — not the absent DNS record: the Cloudflare wildcard resolves ANY name.
+      # `public=false` is for infrastructure APIs that must never face the internet whatever
+      # the flag says — the CrowdSec LAPI is the standing example.
+      match: "{% if k8s_public_route and public %}Host(`{{ hostname }}.{{ domain }}`) || {% endif %}Host(`{{ hostname }}.local.{{ domain }}`)"
       middlewares:
         - name: rate-limit
 {% if authelia %}

@@ -52,6 +52,7 @@
       - acme-pvc.yaml
       - static-config.yaml
       - dynamic.yaml
+      - reverse-bridge.yaml
       - deployment.yaml
       - service.yaml
     manifests_secret_files:

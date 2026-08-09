@@ -113,10 +113,13 @@ k8s_rollout_stabilise_seconds: 60
 # it is not told to watch, silently, with the route reporting no error at all.
 k8s_observability_namespace: observability
 # Whether k8s IngressRoutes also match the PUBLIC host (`<svc>.<domain>`) alongside the LAN
-# `<svc>.local.<domain>`. False until slice 6 puts CrowdSec in front of the k8s edge: the
-# missing Host rule — not merely the missing DNS record — is what keeps an unprotected
-# ingress from being one Cloudflare entry away.
-k8s_public_route: false
+# `<svc>.local.<domain>`. Flipped at slice-6 B4 (2026-08-09), once the k8s edge carried the
+# CrowdSec bouncer + AppSec (B1) and the reverse bridge existed for Docker-hosted names —
+# the pairing test_routes_stay_lan_only_* enforces. External traffic still lands on the
+# Docker edge until B5 moves the router's 80/443 forward to the ingress VIP; until then the
+# public rules are answerable only from the LAN. Infrastructure APIs opt out per-route with
+# the macro's public=false (the CrowdSec LAPI is the standing example).
+k8s_public_route: true
 # The Docker edge's address as the k8s cluster sees it on the wire — daniel-server. Slice 2
 # retires each Docker copy behind a strangler bridge rather than a DNS change, so its real
 # hostnames keep arriving at daniel-server and are forwarded here; the bridged IngressRoute

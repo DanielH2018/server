@@ -253,6 +253,11 @@ containers_list:
       - monitoring
   - name: homelab-mcp
     port: 8000
+    # No public Host rule ANYWHERE: the route is hand-written in the traefik role's file
+    # provider, matches only mcp.local.<domain> + the bearer header, and slice-6 B4's
+    # reverse bridge skips entries carrying this key so the cluster edge never grows a
+    # public router for it either.
+    public_route: false
     # Read-only MCP server exposing live state to Claude Code (LAN-only, token-gated at
     # Traefik + re-checked in-app). No Authelia — a headless MCP client can't pass 2FA.
     # networks: proxy (Traefik reaches the token-gated route), monitoring (prometheus +

@@ -1,0 +1,115 @@
+{#
+  Slice-6 B4 — the reverse strangler bridge (mirror of the Docker edge's forward bridge in
+  roles/containers/traefik/templates/config.yml.j2). Once the router's 80/443 forward moves
+  to the ingress VIP (B5), external traffic for a service still hosted in Docker arrives
+  HERE — these routers forward it to https://10.0.0.161 with the Host preserved, where the
+  Docker edge terminates it exactly as it does today.
+
+  Authelia is deliberately NOT applied on these routes: it keeps being enforced at the
+  daniel-server edge (second hop), whose portal (auth.<domain>) is itself reverse-bridged
+  below — same single-portal reasoning as the forward bridge, in the opposite direction.
+  CrowdSec + AppSec DO apply: the bouncer middleware is attached entrypoint-wide on this
+  edge, so every route here inherits it.
+
+  The service list derives from daniel-server's inventory (one source of truth, same as the
+  forward bridge): every platform-docker entry with a web port, minus explicit
+  `public_route: false` opt-outs (homelab-mcp — LAN-only, token-gated), plus the Authelia
+  portal itself, whose entry carries no port because its route is hand-labelled in its
+  compose. Rendered only while k8s_public_route is true — the same flag that creates the
+  public Host rules this bridge completes.
+
+  ONE ROUTER + TRANSPORT PER HOSTNAME, not one router with an || rule: the backend is HTTPS
+  and serversTransport.serverName is a single value — a Host that disagrees with the SNI
+  gets 421 Misdirected Request (verified live when the forward bridge was built).
+
+  Rate limiting: plain rate-limit. Unlike the forward bridge (one peer — daniel-server),
+  requests here arrive with real client addresses (externalTrafficPolicy: Local), so the
+  default per-IP keying is correct. The Docker edge meters again downstream and trusts this
+  hop's X-Forwarded-For (lan_subnet is in its trustedIPs), so users are keyed per-IP there
+  too — double-metered like the forward bridge, tighter-of-two wins.
+#}
+{% if k8s_public_route %}
+{% set docker_web = hostvars['daniel-server'].containers_list | default([])
+     | filter_by_platform('docker')
+     | selectattr('port', 'defined') | selectattr('port')
+     | selectattr('public_route', 'undefined') | list %}
+{% set rb_hosts = (docker_web | map(attribute='hostname', default='') | select | list)
+     + (docker_web | rejectattr('hostname', 'defined') | map(attribute='name') | list)
+     + ['auth'] %}
+---
+# The one backend every reverse-bridge route shares: the Docker edge, by address — the
+# hostnames all resolve either to Cloudflare (public) or to daniel-server via the LAN
+# wildcard, and routing by name from inside the cluster would loop through this very edge.
+# A selector-less Service with a manual EndpointSlice is how a fixed external IP becomes a
+# routable k8s Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: docker-edge
+  namespace: {{ k8s_namespace }}
+spec:
+  clusterIP: None
+  ports:
+    - name: https
+      port: 443
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: docker-edge-1
+  namespace: {{ k8s_namespace }}
+  labels:
+    kubernetes.io/service-name: docker-edge
+addressType: IPv4
+endpoints:
+  - addresses:
+      - "{{ hostvars['daniel-server'].server_ip }}"
+ports:
+  - name: https
+    port: 443
+{% for host in rb_hosts | sort %}
+---
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: reverse-bridge-{{ host }}
+  namespace: {{ k8s_namespace }}
+spec:
+  # SNI does double duty: selects the Docker edge's wildcard cert and must equal the Host
+  # header or that edge answers 421. Certificate verification stays ON — both edges serve
+  # the same Let's Encrypt wildcard.
+  serverName: "{{ host }}.{{ domain }}"
+{% endfor %}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: reverse-bridge
+  namespace: {{ k8s_namespace }}
+spec:
+  entryPoints:
+    - https
+  routes:
+{% for host in rb_hosts | sort %}
+    - kind: Rule
+      match: "Host(`{{ host }}.{{ domain }}`)"
+      middlewares:
+        - name: rate-limit
+      services:
+        - name: docker-edge
+          port: 443
+          scheme: https
+          serversTransport: reverse-bridge-{{ host }}
+{% endfor %}
+  # Load-bearing, as everywhere on this entrypoint: without spec.tls the router is non-TLS
+  # and never matches an HTTPS request (see the monitoring_route macro's header).
+  tls:
+    certResolver: cloudflare
+    options:
+      name: modern
+    domains:
+      - main: "{{ domain }}"
+        sans:
+          - "*.{{ domain }}"
+          - "*.local.{{ domain }}"
+{% endif %}
