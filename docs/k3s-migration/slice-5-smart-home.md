@@ -1,6 +1,13 @@
 # k3s Slice 5 — Smart Home
 
-**Status:** plan, not yet executed. Written 2026-08-08, from measured state.
+**Status:** B1 executed through the client repoints, 2026-08-09 ~01:25 UTC — cluster broker
+deployed and gated (VIP round-trip from daniel-server), HA repointed via the reconfigure flow
+(`reconfigure_successful`, connection validated before commit), z2m repointed and reconnected
+(SLZB/ember link up, bridge online). Docker mosquitto still runs, clientless, pending the soak
++ retirement in step 3. One finding for the record: mosquitto 2.1's password-file plugin
+refuses the pwfile straight off a Secret mount — an init container copies it into a pod-owned
+emptyDir (see the deployment template's comment). B2/B3 not started. Plan written 2026-08-08
+from measured state.
 
 Design doc §8 gives this slice one line: *"Smart home: mosquitto, zigbee2mqtt, home-assistant —
 Zigbee mesh intact (PAN identity preserved); HA automations firing."*
