@@ -84,11 +84,12 @@
             icon: home-assistant.png
             href: https://home-assistant.{{ domain }}/
             description: Bedroom air quality
-            server: my-docker
-            container: home-assistant
+            # No server/container pair and a bridge-URL widget since slice-5 B3: HA runs in
+            # k3s, so the Docker-DNS name is gone. The .local name resolves from containers
+            # (LAN DNS) and served the same HA before and after the cutover.
             widget:
                 type: homeassistant
-                url: http://home-assistant:8123
+                url: https://home-assistant.local.{{ domain }}
                 key: {{ homepage_ha_token }}
                 custom:
                     - state: sensor.bedroom_airgradient_one_carbon_dioxide

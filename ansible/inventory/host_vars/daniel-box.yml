@@ -423,17 +423,16 @@ containers_list:
     use_authelia: true
     bridge_hostname: zigbee2mqtt
 
-  # Slice 5, B3 — BUILT BUT NOT DEPLOYED, held by home_assistant_k8s_enabled: false (role
-  # defaults) exactly like the B4a *arrs were: the entry is mandatory for
-  # validate_k8s_manifests.py, and gitops would otherwise stand HA up unattended next to the
-  # running Docker copy. No bridge_hostname until the cutover commit, which also removes the
-  # daniel-server entry (the strangler guard ties the two together). use_authelia stays false
-  # for the Docker route's reason: forward-auth breaks the companion app.
+  # Slice 5, B3 — cut over 2026-08-09. use_authelia stays false for the Docker route's reason:
+  # forward-auth breaks the companion app; HA's own login + TOTP is the gate. bridge_hostname
+  # keeps the unsuffixed (Cloudflare-proxied) name working, so the companion app never notices.
+  # Reaches mosquitto by Service name, upsd on daniel-server's LAN 3493 (B3 prereqs).
   - name: home-assistant
     platform: k8s
     hostname: "home-assistant{{ k8s_hostname_suffix }}"
     port: 8123
     use_authelia: false
+    bridge_hostname: home-assistant
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the

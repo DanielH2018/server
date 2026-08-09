@@ -138,16 +138,11 @@ containers_list:
   # SLZB coordinator is network-attached, so nothing tied it to this host. The containers
   # role stays as the config-template source (the k8s Secret renders it), same split as
   # configarr. Unsuffixed zigbee2mqtt.<domain> forwards to the cluster via bridge_hostname.
-  - name: home-assistant
-    port: 8123
-    # HA uses its own auth (+ optional TOTP), NOT Authelia: forward-auth breaks the
-    # companion mobile app, webhooks, and long-lived API tokens. Route still gets
-    # Traefik TLS + CrowdSec + rate-limiting.
-    use_authelia: false
-    networks:
-      - apps
-      - ups  # reach the nut sidecar's upsd:3493 for the Home Assistant NUT integration
-      - mqtt  # reach the mosquitto broker for the MQTT (Zigbee2MQTT) integration
+  # home-assistant moved to daniel-box on 2026-08-09 (slice 5, B3) as a k8s Deployment. The
+  # containers role stays as the config-authoring home (validate-ha-config, the macro tests,
+  # the skills anchor there); the k8s role ships its files. Unsuffixed home-assistant.<domain>
+  # forwards to the cluster via bridge_hostname, so the companion app's route never changed.
+  # Its former `ups` and `mqtt` isolation nets retire with the mosquitto cleanup.
   # Organization: Development
   - name: code-server
     port: 8443

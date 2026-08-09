@@ -75,7 +75,9 @@ def test_daniel_server_is_still_wholly_docker():
     # host is a nightly `compose run --rm` and the state file monitor-bridge read beside it. Then
     # janitorr (31 -> 30), B7b — the LAST of the nine, so the media set is now wholly off this
     # host. Then zigbee2mqtt on 2026-08-09 (30 -> 29), slice-5 B2 — the SLZB coordinator is
-    # network-attached, so nothing tied it here once the broker moved. The count
+    # network-attached, so nothing tied it here once the broker moved. Then home-assistant the
+    # same day (29 -> 28), B3, completing the smart-home chain: broker, bridge, then the
+    # platform that consumes them both. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -84,6 +86,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 29
-    assert len(filter_by_platform(containers, "docker")) == 29
+    assert len(containers) == 28
+    assert len(filter_by_platform(containers, "docker")) == 28
     assert filter_by_platform(containers, "k8s") == []

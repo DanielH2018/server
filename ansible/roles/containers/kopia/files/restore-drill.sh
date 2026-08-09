@@ -30,10 +30,11 @@ source /usr/local/lib/kopia-lib.sh
 # frozen directory and passed, proving nothing about the live data (now a Longhorn PVC, covered by
 # longhorn-backup-health.sh's per-volume check). karakeep and n8n dropped the same day, on their own
 # cutovers, for the same reason. Drop a service here when it migrates.
-# zigbee2mqtt dropped 2026-08-09 — slice-5 B2 moved it to k3s; its data dir on this host is
-# the frozen rollback copy, so drilling it would prove nothing about the live pairings (now a
-# Longhorn PVC on the backed-up class, asserted by longhorn-backup-health.sh).
-SVCS=(authelia traefik grafana pihole home-assistant wg-easy)
+# zigbee2mqtt and home-assistant dropped 2026-08-09 — slice-5 B2/B3 moved them to k3s; their
+# data dirs on this host are frozen rollback copies, so drilling them would prove nothing about
+# the live pairings/registries (now Longhorn PVCs on the backed-up class, asserted by
+# longhorn-backup-health.sh).
+SVCS=(authelia traefik grafana pihole wg-easy)
 declare -A SENTINEL=(
   [authelia]=config/configuration.yml
   [traefik]=data/acme.json
@@ -53,12 +54,8 @@ declare -A SENTINEL=(
   # wg-easy's sentinel is the PULLED Pi peer config (pi-peers/, filled by the daniel-server
   # wg-easy-pull-pi-peers cron) — the one un-rebuildable secret backup, so prove IT restores,
   # not just the server's own re-templatable config. wg0.json is a real JSON file, so it skips
-  # the SQLite-magic branch below like home-assistant's/zigbee2mqtt's JSON sentinels.
+  # the SQLite-magic branch below.
   [wg-easy]=pi-peers/wg0.json
-  # HA's .storage registry (device/entity/Z2M pairings) is the highest-value, hardest-to-
-  # rebuild tree in the homelab — prove it restores, not just that it's backed up. The
-  # registry is a JSON file (not *.db), so it skips the SQLite-magic branch below.
-  [home-assistant]=config/.storage/core.device_registry
 )
 # Rotation: (month + year) % len picks one service per monthly run. With 12 services and 12
 # months each is drilled once a year; the + year term shifts which calendar month a given

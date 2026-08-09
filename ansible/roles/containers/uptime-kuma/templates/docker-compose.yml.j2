@@ -150,6 +150,12 @@ services:
       # needs watching regardless of where z2m runs. Pages even if HA/MQTT are down, catching an
       # EHOSTUNREACH like the 2026-06-18 unplug.
       {{ kuma('slzb-coordinator', port=6638, name='SLZB-06M Coordinator', hostname=slzb_ip, monitor_type='port') }}
+      # HA answers 200 on / (its login page — no Authelia on this route by design, so no 302
+      # dance). Probing the -k8s name watches the cluster copy specifically; the companion-app
+      # path (the unsuffixed Cloudflare-proxied name via the bridge) shares every hop past
+      # daniel-server's Traefik.
+      {{ kuma('home-assistant-k8s', name='k3s Home Assistant', monitor_type='http',
+              url='https://home-assistant' ~ k8s_hostname_suffix ~ '.local.' ~ domain) }}
       # healthchecks' user-facing hostname. Its old monitor was `docker`-type, queried through
       # the socket, so retiring the container took it away entirely rather than merely leaving
       # it stale.
