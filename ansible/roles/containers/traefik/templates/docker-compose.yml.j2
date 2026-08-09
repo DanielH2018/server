@@ -21,6 +21,16 @@ services:
       - no-new-privileges:true
     environment:
       GID: "${GID-{{ pgid }}}"
+      # Slice-6 B2: demoted to a log-processing AGENT against the in-cluster LAPI. This
+      # host still originates the signals the cluster cannot see (auth.log, the Docker
+      # Authelia, this traefik's access log) and still runs the local AppSec listener the
+      # plugin points at — but decisions live in one place now. The entrypoint logs in as
+      # the machine below (registered by the k8s/crowdsec role at B2a); the old local
+      # LAPI's DB stays in the crowdsec-db volume untouched for rollback.
+      DISABLE_LOCAL_API: "true"
+      LOCAL_API_URL: "https://crowdsec-lapi-k8s.local.{{ domain }}"
+      AGENT_USERNAME: "{{ crowdsec_k8s_server_agent_machine }}"
+      AGENT_PASSWORD: "{{ crowdsec_k8s_agent_password }}"
       # http-cve + whitelist-good-actors are transitive deps that base-http-scenarios /
       # linux DECLARE but that `cscli hub upgrade` never auto-installs — left off this list
       # they sit "tainted by missing collection", silently dropping CVE-probe detection +

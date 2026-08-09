@@ -312,64 +312,24 @@
   delay: 10
   when: traefik_crowdsec_wal_config.changed
 
-- name: Probe LAPI with the configured bouncer key (rotation guard)
-  # `cscli bouncers add` is create-only (no update flag) and the add task below tolerates
-  # "already exist" — so after a key rotation the LAPI would keep the OLD hash while
-  # Traefik hot-reloads the NEW key from the file provider instantly (config.yml is a
-  # directory-mounted dynamic config; no recreate gates it). Auth then fails and the
-  # bouncer plugin FAILS OPEN indefinitely — a silent WAF bypass. Probing /v1/decisions
-  # with the configured key detects that mismatch so the delete+re-add below makes the
-  # rotated key actually take effect. Rotation runbook: docs/secret-rotation.md.
+- name: Probe the cluster LAPI with the configured bouncer key (fail loudly)
+  # Slice-6 B2: this bouncer registers DECLARATIVELY on the in-cluster engine
+  # (BOUNCER_KEY_dockertraefik env in roles/k8s/crowdsec) — the local cscli delete/re-add
+  # rotation dance is gone with the local LAPI. What must remain is the loud failure: the
+  # plugin hot-reloads a rotated key from the directory-mounted dynamic config instantly
+  # and FAILS OPEN on auth errors — a silent WAF bypass. So a key the LAPI rejects fails
+  # the deploy here. Rotation runbook: docs/secret-rotation.md (delete the bouncer on the
+  # engine + update SOPS + redeploy both crowdsec (daniel-box) and traefik (this host)).
   tags: [deploy]
   community.docker.docker_container_exec:
     container: crowdsec
     command: >-
-      wget -q -O /dev/null --header "X-Api-Key: {{ crowdsec_bouncer_api_key }}"
-      http://localhost:8080/v1/decisions?limit=1
+      wget -q -O /dev/null --header "X-Api-Key: {{ crowdsec_bouncer_docker_traefik_key }}"
+      https://crowdsec-lapi-k8s.local.{{ domain }}/v1/decisions?limit=1
   register: traefik_crowdsec_bouncer_probe
-  failed_when: false
+  failed_when: (traefik_crowdsec_bouncer_probe.rc | default(1)) != 0
   changed_when: false
   no_log: true
-
-- name: Deregister bouncer whose stored key no longer matches
-  # Delete-then-re-add is the only rotation path cscli offers. Deleting the parent
-  # CASCADES to every auto-created `traefik-bouncer@<ip>` row (cscli refuses to delete
-  # children individually — verified live 2026-07-03), so each rotation also resets the
-  # ~1-row-per-recreate accumulation; between rotations it's cosmetic and accepted.
-  tags: [deploy]
-  community.docker.docker_container_exec:
-    container: crowdsec
-    command: "cscli bouncers delete traefik-bouncer"
-  register: traefik_crowdsec_bouncer_delete
-  # `| default(...)` guards every .rc/.stderr ref in these crowdsec exec tasks: docker_container_exec
-  # registers an error dict with NO rc/stderr keys if crowdsec isn't running yet, which would crash
-  # the condition with "dict object has no attribute 'rc'" (the 2026-07-18 qbittorrent crash class)
-  # instead of failing cleanly. Defaulting rc→1 makes a not-ready crowdsec fail loudly here.
-  failed_when:
-    - (traefik_crowdsec_bouncer_delete.rc | default(1)) != 0
-    - "'not found' not in (traefik_crowdsec_bouncer_delete.stderr | default('') | lower)"
-  changed_when: (traefik_crowdsec_bouncer_delete.rc | default(1)) == 0
-  when: (traefik_crowdsec_bouncer_probe.rc | default(1)) != 0
-
-- name: Register Traefik bouncer API key with CrowdSec
-  tags: [deploy]
-  community.docker.docker_container_exec:
-    container: crowdsec
-    command: "cscli bouncers add traefik-bouncer --key {{ crowdsec_bouncer_api_key }}"
-  register: traefik_crowdsec_bouncer_registration
-  failed_when:
-    - (traefik_crowdsec_bouncer_registration.rc | default(1)) != 0
-    - "'already exist' not in (traefik_crowdsec_bouncer_registration.stderr | default('') | lower)"
-  changed_when: (traefik_crowdsec_bouncer_registration.rc | default(1)) == 0
-  no_log: true
-
-- name: Restart Traefik to re-authenticate with CrowdSec bouncer # noqa no-handler
-  tags: [deploy]
-  community.docker.docker_container:
-    name: traefik
-    state: started
-    restart: true
-  when: traefik_crowdsec_bouncer_registration.changed
 
 - name: Update CrowdSec hub
   tags: [deploy]

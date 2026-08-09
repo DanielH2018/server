@@ -389,8 +389,13 @@ http:
       plugin:
         bouncer:
           enabled: true
-          crowdsecLapiKey: "{{ crowdsec_bouncer_api_key }}"
-          crowdsecLapiHost: "crowdsec:8080"
+          # Slice-6 B2: decisions come from the in-cluster LAPI (one ban list for both
+          # edges). The key is this bouncer's own registration there (BOUNCER_KEY_
+          # dockertraefik on the engine) — the old crowdsec_bouncer_api_key authenticated
+          # the retired local LAPI. TLS via the LE wildcard at the ingress VIP.
+          crowdsecLapiKey: "{{ crowdsec_bouncer_docker_traefik_key }}"
+          crowdsecLapiScheme: https
+          crowdsecLapiHost: "crowdsec-lapi-k8s.local.{{ domain }}"
           crowdsecMode: stream
           updateIntervalSeconds: 60
           # AppSec Component — inline L7 WAF (see crowdsec-acquis.yaml.j2). stream mode above is the
