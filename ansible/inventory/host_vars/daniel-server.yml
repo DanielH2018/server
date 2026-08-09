@@ -34,11 +34,12 @@ containers_list:
   # 2026-08-09 at slice-6 B2c: it rides in the cluster engine pod now, reading the LIVE
   # decision DB. The Docker copy had been showing the retired local LAPI's frozen DB since
   # B2b. Role archived at roles/containers/archive/crowdsec.
-  - name: portainer
-    port: 9000
-    use_authelia: true
-    networks:
-      - proxy
+  # portainer retired 2026-08-09 (slice-7 Phase B / design decision 4, executed): replaced by
+  # nothing — kubectl/k9s serve the cluster, `docker ps` covers the shrinking residual set.
+  # Took its whole cohort: docker-proxy-portainer (lived in this role's compose), homepage's
+  # widget (and homepage's `proxy` net membership, which existed only for it), the Pi's
+  # portainer-agent + its DOCKER-USER firewall, and portainer_manager_host. Role in
+  # roles/containers/archive/.
   - name: docker-proxy
     use_authelia: false
     # NOT on `apps` (Security M1, 2026-07-01): this read-only proxy runs CONTAINERS=1, and
@@ -55,13 +56,11 @@ containers_list:
   - name: homepage
     port: 3000
     use_authelia: true
-    # `proxy` is REQUIRED: the Portainer service widget queries portainer:9000 directly
-    # (roles/containers/homepage/templates/services.yaml.j2), and portainer only lives on the
-    # `proxy` net — homepage must share it to reach the widget endpoint. Do NOT strip `proxy`
-    # as "over-connected" (a 2026-06-24 attempt to do so broke the Portainer widget).
+    # `proxy` dropped 2026-08-09 with the Portainer widget — it was the sole reason homepage
+    # sat on that net (the 2026-06-24 lesson, now moot). Remaining widgets reach their
+    # targets over apps/monitoring or via .local hostnames.
     networks:
       - apps
-      - proxy
       - monitoring
       - media
       - homepage_private

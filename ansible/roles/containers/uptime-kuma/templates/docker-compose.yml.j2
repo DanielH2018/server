@@ -67,12 +67,8 @@ services:
               url='http://' ~ hostvars['daniel-pi'].server_ip ~ ':8080') }}
       {{ kuma('daniel-pi-wg-easy', name='Daniel Pi WG Easy', monitor_type='http',
               url='http://' ~ hostvars['daniel-pi'].server_ip ~ ':51821') }}
-      # Pi Portainer agent: root-equivalent Docker-socket agent on :9001. TLS + AGENT_SECRET
-      # gated, so a `port` (raw TCP) probe — an http probe would hit the TLS listener + 403 and
-      # false-fail (mirrors the agent's own `nc -z localhost 9001` healthcheck). The server-run
-      # Kuma probe egresses as the server IP, which the Pi's DOCKER-USER :9001 allow permits.
-      {{ kuma('daniel-pi-portainer-agent', name='Daniel Pi Portainer Agent', monitor_type='port',
-              hostname=hostvars['daniel-pi'].server_ip, port=9001) }}
+      # (daniel-pi-portainer-agent's port monitor retired 2026-08-09 with the agent —
+      # slice-7 Phase B, the Portainer cohort.)
       # k3s ingress monitors (static, same reason as the Pi block above): AutoKuma reads only the
       # SERVER's docker socket, and the k8s workloads on daniel-box have no container here at all,
       # so the kuma() labels their compose templates would carry are never seen. Probe the MetalLB

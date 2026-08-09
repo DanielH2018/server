@@ -53,18 +53,10 @@ containers_list:
     use_authelia: false
     networks:
       - proxy
-  # Portainer Agent — lets the SERVER's Portainer manage this Pi as a remote environment.
-  # Not Traefik-routed: publishes :9001 (TLS) bound to the Pi LAN IP, locked to the server by a
-  # DOCKER-USER rule; auth via AGENT_SECRET (SOPS). See the portainer-agent role CLAUDE.md.
-  # On its OWN single-member `portainer-agent` isolation net (NOT the shared `proxy` bridge): the
-  # server reaches it via the host-published :9001, never by container DNS, so it needs zero
-  # container-to-container reachability. Isolating it keeps this root-equivalent Docker-socket agent
-  # off the same bridge as wg-easy's unauthenticated LAN admin UI / glances / dozzle (Security M1).
-  - name: portainer-agent
-    port: 9001
-    use_authelia: false
-    networks:
-      - portainer-agent
+  # portainer-agent retired 2026-08-09 with the server's Portainer (slice-7 Phase B, design
+  # decision 4). Its host artifacts — /etc/portainer-agent-firewall.sh, the systemd oneshot,
+  # and the DOCKER-USER rules for :9001 — were removed imperatively at retire time; nothing
+  # in Ansible recreates them. Role in roles/containers/archive/.
   - name: autoheal
     use_authelia: false
     networks:

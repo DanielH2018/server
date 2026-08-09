@@ -84,7 +84,10 @@ def test_daniel_server_is_still_wholly_docker():
     # 2026-08-09, slice-7 Phase B's first dissolve — not moved but REPLACED: Renovate owns
     # image updates, so an unsupervised puller was pure risk. glances followed the same day
     # (25 -> 24) — node-exporter + cAdvisor already feed Prometheus the same host metrics,
-    # and homepage's glances widgets retired with it (the readings live in Grafana). The count
+    # and homepage's glances widgets retired with it (the readings live in Grafana). Then
+    # portainer (24 -> 23), design decision 4 executed — replaced by nothing (kubectl/k9s +
+    # docker ps), taking docker-proxy-portainer, homepage's widget and proxy-net membership,
+    # the Pi's agent + DOCKER-USER firewall, and portainer_manager_host with it. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -93,6 +96,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 24
-    assert len(filter_by_platform(containers, "docker")) == 24
+    assert len(containers) == 23
+    assert len(filter_by_platform(containers, "docker")) == 23
     assert filter_by_platform(containers, "k8s") == []

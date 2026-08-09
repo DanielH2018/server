@@ -270,18 +270,6 @@
       "automerge": false
     },
     {
-      "description": "Portainer server (portainer/portainer-ce, daniel-server, GitOps-auto-deployed) and the Pi agent (portainer/agent, daniel-pi, MANUAL deploy only) MUST run the same version \u2014 the agent API tracks the Portainer server it connects to (portainer-agent/CLAUDE.md). One group = one PR touching both, and NO automerge: the Pi has no GitOps path, so if this auto-merged the server would deploy ahead while the un-deployed Pi agent silently lags (broken environment, no alert \u2014 Pi-only changes phantom-succeed). Merge, then redeploy the Pi by hand: deploy.yml --tags portainer-agent -e target=daniel-pi. scripts/test_renovate_managers.py asserts the two tags stay in lockstep. Overrides the non-major automerge group.",
-      "matchDatasources": [
-        "docker"
-      ],
-      "matchPackageNames": [
-        "portainer/portainer-ce",
-        "portainer/agent"
-      ],
-      "groupName": "portainer (lockstep: server portainer-ce + Pi agent)",
-      "automerge": false
-    },
-    {
       "description": "SOPS binary (getsops/sops) \u2014 the secret-decryption root of trust; its paired per-arch sops_sha256 needs a manual bump from the release checksums, so NO automerge (same manual-finish class as the galaxy collections + crowdsec plugin). Own group, so it overrides the custom.regex non-major automerge rule above and gets a deliberate operator review + sha256 finish.",
       "matchDatasources": [
         "github-releases"

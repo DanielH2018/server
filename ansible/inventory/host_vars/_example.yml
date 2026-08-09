@@ -72,5 +72,4 @@ has_gitops: false
 # --- the old host stops claiming it. -----------------------------------------------------
 # monitoring_controller_host: <hostname>
 # backup_controller_host: <hostname>
-# portainer_manager_host: <hostname>
 # renovate_notify_host: <hostname>
