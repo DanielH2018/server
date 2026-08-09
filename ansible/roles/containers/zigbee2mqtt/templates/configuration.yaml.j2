@@ -5,7 +5,9 @@ homeassistant:
   enabled: true
 mqtt:
   base_topic: zigbee2mqtt
-  server: mqtt://mosquitto:1883
+  # Slice 5 B1: the broker lives in the cluster now, behind its pinned MetalLB VIP. The
+  # Docker-DNS name `mosquitto` stops resolving here once the mqtt isolation net retires.
+  server: mqtt://{{ mqtt_k8s_vip }}:1883
   user: "{{ mqtt_username }}"
   password: "{{ mqtt_password }}"
 serial:

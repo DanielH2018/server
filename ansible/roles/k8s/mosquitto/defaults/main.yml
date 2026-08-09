@@ -10,8 +10,9 @@ mosquitto_k8s_cpu_request: "25m"
 mosquitto_k8s_mem_request: 16Mi
 
 # MQTT crosses hosts on this pinned VIP (slice-5 D2): raw TCP with its own auth, so the HTTP
-# ingress machinery has nothing to offer it. .240 is the Traefik ingress VIP, .241 jellyfin-lan.
-mosquitto_k8s_lan_ip: 10.0.0.242
+# ingress machinery has nothing to offer it. Value lives in group_vars (mqtt_k8s_vip) because
+# daniel-server's Docker-side clients render it into their configs too.
+mosquitto_k8s_lan_ip: "{{ mqtt_k8s_vip }}"
 
 mosquitto_k8s_claim: mosquitto-data
 # nobackup regardless of the D6 verdict for the other slice-5 PVCs: the persistence file holds
