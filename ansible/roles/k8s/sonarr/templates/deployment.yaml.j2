@@ -60,6 +60,16 @@ spec:
             # library still loads, the UI still works, and every import silently fails.
             - name: media
               mountPath: /data
+          startupProbe:
+            # Same unpinned striptracks DOCKER_MODS as radarr, same failure mode: on
+            # 2026-08-09 the mod's apk payload grew past the liveness window and radarr
+            # crash-looped re-installing it on every restart. 10-minute first-boot gate;
+            # liveness only starts once it passes.
+            httpGet:
+              path: /ping
+              port: {{ container_item.port }}
+            periodSeconds: 10
+            failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /ping

@@ -57,6 +57,17 @@ spec:
             # library still loads, the UI still works, and every import silently fails.
             - name: media
               mountPath: /data
+          startupProbe:
+            # DOCKER_MODS install runs before radarr serves /ping, and the striptracks mod's
+            # payload is set upstream, not pinned here — on 2026-08-09 it grew to 86 apk
+            # packages (llvm/mesa via mkvtoolnix) and outran the liveness window, so every
+            # restart re-installed from scratch and the pod crash-looped for 5h. This gate
+            # gives first boot up to 10 minutes; liveness only starts once it has passed.
+            httpGet:
+              path: /ping
+              port: {{ container_item.port }}
+            periodSeconds: 10
+            failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /ping
