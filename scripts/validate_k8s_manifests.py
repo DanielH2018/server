@@ -18,6 +18,7 @@ or invalid YAML.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -104,10 +105,37 @@ def yaml_error(rendered: str) -> str | None:
                 if not key.endswith((".yml", ".yaml")) or not isinstance(value, str):
                     continue
                 try:
-                    yaml.safe_load(value)
+                    yaml.load(value, Loader=_AppTagLoader)  # noqa: S506 — tolerant SafeLoader subclass
                 except yaml.YAMLError as exc:
                     return f"invalid embedded YAML in {field}.{key}: {exc}"
     return None
+
+
+class _AppTagLoader(yaml.SafeLoader):
+    """SafeLoader that tolerates application-defined tags in EMBEDDED config (home-assistant's
+    configuration.yaml uses ``!include``/``!secret``). The structure is still fully parsed —
+    only the tag resolves to a placeholder. HA's own files get deep validation from
+    validate-ha-config; this guard just proves the ConfigMap embeds well-formed YAML."""
+
+
+_AppTagLoader.add_multi_constructor("!", lambda loader, suffix, node: f"<{suffix}>")
+
+
+def _from_json(value) -> object:
+    """Ansible's ``from_json`` for looked-up templates (home-assistant's secrets.yaml.j2 parses
+    a SOPS-stored service-account blob). Under this guard the value is a StubUndefined, not
+    JSON — return an empty dict so attribute access on the result stubs out like any other
+    undefined instead of aborting the render."""
+    try:
+        return json.loads(str(value))
+    except ValueError, TypeError:
+        return {}
+
+
+def _to_json(value) -> str:
+    """Ansible's ``to_json`` for looked-up templates. ``default=str`` so a StubUndefined
+    serializes as its placeholder instead of aborting the render."""
+    return json.dumps(value, default=str)
 
 
 def make_lookup(ctx: dict):
@@ -130,6 +158,8 @@ def make_lookup(ctx: dict):
         if kind == "template":
             env = make_env([path.parent])
             env.globals["lookup"] = lookup
+            env.filters["from_json"] = _from_json
+            env.filters["to_json"] = _to_json
             return env.get_template(path.name).render(ctx).rstrip("\n")
         raise ValueError(
             "validate_k8s_manifests implements lookup('file') and lookup('template'), "

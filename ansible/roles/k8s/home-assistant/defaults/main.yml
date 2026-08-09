@@ -1,0 +1,25 @@
+---
+# Held until the B3 cutover window (slice 5). daniel-box runs has_gitops and deploy.yml is a
+# plain containers_list loop, so without this flag the inventory entry alone would stand HA up
+# unattended alongside the running Docker copy — two HAs on one MQTT broker and one recorder
+# lineage, the exact failure slice-5 D5 exists to prevent.
+home_assistant_k8s_enabled: false
+
+# Same image the Docker role runs — both copies stay on the same tag through coexistence so a
+# difference in behaviour between them is never the image. DOCKER_MODS rides along (HACS);
+# whether the mod layer applies under containerd is a B3 gate, checked at first boot.
+home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.6.3-ls221
+
+# Mirrors resources('1.0', '1536M', '0.10', '256M') in the compose template.
+home_assistant_k8s_cpu_limit: "1"
+home_assistant_k8s_mem_limit: 1536Mi
+home_assistant_k8s_cpu_request: "100m"
+home_assistant_k8s_mem_request: 256Mi
+
+# 140 M at planning (71 M of it the recorder SQLite); sized for recorder growth. `longhorn`
+# (backed up): .storage carries the device/entity registries — the highest-value,
+# hardest-to-rebuild tree in the homelab, per the kopia restore-drill's own comment.
+home_assistant_k8s_claim: home-assistant-config
+home_assistant_k8s_storage_class: longhorn
+home_assistant_k8s_size: 4Gi
+home_assistant_k8s_source_path: /home/ubuntu/server/containers/home-assistant/config

@@ -1,0 +1,52 @@
+---
+# The git-owned config plane, shipped from roles/containers/home-assistant per slice-5 D3 —
+# that role stays the authoring home (validate-ha-config, the macro tests, the skills all
+# anchor there); this manifest only carries its files into the cluster. lookup('file'), not
+# 'template': these files are copied verbatim by contract (validate-ha-config rejects Ansible
+# markers in them), and 'file' makes a regression to real templating fail the deploy loudly.
+#
+# An init container installs these into the /config PVC on every pod start — the same
+# "Ansible is the source of truth, UI edits to THESE files don't survive" contract the Docker
+# role's every-deploy copy enforced. Runtime-owned state (.storage/, the recorder DB,
+# custom_components/) lives only on the PVC and is never touched.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: home-assistant-config
+  namespace: {{ k8s_namespace }}
+data:
+  configuration.yaml: |
+{{ lookup('file', playbook_dir + '/roles/containers/home-assistant/templates/configuration.yaml.j2') | indent(4, true) }}
+  customize.yaml: |
+{{ lookup('file', playbook_dir + '/roles/containers/home-assistant/templates/customize.yaml.j2') | indent(4, true) }}
+  ui-lovelace.yaml: |
+{{ lookup('file', playbook_dir + '/roles/containers/home-assistant/templates/ui-lovelace.yaml.j2') | indent(4, true) }}
+  automations.yaml: |
+{{ lookup('file', playbook_dir + '/roles/containers/home-assistant/files/automations.yaml') | indent(4, true) }}
+  scenes.yaml: |
+{{ lookup('file', playbook_dir + '/roles/containers/home-assistant/files/scenes.yaml') | indent(4, true) }}
+  scripts.yaml: |
+{{ lookup('file', playbook_dir + '/roles/containers/home-assistant/files/scripts.yaml') | indent(4, true) }}
+  templates.yaml: |
+{{ lookup('file', playbook_dir + '/roles/containers/home-assistant/files/templates.yaml') | indent(4, true) }}
+  rest.yaml: |
+{{ lookup('file', playbook_dir + '/roles/containers/home-assistant/files/rest.yaml') | indent(4, true) }}
+---
+# custom_templates/ as its own map so the init container can lay it down as a directory.
+# Files enumerated explicitly rather than fileglob'd: the Jinja macros are load-bearing
+# (tested, imported by automations), and a glob that silently shipped nothing would surface
+# only as broken automations at runtime.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: home-assistant-custom-templates
+  namespace: {{ k8s_namespace }}
+data:
+  diagnostics.jinja: |
+{{ lookup('file', playbook_dir + '/roles/containers/home-assistant/files/custom_templates/diagnostics.jinja') | indent(4, true) }}
+  fan.jinja: |
+{{ lookup('file', playbook_dir + '/roles/containers/home-assistant/files/custom_templates/fan.jinja') | indent(4, true) }}
+  lighting.jinja: |
+{{ lookup('file', playbook_dir + '/roles/containers/home-assistant/files/custom_templates/lighting.jinja') | indent(4, true) }}
+  ventilation.jinja: |
+{{ lookup('file', playbook_dir + '/roles/containers/home-assistant/files/custom_templates/ventilation.jinja') | indent(4, true) }}

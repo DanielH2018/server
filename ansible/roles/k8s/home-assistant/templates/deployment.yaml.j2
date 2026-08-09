@@ -1,0 +1,123 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: home-assistant
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # Recreate is load-bearing (slice-5 D5): the PVC is RWO, and two HAs against one MQTT
+  # broker and one recorder lineage must never coexist.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: home-assistant
+  template:
+    metadata:
+      labels:
+        app: home-assistant
+    spec:
+      enableServiceLinks: false
+      # No pod-level runAsUser/fsGroup: the LSIO image starts as root and s6 drops to
+      # PUID/PGID itself, chowning /config on the way — same contract as under Docker.
+      initContainers:
+        # Lay the git-owned config plane into the PVC on every start (see the ConfigMap's
+        # comment). Only these named files are written; .storage/, the recorder DB, secrets
+        # consumers, custom_components/ are PVC state this never touches.
+        - name: config-install
+          image: alpine:3.22
+          command:
+            - sh
+            - -c
+            - install -m 644 /cm/configuration.yaml /cm/customize.yaml /cm/ui-lovelace.yaml
+              /cm/automations.yaml /cm/scenes.yaml /cm/scripts.yaml /cm/templates.yaml
+              /cm/rest.yaml /config/ &&
+              install -m 600 /sec/secrets.yaml /config/secrets.yaml &&
+              mkdir -p /config/custom_templates &&
+              install -m 644 /ct/diagnostics.jinja /ct/fan.jinja /ct/lighting.jinja
+              /ct/ventilation.jinja /config/custom_templates/
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config-files
+              mountPath: /cm
+              readOnly: true
+            - name: custom-templates
+              mountPath: /ct
+              readOnly: true
+            - name: config-secrets
+              mountPath: /sec
+              readOnly: true
+            - name: config
+              mountPath: /config
+      containers:
+        - name: home-assistant
+          image: {{ home_assistant_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          # The compose template's cap posture: drop ALL, add the s6 privilege-drop set. No
+          # NET_BIND_SERVICE — HA binds 8123. allowPrivilegeEscalation false mirrors
+          # no-new-privileges:true (s6 goes root -> PUID, never up).
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - SETUID
+                - SETGID
+                - FOWNER
+                - DAC_OVERRIDE
+          env:
+            - name: PUID
+              value: "{{ puid }}"
+            - name: PGID
+              value: "{{ pgid }}"
+            - name: TZ
+              value: "{{ tz }}"
+            - name: DOCKER_MODS
+              value: linuxserver/mods:homeassistant-hacs
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          # HA is a slow first-booter (the LSIO permissions pass, then core start before :8123
+          # binds) — the compose healthcheck carries start_period 120s for the same reason.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 180
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ home_assistant_k8s_cpu_limit }}"
+              memory: {{ home_assistant_k8s_mem_limit }}
+            requests:
+              cpu: "{{ home_assistant_k8s_cpu_request }}"
+              memory: {{ home_assistant_k8s_mem_request }}
+      volumes:
+        - name: config-files
+          configMap:
+            name: home-assistant-config
+        - name: custom-templates
+          configMap:
+            name: home-assistant-custom-templates
+        - name: config-secrets
+          secret:
+            secretName: home-assistant-secrets
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ home_assistant_k8s_claim }}
