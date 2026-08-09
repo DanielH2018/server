@@ -287,6 +287,18 @@ no consumer yet.
 
 ### B5 — The router forward flips; the old bridge comes down
 
+**FLIPPED 2026-08-09 ~23:29, with two deviations from the plan.** (1) The router's
+port-forward UI only targets devices from its DHCP/ARP list — the VIP has no lease, so the
+traefik Service gained the node address as an `externalIP` (`656c5f36`) and the forwards
+point at the DEVICE daniel-box. (2) The operator moved **51820/udp too**, overriding D6:
+**WireGuard remote access is DOWN, accepted knowingly** — wg-easy still runs on
+daniel-server and nothing on daniel-box answers 51820. Resolve during the soak: either flip
+that one forward back to .161, or pull wg-easy's move forward out of slice 7.
+Verified through Cloudflare within a minute of the fix: homepage 302s to the Docker portal
+via the reverse bridge, sonarr 302s to the k8s portal, www serves 200. Before the device
+fix, the flip 522'd for ~20 minutes — external origin unreachable — which is what surfaced
+the device-list constraint.
+
 Change 80/443 forwarding 10.0.0.161 → 10.0.0.240 at the router (manual; verify from LTE, not
 LAN). After a soak (Kuma green across every public monitor, CrowdSec seeing external traffic,
 Authelia sessions surviving on both stacks), remove the now-dead forward bridge from the
