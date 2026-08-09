@@ -4,8 +4,16 @@ Edge router for the whole homelab. See repo-root `CLAUDE.md` for shared conventi
 **This role bundles two containers:** `traefik` (version-pinned, Renovate-managed) and the
 CrowdSec agent (`crowdsecurity/crowdsec:latest`, `watchtower.enable=false` — it health-gates traefik's
 boot, so image updates are deliberate manual pulls: `deploy.yml --tags traefik -e common_pull=always`,
-since a plain redeploy never re-pulls a tag already present locally). The separate `crowdsec` role is only the
-Metabase dashboard.
+since a plain redeploy never re-pulls a tag already present locally).
+
+**Since slice-6 B2 (2026-08-09) this container is an AGENT, not an engine.** `DISABLE_LOCAL_API`
++ `LOCAL_API_URL` point it at the single LAPI in the k3s cluster (`roles/k8s/crowdsec`), so it
+holds no decisions and no bouncer registrations — it parses this host's logs (auth.log, the
+Docker Authelia, traefik's access log) and still serves the local AppSec listener on :7422 that
+this edge's bouncer plugin calls inline. Decisions, allowlists, the Discord notifier and the
+Metabase dashboard all live in the cluster; the old `crowdsec` role (dashboard only) is archived
+at `roles/containers/archive/crowdsec`. Plan and rationale:
+`docs/k3s-migration/slice-6-edge-cutover.md`.
 
 ## At a glance
 - **Host:** daniel-server
@@ -15,8 +23,13 @@ Metabase dashboard.
 
 ## Notable
 - TLS via Cloudflare DNS-01; routes services at `<hostname>.<domain>` from their labels.
-- CrowdSec bouncer/WAF: `crowdsec-acquis.yaml`, `crowdsec-profiles.yaml`,
-  `crowdsec-whitelist.yaml`, Discord alerts, home-IP allowlist updater.
+- CrowdSec bouncer/WAF: `crowdsec-acquis.yaml` (this host's log sources + the AppSec listener)
+  and `crowdsec-whitelist.yaml` / `crowdsec-trusted-remote-whitelist.yaml` — the whitelist files
+  are shared: the cluster roles render these same `files/` into their agents' parsers, so an edit
+  here reaches both stacks. `crowdsec-profiles.yaml` and the Discord notifier are still deployed
+  by this role but are LAPI-side config, so the cluster engine's copies are the live ones. The
+  home-IP allowlist updater moved to daniel-box at B2 (`cscli allowlists` is LAPI-machine-only);
+  this role now carries absent-state tombstones that remove its cron, script and state dir.
 - **CrowdSec AppSec (inline L7 WAF, 2026-07-14):** the bouncer runs BOTH modes — `stream`
   (reactive ban-list: bans an IP after a pattern of log lines) AND the **AppSec Component**, which
   inspects each request INLINE before the backend, so a first-hit malicious payload (a CVE exploit
@@ -34,12 +47,7 @@ Metabase dashboard.
   `cscli appsec-rules` loaded and pages monitor-bridge's "CrowdSec AppSec" monitor on failure. Manual
   verify: `docker exec crowdsec cscli appsec-configs list` (non-empty) + `metrics` shows an `appsec`
   acquisition source.
-- **Host crons (state-file → monitor-bridge):** `crowdsec-update-home-allowlist.sh` (every 5 min —
-  keeps **both** the home public IPv4 *address* and the home LAN's IPv6 **/64 prefix** in the
-  `home-ips` allowlist. The prefix, not a /128, is the point: IPv6 has no NAT, so every device gets
-  its own routable address and privacy extensions rotate it — a /128 would cover one interface of one
-  machine for a few hours. It was IPv4-only until 2026-08-06, when a burst test egressing over IPv6
-  got the homelab's own address banned and 403'd every public hostname for everyone at home),
+- **Host crons (state-file → monitor-bridge):**
   `docker-user-verify.sh` (every 15 min), `appsec-verify.sh` (every 15 min, asserts the inline WAF is
   actually loaded — the fail-open blind spot), and `cloudflare-ip-drift.sh` (weekly) — the last diffs
   the hardcoded `cloudflare_ips` (`group_vars/all.yml`, which gates trustedIPs + the DOCKER-USER DROP)
@@ -55,20 +63,25 @@ Metabase dashboard.
   15 min by `docker-user-verify.sh` — `ok:true` = the live `iptables DOCKER-USER` chain asserts the
   terminal :80/:443 DROP) and its **DOCKER-USER Origin Lock** Kuma monitor. `iptables -nvL
   DOCKER-USER` (needs root) is the ground truth if you have a shell.
-- **Bouncer registration is rotation-safe (2026-07-03, exercised live):** the deploy probes
-  LAPI with the configured `crowdsec_bouncer_api_key` and deletes + re-adds `traefik-bouncer`
-  on mismatch (`cscli bouncers add` is create-only — without this, a rotated key leaves LAPI
-  on the old hash while traefik hot-reloads the new one, and the plugin fails OPEN: silent
-  WAF bypass). The auto-created `traefik-bouncer@<bridge-ip>` rows LAPI accumulates (~1 per
-  traefik recreate, sharing the parent's key hash) **cannot be pruned individually** — cscli
-  refuses, "delete parent instead" — so accumulation between rotations is cosmetic and
-  accepted; the rotation-path parent delete cascades the whole set. Rotation runbook:
-  `docs/secret-rotation.md` (`assisted`). **Not an anomaly: a `traefik-bouncer@::1` row with
-  `Type: Wget` is the deploy-time rotation-guard probe** (`tasks/main.yml` "Probe LAPI with the
-  configured bouncer key" `wget`s `localhost:8080/v1/decisions` from *inside* the crowdsec
-  container). It looks exactly like a bouncer-key leak used from within the container, so a future
-  `cscli bouncers list` audit shouldn't chase it as a compromise indicator — it shares the same
-  known key and is cascaded away by the same parent delete.
+- **This edge's bouncer registers on the CLUSTER LAPI, declaratively (slice-6 B2).** Its identity
+  is `dockertraefik`, created from the engine's `BOUNCER_KEY_dockertraefik` env
+  (`roles/k8s/crowdsec/templates/config-secret.yaml.j2`) with the key
+  `crowdsec_bouncer_docker_traefik_key`; `crowdsec_bouncer_api_key` is LEGACY (it authenticated the
+  retired local LAPI, kept only for the B2 rollback window). The old probe/delete/re-add rotation
+  dance is gone with that LAPI — what remains is one deploy task that probes the cluster LAPI and
+  **fails the deploy** on a rejected key, because re-registration never UPDATES an existing key and
+  the plugin fails OPEN on auth errors (silent WAF bypass). Rotation runbook:
+  `docs/secret-rotation.md` (`assisted`). Inspect with
+  `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list` on daniel-box —
+  `cscli` against the local container answers for an agent with no LAPI and will refuse.
+- **Three bouncer-plugin traps, all found live at B2 and all silent-ish:** with
+  `crowdsecLapiScheme: https` the plugin requires an explicit
+  `crowdsecLapiTLSCertificateAuthorityFile` (it does NOT use system CAs) or the middleware fails to
+  construct — and an invalid middleware 404s EVERY router on the entrypoint, so the whole edge goes
+  dark; `crowdsecAppsecScheme` silently DEFAULTS TO THE LAPI SCHEME, which pointed https at the
+  plaintext local :7422 listener and killed the inline WAF (fail-open, so the only symptom was a log
+  line); and plugin config does not reliably hot-reload through the directory-mounted dynamic
+  config — **restart traefik after any bouncer config change**.
 - Ships **systemd units** (`traefik-init.service`, `docker-user-rules.service`) and
   logrotate — this role does more than run a container.
 - The `labels()` macro imported by every other service's compose lives in the repo-level

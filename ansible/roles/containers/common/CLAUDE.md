@@ -13,7 +13,8 @@ Utility role (not a container). Every container role calls into it via
   `recreate: "{{ 'always' if common_config_changed | default(false) else 'auto' }}"`,
   `remove_orphans: true`. **This is why `containers/` is generated/read-only.**
 - **`redeploy_cron.yml`** — weekly Sunday-06:00 redeploy cron for roles with locally-built
-  images (code-server :00, n8n :05, crowdsec :10, peanut :15, ical-proxy :20); Watchtower
+  images (code-server :00, n8n :05, peanut :15, ical-proxy :20 — the :10 slot was crowdsec's
+  Metabase build, archived at slice-6 B2 when the dashboard moved to the cluster); Watchtower
   can't update those, and the GitOps deployer only redeploys *changed* roles. Callers pass
   `common_redeploy_cron_minute` to stagger the jobs. The job runs through
   `~/.local/bin/uv run` (absolute path — cron's PATH has no ansible-playbook, and the bare

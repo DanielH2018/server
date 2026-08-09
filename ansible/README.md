@@ -222,11 +222,14 @@ entry, an `ssh_config_path` that doesn't exist on this OS image, a sudo password
 match the SOPS `become_password` (§1), or a repo cloned somewhere other than
 `/home/<user>/server` (§2). Reaching its asserts at all proves §5's SOPS onboarding worked.
 
-**CrowdSec's Traefik bouncer needs no manual registration.** The traefik role registers it
-from the existing SOPS `crowdsec_bouncer_api_key` on every deploy, and its probe/delete/re-add
-sequence is rotation-safe (`roles/containers/traefik/tasks/main.yml`). Verify with
-`docker exec crowdsec cscli bouncers list` — the name is `traefik-bouncer`. Rotation is
-`docs/secret-rotation.md`, not a hand-run `cscli bouncers add`.
+**CrowdSec's bouncers need no manual registration.** Since slice-6 B2 the single LAPI runs in
+the k3s cluster (`roles/k8s/crowdsec`) and registers both bouncers declaratively from its
+`BOUNCER_KEY_*` env — `dockertraefik` for daniel-server's edge
+(`crowdsec_bouncer_docker_traefik_key`) and `k8straefik` for the cluster's. The traefik role's
+remaining job is to fail its own deploy if the LAPI rejects the key. Verify with
+`kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list` on daniel-box (the
+Docker container is an agent now and has no LAPI to ask). Rotation is `docs/secret-rotation.md`,
+not a hand-run `cscli bouncers add`.
 
 > **Adding a new service**, **secrets**, and **deploy flow** are documented once in the
 > repo-root [`CLAUDE.md`](../CLAUDE.md) and [`README.md`](../README.md) and the

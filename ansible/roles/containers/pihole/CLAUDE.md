@@ -19,6 +19,13 @@ LAN DNS sinkhole (Pi-hole) with a recursive Unbound upstream. See repo-root `CLA
   `dnsmasq.yml.j2`). A no-op run recreates nothing and never touches `/etc/resolv.conf`;
   the Cloudflare fallback resolv.conf is written only on first install or when a
   recreate is actually coming.
+- **This host's steady-state resolver is `pihole_host_dns_primary`** (`defaults/main.yml`,
+  default `server_ip` = this Pi-hole), with 1.1.1.1 as the second line. Slice-6 B3 flips that
+  default to the in-cluster DNS VIP; the fallback stays, because it is what keeps ~26 Docker
+  services resolving when the cluster is down. Note the k3s node uses a different mechanism
+  entirely — an Ansible-owned `systemd-resolved` drop-in pinning upstream resolvers
+  (`roles/setup/k3s`), because a cluster node must never resolve through a VIP the cluster
+  itself has to be up to serve.
 - DNS/DHCP ports bound to **`{{ server_ip }}` (the LAN IP), not 0.0.0.0** — avoids being
   an open resolver / rogue DHCP source.
 - Pi-hole resolves via Unbound (`FTLCONF_dns_upstreams: unbound`), a local recursive

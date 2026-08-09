@@ -127,7 +127,12 @@ Note `portainer_manager_host` and the Pi's `portainer-agent` are downstream of t
 
 **Reworks — real redesign, not a port (8):** `traefik`, `authelia`, `kopia`, `prometheus`, `grafana`, `otel-collector`, `uptime-kuma`, `terraria`.
 
-- **Traefik + CrowdSec.** The CrowdSec *detection engine* lives in the `traefik` role, not the `crowdsec` role (that one is only a Metabase dashboard). Its acquisition reads container logs over the Docker socket; in k8s that becomes file-based acquisition over `/var/log/pods`. The Traefik bouncer plugin still works, but the LAPI feeding it must be rebuilt.
+- **Traefik + CrowdSec.** *(Done at slice-6 B1/B2 — this bullet is the pre-migration analysis;
+  `slice-6-edge-cutover.md` is authoritative.)* The engine then lived in the `traefik` role, not the
+  `crowdsec` role (a Metabase dashboard, since archived). Two predictions here were wrong in
+  practice: acquisition did NOT go to `/var/log/pods` — each pod writes a file log to a shared
+  emptyDir and carries its own agent sidecar (D2) — and the LAPI was not merely "rebuilt" but
+  centralised, with the Docker engine demoted to one of four agents reporting to it.
 - **Authelia** — forwardauth becomes a Middleware CRD. Its storage encryption key is a SOPS `pinned` DANGER secret.
 - **AutoKuma** — reads Docker labels to generate Uptime Kuma monitors. Those labels do not exist in k8s. Either rework onto annotations or replace the monitor-generation path.
 - **Prometheus / Grafana / OTel** — `kube-prometheus-stack` is the idiomatic target, but adopting it is a config rewrite, not a lift. Note **Loki has no `containers_list` entry of its own** — it is deployed from inside the `grafana` role's compose, so it migrates with Grafana rather than separately.

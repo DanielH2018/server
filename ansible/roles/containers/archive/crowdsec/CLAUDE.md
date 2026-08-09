@@ -1,8 +1,14 @@
-# crowdsec — Metabase dashboard for CrowdSec
+# crowdsec — Metabase dashboard for CrowdSec  *(MIGRATED — do not reactivate)*
 
-**Visualization only.** The CrowdSec detection engine runs in the `traefik` role; this
-role is a Metabase instance (`crowdsec-dashboard`) with pre-configured dashboards.
-See repo-root `CLAUDE.md` for shared conventions.
+> **Superseded 2026-08-09 by slice-6 B2c.** This dashboard runs in the k3s cluster now, inside
+> the CrowdSec engine pod so it can read the LIVE decision DB (`roles/k8s/crowdsec`, reachable at
+> `crowdsec-k8s.local.<domain>`). Reactivating this role would stand up a second Metabase against
+> a database nothing writes any more. Kept only as the B2 rollback path; delete once slice 6
+> closes. The engine itself never lived here — before B2 it ran in the `traefik` role, and it
+> now runs in the cluster with that container demoted to an agent.
+
+**Visualization only.** A Metabase instance (`crowdsec-dashboard`) with pre-configured
+dashboards. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 - **Image:** built from `templates/Dockerfile.j2` (Metabase base, baked-in dashboards)

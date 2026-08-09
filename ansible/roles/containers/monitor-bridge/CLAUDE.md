@@ -161,20 +161,12 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     snapshot still succeeds — **Backup Freshness stays green while the peers go stale**. This is the
     dedicated watchdog for that gap (added 2026-07-05 — it was the one backup cron with no monitor).
     Same state-file idiom as Backup Verify / Restore Drill; pure `pi_peers()` is unit-tested.)
-  - **CrowdSec Home Allowlist** (reads `/home-allowlist/state.json`, written **every 5 min** by the
-    **traefik** role's `crowdsec-update-home-allowlist.sh` host cron — `down` on a FAILED run (ipify
-    unreachable / malformed IP / cscli error) or >30 min staleness (cron broken / never ran), a
-    missing/corrupt state file included. That cron keeps the operator's current home public IPv4
-    address AND the home LAN's IPv6 /64 prefix in
-    CrowdSec's `home-ips` allowlist so browsing the public path from home doesn't trip the WAF
-    (IPv4-only until 2026-08-06 — the IPv6 half was the gap that let a burst test ban the homelab's
-    own address); a v4-only host skips the IPv6 half and stays green, but a host that HAS global
-    IPv6 and cannot resolve it pages, since a stale prefix 403s everyone at home on the next
-    rotation; it
-    writes state on EVERY run incl. the common IP-unchanged fast path, so a healthy no-op keeps the
-    monitor green and only a real failure/stall pages. It was the last self-`logger`ing cron with no
-    watchdog — the twin of the WG Pi Peer Backup gap (2026-07-05). Same state-file idiom; pure
-    `home_allowlist()` is unit-tested. `HOME_ALLOWLIST_MAX_AGE_MIN` tunes the staleness window.)
+  - **CrowdSec Home Allowlist** — RETIRED from this container at slice-6 B2 (2026-08-09). `cscli
+    allowlists` is LAPI-machine-only, so the updater cron followed the LAPI into the cluster
+    (`roles/k8s/crowdsec`) and pushes the Kuma monitor directly from daniel-box; there is no
+    state file on this host to read, so the check, its `HOME_ALLOWLIST_*` env, its bind mount and
+    its tests are gone. The monitor itself still exists — its AutoKuma label moved to the
+    `uptime-kuma` role.
   - **DOCKER-USER Origin Lock** (reads `/docker-user/state.json`, written **every 15 min** by the
     **traefik** role's `docker-user-verify.sh` root cron — `down` on a failed live-chain assert or
     >45 min staleness (3 missed runs), a missing/corrupt state file included. The Cloudflare-only-
@@ -506,7 +498,7 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,home_allowlist,docker_user,cloudflare_drift,appsec,b2,b2_trend,b2_reachable,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,fake_remux,fake_remux_replace,maintenance,discord}_push_token` + `kopia_restore_drill_push_token`)
+- Push tokens (`monitor_bridge_{kopia,disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,docker_user,cloudflare_drift,appsec,b2,b2_trend,b2_reachable,ha,renovate_alive,loki,loki_reachable,promtail_dropped,verify,content_verify,disk_prune,fake_remux,fake_remux_replace,maintenance,discord}_push_token` + `kopia_restore_drill_push_token`)
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -535,12 +527,10 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
   sys_user-owned (and its file task re-chowns it if Docker got there first), so deploy `wg-easy`
   before `monitor-bridge` on a fresh host. Kopia's own state dirs (`/var/lib/kopia-*`) are created
   by the kopia role, which `monitor-bridge` already depends on.
-- The **CrowdSec Home Allowlist** monitor bind-mounts `/var/lib/crowdsec-home-allowlist:/home-allowlist:ro`
-  (written by the `traefik` role's every-5-min `crowdsec-update-home-allowlist.sh` cron). The `traefik`
-  role creates that dir sys_user-owned, and traefik deploys first (everything depends on it), so the
-  ordering is naturally satisfied. The **Cloudflare IP Drift** monitor's
-  `/var/lib/cloudflare-ip-drift:/cloudflare-drift:ro` mount (written weekly by the same role's
-  `cloudflare-ip-drift.sh`, seeded once on deploy) is created the same way with the same ordering.
+- The **Cloudflare IP Drift** monitor's
+  `/var/lib/cloudflare-ip-drift:/cloudflare-drift:ro` mount (written weekly by the `traefik` role's
+  `cloudflare-ip-drift.sh`, seeded once on deploy) is created sys_user-owned by that role, which
+  deploys first (everything depends on it), so the ordering is naturally satisfied.
   The **CrowdSec AppSec** monitor's `/var/lib/crowdsec-appsec:/crowdsec-appsec:ro` mount (written
   every 15 min by the same role's `appsec-verify.sh`, seeded once on deploy) follows the same
   ordering — but that dir is **root-owned** (the verify cron runs as root via `docker exec`, like
