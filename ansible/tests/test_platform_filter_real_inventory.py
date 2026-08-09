@@ -80,7 +80,9 @@ def test_daniel_server_is_still_wholly_docker():
     # twin retiring once its connection log proved nothing else ever spoke to it. Then
     # crowdsec (27 -> 26) later that day, slice-6 B2c — the Metabase dashboard only (the
     # engine lives in the traefik role, demoted to an agent at B2b); it rides in the
-    # cluster engine pod now, reading the live decision DB. The count
+    # cluster engine pod now, reading the live decision DB. Then watchtower (26 -> 25) on
+    # 2026-08-09, slice-7 Phase B's first dissolve — not moved but REPLACED: Renovate owns
+    # image updates, so an unsupervised puller was pure risk. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -89,6 +91,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 26
-    assert len(filter_by_platform(containers, "docker")) == 26
+    assert len(containers) == 25
+    assert len(filter_by_platform(containers, "docker")) == 25
     assert filter_by_platform(containers, "k8s") == []

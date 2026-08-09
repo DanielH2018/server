@@ -70,11 +70,10 @@ containers_list:
     networks:
       # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
       - lifecycle
-  - name: watchtower
-    use_authelia: false
-    networks:
-      # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
-      - lifecycle
+  # watchtower retired 2026-08-09 (slice-7 Phase B dissolve): Renovate owns image updates —
+  # every remaining image is pinned and PR-driven, so an unsupervised puller was pure risk
+  # (the per-service watchtower.enable=false labels it obeyed are now dead metadata and go
+  # with each remaining template as it retires). Role in roles/containers/archive/.
   # cloudflare-ddns was retired from this host on 2026-08-05 — the first service slice 2
   # actually cut over. It now runs in k3s (roles/k8s/cloudflare-ddns), and its two Kuma
   # dead-man's-switches moved to uptime-kuma's own compose because AutoKuma derives monitors
