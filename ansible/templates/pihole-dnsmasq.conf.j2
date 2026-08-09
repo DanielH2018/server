@@ -1,4 +1,7 @@
-address=/local.{{ domain }}/{{ server_ip }}
+{# Shared between the Docker pihole role (renders on daniel-server, where the default is
+   right) and roles/k8s/pihole's ConfigMap (renders on daniel-box, which must pin the
+   wildcard to daniel-server per slice-6 D7 — the LAN wildcard does NOT move with B3). #}
+address=/local.{{ domain }}/{{ pihole_wildcard_ip | default(server_ip) }}
 address=/local.{{ domain }}/::
 
 # k3s-hosted services answer with the cluster's MetalLB ingress VIP instead of the wildcard

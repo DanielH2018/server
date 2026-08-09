@@ -1,0 +1,57 @@
+---
+# Slice 6, B3 (build half). Coexists with the Docker copy by design (D4): nothing resolves
+# through the DNS VIP until the router's DHCP DNS option flips at cutover.
+
+# Same pin as the Docker role's compose (Renovate-managed); the two copies coexist through
+# the lease drain, so keep them on one version until the Docker role is retired.
+pihole_k8s_image: pihole/pihole:2026.07.2
+# The Docker side runs klutchell/unbound:latest with watchtower disabled; k8s images are
+# pinned (Renovate k8s-defaults manager). v-prefixed tags track upstream unbound releases.
+pihole_k8s_unbound_image: klutchell/unbound:v1.25.2
+
+pihole_k8s_claim: pihole-etc
+# nobackup: every byte of /etc/pihole is derivable — gravity.db from the declared adlists
+# below, pihole.toml from the FTLCONF env (diffed clean against the live Docker copy's toml,
+# 2026-08-09), dnsmasq.d from the shared template. pihole-FTL.db is query history: stats,
+# not state. The Docker copy measured 488M, most of it gravity + FTL history.
+pihole_k8s_storage_class: longhorn-nobackup
+pihole_k8s_size: 2Gi
+
+# Unbound listens here inside the pod — FTL owns :53 in the shared network namespace.
+# Consumed by the ConfigMap (unbound server config), the probes, and FTL's upstream env.
+pihole_k8s_unbound_port: 5335
+
+# The pinned DNS VIP the LAN will be handed at cutover; global (group_vars) because
+# daniel-server's wg-easy and resolv.conf repoint to it at B3's cutover half.
+pihole_k8s_lan_ip: "{{ dns_k8s_vip }}"
+
+# Resource caps mirrored from the compose templates (M1 blast-radius values). k8s-native
+# units on purpose: compose-style "1.0"/"0.50" normalize server-side ("1"/"500m") and make
+# every `kubectl apply` report the Deployment "configured" (flapped live 2026-08-09).
+pihole_k8s_cpu_limit: "1"
+pihole_k8s_mem_limit: 512Mi
+pihole_k8s_cpu_request: 100m
+pihole_k8s_mem_request: 64Mi
+pihole_k8s_unbound_cpu_limit: 500m
+pihole_k8s_unbound_mem_limit: 256Mi
+pihole_k8s_unbound_cpu_request: 50m
+pihole_k8s_unbound_mem_request: 32Mi
+
+# Desired blocklist state, reconciled into gravity.db by tasks/main.yml (idempotent
+# INSERT/UPDATE, then a gravity rebuild only when something changed). DECLARED rather than
+# volume-seeded — resolving the plan's "seed vs regenerate" open item: seed-volume verifies
+# against a quiescent source, and pihole-FTL.db moves on every DNS query, so a coexistence
+# seed can never pass verification. This list is the complete durable state the Docker
+# copy's gravity.db held on 2026-08-09 (plus two regexes below; the only client row was a
+# stale 192.168.50.x entry from the old subnet, dropped deliberately).
+# StevenBlack is Pi-hole's first-boot default and was DISABLED on the Docker copy —
+# declaring it disabled keeps a fresh boot from silently re-enabling it.
+pihole_k8s_adlists:
+  - address: https://big.oisd.nl
+    enabled: 1
+  - address: https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+    enabled: 0
+# domainlist type 3 = regex deny.
+pihole_k8s_regex_deny:
+  - '(\.|^)logs\.roku\.com$'
+  - '(\.|^)ads\.samsung\.com$'

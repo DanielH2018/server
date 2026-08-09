@@ -23,9 +23,11 @@
     dest: "{{ pihole_base }}/{{ item.dest }}"
     mode: "0644"
   loop:
-    - src: unbound.conf.j2
+    # Shared with roles/k8s/pihole since slice-6 B3 — they live in ansible/templates/ so both
+    # the compose bind-mounts and the cluster ConfigMap render from one source.
+    - src: pihole-unbound.conf.j2
       dest: data/unbound/my_settings.conf
-    - src: dnsmasq.yml.j2
+    - src: pihole-dnsmasq.conf.j2
       dest: data/etc-dnsmasq.d/02-wildcard.conf
   register: pihole_cfg_resolver
 

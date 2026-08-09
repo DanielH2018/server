@@ -1,0 +1,59 @@
+---
+# Slice 6, B3 (build half). Standing this up unattended is safe by design (D4): the DNS VIP
+# serves nobody until the router's DHCP DNS option flips at cutover, and the web UI hostname
+# carries the -k8s suffix while the Docker copy keeps pihole.<domain>.
+
+- name: Deploy pihole to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: pihole
+    manifests_rollout: pihole
+    manifests_files:
+      - pvc.yaml
+      - configmap.yaml
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
+    manifests_secret_files:
+      - secret.yaml
+
+# Blocklist state is DECLARED (defaults/main.yml), not seeded — see the defaults for why a
+# coexistence volume seed can never verify. SQL travels over exec stdin; total_changes() on
+# the last line makes changed_when honest. Runs after the rollout wait, so FTL has already
+# initialised the gravity.db schema on a first boot. INSERTs rely on the gravity schema's
+# AFTER INSERT triggers to attach new rows to the default group.
+- name: Reconcile the declared adlists and regex denies into gravity.db
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec -i deploy/pihole -c pihole --
+      pihole-FTL sqlite3 /etc/pihole/gravity.db
+    stdin: |
+      {% for a in pihole_k8s_adlists %}
+      INSERT INTO adlist (address, enabled, comment)
+        SELECT '{{ a.address }}', {{ a.enabled }}, 'ansible-declared'
+        WHERE NOT EXISTS (SELECT 1 FROM adlist WHERE address = '{{ a.address }}');
+      UPDATE adlist SET enabled = {{ a.enabled }}
+        WHERE address = '{{ a.address }}' AND enabled != {{ a.enabled }};
+      {% endfor %}
+      {% for r in pihole_k8s_regex_deny %}
+      INSERT INTO domainlist (type, domain, enabled, comment)
+        SELECT 3, '{{ r }}', 1, 'ansible-declared'
+        WHERE NOT EXISTS (SELECT 1 FROM domainlist WHERE type = 3 AND domain = '{{ r }}');
+      {% endfor %}
+      SELECT total_changes();
+  register: pihole_k8s_gravity_sql
+  become: true
+  changed_when: (pihole_k8s_gravity_sql.stdout_lines | last | default('0') | int) > 0
+
+# Only when the declaration actually changed something — gravity downloads big.oisd
+# (~200k domains) and rebuilds the blocklist table, ~1-2 min.
+- name: Rebuild gravity after a blocklist change # noqa no-handler
+  tags: [deploy]
+  when: pihole_k8s_gravity_sql is changed
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec deploy/pihole -c pihole -- pihole -g
+  become: true
+  changed_when: true

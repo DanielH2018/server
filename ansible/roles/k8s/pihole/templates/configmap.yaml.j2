@@ -1,0 +1,28 @@
+{# D7: the LAN wildcard keeps answering with daniel-server's IP even once this copy serves
+   the LAN — only the *-k8s overrides point at the cluster. The shared template defaults its
+   wildcard to the rendering host's server_ip, which HERE would be daniel-box; pin it. #}
+{% set pihole_wildcard_ip = hostvars['daniel-server'].server_ip %}
+{% set pihole_unbound_port = pihole_k8s_unbound_port %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pihole-dns-config
+  namespace: {{ k8s_namespace }}
+data:
+  # Rendered from the same shared templates as the Docker copy's bind mounts
+  # (ansible/templates/pihole-*.j2) — one source, two deployment shapes.
+  02-wildcard.conf: |
+{% filter indent(4, true) %}
+{% include 'pihole-dnsmasq.conf.j2' %}
+{% endfilter %}
+
+  # The blank line above is LOAD-BEARING: {% raw %}{% include %}{% endraw %} drops the
+  # included file's trailing newline, so without it this key concatenates onto the literal
+  # block's last line — still-valid YAML with ONE key, which the validator cannot catch
+  # (bit live 2026-08-09: unbound crash-looped with "input in flex scanner failed" on the
+  # subPath mount of the then-missing key).
+  my_settings.conf: |
+{% filter indent(4, true) %}
+{% include 'pihole-unbound.conf.j2' %}
+{% endfilter %}

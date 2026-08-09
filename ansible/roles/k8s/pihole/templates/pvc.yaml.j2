@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ pihole_k8s_claim }}
+  namespace: {{ k8s_namespace }}
+spec:
+  # Not seeded from the Docker copy — blocklist state is declared in the role defaults and
+  # reconciled by tasks/main.yml; everything else in /etc/pihole regenerates (see defaults).
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ pihole_k8s_storage_class }}
+  resources:
+    requests:
+      storage: {{ pihole_k8s_size }}

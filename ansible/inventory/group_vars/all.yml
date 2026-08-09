@@ -64,6 +64,11 @@ k3s_metallb_ingress_vip: 10.0.0.240
 # Docker-side MQTT clients (z2m, HA) point at it during coexistence. MQTT is raw TCP —
 # this VIP, not a Traefik hostname, is how it crosses hosts.
 mqtt_k8s_vip: 10.0.0.242
+# Slice-6 B3: the cluster Pi-hole's pinned LAN DNS VIP (D4). Global for the same two-hosts
+# reason — daniel-box's pihole-dns Service claims it, and at cutover daniel-server repoints
+# wg-easy's WG_DEFAULT_DNS and its own resolv.conf primary (pihole_host_dns_primary) here.
+# Until the router's DHCP DNS option flips, nothing resolves through it.
+dns_k8s_vip: 10.0.0.243
 # Slice-6 B1: shared between roles/k8s/crowdsec (the engine that runs LAPI+AppSec) and
 # roles/k8s/traefik (the bouncer plugin middleware + the log-tailing agent sidecar).
 # Cross-role like mqtt_k8s_vip above — role defaults are invisible across roles.

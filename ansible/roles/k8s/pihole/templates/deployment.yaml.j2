@@ -1,0 +1,149 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pihole
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # ReadWriteOnce PVC on single-replica Longhorn — a rolling update would deadlock on the volume.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: pihole
+  template:
+    metadata:
+      labels:
+        app: pihole
+    spec:
+      enableServiceLinks: false
+      containers:
+        # Both containers share the pod network namespace: FTL binds :53/:80, unbound sits on
+        # 127.0.0.1:{{ pihole_k8s_unbound_port }} (the ConfigMap moves it off :53). There is
+        # no depends_on/service_healthy here — FTL retries its upstream, and the readiness
+        # probe keeps the Services dark until resolution actually works.
+        - name: pihole
+          image: {{ pihole_k8s_image }}
+          ports:
+            - containerPort: 53
+              protocol: UDP
+            - containerPort: 53
+              protocol: TCP
+            - containerPort: {{ container_item.port }}
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            - name: FTLCONF_dns_upstreams
+              value: "127.0.0.1#{{ pihole_k8s_unbound_port }}"
+            - name: FTLCONF_dns_listeningMode
+              value: all
+            - name: FTLCONF_misc_etc_dnsmasq_d
+              value: "true"
+          envFrom:
+            # FTLCONF_webserver_api_password — envFrom keeps the value out of the pod spec
+            # the read-only kubeconfig can read; it only sees the Secret's name.
+            - secretRef:
+                name: pihole-env
+          # Same cap set as the Docker compose (documented there line-by-line): FTL binds
+          # <1024 ports, applies file caps to its own binary at startup (SETFCAP — without it
+          # "unable to set CAP_SETFCAP ... Cannot run as non-root"), and the s6 init chowns
+          # /etc/pihole then drops privileges. Runs as root by image design — the DAC_OVERRIDE
+          # memory's "use the pod uid" fix does not fit an image whose entrypoint demands the
+          # drop-privileges dance. No NET_RAW: that was for DHCP raw sockets, and this copy is
+          # DNS-only (D4 — DHCP measured inactive on the Docker copy, :67 not exposed here).
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - DAC_OVERRIDE
+                - NET_ADMIN
+                - NET_BIND_SERVICE
+                - SETFCAP
+                - SETUID
+                - SETGID
+                - SYS_NICE
+          volumeMounts:
+            - name: etc-pihole
+              mountPath: /etc/pihole
+            # items: — the ConfigMap also carries unbound's config, and dnsmasq parses
+            # EVERY file in its conf-dir; letting my_settings.conf land here would feed
+            # dnsmasq unbound syntax and kill FTL at startup.
+            - name: dns-config
+              mountPath: /etc/dnsmasq.d/02-wildcard.conf
+              subPath: 02-wildcard.conf
+              readOnly: true
+          # pi.hole is answered by FTL itself — no upstream dependency, so readiness proves
+          # the resolver is up without coupling it to internet reachability.
+          readinessProbe:
+            exec:
+              command: [dig, +short, +tries=1, +time=2, "@127.0.0.1", pi.hole]
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 53
+            periodSeconds: 30
+          # First boot builds gravity from scratch (big.oisd is ~200k domains); give it the
+          # same generous window the *arr DOCKER_MODS lesson bought (radarr, 2026-08-09).
+          startupProbe:
+            tcpSocket:
+              port: 53
+            periodSeconds: 10
+            failureThreshold: 60
+          resources:
+            limits:
+              cpu: "{{ pihole_k8s_cpu_limit }}"
+              memory: {{ pihole_k8s_mem_limit }}
+            requests:
+              cpu: "{{ pihole_k8s_cpu_request }}"
+              memory: {{ pihole_k8s_mem_request }}
+        - name: unbound
+          image: {{ pihole_k8s_unbound_image }}
+          # Starts as root to read its config, then drops to the unbound user — SETUID/SETGID
+          # only. No NET_BIND_SERVICE: it listens on {{ pihole_k8s_unbound_port }} (>1024)
+          # here, unlike the Docker copy's :53. The compose's nofile ulimit (32768, for
+          # num-threads: 2 × outgoing-range 8192) has no k8s equivalent — containerd's
+          # default (1048576) already clears it.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - SETUID
+                - SETGID
+          volumeMounts:
+            - name: dns-config
+              mountPath: /etc/unbound/custom.conf.d/my_settings.conf
+              subPath: my_settings.conf
+              readOnly: true
+          # drill-hc passes args through to drill; timeout 30s — DNSSEC validation can be slow.
+          readinessProbe:
+            exec:
+              command: [drill-hc, -p, "{{ pihole_k8s_unbound_port }}", "@127.0.0.1", dnssec.works]
+            periodSeconds: 30
+            timeoutSeconds: 30
+          livenessProbe:
+            exec:
+              command: [drill-hc, -p, "{{ pihole_k8s_unbound_port }}", "@127.0.0.1", dnssec.works]
+            periodSeconds: 60
+            timeoutSeconds: 30
+            failureThreshold: 3
+          resources:
+            limits:
+              cpu: "{{ pihole_k8s_unbound_cpu_limit }}"
+              memory: {{ pihole_k8s_unbound_mem_limit }}
+            requests:
+              cpu: "{{ pihole_k8s_unbound_cpu_request }}"
+              memory: {{ pihole_k8s_unbound_mem_request }}
+      volumes:
+        - name: etc-pihole
+          persistentVolumeClaim:
+            claimName: {{ pihole_k8s_claim }}
+        - name: dns-config
+          configMap:
+            name: pihole-dns-config

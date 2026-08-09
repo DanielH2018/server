@@ -451,6 +451,17 @@ containers_list:
     port: 8123
     use_authelia: false
     bridge_hostname: home-assistant
+
+  # Slice 6, B3 (build half) — LAN DNS on its own pinned VIP (dns_k8s_vip, D4), coexisting
+  # with the Docker copy until the router's DHCP DNS option flips at cutover. Not seeded:
+  # blocklist state is declared in the role defaults (pihole_k8s_adlists) and everything else
+  # in /etc/pihole regenerates. No bridge_hostname — the Docker copy keeps pihole.<domain>
+  # until it is retired, and DNS clients arrive by VIP, not by name.
+  - name: pihole
+    platform: k8s
+    hostname: "pihole{{ k8s_hostname_suffix }}"
+    port: 80
+    use_authelia: true
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the

@@ -1,0 +1,42 @@
+---
+# Web UI, reached only through the IngressRoute (Authelia-gated) — the macro targets a
+# Service named after the containers_list entry.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: pihole
+  ports:
+    - name: web
+      port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}
+---
+# The LAN DNS seam (slice-6 D4): one pinned VIP the router's DHCP DNS option flips to at
+# cutover. Both Pi-holes serve simultaneously while leases renew — the free strangler.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole-dns
+  namespace: {{ k8s_namespace }}
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: {{ pihole_k8s_lan_ip }}
+spec:
+  type: LoadBalancer
+  # Preserves real client addresses — Pi-hole's per-client query log is how the drain is
+  # observed (retire the Docker copy only when ITS log flatlines, and this one shows who
+  # has moved). Safe on a single node.
+  externalTrafficPolicy: Local
+  selector:
+    app: pihole
+  ports:
+    - name: dns-udp
+      port: 53
+      targetPort: 53
+      protocol: UDP
+    - name: dns-tcp
+      port: 53
+      targetPort: 53
+      protocol: TCP

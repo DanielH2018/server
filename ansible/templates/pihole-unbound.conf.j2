@@ -1,4 +1,9 @@
 server:
+{% if pihole_unbound_port is defined %}
+    # k8s pod only: Pi-hole's FTL owns :53 in the shared network namespace, so unbound moves
+    # off it. `port:` retargets the image's bare `interface: 0.0.0.0` line (no @port pin).
+    port: {{ pihole_unbound_port }}
+{% endif %}
     verbosity: 1
     do-ip6: no
 
