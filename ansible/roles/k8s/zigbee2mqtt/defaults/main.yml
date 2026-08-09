@@ -1,0 +1,22 @@
+---
+# Same image the Docker role runs — both copies stay on the same tag through coexistence so a
+# difference in behaviour between them is never the image.
+zigbee2mqtt_k8s_image: ghcr.io/koenkk/zigbee2mqtt:2.12.0
+
+# Mirrors resources('0.50', '256M', '0.05', '64M') in the compose template.
+zigbee2mqtt_k8s_cpu_limit: "500m"
+zigbee2mqtt_k8s_mem_limit: 256Mi
+zigbee2mqtt_k8s_cpu_request: "50m"
+zigbee2mqtt_k8s_mem_request: 64Mi
+
+# In-cluster the broker is one Service hop away; the shared config template defaults to the
+# LAN VIP for the Docker render.
+zigbee2mqtt_k8s_mqtt_broker: mosquitto
+
+# 63 M at cutover: database.db, devices.yaml, coordinator_backup.json — the device pairings.
+# `longhorn` (backed up), not nobackup: this is the least regenerable smart-home state short
+# of re-pairing every device by hand.
+zigbee2mqtt_k8s_claim: zigbee2mqtt-data
+zigbee2mqtt_k8s_storage_class: longhorn
+zigbee2mqtt_k8s_size: 2Gi
+zigbee2mqtt_k8s_source_path: /home/ubuntu/server/containers/zigbee2mqtt/data

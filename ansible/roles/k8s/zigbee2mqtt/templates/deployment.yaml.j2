@@ -1,0 +1,96 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zigbee2mqtt
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # Recreate is load-bearing twice over: the PVC is ReadWriteOnce on single-replica Longhorn,
+  # and the SLZB coordinator accepts ONE client — a rolling update would have two z2m fighting
+  # for the radio (slice-5 D5).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: zigbee2mqtt
+  template:
+    metadata:
+      labels:
+        app: zigbee2mqtt
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsUser: {{ puid }}
+        runAsGroup: {{ pgid }}
+        fsGroup: {{ pgid }}
+      # Re-install the Ansible-rendered configuration.yaml into the data volume on every start
+      # (see the Secret's comment). install -m 640 mirrors the Docker role's 0640 render; the
+      # rest of the data dir (database.db, devices.yaml, coordinator_backup.json) is z2m's own
+      # and is never touched here.
+      initContainers:
+        - name: config-install
+          image: alpine:3.22
+          command:
+            - sh
+            - -c
+            - install -m 640 /secret/configuration.yaml /data/configuration.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config-secret
+              mountPath: /secret
+              readOnly: true
+            - name: data
+              mountPath: /data
+      containers:
+        - name: zigbee2mqtt
+          image: {{ zigbee2mqtt_k8s_image }}
+          ports:
+            - containerPort: 8080
+          # The compose template's posture: non-root uid owning its data, no caps, immutable
+          # rootfs (verified there — every persisted path resolves under the data mount).
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          # Z2M takes a moment to connect to the coordinator before the frontend serves —
+          # same reason the compose healthcheck carries start_period 60s.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ zigbee2mqtt_k8s_cpu_limit }}"
+              memory: {{ zigbee2mqtt_k8s_mem_limit }}
+            requests:
+              cpu: "{{ zigbee2mqtt_k8s_cpu_request }}"
+              memory: {{ zigbee2mqtt_k8s_mem_request }}
+      volumes:
+        - name: config-secret
+          secret:
+            secretName: zigbee2mqtt-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ zigbee2mqtt_k8s_claim }}

@@ -30,7 +30,10 @@ source /usr/local/lib/kopia-lib.sh
 # frozen directory and passed, proving nothing about the live data (now a Longhorn PVC, covered by
 # longhorn-backup-health.sh's per-volume check). karakeep and n8n dropped the same day, on their own
 # cutovers, for the same reason. Drop a service here when it migrates.
-SVCS=(authelia traefik grafana pihole home-assistant zigbee2mqtt wg-easy)
+# zigbee2mqtt dropped 2026-08-09 — slice-5 B2 moved it to k3s; its data dir on this host is
+# the frozen rollback copy, so drilling it would prove nothing about the live pairings (now a
+# Longhorn PVC on the backed-up class, asserted by longhorn-backup-health.sh).
+SVCS=(authelia traefik grafana pihole home-assistant wg-easy)
 declare -A SENTINEL=(
   [authelia]=config/configuration.yml
   [traefik]=data/acme.json
@@ -56,11 +59,6 @@ declare -A SENTINEL=(
   # rebuild tree in the homelab — prove it restores, not just that it's backed up. The
   # registry is a JSON file (not *.db), so it skips the SQLite-magic branch below.
   [home-assistant]=config/.storage/core.device_registry
-  # Z2M's OWN database.db is NDJSON (newline-delimited JSON), not SQLite — the *.db
-  # SQLite-magic branch below would false-fail against its header. coordinator_backup.json
-  # (the Zigbee network's radio-side backup, re-pair-critical) is a real JSON file and
-  # skips that branch the same way home-assistant's registry does.
-  [zigbee2mqtt]=data/coordinator_backup.json
 )
 # Rotation: (month + year) % len picks one service per monthly run. With 12 services and 12
 # months each is drilled once a year; the + year term shifts which calendar month a given

@@ -112,7 +112,10 @@ _DEFAULT_BACKUP_SENTINELS = [
     # receiving writes — green for a frozen file. Longhorn covers the live PVC now.
     "wg-easy/pi-peers/wg0.json",
     "home-assistant/config/.storage/core.device_registry",
-    "zigbee2mqtt/data/coordinator_backup.json",
+    # zigbee2mqtt/data/coordinator_backup.json was here until 2026-08-09, when slice-5 B2 moved
+    # z2m to k3s. Removed for the same reason as jellyfin and the slice-2 four above: the Docker
+    # data dir stays on disk as the rollback copy, so the sentinel would keep resolving against
+    # a file that stopped receiving writes — green for a frozen copy. Longhorn covers the PVC.
 ]
 BACKUP_SENTINELS = [
     s.strip()
