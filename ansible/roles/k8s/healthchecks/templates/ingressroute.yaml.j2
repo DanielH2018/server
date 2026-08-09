@@ -5,11 +5,14 @@
     container_item.hostname | default(container_item.name),
     container_item.port,
     container_item.use_authelia,
-    bridge_hostname=container_item.bridge_hostname | default(none)
+    bridge_hostname=container_item.bridge_hostname | default(none),
+    bypass_prefixes=container_item.bridge_bypass_prefixes | default([])
   )
 }}
 ---
 # Ping bypass, carried over from the Docker role's hand-rolled `healthchecks-ping` router.
+# (This object covers the -k8s hostname; the UNSUFFIXED public name's /ping/ bypass rides
+# the macro's bypass_prefixes route above, B5 prep.)
 # Monitored jobs POST to /ping/<uuid> with no credentials — an Authelia gate here would not
 # fail loudly, it would silently turn every check red while the jobs themselves keep working.
 #

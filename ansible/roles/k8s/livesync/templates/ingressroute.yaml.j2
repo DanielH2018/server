@@ -16,6 +16,7 @@
     container_item.port,
     container_item.use_authelia,
     bridge_hostname=container_item.bridge_hostname | default(none),
-    bridge_rate_limit=container_item.bridge_rate_limit | default('rate-limit-bridge')
+    bridge_rate_limit=container_item.bridge_rate_limit | default('rate-limit-bridge'),
+    public_native=false
   )
 }}

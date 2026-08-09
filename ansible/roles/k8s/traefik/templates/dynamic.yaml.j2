@@ -114,6 +114,21 @@ spec:
           - "{{ k8s_bridge_client_ip }}/32"
 ---
 apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  # livesync's ceiling for its DIRECT public route on the reverse bridge (B5 prep) — the
+  # 6000/600 CouchDB-replication headroom of rate-limit-bridge-livesync, but with DEFAULT
+  # keying: requests on that route arrive with real client addresses (externalTrafficPolicy:
+  # Local), so the excludedIPs XFF-walk above would be forgeable here and is not needed.
+  name: rate-limit-public-livesync
+  namespace: {{ k8s_namespace }}
+spec:
+  rateLimit:
+    average: 6000
+    burst: 600
+    period: 1m
+---
+apiVersion: traefik.io/v1alpha1
 kind: TLSOption
 metadata:
   # NOT `default`. That name is reserved: Traefik registers a TLSOption called `default` as

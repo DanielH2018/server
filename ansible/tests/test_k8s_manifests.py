@@ -304,6 +304,21 @@ AUTHELIA_BYPASS_ROUTES = {
         "n8n's API is read-WRITE — it can create, modify and delete workflows, unlike the "
         "read-only widget endpoints the LAN bypasses on the Docker side expose."
     ),
+    # The three below are the B5-prep NATIVE public bypasses on the UNSUFFIXED names —
+    # emitted by the ingressroute() macro from each entry's bridge_bypass_prefixes once
+    # k8s_public_route flipped. Each reproduces a hole the Docker edge already serves for the
+    # same session-less callers; post-B5 those callers arrive at this edge directly.
+    "healthchecks-public-ping": (
+        "Monitored jobs POST /ping/<uuid> with no credentials to the unsuffixed public name."
+    ),
+    "n8n-public-webhook": (
+        "External services POST /webhook/ with no session; gating it silently breaks every "
+        "registered webhook while the callers keep reporting success."
+    ),
+    "karakeep-public-api": (
+        "The karakeep API bypass the Docker edge already serves publicly (trailing slash "
+        "keeps /api-docs and siblings out); the app's own API keys are the gate."
+    ),
 }
 
 

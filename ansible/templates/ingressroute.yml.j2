@@ -21,7 +21,7 @@
   Docker instance's. The Docker side repeats the same block on each hand-rolled file-provider
   router for the same reason.
 #}
-{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, bridge_hostname=none, bridge_rate_limit='rate-limit-bridge', public=true) -%}
+{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, bridge_hostname=none, bridge_rate_limit='rate-limit-bridge', public=true, public_native=true, bypass_prefixes=[]) -%}
 {#
   namespace defaults to k8s_namespace — every slice-2 service wants that. It is overridable
   because the telemetry stack runs in its own namespace, and an IngressRoute must live
@@ -95,6 +95,35 @@ spec:
       services:
         - name: {{ name }}
           port: {{ port }}
+{% if k8s_public_route and public and public_native %}
+    # The NATIVE unsuffixed public route (slice-6 B5 prep). Once the router's 80/443 forward
+    # moves to the VIP, external traffic arrives here directly — from arbitrary addresses, so
+    # it can never match the ClientIP-guarded bridge route above, and without this rule the
+    # public name would 404 the moment the forward flips. Authelia is applied HERE (the k8s
+    # portal, public cookie domain) because there is no upstream edge any more on this path.
+    # During coexistence the bridge route wins for daniel-server-forwarded traffic on rule
+    # length, so nothing bridged is double-authenticated.
+    #
+    # public_native=false opts a service out — livesync's public name stays on the REVERSE
+    # bridge (through the Docker edge) because its X-Sync-Token gate lives in that edge's
+    # file provider, where the readonly kubeconfig cannot read it; an IngressRoute rule
+    # carrying the token would hand it to anything holding that kubeconfig.
+    # The .local name is deliberately absent: the LAN wildcard keeps resolving to
+    # daniel-server (D7), which forwards it across the strangler bridge.
+    - kind: Rule
+      match: "Host(`{{ bridge_hostname }}.{{ domain }}`)"
+      middlewares:
+        - name: rate-limit
+{% if authelia %}
+        - name: authelia
+{% endif %}
+{% for middleware in extra_middlewares %}
+        - name: {{ middleware }}
+{% endfor %}
+      services:
+        - name: {{ name }}
+          port: {{ port }}
+{% endif %}
 {% endif %}
   tls:
     certResolver: cloudflare
@@ -108,6 +137,45 @@ spec:
         sans:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
+{% if k8s_public_route and public and public_native and bridge_hostname %}
+{% for prefix in bypass_prefixes %}
+{% set slug = prefix | trim('/') | replace('/', '-') %}
+---
+# An unauthenticated public path the service had at the Docker edge (bridge_bypass_prefixes),
+# reproduced natively on the UNSUFFIXED name for B5: the callers are automated and
+# session-less, so an Authelia gate does not fail loudly — it silently breaks every caller
+# while they keep reporting success. Same trailing-slash load-bearing rule as the Docker twin.
+# A separate document on purpose: its metadata.name must appear in test_k8s_manifests.py's
+# AUTHELIA_BYPASS_ROUTES allow-list with a written reason, so a new public no-auth path is a
+# conscious edit there, never a quiet template change.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ name }}-public-{{ slug }}
+  namespace: {{ namespace | default(k8s_namespace, true) }}
+spec:
+  entryPoints:
+    - https
+  routes:
+    - kind: Rule
+      match: "Host(`{{ bridge_hostname }}.{{ domain }}`) && PathPrefix(`{{ prefix }}`)"
+      priority: 100
+      middlewares:
+        - name: rate-limit
+      services:
+        - name: {{ name }}
+          port: {{ port }}
+  tls:
+    certResolver: cloudflare
+    options:
+      name: modern
+    domains:
+      - main: "{{ domain }}"
+        sans:
+          - "*.{{ domain }}"
+          - "*.local.{{ domain }}"
+{% endfor %}
+{% endif %}
 {%- endmacro %}
 
 {% macro monitoring_route(name, hostname, port, path_prefix, namespace=none) -%}
