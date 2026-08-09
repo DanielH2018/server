@@ -65,12 +65,16 @@ dropped has no DAC_OVERRIDE, so it cannot write the init container's `/etc/crowd
 `cscli parsers install` dies on mkdir — as the pod's own uid each agent owns its config and log
 outright, and needs no privilege to read a file and post to the LAPI).
 
-**Next:** A1, B3 (drain observing), and B4 are COMPLETE as of 2026-08-09. Only B5 remains:
-BEFORE the router flip, the unsuffixed public names of k8s services (today answered by the
-ClientIP-guarded bridge routes, auth'd at the Docker edge) must be served natively at the
-cluster with Authelia — external traffic arriving directly at the VIP matches no
-ClientIP-guarded route and would 404. Then the router 80/443 forward moves to 10.0.0.240
-(operator, verify from LTE), a soak, and the bridge teardown lands last.
+**Next:** A1, B3 (drain observing), B4, and B5's prep are COMPLETE as of 2026-08-09. The
+unsuffixed public names are served natively at the cluster (`5534de1e`): Authelia'd routes
+per inventory, allow-listed bypass documents for healthchecks `/ping/`, n8n `/webhook/`,
+karakeep `/api/`, and livesync's public name riding the reverse bridge because its
+X-Sync-Token gate stays in daniel-server's file provider (a CRD would leak the token to the
+readonly kubeconfig) — all gated live at the VIP, including `/_utils` traversing to the
+Docker portal. **What remains is the flip itself:** the operator moves the router's 80/443
+forward → 10.0.0.240 and verifies from LTE; then the soak; then the bridge teardown
+(remove the forward bridge, delete `bridge_hostname` keys, rework `test_strangler_bridge.py`
+to the end-state) lands last.
 
 > design.md row: *"Edge cutover: CrowdSec LAPI, Pi-hole, router forward → VIP, flip the four
 > `*_host` flags — exit: external access and LAN DNS on the new path."*
