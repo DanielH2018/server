@@ -10,6 +10,10 @@ The vendored copy exists because a ConfigMap renders from a file that must be pr
 time, and CI renders every manifest template on a machine that has never run a deploy, so a
 lookup on a download destination could only ever fail there.
 
+The Docker role was archived on 2026-08-09 (karakeep runs only in k8s now), but it stays the
+reference: its get_url task is the sole record of the pinned commit URL + sha256 the vendored
+bytes were taken from, so the guard reads it from the archive.
+
 Run: uv run pytest ansible/tests/test_karakeep_time_tagger_script.py
 """
 
@@ -19,7 +23,9 @@ from pathlib import Path
 
 ANSIBLE = Path(__file__).resolve().parents[1]
 VENDORED = ANSIBLE / "roles" / "k8s" / "karakeep" / "files" / "karakeep-time-tagger.py"
-DOCKER_TASKS = ANSIBLE / "roles" / "containers" / "karakeep" / "tasks" / "main.yml"
+DOCKER_TASKS = (
+    ANSIBLE / "roles" / "containers" / "archive" / "karakeep" / "tasks" / "main.yml"
+)
 
 
 def _docker_role_pin() -> tuple[str, str]:

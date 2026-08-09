@@ -2,6 +2,12 @@
 # Taken BEFORE the copy so it can be compared with the same reading afterwards. Without this
 # there is no way to tell a corrupted copy from a source that simply moved while being read,
 # and those need opposite responses: one is a bug, the other is a live service doing its job.
+#
+# Every ssh-touching task in this file retries with a 35s delay. The source host rate-limits
+# ssh (ufw `limit`: 6+ connections/30s get REJECTed, self-clearing in ~60s), and a seed's own
+# three connections plus any operator ssh in the same window trip it — it killed the slice-5
+# zigbee2mqtt cutover seed twice on 2026-08-09 with an instant rc=255. 35s outlasts the
+# 30-second window, so the second attempt always starts with a clean slate.
 - name: Checksum the source tree before copying
   tags: [deploy]
   when: seed_volume_copying | bool
@@ -12,6 +18,9 @@
        find . -type f -exec sha256sum {} + | LC_ALL=C sort | sha256sum"
   register: seed_volume_src_before
   changed_when: false
+  retries: 3
+  delay: 35
+  until: seed_volume_src_before.rc == 0
 
 # ── the destination must be EMPTY for a re-seed, not merely written over ─────────────────────
 # tar extracts over what is already there; it does not remove files the destination has and the
@@ -61,6 +70,12 @@
     executable: /bin/bash
   become: true
   changed_when: true
+  # Safe to retry: a second attempt extracts the full stream again over its own partial
+  # output, and the verification below still gates the result byte-for-byte.
+  register: seed_volume_stream
+  retries: 3
+  delay: 35
+  until: seed_volume_stream.rc == 0
 
 # ── verification ────────────────────────────────────────────────────────────
 # `find . -type f -exec sha256sum {} + | LC_ALL=C sort | sha256sum` runs identically under GNU
@@ -84,6 +99,9 @@
        find . -type f -exec sha256sum {} + | LC_ALL=C sort | sha256sum"
   register: seed_volume_src_sum
   changed_when: false
+  retries: 3
+  delay: 35
+  until: seed_volume_src_sum.rc == 0
 
 - name: Note whether the source held still
   tags: [deploy]

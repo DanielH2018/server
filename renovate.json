@@ -141,9 +141,9 @@
     },
     {
       "customType": "regex",
-      "description": "karakeep-time-tagger runtime pip deps pinned inside its docker-compose command (`uv pip install <pkg>==<ver>`). The uv base image is digest-pinned, but its runtime deps would otherwise re-resolve to newest PyPI on every container start with no update signal (2026-07-16 review M3) \u2014 the same silent-drift the image pin closes, one layer down. Track each pin on PyPI; the packageRule below keeps them manual so a client bump is reviewed alongside the digest-pinned karakeep app it talks to.",
+      "description": "karakeep-time-tagger runtime pip deps pinned inside its container command (`uv pip install <pkg>==<ver>`). The uv base image is digest-pinned, but its runtime deps would otherwise re-resolve to newest PyPI on every container start with no update signal (2026-07-16 review M3) \u2014 the same silent-drift the image pin closes, one layer down. Track each pin on PyPI; the packageRule below keeps them manual so a client bump is reviewed alongside the digest-pinned karakeep app it talks to. Lived in the Docker role's compose template until the karakeep k8s cutover (2026-08-06) moved the pins into the k8s deployment template; role archived 2026-08-09.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/containers/karakeep/templates/docker-compose\\.yml\\.j2$/"
+        "/(^|/)ansible/roles/k8s/karakeep/templates/deployment-time-tagger\\.yaml\\.j2$/"
       ],
       "matchStrings": [
         "(?<depName>[A-Za-z0-9._-]+)==(?<currentValue>[0-9][^\\s\"']*)"
