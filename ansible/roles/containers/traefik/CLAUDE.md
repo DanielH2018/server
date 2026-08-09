@@ -84,6 +84,19 @@ Metabase dashboard.
   Encrypt). Adding `certresolver` to them would only trigger redundant per-host ACME requests for
   zero gain. A NEW hand-rolled router on a NEW host not under the wildcard would still need one.
 
+- **Strangler-bridge routers render from ANOTHER HOST's inventory — a `bridge_hostname` addition
+  needs a traefik redeploy on daniel-server, or the new route simply doesn't exist.**
+  `config.yml.j2` builds its k8s bridge routers by iterating `hostvars['daniel-box'].containers_list
+  | selectattr('bridge_hostname', 'defined')`. So when a service migrates to the cluster and gains a
+  `bridge_hostname` in *daniel-box's* host_vars, nothing about *daniel-server's* own inventory
+  changed — no deploy of the migrated service touches this host, and the GitOps run only redeploys
+  roles whose tags it maps from the diff. Until someone runs `deploy.yml --tags traefik` on
+  daniel-server, the edge keeps serving the OLD route set and the new `<bridge_hostname>.<domain>`
+  404s (found live at slice-5 B2: `zigbee2mqtt.local.<domain>` 404'd after the z2m cutover while
+  the pod was healthy). Cutover checklists must pair "add `bridge_hostname`" with "redeploy traefik
+  on daniel-server" as one step. (Thanks to the directory-mounted dynamic config below, the
+  re-render applies live — no container recreate.)
+
 - **Dynamic config (`config.yml.j2`) is bind-mounted via its PARENT DIRECTORY
   (`./data/dynamic:/dynamic:ro`, `providers.file.directory: /dynamic`), not as a single
   file.** Ansible's `template` module writes via tmp+rename, so a re-render swaps in a
