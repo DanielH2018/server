@@ -564,6 +564,27 @@
     cron_file: longhorn-backup-health
   become: true
 
+- name: Deploy the root-disk headroom heartbeat
+  tags: [disk-health]
+  ansible.builtin.template:
+    src: disk-health.sh.j2
+    dest: /usr/local/bin/disk-health.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Schedule the root-disk headroom heartbeat
+  tags: [disk-health]
+  ansible.builtin.cron:
+    name: "daniel-box disk health"
+    minute: "{{ k3s_disk_health_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: "/usr/local/bin/disk-health.sh"
+    cron_file: disk-health
+  become: true
+
 - name: Render the read-only cluster identity
   tags: [kubeconfig]
   ansible.builtin.template:

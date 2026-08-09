@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# daniel-box root-disk headroom heartbeat — managed by Ansible (k3s role); edits overwritten.
+#
+# Everything on this host — Longhorn replicas, container images, etcd — lives on the root LV,
+# and no node-exporter runs here (cluster monitoring is kube-state-metrics + remote-write), so
+# monitor-bridge's Prometheus-based check_disk cannot see this filesystem. Pushes to Kuma like
+# the Longhorn backup heartbeat beside it, for the same reason.
+#
+# The threshold is Longhorn's, not the fleet's 90%: with storageMinimalAvailablePercentage=25
+# (Longhorn default) replica scheduling stops once the disk passes 75% used, so paging at 90
+# would fire after the storage plane already degraded.
+set -uo pipefail
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+KUMA_RESOLVE_IP="{{ hostvars[monitoring_controller_host].server_ip }}"
+PUSH_URL="https://${KUMA_HOST}/api/push/{{ daniel_box_disk_push_token }}"
+MAX_PCT={{ k3s_disk_max_pct }}
+
+read -r USED_PCT AVAIL_KB < <(df -P / | awk 'NR==2 { sub("%","",$5); print $5, $4 }')
+
+if [[ -z "${USED_PCT:-}" ]]; then
+  STATUS=down
+  MSG="df failed for /"
+elif (( USED_PCT > MAX_PCT )); then
+  STATUS=down
+  MSG="/ at ${USED_PCT}% (> ${MAX_PCT}% — Longhorn stops scheduling replicas at 75%)"
+else
+  STATUS=up
+  MSG="/ at ${USED_PCT}%, $(( AVAIL_KB / 1048576 )) GiB free"
+fi
+
+curl -fsS --max-time 10 -G \
+  --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
+  --data-urlencode "status=${STATUS}" \
+  --data-urlencode "msg=${MSG}" \
+  "$PUSH_URL" >/dev/null \
+  || logger -t disk-health "push failed (status=${STATUS}: ${MSG})"

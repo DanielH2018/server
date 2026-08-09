@@ -188,6 +188,13 @@ k3s_longhorn_backup_health_cron_minute: "*/10"
 # Raise it only together with a decision about the cap itself, never to silence the warning.
 k3s_longhorn_daily_backup_budget: 17
 
+# Root-disk headroom heartbeat (templates/disk-health.sh.j2). 75, not the fleet's 90: Longhorn's
+# storageMinimalAvailablePercentage=25 stops replica scheduling once the disk passes 75% used, so
+# this pages at the line where the storage plane starts degrading, not after. Same */10-cron /
+# 1200s-Kuma-interval pairing as the backup heartbeat above.
+k3s_disk_max_pct: 75
+k3s_disk_health_cron_minute: "*/10"
+
 # Bound volumes forced OUT of the backup set, as `namespace/pvcName` — an override for volumes
 # whose StorageClass says `longhorn` (back me up) but which should not be. Needed as a separate
 # lever because storageClassName is immutable: a volume that must leave the backup set after it is

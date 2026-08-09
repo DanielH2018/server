@@ -262,6 +262,11 @@ services:
       # Unwrapped on purpose: test_push_monitor_retries greps per LINE for max_retries=0, so a
       # wrapped kuma() call reads as missing it. Same reason the Pi push monitors above are one-liners.
       {{ kuma('longhorn-backup', name='k3s Longhorn Backup', monitor_type='push', interval=1200, max_retries=0, push_token=longhorn_backup_push_token) }}
+      # daniel-box root disk: Longhorn replicas, images and etcd all live on the root LV, and no
+      # node-exporter runs there, so monitor-bridge's Prometheus check_disk cannot see it. Pushed
+      # by daniel-box's own cron (k3s role, templates/disk-health.sh.j2); pages at 75% used — the
+      # line where Longhorn (storageMinimalAvailablePercentage=25) stops scheduling replicas.
+      {{ kuma('daniel-box-disk', name='daniel-box Disk', monitor_type='push', interval=1200, max_retries=0, push_token=daniel_box_disk_push_token) }}
       # k3s telemetry stack: watches the thing that watches everything else. A dead collector,
       # a broken hostPort DNAT, or a backend rejecting writes all present as "no data" — which
       # is indistinguishable from "Claude Code was idle" without this. Pushed by daniel-box's
