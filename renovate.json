@@ -34,10 +34,19 @@
       "before 6am on monday"
     ]
   },
+  "ignorePaths": [
+    "ansible/roles/containers/configarr/templates/docker-compose.yml.j2",
+    "ansible/roles/containers/freshrss/templates/docker-compose.yml.j2",
+    "ansible/roles/containers/home-assistant/templates/docker-compose.yml.j2",
+    "ansible/roles/containers/janitorr/templates/docker-compose.yml.j2",
+    "ansible/roles/containers/livesync/templates/docker-compose.yml.j2",
+    "ansible/roles/containers/n8n/templates/docker-compose.yml.j2",
+    "ansible/roles/containers/zigbee2mqtt/templates/docker-compose.yml.j2"
+  ],
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Docker image tags inside Ansible docker-compose Jinja templates (containers/ is generated, so the source of truth is the .j2)",
+      "description": "Docker image tags inside Ansible docker-compose Jinja templates (containers/ is generated, so the source of truth is the .j2). The ignorePaths list above freezes the compose templates of config-source roles whose services run only in k8s (their live pins are in ansible/roles/k8s/<svc>/defaults, tracked by the k8s manager below): those composes never deploy and exist as rollback artifacts, so bumping them would only manufacture drift from the state they were frozen at.",
       "managerFilePatterns": [
         "/^ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2$/"
       ],
