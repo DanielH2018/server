@@ -46,6 +46,9 @@
     manifests_files:
       - deployment.yaml
       - service.yaml
+      # The Docker-era `wireguard:8080` name, which radarr's and sonarr's databases still hold
+      # as the download client host (D11 / slice-4:542). Same pod, alias name.
+      - service-wireguard.yaml
       - ingressroute.yaml
     # 0600 on disk, rendered under no_log — the Mullvad key and account number.
     manifests_secret_files:
