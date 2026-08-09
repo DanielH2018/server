@@ -396,17 +396,6 @@
     state: present
   become: true
 
-- name: Create CrowdSec home-ips allowlist
-  tags: [config]
-  community.docker.docker_container_exec:
-    container: crowdsec
-    command: "cscli allowlists create home-ips --description 'Home IPs'"
-  register: traefik_crowdsec_allowlist_create
-  failed_when:
-    - (traefik_crowdsec_allowlist_create.rc | default(1)) != 0
-    - "'already exist' not in (traefik_crowdsec_allowlist_create.stderr | default('') | lower)"
-  changed_when: (traefik_crowdsec_allowlist_create.rc | default(1)) == 0
-
 - name: Create the CrowdSec home-allowlist monitor state directory
   tags: [config]
   # monitor-bridge bind-mounts this read-only (/home-allowlist) and its `home_allowlist` check alerts

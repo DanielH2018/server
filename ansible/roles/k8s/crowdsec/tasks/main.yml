@@ -34,5 +34,21 @@
   no_log: true
   changed_when: "'ADDED' in crowdsec_k8s_machine_add.stdout"
 
+- name: Create the home-ips allowlist on the LAPI
+  tags: [deploy]
+  # Moved from the containers/traefik role at B2b: `cscli allowlists` is LAPI-machine-only
+  # ("local API is disabled -- this command must be run on the local API machine" from the
+  # demoted agent, live 2026-08-09), so allowlist management follows the LAPI here.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
+      cscli allowlists create home-ips --description 'Home IPs'
+  register: crowdsec_k8s_allowlist_create
+  become: true
+  failed_when:
+    - crowdsec_k8s_allowlist_create.rc != 0
+    - "'already exist' not in (crowdsec_k8s_allowlist_create.stderr | default('') | lower)"
+  changed_when: crowdsec_k8s_allowlist_create.rc == 0
+
 - name: Enforcement gate (opt-in via --tags b1-gate)
   ansible.builtin.import_tasks: verify.yml

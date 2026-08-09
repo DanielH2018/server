@@ -396,6 +396,11 @@ http:
           crowdsecLapiKey: "{{ crowdsec_bouncer_docker_traefik_key }}"
           crowdsecLapiScheme: https
           crowdsecLapiHost: "crowdsec-lapi-k8s.local.{{ domain }}"
+          # The plugin does NOT use system CAs: with https it hard-requires an explicit CA
+          # or it refuses to construct — and an invalid middleware 404s EVERY router on the
+          # entrypoint (took the edge down at B2b). The traefik image's own bundle (present
+          # because ACME needs it) contains ISRG Root X1, which signs the LE wildcard.
+          crowdsecLapiTLSCertificateAuthorityFile: /etc/ssl/certs/ca-certificates.crt
           crowdsecMode: stream
           updateIntervalSeconds: 60
           # AppSec Component — inline L7 WAF (see crowdsec-acquis.yaml.j2). stream mode above is the
