@@ -310,3 +310,23 @@ was the PVC-migration full-upload day plus the 403 retry storm feeding itself, n
 volume count. The eight config volumes stay in the backup set, `k3s_longhorn_nobackup_volumes`
 stays empty, and slice-5's D6 resolves to `longhorn` for the z2m/HA claims (mosquitto stays
 nobackup on its own merits — regenerable retained state).
+
+## Recurrence — 2026-08-09, cap blown again by ~05:49 UTC
+
+The verdict above held for the *daily-backup run* but not for the *day*: `b2_reachable` flipped
+DOWN at 05:49 UTC (00:49 local) with `transaction_cap_exceeded` — about two hours after the
+03:38 green run — and stayed down. So something in the 03:38–05:49 window consumed the rest of
+the daily cap; the Longhorn daily itself is exonerated (17/17, zero cap errors). Kopia's
+nightly window on daniel-server is the prime suspect, but per-class usage can't be read while
+capped (the B2 API itself 403s) — pull the Caps & Alerts page, or tomorrow's 02:30
+`kopia-b2-usage` probe, before concluding.
+
+Containment applied (same shape as 08-08): `docker stop kopia` on daniel-server at 12:49 UTC
+(its connect loop misreads the 403 as "repository not found" and retries creation — creation
+also 403s, so no damage, but it's a steady burn), and the Longhorn backup target needs
+blanking to kill the ~150/min reconcile storm. Restore after 00:00 UTC with the revised
+sequence above.
+
+Open question for the next window: what does kopia's nightly actually cost in class B/C now
+that Longhorn shares the account cap, and does the cap need raising for the two to coexist —
+the 08-08 analysis priced the *Longhorn* side only.
