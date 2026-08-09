@@ -65,7 +65,9 @@ dropped has no DAC_OVERRIDE, so it cannot write the init container's `/etc/crowd
 `cscli parsers install` dies on mkdir — as the pod's own uid each agent owns its config and log
 outright, and needs no privilege to read a file and post to the LAPI).
 
-**Next:** B3 waits on the A1 cold-boot gate and the router-UI reads — both operator tasks.
+**Next:** B3's build half is done (2026-08-09) — the cluster Pi-hole serves on 10.0.0.243 and
+every build gate passed. Its cutover half, and B4/B5, wait on the A1 cold-boot gate and the
+router-UI reads — both operator tasks.
 
 > design.md row: *"Edge cutover: CrowdSec LAPI, Pi-hole, router forward → VIP, flip the four
 > `*_host` flags — exit: external access and LAN DNS on the new path."*
@@ -211,12 +213,21 @@ topology stay in SOPS until the slice closes.
 
 ### B3 — Pi-hole (+Unbound) to the cluster, router DNS option flips
 
-Gated on A1's cold-boot pass. `roles/k8s/pihole` per D4, seeded from the Docker copy's
-`etc-pihole` volume (gravity + adlists + pihole.toml minus host-specifics; the dnsmasq records
-render from the shared template). Cutover order: cluster Pi-hole serving on 10.0.0.243 and
-answering test queries → wg-easy `WG_DEFAULT_DNS` → .243 → daniel-server resolv.conf per D8 →
-router DHCP DNS option → .243. The Docker Pi-hole keeps serving 10.0.0.161:53 while leases
-drain; retire it only when its query log flatlines (days, not minutes — lease time decides).
+**Build half executed 2026-08-09** (`roles/k8s/pihole`, coexisting per D4 — safe before the
+gate because nothing resolves through the VIP until the DHCP option flips). NOT seeded — see
+the resolved Unverified item: blocklist state is declared in the role defaults and reconciled
+into gravity.db; everything else in `etc-pihole` proved env-derived or regenerable
+(pihole.toml diffed clean against the FTLCONF env). The dnsmasq records render from the now-
+shared template (`ansible/templates/pihole-dnsmasq.conf.j2`), wildcard pinned to
+daniel-server per D7; Unbound rides the pod on :5335 (FTL owns :53 in the shared netns).
+Build gates all passed via 10.0.0.243: the `-k8s` override, the wildcard, `daniel-pi.lan`,
+an external name through Unbound (DNSSEC: `fail01.dnssec.works` SERVFAILs), both blocklist
+tiers sinkhole (regex + big.oisd), and the Authelia-gated UI at `pihole-k8s` 302s to SSO.
+
+**Cutover half — gated on A1's cold-boot pass.** Order: wg-easy `WG_DEFAULT_DNS` → .243 →
+daniel-server resolv.conf per D8 → router DHCP DNS option → .243. The Docker Pi-hole keeps
+serving 10.0.0.161:53 while leases drain; retire it only when its query log flatlines (days,
+not minutes — lease time decides).
 
 **Gates:** dig via .243 resolves a `-k8s` override, the wildcard, `daniel-pi.lan`, and an
 external name (through Unbound) correctly; a VPN client resolves `*.local.<domain>` after
@@ -284,9 +295,13 @@ the soak.
 - **Bouncer plugin behaviour against a remote LAPI over TLS** — the plugin config grows
   `crowdsecLapiScheme: https`; verify stream mode + AppSec URL both accept the ingress
   hostname before B2 commits daniel-server to it.
-- **Seeding Pi-hole state vs regenerating** — gravity.db is derivable from adlists; decide at
-  B3 whether seeding the volume or re-running gravity on first boot is cleaner (leaning seed,
-  for parity with every other slice).
+- **Seeding Pi-hole state vs regenerating** — RESOLVED 2026-08-09, against the lean:
+  regenerate. seed-volume verifies against a quiescent source and pihole-FTL.db moves on
+  every DNS query, so a coexistence seed can never pass verification. Measured the actual
+  durable state instead: one enabled adlist (big.oisd.nl), the default StevenBlack list
+  disabled, two regex denies, and a stale client row from the old 192.168.50.x subnet
+  (dropped). All declared in `roles/k8s/pihole/defaults` and reconciled idempotently — and
+  the claim is `longhorn-nobackup` as a result.
 - **AppSec CPU cost in-cluster** — it ran uncapped-ish on daniel-server; set requests/limits
   from the Docker copy's cAdvisor history at B1.
 - **daniel-pi has no CrowdSec coverage today** — unchanged by this slice; candidate for a
