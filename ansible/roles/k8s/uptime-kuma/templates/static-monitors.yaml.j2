@@ -71,6 +71,13 @@ stringData:
     {"type": "http", "name": "k3s CrowdSec Dashboard", "url": "https://crowdsec-k8s.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   home-assistant-k8s.json: |
     {"type": "http", "name": "k3s Home Assistant", "url": "https://home-assistant{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # Transcribed 2026-08-10 (Phase D.2 step 3): id `loki` was the grafana compose's
+  # kuma('loki') label; the tile now probes the CLUSTER loki-homelab through its
+  # ClientIP-gated route (this pod's CIDR is admitted; hostAliases pin the -k8s name to
+  # the VIP). /ready 503s ~15s after a restart while the ingester warms — brief PENDING
+  # after a deploy is normal, carried over from the Docker tile's notes.
+  loki.json: |
+    {"type": "http", "name": "Loki", "url": "https://loki-homelab{{ k8s_hostname_suffix }}.local.{{ domain }}/ready", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   karakeep-k8s.json: |
     {"type": "http", "name": "k3s karakeep", "url": "https://karakeep{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   ical-proxy-k8s.json: |

@@ -112,7 +112,13 @@ the claude-otel one.
   `loki` datasource → the cluster route; probe.py pins the -k8s name to the MetalLB VIP
   via `curl --resolve` (split-horizon: the host shell resolves -k8s names to the Docker
   Traefik). Grafana gains non-default `loki-docker-retiring` for pre-cutover history —
-  delete it at step 4.
+  delete it at step 4. The Kuma `Loki` tile transcribed the same day (static entity
+  `loki.json` → the cluster /ready; label tombstoned on the grafana compose), ahead of
+  its step-4 slot.
+- **The D7 gate is MET (2026-08-10):** the otel-collector became a forwarder into the
+  cluster claude-otel stack (see slice-7-drain-and-join.md D7) — no Claude content lands
+  in the Docker Loki anymore. Step 4 now waits only on the 7-day dual-write window
+  (through 2026-08-17).
 
 ## Unverified — resolve during execution
 
