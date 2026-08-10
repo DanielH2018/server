@@ -21,7 +21,7 @@
   Docker instance's. The Docker side repeats the same block on each hand-rolled file-provider
   router for the same reason.
 #}
-{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, bridge_hostname=none, bridge_rate_limit='rate-limit-bridge', public=true, public_native=true, bypass_prefixes=[]) -%}
+{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, unsuffixed_hostname=none, bridge_rate_limit='rate-limit-bridge', public=true, public_native=true, bypass_prefixes=[]) -%}
 {#
   namespace defaults to k8s_namespace — every slice-2 service wants that. It is overridable
   because the telemetry stack runs in its own namespace, and an IngressRoute must live
@@ -56,62 +56,19 @@ spec:
       services:
         - name: {{ name }}
           port: {{ port }}
-{% if bridge_hostname %}
-    # The strangler-bridge route (docs/k3s-migration/slice-2-leaf-apps.md, decision 1). Once
-    # the Docker copy is retired, its two real host rules keep resolving to daniel-server,
-    # which forwards them here. So this route answers the UNSUFFIXED names, unlike the one
-    # above.
+{% if unsuffixed_hostname and public_native %}
+    # The service's PRE-MIGRATION names, served natively (bridge-teardown BT1/BT2 — the
+    # forward bridge and its ClientIP-gated route are gone; slice-7-bridge-teardown.md).
+    # The `.local` leg exists for the LAN wildcard's arrival at this edge (BT3); the public
+    # leg for direct internet arrivals since the 80/443 flip. Authelia is applied here (the
+    # k8s portal owns the public cookie domain) — one portal, no double login.
     #
-    # It deliberately carries NO authelia, and that is not an oversight. Both portals set
-    # their own cookie, so gating here as well would bounce the user to a second login — and
-    # for public traffic to `auth{{ k8s_hostname_suffix }}.{{ domain }}`, which has no DNS
-    # record and no route while k8s_public_route is false. The Docker edge is the only
-    # publicly reachable portal, so it is the one that authenticates; requests arrive here
-    # already through it, and through its CrowdSec bouncer.
-    #
-    # ClientIP is what makes that safe. Without it, any LAN host could curl the VIP with
-    # `Host: {{ bridge_hostname }}.{{ domain }}` and reach an un-Authelia'd route — a real
-    # bypass, since `--resolve` is all it takes. The matcher is not spoofable: Traefik
-    # implements ClientIP with ip.RemoteAddrStrategy (pkg/muxer/http/matcher.go), i.e. the TCP
-    # peer address, NOT X-Forwarded-For. That distinction is load-bearing here, because
-    # lan_subnet IS in the https entrypoint's forwardedHeaders.trustedIPs, so an XFF-based
-    # matcher would be forgeable by exactly the hosts this is keeping out. The address is
-    # preserved end-to-end because the Service runs externalTrafficPolicy: Local.
+    # public_native=false opts a service out — livesync's names stay on the REVERSE bridge
+    # (through the Docker edge) because its X-Sync-Token gate lives in that edge's file
+    # provider, where the readonly kubeconfig cannot read it; an IngressRoute rule carrying
+    # the token would hand it to anything holding that kubeconfig.
     - kind: Rule
-      match: "(Host(`{{ bridge_hostname }}.{{ domain }}`) || Host(`{{ bridge_hostname }}.local.{{ domain }}`)) && ClientIP(`{{ k8s_bridge_client_ip }}/32`)"
-      middlewares:
-        # rate-limit-bridge, not rate-limit: every request on this route arrives from the same
-        # peer, so the default limiter would meter all users as one. See dynamic.yaml.j2.
-        #
-        # Overridable because a bridged request is metered TWICE — once by the Docker edge
-        # router and again here — and the tighter of the two wins. A service the Docker side
-        # exempted from the default ceiling therefore needs the same exemption here, or the
-        # migration silently re-imposes what it was exempted from. livesync 429'd a phone
-        # mid-replication this way.
-        - name: {{ bridge_rate_limit }}
-{% for middleware in extra_middlewares %}
-        - name: {{ middleware }}
-{% endfor %}
-      services:
-        - name: {{ name }}
-          port: {{ port }}
-{% if k8s_public_route and public and public_native %}
-    # The NATIVE unsuffixed public route (slice-6 B5 prep). Once the router's 80/443 forward
-    # moves to the VIP, external traffic arrives here directly — from arbitrary addresses, so
-    # it can never match the ClientIP-guarded bridge route above, and without this rule the
-    # public name would 404 the moment the forward flips. Authelia is applied HERE (the k8s
-    # portal, public cookie domain) because there is no upstream edge any more on this path.
-    # During coexistence the bridge route wins for daniel-server-forwarded traffic on rule
-    # length, so nothing bridged is double-authenticated.
-    #
-    # public_native=false opts a service out — livesync's public name stays on the REVERSE
-    # bridge (through the Docker edge) because its X-Sync-Token gate lives in that edge's
-    # file provider, where the readonly kubeconfig cannot read it; an IngressRoute rule
-    # carrying the token would hand it to anything holding that kubeconfig.
-    # The .local name is deliberately absent: the LAN wildcard keeps resolving to
-    # daniel-server (D7), which forwards it across the strangler bridge.
-    - kind: Rule
-      match: "Host(`{{ bridge_hostname }}.{{ domain }}`)"
+      match: "Host(`{{ unsuffixed_hostname }}.local.{{ domain }}`){% if k8s_public_route and public %} || Host(`{{ unsuffixed_hostname }}.{{ domain }}`){% endif %}"
       middlewares:
         - name: rate-limit
 {% if authelia %}
@@ -123,7 +80,30 @@ spec:
       services:
         - name: {{ name }}
           port: {{ port }}
-{% endif %}
+{% elif unsuffixed_hostname %}
+    # public_native=false: the unsuffixed names TERMINATE at the Docker edge (livesync's
+    # token gate lives in its file provider) and its hand-written routers forward here — so
+    # this is the return leg of the reverse bridge, not a public route. ClientIP is the
+    # whole guard: without it any LAN host could curl the VIP with this Host and skip the
+    # edge's token/Authelia gates (`--resolve` is all it takes); the matcher reads the TCP
+    # peer, not X-Forwarded-For, and externalTrafficPolicy: Local preserves it. Deleting
+    # this leg at the teardown looped cluster ⇄ Docker edge into a 429 (found live,
+    # 2026-08-10) — the edge forwards here expecting a terminus.
+    - kind: Rule
+      match: "(Host(`{{ unsuffixed_hostname }}.{{ domain }}`) || Host(`{{ unsuffixed_hostname }}.local.{{ domain }}`)) && ClientIP(`{{ k8s_bridge_client_ip }}/32`)"
+      middlewares:
+        # Single-peer route (daniel-server) — the per-IP default limiter would meter every
+        # user as one. The edge already metered per real client upstream. Overridable
+        # because this hop meters AGAIN after the edge and the tighter of the two wins —
+        # livesync's replication needs its high-ceiling exemption here too or a phone
+        # 429s mid-sync (measured when the bridges were built).
+        - name: {{ bridge_rate_limit }}
+{% for middleware in extra_middlewares %}
+        - name: {{ middleware }}
+{% endfor %}
+      services:
+        - name: {{ name }}
+          port: {{ port }}
 {% endif %}
   tls:
     certResolver: cloudflare
@@ -137,7 +117,7 @@ spec:
         sans:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
-{% if k8s_public_route and public and public_native and bridge_hostname %}
+{% if k8s_public_route and public and public_native and unsuffixed_hostname %}
 {% for prefix in bypass_prefixes %}
 {% set slug = prefix | trim('/') | replace('/', '-') %}
 ---
@@ -158,7 +138,7 @@ spec:
     - https
   routes:
     - kind: Rule
-      match: "Host(`{{ bridge_hostname }}.{{ domain }}`) && PathPrefix(`{{ prefix }}`)"
+      match: "Host(`{{ unsuffixed_hostname }}.{{ domain }}`) && PathPrefix(`{{ prefix }}`)"
       priority: 100
       middlewares:
         - name: rate-limit

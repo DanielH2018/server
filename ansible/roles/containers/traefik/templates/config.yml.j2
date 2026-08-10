@@ -3,7 +3,18 @@
   bridge block below because the hand-written livesync routers need it too, and Jinja evaluates
   top-to-bottom.
 #}
-{% set bridged = hostvars['daniel-box'].containers_list | default([]) | selectattr('bridge_hostname', 'defined') | list %}
+{#
+  Bridge-teardown BT4 (2026-08-10, slice-7-bridge-teardown.md): the generic forward bridge
+  is GONE — the cluster edge serves every migrated service's unsuffixed names natively (the
+  LAN wildcard answers the VIP, the router's 80/443 forward moved there on the same day).
+  What remains is the CUSTOM-ROUTER residual: livesync's X-Sync-Token gate lives in this
+  file provider on purpose (a CRD would leak the token to the readonly kubeconfig), so its
+  hand-written routers — and the generated bridge services/transports they reference — stay
+  until that gate finds a cluster-safe home. Traffic reaches them via the cluster's
+  reverse bridge.
+#}
+{% set bridged = hostvars['daniel-box'].containers_list | default([])
+   | selectattr('bridge_custom_routers', 'defined') | selectattr('bridge_custom_routers') | list %}
 {% set bridged_names = bridged | map(attribute='name') | list %}
 http:
  #region routers
@@ -174,7 +185,7 @@ http:
   test_strangler_bridge.py requires at least one.
 #}
 {% if not svc.bridge_custom_routers | default(false) %}
-{% for key, host in [('public', svc.bridge_hostname ~ '.' ~ domain), ('local', svc.bridge_hostname ~ '.local.' ~ domain)] %}
+{% for key, host in [('public', svc.unsuffixed_hostname ~ '.' ~ domain), ('local', svc.unsuffixed_hostname ~ '.local.' ~ domain)] %}
     {{ svc.name }}-bridge-{{ key }}:
       entryPoints:
         - https
@@ -201,7 +212,7 @@ http:
 {% endif %}
 {% for prefix in svc.bridge_bypass_prefixes | default([]) %}
 {% set slug = prefix | trim('/') | replace('/', '-') %}
-{% for key, host in [('public', svc.bridge_hostname ~ '.' ~ domain), ('local', svc.bridge_hostname ~ '.local.' ~ domain)] %}
+{% for key, host in [('public', svc.unsuffixed_hostname ~ '.' ~ domain), ('local', svc.unsuffixed_hostname ~ '.local.' ~ domain)] %}
     {{ svc.name }}-bridge-bypass-{{ slug }}-{{ key }}:
       # An unauthenticated path the service had BEFORE it moved, reproduced on the bridge.
       # These exist because something automated calls them without a session — healthchecks'
@@ -251,7 +262,7 @@ http:
       # reachability plus the app's own credentials), not an unprotected endpoint.
       entryPoints:
         - https
-      rule: "Host(`{{ svc.bridge_hostname }}.local.{{ domain }}`) && PathPrefix(`{{ prefix }}`)"
+      rule: "Host(`{{ svc.unsuffixed_hostname }}.local.{{ domain }}`) && PathPrefix(`{{ prefix }}`)"
       priority: 100
       service: {{ svc.name }}-bridge-local
       middlewares:
@@ -273,7 +284,7 @@ http:
       # Traefik and the app itself, and only the app can answer it.
       #
       # LAN-ONLY, and that is the security boundary rather than a detail: there is deliberately
-      # no `{{ svc.bridge_hostname }}.{{ domain }}` sibling, so this is unreachable from the
+      # no `{{ svc.unsuffixed_hostname }}.{{ domain }}` sibling, so this is unreachable from the
       # internet. test_strangler_bridge.py fails if a probe router ever matches a host without
       # `.local.` — the same shape as the ClientIP guard, where the exemption from auth and the
       # thing that makes it safe cannot be separated.
@@ -281,7 +292,7 @@ http:
       # Path, not PathPrefix: an exact match cannot widen to whatever else lives underneath it.
       entryPoints:
         - https
-      rule: "Host(`{{ svc.bridge_hostname }}.local.{{ domain }}`) && Path(`{{ svc.bridge_probe_path }}`)"
+      rule: "Host(`{{ svc.unsuffixed_hostname }}.local.{{ domain }}`) && Path(`{{ svc.bridge_probe_path }}`)"
       # Explicit rather than inherited. This rule is longer than the plain Host one so
       # rule-length ordering would pick it anyway, but a length tie is a silent inversion
       # waiting for someone to rename a host — the livesync-utils router states its priority
@@ -305,7 +316,7 @@ http:
   services:
     # (Empty but for the strangler bridges below — api@internal is built-in.)
 {% for svc in bridged %}
-{% for key, host in [('public', svc.bridge_hostname ~ '.' ~ domain), ('local', svc.bridge_hostname ~ '.local.' ~ domain)] %}
+{% for key, host in [('public', svc.unsuffixed_hostname ~ '.' ~ domain), ('local', svc.unsuffixed_hostname ~ '.local.' ~ domain)] %}
     {{ svc.name }}-bridge-{{ key }}:
       loadBalancer:
         servers:
@@ -322,7 +333,7 @@ http:
 #region serversTransports
   serversTransports:
 {% for svc in bridged %}
-{% for key, host in [('public', svc.bridge_hostname ~ '.' ~ domain), ('local', svc.bridge_hostname ~ '.local.' ~ domain)] %}
+{% for key, host in [('public', svc.unsuffixed_hostname ~ '.' ~ domain), ('local', svc.unsuffixed_hostname ~ '.local.' ~ domain)] %}
     {{ svc.name }}-bridge-{{ key }}:
       # Sets the SNI, which does double duty: it selects the cluster's wildcard certificate and
       # it has to equal the Host header or Traefik answers 421. Certificate verification stays

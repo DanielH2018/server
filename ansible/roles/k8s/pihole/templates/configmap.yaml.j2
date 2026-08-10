@@ -1,7 +1,9 @@
-{# D7: the LAN wildcard keeps answering with daniel-server's IP even once this copy serves
-   the LAN — only the *-k8s overrides point at the cluster. The shared template defaults its
-   wildcard to the rendering host's server_ip, which HERE would be daniel-box; pin it. #}
-{% set pihole_wildcard_ip = hostvars['daniel-server'].server_ip %}
+{# Bridge-teardown BT3 (2026-08-10, superseding slice-6 D7): the LAN wildcard answers the
+   cluster ingress VIP — k8s services route natively (incl. the new unsuffixed .local
+   routes), Docker-hosted names ride the reverse bridge's .local twins. The shared template
+   defaults its wildcard to the rendering host's server_ip, which HERE would be daniel-box;
+   pin it to the VIP. #}
+{% set pihole_wildcard_ip = k3s_metallb_ingress_vip %}
 {% set pihole_unbound_port = pihole_k8s_unbound_port %}
 ---
 apiVersion: v1

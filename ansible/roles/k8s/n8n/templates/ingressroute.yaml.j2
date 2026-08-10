@@ -11,7 +11,7 @@
     container_item.hostname | default(container_item.name),
     container_item.port,
     container_item.use_authelia,
-    bridge_hostname=container_item.bridge_hostname | default(none),
+    unsuffixed_hostname=container_item.unsuffixed_hostname | default(none),
     bypass_prefixes=container_item.bridge_bypass_prefixes | default([])
   )
 }}

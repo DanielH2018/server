@@ -46,9 +46,9 @@
 #}
 {% set custom_edge = containers_list | default([]) | selectattr('bridge_custom_routers', 'defined')
      | selectattr('bridge_custom_routers') | list %}
-{% set rb_hosts = rb_hosts + (custom_edge | map(attribute='bridge_hostname') | list) %}
+{% set rb_hosts = rb_hosts + (custom_edge | map(attribute='unsuffixed_hostname') | list) %}
 {% set rb_rate_limit = {} %}
-{% for svc in custom_edge %}{% set _ = rb_rate_limit.update({svc.bridge_hostname: 'rate-limit-public-livesync'}) %}{% endfor %}
+{% for svc in custom_edge %}{% set _ = rb_rate_limit.update({svc.unsuffixed_hostname: 'rate-limit-public-livesync'}) %}{% endfor %}
 ---
 # The one backend every reverse-bridge route shares: the Docker edge, by address — the
 # hostnames all resolve either to Cloudflare (public) or to daniel-server via the LAN
@@ -92,6 +92,17 @@ spec:
   # header or that edge answers 421. Certificate verification stays ON — both edges serve
   # the same Let's Encrypt wildcard.
   serverName: "{{ host }}.{{ domain }}"
+---
+# The `.local` twin (bridge-teardown BT3): once the LAN wildcard answers the VIP, the
+# Docker-hosted `.local` names arrive HERE too — and SNI must equal Host (above), so each
+# name form needs its own transport, not an || rule.
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: reverse-bridge-{{ host }}-local
+  namespace: {{ k8s_namespace }}
+spec:
+  serverName: "{{ host }}.local.{{ domain }}"
 {% endfor %}
 ---
 apiVersion: traefik.io/v1alpha1
@@ -113,6 +124,15 @@ spec:
           port: 443
           scheme: https
           serversTransport: reverse-bridge-{{ host }}
+    - kind: Rule
+      match: "Host(`{{ host }}.local.{{ domain }}`)"
+      middlewares:
+        - name: {{ rb_rate_limit.get(host, 'rate-limit') }}
+      services:
+        - name: docker-edge
+          port: 443
+          scheme: https
+          serversTransport: reverse-bridge-{{ host }}-local
 {% endfor %}
   # Load-bearing, as everywhere on this entrypoint: without spec.tls the router is non-TLS
   # and never matches an HTTPS request (see the monitoring_route macro's header).

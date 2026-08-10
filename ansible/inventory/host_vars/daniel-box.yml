@@ -79,7 +79,7 @@ containers_list:
     # slice-1 canary went live, never retired. bridge_hostname keeps the unsuffixed name:
     # LAN via the .161 wildcard and the forward bridge, external via the B5-prep native
     # public route (the reverse bridge shed its host when the Docker entry left).
-    bridge_hostname: bento-pdf
+    unsuffixed_hostname: bento-pdf
   # Claude Code telemetry sink. No `port` and no `hostname` on purpose: it has no Traefik
   # route at all. Claude Code runs on this HOST and exports to 127.0.0.1:4317, reaching the
   # collector through a hostPort rather than the ingress — content logging is on, so nothing
@@ -128,7 +128,7 @@ containers_list:
     # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
     # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
     # at sonarr.local, which 404'd between the cutover and this.
-    bridge_hostname: sonarr
+    unsuffixed_hostname: sonarr
   # Slice 4, B4b — BUILT BUT NOT DEPLOYED. The entry has to exist (a k8s role without one fails
   # validate_k8s_manifests.py), but `qbittorrent_k8s_enabled` defaults to FALSE and every task
   # in the role is gated on it. Without that gate this entry alone would be enough: gitops runs
@@ -145,7 +145,7 @@ containers_list:
     # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
     # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
     # at qbittorrent.local, which 404'd between the cutover and this.
-    bridge_hostname: qbittorrent
+    unsuffixed_hostname: qbittorrent
   # Slice 4, B4a — the three remaining \*arrs, ALL held by their own `<svc>_k8s_enabled: false`
   # for the same reason as qbittorrent above: the entry is mandatory for
   # validate_k8s_manifests.py, and gitops would otherwise deploy them unattended.
@@ -161,7 +161,7 @@ containers_list:
     # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
     # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
     # at radarr.local, which 404'd between the cutover and this.
-    bridge_hostname: radarr
+    unsuffixed_hostname: radarr
   # Brings a second workload with it — flaresolverr, which renders attacker-supplied Cloudflare
   # pages. Under Compose that sat on its own network; here an INGRESS NetworkPolicy keeps it
   # reachable from prowlarr alone, so the move to one namespace is a narrowing rather than a
@@ -174,7 +174,7 @@ containers_list:
     # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
     # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
     # at prowlarr.local, which 404'd between the cutover and this.
-    bridge_hostname: prowlarr
+    unsuffixed_hostname: prowlarr
   - name: bazarr
     platform: k8s
     hostname: "bazarr{{ k8s_hostname_suffix }}"
@@ -183,7 +183,7 @@ containers_list:
     # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
     # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
     # at bazarr.local, which 404'd between the cutover and this.
-    bridge_hostname: bazarr
+    unsuffixed_hostname: bazarr
 
   # The slice's exit criterion (B5), and the first workload anywhere to request the
   # `devic.es/dri` extended resource the B1 device plugin advertises.
@@ -198,7 +198,7 @@ containers_list:
     hostname: "jellyfin{{ k8s_hostname_suffix }}"
     port: 8096
     use_authelia: false
-    bridge_hostname: jellyfin
+    unsuffixed_hostname: jellyfin
 
   # B6. Alone like jellyfin, and for a related reason — it shares no hardlink seam. What sets it
   # apart is that it holds the GPU for minutes at a time on real files and rewrites the library
@@ -209,7 +209,7 @@ containers_list:
     hostname: "tdarr{{ k8s_hostname_suffix }}"
     port: 8265
     use_authelia: true
-    bridge_hostname: tdarr
+    unsuffixed_hostname: tdarr
 
   # Slice 4, B7a. No `port`, no `hostname`, no `bridge_hostname` — and none of that is an
   # omission. configarr is a nightly reconcile that reads the two *arrs and exits, so it ports to
@@ -257,7 +257,7 @@ containers_list:
     # forward-auth in front of it, the ordinary littlelink-bridge monitor already reaches the
     # app itself, so this is the one bridged service whose normal monitor is end-to-end. That
     # makes it the canary for the bridge mechanism the gated services depend on.
-    bridge_hostname: www
+    unsuffixed_hostname: www
   # Slice 2, batch B. First PVC seeded from daniel-server, and the first k8s Secret
   # (Laravel's APP_KEY) — deliberately on a service whose data is disposable, so the
   # seed-volume mechanic is proven where a botched copy costs nothing.
@@ -269,7 +269,7 @@ containers_list:
     # First service behind the strangler bridge. Setting this adds a second, ClientIP-guarded
     # IngressRoute route for the UNSUFFIXED hostnames, which daniel-server forwards here once
     # its Docker copy is gone. Unset for a service whose Docker twin is still serving them.
-    bridge_hostname: speedtest
+    unsuffixed_hostname: speedtest
     # An app endpoint that answers without a session, so a monitor can traverse the whole
     # bridge instead of stopping at Authelia's 302. Verified against the running container:
     # `{"message":"Speedtest Tracker is running!"}`, no data in it. Exposed LAN-only.
@@ -295,7 +295,7 @@ containers_list:
     # Cut over 2026-08-05. Nothing else changes: FreshRSS keeps its base_url in the seeded
     # config.php, which already reads https://freshrss.<domain> — it was written by the Docker
     # copy, so the cutover makes it correct rather than requiring an edit.
-    bridge_hostname: freshrss
+    unsuffixed_hostname: freshrss
     # Returns the bare string `OK` without a session, so it proves PHP is executing while
     # exposing nothing. Safe ONLY because the probe router matches an exact Path: the GReader
     # API's real endpoints live at /api/greader.php/reader/api/0/..., which do not match and
@@ -318,7 +318,7 @@ containers_list:
     hostname: "healthchecks{{ k8s_hostname_suffix }}"
     port: 8000
     use_authelia: true
-    bridge_hostname: healthchecks
+    unsuffixed_hostname: healthchecks
     # No bridge_probe_path: the bypass below already reaches the app without a session, so a
     # second unauthenticated route would be a second hole for no extra signal. The monitor
     # probes /ping/<all-zero uuid> and treats 404 as healthy — Django answering 404 for an
@@ -339,7 +339,7 @@ containers_list:
     port: 5984
     use_authelia: false
     # Cut over 2026-08-06.
-    bridge_hostname: livesync
+    unsuffixed_hostname: livesync
     # The only bridge so far that suppresses the generic Host router. livesync's edge routing is
     # not "everything on this host": the sync API is gated on a secret header and /_utils is
     # carved out behind Authelia at priority 200, so an unconditional Host router would forward
@@ -376,7 +376,7 @@ containers_list:
     # sign-in redirect has to name the hostname the browser actually arrived on, and getting it
     # wrong does not fail at startup — the pod goes ready and login bounces users somewhere that
     # does not resolve for them.
-    bridge_hostname: karakeep
+    unsuffixed_hostname: karakeep
     # Reproduces the karakeep-api Docker router, which has always been public: /api/v1 is
     # Bearer-token authenticated, and the browser extension and mobile app cannot pass 2FA. This
     # carries an existing hole across rather than opening one — but it is still public, hence the
@@ -416,7 +416,7 @@ containers_list:
     hostname: "n8n{{ k8s_hostname_suffix }}"
     port: 5678
     use_authelia: true
-    bridge_hostname: n8n
+    unsuffixed_hostname: n8n
     # Reproduces the compose template's `n8n-webhook` router. External services POST here with
     # no session — Authelia would not fail loudly, it would silently break every registered
     # webhook while the callers keep reporting success. Public on purpose; the trailing slash
@@ -448,7 +448,7 @@ containers_list:
     hostname: "zigbee2mqtt{{ k8s_hostname_suffix }}"
     port: 8080
     use_authelia: true
-    bridge_hostname: zigbee2mqtt
+    unsuffixed_hostname: zigbee2mqtt
 
   # Slice 5, B3 — cut over 2026-08-09. use_authelia stays false for the Docker route's reason:
   # forward-auth breaks the companion app; HA's own login + TOTP is the gate. bridge_hostname
@@ -459,7 +459,7 @@ containers_list:
     hostname: "home-assistant{{ k8s_hostname_suffix }}"
     port: 8123
     use_authelia: false
-    bridge_hostname: home-assistant
+    unsuffixed_hostname: home-assistant
 
   # Slice 6, B3 (build half) — LAN DNS on its own pinned VIP (dns_k8s_vip, D4), coexisting
   # with the Docker copy until the router's DHCP DNS option flips at cutover. Not seeded:
@@ -495,7 +495,7 @@ containers_list:
     port: 51821
     udp_port: 51820
     use_authelia: true
-    bridge_hostname: wg-easy
+    unsuffixed_hostname: wg-easy
     default_dns: "{{ dns_k8s_vip }}"
 
   # Slice-7 Phase D step 4 (2026-08-10): the alerting spine, cut over in one window (no
@@ -507,7 +507,7 @@ containers_list:
     hostname: "uptime-kuma{{ k8s_hostname_suffix }}"
     port: 3001
     use_authelia: true
-    bridge_hostname: uptime-kuma
+    unsuffixed_hostname: uptime-kuma
 
   # Slice-7 Phase C (2026-08-10): ported WITHOUT its docker plumbing (operator decision) —
   # no DOCKER_HOST, so the in-IDE docker CLI and devcontainers are gone. Image built
@@ -518,7 +518,7 @@ containers_list:
     hostname: "code-server{{ k8s_hostname_suffix }}"
     port: 8443
     use_authelia: true
-    bridge_hostname: code-server
+    unsuffixed_hostname: code-server
 
   # Backup consolidation BL1 (2026-08-10): pulled ahead of its slot — the worlds were the
   # only irreplaceable data kopia still uniquely protected. No port/hostname: nothing

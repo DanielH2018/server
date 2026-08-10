@@ -50,8 +50,8 @@ spec:
             # value the Docker copy used, and the one two initial_setup crons hardcode. Before
             # cutover it follows the inventory hostname so the -k8s copy shows URLs that work.
             - name: SITE_ROOT
-{% if container_item.bridge_hostname is defined %}
-              value: "https://{{ container_item.bridge_hostname }}.{{ domain }}"
+{% if container_item.unsuffixed_hostname is defined %}
+              value: "https://{{ container_item.unsuffixed_hostname }}.{{ domain }}"
 {% else %}
               value: "https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
 {% endif %}

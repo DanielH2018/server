@@ -60,11 +60,11 @@ spec:
             # never by this variable. What it can change is the Test URL shown in the editor,
             # which n8n previously derived from N8N_HOST/N8N_PROTOCOL/N8N_PORT and now takes from
             # here; the production URL is unchanged because the value is the same.
-{% if container_item.bridge_hostname is defined %}
+{% if container_item.unsuffixed_hostname is defined %}
             - name: N8N_HOST
-              value: "{{ container_item.bridge_hostname }}.{{ domain }}"
+              value: "{{ container_item.unsuffixed_hostname }}.{{ domain }}"
             - name: N8N_WEBHOOK_URL
-              value: "https://{{ container_item.bridge_hostname }}.{{ domain }}/"
+              value: "https://{{ container_item.unsuffixed_hostname }}.{{ domain }}/"
 {% else %}
             - name: N8N_HOST
               value: "{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
@@ -82,7 +82,7 @@ spec:
             # and audit log key on. Conditional so the pre-cutover -k8s route, which really does
             # have one proxy, is also right.
             - name: N8N_PROXY_HOPS
-{% if container_item.bridge_hostname is defined %}
+{% if container_item.unsuffixed_hostname is defined %}
               value: "2"
 {% else %}
               value: "1"
