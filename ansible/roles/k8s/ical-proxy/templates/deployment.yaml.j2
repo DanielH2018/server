@@ -1,0 +1,61 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ical-proxy
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ical-proxy
+  template:
+    metadata:
+      labels:
+        app: ical-proxy
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: ical-proxy
+          image: {{ ical_proxy_k8s_image }}
+          ports:
+            - containerPort: 5000
+          env:
+            - name: REFRESH_INTERVAL
+              value: "900"
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          envFrom:
+            - secretRef:
+                name: ical-proxy-env
+          # The image drops to uid-1000 appuser itself; rootfs read-only as under Docker
+          # (app.py caches calendars in memory, never on disk — /tmp scratch only).
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ ical_proxy_k8s_cpu_limit }}"
+              memory: {{ ical_proxy_k8s_mem_limit }}
+            requests:
+              cpu: "{{ ical_proxy_k8s_cpu_request }}"
+              memory: {{ ical_proxy_k8s_mem_request }}
+      volumes:
+        - name: tmp
+          emptyDir: {}

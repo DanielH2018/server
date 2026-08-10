@@ -300,11 +300,12 @@ containers_list:
   # off this container's labels, where it would have died with it. Rolling back is re-adding this
   # entry, removing bridge_hostname/bridge_custom_routers from daniel-box's, and restoring the
   # livesync-utils labels in the livesync role's compose template.
-  - name: ical-proxy
-    port: false
-    use_authelia: false
-    networks:
-      - homepage_private
+  # ical-proxy moved to k3s on 2026-08-10 (slice-7 Phase C): stateless, built in-cluster
+  # from this repo's Dockerfile (roles/containers/ical-proxy REMAINS as the build source and
+  # test home — only this entry retired). The homepage_private isolation net's job — only
+  # homepage may read the unauthenticated private feeds — is done by the cluster route's
+  # ClientIP(daniel-server) guard now; the net itself retires when homepage's compose stops
+  # declaring it.
   # speedtest moved to k3s on 2026-08-05 — the first service retired behind a strangler
   # bridge. Its hostnames still arrive here and are forwarded to the cluster VIP by the
   # <name>-bridge-* routers in the traefik role's config.yml.j2, which are generated from

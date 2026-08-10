@@ -1,0 +1,14 @@
+{% from 'ingressroute.yml.j2' import monitoring_route with context %}
+---
+{# monitoring_route, not ingressroute(): under Docker this sat on the homepage_private
+   isolation net so ONLY homepage could read the unauthenticated private feeds. The
+   ClientIP(daniel-server) guard is that isolation's cluster equivalent — homepage still
+   runs there, and nothing else on the LAN can fetch the calendars. LAN-only by
+   construction (the macro ignores k8s_public_route). #}
+{{ monitoring_route(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    '/'
+  )
+}}

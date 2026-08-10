@@ -475,6 +475,16 @@ containers_list:
   # keypair and every imported client config survived. bridge_hostname keeps the unsuffixed
   # admin-UI name serving (natively, behind the cluster Authelia). password_hash lives in the
   # role's Secret template, not here.
+  # Slice-7 Phase C (2026-08-10): stateless straight port, image built in-cluster. hostname
+  # feeds the Pi-hole override so homepage (still Docker on daniel-server) reaches the
+  # ClientIP-guarded feed route by the -k8s name. No public anything — monitoring_route
+  # ignores k8s_public_route by design.
+  - name: ical-proxy
+    platform: k8s
+    hostname: "ical-proxy{{ k8s_hostname_suffix }}"
+    port: 5000
+    use_authelia: false
+
   - name: wg-easy
     platform: k8s
     hostname: "wg-easy{{ k8s_hostname_suffix }}"

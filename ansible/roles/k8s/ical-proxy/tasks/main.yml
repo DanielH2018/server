@@ -1,0 +1,26 @@
+---
+# Slice-7 Phase C (2026-08-10): stateless straight port. Image built into the cluster
+# registry from the containers role's Dockerfile (that role remains the build source).
+
+- name: Build the ical-proxy image
+  ansible.builtin.include_role:
+    name: k8s/image-builder
+  vars:
+    image_builder_name: ical-proxy
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/containers/ical-proxy/templates/Dockerfile.j2"
+    # The one file the Dockerfile COPYs, at the exact context path the COPY names.
+    image_builder_context:
+      "{{ playbook_dir }}/roles/containers/ical-proxy/files/app.py": app/app.py
+
+- name: Deploy ical-proxy to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: ical-proxy
+    manifests_rollout: ical-proxy
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
+    manifests_secret_files:
+      - secret.yaml
