@@ -29,6 +29,7 @@ from deploy_logic import (  # noqa: E402
     behind_marker,
     broad_remediation,
     containers_to_gate,
+    declared_services,
     deferred_service_alerts,
     dirty_alert_slot,
     gate_services,
@@ -37,6 +38,7 @@ from deploy_logic import (  # noqa: E402
     next_action,
     services_from_changed_paths,
     should_alert_dirty,
+    stale_rendered_services,
 )
 from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
 
@@ -72,6 +74,9 @@ DIVERGED_FILE = "/var/lib/gitops-deploy/diverged_sha"
 # The first-seen stamp is preserved across ticks and reset ONLY on convergence — not per-SHA, or a
 # steady trickle of pushes to a permanently-stuck host would keep restarting the clock.
 BEHIND_FILE = "/var/lib/gitops-deploy/behind_since"
+# The sorted stale-compose set last alerted on, so a lingering stale dir doesn't re-page
+# every tick — only a CHANGED set (new stale dir, or one cleaned up) re-alerts.
+STALE_COMPOSE_FILE = "/var/lib/gitops-deploy/stale_composes_alerted"
 # Last origin SHA we've already alerted on for a broad change, so a deferred
 # broad change doesn't re-page Discord every 30-min tick until it's resolved.
 BROAD_FILE = "/var/lib/gitops-deploy/broad_alerted_sha"
@@ -367,6 +372,41 @@ def containers_for(service: str) -> list[str]:
     return containers_to_gate(text, service)
 
 
+def check_stale_composes() -> None:
+    """Page (once per distinct set) when containers/<svc>/docker-compose.yml exists on disk
+    but <svc> has no containers_list entry — the stale-compose trap (see
+    deploy_logic.stale_rendered_services for the incident history). Detection only, never
+    cleanup: the remedy removes containers and directories, which stays an operator action."""
+    containers_dir = os.path.join(REPO, "containers")
+    hostvars = os.path.join(
+        REPO, "ansible", "inventory", "host_vars", f"{HOSTNAME}.yml"
+    )
+    try:
+        with open(hostvars) as fh:
+            declared = declared_services(fh.read())
+        rendered = [
+            d
+            for d in os.listdir(containers_dir)
+            if os.path.isfile(os.path.join(containers_dir, d, "docker-compose.yml"))
+        ]
+    except OSError:
+        return  # unreadable inventory/tree — not this watchdog's failure to page about
+    stale = stale_rendered_services(rendered, declared)
+    marker = ",".join(stale)
+    if _read_marker(STALE_COMPOSE_FILE) == (marker or None):
+        return
+    _write_marker(STALE_COMPOSE_FILE, marker or None)
+    if stale:
+        deliver(
+            f"stale-composes:{marker}",
+            f"⚠️ gitops-deploy: stale rendered compose(s) on {HOSTNAME} with no "
+            f"containers_list entry: `{', '.join(stale)}` — a retired/migrated service "
+            f"left its render behind, and its phantom containers will fail the health "
+            f"gate on that service's next deploy (false rollback + hold). Clean up: "
+            f"`docker rm -f <its containers>` then `rm -rf containers/<svc>`.",
+        )
+
+
 def service_healthy(service: str, deadline: float | None = None) -> bool:
     # A role may run several containers; gate every one (the bumped image's
     # container is often not the role-named one). `deadline` (the run-wide gate
@@ -397,6 +437,12 @@ def main() -> int:
     # secrets/tasks/meta/combined paths never re-reach their alert code (local==origin -> noop), so a
     # transient webhook failure is only recoverable here, not by discord()'s per-tick re-eval.
     drain_pending()
+
+    # Disk-only, independent of git state, so it runs before any branch can short-circuit
+    # the tick: page (once per distinct set) when a rendered compose has no containers_list
+    # entry — the stale-compose trap, twice now the cause of a phantom health gate + false
+    # rollback + hold.
+    check_stale_composes()
 
     # A dirty working tree (operator may be mid-edit) is a healthy skip, not an
     # outage: we never deploy from it, but the tick completes and writes last_run so

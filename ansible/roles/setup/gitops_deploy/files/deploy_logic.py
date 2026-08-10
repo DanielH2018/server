@@ -425,3 +425,25 @@ def gate_services(services, health_fn, gate_deadline, now_fn) -> list[str]:
         if not health_fn(service, gate_deadline):
             failed.append(service)
     return failed
+
+
+# `- name: <svc>` entries at the containers_list indent level in a host_vars file. Two-space
+# list indent is the repo-wide inventory convention; matching on it (rather than YAML-parsing)
+# keeps this module stdlib-only and immune to the Jinja expressions inventory values carry.
+_DECLARED_NAME = re.compile(r"^  - name: (\S+)", re.MULTILINE)
+
+
+def declared_services(hostvars_text: str) -> set[str]:
+    """Service names declared in a host's containers_list."""
+    return set(_DECLARED_NAME.findall(hostvars_text))
+
+
+def stale_rendered_services(rendered: list[str], declared: set[str]) -> list[str]:
+    """Rendered compose dirs with no containers_list entry — the stale-compose trap.
+
+    A service retired or migrated off this host leaves containers/<svc>/ behind unless the
+    cutover cleans it up; the phantom compose then feeds containers_for(), the health gate
+    polls a container that will never run again, and a healthy push rolls back with a hold
+    (code-server 2026-08-10, then the kopia/terraria cutover the same day — the second
+    occurrence is why this is now a machine check instead of an operator memory)."""
+    return sorted(set(rendered) - declared)

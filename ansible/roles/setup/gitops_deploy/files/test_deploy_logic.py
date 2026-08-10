@@ -17,6 +17,8 @@ from deploy_logic import (
     gate_services,
     apply_send_result,
     apply_drain_result,
+    declared_services,
+    stale_rendered_services,
 )
 
 
@@ -915,3 +917,29 @@ def test_behind_marker_keeps_first_seen_when_origin_advances():
 
 def test_behind_marker_restamps_when_marker_unparseable():
     assert behind_marker(True, "originX", "garbage", now=200.0) == "originX 200.0"
+
+
+# --- stale-compose watchdog (2nd occurrence of the trap -> machine check) ---------------
+
+
+def test_declared_services_parses_containers_list_names():
+    text = (
+        "containers_list:\n"
+        "  - name: traefik\n"
+        "    port: 8080\n"
+        "  - name: monitor-bridge\n"
+        "    port: false\n"
+        "  # kopia RETIRED 2026-08-10\n"
+        "      - name: not-a-service-deeper-indent\n"
+    )
+    assert declared_services(text) == {"traefik", "monitor-bridge"}
+
+
+def test_stale_rendered_services_flags_only_undeclared_dirs():
+    assert stale_rendered_services(
+        ["traefik", "kopia", "tempo"], {"traefik", "monitor-bridge"}
+    ) == ["kopia", "tempo"]
+
+
+def test_stale_rendered_services_empty_when_all_declared():
+    assert stale_rendered_services(["traefik"], {"traefik", "monitor-bridge"}) == []
