@@ -1,0 +1,21 @@
+---
+# Rolling tag, as under Docker: beardedio publishes vanilla-latest as the tserver channel;
+# there is no pinned-version stream worth tracking. Updates arrive on pod recreate.
+terraria_k8s_image: beardedio/terraria:vanilla-latest
+
+# 36 M of worlds + config at the port — `longhorn`, BACKED UP: this is the one
+# irreplaceable dataset the backup consolidation (backup-consolidation-longhorn.md, BL1)
+# moved the whole service for.
+terraria_k8s_claim: terraria-config
+terraria_k8s_size: 1Gi
+terraria_k8s_storage_class: longhorn
+# Overridden at the cutover seed: the world files are root-owned 600 (the in-game backup
+# rotation writes them as root), so the unprivileged ssh|tar pipeline can't read them in
+# place — a one-shot play stages a sudo copy first (the wg-easy pattern).
+terraria_k8s_source_path: /home/ubuntu/server/containers/terraria/config
+
+# Mirrors resources('2.0', '2048M', '0.25', '512M').
+terraria_k8s_cpu_limit: "2"
+terraria_k8s_mem_limit: 2048Mi
+terraria_k8s_cpu_request: "250m"
+terraria_k8s_mem_request: 512Mi

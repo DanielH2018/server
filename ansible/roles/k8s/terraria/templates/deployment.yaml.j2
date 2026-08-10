@@ -1,0 +1,68 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: terraria
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # RWO config PVC on single-replica Longhorn — a rolling update deadlocks on the volume,
+  # and two servers writing one world would be worse than the deadlock.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: terraria
+  template:
+    metadata:
+      labels:
+        app: terraria
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: terraria
+          image: {{ terraria_k8s_image }}
+          # The image's console wants a TTY + open stdin (compose parity: stdin_open/tty).
+          stdin: true
+          tty: true
+          ports:
+            - containerPort: 7777
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                # PID 1 runs as root and rotates the uid-1000-owned .wld.bak backups —
+                # unlink+rename in a directory root doesn't own needs DAC_OVERRIDE.
+                # Without it every world-save FATAL-crashes on the backup step while
+                # startup looks fine (the 39-restarts/11-days Docker lesson).
+                - DAC_OVERRIDE
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          # Liveness = a LISTEN socket on 7777 in the kernel table, NOT a connect probe:
+          # the binary protocol logs every accepted socket as "<ip> is connecting...", so
+          # a tcpSocket probe would spam the game console ~2900x/day. 1E61 = hex 7777.
+          # The startup probe covers the ~74s world-load before the port binds; a
+          # first-boot world GENERATION can exceed it but the seed ships existing worlds.
+          startupProbe:
+            exec:
+              command: ["bash", "-c", "grep -q ':1E61 [0-9A-F]*:0000 0A ' /proc/net/tcp"]
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            exec:
+              command: ["bash", "-c", "grep -q ':1E61 [0-9A-F]*:0000 0A ' /proc/net/tcp"]
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ terraria_k8s_cpu_limit }}"
+              memory: {{ terraria_k8s_mem_limit }}
+            requests:
+              cpu: "{{ terraria_k8s_cpu_request }}"
+              memory: {{ terraria_k8s_mem_request }}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ terraria_k8s_claim }}

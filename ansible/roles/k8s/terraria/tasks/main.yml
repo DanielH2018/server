@@ -1,0 +1,27 @@
+---
+# Backup consolidation BL1 (2026-08-10): moved ahead of its Phase C/D slot because the
+# worlds were the only irreplaceable data kopia still uniquely protected. Also fixes the
+# public join port: the router's 7777 forward has pointed at daniel-box since slice-6 B5,
+# where nothing listened until now. terraria-stats stays on Docker and goes dark until
+# Phase D's Loki step (it read the game console via Docker promtail).
+
+- name: Seed the terraria config volume
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/seed-volume
+  vars:
+    seed_volume_service: terraria
+    seed_volume_claim: "{{ terraria_k8s_claim }}"
+    seed_volume_source_path: "{{ terraria_k8s_source_path }}"
+    seed_volume_storage_class: "{{ terraria_k8s_storage_class }}"
+    seed_volume_size: "{{ terraria_k8s_size }}"
+
+- name: Deploy terraria to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: terraria
+    manifests_rollout: terraria
+    manifests_files:
+      - deployment.yaml
+      - service.yaml

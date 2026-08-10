@@ -2,10 +2,10 @@
 # Deploy after the services it queries/pushes to, so they're up first. Sequencing is
 # computed by the toposort filter in deploy.yml from these names (which must match
 # containers_list entries), not by Ansible meta dependencies.
+# uptime-kuma and kopia dropped 2026-08-10: Kuma moved to the cluster (Phase D) and kopia
+# retired (backup-consolidation-longhorn.md) — neither is a containers_list entry anymore.
 role_deps:
   - prometheus
-  - uptime-kuma
-  - kopia
   # configarr dropped 2026-08-08 (slice 4, B7a): the dependency existed so /var/lib/configarr was
   # created sys_user-owned before this container bind-mounted it. Both the mount and the Docker
   # role are gone from this host — the sync is a k8s CronJob now.

@@ -59,10 +59,8 @@ entryPoints:
         # the livesync sync router can opt into the higher rate-limit-livesync ceiling.
         # An entrypoint-level middleware can't be loosened for a single router.
         - default-headers@file
-  # Game-server entrypoints — re-enable alongside the published ports in the
-  # compose template when Terraria/Minecraft are deployed again.
-  terraria:
-    address: ":7777"
+  # Game-server entrypoints retired 2026-08-10: terraria moved to k3s (its Service answers
+  # on the node IP; the router's 7777 forward points at daniel-box since B5 anyway).
   # minecraft:
   #   address: ":25565"
   ping:

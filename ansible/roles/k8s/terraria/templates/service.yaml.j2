@@ -1,0 +1,24 @@
+---
+# The game join port, answered on the NODE's own address (the wg-easy-udp pattern): the
+# router's port-forward UI only targets DHCP/ARP-known devices, and its 7777 forward has
+# pointed at the device daniel-box since slice-6 B5. Local policy so the server logs real
+# client addresses. No Traefik in the path: a raw-TCP game protocol can't use the HTTP
+# CrowdSec/rate-limit chain — same posture as the Docker edge's dedicated entrypoint,
+# which retires with this move.
+apiVersion: v1
+kind: Service
+metadata:
+  name: terraria
+  namespace: {{ k8s_namespace }}
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  externalIPs:
+    - {{ hostvars['daniel-box'].server_ip }}
+  selector:
+    app: terraria
+  ports:
+    - name: game
+      port: 7777
+      targetPort: 7777
+      protocol: TCP

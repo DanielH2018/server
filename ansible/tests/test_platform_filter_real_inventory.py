@@ -98,7 +98,12 @@ def test_daniel_server_is_still_wholly_docker():
     # decision) — docker-proxy-codeserver and the `codeserver` net dissolved with it. Then
     # uptime-kuma (19 -> 18) that night, slice-7 Phase D's cutover — the alerting spine and
     # its autokuma sidecar moved in one window, both data dirs seeded, tokens unchanged;
-    # the docker-fleet cron it briefly carried re-homed to monitor-bridge. The count
+    # the docker-fleet cron it briefly carried re-homed to monitor-bridge. Then the backup
+    # consolidation (2026-08-10, operator decision after the third B2 cap event in nine
+    # days) took TWO in one window: terraria (18 -> 17) moved to k3s ahead of its slot —
+    # its worlds were the only irreplaceable data kopia still uniquely protected — and
+    # kopia itself (17 -> 16) RETIRED, replaced by the Longhorn backup plane it had been
+    # sharing a B2 account cap with. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -107,6 +112,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 18
-    assert len(filter_by_platform(containers, "docker")) == 18
+    assert len(containers) == 16
+    assert len(filter_by_platform(containers, "docker")) == 16
     assert filter_by_platform(containers, "k8s") == []

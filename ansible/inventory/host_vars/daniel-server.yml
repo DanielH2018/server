@@ -95,14 +95,12 @@ containers_list:
     use_authelia: true
     networks:
       - apps
-  - name: kopia
-    port: 51515
-    use_authelia: true
-    networks:
-      # Dedicated isolation net shared only with Traefik. Kopia runs intentionally
-      # unauthenticated (Kopia basic-auth bug workaround); keeping it off `apps`
-      # stops other app containers reaching kopia:51515 directly.
-      - kopia
+  # kopia RETIRED 2026-08-10 (backup consolidation BL2, operator decision after the third
+  # B2 cap event in nine days): Longhorn owns the backup plane; longhorn-backup-health.sh
+  # is the successor check. The `kopia` isolation net and Traefik's route retired with it;
+  # its five host crons removed imperatively; role in roles/containers/archive/. The B2
+  # repo is deleted once the first Longhorn-only nightly verifies (operator's call — no
+  # retention window); kopia_password stays pinned in SOPS until then.
   # wg-easy moved to k3s on 2026-08-09 — slice-6 B5, pulled FORWARD from slice 7 by the
   # operator moving ALL router forwards (51820/udp included) to daniel-box, which took
   # remote access down until the workload followed. roles/k8s/wg-easy, config volume seeded
@@ -263,14 +261,12 @@ containers_list:
     port: false
     use_authelia: false
     networks:
-      # monitoring: reach prometheus + uptime-kuma. kopia: query the backup source's
-      # status without putting kopia on the broad monitoring net (trusted-infra access,
-      # like traefik). apps: reach the n8n public API at n8n:5678 (workflow-failure check)
-      # AND home-assistant:8123 (HA automation-heartbeat check). media: reach sonarr:8989 +
-      # radarr:7878 for the queue-warning check (2026-07-02; same precedent as homepage
-      # joining media). No web UI, so no port / Authelia.
+      # monitoring: reach prometheus (Kuma is reached over the LAN since its Phase D move;
+      # the kopia net retired with kopia, 2026-08-10). apps: formerly the n8n/HA Docker-DNS
+      # paths — both now cross the LAN too, but egress to the cluster VIP rides any net.
+      # media: reach sonarr:8989 + radarr:7878... also cluster-side now. Kept minimal-change
+      # at the kopia retirement; the net diet is a Phase E cleanup.
       - monitoring
-      - kopia
       - apps
       - media
   - name: autofix-bridge
@@ -314,18 +310,16 @@ containers_list:
   # <name>-bridge-* routers in the traefik role's config.yml.j2, which are generated from
   # daniel-box's inventory. Rolling back is re-adding this entry and removing bridge_hostname
   # from that one; both must move together, which test_strangler_bridge.py enforces.
-  # Organization: Game servers (apps network)
-  - name: terraria
-    # No HTTP port — exposed over a dedicated raw-TCP Traefik entrypoint (terraria,
-    # :7777) plus a direct 7778->7777 host publish; can't carry Authelia forward-auth.
-    use_authelia: false
-    # Dedicated isolation net (2026-07-02 review M3, kopia pattern): terraria is the only
-    # internet entry point with NO CrowdSec/rate-limit chain (raw TCP), so it must not sit
-    # on the shared `apps` net where a game-protocol exploit could reach ~15 services'
-    # unauthenticated container ports. Only traefik joins `terraria` alongside it; it
-    # needs to reach nothing (terraria-stats reads its console via Loki, not the net).
-    networks:
-      - terraria
+  # Organization: Game servers
+  # terraria moved to k3s on 2026-08-10 (backup consolidation BL1, pulled ahead of its
+  # Phase C/D slot): its worlds were the only irreplaceable data kopia still uniquely
+  # protected, and they now sit on a backed-up Longhorn PVC. The move also fixed the
+  # public join port — the router's 7777 forward has pointed at daniel-box since B5. The
+  # `terraria` isolation net and Traefik's raw-TCP entrypoint retired with it (the k8s
+  # Service answers on the node IP directly; a raw-TCP game protocol never could use the
+  # HTTP CrowdSec chain). terraria-stats below goes dark until Phase D's Loki step — it
+  # read the game console via Docker promtail. Rolling back is re-adding this entry and
+  # the traefik entrypoint/net; containers/terraria/config is still on disk.
   - name: terraria-stats
     # Headless sidecar: reads terraria console lines from Loki, serves Prometheus
     # metrics on :9420. No web UI -> no port/Authelia. monitoring net = reach Loki

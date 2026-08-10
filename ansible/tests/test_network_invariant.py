@@ -134,7 +134,7 @@ def _routed_route_networks() -> dict[str, str]:
 
 def test_traefik_parse_is_sane():
     # Guard: a parse regression returning {} would make the invariant below vacuously pass.
-    assert {"proxy", "monitoring", "media", "apps", "kopia"} <= _traefik_networks()
+    assert {"proxy", "monitoring", "media", "apps"} <= _traefik_networks()
 
 
 def test_traefik_joins_every_routed_network():

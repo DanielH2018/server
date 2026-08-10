@@ -93,17 +93,12 @@ services:
       # grows whenever a service lands on a brand-new net, or that service's route 502s.
       # test_network_invariant.py's test_traefik_joins_every_routed_network enforces this: it fails
       # pre-deploy if any routed service's route network (networks[0]) isn't in this list. proxy is
-      # the default; monitoring/media/apps/kopia reach those backends.
+      # the default; monitoring/media/apps reach those backends. (The kopia and terraria
+      # isolation nets retired with their services, 2026-08-10.)
       - proxy
       - monitoring
       - media
       - apps
-      - kopia
-      # terraria isolation net: traefik must reach terraria:7777 for the raw-TCP router,
-      # but terraria (the only CrowdSec-less internet entry point) stays off the shared
-      # `apps` net so a game-protocol exploit can't reach ~15 other services' container
-      # ports (2026-07-02 review M3; same pattern as `kopia`).
-      - terraria
     ports:
       # Bind v4-only (0.0.0.0). Docker does NOT manage ip6tables here (daemon
       # Experimental:false, no ip6tables key), so a bare "80:80" makes docker-proxy

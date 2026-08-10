@@ -47,24 +47,14 @@ services:
       # the homelab. That derivation is deliberate — see the PROM_ORIGIN comment — so these two
       # URLs can never be pointed at different places by accident.
       - PROMETHEUS_URL=https://prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}
-      - KOPIA_URL=http://kopia:51515
       # Re-pointed 2026-08-10 at the Phase D cutover: Kuma moved to the cluster, so the
       # Docker DNS name is gone. The `-k8s` name, NOT the bridged one (same-bridge hairpin —
       # the N8N_URL lesson above). /api/push bypasses Authelia LAN-only on the k8s side.
       - KUMA_URL=https://uptime-kuma{{ k8s_hostname_suffix }}.local.{{ domain }}
-      - BACKUP_SOURCE_PATH=/data/home/{{ sys_user }}/server/containers
-      - BACKUP_MAX_AGE_H=30
-      # Snapshot-shrink guard folded into Backup Freshness: a fresh, 0-error snapshot still hides a
-      # service that silently left backup scope (kopiaignore over-match / vanished bind mount). Floor
-      # the latest snapshot's total files+bytes at N% below the trailing-median (from Kopia's own
-      # snapshot history); the median absorbs the routine one-off drops from exclusion tuning.
-      # The intended ~40% re-baseline (karakeep precrawled purge / retention 4w/3m→0) never landed in
-      # summary.size: the B2 65%→38% drop came from retention-set reduction + GC/hidden-version cleanup
-      # (dedup/repo-level), not the logical tree size — the 7 retained dailies hold flat at ~1.1GB with
-      # files growing, latest ~5% under the trailing median (verified live 2026-07-13). So a 20% floor
-      # has comfortable headroom; the temp 55 bump is reverted early to close the wide shrink blind spot.
-      - BACKUP_SIZE_DROP_PCT=20
-      - BACKUP_SIZE_MIN_HISTORY=3
+      # kopia checks removed 2026-08-10 — backup plane is Longhorn
+      # (backup-consolidation-longhorn.md). This block used to carry KOPIA_URL, the Backup
+      # Freshness source path/staleness window, and the snapshot-shrink guard (size floor +
+      # presence/sentinel guards over Kopia's snapshot history).
       # /boot: old kernels filling it quietly breaks upgrades; /boot/efi (vfat ESP):
       # same failure class for firmware/bootloader updates (node-exporter exposes both)
       - DISK_MOUNTPOINTS=/,/boot,/boot/efi
@@ -83,7 +73,6 @@ services:
       - TRAEFIK_5XX_PCT=5
       - TRAEFIK_MIN_RPS=0.05
       # Push tokens: we set them; Kuma honors client-supplied tokens. In secrets.yml.
-      - KUMA_PUSH_KOPIA={{ monitor_bridge_kopia_push_token }}
       - KUMA_PUSH_DISK={{ monitor_bridge_disk_push_token }}
       - KUMA_PUSH_CERT={{ monitor_bridge_cert_push_token }}
       - KUMA_PUSH_MEM={{ monitor_bridge_mem_push_token }}
@@ -175,15 +164,11 @@ services:
       - GITOPS_BEHIND_MAX_MIN=360
       - KUMA_PUSH_GITOPS_ALIVE={{ monitor_bridge_gitops_alive_push_token }}
       - KUMA_PUSH_GITOPS_STATUS={{ monitor_bridge_gitops_status_push_token }}
-      # Monthly kopia restore drill: the host cron (kopia role) writes state.json;
-      # we alert on failure, >35d staleness, or a missing/corrupt file.
-      - RESTORE_DRILL_STATE=/restore-drill/state.json
-      - RESTORE_DRILL_MAX_AGE_D=35
-      - KUMA_PUSH_RESTORE_DRILL={{ kopia_restore_drill_push_token }}
       # Daily wg-easy Pi-peer backup pull: the wg-easy role's daniel-server host cron writes
       # state.json after rsyncing the Pi's un-rebuildable WireGuard peer keys into Kopia scope. The
-      # pull uses no --delete, so a broken pull keeps Backup Freshness green while the peers go stale
-      # — this is the watchdog. Alert on a failed pull, >2.5d staleness, or a missing/corrupt file.
+      # pull uses no --delete, so a broken pull leaves stale-but-present files in place while the
+      # peers go stale — this is the watchdog. Alert on a failed pull, >2.5d staleness, or a
+      # missing/corrupt file.
       - PI_PEERS_STATE=/pi-peers/state.json
       - PI_PEERS_MAX_AGE_D=2.5
       - KUMA_PUSH_PI_PEERS={{ monitor_bridge_pi_peers_push_token }}
@@ -213,21 +198,6 @@ services:
       - APPSEC_STATE=/crowdsec-appsec/state.json
       - APPSEC_MAX_AGE_MIN=45
       - KUMA_PUSH_APPSEC={{ monitor_bridge_appsec_push_token }}
-      # Weekly kopia snapshot verify: the host cron (kopia role) writes state.json; we
-      # alert on a FAILED verify (bit-rot / unreadable blob the old `| logger` cron
-      # swallowed), >10d staleness, or a missing/corrupt file. The verify tier of the
-      # three-tier backup assurance — previously the only un-monitored one.
-      - VERIFY_STATE=/verify/state.json
-      - VERIFY_MAX_AGE_D=10
-      - KUMA_PUSH_VERIFY={{ monitor_bridge_verify_push_token }}
-      # Quarterly kopia DEEP content verify: the kopia role's content-verify.sh cron (1st of Mar/Jun/
-      # Sep/Dec) runs `kopia snapshot verify --verify-files-percent=25` and writes state.json — the
-      # deep tier below the weekly 1% verify, catching a mis-purge / blob bug the 1% sample misses.
-      # Alert on a FAILED deep verify or >100d staleness (~92d max inter-quarter gap + margin; a missed
-      # quarter pages). Seeded on first deploy so it's green until the first quarterly run.
-      - CONTENT_VERIFY_STATE=/content-verify/state.json
-      - CONTENT_VERIFY_MAX_AGE_D=100
-      - KUMA_PUSH_CONTENT_VERIFY={{ monitor_bridge_content_verify_push_token }}
       # Hourly disk-autoprune host cron (autofix-bridge role): conservative docker/builder/
       # container prune when `/` used% crosses a threshold. Alert on a FAILED prune command
       # or >3h staleness (cron broken / never ran) — a disk still full of real data after a
@@ -246,42 +216,24 @@ services:
       # k8s/configarr role's health cron runs on that node, reads the last Job, and pushes the
       # SAME Kuma monitor with the same token — the monitor and its history are unchanged, only
       # the pusher moved. The AutoKuma label went with it, to the uptime-kuma role.
-      # Daily kopia FULL-maintenance freshness: the host cron (kopia role) queries `kopia
-      # maintenance info --json` and writes state.json. Full maintenance GCs expired blobs from
-      # B2, so a stall is the upstream CAUSE the b2_usage check only catches weeks later as the
-      # symptom. Alert on a stalled/disabled/failed cycle, >2.5d staleness, or a missing file.
-      - MAINTENANCE_STATE=/maintenance/state.json
-      - MAINTENANCE_MAX_AGE_D=2.5
-      - KUMA_PUSH_MAINTENANCE={{ monitor_bridge_maintenance_push_token }}
-      # B2 free tier is 10GB; alert at 85% so there's runway to prune/upgrade
-      # before the bucket fills and nightly snapshots start failing.
-      - B2_USAGE_STATE=/b2-usage/state.json
-      - B2_USAGE_MAX_AGE_D=2.5
-      - B2_CAP_GB=10
-      - B2_USAGE_MAX_PCT=85
-      - KUMA_PUSH_B2={{ monitor_bridge_b2_push_token }}
-      # B2 growth TREND: predict_linear over the kopia_b2_billable_bytes gauge (exported by the
-      # same b2-usage cron via node-exporter textfile) — `down` when on track to hit the cap
-      # within B2_TREND_HORIZON_D days, the runway warning the absolute-85% B2 monitor can't give.
-      # Prom-dependent (suppressed under the Prometheus gate); a missing gauge reads as down.
-      - B2_TREND_WINDOW=7d
-      - B2_TREND_HORIZON_D=7
-      - KUMA_PUSH_B2_TREND={{ monitor_bridge_b2_trend_push_token }}
-      # B2 REACHABILITY — the gate above the four state-file backup checks AND the two B2 byte
-      # checks. B2 caps transactions separately from storage, and on 2026-08-02 every one of those
-      # six read green for 9.5h while B2 refused all requests (docs/b2-transaction-cap-monitoring-
-      # gaps.md). This authenticates against B2 directly, so a cap breach reports B2's own
-      # `transaction_cap_exceeded` instead of the backup check's "timed out".
+      # B2 REACHABILITY — Longhorn's own B2-backed backups need this probe. It used to also gate
+      # kopia's maintenance/verify/content-verify/usage/usage-trend checks, all removed 2026-08-10
+      # (kopia is retired, backup moved to Longhorn — see backup-consolidation-longhorn.md); on
+      # 2026-08-02 those six read green for 9.5h while B2 refused all requests
+      # (docs/b2-transaction-cap-monitoring-gaps.md). This authenticates against B2 directly, so a
+      # cap breach reports B2's own `transaction_cap_exceeded` directly.
       #
       # Throttled to one call per B2_PROBE_INTERVAL_S and BOTH outcomes cached: the fault being
       # detected is a transaction cap, so an every-cycle probe (288/day at INTERVAL=300) would feed
       # the budget it watches. 1800s = 48 calls/day.
       #
-      # Kopia's credentials, under probe-specific names: the check only needs to authenticate, so
-      # pointing these at a scoped read-only key later is an inventory edit, not a code change. The
-      # application key is FILE-mounted, not inlined — an inlined secret lands in the container's
-      # Config.Env, which the read-only docker-proxy exposes to any monitoring-net neighbor
-      # (2026-07-15 review H2). The key id is an identifier and cannot authenticate on its own.
+      # Kopia's credentials, under probe-specific names — kept even though kopia itself is retired,
+      # since this is still the credential B2 issued for this purpose. The check only needs to
+      # authenticate, so pointing these at a scoped read-only key later is an inventory edit, not a
+      # code change. The application key is FILE-mounted, not inlined — an inlined secret lands in
+      # the container's Config.Env, which the read-only docker-proxy exposes to any monitoring-net
+      # neighbor (2026-07-15 review H2). The key id is an identifier and cannot authenticate on its
+      # own.
       - B2_PROBE_KEY_ID={{ kopia_b2_key_id }}
       - B2_PROBE_APPLICATION_KEY_FILE=/run/secrets/b2_probe_application_key
       - B2_PROBE_INTERVAL_S=1800
@@ -468,16 +420,11 @@ services:
       - ./b2_probe_application_key:/run/secrets/b2_probe_application_key:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
       - /var/lib/renovate-notify:/renovate-state:ro
-      - /var/lib/kopia-restore-drill:/restore-drill:ro
       - /var/lib/wg-easy-pi-peers:/pi-peers:ro
-      - /var/lib/kopia-verify:/verify:ro
       - /var/lib/autofix-disk-prune:/autofix-disk:ro
-      - /var/lib/kopia-maintenance:/maintenance:ro
-      - /var/lib/kopia-b2-usage:/b2-usage:ro
       - /var/lib/docker-user-rules:/docker-user:ro
       - /var/lib/cloudflare-ip-drift:/cloudflare-drift:ro
       - /var/lib/crowdsec-appsec:/crowdsec-appsec:ro
-      - /var/lib/kopia-content-verify:/content-verify:ro
     {{ service_networks() }}
     labels:
       {# Container-liveness monitor + one push monitor per check (AutoKuma-provisioned).
@@ -488,7 +435,6 @@ services:
          flips the state and the descriptive msg survives into the event + notification.
          Trade-off: a dead bridge pages after one missed 600s window (no grace beats). -#}
       {{ kuma('monitor-bridge') }}
-      {{ kuma('monitor-bridge-backup', monitor_type='push', name='Backup Freshness', interval=600, max_retries=0, push_token=monitor_bridge_kopia_push_token) }}
       {{ kuma('monitor-bridge-disk', monitor_type='push', name='Root Disk', interval=600, max_retries=0, push_token=monitor_bridge_disk_push_token) }}
       {{ kuma('monitor-bridge-cert', monitor_type='push', name='TLS Cert Expiry', interval=600, max_retries=0, push_token=monitor_bridge_cert_push_token) }}
       {{ kuma('monitor-bridge-mem', monitor_type='push', name='Memory', interval=600, max_retries=0, push_token=monitor_bridge_mem_push_token) }}
@@ -516,11 +462,9 @@ services:
          check_gitops_alive/status from the host state files. interval 600s = 2× the 5-min loop. -#}
       {{ kuma('gitops-deploy-alive', monitor_type='push', name='GitOps Deploy — Alive', interval=600, max_retries=0, push_token=monitor_bridge_gitops_alive_push_token) }}
       {{ kuma('gitops-deploy-status', monitor_type='push', name='GitOps Deploy — Status', interval=600, max_retries=0, push_token=monitor_bridge_gitops_status_push_token) }}
-      {{ kuma('kopia-restore-drill', monitor_type='push', name='Backup Restore Drill', interval=600, max_retries=0, push_token=kopia_restore_drill_push_token) }}
       {# WG Pi Peer Backup: check_pi_peers reads /pi-peers/state.json (written by the wg-easy role's
-         daily daniel-server pull cron) — the ONLY backup cron that was previously unwatched; the
-         no-delete pull keeps Backup Freshness green even when the un-rebuildable peer keys stop
-         refreshing, so this is the dedicated failed/stale/missing watchdog for it. -#}
+         daily daniel-server pull cron) — the no-delete pull leaves stale-but-present files in place
+         when it fails, so this is the dedicated failed/stale/missing watchdog for it. -#}
       {{ kuma('wg-easy-pi-peers', monitor_type='push', name='WG Pi Peer Backup', interval=600, max_retries=0, push_token=monitor_bridge_pi_peers_push_token) }}
       {# CrowdSec Home Allowlist moved to the uptime-kuma role's labels at slice-6 B2: the
          updater cron lives on daniel-box now (k8s/crowdsec role) and pushes the monitor
@@ -541,23 +485,12 @@ services:
          ban-list-only, the fail-open blind spot) or 45m staleness. The bouncer fails open, so nothing
          else signals a dead inline WAF while crowdsec stays up. -#}
       {{ kuma('crowdsec-appsec', monitor_type='push', name='CrowdSec AppSec', interval=600, max_retries=0, push_token=monitor_bridge_appsec_push_token) }}
-      {{ kuma('kopia-verify', monitor_type='push', name='Backup Verify', interval=600, max_retries=0, push_token=monitor_bridge_verify_push_token) }}
-      {# Backup Content Verify: check_content_verify reads /content-verify/state.json (written quarterly
-         by the kopia role's content-verify.sh — a 25% deep content re-read) — down on a failed verify
-         or >100d staleness. The deep tier below the weekly Backup Verify. -#}
-      {{ kuma('kopia-content-verify', monitor_type='push', name='Backup Content Verify', interval=600, max_retries=0, push_token=monitor_bridge_content_verify_push_token) }}
       {# Disk Autoprune: check_disk_prune reads /autofix-disk/state.json (written hourly by the
          autofix-bridge role's disk-prune cron) — down on a FAILED prune command or >3h staleness. -#}
       {{ kuma('autofix-disk-prune', monitor_type='push', name='Disk Autoprune', interval=600, max_retries=0, push_token=monitor_bridge_disk_prune_push_token) }}
-      {{ kuma('kopia-maintenance', monitor_type='push', name='Backup Maintenance', interval=600, max_retries=0, push_token=monitor_bridge_maintenance_push_token) }}
-      {{ kuma('monitor-bridge-b2', monitor_type='push', name='B2 Storage Usage', interval=600, max_retries=0, push_token=monitor_bridge_b2_push_token) }}
-      {# B2 growth trend: predict_linear projection of the billable-bytes gauge — runway warning
-         before the absolute 85% B2 Storage Usage monitor fires. Prom-dependent. -#}
-      {{ kuma('monitor-bridge-b2-trend', monitor_type='push', name='B2 Usage Trend', interval=600, max_retries=0, push_token=monitor_bridge_b2_trend_push_token) }}
-      {# B2 reachability — the root-cause monitor gating the six B2-backed checks (the four
-         state-file ones plus the two byte ones): when it's down they're suppressed and this one
-         names the cause. Unlike the Prometheus/Loki gates it does NOT gate Backup Freshness,
-         which polls Kopia live and correctly paged through the 2026-08-02 cap breach. -#}
+      {# B2 reachability — Longhorn's own B2-backed backups need this probe. It used to also gate
+         kopia's maintenance/verify/content-verify/usage/usage-trend checks (removed 2026-08-10,
+         kopia retired — backup-consolidation-longhorn.md). -#}
       {{ kuma('monitor-bridge-b2-reachable', monitor_type='push', name='B2 Reachable', interval=600, max_retries=0, push_token=monitor_bridge_b2_reachable_push_token) }}
       {{ kuma('monitor-bridge-k8s-workloads', monitor_type='push', name='k3s Workload Health', interval=600, max_retries=0, push_token=monitor_bridge_k8s_workloads_push_token) }}
       {{ kuma('monitor-bridge-cluster-targets', monitor_type='push', name='Cluster Scrape Targets', interval=600, max_retries=0, push_token=monitor_bridge_cluster_targets_push_token) }}

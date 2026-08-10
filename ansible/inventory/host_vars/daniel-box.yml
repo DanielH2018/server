@@ -515,6 +515,24 @@ containers_list:
     port: 8443
     use_authelia: true
     bridge_hostname: code-server
+
+  # Backup consolidation BL1 (2026-08-10): pulled ahead of its slot — the worlds were the
+  # only irreplaceable data kopia still uniquely protected. No port/hostname: nothing
+  # routes over HTTP; the game's TCP 7777 answers on the node IP via its Service
+  # (the wg-easy-udp pattern — the router's forward already points at this device).
+  - name: terraria
+    platform: k8s
+
+  # Slice-7 Phase D.2 KL1 (2026-08-10): the homelab log store — a SECOND cluster Loki,
+  # deliberately separate from claude-otel's (that one holds verbatim prompts and stays
+  # loopback-only; the D1 exception is documented in slice-7-phase-d-loki.md). hostname
+  # feeds the Pi-hole override; the route is ClientIP-gated (monitoring_route), so
+  # use_authelia is moot but stated. Ships with the KL3 pod-log promtail DaemonSet.
+  - name: loki-homelab
+    platform: k8s
+    hostname: "loki-homelab{{ k8s_hostname_suffix }}"
+    port: 3100
+    use_authelia: false
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the

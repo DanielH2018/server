@@ -15,7 +15,6 @@ import json
 import os
 import smtplib
 import ssl
-import statistics
 import sys
 import time
 import urllib.error
@@ -55,7 +54,7 @@ def _env_file(name, default=""):
 INTERVAL = int(_env("INTERVAL", "300"))
 HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
 # Startup/redeploy grace for the reach-out checks (STARTUP_GRACE, applied in run_once). The
-# bridge's first cycle after a host reboot runs before the heavy apps it polls (kopia, n8n,
+# bridge's first cycle after a host reboot runs before the heavy apps it polls (n8n,
 # sonarr/radarr, prowlarr, scrutiny, the Pi glances) finish starting, so an un-graced reach-out
 # check flips its
 # max_retries=0 push monitor DOWN on that one transient cycle and pages, then recovers next cycle —
@@ -67,61 +66,9 @@ GRACE_CYCLES = int(_env("GRACE_CYCLES", "2"))
 # up as push silence in Kuma — the healthcheck lets autoheal restart on that too.
 HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
 PROM_URL = _env("PROMETHEUS_URL", "http://prometheus:9090").rstrip("/")
-KOPIA_URL = _env("KOPIA_URL", "http://kopia:51515").rstrip("/")
 KUMA_URL = _env("KUMA_URL", "http://uptime-kuma:3001").rstrip("/")
 LOKI_URL = _env("LOKI_URL", "http://loki:3100").rstrip("/")
 
-BACKUP_PATH = _env("BACKUP_SOURCE_PATH", "/data/home/ubuntu/server/containers")
-BACKUP_MAX_AGE_H = float(_env("BACKUP_MAX_AGE_H", "30"))
-# Snapshot-size regression guard (folded into check_backup). A kopiaignore over-match or a vanished
-# bind mount can silently drop a service from the CONFIG-ONLY backup source: the snapshot still
-# completes with errorCount 0 and a fresh timestamp, so the freshness/error check above stays GREEN
-# while the offsite copy quietly loses a service (the recurring bare-`data/` incident class, see
-# kopiaignore.j2's own changelog). Nothing else catches a SHRINK — the B2 monitors track billable-bytes
-# GROWTH (a shrink reads greener) and the monthly restore drill exercises only one rotated service. We
-# compare the latest snapshot's total files/bytes against a rolling floor: BACKUP_SIZE_DROP_PCT below
-# the MEDIAN of the trailing snapshots (the median absorbs the routine one-off drops from exclusion
-# tuning, so only a sharp anomalous drop pages). Sourced from Kopia's own snapshot history
-# (/api/v1/snapshots), so the check stays stateless.
-BACKUP_SIZE_DROP_PCT = float(_env("BACKUP_SIZE_DROP_PCT", "20"))
-BACKUP_SIZE_MIN_HISTORY = int(_env("BACKUP_SIZE_MIN_HISTORY", "3"))
-# Critical-file sentinel guard (folded into check_backup, 2026-07-15 review L2). The presence guard
-# tracks only TOP-LEVEL service dirs and the size guard floors at 20% of the tree, so a kopiaignore
-# regression that re-drops a small NESTED critical file slips through BOTH: the 2026-07-15 incident
-# was a blanket `data*/` dropping jellyfin/config/data/data/jellyfin.db (~4MB, <1% of the tree) while
-# jellyfin/ stayed present via its XML configs — invisible until the yearly restore-drill's turn. We
-# assert each critical file still resolves in the latest snapshot's object tree every cycle. The list
-# MIRRORS the kopia restore-drill's SENTINEL map as `<service>/<sentinel>` (the operator's own set of
-# critical-enough-to-prove-restorable files, all verified present); a lockstep test
-# (test_backup_sentinels_match_restore_drill) keeps the two from drifting.
-_DEFAULT_BACKUP_SENTINELS = [
-    "authelia/config/configuration.yml",
-    "traefik/data/acme.json",
-    # freshrss, karakeep and n8n were removed 2026-08-06, on their cutovers to k3s. The directory is
-    # still on disk and Kopia still backs it up, which is exactly the problem: it stopped
-    # receiving writes when the container was retired, so the sentinel kept resolving and this
-    # check kept reporting green for a frozen copy while the live data moved to a Longhorn PVC.
-    # False assurance, not a false alarm. Per-volume coverage for the migrated services is
-    # asserted cluster-side instead, by longhorn-backup-health.sh (k3s role) — a service must
-    # be verified in exactly one plane, and after a cutover that plane is Longhorn's.
-    "grafana/data/grafana.db",
-    "pihole/data/etc-pihole/pihole.toml",
-    # jellyfin/config/data/data/jellyfin.db was here until 2026-08-08, when B5 moved jellyfin to
-    # k3s. Removed for the same reason as the four above: the directory stays on disk and Kopia
-    # keeps backing it up, so the sentinel would keep resolving against a copy that stopped
-    # receiving writes — green for a frozen file. Longhorn covers the live PVC now.
-    "wg-easy/pi-peers/wg0.json",
-    # zigbee2mqtt/data/coordinator_backup.json and home-assistant/config/.storage/
-    # core.device_registry left on 2026-08-09 with slice-5 B2/B3. Same reason as jellyfin and
-    # the slice-2 four above: the Docker data dirs stay on disk as rollback copies, so the
-    # sentinels would keep resolving against files that stopped receiving writes — green for a
-    # frozen copy. Longhorn covers both PVCs.
-]
-BACKUP_SENTINELS = [
-    s.strip()
-    for s in _env("BACKUP_SENTINELS", ",".join(_DEFAULT_BACKUP_SENTINELS)).split(",")
-    if s.strip()
-]
 DISK_MOUNTPOINTS = [
     m.strip() for m in _env("DISK_MOUNTPOINTS", "/").split(",") if m.strip()
 ]
@@ -204,20 +151,14 @@ GITOPS_BEHIND_MAX_S = float(_env("GITOPS_BEHIND_MAX_MIN", "360")) * 60
 RENOVATE_STATE_DIR = _env("RENOVATE_STATE_DIR", "/renovate-state")
 RENOVATE_MAX_AGE_S = float(_env("RENOVATE_MAX_AGE_MIN", "2160")) * 60
 
-# Monthly kopia restore drill: the host cron (kopia-restore-drill.sh, kopia role)
-# writes {"ts": epoch, "ok": bool, "msg": str} after each run; we alert on failure,
-# staleness (cron broken / never ran), or a missing/corrupt state file.
-RESTORE_DRILL_STATE = _env("RESTORE_DRILL_STATE", "/restore-drill/state.json")
-RESTORE_DRILL_MAX_AGE_S = float(_env("RESTORE_DRILL_MAX_AGE_D", "35")) * 86400
-
 # Daily wg-easy Pi-peer backup pull: the wg-easy role's daniel-server host cron
 # (wg-easy-pull-pi-peers.sh) rsyncs the Pi's WireGuard peer configs (wg0.conf/wg0.json — private
 # keys a redeploy can't rebuild) into Kopia scope and writes {"ts": epoch, "ok": bool, "msg": str}.
 # It's the only Pi state pulled into the backup AND was the only backup cron with no watchdog: the
 # pull uses no --delete, so a broken pull (Pi unreachable, SSH/sudo break) leaves the last-good copy
-# in place and Backup Freshness stays green while the peers silently go stale. We alert on a FAILED
+# in place while the peers silently go stale. We alert on a FAILED
 # pull, staleness (cron broken / never ran), or a missing/corrupt state file. 2.5d staleness = two
-# missed daily runs + slack (same as the daily b2-usage / maintenance crons).
+# missed daily runs + slack.
 PI_PEERS_STATE = _env("PI_PEERS_STATE", "/pi-peers/state.json")
 PI_PEERS_MAX_AGE_S = float(_env("PI_PEERS_MAX_AGE_D", "2.5")) * 86400
 
@@ -252,100 +193,32 @@ CLOUDFLARE_DRIFT_MAX_AGE_S = float(_env("CLOUDFLARE_DRIFT_MAX_AGE_D", "10")) * 8
 APPSEC_STATE = _env("APPSEC_STATE", "/crowdsec-appsec/state.json")
 APPSEC_MAX_AGE_S = float(_env("APPSEC_MAX_AGE_MIN", "45")) * 60
 
-# Weekly kopia snapshot verify: the host cron (kopia-verify.sh, kopia role) writes
-# {"ts": epoch, "ok": bool, "msg": str} after each run; we alert on a FAILED verify
-# (detected bit-rot / an unreadable blob — failures the old `| logger` cron silently
-# swallowed), staleness (cron broken / never ran), or a missing/corrupt state file.
-# This is the verify TIER of the three-tier backup assurance (snapshot freshness →
-# weekly verify → monthly restore drill) — the only one that previously had no monitor.
-# 10d staleness = one missed weekly run + slack.
-VERIFY_STATE = _env("VERIFY_STATE", "/verify/state.json")
-VERIFY_MAX_AGE_S = float(_env("VERIFY_MAX_AGE_D", "10")) * 86400
-
-# Quarterly kopia DEEP content verify: the kopia role's content-verify.sh cron (1st of Mar/Jun/Sep/
-# Dec) runs `kopia snapshot verify --verify-files-percent=25` and writes {"ts": epoch, "ok": bool,
-# "msg": str}. The deep tier below the weekly 1% verify — a mis-purge / blob-accounting bug the 1%
-# sample keeps missing gets caught within a quarter. ok=false = the deep verify FAILED; staleness =
-# the quarterly cron stopped. 100d tolerates the ~92d max gap between quarters + margin (a MISSED
-# quarter -> ~183d -> pages).
-CONTENT_VERIFY_STATE = _env("CONTENT_VERIFY_STATE", "/content-verify/state.json")
-CONTENT_VERIFY_MAX_AGE_S = float(_env("CONTENT_VERIFY_MAX_AGE_D", "100")) * 86400
-
 # Hourly disk-autoprune host cron (autofix-bridge role): writes {"ts": epoch, "ok": bool, "msg":
 # str} after checking `/` used% against a threshold and, if crossed, running a conservative
-# docker/builder/container prune. Same state-file idiom as verify/pi_peers. ok=false means the
+# docker/builder/container prune. Same state-file idiom as pi_peers. ok=false means the
 # prune command itself errored — a disk still full of real data after a clean prune is Root
 # Disk's alert, not this one. 3h staleness = 3x the hourly cron + slack.
 DISK_PRUNE_STATE = _env("DISK_PRUNE_STATE", "/autofix-disk/state.json")
 DISK_PRUNE_MAX_AGE_S = float(_env("DISK_PRUNE_MAX_AGE_H", "3")) * 3600
 
-# Daily kopia FULL-maintenance freshness: the host cron (kopia-maintenance-check.sh, kopia role)
-# queries `kopia maintenance info --json` and writes {"ts": epoch, "ok": bool, "msg": str} after
-# deciding whether full maintenance is healthy (enabled + owned + next full run not overdue +
-# newest run succeeded). Full maintenance is what GCs expired blobs from B2, so a stall is the
-# upstream CAUSE the b2_usage check only catches weeks later as a downstream symptom. We alert on
-# an UNHEALTHY/stalled maintenance, staleness (cron broken / never ran), or a missing/corrupt
-# state file. 2.5d staleness = two missed daily runs + slack.
-MAINTENANCE_STATE = _env("MAINTENANCE_STATE", "/maintenance/state.json")
-MAINTENANCE_MAX_AGE_S = float(_env("MAINTENANCE_MAX_AGE_D", "2.5")) * 86400
-
-# B2 storage usage: the daily host cron (kopia-b2-usage.sh, kopia role) writes
-# {"ts": epoch, "ok": bool, "bytes": int, "msg": str} with the bucket's BILLABLE
-# bytes (incl. hidden versions — what counts against the free tier). We alert when
-# usage crosses the threshold, on probe failure, staleness, or missing state.
-# 2.5d staleness = two missed daily runs + slack.
-B2_USAGE_STATE = _env("B2_USAGE_STATE", "/b2-usage/state.json")
-B2_USAGE_MAX_AGE_S = float(_env("B2_USAGE_MAX_AGE_D", "2.5")) * 86400
-# Decimal GB (1e9), not GiB: B2 bills and displays decimal units, and the cap we're
-# protecting is B2's "10 GB" free tier — GiB math would overstate the allowance ~7%.
-B2_CAP_BYTES = float(_env("B2_CAP_GB", "10")) * 1e9
-B2_USAGE_MAX_PCT = float(_env("B2_USAGE_MAX_PCT", "85"))
-
-# B2 usage growth TREND. The same daily host cron (kopia-b2-usage / b2-usage.sh) also exports
-# the billable bytes as the Prometheus gauge `kopia_b2_billable_bytes` (node-exporter textfile).
-# The B2_USAGE check above fires only at an ABSOLUTE 85% of the cap — no runway warning for fast
-# growth still under that line (the recurring hidden-version / LiveSync-churn incidents that ate
-# the headroom in days). We fit a linear trend over B2_TREND_WINDOW and project it forward with
-# predict_linear: `down` when the bucket is on track to hit the cap within B2_TREND_HORIZON_D
-# days. Prom-dependent (so it's suppressed under the Prometheus-reachability gate, below). A
-# missing gauge (cron not exporting / textfile collector broken) reads as unavailable -> down,
-# distinct from B2_USAGE's state.json staleness.
-B2_TREND_METRIC = _env("B2_TREND_METRIC", "kopia_b2_billable_bytes")
-B2_TREND_WINDOW = _env("B2_TREND_WINDOW", "7d")
-# Below this many samples in B2_TREND_WINDOW, predict_linear is extrapolating rather than fitting
-# and its projection is suppressed — see check_b2_trend. node-exporter scrapes at 1m, so a filled
-# 7d window holds ~10000 samples (measured: 10077); 5000 is half a window, enough for a slope that
-# means something while still tripping on the ~61 the cluster copy had at the B5 flip.
-B2_TREND_MIN_SAMPLES = int(_env("B2_TREND_MIN_SAMPLES", "5000"))
-B2_TREND_HORIZON_D = float(_env("B2_TREND_HORIZON_D", "7"))
-# Textfile-freshness guard for the trend gauge. node-exporter serves the last written textfile
-# value on EVERY scrape, so if b2-usage.sh's atomic .prom write fails (mv into a re-rooted/full
-# textfile dir) while write_state still writes state.json fresh, the gauge FREEZES: B2 Storage
-# Usage stays green (state.json fresh) AND the frozen gauge reads flat -> this trend check reads
-# up — a silent blind spot. The collector's per-file `node_textfile_mtime_seconds` catches exactly
-# that: go `down` (fail-stale) once the kopia_b2 textfile's mtime is older than this. 2.5 d mirrors
-# B2_USAGE's daily-cron staleness. A missing mtime metric (textfile collector absent) skips the
-# guard — the `current` gauge would already be None -> "unavailable" above — so it never false-pages.
-B2_TREND_MTIME_QUERY = _env(
-    "B2_TREND_MTIME_QUERY", 'node_textfile_mtime_seconds{file=~".*kopia_b2.*"}'
-)
-B2_TREND_MAX_AGE_S = float(_env("B2_TREND_MAX_AGE_D", "2.5")) * 86400
-
-# B2 REACHABILITY — the gate for every B2-backed check, and the gap the 2026-08-02 transaction-cap
-# incident exposed (docs/b2-transaction-cap-monitoring-gaps.md). B2 caps TRANSACTIONS separately
-# from storage bytes, and the two checks above track only bytes: both reported
-# "B2 6.05/10GB billable (60% of plan)" for nine and a half hours while B2 refused every request.
-# Worse than absent — an operator triaging the one true alert was told by these that B2 was fine.
+# B2 REACHABILITY — the gap the 2026-08-02 transaction-cap incident exposed
+# (docs/b2-transaction-cap-monitoring-gaps.md). B2 caps TRANSACTIONS separately from storage
+# bytes; the kopia-era state-file checks this used to gate reported their last successful cron
+# run rather than current B2 health, so all of them read green — "B2 6.05/10GB billable (60% of
+# plan)" among them — for nine and a half hours while B2 refused every request. Worse than absent
+# — an operator triaging the one true alert was told by these that B2 was fine. Those checks were
+# removed 2026-08-10 (kopia is retired, backup moved to Longhorn — see
+# docs/k3s-migration/backup-consolidation-longhorn.md), but this probe stays: Longhorn still needs
+# B2 reachable.
 #
 # The probe authenticates against B2's native API. A cap breach answers b2_authorize_account with
 # HTTP 403 and error code `transaction_cap_exceeded`, which _get_json's HTTPError detail carries
-# verbatim into the alert message — so this monitor names the CAUSE where the backup check could
-# only report the symptom ("backup check error: timed out").
+# verbatim into the alert message, naming the cause directly.
 #
 # ASSUMPTION, stated because it is load-bearing and cannot be tested without a live breach:
 # that b2_authorize_account is itself subject to the cap. Backblaze's endpoint documentation lists
 # 403/transaction_cap_exceeded among its errors, which is the basis. If a future breach shows THIS
-# monitor stayed green while the backup check paged, the assumption was wrong — point B2_PROBE_URL
+# monitor stayed green through it, the assumption was wrong — point B2_PROBE_URL
 # at a Class C call (b2_list_buckets, which needs the account id from the auth response) instead.
 # It is a URL swap, not a rewrite, deliberately.
 B2_PROBE_URL = _env(
@@ -388,7 +261,7 @@ CLUSTER_PROM_URL = _env("CLUSTER_PROMETHEUS_URL", "").rstrip("/")
 # PROMETHEUS_URL points at the cluster, restarts / oom / cpu / janitorr / targets silently widen
 # from "daniel-server's containers" to "every container in the homelab", and would start naming k8s
 # pods as offenders. The other seven PROM_DEPENDENT checks read metrics only this host produces
-# (node_*, traefik_*, kopia_b2_*, promtail_*) and need no pin.
+# (node_*, traefik_*, promtail_*) and need no pin.
 #
 # `{name!=""}` does NOT already scope this, which is the obvious assumption and a wrong one: the
 # kubelet's cAdvisor emits `name` too, so 99 cluster-native series survive that filter.
@@ -589,7 +462,7 @@ REMOTE_WRITE_MAX_RETRIES = float(_env("REMOTE_WRITE_MAX_RETRIES", "0"))
 # The receiver's own uptime, read from the cluster Prometheus about itself (origin="" = the series
 # with no origin label, i.e. cluster-native). The rejection arms above cannot mean anything until a
 # full window has elapsed since the receiver restarted, because the burst stays inside the window
-# until it ages out — the same reasoning as the b2_trend history guard. The LAG arm is deliberately
+# until it ages out. The LAG arm is deliberately
 # left armed throughout: it is the arm that detects genuine non-delivery, and it read a healthy 40s
 # through the incident that prompted all this.
 REMOTE_WRITE_RECEIVER_UPTIME_QUERY = _env(
@@ -846,264 +719,7 @@ def parse_duration(s):
     return float(s)
 
 
-def backup_age_hours(sources_json, path, now=None):
-    """Return (age_hours, error_count) for the Kopia source matching `path`.
-
-    Raises LookupError if the source or its lastSnapshot is missing.
-    """
-    now = now or datetime.now(timezone.utc)
-    srcs = [
-        s
-        for s in sources_json.get("sources", [])
-        if s.get("source", {}).get("path") == path
-    ]
-    if not srcs:
-        raise LookupError("no Kopia source for %s" % path)
-    last = srcs[0].get("lastSnapshot")
-    if not last:
-        raise LookupError("no snapshot recorded yet")
-    end = last.get("endTime") or last.get("startTime")
-    age_h = (now - parse_rfc3339(end)).total_seconds() / 3600.0
-    errs = int(last.get("stats", {}).get("errorCount", 0))
-    return age_h, errs
-
-
-def backup_source(sources_json, path):
-    """Return the {host, userName, path} identity dict for the Kopia source matching `path`.
-
-    Raises LookupError if there's no such source (same contract as backup_age_hours). The host +
-    userName are needed to query that source's snapshot HISTORY (/api/v1/snapshots), which only
-    /api/v1/sources exposes.
-    """
-    for s in sources_json.get("sources", []):
-        src = s.get("source", {})
-        if src.get("path") == path:
-            return src
-    raise LookupError("no Kopia source for %s" % path)
-
-
-def backup_size_regression(snapshots, drop_pct, min_history):
-    """Pure: has the latest snapshot's file count or total size dropped below a rolling floor? (ok, msg).
-
-    `snapshots` is Kopia's /api/v1/snapshots list for ONE source, each carrying a `summary` with the
-    whole-tree totals `files` and `size` — NOT `stats.fileCount`, which counts only the newly-hashed
-    non-cached files (e.g. 100 of 8113) and swings wildly by design. A config-only source grows
-    steadily, so we floor each metric at `drop_pct` below the MEDIAN of the trailing history (excluding
-    the latest): the median absorbs the routine one-off dips from exclusion tuning, so only a sharp
-    anomalous drop — a service silently leaving backup scope — pages. Fewer than `min_history` prior
-    snapshots means too little baseline to judge, so it stays up.
-    """
-    entries = []
-    for s in snapshots or []:
-        summ = s.get("summary") or {}
-        files, size = summ.get("files"), summ.get("size")
-        if files is None or size is None:
-            continue
-        entries.append(
-            (s.get("endTime") or s.get("startTime") or "", int(files), int(size))
-        )
-    entries.sort(
-        key=lambda e: e[0]
-    )  # chronological; endTimes are same-format UTC, so lexical == temporal
-    if len(entries) < min_history + 1:
-        return True, "size guard skipped — only %d snapshot(s) of history" % len(
-            entries
-        )
-    latest_files, latest_size = entries[-1][1], entries[-1][2]
-    med_files = statistics.median(f for _, f, _ in entries[:-1])
-    med_size = statistics.median(sz for _, _, sz in entries[:-1])
-    floor = 1 - drop_pct / 100.0
-    if med_files > 0 and latest_files < med_files * floor:
-        return False, (
-            "snapshot file count dropped to %d (trailing median %g, -%.0f%%, floor %.0f%%) "
-            "— a service may have silently left backup scope"
-            % (latest_files, med_files, 100 * (1 - latest_files / med_files), drop_pct)
-        )
-    if med_size > 0 and latest_size < med_size * floor:
-        return False, (
-            "snapshot size dropped to %.2fGB (trailing median %.2fGB, -%.0f%%, floor %.0f%%) "
-            "— a service may have silently left backup scope"
-            % (
-                latest_size / 1e9,
-                med_size / 1e9,
-                100 * (1 - latest_size / med_size),
-                drop_pct,
-            )
-        )
-    return True, "size ok (%d files, %.2fGB, >= %.0f%% of trailing median)" % (
-        latest_files,
-        latest_size / 1e9,
-        100 * floor,
-    )
-
-
-def backup_presence_regression(listings, min_history):
-    """Pure: did a consistently-backed-up service directory vanish from the latest snapshot? (ok, msg).
-
-    `listings` is a chronological list (latest LAST) of {top_level_dir_name: recursive_file_count}
-    maps — one per snapshot, from each snapshot's root directory listing. A service is "present" in a
-    snapshot when its dir is there with > 0 files. The expected set is every dir present in ALL of the
-    trailing `min_history` snapshots before the latest; we page if any expected dir is missing (or
-    dropped to 0 files) in the latest — a whole service silently leaving backup scope, which the
-    aggregate backup_size_regression can't see once the service is small (< the 20% floor; e.g.
-    portainer is ~0.05% of the tree). A newly-added service isn't in the priors, so it's never
-    "expected" (no false page on an add); an intentional removal stops being expected after one cycle
-    (it drops out of the prior window). Fewer than min_history+1 snapshots -> too little baseline, up.
-    An empty latest listing -> skip (a genuine total loss is already caught by the size guard above).
-    """
-    if len(listings) < min_history + 1:
-        return True, "presence guard skipped — only %d snapshot(s) of history" % len(
-            listings
-        )
-    latest = listings[-1]
-    if not latest:
-        return True, "presence guard skipped — latest listing empty"
-    priors = listings[-(min_history + 1) : -1]
-
-    def present(m, name):
-        return m.get(name, 0) > 0
-
-    expected = {n for n in priors[0] if all(present(p, n) for p in priors)}
-    missing = sorted(n for n in expected if not present(latest, n))
-    if missing:
-        return False, (
-            "%d service dir(s) vanished from the latest backup (present in the prior %d "
-            "snapshots): %s — a kopiaignore over-match or dropped bind mount?"
-            % (len(missing), min_history, ", ".join(missing))
-        )
-    return True, "all %d expected service dir(s) present" % len(expected)
-
-
-def backup_sentinels_regression(sentinels, present, service_dirs):
-    """Pure: did a critical NESTED sentinel file vanish while its service dir is still present? (ok, msg).
-
-    `sentinels`: snapshot-relative critical-file paths (e.g. 'jellyfin/config/data/data/jellyfin.db').
-    `present`: the subset of `sentinels` that resolved in the latest snapshot's object tree.
-    `service_dirs`: {top_level_dir: file_count} for the latest snapshot. A sentinel is only asserted
-    when its own top-level service dir is present with > 0 files: a whole-service disappearance is the
-    presence/size guard's job (an intentional removal clears there after one cycle), so gating here
-    avoids double-paging AND means a decommissioned service still listed in `sentinels` can't
-    false-page. What this catches that neither other guard can: the presence guard sees only top-level
-    dirs and the size floor is 20% of the tree, so a re-dropped small nested file (the jellyfin.db
-    incident class) trips neither.
-    """
-    checked = [s for s in sentinels if service_dirs.get(s.split("/", 1)[0], 0) > 0]
-    missing = sorted(s for s in checked if s not in present)
-    if missing:
-        return False, (
-            "%d critical backup sentinel file(s) vanished from the latest snapshot while the "
-            "service dir remains (a kopiaignore over-match on a nested path?): %s"
-            % (len(missing), ", ".join(missing))
-        )
-    return True, "all %d critical sentinel file(s) present" % len(checked)
-
-
 # --- checks: each returns (ok, msg) -----------------------------------------
-
-
-def _kopia_dir_files(root_id):
-    """{top_level_dir_name: recursive_file_count} for a Kopia snapshot's root object (dirs only).
-
-    Fetches /api/v1/objects/<rootID>, whose `entries` list carries each child's type ('d'/'f') and,
-    for directories, a recursive `summ.files`. Feeds check_backup's presence guard.
-    """
-    if not root_id:
-        return {}
-    data = _get_json(KOPIA_URL + "/api/v1/objects/" + root_id)
-    return {
-        e.get("name"): int((e.get("summ") or {}).get("files", 0))
-        for e in (data.get("entries") or [])
-        if e.get("type") == "d"
-    }
-
-
-def _kopia_dir_entries(obj_id, cache):
-    """Cached {child_name: entry} for a Kopia directory object; {} for a missing id. See _kopia_path_exists."""
-    if obj_id not in cache:
-        data = _get_json(KOPIA_URL + "/api/v1/objects/" + obj_id) if obj_id else {}
-        cache[obj_id] = {e.get("name"): e for e in (data.get("entries") or [])}
-    return cache[obj_id]
-
-
-def _kopia_path_exists(root_id, path, cache):
-    """Does `path` (snapshot-relative, '/'-separated) resolve under the snapshot root object?
-
-    Walks /api/v1/objects/<id> level by level from the root, matching each path component against its
-    parent directory's `entries` — the leaf file itself is never fetched, just confirmed to appear in
-    its parent listing. `cache` memoizes each dir listing by object id so sentinels sharing a prefix
-    (the same service dir) fetch it once per cycle. Feeds check_backup's critical-sentinel guard.
-    """
-    obj = root_id
-    parts = [p for p in path.split("/") if p]
-    for i, part in enumerate(parts):
-        entry = _kopia_dir_entries(obj, cache).get(part)
-        if entry is None:
-            return False
-        if i < len(parts) - 1 and entry.get("type") != "d":
-            return False
-        obj = entry.get("obj")
-    return True
-
-
-def check_backup():
-    data = _get_json(KOPIA_URL + "/api/v1/sources")
-    try:
-        age_h, errs = backup_age_hours(data, BACKUP_PATH)
-    except LookupError as e:
-        return False, str(e)
-    if errs:
-        return False, "last snapshot had %d errors (%.1fh ago)" % (errs, age_h)
-    if age_h > BACKUP_MAX_AGE_H:
-        return False, "last snapshot %.1fh ago (> %.0fh)" % (age_h, BACKUP_MAX_AGE_H)
-    # Freshness + errorCount are clean — now run three shrink guards over the snapshot HISTORY, coarse
-    # to fine: a size floor (a dropped bind mount / kopiaignore over-match the fresh, 0-error snapshot
-    # hides), a per-service presence guard (a whole small dir the size floor can't see — portainer is
-    # ~0.05% of the tree, far under the 20% floor), and a nested-sentinel guard (a critical file
-    # re-dropped from a still-present service dir — the jellyfin.db incident class). Evaluate ALL THREE
-    # even after one trips, then report the MOST-URGENT failure (sentinel > presence > size): during the
-    # recurring karakeep asset-volatility window the size guard sits tripped for days, and
-    # short-circuiting on it would mask a genuinely new presence/sentinel regression behind the same
-    # already-triaged "size dropped" message. The paging state is identical either way.
-    src = backup_source(data, BACKUP_PATH)
-    q = urllib.parse.urlencode(
-        {
-            "userName": src.get("userName", ""),
-            "host": src.get("host", ""),
-            "path": BACKUP_PATH,
-        }
-    )
-    snaps = _get_json(KOPIA_URL + "/api/v1/snapshots?" + q).get("snapshots", [])
-    size_ok, size_msg = backup_size_regression(
-        snaps, BACKUP_SIZE_DROP_PCT, BACKUP_SIZE_MIN_HISTORY
-    )
-    recent = sorted(snaps, key=lambda s: s.get("endTime") or s.get("startTime") or "")[
-        -(BACKUP_SIZE_MIN_HISTORY + 1) :
-    ]
-    listings = [_kopia_dir_files(s.get("rootID")) for s in recent]
-    pres_ok, pres_msg = backup_presence_regression(listings, BACKUP_SIZE_MIN_HISTORY)
-    sent_ok, sent_msg = True, "sentinel guard skipped — no snapshot history"
-    if recent:
-        obj_cache = {}
-        present_sentinels = {
-            s
-            for s in BACKUP_SENTINELS
-            if _kopia_path_exists(recent[-1].get("rootID"), s, obj_cache)
-        }
-        sent_ok, sent_msg = backup_sentinels_regression(
-            BACKUP_SENTINELS, present_sentinels, listings[-1]
-        )
-    if not sent_ok:
-        return False, sent_msg
-    if not pres_ok:
-        return False, pres_msg
-    if not size_ok:
-        return False, size_msg
-    return True, "last snapshot %.1fh ago, 0 errors; %s; %s; %s" % (
-        age_h,
-        size_msg,
-        pres_msg,
-        sent_msg,
-    )
 
 
 def check_disk():
@@ -1458,7 +1074,7 @@ def n8n_update_streaks(workflows_json, executions_json, state, now, window_s):
     `window_s` (recovered / went idle) or no error is on record. `state` is a mutable
     {workflow_id: {"last_id", "streak"}} dict persisted across cycles. Returns
     {workflow_name: streak} for streak >= 1. Pure given (state, now) — unit-tested by
-    driving cycles (like backup_age_hours).
+    driving cycles.
     """
     active = {
         w["id"]: (w.get("name") or w["id"])
@@ -2103,27 +1719,13 @@ def check_pi_pressure():
     return pi_pressure(load, mem, fs, PI_LOAD_MAX, PI_MEM_MIN_MB, PI_DISK_MAX_PCT)
 
 
-def restore_drill(state, age_s, max_age_s):
-    if not state.get("ok"):
-        return False, "last restore drill FAILED: %s" % state.get("msg", "?")
-    if age_s > max_age_s:
-        return False, "last successful restore drill %.1fd ago (max %dd)" % (
-            age_s / 86400,
-            max_age_s / 86400,
-        )
-    return True, "restore drill ok %.1fd ago: %s" % (
-        age_s / 86400,
-        state.get("msg", ""),
-    )
-
-
 def _check_state_file(path, missing_msg, bad_msg, decide):
     """Read a JSON state file written by a host cron and hand (state, age_s) to `decide`.
 
-    Shared IO half of the state-file monitors (restore-drill/verify/pi-peers/docker-user/…):
-    every one reads the same {ts, ok, msg} shape, so only the path, the two failure messages,
-    and the pure decision differ. Returns `decide(state, age_s)`, or (False, msg) when the file
-    is missing/unparseable.
+    Shared IO half of the state-file monitors (pi-peers/docker-user/cloudflare-drift/appsec/
+    disk-prune/…): every one reads the same {ts, ok, msg} shape, so only the path, the two
+    failure messages, and the pure decision differ. Returns `decide(state, age_s)`, or
+    (False, msg) when the file is missing/unparseable.
     """
     try:
         with open(path) as fh:
@@ -2136,77 +1738,12 @@ def _check_state_file(path, missing_msg, bad_msg, decide):
     return decide(state, age_s)
 
 
-def check_restore_drill():
-    return _check_state_file(
-        RESTORE_DRILL_STATE,
-        "no restore-drill state (drill never ran?)",
-        "restore-drill state unparseable",
-        lambda state, age_s: restore_drill(state, age_s, RESTORE_DRILL_MAX_AGE_S),
-    )
-
-
-def verify(state, age_s, max_age_s):
-    """Pure: did the last weekly `kopia snapshot verify` pass, and recently? (ok, msg).
-
-    Same state-file idiom as restore_drill/b2_usage. The verify proves stored blobs are
-    READABLE across all snapshots (the restore drill proves one service's tree restores);
-    a failure here is detected B2 bit-rot / repo corruption — the weakest link in the
-    single offsite copy's integrity chain, and previously un-alerted.
-    """
-    if not state.get("ok"):
-        return False, "last snapshot verify FAILED: %s" % state.get("msg", "?")
-    if age_s > max_age_s:
-        return False, "last successful verify %.1fd ago (max %dd)" % (
-            age_s / 86400,
-            max_age_s / 86400,
-        )
-    return True, "verify ok %.1fd ago: %s" % (age_s / 86400, state.get("msg", ""))
-
-
-def check_verify():
-    return _check_state_file(
-        VERIFY_STATE,
-        "no verify state (verify never ran?)",
-        "verify state unparseable",
-        lambda state, age_s: verify(state, age_s, VERIFY_MAX_AGE_S),
-    )
-
-
-def content_verify(state, age_s, max_age_s):
-    """Pure: did the last quarterly deep (25%) content verify pass, and recently enough? (ok, msg).
-
-    Same state-file idiom as verify (the weekly 1% pass). This re-reads a QUARTER of every snapshot's
-    file content, so it catches a mis-purge / blob-accounting bug the 1% sample can miss; a failure is
-    detected B2 bit-rot / repo corruption on the deep sample.
-    """
-    if not state.get("ok"):
-        return False, "last deep content verify FAILED: %s" % state.get("msg", "?")
-    if age_s > max_age_s:
-        return False, "last successful content verify %.0fd ago (max %.0fd)" % (
-            age_s / 86400,
-            max_age_s / 86400,
-        )
-    return True, "content verify ok %.0fd ago: %s" % (
-        age_s / 86400,
-        state.get("msg", ""),
-    )
-
-
-def check_content_verify():
-    return _check_state_file(
-        CONTENT_VERIFY_STATE,
-        "no content-verify state (verify never ran?)",
-        "content-verify state unparseable",
-        lambda state, age_s: content_verify(state, age_s, CONTENT_VERIFY_MAX_AGE_S),
-    )
-
-
 def pi_peers(state, age_s, max_age_s):
     """Pure: did the last wg-easy Pi-peer backup pull succeed, and recently? (ok, msg).
 
-    Same state-file idiom as verify/restore_drill. The pull is the only path that carries the Pi's
-    un-rebuildable WireGuard peer keys into Kopia scope; because it never --deletes, a silently
-    failing pull leaves stale-but-present files that keep Backup Freshness green — so a FAILED or
+    Same state-file idiom as docker_user/cloudflare_drift/appsec. The pull is the only path that
+    carries the Pi's un-rebuildable WireGuard peer keys into backup scope; because it never
+    --deletes, a silently failing pull leaves stale-but-present files in place — so a FAILED or
     STALE pull is the signal that the offsite copy of those keys has quietly stopped refreshing.
     """
     if not state.get("ok"):
@@ -2259,7 +1796,7 @@ def check_disk_prune():
 def docker_user(state, age_s, max_age_s):
     """Pure: is the DOCKER-USER origin lock currently applied, per the last live-chain verify? (ok, msg).
 
-    Same state-file idiom as home_allowlist/verify. The verify cron re-reads the live iptables chain
+    Same state-file idiom as home_allowlist. The verify cron re-reads the live iptables chain
     every run, so ok=false means the terminal DROP or the RETURN allows went missing (origin reachable
     direct), and a stale timestamp means the verify cron itself stopped.
     """
@@ -2348,168 +1885,6 @@ def check_appsec():
         "no AppSec verify state (verify never ran?)",
         "AppSec verify state unparseable",
         lambda state, age_s: appsec(state, age_s, APPSEC_MAX_AGE_S),
-    )
-
-
-def b2_usage(state, age_s, max_age_s, cap_bytes, max_pct):
-    """Pure: billable B2 bytes vs the plan cap, plus probe-failure/staleness.
-
-    The threshold fires BEFORE the cap (default 85% of 10GB) — once the bucket is
-    full, B2 rejects uploads and kopia's nightly snapshot starts failing, so the
-    point is runway to prune/upgrade, not a post-mortem.
-    """
-    if not state.get("ok"):
-        return False, "B2 usage probe FAILED: %s" % state.get("msg", "?")
-    if age_s > max_age_s:
-        return False, "B2 usage data %.1fd old (max %.1fd)" % (
-            age_s / 86400,
-            max_age_s / 86400,
-        )
-    try:
-        used = float(state["bytes"])
-    except KeyError, TypeError, ValueError:
-        return False, "B2 usage state missing/invalid bytes"
-    pct = used / cap_bytes * 100
-    msg = "B2 %.2f/%.0fGB billable (%.0f%% of plan)" % (
-        used / 1e9,
-        cap_bytes / 1e9,
-        pct,
-    )
-    if pct > max_pct:
-        return False, msg + " — over %g%% threshold" % max_pct
-    return True, msg
-
-
-def check_b2_usage():
-    return _check_state_file(
-        B2_USAGE_STATE,
-        "no B2-usage state (probe never ran?)",
-        "B2-usage state unparseable",
-        lambda state, age_s: b2_usage(
-            state, age_s, B2_USAGE_MAX_AGE_S, B2_CAP_BYTES, B2_USAGE_MAX_PCT
-        ),
-    )
-
-
-def b2_trend(current, predicted, cap_bytes, horizon_d, age_s=None, max_age_s=None):
-    """Pure: project B2 billable bytes forward and decide if the cap is imminent. (ok, msg).
-
-    `current` = the gauge now; `predicted` = predict_linear(metric[window], horizon) — the
-    fitted value horizon_d days out. Either being None (gauge absent/never scraped) -> down
-    (fail-stale). `age_s` (the textfile's mtime age, None to skip the guard) -> down when older
-    than `max_age_s`: node-exporter keeps serving a frozen gauge after a failed .prom write, so
-    without this a stuck textfile reads flat -> false ok. A flat or falling trend
-    (predicted <= current) -> ok. Otherwise derive the per-day slope from the same projection:
-    `down` when the cap is reached within the horizon (predicted >= cap), naming the runway; ok
-    with the runway noted when it's further out.
-    """
-    if current is None or predicted is None:
-        return False, "B2 trend metric unavailable (%s not exported?)" % B2_TREND_METRIC
-    if age_s is not None and max_age_s is not None and age_s > max_age_s:
-        return False, (
-            "B2 trend gauge STALE: %s textfile %.1fd old (max %.1fd) — cron wrote state.json "
-            "but the .prom export is frozen, so the trend is blind"
-            % (
-                B2_TREND_METRIC,
-                age_s / 86400,
-                max_age_s / 86400,
-            )
-        )
-    cur_gb, cap_gb = current / 1e9, cap_bytes / 1e9
-    if predicted <= current:
-        return True, "B2 flat/shrinking (%.2f/%.0fGB, %.0fd projection %.2fGB)" % (
-            cur_gb,
-            cap_gb,
-            horizon_d,
-            predicted / 1e9,
-        )
-    per_day_gb = (predicted - current) / horizon_d / 1e9
-    days_to_cap = (cap_bytes - current) / ((predicted - current) / horizon_d)
-    if predicted >= cap_bytes:
-        return False, (
-            "B2 on track to hit the %.0fGB cap in ~%.0fd (now %.2fGB, +%.2fGB/day) "
-            "— prune/upgrade before snapshots fail"
-            % (cap_gb, days_to_cap, cur_gb, per_day_gb)
-        )
-    return True, "B2 %.2f/%.0fGB, +%.2fGB/day, cap ~%.0fd out (> %.0fd horizon)" % (
-        cur_gb,
-        cap_gb,
-        per_day_gb,
-        days_to_cap,
-        horizon_d,
-    )
-
-
-def check_b2_trend():
-    """Project the kopia_b2_billable_bytes gauge to warn of a filling bucket before the 85% cap.
-
-    Prom-dependent (suppressed under the Prometheus-reachability gate). The gauge is exported
-    by the daily b2-usage host cron via the node-exporter textfile collector; node-exporter
-    serves the last written value continuously, so predict_linear has a dense series even
-    between the cron's daily writes (a stalled cron reads flat — its own staleness is the
-    B2_USAGE check's job, off the state.json). The textfile-mtime guard catches the narrower
-    case where the cron runs but ONLY its .prom write fails: state.json stays fresh (B2_USAGE
-    green) while the gauge freezes here.
-    """
-    # History-depth guard (slice 3, B5). This is the ONLY check with a multi-day lookback, and
-    # remote-write moves series FORWARD without backfilling — so repointing at the cluster copy
-    # left predict_linear extrapolating 7 days from whatever had accumulated since B3. Measured at
-    # the flip: 61 samples in the cluster's 7d window against 10077 in daniel-server's, i.e. 0.6%
-    # of the data, and the two instances duly disagreed about the projection (5.87GB vs 5.14GB).
-    #
-    # A series-count comparison cannot see this — the counts of *current* series matched exactly.
-    # Depth is a separate property from presence, and only this check cares about it.
-    #
-    # Reports OK rather than DOWN on purpose: the condition is temporary and self-healing (the
-    # window fills ~7 days after B3), so paging for a week would be pure noise, and the absolute
-    # side of the same risk is already covered independently by the B2 Storage Usage check. The
-    # message says plainly that the projection is not to be trusted meanwhile.
-    samples = prom_scalar(
-        "count_over_time(%s[%s])" % (B2_TREND_METRIC, B2_TREND_WINDOW)
-    )
-    if samples is not None and samples < B2_TREND_MIN_SAMPLES:
-        return True, (
-            "B2 trend projection SUPPRESSED — only %d samples in the %s window (need %d). The "
-            "series was remote-written forward without history; this self-heals as the window "
-            "fills. Absolute usage is still covered by the B2 Storage Usage check."
-            % (int(samples), B2_TREND_WINDOW, B2_TREND_MIN_SAMPLES)
-        )
-    current = prom_scalar(B2_TREND_METRIC)
-    predicted = prom_scalar(
-        "predict_linear(%s[%s], %d)"
-        % (B2_TREND_METRIC, B2_TREND_WINDOW, int(B2_TREND_HORIZON_D * 86400))
-    )
-    mtime = prom_scalar(B2_TREND_MTIME_QUERY)
-    age_s = (time.time() - mtime) if mtime is not None else None
-    return b2_trend(
-        current, predicted, B2_CAP_BYTES, B2_TREND_HORIZON_D, age_s, B2_TREND_MAX_AGE_S
-    )
-
-
-def maintenance(state, age_s, max_age_s):
-    """Pure: is kopia FULL maintenance healthy, and the check recent? (ok, msg).
-
-    Same state-file idiom as verify/b2_usage. The host cron decides `ok` from `kopia maintenance
-    info --json` (full enabled, owner set, next full run not overdue, newest run succeeded); here
-    we add staleness. Full maintenance GCs expired blobs from B2, so a stall is the upstream CAUSE
-    the b2_usage check only catches later as a downstream symptom (and B2 headroom is thin).
-    """
-    if not state.get("ok"):
-        return False, "kopia full maintenance UNHEALTHY: %s" % state.get("msg", "?")
-    if age_s > max_age_s:
-        return False, "maintenance check %.1fd old (max %.1fd)" % (
-            age_s / 86400,
-            max_age_s / 86400,
-        )
-    return True, "maintenance ok %.1fd ago: %s" % (age_s / 86400, state.get("msg", ""))
-
-
-def check_maintenance():
-    return _check_state_file(
-        MAINTENANCE_STATE,
-        "no maintenance state (check never ran?)",
-        "maintenance state unparseable",
-        lambda state, age_s: maintenance(state, age_s, MAINTENANCE_MAX_AGE_S),
     )
 
 
@@ -3053,7 +2428,6 @@ def check_discord():
 
 
 CHECKS = [
-    ("backup", _env("KUMA_PUSH_KOPIA", ""), check_backup),
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
     ("cert", _env("KUMA_PUSH_CERT", ""), check_cert),
     ("memory", _env("KUMA_PUSH_MEM", ""), check_mem),
@@ -3076,9 +2450,6 @@ CHECKS = [
     ),
     ("gitops_alive", _env("KUMA_PUSH_GITOPS_ALIVE", ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
-    ("restore_drill", _env("KUMA_PUSH_RESTORE_DRILL", ""), check_restore_drill),
-    ("verify", _env("KUMA_PUSH_VERIFY", ""), check_verify),
-    ("content_verify", _env("KUMA_PUSH_CONTENT_VERIFY", ""), check_content_verify),
     ("pi_peers", _env("KUMA_PUSH_PI_PEERS", ""), check_pi_peers),
     ("disk_prune", _env("KUMA_PUSH_DISK_PRUNE", ""), check_disk_prune),
     ("docker_user", _env("KUMA_PUSH_DOCKER_USER", ""), check_docker_user),
@@ -3088,9 +2459,6 @@ CHECKS = [
         check_cloudflare_drift,
     ),
     ("appsec", _env("KUMA_PUSH_APPSEC", ""), check_appsec),
-    ("maintenance", _env("KUMA_PUSH_MAINTENANCE", ""), check_maintenance),
-    ("b2_usage", _env("KUMA_PUSH_B2", ""), check_b2_usage),
-    ("b2_trend", _env("KUMA_PUSH_B2_TREND", ""), check_b2_trend),
     ("scrutiny", _env("KUMA_PUSH_SCRUTINY", ""), check_scrutiny),
     ("ups", _env("KUMA_PUSH_UPS", ""), check_ups),
     ("pi_pressure", _env("KUMA_PUSH_PI", ""), check_pi_pressure),
@@ -3123,7 +2491,6 @@ PROM_DEPENDENT = frozenset(
         "cpu",
         "targets",
         "traefik5xx",
-        "b2_trend",
         "ups",  # queries HA's Prometheus-scraped UPS battery sensors
         "promtail_dropped",  # increase(promtail_dropped_entries_total) instant query
         # Reads the SENDER's own remote-write gauges, which live in THIS Prometheus. If it is
@@ -3134,16 +2501,16 @@ PROM_DEPENDENT = frozenset(
 )
 
 # One level BELOW the Prometheus gate: a single exporter down while Prometheus is UP fails every
-# check reading its metrics at once. node-exporter death false-pages Root Disk + Memory + B2 Usage
-# Trend (node_* / the kopia_b2 textfile gauge go unavailable -> down) on top of the legitimate Scrape
-# Targets page; cadvisor death makes restarts/oom/cpu read an empty vector -> silently green. Scrape
-# Targets already names the dead `up{job=...}==0`, so run_once suppresses each dead exporter's
-# dependents (pushes `up` with a skip msg, heartbeat kept alive) and lets Scrape Targets be the single
-# page — the same one-root-cause-one-alert shape as the Prometheus gate, keyed by the Prometheus `job`
-# label. Guarded by a test against CHECKS. (`cert`/`traefik5xx` read Traefik's own metrics, not these
+# check reading its metrics at once. node-exporter death false-pages Root Disk + Memory (node_* go
+# unavailable -> down) on top of the legitimate Scrape Targets page; cadvisor death makes
+# restarts/oom/cpu read an empty vector -> silently green. Scrape Targets already names the dead
+# `up{job=...}==0`, so run_once suppresses each dead exporter's dependents (pushes `up` with a skip
+# msg, heartbeat kept alive) and lets Scrape Targets be the single page — the same
+# one-root-cause-one-alert shape as the Prometheus gate, keyed by the Prometheus `job` label.
+# Guarded by a test against CHECKS. (`cert`/`traefik5xx` read Traefik's own metrics, not these
 # two exporters, so they're not mapped here.)
 EXPORTER_DEPENDENT = {
-    "node": frozenset({"disk", "memory", "b2_trend"}),
+    "node": frozenset({"disk", "memory"}),
     "cadvisor": frozenset({"restarts", "oom", "cpu"}),
 }
 
@@ -3156,31 +2523,16 @@ EXPORTER_DEPENDENT = {
 # surfaces (it evaluates whenever Loki is reachable). Guarded by a test against CHECKS.
 LOKI_DEPENDENT = frozenset({"loki_ingestion"})
 
-# B2-reachability gate — the third peer of the Prometheus and Loki gates, and the fix for G2/G4 of
-# docs/b2-transaction-cap-monitoring-gaps.md. All five describe the state of the B2-backed backup
-# plane and none of them can see B2 directly. The first four read it from state files written by
-# periodic crons, so they report the LAST SUCCESSFUL RUN rather than current health: on 2026-08-02
-# they read 4.7 d / seeded / 0.7 d / 60% — all green — through a nine-and-a-half-hour outage in
-# which B2 refused every request, because their staleness thresholds (10 d / 100 d / 2.5 d / 2.5 d)
-# are far longer than the outage. b2_trend is the fifth and fails the same way from the other
-# direction: it projects a Prometheus gauge the daily cron stopped updating, and a frozen gauge
-# reads FLAT, which is the healthiest possible trend. Under this gate all five are suppressed
-# instead (pushed `up` with a skip msg, heartbeat kept alive), so they stop claiming health for a
-# thing they cannot currently see — and stop actively contradicting the one alert that was right.
-#
-# `backup` is deliberately NOT here, for two independent reasons. It is in STARTUP_GRACE, which must
-# stay disjoint from every skip set (a graced check has to reach the eval path each cycle for its
-# streak to advance) — so including it would break that invariant. And it is the one monitor that
-# behaved correctly during the incident: it polls Kopia live and paged. Suppressing it would delete
-# the only true signal.
-#
-# The consequence, stated rather than left to be rediscovered: a cap breach pages TWICE — once as
-# `backup check error: timed out` and once as B2 Reachable naming transaction_cap_exceeded. That
-# departs from the one-root-cause-one-page shape the other two gates have, and it is the right
-# trade here: the second page is the one that says what to do about the first.
-B2_DEPENDENT = frozenset(
-    {"verify", "content_verify", "maintenance", "b2_usage", "b2_trend"}
-)
+# B2-reachability gate — the third peer of the Prometheus and Loki gates (see check_b2_reachable /
+# b2_reachable in run_once), and the fix for G2/G4 of docs/b2-transaction-cap-monitoring-gaps.md.
+# It used to gate five kopia-era checks that read B2 health from state files written by periodic
+# crons, so they reported the LAST SUCCESSFUL RUN rather than current health: on 2026-08-02 they
+# read green through a nine-and-a-half-hour outage in which B2 refused every request. Those checks
+# were removed 2026-08-10 — kopia is retired, backup moved to Longhorn (see
+# docs/k3s-migration/backup-consolidation-longhorn.md) — leaving this empty. b2_reachable itself
+# stays: Longhorn still needs B2. Kept as infrastructure for any future check that reads B2-backed
+# state via a cron/state-file rather than querying B2 live.
+B2_DEPENDENT = frozenset()
 
 # Checks that read the CLUSTER Prometheus (daniel-box) rather than the Docker one. Its own gate,
 # not an arm of PROM_DEPENDENT, because they are two instances on two hosts reached by two paths —
@@ -3196,7 +2548,7 @@ B2_DEPENDENT = frozenset(
 # a blind monitor green.
 CLUSTER_DEPENDENT = frozenset({"k8s_workloads", "cluster_targets"})
 
-# Reach-out checks that poll a live app dependency (kopia/n8n/sonarr/radarr/prowlarr/scrutiny/the Pi
+# Reach-out checks that poll a live app dependency (n8n/sonarr/radarr/prowlarr/scrutiny/the Pi
 # glances) with NO reachability gate above them and NO per-check hysteresis of their own — unlike
 # check_ha_heartbeat/check_discord, whose HA_CONSECUTIVE/DISCORD_CONSECUTIVE grace rides out exactly
 # this. On the bridge's first cycle after the weekly host reboot those dependencies are still
@@ -3209,7 +2561,7 @@ CLUSTER_DEPENDENT = frozenset({"k8s_workloads", "cluster_targets"})
 # that every un-gated _get_json reach-out check is in here (prowlarr_indexers/scrutiny were added
 # 2026-07-14 after they were found missing — the weekly-reboot flap's original set omitted them).
 STARTUP_GRACE = frozenset(
-    {"backup", "n8n", "arr_queue", "pi_pressure", "prowlarr_indexers", "scrutiny"}
+    {"n8n", "arr_queue", "pi_pressure", "prowlarr_indexers", "scrutiny"}
 )
 
 _grace_streaks = {}
@@ -3311,11 +2663,13 @@ def run_once():
     log("OK  " if loki_ok else "DOWN", "loki_reachable", "-", loki_msg)
     push(_env("KUMA_PUSH_LOKI_REACHABLE", ""), loki_ok, loki_msg)
 
-    # B2-reachability gate (peer of the two above): the B2-backed backup checks all report the last
-    # successful cron run, so without this they stay green through a B2 outage — the 2026-08-02
-    # transaction-cap incident. The probe is throttled inside b2_reachable (it must not spend the
-    # transaction budget it is watching), but the cached verdict is pushed every cycle so this
-    # monitor's own heartbeat stays alive.
+    # B2-reachability gate (peer of the two above): B2 caps TRANSACTIONS separately from storage
+    # bytes, and the kopia-era state-file checks this used to gate all reported their last
+    # successful cron run rather than current B2 health — the 2026-08-02 transaction-cap incident.
+    # Those checks are gone (backup moved to Longhorn), but b2_reachable stays: Longhorn still
+    # needs B2. The probe is throttled inside b2_reachable (it must not spend the transaction
+    # budget it is watching), but the cached verdict is pushed every cycle so this monitor's own
+    # heartbeat stays alive.
     b2_ok, b2_msg = _evaluate("b2_reachable", check_b2_reachable)
     log("OK  " if b2_ok else "DOWN", "b2_reachable", "-", b2_msg)
     push(_env("KUMA_PUSH_B2_REACHABLE", ""), b2_ok, b2_msg)
