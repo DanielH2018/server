@@ -84,3 +84,30 @@ containers_list entry stays for the spoke) → Phase F removes the rest. The
   `COLLECTOR_API_ENDPOINT` URL — but the 302-on-miss shape is worth one probe).
 - Whether influxdb 2.9's first-run setup skips cleanly on a seeded volume (it keys on
   `influxd.bolt` existing — expected yes, same as the Docker deploy's re-runs).
+
+## Execution record (2026-08-10, all five steps in one window)
+
+Commits 78fea27b → 7d47740a. All three open questions resolved, two the hard way:
+
+- **/run/secrets, second occurrence:** the web + influxdb manifests CrashLooped on the
+  ServiceAccount-token-shadow trap — the existing guard only rendered
+  `deployment.yaml.j2`, so differently-named workload templates slipped it. Escalated per
+  the review-hygiene ladder: a textual scan over EVERY k8s template now bans the class
+  (`test_no_template_names_a_mount_under_run_secrets`), and cloudflare-ddns — which only
+  worked because its scratch image lacks the `/var/run → /run` symlink — moved to the
+  `/etc/<app>-secrets` convention too.
+- **Device access needs `privileged: true`** (SC3 fallback): the Docker cap set +
+  CharDevice hostPath still hits the k8s device cgroup — smartctl detected `/dev/nvme0`
+  but the open failed (exit 2). No per-device grant exists short of a device plugin.
+- **Privileged pods see the host's /dev**, where Longhorn's iSCSI fleet lives: the scan
+  published 37 bogus `0x600…` records. `allow_listed_devices: [/dev/nvme0]` is the key
+  that restricts the scan (`devices:` only *customizes* detected entries — tried and
+  failed first); the bogus records were purged via the API.
+- influxdb's first-run setup skipped cleanly on the seeded volume; the HTTPS bypass
+  endpoint needed no accommodation (Go client, no AAAA/grpc trap).
+
+Verified end-state: `/api/summary` shows exactly two devices — SHPP41-500GM
+(daniel-server, via the re-pointed Docker spoke over HTTPS) and CT1000E100SSD8
+(daniel-box, via the DaemonSet — first-ever SMART coverage) — both fresh within minutes;
+monitor-bridge `scrutiny` check green ("2 device(s) reported within 26h; SMART health
+ok"); `k3s Scrutiny` Kuma tile probing `/api/health` through the LAN bypass.
