@@ -1,0 +1,14 @@
+{% from 'ingressroute.yml.j2' import monitoring_route with context %}
+---
+{# monitoring_route, not ingressroute(): LogQL clients (promtail's pusher, probe.py,
+   terraria-stats, monitor-bridge, homelab-mcp) can't 302-dance through Authelia — the
+   ClientIP guard is the gate, as on every monitoring route. daniel-server plus the pod
+   CIDR (the cluster Kuma prober and any in-cluster reader). LAN-only by construction. #}
+{{ monitoring_route(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    '/',
+    extra_client_cidrs=['10.42.0.0/16']
+  )
+}}

@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki-homelab
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: loki-homelab
+  ports:
+    - port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}

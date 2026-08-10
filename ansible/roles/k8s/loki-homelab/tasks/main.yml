@@ -1,0 +1,19 @@
+---
+# Slice-7 Phase D.2 (2026-08-10): the homelab log store, SEPARATE from the claude-otel Loki
+# by decision KL1 (slice-7-phase-d-loki.md) — merging would give the verbatim-prompts store
+# the LAN route it deliberately lacks. Ships with the KL3 pod-log DaemonSet, which is what
+# un-darkens terraria-stats and restores log-based checks for cluster services.
+
+- name: Deploy loki-homelab to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: loki-homelab
+    manifests_rollout: loki-homelab
+    manifests_files:
+      - configmap.yaml
+      - pvc.yaml
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
+      - promtail-daemonset.yaml

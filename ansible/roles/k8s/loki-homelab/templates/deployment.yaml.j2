@@ -1,0 +1,65 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki-homelab
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # RWO PVC on single-replica Longhorn — a rolling update deadlocks on the volume.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: loki-homelab
+  template:
+    metadata:
+      labels:
+        app: loki-homelab
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: loki
+          image: {{ loki_homelab_image }}
+          args: ["-config.file=/etc/loki/loki.yaml"]
+          ports:
+            - name: http
+              containerPort: 3100
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki
+            - name: data
+              mountPath: /loki
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3100
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 3100
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ loki_homelab_cpu_limit }}"
+              memory: {{ loki_homelab_mem_limit }}
+            requests:
+              cpu: "{{ loki_homelab_cpu_request }}"
+              memory: {{ loki_homelab_mem_request }}
+      volumes:
+        - name: config
+          configMap:
+            name: loki-homelab-config
+            items:
+              - key: loki.yaml
+                path: loki.yaml
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ loki_homelab_claim }}

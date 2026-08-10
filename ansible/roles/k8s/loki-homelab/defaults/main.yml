@@ -1,0 +1,19 @@
+---
+# Pinned like the claude-otel Loki (Renovate-tracked); the Docker copy ran :latest under
+# Watchtower, which retires with it.
+loki_homelab_image: grafana/loki:3.3.0
+loki_homelab_promtail_image: grafana/promtail:3.3.0
+
+# 1.1 G live in the Docker named volume at planning. `longhorn-nobackup` on purpose — same
+# posture as the Docker volume's deliberate kopia exclusion: logs are bulky, rotating, and
+# reconstructible in spirit; the 31-day retention is the real bound.
+loki_homelab_claim: loki-homelab-data
+loki_homelab_size: 5Gi
+loki_homelab_storage_class: longhorn-nobackup
+
+loki_homelab_retention: 744h
+
+loki_homelab_cpu_limit: "1"
+loki_homelab_mem_limit: 1024Mi
+loki_homelab_cpu_request: "100m"
+loki_homelab_mem_request: 256Mi

@@ -1,0 +1,13 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ loki_homelab_claim }}
+  namespace: {{ k8s_namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ loki_homelab_storage_class }}
+  resources:
+    requests:
+      storage: {{ loki_homelab_size }}

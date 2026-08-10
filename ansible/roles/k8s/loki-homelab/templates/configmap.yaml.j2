@@ -1,0 +1,101 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-homelab-config
+  namespace: {{ k8s_namespace }}
+data:
+  loki.yaml: |
+    auth_enabled: false
+    server:
+      http_listen_port: 3100
+      grpc_listen_port: 9096
+      log_level: warn
+    common:
+      instance_addr: 127.0.0.1
+      path_prefix: /loki
+      storage:
+        filesystem:
+          chunks_directory: /loki/chunks
+          rules_directory: /loki/rules
+      replication_factor: 1
+      ring:
+        kvstore:
+          store: inmemory
+    schema_config:
+      configs:
+        - from: 2024-01-01
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+    limits_config:
+      retention_period: {{ loki_homelab_retention }}
+      # The Docker copy's guards, carried over verbatim: promtail re-reading from scratch
+      # after a lost positions file once blew the default ingest limit.
+      max_global_streams_per_user: 5000
+      ingestion_rate_mb: 50
+      per_stream_rate_limit: 50MB
+      reject_old_samples: false
+    compactor:
+      working_directory: /loki/compactor
+      # Without retention_enabled the retention_period above is inert and the volume grows
+      # without bound; delete_request_store is required by Loki 3.x with it on.
+      retention_enabled: true
+      retention_delete_delay: 2h
+      delete_request_store: filesystem
+    ruler:
+      storage:
+        type: local
+        local:
+          directory: /loki/rules
+  promtail.yaml: |
+    server:
+      http_listen_port: 9080
+    positions:
+      filename: /positions/positions.yaml
+    clients:
+      - url: http://loki-homelab:3100/loki/api/v1/push
+    scrape_configs:
+      # Cluster pod logs (KL3) — the stream that un-darkens terraria-stats. `container=`
+      # matches the Docker promtail's label contract; `job=k8s` keeps the sources tellable
+      # apart; `machine=` mirrors the prometheus origin convention.
+      - job_name: k8s-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: __host__
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - target_label: job
+            replacement: k8s
+          - target_label: machine
+            replacement: daniel-box
+          - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+            separator: /
+            target_label: __path__
+            replacement: /var/log/pods/*$1/*.log
+      # daniel-box host logs — NEW coverage (nothing shipped this host's files before):
+      # the operator's "both servers, full logs" bar, held in the strong sense. Same job
+      # labels as the daniel-server tails so monitor-bridge's freshness arm sees them.
+      - job_name: node-syslog
+        static_configs:
+          - targets: [localhost]
+            labels:
+              job: syslog
+              machine: daniel-box
+              __path__: /var/log/syslog
+      - job_name: node-authlog
+        static_configs:
+          - targets: [localhost]
+            labels:
+              job: authlog
+              machine: daniel-box
+              __path__: /var/log/auth.log
