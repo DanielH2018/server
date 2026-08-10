@@ -15,10 +15,6 @@ spec:
         app: cloudflare-ddns-proxied
     spec:
       enableServiceLinks: false
-      hostAliases:
-        - ip: "{{ cloudflare_ddns_k8s_kuma_ip }}"
-          hostnames:
-            - "{{ cloudflare_ddns_k8s_kuma_host }}"
       containers:
         - name: cloudflare-ddns
           image: {{ cloudflare_ddns_k8s_image }}
@@ -39,7 +35,11 @@ spec:
               value: none
             # Dead-man's-switch: ping a Kuma push monitor after each successful update.
             - name: UPTIMEKUMA
-              value: "https://{{ cloudflare_ddns_k8s_kuma_host }}/api/push/{{ cloudflare_ddns_proxied_push_token }}"
+              # In-cluster Service URL — Kuma is one namespace hop away, so the heartbeat
+              # neither leaves the cluster nor depends on edge routing. The old hostAliases
+              # pin to daniel-server died with the slice-7 bridge teardown (the Docker
+              # edge's forward-bridge router was the path it relied on).
+              value: "http://uptime-kuma:3001/api/push/{{ cloudflare_ddns_proxied_push_token }}"
           volumeMounts:
             # /etc, not /run/secrets — see deployment-direct's note (convention guard).
             - name: token

@@ -15,10 +15,6 @@ spec:
         app: cloudflare-ddns-direct
     spec:
       enableServiceLinks: false
-      hostAliases:
-        - ip: "{{ cloudflare_ddns_k8s_kuma_ip }}"
-          hostnames:
-            - "{{ cloudflare_ddns_k8s_kuma_host }}"
       containers:
         - name: cloudflare-ddns
           image: {{ cloudflare_ddns_k8s_image }}
@@ -41,7 +37,11 @@ spec:
             - name: IP6_PROVIDER
               value: none
             - name: UPTIMEKUMA
-              value: "https://{{ cloudflare_ddns_k8s_kuma_host }}/api/push/{{ cloudflare_ddns_direct_push_token }}"
+              # In-cluster Service URL — Kuma is one namespace hop away, so the heartbeat
+              # neither leaves the cluster nor depends on edge routing. The old hostAliases
+              # pin to daniel-server died with the slice-7 bridge teardown (the Docker
+              # edge's forward-bridge router was the path it relied on).
+              value: "http://uptime-kuma:3001/api/push/{{ cloudflare_ddns_direct_push_token }}"
           volumeMounts:
             # /etc, not /run/secrets: this image (scratch-based) lacks the /var/run
             # symlink so the old path happened to work, but the convention guard bans the
