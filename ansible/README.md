@@ -233,8 +233,11 @@ not a hand-run `cscli bouncers add`.
 
 > **Adding a new service**, **secrets**, and **deploy flow** are documented once in the
 > repo-root [`CLAUDE.md`](../CLAUDE.md) and [`README.md`](../README.md) and the
-> `new-container` skill — not duplicated here. **Backups** are handled by the Kopia role
-> (snapshots the bind-mounted `containers/` data), not the legacy Duplicati setup.
+> `new-container` skill — not duplicated here. **Backups** are Longhorn's since the
+> 2026-08-10 consolidation (nightly PVC backups to B2 —
+> `docs/k3s-migration/backup-consolidation-longhorn.md`); kopia is retired and Docker-tier
+> bind mounts are no longer backed up (the remaining Docker services hold regenerable or
+> migrating state only).
 
 Router port-forwarding, Cloudflare DNS and the other off-box prerequisites are in §9.
 
@@ -256,8 +259,9 @@ reports SKIP. Run it after `deploy.yml` and again after working through the list
 
 1. **Create the Uptime-Kuma admin** at `https://uptime-kuma.<domain>` (first-run wizard). AutoKuma
    **cannot** create it, and until it exists AutoKuma provisions **zero** monitors — so nothing
-   in the fleet is watched and no alert can fire. Kuma's own DB is deliberately excluded from
-   Kopia backups, so a rebuilt host always needs this again.
+   in the fleet is watched and no alert can fire. Kuma runs in the cluster since Phase D
+   (2026-08-10) with its DB on a backed-up Longhorn PVC — but a from-scratch rebuild still
+   needs this wizard once.
 2. **Re-mint `prometheus_kuma_api_key`** in Kuma (Settings → API Keys) and `sops set` it. Kuma
    issues keys into that same unbacked-up DB, so the value in `secrets.yml` is stale on any
    fresh Kuma and the `uptime-kuma` scrape target sits at 401/DOWN.
@@ -293,10 +297,12 @@ admin user on the next deploy with no UI step.
 External prerequisites, none of them IaC-managed: the Cloudflare DNS records (including the
 hand-created grey-cloud `*.local.<domain>` wildcard that all internal routing depends on — see
 [`roles/containers/cloudflare-ddns/CLAUDE.md`](roles/containers/cloudflare-ddns/CLAUDE.md)),
-router port-forwards for Traefik and WireGuard, a Backblaze B2 bucket for Kopia, and the
-off-box UptimeRobot dead-man's-switch. Rebuilding rather than bringing up a new host? Follow
-[`docs/kopia-disaster-recovery.md`](../docs/kopia-disaster-recovery.md) instead — it covers
-restore ordering this section doesn't.
+router port-forwards for Traefik and WireGuard, a Backblaze B2 bucket for the Longhorn
+backup plane (kopia retired 2026-08-10), and the off-box UptimeRobot dead-man's-switch.
+Rebuilding rather than bringing up a new host? Workload state restores from Longhorn's B2
+backups (per-PVC restore via the Longhorn UI); `docs/kopia-disaster-recovery.md` describes
+the RETIRED plane and survives only as history — a Longhorn-native DR runbook is Phase E
+backlog.
 
 ## Not bring-up, moved out of this file
 

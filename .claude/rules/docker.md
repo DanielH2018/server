@@ -12,9 +12,11 @@ the path-specific detail not spelled out there:
 
 - Set `restart: unless-stopped` on every service.
 - Persistent storage = bind mounts under a well-known `/data` path; **no anonymous volumes** — bind
-  mounts under `containers/` are what Kopia backs up.
-  - **Documented exception — named volumes** are the deliberate pattern for bulky, regenerable state
-    that should stay OUT of Kopia's scope: `prometheus_data` (TSDB), `loki` (logs), `feed_cache`
+  mounts under `containers/` keep state inspectable and portable. (Kopia retired 2026-08-10;
+  the backup plane is Longhorn-on-k8s, so Docker-tier state is deliberately unbacked-up —
+  the services still on Docker hold regenerable or migrating state only.)
+  - **Documented exception — named volumes** are the deliberate pattern for bulky, regenerable state:
+    `prometheus_data` (TSDB), `loki` (logs), `feed_cache`
     (freshrss nginx), `karakeep_meili` (rebuildable search index), `crowdsec-db` (shared
     traefik+crowdsec), `promtail_positions` (promtail's log-read cursor, regenerable). Don't flag
     these; justify any new named volume with a comment.

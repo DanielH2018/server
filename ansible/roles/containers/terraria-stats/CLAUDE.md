@@ -16,8 +16,12 @@ playtime/session/presence metrics for Grafana. See repo-root `CLAUDE.md`.
 - **Deaths are NOT tracked** — the vanilla console only emits `has joined`/`has left`
   (verified Phase 0, 2026-06-15); deaths/chat never reach it. Deaths would require a
   TShock+SSC migration (rejected). Do not re-add a death metric without that.
-- `files/stats.py` is a **static** stdlib script (env-driven). SQLite (`./data/stats.db`,
-  Kopia-backed) is the durable source of truth; Prometheus/Grafana are the display layer.
+- `files/stats.py` is a **static** stdlib script (env-driven). SQLite (`./data/stats.db`)
+  is the durable source of truth; Prometheus/Grafana are the display layer. (No longer
+  Kopia-backed — kopia retired 2026-08-10; the DB migrates to a Longhorn PVC when this
+  sidecar follows terraria to the cluster.) Since Phase D.2 it reads the game console from
+  the CLUSTER loki-homelab (`LOKI_URL` → the -k8s route) — the brief dark window after
+  terraria's own move ended there.
 - Metrics: `terraria_player_playtime_seconds_total{player}` (incl. live session),
   `terraria_player_sessions_total{player}`, `terraria_players_online`,
   `terraria_stats_last_event_timestamp`, `terraria_stats_unmatched_player_lines_total`.

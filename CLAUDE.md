@@ -101,7 +101,7 @@ read-only commands to fit it. Anything that writes or executes still prompts —
   `lsb_release`, `sensors`, `mailq`, `crontab -l` (the write forms — `dpkg -i`,
   `apt install`, `crontab -r`, `sensors -s`, … — still prompt)
 - Those same read-only commands run over `ssh daniel-server`/`ssh daniel-pi` — the remote
-  command is classified exactly like a local one, so `ssh daniel-server docker logs kopia
+  command is classified exactly like a local one, so `ssh daniel-server docker logs traefik
   --since 24h 2>&1 | tail -20` goes through. Connection flags (`-i`, `-p`, `-l`, `-q`, `-o`
   with a connection-only key) are fine; forwarding/proxying (`-L`/`-R`/`-D`/`-A`/`-F`,
   `-o ProxyCommand=…`), a second hop, any other host, and remote reads of secret paths or
@@ -196,8 +196,10 @@ Hand-running an auto-approved *write* verb creates drift from the Ansible source
 - **permission auditing** — no longer lives here. A `log-permission` hook used to count tool calls
   and prompts into `.claude/logs/permissions.json` for `audit-permissions.py` to read; Claude Code's
   own OTEL `tool_decision` events carry that now, and name the deciding authority (`config` rule,
-  `hook`, `user`) instead of leaving it inferred. This host exports to the `otel-collector`
-  container, which ships events to Loki. The reader is the `claude-permission-audit` plugin
+  `hook`, `user`) instead of leaving it inferred. Both hosts' Claude Code exports OTLP to
+  `localhost:4317`; since D7 (2026-08-10) everything lands in the cluster claude-otel stack
+  (daniel-server's Docker `otel-collector` is a pure forwarder into it). The reader is the
+  `claude-permission-audit` plugin
   (`/audit-permissions`), installed globally rather than vendored per-repo.
 - **session-health** (SessionStart) — on opening a session here, prints a banner of any unhealthy/
   restarting containers + down Prometheus targets (silent when all-green; read-only, timeout-bounded).
@@ -281,7 +283,7 @@ uv run pytest scripts         # just one suite
   `validate-compose-templates` hooks call `uv run`, so there's no duplicated dependency list.
   **uv must be on `PATH` for `prek run`** (CI installs it via `astral-sh/setup-uv`).
 - **Suites:** `ansible/tests/` (toposort deploy-ordering filters),
-  `ansible/roles/containers/monitor-bridge/files/` (Kopia/Prometheus check logic),
+  `ansible/roles/containers/monitor-bridge/files/` (B2/Prometheus/Loki check logic),
   `.claude/hooks/` (read-only Bash classifier), `scripts/` (image-diff parser).
 - **Test-placement gotcha:** pytest tests must NOT live under `ansible/filter_plugins/` —
   Ansible's plugin loader imports every `.py` there at deploy time and would choke on the

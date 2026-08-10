@@ -15,7 +15,8 @@ Prometheus plus its exporters; the scrape source for Grafana. See repo-root `CLA
   data behind the M1 resource-limit tuning.
 - Scrape targets in `templates/prometheus.yml.j2`.
 - **Retention is explicit** (compose `command:`): 90d, with a 10GB size backstop. The TSDB
-  lives in the `prometheus_data` named volume — deliberately outside Kopia's backup scope.
+  lives in the `prometheus_data` named volume — deliberately unbacked-up (regenerable TSDB;
+  since 2026-08-10 every series also remote-writes to the cluster prometheus).
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` · Scrape cfg: `templates/prometheus.yml.j2`

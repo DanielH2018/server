@@ -118,12 +118,13 @@ The failure this prevents: `sops set` first, redeploy, discover the data is now 
 the only value that could open it has already been overwritten. The two procedures below are concrete
 instances of this discipline:
 
-- **`kopia_password`** — the backup repository password. Change it *through Kopia* or you
-  can no longer open the repo (all backups become unreadable):
-  ```bash
-  docker exec -it kopia kopia repository change-password
-  ```
-  then `sops set` the new value and redeploy kopia. Verify a `kopia snapshot list` works.
+- **`kopia_password`** — RETIRING, not rotatable. kopia retired 2026-08-10 (backup
+  consolidation — `docs/k3s-migration/backup-consolidation-longhorn.md` BL2/BL3): the
+  container and role are gone, so the old `docker exec … change-password` procedure has
+  nothing to run against. The secret stays pinned ONLY until the kopia B2 repo is deleted
+  after the first verified Longhorn-only nightly (operator decision, no retention
+  window); it and its registry entry are removed with the repo. Never rotate it in the
+  interim — it is the only key that opens the residual repo.
 - **`authelia_storage`** — the Authelia DB encryption key. Use Authelia's migration, never a
   raw swap (a raw swap makes the existing SQLite DB undecryptable → TOTP/sessions lost):
   ```bash
