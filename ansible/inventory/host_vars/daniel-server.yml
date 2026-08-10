@@ -190,9 +190,10 @@ containers_list:
   - name: prometheus
     port: 9090
     use_authelia: true
+    # `apps` dropped 2026-08-10: it existed to reach home-assistant:8123, and that scrape now
+    # goes to the cluster HA over the -k8s name (HA moved 2026-08-09).
     networks:
       - monitoring
-      - apps  # reach home-assistant:8123 for the /api/prometheus scrape (mirrors monitor-bridge)
   - name: grafana
     port: 3000
     use_authelia: true

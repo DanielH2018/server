@@ -349,13 +349,19 @@ services:
       - PI_DISK_MAX_PCT=90
       - KUMA_PUSH_PI={{ monitor_bridge_pi_push_token }}
       # HA automation-engine heartbeat: poll input_datetime.ha_heartbeat (stamped every minute by an
-      # HA time_pattern automation) over the `apps` net with a long-lived token; `down` when it's
-      # stale -> a wedged-but-running HA (HTTP :8123 up, scheduler stuck) the container healthcheck
-      # can't see. Empty HA_URL/HA_TOKEN = disabled (stays up). 300s = 5 missed 1-min beats.
+      # HA time_pattern automation) with a long-lived token; `down` when it's stale -> a
+      # wedged-but-running HA (HTTP :8123 up, scheduler stuck) the liveness probe can't see.
+      # Empty HA_URL/HA_TOKEN = disabled (stays up). 300s = 5 missed 1-min beats.
       # HA_CONSECUTIVE=2: hysteresis (like CPU_CONSECUTIVE) so a planned redeploy — API
       # unreachable ~120s, then the scheduler a beat behind — doesn't false-page; only 2 straight
       # down cycles (~one INTERVAL of continuous badness) go `down`. A real wedge still pages.
-      - HA_URL=http://home-assistant:8123
+      #
+      # Re-pointed 2026-08-10: HA moved to k3s on 2026-08-09 (slice 5, B3) and the old
+      # container-to-container `http://home-assistant:8123` name stopped resolving — this check
+      # sat DOWN for ~80 cycles before the slice-7 shrink survey caught it. The `-k8s` name, NOT
+      # the bridged one, for the same-bridge hairpin reason as N8N_URL above. No Authelia on
+      # HA's route by design; the token is still the gate.
+      - HA_URL=https://home-assistant{{ k8s_hostname_suffix }}.local.{{ domain }}
       # HA_TOKEN is a full-access HA long-lived token (unscoped by design). File-mounted (below),
       # NOT inline, so it stays out of the container Env the read-only docker-proxy exposes to every
       # monitoring-net neighbor (2026-07-15 review H2). check.py reads HA_TOKEN_FILE.

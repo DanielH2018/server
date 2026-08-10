@@ -222,25 +222,12 @@ A tiny sidecar that turns Prometheus metrics and Kopia backup state into Uptime 
     as image churn grows. A disk still full of real data after a clean prune is Root Disk's alert,
     not this one — single-purpose monitors, no double-paging. Same state-file idiom as Backup
     Verify / WG Pi Peer Backup; pure `disk_prune()` is unit-tested.)
-  - **Fake Remux Scan** (reads `/fake-remux/state.json`, written daily by the **autofix-bridge**
-    role's `fake_remux_scan.py` host cron — `down` on a scan that couldn't run (Sonarr unreachable),
-    a mass-match blast-valve hold (>`MAX_PER_SCAN` new fakes = systemic), or >26 h staleness (a missed
-    daily run), a missing/corrupt state file included. That cron ffprobes every Remux-quality file
-    (via `docker exec jellyfin`) and detects re-encodes mislabeled as remuxes — long GOP or a consumer
-    re-encoder ENCODER tag — the post-import backstop the sidecar can't be (ffprobe needs a binary the
-    zero-privilege container lacks). It only DETECTS: each new fake is seeded into the ledger and the
-    scan returns `ok` (seeded N / library clean) — unresolved fakes surface on **Fake Remux Replace**'s
-    `held` state (the reconciler owns replacement + hold), not here. Same state-file idiom; pure
-    `fake_remux()` is unit-tested. `FAKE_REMUX_MAX_AGE_H` tunes staleness.)
-  - **Fake Remux Replace** (reads `/fake-remux/replace_state.json` — same `/fake-remux` mount as
-    the scan above, written every 20 min by the **autofix-bridge** role's `fake_remux_replace.py`
-    host cron — `down` while any ledger entry is `held` (a stalled download, a failed re-verify, or
-    no acceptable candidate found — kept `down` until an operator resolves it, persistent by design
-    like Fake Remux Scan/the *arr queue), or >1.2 h staleness (a missed cron run). That cron closes
-    the loop the scan opens: it searches Sonarr for a replacement, grabs it, waits for the download,
-    ffprobes it the same way the scan does, and only then deletes the fake and lets Sonarr import the
-    verified genuine file. Same state-file idiom; pure `fake_remux_replace()` is unit-tested.
-    `FAKE_REMUX_REPLACE_MAX_AGE_H` tunes staleness.)
+  - **Fake Remux Scan / Fake Remux Replace** — no longer bridge checks. The detector +
+    reconciler crons moved to daniel-box with the media stack (2026-08-08, slice 4 B7c;
+    `roles/setup/fake_remux`), and their Kuma pushes go directly from that host via
+    `state_push.py` — same tokens, so the monitors and their history survived the move. The
+    label declarations live on the uptime-kuma compose now. Nothing in `check.py` references
+    fake-remux anymore.
   - **Backup Maintenance** (reads `/maintenance/state.json`, written daily by the kopia role's
     `kopia-maintenance` host cron from `kopia maintenance info --json` — `down` on a
     disabled/overdue/failed full-maintenance cycle, >2.5 d staleness, or a missing/corrupt state

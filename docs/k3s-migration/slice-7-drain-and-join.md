@@ -129,6 +129,21 @@ cluster Loki), monitor-bridge and autofix-bridge (their check targets are mostly
 services already; what remains Docker-side shrinks to host checks), healthchecks-style
 verification per service as in slices 2-5.
 
+**Executed so far:** bento-pdf and ical-proxy 2026-08-10 (`6baaf482`, `a762e35c`).
+code-server 2026-08-10 (`c486f05b`) — ported WITHOUT its docker plumbing (operator
+decision): no DOCKER_HOST, in-IDE docker CLI and devcontainers gone,
+docker-proxy-codeserver + the `codeserver` net dissolved (`has_code_server: false`).
+daniel-server: 20 → 19.
+
+**Homepage widget inventory (the open question below, resolved 2026-08-10):** three
+`server: my-docker` docker-status pairs remain — uptime-kuma, pihole, peanut — via
+`docker-proxy:2375`, plus two widget URLs on Docker DNS names (`http://uptime-kuma:3001`,
+`http://pihole:80`). All other targets already point at cluster names/VIPs. Those three
+stay Docker-side until Phase D (Kuma), the Pi-hole query-log flatline, and the D6 residual
+set (peanut) — so homepage ports AFTER the Phase D Kuma move, not before: doing it now
+would drop the status dots AND leave widget APIs pointing through Authelia-gated bridge
+names they cannot authenticate to, then need re-pointing again anyway.
+
 ### D — Monitoring consolidation (the long pole)
 
 Per D3/D4, in strangler order: stand up cluster-side replacements → dual-run → repoint

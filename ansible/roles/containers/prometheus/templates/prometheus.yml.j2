@@ -142,12 +142,19 @@ scrape_configs:
     static_configs:
     - targets: ["terraria-stats:9420"]
 
+  # Re-pointed 2026-08-10: HA moved to k3s on 2026-08-09 (slice 5, B3) and the Docker DNS name
+  # stopped resolving — this target sat down (and check_ups went green-but-blind with it, its
+  # hass_* source gone) until the slice-7 shrink survey caught it. The `-k8s` name resolves via
+  # Pi-hole to the cluster VIP; the bridged name would hairpin into this host's own bridge and
+  # time out (the monitor-bridge N8N_URL lesson). HA's route carries no Authelia by design —
+  # the bearer token is still the gate.
   - job_name: "home-assistant"
     scrape_interval: 1m
+    scheme: https
     metrics_path: /api/prometheus
     authorization:
       credentials: "{{ prometheus_ha_token }}"
     static_configs:
-      - targets: ["home-assistant:8123"]
+      - targets: ["home-assistant{{ k8s_hostname_suffix }}.local.{{ domain }}"]
 
 #################################################################################################
