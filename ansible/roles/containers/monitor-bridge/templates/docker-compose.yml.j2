@@ -48,7 +48,10 @@ services:
       # URLs can never be pointed at different places by accident.
       - PROMETHEUS_URL=https://prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}
       - KOPIA_URL=http://kopia:51515
-      - KUMA_URL=http://uptime-kuma:3001
+      # Re-pointed 2026-08-10 at the Phase D cutover: Kuma moved to the cluster, so the
+      # Docker DNS name is gone. The `-k8s` name, NOT the bridged one (same-bridge hairpin —
+      # the N8N_URL lesson above). /api/push bypasses Authelia LAN-only on the k8s side.
+      - KUMA_URL=https://uptime-kuma{{ k8s_hostname_suffix }}.local.{{ domain }}
       - BACKUP_SOURCE_PATH=/data/home/{{ sys_user }}/server/containers
       - BACKUP_MAX_AGE_H=30
       # Snapshot-shrink guard folded into Backup Freshness: a fresh, 0-error snapshot still hides a

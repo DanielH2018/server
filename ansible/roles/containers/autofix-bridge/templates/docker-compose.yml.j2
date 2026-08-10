@@ -28,7 +28,9 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       - INTERVAL=300
-      - KUMA_URL=http://uptime-kuma:3001
+      # Re-pointed 2026-08-10 at the Phase D cutover — same move and same -k8s-not-bridged
+      # reasoning as monitor-bridge's KUMA_URL.
+      - KUMA_URL=https://uptime-kuma{{ k8s_hostname_suffix }}.local.{{ domain }}
       # LIVE (DRY_RUN=false): actually blocklist+remove and re-search eligible items. Flipped
       # from the initial dry-run at the operator's direction on 2026-07-06, after adding the
       # client-communication-error exclusion. Set back to true (edit here + redeploy) to return

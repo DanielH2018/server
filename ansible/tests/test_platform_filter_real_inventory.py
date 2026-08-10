@@ -95,7 +95,10 @@ def test_daniel_server_is_still_wholly_docker():
     # the whole time, and only the Docker twin was ever public. ical-proxy followed (21 -> 20),
     # stateless and built in-cluster; its containers role remains as the build source. Then
     # code-server (20 -> 19) the same day, ported WITHOUT its docker plumbing (operator
-    # decision) — docker-proxy-codeserver and the `codeserver` net dissolved with it. The count
+    # decision) — docker-proxy-codeserver and the `codeserver` net dissolved with it. Then
+    # uptime-kuma (19 -> 18) that night, slice-7 Phase D's cutover — the alerting spine and
+    # its autokuma sidecar moved in one window, both data dirs seeded, tokens unchanged;
+    # the docker-fleet cron it briefly carried re-homed to monitor-bridge. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -104,6 +107,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 19
-    assert len(filter_by_platform(containers, "docker")) == 19
+    assert len(containers) == 18
+    assert len(filter_by_platform(containers, "docker")) == 18
     assert filter_by_platform(containers, "k8s") == []

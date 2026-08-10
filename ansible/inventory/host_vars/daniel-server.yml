@@ -220,11 +220,13 @@ containers_list:
   # of data the monitoring plane owns. Homepage's glances-widget Monitoring section went
   # with it — those readings live in Grafana. The Pi's own glances copy is untouched (it was
   # never part of the 46-entry disposition). Role in roles/containers/archive/.
-  - name: uptime-kuma
-    port: 3001
-    use_authelia: true
-    networks:
-      - monitoring
+  # uptime-kuma (with its autokuma sidecar) moved to k3s on 2026-08-10 (slice-7 Phase D,
+  # step-4 cutover — no coexistence: two Kumas would double-fire every alert). Both data
+  # dirs force-seeded, tokens unchanged, so every monitor and its history survived. The
+  # docker-fleet host cron it briefly owned now lives in the monitor-bridge role. Rolling
+  # back is re-adding this entry, removing bridge_hostname from daniel-box's, and
+  # `docker compose up -d` in containers/uptime-kuma/ (dirs still on disk; tar snapshot at
+  # /home/ubuntu/kuma-cutover-snapshot.tar.gz).
   - name: scrutiny
     port: 8080
     use_authelia: true

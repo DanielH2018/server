@@ -221,6 +221,24 @@ def test_k8s_authelia_database_is_on_its_own_volume():
     )
 
 
+# Inventory-shaped stubs for deployment templates that reach outside their role defaults
+# (uptime-kuma's hostAliases render the -k8s hostname list from daniel-box's inventory).
+_DEPLOYMENT_STUBS = {
+    # domain and the ingress VIP already arrive via _role_defaults (group_vars).
+    "hostvars": {
+        "daniel-box": {
+            "containers_list": [
+                {
+                    "name": "stub",
+                    "hostname": "stub-k8s",
+                    "extra_hostnames": ["stub2-k8s"],
+                },
+            ]
+        }
+    },
+}
+
+
 def test_nothing_mounts_over_the_serviceaccount_token_path():
     """`/run/secrets` is the Docker convention for file-mounted credentials and it does not
     survive the port. `/var/run/secrets` symlinks to `/run/secrets`, which is where Kubernetes
@@ -242,6 +260,7 @@ def test_nothing_mounts_over_the_serviceaccount_token_path():
             _render(
                 tpl,
                 container_item=entry,
+                **_DEPLOYMENT_STUBS,
                 **_role_defaults(entry["name"]),
             )
         )
@@ -274,6 +293,7 @@ def test_every_deployment_disables_service_link_env_vars():
             _render(
                 tpl,
                 container_item=entry,
+                **_DEPLOYMENT_STUBS,
                 **_role_defaults(entry["name"]),
             )
         )

@@ -1,9 +1,8 @@
 ---
-# HELD until the Phase D step-4 cutover window (slice-7-phase-d-kuma.md). Two Kumas
-# dual-running would double-fire every Discord alert and split the push consumers, so unlike
-# the coexistence migrations this one deploys only inside the window, against a stopped
-# Docker pair and a force-seeded DB.
-uptime_kuma_k8s_enabled: false
+# Flipped 2026-08-10 in the step-4 cutover window (slice-7-phase-d-kuma.md): the Docker
+# pair is stopped and removed (compose file kept for rollback beside the tar snapshot),
+# both volumes force-seeded, and this instance is the alerting spine now.
+uptime_kuma_k8s_enabled: true
 
 # SAME tag as the Docker copy on purpose — the seeded SQLite crosses hosts, not versions.
 uptime_kuma_k8s_image: louislam/uptime-kuma:2.4.0

@@ -18,6 +18,21 @@ spec:
         app: uptime-kuma
     spec:
       enableServiceLinks: false
+      # The pod is the first cluster workload probing `-k8s` LAN names. CoreDNS forwards to
+      # the node's resolver, which deliberately uses public DNS (the A1 bootstrap posture),
+      # and the PUBLIC wildcard *.local.<domain> answers the Docker edge .161 — so every
+      # -k8s probe 404'd there. Pin exactly the cluster-served hostnames to the ingress
+      # VIP, rendered from inventory so the list can't rot. Bridge monitors (unsuffixed
+      # names) stay UNpinned on purpose: .161 is the path they exist to test.
+      hostAliases:
+        - ip: "{{ k3s_metallb_ingress_vip }}"
+          hostnames:
+{% for entry in hostvars['daniel-box'].containers_list | selectattr('hostname', 'defined') %}
+            - "{{ entry.hostname }}.local.{{ domain }}"
+{% for extra in entry.extra_hostnames | default([]) %}
+            - "{{ extra }}.local.{{ domain }}"
+{% endfor %}
+{% endfor %}
       containers:
         - name: uptime-kuma
           image: {{ uptime_kuma_k8s_image }}
@@ -138,4 +153,8 @@ spec:
         - name: credentials
           secret:
             secretName: autokuma-credentials
-            defaultMode: 0o400
+            # 444, not 400: secret-volume files are root-owned (no fsGroup — it would
+            # recursively chown the data PVC on every mount) and autokuma is uid 1000, so
+            # 400 reads as an empty password and Kuma rejects the login. Pod-scoped
+            # exposure only, and the kuma container is root anyway.
+            defaultMode: 0o444

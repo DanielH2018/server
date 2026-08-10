@@ -178,7 +178,7 @@ spec:
 {% endif %}
 {%- endmacro %}
 
-{% macro monitoring_route(name, hostname, port, path_prefix, namespace=none) -%}
+{% macro monitoring_route(name, hostname, port, path_prefix, namespace=none, extra_client_cidrs=[]) -%}
 {#
   A query-only door for monitor-bridge, which runs in Docker on daniel-server and lost its
   route to these services when they left that host (slice 4, B4c). Modelled on
@@ -207,7 +207,9 @@ spec:
   https entrypoint without a tls block, so this cannot regress silently again.
 
   The guards it is MEANT to provide, kept in the rule so they are real once it routes:
-    1. ClientIP — daniel-server alone, the only intended caller.
+    1. ClientIP — daniel-server alone, the only intended caller. `extra_client_cidrs` is a
+       per-caller widening: added for the Kuma prober's move into the cluster (Phase D),
+       whose probes arrive from the pod CIDR.
     2. PathPrefix — only the endpoint the check reads. The *arr APIs are wide, and a bare Host
        rule would expose every write endpoint they have.
     3. LAN-only. Unlike ingressroute() above this does NOT honour k8s_public_route, so slice 6
@@ -225,7 +227,7 @@ spec:
     - https
   routes:
     - kind: Rule
-      match: "Host(`{{ hostname }}.local.{{ domain }}`) && PathPrefix(`{{ path_prefix }}`) && ClientIP(`{{ k8s_bridge_client_ip }}/32`)"
+      match: "Host(`{{ hostname }}.local.{{ domain }}`) && PathPrefix(`{{ path_prefix }}`) && ClientIP(`{{ ([k8s_bridge_client_ip ~ '/32'] + extra_client_cidrs) | join('`, `') }}`)"
       # EXPLICIT, as n8n-monitoring sets it: this must beat the service's plain Host router,
       # which otherwise sends monitor-bridge to Authelia.
       priority: 100

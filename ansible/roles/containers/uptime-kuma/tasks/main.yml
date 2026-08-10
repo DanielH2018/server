@@ -28,27 +28,6 @@
     mode: "0600"
   register: uptime_kuma_cfg_password
 
-- name: Deploy the docker-fleet heartbeat script
-  tags: [cron]
-  ansible.builtin.template:
-    src: docker-fleet-health.sh.j2
-    dest: /usr/local/bin/docker-fleet-health.sh
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-
-- name: Schedule the docker-fleet heartbeat
-  tags: [cron]
-  # Every 5 min; the Kuma push monitor's interval is 600s so one missed run never pages —
-  # two do, matching the crowdsec-home-allowlist cadence for cron-fed push monitors.
-  ansible.builtin.cron:
-    name: "Docker fleet health"
-    minute: "*/5"
-    job: "/usr/local/bin/docker-fleet-health.sh"
-    user: "{{ sys_user }}"
-  become: true
-
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:

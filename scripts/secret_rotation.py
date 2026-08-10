@@ -128,9 +128,10 @@ def consumer_tag(name: str) -> str | None:
     if name.startswith("cloudflare_ddns_"):
         return "cloudflare-ddns"
     if name == "docker_fleet_push_token":
-        # The uptime-kuma role renders both the host cron script and the AutoKuma label —
-        # the single-host single-redeploy pattern (slice-7 Phase D KD2).
-        return "uptime-kuma"
+        # The monitor-bridge role renders the host cron script; the monitor itself is a
+        # static-file entity in the cluster Kuma (slice-7 Phase D KD2). Redeploying
+        # monitor-bridge re-renders the pusher; the k8s side follows on its own deploy.
+        return "monitor-bridge"
     if name == "arr_autoblock_push_token":
         # autofix-bridge (daniel-server only) consumes it in env + the AutoKuma label on one
         # compose file — the single-host single-redeploy pattern, not cross-host. (Token name

@@ -6,11 +6,12 @@
             icon: uptime-kuma.png
             href: https://uptime-kuma.{{ domain }}/
             description: Container Monitoring
-            server: my-docker
-            container: uptime-kuma
+            # No server/container pair since the Phase D cutover (2026-08-10): Kuma runs in
+            # k3s now. Widget re-targets the -k8s name (bridged names hairpin from here);
+            # /api/status-page bypasses Authelia LAN-only on the k8s side.
             widget:
                 type: uptimekuma
-                url: http://uptime-kuma:3001
+                url: https://uptime-kuma{{ k8s_hostname_suffix }}.local.{{ domain }}
                 slug: containers
         - Pihole:
             icon: pi-hole.png

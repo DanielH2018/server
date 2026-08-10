@@ -9,6 +9,9 @@
     container_item.name,
     container_item.hostname | default(container_item.name),
     container_item.port,
-    '/'
+    '/',
+    extra_client_cidrs=['10.42.0.0/16']
   )
 }}
+{# 10.42.0.0/16: the iCal Proxy Kuma monitor probes from the cluster Kuma pod since the
+   Phase D cutover — pod-CIDR source, which the daniel-server-only guard rejected (404). #}
