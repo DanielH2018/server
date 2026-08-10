@@ -28,6 +28,7 @@
       - ingest-ingressroute.yaml
     manifests_secret_files:
       - grafana-secret.yaml
+      - scrape-credentials-secret.yaml
     # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has three,
     # in a different namespace. Skip its wait and roll our own below.
     manifests_rollout: ''

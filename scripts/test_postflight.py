@@ -27,8 +27,14 @@ def stub_host(monkeypatch):
     monkeypatch.setattr(postflight, "container_ip", lambda name: "10.0.0.1")
     monkeypatch.setattr(postflight, "secret", lambda name: (f"<{name}>", ""))
     # check_ha_token reaches HA via probe.ha_base(), which decrypts the domain from
-    # SOPS — stub it so no test needs the age key (CI has none).
+    # SOPS — stub it so no test needs the age key (CI has none). Same for the cluster
+    # prometheus route the Kuma checks query since the PG1 scrape port.
     monkeypatch.setattr(postflight.probe, "ha_base", lambda: "https://ha.test")
+    monkeypatch.setattr(
+        postflight.probe,
+        "k8s_endpoint",
+        lambda h: (f"https://{h}.test", f"{h}.test:443:10.0.0.240"),
+    )
 
 
 def respond(monkeypatch, status, body=""):
@@ -67,16 +73,18 @@ def test_kuma_monitors_empty_result_fails(monkeypatch):
 
 
 def test_kuma_scrape_down_reports_the_scrape_error(monkeypatch):
-    body = targets_body(target("uptime-kuma", "down", "401 Unauthorized"))
+    # up{job="uptime-kuma"} == 0 — since the PG1 port the check reads the up series
+    # through the cluster query route (the targets API isn't admitted by it).
+    body = json.dumps({"data": {"result": [{"value": [0, "0"]}]}})
     respond(monkeypatch, 200, body)
     status, detail = postflight.check_kuma_scrape()
     assert status == postflight.FAIL
-    assert "401 Unauthorized" in detail
+    assert "prometheus_kuma_api_key" in detail
 
 
 def test_kuma_scrape_absent_target_skips(monkeypatch):
-    """A host that doesn't scrape Kuma hasn't failed the step — it doesn't have it."""
-    respond(monkeypatch, 200, targets_body(target("node")))
+    """A cluster that doesn't scrape Kuma hasn't failed the step — it doesn't have it."""
+    respond(monkeypatch, 200, json.dumps({"data": {"result": []}}))
     assert postflight.check_kuma_scrape()[0] == postflight.SKIP
 
 

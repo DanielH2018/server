@@ -55,6 +55,7 @@
       - reverse-bridge.yaml
       - deployment.yaml
       - service.yaml
+      - metrics-service.yaml
     manifests_secret_files:
       - cf-token-secret.yaml
       - crowdsec-secret.yaml

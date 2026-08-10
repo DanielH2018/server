@@ -30,10 +30,12 @@ class Skip(Exception):
     """This host doesn't run the service, so the README item doesn't apply to it."""
 
 
-def get(url, header=None, timeout=TIMEOUT):
+def get(url, header=None, timeout=TIMEOUT, resolve=None):
     """GET url, returning (http_status, body). `header` is a full `curl --config`
     body (e.g. `header = "X-Api-Key: ..."`) fed via stdin so credentials stay out
-    of argv. status 0 means curl itself failed (connection refused, DNS, timeout)."""
+    of argv. `resolve` is a curl --resolve pin (probe.k8s_endpoint's second element)
+    for -k8s routes the host shell can't resolve. status 0 means curl itself failed
+    (connection refused, DNS, timeout)."""
     argv = [
         "curl",
         "-sS",
@@ -44,6 +46,8 @@ def get(url, header=None, timeout=TIMEOUT):
         "-w",
         "\n%{http_code}",
     ]
+    if resolve:
+        argv += ["--resolve", resolve]
     if header:
         argv += ["--config", "-"]
     argv.append(url)
@@ -76,12 +80,22 @@ def secret(name):
 # ask "does an admin exist". The scrape is the observable consequence of both steps.
 
 
+def _cluster_prom_query(promql):
+    """Query the CLUSTER prometheus through its LAN query route (the uptime-kuma job
+    moved there at the Phase D dashboard triage, PG1). VIP-pinned — the host shell
+    resolves -k8s names to the wrong Traefik (split-horizon)."""
+    base, pin = probe.k8s_endpoint("prometheus-k8s")
+    from urllib.parse import urlencode
+
+    url = f"{base}/api/v1/query?" + urlencode({"query": promql})
+    return get(url, resolve=pin)
+
+
 def check_kuma_monitors():
     """§9.1 — no admin means AutoKuma provisions zero monitors, so nothing is watched."""
-    ip = container_ip("prometheus")
-    status, body = get(probe.prom_query_url(ip, "count(monitor_status)"))
+    status, body = _cluster_prom_query("count(monitor_status)")
     if status != 200:
-        return FAIL, f"prometheus query returned {status}"
+        return FAIL, f"cluster prometheus query returned {status}"
     result = json.loads(body).get("data", {}).get("result", [])
     if not result:
         return FAIL, "AutoKuma has provisioned 0 monitors — create the Kuma admin"
@@ -90,17 +104,18 @@ def check_kuma_monitors():
 
 
 def check_kuma_scrape():
-    """§9.2 — a stale prometheus_kuma_api_key leaves the uptime-kuma target at 401."""
-    ip = container_ip("prometheus")
-    status, body = get(probe.prom_targets_url(ip))
+    """§9.2 — a stale prometheus_kuma_api_key leaves the uptime-kuma target at 401.
+    Reads `up{job=...}` rather than the targets API: the cluster route only admits
+    /api/v1/query paths, and up==0 is the same evidence the target listing gave."""
+    status, body = _cluster_prom_query('up{job="uptime-kuma"}')
     if status != 200:
-        return FAIL, f"prometheus targets returned {status}"
-    for target in json.loads(body)["data"]["activeTargets"]:
-        if target["labels"]["job"] == "uptime-kuma":
-            if target["health"] == "up":
-                return OK, "uptime-kuma scrape target up"
-            return FAIL, f"target {target['health']}: {target['lastError']}"
-    return SKIP, "no uptime-kuma scrape target configured"
+        return FAIL, f"cluster prometheus query returned {status}"
+    result = json.loads(body).get("data", {}).get("result", [])
+    if not result:
+        return SKIP, "no uptime-kuma scrape target configured"
+    if float(result[0]["value"][1]) == 1:
+        return OK, "uptime-kuma scrape target up"
+    return FAIL, "uptime-kuma target down (stale prometheus_kuma_api_key?)"
 
 
 # --- §9.3: *arr + jellyfin API keys ------------------------------------------

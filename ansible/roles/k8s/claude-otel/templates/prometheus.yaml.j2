@@ -41,6 +41,49 @@ data:
       - job_name: crowdsec
         static_configs:
           - targets: ['crowdsec.{{ k8s_namespace }}.svc:6060']
+      # ── Phase D dashboard triage (2026-08-10, PG1/PG2 — slice-7-phase-d-dashboards.md) ──
+      # PG1: ported from the Docker prometheus, which scraped these cluster workloads from
+      # the wrong side of the migration (through Traefik routes, over the LAN). Same job
+      # names as the Docker jobs carried, so every dashboard query and consumer keeps
+      # resolving; in-cluster ClusterIP targets, so no route/bypass/DNS in the path.
+      # Credentials are file-mounted from the prometheus-scrape-credentials Secret — they
+      # must NOT be inlined here (this is a world-readable ConfigMap, not a Secret).
+      #
+      # Kuma's API key rides HTTP Basic with a blank username; per-monitor up/down,
+      # response times and cert-days-remaining. Sole source of monitor_status — the
+      # uptime-kuma board and scripts/postflight.py's gates read it.
+      - job_name: uptime-kuma
+        scrape_interval: 1m
+        basic_auth:
+          username: ""
+          password_file: /etc/prometheus-scrape-creds/kuma_api_key
+        static_configs:
+          - targets: ['uptime-kuma.{{ k8s_namespace }}.svc:3001']
+      # HA's prometheus integration; the bearer token is the gate (its route carries no
+      # Authelia by design). Feeds hass_* — the home-assistant + ups boards and
+      # monitor-bridge's UPS battery checks (which query hass_* unpinned, so the native
+      # series feeds them with no origin-label caveat).
+      - job_name: home-assistant
+        scrape_interval: 1m
+        metrics_path: /api/prometheus
+        authorization:
+          credentials_file: /etc/prometheus-scrape-creds/ha_token
+        static_configs:
+          - targets: ['home-assistant.{{ k8s_namespace }}.svc:8123']
+      # PG2: the cluster homelab Loki's own internals (loki_*) — nothing scraped it before
+      # this job, despite slice-7-phase-d-loki.md assuming otherwise. Keeps the
+      # Logs/loki-internals board alive past the Docker loki's retirement.
+      - job_name: loki-homelab
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['loki-homelab.{{ k8s_namespace }}.svc:3100']
+      # PG2: the k8s edge's traefik_* metrics (exposed since slice-6, scraped by nothing).
+      # Via the dedicated traefik-metrics ClusterIP — the internal :8080 entrypoint must
+      # not ride the LoadBalancer Service onto the LAN VIP.
+      - job_name: traefik-k8s
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['traefik-metrics.{{ k8s_namespace }}.svc:8080']
       # Per-pod CPU/memory from each kubelet's cAdvisor, reached through the API server proxy
       # rather than the kubelet's own :10250. The proxy path needs only nodes/proxy RBAC and no
       # kubelet client certificate, which is why it is the usual choice for a single-node k3s.
@@ -174,6 +217,11 @@ spec:
               mountPath: /etc/prometheus
             - name: data
               mountPath: /prometheus
+            # /etc, not /run/secrets (the ServiceAccount-token-shadow guard); 0444 because
+            # prometheus runs as nobody and secret-volume files are root-owned.
+            - name: scrape-creds
+              mountPath: /etc/prometheus-scrape-creds
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /-/ready
@@ -194,6 +242,10 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: prometheus-data
+        - name: scrape-creds
+          secret:
+            secretName: prometheus-scrape-credentials
+            defaultMode: 0o444
 ---
 apiVersion: v1
 kind: Service
