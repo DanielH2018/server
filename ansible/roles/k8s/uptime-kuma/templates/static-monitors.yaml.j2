@@ -65,8 +65,10 @@ stringData:
     {"type": "http", "name": "k3s Zigbee2MQTT", "url": "https://zigbee2mqtt{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   slzb-coordinator.json: |
     {"type": "port", "name": "SLZB-06M Coordinator", "hostname": "{{ slzb_ip }}", "port": 6638, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # max_redirects 0 was ABSENT from the label this transcribes — the monitor then follows
+  # the 302 to the Authelia portal and fails on the resulting 200. Made explicit here.
   crowdsec-dashboard-k8s.json: |
-    {"type": "http", "name": "k3s CrowdSec Dashboard", "url": "https://crowdsec-k8s.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s CrowdSec Dashboard", "url": "https://crowdsec-k8s.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   home-assistant-k8s.json: |
     {"type": "http", "name": "k3s Home Assistant", "url": "https://home-assistant{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   karakeep-k8s.json: |

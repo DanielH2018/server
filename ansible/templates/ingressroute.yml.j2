@@ -227,7 +227,10 @@ spec:
     - https
   routes:
     - kind: Rule
-      match: "Host(`{{ hostname }}.local.{{ domain }}`) && PathPrefix(`{{ path_prefix }}`) && ClientIP(`{{ ([k8s_bridge_client_ip ~ '/32'] + extra_client_cidrs) | join('`, `') }}`)"
+{# One ClientIP() per CIDR, OR'd: Traefik v3's ClientIP takes a single argument, and a
+    two-argument call silently kills the whole router — every source 404s, measured
+    2026-08-10 when the first extra_client_cidrs caller landed. #}
+      match: "Host(`{{ hostname }}.local.{{ domain }}`) && PathPrefix(`{{ path_prefix }}`) && ({% for cidr in [k8s_bridge_client_ip ~ '/32'] + extra_client_cidrs %}ClientIP(`{{ cidr }}`){% if not loop.last %} || {% endif %}{% endfor %})"
       # EXPLICIT, as n8n-monitoring sets it: this must beat the service's plain Host router,
       # which otherwise sends monitor-bridge to Authelia.
       priority: 100
