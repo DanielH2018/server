@@ -126,8 +126,9 @@ its query log flatlines — its recreate-driven tail ends as Phases B/C retire c
 **FLIPPED 2026-08-10 ~17:55 UTC (operator).** Verified from the cluster edge's own
 metrics: the reverse-bridge router carries live traffic (it only matches public arrivals
 for Docker-hosted names), public apps serve through the k8s Traefik, and no monitor
-paged across the flip. Still open before the gate clears: LTE verification (operator),
-a soak window, the forward-bridge teardown, and tonight's B2 re-arm.
+paged across the flip. LTE-verified by the operator ~18:00 UTC the same day. Still open
+before the gate clears: a soak window, the forward-bridge teardown, and tonight's B2
+re-arm.
 
 ### B — Dissolves and cheap retires — EXECUTED 2026-08-09 (ahead of Phase A, deliberately:
 none of these depend on the slice-6 close-out)
