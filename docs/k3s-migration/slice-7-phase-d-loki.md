@@ -85,8 +85,13 @@ the claude-otel one.
    ingest (the same LogQL answers on both).
 3. Re-point readers (KL4 list) — verify terraria-stats un-darkens (its exporter serves
    non-zero series again), `probe.py alerts` reconstructs against the new instance.
-4. After 7 days: drop the dual-write, retire the Docker loki container + volume, drop the
-   Docker prometheus loki job, transcribe the Kuma `Loki` entity's URL.
+4. After 7 days AND after D7 moves the otel-collector: drop the dual-write, retire the
+   Docker loki container + volume, drop the Docker prometheus loki job, transcribe the
+   Kuma `Loki` entity's URL. The D7 gate is a KL5 execution finding: the Docker
+   otel-collector ships Claude content into the Docker Loki, and that stream must NOT
+   dual-write to the LAN-readable homelab store (the KL1 boundary) — so the Docker Loki
+   lives until the collector's own migration re-homes it to the loopback-only claude-otel
+   stack.
 
 ## Unverified — resolve during execution
 
