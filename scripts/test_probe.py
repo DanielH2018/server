@@ -53,7 +53,10 @@ def test_loki_query_url_encodes_logql_and_limit():
 
 
 def test_scrutiny_url():
-    assert probe.scrutiny_url("10.0.0.3") == "http://10.0.0.3:8080/api/summary"
+    assert (
+        probe.scrutiny_url("https://scrutiny.example")
+        == "https://scrutiny.example/api/summary"
+    )
 
 
 def test_pi_url():
@@ -103,37 +106,42 @@ def test_plan_targets_resolves_prometheus():
     assert stages == [probe.curl_argv("http://10.0.0.1:9090/api/v1/targets")]
 
 
-def fake_loki_endpoint():
-    # The (base, --resolve pin) pair the live loki_endpoint() derives from SOPS +
+def fake_k8s_endpoint(hostname):
+    # The (base, --resolve pin) pair the live k8s_endpoint() derives from SOPS +
     # inventory — faked so plan() stays testable without either.
-    return "https://loki.example", "loki.example:443:10.0.0.240"
+    return f"https://{hostname}.example", f"{hostname}.example:443:10.0.0.240"
 
 
 def test_plan_loki_labels_uses_cluster_endpoint_with_vip_pin():
-    stages = probe.plan(["loki-labels"], fake_resolve, fake_loki_endpoint)
+    stages = probe.plan(["loki-labels"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
         probe.curl_argv(
-            "https://loki.example/loki/api/v1/labels",
-            resolve="loki.example:443:10.0.0.240",
+            "https://loki-homelab-k8s.example/loki/api/v1/labels",
+            resolve="loki-homelab-k8s.example:443:10.0.0.240",
         )
     ]
 
 
 def test_plan_loki_query_with_limit():
     stages = probe.plan(
-        ["loki-query", '{job="x"}', "--limit", "50"], fake_resolve, fake_loki_endpoint
+        ["loki-query", '{job="x"}', "--limit", "50"], fake_resolve, fake_k8s_endpoint
     )
     assert stages == [
         probe.curl_argv(
-            probe.loki_query_url("https://loki.example", '{job="x"}', 50),
-            resolve="loki.example:443:10.0.0.240",
+            probe.loki_query_url("https://loki-homelab-k8s.example", '{job="x"}', 50),
+            resolve="loki-homelab-k8s.example:443:10.0.0.240",
         )
     ]
 
 
-def test_plan_scrutiny_resolves_scrutiny():
-    stages = probe.plan(["scrutiny"], fake_resolve)
-    assert stages == [probe.curl_argv("http://10.0.0.3:8080/api/summary")]
+def test_plan_scrutiny_uses_cluster_endpoint_with_vip_pin():
+    stages = probe.plan(["scrutiny"], fake_resolve, fake_k8s_endpoint)
+    assert stages == [
+        probe.curl_argv(
+            "https://scrutiny-k8s.example/api/summary",
+            resolve="scrutiny-k8s.example:443:10.0.0.240",
+        )
+    ]
 
 
 def test_plan_pi_does_not_resolve_docker():

@@ -266,7 +266,9 @@ services:
       # that goes SMART-FAILED while still reporting fresh data still pages (Scrutiny stores to
       # InfluxDB not Prometheus and its own notifier is off — this is the only alert path).
       # SCRUTINY_TEMP_MAX (°C) is an optional early-warning temperature ceiling; 0 disables it.
-      - SCRUTINY_URL=http://scrutiny:8080
+      # Phase D SC5 (2026-08-10): the cluster web API via the Authelia /api LAN bypass —
+      # now covers BOTH nodes' devices (daniel-box's NVMe was never monitored before).
+      - SCRUTINY_URL=https://scrutiny{{ k8s_hostname_suffix }}.local.{{ domain }}
       - SCRUTINY_MAX_AGE_H=26
       - SCRUTINY_TEMP_MAX=0
       - KUMA_PUSH_SCRUTINY={{ monitor_bridge_scrutiny_push_token }}

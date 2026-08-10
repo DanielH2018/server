@@ -20,7 +20,7 @@ Subcommands:
     loki-labels              Loki label names                (cluster loki-homelab)
     loki-query '<logql>'     Loki range query [--limit N] [--json] (cluster loki-homelab)
     alerts                   monitor-bridge DOWN history as episodes [--days N --check X --raw --json]
-    scrutiny                 Disk SMART summary              (scrutiny :8080)
+    scrutiny                 Disk SMART summary              (cluster scrutiny, both nodes)
     pi <subpath>             Pi glances API, e.g. `pi fs`    (daniel-pi.lan:61208)
     cert <host[:port]>       Served TLS cert subj/dates [--sni NAME]
     health <container>       Container state + healthcheck rollup (exit 0 = healthy)
@@ -84,13 +84,18 @@ def metallb_vip():
     raise SystemExit(f"k3s_metallb_ingress_vip not found in {GROUP_VARS_PATH}")
 
 
-def loki_endpoint():
-    """(base_url, curl --resolve pin) for the cluster Loki (Phase D.2 KL4). Split-horizon
-    DNS: this host's shell resolves -k8s names to the Docker Traefik (which 404s them), so
-    curl pins the name to the MetalLB ingress VIP; containers get the right answer from
+def k8s_endpoint(hostname):
+    """(base_url, curl --resolve pin) for a cluster -k8s route. Split-horizon DNS: this
+    host's shell resolves -k8s names to the Docker Traefik (which 404s them), so curl
+    pins the name to the MetalLB ingress VIP; containers get the right answer from
     Pi-hole and need no pin."""
-    host = f"loki-homelab-k8s.local.{sops_extract('domain')}"
+    host = f"{hostname}.local.{sops_extract('domain')}"
     return f"https://{host}", f"{host}:443:{metallb_vip()}"
+
+
+def loki_endpoint():
+    """The cluster Loki (Phase D.2 KL4)."""
+    return k8s_endpoint("loki-homelab-k8s")
 
 
 # claude_ha_token lives in the SOPS-encrypted secrets file (repo-root relative).
@@ -152,8 +157,8 @@ def loki_query_url(base, logql, limit, start=None, end=None, direction=None):
     return f"{base}/loki/api/v1/query_range?" + urlencode(params)
 
 
-def scrutiny_url(ip):
-    return f"http://{ip}:8080/api/summary"
+def scrutiny_url(base):
+    return f"{base}/api/summary"
 
 
 def pi_url(subpath):
@@ -825,10 +830,10 @@ def _build_parser():
     return p
 
 
-def plan(args, resolve_ip, loki_endpoint=loki_endpoint):
+def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint):
     """Return the command pipeline (list of argv stages) for the parsed args.
 
-    `resolve_ip(container) -> ip` and `loki_endpoint() -> (base, pin)` are injected so
+    `resolve_ip(container) -> ip` and `k8s_endpoint(hostname) -> (base, pin)` are injected so
     all routing/URL logic is testable without Docker, SOPS, or the network. Most
     commands are a single stage; `cert` is a two-stage openssl pipeline.
     """
@@ -839,13 +844,14 @@ def plan(args, resolve_ip, loki_endpoint=loki_endpoint):
     if cmd == "targets":
         return [curl_argv(prom_targets_url(resolve_ip("prometheus")))]
     if cmd == "loki-labels":
-        base, pin = loki_endpoint()
+        base, pin = k8s_endpoint("loki-homelab-k8s")
         return [curl_argv(loki_labels_url(base), resolve=pin)]
     if cmd == "loki-query":
-        base, pin = loki_endpoint()
+        base, pin = k8s_endpoint("loki-homelab-k8s")
         return [curl_argv(loki_query_url(base, ns.logql, ns.limit), resolve=pin)]
     if cmd == "scrutiny":
-        return [curl_argv(scrutiny_url(resolve_ip("scrutiny")))]
+        base, pin = k8s_endpoint("scrutiny-k8s")
+        return [curl_argv(scrutiny_url(base), resolve=pin)]
     if cmd == "pi":
         return [curl_argv(pi_url(ns.subpath))]
     if cmd == "cert":

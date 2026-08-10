@@ -78,6 +78,11 @@ stringData:
   # after a deploy is normal, carried over from the Docker tile's notes.
   loki.json: |
     {"type": "http", "name": "Loki", "url": "https://loki-homelab{{ k8s_hostname_suffix }}.local.{{ domain }}/ready", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # Phase D scrutiny move (2026-08-10, SC5): /api/health rides the LAN Authelia bypass
+  # (this pod's CIDR ⊂ 10.0.0.0/8), so a plain 200 — no 302 dance. Covers the cluster
+  # web+influxdb pair; the per-node collectors are covered by SMART Data Freshness.
+  scrutiny-k8s.json: |
+    {"type": "http", "name": "k3s Scrutiny", "url": "https://scrutiny{{ k8s_hostname_suffix }}.local.{{ domain }}/api/health", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   karakeep-k8s.json: |
     {"type": "http", "name": "k3s karakeep", "url": "https://karakeep{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   ical-proxy-k8s.json: |

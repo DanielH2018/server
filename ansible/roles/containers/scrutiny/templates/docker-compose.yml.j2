@@ -1,162 +1,55 @@
-{% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
-{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
+# Slice-7 Phase D SC6 (2026-08-10): the web UI + influxdb moved to the cluster
+# (roles/k8s/scrutiny); this compose is now only the COLLECTOR SPOKE — daniel-server is
+# not a cluster node yet, so its NVMe reports by pushing to the cluster web API over the
+# Authelia /api bypass. The Phase F join replaces this with the collector DaemonSet and
+# the whole role retires. The scrutiny_internal net and the Traefik route went with the
+# web; the entry's `monitoring` net is only for egress parity with the fleet.
 services:
-  # Time-series store for SMART history. Internal-only (no host port, not routed by
-  # Traefik). Provisioned once via DOCKER_INFLUXDB_INIT_* with a SOPS-stored token.
-  scrutiny-influxdb:
-    image: influxdb:2.9
-    container_name: scrutiny-influxdb
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      # Entrypoint chowns the data dir then drops root via gosu before starting influxd.
-      - CHOWN
-      - SETUID
-      - SETGID
-      - DAC_OVERRIDE
-      - FOWNER
-    environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      # Admin password + admin token file-mounted (below), NOT inline, so they stay out of the
-      # container Env the read-only docker-proxy exposes to every neighbor (2026-07-15 review M2).
-      # influxdb 2.x natively reads the _FILE variants. Only consumed on first-run setup (skipped
-      # once influxd.bolt exists), so swapping to _FILE on the initialized instance is a no-op.
-      - DOCKER_INFLUXDB_INIT_PASSWORD_FILE=/run/secrets/influxdb_admin_password
-      - DOCKER_INFLUXDB_INIT_ORG=scrutiny
-      - DOCKER_INFLUXDB_INIT_BUCKET=metrics
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE=/run/secrets/influxdb_token
-      - TZ={{ tz }}
-    volumes:
-      - ./influxdb2:/var/lib/influxdb2
-      # The image also declares VOLUME /etc/influxdb2 (the CLI's influx-configs file);
-      # without a mapping Docker silently created an anonymous volume for it.
-      - ./influxdb2-config:/etc/influxdb2
-      - ./influxdb_admin_password:/run/secrets/influxdb_admin_password:ro
-      - ./influxdb_token:/run/secrets/influxdb_token:ro
-    networks:
-      - scrutiny_internal
-    {{ healthcheck('["CMD", "influx", "ping"]', retries=5) }}
-    labels:
-      {{ kuma('scrutiny-influxdb') }}
-    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    {{ resources('1.0', '2048M', '0.10', '128M') }}
-
-  # Web UI + API. Authelia-facing via Traefik, but holds NO device capabilities —
-  # SYS_RAWIO / SYS_ADMIN now live only on the collector below.
-  scrutiny-web:
-    image: ghcr.io/analogj/scrutiny:master-web
-    container_name: scrutiny
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    # Read-only rootfs: `docker diff` shows zero rootfs writes — the SQLite config DB + its
-    # WAL/journal live in the ./config:/opt/scrutiny/config BIND MOUNT (writable regardless
-    # of read_only), so this doesn't fight the DAC_OVERRIDE note below. No tmpfs needed.
-    read_only: true
-    # No `cap_drop: ALL` here: the web process writes its SQLite config DB at
-    # /opt/scrutiny/config/scrutiny.db and needs a default cap (DAC_OVERRIDE) to
-    # create the WAL/journal in the bind-mounted config dir. SYS_ADMIN / SYS_RAWIO
-    # are not in Docker's default set, so the device caps stay off this service.
-    depends_on:
-      scrutiny-influxdb:
-        condition: service_healthy
-    # Scrutiny has no native _FILE convention, so a wrapper exports the influxdb token from a 0600
-    # file-mount before exec'ing the binary — keeping it out of the container Env the read-only
-    # docker-proxy exposes to every monitoring-net neighbor (2026-07-15 review M2). The `$$` are
-    # doubled so Compose doesn't interpolate them at parse time; the in-container shell sees $(...)/$@.
-    entrypoint:
-      - /bin/sh
-      - -c
-      - 'export SCRUTINY_WEB_INFLUXDB_TOKEN="$$(cat /run/secrets/influxdb_token)"; exec "$$@"'
-      - --
-    command: ["/opt/scrutiny/bin/scrutiny", "start"]
-    environment:
-      - SCRUTINY_WEB_INFLUXDB_HOST=scrutiny-influxdb
-      - SCRUTINY_WEB_INFLUXDB_PORT=8086
-      - SCRUTINY_WEB_INFLUXDB_ORG=scrutiny
-      - SCRUTINY_WEB_INFLUXDB_BUCKET=metrics
-      - TZ={{ tz }}
-    volumes:
-      - ./config:/opt/scrutiny/config
-      - ./influxdb_token:/run/secrets/influxdb_token:ro
-    {{ service_networks() }}
-      - scrutiny_internal
-    {{ healthcheck('curl --fail -s http://localhost:8080/api/health || exit 1') }}
-    labels:
-      # Pinned/manual-update tier: scrutiny ships rolling `master-web`/`master-collector` branch
-      # builds, so it must NOT ride watchtower's auto-update pool — a stateful monitoring service
-      # (the influxdb sidecar holds the SMART history) on unsupervised upstream `master` commits.
-      # Update deliberately via `deploy -t scrutiny`.
-      - "com.centurylinklabs.watchtower.enable=false"
-      {# Generate labels(container, port, docker_network, use_authelia) -#}
-      {{ labels(
-          container_item.hostname | default(container_item.name),
-          container_item.port | string,
-          (container_item.networks | default([docker_network]))[0],
-          container_item.use_authelia
-        )
-      }}
-      {{ kuma(container_item.name) }}
-    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    {{ resources('0.50', '512M', '0.05', '64M') }}
-
   # Spoke collector: reads SMART data (needs the raw-I/O caps + the NVMe device) and
-  # pushes results to the web API. No inbound network surface, never routed by Traefik.
+  # pushes results to the CLUSTER web API. No inbound network surface.
   scrutiny-collector:
     image: ghcr.io/analogj/scrutiny:master-collector
     container_name: scrutiny-collector
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    # Drop the default cap set (previously retained implicitly) and add back only what's needed —
-    # matches scrutiny-influxdb above and the rest of the hardened fleet. Verified against the live
-    # container after deploy (monitor-bridge "SMART Data Freshness"): SETUID/SETGID are required by
-    # the entrypoint's `su` privilege-drop (starts cron as a user — without them it loops
-    # "su: cannot set groups: Operation not permitted"); the two SYS_* caps do the SMART read.
-    # /dev/nvme0 is read as its root owner, so no DAC_OVERRIDE is needed.
+    # Same proven set as before the move: SETUID/SETGID for the entrypoint's `su`
+    # privilege-drop, SYS_RAWIO for SMART, SYS_ADMIN because the NVMe health log page
+    # goes through NVME_IOCTL_ADMIN_CMD (without it the read silently loses all health
+    # metrics).
     cap_drop:
       - ALL
     cap_add:
       - SETUID
       - SETGID
       - SYS_RAWIO
-      # SYS_ADMIN is required for NVMe drives: reading the SMART/Health Information
-      # log page goes through NVME_IOCTL_ADMIN_CMD, which the kernel gates on
-      # CAP_SYS_ADMIN. With SYS_RAWIO alone that read returns "Permission denied"
-      # and the collector silently publishes records missing all health metrics.
       - SYS_ADMIN
-    depends_on:
-      scrutiny-web:
-        condition: service_healthy
     environment:
-      - COLLECTOR_API_ENDPOINT=http://scrutiny:8080
+      # The cluster web API through its ClientIP-agnostic LAN bypass (^/api/.*). The
+      # container resolves the -k8s name to the cluster VIP via Pi-hole; the Go client
+      # tolerates the wildcard AAAA `::` answer (unlike grpc-go — see the otel-collector
+      # forwarder's VIP pin).
+      - COLLECTOR_API_ENDPOINT=https://scrutiny{{ k8s_hostname_suffix }}.local.{{ domain }}
       - TZ={{ tz }}
       # Pin the collector cadence (image default is daily 00:00) so the monitor-bridge
-      # "SMART Data Freshness" window (SCRUTINY_MAX_AGE_H=26 = one daily run + slack) is
-      # decoupled from the upstream default — a future image changing the default can't
-      # silently make the freshness window too tight (false down) or too loose (missed death).
+      # "SMART Data Freshness" window (26 h) is decoupled from the upstream default.
       - COLLECTOR_CRON_SCHEDULE=0 0 * * *
     volumes:
       - /run/udev:/run/udev:ro
     devices:
       - "{{ scrutiny_nvme_device }}:{{ scrutiny_nvme_device }}"
-    networks:
-      - scrutiny_internal
+    {{ service_networks() }}
     labels:
-      # Pinned/manual-update tier — see scrutiny-web. No unsupervised `master` pulls.
+      # Pinned/manual-update tier: rolling `master-collector` branch tag must NOT ride
+      # watchtower's auto-update pool. Update deliberately via
+      # `deploy -t scrutiny -e common_pull=always`.
       - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('scrutiny-collector') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '256M', '0.05', '32M') }}
 
 {{ external_networks() }}
-  scrutiny_internal:
-    internal: true

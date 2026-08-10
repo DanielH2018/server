@@ -224,9 +224,13 @@ containers_list:
   # back is re-adding this entry, removing bridge_hostname from daniel-box's, and
   # `docker compose up -d` in containers/uptime-kuma/ (dirs still on disk; tar snapshot at
   # /home/ubuntu/kuma-cutover-snapshot.tar.gz).
+  # scrutiny web+influxdb moved to the cluster 2026-08-10 (slice-7-phase-d-scrutiny.md
+  # SC6); this entry is now only the collector SPOKE pushing this host's NVMe SMART data
+  # to the cluster web API. port: false — the Traefik route retired with the Docker web.
+  # The whole entry retires at the Phase F join (the collector DaemonSet takes over).
   - name: scrutiny
-    port: 8080
-    use_authelia: true
+    port: false
+    use_authelia: false
     networks:
       - monitoring
   - name: homelab-mcp
