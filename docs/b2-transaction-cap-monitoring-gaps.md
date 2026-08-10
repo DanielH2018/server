@@ -330,3 +330,28 @@ sequence above.
 Open question for the next window: what does kopia's nightly actually cost in class B/C now
 that Longhorn shares the account cap, and does the cap need raising for the two to coexist —
 the 08-08 analysis priced the *Longhorn* side only.
+
+## Recurrence — 2026-08-10, Class B AND Class C caps blown (operator emails confirm both)
+
+Timeline: the Longhorn backup target went unavailable at 05:01 UTC and the reconcile storm
+ran unattended — an errored `backups.longhorn.io` object every ~7.5 min until containment.
+`b2_reachable` 403'd all morning; kopia's API hung on the 403s (~04:00 UTC on), taking the
+Backup Freshness check down with it. New load that night, and the likely first-cause: the
+Phase D Kuma cutover enrolled TWO first-backup volumes into the `longhorn` backed-up class
+(uptime-kuma-data 4 Gi seeded at 1.5 G, code-server-config 10 Gi seeded at 6.2 G) — a
+full-upload night on top of kopia's nightly, before the storm amplified it. Class B blowing
+too is new and unexplained by lists alone; per-class attribution still can't be read while
+capped (the open question below stands, now for both classes).
+
+Containment (12:47–12:55 UTC): backup target blanked (`backupTargetURL: ""` — the 08-08
+lever), kopia stopped AND `docker rm`'d — its connect loop misreads the 403 as "repository
+not found" and retries creation at a steady burn, and a removed container leaves the
+docker-fleet check's restart-policy scope instead of paging red for 11 hours.
+
+Re-arm after 00:00 UTC: `deploy.yml --tags kopia` on daniel-server (recreates the
+container), then re-set `backupTargetURL` to `s3://daniel-server-kopia@us-east-005/longhorn`
+and confirm the target goes `available: true` without a 403 before walking away.
+
+Operator decision now genuinely due (third cap event in nine days): raise the B2 daily caps
+so Longhorn + kopia can coexist on the account, or thin/serialise the backup set. Enrolment
+of every migrated PVC into `longhorn` is additive by design — the cap is not.
