@@ -272,6 +272,27 @@ def test_nothing_mounts_over_the_serviceaccount_token_path():
                 ), f"{entry['name']} mounts {path}, shadowing the ServiceAccount token"
 
 
+def test_no_template_names_a_mount_under_run_secrets():
+    """The rendered check above only sees deployment.yaml.j2; roles whose workloads live in
+    differently-named templates (scrutiny's web.yaml.j2/influxdb.yaml.j2) slipped past it and
+    CrashLooped on the same runc mountpoint error (2026-08-10, second occurrence). A textual
+    scan over EVERY k8s template needs no render context and catches the whole class."""
+    offenders = []
+    for tpl in K8S.glob("*/templates/*.j2"):
+        for line in tpl.read_text().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("mountPath:"):
+                path = stripped.split(":", 1)[1].strip().strip("\"'").rstrip("/")
+                if (
+                    path == "/run/secrets"
+                    or path.startswith("/run/secrets/")
+                    or path == "/var/run/secrets"
+                    or path.startswith("/var/run/secrets/")
+                ):
+                    offenders.append(f"{tpl}: {stripped}")
+    assert not offenders, f"ServiceAccount-token-shadowing mounts: {offenders}"
+
+
 def test_every_deployment_disables_service_link_env_vars():
     """Kubernetes injects legacy Docker-link env vars for every Service in the namespace —
     <NAME>_SERVICE_HOST, <NAME>_PORT_<n>_TCP and so on. Any app that reads its own config from

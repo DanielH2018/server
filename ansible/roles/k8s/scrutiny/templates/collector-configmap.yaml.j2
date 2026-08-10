@@ -1,0 +1,18 @@
+---
+# Pin the collector to the node's real NVMe. A privileged pod sees the HOST's /dev, which
+# on a Longhorn node includes dozens of iSCSI virtual disks (sda, sdb, …) — smartctl
+# errors on every one (checksum error, exit 4) and publishes bogus 0x600… wwn records.
+# `allow_listed_devices` is the key that restricts the smartctl scan (a `devices:` list
+# only CUSTOMIZES detected entries — tried first, and the scan kept publishing the iSCSI
+# fleet). Both nodes' NVMe enumerates as /dev/nvme0, so one config serves the whole
+# DaemonSet (matches scrutiny_nvme_device on the Docker side).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scrutiny-collector-config
+  namespace: {{ k8s_namespace }}
+data:
+  collector.yaml: |
+    version: 1
+    allow_listed_devices:
+      - /dev/nvme0

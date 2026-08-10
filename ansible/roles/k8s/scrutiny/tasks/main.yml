@@ -39,6 +39,7 @@
     manifests_files:
       - influxdb.yaml
       - web.yaml
+      - collector-configmap.yaml
       - collector-daemonset.yaml
       - ingressroute.yaml
     manifests_secret_files:

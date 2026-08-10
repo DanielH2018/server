@@ -43,13 +43,13 @@ spec:
             - name: DOCKER_INFLUXDB_INIT_USERNAME
               value: admin
             - name: DOCKER_INFLUXDB_INIT_PASSWORD_FILE
-              value: /run/secrets/influxdb_admin_password
+              value: /etc/influxdb-secrets/influxdb_admin_password
             - name: DOCKER_INFLUXDB_INIT_ORG
               value: scrutiny
             - name: DOCKER_INFLUXDB_INIT_BUCKET
               value: metrics
             - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE
-              value: /run/secrets/influxdb_token
+              value: /etc/influxdb-secrets/influxdb_token
             - name: TZ
               value: {{ tz }}
           ports:
@@ -63,8 +63,10 @@ spec:
             # HTTP and never reads it; losing it costs nothing.
             - name: cli-config
               mountPath: /etc/influxdb2
+            # /etc, NOT /run/secrets — the Docker idiom shadows the ServiceAccount token
+            # projection there and runc cannot create its mountpoint (CrashLoopBackOff).
             - name: credentials
-              mountPath: /run/secrets
+              mountPath: /etc/influxdb-secrets
               readOnly: true
           readinessProbe:
             exec:

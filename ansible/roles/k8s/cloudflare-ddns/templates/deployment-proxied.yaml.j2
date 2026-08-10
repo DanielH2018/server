@@ -30,7 +30,7 @@ spec:
                 - ALL
           env:
             - name: CLOUDFLARE_API_TOKEN_FILE
-              value: /run/secrets/cf_dns_token
+              value: /etc/ddns-secrets/cf_dns_token
             - name: DOMAINS
               value: "{{ domain }}"
             - name: PROXIED
@@ -41,8 +41,9 @@ spec:
             - name: UPTIMEKUMA
               value: "https://{{ cloudflare_ddns_k8s_kuma_host }}/api/push/{{ cloudflare_ddns_proxied_push_token }}"
           volumeMounts:
+            # /etc, not /run/secrets — see deployment-direct's note (convention guard).
             - name: token
-              mountPath: /run/secrets
+              mountPath: /etc/ddns-secrets
               readOnly: true
           resources:
             limits:

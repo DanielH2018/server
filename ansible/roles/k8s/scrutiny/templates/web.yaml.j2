@@ -30,7 +30,7 @@ spec:
           command:
             - /bin/sh
             - -c
-            - 'export SCRUTINY_WEB_INFLUXDB_TOKEN="$(cat /run/secrets/influxdb_token)"; exec /opt/scrutiny/bin/scrutiny start'
+            - 'export SCRUTINY_WEB_INFLUXDB_TOKEN="$(cat /etc/scrutiny-secrets/influxdb_token)"; exec /opt/scrutiny/bin/scrutiny start'
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -57,8 +57,9 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /opt/scrutiny/config
+            # /etc, NOT /run/secrets — see the influxdb manifest's note.
             - name: credentials
-              mountPath: /run/secrets
+              mountPath: /etc/scrutiny-secrets
               readOnly: true
           readinessProbe:
             httpGet:

@@ -21,19 +21,14 @@ spec:
         - name: collector
           image: {{ scrutiny_k8s_collector_image }}
           securityContext:
-            allowPrivilegeEscalation: true
-            capabilities:
-              drop:
-                - ALL
-              add:
-                # Same set the Docker copy proved out: SETUID/SETGID for the entrypoint's
-                # su privilege-drop, SYS_RAWIO for SMART, SYS_ADMIN because the NVMe
-                # health log page goes through NVME_IOCTL_ADMIN_CMD (without it the read
-                # is refused and records silently miss all health metrics).
-                - SETUID
-                - SETGID
-                - SYS_RAWIO
-                - SYS_ADMIN
+            # The SC3 open question, resolved 2026-08-10: the Docker cap set
+            # (SETUID/SETGID/SYS_RAWIO/SYS_ADMIN) + a CharDevice hostPath is NOT enough
+            # under k8s — the device cgroup still refuses the open (`smartctl --info
+            # --device nvme /dev/nvme0` → exit status 2, device detected but unreadable).
+            # Unlike Docker's `devices:`, k8s has no per-device grant short of a device
+            # plugin, so this DaemonSet is privileged — the node-exporter-style trade for
+            # host-hardware readers.
+            privileged: true
           env:
             - name: COLLECTOR_API_ENDPOINT
               # The in-cluster Service — no route, no Authelia in the path.
@@ -48,6 +43,8 @@ spec:
               readOnly: true
             - name: nvme
               mountPath: /dev/nvme0
+            - name: config
+              mountPath: /opt/scrutiny/config
           resources:
             limits:
               cpu: "500m"
@@ -63,3 +60,6 @@ spec:
           hostPath:
             path: /dev/nvme0
             type: CharDevice
+        - name: config
+          configMap:
+            name: scrutiny-collector-config

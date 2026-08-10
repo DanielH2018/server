@@ -30,7 +30,7 @@ spec:
                 - ALL
           env:
             - name: CLOUDFLARE_API_TOKEN_FILE
-              value: /run/secrets/cf_dns_token
+              value: /etc/ddns-secrets/cf_dns_token
             # Only terraria is live. valheim/minecraft are archived — publishing their A
             # records pointed unproxied home IP at nothing, needlessly exposing the raw IP.
             # Re-add a domain here when its game server is reactivated.
@@ -43,8 +43,11 @@ spec:
             - name: UPTIMEKUMA
               value: "https://{{ cloudflare_ddns_k8s_kuma_host }}/api/push/{{ cloudflare_ddns_direct_push_token }}"
           volumeMounts:
+            # /etc, not /run/secrets: this image (scratch-based) lacks the /var/run
+            # symlink so the old path happened to work, but the convention guard bans the
+            # class — on any distro-based image it shadows the ServiceAccount token mount.
             - name: token
-              mountPath: /run/secrets
+              mountPath: /etc/ddns-secrets
               readOnly: true
           resources:
             limits:
