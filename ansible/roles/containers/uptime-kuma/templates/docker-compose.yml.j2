@@ -151,6 +151,11 @@ services:
          the cron follows the LAPI into the cluster and the monitor-bridge state-file hop is
          gone. Label lives HERE (not monitor-bridge) purely to keep the monitor provisioned. -#}
       {{ kuma('crowdsec-home-allowlist', monitor_type='push', name='CrowdSec Home Allowlist', interval=600, max_retries=0, push_token=monitor_bridge_home_allowlist_push_token) }}
+      {# Slice-7 Phase D KD2: the one monitor superseding the ~27 per-container docker-type
+         tiles (kuma_docker_monitors=false in group_vars). Fed every 5 min by this role's
+         docker-fleet-health.sh host cron; scope is self-maintaining (restart-policy-based,
+         no name list to rot). Per-container detail rides in the push message. -#}
+      {{ kuma('docker-fleet', monitor_type='push', name='Docker Fleet Health', interval=600, max_retries=0, push_token=docker_fleet_push_token) }}
       {# CrowdSec dashboard moved into the cluster engine pod at B2c (Docker role archived);
          Authelia-gated, so an unauthenticated probe sees the 302 to the portal — same
          expectation as the other authelia'd -k8s monitors. -#}

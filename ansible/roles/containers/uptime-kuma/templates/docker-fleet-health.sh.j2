@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Docker-fleet heartbeat — managed by Ansible (uptime-kuma role); edits overwritten.
+#
+# Slice-7 Phase D KD2 (2026-08-10): supersedes the ~27 per-container AutoKuma docker-type
+# monitors, which could not survive Kuma's move to the cluster (cluster-side AutoKuma can
+# never reach the private docker-proxy socket — Security M1 keeps it off the LAN). One push
+# monitor, per-container detail in the message.
+#
+# No expected-name list to rot: a container is in scope iff its restart policy says it
+# should be running (unless-stopped/always). A retired service is `docker rm`ed and leaves
+# scope by itself; a crashed one sits Exited with its policy still set and is caught.
+# Restart-loop/OOM/CPU detail stays monitor-bridge's job (cAdvisor checks).
+set -uo pipefail
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+KUMA_RESOLVE_IP="{{ hostvars[monitoring_controller_host].server_ip }}"
+PUSH_URL="https://${KUMA_HOST}/api/push/{{ docker_fleet_push_token }}"
+
+BAD=$(docker ps -aq | xargs -r docker inspect --format \
+  '{% raw %}{{.Name}}|{{.HostConfig.RestartPolicy.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}{% endraw %}' \
+  2>/dev/null \
+  | awk -F'|' '($2=="unless-stopped" || $2=="always") && ($3!="running" || $4=="unhealthy") \
+      {gsub("^/","",$1); print $1"("$3"/"$4")"}' \
+  | paste -sd' ' -)
+
+if [[ -n "${BAD}" ]]; then
+  STATUS=down
+  MSG="not running or unhealthy: ${BAD}"
+else
+  N=$(docker ps -q | wc -l)
+  STATUS=up
+  MSG="${N} containers running, none unhealthy"
+fi
+
+curl -fsS --max-time 10 -G \
+  --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
+  --data-urlencode "status=${STATUS}" \
+  --data-urlencode "msg=${MSG}" \
+  "$PUSH_URL" >/dev/null \
+  || logger -t docker-fleet-health "push failed (status=${STATUS}: ${MSG})"

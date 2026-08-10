@@ -1,12 +1,23 @@
 {% macro labels(container, port=none, name=none, url=none, monitor_type='docker', interval=60, max_retries=2, push_token=none, notify=true, hostname=none, extra_notifications=none, accepted_statuscodes=none, max_redirects=none, dns_resolve_server=none) -%}
 {% set _name = name if name is not none else container | replace('-', ' ') | title -%}
 {% if monitor_type == 'docker' -%}
+{#- Slice-7 Phase D KD2 (2026-08-10): docker-type monitors retired fleet-wide — one
+    docker-fleet push check (uptime-kuma role's host cron) supersedes the per-container
+    tiles, because cluster-side AutoKuma can never reach the private docker-proxy socket.
+    The flag lives in group_vars; flipping it back restores every docker monitor unchanged.
+    When suppressed, an inert NON-kuma-prefixed label is emitted instead of nothing so a
+    `labels:` block whose only entry was this macro stays valid YAML (a bare `kuma.*` label
+    would be parsed by AutoKuma and one malformed monitor blocks its entire sync). -#}
+{% if kuma_docker_monitors | default(true) -%}
       - "kuma.{{ container }}.docker.name={{ _name }}"
       - "kuma.{{ container }}.docker.docker_container={{ container }}"
       - "kuma.{{ container }}.docker.docker_host={{ kuma_docker_host | string }}"
       - "kuma.{{ container }}.docker.interval={{ interval | string }}"
       - "kuma.{{ container }}.docker.maxretries={{ max_retries | string }}"
 {% if notify and kuma_notification_id is defined and kuma_notification_id %}      - 'kuma.{{ container }}.docker.notification_name_list={{ ([kuma_notification_id] + (extra_notifications or [])) | tojson }}'
+{% endif -%}
+{%- else -%}
+      - "org.homelab.kuma-docker-monitor=retired-slice7-phase-d"
 {% endif -%}
 {%- elif monitor_type == 'push' -%}
       - "kuma.{{ container }}.push.name={{ _name }}"

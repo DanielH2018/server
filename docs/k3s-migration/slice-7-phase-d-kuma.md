@@ -127,9 +127,21 @@ cron's expected list stays derived from inventory (not hand-maintained).
 6. **Retire** — Docker uptime-kuma role to archive, inventory entry swap (19 → 18),
    `kuma_docker_host` + `_render_guard` stub removed, count lineage, docs.
 
-## Unverified — resolve during execution
+## KD5 gate — PASSED 2026-08-10 (runtime-proven, then source-verified)
 
-- Static-file **notification** entities (KD5 — the gate).
+A second AutoKuma v2.0.0 ran against live Kuma with `AUTOKUMA__DOCKER__ENABLED=false` and a
+static dir defining a notification + a push monitor referencing it: both created ("Creating
+new notification/push" in its logs), no docker socket, no crash. Source-level confirmations
+(v2.0.0 tag): `Entity` enum parses `type = "notification"` from files (entity.rs);
+`docker.enabled` exists in stable despite being absent from the stable README (config.rs,
+default true); `on_delete` defaults to Delete; upstream ships `monitors/example_notification.json`.
+Managed = the instance's OWN sqlite DB ∩ live entities (kuma.rs) — which makes additive
+testing safe AND means the cutover must seed autokuma's own DB alongside Kuma's, with
+static filenames equal to the existing label-derived ids, or reconciliation duplicates the
+fleet. The 5s "Updating notification" churn quirk affects file-defined notifications too.
+Gate entities removed afterwards via the kuma-cli release binary; DB verified clean.
+
+## Unverified — resolve during execution
 - AutoKuma static-file **field parity** with the label macro (accepted_statuscodes,
   max_redirects, dns fields) — render one of each type on the scratch deploy.
 - Whether AutoKuma's `:latest` current version matches the docs' `dev` options
