@@ -28,7 +28,10 @@ services:
       - TZ={{ tz }}
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
-      - LOKI_URL=http://loki:3100
+      # Phase D.2 KL4 (2026-08-10): terraria's logs live in the cluster Loki now (its
+      # pod moved at the backup consolidation), so this reads the -k8s route — Pi-hole
+      # resolves it to the cluster VIP, and the ClientIP gate admits this host's IP.
+      - LOKI_URL=https://loki-homelab{{ k8s_hostname_suffix }}.local.{{ domain }}
       # Quote: the value starts with '{', a YAML flow-mapping indicator. (stats.py's
       # default selector is identical, so this is for discoverability/tunability.)
       - 'LOKI_QUERY={container="terraria"}'

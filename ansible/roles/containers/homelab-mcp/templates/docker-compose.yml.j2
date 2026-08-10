@@ -17,6 +17,9 @@ services:
       - HOMELAB_FILE_ROOT=/srv/ansible-src
       # Trusted host for the MCP transport's DNS-rebinding guard (else 421 Invalid Host).
       - MCP_PUBLIC_HOST=mcp.local.{{ domain }}
+      # Phase D.2 KL4 (2026-08-10): app.py's default is the Docker loki, which retires
+      # after the dual-write window — point at the cluster Loki explicitly.
+      - LOKI_URL=https://loki-homelab{{ k8s_hostname_suffix }}.local.{{ domain }}
       - PORT={{ container_item.port }}
       - PYTHONDONTWRITEBYTECODE=1
       - TZ=America/Chicago

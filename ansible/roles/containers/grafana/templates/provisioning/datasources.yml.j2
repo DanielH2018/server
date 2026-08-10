@@ -28,7 +28,10 @@ datasources:
     uid: bf4q19tuivta8e
     type: loki
     access: proxy
-    url: http://loki:3100
+    # Phase D.2 KL4 (2026-08-10): the contract uid follows the pipeline that survives —
+    # every dashboard pinned to bf4q19tuivta8e now reads the cluster Loki. History older
+    # than the cutover stays in the Docker copy below until it retires.
+    url: https://loki-homelab{{ k8s_hostname_suffix }}.local.{{ domain }}
     editable: true
     jsonData:
       # Logs -> traces. Claude Code stamps trace_id/span_id onto every event it logs, and
@@ -42,6 +45,16 @@ datasources:
           matcherType: label
           matcherRegex: trace_id
           url: "${__value.raw}"
+
+  # Phase D.2 KL5 overlap escape hatch: history older than the 2026-08-10 cutover lives
+  # only in the Docker Loki's volume. Non-default, no dashboard pins it; retires with the
+  # container at the end of the dual-write window (delete this block then).
+  - name: loki-docker-retiring
+    uid: loki-docker-retiring
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
 
   # New datasource (no hand-created predecessor to adopt), so the uid is simply `tempo`.
   # Backs the Claude Code spans the otel-collector's traces pipeline forwards.

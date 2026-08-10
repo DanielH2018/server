@@ -335,8 +335,10 @@ services:
       # docker_sd `job:docker` stream) over a tolerant window (LOKI_FILETAIL_WINDOW) and `down`s at
       # zero — a file-tail break silences all three at once, while syslog's routine volume keeps a
       # quiet night alive; arm 2 counts {container=~".+"} (the docker stream) over LOKI_WINDOW.
-      # Reached at loki:3100 over `monitoring`.
-      - LOKI_URL=http://loki:3100
+      # Phase D.2 KL4 (2026-08-10): points at the cluster Loki so the freshness check
+      # guards the pipeline that survives the Docker loki's retirement (the dual-write
+      # ships the same streams to both during the overlap).
+      - LOKI_URL=https://loki-homelab{{ k8s_hostname_suffix }}.local.{{ domain }}
       - LOKI_STREAM={job=~"authlog|syslog|traefik"}
       - LOKI_WINDOW=30m
       - LOKI_FILETAIL_WINDOW=3h

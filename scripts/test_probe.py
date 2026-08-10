@@ -39,15 +39,16 @@ def test_prom_targets_url():
 
 def test_loki_labels_url():
     assert (
-        probe.loki_labels_url("10.0.0.2") == "http://10.0.0.2:3100/loki/api/v1/labels"
+        probe.loki_labels_url("https://loki.example")
+        == "https://loki.example/loki/api/v1/labels"
     )
 
 
 def test_loki_query_url_encodes_logql_and_limit():
-    url = probe.loki_query_url("10.0.0.2", '{job="x"}', 50)
+    url = probe.loki_query_url("https://loki.example", '{job="x"}', 50)
     assert (
         url
-        == "http://10.0.0.2:3100/loki/api/v1/query_range?query=%7Bjob%3D%22x%22%7D&limit=50"
+        == "https://loki.example/loki/api/v1/query_range?query=%7Bjob%3D%22x%22%7D&limit=50"
     )
 
 
@@ -102,15 +103,31 @@ def test_plan_targets_resolves_prometheus():
     assert stages == [probe.curl_argv("http://10.0.0.1:9090/api/v1/targets")]
 
 
-def test_plan_loki_labels_resolves_loki():
-    stages = probe.plan(["loki-labels"], fake_resolve)
-    assert stages == [probe.curl_argv("http://10.0.0.2:3100/loki/api/v1/labels")]
+def fake_loki_endpoint():
+    # The (base, --resolve pin) pair the live loki_endpoint() derives from SOPS +
+    # inventory — faked so plan() stays testable without either.
+    return "https://loki.example", "loki.example:443:10.0.0.240"
+
+
+def test_plan_loki_labels_uses_cluster_endpoint_with_vip_pin():
+    stages = probe.plan(["loki-labels"], fake_resolve, fake_loki_endpoint)
+    assert stages == [
+        probe.curl_argv(
+            "https://loki.example/loki/api/v1/labels",
+            resolve="loki.example:443:10.0.0.240",
+        )
+    ]
 
 
 def test_plan_loki_query_with_limit():
-    stages = probe.plan(["loki-query", '{job="x"}', "--limit", "50"], fake_resolve)
+    stages = probe.plan(
+        ["loki-query", '{job="x"}', "--limit", "50"], fake_resolve, fake_loki_endpoint
+    )
     assert stages == [
-        probe.curl_argv(probe.loki_query_url("10.0.0.2", '{job="x"}', 50))
+        probe.curl_argv(
+            probe.loki_query_url("https://loki.example", '{job="x"}', 50),
+            resolve="loki.example:443:10.0.0.240",
+        )
     ]
 
 

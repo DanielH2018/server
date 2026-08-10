@@ -17,8 +17,8 @@ Everything it runs is read-only (HTTP GET / TLS handshake / docker inspect).
 Subcommands:
     metric '<promql>'        Prometheus instant query [--json] (prometheus :9090)
     targets                  Prometheus scrape-target health (prometheus :9090)
-    loki-labels              Loki label names                (loki :3100)
-    loki-query '<logql>'     Loki range query [--limit N] [--json] (loki :3100)
+    loki-labels              Loki label names                (cluster loki-homelab)
+    loki-query '<logql>'     Loki range query [--limit N] [--json] (cluster loki-homelab)
     alerts                   monitor-bridge DOWN history as episodes [--days N --check X --raw --json]
     scrutiny                 Disk SMART summary              (scrutiny :8080)
     pi <subpath>             Pi glances API, e.g. `pi fs`    (daniel-pi.lan:61208)
@@ -75,12 +75,39 @@ def ha_base():
     return f"https://{ha_host()}"
 
 
+def metallb_vip():
+    """The cluster's MetalLB ingress VIP, read from inventory (plaintext, not a secret)."""
+    with open(GROUP_VARS_PATH) as f:
+        for line in f:
+            if line.startswith("k3s_metallb_ingress_vip:"):
+                return line.split(":", 1)[1].strip()
+    raise SystemExit(f"k3s_metallb_ingress_vip not found in {GROUP_VARS_PATH}")
+
+
+def loki_endpoint():
+    """(base_url, curl --resolve pin) for the cluster Loki (Phase D.2 KL4). Split-horizon
+    DNS: this host's shell resolves -k8s names to the Docker Traefik (which 404s them), so
+    curl pins the name to the MetalLB ingress VIP; containers get the right answer from
+    Pi-hole and need no pin."""
+    host = f"loki-homelab-k8s.local.{sops_extract('domain')}"
+    return f"https://{host}", f"{host}:443:{metallb_vip()}"
+
+
 # claude_ha_token lives in the SOPS-encrypted secrets file (repo-root relative).
 SECRETS_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "ansible",
     "vars",
     "secrets.yml",
+)
+
+# Inventory group vars (plaintext) — source of the MetalLB ingress VIP.
+GROUP_VARS_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "ansible",
+    "inventory",
+    "group_vars",
+    "all.yml",
 )
 
 # Git-managed automation source (repo-root relative to this file) — the "expected" set for
@@ -110,11 +137,11 @@ def prom_targets_url(ip):
     return f"http://{ip}:9090/api/v1/targets"
 
 
-def loki_labels_url(ip):
-    return f"http://{ip}:3100/loki/api/v1/labels"
+def loki_labels_url(base):
+    return f"{base}/loki/api/v1/labels"
 
 
-def loki_query_url(ip, logql, limit, start=None, end=None, direction=None):
+def loki_query_url(base, logql, limit, start=None, end=None, direction=None):
     params = {"query": logql, "limit": limit}
     if start is not None:
         params["start"] = start
@@ -122,7 +149,7 @@ def loki_query_url(ip, logql, limit, start=None, end=None, direction=None):
         params["end"] = end
     if direction is not None:
         params["direction"] = direction
-    return f"http://{ip}:3100/loki/api/v1/query_range?" + urlencode(params)
+    return f"{base}/loki/api/v1/query_range?" + urlencode(params)
 
 
 def scrutiny_url(ip):
@@ -457,8 +484,12 @@ def ha_state_rows(states, model):
 # --- low-level argv / parsing helpers (pure) --------------------------------
 
 
-def curl_argv(url, timeout=DEFAULT_TIMEOUT):
-    return ["curl", "-sS", "--max-time", str(timeout), url]
+def curl_argv(url, timeout=DEFAULT_TIMEOUT, resolve=None):
+    argv = ["curl", "-sS", "--max-time", str(timeout)]
+    if resolve:
+        argv += ["--resolve", resolve]
+    argv.append(url)
+    return argv
 
 
 def inspect_ip_argv(container):
@@ -794,12 +825,12 @@ def _build_parser():
     return p
 
 
-def plan(args, resolve_ip):
+def plan(args, resolve_ip, loki_endpoint=loki_endpoint):
     """Return the command pipeline (list of argv stages) for the parsed args.
 
-    `resolve_ip(container) -> ip` is injected so all routing/URL logic is testable
-    without Docker or the network. Most commands are a single stage; `cert` is a
-    two-stage openssl pipeline.
+    `resolve_ip(container) -> ip` and `loki_endpoint() -> (base, pin)` are injected so
+    all routing/URL logic is testable without Docker, SOPS, or the network. Most
+    commands are a single stage; `cert` is a two-stage openssl pipeline.
     """
     ns = _build_parser().parse_args(args)
     cmd = ns.cmd
@@ -808,9 +839,11 @@ def plan(args, resolve_ip):
     if cmd == "targets":
         return [curl_argv(prom_targets_url(resolve_ip("prometheus")))]
     if cmd == "loki-labels":
-        return [curl_argv(loki_labels_url(resolve_ip("loki")))]
+        base, pin = loki_endpoint()
+        return [curl_argv(loki_labels_url(base), resolve=pin)]
     if cmd == "loki-query":
-        return [curl_argv(loki_query_url(resolve_ip("loki"), ns.logql, ns.limit))]
+        base, pin = loki_endpoint()
+        return [curl_argv(loki_query_url(base, ns.logql, ns.limit), resolve=pin)]
     if cmd == "scrutiny":
         return [curl_argv(scrutiny_url(resolve_ip("scrutiny")))]
     if cmd == "pi":
@@ -854,9 +887,11 @@ def run_pipeline(stages):
     return procs[-1].wait()
 
 
-def fetch(url):
+def fetch(url, resolve=None):
     """Run the read-only curl GET and return its body (raise on failure)."""
-    out = subprocess.run(curl_argv(url), capture_output=True, text=True)
+    out = subprocess.run(
+        curl_argv(url, resolve=resolve), capture_output=True, text=True
+    )
     if out.returncode != 0:
         raise SystemExit(f"curl {url} failed: {out.stderr.strip()}")
     return out.stdout
@@ -867,11 +902,13 @@ def run_query(ns):
     `--json` and `--dry-run` never reach here — they take the raw streaming path."""
     if ns.cmd == "metric":
         url = prom_query_url(resolve_ip("prometheus"), ns.promql)
+        pin = None
         formatter = format_metric
     else:
-        url = loki_query_url(resolve_ip("loki"), ns.logql, ns.limit)
+        base, pin = loki_endpoint()
+        url = loki_query_url(base, ns.logql, ns.limit)
         formatter = format_loki
-    body = fetch(url)
+    body = fetch(url, resolve=pin)
     try:
         data = json.loads(body)
     except json.JSONDecodeError:
@@ -897,8 +934,9 @@ def run_alerts(ns):
     """Fetch monitor-bridge's DOWN log lines over the window and print firing episodes."""
     end_s = datetime.now(_CHICAGO).timestamp()
     start_s = end_s - ns.days * 86400
+    base, pin = loki_endpoint()
     url = loki_query_url(
-        resolve_ip("loki"),
+        base,
         ALERT_LOGQL,
         ns.limit,
         start=int(start_s * 1e9),
@@ -906,9 +944,9 @@ def run_alerts(ns):
         direction="forward",
     )
     if ns.dry_run:
-        print(" ".join(curl_argv(url)))
+        print(" ".join(curl_argv(url, resolve=pin)))
         return 0
-    raw = _rows_from_loki(json.loads(fetch(url)))
+    raw = _rows_from_loki(json.loads(fetch(url, resolve=pin)))
     if ns.raw:
         print("\n".join(line for _, line in raw) or "no logs")
     else:
