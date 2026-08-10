@@ -136,3 +136,76 @@ stringData:
     {"type": "push", "name": "Daniel Pi Recovery", "interval": 600, "max_retries": 0, "push_token": "{{ pi_recovery_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   secret-rotation.json: |
     {"type": "push", "name": "Secret Rotation", "interval": 90000, "max_retries": 0, "push_token": "{{ secret_rotation_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # ── Transcribed 2026-08-10: the LIVE push fleet whose labels sit inert on the
+  # monitor-bridge / autofix-bridge composes (the transcription ledger, pre-ON_DELETE flip).
+  # Ids must keep matching the kuma() first arguments at those call sites.
+  monitor-bridge-disk.json: |
+    {"type": "push", "name": "Root Disk", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_disk_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-cert.json: |
+    {"type": "push", "name": "TLS Cert Expiry", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_cert_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-mem.json: |
+    {"type": "push", "name": "Memory", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_mem_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-restarts.json: |
+    {"type": "push", "name": "Container Restarts", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_restarts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-oom.json: |
+    {"type": "push", "name": "Container OOM", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_oom_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-cpu.json: |
+    {"type": "push", "name": "CPU Throttling", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_cpu_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-prometheus.json: |
+    {"type": "push", "name": "Prometheus Reachable", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_prometheus_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-targets.json: |
+    {"type": "push", "name": "Scrape Targets", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_targets_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-traefik.json: |
+    {"type": "push", "name": "Traefik 5xx", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_traefik_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-traefik-latency.json: |
+    {"type": "push", "name": "Traefik Latency", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_traefik_latency_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-n8n.json: |
+    {"type": "push", "name": "n8n Prod Workflows", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_n8n_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-arr-queue.json: |
+    {"type": "push", "name": "Arr Queue Warnings", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_arr_queue_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-prowlarr-indexers.json: |
+    {"type": "push", "name": "Prowlarr Indexers", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_prowlarr_indexers_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  gitops-deploy-alive.json: |
+    {"type": "push", "name": "GitOps Deploy — Alive", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_gitops_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  gitops-deploy-status.json: |
+    {"type": "push", "name": "GitOps Deploy — Status", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_gitops_status_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  wg-easy-pi-peers.json: |
+    {"type": "push", "name": "WG Pi Peer Backup", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_pi_peers_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  docker-user-origin-lock.json: |
+    {"type": "push", "name": "DOCKER-USER Origin Lock", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_docker_user_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  cloudflare-ip-drift.json: |
+    {"type": "push", "name": "Cloudflare IP Drift", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_cloudflare_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  crowdsec-appsec.json: |
+    {"type": "push", "name": "CrowdSec AppSec", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_appsec_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  autofix-disk-prune.json: |
+    {"type": "push", "name": "Disk Autoprune", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_disk_prune_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-b2-reachable.json: |
+    {"type": "push", "name": "B2 Reachable", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_b2_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-k8s-workloads.json: |
+    {"type": "push", "name": "k3s Workload Health", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_k8s_workloads_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-cluster-targets.json: |
+    {"type": "push", "name": "Cluster Scrape Targets", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_cluster_targets_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-cluster-prometheus.json: |
+    {"type": "push", "name": "Cluster Prometheus Reachable", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_cluster_prometheus_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-scrutiny.json: |
+    {"type": "push", "name": "SMART Data / Health", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_scrutiny_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-ups.json: |
+    {"type": "push", "name": "UPS Battery Health", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_ups_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-pi.json: |
+    {"type": "push", "name": "Pi Pressure", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-ha.json: |
+    {"type": "push", "name": "Home Assistant Automations", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_ha_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  renovate-notify-alive.json: |
+    {"type": "push", "name": "Renovate Notifier — Alive", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_renovate_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-loki.json: |
+    {"type": "push", "name": "Loki Log Ingestion", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_loki_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-promtail-dropped.json: |
+    {"type": "push", "name": "Promtail Dropped Entries", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_promtail_dropped_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-loki-reachable.json: |
+    {"type": "push", "name": "Loki Reachable", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_loki_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-remote-write.json: |
+    {"type": "push", "name": "Prometheus Remote-Write Lag", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_remote_write_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-discord.json: |
+    {"type": "push", "name": "Discord Delivery", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_discord_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+  arr-autoblock.json: |
+    {"type": "push", "name": "Arr Auto-Block", "interval": 600, "max_retries": 0, "push_token": "{{ arr_autoblock_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
