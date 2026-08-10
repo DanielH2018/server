@@ -133,7 +133,17 @@ verification per service as in slices 2-5.
 code-server 2026-08-10 (`c486f05b`) — ported WITHOUT its docker plumbing (operator
 decision): no DOCKER_HOST, in-IDE docker CLI and devcontainers gone,
 docker-proxy-codeserver + the `codeserver` net dissolved (`has_code_server: false`).
-daniel-server: 20 → 19.
+daniel-server: 20 → 19. Deployed + verified same day: 22-min in-cluster build,
+authoritative seed (104,334 files, identical digest, staging copy since removed),
+pod 1/1, native route 302 via the VIP and bridged `code-server.<domain>` 302 after a
+traefik redeploy rendered its forward-bridge router (inventory-only changes are outside
+gitops' trigger map — the redeploy has to be asked for).
+
+Fallout caught by the shrink survey and fixed same night (`026d058b`): HA's 08-09 move
+left prometheus's `home-assistant` scrape job and monitor-bridge's `HA_URL` on the dead
+Docker DNS name — `ha_heartbeat` DOWN ~80 cycles, `targets` DOWN, and `check_ups`
+green-but-blind (its `hass_*` source gone). Both re-pointed at the `-k8s` name; all three
+verified recovered. Prometheus dropped its `apps` net (existed only for that scrape).
 
 **Homepage widget inventory (the open question below, resolved 2026-08-10):** three
 `server: my-docker` docker-status pairs remain — uptime-kuma, pihole, peanut — via
