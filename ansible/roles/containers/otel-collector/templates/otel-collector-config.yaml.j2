@@ -26,12 +26,19 @@ processors:
 
 exporters:
   # OTLP/gRPC to the cluster collector: TLS terminates at the cluster Traefik (LE cert,
-  # validated against system CAs), which h2c-forwards to the collector's plaintext gRPC
-  # receiver. The route is ClientIP-gated to this host. Pi-hole resolves the -k8s name to
-  # the cluster VIP for containers; the host shell would get the wrong Traefik, which is
-  # one of the reasons this forwarder is a container.
+  # validated against system CAs via server_name_override), which h2c-forwards to the
+  # collector's plaintext gRPC receiver. The route is ClientIP-gated to this host.
+  #
+  # Dialed by VIP, not by name — probe.py's --resolve pin, same reason plus one: Pi-hole's
+  # wildcard `address=/local.<domain>/::` (the anti-public-IPv6 block) answers AAAA `::`
+  # even for names whose A record is overridden to the VIP, and grpc-go wedges retrying
+  # `[::]:443` instead of falling back to the A answer (observed 2026-08-10 at cutover).
+  # `authority` carries the hostname so the cluster Traefik's Host() rule still matches.
   otlp/cluster:
-    endpoint: https://claude-otel-ingest{{ k8s_hostname_suffix }}.local.{{ domain }}:443
+    endpoint: https://{{ k3s_metallb_ingress_vip }}:443
+    authority: claude-otel-ingest{{ k8s_hostname_suffix }}.local.{{ domain }}
+    tls:
+      server_name_override: claude-otel-ingest{{ k8s_hostname_suffix }}.local.{{ domain }}
 
 extensions:
   # The otelcol-contrib image is a distroless single Go binary (no shell), so a docker
