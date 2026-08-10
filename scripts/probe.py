@@ -64,11 +64,17 @@ DEFAULT_TIMEOUT = 10
 
 
 def ha_host():
-    """HA's bridge hostname. Since slice-5 B3 HA runs in the cluster, so there is no local
-    container to `docker inspect` — the unsuffixed .local name is the endpoint: it resolves
-    from this host's shell (the -k8s names don't — split-horizon DNS), carries no Authelia,
-    and pointed at the same HA before AND after the cutover, so this path never breaks."""
+    """HA's unsuffixed .local hostname — carries no Authelia and pointed at the same HA
+    before AND after the cutover. Since the bridge teardown (slice-7 BT4) the name serves
+    from the cluster edge, and host-shell DNS for it rides the Cloudflare grey-cloud
+    wildcard — so callers pin it to the ingress VIP (ha_resolve) instead of trusting DNS."""
     return f"home-assistant.local.{sops_extract('domain')}"
+
+
+def ha_resolve():
+    """curl --resolve pin for ha_host() → the MetalLB ingress VIP (same reason as
+    k8s_endpoint: the host shell's answer for the name is not the cluster edge)."""
+    return f"{ha_host()}:443:{metallb_vip()}"
 
 
 def ha_base():
@@ -182,10 +188,13 @@ def ha_get_url(base, path):
     return f"{base}/api/{path}"
 
 
-def ha_curl_argv(url, timeout=DEFAULT_TIMEOUT):
+def ha_curl_argv(url, timeout=DEFAULT_TIMEOUT, resolve=None):
     """curl argv for an HA GET. The bearer header is fed via stdin (`--config -`,
     see ha_curl_config), so the token NEVER appears in argv / `ps` / shell history."""
-    return ["curl", "-sS", "--max-time", str(timeout), "--config", "-", url]
+    argv = ["curl", "-sS", "--max-time", str(timeout), "--config", "-"]
+    if resolve:
+        argv += ["--resolve", resolve]
+    return argv + [url]
 
 
 def ha_curl_config(token):
@@ -350,19 +359,19 @@ def _ws_recv_json(recv_exact):
     return json.loads(_ws_read_frame(recv_exact))
 
 
-def ha_trace(host, token, automation_id, timeout=DEFAULT_TIMEOUT):
+def ha_trace(host, token, automation_id, timeout=DEFAULT_TIMEOUT, connect_ip=None):
     """Fetch the latest execution trace for an automation via the HA WebSocket API. Read-only:
     sends ONLY auth + trace/list + trace/get. Returns the trace dict, or None if no stored trace.
 
-    `host` is the bridge hostname (TLS on 443) — since slice-5 B3 HA runs in the cluster, and
-    the unsuffixed .local name via daniel-server's Traefik is the one path that both resolves
-    from this host's shell (the -k8s names don't — split-horizon) and survives cutovers."""
+    `host` is the unsuffixed .local hostname (TLS on 443, SNI/Host). `connect_ip` pins the
+    TCP connection to the ingress VIP — since the bridge teardown (slice-7 BT4) the host
+    shell's DNS answer for the name is not the cluster edge (see ha_host)."""
     import base64
     import os
     import socket
     import ssl
 
-    raw = socket.create_connection((host, 443), timeout=timeout)
+    raw = socket.create_connection((connect_ip or host, 443), timeout=timeout)
     sock = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
     try:
         key = base64.b64encode(os.urandom(16)).decode()
@@ -995,9 +1004,9 @@ def ha_token():
     return sops_extract("claude_ha_token")
 
 
-def ha_get(url, token):
+def ha_get(url, token, resolve=None):
     """Authenticated HA GET; returns the response body. Token is passed via stdin."""
-    return config_get(url, ha_curl_config(token))
+    return config_get(url, ha_curl_config(token), resolve=resolve)
 
 
 def sops_extract(key_name):
@@ -1015,11 +1024,14 @@ def sops_extract(key_name):
     return out.stdout.strip()
 
 
-def config_get(url, config_body):
+def config_get(url, config_body, resolve=None):
     """Authenticated GET whose auth header is fed via curl `--config -` stdin
     (never argv). Returns the response body."""
     out = subprocess.run(
-        ha_curl_argv(url), input=config_body, capture_output=True, text=True
+        ha_curl_argv(url, resolve=resolve),
+        input=config_body,
+        capture_output=True,
+        text=True,
     )
     if out.returncode != 0:
         raise SystemExit(f"curl {url} failed: {out.stderr.strip()}")
@@ -1065,7 +1077,9 @@ def run_ha(ns):
             )
             return 0
         token = ha_token()
-        states = json.loads(ha_get(ha_get_url(ha_base(), "states"), token))
+        states = json.loads(
+            ha_get(ha_get_url(ha_base(), "states"), token, resolve=ha_resolve())
+        )
         m = match_automation(states, ns.query)
         if m is None:
             print(
@@ -1076,7 +1090,11 @@ def run_ha(ns):
         if not automation_id:
             print(f"{m['entity_id']}: no config id (cannot fetch trace)")
             return 1
-        print(format_trace(ha_trace(ha_host(), token, automation_id)))
+        print(
+            format_trace(
+                ha_trace(ha_host(), token, automation_id, connect_ip=metallb_vip())
+            )
+        )
         return 0
     if ns.ha_cmd == "verify-automations":
         if ns.dry_run:
@@ -1085,7 +1103,9 @@ def run_ha(ns):
                 + f"   # + Bearer; compare attributes.id against ids in {AUTOMATIONS_YAML}"
             )
             return 0
-        states = json.loads(ha_get(ha_get_url(ha_base(), "states"), ha_token()))
+        states = json.loads(
+            ha_get(ha_get_url(ha_base(), "states"), ha_token(), resolve=ha_resolve())
+        )
         live = [s for s in states if s.get("entity_id", "").startswith("automation.")]
         with open(AUTOMATIONS_YAML, encoding="utf-8") as f:
             expected = expected_automation_ids(f.read())
@@ -1103,7 +1123,7 @@ def run_ha(ns):
             + "   # + Authorization: Bearer <redacted> (via --config stdin)"
         )
         return 0
-    body = ha_get(_ha_url(ha_base(), ns), ha_token())
+    body = ha_get(_ha_url(ha_base(), ns), ha_token(), resolve=ha_resolve())
     if ns.ha_cmd == "get":
         print(body, end="")
         return 0
@@ -1142,7 +1162,7 @@ def run_ha_state(ns):
             + "   # + Bearer (stdin)"
         )
         return 0
-    body = ha_get(ha_get_url(ha_base(), "states"), ha_token())
+    body = ha_get(ha_get_url(ha_base(), "states"), ha_token(), resolve=ha_resolve())
     states = json.loads(body)
     model = ha_state_model.build_model(ha_state_model.load_role())
     print(ha_state_rows(states, model))

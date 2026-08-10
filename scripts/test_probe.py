@@ -245,6 +245,20 @@ def test_ha_base_builds_on_ha_host(monkeypatch):
     assert probe.ha_base() == "https://home-assistant.local.example.test"
 
 
+def test_ha_resolve_pins_vip(monkeypatch):
+    # Since the bridge teardown (slice-7 BT4) host-shell DNS for the .local name rides the
+    # Cloudflare wildcard, so every HA call pins the name to the ingress VIP.
+    monkeypatch.setattr(probe, "sops_extract", lambda key: "example.test")
+    monkeypatch.setattr(probe, "metallb_vip", lambda: "10.0.0.240")
+    assert probe.ha_resolve() == "home-assistant.local.example.test:443:10.0.0.240"
+
+
+def test_ha_curl_argv_resolve_precedes_url():
+    argv = probe.ha_curl_argv("https://h/api/states/x", resolve="h:443:10.0.0.240")
+    assert argv[-1] == "https://h/api/states/x"
+    assert argv[argv.index("--resolve") + 1] == "h:443:10.0.0.240"
+
+
 def test_ha_state_url():
     # The base is the bridge URL since slice-5 B3 (HA in the cluster — no container to inspect).
     assert (
