@@ -1,0 +1,124 @@
+---
+# AutoKuma static entity files (KD1). Filename (minus .json) = the AutoKuma id, and each id
+# here MUST equal the label-derived id it replaces — the seeded entity map is keyed by id,
+# and a mismatch makes AutoKuma create a duplicate instead of adopting (KD5 gate finding).
+#
+# Scope at cutover: the two notifications plus every monitor whose label home was the
+# RETIRING uptime-kuma compose. Declarations still living as inert labels on other Docker
+# composes (monitor-bridge's push fleet, autofix-bridge, cloudflare-ddns, loki/tempo/
+# otel-collector) are protected by AUTOKUMA__ON_DELETE=keep and transcribe in here as each
+# of those roles retires. A Secret, not a ConfigMap: push tokens, the Discord webhook and
+# the SMTP password are values, not references, once rendered.
+#
+# Field names are v2.0.0 serde: `maxretries` (http/port/dns/ping), `max_retries` and
+# `push_token` accepted as aliases on push, `accepted_statuscodes`, `notification_name_list`.
+# Omitted accepted_statuscodes defaults to ["200-299"] server-side, same as the labels did.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kuma-static-monitors
+  namespace: {{ k8s_namespace }}
+type: Opaque
+stringData:
+  # ── notifications (label-provisioned before; file-provisioned now — KD5 gate) ──────────
+  discord.json: |
+    {
+      "type": "notification",
+      "name": "Homelab Alerts",
+      "active": true,
+      "config": {"type": "discord", "discordWebhookUrl": "{{ monitor_discord_webhook_url }}", "discordUsername": "Uptime Kuma"}
+    }
+  email.json: |
+    {
+      "type": "notification",
+      "name": "Homelab Alerts (Email)",
+      "active": true,
+      "config": {"type": "smtp", "smtpHost": "smtp.gmail.com", "smtpPort": 465, "smtpSecure": true, "smtpUsername": "{{ email }}", "smtpPassword": "{{ smtp_notify_app_password }}", "smtpFrom": "{{ email }}", "smtpTo": "{{ email }}", "customSubject": "[Homelab] Uptime Kuma alert"}
+    }
+  # ── daniel-pi LAN probes ───────────────────────────────────────────────────────────────
+  daniel-pi-host.json: |
+    {"type": "ping", "name": "Daniel Pi Host", "hostname": "{{ hostvars['daniel-pi'].server_ip }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  daniel-pi-glances.json: |
+    {"type": "http", "name": "Daniel Pi Glances", "url": "http://{{ hostvars['daniel-pi'].server_ip }}:61208", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  daniel-pi-dozzle.json: |
+    {"type": "http", "name": "Daniel Pi Dozzle", "url": "http://{{ hostvars['daniel-pi'].server_ip }}:8080", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  daniel-pi-wg-easy.json: |
+    {"type": "http", "name": "Daniel Pi WG Easy", "url": "http://{{ hostvars['daniel-pi'].server_ip }}:51821", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # ── k3s ingress monitors ───────────────────────────────────────────────────────────────
+  auth-k8s.json: |
+    {"type": "http", "name": "k3s Authelia Portal", "url": "https://auth{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  bento-pdf-k8s.json: |
+    {"type": "http", "name": "k3s Ingress (bento-pdf)", "url": "https://bento-pdf{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  littlelink-k8s.json: |
+    {"type": "http", "name": "k3s littlelink", "url": "https://www{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  speedtest-k8s.json: |
+    {"type": "http", "name": "k3s speedtest", "url": "https://speedtest{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  freshrss-k8s.json: |
+    {"type": "http", "name": "k3s FreshRSS", "url": "https://freshrss{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  healthchecks-k8s.json: |
+    {"type": "http", "name": "k3s healthchecks", "url": "https://healthchecks{{ k8s_hostname_suffix }}.local.{{ domain }}/ping/00000000-0000-0000-0000-000000000000", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["404"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  livesync-k8s.json: |
+    {"type": "http", "name": "k3s LiveSync", "url": "https://livesync{{ k8s_hostname_suffix }}.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["401"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  mosquitto-k8s.json: |
+    {"type": "port", "name": "k3s Mosquitto (VIP)", "hostname": "{{ mqtt_k8s_vip }}", "port": 1883, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  zigbee2mqtt-k8s.json: |
+    {"type": "http", "name": "k3s Zigbee2MQTT", "url": "https://zigbee2mqtt{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  slzb-coordinator.json: |
+    {"type": "port", "name": "SLZB-06M Coordinator", "hostname": "{{ slzb_ip }}", "port": 6638, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  crowdsec-dashboard-k8s.json: |
+    {"type": "http", "name": "k3s CrowdSec Dashboard", "url": "https://crowdsec-k8s.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "notification_name_list": ["{{ kuma_notification_id }}"]}
+  home-assistant-k8s.json: |
+    {"type": "http", "name": "k3s Home Assistant", "url": "https://home-assistant{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  karakeep-k8s.json: |
+    {"type": "http", "name": "k3s karakeep", "url": "https://karakeep{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  ical-proxy-k8s.json: |
+    {"type": "http", "name": "iCal Proxy k8s", "url": "https://ical-proxy{{ k8s_hostname_suffix }}.local.{{ domain }}/calendar1.ics", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  code-server-k8s.json: |
+    {"type": "http", "name": "k3s code-server", "url": "https://code-server{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  pihole-k8s-dns.json: |
+    {"type": "dns", "name": "Pi-hole k8s DNS", "hostname": "homepage.local.{{ domain }}", "dns_resolve_server": "{{ dns_k8s_vip }}", "dns_resolve_type": "A", "port": 53, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # ── bridge monitors (the user-facing unsuffixed names) ─────────────────────────────────
+  healthchecks-bridge.json: |
+    {"type": "http", "name": "healthchecks (via bridge)", "url": "https://healthchecks.local.{{ domain }}/ping/00000000-0000-0000-0000-000000000000", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["404"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% set freshrss_k8s = (hostvars['daniel-box'].containers_list | selectattr('name', 'equalto', 'freshrss') | first) %}
+  freshrss-bridge.json: |
+    {"type": "http", "name": "FreshRSS (via bridge)", "url": "https://freshrss.local.{{ domain }}{{ freshrss_k8s.bridge_probe_path }}", "interval": 60, "maxretries": 2, "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  karakeep-bridge.json: |
+    {"type": "http", "name": "karakeep (via bridge)", "url": "https://karakeep.local.{{ domain }}/api/health", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["200"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% set livesync_k8s = (hostvars['daniel-box'].containers_list | selectattr('name', 'equalto', 'livesync') | first) %}
+  livesync-bridge.json: |
+    {"type": "http", "name": "LiveSync (via bridge)", "url": "https://livesync.local.{{ domain }}{{ livesync_k8s.bridge_probe_path }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["401"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  littlelink-bridge.json: |
+    {"type": "http", "name": "littlelink (via bridge)", "url": "https://www.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% set speedtest_k8s = (hostvars['daniel-box'].containers_list | selectattr('name', 'equalto', 'speedtest') | first) %}
+  speedtest-bridge.json: |
+    {"type": "http", "name": "speedtest (via bridge)", "url": "https://speedtest.local.{{ domain }}{{ speedtest_k8s.bridge_probe_path }}", "interval": 60, "maxretries": 2, "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # ── push monitors fed by host crons (tokens unchanged — monitors keep their history) ───
+  crowdsec-home-allowlist.json: |
+    {"type": "push", "name": "CrowdSec Home Allowlist", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_home_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  docker-fleet.json: |
+    {"type": "push", "name": "Docker Fleet Health", "interval": 600, "max_retries": 0, "push_token": "{{ docker_fleet_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  cloudflare-ddns-proxied-push.json: |
+    {"type": "push", "name": "Cloudflare DDNS Proxied", "interval": 300, "max_retries": 0, "push_token": "{{ cloudflare_ddns_proxied_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  cloudflare-ddns-direct-push.json: |
+    {"type": "push", "name": "Cloudflare DDNS Direct", "interval": 300, "max_retries": 0, "push_token": "{{ cloudflare_ddns_direct_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  longhorn-backup.json: |
+    {"type": "push", "name": "k3s Longhorn Backup", "interval": 1200, "max_retries": 0, "push_token": "{{ longhorn_backup_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  daniel-box-disk.json: |
+    {"type": "push", "name": "daniel-box Disk", "interval": 1200, "max_retries": 0, "push_token": "{{ daniel_box_disk_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  claude-otel-health.json: |
+    {"type": "push", "name": "k3s Telemetry Stack", "interval": 1200, "max_retries": 0, "push_token": "{{ claude_otel_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  configarr.json: |
+    {"type": "push", "name": "Configarr Sync", "interval": 1200, "max_retries": 0, "push_token": "{{ monitor_bridge_configarr_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-janitorr.json: |
+    {"type": "push", "name": "Janitorr Errors", "interval": 1200, "max_retries": 0, "push_token": "{{ monitor_bridge_janitorr_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  autofix-fake-remux.json: |
+    {"type": "push", "name": "Fake Remux Scan", "interval": 1200, "max_retries": 0, "push_token": "{{ monitor_bridge_fake_remux_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  autofix-fake-remux-replace.json: |
+    {"type": "push", "name": "Fake Remux Replace", "interval": 1200, "max_retries": 0, "push_token": "{{ monitor_bridge_fake_remux_replace_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  daniel-pi-sd-health.json: |
+    {"type": "push", "name": "Daniel Pi SD Health", "interval": 600, "max_retries": 0, "push_token": "{{ pi_sd_health_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  daniel-pi-recovery.json: |
+    {"type": "push", "name": "Daniel Pi Recovery", "interval": 600, "max_retries": 0, "push_token": "{{ pi_recovery_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  secret-rotation.json: |
+    {"type": "push", "name": "Secret Rotation", "interval": 90000, "max_retries": 0, "push_token": "{{ secret_rotation_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}

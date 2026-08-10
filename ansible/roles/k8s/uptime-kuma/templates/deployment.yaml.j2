@@ -1,0 +1,141 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: uptime-kuma
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # Two RWO PVCs on single-replica Longhorn — a rolling update deadlocks on the volumes.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: uptime-kuma
+  template:
+    metadata:
+      labels:
+        app: uptime-kuma
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: uptime-kuma
+          image: {{ uptime_kuma_k8s_image }}
+          ports:
+            - containerPort: 3001
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                # The daniel-pi-host monitor is a real ICMP ping — compose parity.
+                - NET_RAW
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          # / answers 302 to /dashboard; kubelet counts 200-399 as success.
+          startupProbe:
+            httpGet:
+              path: /
+              port: 3001
+            periodSeconds: 10
+            failureThreshold: 18
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3001
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3001
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ uptime_kuma_k8s_cpu_limit }}"
+              memory: {{ uptime_kuma_k8s_mem_limit }}
+            requests:
+              cpu: "{{ uptime_kuma_k8s_cpu_request }}"
+              memory: {{ uptime_kuma_k8s_mem_request }}
+        # First true sidecar in the fleet, deliberately (KD4): recreating Kuma invalidates
+        # AutoKuma's Socket.IO session, and a shared pod reproduces Docker's
+        # `depends_on: {restart: true}` — a pod recreate cycles both.
+        - name: autokuma
+          image: {{ autokuma_k8s_image }}
+          # The Kuma ADMIN password is exported from a file mount instead of an inline env
+          # (same H1 discipline as the compose entrypoint wrapper): env vars are visible to
+          # anything that can read the pod spec or /proc, and this credential can silence
+          # the whole fleet's alerting. `exec` keeps autokuma PID 1 for the liveness grep.
+          command:
+            - /usr/bin/sh
+            - -c
+            - 'export AUTOKUMA__KUMA__PASSWORD="$(cat /etc/autokuma/kuma_password)"; exec autokuma'
+          env:
+            - name: AUTOKUMA__KUMA__URL
+              value: http://localhost:3001
+            - name: AUTOKUMA__KUMA__USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: autokuma-credentials
+                  key: username
+            # Docker source OFF (KD2): the socket this fleet's labels lived behind is
+            # unreachable from the cluster by design (Security M1).
+            - name: AUTOKUMA__DOCKER__ENABLED
+              value: "false"
+            - name: AUTOKUMA__STATIC_MONITORS
+              value: /monitors
+            - name: AUTOKUMA__DB_PATH
+              value: /data/autokuma.db
+            # INTERIM (KD1 refinement): most monitor declarations still sit as inert labels
+            # on Docker compose files this instance can't read. `keep` protects them —
+            # entities in the seeded DB survive having no visible declaration. Flip to
+            # `delete` only when the last declaration has been transcribed into the
+            # static-monitors Secret (tracked in slice-7-phase-d-kuma.md).
+            - name: AUTOKUMA__ON_DELETE
+              value: keep
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: autokuma-data
+              mountPath: /data
+            - name: static-monitors
+              mountPath: /monitors
+              readOnly: true
+            # NOT /run/secrets — that shadows the ServiceAccount token projection and the
+            # container never starts (the guarded 2026-08-02 trap).
+            - name: credentials
+              mountPath: /etc/autokuma
+              readOnly: true
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "grep -q autokuma /proc/1/comm"]
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ autokuma_k8s_cpu_limit }}"
+              memory: {{ autokuma_k8s_mem_limit }}
+            requests:
+              cpu: "{{ autokuma_k8s_cpu_request }}"
+              memory: {{ autokuma_k8s_mem_request }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ uptime_kuma_k8s_claim }}
+        - name: autokuma-data
+          persistentVolumeClaim:
+            claimName: {{ uptime_kuma_k8s_autokuma_claim }}
+        - name: static-monitors
+          secret:
+            secretName: kuma-static-monitors
+        - name: credentials
+          secret:
+            secretName: autokuma-credentials
+            defaultMode: 0o400

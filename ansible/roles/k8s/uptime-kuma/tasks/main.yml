@@ -1,0 +1,54 @@
+---
+# Slice-7 Phase D step 3 (2026-08-10): Uptime Kuma + AutoKuma sidecar. Built ahead of the
+# cutover, deployed only inside it — see the flag comment in defaults.
+
+- name: Report that uptime-kuma is held until the cutover window
+  tags: [always]
+  when: not uptime_kuma_k8s_enabled | bool
+  ansible.builtin.debug:
+    msg: >-
+      uptime-kuma is built but NOT deployed (uptime_kuma_k8s_enabled is false). The cutover
+      window (slice-7-phase-d-kuma.md step 4) stops the Docker pair, snapshots data/, and
+      deploys this with seed_volume_force=true.
+
+# Both seeds are cutover seeds by nature: Kuma writes its SQLite continuously, so only a
+# force seed against the STOPPED Docker pair is authoritative. The pair must be stopped by
+# the cutover play before this runs.
+- name: Seed the Kuma data volume
+  tags: [deploy]
+  when: uptime_kuma_k8s_enabled | bool
+  ansible.builtin.include_role:
+    name: k8s/seed-volume
+  vars:
+    seed_volume_service: uptime-kuma
+    seed_volume_claim: "{{ uptime_kuma_k8s_claim }}"
+    seed_volume_source_path: "{{ uptime_kuma_k8s_source_path }}"
+    seed_volume_storage_class: "{{ uptime_kuma_k8s_storage_class }}"
+    seed_volume_size: "{{ uptime_kuma_k8s_size }}"
+
+- name: Seed the AutoKuma entity-map volume
+  tags: [deploy]
+  when: uptime_kuma_k8s_enabled | bool
+  ansible.builtin.include_role:
+    name: k8s/seed-volume
+  vars:
+    seed_volume_service: autokuma
+    seed_volume_claim: "{{ uptime_kuma_k8s_autokuma_claim }}"
+    seed_volume_source_path: "{{ uptime_kuma_k8s_autokuma_source_path }}"
+    seed_volume_storage_class: "{{ uptime_kuma_k8s_storage_class }}"
+    seed_volume_size: "{{ uptime_kuma_k8s_autokuma_size }}"
+
+- name: Deploy uptime-kuma to the cluster
+  when: uptime_kuma_k8s_enabled | bool
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: uptime-kuma
+    manifests_rollout: uptime-kuma
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
+    manifests_secret_files:
+      - secret.yaml
+      - static-monitors.yaml

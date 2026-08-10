@@ -1,0 +1,10 @@
+{% from 'ingressroute.yml.j2' import ingressroute with context %}
+---
+{{ ingressroute(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    container_item.use_authelia,
+    bridge_hostname=container_item.bridge_hostname | default(none)
+  )
+}}

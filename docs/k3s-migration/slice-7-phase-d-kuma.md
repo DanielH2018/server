@@ -150,6 +150,25 @@ two consecutive 5-min up beats ("30 containers running, none unhealthy"), Discor
 check green, all 11 Prometheus targets up. The Kuma DB now carries no docker-type monitor —
 the `kuma_docker_host` FK is referent-free ahead of the seed.
 
+## Step 3 — BUILT 2026-08-10 (held behind `uptime_kuma_k8s_enabled: false`)
+
+`roles/k8s/uptime-kuma`: two-container pod (kuma 2.4.0 — same tag as Docker, no schema
+skew; autokuma pinned 2.0.0), both PVC seeds (data 1.5 G → 4 Gi `longhorn` — the DB gains
+the backup it never had; autokuma's 1.1 M entity map — must move or static files duplicate
+the fleet), password kept file-mounted (H1), NET_RAW for the ping monitor. daniel-box entry
+added WITHOUT `bridge_hostname` (that key would route every push consumer's URL at a
+nonexistent cluster route today — it lands in the cutover commit). k8s Authelia push bypass
+now covers both names.
+
+**KD1 execution refinement (from the KD5 managed-set finding):** cutover runs with
+`AUTOKUMA__ON_DELETE=keep`. The static-monitors Secret carries the two notifications plus
+the ~35 monitors whose label home is the retiring uptime-kuma compose; the rest of the
+fleet's declarations stay as inert labels on their own compose files, protected by `keep`,
+and transcribe into the Secret as each Docker role retires. `on_delete` flips back to
+`delete` when the last one lands — reconciliation restored, no big-bang transcription
+before the move. Guards: `ansible/tests/test_kuma_static_monitors.py` (every monitor
+linked to discord, push retries 0, both notifications defined, ids unique by construction).
+
 ## Unverified — resolve during execution
 - AutoKuma static-file **field parity** with the label macro (accepted_statuscodes,
   max_redirects, dns fields) — render one of each type on the scratch deploy.

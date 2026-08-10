@@ -1,0 +1,37 @@
+---
+# HELD until the Phase D step-4 cutover window (slice-7-phase-d-kuma.md). Two Kumas
+# dual-running would double-fire every Discord alert and split the push consumers, so unlike
+# the coexistence migrations this one deploys only inside the window, against a stopped
+# Docker pair and a force-seeded DB.
+uptime_kuma_k8s_enabled: false
+
+# SAME tag as the Docker copy on purpose — the seeded SQLite crosses hosts, not versions.
+uptime_kuma_k8s_image: louislam/uptime-kuma:2.4.0
+# Pinned (the Docker sidecar ran :latest): the k8s-defaults Renovate manager only tracks
+# versioned pins, and v2.0.0 is what the KD5 gate verified (docker.enabled, static-file
+# notification entities, on_delete semantics).
+autokuma_k8s_image: ghcr.io/bigboot/autokuma:2.0.0
+
+# 1.5 G live at planning (heartbeat history) — `longhorn`, BACKED UP, which the Docker copy
+# deliberately never was (kopiaignore). The migration upgrades the DB from "unrecoverable"
+# to "nightly Longhorn backup".
+uptime_kuma_k8s_claim: uptime-kuma-data
+uptime_kuma_k8s_size: 4Gi
+uptime_kuma_k8s_storage_class: longhorn
+uptime_kuma_k8s_source_path: /home/ubuntu/server/containers/uptime-kuma/data
+
+# AutoKuma's OWN entity-id map (1.1 M live). It must move with Kuma's DB or the new
+# instance manages nothing and static files would recreate duplicates (KD5 gate finding).
+uptime_kuma_k8s_autokuma_claim: autokuma-data
+uptime_kuma_k8s_autokuma_size: 1Gi
+uptime_kuma_k8s_autokuma_source_path: /home/ubuntu/server/containers/uptime-kuma/autokuma-data
+
+# Mirrors resources('0.50', '512M', '0.05', '64M') for kuma; autokuma is a reconciler.
+uptime_kuma_k8s_cpu_limit: "500m"
+uptime_kuma_k8s_mem_limit: 512Mi
+uptime_kuma_k8s_cpu_request: "50m"
+uptime_kuma_k8s_mem_request: 64Mi
+autokuma_k8s_cpu_limit: "250m"
+autokuma_k8s_mem_limit: 128Mi
+autokuma_k8s_cpu_request: "20m"
+autokuma_k8s_mem_request: 32Mi

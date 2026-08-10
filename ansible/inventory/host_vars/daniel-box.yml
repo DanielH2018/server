@@ -494,6 +494,17 @@ containers_list:
     bridge_hostname: wg-easy
     default_dns: "{{ dns_k8s_vip }}"
 
+  # Slice-7 Phase D step 3 (2026-08-10): built and HELD (uptime_kuma_k8s_enabled=false in
+  # the role defaults) — the cutover window deploys it. Deliberately NO bridge_hostname
+  # yet: that key renders the forward-bridge router on daniel-server's Traefik immediately,
+  # which would route uptime-kuma.local.<domain> — every push consumer's URL — at a cluster
+  # route that doesn't exist until the window. It is added in the cutover commit.
+  - name: uptime-kuma
+    platform: k8s
+    hostname: "uptime-kuma{{ k8s_hostname_suffix }}"
+    port: 3001
+    use_authelia: true
+
   # Slice-7 Phase C (2026-08-10): ported WITHOUT its docker plumbing (operator decision) —
   # no DOCKER_HOST, so the in-IDE docker CLI and devcontainers are gone. Image built
   # in-cluster from the containers role's Dockerfile (that role stays the build source).
