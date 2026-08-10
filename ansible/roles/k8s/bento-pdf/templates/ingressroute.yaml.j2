@@ -4,6 +4,7 @@
     container_item.name,
     container_item.hostname | default(container_item.name),
     container_item.port,
-    container_item.use_authelia
+    container_item.use_authelia,
+    bridge_hostname=container_item.bridge_hostname | default(none)
   )
 }}

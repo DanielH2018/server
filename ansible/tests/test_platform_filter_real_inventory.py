@@ -90,7 +90,9 @@ def test_daniel_server_is_still_wholly_docker():
     # the Pi's agent + DOCKER-USER firewall, and portainer_manager_host with it. Then wg-easy
     # (23 -> 22) the same night — slice-6 B5 pulled it forward out of slice 7: the operator
     # moved ALL router forwards (51820/udp included) to daniel-box, so the workload followed
-    # its port, seeded keypair intact. The count
+    # its port, seeded keypair intact. Then bento-pdf (22 -> 21) on 2026-08-10, slice-7
+    # Phase C — not a move but a RECONCILE: its slice-1 k8s canary had served in parallel
+    # the whole time, and only the Docker twin was ever public. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -99,6 +101,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 22
-    assert len(filter_by_platform(containers, "docker")) == 22
+    assert len(containers) == 21
+    assert len(filter_by_platform(containers, "docker")) == 21
     assert filter_by_platform(containers, "k8s") == []

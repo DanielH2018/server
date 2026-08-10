@@ -75,6 +75,11 @@ containers_list:
     hostname: "bento-pdf{{ k8s_hostname_suffix }}"
     port: 8080
     use_authelia: true
+    # Docker twin retired 2026-08-10 (slice-7 Phase C) — it had run in PARALLEL since this
+    # slice-1 canary went live, never retired. bridge_hostname keeps the unsuffixed name:
+    # LAN via the .161 wildcard and the forward bridge, external via the B5-prep native
+    # public route (the reverse bridge shed its host when the Docker entry left).
+    bridge_hostname: bento-pdf
   # Claude Code telemetry sink. No `port` and no `hostname` on purpose: it has no Traefik
   # route at all. Claude Code runs on this HOST and exports to 127.0.0.1:4317, reaching the
   # collector through a hostPort rather than the ingress — content logging is on, so nothing

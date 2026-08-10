@@ -285,11 +285,10 @@ containers_list:
   # replaces explained why it sat on `apps` rather than `monitoring` — it was
   # internet-reachable unauthenticated on /ping/ and so must not share a net with
   # docker-proxy. That reasoning now applies to the bypass routers instead.
-  - name: bento-pdf
-    port: 8080
-    use_authelia: true
-    networks:
-      - apps
+  # bento-pdf's Docker copy retired 2026-08-10 (slice-7 Phase C): it had run in PARALLEL
+  # with its slice-1 k8s canary the whole time — the canary was never promoted and this
+  # copy never retired, so the reverse bridge was fronting the stale one. The unsuffixed
+  # name now rides bridge_hostname on the daniel-box entry. Role in roles/containers/archive/.
   # littlelink moved to k3s on 2026-08-05, behind the same strangler bridge as speedtest. It
   # stays public and un-gated there — the reason the Docker entry carried use_authelia: false
   # is unchanged by the platform: this is the public link-in-bio landing page (www), so a login

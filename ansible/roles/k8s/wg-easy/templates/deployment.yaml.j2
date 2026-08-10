@@ -29,6 +29,31 @@ spec:
             value: "1"
           - name: net.ipv4.conf.all.src_valid_mark
             value: "1"
+      # The image runs as root (wg-quick + iptables leave no choice), but the seeded files
+      # arrive uid-1000 from the unprivileged ssh|tar pipeline — and root with ALL caps
+      # dropped has no DAC_OVERRIDE, so it cannot even READ them (fourth live occurrence of
+      # that lesson; the near-miss here was wg-easy silently GENERATING a fresh keypair when
+      # the seeded one was unreadable — the save failing on the same wall is what stopped
+      # every client config from being invalidated). CAP_CHOWN alone lets the init hand the
+      # tree to uid 0; no DAC_OVERRIDE anywhere.
+      initContainers:
+        - name: config-chown
+          image: {{ wg_easy_k8s_image }}
+          command:
+            - chown
+            - -R
+            - "0:0"
+            - /etc/wireguard
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+          volumeMounts:
+            - name: config
+              mountPath: /etc/wireguard
       containers:
         - name: wg-easy
           image: {{ wg_easy_k8s_image }}
