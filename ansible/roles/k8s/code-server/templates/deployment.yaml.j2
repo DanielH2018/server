@@ -1,0 +1,85 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: code-server
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # RWO config PVC on single-replica Longhorn — a rolling update deadlocks on the volume.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: code-server
+  template:
+    metadata:
+      labels:
+        app: code-server
+    spec:
+      enableServiceLinks: false
+      # No fsGroup: seed-volume restores ownership with `tar -p --numeric-owner` and the LSIO
+      # image chowns /config itself on startup.
+      containers:
+        - name: code-server
+          image: {{ code_server_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set.
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - SETUID
+                - SETGID
+                # s6/DOCKER_MODS init chmods files it doesn't own (e.g. /config/.ssh to
+                # 0700) — without FOWNER that EPERMs and .ssh is left world-readable 0755.
+                - FOWNER
+                - DAC_OVERRIDE
+          env:
+            - name: PUID
+              value: "{{ puid }}"
+            - name: PGID
+              value: "{{ pgid }}"
+            - name: TZ
+              value: "{{ tz }}"
+            - name: EXTENSIONS_GALLERY
+              value: '{"serviceUrl": "https://open-vsx.org/vscode/gallery", "itemUrl": "https://open-vsx.org/vscode/item"}'
+          envFrom:
+            - secretRef:
+                name: code-server-env
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          # First boot runs 10-extensions.sh (installs the baked vsix set into /config)
+          # before the listener comes up — allow up to 5 min before liveness takes over.
+          startupProbe:
+            httpGet:
+              path: /healthz/
+              port: {{ container_item.port }}
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz/
+              port: {{ container_item.port }}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz/
+              port: {{ container_item.port }}
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ code_server_k8s_cpu_limit }}"
+              memory: {{ code_server_k8s_mem_limit }}
+            requests:
+              cpu: "{{ code_server_k8s_cpu_request }}"
+              memory: {{ code_server_k8s_mem_request }}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ code_server_k8s_claim }}

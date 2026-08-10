@@ -93,7 +93,9 @@ def test_daniel_server_is_still_wholly_docker():
     # its port, seeded keypair intact. Then bento-pdf (22 -> 21) on 2026-08-10, slice-7
     # Phase C — not a move but a RECONCILE: its slice-1 k8s canary had served in parallel
     # the whole time, and only the Docker twin was ever public. ical-proxy followed (21 -> 20),
-    # stateless and built in-cluster; its containers role remains as the build source. The count
+    # stateless and built in-cluster; its containers role remains as the build source. Then
+    # code-server (20 -> 19) the same day, ported WITHOUT its docker plumbing (operator
+    # decision) — docker-proxy-codeserver and the `codeserver` net dissolved with it. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -102,6 +104,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 20
-    assert len(filter_by_platform(containers, "docker")) == 20
+    assert len(containers) == 19
+    assert len(filter_by_platform(containers, "docker")) == 19
     assert filter_by_platform(containers, "k8s") == []

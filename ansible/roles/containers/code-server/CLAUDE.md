@@ -1,26 +1,24 @@
-# code-server — Browser-based VS Code
+# code-server — Browser-based VS Code (build source only)
 
-See repo-root `CLAUDE.md` for shared conventions.
+Moved to k3s on 2026-08-10 (slice-7 Phase C). This role no longer deploys a container — it
+remains the **build source** for the cluster image (`templates/Dockerfile.j2` +
+`files/extensions.sh`), same split as n8n/ical-proxy. The workload lives in
+`ansible/roles/k8s/code-server/`; the inventory entry is in `daniel-box.yml`.
 
 ## At a glance
-- **Image:** `my-code-server:latest` — **built locally** from `templates/Dockerfile.j2`
-  (not a registry pull)
-- **Host:** daniel-server · **Port:** 8443 · **URL:** `code-server.<domain>` (Authelia: yes)
-- **Networks:** apps
-- **Depends on:** traefik, authelia
-- **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
+- **Image:** built in-cluster by k8s/image-builder from `templates/Dockerfile.j2`
+- **Host:** daniel-box (k3s) · **Port:** 8443 · **URL:** `code-server.<domain>` via
+  bridge_hostname, `code-server-k8s.local.<domain>` native (Authelia: yes)
+- **Ported WITHOUT docker plumbing** (operator decision 2026-08-10): no DOCKER_HOST, so the
+  in-IDE docker CLI and devcontainers are gone; docker-proxy-codeserver and the `codeserver`
+  net dissolved with the Docker copy (`has_code_server: false` in daniel-server host_vars).
 
 ## Notable
-- Extensions are installed at build time via `files/extensions.sh` baked into the image.
-- Because the image is built (`build: always` in the deploy task), bump it by redeploying
-  this role — Watchtower won't update it.
-
-## LaTeX editing (devcontainer)
-1. Clone the Resume repository on the server.
-2. Copy `.devcontainer` from <https://github.com/James-Yu/LaTeX-Workshop/tree/master/samples/docker>.
-3. Install the VS Code Remote - Containers + SSH extensions, then reopen the directory in the
-   container.
+- Extensions are downloaded at build time (Open VSX + MS Marketplace) into `/opt/vsix`;
+  `extensions.sh` installs them into /config on container start.
+- Because the image is built, bump it by redeploying the k8s role — there is no registry tag
+  for Renovate to track (`code_server_k8s_image` is in the REGISTRY_BUILT_IMAGES carve-out).
 
 ## Editing
-- Compose: `templates/docker-compose.yml.j2` · Image: `templates/Dockerfile.j2`, `files/extensions.sh`
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "code-server"`
+- Image: `templates/Dockerfile.j2`, `files/extensions.sh` · Workload: `ansible/roles/k8s/code-server/`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "code-server" -e target=daniel-box`

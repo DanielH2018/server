@@ -493,6 +493,17 @@ containers_list:
     use_authelia: true
     bridge_hostname: wg-easy
     default_dns: "{{ dns_k8s_vip }}"
+
+  # Slice-7 Phase C (2026-08-10): ported WITHOUT its docker plumbing (operator decision) —
+  # no DOCKER_HOST, so the in-IDE docker CLI and devcontainers are gone. Image built
+  # in-cluster from the containers role's Dockerfile (that role stays the build source).
+  # Unsuffixed code-server.<domain> keeps working via bridge_hostname.
+  - name: code-server
+    platform: k8s
+    hostname: "code-server{{ k8s_hostname_suffix }}"
+    port: 8443
+    use_authelia: true
+    bridge_hostname: code-server
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the

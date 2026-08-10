@@ -250,6 +250,12 @@ services:
       # died with the container.
       {{ kuma('ical-proxy-k8s', name='iCal Proxy k8s', monitor_type='http',
               url='https://ical-proxy' ~ k8s_hostname_suffix ~ '.local.' ~ domain ~ '/calendar1.ics') }}
+      # code-server's cluster copy (slice-7 Phase C). Authelia-gated, so 302 is the edge
+      # answering — proves the route and the middleware, not the app (the bento-pdf
+      # limitation). Replaces the docker-type monitor that died with the container.
+      {{ kuma('code-server-k8s', name='k3s code-server', monitor_type='http',
+              url='https://code-server' ~ k8s_hostname_suffix ~ '.local.' ~ domain,
+              accepted_statuscodes=['302'], max_redirects=0) }}
       # The cluster Pi-hole's DNS VIP (slice-6 B3). A real query — resolve the LAN wildcard
       # via 10.0.0.243 — so up means MetalLB + FTL + the dnsmasq ConfigMap all answered, not
       # merely that something accepted a TCP connection. The Docker Pi-hole keeps its own

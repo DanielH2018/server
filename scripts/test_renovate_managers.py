@@ -164,6 +164,7 @@ REGISTRY_BUILT_IMAGES = {
     "n8n_k8s_image",  # ansible/roles/containers/n8n/templates/Dockerfile.j2
     "n8n_k8s_runners_image",  # ansible/roles/containers/n8n/templates/Dockerfile-runners.j2
     "ical_proxy_k8s_image",  # ansible/roles/containers/ical-proxy/templates/Dockerfile.j2
+    "code_server_k8s_image",  # ansible/roles/containers/code-server/templates/Dockerfile.j2
 }
 
 

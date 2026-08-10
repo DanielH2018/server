@@ -1,0 +1,45 @@
+---
+# Slice-7 Phase C (2026-08-10): ported WITHOUT its docker plumbing (operator decision) — no
+# DOCKER_HOST, so the in-IDE docker CLI and devcontainers are gone, and docker-proxy-codeserver
+# plus the `codeserver` net retire with the Docker copy. Image built into the cluster registry
+# from the containers role's Dockerfile — that role remains the build source, same split as
+# n8n/ical-proxy.
+
+- name: Build the code-server image
+  ansible.builtin.include_role:
+    name: k8s/image-builder
+  vars:
+    image_builder_name: code-server
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/containers/code-server/templates/Dockerfile.j2"
+    # The one file the Dockerfile COPYs (flat — ConfigMap keys cannot contain '/').
+    image_builder_context:
+      "{{ playbook_dir }}/roles/containers/code-server/files/extensions.sh": extensions.sh
+    # texlive-latex-extra + the font packages pull ~2 G of apt on a cold cache; the default
+    # 900 s is not enough for a first build.
+    image_builder_timeout: 1800
+
+# Seeded BEFORE the workload so first boot never runs against an empty /config. The cutover
+# seed passes seed_volume_force=true against a STOPPED, staged source — quiescing is manual
+# here (a Docker container, not a Deployment, is the writer).
+- name: Seed the code-server config volume
+  ansible.builtin.include_role:
+    name: k8s/seed-volume
+  vars:
+    seed_volume_service: code-server
+    seed_volume_claim: "{{ code_server_k8s_claim }}"
+    seed_volume_source_path: "{{ code_server_k8s_source_path }}"
+    seed_volume_storage_class: "{{ code_server_k8s_storage_class }}"
+    seed_volume_size: "{{ code_server_k8s_size }}"
+
+- name: Deploy code-server to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: code-server
+    manifests_rollout: code-server
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
+    manifests_secret_files:
+      - secret.yaml

@@ -1,0 +1,18 @@
+---
+code_server_k8s_image: "{{ k8s_registry_pull_host }}/code-server:latest"
+
+# 6.2 G at the port — mostly extensions and npm/pip caches; the workspace itself is ~2 M.
+code_server_k8s_claim: code-server-config
+# `longhorn` — backed up: /config/workspace holds real working copies, not just caches.
+code_server_k8s_storage_class: longhorn
+code_server_k8s_size: 10Gi
+# Overridden at the cutover seed: .npm and friends are root-owned (written by the image's
+# root init), so the unprivileged ssh|tar pipeline can't read them in place — a one-shot
+# play stages a sudo copy into an ubuntu-owned dir first (the wg-easy pattern).
+code_server_k8s_source_path: /home/ubuntu/server/containers/code-server/config
+
+# Mirrors resources('4.0', '4096M', '0.10', '256M') — a dev env that runs builds.
+code_server_k8s_cpu_limit: "4"
+code_server_k8s_mem_limit: 4096Mi
+code_server_k8s_cpu_request: "100m"
+code_server_k8s_mem_request: 256Mi

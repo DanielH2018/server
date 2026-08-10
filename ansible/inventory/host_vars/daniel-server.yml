@@ -3,7 +3,9 @@ server_ip: 10.0.0.161
 ssh_config_path: /etc/ssh/sshd_config
 # Intel XE iGPU present — enables /dev/dri passthrough for jellyfin/tdarr hardware transcode.
 has_igpu: true
-has_code_server: true
+# Flipped 2026-08-10 with code-server's move to k3s — dissolves docker-proxy-codeserver and
+# the `codeserver` net from the docker-proxy compose on the next docker-proxy deploy.
+has_code_server: false
 # scrutiny-collector's SMART source device (see scrutiny role CLAUDE.md) — override per host
 # if the NVMe enumerates differently, or drop the scrutiny role entirely if the host has none.
 scrutiny_nvme_device: /dev/nvme0
@@ -123,15 +125,13 @@ containers_list:
   # forwards to the cluster via bridge_hostname, so the companion app's route never changed.
   # Its former `ups` and `mqtt` isolation nets retire with the mosquitto cleanup.
   # Organization: Development
-  - name: code-server
-    port: 8443
-    use_authelia: true
-    # `apps` stays networks[0] (the Traefik route binds to it). `codeserver` is the private
-    # isolation net to its OWN read-only docker-proxy (docker-proxy-codeserver) — so it keeps
-    # its in-IDE `docker` CLI without the shared docker-proxy having to sit on `apps` (Security M1).
-    networks:
-      - apps
-      - codeserver
+  # code-server moved to k3s on 2026-08-10 (slice-7 Phase C), ported WITHOUT its docker
+  # plumbing (operator decision): no DOCKER_HOST, so the in-IDE docker CLI and devcontainers
+  # are gone, and docker-proxy-codeserver + the private `codeserver` net retired with it
+  # (has_code_server above is what dissolves them from the docker-proxy compose). Unsuffixed
+  # code-server.<domain> forwards to the cluster via bridge_hostname. Rolling back is
+  # re-adding this entry (with the codeserver net), re-flipping has_code_server, and removing
+  # bridge_hostname from daniel-box's; containers/code-server/config is still on disk.
   # n8n moved to k3s on 2026-08-06 behind the strangler bridge, taking its task-runner sidecar
   # with it (n8n-runners was never its own entry here). Unlike the earlier migrations there was
   # no coexistence window — two schedulers against one database would double-fire every
