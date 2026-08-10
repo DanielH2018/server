@@ -13,6 +13,13 @@
 # Field names are v2.0.0 serde: `maxretries` (http/port/dns/ping), `max_retries` and
 # `push_token` accepted as aliases on push, `accepted_statuscodes`, `notification_name_list`.
 # Omitted accepted_statuscodes defaults to ["200-299"] server-side, same as the labels did.
+#
+# REMOVING A FILE HERE DOES NOT DELETE THE MONITOR, despite ON_DELETE=delete. Measured
+# 2026-08-10 (the "(via bridge)" retirement): the Secret updated, the pod restarted twice,
+# and AutoKuma v2.0.0 never issued a delete — on_delete evidently tracks label-sourced
+# entities, not static files. Removing an entry from this file must be paired with an
+# explicit kuma-cli `monitor delete` (pattern: kuma-bridge-tiles.yml in the job archive,
+# or the KD-era kuma-dead-tiles.yml).
 apiVersion: v1
 kind: Secret
 metadata:
