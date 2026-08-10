@@ -103,7 +103,9 @@ def test_daniel_server_is_still_wholly_docker():
     # days) took TWO in one window: terraria (18 -> 17) moved to k3s ahead of its slot —
     # its worlds were the only irreplaceable data kopia still uniquely protected — and
     # kopia itself (17 -> 16) RETIRED, replaced by the Longhorn backup plane it had been
-    # sharing a B2 account cap with. The count
+    # sharing a B2 account cap with. Then tempo (16 -> 15) RETIRED at D7 later that day:
+    # the otel-collector became a pure forwarder into the cluster claude-otel stack, so
+    # nothing fed the Docker tempo anymore — cluster tempo is the successor. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
@@ -112,6 +114,6 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 16
-    assert len(filter_by_platform(containers, "docker")) == 16
+    assert len(containers) == 15
+    assert len(filter_by_platform(containers, "docker")) == 15
     assert filter_by_platform(containers, "k8s") == []

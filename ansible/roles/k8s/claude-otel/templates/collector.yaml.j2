@@ -136,3 +136,9 @@ spec:
     - name: self-metrics
       port: 8888
       targetPort: 8888
+    # D7 forwarder seam: the ingest IngressRoute targets this port so daniel-server's
+    # Docker collector can chain into this one. In-cluster nothing else uses it — local
+    # sessions still enter via the loopback hostPort.
+    - name: otlp-grpc
+      port: {{ claude_otel_otlp_port }}
+      targetPort: {{ claude_otel_otlp_port }}

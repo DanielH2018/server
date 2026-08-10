@@ -1,0 +1,61 @@
+# OpenTelemetry Collector config for Claude Code telemetry — since slice-7 D7 a pure
+# FORWARDER: everything received on loopback :4317 chains to the cluster claude-otel
+# collector over its write-only ingest route, which fans out to the cluster's
+# Loki/Tempo/Prometheus (the loopback-only prompt store). Nothing lands in the Docker
+# monitoring stack anymore — that stream was the last thing keeping the Docker loki alive
+# (Phase D.2 step-4 gate) — and this container itself dissolves at the Phase F join, when
+# a collector DaemonSet gives daniel-server its own loopback hostPort.
+receivers:
+  otlp:
+    protocols:
+      # gRPC only — the host Claude Code exporter is grpc (settings.json
+      # OTEL_EXPORTER_OTLP_PROTOCOL=grpc); the HTTP :4318 receiver was unused.
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  # Shed load before an OTLP burst walks the process into its 256M cgroup cap (compose
+  # resources) and gets OOM-killed. otelcol guidance: memory_limiter must be the FIRST
+  # processor in every pipeline.
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  batch:
+    timeout: 5s
+
+exporters:
+  # OTLP/gRPC to the cluster collector: TLS terminates at the cluster Traefik (LE cert,
+  # validated against system CAs), which h2c-forwards to the collector's plaintext gRPC
+  # receiver. The route is ClientIP-gated to this host. Pi-hole resolves the -k8s name to
+  # the cluster VIP for containers; the host shell would get the wrong Traefik, which is
+  # one of the reasons this forwarder is a container.
+  otlp/cluster:
+    endpoint: https://claude-otel-ingest{{ k8s_hostname_suffix }}.local.{{ domain }}:443
+
+extensions:
+  # The otelcol-contrib image is a distroless single Go binary (no shell), so a docker
+  # healthcheck is impossible — expose a health endpoint on the monitoring net instead
+  # (probed by nothing since the Kuma tile's D7 retirement; kept for ad-hoc checks and
+  # because docker-fleet only proves the process runs, not that pipelines started).
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/cluster]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/cluster]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/cluster]

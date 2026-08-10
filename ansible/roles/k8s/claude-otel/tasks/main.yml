@@ -25,6 +25,7 @@
       # Must follow middlewares.yaml — it references the `rate-limit` Middleware, which
       # Traefik will not resolve across namespaces.
       - prometheus-ingressroute.yaml
+      - ingest-ingressroute.yaml
     manifests_secret_files:
       - grafana-secret.yaml
     # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has three,

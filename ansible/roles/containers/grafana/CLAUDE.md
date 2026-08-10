@@ -12,15 +12,13 @@ Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md
 ## Notable
 - **Datasources + dashboards are provisioned as code** (not hand-clicked in the UI):
   - `templates/provisioning/datasources.yml.j2` — **Prometheus** (uid `EGdsQqhVk`,
-    default), **Loki** (uid `bf4q19tuivta8e`) and **Tempo** (uid `tempo`). All
-    `editable: true`. **The Prometheus/Loki uids are adopted from the original
-    hand-created datasources** so the 9 pre-existing dashboards (Crowdsec/Traefik/logs)
-    keep resolving — provisioning updates them in place by uid rather than
-    delete/recreate. Tempo is new (nothing to adopt), so its uid is just `tempo`.
-    - **The two are cross-linked** for Claude Code telemetry: Tempo carries
-      `tracesToLogsV2` → Loki, and Loki carries a `derivedFields` **TraceID** link →
-      Tempo. Both match on the `trace_id` Claude Code stamps onto every event it logs, so
-      a span jumps to its events and a log line jumps to its trace. See `tempo/CLAUDE.md`.
+    default), **Loki** (uid `bf4q19tuivta8e`, pointed at the CLUSTER loki-homelab since
+    Phase D.2), and the non-default **loki-docker-retiring** (pre-cutover history; retires
+    with the Docker loki container). All `editable: true`. **The Prometheus/Loki uids are
+    adopted from the original hand-created datasources** so the 9 pre-existing dashboards
+    (Crowdsec/Traefik/logs) keep resolving — provisioning updates them in place by uid
+    rather than delete/recreate. (Tempo and the Loki↔Tempo trace cross-links retired at
+    D7 with the Docker tempo — the cluster claude-otel Grafana carries them now.)
   - `templates/provisioning/dashboards.yml.j2` — a file provider with `allowUiUpdates: true`
     and `foldersFromFilesStructure: true` pointing at `/var/lib/grafana/dashboards`. Each
     subdirectory becomes a Grafana folder of the same name (e.g. `dashboards/Security/`).
@@ -32,9 +30,9 @@ Grafana with a co-deployed Loki/Promtail logging stack. See repo-root `CLAUDE.md
     - **Custom boards** — upstream is the live Grafana DB: the CrowdSec set + `lapi-metrics`
       (`Security/`); `home-assistant`, `uptime-kuma`, `backups`, `player-stats` (`Apps/`);
       `docker-and-system-monitoring`, `ups`, `alert-history` (`Infrastructure/`); the Loki log
-      views `logs` + `loki-internals` (`Logs/`); `traefik-custom` (`Networking/`); and
-      `claude-code` (`AI/` — the Claude Code token/cost/session board fed by the otel-collector
-      Prometheus scrape). `ups.json` is the visual companion to monitor-bridge's UPS Battery
+      views `logs` + `loki-internals` (`Logs/`); and `traefik-custom` (`Networking/`).
+      (The `AI/claude-code` board retired at D7 with the otel-collector scrape job — the
+      live board is the cluster claude-otel Grafana's.) `ups.json` is the visual companion to monitor-bridge's UPS Battery
       Health check (its runtime-trend panel is the slow battery-decay view the alert floor can't
       show); `alert-history.json` reconstructs monitor-bridge DOWN episodes from Loki (the board
       twin of `probe.py alerts`). These are hand-authored seeds — edit-in-UI then

@@ -241,6 +241,10 @@ containers_list:
     # in step: the route matches this exact host, hardcoded as prometheus{{ k8s_hostname_suffix }}.
     extra_hostnames:
       - "prometheus{{ k8s_hostname_suffix }}"
+      # D7 forwarder seam (2026-08-10): daniel-server's Docker otel-collector forwards
+      # Claude telemetry to the cluster collector through this name (write-only OTLP
+      # ingest route; see the role's ingest-ingressroute.yaml.j2). Dissolves at Phase F.
+      - "claude-otel-ingest{{ k8s_hostname_suffix }}"
   # Slice 2, batch A (docs/k3s-migration/slice-2-leaf-apps.md). The Docker twin serves `www`;
   # this one answers on www-k8s until cutover. use_authelia mirrors the Docker entry and its
   # reason: this is the public link-in-bio landing page, so a login gate would break it.

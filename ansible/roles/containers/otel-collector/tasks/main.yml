@@ -10,8 +10,8 @@
 
 - name: Deploy the OTEL collector config
   tags: [config]
-  ansible.builtin.copy:
-    src: otel-collector-config.yaml
+  ansible.builtin.template:
+    src: otel-collector-config.yaml.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/otel-collector-config.yaml"
     mode: "0644"
   register: otel_collector_cfg

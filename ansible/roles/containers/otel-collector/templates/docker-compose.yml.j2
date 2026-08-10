@@ -32,9 +32,8 @@ services:
       - 13133
     {{ service_networks() }}
     labels:
-      # Distroless image has no shell for a docker healthcheck (like loki), so Kuma
-      # http-probes the collector's health_check extension on :13133 over `monitoring`.
-      {{ kuma('otel-collector', monitor_type='http', name='Claude OTEL Collector', url='http://otel-collector:13133/', interval=60, max_retries=2) }}
+      # No Kuma tile since D7 (cluster Kuma can't reach `monitoring`-net names; docker-fleet
+      # covers the container's liveness, telemetry-health the cluster stack it feeds).
       # Watchtower: version-pinned image, skip auto-update (same as cadvisor).
       - "com.centurylinklabs.watchtower.enable=false"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.

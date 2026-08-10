@@ -1,9 +1,9 @@
 ---
 # Deploy after the stack it feeds, so they're up first. Sequencing is computed by the
 # toposort filter in deploy.yml from these names (which must match containers_list entries),
-# not by Ansible meta dependencies. loki lives in the grafana compose, so `grafana` covers it.
-role_deps:
-  - prometheus
-  - grafana
-  # The traces pipeline exports to tempo:4317 — bring the sink up first.
-  - tempo
+# not by Ansible meta dependencies.
+#
+# Since slice-7 D7 the collector forwards everything to the CLUSTER claude-otel collector
+# (nothing local consumes it), so it has no local deps at all — it queues its export until
+# the cluster answers.
+role_deps: []

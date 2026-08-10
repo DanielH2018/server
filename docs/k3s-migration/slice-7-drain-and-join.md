@@ -97,6 +97,22 @@ instruments"). homelab-mcp additionally needs a redesign — its tools read the 
 which by then describes only the residual set; its k8s successor reads the cluster API.
 Deferred to Phase G, possibly beyond the slice.
 
+**D7 SPLIT AND PARTIALLY EXECUTED EARLY (2026-08-10), operator-approved:** what gated the
+Docker Loki retirement (D.2 step 4) was never "collector runs in the cluster" — it was
+"the Claude stream stops landing in Docker stores". So the *exporter seam* moved now and
+the *receiver* stays: the Docker otel-collector became a pure forwarder chaining all three
+pipelines to the cluster claude-otel collector over a new write-only, ClientIP(.161/32)-
+gated, h2c ingest IngressRoute (`claude-otel-ingest-k8s`; the loopback posture protects
+READ access, and no read path was added). `localhost:4317` stays the client contract on
+both hosts — zero settings.json divergence — and the forwarder + route dissolve at the
+Phase F join exactly as this decision planned. Executed with it: Docker tempo RETIRED
+(16 → 15; the forwarder was its only feeder — cluster tempo is the successor), the Docker
+prometheus `otel-collector` job dropped, the AI/claude-code board re-homed to the
+claude-otel role (its only consumer now), and the Tempo datasource + trace cross-links
+removed from the Docker Grafana. homelab-mcp's `claude_code_usage`/`claude_code_events`
+tools are dark for post-D7 data until the Phase G redesign (pre-D7 history stays in the
+Docker prometheus TSDB). The homelab-mcp half of D7 remains deferred to Phase G.
+
 ## Steps
 
 ### A — Slice-6 close-out gate (blocks everything)

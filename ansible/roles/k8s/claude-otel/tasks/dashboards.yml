@@ -75,7 +75,9 @@
 - name: Stage the shared Grafana dashboards on the node
   tags: [config]
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/roles/containers/grafana/files/dashboards/{{ item }}/"
+    # `AI` is role-owned since D7 (this role's files/), the rest come from the Docker
+    # Grafana's shared tree — see claude_otel_dashboard_folders in defaults.
+    src: "{{ (item == 'AI') | ternary('dashboards/AI/', playbook_dir ~ '/roles/containers/grafana/files/dashboards/' ~ item ~ '/') }}"
     dest: "/etc/rancher/k3s/dashboards/{{ item }}/"
     mode: "0644"
     owner: root

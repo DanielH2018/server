@@ -1,64 +1,56 @@
-# otel-collector — OpenTelemetry collector for Claude Code telemetry
+# otel-collector — Claude Code telemetry forwarder (since slice-7 D7)
 
-A single OpenTelemetry collector that gives Claude Code's OTLP export a sink and wires it
-into the observability stack already running here. Claude Code (on the host) exports OTLP/gRPC
-to `localhost:4317` (`settings.json`); this collector receives it, re-exposes the metrics for
-Prometheus, forwards the event logs to the existing Loki, and forwards spans to `tempo` —
-rather than standing up the portable `~/claude-otel` bundle, which ships its own
-Grafana/Loki/Prometheus and would collide on 3000/9090/3100. See repo-root `CLAUDE.md`.
+Since D7 (2026-08-10) this is a pure **forwarder**: Claude Code (on the host) exports
+OTLP/gRPC to `localhost:4317`; this collector receives it and chains ALL THREE pipelines
+(metrics, logs, traces) to the **cluster claude-otel collector** over its ClientIP-gated
+ingest route (`claude-otel-ingest-k8s.local.<domain>`, write-only — see
+`k8s/claude-otel/templates/ingest-ingressroute.yaml.j2`). Nothing lands in the Docker
+monitoring stack anymore: the Docker tempo retired with this change (its only feeder), the
+Docker prometheus dropped its `otel-collector` scrape job, and the Docker loki's Claude
+stream ended — which was the Phase D.2 step-4 gate. The container itself dissolves at the
+Phase F join, when a collector DaemonSet gives daniel-server its own loopback hostPort and
+the ingest route is deleted.
 
-**All three signals, and content IS included.** `~/.claude/settings.json` sets
-`OTEL_LOG_USER_PROMPTS`, `OTEL_LOG_ASSISTANT_RESPONSES`, `OTEL_LOG_TOOL_DETAILS` and
-`OTEL_LOG_TOOL_CONTENT` to `1`, so prompts, assistant responses, and tool arguments/output are
-stored verbatim — in Loki as event attributes and in Tempo as span attributes. (This file
-previously claimed "metrics + event logs only — no prompt/response/tool content"; that was
-stale, corrected 2026-08-06 after reading a live `user_prompt` event back out of Loki.) Treat
-the Loki and Tempo stores as being as sensitive as the transcripts themselves. Nothing is
-published off `monitoring` / host loopback.
+**Why a container survives as "just a forwarder":** the `localhost:4317` endpoint is
+identical in both hosts' chezmoi-managed `settings.json`, and a host shell resolves -k8s
+names to the wrong Traefik (split-horizon) while containers resolve them via Pi-hole. The
+forwarder keeps the client contract and the DNS path correct at once, with zero settings
+divergence between hosts.
+
+**Content flows through here verbatim** (prompts, responses, tool output —
+`OTEL_LOG_USER_PROMPTS` etc. are `1`), TLS-encrypted in transit to the cluster, stored
+only in the loopback-only claude-otel stack. Read-side sensitivity now lives entirely on
+daniel-box; see `k8s/claude-otel/CLAUDE.md`.
 
 ## At a glance
-- **Image:** `otel/opentelemetry-collector-contrib:0.157.0` (pinned; Renovate-tracked via the
-  generic docker-compose manager; Watchtower disabled)
+- **Image:** `otel/opentelemetry-collector-contrib:0.157.0` (pinned; Renovate-tracked;
+  Watchtower disabled)
 - **Host:** daniel-server · **Web UI:** none (`port: false`, no Authelia)
-- **Ports:** OTLP `127.0.0.1:4317` (gRPC only — the host exporter is grpc; the HTTP `:4318`
-  receiver was dropped as unused) — **host loopback only** (Claude Code runs on the host, not a
-  container). `:8889` (Prometheus scrape) and `:13133` (health) are reachable only over the
-  `monitoring` net.
-- **Networks:** monitoring
-- **Depends on:** prometheus, grafana (loki lives in the grafana compose), tempo — deploy ordering via
-  `meta/deps.yml` toposort, not compose `depends_on` (the collector queues its Loki export if
-  Loki isn't up yet)
+- **Ports:** OTLP `127.0.0.1:4317` (gRPC only) — **host loopback only**. `:13133` (health)
+  reachable over `monitoring` for ad-hoc checks; nothing probes it (the Kuma tile was
+  deleted at D7 — docker-fleet covers container liveness, the cluster's telemetry-health
+  cron covers the stack it feeds).
+- **Networks:** monitoring · **Depends on:** nothing local (`meta/deps.yml` is empty —
+  the exporter queues until the cluster answers)
 - **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`, and
-  `files/otel-collector-config.yaml`
+  `templates/otel-collector-config.yaml.j2`
 
 ## Notable
-- **Loopback-only OTLP is deliberate.** 4317 is published to `127.0.0.1` so nothing lands on the
-  LAN. The receiver binds `0.0.0.0` *inside* the container, so `monitoring`-net peers can also
-  push to it — accepted, the same unauthenticated same-net trust boundary as Loki's push API and
-  the Prometheus scrape plane.
-- **No Docker healthcheck — Kuma HTTP-probes instead** (same reason as loki: the otelcol-contrib
-  image is a distroless single Go binary, no shell). The `health_check` extension listens on
-  `:13133` and the `kuma()` label points an HTTP monitor at `http://otel-collector:13133/`.
-  Prometheus also scrapes `:8889`, so Scrape Targets double-covers the collector's death.
-- **The traces pipeline is what makes spans exist at all.** An `otlp` receiver only registers
-  the gRPC TraceService when some pipeline consumes traces — so before `traces:` was added
-  (2026-08-06), Claude Code was exporting `claude_code.interaction` spans to 4317 and having
-  every one of them refused, silently. Client-side the two required env vars were already set
-  (`CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` + `OTEL_TRACES_EXPORTER=otlp`). See `tempo/CLAUDE.md`.
-- **Config choices** (`files/otel-collector-config.yaml`): `memory_limiter` is first in all
-  three pipelines so an OTLP burst is shed before hitting the 256M cgroup cap; `metric_expiration:
-  168h` keeps idle cumulative counters from flickering to "No data" between usage bursts;
-  `resource_to_telemetry_conversion` turns bounded OTLP resource attrs (model, terminal) into
-  metric labels for the by-model breakdown.
+- **The traces pipeline must exist for spans to be accepted at all** — an `otlp` receiver
+  only registers the gRPC TraceService when some pipeline consumes traces (learned
+  2026-08-06, when spans were silently refused).
+- `memory_limiter` stays first in every pipeline (shed an OTLP burst before the 256M
+  cgroup cap OOM-kills the process).
 - **Config-change recreate is wired** — the config is bind-mounted `:ro` and read once at
-  startup, so a config-only edit forces a recreate via `common_config_changed:
-  "{{ otel_collector_cfg is changed }}"` (see `common/CLAUDE.md`). No persistent volume →
-  **nothing in Kopia scope** (the config is regenerable from this role).
-- **Consumers:** the "Claude Code — Usage & Observability" Grafana board
-  (`grafana/files/dashboards/AI/claude-code.json`) and homelab-mcp's `claude_code_usage` /
-  `claude_code_events` tools read this stream (Prometheus + the Loki OTLP logs).
+  startup (`common_config_changed: "{{ otel_collector_cfg is changed }}"`). No persistent
+  volume; the config is regenerable from this role.
+- **Consumers moved with the stream:** the live Claude Code board is the cluster
+  claude-otel Grafana's; the Docker AI/claude-code board was removed at D7 (pre-D7 metric
+  history stays queryable in the Docker prometheus TSDB until retention ages it out).
+  homelab-mcp's `claude_code_usage`/`claude_code_events` tools read the Docker stores and
+  are dark for post-D7 data until the Phase G homelab-mcp redesign.
 
 ## Editing
-- Compose: `templates/docker-compose.yml.j2` · Collector config: `files/otel-collector-config.yaml`
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "otel-collector"` (a config edit
-  forces the recreate)
+- Compose: `templates/docker-compose.yml.j2` · Collector config: `templates/otel-collector-config.yaml.j2`
+- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "otel-collector"` (a config
+  edit forces the recreate)
