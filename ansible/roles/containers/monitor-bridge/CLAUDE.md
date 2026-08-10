@@ -303,7 +303,8 @@ Uptime Kuma **push** monitors, so threshold problems actually page. See repo-roo
     invisible to the reachability gate above, which is why both exist. Pure
     `k8s_workloads_verdict()` is unit-tested; `CLUSTER_DEPENDENT` is guarded against the live
     `CHECKS` and asserted disjoint from the other three skip sets.)
-  - **Loki Log Ingestion** (two-arm LogQL freshness against `loki:3100` over `monitoring`, `down`
+  - **Loki Log Ingestion** (two-arm LogQL freshness against the cluster `loki-homelab` via
+    its ClientIP-gated -k8s route since Phase D.2, `down`
     if EITHER arm is silent — a silently-dead promtail→Loki pipeline (docker-proxy break,
     positions-file corruption, relabel regression) that Loki's `/ready` Kuma probe stays green
     through. **Arm 1 — file-tail union** `sum(count_over_time({job=~"authlog|syslog|traefik"}[3h]))`:

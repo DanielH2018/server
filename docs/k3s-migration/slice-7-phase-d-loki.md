@@ -93,6 +93,27 @@ the claude-otel one.
    lives until the collector's own migration re-homes it to the loopback-only claude-otel
    stack.
 
+## Execution record
+
+- **Step 1 (2026-08-10, commits d4bc603d + 4ee53936):** loki-homelab + promtail DaemonSet
+  live. Two silent-drop traps cost the `{job="k8s"}` gate a debugging round:
+  1. **promtail drops any discovered target whose `__host__` label ≠ its own hostname** —
+     in a pod that's the *pod* name, never the node name the kubernetes_sd relabel writes,
+     so every pod target was filtered with no error logged. Fix: `HOSTNAME` env from
+     `fieldRef: spec.nodeName` (what the upstream chart does).
+  2. syslog/auth.log are `syslog`-user-owned — capability-stripped root needed
+     `DAC_READ_SEARCH` (the recurring root-without-DAC lesson, read-only variant).
+  Verified: jobs `authlog|docker|k8s|syslog|traefik` in the cluster Loki;
+  `{container="terraria"}` non-empty; daniel-box ships authlog+syslog+k8s (KL3's "both
+  servers, full logs" bar met — daniel-box host logs are NEW coverage).
+- **Step 2 (2026-08-10, c1f7b5f3):** daniel-server promtail dual-writes both Lokis. The
+  Docker otel-collector was deliberately NOT dual-written (the D7/KL1 boundary below).
+- **Step 3 (2026-08-10, c70cf206):** terraria-stats, monitor-bridge, homelab-mcp, Grafana
+  `loki` datasource → the cluster route; probe.py pins the -k8s name to the MetalLB VIP
+  via `curl --resolve` (split-horizon: the host shell resolves -k8s names to the Docker
+  Traefik). Grafana gains non-default `loki-docker-retiring` for pre-cutover history —
+  delete it at step 4.
+
 ## Unverified — resolve during execution
 
 - Docker Loki volume size (sizes the new PVC; read it before step 1).
