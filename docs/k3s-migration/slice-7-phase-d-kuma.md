@@ -141,6 +141,15 @@ static filenames equal to the existing label-derived ids, or reconciliation dupl
 fleet. The 5s "Updating notification" churn quirk affects file-defined notifications too.
 Gate entities removed afterwards via the kuma-cli release binary; DB verified clean.
 
+## Step 2 — EXECUTED 2026-08-10 (KD2/KD3)
+
+`kuma_docker_monitors: false` + macro gate + fleet cron landed (one commit), full deploy
+re-rendered the fleet. Verified: `SELECT type, COUNT(*)` shows **zero docker-type monitors**
+(85 remain: 56 push / 25 http / 2 port / 1 ping / 1 dns), `Docker Fleet Health` active with
+two consecutive 5-min up beats ("30 containers running, none unhealthy"), Discord delivery
+check green, all 11 Prometheus targets up. The Kuma DB now carries no docker-type monitor —
+the `kuma_docker_host` FK is referent-free ahead of the seed.
+
 ## Unverified — resolve during execution
 - AutoKuma static-file **field parity** with the label macro (accepted_statuscodes,
   max_redirects, dns fields) — render one of each type on the scratch deploy.
