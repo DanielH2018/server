@@ -80,9 +80,11 @@ Executed in plan order; all on daniel-box unless noted.
    pihole ConfigMap override; both Pi-holes deployed. `dig @10.0.0.243 sonarr.local.…`
    → 10.0.0.240; `grafana.local` (Docker-hosted, reverse bridge) → 302 to
    `auth.local.…`; `sonarr.local` (k8s native) → 302 to the k8s portal.
-2. **Cloudflare wildcard** — OPERATOR STEP STILL OPEN: grey-cloud `*.local.<domain>` →
-   10.0.0.240. Until it moves, host-shell/public-DNS `.local` resolution still lands on
-   the Docker edge (which keeps working — it's fully assembled until Phase E).
+2. **Cloudflare wildcard** ✓ — operator moved grey-cloud `*.local.<domain>` → 10.0.0.240
+   (2026-08-10 ~19:40 UTC). Verified via 1.1.1.1 and the host shell; a Docker-hosted
+   name (reverse bridge) and a k8s name (native) both serve from the VIP. During the
+   gap, host-shell resolution 404'd at the stripped Docker edge — probe.py's HA calls
+   were the casualty and now pin the VIP (`dcad9bc1`).
 3. **BT1+BT2** ✓ — macro refactor + `bridge_hostname` → `unsuffixed_hostname` rename
    (inventory + 20 route templates + 4 deployment templates + reverse-bridge + Docker
    config); full daniel-box deploy ok=834 changed=155 failed=0 (first run caught a
