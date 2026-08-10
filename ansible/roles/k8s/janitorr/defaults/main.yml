@@ -5,7 +5,7 @@
 # two copies are the same binary during coexistence: `jvm-stable` is a floating non-semver alias
 # Renovate cannot version-track. Manual update: `docker pull ghcr.io/schaka/janitorr:jvm-stable`,
 # take the new digest.
-janitorr_k8s_image: ghcr.io/schaka/janitorr:jvm-stable@sha256:6becfbed9098d27e6bf81a114976394a091d095ee5aba3ae8d86a4fd94af8e7a
+janitorr_k8s_image: ghcr.io/schaka/janitorr:jvm-stable@sha256:270e9113c71182d30929f253ff6ff49c63078f4556487a668602c4114c7d665a
 
 # Flipped to "false" 2026-08-08 (operator decision), after the port shipped dry and verify.yml
 # produced the evidence it exists for: the config the JVM loaded read dry-run: true, sonarr,
