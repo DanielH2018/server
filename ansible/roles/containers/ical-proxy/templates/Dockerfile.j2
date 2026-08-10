@@ -5,7 +5,9 @@ WORKDIR /app
 # every weekly rebuild, certifying a flask the container never runs — 2026-07-18 review L1). Kept in
 # lockstep with uv.lock by ansible/tests/test_ical_proxy_pins_match_uv_lock.py.
 RUN pip install flask==3.1.3 requests==2.34.2
-COPY app/app.py .
+# Flat path: the k8s image-builder stages context files as ConfigMap keys, which cannot
+# contain '/'. (The retired Docker build staged app/ itself; nothing uses that shape now.)
+COPY app.py .
 # Drop root: the app only reads app.py and binds :5000 (no privileged port, read-only rootfs).
 RUN useradd -u 1000 -m appuser
 USER appuser
