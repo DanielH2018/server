@@ -100,6 +100,12 @@ spec:
               value: "false"
             - name: AUTOKUMA__STATIC_MONITORS
               value: /monitors
+            # Secret volumes surface every file as a symlink into ..data/, and AutoKuma
+            # skips symlinks by default — without this the static source silently reads an
+            # empty directory (masked by on_delete=keep; caught when a file edit never
+            # reached the live monitor, 2026-08-10).
+            - name: AUTOKUMA__FILES__FOLLOW_SYMLINKS
+              value: "true"
             - name: AUTOKUMA__DB_PATH
               value: /data/autokuma.db
             # INTERIM (KD1 refinement): most monitor declarations still sit as inert labels

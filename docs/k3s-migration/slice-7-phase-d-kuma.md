@@ -169,6 +169,42 @@ and transcribe into the Secret as each Docker role retires. `on_delete` flips ba
 before the move. Guards: `ansible/tests/test_kuma_static_monitors.py` (every monitor
 linked to discord, push retries 0, both notifications defined, ids unique by construction).
 
+## Steps 4 + 5 — EXECUTED 2026-08-10
+
+Window: Docker pair stopped + removed (compose kept; tar snapshot at
+`/home/ubuntu/kuma-cutover-snapshot.tar.gz`), both volumes force-seeded (identical
+digests), pod live with all monitors + history, autokuma logged in and adopting — zero
+`Creating` lines, so every static id matched its seeded entity. Bridge answers 302 on the
+unsuffixed name; monitor-bridge/autofix pushes land (a full cycle with zero failures);
+Discord delivery green; `up{job="uptime-kuma"} = 1` on the re-pointed scrape;
+homepage widget re-targeted. daniel-server: 19 → 18.
+
+Five traps found live, each now encoded in-template or in-guard:
+1. Secret-volume files are root-owned → the sidecar's 0400 password mount read as an
+   empty password (`authIncorrectCreds` alternating with "none provided"). 444 now.
+2. The pod is the first cluster workload probing `-k8s` LAN names, and the node's
+   public-DNS posture resolves the public wildcard to the Docker edge → hostAliases pin
+   the inventory-derived cluster hostnames to the VIP (bridge names left unpinned — .161
+   is the path they test). Both Pi-holes also needed a redeploy for the new
+   `uptime-kuma-k8s` override; Docker prometheus needed a restart to drop its pre-fix
+   resolution.
+3. `monitoring_route`'s ClientIP guard rejected the prober that moved into the cluster →
+   `extra_client_cidrs` opt-in (ical-proxy: pod CIDR).
+4. Traefik v3's ClientIP takes ONE argument — the two-arg form silently kills the whole
+   router (every source 404s). One `ClientIP()` per CIDR, OR'd.
+5. Secret volumes surface files as symlinks and AutoKuma skips symlinks by default — the
+   static source read an EMPTY directory, masked by `on_delete=keep`, caught when a file
+   edit never reached the live monitor. `AUTOKUMA__FILES__FOLLOW_SYMLINKS=true`.
+
+Deliberate leftovers: the `Loki` / `Tempo` / `Claude OTEL Collector` monitors watch
+Docker-DNS names unreachable from the cluster — down until their Phase D migrations
+re-point them (interim liveness is covered by docker-fleet + monitor-bridge). Delete or
+pause them in the UI if the red tiles annoy. The `monitoring_controller_host` `--resolve`
+flip stays lazy: the forward bridge keeps every baked `.161` push working; Phase E forces
+the flip when the Docker edge retires. Remaining ledger before `on_delete` flips back to
+`delete`: transcribe the label declarations still on monitor-bridge, autofix-bridge, and
+the loki/tempo/otel-collector roles as each retires.
+
 ## Unverified — resolve during execution
 - AutoKuma static-file **field parity** with the label macro (accepted_statuscodes,
   max_redirects, dns fields) — render one of each type on the scratch deploy.
