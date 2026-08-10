@@ -1,4 +1,4 @@
-{% from 'ingressroute.yml.j2' import ingressroute with context %}
+{% from 'ingressroute.yml.j2' import ingressroute, monitoring_route with context %}
 ---
 {#
   csp-karakeep rides on both routes here, where the Docker labels() call attaches it to the main
@@ -14,5 +14,17 @@
     extra_middlewares=['csp-karakeep'],
     unsuffixed_hostname=container_item.unsuffixed_hostname | default(none),
     bypass_prefixes=container_item.bridge_bypass_prefixes | default([])
+  )
+}}
+---
+{#
+  Homepage's karakeep widget (daniel-server, session-less API-key caller) — same story as
+  speedtest: the no-auth bridge route it used died in the slice-7 teardown.
+#}
+{{ monitoring_route(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    '/api/'
   )
 }}

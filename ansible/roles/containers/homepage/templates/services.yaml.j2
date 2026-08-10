@@ -29,22 +29,21 @@
             href: https://speedtest.{{ domain }}/
             description: Internet tracking
             # No server/container: speedtest runs in k3s now, so there is no Docker container
-            # for the status dot. The widget does NOT go through the Docker bridge — compose
-            # maps this .local name straight to the cluster ingress VIP via extra_hosts,
-            # because the Docker edge is unreachable from this container (same-bridge hairpin
-            # NAT; the reasoning is in docker-compose.yml.j2).
+            # for the status dot. The -k8s name is the ClientIP-gated monitoring route (no
+            # Authelia) — the unsuffixed name's native route is Authelia'd and 401s this
+            # session-less widget (broke when the slice-7 teardown removed the bridge route).
             widget:
                 type: speedtest
-                url: https://speedtest.local.{{ domain }}
+                url: https://speedtest{{ k8s_hostname_suffix }}.local.{{ domain }}
         - FreshRSS:
             icon: freshrss.png
             href: https://freshrss.{{ domain }}/
             description: RSS Link Aggregator
             # No server/container: freshrss runs in k3s now. Same as speedtest above — the
-            # widget resolves this .local name straight to the cluster VIP.
+            # -k8s monitoring route, because the native route's Authelia 401s the widget.
             widget:
                 type: freshrss
-                url: https://freshrss.local.{{ domain }}
+                url: https://freshrss{{ k8s_hostname_suffix }}.local.{{ domain }}
                 username: {{ freshrss_username }}
                 password: {{ freshrss_password }}
         - Karakeep:
@@ -52,11 +51,11 @@
             href: https://karakeep.{{ domain }}/
             description: Karakeep
             # No server/container: karakeep runs in k3s now. Same as speedtest and freshrss
-            # above — the widget resolves this .local name straight to the cluster VIP, where
-            # the bridge IngressRoute serves it without Authelia; no extra route was needed.
+            # above — the -k8s monitoring route, because the native route's Authelia 401s
+            # the widget.
             widget:
                 type: karakeep
-                url: https://karakeep.local.{{ domain }}
+                url: https://karakeep{{ k8s_hostname_suffix }}.local.{{ domain }}
                 key: {{ karakeep_homepage_api_key }}
         - UPS:
             icon: apc.png

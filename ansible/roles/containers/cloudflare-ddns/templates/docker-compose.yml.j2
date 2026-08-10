@@ -19,9 +19,11 @@ services:
       - PROXIED=true
       - IP6_PROVIDER=none
       # Dead-man's-switch: ping a Kuma push monitor after each successful update.
-      # Internal http (same `monitoring` net) — keeps the heartbeat off public DNS
-      # and out of the Authelia-gated public route. Token lives in secrets.yml.
-      - UPTIMEKUMA=http://uptime-kuma:3001/api/push/{{ cloudflare_ddns_proxied_push_token }}
+      # Kuma lives in the cluster now — the old `http://uptime-kuma:3001` same-net URL
+      # died with the Docker container. The -k8s .local name resolves to the ingress
+      # VIP via Pi-hole from inside a container; /api/push carries no Authelia (LAN
+      # bypass on the k8s route). Token lives in secrets.yml.
+      - UPTIMEKUMA=https://uptime-kuma{{ k8s_hostname_suffix }}.local.{{ domain }}/api/push/{{ cloudflare_ddns_proxied_push_token }}
     volumes:
       - ./data/cf_dns_token:/run/secrets/cf_dns_token:ro
     {{ service_networks() }}
@@ -50,9 +52,11 @@ services:
       - PROXIED=false
       - IP6_PROVIDER=none
       # Dead-man's-switch: ping a Kuma push monitor after each successful update.
-      # Internal http (same `monitoring` net) — keeps the heartbeat off public DNS
-      # and out of the Authelia-gated public route. Token lives in secrets.yml.
-      - UPTIMEKUMA=http://uptime-kuma:3001/api/push/{{ cloudflare_ddns_direct_push_token }}
+      # Kuma lives in the cluster now — the old `http://uptime-kuma:3001` same-net URL
+      # died with the Docker container. The -k8s .local name resolves to the ingress
+      # VIP via Pi-hole from inside a container; /api/push carries no Authelia (LAN
+      # bypass on the k8s route). Token lives in secrets.yml.
+      - UPTIMEKUMA=https://uptime-kuma{{ k8s_hostname_suffix }}.local.{{ domain }}/api/push/{{ cloudflare_ddns_direct_push_token }}
     volumes:
       - ./data/cf_dns_token:/run/secrets/cf_dns_token:ro
     {{ service_networks() }}

@@ -1,7 +1,7 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 ---
 {#
-  The UI route, plus the strangler-bridge route once bridge_hostname is set. /webhook/ needs no
+  The UI route, plus the strangler-bridge route once unsuffixed_hostname is set. /webhook/ needs no
   route of its own here: the bridge route the macro emits carries no Authelia at all, and the
   Docker edge's half of the bypass is generated from bridge_bypass_prefixes. That pairing is
   what reproduces the compose template's `n8n-webhook` router — see daniel-box.yml.

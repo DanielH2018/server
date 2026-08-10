@@ -19,7 +19,9 @@ export CONFIGARR_NAMESPACE={{ k8s_namespace }}
 export CONFIGARR_MAX_AGE_H={{ configarr_k8s_max_age_hours }}
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ hostvars[monitoring_controller_host].server_ip }}"
+# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
+# edge's bridge route for this name was removed in the slice-7 bridge teardown.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 PUSH_URL="https://${KUMA_HOST}/api/push/{{ monitor_bridge_configarr_push_token }}"
 
 # The reader prints `up<TAB>msg` or `down<TAB>msg` and always exits 0. A nonzero exit or empty

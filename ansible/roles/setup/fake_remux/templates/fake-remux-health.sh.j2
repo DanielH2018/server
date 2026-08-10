@@ -13,7 +13,9 @@
 set -uo pipefail
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ hostvars[monitoring_controller_host].server_ip }}"
+# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
+# edge's bridge route for this name was removed in the slice-7 bridge teardown.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 
 # Order is load-bearing: state_push.py prints one line per triple, in argument order, and the two
 # tokens below are consumed in that same order.

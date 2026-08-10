@@ -1,4 +1,4 @@
-{% from 'ingressroute.yml.j2' import ingressroute with context %}
+{% from 'ingressroute.yml.j2' import ingressroute, monitoring_route with context %}
 ---
 {{ ingressroute(
     container_item.name,
@@ -6,5 +6,18 @@
     container_item.port,
     container_item.use_authelia,
     unsuffixed_hostname=container_item.unsuffixed_hostname | default(none)
+  )
+}}
+---
+{#
+  Homepage's FreshRSS widget (daniel-server, session-less greader login) — same story as
+  speedtest: the no-auth bridge route it used died in the slice-7 teardown. The path is
+  the greader API endpoint itself, the same one the old bridge probe exercised.
+#}
+{{ monitoring_route(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    '/api/greader.php'
   )
 }}

@@ -91,22 +91,16 @@ stringData:
     {"type": "http", "name": "k3s code-server", "url": "https://code-server{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   pihole-k8s-dns.json: |
     {"type": "dns", "name": "Pi-hole k8s DNS", "hostname": "homepage.local.{{ domain }}", "dns_resolve_server": "{{ dns_k8s_vip }}", "dns_resolve_type": "A", "port": 53, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # ── bridge monitors (the user-facing unsuffixed names) ─────────────────────────────────
-  healthchecks-bridge.json: |
-    {"type": "http", "name": "healthchecks (via bridge)", "url": "https://healthchecks.local.{{ domain }}/ping/00000000-0000-0000-0000-000000000000", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["404"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
-{% set freshrss_k8s = (hostvars['daniel-box'].containers_list | selectattr('name', 'equalto', 'freshrss') | first) %}
-  freshrss-bridge.json: |
-    {"type": "http", "name": "FreshRSS (via bridge)", "url": "https://freshrss.local.{{ domain }}{{ freshrss_k8s.bridge_probe_path }}", "interval": 60, "maxretries": 2, "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  karakeep-bridge.json: |
-    {"type": "http", "name": "karakeep (via bridge)", "url": "https://karakeep.local.{{ domain }}/api/health", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["200"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # ── residual bridge monitor ────────────────────────────────────────────────────────────
+  # The other "(via bridge)" tiles (healthchecks/freshrss/karakeep/littlelink/speedtest)
+  # were RETIRED at the slice-7 bridge teardown: their probe routers died with the forward
+  # bridge, and the unsuffixed names they watched now serve through the same cluster edge
+  # the -k8s tiles above already cover. LiveSync keeps its tile because its chain is still
+  # real — Docker edge probe router → forward transport → cluster return-leg → CouchDB —
+  # and only this probe exercises it end-to-end.
 {% set livesync_k8s = (hostvars['daniel-box'].containers_list | selectattr('name', 'equalto', 'livesync') | first) %}
   livesync-bridge.json: |
     {"type": "http", "name": "LiveSync (via bridge)", "url": "https://livesync.local.{{ domain }}{{ livesync_k8s.bridge_probe_path }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["401"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  littlelink-bridge.json: |
-    {"type": "http", "name": "littlelink (via bridge)", "url": "https://www.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-{% set speedtest_k8s = (hostvars['daniel-box'].containers_list | selectattr('name', 'equalto', 'speedtest') | first) %}
-  speedtest-bridge.json: |
-    {"type": "http", "name": "speedtest (via bridge)", "url": "https://speedtest.local.{{ domain }}{{ speedtest_k8s.bridge_probe_path }}", "interval": 60, "maxretries": 2, "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # ── push monitors fed by host crons (tokens unchanged — monitors keep their history) ───
   crowdsec-home-allowlist.json: |
     {"type": "push", "name": "CrowdSec Home Allowlist", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_home_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}

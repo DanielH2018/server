@@ -24,7 +24,9 @@ COUNTER=/sys/fs/ext4/mmcblk0p2/errors_count
    hostvars['daniel-server'].domain — secrets are play-scoped, so that lookup
    fails cross-host. Verified: the Pi's wg-easy renders the same way. #}
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ hostvars[monitoring_controller_host].server_ip }}"
+# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
+# edge's bridge route for this name was removed in the slice-7 bridge teardown.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 PUSH_URL="https://${KUMA_HOST}/api/push/{{ pi_sd_health_push_token }}"
 
 if COUNT=$(cat "$COUNTER" 2>/dev/null); then

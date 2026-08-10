@@ -1,4 +1,4 @@
-{% from 'ingressroute.yml.j2' import ingressroute with context %}
+{% from 'ingressroute.yml.j2' import ingressroute, monitoring_route with context %}
 ---
 {{ ingressroute(
     container_item.name,
@@ -6,5 +6,18 @@
     container_item.port,
     container_item.use_authelia,
     unsuffixed_hostname=container_item.unsuffixed_hostname | default(none)
+  )
+}}
+---
+{#
+  Homepage's speedtest widget (daniel-server, session-less API-key caller). It rode the
+  no-auth ClientIP bridge route until the slice-7 teardown deleted it; the native route
+  that replaced it carries Authelia, which 401s the widget.
+#}
+{{ monitoring_route(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    '/api/'
   )
 }}

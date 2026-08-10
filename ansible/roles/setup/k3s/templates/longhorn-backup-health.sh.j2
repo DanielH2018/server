@@ -22,7 +22,9 @@ KUBECTL="k3s kubectl -n longhorn-system"
 AGE_S=0
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ hostvars[monitoring_controller_host].server_ip }}"
+# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
+# edge's bridge route for this name was removed in the slice-7 bridge teardown.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 PUSH_URL="https://${KUMA_HOST}/api/push/{{ longhorn_backup_push_token }}"
 MAX_AGE_S=$(( {{ k3s_longhorn_backup_max_age_hours }} * 3600 ))
 

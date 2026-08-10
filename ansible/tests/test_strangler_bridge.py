@@ -60,6 +60,20 @@ def test_no_bridge_hostname_key_survives_anywhere():
                 f"{host_file.name}: {entry.get('name')} declares bridge_hostname — "
                 "the teardown renamed this to unsuffixed_hostname"
             )
+    # Templates too, not just inventory: a selectattr('bridge_hostname', ...) in Jinja
+    # matches zero entries and renders an EMPTY block instead of failing — exactly how
+    # homepage's extra_hosts pins silently vanished at the teardown. Comments are exempt
+    # (history is allowed to name the old key); expressions are not.
+    ansible_root = HOST_VARS.parent.parent
+    for tmpl in ansible_root.rglob("*.j2"):
+        if "collections" in tmpl.parts:
+            continue
+        for i, line in enumerate(tmpl.read_text().splitlines(), 1):
+            if "bridge_hostname" in line and not line.lstrip().startswith("#"):
+                raise AssertionError(
+                    f"{tmpl.relative_to(ansible_root)}:{i} references bridge_hostname "
+                    "outside a comment — renamed to unsuffixed_hostname at the teardown"
+                )
 
 
 def test_docker_edge_renders_no_generic_bridge_routers():

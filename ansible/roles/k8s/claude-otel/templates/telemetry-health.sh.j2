@@ -19,7 +19,9 @@ export KUBECONFIG=/home/{{ sys_user }}/.kube/config
 KUBECTL="k3s kubectl -n {{ k8s_observability_namespace }}"
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ hostvars[monitoring_controller_host].server_ip }}"
+# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
+# edge's bridge route for this name was removed in the slice-7 bridge teardown.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 PUSH_URL="https://${KUMA_HOST}/api/push/{{ claude_otel_push_token }}"
 
 PROBLEMS=""
