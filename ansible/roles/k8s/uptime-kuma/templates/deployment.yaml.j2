@@ -108,13 +108,15 @@ spec:
               value: "true"
             - name: AUTOKUMA__DB_PATH
               value: /data/autokuma.db
-            # INTERIM (KD1 refinement): most monitor declarations still sit as inert labels
-            # on Docker compose files this instance can't read. `keep` protects them —
-            # entities in the seeded DB survive having no visible declaration. Flip to
-            # `delete` only when the last declaration has been transcribed into the
-            # static-monitors Secret (tracked in slice-7-phase-d-kuma.md).
+            # Flipped keep → delete 2026-08-10 after the transcription ledger closed:
+            # every one of the 77 live monitors has a static-monitors declaration
+            # (audited name-by-name against `kuma-cli monitor list`; the only file-only
+            # entries are the two notification objects). From here, removing an entity's
+            # .json file DELETES the live monitor and its history — that is the intended
+            # semantic; the interim `keep` existed only while declarations still sat as
+            # inert labels on Docker composes this instance can't read.
             - name: AUTOKUMA__ON_DELETE
-              value: keep
+              value: delete
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
