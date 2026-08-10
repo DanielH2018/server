@@ -1,0 +1,101 @@
+---
+# Web UI + API. The Service is named `scrutiny` (not scrutiny-web) because the shared
+# ingressroute macro names the Service after the containers_list entry — and it keeps
+# COLLECTOR_API_ENDPOINT=http://scrutiny:8080 identical to the Docker compose for the
+# DaemonSet below.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scrutiny-web
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: scrutiny-web
+  template:
+    metadata:
+      labels:
+        app: scrutiny-web
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: web
+          image: {{ scrutiny_k8s_web_image }}
+          # No _FILE convention in scrutiny, so a wrapper exports the influxdb token from
+          # the Secret mount before exec'ing the binary — same idiom as the Docker copy
+          # (there: keeping it out of docker-proxy-readable Env; here: out of the pod spec).
+          command:
+            - /bin/sh
+            - -c
+            - 'export SCRUTINY_WEB_INFLUXDB_TOKEN="$(cat /run/secrets/influxdb_token)"; exec /opt/scrutiny/bin/scrutiny start'
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                # Runs as root writing its SQLite config DB + WAL in the PVC mount; the
+                # Docker copy leaned on the default cap set for the same reason.
+                - DAC_OVERRIDE
+          env:
+            - name: SCRUTINY_WEB_INFLUXDB_HOST
+              value: scrutiny-influxdb
+            - name: SCRUTINY_WEB_INFLUXDB_PORT
+              value: "8086"
+            - name: SCRUTINY_WEB_INFLUXDB_ORG
+              value: scrutiny
+            - name: SCRUTINY_WEB_INFLUXDB_BUCKET
+              value: metrics
+            - name: TZ
+              value: {{ tz }}
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: config
+              mountPath: /opt/scrutiny/config
+            - name: credentials
+              mountPath: /run/secrets
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "500m"
+              memory: 512Mi
+            requests:
+              cpu: "50m"
+              memory: 64Mi
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ scrutiny_k8s_config_claim }}
+        - name: credentials
+          secret:
+            secretName: scrutiny-influxdb-credentials
+            defaultMode: 0o444
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scrutiny
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: scrutiny-web
+  ports:
+    - port: {{ container_item.port }}
+      targetPort: 8080

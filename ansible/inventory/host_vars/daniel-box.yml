@@ -537,6 +537,16 @@ containers_list:
     hostname: "loki-homelab{{ k8s_hostname_suffix }}"
     port: 3100
     use_authelia: false
+  # Slice-7 Phase D (2026-08-10, slice-7-phase-d-scrutiny.md): SMART monitoring. The
+  # collector DaemonSet adds this host's never-monitored NVMe; daniel-server's Docker
+  # collector pushes into the same web API as a spoke until the Phase F join. UI behind
+  # Authelia; /api/* bypassed for LAN machine traffic (the spoke's POSTs and
+  # monitor-bridge's summary reads) in the authelia role's config.
+  - name: scrutiny
+    platform: k8s
+    hostname: "scrutiny{{ k8s_hostname_suffix }}"
+    port: 8080
+    use_authelia: true
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the

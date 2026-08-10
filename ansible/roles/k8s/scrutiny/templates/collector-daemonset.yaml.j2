@@ -1,0 +1,65 @@
+---
+# SC3: the collector runs on every node — today daniel-box only, which ADDS its
+# never-monitored NVMe; the Phase F join extends it to daniel-server automatically and
+# retires the Docker spoke there.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: scrutiny-collector
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: scrutiny-collector
+  template:
+    metadata:
+      labels:
+        app: scrutiny-collector
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: collector
+          image: {{ scrutiny_k8s_collector_image }}
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                # Same set the Docker copy proved out: SETUID/SETGID for the entrypoint's
+                # su privilege-drop, SYS_RAWIO for SMART, SYS_ADMIN because the NVMe
+                # health log page goes through NVME_IOCTL_ADMIN_CMD (without it the read
+                # is refused and records silently miss all health metrics).
+                - SETUID
+                - SETGID
+                - SYS_RAWIO
+                - SYS_ADMIN
+          env:
+            - name: COLLECTOR_API_ENDPOINT
+              # The in-cluster Service — no route, no Authelia in the path.
+              value: http://scrutiny:{{ container_item.port }}
+            - name: COLLECTOR_CRON_SCHEDULE
+              value: "{{ scrutiny_k8s_collector_cron }}"
+            - name: TZ
+              value: {{ tz }}
+          volumeMounts:
+            - name: udev
+              mountPath: /run/udev
+              readOnly: true
+            - name: nvme
+              mountPath: /dev/nvme0
+          resources:
+            limits:
+              cpu: "500m"
+              memory: 256Mi
+            requests:
+              cpu: "50m"
+              memory: 32Mi
+      volumes:
+        - name: udev
+          hostPath:
+            path: /run/udev
+        - name: nvme
+          hostPath:
+            path: /dev/nvme0
+            type: CharDevice

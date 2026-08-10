@@ -1,0 +1,9 @@
+{% from 'ingressroute.yml.j2' import ingressroute with context %}
+---
+{{ ingressroute(
+    container_item.name,
+    container_item.hostname,
+    container_item.port,
+    container_item.use_authelia
+  )
+}}

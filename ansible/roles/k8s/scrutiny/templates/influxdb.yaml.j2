@@ -1,0 +1,107 @@
+---
+# Time-series store for SMART history. ClusterIP only — nothing outside the namespace
+# reads it (the web is the API). The INIT_* env is consumed only on first-run setup and
+# skipped once influxd.bolt exists, which the seeded volume provides.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scrutiny-influxdb
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # RWO PVC on single-replica Longhorn — a rolling update deadlocks on the volume.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: scrutiny-influxdb
+  template:
+    metadata:
+      labels:
+        app: scrutiny-influxdb
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: influxdb
+          image: {{ scrutiny_k8s_influxdb_image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                # Entrypoint chowns the data dir then drops root via gosu before starting
+                # influxd — the same add-backs the Docker copy carries.
+                - CHOWN
+                - SETUID
+                - SETGID
+                - DAC_OVERRIDE
+                - FOWNER
+          env:
+            - name: DOCKER_INFLUXDB_INIT_MODE
+              value: setup
+            - name: DOCKER_INFLUXDB_INIT_USERNAME
+              value: admin
+            - name: DOCKER_INFLUXDB_INIT_PASSWORD_FILE
+              value: /run/secrets/influxdb_admin_password
+            - name: DOCKER_INFLUXDB_INIT_ORG
+              value: scrutiny
+            - name: DOCKER_INFLUXDB_INIT_BUCKET
+              value: metrics
+            - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE
+              value: /run/secrets/influxdb_token
+            - name: TZ
+              value: {{ tz }}
+          ports:
+            - name: http
+              containerPort: 8086
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/influxdb2
+            # The image declares VOLUME /etc/influxdb2 (the CLI's influx-configs file,
+            # written only at first-run setup). emptyDir: the web talks token-auth over
+            # HTTP and never reads it; losing it costs nothing.
+            - name: cli-config
+              mountPath: /etc/influxdb2
+            - name: credentials
+              mountPath: /run/secrets
+              readOnly: true
+          readinessProbe:
+            exec:
+              command: ["influx", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            exec:
+              command: ["influx", "ping"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "1"
+              memory: 2048Mi
+            requests:
+              cpu: "100m"
+              memory: 128Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ scrutiny_k8s_influxdb_claim }}
+        - name: cli-config
+          emptyDir: {}
+        - name: credentials
+          secret:
+            secretName: scrutiny-influxdb-credentials
+            defaultMode: 0o444
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scrutiny-influxdb
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: scrutiny-influxdb
+  ports:
+    - port: 8086
+      targetPort: 8086

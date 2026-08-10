@@ -1,0 +1,25 @@
+---
+# Rolling upstream-branch tags, SAME as the Docker copy and the same policy: manual-update
+# tier. Renovate cannot version-track a branch tag and MUST NOT be taught to — updating is
+# a deliberate redeploy with an image pull, never unsupervised `master` builds on a
+# stateful monitoring service.
+scrutiny_k8s_web_image: ghcr.io/analogj/scrutiny:master-web
+scrutiny_k8s_collector_image: ghcr.io/analogj/scrutiny:master-collector
+scrutiny_k8s_influxdb_image: influxdb:2.9
+
+# SC2: SMART history is trend data and the whole point of the tool — backed-up class.
+# 3.1 MB at planning; 2Gi leaves influxdb compaction headroom.
+scrutiny_k8s_influxdb_claim: scrutiny-influxdb-data
+scrutiny_k8s_influxdb_size: 2Gi
+scrutiny_k8s_influxdb_storage_class: longhorn
+scrutiny_k8s_influxdb_source_path: /home/ubuntu/server/containers/scrutiny/influxdb2
+
+# The web's SQLite config DB (32 KB) — device metadata, notification settings.
+scrutiny_k8s_config_claim: scrutiny-web-config
+scrutiny_k8s_config_size: 1Gi
+scrutiny_k8s_config_storage_class: longhorn
+scrutiny_k8s_config_source_path: /home/ubuntu/server/containers/scrutiny/config
+
+# Collector cadence, pinned for the same reason as the Docker copy: monitor-bridge's
+# SMART Data Freshness window (26 h) must not depend on the image's default.
+scrutiny_k8s_collector_cron: "0 0 * * *"
