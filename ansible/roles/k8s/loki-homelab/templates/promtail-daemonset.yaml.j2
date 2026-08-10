@@ -49,14 +49,26 @@ spec:
         - name: promtail
           image: {{ loki_homelab_promtail_image }}
           args: ["-config.file=/etc/promtail/promtail.yaml"]
+          env:
+            # promtail drops any discovered target whose __host__ label doesn't match its
+            # own hostname — which in a pod is the POD name, never the node name the
+            # kubernetes_sd relabel writes into __host__. Without this override every
+            # pod-log target is silently filtered and {job="k8s"} stays empty.
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           securityContext:
-            # Root because the tailed files are root-owned (pod logs 640, auth.log
-            # root:adm) — owner-read suffices, so every capability still drops.
             runAsUser: 0
             allowPrivilegeEscalation: false
             capabilities:
               drop:
                 - ALL
+              add:
+                # syslog/auth.log are owned by the `syslog` user (640), so root WITHOUT
+                # this cannot read them — the recurring root-without-DAC lesson, read-only
+                # variant. Same cap the Docker promtail carries for the same files.
+                - DAC_READ_SEARCH
           volumeMounts:
             - name: config
               mountPath: /etc/promtail
