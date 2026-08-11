@@ -14,12 +14,13 @@
 # `push_token` accepted as aliases on push, `accepted_statuscodes`, `notification_name_list`.
 # Omitted accepted_statuscodes defaults to ["200-299"] server-side, same as the labels did.
 #
-# REMOVING A FILE HERE DOES NOT DELETE THE MONITOR, despite ON_DELETE=delete. Measured
-# 2026-08-10 (the "(via bridge)" retirement): the Secret updated, the pod restarted twice,
-# and AutoKuma v2.0.0 never issued a delete — on_delete evidently tracks label-sourced
-# entities, not static files. Removing an entry from this file must be paired with an
-# explicit kuma-cli `monitor delete` (pattern: kuma-bridge-tiles.yml in the job archive,
-# or the KD-era kuma-dead-tiles.yml).
+# REMOVING AN ENTRY HERE MAY NOT REACH THE CLUSTER: this Secret predates apply-managed
+# creation, so it carried no last-applied baseline and `kubectl apply` never pruned
+# removed keys — the "(via bridge)" retirement (2026-08-10) deployed green while the old
+# files stayed mounted and autokuma faithfully re-created every monitor kuma-cli deleted.
+# Fixed with a one-time `kubectl replace` (the baseline exists now, so apply prunes
+# from here on). After a removal, verify the monitor is gone and kuma-cli-delete it if
+# not (pattern: kuma-secret-replace.yml in the job archive).
 apiVersion: v1
 kind: Secret
 metadata:

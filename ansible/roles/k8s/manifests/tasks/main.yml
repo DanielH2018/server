@@ -62,6 +62,12 @@
 
 - name: Apply manifests for {{ manifests_service }}
   tags: [deploy]
+  # TRAP: `apply` only prunes map keys (Secret/ConfigMap data entries) on objects it has a
+  # last-applied baseline for. An object first created by anything else — `kubectl create`,
+  # a bootstrap script — silently KEEPS removed keys forever while the deploy reports green.
+  # Bit the static-monitors Secret 2026-08-10 (retired Kuma tiles kept resurrecting). If a
+  # key removal must land on such an object, `kubectl replace -f` it once; apply prunes
+  # normally after that.
   ansible.builtin.command:
     cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/{{ manifests_service }}/"
   register: manifests_apply
