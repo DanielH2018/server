@@ -355,3 +355,26 @@ and confirm the target goes `available: true` without a 403 before walking away.
 Operator decision now genuinely due (third cap event in nine days): raise the B2 daily caps
 so Longhorn + kopia can coexist on the account, or thin/serialise the backup set. Enrolment
 of every migrated PVC into `longhorn` is additive by design — the cap is not.
+
+## Recurrence — 2026-08-11 (fourth cap event)
+
+The 00:00 reset briefly worked as planned: the (accidentally re-armed, all-day-failing)
+target's storm started *succeeding* at reset, first clean sync 02:01, heartbeat green,
+board fully green by 02:30. Then the 03:30 nightly ran and puts began 403ing partway
+through — 11 of 12 volumes Completed, the rest went into Longhorn's per-volume retry loop
+(54 Error CRs by 05:40), which pins the cap exactly like the original storm.
+`b2_reachable` DOWN from 05:11.
+
+Two candidate explanations, distinguishable tomorrow: (a) the 00:00–02:01 storm tail
+burned the fresh cap before the nightly (its window shrinks to zero with a clean re-arm),
+or (b) the nightly's own transaction volume no longer fits the cap even alone — kopia is
+retired now, so the nightly is the only B2 load left, and a clean-cap failure tomorrow
+means the cap is simply too small (operator decision from the 08-10 entry stands).
+
+Containment 05:45 UTC: target blanked again (same lever). No kopia to stop this time.
+
+Re-arm after the next 00:00 UTC reset: set `backupTargetURL` back to
+`s3://daniel-server-kopia@us-east-005/longhorn`, confirm `available: true`, and watch the
+03:30 nightly with a clean cap. The kopia B2 deletion (approved, no retention window)
+stays gated on ONE fully-green nightly — note the deletion itself spends class A/B/C
+transactions on the shared cap, so run it after the nightly verifies, not before.
