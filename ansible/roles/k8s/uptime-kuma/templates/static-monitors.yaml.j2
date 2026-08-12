@@ -99,16 +99,14 @@ stringData:
     {"type": "http", "name": "k3s code-server", "url": "https://code-server{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   pihole-k8s-dns.json: |
     {"type": "dns", "name": "Pi-hole k8s DNS", "hostname": "homepage.local.{{ domain }}", "dns_resolve_server": "{{ dns_k8s_vip }}", "dns_resolve_type": "A", "port": 53, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # ── residual bridge monitor ────────────────────────────────────────────────────────────
-  # The other "(via bridge)" tiles (healthchecks/freshrss/karakeep/littlelink/speedtest)
-  # were RETIRED at the slice-7 bridge teardown: their probe routers died with the forward
-  # bridge, and the unsuffixed names they watched now serve through the same cluster edge
-  # the -k8s tiles above already cover. LiveSync keeps its tile because its chain is still
-  # real — Docker edge probe router → forward transport → cluster return-leg → CouchDB —
-  # and only this probe exercises it end-to-end.
-{% set livesync_k8s = (hostvars['daniel-box'].containers_list | selectattr('name', 'equalto', 'livesync') | first) %}
+  # ── livesync edge-gate probe ───────────────────────────────────────────────────────────
+  # The last "(via bridge)" tile, renamed when the gate moved to the k8s edge's file
+  # provider (2026-08-12): the probe now exercises k8s edge → gate probe router → CouchDB.
+  # A 401 is CouchDB's require_valid_user answering unauthenticated — the end-to-end
+  # signal. Filename (= AutoKuma id) deliberately unchanged so the monitor keeps its
+  # identity and history; only the display name updates in place.
   livesync-bridge.json: |
-    {"type": "http", "name": "LiveSync (via bridge)", "url": "https://livesync.local.{{ domain }}{{ livesync_k8s.bridge_probe_path }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["401"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "LiveSync (edge gate)", "url": "https://livesync.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["401"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # ── push monitors fed by host crons (tokens unchanged — monitors keep their history) ───
   crowdsec-home-allowlist.json: |
     {"type": "push", "name": "CrowdSec Home Allowlist", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_home_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}

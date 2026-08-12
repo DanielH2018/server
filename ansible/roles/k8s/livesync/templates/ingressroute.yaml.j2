@@ -1,22 +1,20 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 ---
 {#
-  use_authelia is false, matching the Docker entry and for the same reason: the Obsidian
-  LiveSync client uses non-interactive basic auth and cannot pass 2FA. CouchDB's own
-  require_valid_user (local.ini) is the gate on this route.
+  use_authelia is false, matching the retired Docker entry and for the same reason: the
+  Obsidian LiveSync client uses non-interactive basic auth and cannot pass 2FA. CouchDB's
+  own require_valid_user (local.ini) is the gate on this route.
 
-  The bridge route this emits is permissive by design — it carries whatever daniel-server
-  forwards. The X-Sync-Token gate and the Authelia'd /_utils carve-out both live at the Docker
-  edge, upstream of here, and ClientIP is what stops anything else reaching this route. See
-  the hand-written livesync routers in roles/containers/traefik/templates/config.yml.j2.
+  Only the -k8s names route here. The UNSUFFIXED names (livesync.<domain> and its .local
+  twin) are served by the X-Sync-Token gate in the k8s Traefik's Secret-mounted file
+  provider (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2) — a token router, an
+  Authelia'd /_utils carve-out, and the Kuma probe router. The token stays out of CRDs on
+  purpose: the readonly kubeconfig can read IngressRoutes but is RBAC-denied Secrets.
 #}
 {{ ingressroute(
     container_item.name,
     container_item.hostname | default(container_item.name),
     container_item.port,
-    container_item.use_authelia,
-    unsuffixed_hostname=container_item.unsuffixed_hostname | default(none),
-    bridge_rate_limit=container_item.bridge_rate_limit | default('rate-limit-bridge'),
-    public_native=false
+    container_item.use_authelia
   )
 }}

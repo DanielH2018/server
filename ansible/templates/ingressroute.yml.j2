@@ -21,7 +21,7 @@
   Docker instance's. The Docker side repeats the same block on each hand-rolled file-provider
   router for the same reason.
 #}
-{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, unsuffixed_hostname=none, bridge_rate_limit='rate-limit-bridge', public=true, public_native=true, bypass_prefixes=[]) -%}
+{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, unsuffixed_hostname=none, public=true, bypass_prefixes=[]) -%}
 {#
   namespace defaults to k8s_namespace — every slice-2 service wants that. It is overridable
   because the telemetry stack runs in its own namespace, and an IngressRoute must live
@@ -56,7 +56,7 @@ spec:
       services:
         - name: {{ name }}
           port: {{ port }}
-{% if unsuffixed_hostname and public_native %}
+{% if unsuffixed_hostname %}
     # The service's PRE-MIGRATION names, served natively (bridge-teardown BT1/BT2 — the
     # forward bridge and its ClientIP-gated route are gone; slice-7-bridge-teardown.md).
     # The `.local` leg exists for the LAN wildcard's arrival at this edge (BT3); the public
@@ -80,30 +80,6 @@ spec:
       services:
         - name: {{ name }}
           port: {{ port }}
-{% elif unsuffixed_hostname %}
-    # public_native=false: the unsuffixed names TERMINATE at the Docker edge (livesync's
-    # token gate lives in its file provider) and its hand-written routers forward here — so
-    # this is the return leg of the reverse bridge, not a public route. ClientIP is the
-    # whole guard: without it any LAN host could curl the VIP with this Host and skip the
-    # edge's token/Authelia gates (`--resolve` is all it takes); the matcher reads the TCP
-    # peer, not X-Forwarded-For, and externalTrafficPolicy: Local preserves it. Deleting
-    # this leg at the teardown looped cluster ⇄ Docker edge into a 429 (found live,
-    # 2026-08-10) — the edge forwards here expecting a terminus.
-    - kind: Rule
-      match: "(Host(`{{ unsuffixed_hostname }}.{{ domain }}`) || Host(`{{ unsuffixed_hostname }}.local.{{ domain }}`)) && ClientIP(`{{ k8s_bridge_client_ip }}/32`)"
-      middlewares:
-        # Single-peer route (daniel-server) — the per-IP default limiter would meter every
-        # user as one. The edge already metered per real client upstream. Overridable
-        # because this hop meters AGAIN after the edge and the tighter of the two wins —
-        # livesync's replication needs its high-ceiling exemption here too or a phone
-        # 429s mid-sync (measured when the bridges were built).
-        - name: {{ bridge_rate_limit }}
-{% for middleware in extra_middlewares %}
-        - name: {{ middleware }}
-{% endfor %}
-      services:
-        - name: {{ name }}
-          port: {{ port }}
 {% endif %}
   tls:
     certResolver: cloudflare
@@ -117,7 +93,7 @@ spec:
         sans:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
-{% if k8s_public_route and public and public_native and unsuffixed_hostname %}
+{% if k8s_public_route and public and unsuffixed_hostname %}
 {% for prefix in bypass_prefixes %}
 {% set slug = prefix | trim('/') | replace('/', '-') %}
 ---

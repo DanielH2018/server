@@ -119,6 +119,9 @@ spec:
             - name: config
               mountPath: /config
               readOnly: true
+            - name: livesync-gate
+              mountPath: /etc/traefik-file
+              readOnly: true
             # NOT /run/secrets, which is the Docker convention this was ported from.
             # /var/run/secrets symlinks to /run/secrets, and that is where Kubernetes projects
             # the ServiceAccount token — mounting a read-only Secret over it leaves runc unable
@@ -231,6 +234,10 @@ spec:
         - name: config
           configMap:
             name: traefik-static
+        # LiveSync token gate — file-provider dynamic config (see livesync-gate-secret.yaml.j2)
+        - name: livesync-gate
+          secret:
+            secretName: traefik-livesync-gate
         - name: cloudflare
           secret:
             secretName: traefik-cloudflare

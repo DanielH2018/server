@@ -270,10 +270,6 @@ containers_list:
     # IngressRoute route for the UNSUFFIXED hostnames, which daniel-server forwards here once
     # its Docker copy is gone. Unset for a service whose Docker twin is still serving them.
     unsuffixed_hostname: speedtest
-    # An app endpoint that answers without a session, so a monitor can traverse the whole
-    # bridge instead of stopping at Authelia's 302. Verified against the running container:
-    # `{"message":"Speedtest Tracker is running!"}`, no data in it. Exposed LAN-only.
-    bridge_probe_path: /api/healthcheck
     # No bridge_lan_prefixes. There was one for /api/ — homepage's speedtest widget reads
     # /api/speedtest/latest — but the widget now resolves speedtest.local to the cluster VIP
     # directly and never reaches the Docker edge. This was the weaker of the two: homepage
@@ -296,11 +292,6 @@ containers_list:
     # config.php, which already reads https://freshrss.<domain> — it was written by the Docker
     # copy, so the cutover makes it correct rather than requiring an edit.
     unsuffixed_hostname: freshrss
-    # Returns the bare string `OK` without a session, so it proves PHP is executing while
-    # exposing nothing. Safe ONLY because the probe router matches an exact Path: the GReader
-    # API's real endpoints live at /api/greader.php/reader/api/0/..., which do not match and
-    # so still fall through to the main router and Authelia.
-    bridge_probe_path: /api/greader.php
     # No bridge_lan_prefixes. There was one for /api/greader.php/ — homepage's FreshRSS widget
     # reads unread counts over the GReader API — but the widget no longer takes that path: it
     # resolves freshrss.local to the cluster VIP directly (homepage's extra_hosts), so it never
@@ -338,31 +329,14 @@ containers_list:
     hostname: "livesync{{ k8s_hostname_suffix }}"
     port: 5984
     use_authelia: false
-    # Cut over 2026-08-06.
-    unsuffixed_hostname: livesync
-    # The only bridge so far that suppresses the generic Host router. livesync's edge routing is
-    # not "everything on this host": the sync API is gated on a secret header and /_utils is
-    # carved out behind Authelia at priority 200, so an unconditional Host router would forward
-    # traffic straight past the token check. The four replacements are hand-written in the
-    # traefik role's config.yml.j2; the service and serversTransport are still generated, and a
-    # guard test fails if nothing references them.
-    bridge_custom_routers: true
-    # `/` and it is genuinely end-to-end, which no other gated service manages. Everywhere else
-    # the probe path has to be an endpoint that answers without a session; here EVERY endpoint
-    # answers without one, because require_valid_user means CouchDB replies 401 rather than
-    # redirecting. So a 401 through this route was produced by CouchDB, in the cluster, having
-    # crossed the bridge — the same quality of signal littlelink's 200 gives. Measured: `/` and
-    # `/_up` both return 401 unauthenticated.
-    #
-    # It is exposed LAN-only, like every probe route, and it exposes nothing: an unauthenticated
-    # caller gets the 401 and stops there.
-    bridge_probe_path: /
-    # A bridged request is metered TWICE — the Docker edge router and this cluster route — and
-    # the tighter ceiling wins. The Docker side gave livesync a 20x limiter (rate-limit-livesync,
-    # 6000/min) because CouchDB replication is extremely chatty; without the matching override
-    # here the cluster's default 300/min silently re-imposed exactly what that exemption existed
-    # to remove, and a phone mid-pull got 429s within the hour of cutover.
-    bridge_rate_limit: rate-limit-bridge-livesync
+    # Cut over 2026-08-06. NO unsuffixed_hostname on purpose: the unsuffixed names are
+    # served by the X-Sync-Token gate in the k8s Traefik's Secret-mounted file provider
+    # (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2 — token router, Authelia'd
+    # /_utils carve-out at priority 200, and the LAN-only Kuma probe router whose CouchDB
+    # 401 is the end-to-end signal). The token stays out of CRDs because the readonly
+    # kubeconfig can read IngressRoutes but is RBAC-denied Secrets. Replication keeps its
+    # 20x limiter there (rate-limit-public-livesync — the default 300/min 429'd a phone
+    # mid-pull within an hour of cutover, measured 2026-08-06).
   # Slice 2, batch E. Four workloads — the app, headless Chrome, Meilisearch and the time-tagger
   # — which is the largest single service in the slice. Only the app is routed; the other three
   # are reached in-cluster by Service name, and those names are load-bearing because karakeep

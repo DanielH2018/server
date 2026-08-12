@@ -36,19 +36,6 @@
 {% set rb_hosts = (docker_web | map(attribute='hostname', default='') | select | list)
      + (docker_web | rejectattr('hostname', 'defined') | map(attribute='name') | list)
      + ['auth'] %}
-{#
-  k8s services whose custom edge routing still lives at the Docker edge keep their PUBLIC
-  name on this bridge too (B5 prep): livesync's X-Sync-Token gate and Authelia'd /_utils
-  carve-out are in daniel-server's file provider, where the readonly kubeconfig cannot read
-  the token — so its external traffic goes VIP → Docker edge (token/auth) → forward bridge →
-  cluster, and its route here carries the high-ceiling limiter (CouchDB replication is
-  chatty; the 300/min default 429'd a phone mid-replication on 2026-08-06).
-#}
-{% set custom_edge = containers_list | default([]) | selectattr('bridge_custom_routers', 'defined')
-     | selectattr('bridge_custom_routers') | list %}
-{% set rb_hosts = rb_hosts + (custom_edge | map(attribute='unsuffixed_hostname') | list) %}
-{% set rb_rate_limit = {} %}
-{% for svc in custom_edge %}{% set _ = rb_rate_limit.update({svc.unsuffixed_hostname: 'rate-limit-public-livesync'}) %}{% endfor %}
 ---
 # The one backend every reverse-bridge route shares: the Docker edge, by address — the
 # hostnames all resolve either to Cloudflare (public) or to daniel-server via the LAN
@@ -118,7 +105,7 @@ spec:
     - kind: Rule
       match: "Host(`{{ host }}.{{ domain }}`)"
       middlewares:
-        - name: {{ rb_rate_limit.get(host, 'rate-limit') }}
+        - name: rate-limit
       services:
         - name: docker-edge
           port: 443
@@ -127,7 +114,7 @@ spec:
     - kind: Rule
       match: "Host(`{{ host }}.local.{{ domain }}`)"
       middlewares:
-        - name: {{ rb_rate_limit.get(host, 'rate-limit') }}
+        - name: rate-limit
       services:
         - name: docker-edge
           port: 443

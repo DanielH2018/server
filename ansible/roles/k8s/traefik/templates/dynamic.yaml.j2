@@ -3,7 +3,7 @@
 
   Deliberately NOT carried over for slice 1:
     csp-karakeep        lives in the karakeep role instead, beside the Service it applies to
-    rate-limit-livesync superseded here by rate-limit-bridge-livesync, below
+    rate-limit-livesync superseded by rate-limit-public-livesync, below (the bridge-era twins retired 2026-08-12 with the return-leg)
   crowdsec arrived at slice-6 B1 (bottom of this file), pointed at the in-cluster LAPI.
   No TLSStore either: every IngressRoute states its own tls.domains via the ingressroute()
   macro, so a store's defaultGeneratedCert would be a second source of truth for the SAN set.
@@ -49,77 +49,11 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  # Same ceiling as rate-limit, keyed differently. A strangler-bridge route only ever sees one
-  # peer address — daniel-server — because that is what the bridge is, so the default
-  # source criterion (the remote address) would put every user of a bridged service into a
-  # single 300/min bucket and let one of them 429 the rest.
-  #
-  # excludedIPs rather than depth, because the chain is not a fixed length. Measured on the
-  # first real request through the bridge, X-Forwarded-For arrived as
-  # `<real client>, <cloudflare edge>` — so depth: 1 would have keyed on Cloudflare and put
-  # everyone behind one POP in a single bucket. LAN traffic reaches the same route with a
-  # one-entry chain and no Cloudflare hop, so no single depth is right for both. Traefik walks
-  # the chain from the right and skips excluded addresses, which lands on the real client
-  # either way.
-  #
-  # Trusting XFF here is sound only because the bridged routes are ClientIP-guarded to the
-  # edge — nothing else can reach them to forge it. Do not reuse this middleware on a route
-  # that is directly reachable.
-  name: rate-limit-bridge
-  namespace: {{ k8s_namespace }}
-spec:
-  rateLimit:
-    average: 300
-    burst: 150
-    period: 1m
-    sourceCriterion:
-      ipStrategy:
-        excludedIPs:
-{% for ip in cloudflare_ips %}
-          - "{{ ip }}"
-{% endfor %}
-          - "{{ k8s_bridge_client_ip }}/32"
----
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  # The bridge twin of the Docker edge's rate-limit-livesync, and it has to exist because a
-  # bridged request is metered TWICE: once by the edge router's limiter and again by whatever
-  # the cluster route carries. Matching only the edge's generous ceiling is not enough — the
-  # tighter of the two wins, so livesync passed the edge's 6000/min and then 429'd against
-  # rate-limit-bridge's 300/min. Reported from a phone doing a full pull on 2026-08-06,
-  # immediately after cutover.
-  #
-  # 6000/600 mirrors rate-limit-livesync exactly: CouchDB replication is extremely chatty
-  # (_changes, _revs_diff, _bulk_docs, per-chunk reads), which is why the Docker side gave it a
-  # 20x ceiling in the first place. The keying is rate-limit-bridge's, for rate-limit-bridge's
-  # reasons — see the excludedIPs rationale above.
-  #
-  # The general lesson, which the next chatty service will hit: a service that needed a
-  # per-router limiter on the Docker side needs the bridge equivalent too, or the migration
-  # silently re-imposes the default it was exempted from.
-  name: rate-limit-bridge-livesync
-  namespace: {{ k8s_namespace }}
-spec:
-  rateLimit:
-    average: 6000
-    burst: 600
-    period: 1m
-    sourceCriterion:
-      ipStrategy:
-        excludedIPs:
-{% for ip in cloudflare_ips %}
-          - "{{ ip }}"
-{% endfor %}
-          - "{{ k8s_bridge_client_ip }}/32"
----
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  # livesync's ceiling for its DIRECT public route on the reverse bridge (B5 prep) — the
-  # 6000/600 CouchDB-replication headroom of rate-limit-bridge-livesync, but with DEFAULT
-  # keying: requests on that route arrive with real client addresses (externalTrafficPolicy:
-  # Local), so the excludedIPs XFF-walk above would be forgeable here and is not needed.
+  # livesync's replication ceiling (CouchDB sync is extremely chatty — _changes,
+  # _revs_diff, _bulk_docs, per-chunk reads; the shared 300/min 429'd a phone mid-pull,
+  # 2026-08-06). Default per-IP keying: requests arrive with real client addresses
+  # (externalTrafficPolicy: Local). Referenced by the file-provider token gate
+  # (livesync-gate-secret.yaml.j2).
   name: rate-limit-public-livesync
   namespace: {{ k8s_namespace }}
 spec:

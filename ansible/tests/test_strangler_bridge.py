@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""End-state guards for the (torn-down) strangler bridge — slice-7-bridge-teardown.md.
+"""End-state guards for the (fully retired) strangler bridge.
 
-The forward bridge is gone (BT4, 2026-08-10): the cluster edge serves every migrated
-service's unsuffixed names natively, the LAN wildcard answers the VIP, and daniel-server's
-Traefik keeps only the CUSTOM-ROUTER residual (livesync's X-Sync-Token gate, whose secret
-must stay in the file provider). Slice-2's suite guarded the bridge's existence; this one
-guards its absence — the failure modes are now:
+Timeline: the forward bridge died at BT4 (2026-08-10, slice-7-bridge-teardown.md); the
+last residual — livesync's X-Sync-Token gate — left the Docker edge on 2026-08-12 for a
+Secret-mounted file-provider config on the k8s edge (the readonly kubeconfig can read
+CRDs but is RBAC-denied Secrets, so that is the token's cluster-safe home). The failure
+modes this suite guards are now:
 
-  * a `bridge_hostname` key reappearing -> renders nothing anywhere (the macro parameter is
-    `unsuffixed_hostname`), so the service's pre-migration names silently 404
-  * a generic bridge router reappearing at the Docker edge -> two edges claim one Host rule
-  * the livesync residual losing its generated services/transports -> its hand-written
-    routers dangle and phone sync dies
+  * a `bridge_hostname` key reappearing -> renders nothing anywhere (the macro parameter
+    is `unsuffixed_hostname`), so the service's pre-migration names silently 404
+  * ANY bridge machinery reappearing at the Docker edge -> two edges claim one Host rule
+  * the livesync gate losing one of its routers -> tokened sync 404s, or the token gate
+    silently stops gating (a bare Host router would forward past the header check)
   * a reverse-bridge host losing one of its two name forms -> the LAN wildcard sends
     `.local` traffic to a router that isn't there (or SNI != Host and the Docker edge 421s)
 
@@ -26,6 +26,9 @@ from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 ANSIBLE = Path(__file__).resolve().parents[1]
 HOST_VARS = ANSIBLE / "inventory" / "host_vars"
 TRAEFIK = ANSIBLE / "roles" / "containers" / "traefik" / "templates"
+GATE = (
+    ANSIBLE / "roles" / "k8s" / "traefik" / "templates" / "livesync-gate-secret.yaml.j2"
+)
 DOMAIN = "example.com"
 VIP = "10.0.0.240"
 
@@ -35,8 +38,8 @@ def _containers(host: str) -> list[dict]:
     return data.get("containers_list") or []
 
 
-def _dynamic_config() -> dict:
-    """The traefik file-provider config as Ansible would render it on daniel-server."""
+def _docker_edge_config() -> dict:
+    """The Docker traefik file-provider config as Ansible would render it."""
     env = Environment(
         loader=FileSystemLoader(str(TRAEFIK)),
         undefined=ChainableUndefined,
@@ -50,10 +53,25 @@ def _dynamic_config() -> dict:
     return yaml.safe_load(rendered)
 
 
+def _gate_config() -> dict:
+    """The livesync token gate as rendered into the k8s traefik's file provider."""
+    env = Environment(
+        loader=FileSystemLoader(str(GATE.parent)),
+        undefined=ChainableUndefined,
+        keep_trailing_newline=True,
+    )
+    rendered = env.get_template(GATE.name).render(
+        domain=DOMAIN,
+        k8s_namespace="homelab",
+        livesync_sync_token="TESTTOKEN",
+    )
+    manifest = yaml.safe_load(rendered)
+    return yaml.safe_load(manifest["stringData"]["livesync-gate.yml"])
+
+
 def test_no_bridge_hostname_key_survives_anywhere():
     """The key was renamed to `unsuffixed_hostname` at the teardown; a reintroduced
-    `bridge_hostname` matches NOTHING (macro, config, reverse bridge) and the service's
-    pre-migration names silently 404."""
+    `bridge_hostname` matches NOTHING and the service's pre-migration names silently 404."""
     for host_file in HOST_VARS.glob("*.yml"):
         for entry in yaml.safe_load(host_file.read_text()).get("containers_list") or []:
             assert "bridge_hostname" not in entry, (
@@ -76,43 +94,78 @@ def test_no_bridge_hostname_key_survives_anywhere():
                 )
 
 
-def test_docker_edge_renders_no_generic_bridge_routers():
-    """Only the custom-router residual (livesync) may reference bridge services at the
-    Docker edge; a generic bridge router reappearing would contest Host rules the cluster
-    now owns."""
-    config = _dynamic_config()
-    custom = {
-        c["name"] for c in _containers("daniel-box") if c.get("bridge_custom_routers")
-    }
-    for name, router in (config["http"].get("routers") or {}).items():
-        service = router.get("service", "")
-        if "-bridge-" in service:
-            owner = service.split("-bridge-")[0]
-            assert owner in custom, (
-                f"router {name} references {service}: a generic forward-bridge router "
-                "has reappeared at the Docker edge"
-            )
-
-
-def test_livesync_residual_stays_wired():
-    """livesync's hand-written routers live at the Docker edge on purpose (the X-Sync-Token
-    must stay out of CRDs); they reference GENERATED bridge services/transports, which must
-    keep rendering for exactly the custom-router services."""
-    config = _dynamic_config()
+def test_docker_edge_renders_no_bridge_machinery():
+    """The Docker edge carries NO bridge anything since the livesync gate moved to the
+    cluster: no routers referencing bridge services, no generated services/transports,
+    and no livesync routers (its names are the k8s file provider's now)."""
+    config = _docker_edge_config()
     routers = config["http"].get("routers") or {}
-    services = config["http"].get("services") or {}
-    transports = config["http"].get("serversTransports") or {}
-    livesync_routers = [
-        r for r in routers.values() if "livesync" in r.get("service", "")
-    ]
-    assert livesync_routers, "livesync's custom routers vanished from the Docker edge"
-    for router in livesync_routers:
-        svc = router["service"]
-        assert svc in services, f"livesync router references missing service {svc}"
-        transport = services[svc]["loadBalancer"]["serversTransport"]
-        assert transport in transports, (
-            f"{svc} references missing transport {transport}"
+    for name, router in routers.items():
+        assert "-bridge-" not in router.get("service", ""), (
+            f"router {name} references a bridge service — the bridge is fully retired"
         )
+        assert "livesync" not in name, (
+            f"router {name}: livesync routing belongs to the k8s edge's file provider"
+        )
+    assert "services" not in config["http"] or not any(
+        "-bridge-" in s for s in config["http"]["services"]
+    ), "generated bridge services reappeared at the Docker edge"
+    assert not (config["http"].get("serversTransports") or {}), (
+        "bridge serversTransports reappeared at the Docker edge"
+    )
+
+
+def test_livesync_gate_serves_all_five_routers():
+    """The gate must render: a token router and an Authelia'd /_utils carve-out per name
+    form, plus the LAN-only probe router — and every router must reach the CouchDB
+    service. Losing the token predicate on a sync router would forward PAST the gate."""
+    gate = _gate_config()
+    routers = gate["http"]["routers"]
+    services = gate["http"]["services"]
+    expected = {
+        "livesync-sync-public",
+        "livesync-sync-local",
+        "livesync-utils-public",
+        "livesync-utils-local",
+        "livesync-probe",
+    }
+    assert set(routers) == expected, f"gate routers drifted: {sorted(routers)}"
+    for name, router in routers.items():
+        assert router["service"] in services, f"{name} references a missing service"
+        if name.startswith("livesync-sync"):
+            assert "Header(`X-Sync-Token`" in router["rule"], (
+                f"{name} lost the token predicate — the gate would forward ungated"
+            )
+        if name.startswith("livesync-utils"):
+            assert any("authelia" in m for m in router["middlewares"]), (
+                f"{name} lost its Authelia middleware"
+            )
+    # The probe stays LAN-only by construction: .local host, no public sibling.
+    assert ".local." in routers["livesync-probe"]["rule"]
+    assert f"Host(`livesync.{DOMAIN}`)" not in routers["livesync-probe"]["rule"]
+
+
+def test_gate_stays_out_of_crd_objects():
+    """The token's whole safety argument: it lives in a Secret (RBAC-denied to the
+    readonly kubeconfig), never in an IngressRoute. A livesync IngressRoute matching the
+    unsuffixed names would both leak routing back to CRDs and contest the gate's rules."""
+    livesync_route = (
+        ANSIBLE / "roles" / "k8s" / "livesync" / "templates" / "ingressroute.yaml.j2"
+    ).read_text()
+    assert "unsuffixed_hostname" not in [
+        line
+        for line in livesync_route.splitlines()
+        if not line.lstrip().startswith(("#", "{#"))
+        and "unsuffixed" in line
+        and "=" in line
+    ], (
+        "livesync's IngressRoute must not claim the unsuffixed names — the gate owns them"
+    )
+    entry = next(c for c in _containers("daniel-box") if c["name"] == "livesync")
+    assert "unsuffixed_hostname" not in entry, (
+        "livesync's inventory entry must not set unsuffixed_hostname — the gate owns "
+        "the unsuffixed names"
+    )
 
 
 def test_reverse_bridge_serves_both_name_forms_per_host():
@@ -126,6 +179,9 @@ def test_reverse_bridge_serves_both_name_forms_per_host():
     assert "Host(`{{ host }}.local.{{ domain }}`)" in template
     assert "reverse-bridge-{{ host }}-local" in template
     assert 'serverName: "{{ host }}.local.{{ domain }}"' in template
+    assert "custom_edge" not in template, (
+        "the reverse bridge's livesync carve-out is retired with the gate move"
+    )
 
 
 def test_every_unsuffixed_hostname_belongs_to_a_routed_service():
