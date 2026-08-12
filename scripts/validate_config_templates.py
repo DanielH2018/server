@@ -43,7 +43,6 @@ CONFIG_TEMPLATES = [
     "authelia/configuration.yml.j2",
     "traefik/config.yml.j2",
     "traefik/traefik.yml.j2",
-    "prometheus/prometheus.yml.j2",
     "grafana/loki-config.yml.j2",
     "grafana/promtail-config.yml.j2",
 ]

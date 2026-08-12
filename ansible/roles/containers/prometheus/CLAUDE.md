@@ -1,23 +1,27 @@
-# prometheus — Metrics collection
+# prometheus — Host exporters (Prometheus itself retired 2026-08-12)
 
-Prometheus plus its exporters; the scrape source for Grafana. See repo-root `CLAUDE.md`.
+The Prometheus server this role was named for retired in Phase E2 of the k3s migration — the
+cluster prometheus (claude-otel stack) now scrapes everything directly. What remains here are
+the two daniel-server host exporters it scrapes over the LAN. See repo-root `CLAUDE.md`.
 
 ## At a glance
-- **Images:** `prom/prometheus:latest` + `prom/node-exporter:latest`
-  + `ghcr.io/google/cadvisor` (container metrics; version-pinned, Renovate-managed)
-- **Host:** daniel-server · **Port:** 9090 · **URL:** `prometheus.<domain>` (Authelia: yes)
-- **Networks:** monitoring, apps (reaches `home-assistant:8123` for the `/api/prometheus` scrape)
-- **Depends on:** traefik
-- **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
+- **Images:** `prom/node-exporter:latest` + `ghcr.io/google/cadvisor` (version-pinned,
+  Renovate-managed)
+- **Host:** daniel-server · no web route (`containers_list` entry is name+networks only)
+- **Networks:** monitoring
+- **Ports:** node-exporter `{{ server_ip }}:9100`, cadvisor `{{ server_ip }}:9101` —
+  LAN-published for the cluster scrape, locked to daniel-box by
+  `prometheus-exporters-lan-firewall.sh` (DOCKER-USER; the same unit also guards promtail
+  9102, crowdsec 9103, traefik 9104 published from their own roles)
 
 ## Notable
-- Bundles **node-exporter** (host metrics) and **cAdvisor** (per-container CPU/mem) — the
-  data behind the M1 resource-limit tuning.
-- Scrape targets in `templates/prometheus.yml.j2`.
-- **Retention is explicit** (compose `command:`): 90d, with a 10GB size backstop. The TSDB
-  lives in the `prometheus_data` named volume — deliberately unbacked-up (regenerable TSDB;
-  since 2026-08-10 every series also remote-writes to the cluster prometheus).
+- **node-exporter** (host metrics) and **cAdvisor** (per-container CPU/mem) — the data behind
+  the M1 resource-limit tuning; scraped as jobs `node`/`cadvisor` with
+  `instance: daniel-server` labels in claude-otel's `prometheus.yaml.j2`.
+- The textfile-collector dir `/var/lib/node-exporter-textfile` takes host-cron `.prom` gauges
+  (e.g. `kopia_b2_billable_bytes`).
 
 ## Editing
-- Compose: `templates/docker-compose.yml.j2` · Scrape cfg: `templates/prometheus.yml.j2`
+- Compose: `templates/docker-compose.yml.j2` · Scrape jobs live in
+  `ansible/roles/k8s/claude-otel/templates/prometheus.yaml.j2`
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "prometheus"`

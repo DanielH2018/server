@@ -20,12 +20,12 @@ Uptime Kuma **push** monitors, so threshold problems actually page. See repo-roo
   gates evaluated ahead of them) and pushes `status=up|down&msg=…` to one Kuma push
   monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
-    prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the eleven
+    prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the ten
     prom-dependent checks (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/ups/
-    promtail_dropped/remote_write) are
+    promtail_dropped) are
     **suppressed** — pushed `up` with a "skipped — Prometheus unreachable" msg so their push-monitor
     heartbeats stay alive — and only THIS monitor pages. Without the gate one Prometheus outage
-    fires all eleven at once: one root cause, an eleven-monitor alert storm. A single scrape target down
+    fires all ten at once: one root cause, a ten-monitor alert storm. A single scrape target down
     (Prometheus up, one exporter gone) still surfaces separately on Scrape Targets. The
     `PROM_DEPENDENT` set is guarded by a test against the live `CHECKS` so it can't drift.)
   - **Root Disk** (`node_filesystem_*` for `/`, `/boot` **and `/boot/efi`** — old kernels

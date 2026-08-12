@@ -496,7 +496,6 @@ services:
       {# Loki reachability — the root-cause monitor that gates the Loki-querying checks: when it's
          down they're suppressed and only this one pages (no Loki-Ingestion/Janitorr storm). -#}
       {{ kuma('monitor-bridge-loki-reachable', monitor_type='push', name='Loki Reachable', interval=600, max_retries=0, push_token=monitor_bridge_loki_reachable_push_token) }}
-      {{ kuma('monitor-bridge-remote-write', monitor_type='push', name='Prometheus Remote-Write Lag', interval=600, max_retries=0, push_token=monitor_bridge_remote_write_push_token) }}
       {# Discord delivery: check_discord GET-verifies Kuma's notification webhook is still valid —
          the alert chain's delivery hop that no other monitor (incl. UptimeRobot) exercises. -#}
       {# extra_notifications=['email']: the ONLY monitor with the independent 2nd (Gmail) channel —
