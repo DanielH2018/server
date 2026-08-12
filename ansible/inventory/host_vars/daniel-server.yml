@@ -175,11 +175,10 @@ containers_list:
   # monitor-bridge (it now lives on uptime-kuma, pushed by a health cron on daniel-box; the token
   # is unchanged, so the monitor and its history are the same object either way).
   # Organization: Monitoring
+  # The prometheus service retired 2026-08-12 (E2 close) — the entry stays for
+  # node-exporter and cadvisor, which the cluster scrapes over the LAN until the Phase F
+  # join; no hostname/port, so no route or reverse-bridge host derives.
   - name: prometheus
-    port: 9090
-    use_authelia: true
-    # `apps` dropped 2026-08-10: it existed to reach home-assistant:8123, and that scrape now
-    # goes to the cluster HA over the -k8s name (HA moved 2026-08-09).
     networks:
       - monitoring
   # grafana's UI moved to the cluster grafana (E1, 2026-08-12) — the unsuffixed name is

@@ -209,8 +209,6 @@ stringData:
     {"type": "push", "name": "Promtail Dropped Entries", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_promtail_dropped_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-loki-reachable.json: |
     {"type": "push", "name": "Loki Reachable", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_loki_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-remote-write.json: |
-    {"type": "push", "name": "Prometheus Remote-Write Lag", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_remote_write_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-discord.json: |
     {"type": "push", "name": "Discord Delivery", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_discord_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   arr-autoblock.json: |

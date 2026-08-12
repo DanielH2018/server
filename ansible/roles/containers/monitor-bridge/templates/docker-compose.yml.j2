@@ -358,29 +358,6 @@ services:
       - PROMTAIL_DROPPED_WINDOW=1h
       - PROMTAIL_DROPPED_MAX=1000
       - KUMA_PUSH_PROMTAIL_DROPPED={{ monitor_bridge_promtail_dropped_push_token }}
-      # Northbound remote-write freshness (slice 3, B3). This Prometheus forwards everything to the
-      # k3s cluster Prometheus, and B5 makes that copy the one alerting reads from. Remote-write
-      # fails quietly — it buffers, retries, then drops — and a stale copy answers queries exactly
-      # like a current one, so nothing downstream can tell. 300s tolerates a cluster rollout at a 1m
-      # scrape interval without flapping. Read from THIS Prometheus' own gauges: Prom-dependent.
-      # Three arms: lag (receiver down/queue stalled), failed (permanent rejection), and retries
-      # (enqueue backpressure — the one lag CANNOT see, because an overflowing queue discards its
-      # oldest samples while the newest keep flowing, leaving the lag healthy and the copy holed).
-      # Overflow tolerance is 0: in normal operation this counter never moves.
-      - REMOTE_WRITE_MAX_LAG=300
-      # 15m, not 1h. A receiver restart makes the sender replay its backlog and the receiver
-      # reject the overlap it already holds — 9656 "failed" samples with zero retries on one
-      # claude-otel deploy (2026-08-07), while a per-minute count showed no hole in the data at
-      # all. Truthful counter, false conclusion; a 1h window let that hold the check DOWN for an
-      # hour. The rejection arms are additionally graced until the receiver is a full window old.
-      - REMOTE_WRITE_WINDOW=15m
-      - REMOTE_WRITE_MAX_FAILED=1000
-      - REMOTE_WRITE_MAX_RETRIES=0
-      # The sent-timestamp gauge is 0 until the first successful send, so time()-0 is ~1.8e9 and
-      # the first cycle after every `prometheus` deploy would page. Graced on the sender's own
-      # uptime rather than STARTUP_GRACE, which must stay disjoint from PROM_DEPENDENT.
-      - REMOTE_WRITE_MIN_UPTIME=300
-      - KUMA_PUSH_REMOTE_WRITE={{ monitor_bridge_remote_write_push_token }}
       # Discord delivery: GET-verify Kuma's own notification webhook is still valid — a
       # rotated/revoked/deleted webhook makes Kuma's alert POSTs silently fail while every
       # monitor stays green-in-UI (the alert chain's delivery hop no other monitor, not even

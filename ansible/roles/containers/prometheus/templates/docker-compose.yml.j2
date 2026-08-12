@@ -94,41 +94,10 @@ services:
       {{ kuma('cadvisor', name='cAdvisor') }}
     {{ resources('0.30', '1000M', '0.10', '100M') }}
 
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    restart: unless-stopped
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    volumes:
-     - ./:/etc/prometheus/
-     - prometheus_data:/prometheus
-    command:
-      # Overriding command replaces the image CMD, so restate the stock flags first.
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      # Explicit retention (default is only 15d). ~350M covered 15d here, so 90d of
-      # trend history costs ~2G; the size cap is the backstop if series ever explode.
-      - '--storage.tsdb.retention.time=90d'
-      - '--storage.tsdb.retention.size=10GB'
-    {{ service_networks() }}
-    {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:9090/ || exit 1') }}
-    labels:
-      {# Generate labels(container, port, docker_network, use_authelia) -#}
-      {{ labels(
-          container_item.hostname | default(container_item.name),
-          container_item.port | string,
-          (container_item.networks | default([docker_network]))[0],
-          container_item.use_authelia
-        )
-      }}
-      {{ kuma(container_item.name) }}
-    # Resource caps for blast-radius containment (M1). TSDB memory grows with
-    # series count, so size generously and tune from cAdvisor/Grafana.
-    {{ resources('2.0', '2048M', '0.25', '256M') }}
+  # The prometheus service retired at E2's close (2026-08-12): the cluster prometheus
+  # scrapes node-exporter and cadvisor (below) directly over the LAN publishes, every
+  # dashboard and monitor-bridge check reads the cluster, and remote-write - this
+  # instance's last job - died of having nothing left to forward. The two exporters
+  # stay until the Phase F join gives the cluster a node-level view of this host.
 
 {{ external_networks() }}
-volumes:
-    prometheus_data:
