@@ -26,3 +26,21 @@ spec:
     - default
   retain: {{ k3s_longhorn_backup_retain }}
   concurrency: 1
+---
+# The weekly tier (fifth cap event, 2026-08-12): B2 transaction spend scales with volume
+# count per run, and 25 nightly volumes blew the class B/C caps on two clean-cap nights.
+# Config-heavy, slow-changing volumes (k3s_longhorn_weekly_volumes in defaults) back up
+# Sundays instead — an hour after the daily run so the two never overlap.
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: weekly-backup
+  namespace: longhorn-system
+spec:
+  name: weekly-backup
+  cron: "{{ k3s_longhorn_weekly_backup_cron }}"
+  task: backup
+  groups:
+    - weekly-backup
+  retain: {{ k3s_longhorn_weekly_backup_retain }}
+  concurrency: 1

@@ -426,6 +426,50 @@
   when:
     - item.split(' ')[1] in k3s_longhorn_backup_class_pvcs.stdout_lines
     - item.split(' ')[1] not in k3s_longhorn_nobackup_volumes
+    - item.split(' ')[1] not in k3s_longhorn_weekly_volumes
+  become: true
+  changed_when: true
+
+# ── weekly tier (mirrors the no-backup pair above, same idempotence argument) ────────────
+- name: Move weekly-tier volumes out of the daily group
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
+      recurring-job-group.longhorn.io/weekly-backup=enabled
+      recurring-job-group.longhorn.io/default- --overwrite
+  loop: "{{ k3s_longhorn_backed_up.stdout_lines }}"
+  when: item.split(' ')[1] in k3s_longhorn_weekly_volumes
+  become: true
+  changed_when: true
+
+- name: Find weekly-tier volumes that should be daily again
+  tags: [longhorn]
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - -l
+      - recurring-job-group.longhorn.io/weekly-backup=enabled
+      - -o
+      - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}'
+  become: true
+  changed_when: false
+  register: k3s_longhorn_weekly_labelled
+
+- name: Return weekly-tier volumes to the default recurring-job group
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
+      recurring-job-group.longhorn.io/default=enabled
+      recurring-job-group.longhorn.io/weekly-backup- --overwrite
+  loop: "{{ k3s_longhorn_weekly_labelled.stdout_lines }}"
+  when: item.split(' ')[1] not in k3s_longhorn_weekly_volumes
   become: true
   changed_when: true
 
@@ -506,6 +550,9 @@
   become: true
   changed_when: "'no change' not in k3s_longhorn_target_secret.stdout"
 
+# Skipped while disarmed: a blank target is never `available`, so this gate would fail the
+# play before the recurring-job and label-reconcile tasks below it — which must keep
+# converging exactly when the target is deliberately down.
 - name: Check whether Longhorn can reach the backup target
   tags: [longhorn_backup]
   ansible.builtin.command:
@@ -516,6 +563,7 @@
   retries: 12
   delay: 10
   until: k3s_backup_available.stdout == "true"
+  when: k3s_longhorn_backup_armed | bool
 
 - name: Render the Longhorn recurring backup job
   tags: [longhorn_backup]

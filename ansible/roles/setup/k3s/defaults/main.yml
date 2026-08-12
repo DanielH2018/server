@@ -155,6 +155,32 @@ k3s_longhorn_backup_armed: false
 k3s_longhorn_backup_cron: "30 3 * * *"
 k3s_longhorn_backup_retain: 14
 
+# Weekly tier (fifth cap event's fix, 2026-08-12): B2 transaction spend scales with volume
+# COUNT per run — each backup pays fixed lock/list/config overhead plus per-block existence
+# checks — and 25 volumes nightly blew the daily class B/C caps two clean-cap nights in a
+# row. Volumes listed in k3s_longhorn_weekly_volumes back up Sundays instead: config-heavy,
+# slow-changing state whose week-old copy restores just as well (arr configs are largely
+# configarr-regenerable; code-server and tdarr are tooling). retain 4 ≈ a month of weeklies.
+k3s_longhorn_weekly_backup_cron: "30 4 * * 0"
+k3s_longhorn_weekly_backup_retain: 4
+# PVC names; the reconcile task swaps the volume's recurring-job group label. A PVC
+# recreated from the `longhorn` StorageClass reverts to daily until the next deploy — drift
+# in the over-backed-up direction, caught by the reconcile rerun.
+k3s_longhorn_weekly_volumes:
+  - homelab/code-server-config
+  - homelab/jellyfin-config
+  - homelab/sonarr-config
+  - homelab/radarr-config
+  - homelab/prowlarr-config
+  - homelab/bazarr-config
+  - homelab/qbittorrent-config
+  - homelab/tdarr-server
+  - homelab/tdarr-configs
+  - homelab/scrutiny-influxdb-data
+  - homelab/scrutiny-web-config
+  - homelab/crowdsec-db
+  - homelab/terraria-config
+
 # Backup-plane heartbeat (templates/longhorn-backup-health.sh.j2). Pushes to a static Kuma
 # monitor rather than being polled, because monitor-bridge runs on daniel-server and cannot
 # see this cluster.
@@ -224,7 +250,10 @@ k3s_disk_health_cron_minute: "*/10"
 # a 25 MB volume), and B2 publishes no cap-headroom endpoint, which is gap G2's whole premise. So
 # the 03:30 run is the experiment and **B2 Reachable** is the readout. If the cap fires again, the
 # eight names go back in here and the answer is a staggered weekly group, not a permanent exclusion.
-k3s_longhorn_nobackup_volumes: []
+k3s_longhorn_nobackup_volumes:
+  # autokuma's state rebuilds from the static-monitors Secret — fully regenerable, so it
+  # meets the same standard as the nobackup StorageClass (added at the fifth cap event).
+  - homelab/autokuma-data
 
 # Slice-6 D8/A1: upstream resolvers the k3s node is pinned to. The node must NEVER resolve
 # through the in-cluster Pi-hole VIP — a cold cluster start needs DNS (image pulls, Longhorn,
