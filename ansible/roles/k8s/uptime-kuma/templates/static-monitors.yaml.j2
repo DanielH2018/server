@@ -77,6 +77,12 @@ stringData:
   # the 302 to the Authelia portal and fails on the resulting 200. Made explicit here.
   crowdsec-dashboard-k8s.json: |
     {"type": "http", "name": "k3s CrowdSec Dashboard", "url": "https://crowdsec-k8s.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  homepage-k8s.json: |
+    {"type": "http", "name": "k3s homepage", "url": "https://homepage{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  peanut-k8s.json: |
+    {"type": "http", "name": "k3s peanut", "url": "https://peanut{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  grafana-k8s.json: |
+    {"type": "http", "name": "k3s Grafana", "url": "https://grafana{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   home-assistant-k8s.json: |
     {"type": "http", "name": "k3s Home Assistant", "url": "https://home-assistant{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Transcribed 2026-08-10 (Phase D.2 step 3): id `loki` was the grafana compose's

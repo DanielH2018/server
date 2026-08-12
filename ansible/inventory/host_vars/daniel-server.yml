@@ -52,15 +52,6 @@ containers_list:
     networks:
       - proxy
       - monitoring
-  - name: homepage
-    port: 3000
-    use_authelia: true
-    # `proxy` dropped 2026-08-09 with the Portainer widget — it was the sole reason homepage
-    # sat on that net (the 2026-06-24 lesson, now moot). Remaining widgets reach their
-    # targets over apps/monitoring or via .local hostnames.
-    networks:
-      - apps
-      - monitoring
       - media
       - homepage_private
   - name: autoheal
@@ -82,9 +73,11 @@ containers_list:
   # on. The role under roles/containers/cloudflare-ddns is deliberately left in place — it is
   # the rollback, and re-adding an entry here is the whole of it.
   # Organization: Apps network
+  # peanut's web UI moved to the cluster (E4, 2026-08-12). The entry stays because the
+  # role still deploys nut (USB UPS daemon — hardware-bound until the Phase F join) and
+  # the LAN firewall for upsd:3493; no hostname/port, so no route and no reverse-bridge
+  # host derive from it.
   - name: peanut
-    port: 8080
-    use_authelia: true
     networks:
       - apps
   - name: pihole
@@ -189,9 +182,10 @@ containers_list:
     # goes to the cluster HA over the -k8s name (HA moved 2026-08-09).
     networks:
       - monitoring
+  # grafana's UI moved to the cluster grafana (E1, 2026-08-12) — the unsuffixed name is
+  # served there now. The entry stays because this role's compose still carries loki and
+  # promtail until the 2026-08-17 Docker Loki cut; no hostname/port, so no route derives.
   - name: grafana
-    port: 3000
-    use_authelia: true
     networks:
       - monitoring
   # tempo RETIRED 2026-08-10 (slice-7 D7): its only feeder was the otel-collector's traces

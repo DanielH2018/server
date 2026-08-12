@@ -54,46 +54,9 @@ services:
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '128M', '0.05', '16M') }}
 
-  peanut:
-    container_name: peanut
-    image: brandawg93/peanut:latest
-    restart: unless-stopped
-    depends_on:
-      # nut has a healthcheck (upsc battery.charge); gate on it so peanut doesn't start
-      # before upsd is serving and show "no data" until its next poll on a recreate deploy.
-      nut:
-        condition: service_healthy
-    volumes:
-      - ./peanut-config:/config
-    environment:
-      - TZ={{ tz }}
-      - WEB_USERNAME={{ peanut_username }}
-      - WEB_PASSWORD={{ peanut_password }}
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    # Read-only rootfs: peanut (runs as non-root `node`) regenerates /app/config/auth.yaml
-    # from WEB_USERNAME/PASSWORD at every boot — a dir ABSENT from the image (not the
-    # ./peanut-config:/config mount), so tmpfs it (mode=1777 for the node uid). Persistent
-    # state stays in the /config bind mount; auth.yaml is env-derived, fine to be ephemeral.
-    read_only: true
-    tmpfs:
-      - /app/config:mode=1777
-    {{ service_networks() }}
-      - internal
-    labels:
-      {# Generate labels(container, port, docker_network, use_authelia) -#}
-      {{ labels(
-          container_item.hostname | default(container_item.name),
-          container_item.port | string,
-          (container_item.networks | default([docker_network]))[0],
-          container_item.use_authelia
-        )
-      }}
-      {{ kuma(container_item.name) }}
-    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    {{ resources('0.50', '256M', '0.05', '32M') }}
+  # The peanut web UI moved to the cluster (E4, 2026-08-12) — only nut (USB-bound
+  # upsd + its healthcheck/beat) remains until the Phase F join. The k8s peanut reads
+  # upsd over the LAN publish above.
 
 {{ external_networks() }}
   internal:

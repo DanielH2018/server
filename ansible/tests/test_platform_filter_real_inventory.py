@@ -114,6 +114,8 @@ def test_daniel_server_is_still_wholly_docker():
     # not until slice 7, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
-    assert len(containers) == 15
-    assert len(filter_by_platform(containers, "docker")) == 15
+    # 14 since E3 retired homepage (2026-08-12; peanut/grafana kept their entries for the
+    # nut / loki+promtail residuals).
+    assert len(containers) == 14
+    assert len(filter_by_platform(containers, "docker")) == 14
     assert filter_by_platform(containers, "k8s") == []

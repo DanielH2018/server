@@ -234,6 +234,9 @@ containers_list:
     hostname: "grafana{{ k8s_hostname_suffix }}"
     port: 3000
     use_authelia: true
+    # E1 retirement (2026-08-12): the cluster grafana owns the pre-migration name — its
+    # Docker twin is gone (the compose's loki/promtail siblings live until the 08-17 cut).
+    unsuffixed_hostname: grafana
     # Slice 3 (D8). Prometheus' own name, so Pi-hole answers it with the cluster VIP instead of
     # the local.<domain> wildcard that points at daniel-server. monitor-bridge runs there and
     # cannot reach this host's ClusterIP or its loopback-pinned hostPort, so this name plus the

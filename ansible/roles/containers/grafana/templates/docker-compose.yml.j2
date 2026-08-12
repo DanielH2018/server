@@ -6,46 +6,9 @@
 ---
 
 services:
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    user: "{{ puid }}"
-    restart: unless-stopped
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      # File-mounted (below), NOT inline, so the admin password stays out of the container Env the
-      # read-only docker-proxy exposes to every monitoring-net neighbor (2026-07-15 review M2).
-      # Grafana natively reads GF_<SECTION>_<KEY>__FILE (double underscore) from the file.
-      - GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_admin_password
-      - GF_ANALYTICS_REPORTING_ENABLED=false
-      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
-    volumes:
-      - ./data:/var/lib/grafana
-      - ./admin_password:/run/secrets/grafana_admin_password:ro
-      # Provisioned-as-code datasources + dashboards (read-only; UI edits persist in ./data).
-      - ./provisioning/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
-      - ./provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
-      - ./dashboards:/var/lib/grafana/dashboards:ro
-    {{ service_networks() }}
-    {{ healthcheck('wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1', name=container_item.name) }}
-    labels:
-      {# Generate labels(container, port, docker_network, use_authelia) -#}
-      {{ labels(
-          container_item.hostname | default(container_item.name),
-          container_item.port | string,
-          (container_item.networks | default([docker_network]))[0],
-          container_item.use_authelia
-        )
-      }}
-      {{ kuma(container_item.name) }}
-
-      # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on=prometheus"
-    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    {{ resources('1.0', '1024M', '0.10', '128M') }}
+  # The grafana service moved to the cluster grafana (E1, 2026-08-12) — it now owns the
+  # unsuffixed name and reads the same dashboards tree. loki + promtail below live until
+  # the 2026-08-17 Docker Loki cut (D.2 step 4).
   loki:
     image: grafana/loki:latest
     container_name: loki
