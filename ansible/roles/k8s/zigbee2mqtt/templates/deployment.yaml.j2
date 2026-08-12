@@ -66,6 +66,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /app/data
+            # z2m's rotating logs — kopia's log/ rule; appending logs churn blocks every night.
+            - name: log
+              mountPath: /app/data/log
           # Z2M takes a moment to connect to the coordinator before the frontend serves —
           # same reason the compose healthcheck carries start_period 60s.
           readinessProbe:
@@ -94,3 +97,5 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: {{ zigbee2mqtt_k8s_claim }}
+        - name: log
+          emptyDir: {}

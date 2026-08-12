@@ -126,6 +126,9 @@ spec:
               mountPath: /home/node/.n8n
             - name: files
               mountPath: /files
+            # n8n's .cache is re-derived (kopia's .cache/ rule).
+            - name: cache
+              mountPath: /home/node/.n8n/.cache
           # The compose healthcheck's endpoint, as an httpGet. /healthz answers 200 without
           # credentials — it is n8n's own liveness endpoint, not a routed one, so Authelia is
           # not in the path here.
@@ -158,3 +161,5 @@ spec:
         - name: files
           persistentVolumeClaim:
             claimName: {{ n8n_k8s_files_claim }}
+        - name: cache
+          emptyDir: {}

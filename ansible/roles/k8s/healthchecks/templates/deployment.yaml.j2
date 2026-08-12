@@ -79,6 +79,9 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
+            # LSIO app logs — kopia's logs/ rule.
+            - name: log
+              mountPath: /config/log
           readinessProbe:
             httpGet:
               path: /
@@ -110,3 +113,5 @@ spec:
         - name: config
           persistentVolumeClaim:
             claimName: {{ healthchecks_k8s_claim }}
+        - name: log
+          emptyDir: {}

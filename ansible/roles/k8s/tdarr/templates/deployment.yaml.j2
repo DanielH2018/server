@@ -73,6 +73,9 @@ spec:
           volumeMounts:
             - name: server
               mountPath: /app/server
+            # Tdarr's internal DB backup zips — backups-of-a-backup (kopia excluded them); the live DB2/ tree stays on the PVC.
+            - name: db-backups
+              mountPath: /app/server/Tdarr/Backups
             - name: configs
               mountPath: /app/configs
             # THE PATH CONTRACT (D4), and the one mount here that is read-write.
@@ -122,6 +125,9 @@ spec:
         - name: media
           persistentVolumeClaim:
             claimName: {{ tdarr_k8s_media_claim }}
+        - name: db-backups
+          emptyDir:
+            sizeLimit: 2Gi
         # sizeLimit IS THE POINT, not tidiness. An unbounded emptyDir is backed by the node's
         # root filesystem, and tdarr's cache holds whole intermediate video files — unlike
         # jellyfin's scratch, which is bounded by one client's stream. A stuck or pathological

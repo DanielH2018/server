@@ -176,9 +176,7 @@ k3s_longhorn_weekly_volumes:
   - homelab/qbittorrent-config
   - homelab/tdarr-server
   - homelab/tdarr-configs
-  - homelab/scrutiny-influxdb-data
   - homelab/scrutiny-web-config
-  - homelab/crowdsec-db
   - homelab/terraria-config
 
 # Backup-plane heartbeat (templates/longhorn-backup-health.sh.j2). Pushes to a static Kuma
@@ -250,10 +248,24 @@ k3s_disk_health_cron_minute: "*/10"
 # a 25 MB volume), and B2 publishes no cap-headroom endpoint, which is gap G2's whole premise. So
 # the 03:30 run is the experiment and **B2 Reachable** is the readout. If the cap fires again, the
 # eight names go back in here and the answer is a staggered weekly group, not a permanent exclusion.
+# The 2026-08-12 kopiaignore audit (docs/longhorn-backup-tiering.md) mapped kopia's
+# whole-tree exclusions onto whole volumes; each entry cites the kopia rule it preserves.
 k3s_longhorn_nobackup_volumes:
   # autokuma's state rebuilds from the static-monitors Secret — fully regenerable, so it
   # meets the same standard as the nobackup StorageClass (added at the fifth cap event).
   - homelab/autokuma-data
+  # kopia: `scrutiny/influxdb2/` excluded — the volume holds ONLY the SMART TSDB
+  # (verified single mount), regenerating from the daily collector runs.
+  - homelab/scrutiny-influxdb-data
+  # kopia: `uptime-kuma/data*/` excluded — monitors + notifications now regenerate from
+  # the git-rendered static-monitors Secret (stronger than the label era the rule was
+  # written in). Same DR caveat as kopia's: the first-run admin is recreated by hand and
+  # status HISTORY is not kept anywhere.
+  - homelab/uptime-kuma-data
+  # kopia scope: the Docker crowdsec-db named volume was deliberately unbacked
+  # (.claude/rules/docker.md) — decisions expire and re-derive from logs; Metabase
+  # dashboards are provisioned.
+  - homelab/crowdsec-db
 
 # Slice-6 D8/A1: upstream resolvers the k3s node is pinned to. The node must NEVER resolve
 # through the in-cluster Pi-hole VIP — a cold cluster start needs DNS (image pulls, Longhorn,

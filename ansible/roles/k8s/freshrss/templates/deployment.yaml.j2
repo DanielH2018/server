@@ -50,6 +50,9 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
+            # FreshRSS favicon/content cache — kopia excluded it; re-fetched on demand.
+            - name: app-cache
+              mountPath: /config/www/freshrss/data/cache
           readinessProbe:
             httpGet:
               path: /
@@ -73,3 +76,5 @@ spec:
         - name: config
           persistentVolumeClaim:
             claimName: {{ freshrss_k8s_claim }}
+        - name: app-cache
+          emptyDir: {}
