@@ -1,0 +1,11 @@
+---
+# Unlike docker.yaml (never provided on the Docker side either), this file has to exist here
+# specifically because of how the gethomepage image behaves: servicesFromKubernetes() calls
+# checkAndCopyConfig("kubernetes.yaml") on EVERY service/widget lookup (service-helpers.js,
+# via getServiceItem's docker/kubernetes discovery fallback — unconditional, not gated on any
+# service actually using a kubernetes: widget). checkAndCopyConfig only copies its skeleton
+# when the file is missing; against this role's read-only Secret mount at /app/config that
+# copy fails with EROFS and the app calls process.exit(1) — a crash loop on the very first
+# widget poll. Pre-supplying an empty file here (parses to undefined; config?.mode is then
+# undefined, getKubeConfig() falls through to `default: return null`) avoids the write
+# entirely. No kubernetes-widget usage is configured, so `mode` stays unset on purpose.

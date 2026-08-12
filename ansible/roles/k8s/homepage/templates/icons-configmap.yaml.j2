@@ -1,0 +1,14 @@
+---
+# The bookmark icons the Docker role served via its ./icons bind mount — without them the
+# bookmark tiles render broken images (E3 audit). binaryData reads the SAME files/ dir in
+# the Docker role (single source, like the lookup('template') config keys); ~160KB total,
+# well under the 1MiB object limit.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homepage-icons
+  namespace: {{ k8s_namespace }}
+binaryData:
+{% for icon in ['limitless.png', 'LoLalytics.png', 'monarch.png', 'opgg.png', 'tacticstools.png', 'tftacademy.png'] %}
+  {{ icon }}: {{ lookup('pipe', 'base64 -w0 ' ~ playbook_dir ~ '/roles/containers/homepage/files/' ~ icon) }}
+{% endfor %}

@@ -198,3 +198,9 @@ has_docker: true
 has_github_cli: false
 has_chezmoi: false
 has_claude_code: false
+
+# Physical location, feeds the homepage weather widget. Moved from daniel-server's
+# host_vars at E3 (2026-08-12): homepage renders on daniel-box now — same move the SLZB
+# vars made on 2026-08-09 when z2m's render host changed.
+lat: 38.89
+long: -77.08

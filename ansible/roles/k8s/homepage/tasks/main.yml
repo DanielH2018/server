@@ -13,5 +13,6 @@
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
+      - icons-configmap.yaml
     manifests_secret_files:
       - config-secret.yaml

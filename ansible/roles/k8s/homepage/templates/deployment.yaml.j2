@@ -55,16 +55,30 @@ spec:
             # rather than trying to widen the Secret mount.
             - name: config-logs
               mountPath: /app/config/logs
+            # Bookmark icons (see icons-configmap.yaml.j2).
+            - name: icons
+              mountPath: /app/public/icons
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /api/healthcheck
               port: {{ container_item.port }}
+              # kubelet probes carry the pod IP as Host, which HOMEPAGE_ALLOWED_HOSTS
+              # rejects (400) — pin an allowed Host (failed live at first deploy).
+              httpHeaders:
+                - name: Host
+                  value: "{{ container_item.hostname }}.local.{{ domain }}"
             initialDelaySeconds: 15
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /api/healthcheck
               port: {{ container_item.port }}
+              # kubelet probes carry the pod IP as Host, which HOMEPAGE_ALLOWED_HOSTS
+              # rejects (400) — pin an allowed Host (failed live at first deploy).
+              httpHeaders:
+                - name: Host
+                  value: "{{ container_item.hostname }}.local.{{ domain }}"
             initialDelaySeconds: 30
             periodSeconds: 30
           resources:
@@ -80,3 +94,6 @@ spec:
             secretName: homepage-config
         - name: config-logs
           emptyDir: {}
+        - name: icons
+          configMap:
+            name: homepage-icons

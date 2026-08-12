@@ -26,6 +26,29 @@ spec:
       # `tmpfs: /app/config:mode=1777`, which sidesteps the same unknown-UID problem the other way.
       securityContext:
         fsGroup: 1000
+      # PeaNUT WRITES /config (it persists UI settings beside settings.yml — the compose
+      # template's writable ./peanut-config bind). A read-only subPath mount there EROFS'd
+      # the app at first deploy (2026-08-12), so the Secret seeds a writable emptyDir
+      # instead, same copy-not-mount shape as the app-config scratch below.
+      initContainers:
+        - name: seed-config
+          # alpine, not the app image: peanut's distroless-ish image has no cp
+          # (StartError "executable file not found" at first deploy). Same init image
+          # zigbee2mqtt and home-assistant use.
+          image: alpine:3.22
+          command: ["cp", "/config-seed/settings.yml", "/config/settings.yml"]
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: settings
+              mountPath: /config-seed
+              readOnly: true
+            - name: config
+              mountPath: /config
       containers:
         - name: peanut
           image: {{ peanut_k8s_image }}
@@ -51,11 +74,9 @@ spec:
                   name: peanut-secrets
                   key: WEB_PASSWORD
           volumeMounts:
-            # NUT_SERVERS config — read-only, points at daniel-server's upsd over the LAN.
-            - name: settings
-              mountPath: /config/settings.yml
-              subPath: settings.yml
-              readOnly: true
+            # Writable /config seeded with settings.yml by the init container above.
+            - name: config
+              mountPath: /config
             # auth.yaml is regenerated from WEB_USERNAME/WEB_PASSWORD at every boot (absent from
             # the image, not part of the settings mount above) — the compose template's
             # `tmpfs: /app/config:mode=1777` equivalent.
@@ -88,4 +109,6 @@ spec:
               - key: settings.yml
                 path: settings.yml
         - name: app-config
+          emptyDir: {}
+        - name: config
           emptyDir: {}

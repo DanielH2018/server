@@ -18,6 +18,7 @@ or invalid YAML.
 
 from __future__ import annotations
 
+import base64
 import json
 import sys
 from pathlib import Path
@@ -158,6 +159,16 @@ def make_lookup(ctx: dict):
         path = Path(args[0])
         if kind == "file":
             return path.read_text().rstrip("\n")
+        if kind == "pipe":
+            # Only the binary-embed idiom, done hermetically in Python rather than by
+            # running a shell: lookup('file') utf-8-decodes and would mangle binary, so
+            # templates embedding images (homepage's icons ConfigMap) pipe base64 instead.
+            cmd = args[0].split()
+            if cmd[:2] == ["base64", "-w0"] and len(cmd) == 3:
+                return base64.b64encode(Path(cmd[2]).read_bytes()).decode()
+            raise ValueError(
+                f"lookup('pipe') is only supported for 'base64 -w0 <path>', got {args[0]!r}"
+            )
         if kind == "template":
             env = make_env([path.parent])
             env.globals["lookup"] = lookup

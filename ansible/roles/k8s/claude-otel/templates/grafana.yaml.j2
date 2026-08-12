@@ -7,6 +7,13 @@ metadata:
 data:
   datasources.yaml: |
     apiVersion: 1
+    # Provisioning keys on NAME, so renaming the alias (loki -> loki-homelab, E1) needs
+    # the old record deleted or the insert hits "same uid already exists" — CrashLooped
+    # the pod at first deploy, 2026-08-12. Lowercase `loki` is the retired alias name;
+    # the stack's own `Loki` (uid loki) is untouched.
+    deleteDatasources:
+      - name: loki
+        orgId: 1
     datasources:
       - name: Prometheus
         uid: prometheus

@@ -1,4 +1,4 @@
-{% from 'ingressroute.yml.j2' import ingressroute with context %}
+{% from 'ingressroute.yml.j2' import ingressroute, monitoring_route with context %}
 ---
 {{ ingressroute(
     container_item.name,
@@ -6,5 +6,19 @@
     container_item.port,
     container_item.use_authelia,
     unsuffixed_hostname=container_item.unsuffixed_hostname | default(none)
+  )
+}}
+---
+{#
+  Homepage's UPS widget (session-less, peanut's own basic auth) — same shape as the
+  speedtest/karakeep/freshrss monitoring routes. Callers: the homepage pod (pod CIDR)
+  and daniel-server (monitor-bridge era tooling).
+#}
+{{ monitoring_route(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    '/api/',
+    extra_client_cidrs=['10.42.0.0/16']
   )
 }}

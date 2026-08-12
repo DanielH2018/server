@@ -68,7 +68,10 @@
             description: APC BR1500MS2
             widget:
                 type: peanut
-                url: http://peanut:8080
+                # The -k8s monitoring route (ClientIP-gated, no Authelia) — the old
+                # Docker-internal name died with the shared bridge. peanut's own basic
+                # auth (username/password below) is the gate on this path.
+                url: https://peanut{{ k8s_hostname_suffix }}.local.{{ domain }}
                 key: {{ nut_ups_name | default('apc-ups') }}
                 username: {{ peanut_username }}
                 password: {{ peanut_password }}

@@ -18,13 +18,14 @@
 }}
 ---
 {#
-  Homepage's karakeep widget (daniel-server, session-less API-key caller) — same story as
+  Homepage's karakeep widget (daniel-server, session-less API-key caller; pod CIDR added when homepage itself moved in-cluster, E3) — same story as
   speedtest: the no-auth bridge route it used died in the slice-7 teardown.
 #}
 {{ monitoring_route(
     container_item.name,
     container_item.hostname | default(container_item.name),
     container_item.port,
-    '/api/'
+    '/api/',
+    extra_client_cidrs=['10.42.0.0/16']
   )
 }}

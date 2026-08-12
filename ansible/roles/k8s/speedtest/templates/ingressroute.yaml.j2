@@ -10,7 +10,7 @@
 }}
 ---
 {#
-  Homepage's speedtest widget (daniel-server, session-less API-key caller). It rode the
+  Homepage's speedtest widget (daniel-server, session-less API-key caller; pod CIDR added when homepage itself moved in-cluster, E3). It rode the
   no-auth ClientIP bridge route until the slice-7 teardown deleted it; the native route
   that replaced it carries Authelia, which 401s the widget.
 #}
@@ -18,6 +18,7 @@
     container_item.name,
     container_item.hostname | default(container_item.name),
     container_item.port,
-    '/api/'
+    '/api/',
+    extra_client_cidrs=['10.42.0.0/16']
   )
 }}
