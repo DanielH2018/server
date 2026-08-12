@@ -99,6 +99,11 @@ services:
       # Access to the host log files
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/promtail-config.yaml
+    ports:
+      # Phase E2: LAN-published (host 9102 -> container 9080) for the cluster Prometheus
+      # (10.0.0.161:9102). Locked to daniel-box only by the prometheus role's
+      # prometheus-exporters-lan-firewall.sh.
+      - "{{ server_ip }}:9102:9080"
     {{ service_networks() }}
     labels:
       {{ kuma('promtail') }}

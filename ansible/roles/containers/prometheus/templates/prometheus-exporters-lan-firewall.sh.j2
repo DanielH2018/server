@@ -1,0 +1,32 @@
+#!/bin/bash
+# Restrict the LAN-published Prometheus-exporter ports to daniel-box only, in the DOCKER-USER
+# chain. Docker-published ports BYPASS ufw (Docker inserts its own FORWARD rules ahead of ufw),
+# so a host-firewall lock for a *container* port must live here, not in ufw. Mirrors the peanut
+# role's nut-lan-firewall lock (see that script for the verified no-terminal-RETURN caveat).
+#
+# Why this exists (Phase E2, Prometheus consolidation): the cluster Prometheus now scrapes these
+# five daniel-server exporters directly by IP instead of via this host's remote_write, so their
+# ports are published on the host for the first time. Scoped to daniel-box only, not the whole
+# LAN — these are unauthenticated metrics endpoints (crowdsec's :6060 in particular carries
+# per-machine decision counts).
+
+PORTS=(9100 9101 9102 9103 9104)
+# daniel-box's /32 — cluster pod egress NATs to the node address. Same reasoning as
+# nut-lan-firewall.sh.j2: the reachable set stays exactly one host.
+ALLOW={{ hostvars['daniel-box'].server_ip }}
+# This host's own Docker bridges — kept for parity with nut-lan-firewall.sh.j2 so any future
+# on-host container-to-container hairpin (host-published IP:port, not the internal DNS name)
+# keeps working rather than silently DROPping.
+BRIDGES=172.16.0.0/12
+
+for PORT in "${PORTS[@]}"; do
+  # Remove any previously-added rules for this port (ignore if absent)
+  iptables -D DOCKER-USER -p tcp --dport "$PORT" -s "$ALLOW" -j RETURN 2>/dev/null || true
+  iptables -D DOCKER-USER -p tcp --dport "$PORT" -s "$BRIDGES" -j RETURN 2>/dev/null || true
+  iptables -D DOCKER-USER -p tcp --dport "$PORT" -j DROP 2>/dev/null || true
+
+  # Allow daniel-box + this host's containers (RETURN = stop DOCKER-USER processing), drop the rest.
+  iptables -I DOCKER-USER -p tcp --dport "$PORT" -s "$ALLOW" -j RETURN
+  iptables -I DOCKER-USER -p tcp --dport "$PORT" -s "$BRIDGES" -j RETURN
+  iptables -A DOCKER-USER -p tcp --dport "$PORT" -j DROP
+done

@@ -1,0 +1,17 @@
+---
+# The nut sidecar (USB-attached UPS) stays on daniel-server by design — only the peanut web
+# UI migrates. It reaches upsd over the LAN publish the Docker role already opened for the
+# cluster host (nut-lan-firewall.sh.j2 allows daniel-box's egress /32 specifically).
+
+- name: Deploy peanut to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: peanut
+    manifests_rollout: peanut
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
+    manifests_secret_files:
+      - secret.yaml

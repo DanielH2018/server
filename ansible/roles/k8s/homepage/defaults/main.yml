@@ -1,0 +1,9 @@
+---
+# Same image the Docker role runs — both copies stay on the same tag through coexistence so a
+# difference in behaviour between them is never the image.
+homepage_k8s_image: ghcr.io/gethomepage/homepage:latest
+# Mirrors resources('0.50', '256M', '0.05', '32M') in the compose template.
+homepage_k8s_cpu_limit: "500m"
+homepage_k8s_mem_limit: 256Mi
+homepage_k8s_cpu_request: "50m"
+homepage_k8s_mem_request: 32Mi

@@ -1,0 +1,170 @@
+
+
+{#
+  k8s fork of roles/containers/homepage/templates/services.yaml.j2 — kept in sync by hand, not
+  by a shared include: the only difference from the Docker copy is the two `server:`/
+  `container:` pairs below (dropped, see docker.yaml.j2 in this role for why). Everything else
+  — widget URLs, credentials, comments — must match the Docker template verbatim. If you're
+  editing tiles/widgets here, make the same edit in roles/containers/homepage/templates/ too.
+#}
+- Top Row:
+    - Services:
+        - Uptime-Kuma:
+            icon: uptime-kuma.png
+            href: https://uptime-kuma.{{ domain }}/
+            description: Container Monitoring
+            # No server/container pair since the Phase D cutover (2026-08-10): Kuma runs in
+            # k3s now. Widget re-targets the -k8s name (bridged names hairpin from here);
+            # /api/status-page bypasses Authelia LAN-only on the k8s side.
+            widget:
+                type: uptimekuma
+                url: https://uptime-kuma{{ k8s_hostname_suffix }}.local.{{ domain }}
+                slug: containers
+        - Pihole:
+            icon: pi-hole.png
+            href: https://pihole.{{ domain }}/admin
+            description: DNS Ad Blocker
+            widget:
+                type: pihole
+                url: http://pihole:80
+                version: 6
+                key: {{ pihole_api_key }}
+        - Speedtest:
+            icon: speedtest-tracker.png
+            href: https://speedtest.{{ domain }}/
+            description: Internet tracking
+            # No server/container: speedtest runs in k3s now, so there is no Docker container
+            # for the status dot. The -k8s name is the ClientIP-gated monitoring route (no
+            # Authelia) — the unsuffixed name's native route is Authelia'd and 401s this
+            # session-less widget (broke when the slice-7 teardown removed the bridge route).
+            widget:
+                type: speedtest
+                url: https://speedtest{{ k8s_hostname_suffix }}.local.{{ domain }}
+        - FreshRSS:
+            icon: freshrss.png
+            href: https://freshrss.{{ domain }}/
+            description: RSS Link Aggregator
+            # No server/container: freshrss runs in k3s now. Same as speedtest above — the
+            # -k8s monitoring route, because the native route's Authelia 401s the widget.
+            widget:
+                type: freshrss
+                url: https://freshrss{{ k8s_hostname_suffix }}.local.{{ domain }}
+                username: {{ freshrss_username }}
+                password: {{ freshrss_password }}
+        - Karakeep:
+            icon: karakeep.png
+            href: https://karakeep.{{ domain }}/
+            description: Karakeep
+            # No server/container: karakeep runs in k3s now. Same as speedtest and freshrss
+            # above — the -k8s monitoring route, because the native route's Authelia 401s
+            # the widget.
+            widget:
+                type: karakeep
+                url: https://karakeep{{ k8s_hostname_suffix }}.local.{{ domain }}
+                key: {{ karakeep_homepage_api_key }}
+        - UPS:
+            icon: apc.png
+            href: https://peanut.{{ domain }}/
+            description: APC BR1500MS2
+            widget:
+                type: peanut
+                url: http://peanut:8080
+                key: {{ nut_ups_name | default('apc-ups') }}
+                username: {{ peanut_username }}
+                password: {{ peanut_password }}
+        - Home Assistant:
+            icon: home-assistant.png
+            href: https://home-assistant.{{ domain }}/
+            description: Bedroom air quality
+            # No server/container pair and a bridge-URL widget since slice-5 B3: HA runs in
+            # k3s, so the Docker-DNS name is gone. The .local name resolves from containers
+            # (LAN DNS) and served the same HA before and after the cutover.
+            widget:
+                type: homeassistant
+                url: https://home-assistant.local.{{ domain }}
+                key: {{ homepage_ha_token }}
+                custom:
+                    - state: sensor.bedroom_airgradient_one_carbon_dioxide
+                      label: CO₂
+                    - template: "{% raw %}{{ states('sensor.bedroom_airgradient_one_temperature') | float | round(1) }}{% endraw %} °F"
+                      label: Temp
+                    - state: sensor.bedroom_airgradient_one_humidity
+                      label: Humidity
+                    - state: sensor.bedroom_airgradient_one_voc_index
+                      label: VOC
+    - Calendar:
+        - Calendar:
+            id: my-calendar
+            href: https://calendar.google.com/calendar/u/0/r
+            widget:
+              type: calendar
+              firstDayInWeek: sunday
+              view: monthly
+              maxEvents: 8
+              showTime: true
+              timezone: {{ tz }}
+              integrations:
+                - type: ical
+                  url: https://ical-proxy{{ k8s_hostname_suffix }}.local.{{ domain }}/calendar1.ics
+                  name: Daniel
+                  color: indigo
+                  params:
+                      showName: true
+                - type: ical
+                  url: https://ical-proxy{{ k8s_hostname_suffix }}.local.{{ domain }}/calendar2.ics
+                  name: Work
+                  color: slate
+                  params:
+                      showName: true
+                - type: ical
+                  url: {{ calendar_3 }}
+                  name: Holidays
+                  color: purple
+                  params:
+                      showName: true
+                - type: ical
+                  url: https://ical-proxy{{ k8s_hostname_suffix }}.local.{{ domain }}/calendar4.ics
+                  name: Tasks
+                  color: emerald
+                  params:
+                      showName: true
+
+- Media:
+    # The four media services moved to the k8s cluster (slice 4), so the Docker-DNS widget URLs
+    # (http://jellyfin:8096, …) stopped resolving — each dashboard load burned ~15 widget-proxy
+    # 500s (the Traefik `homepage@docker` 5xx signal, 2026-08-08). Jellyfin's -k8s route carries
+    # no Authelia, so its widget follows the service. The sonarr/radarr/qbittorrent -k8s routes
+    # are Authelia-gated and their monitoring IngressRoutes deliberately expose only
+    # /api/v3/queue — restoring those widgets means consciously widening the route path list
+    # (see ansible/templates/ingressroute.yml.j2 monitoring_route), so they are dropped, not
+    # repointed. The `server:`/`container:` docker-status pairs referenced containers that no
+    # longer exist on this host.
+    - Jellyfin:
+        href: https://jellyfin.{{ domain }}
+        icon: jellyfin.png
+        description: Mediaserver
+        widget:
+            type: jellyfin
+            url: https://jellyfin{{ k8s_hostname_suffix }}.local.{{ domain }}
+            key: {{ jellyfin_api_key }}
+    - Sonarr:
+        icon: sonarr.png
+        href: https://sonarr.{{ domain }}/
+        description: Series management
+    - Radarr:
+        icon: radarr.png
+        href: https://radarr.{{ domain }}/
+        description: Movie management
+    - qBittorrent:
+        icon: qbittorrent.png
+        href: https://qBittorrent.{{ domain }}
+        description: Download management
+
+- Tracking:
+    - Crypto:
+        widget:
+            type: coinmarketcap
+            currency: USD # Optional
+            symbols: [BTC, ETH, DOGE]
+            key: {{ coinmarket_api_key }}
+            defaultinterval: 24h # Optional

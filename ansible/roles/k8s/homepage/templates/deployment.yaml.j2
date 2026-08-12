@@ -1,0 +1,82 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homepage
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: homepage
+  template:
+    metadata:
+      labels:
+        app: homepage
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: homepage
+          image: {{ homepage_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # The compose template's cap_drop/cap_add pair: docker-entrypoint.sh chowns
+              # /app/config and /app/config/logs to PUID/PGID (best-effort — it warns and
+              # continues on failure, which is what happens against the read-only Secret mount
+              # below) before su-exec'ing down to that uid.
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - SETUID
+                - SETGID
+          env:
+            - name: PUID
+              value: "{{ puid }}"
+            - name: PGID
+              value: "{{ pgid }}"
+            - name: TZ
+              value: "{{ tz }}"
+            # The public (Cloudflare) host, the .local host used over the WireGuard private
+            # path, and both -k8s forms — coexistence means both platforms answer for
+            # homepage at once, and Homepage rejects any Host header not listed here.
+            - name: HOMEPAGE_ALLOWED_HOSTS
+              value: >-
+                homepage.{{ domain }},homepage.local.{{ domain }},homepage{{ k8s_hostname_suffix }}.{{ domain }},homepage{{ k8s_hostname_suffix }}.local.{{ domain }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            # docker-entrypoint.sh mkdir -p's and chowns this on every start; the Secret above
+            # is read-only, so logs get their own writable emptyDir mounted over that subpath
+            # rather than trying to widen the Secret mount.
+            - name: config-logs
+              mountPath: /app/config/logs
+          readinessProbe:
+            httpGet:
+              path: /api/healthcheck
+              port: {{ container_item.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/healthcheck
+              port: {{ container_item.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ homepage_k8s_cpu_limit }}"
+              memory: {{ homepage_k8s_mem_limit }}
+            requests:
+              cpu: "{{ homepage_k8s_cpu_request }}"
+              memory: {{ homepage_k8s_mem_request }}
+      volumes:
+        - name: config
+          secret:
+            secretName: homepage-config
+        - name: config-logs
+          emptyDir: {}

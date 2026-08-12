@@ -1,0 +1,17 @@
+---
+# No seed-volume step, unlike freshrss/speedtest/zigbee2mqtt: homepage carries no state across
+# the cutover. Every byte under /app/config is Ansible-rendered on every deploy (same contract
+# the Docker role's docker_deploy.yml enforces), so the k8s copy needs nothing seeded from the
+# Docker role's containers/homepage/config — it is regenerated from templates instead.
+
+- name: Deploy homepage to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: homepage
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
+    manifests_secret_files:
+      - config-secret.yaml

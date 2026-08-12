@@ -1,0 +1,15 @@
+---
+# Same image the Docker role runs — both copies stay on the same tag through coexistence so
+# a difference in behaviour between them is never the image.
+peanut_k8s_image: brandawg93/peanut:latest
+# Mirrors resources('0.50', '256M', '0.05', '32M') in the compose template (peanut service only —
+# the nut sidecar stays on Docker, the UPS is USB-attached to daniel-server).
+peanut_k8s_cpu_limit: "500m"
+peanut_k8s_mem_limit: 256Mi
+peanut_k8s_cpu_request: "50m"
+peanut_k8s_mem_request: 32Mi
+# The upsd port on daniel-server. Published to the LAN (server_ip:3493) and locked in
+# DOCKER-USER to daniel-box's egress address specifically — see the peanut Docker role's
+# nut-lan-firewall.sh.j2. NUT auth is a plaintext protocol password, so this stays a single
+# allowed host rather than the whole LAN /24.
+peanut_k8s_nut_port: 3493

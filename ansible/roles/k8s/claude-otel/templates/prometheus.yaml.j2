@@ -84,6 +84,59 @@ data:
         scrape_interval: 1m
         static_configs:
           - targets: ['traefik-metrics.{{ k8s_namespace }}.svc:8080']
+      # ── Phase E2 (2026-08-12): Prometheus consolidation — daniel-server's remaining Docker
+      # exporters, scraped directly instead of arriving via that instance's remote_write. Ports
+      # are newly LAN-published (prometheus-exporters-lan-firewall.sh locks each to daniel-box
+      # only). k8s_bridge_client_ip is daniel-server's address as this play sees it (a literal,
+      # not hostvars['daniel-server'] — see its definition: daniel-server isn't guaranteed to be
+      # in this play's hostvars).
+      #
+      # Label parity is load-bearing, not cosmetic: these same job names and an instance of
+      # "daniel-server" are what daniel-server's Docker Prometheus produced (directly for `node`
+      # via its own metric_relabel_configs; by default target-address for the others — set
+      # explicitly here since there's no container DNS name to default from) plus the
+      # `origin: daniel-server` external label every one of its remote-written series carried.
+      # Reproducing both keeps existing dashboard queries/legends matching unchanged. These five
+      # jobs are being removed from daniel-server's prometheus.yml.j2 in this same change, so
+      # there is no remaining remote-write source for these job names and no collision risk.
+      - job_name: node
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['{{ k8s_bridge_client_ip }}:9100']
+            labels:
+              instance: daniel-server
+              origin: daniel-server
+      - job_name: cadvisor
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['{{ k8s_bridge_client_ip }}:9101']
+            labels:
+              instance: daniel-server
+              origin: daniel-server
+      - job_name: promtail
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['{{ k8s_bridge_client_ip }}:9102']
+            labels:
+              instance: daniel-server
+              origin: daniel-server
+      - job_name: crowdsec_daniel-server
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['{{ k8s_bridge_client_ip }}:9103']
+            labels:
+              instance: daniel-server
+              origin: daniel-server
+              # Carried over from the Docker job's static_configs label — distinguishes this
+              # per-host demoted agent's series from the in-cluster `crowdsec` job's engine series.
+              machine: daniel-server
+      - job_name: traefik
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['{{ k8s_bridge_client_ip }}:9104']
+            labels:
+              instance: daniel-server
+              origin: daniel-server
       # Per-pod CPU/memory from each kubelet's cAdvisor, reached through the API server proxy
       # rather than the kubelet's own :10250. The proxy path needs only nodes/proxy RBAC and no
       # kubelet client certificate, which is why it is the usual choice for a single-node k3s.

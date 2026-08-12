@@ -41,6 +41,11 @@ services:
       - '--collector.tcpstat'
     expose:
       - 9100
+    ports:
+      # Phase E2: LAN-published for the cluster Prometheus to scrape directly (10.0.0.161:9100).
+      # Locked to daniel-box only by prometheus-exporters-lan-firewall.sh (DOCKER-USER), applied
+      # before this container deploys.
+      - "{{ server_ip }}:9100:9100"
     {{ service_networks() }}
     {{ healthcheck('wget --no-verbose --tries=1 -O /dev/null http://localhost:9100/metrics || exit 1') }}
     labels:
@@ -77,6 +82,10 @@ services:
       - '--store_container_labels=false'
       - '--docker_only=true'
       - '--disable_metrics=hugetlb,memory_numa,tcp,udp,referenced_memory,disk,diskIO,percpu,sched,process,cpu_topology,perf_event,advtcp'
+    ports:
+      # Phase E2: LAN-published (host 9101 -> container 8080) for the cluster Prometheus
+      # (10.0.0.161:9101). Locked to daniel-box only by prometheus-exporters-lan-firewall.sh.
+      - "{{ server_ip }}:9101:8080"
     {{ service_networks() }}
     restart: unless-stopped
     labels:

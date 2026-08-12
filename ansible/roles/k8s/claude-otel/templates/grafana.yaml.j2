@@ -67,11 +67,15 @@ data:
           # recorded as a migration gap that is really a datasource setting. The cluster-native
           # datasource above correctly leaves it unset.
           timeInterval: "1m"
-      - name: loki
+      - name: loki-homelab
         uid: bf4q19tuivta8e
         type: loki
         access: proxy
-        url: http://loki:3100
+        # The HOMELAB Loki, cross-namespace — NOT this stack's own loki (that one keeps
+        # uid `loki` for tracesToLogsV2). The ported dashboards bake this uid into their
+        # panels, and pointing it at the observability Loki left Logs, Loki — Internals
+        # and Alert History's log half empty (E1 parity audit, 2026-08-12).
+        url: http://loki-homelab.{{ k8s_namespace }}.svc.cluster.local:3100
   dashboards.yaml: |
     apiVersion: 1
     providers:

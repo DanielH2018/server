@@ -54,6 +54,12 @@ services:
     # (reads the agent creds, pings LAPI) and exits non-zero until LAPI accepts, so the gate now
     # means "WAF is ready".
     {{ healthcheck('["CMD", "cscli", "lapi", "status"]', start_period='20s') }}
+    ports:
+      # Phase E2: LAN-published (host 9103 -> container 6060) for the cluster Prometheus
+      # (10.0.0.161:9103), which scrapes this demoted per-host agent's own metrics (a
+      # different target than the cluster's in-cluster CrowdSec engine). Locked to daniel-box
+      # only by the prometheus role's prometheus-exporters-lan-firewall.sh.
+      - "{{ server_ip }}:9103:6060"
     networks:
       - {{ (container_item.networks | default([docker_network]))[0] }}
       # Join monitoring so Prometheus can scrape the CrowdSec metrics endpoint
@@ -107,6 +113,11 @@ services:
       # v4 (dnsmasq AAAA=::) and no AAAA is published, so v4-only publish loses nothing.
       - 0.0.0.0:80:80
       - 0.0.0.0:443:443
+      # Phase E2: LAN-published (host 9104 -> container 8080, the internal `traefik` metrics
+      # entrypoint) for the cluster Prometheus (10.0.0.161:9104). Bound to server_ip, not
+      # 0.0.0.0 — unlike 80/443 this is unauthenticated and only daniel-box needs it. Locked to
+      # daniel-box only by the prometheus role's prometheus-exporters-lan-firewall.sh.
+      - "{{ server_ip }}:9104:8080"
       # Raw-TCP game-server entrypoints bypass the CrowdSec + rate-limit chain
       # (no HTTP middleware on TCP routers) — only publish when the server is live.
       - 0.0.0.0:7777:7777/tcp  # terraria

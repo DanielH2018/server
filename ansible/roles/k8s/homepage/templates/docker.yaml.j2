@@ -1,0 +1,9 @@
+---
+# k8s fork of roles/containers/homepage/templates/docker.yaml.j2 — genuinely diverges, so it
+# is not read from the Docker role's template like the rest of this Secret's keys are.
+#
+# The Docker copy points Homepage's docker-proxy status dots at `my-docker` (docker-proxy on
+# the Docker network). There is no k8s equivalent yet — a kubernetes-widget-backed status dot
+# is a later decision — so this renders empty. services.yaml.j2 (this role's own fork) drops
+# the matching `server:`/`container:` keys so tiles render dot-less instead of erroring on a
+# `my-docker` host that doesn't exist here.

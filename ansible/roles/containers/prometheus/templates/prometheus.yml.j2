@@ -20,9 +20,11 @@ global:
 # is the property that makes the rest of slice 3 reversible: B5 repoints monitor-bridge at the
 # cluster and B6 retires this instance, and until B6 either one can serve.
 #
-# Chosen over having the cluster scrape daniel-server: every job above targets a container name
-# on the internal `monitoring` network and NONE is published to the host, so scraping inward
-# would mean exposing eleven jobs' worth of ports to the LAN. This is one outbound connection.
+# Phase E2 (2026-08-12): the traefik/node/cadvisor/promtail/crowdsec jobs this comment used to
+# justify keeping inbound-only moved to native cluster scrape jobs (claude-otel's
+# prometheus.yaml.j2) — their exporter ports are now LAN-published, locked to daniel-box only by
+# prometheus-exporters-lan-firewall.sh. What remains below (this self-scrape + `loki`) still isn't
+# published, so remote_write stays the path for those two until the rest of this instance retires.
 #
 # The receiving route admits this host only (ClientIP), so the URL is not a shared secret and
 # there is no credential here to leak.
@@ -41,32 +43,11 @@ scrape_configs:
 
 #################################################################################################
 
-  - job_name: 'traefik'
-    scrape_interval: 15s
-    static_configs:
-      - targets: ['traefik:8080']
-
-#################################################################################################
-
-  - job_name: "node"
-    scrape_interval: 1m
-    static_configs:
-    - targets: ["node-exporter:9100"]
-    metric_relabel_configs:
-      # Pin a single, consistent `instance` across ALL node metrics. The previous rule
-      # sourced `instance` from the `nodename` label, which only exists on node_uname_info
-      # — so it stripped `instance` off every other node metric and broke node dashboards
-      # (panels filtering on instance="$node" matched nothing). A static replacement keeps
-      # one stable host identity everywhere.
-      - target_label: instance
-        replacement: "{{ inventory_hostname }}"
-
-#################################################################################################
-
-  - job_name: "cadvisor"
-    scrape_interval: 1m
-    static_configs:
-    - targets: ["cadvisor:8080"]
+  # traefik/node/cadvisor jobs PORTED to the cluster prometheus at Phase E2 (2026-08-12,
+  # Prometheus consolidation) — their exporter ports are now LAN-published on this host and
+  # scraped directly by the cluster instead of arriving here first. Same job names + a static
+  # instance="daniel-server"/origin="daniel-server" label pair over there, so dashboard
+  # queries/legends keep matching. See claude-otel's prometheus.yaml.j2.
 
 #################################################################################################
 
@@ -82,14 +63,8 @@ scrape_configs:
 
 #################################################################################################
 
-  # Promtail's own /metrics (per-target send failures, promtail_dropped_entries_total,
-  # positions-file lag) on its :9080 server port — Promtail and Prometheus share `monitoring`.
-  # The loki_ingestion bridge check only trips at ZERO lines; this surfaces PARTIAL log-shipping
-  # loss (dropped/rate-limited entries) plus the trend history that point-in-time check can't retain.
-  - job_name: "promtail"
-    scrape_interval: 1m
-    static_configs:
-    - targets: ["promtail:9080"]
+  # promtail job PORTED to the cluster prometheus at Phase E2 (2026-08-12) — same reasoning as
+  # the traefik/node/cadvisor block above. See claude-otel's prometheus.yaml.j2.
 
 #################################################################################################
 
@@ -103,17 +78,14 @@ scrape_configs:
 #################################################################################################
 
 
-  - job_name: "crowdsec_{{ inventory_hostname }}"
-    scrape_interval: 1m
-    static_configs:
-    - targets: ["crowdsec:6060"]
-      labels:
-        machine: "{{ inventory_hostname }}"
-
-  - job_name: "terraria-stats"
-    scrape_interval: 1m
-    static_configs:
-    - targets: ["terraria-stats:9420"]
+  # crowdsec_{{ inventory_hostname }} job PORTED to the cluster prometheus at Phase E2
+  # (2026-08-12) as `crowdsec_daniel-server` — same reasoning as the blocks above. See
+  # claude-otel's prometheus.yaml.j2.
+  #
+  # terraria-stats job DROPPED at Phase E2 (2026-08-12) — dead, not ported. terraria itself
+  # moved to k3s 2026-08-10; per inventory/host_vars/daniel-server.yml this sidecar "goes dark
+  # until Phase D's Loki step" and has had no live console to read since. Not touching its
+  # containers_list entry (out of this change's scope) — only removing the now-pointless scrape.
 
   # home-assistant job PORTED to the cluster prometheus 2026-08-10 (dashboard triage PG1),
   # after two prior hops (Docker DNS → -k8s route). hass_* consumers query unpinned, so

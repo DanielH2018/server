@@ -339,6 +339,22 @@ containers_list:
     # mid-pull within an hour of cutover, measured 2026-08-06).
   # Slice 2, batch E. Four workloads — the app, headless Chrome, Meilisearch and the time-tagger
   # — which is the largest single service in the slice. Only the app is routed; the other three
+  # Phase E3 (2026-08-12): the dashboard follows its widgets, which already call the
+  # cluster's -k8s monitoring routes. The Docker twin retires after this one verifies.
+  - name: homepage
+    platform: k8s
+    hostname: "homepage{{ k8s_hostname_suffix }}"
+    port: 3000
+    use_authelia: true
+    unsuffixed_hostname: homepage
+  # Phase E4 (2026-08-12): UPS web UI. The nut daemon stays on daniel-server (USB) —
+  # upsd:3493 is LAN-published and DOCKER-USER-scoped to this node already (slice-5 B3).
+  - name: peanut
+    platform: k8s
+    hostname: "peanut{{ k8s_hostname_suffix }}"
+    port: 8080
+    use_authelia: true
+    unsuffixed_hostname: peanut
   # are reached in-cluster by Service name, and those names are load-bearing because karakeep
   # addresses them exactly as it addressed the Compose service keys.
   - name: karakeep

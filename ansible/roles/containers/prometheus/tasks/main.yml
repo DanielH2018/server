@@ -22,6 +22,54 @@
     mode: "0755"
   become: true
 
+# --- Host firewall: lock the LAN-published exporter ports to daniel-box (DOCKER-USER) ---
+# Phase E2 (Prometheus consolidation): node-exporter, cadvisor, promtail, the crowdsec agent and
+# traefik's metrics port all gain a LAN binding below (in their respective compose templates) so
+# the cluster Prometheus can scrape them directly instead of via this instance's remote_write.
+# Docker-published ports bypass ufw, so the lock lives in DOCKER-USER, applied by a systemd
+# oneshot that re-asserts after Docker restarts. Applied BEFORE the container deploys below so
+# there is no window with these ports open to the whole LAN. Mirrors peanut's
+# nut-lan-firewall mechanism; see that script for why the bridge range is also allowed.
+- name: Deploy the Prometheus-exporters LAN firewall script
+  tags: [config]
+  ansible.builtin.template:
+    src: prometheus-exporters-lan-firewall.sh.j2
+    dest: /etc/prometheus-exporters-lan-firewall.sh
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+  register: prometheus_fw_script
+
+- name: Deploy the Prometheus-exporters LAN firewall systemd service
+  tags: [config]
+  ansible.builtin.template:
+    src: prometheus-exporters-lan-firewall.service.j2
+    dest: /etc/systemd/system/prometheus-exporters-lan-firewall.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: prometheus_fw_service
+
+- name: Enable the Prometheus-exporters LAN firewall service
+  tags: [config]
+  ansible.builtin.systemd:
+    name: prometheus-exporters-lan-firewall
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+- name: Re-apply the Prometheus-exporters LAN firewall rules if the script or unit changed
+  tags: [config]
+  ansible.builtin.systemd:
+    name: prometheus-exporters-lan-firewall
+    state: restarted
+    daemon_reload: true
+  become: true
+  when: prometheus_fw_script is changed or prometheus_fw_service is changed
+
 - name: Create prometheus.yml from template
   tags: [config]
   # Embeds the HA long-lived bearer token (prometheus_ha_token) for the /api/prometheus

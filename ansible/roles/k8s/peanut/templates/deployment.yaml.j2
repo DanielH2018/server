@@ -1,0 +1,91 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: peanut
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: peanut
+  template:
+    metadata:
+      labels:
+        app: peanut
+    spec:
+      # No legacy Docker-link env vars for every Service in the namespace. Harmless clutter
+      # here, fatal for Authelia — see that role's deployment for the failure it causes.
+      enableServiceLinks: false
+      # No runAsUser pinned, mirroring littlelink: the compose template sets no `user:` either
+      # (the image's own non-root `node` user is what has been serving this page), so pinning a
+      # UID here would be a behaviour change smuggled in under a platform move. fsGroup is set
+      # instead — it's added as a supplementary group to the container process regardless of
+      # which UID the image actually runs as, which is what makes the /app/config emptyDir
+      # group-writable without knowing that UID. Mirrors the compose template's
+      # `tmpfs: /app/config:mode=1777`, which sidesteps the same unknown-UID problem the other way.
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: peanut
+          image: {{ peanut_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            - name: WEB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: peanut-secrets
+                  key: WEB_USERNAME
+            - name: WEB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: peanut-secrets
+                  key: WEB_PASSWORD
+          volumeMounts:
+            # NUT_SERVERS config — read-only, points at daniel-server's upsd over the LAN.
+            - name: settings
+              mountPath: /config/settings.yml
+              subPath: settings.yml
+              readOnly: true
+            # auth.yaml is regenerated from WEB_USERNAME/WEB_PASSWORD at every boot (absent from
+            # the image, not part of the settings mount above) — the compose template's
+            # `tmpfs: /app/config:mode=1777` equivalent.
+            - name: app-config
+              mountPath: /app/config
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ peanut_k8s_cpu_limit }}"
+              memory: {{ peanut_k8s_mem_limit }}
+            requests:
+              cpu: "{{ peanut_k8s_cpu_request }}"
+              memory: {{ peanut_k8s_mem_request }}
+      volumes:
+        - name: settings
+          secret:
+            secretName: peanut-secrets
+            items:
+              - key: settings.yml
+                path: settings.yml
+        - name: app-config
+          emptyDir: {}
