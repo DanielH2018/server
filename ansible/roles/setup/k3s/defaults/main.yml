@@ -143,6 +143,10 @@ k3s_readonly_crd_api_groups:
 # never share a namespace and a lifecycle rule written for one cannot expire the other's
 # data. Kopia's own snapshots live at the bucket root.
 k3s_longhorn_backup_prefix: longhorn
+# Whether the backup target is armed. false enforces a BLANK target URL - the containment
+# lever for a B2 transaction-cap spiral (see the task comment). Disarmed 2026-08-12 after
+# the fourth cap event; re-arm only after the daily caps are raised to fit the nightly.
+k3s_longhorn_backup_armed: false
 
 # Daily volume backup to that target. 03:30 keeps it clear of the Kopia run and of the daily
 # secret-rotation cron. 14 retained backups per volume is two weeks of daily recovery points

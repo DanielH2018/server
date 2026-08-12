@@ -475,7 +475,13 @@
   when: k3s_longhorn_secret.rc != 0
   changed_when: true
 
-- name: Point Longhorn at the backup target
+# Declarative in BOTH directions: k3s_longhorn_backup_armed=false enforces a BLANK target.
+# It used to arm unconditionally, which silently resurrected a deliberately blanked target
+# on every role run — that re-arm restarted the B2 transaction-cap death spiral twice
+# (2026-08-10 and 2026-08-12; docs/b2-transaction-cap-monitoring-gaps.md). Blanking is the
+# incident lever that stops all backupstore S3 traffic, so a blank must survive deploys
+# until an operator flips the var back.
+- name: Point Longhorn at the backup target (or enforce the blanked target)
   tags: [longhorn_backup]
   ansible.builtin.command:
     cmd: >-
@@ -483,7 +489,7 @@
       --type=merge -p {{ target_patch | quote }}
   vars:
     target_patch: >-
-      {"value":"s3://{{ kopia_b2_bucket }}@{{ k3s_longhorn_b2_region }}/{{ k3s_longhorn_backup_prefix }}"}
+      {"value":"{% if k3s_longhorn_backup_armed | bool %}s3://{{ kopia_b2_bucket }}@{{ k3s_longhorn_b2_region }}/{{ k3s_longhorn_backup_prefix }}{% endif %}"}
   register: k3s_longhorn_target
   become: true
   changed_when: "'no change' not in k3s_longhorn_target.stdout"
