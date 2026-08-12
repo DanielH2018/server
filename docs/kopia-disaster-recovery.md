@@ -1,5 +1,10 @@
 # Kopia Disaster Recovery — bare-metal restore from B2
 
+> **RETIRED 2026-08-13.** The kopia repo was deleted from B2 (slice-7 consolidation;
+> Longhorn owns the backup plane). This procedure can no longer be executed — see
+> [`longhorn-disaster-recovery.md`](longhorn-disaster-recovery.md) for the successor.
+> Kept for the era it describes.
+
 Recover the homelab's container state when **the server is gone** (dead disk, lost host,
 total-loss event). The Kopia repository lives off-site in Backblaze B2, and every
 credential needed to reach it is in SOPS — which is itself DR-closed (the age host keys
