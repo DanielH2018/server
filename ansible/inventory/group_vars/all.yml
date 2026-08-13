@@ -76,6 +76,10 @@ mqtt_k8s_vip: 10.0.0.242
 # wg-easy's WG_DEFAULT_DNS and its own resolv.conf primary (pihole_host_dns_primary) here.
 # Until the router's DHCP DNS option flips, nothing resolves through it.
 dns_k8s_vip: 10.0.0.243
+# Jellyfin's dedicated LAN LoadBalancer VIP (slice 4, B5) — a second path distinct from the
+# Traefik ingress VIP. Global for the same cross-role reason: roles/k8s/jellyfin's
+# service-lan claims it, and roles/k8s/uptime-kuma's VIP port tile probes it.
+jellyfin_k8s_lan_ip: 10.0.0.241
 # Slice-6 B1: shared between roles/k8s/crowdsec (the engine that runs LAPI+AppSec) and
 # roles/k8s/traefik (the bouncer plugin middleware + the log-tailing agent sidecar).
 # Cross-role like mqtt_k8s_vip above — role defaults are invisible across roles.
