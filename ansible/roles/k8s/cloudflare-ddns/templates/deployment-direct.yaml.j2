@@ -36,12 +36,21 @@ spec:
               value: "false"
             - name: IP6_PROVIDER
               value: none
+            # No UPTIMEKUMA_FILE exists upstream (favonia/cloudflare-ddns only has
+            # CLOUDFLARE_API_TOKEN_FILE and SHOUTRRR_FILE), so the token comes from a
+            # secretKeyRef and is composed into the URL via $(...) expansion — the pod spec
+            # then holds a reference, not the token itself.
+            - name: KUMA_PUSH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-ddns
+                  key: kuma_push_token_direct
             - name: UPTIMEKUMA
               # In-cluster Service URL — Kuma is one namespace hop away, so the heartbeat
               # neither leaves the cluster nor depends on edge routing. The old hostAliases
               # pin to daniel-server died with the slice-7 bridge teardown (the Docker
               # edge's forward-bridge router was the path it relied on).
-              value: "http://uptime-kuma:3001/api/push/{{ cloudflare_ddns_direct_push_token }}"
+              value: "http://uptime-kuma:3001/api/push/$(KUMA_PUSH_TOKEN)"
           volumeMounts:
             # /etc, not /run/secrets: this image (scratch-based) lacks the /var/run
             # symlink so the old path happened to work, but the convention guard bans the
