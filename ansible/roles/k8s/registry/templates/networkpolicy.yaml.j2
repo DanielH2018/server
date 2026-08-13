@@ -1,0 +1,93 @@
+---
+# registry has no REGISTRY_AUTH (see deployment.yaml.j2) and its Service has no auth in front of
+# it either — the loopback hostPort only protects the LAN path. Any pod in {{ k8s_namespace }}
+# can currently push or delete images over the ClusterIP, including qbittorrent's and jellyfin's
+# untrusted-input neighbors. This narrows that to the pods that legitimately write here.
+#
+# INGRESS, deliberately — the direction proven enforced on this cluster. Egress policies select
+# pods correctly and block nothing (measured 2026-08-07, sonarr's isolation-probe header); this
+# repeats the same choice prowlarr's flaresolverr policy and n8n's broker policy already made,
+# and netpol-probe-job.yaml.j2 beside this file checks it on every deploy rather than assuming.
+#
+# TWO ADMIT RULES, for two different kinds of traffic:
+#
+#   1. POD-NETWORK PUSHERS — image-builder's build Jobs (any image_builder_name, admitted via
+#      the shared `netpol-role: image-builder` label added in
+#      image-builder/templates/build-job.yaml.j2 for exactly this) and this role's own
+#      selftest-push/selftest-pull Jobs. Ordinary podSelector matching; unremarkable.
+#
+#   2. THE PULL PATH — containerd resolves {{ k8s_registry_pull_host }} (localhost, the loopback
+#      hostPort in deployment.yaml.j2) and is a HOST process, not a pod. That traffic never
+#      carries a pod identity a podSelector could match, so it needs an ipBlock. See the ipBlock
+#      comment below for what is and is not proven about it.
+#
+# WHAT DOES NOT NEED A RULE: the readinessProbe/livenessProbe on this same port. n8n's broker
+# policy left its probed port (5678) open to ALL sources specifically because kube-router's
+# handling of node-sourced probe traffic under a restrictive policy was untested at the time it
+# was written. It is no longer untested: flaresolverr's policy restricts its ONLY port (8191) to
+# `podSelector: {app: prowlarr}` with no exception of any kind, and that pod has run 1/1 Ready
+# for 4 days on readiness+liveness probes over that exact port (checked 2026-08-13). Kubelet
+# probes a pod's IP directly — not through the hostPort/loopback path — and kube-router does not
+# subject that path to ingress enforcement. This policy relies on the same proven behavior rather
+# than re-deriving it, and does not carve out {{ k8s_registry_port }} for probes.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: registry
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: registry
+  policyTypes:
+    - Ingress
+  ingress:
+    # Pod-network pushers: image-builder's build Jobs and this role's own selftest Jobs.
+    - from:
+        - podSelector:
+            matchLabels:
+              netpol-role: image-builder
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - registry-selftest-push
+                  - registry-selftest-pull
+      ports:
+        - protocol: TCP
+          port: {{ k8s_registry_port }}
+    # The PULL path. containerd on daniel-box is a HOST process reaching the pod through the
+    # loopback hostPort (portmap), not a pod on the cluster network — a podSelector cannot admit
+    # it by identity, only an ipBlock by address can.
+    #
+    # PROVEN: `ip -4 addr show cni0` on daniel-box reads 10.42.0.1/24, matching the node's live
+    # podCIDR (`kubectl get node daniel-box -o jsonpath='{.spec.podCIDR}'` = 10.42.0.0/24). That
+    # is the standard hostPort/portmap SNAT target — the address hostPort-forwarded traffic is
+    # rewritten to before it reaches the pod netns, so return traffic routes back through cni0.
+    #
+    # NOT PROVEN, and stated plainly rather than papered over: this repo has no prior
+    # hostPort+NetworkPolicy combination to test against (every other fenced pod in this cluster
+    # is reached over its Service or a normal pod IP, never a hostPort), and applying this policy
+    # for a live test is out of scope for this change (no cluster writes). Three outcomes are
+    # possible after a real deploy, not two:
+    #   (a) this ipBlock is exactly right — the pull succeeds because the source matches;
+    #   (b) the SNAT target is some other address — the pull fails, this ipBlock needs widening;
+    #   (c) hostPort-DNAT'd traffic bypasses kube-router's ingress enforcement entirely, the same
+    #       way kubelet's direct-to-pod-IP probe traffic does (see the probe paragraph above) —
+    #       the pull succeeds, but this ipBlock is inert: neither protecting nor admitting
+    #       anything, and should be deleted so it doesn't read as load-bearing to the next
+    #       person who edits this policy.
+    # registry-selftest-pull-job.yaml.j2 already runs on every deploy and distinguishes (a)/(c)
+    # from (b) for free: (b) fails loudly (`sudo k3s kubectl -n {{ k8s_namespace }} logs
+    # job/registry-selftest-pull` shows an image-pull error). Telling (a) apart from (c) needs
+    # one manual check the selftest can't do on its own — during/after a deploy, on daniel-box:
+    # `sudo conntrack -L 2>/dev/null | grep :{{ k8s_registry_port }}` while a pull is in flight.
+    # If it shows the pod receiving 10.42.0.1, this rule is load-bearing (a). If it shows
+    # something else and the pull still succeeds, this rule is dead (c) — remove it.
+    - from:
+        - ipBlock:
+            cidr: {{ registry_k8s_netpol_cni_gateway }}
+      ports:
+        - protocol: TCP
+          port: {{ k8s_registry_port }}

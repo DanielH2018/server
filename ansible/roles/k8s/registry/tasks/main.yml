@@ -6,6 +6,7 @@
     manifests_service: registry
     manifests_files:
       - pvc.yaml
+      - networkpolicy.yaml
       - deployment.yaml
       - service.yaml
 
@@ -93,3 +94,54 @@
       Registry loop proven: pushed {{ registry_k8s_probe_source }} to
       {{ k8s_registry_push_host }}/{{ registry_k8s_probe_repo }}:probe over the Service, and
       containerd pulled it back as {{ k8s_registry_pull_host }}/{{ registry_k8s_probe_repo }}:probe.
+
+# ── prove the NetworkPolicy, rather than assuming it ────────────────────────────────────────
+# The positive half is already covered by the push/pull selftests above: registry-selftest-push
+# carries the admitted label and its success proves the allow rule works. This is the negative
+# half — a pod the policy does NOT admit must be refused.
+- name: Render the registry netpol-isolation probe
+  tags: [deploy]
+  ansible.builtin.template:
+    src: netpol-probe-job.yaml.j2
+    dest: /etc/rancher/k3s/manifests/registry/netpol-probe-job.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Remove any previous registry netpol-isolation probe
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete job registry-netpol-probe
+      --ignore-not-found --wait=true
+  become: true
+  changed_when: true
+
+- name: Run the registry netpol-isolation probe
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/registry/netpol-probe-job.yaml"
+  become: true
+  changed_when: true
+
+- name: Wait for the registry netpol-isolation probe to finish
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
+      job/registry-netpol-probe --timeout=180s
+  become: true
+  changed_when: false
+  # The Job succeeds only when the connection is REFUSED or times out. A pod with neither
+  # admitted label reaching the registry port fails the Job, and therefore the deploy.
+  register: registry_netpol_probe
+  failed_when: registry_netpol_probe.rc != 0
+
+- name: Report the registry netpol-isolation result
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: >-
+      NetworkPolicy registry verified: a pod with neither netpol-role=image-builder nor an
+      admitted selftest label cannot reach registry:{{ k8s_registry_port }}, and the push/pull
+      selftests above prove the admitted pods can.

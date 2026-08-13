@@ -16,6 +16,11 @@ spec:
     metadata:
       labels:
         app: build-{{ image_builder_name }}
+        # Static, unlike `app` above which is per-image-name (build-n8n, build-code-server, ...).
+        # This is what the registry's NetworkPolicy admits on the push port, so every current
+        # and future caller of this role is covered without that policy having to enumerate
+        # image_builder_name values. See k8s/registry/templates/networkpolicy.yaml.j2.
+        netpol-role: image-builder
     spec:
       # Phase F (2026-08-13): pinned to daniel-box — this image comes from the in-cluster
       # registry, which is a loopback hostPort on that node only; a pod scheduled on
