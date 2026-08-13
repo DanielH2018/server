@@ -24,8 +24,10 @@
       - ingressroute.yaml
       # Must follow middlewares.yaml — it references the `rate-limit` Middleware, which
       # Traefik will not resolve across namespaces.
+      # (ingest-ingressroute retired 2026-08-13 with the D7 forwarder — the collector
+      # DaemonSet gives every node its own loopback hostPort, so nothing ingests over
+      # the LAN anymore.)
       - prometheus-ingressroute.yaml
-      - ingest-ingressroute.yaml
     manifests_secret_files:
       - grafana-secret.yaml
       - scrape-credentials-secret.yaml
@@ -44,19 +46,23 @@
   # `rollout restart` races the initial rollout.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_observability_namespace }} rollout restart deploy/{{ item }}
+      k3s kubectl -n {{ k8s_observability_namespace }}
+      rollout restart {{ item.kind }}/{{ item.name }}
   loop:
-    - loki
-    - prometheus
-    - kube-state-metrics
-    - tempo
-    - otel-collector
-    - grafana
+    # otel-collector is a DaemonSet since the Phase F drain (per-node loopback OTLP).
+    - { kind: deploy, name: loki }
+    - { kind: deploy, name: prometheus }
+    - { kind: deploy, name: kube-state-metrics }
+    - { kind: deploy, name: tempo }
+    - { kind: daemonset, name: otel-collector }
+    - { kind: deploy, name: grafana }
+  loop_control:
+    label: "{{ item.name }}"
   become: true
   changed_when: true
   when:
     - manifests_render is changed or manifests_secret_render is changed
-    - not manifests_apply.stdout is search('deployment.apps/' ~ item ~ ' created')
+    - not manifests_apply.stdout is search('\.apps/' ~ item.name ~ ' created')
 
 - name: Wait for the telemetry workloads to roll out
   tags: [deploy]
@@ -66,14 +72,16 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_observability_namespace }} rollout status
-      deploy/{{ item }} --timeout=300s
+      {{ item.kind }}/{{ item.name }} --timeout=300s
   loop:
-    - loki
-    - prometheus
-    - kube-state-metrics
-    - tempo
-    - otel-collector
-    - grafana
+    - { kind: deploy, name: loki }
+    - { kind: deploy, name: prometheus }
+    - { kind: deploy, name: kube-state-metrics }
+    - { kind: deploy, name: tempo }
+    - { kind: daemonset, name: otel-collector }
+    - { kind: deploy, name: grafana }
+  loop_control:
+    label: "{{ item.name }}"
   become: true
   changed_when: false
 
@@ -132,7 +140,7 @@
   # and responses verbatim to the whole LAN. Assert it rather than trust the manifest.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_observability_namespace }} get deploy otel-collector
+      k3s kubectl -n {{ k8s_observability_namespace }} get daemonset otel-collector
       -o jsonpath={.spec.template.spec.containers[0].ports[0].hostIP}
   register: claude_otel_bind
   become: true

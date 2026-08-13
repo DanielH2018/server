@@ -64,19 +64,16 @@ data:
           exporters: [otlp/tempo]
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: otel-collector
   namespace: {{ k8s_observability_namespace }}
 spec:
-  replicas: 1
-  strategy:
-    # Recreate, not RollingUpdate. hostPort is a NODE-level exclusive resource: under a
-    # rolling update the new pod cannot bind 4317 while the old one holds it, so it sits
-    # Pending forever and the old pod never terminates — a deadlock that leaves the previous
-    # config serving indefinitely while the deploy reports a stuck rollout. Same reasoning as
-    # the ReadWriteOnce PVCs on loki/prometheus, different exclusive resource.
-    type: Recreate
+  # A DaemonSet since the Phase F drain (2026-08-13): every node carries its own
+  # loopback OTLP listener, so a host's Claude Code always exports to 127.0.0.1:4317
+  # locally — the property the Docker forwarder + ingest route existed to fake for
+  # daniel-server. DaemonSet updates are delete-then-create per node, so the hostPort
+  # deadlock that forced the old Deployment's Recreate strategy cannot occur.
   selector:
     matchLabels:
       app: otel-collector
@@ -136,9 +133,6 @@ spec:
     - name: self-metrics
       port: 8888
       targetPort: 8888
-    # D7 forwarder seam: the ingest IngressRoute targets this port so daniel-server's
-    # Docker collector can chain into this one. In-cluster nothing else uses it — local
-    # sessions still enter via the loopback hostPort.
-    - name: otlp-grpc
-      port: {{ claude_otel_otlp_port }}
-      targetPort: {{ claude_otel_otlp_port }}
+    # (The D7 forwarder seam — an otlp-grpc Service port for the ingest IngressRoute —
+    # dissolved 2026-08-13 with the DaemonSet conversion: every node has its own
+    # loopback hostPort now, so nothing enters over the LAN.)

@@ -195,15 +195,11 @@ containers_list:
   # Grafana Tempo datasource, the loki derivedFields link, and the AI/claude-code board
   # retired with it (the cluster claude-otel Grafana carries the live board; the Docker
   # prometheus TSDB keeps pre-D7 claude metrics until retention ages them out).
-  - name: otel-collector
-    port: false
-    use_authelia: false
-    networks:
-      # Since D7 (2026-08-10) a pure forwarder: everything received on host-loopback 4317
-      # chains to the cluster claude-otel collector over its ClientIP-gated ingest route.
-      # Nothing local consumes it anymore — `monitoring` is kept only for the :13133
-      # health endpoint (ad-hoc checks). Dissolves at the Phase F join.
-      - monitoring
+  # otel-collector DISSOLVED 2026-08-13 (Phase F drain): the cluster collector became a
+  # DaemonSet, so this host's Claude Code exports to its OWN node's loopback hostPort
+  # 4317 — the exact seam the D7 forwarder faked. The ClientIP-gated ingest route retired
+  # with it (nothing ingests over the LAN). Role archived at
+  # roles/containers/archive/otel-collector.
   # glances retired 2026-08-09 (slice-7 Phase B dissolve): node-exporter + cAdvisor already
   # feed the same host metrics to Prometheus/Grafana, so this was a second, unscraped copy
   # of data the monitoring plane owns. Homepage's glances-widget Monitoring section went

@@ -20,15 +20,42 @@ data:
           - targets: ['localhost:9090']
       # The collector re-exposes Claude Code's OTLP metrics here. This is the only source of
       # session/token/cost data — nothing else produces it.
+      #
+      # PER-POD discovery, not the Service, since the DaemonSet conversion (Phase F drain,
+      # 2026-08-13): each collector pod exports only the metrics ITS node received, so a
+      # Service-target scrape would round-robin between partial views and corrupt every
+      # counter. The job names stay — dashboards and monitor-bridge pin them.
       - job_name: otel-collector
-        static_configs:
-          - targets: ['otel-collector:8889']
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [{{ k8s_observability_namespace }}]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: otel-collector
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            regex: "8889"
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
       # The collector's OWN metrics, on a different port. These carry the send_failed_*
       # counters that are the only evidence a batch was dropped en route to Loki. Without
       # this scrape a silent export failure is indistinguishable from "Claude Code was idle".
       - job_name: otel-collector-internal
-        static_configs:
-          - targets: ['otel-collector:8888']
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [{{ k8s_observability_namespace }}]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: otel-collector
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            regex: "8888"
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
       # Workload readiness for every Pod/Deployment in the cluster (slice 3, D8). This is what
       # gives the seven previously-unmonitorable workloads a health signal at all — see the
       # header of kube-state-metrics.yaml.j2.

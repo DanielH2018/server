@@ -263,9 +263,11 @@ PROM_ORIGIN = _env(
 # 2026-08-13 Docker loki cut changed none of them — promtail STAYS a Docker-host tailer until
 # the Phase F join (KL2), so its 9102 scrape and this floor of 4 hold until F drops it to 3.
 TARGETS_MIN = int(_env("TARGETS_MIN", "4"))
-# Same floor idea for the cluster's own scrape targets (see check_cluster_targets). It runs five —
-# prometheus, otel-collector, otel-collector-internal, kube-state-metrics, kubernetes-cadvisor —
-# so 3 tolerates a deliberate removal without ever mistaking an empty vector for a clean one.
+# Same floor idea for the cluster's own scrape targets (see check_cluster_targets). Since the
+# otel-collector became a DaemonSet (Phase F drain, 2026-08-13) its two jobs are per-POD —
+# one target per node each — so the set is seven: prometheus, 2x otel-collector,
+# 2x otel-collector-internal, kube-state-metrics, kubernetes-cadvisor. 3 still tolerates a
+# deliberate removal without ever mistaking an empty vector for a clean one.
 CLUSTER_TARGETS_MIN = int(_env("CLUSTER_TARGETS_MIN", "3"))
 
 

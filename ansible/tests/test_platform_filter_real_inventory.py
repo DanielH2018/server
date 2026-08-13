@@ -123,7 +123,9 @@ def test_daniel_server_is_still_wholly_docker():
     # the demoted CrowdSec agent (auth.log/SSH), just no edge container behind it anymore.
     # Then 10: scrutiny's collector spoke retired 2026-08-13 — the Phase F drain's first
     # workload, taken by the collector DaemonSet the moment the join put a kubelet on this
-    # host (the daniel-box pin came off with it).
-    assert len(containers) == 10
-    assert len(filter_by_platform(containers, "docker")) == 10
+    # host (the daniel-box pin came off with it). Then 9: the otel-collector forwarder
+    # DISSOLVED the same day — the cluster collector became a DaemonSet, giving this host
+    # its own loopback OTLP hostPort, which is the seam the D7 forwarder existed to fake.
+    assert len(containers) == 9
+    assert len(filter_by_platform(containers, "docker")) == 9
     assert filter_by_platform(containers, "k8s") == []
