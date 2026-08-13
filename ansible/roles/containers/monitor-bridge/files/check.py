@@ -293,6 +293,14 @@ def origin_sel(*matchers):
 # ClusterRole is deliberately scoped, so dropping `apps` from it would take every deployment series
 # away while the pod stays up and Ready.
 K8S_MIN_WORKLOADS = int(_env("K8S_MIN_WORKLOADS", "5"))
+# Same fail-closed reasoning as K8S_MIN_WORKLOADS, for the DaemonSet series
+# (kube_daemonset_status_number_unavailable) instead of the Deployment one — a DaemonSet's
+# absent/unschedulable pod has no Deployment-arm equivalent, so it was invisible until this
+# arm existed. The nine DaemonSets running as of 2026-08-13: otel-collector, promtail,
+# scrutiny-collector, crowdsec-node-agent, dri-device-plugin, engine-image-*,
+# longhorn-csi-plugin, longhorn-manager, speaker. Bump this floor (and the comment) when a
+# DaemonSet is added or retired — same discipline as K8S_MIN_WORKLOADS.
+K8S_MIN_DAEMONSETS = int(_env("K8S_MIN_DAEMONSETS", "9"))
 # Crash-loop arm of the workload check: pods whose restart counter climbed more than
 # K8S_RESTART_MAX inside K8S_RESTART_WINDOW page even while readiness flaps green
 # (CrashLoopBackOff passes probes briefly each backoff cycle — the 2026-08-13 homepage
@@ -1906,7 +1914,15 @@ def check_b2_reachable():
     return b2_reachable()
 
 
-def k8s_workloads_verdict(total, offenders, min_workloads, restart_offenders=()):
+def k8s_workloads_verdict(
+    total,
+    offenders,
+    min_workloads,
+    restart_offenders=(),
+    ds_total=None,
+    ds_offenders=(),
+    min_daemonsets=None,
+):
     """Pure: (ok, msg) from the deployment-series COUNT and the unavailable-replica offenders.
 
     The count argument is what makes this fail closed. `unavailable > 0` returning nothing is
@@ -1919,6 +1935,13 @@ def k8s_workloads_verdict(total, offenders, min_workloads, restart_offenders=())
     HTTP tile both mostly read healthy — homepage crash-looped 31 times overnight with this
     check green. A restart counter that climbed past the threshold is down regardless of what
     readiness says right now.
+
+    ds_total/ds_offenders/min_daemonsets are the DaemonSet arm (2026-08-13): a DaemonSet has no
+    Deployment-arm equivalent, so an absent or unschedulable DS pod (a node NotReady, a
+    node-selector mismatch, a node lacking a required resource) was invisible. Same fail-closed
+    shape as the deployment arm; min_daemonsets left None means the caller didn't supply
+    DaemonSet data (existing callers/tests), so this arm is skipped rather than treated as zero
+    DaemonSets.
     """
     if total is None:
         return False, (
@@ -1931,6 +1954,18 @@ def k8s_workloads_verdict(total, offenders, min_workloads, restart_offenders=())
             "kube-state-metrics is partially loaded, so workload health is UNKNOWN, not OK"
             % (int(total), min_workloads)
         )
+    if min_daemonsets is not None:
+        if ds_total is None:
+            return False, (
+                "kube_daemonset_status_number_unavailable is absent from the cluster Prometheus "
+                "— kube-state-metrics is not being scraped, so daemonset health is UNKNOWN, not OK"
+            )
+        if ds_total < min_daemonsets:
+            return False, (
+                "only %d daemonset series in the cluster Prometheus, below the floor of %d — "
+                "kube-state-metrics is partially loaded, so daemonset health is UNKNOWN, not OK"
+                % (int(ds_total), min_daemonsets)
+            )
     if offenders:
         named = ", ".join(
             "%s(%d)" % (labels.get("deployment", "?"), int(value))
@@ -1939,6 +1974,14 @@ def k8s_workloads_verdict(total, offenders, min_workloads, restart_offenders=())
             )
         )
         return False, "k8s workloads with unavailable replicas: %s" % named
+    if ds_offenders:
+        named = ", ".join(
+            "%s(%d)" % (labels.get("daemonset", "?"), int(value))
+            for labels, value in sorted(
+                ds_offenders, key=lambda o: o[0].get("daemonset", "")
+            )
+        )
+        return False, "k8s daemonsets with unavailable pods: %s" % named
     if restart_offenders:
         named = ", ".join(
             "%s(%d)" % (labels.get("pod", "?"), int(value))
@@ -1975,7 +2018,25 @@ def check_k8s_workloads():
         base=CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    return k8s_workloads_verdict(total, offenders, K8S_MIN_WORKLOADS, restart_offenders)
+    ds_total = prom_scalar(
+        "count(kube_daemonset_status_number_unavailable)",
+        base=CLUSTER_PROM_URL,
+        source="cluster prometheus",
+    )
+    ds_offenders = prom_vector(
+        "kube_daemonset_status_number_unavailable > 0",
+        base=CLUSTER_PROM_URL,
+        source="cluster prometheus",
+    )
+    return k8s_workloads_verdict(
+        total,
+        offenders,
+        K8S_MIN_WORKLOADS,
+        restart_offenders,
+        ds_total,
+        ds_offenders,
+        K8S_MIN_DAEMONSETS,
+    )
 
 
 def check_cluster_targets():

@@ -47,6 +47,13 @@ spec:
               readOnly: true
             - name: crowdsec-etc
               mountPath: /etc/crowdsec
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
       containers:
         - name: crowdsec-agent
           image: {{ crowdsec_k8s_image }}

@@ -49,6 +49,13 @@ spec:
               readOnly: true
             - name: config
               mountPath: /config
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
       containers:
         - name: mosquitto
           image: {{ mosquitto_k8s_image }}

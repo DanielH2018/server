@@ -71,6 +71,13 @@ spec:
             # here on the first rollout). Created uid-1000-owned so Authelia can write it.
             - name: authelia-logs
               mountPath: /var/log/authelia
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
       containers:
         - name: authelia
           image: {{ authelia_k8s_image }}

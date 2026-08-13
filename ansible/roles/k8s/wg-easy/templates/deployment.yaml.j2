@@ -54,6 +54,13 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /etc/wireguard
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
       containers:
         - name: wg-easy
           image: {{ wg_easy_k8s_image }}

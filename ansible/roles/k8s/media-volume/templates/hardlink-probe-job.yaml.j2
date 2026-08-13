@@ -20,6 +20,9 @@ spec:
   # No retries: a second attempt of a deterministic filesystem test tells you nothing the
   # first did not, and it would mask which run produced the log being read.
   backoffLimit: 0
+  # Backstop cleanup: the deploy task always deletes this Job before re-applying it, but a day's
+  # TTL means a completed Job doesn't sit around indefinitely if that step is ever skipped.
+  ttlSecondsAfterFinished: 86400
   template:
     spec:
       restartPolicy: Never

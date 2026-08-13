@@ -41,6 +41,13 @@ spec:
             capabilities:
               drop:
                 - ALL
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
       containers:
         - name: n8n-runners
           image: {{ n8n_k8s_runners_image }}

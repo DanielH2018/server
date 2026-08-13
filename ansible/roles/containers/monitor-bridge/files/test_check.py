@@ -1946,6 +1946,35 @@ def test_k8s_workloads_unavailable_replicas_outrank_the_restart_arm():
     assert "unavailable replicas" in msg
 
 
+def test_k8s_daemonsets_absent_series_is_down_not_up():
+    # Same fail-closed shape as the deployment arm: an absent DaemonSet series is UNKNOWN,
+    # not "no DaemonSets have a problem".
+    ok, msg = check.k8s_workloads_verdict(18, [], 5, ds_total=None, min_daemonsets=9)
+    assert ok is False
+    assert "UNKNOWN" in msg
+
+
+def test_k8s_daemonsets_partial_series_is_down():
+    ok, msg = check.k8s_workloads_verdict(18, [], 5, ds_total=3, min_daemonsets=9)
+    assert ok is False
+    assert "below the floor" in msg
+
+
+def test_k8s_daemonsets_names_the_offenders():
+    ds_offenders = [({"daemonset": "otel-collector"}, 1.0)]
+    ok, msg = check.k8s_workloads_verdict(
+        18, [], 5, ds_total=9, ds_offenders=ds_offenders, min_daemonsets=9
+    )
+    assert ok is False
+    assert "otel-collector(1)" in msg
+
+
+def test_k8s_daemonsets_healthy_alongside_healthy_deployments():
+    ok, msg = check.k8s_workloads_verdict(18, [], 5, ds_total=9, min_daemonsets=9)
+    assert ok is True
+    assert "18 k8s workloads healthy" == msg
+
+
 # --- estate pinning once one Prometheus holds two estates (slice 3, B5) ------
 
 

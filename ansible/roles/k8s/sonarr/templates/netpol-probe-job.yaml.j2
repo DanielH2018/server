@@ -27,6 +27,8 @@ metadata:
 spec:
   activeDeadlineSeconds: 120
   backoffLimit: 0
+  # Backstop cleanup: a day's TTL means a completed Job doesn't sit around indefinitely.
+  ttlSecondsAfterFinished: 86400
   template:
     metadata:
       labels:

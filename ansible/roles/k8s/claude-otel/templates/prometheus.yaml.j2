@@ -176,6 +176,28 @@ data:
       # edge. The bare `traefik` job name retires with it — the cluster edge stays
       # `traefik-k8s`, and monitor-bridge's traefik/cert checks are unpinned so they
       # now read that edge's series alone.
+      # First Longhorn scrape (2026-08-13): volume robustness/fullness and node storage
+      # headroom have had no series at all until now. Check-arm wiring comes later.
+      - job_name: longhorn
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['longhorn-backend.longhorn-system.svc:9500']
+      # This stack's OWN Loki/Tempo internals, distinct from the loki-homelab job above
+      # (that one is the general-purpose homelab log store). instance_role separates the
+      # two so a dashboard/alert query doesn't accidentally blend claude-otel's internal
+      # health series with the homelab's.
+      - job_name: loki-internal
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['loki.{{ k8s_observability_namespace }}.svc:3100']
+            labels:
+              instance_role: observability
+      - job_name: tempo-internal
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['tempo.{{ k8s_observability_namespace }}.svc:3200']
+            labels:
+              instance_role: observability
       # Per-pod CPU/memory from each kubelet's cAdvisor, reached through the API server proxy
       # rather than the kubelet's own :10250. The proxy path needs only nodes/proxy RBAC and no
       # kubelet client certificate, which is why it is the usual choice for a single-node k3s.

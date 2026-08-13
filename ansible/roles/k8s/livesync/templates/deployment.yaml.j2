@@ -41,6 +41,13 @@ spec:
               mountPath: /config
             - name: local-d
               mountPath: /opt/couchdb/etc/local.d
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
       containers:
         - name: couchdb
           image: {{ livesync_k8s_image }}
