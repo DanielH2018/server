@@ -23,8 +23,11 @@
 #
 # LAN-ONLY, and unlike the shared ingressroute() macro this does NOT honour k8s_public_route.
 # That is intentional: when slice 6 flips that flag for the app routes, this one must not follow
-# them onto the public internet. There is no authentication in front of it — the guard is that
-# the hostname resolves only on the LAN and the paths are read-only.
+# them onto the public internet. There is no authentication in front of it. Since 2026-08-13
+# the read rule also carries ClientIP({{ lan_subnet }}) — deliberately the whole LAN, not a
+# host pin (operator decision: any LAN computer may query), but pods (10.42/16) and WireGuard
+# peers (10.8/24) present their real source IPs here and are excluded, closing the two
+# non-LAN populations that could otherwise read infra topology and Claude Code usage metrics.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -35,7 +38,7 @@ spec:
     - https
   routes:
     - kind: Rule
-      match: "Host(`prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}`) && PathPrefix(`/api/v1/query`)"
+      match: "Host(`prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}`) && PathPrefix(`/api/v1/query`) && ClientIP(`{{ lan_subnet }}`)"
       middlewares:
         - name: rate-limit
       services:

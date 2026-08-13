@@ -18,6 +18,8 @@ spec:
       labels:
         app: traefik
     spec:
+      # Edge/auth/DNS eviction ordering — see setup/k3s templates/priorityclass.yaml.j2.
+      priorityClassName: homelab-critical
       serviceAccountName: traefik-ingress-controller
       # No legacy Docker-link env vars for every Service in the namespace. Harmless clutter
       # here, fatal for Authelia — see that role's deployment for the failure it causes.

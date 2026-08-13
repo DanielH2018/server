@@ -1,0 +1,41 @@
+---
+# Homepage's cluster identity, added with the kubernetes info widget (see kubernetes.yaml.j2).
+# Before this the pod ran as the namespace `default` ServiceAccount, which holds nothing — the
+# widget's failure mode with no permissions is an EMPTY TILE, not an error, so the missing
+# binding would have looked like "the cluster reports no metrics".
+#
+# Narrower than headlamp's: homepage only ever reads node/pod shape and their metrics, and
+# renders no resource detail. It does not need `view`.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: homepage
+  namespace: {{ k8s_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: homepage-read
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, nodes]
+    verbs: [get, list]
+  # Ingress/IngressRoute reads back homepage's own service-discovery feature, which this
+  # homelab deliberately leaves off (kubernetes.yaml.j2 sets no `ingress:`/`traefik:` keys) —
+  # every tile is hand-authored in services.yaml. Omitted rather than granted-and-unused.
+  - apiGroups: [metrics.k8s.io]
+    resources: [nodes, pods]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: homepage-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: homepage-read
+subjects:
+  - kind: ServiceAccount
+    name: homepage
+    namespace: {{ k8s_namespace }}

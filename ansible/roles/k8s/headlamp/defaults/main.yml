@@ -1,0 +1,24 @@
+---
+# Tag KEPT alongside the digest (repo:tag@sha256) so Renovate's k8s-defaults manager still
+# tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
+headlamp_k8s_image: ghcr.io/headlamp-k8s/headlamp:v0.44.0@sha256:b491653c1a0d380b70b67a4024f1204591f9c84a68ee567778d53d28b1856168
+headlamp_k8s_cpu_limit: "500m"
+headlamp_k8s_mem_limit: 256Mi
+headlamp_k8s_cpu_request: "20m"
+headlamp_k8s_mem_request: 64Mi
+# The upstream image's uid/gid (charts/headlamp/templates/deployment.yaml runs 100:101).
+headlamp_k8s_uid: 100
+headlamp_k8s_gid: 101
+# How long a browser session survives before Headlamp re-reads the ServiceAccount token.
+headlamp_k8s_session_ttl: 86400
+# CRD groups the built-in `view` ClusterRole cannot cover — nothing aggregates into `view`,
+# so a group missing here degrades silently: the UI loads, that one resource list is empty,
+# and it reads as "the cluster has none of those". Mirrors k3s_readonly_crd_api_groups
+# (roles/setup/k3s/defaults) plus the two k3s-internal groups a cluster UI wants to show;
+# that var is a different role's default and is not in scope for the k8s deploy play.
+headlamp_k8s_crd_api_groups:
+  - traefik.io
+  - metallb.io
+  - longhorn.io
+  - helm.cattle.io
+  - k3s.cattle.io

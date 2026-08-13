@@ -75,6 +75,21 @@
                 key: {{ nut_ups_name | default('apc-ups') }}
                 username: {{ peanut_username }}
                 password: {{ peanut_password }}
+        - Headlamp:
+            icon: kubernetes.png
+            href: https://headlamp{{ k8s_hostname_suffix }}.{{ domain }}/
+            description: Cluster UI
+            # k8s-only tile, and the one place this fork diverges from the Docker template
+            # beyond the documented server/container drop: Headlamp has no Docker twin, and
+            # namespace/podSelector are meaningless to a Docker homepage. It also has no
+            # service widget of its own — these two keys are homepage's built-in pod stats
+            # (CPU/memory), which need kubernetes.yaml's `mode: cluster`.
+            #
+            # podSelector rather than `app:`: homepage's `app:` key expands to the label
+            # selector app.kubernetes.io/name=<value>, and this homelab labels its pods with
+            # the plain `app` key instead. `app: headlamp` would match nothing and render blank.
+            namespace: {{ k8s_namespace }}
+            podSelector: app=headlamp
         - Home Assistant:
             icon: home-assistant.png
             href: https://home-assistant.{{ domain }}/

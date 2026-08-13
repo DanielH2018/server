@@ -97,7 +97,7 @@ def yaml_error(rendered: str) -> str | None:
     outer YAML would miss precisely the indentation bugs that matter most here.
     """
     try:
-        docs = list(yaml.safe_load_all(rendered))
+        docs = list(yaml.load_all(rendered, Loader=_StrictKeyLoader))  # noqa: S506 — SafeLoader subclass
     except yaml.YAMLError as exc:
         return f"invalid YAML: {exc}"
 
@@ -115,7 +115,33 @@ def yaml_error(rendered: str) -> str | None:
     return None
 
 
-class _AppTagLoader(yaml.SafeLoader):
+class _StrictKeyLoader(yaml.SafeLoader):
+    """SafeLoader that rejects a duplicate mapping key instead of letting the last one win.
+
+    Plain YAML treats a repeated key as an overwrite: the document stays valid, kubectl
+    applies it, and only the final value takes effect. That is how homepage ended up with
+    both `automountServiceAccountToken: true` (needed by its kubernetes widget) and a
+    `false` inherited from the estate-wide 02e9cfac sweep in one pod spec — the widget would
+    have gone dark with every check green. A rebase or a merge that lands two edits in the
+    same block is the way this arrives, so it needs catching at render time, not by reading.
+    """
+
+    def construct_mapping(self, node, deep=False):
+        seen = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in seen:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    f"duplicate key {key!r} — the later value silently wins",
+                    key_node.start_mark,
+                )
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
+class _AppTagLoader(_StrictKeyLoader):
     """SafeLoader that tolerates application-defined tags in EMBEDDED config (home-assistant's
     configuration.yaml uses ``!include``/``!secret``). The structure is still fully parsed —
     only the tag resolves to a placeholder. HA's own files get deep validation from
