@@ -207,3 +207,19 @@ def allowed_hosts_and_origins(public_host: str) -> tuple[list[str], list[str]]:
     hosts = [public_host, "127.0.0.1:8000", "localhost:8000"]
     origins = [f"https://{public_host}"]
     return hosts, origins
+
+
+def docker_base_or_raise(url: str) -> str:
+    """The docker-proxy base URL, or a clear error while the container tools are dark.
+
+    Empty since the k8s rehome: the cluster is deliberately barred from the Docker
+    socket (Security M1), so an unreachable-host traceback would misread as an outage.
+    The Phase G cluster-API successor replaces these tools; until then the error says so.
+    """
+    if not url:
+        raise RuntimeError(
+            "container tools are dark: the Docker plane retired and the cluster "
+            "cannot reach a docker-proxy (Security M1); use kubectl for cluster "
+            "workloads until the Phase G cluster-API successor"
+        )
+    return url

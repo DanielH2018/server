@@ -358,6 +358,14 @@ containers_list:
     port: 8080
     use_authelia: true
     unsuffixed_hostname: peanut
+  # Phase E (2026-08-13): read-only MCP server, the Docker edge's last routed tenant.
+  # No hostname/ingressroute — its bearer-token router lives in the edge gate Secret
+  # (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2), matching only
+  # mcp.local.<domain>, so no dnsmasq override or public router may exist for it.
+  - name: homelab-mcp
+    platform: k8s
+    port: 8000
+    use_authelia: false
   # are reached in-cluster by Service name, and those names are load-bearing because karakeep
   # addresses them exactly as it addressed the Compose service keys.
   - name: karakeep

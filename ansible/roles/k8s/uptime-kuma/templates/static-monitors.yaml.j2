@@ -83,6 +83,12 @@ stringData:
     {"type": "http", "name": "k3s peanut", "url": "https://peanut{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   grafana-k8s.json: |
     {"type": "http", "name": "k3s Grafana", "url": "https://grafana{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # Tokenless probe of the mcp gate: a request without the bearer matches no router and
+  # the edge itself answers 404 — that 404 IS the healthy signal (same shape as the
+  # livesync probe's expected 401). Edge-down/DNS breakage still fails the tile; a dead
+  # pod behind a live gate surfaces on k3s Workload Health instead.
+  homelab-mcp-k8s.json: |
+    {"type": "http", "name": "k3s homelab-mcp (edge gate)", "url": "https://mcp.local.{{ domain }}/mcp", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["404"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   home-assistant-k8s.json: |
     {"type": "http", "name": "k3s Home Assistant", "url": "https://home-assistant{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Transcribed 2026-08-10 (Phase D.2 step 3): id `loki` was the grafana compose's

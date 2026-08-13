@@ -6,6 +6,7 @@ from safe_reads import (
     allowed_hosts_and_origins,
     bearer_token_valid,
     container_ref_valid,
+    docker_base_or_raise,
     entity_id_valid,
     loki_range_params,
     parse_loki,
@@ -327,3 +328,14 @@ def test_loki_range_params_accepts_fractional_hours():
 def test_loki_range_params_rejects_nonpositive_hours(hours):
     with pytest.raises(ValueError):
         loki_range_params("{}", 1, hours, 1_700_000_000.0)
+
+
+def test_docker_base_raises_a_named_error_while_dark():
+    with pytest.raises(RuntimeError, match="container tools are dark"):
+        docker_base_or_raise("")
+
+
+def test_docker_base_passes_through_when_configured():
+    assert (
+        docker_base_or_raise("http://docker-proxy:2375") == "http://docker-proxy:2375"
+    )

@@ -1,0 +1,11 @@
+---
+# Built in-cluster by k8s/image-builder (same rolling tier as n8n/code-server:
+# imagePullPolicy Always + build-on-deploy replaces the Docker role's Sunday
+# rebuild cron for base refreshes).
+homelab_mcp_k8s_image: "{{ k8s_registry_pull_host }}/homelab-mcp:latest"
+
+# Carried over from the compose template's resources() caps.
+homelab_mcp_k8s_cpu_limit: 500m
+homelab_mcp_k8s_mem_limit: 256Mi
+homelab_mcp_k8s_cpu_request: 50m
+homelab_mcp_k8s_mem_request: 32Mi

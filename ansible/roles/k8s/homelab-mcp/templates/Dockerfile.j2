@@ -1,0 +1,10 @@
+FROM python:3.14-slim
+WORKDIR /app
+# mcp pinned <2: 2.0.0 (picked up by the 2026-08-09 Sunday rebuild, Docker era) removed
+# mcp.server.fastmcp and crash-looped the container. Lift the pin only with an
+# app.py port to the 2.x API.
+RUN pip install --no-cache-dir 'mcp<2' httpx uvicorn
+# Flat COPY (the Docker role's compose build used app/): image-builder mounts its
+# ConfigMap context at the root and ConfigMap keys cannot contain '/'.
+COPY app.py safe_reads.py ./
+CMD ["python", "app.py"]

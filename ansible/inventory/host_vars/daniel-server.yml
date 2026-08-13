@@ -223,23 +223,12 @@ containers_list:
     use_authelia: false
     networks:
       - monitoring
-  - name: homelab-mcp
-    port: 8000
-    # No public Host rule ANYWHERE: the route is hand-written in the traefik role's file
-    # provider, matches only mcp.local.<domain> + the bearer header, and slice-6 B4's
-    # reverse bridge skips entries carrying this key so the cluster edge never grows a
-    # public router for it either.
-    public_route: false
-    # Read-only MCP server exposing live state to Claude Code (LAN-only, token-gated at
-    # Traefik + re-checked in-app). No Authelia — a headless MCP client can't pass 2FA.
-    # networks: proxy (Traefik reaches the token-gated route), monitoring (prometheus +
-    # loki + uptime-kuma + scrutiny + docker-proxy), apps (home-assistant:8123 for the
-    # ha_state tool — same precedent as monitor-bridge/prometheus joining apps for HA).
-    use_authelia: false
-    networks:
-      - proxy
-      - monitoring
-      - apps
+  # homelab-mcp REHOMED to k8s 2026-08-13 (Phase E close — it was the Docker edge's last
+  # routed tenant, and had been dark since BT3 pointed the .local wildcard at the k8s VIP
+  # where nothing routed mcp.local). Its bearer-token router now lives in the k8s edge's
+  # gate Secret; container tools are deliberately dark there (Security M1) until the
+  # Phase G cluster-API successor. Role in roles/containers/archive/; app source moved to
+  # roles/k8s/homelab-mcp/files/.
   # ARCHIVED 2026-07-19 — happy mothballed: containers removed, live PGlite+blob data
   # deleted, daemon timer disabled + redeploy cron removed on the host. Retained for revival:
   # the role, the traefik happy/happy-webapp routes, the SOPS handy_master_secret, and the

@@ -115,10 +115,11 @@ def test_docker_edge_renders_no_bridge_machinery():
     )
 
 
-def test_livesync_gate_serves_all_five_routers():
-    """The gate must render: a token router and an Authelia'd /_utils carve-out per name
-    form, plus the LAN-only probe router — and every router must reach the CouchDB
-    service. Losing the token predicate on a sync router would forward PAST the gate."""
+def test_gate_serves_every_token_router():
+    """The gate must render: a token router and an Authelia'd /_utils carve-out per
+    livesync name form, the LAN-only probe router, and homelab-mcp's bearer router — and
+    every router must reach its service. Losing a token predicate would forward PAST the
+    gate."""
     gate = _gate_config()
     routers = gate["http"]["routers"]
     services = gate["http"]["services"]
@@ -128,6 +129,7 @@ def test_livesync_gate_serves_all_five_routers():
         "livesync-utils-public",
         "livesync-utils-local",
         "livesync-probe",
+        "homelab-mcp-local",
     }
     assert set(routers) == expected, f"gate routers drifted: {sorted(routers)}"
     for name, router in routers.items():
@@ -143,6 +145,13 @@ def test_livesync_gate_serves_all_five_routers():
     # The probe stays LAN-only by construction: .local host, no public sibling.
     assert ".local." in routers["livesync-probe"]["rule"]
     assert f"Host(`livesync.{DOMAIN}`)" not in routers["livesync-probe"]["rule"]
+    # mcp: LAN-only AND bearer-gated — either predicate alone is a regression.
+    mcp_rule = routers["homelab-mcp-local"]["rule"]
+    assert f"Host(`mcp.local.{DOMAIN}`)" in mcp_rule
+    assert "Header(`Authorization`" in mcp_rule, (
+        "homelab-mcp-local lost the bearer predicate — the gate would forward ungated"
+    )
+    assert f"Host(`mcp.{DOMAIN}`)" not in mcp_rule
 
 
 def test_gate_stays_out_of_crd_objects():

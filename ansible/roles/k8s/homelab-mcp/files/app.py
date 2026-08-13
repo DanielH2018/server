@@ -29,7 +29,10 @@ TOKEN = os.environ.get("HOMELAB_MCP_TOKEN", "")
 HA_TOKEN = os.environ.get("HOMELAB_HA_TOKEN", "")
 PROMETHEUS = os.environ.get("PROMETHEUS_URL", "http://prometheus:9090")
 LOKI = os.environ.get("LOKI_URL", "http://loki:3100")
-DOCKER_PROXY = os.environ.get("DOCKER_PROXY_URL", "http://docker-proxy:2375")
+# Empty since the k8s rehome: the cluster is deliberately barred from the Docker socket
+# (Security M1), so the container tools are dark until their cluster-API successor
+# (Phase G). Set the URL to re-light them on a host that can reach a docker-proxy.
+DOCKER_PROXY = os.environ.get("DOCKER_PROXY_URL", "")
 SCRUTINY = os.environ.get("SCRUTINY_URL", "http://scrutiny:8080")
 HA = os.environ.get("HA_URL", "http://home-assistant:8123")
 FILE_ROOT = Path(os.environ.get("HOMELAB_FILE_ROOT", "/srv/ansible-src"))
@@ -56,6 +59,10 @@ def _get_json(
     r = _client.get(url, params=params, headers=headers)
     r.raise_for_status()
     return r.json()
+
+
+def _docker_base() -> str:
+    return safe_reads.docker_base_or_raise(DOCKER_PROXY)
 
 
 @mcp.tool()
@@ -96,7 +103,7 @@ def scrape_targets() -> list[dict]:
 @mcp.tool()
 def list_containers() -> list[dict]:
     """All containers with state/status/image (no secrets)."""
-    items = _get_json(f"{DOCKER_PROXY}/containers/json", {"all": "1"})
+    items = _get_json(f"{_docker_base()}/containers/json", {"all": "1"})
     return safe_reads.summarize_container_list(items)
 
 
@@ -106,7 +113,7 @@ def container_status(name: str) -> dict:
     if not safe_reads.container_ref_valid(name):
         raise ValueError("invalid container name")
     return safe_reads.strip_container_fields(
-        _get_json(f"{DOCKER_PROXY}/containers/{name}/json")
+        _get_json(f"{_docker_base()}/containers/{name}/json")
     )
 
 
@@ -116,7 +123,7 @@ def service_health(name: str) -> dict:
     if not safe_reads.container_ref_valid(name):
         raise ValueError("invalid container name")
     data = safe_reads.strip_container_fields(
-        _get_json(f"{DOCKER_PROXY}/containers/{name}/json")
+        _get_json(f"{_docker_base()}/containers/{name}/json")
     )
     return {
         "name": data["name"],
@@ -147,7 +154,7 @@ def container_logs(name: str, tail: int = 100) -> str:
     if not safe_reads.container_ref_valid(name):
         raise ValueError("invalid container name")
     r = _client.get(
-        f"{DOCKER_PROXY}/containers/{name}/logs",
+        f"{_docker_base()}/containers/{name}/logs",
         params={"stdout": "1", "stderr": "1", "tail": str(tail)},
     )
     r.raise_for_status()

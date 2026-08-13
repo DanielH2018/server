@@ -1,0 +1,108 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homelab-mcp
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: homelab-mcp
+  template:
+    metadata:
+      labels:
+        app: homelab-mcp
+    spec:
+      enableServiceLinks: false
+      # Same posture as the compose template: uid 1000, read-only root, all caps dropped,
+      # /tmp the only writable path.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+      containers:
+        - name: homelab-mcp
+          image: {{ homelab_mcp_k8s_image }}
+          # Rolling tier: the registry tag is rebuilt in place by image-builder, so pod
+          # creation must re-pull (see n8n's defaults for the full note).
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: HOMELAB_MCP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: homelab-mcp-secrets
+                  key: HOMELAB_MCP_TOKEN
+            - name: HOMELAB_HA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: homelab-mcp-secrets
+                  key: HOMELAB_HA_TOKEN
+            # In-cluster service URLs — every backend this server reads is cluster-hosted
+            # now. DOCKER_PROXY_URL stays unset on purpose: the cluster is barred from the
+            # Docker socket (Security M1), so the container tools raise a clear
+            # tools-are-dark error (safe_reads.docker_base_or_raise) until the Phase G
+            # cluster-API successor.
+            - name: PROMETHEUS_URL
+              value: http://prometheus.observability.svc.cluster.local:9090
+            - name: LOKI_URL
+              value: http://loki-homelab.{{ k8s_namespace }}.svc.cluster.local:3100
+            - name: SCRUTINY_URL
+              value: http://scrutiny.{{ k8s_namespace }}.svc.cluster.local:8080
+            - name: HA_URL
+              value: http://home-assistant.{{ k8s_namespace }}.svc.cluster.local:8123
+            - name: HOMELAB_FILE_ROOT
+              value: /srv/ansible-src
+            # Trusted host for the MCP transport's DNS-rebinding guard (else 421).
+            - name: MCP_PUBLIC_HOST
+              value: mcp.local.{{ domain }}
+            - name: PORT
+              value: "{{ container_item.port }}"
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: TZ
+              value: "{{ tz }}"
+          volumeMounts:
+            # ansible/ source, READ-ONLY — the read_file/list_files jail root. Same
+            # guarantees as the compose bind: secrets.yml is denied in-app
+            # (safe_reads.path_is_denied) and the age key isn't under here, so the worst
+            # a jail bug could surface is SOPS ciphertext. hostPath rather than a
+            # git-clone sidecar for the same reason image-builder embeds its context:
+            # this node already holds the checkout Ansible deploys from.
+            - name: ansible-src
+              mountPath: /srv/ansible-src
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            tcpSocket:
+              port: {{ container_item.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: {{ container_item.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ homelab_mcp_k8s_cpu_limit }}"
+              memory: {{ homelab_mcp_k8s_mem_limit }}
+            requests:
+              cpu: "{{ homelab_mcp_k8s_cpu_request }}"
+              memory: {{ homelab_mcp_k8s_mem_request }}
+      volumes:
+        - name: ansible-src
+          hostPath:
+            path: /home/{{ sys_user }}/server/ansible
+            type: Directory
+        - name: tmp
+          emptyDir: {}

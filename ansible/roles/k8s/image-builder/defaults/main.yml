@@ -17,8 +17,12 @@ image_builder_image: moby/buildkit:v0.32.2-rootless
 #   image_builder_dockerfile  template rendered into the context as `Dockerfile`
 #   image_builder_context     extra templates in the context, {src: dest} — dest is the path
 #                             a COPY in the Dockerfile refers to
+#   image_builder_context_files  same shape, but embedded verbatim (lookup('file')) — for
+#                             sources Jinja must not touch (homelab-mcp's app.py embeds
+#                             PromQL whose {{...}} braces a template render would eat)
 image_builder_tag: latest
 image_builder_context: {}
+image_builder_context_files: {}
 
 # A build pulls base layers over the internet and can be slow on a cold cache; a rebuild with
 # warm layers is quick. Bounds a wedged build so a deploy fails with a message instead of

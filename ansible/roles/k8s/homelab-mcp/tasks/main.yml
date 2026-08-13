@@ -1,0 +1,30 @@
+---
+# Read-only MCP server, rehomed from daniel-server (Phase E, 2026-08-13 — this was the
+# last routed tenant of the Docker edge). The route is NOT an IngressRoute: the bearer
+# token lives in the k8s edge's file-provider gate Secret alongside livesync's
+# (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2) so it stays out of CRD
+# objects the readonly kubeconfig can list.
+
+- name: Build the homelab-mcp image
+  ansible.builtin.include_role:
+    name: k8s/image-builder
+  vars:
+    image_builder_name: homelab-mcp
+    image_builder_dockerfile: "{{ role_path }}/templates/Dockerfile.j2"
+    # Raw files, not templates: app.py embeds PromQL whose {{...}} braces Jinja would
+    # eat (the reason image_builder_context_files exists).
+    image_builder_context_files:
+      "{{ role_path }}/files/app.py": app.py
+      "{{ role_path }}/files/safe_reads.py": safe_reads.py
+
+- name: Deploy homelab-mcp to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: homelab-mcp
+    manifests_rollout: homelab-mcp
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+    manifests_secret_files:
+      - secret.yaml

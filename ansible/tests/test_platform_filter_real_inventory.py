@@ -116,7 +116,8 @@ def test_daniel_server_is_still_wholly_docker():
 
     # 14 since E3 retired homepage (2026-08-12; peanut/grafana kept their entries for the
     # nut / loki+promtail residuals). Then 13: pihole retired 2026-08-13 (Phase E, query
-    # log flatlined after the last client repointed to the cluster DNS VIP).
-    assert len(containers) == 13
-    assert len(filter_by_platform(containers, "docker")) == 13
+    # log flatlined after the last client repointed to the cluster DNS VIP). Then 12:
+    # homelab-mcp rehomed to k8s the same night — the Docker edge's last routed tenant.
+    assert len(containers) == 12
+    assert len(filter_by_platform(containers, "docker")) == 12
     assert filter_by_platform(containers, "k8s") == []

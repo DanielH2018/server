@@ -24,3 +24,7 @@ data:
   {{ dest }}: |
 {{ lookup('template', src) | indent(4, true) }}
 {% endfor %}
+{% for src, dest in image_builder_context_files.items() %}
+  {{ dest }}: |
+{{ lookup('file', src) | indent(4, true) }}
+{% endfor %}

@@ -1,0 +1,13 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: homelab-mcp
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: homelab-mcp
+  ports:
+    - name: http
+      port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}

@@ -217,13 +217,14 @@ def main() -> int:
     checked = failures = 0
     for role in roles:
         # Not every .j2 in a k8s role's templates/ is a manifest — a role may also ship a
-        # helper script (claude-otel's telemetry-health.sh.j2). Those are shell, not YAML, and
-        # validate_shell_templates.py already renders and lints them; parsing one here reports
-        # a bash comment as malformed YAML.
+        # helper script (claude-otel's telemetry-health.sh.j2) or a Dockerfile for
+        # image-builder (homelab-mcp). Shell is rendered and linted by
+        # validate_shell_templates.py; a Dockerfile is consumed by buildctl. Parsing
+        # either here reports a comment line as malformed YAML.
         templates = sorted(
             p
             for p in (K8S_ROLES / role / "templates").glob("*.j2")
-            if not p.name.endswith(".sh.j2")
+            if not p.name.endswith(".sh.j2") and not p.name.startswith("Dockerfile")
         )
         if not templates:
             # A role that only delegates — n8n-images calls image-builder twice and owns no
