@@ -20,3 +20,22 @@ registry_k8s_crane_image: gcr.io/go-containerregistry/crane:v0.21.9
 # is broken" and "that image changed".
 registry_k8s_probe_source: alpine:3.22
 registry_k8s_probe_repo: registry-selftest
+
+# ── NetworkPolicy (fencing an unauthenticated Service) ─────────────────────────────────────
+# registry has no REGISTRY_AUTH, so network reachability to k8s_registry_port IS the access
+# control. Two ingress rules admit legitimate pushers; everything else on that port is refused.
+# See networkpolicy.yaml.j2 for the full reasoning, including the PULL-path caveat.
+#
+# alpine:3.22 for the same reason prowlarr's and sonarr's probes use it: busybox `nc` and musl
+# `getent` both need to be present, and this image already ships in the cluster as
+# registry_k8s_probe_source above.
+registry_k8s_netpol_probe_image: alpine:3.22
+
+# The CNI bridge gateway on daniel-box — `ip -4 addr show cni0` reads `10.42.0.1/24`, matching
+# the live podCIDR `kubectl get node daniel-box -o jsonpath='{.spec.podCIDR}'` = 10.42.0.0/24
+# (checked 2026-08-13). hostPort traffic (containerd's pull, see networkpolicy.yaml.j2) is
+# SNAT'd to this address before it reaches the pod, so a podSelector cannot admit it — only an
+# ipBlock can. Single-node today, so one address is exhaustive; a second node joining before
+# slice 7's TLS/LAN-hostname rework would need this widened (or turned into a list) to admit
+# that node's own cni0 gateway too.
+registry_k8s_netpol_cni_gateway: 10.42.0.1/32

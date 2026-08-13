@@ -1,0 +1,74 @@
+---
+# The negative test for networkpolicy.yaml.j2: a pod carrying neither `netpol-role:
+# image-builder` nor an admitted selftest label must be refused on {{ k8s_registry_port }}.
+# Those two are the only things the policy admits over the pod network (the ipBlock rule is for
+# host-originated pull traffic and cannot be exercised from inside a pod at all).
+#
+# Unlike n8n's and flaresolverr's probes, there is no always-open port on this Deployment to use
+# as a TCP-reachability control — {{ k8s_registry_port }} is the only port this Service exposes,
+# and it is the one under test. So the control here is DNS resolution, the same shape sonarr's
+# isolation probe uses: `getent hosts registry` only proves the Service name resolves, which an
+# INGRESS NetworkPolicy never touches (it does not gate traffic to kube-dns) — but it does rule
+# out "this probe pod has no working network at all" as a false-positive "isolated" result.
+#
+# Inverted like n8n's and flaresolverr's: this Job SUCCEEDS when the connection on
+# {{ k8s_registry_port }} is refused or times out.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: registry-netpol-probe
+  namespace: {{ k8s_namespace }}
+spec:
+  # 180s to match the push/pull selftests, not n8n's 120s: this image is not kept warm by any
+  # other role the way n8n's wait image is re-pulled on every n8n deploy, so a cold pull of
+  # {{ registry_k8s_netpol_probe_image }} plus the 5s `nc` timeout needs the same margin.
+  activeDeadlineSeconds: 180
+  backoffLimit: 0
+  # Backstop cleanup: the deploy task always deletes this Job before re-applying it, but a day's
+  # TTL means a completed Job doesn't sit around indefinitely if that step is ever skipped.
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: registry-netpol-probe
+    spec:
+      # Phase F: pinned to daniel-box like every other pod in the registry's loop — the registry
+      # is a loopback hostPort on that node only.
+      nodeSelector:
+        kubernetes.io/hostname: daniel-box
+      restartPolicy: Never
+      enableServiceLinks: false
+      containers:
+        - name: probe
+          image: {{ registry_k8s_netpol_probe_image }}
+          command:
+            - sh
+            - -c
+            - |
+              if ! getent hosts registry >/dev/null 2>&1; then
+                echo "CONTROL FAILED: the Service name 'registry' does not resolve in"
+                echo "{{ k8s_namespace }}, so this probe proves nothing about the policy. Check"
+                echo "DNS and the Service."
+                exit 1
+              fi
+              echo "control ok: registry Service resolves"
+              if nc -w 5 -z registry {{ k8s_registry_port }}; then
+                echo "POLICY NOT ENFORCED: reached registry:{{ k8s_registry_port }} from a pod"
+                echo "with neither netpol-role=image-builder nor an admitted selftest label."
+                echo "NetworkPolicy registry is not taking effect — the registry is pushable by"
+                echo "any pod in {{ k8s_namespace }}."
+                exit 1
+              fi
+              echo "isolated: registry:{{ k8s_registry_port }} refused, as intended"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: "200m"
+              memory: 64Mi
+            requests:
+              cpu: "10m"
+              memory: 16Mi
