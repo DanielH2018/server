@@ -245,6 +245,27 @@ codified in-role:
 **Still open in §F:** the replica raise + allowScheduling flip (after a green nightly),
 the test-PVC/drain-reschedule/cold-boot gates, then uncordon.
 
+**DRAIN EXECUTED SO FAR (2026-08-13, same day as the join):**
+- **scrutiny collector spoke** (13 → 12): the DaemonSet's daniel-box pin came off (both
+  hosts share the /dev/nvme0 controller path — verified before the unpin); Docker spoke
+  + role archived. The new node's first collection is the midnight cron;
+  scrutiny_freshness alarms a miss.
+- **otel-collector forwarder DISSOLVED** (12 → 11): the cluster collector is a DaemonSet
+  — every node has its own loopback OTLP hostPort, the seam the D7 forwarder faked for
+  daniel-server. The ClientIP-gated ingest IngressRoute retired with it (nothing ingests
+  over the LAN). The prometheus otel jobs moved to per-POD discovery in the same commit:
+  each collector exports only what ITS node received, so a Service-target scrape would
+  round-robin partial views and corrupt the claude_code_* counters. Verified: both
+  loopbacks answer, 4 per-pod targets up, exports resumed against the new pods.
+  Cluster-side deletes (old Deployment, ingest route) needed explicit kubectl deletes —
+  apply-only deploys never remove, and a Deployment→DaemonSet rename-in-kind leaves both
+  holding the same hostPort.
+
+Drain order for what remains: terraria-stats, crowdsec-agent re-home, monitor-bridge +
+autofix-bridge (the long pole), THEN node-exporter/cadvisor/promtail (they watch the
+Docker estate, so they leave last), with docker-proxy(+lifecycle)/autoheal retiring
+alongside their final tenants. nut stays.
+
 ### G — Residual role, instruments, and the books
 
 homelab-mcp successor + otel-collector per D7. `backup_controller_host` and
