@@ -177,19 +177,20 @@ def test_gate_stays_out_of_crd_objects():
     )
 
 
-def test_reverse_bridge_serves_both_name_forms_per_host():
-    """Each Docker-hosted name needs a public AND a `.local` route (the LAN wildcard
-    answers the VIP since BT3), and each form its own transport — SNI must equal Host or
-    the Docker edge answers 421 (verified live when the bridges were built)."""
-    template = (
+def test_reverse_bridge_stays_retired():
+    """The reverse bridge retired at E7 (2026-08-13): its last tenant — the Docker
+    Authelia portal on the unsuffixed auth name — moved to the k8s portal, which now
+    owns auth.<domain> and the OIDC issuer. A reappearing template would put two
+    routers on one Host and silently shadow the portal."""
+    assert not (
         ANSIBLE / "roles" / "k8s" / "traefik" / "templates" / "reverse-bridge.yaml.j2"
-    ).read_text()
-    assert "Host(`{{ host }}.{{ domain }}`)" in template
-    assert "Host(`{{ host }}.local.{{ domain }}`)" in template
-    assert "reverse-bridge-{{ host }}-local" in template
-    assert 'serverName: "{{ host }}.local.{{ domain }}"' in template
-    assert "custom_edge" not in template, (
-        "the reverse bridge's livesync carve-out is retired with the gate move"
+    ).exists()
+    tasks = (ANSIBLE / "roles" / "k8s" / "traefik" / "tasks" / "main.yml").read_text()
+    assert "reverse-bridge" not in tasks
+    authelia = next(e for e in _containers("daniel-box") if e["name"] == "authelia")
+    assert authelia.get("unsuffixed_hostname") == "auth", (
+        "the k8s portal must own the unsuffixed auth name — it is the OIDC issuer "
+        "Jellyfin's SSO plugin points at"
     )
 
 

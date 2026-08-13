@@ -43,9 +43,9 @@ BASE_CONTEXT = {
 
 class StubUndefined(ChainableUndefined):
     """Any undefined variable (a SOPS secret, a host fact) renders as the literal ``STUB`` and
-    tolerates attribute/item access and iteration, so structural rendering never aborts on a
-    missing value. The config validator subclasses this to add ``__add__``/``__radd__`` for
-    ``{{ secret | indent(n) }}``."""
+    tolerates attribute/item access, iteration, and concatenation (Jinja's ``indent`` filter
+    prepends a newline via ``+``, so ``{{ secret | indent(n) }}`` needs ``__add__``), so
+    structural rendering never aborts on a missing value."""
 
     _FILL = "STUB"
 
@@ -54,6 +54,12 @@ class StubUndefined(ChainableUndefined):
 
     def __iter__(self):  # {% for x in undefined %}
         return iter(())
+
+    def __add__(self, other):  # {{ secret | indent(n) }}
+        return self._FILL + str(other)
+
+    def __radd__(self, other):
+        return str(other) + self._FILL
 
 
 def load_yaml(path: Path) -> dict:

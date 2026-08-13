@@ -70,6 +70,11 @@ containers_list:
     hostname: "auth{{ k8s_hostname_suffix }}"
     port: 9091
     use_authelia: false
+    # E7 (2026-08-13): this portal claims the unsuffixed auth.<domain> from the Docker
+    # portal — it is the OIDC issuer name Jellyfin's SSO plugin points at, carried over
+    # verbatim so the plugin needs no change. The reverse bridge (whose sole tenant was
+    # the Docker portal on this name) retires in the same deploy.
+    unsuffixed_hostname: auth
   - name: bento-pdf
     platform: k8s
     hostname: "bento-pdf{{ k8s_hostname_suffix }}"

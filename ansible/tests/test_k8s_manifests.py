@@ -164,6 +164,9 @@ def _k8s_authelia_config() -> dict:
         authelia_storage="stub",
         authelia_user="stub",
         authelia_password_hash="stub",
+        authelia_oidc_hmac_secret="stub",
+        authelia_oidc_rsa_key_content="STUBKEY",
+        authelia_client_password_hash="stub",
         **ALL_VARS,
         **defaults,
     )

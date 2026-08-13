@@ -7,6 +7,7 @@
     container_item.name,
     container_item.hostname | default(container_item.name),
     container_item.port,
-    false
+    false,
+    unsuffixed_hostname=container_item.unsuffixed_hostname | default(none)
   )
 }}
