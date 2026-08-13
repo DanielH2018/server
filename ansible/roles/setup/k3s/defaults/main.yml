@@ -236,6 +236,14 @@ k3s_longhorn_daily_backup_budget: 17
 k3s_disk_max_pct: 75
 k3s_disk_health_cron_minute: "*/10"
 
+# Manifest-prune drift check (templates/manifest-prune-check.sh.j2). Daily, not */10 like the
+# heartbeats above: staged-manifest drift only changes on a deploy, so there is nothing new to
+# find between two deploys in the same day. 05:15 — after the 03:30 nightly Longhorn backup
+# (k3s_longhorn_backup_cron) and its 04:30 Sunday sibling have both finished, ahead of the
+# day's first deploy.
+k3s_manifest_prune_cron_hour: "5"
+k3s_manifest_prune_cron_minute: "15"
+
 # Bound volumes forced OUT of the backup set, as `namespace/pvcName` — an override for volumes
 # whose StorageClass says `longhorn` (back me up) but which should not be. Needed as a separate
 # lever because storageClassName is immutable: a volume that must leave the backup set after it is

@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# Manifest-prune drift check — managed by Ansible (k3s role); edits overwritten.
+#
+# `kubectl apply -f <staged-dir>/` (k8s/manifests role) only ADDS/UPDATES what is IN the
+# staged manifest set — it never removes a live object whose entry was deleted from the
+# templates. Nothing else in this repo checks for that, so an apply-only deploy can leave a
+# cluster object running forever after its template entry is gone. This is the exact shape of
+# two live incidents on 2026-08-13: the claude-otel-ingest IngressRoute (observability
+# namespace) is STILL RUNNING right now with no ownerReferences and no mention anywhere in
+# ansible/roles/k8s/claude-otel/templates/ — confirmed live while writing this check — and Kuma
+# monitors 300/301 outlived their static-monitors.yaml.j2 entries at E7.
+#
+# LIMITATION, by design: Kuma monitors are NOT checked here. AutoKuma reconciles those from a
+# mix of live Docker labels and this role's static Secret, and a bash diff against that split
+# source would be unreliable — see the header of static-monitors.yaml.j2 for why "removing an
+# entry here may not reach the cluster" is already a known trap for THAT reconciliation path.
+# The Kuma-monitor drift class needs its own fix, not a bolt-on here.
+#
+# Compares live objects against the STAGED rendered manifests under /etc/rancher/k3s/manifests/,
+# not the .j2 templates: the staged copies are what `kubectl apply` actually acted on and are
+# always current after a deploy, whereas re-rendering the templates here would need every
+# role's vars and secrets. Runs as ROOT because those staged directories are mode 0700
+# (k8s/manifests role) — root is needed for filesystem access, not extra cluster power: the
+# kubectl calls stay scoped to the read-only ServiceAccount kubeconfig, same as the heartbeats
+# beside it, so a bug here still cannot mutate the cluster.
+#
+# Matching is a plain `grep` for `name: <object-name>` in the staged YAML — textual, not
+# structured. Known false-negative: a container/key that happens to be named identically to the
+# orphaned object (in ANY staged file, not just its own kind) reads as "still declared" and the
+# real orphan is missed.
+#
+# CONFIRMED GAP, not hypothetical: k8s/manifests' "Render manifests" task only writes the files
+# CURRENTLY listed in manifests_files/manifests_secret_files — it has no step that deletes a
+# staged file whose entry was later removed from that list, so a stale render sits on disk and
+# keeps getting swept into every future `kubectl apply -f <dir>/` regardless of what the
+# templates say today. This is why claude-otel-ingest (named above) is still live: commit
+# 753b5786 removed BOTH `ingest-ingressroute.yaml` from claude-otel's manifests_files AND its
+# .j2 source, but the already-rendered /etc/rancher/k3s/manifests/claude-otel/
+# ingest-ingressroute.yaml was never cleaned up, so it is very likely still there and this
+# check's own `grep` will find "name: claude-otel-ingest" in it and report the orphan as
+# present — a false "up" on the exact incident this script exists to catch. Closing this for
+# real needs a prune step in k8s/manifests (delete any staged file not in the current file
+# list, before apply) — out of scope for this change; until that lands, or until the stale
+# staged file is manually removed, treat this script as a guard against NEW drift (an object
+# hand-applied outside any template) rather than proof against the one that motivated it.
+set -uo pipefail
+
+# Runs as root under cron, whose default PATH (/usr/bin:/bin) omits /usr/local/bin — where
+# the k3s install script puts the binary. Without this, `k3s` resolves to nothing, the
+# `kubectl get` calls below silently no-op (stderr swallowed by check_kind's 2>/dev/null),
+# ORPHANS stays empty, and the check pushes a permanent false "up". Same trap as
+# cron-path-omits-usr-local-bin.md; the sibling heartbeats beside this one (disk-health.sh.j2,
+# longhorn-backup-health.sh.j2) don't set this either and should be checked for the same bug.
+export PATH="/usr/local/bin:${PATH}"
+
+export KUBECONFIG=/home/{{ sys_user }}/.kube/config
+KUBECTL="k3s kubectl"
+MANIFEST_ROOT=/etc/rancher/k3s/manifests
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
+# edge's bridge route for this name was removed in the slice-7 bridge teardown.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+PUSH_TOKEN="{{ manifest_prune_push_token | default('') }}"
+
+# The role must deploy cleanly before the operator has registered this secret (/add-secret) —
+# skip the push rather than fail the cron until manifest_prune_push_token exists.
+if [[ -z "$PUSH_TOKEN" ]]; then
+  logger -t manifest-prune-check "manifest_prune_push_token not set — skipping push (see /add-secret)"
+  exit 0
+fi
+PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
+
+if [[ ! -d "$MANIFEST_ROOT" ]]; then
+  STATUS=down
+  MSG="${MANIFEST_ROOT} missing — no staged manifests to compare against"
+  curl -fsS --max-time 10 -G \
+    --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
+    --data-urlencode "status=${STATUS}" \
+    --data-urlencode "msg=${MSG}" \
+    "$PUSH_URL" >/dev/null \
+    || logger -t manifest-prune-check "push failed (status=${STATUS}: ${MSG})"
+  exit 0
+fi
+
+# Namespaces this check does not own: kube-system/longhorn-system/metallb-system ship their own
+# objects outside our staged manifests, and `default` carries the kubectl-provisioned
+# `kubernetes` Service — none of these are ours to prune-check.
+EXCLUDED_NS=(kube-system longhorn-system metallb-system default)
+
+ORPHANS=""
+add_orphan() { ORPHANS="${ORPHANS:+$ORPHANS; }$1"; }
+
+is_excluded_ns() {
+  local ns="$1" candidate
+  for candidate in "${EXCLUDED_NS[@]}"; do
+    [[ "$ns" == "$candidate" ]] && return 0
+  done
+  return 1
+}
+
+check_kind() {
+  local kind="$1" ns name owner
+  while IFS=' ' read -r ns name owner; do
+    [[ -z "$ns" || -z "$name" ]] && continue
+    is_excluded_ns "$ns" && continue
+    # An ownerReference means a controller (Longhorn, MetalLB, ...) created this object as a
+    # child of something else — our templates would never declare it, so its absence here is
+    # expected, not drift.
+    [[ -n "$owner" ]] && continue
+    if ! grep -rlE "name: ${name}[[:space:]]*\$" "$MANIFEST_ROOT" >/dev/null 2>&1; then
+      add_orphan "${kind}/${ns}/${name}"
+    fi
+  done < <($KUBECTL get "$kind" -A \
+    -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{" "}{.metadata.ownerReferences}{"\n"}{end}' \
+    2>/dev/null)
+}
+
+for KIND in ingressroute middleware service; do
+  check_kind "$KIND"
+done
+
+if [[ -z "$ORPHANS" ]]; then
+  STATUS=up
+  MSG="no orphaned IngressRoute/Middleware/Service objects found"
+else
+  STATUS=down
+  MSG="live but absent from staged manifests: ${ORPHANS}"
+fi
+
+curl -fsS --max-time 10 -G \
+  --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
+  --data-urlencode "status=${STATUS}" \
+  --data-urlencode "msg=${MSG}" \
+  "$PUSH_URL" >/dev/null \
+  || logger -t manifest-prune-check "push failed (status=${STATUS}: ${MSG})"

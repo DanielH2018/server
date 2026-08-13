@@ -60,6 +60,32 @@
   become: true
   register: manifests_secret_render
 
+- name: Find staged manifests for {{ manifests_service }}
+  tags: [config]
+  ansible.builtin.find:
+    paths: "/etc/rancher/k3s/manifests/{{ manifests_service }}"
+    file_type: file
+  register: manifests_staged
+  become: true
+
+- name: Prune staged manifests dropped from the file lists for {{ manifests_service }}
+  tags: [config]
+  # `kubectl apply -f <dir>/` sweeps every file in the directory, so a file merely dropped
+  # from manifests_files keeps re-applying its objects on every deploy — the retirement
+  # renders green while the live object resurrects. Bit for real 2026-08-13: the retired
+  # claude-otel-ingest IngressRoute was deleted live at 18:51 and silently re-created by the
+  # 18:53 deploy from its stale staged file. Deleting the file here makes dropping a name
+  # from the list the complete staging-side retirement; the already-live object still needs
+  # one kubectl delete, which the manifest-prune-check cron flags.
+  ansible.builtin.file:
+    path: "/etc/rancher/k3s/manifests/{{ manifests_service }}/{{ item }}"
+    state: absent
+  loop: >-
+    {{ manifests_staged.files | map(attribute='path') | map('basename')
+       | difference((manifests_files | default([])) + (manifests_secret_files | default([])))
+       | list }}
+  become: true
+
 - name: Apply manifests for {{ manifests_service }}
   tags: [deploy]
   # TRAP: `apply` only prunes map keys (Secret/ConfigMap data entries) on objects it has a

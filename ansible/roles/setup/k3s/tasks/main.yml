@@ -641,6 +641,33 @@
     cron_file: disk-health
   become: true
 
+- name: Deploy the manifest-prune drift check
+  tags: [manifest-prune]
+  # Root-owned AND root-run (see the cron task below): /etc/rancher/k3s/manifests/*/ is mode
+  # 0700 (k8s/manifests role), so comparing live objects against the staged manifests needs
+  # root at the OS level. The kubectl calls inside the script stay scoped to the read-only
+  # ServiceAccount kubeconfig regardless, same as the heartbeats above — root here buys
+  # filesystem access, not cluster-mutation ability.
+  ansible.builtin.template:
+    src: manifest-prune-check.sh.j2
+    dest: /usr/local/bin/manifest-prune-check.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Schedule the manifest-prune drift check
+  tags: [manifest-prune]
+  ansible.builtin.cron:
+    name: "Manifest prune drift check"
+    minute: "{{ k3s_manifest_prune_cron_minute }}"
+    hour: "{{ k3s_manifest_prune_cron_hour }}"
+    user: root
+    job: "/usr/local/bin/manifest-prune-check.sh"
+    cron_file: manifest-prune-check
+  become: true
+
 - name: Render the read-only cluster identity
   tags: [kubeconfig]
   ansible.builtin.template:
