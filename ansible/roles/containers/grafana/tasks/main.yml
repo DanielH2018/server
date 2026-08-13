@@ -58,14 +58,9 @@
       - "--chmod=F664,D775"
   register: grafana_cfg_dashboards
 
-- name: Create loki-config.yml from template
-  tags: [config]
-  ansible.builtin.template:
-    src: loki-config.yml.j2
-    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/loki-config.yaml"
-    mode: "0664"
-  register: grafana_cfg_loki
-
+# Docker loki cut 2026-08-13 (D.2 step 4, early by operator decision): its config render
+# is gone; the rendered loki-config.yaml and the container/volume are removed by the
+# cut's one-shot, not tombstoned here (single host, single execution).
 - name: Create promtail-config.yml from template
   tags: [config]
   ansible.builtin.template:
@@ -82,7 +77,7 @@
   vars:
     common_config_changed: >-
       {{ (grafana_cfg_datasources is changed) or (grafana_cfg_dashboards_cfg is changed)
-         or (grafana_cfg_dashboards is changed) or (grafana_cfg_loki is changed)
+         or (grafana_cfg_dashboards is changed)
          or (grafana_cfg_promtail is changed) or (grafana_cfg_admin_password is changed) }}
 
 # GF_SECURITY_ADMIN_PASSWORD__FILE is only consulted when Grafana initialises its database,

@@ -6,12 +6,9 @@ positions:
   filename: /tmp/positions.yaml
 
 clients:
-  - url: http://loki:3100/loki/api/v1/push
-  # Phase D.2 KL5 dual-write (2026-08-10): the cluster homelab Loki, through the
-  # ClientIP-gated route (the -k8s name resolves to the VIP via Pi-hole; this container's
-  # source IP is daniel-server's, which the guard admits). Both sinks for 7 days so
-  # `probe.py alerts` and the alert-history board never go blind, then the local client
-  # above retires with the Docker loki.
+  # The cluster homelab Loki, through the ClientIP-gated route (the -k8s name resolves to
+  # the VIP via Pi-hole; this container's source IP is daniel-server's, which the guard
+  # admits). Sole sink since the 2026-08-13 Docker loki cut ended the KL5 dual-write.
   - url: https://loki-homelab{{ k8s_hostname_suffix }}.local.{{ domain }}/loki/api/v1/push
 
 scrape_configs:

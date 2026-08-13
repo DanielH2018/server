@@ -123,6 +123,15 @@ the claude-otel one.
   Docker Loki volume is discarded at the step-4 cut — delete the `loki-docker-retiring`
   datasource AND the `loki` named volume with the role, no export. (Dual-written since
   step 2; the old history was never queried from the retiring datasource.)
+- **Step 4 EXECUTED (2026-08-13, operator decision to close the window 4 days early):**
+  Docker loki container + `loki` volume + rendered config removed; promtail's Docker-loki
+  client dropped (cluster loki-homelab is the sole sink); `loki-docker-retiring`
+  datasource deleted. promtail itself STAYS per KL2 — its 9102 scrape, the exporter
+  firewall PORTS, and monitor-bridge's TARGETS_MIN=4 are all unchanged until the Phase F
+  join (the earlier "PORTS shrinks / floor drops at the cut" notes conflated the two
+  events). The grafana role does NOT retire: it keeps promtail until F and stays the
+  dashboards-tree source of truth for the cluster grafana (claude-otel reads
+  `roles/containers/grafana/files/dashboards` directly).
 
 ## Unverified — resolve during execution
 

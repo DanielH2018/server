@@ -36,20 +36,10 @@ datasources:
     type: loki
     access: proxy
     # Phase D.2 KL4 (2026-08-10): the contract uid follows the pipeline that survives —
-    # every dashboard pinned to bf4q19tuivta8e now reads the cluster Loki. History older
-    # than the cutover stays in the Docker copy below until it retires.
+    # every dashboard pinned to bf4q19tuivta8e now reads the cluster Loki. (Pre-cutover
+    # history discarded with the Docker loki + its volume at the 2026-08-13 cut.)
     url: https://loki-homelab{{ k8s_hostname_suffix }}.local.{{ domain }}
     editable: true
     # (The TraceID derivedFields link retired with the Docker tempo at D7 — Claude events
     # no longer land in this datasource at all; the cluster claude-otel Grafana carries
     # the logs<->traces cross-links now.)
-
-  # Phase D.2 KL5 overlap escape hatch: history older than the 2026-08-10 cutover lives
-  # only in the Docker Loki's volume. Non-default, no dashboard pins it; retires with the
-  # container at the end of the dual-write window (delete this block then).
-  - name: loki-docker-retiring
-    uid: loki-docker-retiring
-    type: loki
-    access: proxy
-    url: http://loki:3100
-    editable: true

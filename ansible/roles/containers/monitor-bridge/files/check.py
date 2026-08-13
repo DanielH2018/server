@@ -259,8 +259,9 @@ PROM_ORIGIN = _env(
 
 # Floor below which the `up` vector is treated as missing rather than clean — see
 # targets_verdict. The cluster prometheus scrapes exactly four origin="daniel-server" jobs since
-# E7 removed the Docker traefik's 9104 (node, cadvisor, promtail, crowdsec_daniel-server); the
-# promtail job leaves 2026-08-17 with the Docker loki cut, when this drops to 3.
+# E7 removed the Docker traefik's 9104 (node, cadvisor, promtail, crowdsec_daniel-server). The
+# 2026-08-13 Docker loki cut changed none of them — promtail STAYS a Docker-host tailer until
+# the Phase F join (KL2), so its 9102 scrape and this floor of 4 hold until F drops it to 3.
 TARGETS_MIN = int(_env("TARGETS_MIN", "4"))
 # Same floor idea for the cluster's own scrape targets (see check_cluster_targets). It runs five —
 # prometheus, otel-collector, otel-collector-internal, kube-state-metrics, kubernetes-cadvisor —

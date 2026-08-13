@@ -183,8 +183,9 @@ containers_list:
     networks:
       - monitoring
   # grafana's UI moved to the cluster grafana (E1, 2026-08-12) — the unsuffixed name is
-  # served there now. The entry stays because this role's compose still carries loki and
-  # promtail until the 2026-08-17 Docker Loki cut; no hostname/port, so no route derives.
+  # served there now. The Docker loki cut executed 2026-08-13 (D.2 step 4, early by
+  # operator decision); the entry stays because the compose still carries promtail, a
+  # Docker-host tailer until the Phase F join (KL2). No hostname/port, so no route derives.
   - name: grafana
     networks:
       - monitoring

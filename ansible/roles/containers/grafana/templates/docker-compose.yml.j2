@@ -7,32 +7,11 @@
 
 services:
   # The grafana service moved to the cluster grafana (E1, 2026-08-12) — it now owns the
-  # unsuffixed name and reads the same dashboards tree. loki + promtail below live until
-  # the 2026-08-17 Docker Loki cut (D.2 step 4).
-  loki:
-    image: grafana/loki:latest
-    container_name: loki
-    restart: unless-stopped
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      - TZ={{ tz }}
-    expose:
-      - 3100
-    volumes:
-      - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
-      - loki:/tmp
-    command: -config.file=/etc/loki/loki-config.yaml
-    {{ service_networks() }}
-    labels:
-      # The `loki` Kuma tile transcribed to the uptime-kuma role's static-monitors at
-      # Phase D.2 step 3 (2026-08-10) — it probes the CLUSTER loki-homelab's /ready now.
-      # This retiring container's liveness is covered by docker-fleet until the cut.
-      - "org.homelab.kuma-monitor=transcribed-loki-homelab"
-    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    {{ resources('1.0', '512M', '0.10', '64M') }}
+  # unsuffixed name and reads the same dashboards tree. The Docker loki cut (D.2 step 4)
+  # executed 2026-08-13, four days early by operator decision — its container, `loki`
+  # named volume, and pre-cutover history are gone. promtail stays a Docker-host tailer
+  # until the Phase F join (KL2: a DaemonSet can't see a non-node host's logs), pushing
+  # only to the cluster loki-homelab.
   promtail:
     image: grafana/promtail:latest
     container_name: promtail
@@ -78,6 +57,5 @@ services:
 {{ external_networks() }}
 
 volumes:
-    loki:
     # Promtail's positions cursor — regenerable, deliberately out of Kopia's bind-mount scope.
     promtail_positions:
