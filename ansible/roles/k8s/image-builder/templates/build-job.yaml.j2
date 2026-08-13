@@ -30,6 +30,7 @@ spec:
         kubernetes.io/hostname: daniel-box
       restartPolicy: Never
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: buildkit
           image: {{ image_builder_image }}

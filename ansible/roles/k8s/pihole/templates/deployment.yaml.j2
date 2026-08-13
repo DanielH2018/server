@@ -18,6 +18,7 @@ spec:
         app: pihole
     spec:
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         # Both containers share the pod network namespace: FTL binds :53/:80, unbound sits on
         # 127.0.0.1:{{ pihole_k8s_unbound_port }} (the ConfigMap moves it off :53). There is

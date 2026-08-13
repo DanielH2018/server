@@ -37,6 +37,7 @@ spec:
         spec:
           restartPolicy: Never
           enableServiceLinks: false
+          automountServiceAccountToken: false
           securityContext:
             runAsUser: {{ puid }}
             runAsGroup: {{ pgid }}

@@ -29,6 +29,7 @@ spec:
     spec:
       restartPolicy: Never
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: probe
           image: {{ n8n_k8s_wait_image }}

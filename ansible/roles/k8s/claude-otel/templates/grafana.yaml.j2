@@ -137,6 +137,7 @@ spec:
         runAsUser: 472
         runAsGroup: 472
         fsGroup: 472
+      automountServiceAccountToken: false
       containers:
         - name: grafana
           image: {{ claude_otel_grafana_image }}

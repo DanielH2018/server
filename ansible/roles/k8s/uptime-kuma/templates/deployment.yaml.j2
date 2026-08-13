@@ -33,6 +33,7 @@ spec:
             - "{{ extra }}.local.{{ domain }}"
 {% endfor %}
 {% endfor %}
+      automountServiceAccountToken: false
       containers:
         - name: uptime-kuma
           image: {{ uptime_kuma_k8s_image }}

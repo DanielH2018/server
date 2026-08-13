@@ -19,6 +19,7 @@ spec:
         app: healthchecks
     spec:
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: healthchecks
           image: {{ healthchecks_k8s_image }}

@@ -88,6 +88,7 @@ spec:
         runAsUser: 10001
         runAsGroup: 10001
         fsGroup: 10001
+      automountServiceAccountToken: false
       containers:
         - name: loki
           image: {{ claude_otel_loki_image }}

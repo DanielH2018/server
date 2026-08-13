@@ -21,6 +21,7 @@ spec:
         app: scrutiny-influxdb
     spec:
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: influxdb
           image: {{ scrutiny_k8s_influxdb_image }}

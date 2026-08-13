@@ -93,6 +93,7 @@ spec:
             requests:
               cpu: "10m"
               memory: 32Mi
+      automountServiceAccountToken: false
       containers:
         - name: jellyfin
           image: {{ jellyfin_k8s_image }}

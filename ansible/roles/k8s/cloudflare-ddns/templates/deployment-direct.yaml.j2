@@ -15,6 +15,7 @@ spec:
         app: cloudflare-ddns-direct
     spec:
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: cloudflare-ddns
           image: {{ cloudflare_ddns_k8s_image }}

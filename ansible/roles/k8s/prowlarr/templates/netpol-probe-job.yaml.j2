@@ -26,6 +26,7 @@ spec:
     spec:
       restartPolicy: Never
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: probe
           image: {{ prowlarr_k8s_probe_image }}

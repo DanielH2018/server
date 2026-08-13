@@ -33,6 +33,7 @@ spec:
         kubernetes.io/hostname: daniel-box
       restartPolicy: Never
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: pulled
           image: {{ k8s_registry_pull_host }}/{{ registry_k8s_probe_repo }}:probe

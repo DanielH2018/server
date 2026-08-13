@@ -78,6 +78,7 @@ spec:
         runAsUser: 10001
         runAsGroup: 10001
         fsGroup: 10001
+      automountServiceAccountToken: false
       containers:
         - name: tempo
           image: {{ claude_otel_tempo_image }}

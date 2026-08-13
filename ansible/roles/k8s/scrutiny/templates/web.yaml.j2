@@ -21,6 +21,7 @@ spec:
         app: scrutiny-web
     spec:
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: web
           image: {{ scrutiny_k8s_web_image }}

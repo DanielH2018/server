@@ -21,6 +21,7 @@ spec:
       enableServiceLinks: false
       # No fsGroup: seed-volume restores the source's ownership with `tar -p --numeric-owner`,
       # and this LSIO image chowns /config to PUID/PGID itself on startup.
+      automountServiceAccountToken: false
       containers:
         - name: freshrss
           image: {{ freshrss_k8s_image }}

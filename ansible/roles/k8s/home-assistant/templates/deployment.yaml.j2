@@ -69,6 +69,7 @@ spec:
             requests:
               cpu: 10m
               memory: 16Mi
+      automountServiceAccountToken: false
       containers:
         - name: home-assistant
           image: {{ home_assistant_k8s_image }}

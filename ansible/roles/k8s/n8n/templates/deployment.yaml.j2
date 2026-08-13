@@ -28,6 +28,7 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: daniel-box
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: n8n
           image: {{ n8n_k8s_image }}
