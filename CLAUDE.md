@@ -197,9 +197,10 @@ Hand-running an auto-approved *write* verb creates drift from the Ansible source
 - **permission auditing** — no longer lives here. A `log-permission` hook used to count tool calls
   and prompts into `.claude/logs/permissions.json` for `audit-permissions.py` to read; Claude Code's
   own OTEL `tool_decision` events carry that now, and name the deciding authority (`config` rule,
-  `hook`, `user`) instead of leaving it inferred. Both hosts' Claude Code exports OTLP to
-  `localhost:4317`; since D7 (2026-08-10) everything lands in the cluster claude-otel stack
-  (daniel-server's Docker `otel-collector` is a pure forwarder into it). The reader is the
+  `hook`, `user`) instead of leaving it inferred. Both hosts' Claude Code exports OTLP to their
+  local node's hostPort (127.0.0.1:4317); since Phase F (2026-08-13) the cluster claude-otel
+  collector is a DaemonSet with a loopback hostPort on every node, so both hosts reach their
+  own node's collector directly — the Docker forwarder is dissolved/archived. The reader is the
   `claude-permission-audit` plugin
   (`/audit-permissions`), installed globally rather than vendored per-repo.
 - **session-health** (SessionStart) — on opening a session here, prints a banner of any unhealthy/
