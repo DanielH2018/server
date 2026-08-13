@@ -1,0 +1,14 @@
+---
+# Stock image, not an image-builder build: stats.py is pure stdlib, mounted from a
+# ConfigMap — no registry coupling, so the pod can schedule on any node once the cordon
+# lifts (the loopback registry cannot serve cross-node pulls). Same call as terraria-stats.
+valheim_stats_k8s_image: python:3.14-alpine
+
+# All-time playtime/deaths live in this SQLite DB and nothing else. Unlike terraria-stats
+# there is NO seed: Valheim was archived in January, long before this Loki existed, so
+# there is no history anywhere to import and the totals genuinely start at zero on first
+# deploy. Backed-up tier all the same — from the first session onward the file is the only
+# copy of numbers that cannot be recomputed (Loki only retains 31 days).
+valheim_stats_k8s_claim: valheim-stats-data
+valheim_stats_k8s_pvc_size: 1Gi
+valheim_stats_k8s_storage_class: longhorn

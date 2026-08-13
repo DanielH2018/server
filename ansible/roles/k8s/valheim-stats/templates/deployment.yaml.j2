@@ -1,0 +1,104 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valheim-stats
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  strategy:
+    # ReadWriteOnce PVC — two pods can't both mount /data during a rolling update.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: valheim-stats
+  template:
+    metadata:
+      labels:
+        app: valheim-stats
+      annotations:
+        # Recreate the pod when the script ConfigMap's source changes — the manifests
+        # role only restarts on manifest changes, and the script is not a manifest.
+        # The value is the stage-task's register (its sha1 of the staged file), not a
+        # lookup|hash here: the offline render guard's Jinja env has no `hash` filter.
+        checksum/stats-script: "{{ (valheim_stats_script | default({})).checksum | default('unstaged') }}"
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsUser: {{ puid }}
+        runAsGroup: {{ pgid }}
+        runAsNonRoot: true
+      containers:
+        - name: valheim-stats
+          image: {{ valheim_stats_k8s_image }}
+          command: ["python", "/app/valheim_stats.py"]
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: LOKI_URL
+              value: http://loki-homelab.{{ k8s_namespace }}.svc.cluster.local:3100
+            - name: LOKI_QUERY
+              value: '{container="valheim"}'
+            - name: POLL_INTERVAL
+              value: "20"
+            - name: METRICS_PORT
+              value: "9420"
+            - name: DB_PATH
+              value: /data/stats.db
+            # Keeps the first-run query under Loki's ~30d max_query_length. There is no
+            # Valheim history to find in that window — the server was archived in January
+            # and only came back on 2026-08-13 — so this is a ceiling, not a expectation.
+            - name: BACKFILL_DAYS
+              value: "28"
+          ports:
+            - containerPort: 9420
+          # /healthz is 503 until the first successful poll and whenever the last one is
+          # older than HEALTH_MAX_AGE; a failing liveness recreates the pod (and feeds the
+          # crash-loop alert arm).
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9420
+            initialDelaySeconds: 45
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9420
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: script
+              mountPath: /app
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ valheim_stats_k8s_claim }}
+        - name: script
+          configMap:
+            name: valheim-stats-script
+        - name: tmp
+          emptyDir: {}
