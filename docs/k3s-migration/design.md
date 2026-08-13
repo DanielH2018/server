@@ -51,7 +51,7 @@ All figures measured on the hosts on 2026-08-01, not estimated.
 
 **Footprint** — `/home/ubuntu/server/containers` totals **31 G**, of which `data/` (media + torrents) is **17 G**; the remainder (~14 G) is per-service config volumes. Some `kopia/` and `portainer/` subdirs were unreadable as `ubuntu`, so the true total is slightly higher. This is small enough that replicating config volumes across two nodes is cheap.
 
-**Service count** — daniel-server's `containers_list` holds **46 active entries** (`grep -cE '^  - name:'`), plus `happy`, archived and commented out on 2026-07-19. daniel-box's `containers_list` is `[]` and nothing runs on it. `valheim` and `recyclarr` exist under `containers/` but are absent from the inventory — treat them as already dead, not as missed services.
+**Service count** — daniel-server's `containers_list` holds **46 active entries** (`grep -cE '^  - name:'`), plus `happy`, archived and commented out on 2026-07-19. daniel-box's `containers_list` is `[]` and nothing runs on it. `valheim` and `recyclarr` exist under `containers/` but are absent from the inventory — treat them as already dead, not as missed services. *(Update 2026-08-13: `valheim` was later reactivated, but as a native k8s role on daniel-box — `roles/k8s/valheim`, seeded from the Docker world dir. It was never a migration target; the statement above still holds for the survey it describes.)*
 
 **"Master node" already exists in this repo.** It is not a new concept to invent — it is four flags in `ansible/inventory/group_vars/all.yml`, all currently `daniel-server`:
 

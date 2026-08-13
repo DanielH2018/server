@@ -546,6 +546,14 @@ containers_list:
   - name: terraria
     platform: k8s
 
+  # Reactivated 2026-08-13, straight onto k3s rather than back onto the retired Docker edge
+  # (the archived compose role and archive/CLAUDE.md's reactivation recipe both predate E7).
+  # Same shape as terraria above: no port/hostname, because nothing about it is HTTP — the
+  # game answers UDP 2456-2457 on the node IP via its own Service. The world was last saved
+  # 2025-11-22 and is seeded from the Docker copy still on daniel-server.
+  - name: valheim
+    platform: k8s
+
   # Slice-7 Phase D.2 KL1 (2026-08-10): the homelab log store — a SECOND cluster Loki,
   # deliberately separate from claude-otel's (that one holds verbatim prompts and stays
   # loopback-only; the D1 exception is documented in slice-7-phase-d-loki.md). hostname
