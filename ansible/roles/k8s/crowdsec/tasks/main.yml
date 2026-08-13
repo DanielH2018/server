@@ -9,6 +9,9 @@
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
+      # Phase F drain: per-node auth.log agents (see node-agent-daemonset.yaml.j2).
+      - node-agent-acquis.yaml
+      - node-agent-daemonset.yaml
     manifests_secret_files:
       - config-secret.yaml
 
@@ -26,10 +29,10 @@
       'read -r pw; cscli machines list -o raw | grep -q "^{{ item }}," ||
       { cscli machines add {{ item }} --password "$pw" -f /dev/null && echo ADDED; }'
     stdin: "{{ crowdsec_k8s_agent_password }}"
-  loop:
-    - "{{ crowdsec_k8s_agent_username }}"
-    - "{{ crowdsec_k8s_server_agent_machine }}"
-    - "{{ crowdsec_k8s_authelia_agent_machine }}"
+  loop: "{{ [crowdsec_k8s_agent_username, crowdsec_k8s_authelia_agent_machine] + crowdsec_k8s_node_agent_machines }}"
+  # crowdsec_k8s_server_agent_machine (the demoted Docker agent) left the loop at the
+  # Phase F drain — the node-agent DaemonSet machines above are its successors; the
+  # retirement one-shot deleted the old machine from the LAPI.
   register: crowdsec_k8s_machine_add
   become: true
   no_log: true

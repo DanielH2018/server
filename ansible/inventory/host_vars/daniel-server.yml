@@ -21,12 +21,11 @@ scrutiny_nvme_device: /dev/nvme0
 happy_git_version: 3f161de70541b1cedaf0b7547ed70889d8dae22d
 containers_list:
   # Organization: Core Services (proxy network)
-  # traefik role now deploys only the demoted CrowdSec agent (E7, 2026-08-13) — the Docker
-  # edge (this traefik + the authelia entry below) retired; the k8s edge serves everything.
-  - name: traefik
-    use_authelia: false
-    networks:
-      - proxy
+  # traefik entry RETIRED 2026-08-13 (Phase F drain): after E7 it carried only the demoted
+  # CrowdSec agent, whose successor is the crowdsec-node-agent DaemonSet (roles/k8s/crowdsec)
+  # tailing each node's auth.log — daniel-box's host SSH signal is NEW coverage. The old
+  # `daniel-server-agent` machine was deleted from the LAPI at retirement. Role archived at
+  # roles/containers/archive/traefik.
   # authelia RETIRED 2026-08-13 (Phase E, slice-7-phase-e-server-retirement.md): the portal
   # + OIDC issuer moved to the k8s authelia, which now owns auth.<domain>. Session keys
   # retire in a later verified pass. Role archived at roles/containers/archive/authelia.

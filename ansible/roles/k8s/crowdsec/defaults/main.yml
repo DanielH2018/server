@@ -45,3 +45,15 @@ crowdsec_k8s_metabase_mem_limit: 2048Mi
 crowdsec_k8s_metabase_mem_request: 256Mi
 crowdsec_k8s_metabase_cpu_limit: "1"
 crowdsec_k8s_metabase_cpu_request: 100m
+
+# ── node-agent DaemonSet (Phase F drain, 2026-08-13) ────────────────────────────────────
+# Per-node auth.log/SSH agents — the demoted Docker agent's successor, extended to
+# daniel-box (whose host SSH signal nothing covered before). Machine names must match
+# the DaemonSet's AGENT_USERNAME pattern k8s-node-agent-<nodeName>; add a line when a
+# node joins the cluster.
+crowdsec_k8s_node_agent_machines:
+  - k8s-node-agent-daniel-box
+  - k8s-node-agent-daniel-server
+# Same pair the demoted Docker agent ran: linux for auth.log/SSH scenarios,
+# whitelist-good-actors to suppress good-actor false positives on them.
+crowdsec_k8s_node_agent_collections: "crowdsecurity/linux crowdsecurity/whitelist-good-actors"

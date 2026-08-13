@@ -10,7 +10,9 @@
 # LAN — these are unauthenticated metrics endpoints (crowdsec's :6060 in particular carries
 # per-machine decision counts).
 
-PORTS=(9100 9101 9102 9103 9104)
+# 9104 died with the Docker edge (E7); 9103 with the demoted crowdsec agent (Phase F
+# drain, 2026-08-13 — its DaemonSet successor is scraped in-cluster, no LAN publish).
+PORTS=(9100 9101 9102)
 # daniel-box's /32 — cluster pod egress NATs to the node address. Same reasoning as
 # nut-lan-firewall.sh.j2: the reachable set stays exactly one host.
 ALLOW={{ hostvars['daniel-box'].server_ip }}

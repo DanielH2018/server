@@ -1,0 +1,130 @@
+---
+# Per-node log-processing agent (Phase F drain, 2026-08-13): tails the node's auth.log
+# and delivers to the in-cluster LAPI. Succeeds the demoted Docker agent on
+# daniel-server (containers/traefik, retired with this) and ADDS daniel-box's
+# never-covered host SSH signal. Same shape as the traefik pod's sidecar agent — the
+# repo's reference for an agent-only crowdsec container — with a per-node identity.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: crowdsec-node-agent
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: crowdsec-node-agent
+  template:
+    metadata:
+      labels:
+        app: crowdsec-node-agent
+    spec:
+      enableServiceLinks: false
+      initContainers:
+        # Seeds /etc/crowdsec before the entrypoint fills in defaults: the auth.log
+        # acquis plus the same whitelist parsers the other agents carry (from the
+        # crowdsec-config Secret — one source for all stacks).
+        - name: config-install
+          image: {{ crowdsec_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            - >-
+              install -m 644 /seed-acquis/acquis.yaml /etc/crowdsec/ &&
+              install -d /etc/crowdsec/parsers/s02-enrich &&
+              install -m 644 /seed/whitelist.yaml /seed/trusted-remote-whitelist.yaml
+              /etc/crowdsec/parsers/s02-enrich/
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: acquis
+              mountPath: /seed-acquis
+              readOnly: true
+            - name: crowdsec-secret
+              mountPath: /seed
+              readOnly: true
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
+      containers:
+        - name: crowdsec-agent
+          image: {{ crowdsec_k8s_image }}
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            - name: DISABLE_LOCAL_API
+              value: "true"
+            - name: LOCAL_API_URL
+              value: "http://crowdsec:{{ crowdsec_k8s_lapi_port }}"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            # Per-node machine identity — two pods sharing one machine name would fight
+            # over its heartbeat. Registered by the "Register the remote agent machines"
+            # task (crowdsec_k8s_node_agent_machines must list every node).
+            - name: AGENT_USERNAME
+              value: "k8s-node-agent-$(NODE_NAME)"
+            - name: AGENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: crowdsec-env
+                  key: AGENT_PASSWORD
+            - name: COLLECTIONS
+              value: "{{ crowdsec_k8s_node_agent_collections }}"
+          securityContext:
+            # Root (image default) — auth.log is 640 syslog:adm on the host.
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                # Read the host's root-owned log files; nothing here writes them.
+                - DAC_READ_SEARCH
+          ports:
+            - name: metrics
+              containerPort: 6060
+          volumeMounts:
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
+            # Hub datafiles re-download on start; the sqlite DB lives only in the LAPI pod.
+            - name: crowdsec-data
+              mountPath: /var/lib/crowdsec/data
+            - name: host-logs
+              mountPath: /var/log
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            # Round-trips the LAPI with the agent's own credentials — alive means
+            # "parsing and able to deliver".
+            exec:
+              command: ["cscli", "lapi", "status"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: acquis
+          configMap:
+            name: crowdsec-node-agent-acquis
+        - name: crowdsec-secret
+          secret:
+            secretName: crowdsec-config
+        - name: crowdsec-etc
+          emptyDir: {}
+        - name: crowdsec-data
+          emptyDir: {}
+        - name: host-logs
+          hostPath:
+            path: /var/log
+            type: Directory
+        - name: tmp
+          emptyDir: {}

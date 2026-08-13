@@ -14,6 +14,12 @@ spec:
       labels:
         app: ical-proxy
     spec:
+      # Phase F (2026-08-13): pinned to daniel-box — this image comes from the in-cluster
+      # registry, which is a loopback hostPort on that node only; a pod scheduled on
+      # daniel-server cannot pull it. The pin comes off when the drain re-plumbs the
+      # registry (real cert + LAN endpoint).
+      nodeSelector:
+        kubernetes.io/hostname: daniel-box
       enableServiceLinks: false
       containers:
         - name: ical-proxy

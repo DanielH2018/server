@@ -1,0 +1,19 @@
+---
+# Acquisition for the node-agent DaemonSet (Phase F drain, 2026-08-13): each node's own
+# auth.log — the SSH brute-force signal the demoted Docker agent used to carry for
+# daniel-server, extended to daniel-box (whose host auth.log was covered by NOTHING
+# while the engine pod parsed only AppSec events). Plain ConfigMap: paths, not secrets.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crowdsec-node-agent-acquis
+  namespace: {{ k8s_namespace }}
+data:
+  acquis.yaml: |
+    # The DIRECTORY /var/log is the hostPath mount, not the file: a single-file
+    # hostPath pins the inode, and logrotate's weekly `create` swaps it — the Docker
+    # agent's file-bind had exactly that silent post-rotation gap.
+    filenames:
+      - /var/log/auth.log
+    labels:
+      type: syslog

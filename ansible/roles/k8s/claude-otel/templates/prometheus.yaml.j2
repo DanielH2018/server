@@ -154,16 +154,24 @@ data:
             labels:
               instance: daniel-server
               origin: daniel-server
-      - job_name: crowdsec_daniel-server
+      # Phase F drain (2026-08-13): the crowdsec_daniel-server job (the demoted Docker
+      # agent's LAN-published 9103) retired with that agent. Its successor is the
+      # node-agent DaemonSet — per-POD discovery like the otel jobs, one target per node.
+      - job_name: crowdsec-node-agents
         scrape_interval: 1m
-        static_configs:
-          - targets: ['{{ k8s_bridge_client_ip }}:9103']
-            labels:
-              instance: daniel-server
-              origin: daniel-server
-              # Carried over from the Docker job's static_configs label — distinguishes this
-              # per-host demoted agent's series from the in-cluster `crowdsec` job's engine series.
-              machine: daniel-server
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [{{ k8s_namespace }}]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: crowdsec-node-agent
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            regex: "6060"
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
       # E7 (2026-08-13): the `traefik` job (Docker edge metrics on 9104) retired with the
       # edge. The bare `traefik` job name retires with it — the cluster edge stays
       # `traefik-k8s`, and monitor-bridge's traefik/cert checks are unpinned so they

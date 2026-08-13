@@ -126,6 +126,11 @@ def test_daniel_server_is_still_wholly_docker():
     # host (the daniel-box pin came off with it). Then 9: the otel-collector forwarder
     # DISSOLVED the same day — the cluster collector became a DaemonSet, giving this host
     # its own loopback OTLP hostPort, which is the seam the D7 forwarder existed to fake.
-    assert len(containers) == 8
-    assert len(filter_by_platform(containers, "docker")) == 8
+    # Then 8: terraria-stats moved in-cluster (SQLite seeded to a Longhorn PVC — all-time
+    # totals outreach Loki's backfill), which also re-lit its never-rescraped exporter.
+    # Then 7: the traefik entry retired — after E7 it carried only the demoted crowdsec
+    # agent, succeeded by the crowdsec-node-agent DaemonSet on BOTH nodes (daniel-box's
+    # host SSH signal is new coverage).
+    assert len(containers) == 7
+    assert len(filter_by_platform(containers, "docker")) == 7
     assert filter_by_platform(containers, "k8s") == []
