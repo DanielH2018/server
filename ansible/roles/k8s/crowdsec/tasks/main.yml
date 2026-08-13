@@ -84,5 +84,29 @@
     cron_file: crowdsec-home-allowlist
   become: true
 
+- name: Deploy the AppSec verifier
+  tags: [cron]
+  # Re-homed from the containers/traefik role at E7 — the Docker edge retired and this
+  # is the estate's only WAF-actually-enforcing signal (the bouncer fails open).
+  ansible.builtin.template:
+    src: crowdsec-appsec-verify.sh.j2
+    dest: /usr/local/bin/crowdsec-appsec-verify.sh
+    mode: "0750"
+    owner: root
+    group: root
+  become: true
+
+- name: Schedule the AppSec verifier
+  tags: [cron]
+  # root, not sys_user: execs into the engine pod via the root kubeconfig. Every 15 min
+  # like its daniel-server predecessor; pushes the "CrowdSec AppSec" monitor directly.
+  ansible.builtin.cron:
+    name: "CrowdSec AppSec verify"
+    minute: "*/15"
+    user: root
+    job: "/usr/local/bin/crowdsec-appsec-verify.sh"
+    cron_file: crowdsec-appsec-verify
+  become: true
+
 - name: Enforcement gate (opt-in via --tags b1-gate)
   ansible.builtin.import_tasks: verify.yml

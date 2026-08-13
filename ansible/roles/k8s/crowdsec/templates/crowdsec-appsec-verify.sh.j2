@@ -1,0 +1,66 @@
+#!/bin/bash
+# Watchdog for the k8s edge's CrowdSec AppSec inline WAF (dynamic.yaml.j2
+# crowdsecAppsecEnabled + the appsec acquisition in this role). The bouncer fails OPEN
+# (crowdsecAppsecUnreachableBlock: false), so a broken appsec engine — a bad
+# `cscli collections upgrade`, a hub rename dropping the appsec rulesets — silently
+# degrades the edge to ban-list-only with no other signal: the crowdsec pod stays up and
+# LAPI-healthy. Asserts the live engine has >=1 ENABLED appsec-config AND >=1 ENABLED
+# appsec-rule — both traffic-independent (request counters read zero on a quiet homelab).
+#
+# MOVED HERE from the containers/traefik role at E7 (2026-08-13): the Docker edge and its
+# verifier retired, and this was the estate's only WAF-actually-enforcing signal. Reporting
+# follows the home-allowlist pattern for daniel-box crons — pushes the SAME "CrowdSec
+# AppSec" Kuma monitor directly (no monitor-bridge hop, same token).
+#
+# set -uo (not -euo): a failed assert must be captured + reported, not swallowed.
+set -uo pipefail
+
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin  # cron ships a bare PATH
+
+PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/{{ monitor_bridge_appsec_push_token }}"
+
+push() { # up|down msg
+  curl -fsS --max-time 10 -G "$PUSH_URL" \
+    --data-urlencode "status=$1" --data-urlencode "msg=$2" -o /dev/null \
+    || logger -t crowdsec-appsec-verify "kuma push failed ($1: $2)"
+}
+
+cscli_pod() {
+  /usr/local/bin/k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec -- cscli "$@"
+}
+
+# DEFER a TOTAL crowdsec outage to the monitors that already own it (the cluster scrape
+# job + k3s Workload Health) — this check owns ONLY the fail-open-while-up blind spot,
+# and paging here too would triple-page one root cause. Push up so the monitor's
+# heartbeat stays alive through engine restarts.
+if ! cscli_pod lapi status >/dev/null 2>&1; then
+  push up "crowdsec unreachable — deferring to the scrape job + workload health"
+  exit 0
+fi
+
+CONFIGS=$(cscli_pod appsec-configs list -o json 2>/dev/null \
+  | jq '[.["appsec-configs"][]? | select(.status == "enabled")] | length' 2>/dev/null)
+if [ -z "$CONFIGS" ]; then
+  push down "cscli appsec-configs list failed though LAPI is up (appsec query error)"
+  exit 1
+fi
+if [ "$CONFIGS" -lt 1 ]; then
+  push down "no enabled appsec-configs — inline WAF not loaded, edge is ban-list-only"
+  exit 1
+fi
+
+# `status == "enabled"` — a loaded, non-disabled rule — is the closest traffic-independent
+# proxy for "the WAF is actually armed" (inband-vs-outofband is a config assignment, not a
+# rule property).
+RULES=$(cscli_pod appsec-rules list -o json 2>/dev/null \
+  | jq '[.["appsec-rules"][]? | select(.status == "enabled")] | length' 2>/dev/null)
+if [ -z "$RULES" ]; then
+  push down "cscli appsec-rules list failed though LAPI is up (appsec query error)"
+  exit 1
+fi
+if [ "$RULES" -lt 1 ]; then
+  push down "0 enabled appsec-rules loaded — WAF config present but not enforcing"
+  exit 1
+fi
+
+push up "$CONFIGS appsec-configs enabled, $RULES enabled rules loaded"

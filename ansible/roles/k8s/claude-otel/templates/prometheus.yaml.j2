@@ -130,13 +130,10 @@ data:
               # Carried over from the Docker job's static_configs label — distinguishes this
               # per-host demoted agent's series from the in-cluster `crowdsec` job's engine series.
               machine: daniel-server
-      - job_name: traefik
-        scrape_interval: 1m
-        static_configs:
-          - targets: ['{{ k8s_bridge_client_ip }}:9104']
-            labels:
-              instance: daniel-server
-              origin: daniel-server
+      # E7 (2026-08-13): the `traefik` job (Docker edge metrics on 9104) retired with the
+      # edge. The bare `traefik` job name retires with it — the cluster edge stays
+      # `traefik-k8s`, and monitor-bridge's traefik/cert checks are unpinned so they
+      # now read that edge's series alone.
       # Per-pod CPU/memory from each kubelet's cAdvisor, reached through the API server proxy
       # rather than the kubelet's own :10250. The proxy path needs only nodes/proxy RBAC and no
       # kubelet client certificate, which is why it is the usual choice for a single-node k3s.

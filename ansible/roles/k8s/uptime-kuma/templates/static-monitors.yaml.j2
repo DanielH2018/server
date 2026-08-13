@@ -183,10 +183,9 @@ stringData:
     {"type": "push", "name": "GitOps Deploy — Status", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_gitops_status_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   wg-easy-pi-peers.json: |
     {"type": "push", "name": "WG Pi Peer Backup", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_pi_peers_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  docker-user-origin-lock.json: |
-    {"type": "push", "name": "DOCKER-USER Origin Lock", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_docker_user_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  cloudflare-ip-drift.json: |
-    {"type": "push", "name": "Cloudflare IP Drift", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_cloudflare_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # E7 (2026-08-13): DOCKER-USER Origin Lock + Cloudflare IP Drift retired with the public
+  # 80/443 they guarded. CrowdSec AppSec stays — its feeder moved to daniel-box
+  # (k8s/crowdsec's crowdsec-appsec-verify.sh cron, pushing directly; same token).
   crowdsec-appsec.json: |
     {"type": "push", "name": "CrowdSec AppSec", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_appsec_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   autofix-disk-prune.json: |

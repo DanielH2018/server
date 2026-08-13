@@ -170,28 +170,6 @@ PI_PEERS_MAX_AGE_S = float(_env("PI_PEERS_MAX_AGE_D", "2.5")) * 86400
 # until noticed. We alert on a FAILED run or staleness (cron broken / never ran). 30 min = 6 missed
 # 5-min runs; the fast-path heartbeat keeps a healthy no-op green.
 
-# DOCKER-USER origin-lock watchdog: the traefik role's docker-user-verify.sh cron (every 15 min, as
-# root) reads the LIVE iptables DOCKER-USER chain and asserts the terminal DROP for :80/:443 plus a
-# RETURN allow are present, then writes {"ts": epoch, "ok": bool, "msg": str}. The seed/re-assert
-# systemd units apply the rules but write no state, so this is the only signal that the origin lock is
-# ACTUALLY applied — a chain flushed after boot (docker network reload, manual iptables -F, a Docker
-# upgrade seeding a preempting RETURN) would otherwise leave 80/443 reachable direct (Cloudflare/
-# CrowdSec bypass) invisibly. ok=false = the live assert failed; staleness = the verify cron stopped.
-# 45 min = 3 missed 15-min runs.
-DOCKER_USER_STATE = _env("DOCKER_USER_STATE", "/docker-user/state.json")
-DOCKER_USER_MAX_AGE_S = float(_env("DOCKER_USER_MAX_AGE_MIN", "45")) * 60
-
-# Weekly Cloudflare-IP drift check (traefik role's cloudflare-ip-drift.sh cron): compares the hardcoded
-# cloudflare_ips allowlist (group_vars/all.yml) — which gates BOTH Traefik's forwardedHeaders.trustedIPs
-# AND the DOCKER-USER origin-lock DROP — against Cloudflare's published ranges and writes {"ts","ok",
-# "msg"}. A stale list silently DROPs a client arriving on a newly-added CF range at the edge firewall
-# (no log trail); Cloudflare changes these rarely, so this is a low-frequency safety net. We alert on
-# drift (ok=false), a failed fetch, or >10d staleness (one missed weekly run + slack).
-CLOUDFLARE_DRIFT_STATE = _env("CLOUDFLARE_DRIFT_STATE", "/cloudflare-drift/state.json")
-CLOUDFLARE_DRIFT_MAX_AGE_S = float(_env("CLOUDFLARE_DRIFT_MAX_AGE_D", "10")) * 86400
-
-APPSEC_STATE = _env("APPSEC_STATE", "/crowdsec-appsec/state.json")
-APPSEC_MAX_AGE_S = float(_env("APPSEC_MAX_AGE_MIN", "45")) * 60
 
 # Hourly disk-autoprune host cron (autofix-bridge role): writes {"ts": epoch, "ok": bool, "msg":
 # str} after checking `/` used% against a threshold and, if crossed, running a conservative
@@ -260,8 +238,10 @@ CLUSTER_PROM_URL = _env("CLUSTER_PROMETHEUS_URL", "").rstrip("/")
 # container_memory_failcnt and the container_cpu_cfs_* pair, plus `up` (5 / 11). So the moment
 # PROMETHEUS_URL points at the cluster, restarts / oom / cpu / janitorr / targets silently widen
 # from "daniel-server's containers" to "every container in the homelab", and would start naming k8s
-# pods as offenders. The other seven PROM_DEPENDENT checks read metrics only this host produces
-# (node_*, traefik_*, promtail_*) and need no pin.
+# pods as offenders. The remaining PROM_DEPENDENT checks that DON'T read traefik_* are pinned
+# (disk/cert/memory/restarts/oom/cpu/targets/ups/promtail_dropped). Since E2 the cluster edge also
+# emits traefik_* (traefik-k8s job), so the unpinned traefik/cert checks now deliberately read the
+# CLUSTER edge's metrics.
 #
 # `{name!=""}` does NOT already scope this, which is the obvious assumption and a wrong one: the
 # kubelet's cAdvisor emits `name` too, so 99 cluster-native series survive that filter.
@@ -278,9 +258,10 @@ PROM_ORIGIN = _env(
 )
 
 # Floor below which the `up` vector is treated as missing rather than clean — see
-# targets_verdict. daniel-server scrapes 11 jobs; 5 leaves room for a couple of legitimately
-# retired exporters without ever getting close to the "estate vanished" case this guards.
-TARGETS_MIN = int(_env("TARGETS_MIN", "5"))
+# targets_verdict. The cluster prometheus scrapes exactly four origin="daniel-server" jobs since
+# E7 removed the Docker traefik's 9104 (node, cadvisor, promtail, crowdsec_daniel-server); the
+# promtail job leaves 2026-08-17 with the Docker loki cut, when this drops to 3.
+TARGETS_MIN = int(_env("TARGETS_MIN", "4"))
 # Same floor idea for the cluster's own scrape targets (see check_cluster_targets). It runs five —
 # prometheus, otel-collector, otel-collector-internal, kube-state-metrics, kubernetes-cadvisor —
 # so 3 tolerates a deliberate removal without ever mistaking an empty vector for a clean one.
@@ -1638,10 +1619,9 @@ def check_pi_pressure():
 def _check_state_file(path, missing_msg, bad_msg, decide):
     """Read a JSON state file written by a host cron and hand (state, age_s) to `decide`.
 
-    Shared IO half of the state-file monitors (pi-peers/docker-user/cloudflare-drift/appsec/
-    disk-prune/…): every one reads the same {ts, ok, msg} shape, so only the path, the two
-    failure messages, and the pure decision differ. Returns `decide(state, age_s)`, or
-    (False, msg) when the file is missing/unparseable.
+    Shared IO half of the state-file monitors (pi-peers/disk-prune): every one reads the same
+    {ts, ok, msg} shape, so only the path, the two failure messages, and the pure decision differ.
+    Returns `decide(state, age_s)`, or (False, msg) when the file is missing/unparseable.
     """
     try:
         with open(path) as fh:
@@ -1657,10 +1637,10 @@ def _check_state_file(path, missing_msg, bad_msg, decide):
 def pi_peers(state, age_s, max_age_s):
     """Pure: did the last wg-easy Pi-peer backup pull succeed, and recently? (ok, msg).
 
-    Same state-file idiom as docker_user/cloudflare_drift/appsec. The pull is the only path that
-    carries the Pi's un-rebuildable WireGuard peer keys into backup scope; because it never
-    --deletes, a silently failing pull leaves stale-but-present files in place — so a FAILED or
-    STALE pull is the signal that the offsite copy of those keys has quietly stopped refreshing.
+    Same state-file idiom as disk_prune. The pull is the only path that carries the Pi's
+    un-rebuildable WireGuard peer keys into backup scope; because it never --deletes, a silently
+    failing pull leaves stale-but-present files in place — so a FAILED or STALE pull is the signal
+    that the offsite copy of those keys has quietly stopped refreshing.
     """
     if not state.get("ok"):
         return False, "last Pi-peer backup pull FAILED: %s" % state.get("msg", "?")
@@ -1706,101 +1686,6 @@ def check_disk_prune():
         "no disk-autoprune state (never ran?)",
         "disk-autoprune state unparseable",
         lambda state, age_s: disk_prune(state, age_s, DISK_PRUNE_MAX_AGE_S),
-    )
-
-
-def docker_user(state, age_s, max_age_s):
-    """Pure: is the DOCKER-USER origin lock currently applied, per the last live-chain verify? (ok, msg).
-
-    Same state-file idiom as home_allowlist. The verify cron re-reads the live iptables chain
-    every run, so ok=false means the terminal DROP or the RETURN allows went missing (origin reachable
-    direct), and a stale timestamp means the verify cron itself stopped.
-    """
-    if not state.get("ok"):
-        return False, "DOCKER-USER origin lock NOT applied: %s" % state.get("msg", "?")
-    if age_s > max_age_s:
-        return (
-            False,
-            "last DOCKER-USER verify %.0f min ago (max %.0f) — verify cron stopped?"
-            % (age_s / 60, max_age_s / 60),
-        )
-    return True, "origin lock verified %.0f min ago: %s" % (
-        age_s / 60,
-        state.get("msg", ""),
-    )
-
-
-def check_docker_user():
-    return _check_state_file(
-        DOCKER_USER_STATE,
-        "no DOCKER-USER verify state (verify never ran?)",
-        "DOCKER-USER verify state unparseable",
-        lambda state, age_s: docker_user(state, age_s, DOCKER_USER_MAX_AGE_S),
-    )
-
-
-def cloudflare_drift(state, age_s, max_age_s):
-    """Pure: did the last Cloudflare-IP drift check pass, and recently? (ok, msg).
-
-    Same state-file idiom as home_allowlist/docker_user. The weekly cron writes state on every run;
-    ok=false means the hardcoded cloudflare_ips allowlist no longer matches Cloudflare's published
-    ranges (or the fetch failed) — a stale list silently DROPs a client on a new CF range at the
-    DOCKER-USER origin lock. A stale timestamp means the weekly cron stopped.
-    """
-    if not state.get("ok"):
-        return False, "Cloudflare IP allowlist drift: %s" % state.get("msg", "?")
-    if age_s > max_age_s:
-        return (
-            False,
-            "last Cloudflare-IP drift check %.1fd ago (max %.1fd) — verify cron stopped?"
-            % (age_s / 86400, max_age_s / 86400),
-        )
-    return True, "cloudflare_ips ok %.1fd ago: %s" % (
-        age_s / 86400,
-        state.get("msg", ""),
-    )
-
-
-def check_cloudflare_drift():
-    return _check_state_file(
-        CLOUDFLARE_DRIFT_STATE,
-        "no Cloudflare-drift state (check never ran?)",
-        "Cloudflare-drift state unparseable",
-        lambda state, age_s: cloudflare_drift(state, age_s, CLOUDFLARE_DRIFT_MAX_AGE_S),
-    )
-
-
-def appsec(state, age_s, max_age_s):
-    """Pure: is the CrowdSec AppSec inline WAF loaded and enforcing, per the last verify? (ok, msg).
-
-    Same state-file idiom as home_allowlist/docker_user/cloudflare_drift. The verify cron asserts the
-    live crowdsec agent has its appsec config + inband rulesets loaded every run. The bouncer fails
-    OPEN (crowdsecAppsecUnreachableBlock:false), so a broken appsec engine — a bad `cscli collections
-    upgrade`, a hub rename dropping appsec-virtual-patching/appsec-generic-rules — silently degrades
-    the edge to ban-list-only while the container stays up + `cscli lapi status`-healthy, which Scrape
-    Targets can't catch (it only sees a TOTAL crowdsec death). ok=false means the live assert failed
-    (WAF not enforcing); a stale timestamp means the verify cron itself stopped.
-    """
-    if not state.get("ok"):
-        return False, "CrowdSec AppSec WAF not enforcing: %s" % state.get("msg", "?")
-    if age_s > max_age_s:
-        return (
-            False,
-            "last AppSec verify %.0f min ago (max %.0f) — verify cron stopped?"
-            % (age_s / 60, max_age_s / 60),
-        )
-    return True, "AppSec WAF enforcing, verified %.0f min ago: %s" % (
-        age_s / 60,
-        state.get("msg", ""),
-    )
-
-
-def check_appsec():
-    return _check_state_file(
-        APPSEC_STATE,
-        "no AppSec verify state (verify never ran?)",
-        "AppSec verify state unparseable",
-        lambda state, age_s: appsec(state, age_s, APPSEC_MAX_AGE_S),
     )
 
 
@@ -2260,13 +2145,6 @@ CHECKS = [
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
     ("pi_peers", _env("KUMA_PUSH_PI_PEERS", ""), check_pi_peers),
     ("disk_prune", _env("KUMA_PUSH_DISK_PRUNE", ""), check_disk_prune),
-    ("docker_user", _env("KUMA_PUSH_DOCKER_USER", ""), check_docker_user),
-    (
-        "cloudflare_drift",
-        _env("KUMA_PUSH_CLOUDFLARE_DRIFT", ""),
-        check_cloudflare_drift,
-    ),
-    ("appsec", _env("KUMA_PUSH_APPSEC", ""), check_appsec),
     ("scrutiny", _env("KUMA_PUSH_SCRUTINY", ""), check_scrutiny),
     ("ups", _env("KUMA_PUSH_UPS", ""), check_ups),
     ("pi_pressure", _env("KUMA_PUSH_PI", ""), check_pi_pressure),
