@@ -77,21 +77,19 @@ def test_skips_digest_pinned_skiplist_image():
 
 def test_extracts_k8s_default_image_var():
     diff = (
-        "-cloudflare_ddns_k8s_image: favonia/cloudflare-ddns:latest\n"
-        "+cloudflare_ddns_k8s_image: favonia/cloudflare-ddns:latest"
+        "-homepage_k8s_image: ghcr.io/gethomepage/homepage:latest\n"
+        "+homepage_k8s_image: ghcr.io/gethomepage/homepage:latest"
         "@sha256:61013368c8f95981c0bb8bf56d962078d8b4e95724a554fa2dabb20d6e478097\n"
     )
     assert extract_changed_images(diff) == [
-        "favonia/cloudflare-ddns:latest"
+        "ghcr.io/gethomepage/homepage:latest"
         "@sha256:61013368c8f95981c0bb8bf56d962078d8b4e95724a554fa2dabb20d6e478097"
     ]
 
 
 def test_k8s_default_image_var_strips_quotes_and_trailing_comment():
-    diff = (
-        '+karakeep_k8s_chrome_image: "zenika/alpine-chrome:124"  # moved off gcr.io\n'
-    )
-    assert extract_changed_images(diff) == ["zenika/alpine-chrome:124"]
+    diff = '+freshrss_k8s_cache_image: "nginx:alpine"  # cache sidecar\n'
+    assert extract_changed_images(diff) == ["nginx:alpine"]
 
 
 def test_k8s_default_jinja_templated_image_is_skipped():
