@@ -69,7 +69,7 @@ comment).
 | Gate | Blocks | State |
 |---|---|---|
 | Docker loki/promtail cut | grafana role removal | Calendar: 2026-08-17 (dual-write window). Decide the `loki-docker-retiring` datasource / history sign-off at the cut. |
-| E7 — edge proper | traefik, authelia, crowdsec, 80/443 unpublish, DOCKER-USER crons | **Unblocked 2026-08-13** — the router table is empty. Remaining scope: Authelia portal duties (all portals are k8s-side already), CrowdSec demoted-agent wiring, the DOCKER-USER cron retirements, and unpublishing 80/443. |
+| E7 — edge proper | — | **DONE 2026-08-13** (same day, three slices). 1: k8s Authelia claimed auth.<domain> + reinstated OIDC (Jellyfin's live SSO issuer, carried verbatim — verified by discovery doc); reverse bridge deleted. 2: traefik scrape job dropped (TARGETS_MIN 5→4), LOKI_STREAM slimmed, origin-lock/drift checks+tiles retired, AppSec verifier re-homed to daniel-box (the only WAF-enforcing signal). 3: traefik role slimmed to the demoted crowdsec agent (auth.log only — kept for SSH coverage until Phase F), authelia archived, cluster-consumed CrowdSec files re-homed to k8s/crowdsec, in-role tombstones unwound the units/crons/state, containers removed, 80/443 verified closed. daniel-server: 14 containers, 11 entries, zero routed services, no public ports. |
 
 ## Stays until Phase F/G (not this phase's debt)
 
