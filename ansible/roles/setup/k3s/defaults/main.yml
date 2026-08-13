@@ -146,8 +146,13 @@ k3s_longhorn_backup_prefix: longhorn
 # Whether the backup target is armed. false enforces a BLANK target URL - the containment
 # lever for a B2 transaction-cap spiral (see the task comment). Disarmed 2026-08-12 after
 # the fourth cap event; re-armed 2026-08-13 after the tiering rework (daily set 25->10
-# volumes, docs/longhorn-backup-tiering.md) shrank the nightly to fit the unchanged caps.
-k3s_longhorn_backup_armed: true
+# volumes, docs/longhorn-backup-tiering.md) shrank the nightly to fit the unchanged caps
+# - and the 03:30 nightly ran green in 4.5 min. Disarmed again the same morning: the
+# STORAGE cap tripped (hidden kopia versions + fresh nightly bytes), wedged retention
+# deletes retry-stormed (~31 errors/min from 6 stuck CRs) and drained the day's class
+# B/C transaction caps. Re-arm after the non-longhorn version purge lands (00:05 UTC
+# 08-14 sequence), so the target comes back below the storage cap with fresh transactions.
+k3s_longhorn_backup_armed: false
 
 # Daily volume backup to that target. 03:30 keeps it clear of the Kopia run and of the daily
 # secret-rotation cron. 14 retained backups per volume is two weeks of daily recovery points
