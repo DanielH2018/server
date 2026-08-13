@@ -121,6 +121,9 @@ def test_daniel_server_is_still_wholly_docker():
     # 11: authelia retired the same night (E7) — the portal + OIDC issuer moved to the k8s
     # authelia, which now owns auth.<domain>. The traefik entry stays: the role still deploys
     # the demoted CrowdSec agent (auth.log/SSH), just no edge container behind it anymore.
-    assert len(containers) == 11
-    assert len(filter_by_platform(containers, "docker")) == 11
+    # Then 10: scrutiny's collector spoke retired 2026-08-13 — the Phase F drain's first
+    # workload, taken by the collector DaemonSet the moment the join put a kubelet on this
+    # host (the daniel-box pin came off with it).
+    assert len(containers) == 10
+    assert len(filter_by_platform(containers, "docker")) == 10
     assert filter_by_platform(containers, "k8s") == []

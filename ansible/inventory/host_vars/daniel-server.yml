@@ -215,15 +215,10 @@ containers_list:
   # docker-fleet host cron it briefly owned now lives in the monitor-bridge role. Rollback
   # window CLOSED 2026-08-13 (operator decision): role archived to
   # roles/containers/archive/uptime-kuma, on-disk dirs and the cutover tar snapshot deleted.
-  # scrutiny web+influxdb moved to the cluster 2026-08-10 (slice-7-phase-d-scrutiny.md
-  # SC6); this entry is now only the collector SPOKE pushing this host's NVMe SMART data
-  # to the cluster web API. port: false — the Traefik route retired with the Docker web.
-  # The whole entry retires at the Phase F join (the collector DaemonSet takes over).
-  - name: scrutiny
-    port: false
-    use_authelia: false
-    networks:
-      - monitoring
+  # scrutiny collector spoke RETIRED 2026-08-13 (Phase F drain, first workload): the
+  # collector DaemonSet (roles/k8s/scrutiny) covers both nodes now — same /dev/nvme0
+  # source, same push target. Web+influxdb had moved at SC6 (2026-08-10). Role archived
+  # at roles/containers/archive/scrutiny.
   # homelab-mcp REHOMED to k8s 2026-08-13 (Phase E close — it was the Docker edge's last
   # routed tenant, and had been dark since BT3 pointed the .local wildcard at the k8s VIP
   # where nothing routed mcp.local). Its bearer-token router now lives in the k8s edge's

@@ -16,12 +16,9 @@ spec:
       labels:
         app: scrutiny-collector
     spec:
-      # Phase F join (2026-08-13): pinned to daniel-box while the Docker
-      # scrutiny-collector spoke still reports daniel-server's disks — unpinned, this
-      # DaemonSet lands there too and double-collects them. The pin comes off at the
-      # drain step, when the Docker spoke retires (§F: collector DaemonSet on both nodes).
-      nodeSelector:
-        kubernetes.io/hostname: daniel-box
+      # Phase F drain (2026-08-13): unpinned — the DaemonSet covers both nodes and the
+      # Docker spoke on daniel-server retired with it. Both hosts' SMART source is the
+      # same /dev/nvme0 controller path (verified on daniel-server before the unpin).
       enableServiceLinks: false
       containers:
         - name: collector
