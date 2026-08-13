@@ -1,0 +1,12 @@
+# The edge trio (traefik, authelia, pihole) references this class: all ingress, all auth,
+# and LAN DNS must not be the first pods evicted under node pressure — before this class
+# existed, the GPU device-plugin (system-node-critical, its own template documents why)
+# outranked all three. Below system-node-critical (2000001000) and system-cluster-critical
+# (2000000000) on purpose: the scheduler and CNI still win.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: homelab-critical
+value: 100000
+globalDefault: false
+description: "Edge/auth/DNS workloads evicted only after ordinary pods."
