@@ -1,0 +1,81 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headlamp
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: headlamp
+  template:
+    metadata:
+      labels:
+        app: headlamp
+    spec:
+      enableServiceLinks: false
+      serviceAccountName: headlamp
+      # The credential the -unsafe-use-service-account-token flag below reads. Nothing may
+      # mount under /run/secrets or /var/run/secrets here — that shadows the projected token
+      # and the container never starts (test_nothing_mounts_over_the_serviceaccount_token_path).
+      automountServiceAccountToken: true
+      securityContext:
+        runAsUser: {{ headlamp_k8s_uid }}
+        runAsGroup: {{ headlamp_k8s_gid }}
+        runAsNonRoot: true
+      containers:
+        - name: headlamp
+          image: {{ headlamp_k8s_image }}
+          args:
+            - "-in-cluster"
+            - "-in-cluster-context-name=main"
+            - "-plugins-dir=/headlamp/plugins"
+            - "-session-ttl={{ headlamp_k8s_session_ttl }}"
+            # Headlamp's default in-cluster flow makes the operator paste a ServiceAccount
+            # token into the browser on every session. This flag makes it use its own mounted
+            # token instead. Upstream names it "unsafe" because it removes Headlamp's only
+            # authentication — which is correct here and only here: the Authelia forward-auth
+            # Middleware on the IngressRoute is the perimeter, and the SA it falls back to is
+            # read-only with no secrets and no exec (rbac.yaml.j2). Dropping the flag without
+            # also narrowing that SA is what "unsafe" is warning about.
+            - "-unsafe-use-service-account-token"
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            # Headlamp writes the kubeconfig it generates from the SA token ("main") under
+            # its XDG config dir, which readOnlyRootFilesystem otherwise makes EROFS.
+            - name: config
+              mountPath: /home/headlamp/.config
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ headlamp_k8s_cpu_limit }}"
+              memory: {{ headlamp_k8s_mem_limit }}
+            requests:
+              cpu: "{{ headlamp_k8s_cpu_request }}"
+              memory: {{ headlamp_k8s_mem_request }}
+      volumes:
+        - name: config
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

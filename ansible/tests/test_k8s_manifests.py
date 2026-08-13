@@ -585,6 +585,60 @@ def test_readonly_bindings_never_reference_a_writing_clusterrole():
         assert name in allowed, f"{binding['metadata']['name']} binds to '{name}'"
 
 
+def _headlamp_rbac_docs() -> list[dict]:
+    rendered = _render(
+        K8S / "headlamp" / "templates" / "rbac.yaml.j2",
+        **_role_defaults("headlamp"),
+    )
+    return [d for d in yaml.safe_load_all(rendered) if d]
+
+
+def test_headlamp_cluster_identity_stays_read_only():
+    """Headlamp runs with `-unsafe-use-service-account-token`, so it never asks the browser
+    for a credential — every request that gets past Authelia acts as this ServiceAccount, and
+    the ClusterIP Service is reachable from any pod besides. The SA's ceiling is therefore the
+    dashboard's security boundary, not a defence-in-depth layer, and it gets the same guard as
+    the shell's homelab-readonly identity above."""
+    rules = [
+        rule
+        for doc in _headlamp_rbac_docs()
+        if doc["kind"] == "ClusterRole"
+        for rule in doc["rules"]
+    ]
+    assert rules, "no ClusterRole rendered"
+    assert _grant_violations(rules) == []
+
+
+def test_headlamp_binds_only_to_read_only_cluster_roles():
+    """A roleRef pointing anywhere else routes around the rule audit above. Upstream's Helm
+    chart binds `cluster-admin` — copying a fragment of it back in is the realistic mistake."""
+    allowed = {"view", "headlamp-cluster-read"}
+    bindings = [d for d in _headlamp_rbac_docs() if d["kind"] == "ClusterRoleBinding"]
+    assert bindings, "no ClusterRoleBinding rendered"
+    for binding in bindings:
+        name = binding["roleRef"]["name"]
+        assert name in allowed, f"{binding['metadata']['name']} binds to '{name}'"
+
+
+def test_headlamp_keeps_its_serviceaccount_token_mounted():
+    """The flag that removes the token prompt reads the projected SA token. Setting
+    automountServiceAccountToken false — or omitting serviceAccountName, which silently falls
+    back to the namespace `default` SA with no permissions — leaves a dashboard that loads,
+    authenticates nobody, and shows an empty cluster."""
+    doc = yaml.safe_load(
+        _render(
+            K8S / "headlamp" / "templates" / "deployment.yaml.j2",
+            container_item=next(c for c in _k8s_entries() if c["name"] == "headlamp"),
+            **_role_defaults("headlamp"),
+        )
+    )
+    spec = doc["spec"]["template"]["spec"]
+    assert spec["serviceAccountName"] == "headlamp"
+    assert spec["automountServiceAccountToken"] is True
+    args = spec["containers"][0]["args"]
+    assert "-unsafe-use-service-account-token" in args
+
+
 def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
     """`view` covers no CRDs and nothing aggregates into it, so a group missing from the
     list degrades silently: the kubeconfig still works, that one `kubectl get` says

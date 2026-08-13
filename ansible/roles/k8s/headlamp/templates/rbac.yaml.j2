@@ -1,0 +1,87 @@
+---
+# Headlamp's cluster identity. This SA's ceiling IS the security boundary for the dashboard:
+# the deployment runs with `-unsafe-use-service-account-token`, which disables Headlamp's own
+# token prompt, so anything that reaches port 4466 acts as this account. Authelia guards the
+# ingress, but the ClusterIP Service is reachable from any pod in the cluster.
+#
+# Read-only by construction, in two halves:
+#   1. the built-in `view` ClusterRole — namespaced resources, and it excludes `secrets` by
+#      design. Bound cluster-wide (not a RoleBinding) so the UI can list longhorn-system,
+#      observability, metallb-system and kube-system, not just homelab.
+#   2. the additive role below — what `view` does not cover: cluster-scoped objects, the
+#      metrics API behind the CPU/memory columns, and this homelab's CRD groups.
+#
+# No `secrets`, no `pods/exec`/`attach`/`portforward`: the UI is a window, and writes go
+# through Ansible (repo CLAUDE.md). ansible/tests/test_k8s_manifests.py enforces both.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: headlamp
+  namespace: {{ k8s_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: headlamp-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: headlamp
+    namespace: {{ k8s_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: headlamp-cluster-read
+rules:
+  - apiGroups: [""]
+    resources: [nodes, namespaces, persistentvolumes]
+    verbs: [get, list, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses, volumeattachments, csidrivers, csinodes]
+    verbs: [get, list, watch]
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [get, list, watch]
+  - apiGroups: [apiregistration.k8s.io]
+    resources: [apiservices]
+    verbs: [get, list, watch]
+  - apiGroups: [scheduling.k8s.io]
+    resources: [priorityclasses]
+    verbs: [get, list, watch]
+  - apiGroups: [node.k8s.io]
+    resources: [runtimeclasses]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingressclasses]
+    verbs: [get, list, watch]
+  # RBAC objects are readable so the "who can do what" views work — and so this SA's own
+  # ceiling is inspectable from the UI it backs. Reading a binding grants nothing.
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles, clusterrolebindings, roles, rolebindings]
+    verbs: [get, list, watch]
+  # Without this every CPU/memory column in the UI is blank; metrics-server serves it.
+  - apiGroups: [metrics.k8s.io]
+    resources: [nodes, pods]
+    verbs: [get, list, watch]
+{% for group in headlamp_k8s_crd_api_groups %}
+  - apiGroups: [{{ group }}]
+    resources: ["*"]
+    verbs: [get, list, watch]
+{% endfor %}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: headlamp-cluster-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: headlamp-cluster-read
+subjects:
+  - kind: ServiceAccount
+    name: headlamp
+    namespace: {{ k8s_namespace }}

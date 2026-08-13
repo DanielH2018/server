@@ -90,6 +90,15 @@ containers_list:
     # LAN via the .161 wildcard and the forward bridge, external via the B5-prep native
     # public route (the reverse bridge shed its host when the Docker entry left).
     unsuffixed_hostname: bento-pdf
+  # Read-only cluster UI. No unsuffixed_hostname: it has no Docker twin and never had one, so
+  # there is no pre-migration name to keep serving. use_authelia is load-bearing rather than
+  # decorative here — the pod runs with -unsafe-use-service-account-token, so this Middleware
+  # is the only thing between a browser and the dashboard's (read-only) cluster identity.
+  - name: headlamp
+    platform: k8s
+    hostname: "headlamp{{ k8s_hostname_suffix }}"
+    port: 4466
+    use_authelia: true
   # Claude Code telemetry sink. No `port` and no `hostname` on purpose: it has no Traefik
   # route at all. Claude Code runs on this HOST and exports to 127.0.0.1:4317, reaching the
   # collector through a hostPort rather than the ingress — content logging is on, so nothing
