@@ -25,8 +25,9 @@ services:
       # (2026-08-13) retired the Docker traefik + Authelia containers this agent used to
       # also feed logs from, and with them the local AppSec listener — this host now
       # originates only auth.log (SSH). The entrypoint logs in as the machine below
-      # (registered by the k8s/crowdsec role at B2a); the old local LAPI's DB stays in
-      # the crowdsec-db volume untouched for rollback.
+      # (registered by the k8s/crowdsec role at B2a). The old local LAPI's DB was purged
+      # from the crowdsec-db volume 2026-08-13 (rollback window closed); the volume now
+      # holds only regenerable hub data files.
       DISABLE_LOCAL_API: "true"
       LOCAL_API_URL: "https://crowdsec-lapi-k8s.local.{{ domain }}"
       AGENT_USERNAME: "{{ crowdsec_k8s_server_agent_machine }}"

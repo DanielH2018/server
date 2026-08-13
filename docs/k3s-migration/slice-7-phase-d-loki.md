@@ -119,6 +119,10 @@ the claude-otel one.
   cluster claude-otel stack (see slice-7-drain-and-join.md D7) — no Claude content lands
   in the Docker Loki anymore. Step 4 now waits only on the 7-day dual-write window
   (through 2026-08-17).
+- **History disposition DECIDED (2026-08-13, operator):** the pre-cutover history in the
+  Docker Loki volume is discarded at the step-4 cut — delete the `loki-docker-retiring`
+  datasource AND the `loki` named volume with the role, no export. (Dual-written since
+  step 2; the old history was never queried from the retiring datasource.)
 
 ## Unverified — resolve during execution
 

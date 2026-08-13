@@ -17,7 +17,8 @@ the path-specific detail not spelled out there:
   the services still on Docker hold regenerable or migrating state only.)
   - **Documented exception — named volumes** are the deliberate pattern for bulky, regenerable state:
     `loki` (logs), `feed_cache` (freshrss nginx), `karakeep_meili` (rebuildable search index),
-    `crowdsec-db` (demoted crowdsec agent; retained for rollback of the pre-E7 local LAPI),
+    `crowdsec-db` (demoted crowdsec agent's hub-data dir; the pre-E7 local-LAPI DB inside it
+    was purged 2026-08-13 — rollback window closed, contents now regenerable),
     `promtail_positions` (promtail's log-read cursor, regenerable). Don't flag these; justify
     any new named volume with a comment.
 - Pin image tags or use a stable channel. `latest` is acceptable for the homelab tier, but note when

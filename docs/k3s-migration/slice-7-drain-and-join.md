@@ -155,6 +155,11 @@ cluster Loki), monitor-bridge and autofix-bridge (their check targets are mostly
 services already; what remains Docker-side shrinks to host checks), healthchecks-style
 verification per service as in slices 2-5.
 
+**Terraria disposition DECIDED (2026-08-13, operator):** the game server is staying —
+terraria + terraria-stats MIGRATE to the cluster at the Phase F drain (not retired). Plan
+them as a normal port: the server's world state moves to a Longhorn PVC, stats re-points
+at the cluster Loki (already done at D step 3 if executed in order).
+
 **Executed so far:** bento-pdf and ical-proxy 2026-08-10 (`6baaf482`, `a762e35c`).
 code-server 2026-08-10 (`c486f05b`) — ported WITHOUT its docker plumbing (operator
 decision): no DOCKER_HOST, in-IDE docker CLI and devcontainers gone,

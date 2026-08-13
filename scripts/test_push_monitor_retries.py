@@ -50,9 +50,10 @@ def _push_monitors() -> list[tuple[str, str, str]]:
 
 def test_push_monitors_are_discovered():
     # Guard the guard: if the macro-call format drifts and the regex matches nothing, the real
-    # assertion below would pass vacuously. Pin a floor well under today's count (~41).
+    # assertion below would pass vacuously. Pin a floor well under today's count (~33 after the
+    # 2026-08-13 uptime-kuma role archival dropped its dead-man labels from the glob).
     monitors = _push_monitors()
-    assert len(monitors) >= 35, (
+    assert len(monitors) >= 28, (
         "found only %d push monitors — regex/format drift?" % len(monitors)
     )
 
