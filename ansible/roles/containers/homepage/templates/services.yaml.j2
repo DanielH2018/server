@@ -69,6 +69,16 @@
                 key: {{ nut_ups_name | default('apc-ups') }}
                 username: {{ peanut_username }}
                 password: {{ peanut_password }}
+        - Headlamp:
+            icon: kubernetes.png
+            href: https://headlamp{{ k8s_hostname_suffix }}.{{ domain }}/
+            description: Cluster UI
+            # Inert in this archived Docker copy — namespace/podSelector are homepage's k8s
+            # pod-stats keys and this deployment has no cluster identity to read them with.
+            # Present anyway because the fork sync guard (test_homepage_services_fork_sync.py)
+            # requires every tile in both copies; the k8s copy carries the real explanation.
+            namespace: {{ k8s_namespace }}
+            podSelector: app=headlamp
         - Home Assistant:
             icon: home-assistant.png
             href: https://home-assistant.{{ domain }}/
