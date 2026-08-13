@@ -282,9 +282,13 @@ the test-PVC/drain-reschedule/cold-boot gates, then uncordon.
 Drain order for what remains: monitor-bridge + autofix-bridge (the long pole), THEN
 node-exporter/cadvisor/promtail (they watch the Docker estate, so they leave last), with
 docker-proxy(+lifecycle)/autoheal retiring alongside their final tenants. nut stays.
-Known flake to catch in the act: claude-otel's deploy fails on changed-manifest runs and
-passes idempotently on the immediate re-run (3 occurrences 2026-08-13; the failing task
-is still uncaptured — tee the FIRST run of the next changed deploy).
+The claude-otel "changed-run flake" is CLOSED — never a flake: after the DS cutover,
+assert_stable still read otel-collector as a Deployment, and the assert was change-gated,
+so exactly (and only) changed-manifest runs failed. Root-caused + fixed by the
+refinements pass (kind-aware rollout lists, PR #122). Nothing left to capture.
+Drain bookkeeping since that pass: monitor-bridge also carries K8S_MIN_DAEMONSETS=9 —
+retiring or adding a DaemonSet during the drain must bump that floor with the same
+narrative discipline as the other MIN guards.
 
 ### G — Residual role, instruments, and the books
 
