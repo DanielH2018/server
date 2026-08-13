@@ -65,6 +65,24 @@ data:
       - job_name: k8s-pods
         kubernetes_sd_configs:
           - role: pod
+        # Strip containerd's per-line envelope ("<rfc3339> stdout F <message>") so what
+        # lands in Loki is the application's own line, which is the contract every
+        # consumer was written against. Without this the Docker-era promtail's clean
+        # output silently became prefixed at the Phase F cutover, and a START-ANCHORED
+        # parser keeps matching — it just captures the envelope as part of the payload.
+        # Measured 2026-08-13: terraria-stats' `^(?P<name>.+) has joined\.$` turned "Ben"
+        # into "2026-08-13T21:14:28.159801911Z stdout F Ben", and since the timestamp is
+        # unique per line EVERY join would have become a new player, fragmenting the
+        # leaderboard while its unmatched-lines drift metric stayed at 0 (the line did
+        # parse — just wrongly). Only unplayed games hid it. Fixing it here rather than in
+        # each parser keeps the one contract in one place.
+        # `- cri: {}`, NOT `- cri`: every promtail stage must be a YAML OBJECT. The bare
+        # scalar form parses as valid YAML and fails only inside promtail, which then
+        # refuses the whole config and crash-loops — taking all k8s pod-log ingestion with
+        # it — reporting: "make sure each stage of your pipeline is a YAML object (must end
+        # with a `:`), check stage `- cri`".
+        pipeline_stages:
+          - cri: {}
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: __host__
