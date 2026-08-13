@@ -69,6 +69,15 @@ stringData:
     {"type": "http", "name": "k3s LiveSync", "url": "https://livesync{{ k8s_hostname_suffix }}.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["401"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   mosquitto-k8s.json: |
     {"type": "port", "name": "k3s Mosquitto (VIP)", "hostname": "{{ mqtt_k8s_vip }}", "port": 1883, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # VIP port tiles (kube-proxy ETP-Local DROP mode): joining a Docker host to k3s can
+  # black out a container's VIP while host-side probes stay green, so a real cross-host
+  # TCP check like this is what actually catches it.
+  jellyfin-lan-vip.json: |
+    {"type": "port", "name": "k3s Jellyfin (VIP)", "hostname": "{{ jellyfin_k8s_lan_ip }}", "port": 8096, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  terraria-vip.json: |
+    {"type": "port", "name": "k3s Terraria (game port)", "hostname": "{{ hostvars['daniel-box'].server_ip }}", "port": 7777, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # wg-easy's VIP is WireGuard-over-UDP — Kuma port monitors are TCP-only, so it cannot get
+  # a port-check tile here.
   zigbee2mqtt-k8s.json: |
     {"type": "http", "name": "k3s Zigbee2MQTT", "url": "https://zigbee2mqtt{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   slzb-coordinator.json: |

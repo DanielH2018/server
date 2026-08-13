@@ -45,6 +45,13 @@ spec:
               readOnly: true
             - name: etc-crowdsec
               mountPath: /etc/crowdsec
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
         # Seeds Metabase's pre-configured CrowdSec dashboards — the same wget+unzip the
         # Docker image BAKED at build time (which is also the proof the metabase image
         # carries wget and unzip). Runs every pod start into an emptyDir; see the defaults
@@ -67,6 +74,13 @@ spec:
               mountPath: /data
             - name: tmp
               mountPath: /tmp
+          resources:
+            limits:
+              cpu: 250m
+              memory: 512Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
       containers:
         - name: crowdsec
           image: {{ crowdsec_k8s_image }}

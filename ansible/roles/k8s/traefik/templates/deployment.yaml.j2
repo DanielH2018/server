@@ -55,6 +55,13 @@ spec:
           volumeMounts:
             - name: acme
               mountPath: /data
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
         # Seeds the agent sidecar's /etc/crowdsec before its entrypoint fills in defaults —
         # acquis pointing at the shared access log, and the same whitelist parsers as the
         # Docker edge (from the traefik-crowdsec Secret). Root like the sidecar itself.
@@ -91,6 +98,13 @@ spec:
             # on its first rollout; the authelia pod lost it outright.
             - name: traefik-logs
               mountPath: /var/log/traefik
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
       containers:
         - name: traefik
           image: {{ traefik_k8s_image }}

@@ -87,6 +87,12 @@ spec:
         - name: otel-collector
           image: {{ claude_otel_collector_image }}
           args: ["--config=/conf/config.yaml"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
           ports:
             # hostPort + hostIP is what puts this on the NODE's loopback, which is where
             # Claude Code (a host process, not a container) exports to. A ClusterIP Service

@@ -19,6 +19,9 @@ spec:
   # failing deploy reports the failure rather than waiting out the wait's own timeout.
   activeDeadlineSeconds: 180
   backoffLimit: 1
+  # Backstop cleanup: the deploy task always deletes this Job before re-applying it, but a day's
+  # TTL means a completed Job doesn't sit around indefinitely if that step is ever skipped.
+  ttlSecondsAfterFinished: 86400
   template:
     metadata:
       labels:

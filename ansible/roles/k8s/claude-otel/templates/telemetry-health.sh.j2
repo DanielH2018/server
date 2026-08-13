@@ -30,7 +30,7 @@ add() { PROBLEMS="${PROBLEMS:+$PROBLEMS; }$1"; }
 # 1. Are the workloads actually up? readyReplicas is absent (not 0) on a Deployment whose
 #    pods have never become ready, so the ${:-0} default matters — a bare comparison against
 #    an empty string succeeds and reports a dead Deployment as healthy.
-for DEP in loki prometheus tempo otel-collector grafana; do
+for DEP in loki prometheus tempo grafana; do
   READY=$($KUBECTL get deploy "$DEP" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
   WANT=$($KUBECTL get deploy "$DEP" -o jsonpath='{.spec.replicas}' 2>/dev/null)
   if [[ -z "$WANT" ]]; then
@@ -39,6 +39,16 @@ for DEP in loki prometheus tempo otel-collector grafana; do
     add "$DEP ${READY:-0}/$WANT ready"
   fi
 done
+
+# otel-collector runs as a DaemonSet (one pod per node), not a Deployment, so its readiness
+# is numberReady vs desiredNumberScheduled rather than readyReplicas vs spec.replicas.
+READY=$($KUBECTL get ds otel-collector -o jsonpath='{.status.numberReady}' 2>/dev/null)
+WANT=$($KUBECTL get ds otel-collector -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null)
+if [[ -z "$WANT" ]]; then
+  add "otel-collector missing"
+elif (( ${READY:-0} < WANT )); then
+  add "otel-collector ${READY:-0}/$WANT ready"
+fi
 
 # 2. Is the ingest door open? This is the one property no k8s object reports: hostPort is an
 #    iptables DNAT installed by the CNI portmap plugin, not a socket, so it is invisible to
@@ -72,7 +82,7 @@ fi
 
 if [[ -z "$PROBLEMS" ]]; then
   STATUS=up
-  MSG="5 workloads ready, OTLP receiver reachable, no export failures"
+  MSG="4 deployments + otel-collector daemonset ready, OTLP receiver reachable, no export failures"
 else
   STATUS=down
   MSG="$PROBLEMS"

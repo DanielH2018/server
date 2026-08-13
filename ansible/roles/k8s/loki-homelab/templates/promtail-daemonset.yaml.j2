@@ -64,6 +64,25 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+          ports:
+            - name: http
+              containerPort: 9080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 9080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 9080
+            # promtail's /ready returns 503 until it has discovered targets, which is
+            # slower and less predictable than Loki's own readiness — a generous
+            # cold-start budget here, not Loki's tight 60s/30s.
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 10
           securityContext:
             runAsUser: 0
             allowPrivilegeEscalation: false
