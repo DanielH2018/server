@@ -261,10 +261,30 @@ the test-PVC/drain-reschedule/cold-boot gates, then uncordon.
   apply-only deploys never remove, and a Deployment→DaemonSet rename-in-kind leaves both
   holding the same hostPort.
 
-Drain order for what remains: terraria-stats, crowdsec-agent re-home, monitor-bridge +
-autofix-bridge (the long pole), THEN node-exporter/cadvisor/promtail (they watch the
-Docker estate, so they leave last), with docker-proxy(+lifecycle)/autoheal retiring
-alongside their final tenants. nut stays.
+- **terraria-stats** (11 → 10): all-time SQLite seeded onto a daily-tier Longhorn PVC
+  (totals outreach Loki's 28d backfill), script from a --from-file ConfigMap on stock
+  python:alpine (no registry coupling). The move re-lit the player-stats board — nothing
+  had scraped the exporter since the Docker prometheus retired. Verified: target up,
+  both players' totals intact through the move.
+- **crowdsec agent re-homed** (10 → 9; traefik role archived, its entry retired 8 → 7):
+  a crowdsec-node-agent DaemonSet tails each node's auth.log against the in-cluster
+  LAPI — daniel-box's host SSH signal is NEW coverage (the engine pod is AppSec-only).
+  Per-node machines k8s-node-agent-<node>; /var/log mounted as a DIRECTORY (a
+  single-file hostPath pins the inode across logrotate — the Docker file-bind's silent
+  post-rotation gap). 9103 + its firewall port retired, TARGETS_MIN 4 → 3, the
+  DaemonSet scraped per-pod. Verified: both machines validated, both targets up, both
+  agents reading auth.log lines; old daniel-server-agent machine deleted.
+- **Registry pins (drain-prep):** every pod template with a locally-built image (n8n ×2,
+  ical-proxy, code-server, homelab-mcp, registry + self-test jobs, image-builder's build
+  job) carries an explicit daniel-box nodeSelector so the uncordon can't strand one in
+  ImagePullBackOff against the loopback-only registry.
+
+Drain order for what remains: monitor-bridge + autofix-bridge (the long pole), THEN
+node-exporter/cadvisor/promtail (they watch the Docker estate, so they leave last), with
+docker-proxy(+lifecycle)/autoheal retiring alongside their final tenants. nut stays.
+Known flake to catch in the act: claude-otel's deploy fails on changed-manifest runs and
+passes idempotently on the immediate re-run (3 occurrences 2026-08-13; the failing task
+is still uncaptured — tee the FIRST run of the next changed deploy).
 
 ### G — Residual role, instruments, and the books
 
