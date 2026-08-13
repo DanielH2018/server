@@ -751,6 +751,20 @@
     create: false
   become: true
 
+# Phase F: node-to-node cluster traffic terminates in host processes (apiserver, kubelet,
+# flannel), not the Docker/kube NAT paths every service port rides — so it is the one
+# class of traffic that actually meets UFW's default-deny INPUT and needs explicit
+# allows. No-op while k3s_agent_node_ips is empty.
+- name: Allow cluster traffic from agent nodes
+  tags: [join-firewall]
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ item.0 }}"
+    port: "{{ item.1.port }}"
+    proto: "{{ item.1.proto }}"
+  loop: "{{ k3s_agent_node_ips | product(k3s_join_server_ports) | list }}"
+  become: true
+
 - name: Create the systemd-resolved drop-in directory
   tags: [node-dns]
   ansible.builtin.file:

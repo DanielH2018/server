@@ -1,0 +1,137 @@
+---
+# Phase F (slice-7 §F): join THIS host to the existing cluster as an agent.
+# Invoked by the "Join an agent node" play in k3s-bringup.yml (which overrides the
+# hosts.ini local connection with ssh — run it FROM daniel-box). The server-side
+# firewall allows (k3s_agent_node_ips + the join-firewall tag) must be deployed on
+# daniel-box first: the agent's registration dials 6443 before anything else.
+#
+# Deliberately NOT here:
+#   - registries.yaml — the in-cluster registry is a loopback hostPort on daniel-box
+#     (k8s_registry_pull_host = localhost:5000), unreachable from any other node.
+#     Workloads with locally-built images stay pinned to daniel-box until the drain
+#     step re-plumbs the registry (real cert + LAN endpoint, or a nodeSelector policy).
+#   - the no-Docker assert from main.yml — coexistence with the remaining Docker
+#     residuals is exactly what §F plans; the two iptables hazards slice 0 named
+#     (DOCKER-USER custom rules, wg-easy hairpin NAT) retired at E7 / live on the Pi.
+
+- name: Allow cluster traffic from the server node
+  tags: [k3s_agent]
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ k3s_server_join_url | urlsplit('hostname') }}"
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop: "{{ k3s_join_agent_ports }}"
+  become: true
+
+- name: Download the k3s installer
+  tags: [k3s_agent]
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /usr/local/bin/k3s-install.sh
+    mode: "0755"
+  become: true
+
+- name: Read the cluster join token from the server node
+  tags: [k3s_agent]
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  delegate_to: daniel-box
+  become: true
+  register: k3s_join_token
+  no_log: true
+
+- name: Read the installed k3s-agent systemd unit
+  tags: [k3s_agent]
+  ansible.builtin.slurp:
+    src: /etc/systemd/system/k3s-agent.service
+  register: k3s_agent_unit
+  become: true
+  failed_when: false
+
+- name: Install or reconfigure the k3s agent
+  tags: [k3s_agent]
+  # Same unit-args guard as the server install (see main.yml): detects missing/changed
+  # flags, not removed ones. The installer writes K3S_URL/K3S_TOKEN into
+  # /etc/systemd/system/k3s-agent.service.env (0600 root), rewrites the unit,
+  # daemon-reloads and restarts the agent itself.
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s-install.sh
+  environment:
+    INSTALL_K3S_EXEC: "{{ k3s_agent_args }}"
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    K3S_URL: "{{ k3s_server_join_url }}"
+    K3S_TOKEN: "{{ k3s_join_token.content | b64decode | trim }}"
+  become: true
+  no_log: true  # K3S_TOKEN is a cluster credential
+  when: >-
+    k3s_agent_args.split() | reject('equalto', 'agent')
+    | difference(k3s_agent_unit.content | default('') | b64decode | replace("'", "") | split())
+    | length > 0
+  changed_when: true
+
+- name: Wait for the new node to report Ready
+  tags: [k3s_agent]
+  ansible.builtin.command:
+    cmd: k3s kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=300s
+  delegate_to: daniel-box
+  become: true
+  changed_when: false
+
+- name: Verify the node registered the canonical address
+  tags: [k3s_agent]
+  ansible.builtin.command:
+    # Single-quoted jsonpath — same shlex reasoning as the server task.
+    cmd: >-
+      k3s kubectl get node {{ inventory_hostname }} -o
+      jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
+  delegate_to: daniel-box
+  become: true
+  register: k3s_agent_node_ip
+  changed_when: false
+
+- name: Fail if the node registered an address the host does not own
+  tags: [k3s_agent]
+  ansible.builtin.assert:
+    that: k3s_agent_node_ip.stdout == server_ip
+    fail_msg: >-
+      k3s registered {{ inventory_hostname }} at {{ k3s_agent_node_ip.stdout }}, expected
+      {{ server_ip }}. Check for a second NIC winning autodetection (the daniel-box
+      2026-08-01 lesson).
+
+- name: Verify Longhorn did not create a default disk on the new node
+  tags: [k3s_agent]
+  # The create-default-disk=false node-label is the guard; this proves it held. An empty
+  # disk map is the expected state until the deliberate storage-participation step.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system get nodes.longhorn.io {{ inventory_hostname }}
+      -o jsonpath={.spec.disks}
+  delegate_to: daniel-box
+  become: true
+  register: k3s_agent_longhorn_disks
+  changed_when: false
+  retries: 6
+  delay: 10
+  # The Longhorn node CR appears asynchronously after longhorn-manager starts on the node.
+  until: k3s_agent_longhorn_disks.rc == 0
+  failed_when: k3s_agent_longhorn_disks.stdout not in ('', '{}')
+
+# No A1 node-DNS drop-in here, deliberately (checked 2026-08-13): daniel-server does not
+# run systemd-resolved — its static /etc/resolv.conf is `10.0.0.243` (the in-cluster
+# Pi-hole VIP) with a `1.1.1.1` fallback and `timeout:2 attempts:1`, so a cold cluster
+# start falls through to the upstream after 2s — the property A1's drop-in exists to
+# guarantee. Pinning upstream-ONLY here would break the Docker containers' `.local`
+# resolution (they forward to the host's resolv.conf: promtail's loki push URL,
+# monitor-bridge's check targets). Revisit when the Docker estate drains.
+
+- name: Raise the inotify instance limit for pod log tailing
+  tags: [node-sysctl]
+  # Same budget math as the server node — kubelet's log watchers plus every root-uid
+  # container share the per-uid default of 128.
+  ansible.posix.sysctl:
+    name: fs.inotify.max_user_instances
+    value: "1024"
+    state: present
+    reload: true
+  become: true

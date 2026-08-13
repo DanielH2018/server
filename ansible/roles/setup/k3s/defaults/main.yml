@@ -281,3 +281,35 @@ k3s_longhorn_nobackup_volumes:
 k3s_node_dns_upstreams:
   - 1.1.1.1
   - 1.0.0.1
+
+# ── Phase F: agent join (slice-7 D1/§F) ─────────────────────────────────────────────────
+# daniel-server joins as an AGENT, not a second server (D1: a two-member etcd halves
+# availability rather than doubling it). Run via:
+#   uv run ansible-playbook ansible/k3s-bringup.yml --tags join-firewall   # on daniel-box first
+#   uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server
+k3s_server_join_url: https://10.0.0.215:6443
+
+# Agent install flags. node.longhorn.io/create-default-disk=false is applied AT
+# registration so Longhorn never mints a default disk on the new node as a side effect of
+# joining — storage participation (the default-replica-count raise, §F) is a deliberate,
+# separately-gated step.
+k3s_agent_args: >-
+  agent --node-ip {{ server_ip }}
+  --node-label node.longhorn.io/create-default-disk=false
+
+# Node-to-node traffic UFW must admit (both hosts default-deny INPUT, and unlike every
+# service port this traffic terminates in host processes, not Docker/kube NAT):
+#   6443/tcp  agent -> server   apiserver registration + watch
+#   8472/udp  both directions   flannel VXLAN (pod-to-pod)
+#   10250/tcp both directions   kubelet API (logs/exec/metrics-server)
+k3s_join_server_ports:  # allowed FROM each agent, ON the server
+  - { port: "6443", proto: tcp }
+  - { port: "8472", proto: udp }
+  - { port: "10250", proto: tcp }
+k3s_join_agent_ports:  # allowed FROM the server, ON the agent
+  - { port: "8472", proto: udp }
+  - { port: "10250", proto: tcp }
+
+# Agent node IPs the server-side firewall admits. Set in daniel-box host_vars once an
+# agent exists; empty means the allow tasks are no-ops.
+k3s_agent_node_ips: []

@@ -38,3 +38,35 @@
       tags: always
   roles:
     - { role: k3s, tags: ["k3s"] }
+
+# Phase F (slice-7 §F): join an agent node. Deliberately opt-in — the play matches no
+# hosts unless invoked with `-e join_agent=daniel-server`, and it overrides hosts.ini's
+# `ansible_connection=local` (correct for each host running its OWN plays, wrong for
+# driving the join from daniel-box). Deploy the server-side firewall allows first:
+#   uv run ansible-playbook ansible/k3s-bringup.yml --tags join-firewall
+#   uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server
+- name: Join an agent node to the cluster
+  hosts: "{{ join_agent | default([]) }}"
+  gather_facts: false
+  vars:
+    ansible_connection: ssh
+    ansible_host: "{{ server_ip }}"
+    ansible_user: "{{ sys_user }}"
+  pre_tasks:
+    - name: Load encrypted secrets and set the become password (shared preamble)
+      ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
+      tags: always
+
+    - name: Refuse to join anything but daniel-server
+      # The only planned agent. A typo'd join_agent must not enroll the Pi.
+      ansible.builtin.assert:
+        that: inventory_hostname == 'daniel-server'
+        fail_msg: >-
+          Phase F joins daniel-server only — see docs/k3s-migration/slice-7-drain-and-join.md.
+      tags: always
+  tasks:
+    - name: Join this host as a k3s agent
+      ansible.builtin.include_role:
+        name: k3s
+        tasks_from: agent
+      tags: [k3s_agent]

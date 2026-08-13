@@ -1,5 +1,10 @@
 ---
 server_ip: 10.0.0.215
+# Phase F (2026-08-13): daniel-server joined as a k3s agent — its node-to-node traffic
+# (6443/8472/10250, k3s_join_server_ports) is UFW-allowed here via the k3s role's
+# join-firewall tag.
+k3s_agent_node_ips:
+  - 10.0.0.161
 # Cloud-init (subiquity) image, like the Pi: sshd's real config is the drop-in, not the
 # bare /etc/ssh/sshd_config. Verified on the host — /etc/ssh/sshd_config.d/ contains only
 # 50-cloud-init.conf. The SSH-hardening tasks have no `create:` fallback, so a wrong value
