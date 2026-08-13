@@ -8,9 +8,11 @@ pre-cutover history all discarded, `loki-docker-retiring` datasource deleted). W
 role still owns:
 
 1. **promtail** — the host's log tailer (/var/log + Docker container logs), pushing to
-   the cluster loki-homelab as its sole sink. It stays a Docker container until the
-   Phase F join (KL2: a DaemonSet cannot see a non-node host's logs), then converts.
-   Its 9102 metrics scrape and monitor-bridge's `TARGETS_MIN=4` hold until F.
+   the cluster loki-homelab as its sole sink. The F join (2026-08-13) made a DaemonSet
+   possible, but it stays a Docker container until the DRAIN step — the cluster promtail
+   DS is pinned to daniel-box meanwhile to avoid double-shipping this host's logs.
+   Its 9102 metrics scrape and monitor-bridge's `TARGETS_MIN` floor (see check.py for
+   the live value) hold until that drain step drops them together.
 2. **The dashboards source of truth** — `files/dashboards/**/*.json`. The cluster
    grafana does NOT copy this tree into its own role: `k8s/claude-otel/tasks/dashboards.yml`
    reads it from here (via `playbook_dir`) and bakes per-folder ConfigMaps. Editing a
