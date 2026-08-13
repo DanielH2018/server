@@ -145,8 +145,9 @@ k3s_readonly_crd_api_groups:
 k3s_longhorn_backup_prefix: longhorn
 # Whether the backup target is armed. false enforces a BLANK target URL - the containment
 # lever for a B2 transaction-cap spiral (see the task comment). Disarmed 2026-08-12 after
-# the fourth cap event; re-arm only after the daily caps are raised to fit the nightly.
-k3s_longhorn_backup_armed: false
+# the fourth cap event; re-armed 2026-08-13 after the tiering rework (daily set 25->10
+# volumes, docs/longhorn-backup-tiering.md) shrank the nightly to fit the unchanged caps.
+k3s_longhorn_backup_armed: true
 
 # Daily volume backup to that target. 03:30 keeps it clear of the Kopia run and of the daily
 # secret-rotation cron. 14 retained backups per volume is two weeks of daily recovery points
