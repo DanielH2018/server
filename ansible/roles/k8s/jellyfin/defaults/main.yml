@@ -44,7 +44,8 @@ jellyfin_k8s_dri_resource: devic.es/dri
 # The two UDP discovery ports (1900 SSDP, 7359 auto-discovery) are deliberately NOT here. Both
 # are multicast/broadcast and MetalLB in L2 mode does not carry multicast to pods; D7 resolved
 # this by establishing nobody uses DLNA. That is what keeps this pod off `hostNetwork`.
-jellyfin_k8s_lan_ip: 10.0.0.241
+# jellyfin_k8s_lan_ip moved to group_vars/all.yml (cross-role: the uptime-kuma VIP tile
+# reads it, and role defaults are invisible across roles).
 
 # What the server advertises to clients as its own address. Was `{{ server_ip }}` (daniel-server)
 # under Compose; the LAN VIP above is the same idea on the new host.
