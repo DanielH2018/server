@@ -15,6 +15,28 @@ spec:
         app: homepage
     spec:
       enableServiceLinks: false
+      # Copy-not-mount (the peanut pattern): homepage seeds every file of its skeleton
+      # config set into /app/config at startup, and that set GROWS with the image —
+      # custom.js and proxmox.yaml both joined it in 2026-08 updates, each crash-looping
+      # the pod against a read-only Secret mount (EROFS on the seed copy). A writable
+      # emptyDir seeded from the Secret ends the whack-a-mole: our files win, and the app
+      # seeds whatever else it invents next to them.
+      initContainers:
+        - name: seed-config
+          image: alpine:3.22
+          command: ["sh", "-c", "cp -L /config-secret/* /config/"]
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config
+              mountPath: /config-secret
+              readOnly: true
+            - name: config-live
+              mountPath: /config
       containers:
         - name: homepage
           image: {{ homepage_k8s_image }}
@@ -47,14 +69,8 @@ spec:
               value: >-
                 homepage.{{ domain }},homepage.local.{{ domain }},homepage{{ k8s_hostname_suffix }}.{{ domain }},homepage{{ k8s_hostname_suffix }}.local.{{ domain }}
           volumeMounts:
-            - name: config
+            - name: config-live
               mountPath: /app/config
-              readOnly: true
-            # docker-entrypoint.sh mkdir -p's and chowns this on every start; the Secret above
-            # is read-only, so logs get their own writable emptyDir mounted over that subpath
-            # rather than trying to widen the Secret mount.
-            - name: config-logs
-              mountPath: /app/config/logs
             # Bookmark icons (see icons-configmap.yaml.j2).
             - name: icons
               mountPath: /app/public/icons
@@ -92,7 +108,9 @@ spec:
         - name: config
           secret:
             secretName: homepage-config
-        - name: config-logs
+        # The writable /app/config the init container seeds; logs no longer need their own
+        # emptyDir carve-out (the whole dir is writable now).
+        - name: config-live
           emptyDir: {}
         - name: icons
           configMap:
