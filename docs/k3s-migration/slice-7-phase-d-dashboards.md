@@ -47,6 +47,8 @@ every board stays populated in BOTH Grafanas. Their future is the Phase F join
 (node-exporter/cadvisor as DaemonSets), not this phase.
 
 ### PG4 — Docker prometheus AND grafana keep running until Phase F
+> **Superseded 2026-08-12/13 by Phase E** (`slice-7-phase-e-server-retirement.md`): the
+> operator's go-ahead retired both, accepting the pre-08-07 TSDB history loss.
 The keep-all-dashboards decision makes early retirement pure loss: the Docker prometheus
 TSDB holds pre-remote-write history (before ~2026-08-07) that the cluster never received,
 and the Docker grafana costs nothing. Cleanups only: delete the commented `netdata-scrape`
