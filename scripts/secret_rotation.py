@@ -113,6 +113,7 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         "longhorn_backup_push_token",  # daniel-box cron (k3s role) + daniel-server label
         "claude_otel_push_token",  # daniel-box cron (k8s/claude-otel) + daniel-server label
         "daniel_box_disk_push_token",  # daniel-box cron (k3s role) + daniel-server label
+        "manifest_prune_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "secret_rotation_push_token",  # self-referential
     }
 )
