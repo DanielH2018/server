@@ -68,6 +68,13 @@ data:
       - job_name: crowdsec
         static_configs:
           - targets: ['crowdsec.{{ k8s_namespace }}.svc:6060']
+      # Phase F drain (2026-08-13): the player-stats aggregator moved in-cluster. This
+      # job is what re-lit the Apps/player-stats board — the exporter had been scraped
+      # by NOTHING since the Docker prometheus retired. Single replica behind the
+      # Service, so a static target is unambiguous (unlike the otel DaemonSet jobs).
+      - job_name: terraria-stats
+        static_configs:
+          - targets: ['terraria-stats.{{ k8s_namespace }}.svc:9420']
       # ── Phase D dashboard triage (2026-08-10, PG1/PG2 — slice-7-phase-d-dashboards.md) ──
       # PG1: ported from the Docker prometheus, which scraped these cluster workloads from
       # the wrong side of the migration (through Traefik routes, over the LAN). Same job

@@ -1,0 +1,58 @@
+---
+# terraria-stats on k8s (Phase F drain, 2026-08-13): reads the terraria pod's console
+# lines from loki-homelab, folds them into all-time per-player stats (SQLite on a
+# Longhorn PVC, seeded from the Docker copy), serves Prometheus metrics on :9420.
+# The scrape job lives in claude-otel's prometheus.yaml.j2 (job_name: terraria-stats).
+
+- name: Seed the stats DB from the Docker copy
+  ansible.builtin.include_role:
+    name: k8s/seed-volume
+  vars:
+    seed_volume_service: terraria-stats
+    seed_volume_claim: terraria-stats-data
+    seed_volume_source_path: /home/ubuntu/server/containers/terraria-stats/data
+    seed_volume_size: "{{ terraria_stats_k8s_pvc_size }}"
+
+- name: Stage the stats script on the node
+  tags: [config]
+  ansible.builtin.copy:
+    src: stats.py
+    dest: /etc/rancher/k3s/terraria-stats/stats.py
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: terraria_stats_script
+
+# The script is Jinja-hostile (its Prometheus exposition strings carry {…} braces), so
+# it becomes a ConfigMap via kubectl --from-file, never via a template — the same
+# reasoning as claude-otel's dashboards and image-builder's context files.
+- name: Render the script ConfigMap manifest
+  tags: [config]
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      k3s kubectl -n {{ k8s_namespace }} create configmap terraria-stats-script
+      --from-file=stats.py=/etc/rancher/k3s/terraria-stats/stats.py
+      --dry-run=client -o yaml > /etc/rancher/k3s/terraria-stats/configmap.yaml
+    executable: /bin/bash
+  become: true
+  changed_when: terraria_stats_script is changed
+
+- name: Apply the script ConfigMap
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/terraria-stats/configmap.yaml
+  become: true
+  register: terraria_stats_cm_apply
+  changed_when: "'configured' in terraria_stats_cm_apply.stdout or 'created' in terraria_stats_cm_apply.stdout"
+
+- name: Deploy terraria-stats to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: terraria-stats
+    manifests_rollout: terraria-stats
+    manifests_files:
+      - deployment.yaml
+      - service.yaml

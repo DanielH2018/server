@@ -1,0 +1,10 @@
+---
+# Stock image, not an image-builder build: stats.py is pure stdlib, mounted from a
+# ConfigMap — no registry coupling, so the pod can schedule on any node once the
+# cordon lifts (the loopback registry cannot serve cross-node pulls).
+terraria_stats_k8s_image: python:3.14-alpine
+
+# All-time playtime lives in the SQLite DB and Loki's backfill window only reaches
+# ~28d, so the volume is seeded from the Docker copy and rides the DAILY backup tier
+# (tiny file, irreplaceable totals).
+terraria_stats_k8s_pvc_size: 1Gi

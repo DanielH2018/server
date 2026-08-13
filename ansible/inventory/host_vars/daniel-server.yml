@@ -294,11 +294,8 @@ containers_list:
   # HTTP CrowdSec chain). terraria-stats below goes dark until Phase D's Loki step — it
   # read the game console via Docker promtail. Rolling back is re-adding this entry and
   # the traefik entrypoint/net; containers/terraria/config is still on disk.
-  - name: terraria-stats
-    # Headless sidecar: reads terraria console lines from Loki, serves Prometheus
-    # metrics on :9420. No web UI -> no port/Authelia. monitoring net = reach Loki
-    # and be scraped by Prometheus.
-    port: false
-    use_authelia: false
-    networks:
-      - monitoring
+  # terraria-stats MOVED to k8s 2026-08-13 (Phase F drain): SQLite all-time stats
+  # seeded onto a Longhorn PVC, script mounted from a ConfigMap, scraped by the cluster
+  # prometheus (which nothing had scraped it with since the Docker prometheus retired —
+  # the player-stats board had been dark for new data). Role archived at
+  # roles/containers/archive/terraria-stats; stats.py + tests moved to the k8s role.

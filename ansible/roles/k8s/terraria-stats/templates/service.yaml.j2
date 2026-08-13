@@ -1,0 +1,13 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: terraria-stats
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: terraria-stats
+  ports:
+    - name: metrics
+      port: 9420
+      targetPort: 9420

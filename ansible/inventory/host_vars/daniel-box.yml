@@ -551,6 +551,12 @@ containers_list:
     hostname: "loki-homelab{{ k8s_hostname_suffix }}"
     port: 3100
     use_authelia: false
+  # Phase F drain (2026-08-13): the player-stats aggregator, moved from daniel-server.
+  # MUST follow loki-homelab (order is load-bearing on this list): it tails the terraria
+  # pod's console lines from that Loki. No web UI — its :9420 exporter is scraped
+  # in-cluster (claude-otel prometheus job terraria-stats), so no port/route derives.
+  - name: terraria-stats
+    platform: k8s
   # Slice-7 Phase D (2026-08-10, slice-7-phase-d-scrutiny.md): SMART monitoring. The
   # collector DaemonSet adds this host's never-monitored NVMe; daniel-server's Docker
   # collector pushes into the same web API as a spoke until the Phase F join. UI behind
