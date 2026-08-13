@@ -29,6 +29,7 @@ from deploy_logic import (  # noqa: E402
     behind_marker,
     broad_remediation,
     containers_to_gate,
+    declared_k8s_services,
     declared_services,
     deferred_service_alerts,
     dirty_alert_slot,
@@ -36,6 +37,7 @@ from deploy_logic import (  # noqa: E402
     health_decision,
     is_diverged,
     next_action,
+    reroute_k8s_services,
     services_from_changed_paths,
     should_alert_dirty,
     stale_rendered_services,
@@ -527,6 +529,20 @@ def main() -> int:
 
     paths = run(["git", "diff", "--name-only", f"{local}..{origin}"]).splitlines()
     cs = services_from_changed_paths(paths)
+    # A path under ansible/roles/containers/<svc>/ maps to <svc> by NAME ALONE — it doesn't know
+    # this host might run that same-named service under k8s (wg-easy: a Docker role, but
+    # platform: k8s on daniel-box). Route those into the k8s defer-and-alert set instead of
+    # deploying a tag that resolves to deploy.yml's K8S play (an idempotent no-op whose health
+    # gate silently no-ops too, since containers_for() renders nothing for a k8s entry).
+    hostvars_path = os.path.join(
+        REPO, "ansible", "inventory", "host_vars", f"{HOSTNAME}.yml"
+    )
+    try:
+        with open(hostvars_path) as fh:
+            k8s_services = declared_k8s_services(fh.read())
+    except OSError:
+        k8s_services = set()
+    cs = reroute_k8s_services(cs, k8s_services)
 
     if cs.broad:
         # Broad doesn't ff-merge, so it re-evals next tick — the per-SHA marker (inside alert_once)

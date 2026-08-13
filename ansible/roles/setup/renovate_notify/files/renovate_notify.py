@@ -25,9 +25,12 @@ from notify_logic import (  # noqa: E402
     ci_rollup,
     dashboard_stale,
     find_dashboard,
+    find_dashboard_problems,
     fingerprint,
     parse_automerge,
+    problems_fingerprint,
     render_digest,
+    render_problems,
     should_notify,
     CLEARED_MSG,
 )
@@ -133,17 +136,31 @@ def main() -> int:
     # Fold it into the fingerprint so it notifies on transition, not every daily tick.
     issues = get("%s/repos/%s/issues?state=open&per_page=100" % (API, repo))
     stale = dashboard_stale(find_dashboard(issues))
-    cur_fp = fingerprint(items) + ("|dashboard-stale" if stale else "")
+    # Repository Problems (per-package lookup failures, config warnings) get no PR and
+    # don't touch dashboard staleness — a package can silently stop updating forever
+    # otherwise (karakeep's gcr.io image, 2026-08). Problem strings go straight into the
+    # fingerprint so a NEW problem re-pages even while an old one is still unresolved.
+    problems = find_dashboard_problems(issues)
+    cur_fp = (
+        fingerprint(items)
+        + ("|dashboard-stale" if stale else "")
+        + ("|problems:" + problems_fingerprint(problems) if problems else "")
+    )
     prev_fp = read_state(state_file)
     notify, kind = should_notify(prev_fp, cur_fp)
     log(
-        "actionable=%d dashboard_stale=%s fp=%r prev=%r -> %s"
-        % (len(items), stale, cur_fp, prev_fp, kind)
+        "actionable=%d dashboard_stale=%s problems=%d fp=%r prev=%r -> %s"
+        % (len(items), stale, len(problems), cur_fp, prev_fp, kind)
     )
 
     if notify:
-        if stale:
-            content = DASHBOARD_STALE_MSG % repo
+        if stale or problems:
+            parts = []
+            if stale:
+                parts.append(DASHBOARD_STALE_MSG % repo)
+            if problems:
+                parts.append(render_problems(problems))
+            content = "\n\n".join(parts)
             if items:
                 content += "\n\n" + render_digest(items)
         elif kind == "cleared":

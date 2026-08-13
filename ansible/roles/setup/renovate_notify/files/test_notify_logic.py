@@ -317,3 +317,100 @@ def test_find_dashboard_absent_returns_none():
 def test_find_dashboard_ignores_non_renovate_author():
     # A human-created issue titled "Dependency Dashboard" must not be trusted as the dashboard.
     assert nl.find_dashboard([_issue("Dependency Dashboard", login="someuser")]) is None
+
+
+# --- parse_repository_problems / find_dashboard_problems ---
+# A package whose lookup starts failing (karakeep's gcr.io image, 2026-08) gets no PR and
+# doesn't touch dashboard staleness — the dashboard still updates on schedule. This section
+# is the only signal, so it must be parsed into the notify path or it silently stops
+# receiving updates forever.
+_PROBLEMS_BODY = """This issue lists Renovate updates and detected dependencies.
+
+## Repository Problems
+
+These problems occurred while renovating this repository.
+
+ - `WARN: Failed to look up docker package ghcr.io/karakeep-app/karakeep`
+ - `WARN: Invalid schedule: "on the last day of the month"`
+
+## Detected Dependencies
+
+some other section
+"""
+
+
+def test_parse_repository_problems_section_present():
+    problems = nl.parse_repository_problems(_PROBLEMS_BODY)
+    assert problems == {
+        "WARN: Failed to look up docker package ghcr.io/karakeep-app/karakeep",
+        'WARN: Invalid schedule: "on the last day of the month"',
+    }
+
+
+def test_parse_repository_problems_section_absent_is_empty():
+    assert nl.parse_repository_problems("no problems section here") == set()
+    assert nl.parse_repository_problems("") == set()
+
+
+def test_find_dashboard_problems_populates_from_dashboard_body():
+    issues = [_issue("Dependency Dashboard")]
+    issues[0]["body"] = _PROBLEMS_BODY
+    assert nl.find_dashboard_problems(issues) == {
+        "WARN: Failed to look up docker package ghcr.io/karakeep-app/karakeep",
+        'WARN: Invalid schedule: "on the last day of the month"',
+    }
+
+
+def test_find_dashboard_problems_no_dashboard_is_empty():
+    assert nl.find_dashboard_problems([_issue("random")]) == set()
+
+
+def test_find_dashboard_problems_dashboard_without_section_is_empty():
+    issues = [_issue("Dependency Dashboard")]
+    issues[0]["body"] = "Nothing wrong here.\n\n## Detected Dependencies\n"
+    assert nl.find_dashboard_problems(issues) == set()
+
+
+# --- problems_fingerprint / re-page behavior ---
+def test_problems_fingerprint_sorted_and_stable():
+    a = {"z problem", "a problem"}
+    b = {"a problem", "z problem"}
+    assert (
+        nl.problems_fingerprint(a)
+        == nl.problems_fingerprint(b)
+        == "a problem,z problem"
+    )
+
+
+def test_problems_fingerprint_empty_is_blank():
+    assert nl.problems_fingerprint(set()) == ""
+
+
+def test_should_notify_unchanged_problems_is_silent():
+    fp = "|problems:" + nl.problems_fingerprint({"WARN: lookup failed for karakeep"})
+    assert nl.should_notify(fp, fp) == (False, "none")
+
+
+def test_should_notify_new_problem_pages():
+    prev = "|problems:" + nl.problems_fingerprint({"WARN: lookup failed for karakeep"})
+    cur = "|problems:" + nl.problems_fingerprint(
+        {"WARN: lookup failed for karakeep", "WARN: invalid schedule"}
+    )
+    assert prev != cur
+    notify, kind = nl.should_notify(prev, cur)
+    assert notify is True
+    assert kind == "digest"
+
+
+def test_should_notify_problems_first_appearing_pages():
+    cur = "|problems:" + nl.problems_fingerprint({"WARN: lookup failed for karakeep"})
+    notify, kind = nl.should_notify("", cur)
+    assert notify is True
+    assert kind == "digest"
+
+
+# --- render_problems ---
+def test_render_problems_lists_each_problem():
+    msg = nl.render_problems({"WARN: lookup failed for karakeep"})
+    assert "Repository Problems" in msg
+    assert "WARN: lookup failed for karakeep" in msg

@@ -593,10 +593,12 @@ tracker in the seconds before the tunnel and its kill-switch exist — traffic t
 `startupProbe` (`wg show wg0`) gates the main container, so that window cannot open.
 
 **The role is held shut by `qbittorrent_k8s_enabled: false`, and the flag is load-bearing.** The
-inventory entry has to exist — a k8s role without one fails `validate_k8s_manifests.py` — but
-daniel-box runs `has_gitops: true` and the deployer runs `ansible/deploy.yml`, a plain
-`containers_list` loop. The entry *alone* would stand up a second qbittorrent on the next tick,
-unattended, holding the same torrent state and announcing to trackers from a second address.
+inventory entry has to exist — a k8s role without one fails `validate_k8s_manifests.py` — and
+while the gitops deployer would not act on it unattended (`ansible/inventory/` is a
+defer-and-alert broad prefix in `deploy_logic.py`, and k8s role changes defer too), the very
+next *manual* deploy of the tag would stand up a second qbittorrent, holding the same torrent
+state and announcing to trackers from a second address. The flag, not the deployer's path
+taxonomy, is what keeps that from happening.
 
 **Prove it, at B4c:** the WebUI answers **from a pod**, not from this host — the host's address is
 already inside the Compose allow-list, so a request from here would pass even with the pod-CIDR
