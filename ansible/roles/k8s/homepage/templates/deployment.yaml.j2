@@ -19,6 +19,9 @@ spec:
       # name here the pod falls back to the namespace `default` SA and every kubernetes
       # widget renders empty instead of failing.
       serviceAccountName: homepage
+      # 02e9cfac swept this to false across 56 pods that never call the API — homepage was
+      # correctly in that set until the widget above gave it a reason to. Left explicit
+      # rather than defaulted so the next estate-wide sweep sees a deliberate value here.
       automountServiceAccountToken: true
       # Copy-not-mount (the peanut pattern): homepage seeds every file of its skeleton
       # config set into /app/config at startup, and that set GROWS with the image —
@@ -49,7 +52,6 @@ spec:
             requests:
               cpu: 10m
               memory: 16Mi
-      automountServiceAccountToken: false
       containers:
         - name: homepage
           image: {{ homepage_k8s_image }}
