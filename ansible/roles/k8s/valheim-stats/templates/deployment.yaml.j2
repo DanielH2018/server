@@ -28,6 +28,13 @@ spec:
         runAsUser: {{ puid }}
         runAsGroup: {{ pgid }}
         runAsNonRoot: true
+        # Needed here even though terraria-stats has no fsGroup, and the difference is the
+        # seed: that claim arrived pre-populated by `tar -p --numeric-owner`, so its files
+        # were ALREADY uid 1000 and the mountpoint was writable. This claim starts empty,
+        # and an empty Longhorn volume mounts root:root — so the very first
+        # sqlite3.connect() died with "unable to open database file" and crash-looped.
+        # fsGroup makes the kubelet chown the volume to this group at mount.
+        fsGroup: {{ pgid }}
       containers:
         - name: valheim-stats
           image: {{ valheim_stats_k8s_image }}
