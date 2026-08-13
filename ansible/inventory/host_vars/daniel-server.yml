@@ -80,11 +80,11 @@ containers_list:
   - name: peanut
     networks:
       - apps
-  - name: pihole
-    port: 80
-    use_authelia: true
-    networks:
-      - apps
+  # pihole RETIRED 2026-08-13 (Phase E, slice-7-phase-e-server-retirement.md): the cluster
+  # pihole at dns_k8s_vip owns LAN DNS. Gate cleared same night — the desktop (last real
+  # client, ~4.3k queries/day) repointed to 10.0.0.243 and the query log flatlined; this
+  # host's resolv.conf already had the VIP as primary. DHCP was verified OFF (router owns
+  # it). pihole+unbound removed imperatively; role in roles/containers/archive/.
   # kopia RETIRED 2026-08-10 (backup consolidation BL2, operator decision after the third
   # B2 cap event in nine days): Longhorn owns the backup plane; longhorn-backup-health.sh
   # is the successor check. The `kopia` isolation net and Traefik's route retired with it;

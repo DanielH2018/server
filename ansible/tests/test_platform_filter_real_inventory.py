@@ -115,7 +115,8 @@ def test_daniel_server_is_still_wholly_docker():
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
     # 14 since E3 retired homepage (2026-08-12; peanut/grafana kept their entries for the
-    # nut / loki+promtail residuals).
-    assert len(containers) == 14
-    assert len(filter_by_platform(containers, "docker")) == 14
+    # nut / loki+promtail residuals). Then 13: pihole retired 2026-08-13 (Phase E, query
+    # log flatlined after the last client repointed to the cluster DNS VIP).
+    assert len(containers) == 13
+    assert len(filter_by_platform(containers, "docker")) == 13
     assert filter_by_platform(containers, "k8s") == []
