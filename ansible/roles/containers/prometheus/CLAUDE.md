@@ -12,7 +12,7 @@ the two daniel-server host exporters it scrapes over the LAN. See repo-root `CLA
 - **Ports:** node-exporter `{{ server_ip }}:9100`, cadvisor `{{ server_ip }}:9101` —
   LAN-published for the cluster scrape, locked to daniel-box by
   `prometheus-exporters-lan-firewall.sh` (DOCKER-USER; the same unit also guards promtail
-  9102, crowdsec 9103, traefik 9104 published from their own roles)
+  9102 published from its own role)
 
 ## Notable
 - **node-exporter** (host metrics) and **cAdvisor** (per-container CPU/mem) — the data behind
