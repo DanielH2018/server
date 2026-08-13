@@ -55,16 +55,21 @@ alpine initContainer seeds a writable emptyDir from the read-only Secret mount.
 
 ## State after this phase
 
-daniel-server: 19 containers, 14 inventory entries. The Docker edge routes exactly two
-services: pihole and homelab-mcp.
+daniel-server: 16 containers, 12 inventory entries, and the Docker edge routes NOTHING —
+pihole retired the night of 08-13 (the desktop repointed to `dns_k8s_vip` and the query
+log flatlined within the hour), and homelab-mcp rehomed to k8s the same night (pulled
+forward from Phase G; it had been dark since BT3 anyway — the wildcard flip left
+mcp.local resolving to a VIP where nothing routed it). The rehome hit a real buildkit
+edge: a multi-file COPY from a ConfigMap-mounted build context drops all but the first
+symlinked file (followPaths closure bug; `COPY .` is the workaround, in the Dockerfile
+comment).
 
 ## Open gates
 
 | Gate | Blocks | State |
 |---|---|---|
-| pihole query flatline | pihole retirement | Desktop (10.0.0.140, ~4.3k queries/day) repointed to `dns_k8s_vip` ~00:10 UTC 2026-08-13; re-measure via `migration-oneshots/pihole-query-volume.yml`. daniel-box's ~456/day is cluster monitor traffic that dies with the tile. DHCP is router-owned (pihole DHCP verified off). |
 | Docker loki/promtail cut | grafana role removal | Calendar: 2026-08-17 (dual-write window). Decide the `loki-docker-retiring` datasource / history sign-off at the cut. |
-| E7 — edge proper | traefik, authelia, crowdsec, 80/443 unpublish, DOCKER-USER crons | Blocked by pihole (above) AND homelab-mcp, which stays until Phase G — E7 cannot complete before homelab-mcp rehomes or its route is otherwise served. |
+| E7 — edge proper | traefik, authelia, crowdsec, 80/443 unpublish, DOCKER-USER crons | **Unblocked 2026-08-13** — the router table is empty. Remaining scope: Authelia portal duties (all portals are k8s-side already), CrowdSec demoted-agent wiring, the DOCKER-USER cron retirements, and unpublishing 80/443. |
 
 ## Stays until Phase F/G (not this phase's debt)
 
