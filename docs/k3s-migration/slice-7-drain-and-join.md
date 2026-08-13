@@ -212,6 +212,39 @@ existing volumes raised; the settings patch slice-0 deliberately kept cheap. Gat
 Ready; a test PVC reports 2 healthy replicas across nodes; a daniel-box drain reschedules a
 stateless workload onto daniel-server and back; cold-boot both hosts (A1's gate, third run).
 
+**JOIN EXECUTED 2026-08-13** (operator moved F up; storage participation deliberately
+deferred until the B2 recovery proves the backup plane): daniel-server is Ready +
+cordoned, agent mode in `roles/setup/k3s/tasks/agent.yml` + the opt-in three-play join in
+k3s-bringup.yml (`-e join_agent=daniel-server`; play-level ssh override — the hosts.ini
+`local` connection is for hosts running their own plays, and play connection vars poison
+delegation, hence three plays handing facts via hostvars). Execution findings, each
+codified in-role:
+
+- **ETP=Local VIP blackout** — the join's one real incident. kube-proxy on the new node
+  programs all six MetalLB VIPs, and with no local traefik endpoint the filter-table
+  KUBE-EXTERNAL-SERVICES chain silently DROPs forwarded (container) traffic to them:
+  every Docker container dialling the cluster crash-looped or went blind within minutes
+  (host-level probes stay green — false all-clear). Fix: vip-kube-bypass.sh + 5-min
+  position-reassert timer (nat PREROUTING RETURN + filter FORWARD ACCEPT for
+  10.0.0.240/28) — container VIP traffic egresses to the LAN masqueraded as the node IP,
+  the pre-join path. Retires at the drain.
+- **L2 announcements pinned to daniel-box** (metallb-pool.yaml.j2 nodeSelectors) — the
+  new speaker had won the .240 election within minutes of joining.
+- **promtail + scrutiny-collector DaemonSets pinned to daniel-box** (nodeSelector) —
+  unpinned they land on the new node and double-ship authlog/syslog / double-collect
+  disks next to the still-running Docker copies. Pins come off at the drain.
+- **`create-default-disk=false` node-label is INERT** (needs the cluster-level
+  `create-default-disk-labeled-nodes` setting) — a default disk appeared with
+  allowScheduling:true; agent_verify.yml now patches the Longhorn node CR to
+  `allowScheduling:false` and asserts zero replicas on the node.
+- **No A1 DNS drop-in on this node** (static resolv.conf already falls through to
+  1.1.1.1; an upstream-only pin would break container `.local` resolution) and **no
+  registries.yaml** (loopback registry unreachable cross-node — image-built workloads
+  stay pinned to daniel-box until the drain re-plumbs it).
+
+**Still open in §F:** the replica raise + allowScheduling flip (after a green nightly),
+the test-PVC/drain-reschedule/cold-boot gates, then uncordon.
+
 ### G — Residual role, instruments, and the books
 
 homelab-mcp successor + otel-collector per D7. `backup_controller_host` and

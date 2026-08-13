@@ -1,0 +1,24 @@
+#!/bin/sh
+# Managed by Ansible (roles/setup/k3s, Phase F join) — do not edit on the host.
+#
+# On an agent node with no traefik endpoint, kube-proxy intercepts traffic to the
+# ETP=Local MetalLB VIPs and the filter-table KUBE-EXTERNAL-SERVICES chain DROPs it
+# ("has no local endpoints" — counter-verified 2026-08-13, the post-join VIP blackout
+# that crash-looped every Docker container dialling the cluster). These two rules make
+# this host treat the VIP range as plain LAN destinations: no DNAT, no kube drop, egress
+# masqueraded to the node IP — byte-for-byte the pre-join path.
+#
+# Delete-then-insert, not check-then-insert: position 1 is load-bearing (the kube jumps
+# sit right below), and -C proves existence, not position. The systemd timer re-asserts
+# every 5 minutes in case a networking component reorders the built-in chains.
+#
+# Retires at the Phase F drain, when no Docker workload on this host dials VIPs anymore.
+set -e
+
+CIDR="{{ k3s_vip_bypass_cidr }}"
+
+iptables -t nat -D PREROUTING -d "$CIDR" -j RETURN 2>/dev/null || true
+iptables -t nat -I PREROUTING 1 -d "$CIDR" -j RETURN
+
+iptables -D FORWARD -d "$CIDR" -j ACCEPT 2>/dev/null || true
+iptables -I FORWARD 1 -d "$CIDR" -j ACCEPT

@@ -43,6 +43,12 @@ spec:
       labels:
         app: promtail
     spec:
+      # Phase F join (2026-08-13): pinned to daniel-box while the Docker promtail still
+      # tails daniel-server's host logs — unpinned, this DaemonSet lands there too and
+      # double-ships authlog/syslog into loki-homelab. The pin comes off at the drain
+      # step, when the Docker promtail retires and this becomes the only shipper.
+      nodeSelector:
+        kubernetes.io/hostname: daniel-box
       enableServiceLinks: false
       serviceAccountName: promtail
       containers:

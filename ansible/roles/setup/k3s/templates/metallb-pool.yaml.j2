@@ -41,3 +41,12 @@ spec:
   ipAddressPools:
     - ingress-pool
     - homelab-pool
+  # Phase F join (2026-08-13): announce VIPs from daniel-box ONLY. Within minutes of the
+  # join, daniel-server's speaker won the L2 election for 10.0.0.240 and every Docker
+  # container on that host lost the cluster: a Docker-bridge client cannot reach a VIP
+  # its own host announces (the hairpin class again — crowdsec agent, terraria-stats and
+  # promtail all crash-looped on "dial tcp 10.0.0.240:443: i/o timeout" from 15:05).
+  # Revisit at the drain, when no Docker workload dials VIPs from that host anymore.
+  nodeSelectors:
+    - matchLabels:
+        kubernetes.io/hostname: daniel-box

@@ -1,9 +1,11 @@
 ---
 # Phase F (slice-7 §F): join THIS host to the existing cluster as an agent.
-# Invoked by the "Join an agent node" play in k3s-bringup.yml (which overrides the
-# hosts.ini local connection with ssh — run it FROM daniel-box). The server-side
-# firewall allows (k3s_agent_node_ips + the join-firewall tag) must be deployed on
-# daniel-box first: the agent's registration dials 6443 before anything else.
+# Invoked by the "Join an agent node" play in k3s-bringup.yml, which supplies
+# k3s_join_token (read on daniel-box by the preceding play — no delegation here, see the
+# playbook's three-play comment). The server-side firewall allows (k3s_agent_node_ips +
+# the join-firewall tag) must be deployed on daniel-box first: the agent's registration
+# dials 6443 before anything else. Post-join verification is agent_verify.yml, run from
+# the server side.
 #
 # Deliberately NOT here:
 #   - registries.yaml — the in-cluster registry is a loopback hostPort on daniel-box
@@ -13,6 +15,13 @@
 #   - the no-Docker assert from main.yml — coexistence with the remaining Docker
 #     residuals is exactly what §F plans; the two iptables hazards slice 0 named
 #     (DOCKER-USER custom rules, wg-easy hairpin NAT) retired at E7 / live on the Pi.
+#   - the A1 node-DNS drop-in (checked 2026-08-13): daniel-server does not run
+#     systemd-resolved — its static /etc/resolv.conf is `10.0.0.243` (the in-cluster
+#     Pi-hole VIP) with a `1.1.1.1` fallback and `timeout:2 attempts:1`, so a cold
+#     cluster start falls through to the upstream after 2s, which is the property A1's
+#     drop-in exists to guarantee. Pinning upstream-ONLY would break the Docker
+#     containers' `.local` resolution (they forward to the host's resolv.conf:
+#     promtail's loki push URL, monitor-bridge's check targets). Revisit at the drain.
 
 - name: Allow cluster traffic from the server node
   tags: [k3s_agent]
@@ -31,15 +40,6 @@
     dest: /usr/local/bin/k3s-install.sh
     mode: "0755"
   become: true
-
-- name: Read the cluster join token from the server node
-  tags: [k3s_agent]
-  ansible.builtin.slurp:
-    src: /var/lib/rancher/k3s/server/node-token
-  delegate_to: daniel-box
-  become: true
-  register: k3s_join_token
-  no_log: true
 
 - name: Read the installed k3s-agent systemd unit
   tags: [k3s_agent]
@@ -61,7 +61,7 @@
     INSTALL_K3S_EXEC: "{{ k3s_agent_args }}"
     INSTALL_K3S_VERSION: "{{ k3s_version }}"
     K3S_URL: "{{ k3s_server_join_url }}"
-    K3S_TOKEN: "{{ k3s_join_token.content | b64decode | trim }}"
+    K3S_TOKEN: "{{ k3s_join_token }}"
   become: true
   no_log: true  # K3S_TOKEN is a cluster credential
   when: >-
@@ -70,63 +70,66 @@
     | length > 0
   changed_when: true
 
-- name: Wait for the new node to report Ready
+# ── VIP kube-proxy bypass (see the script header for the incident it prevents) ────────
+- name: Install the VIP bypass script
   tags: [k3s_agent]
-  ansible.builtin.command:
-    cmd: k3s kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=300s
-  delegate_to: daniel-box
+  ansible.builtin.template:
+    src: vip-kube-bypass.sh.j2
+    dest: /usr/local/bin/vip-kube-bypass.sh
+    mode: "0755"
+    owner: root
+    group: root
   become: true
-  changed_when: false
 
-- name: Verify the node registered the canonical address
+- name: Install the VIP bypass unit and timer
   tags: [k3s_agent]
-  ansible.builtin.command:
-    # Single-quoted jsonpath — same shlex reasoning as the server task.
-    cmd: >-
-      k3s kubectl get node {{ inventory_hostname }} -o
-      jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
-  delegate_to: daniel-box
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.name }}"
+    content: "{{ item.content }}"
+    mode: "0644"
+    owner: root
+    group: root
+  loop:
+    - name: vip-kube-bypass.service
+      content: |
+        # Managed by Ansible (roles/setup/k3s) — do not edit.
+        [Unit]
+        Description=Exempt the MetalLB VIP range from kube-proxy on this Docker-carrying agent
+        After=k3s-agent.service
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/local/bin/vip-kube-bypass.sh
+    - name: vip-kube-bypass.timer
+      content: |
+        # Managed by Ansible (roles/setup/k3s) — do not edit.
+        # Re-asserts rule POSITION every 5 minutes: kube components ensure their jumps
+        # by existence-check + insert-at-top, so a restart of any of them could climb
+        # above the bypass. -C can't detect that; periodic delete+insert can.
+        [Unit]
+        Description=Re-assert the VIP kube-proxy bypass position
+        [Timer]
+        OnBootSec=2min
+        OnUnitActiveSec=5min
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.name }}"
   become: true
-  register: k3s_agent_node_ip
-  changed_when: false
 
-- name: Fail if the node registered an address the host does not own
+- name: Enable the VIP bypass now and on boot
   tags: [k3s_agent]
-  ansible.builtin.assert:
-    that: k3s_agent_node_ip.stdout == server_ip
-    fail_msg: >-
-      k3s registered {{ inventory_hostname }} at {{ k3s_agent_node_ip.stdout }}, expected
-      {{ server_ip }}. Check for a second NIC winning autodetection (the daniel-box
-      2026-08-01 lesson).
-
-- name: Verify Longhorn did not create a default disk on the new node
-  tags: [k3s_agent]
-  # The create-default-disk=false node-label is the guard; this proves it held. An empty
-  # disk map is the expected state until the deliberate storage-participation step.
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n longhorn-system get nodes.longhorn.io {{ inventory_hostname }}
-      -o jsonpath={.spec.disks}
-  delegate_to: daniel-box
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - vip-kube-bypass.service
+    - vip-kube-bypass.timer
   become: true
-  register: k3s_agent_longhorn_disks
-  changed_when: false
-  retries: 6
-  delay: 10
-  # The Longhorn node CR appears asynchronously after longhorn-manager starts on the node.
-  until: k3s_agent_longhorn_disks.rc == 0
-  failed_when: k3s_agent_longhorn_disks.stdout not in ('', '{}')
-
-# No A1 node-DNS drop-in here, deliberately (checked 2026-08-13): daniel-server does not
-# run systemd-resolved — its static /etc/resolv.conf is `10.0.0.243` (the in-cluster
-# Pi-hole VIP) with a `1.1.1.1` fallback and `timeout:2 attempts:1`, so a cold cluster
-# start falls through to the upstream after 2s — the property A1's drop-in exists to
-# guarantee. Pinning upstream-ONLY here would break the Docker containers' `.local`
-# resolution (they forward to the host's resolv.conf: promtail's loki push URL,
-# monitor-bridge's check targets). Revisit when the Docker estate drains.
 
 - name: Raise the inotify instance limit for pod log tailing
-  tags: [node-sysctl]
+  tags: [node-sysctl, k3s_agent]
   # Same budget math as the server node — kubelet's log watchers plus every root-uid
   # container share the per-uid default of 128.
   ansible.posix.sysctl:

@@ -39,22 +39,51 @@
   roles:
     - { role: k3s, tags: ["k3s"] }
 
-# Phase F (slice-7 §F): join an agent node. Deliberately opt-in — the play matches no
-# hosts unless invoked with `-e join_agent=daniel-server`, and it overrides hosts.ini's
-# `ansible_connection=local` (correct for each host running its OWN plays, wrong for
-# driving the join from daniel-box). Deploy the server-side firewall allows first:
+# Phase F (slice-7 §F): join an agent node. Deliberately opt-in — the join plays match no
+# hosts unless invoked with `-e join_agent=daniel-server`. Three plays, not one: the join
+# play overrides hosts.ini's `ansible_connection=local` (correct for each host running
+# its OWN plays, wrong for driving the join from daniel-box), and play-level connection
+# vars POISON every delegated task — a delegate_to inherits them and ssh-dials the wrong
+# box. So anything that must run on daniel-box (token read, secrets load, verification)
+# lives in its own daniel-box play, handing facts across via hostvars. Deploy the
+# server-side firewall allows first:
 #   uv run ansible-playbook ansible/k3s-bringup.yml --tags join-firewall
-#   uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server
+#   uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent
+- name: Read the join credentials on the server node
+  hosts: "{{ join_agent | default([]) is truthy | ternary('daniel-box', []) }}"
+  gather_facts: false
+  pre_tasks:
+    - name: Load encrypted secrets and set the become password (shared preamble)
+      ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
+      tags: always
+  tasks:
+    - name: Read the cluster join token
+      tags: [k3s_agent]
+      ansible.builtin.slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      become: true
+      register: k3s_join_token_slurp
+      no_log: true
+
+    - name: Stage the join credentials for the agent play
+      tags: [k3s_agent]
+      ansible.builtin.set_fact:
+        k3s_join_token_b64: "{{ k3s_join_token_slurp.content }}"
+        k3s_join_become_password: "{{ become_password }}"
+      no_log: true
+
 - name: Join an agent node to the cluster
   hosts: "{{ join_agent | default([]) }}"
   gather_facts: false
   vars:
     ansible_connection: ssh
-    ansible_host: "{{ server_ip }}"
-    ansible_user: "{{ sys_user }}"
+    ansible_host: "{{ hostvars[inventory_hostname]['server_ip'] }}"
+    ansible_user: "{{ hostvars[inventory_hostname]['sys_user'] }}"
   pre_tasks:
-    - name: Load encrypted secrets and set the become password (shared preamble)
-      ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
+    - name: Take the become password staged by the server play
+      ansible.builtin.set_fact:
+        ansible_become_password: "{{ hostvars['daniel-box']['k3s_join_become_password'] }}"
+      no_log: true
       tags: always
 
     - name: Refuse to join anything but daniel-server
@@ -69,4 +98,20 @@
       ansible.builtin.include_role:
         name: k3s
         tasks_from: agent
+      vars:
+        k3s_join_token: "{{ hostvars['daniel-box']['k3s_join_token_b64'] | b64decode | trim }}"
+      tags: [k3s_agent]
+
+- name: Verify the joined node from the server side
+  hosts: "{{ join_agent | default([]) is truthy | ternary('daniel-box', []) }}"
+  gather_facts: false
+  # ansible_become_password still set from the first play's preamble (same host, same run).
+  tasks:
+    - name: Verify the agent node registered, is Ready, and holds no Longhorn disk
+      ansible.builtin.include_role:
+        name: k3s
+        tasks_from: agent_verify
+      vars:
+        k3s_join_node: "{{ join_agent }}"
+        k3s_join_node_ip: "{{ hostvars[join_agent]['server_ip'] }}"
       tags: [k3s_agent]

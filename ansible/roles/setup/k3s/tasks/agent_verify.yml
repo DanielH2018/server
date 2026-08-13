@@ -1,0 +1,64 @@
+---
+# Phase F: server-side verification of a just-joined agent node. Runs ON daniel-box
+# (the kubectl credential lives here); k3s_join_node / k3s_join_node_ip are supplied by
+# the verify play in k3s-bringup.yml.
+
+- name: Wait for the new node to report Ready
+  tags: [k3s_agent]
+  ansible.builtin.command:
+    cmd: k3s kubectl wait --for=condition=Ready node/{{ k3s_join_node }} --timeout=300s
+  become: true
+  changed_when: false
+
+- name: Read the node's registered internal IP
+  tags: [k3s_agent]
+  ansible.builtin.command:
+    # Single-quoted jsonpath — same shlex reasoning as the server task in main.yml.
+    cmd: >-
+      k3s kubectl get node {{ k3s_join_node }} -o
+      jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
+  become: true
+  register: k3s_join_registered_ip
+  changed_when: false
+
+- name: Fail if the node registered an address the host does not own
+  tags: [k3s_agent]
+  ansible.builtin.assert:
+    that: k3s_join_registered_ip.stdout == k3s_join_node_ip
+    fail_msg: >-
+      k3s registered {{ k3s_join_node }} at {{ k3s_join_registered_ip.stdout }}, expected
+      {{ k3s_join_node_ip }}. Check for a second NIC winning autodetection (the daniel-box
+      2026-08-01 lesson).
+
+# The create-default-disk=false node-label turned out to be INERT here (found at the
+# 2026-08-13 join): Longhorn only honors it when the cluster-level
+# `create-default-disk-labeled-nodes` setting is true, which this cluster never set — so
+# a default disk appeared on the new node with allowScheduling:true. The enforceable
+# lever is the node CR itself; this pair disables scheduling declaratively and proves no
+# replica landed. Storage participation (§F replica raise) flips it back deliberately.
+- name: Keep the new node out of Longhorn scheduling until the replica raise
+  tags: [k3s_agent]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch nodes.longhorn.io {{ k3s_join_node }}
+      --type=merge -p {{ sched_patch | quote }}
+  vars:
+    sched_patch: '{"spec":{"allowScheduling":false}}'
+  become: true
+  register: k3s_join_longhorn_sched
+  changed_when: "'no change' not in k3s_join_longhorn_sched.stdout"
+  retries: 12
+  delay: 10
+  # The Longhorn node CR appears asynchronously after longhorn-manager starts.
+  until: k3s_join_longhorn_sched.rc == 0
+
+- name: Verify no Longhorn replica sits on the new node
+  tags: [k3s_agent]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system get replicas.longhorn.io
+      -o jsonpath={.items[?(@.spec.nodeID=="{{ k3s_join_node }}")].metadata.name}
+  become: true
+  register: k3s_join_longhorn_replicas
+  changed_when: false
+  failed_when: k3s_join_longhorn_replicas.stdout | length > 0
