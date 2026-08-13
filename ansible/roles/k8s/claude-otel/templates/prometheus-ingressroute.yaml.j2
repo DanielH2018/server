@@ -38,7 +38,17 @@ spec:
     - https
   routes:
     - kind: Rule
-      match: "Host(`prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}`) && PathPrefix(`/api/v1/query`) && ClientIP(`{{ lan_subnet }}`)"
+      # LAN-wide by operator decision (2026-08-13): any LAN computer may query; pods and
+      # WireGuard peers are excluded. The two /31s are the NODE-owned flannel.1/cni0
+      # addresses (10.42.0.0-1 = daniel-box, 10.42.1.0-1 = daniel-server): a host-originated
+      # query to the VIP takes kube-proxy's cluster-policy path and SNATs to one of them
+      # (measured via authelia's remote_ip: daniel-box curls arrive as 10.42.0.1,
+      # daniel-server's as 10.42.1.0 — host-originated traffic never traverses the
+      # vip-kube-bypass, which is PREROUTING-only). Pods are always .2+ and stay excluded.
+      # Container traffic from daniel-server (monitor-bridge) DOES ride the bypass and
+      # arrives LAN-masqueraded as 10.0.0.161. OR'd matchers, NOT ClientIP(a, b): the
+      # multi-arg form fails rule parsing on this Traefik and the router vanishes.
+      match: "Host(`prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}`) && PathPrefix(`/api/v1/query`) && (ClientIP(`{{ lan_subnet }}`) || ClientIP(`10.42.0.0/31`) || ClientIP(`10.42.1.0/31`))"
       middlewares:
         - name: rate-limit
       services:
