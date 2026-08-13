@@ -223,10 +223,9 @@ match the SOPS `become_password` (§1), or a repo cloned somewhere other than
 `/home/<user>/server` (§2). Reaching its asserts at all proves §5's SOPS onboarding worked.
 
 **CrowdSec's bouncers need no manual registration.** Since slice-6 B2 the single LAPI runs in
-the k3s cluster (`roles/k8s/crowdsec`) and registers both bouncers declaratively from its
-`BOUNCER_KEY_*` env — `dockertraefik` for daniel-server's edge
-(`crowdsec_bouncer_docker_traefik_key`) and `k8straefik` for the cluster's. The traefik role's
-remaining job is to fail its own deploy if the LAPI rejects the key. Verify with
+the k3s cluster (`roles/k8s/crowdsec`) and registers its one bouncer declaratively from the
+`BOUNCER_KEY_*` env — `k8straefik`, the cluster edge's (the Docker edge and its
+`dockertraefik` key retired at E7, 2026-08-13). Verify with
 `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list` on daniel-box (the
 Docker container is an agent now and has no LAPI to ask). Rotation is `docs/secret-rotation.md`,
 not a hand-run `cscli bouncers add`.

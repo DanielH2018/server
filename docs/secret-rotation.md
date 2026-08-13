@@ -65,8 +65,8 @@ ansible/vars/secrets.yml '["<name>"]' '"<new>"'`, update the registry date (`syn
 since the value already existed — set `last_rotated` by hand or re-run after editing), then
 redeploy the app **and** every consumer (e.g. Homepage, monitor-bridge, configarr). Examples:
 - `*_api_key` (sonarr/radarr/jellyfin/prowlarr): Settings → General → regenerate API key.
-- **CrowdSec bouncer keys** (`crowdsec_bouncer_docker_traefik_key` for daniel-server's edge,
-  `crowdsec_k8s_bouncer_api_key` for the cluster's) and the agent password
+- **CrowdSec bouncer keys** (`crowdsec_k8s_bouncer_api_key`, the cluster edge's — the only
+  bouncer since E7 retired the Docker edge and its `dockertraefik` key) and the agent password
   (`crowdsec_k8s_agent_password`, shared by all four agents). Since slice-6 B2 the single
   LAPI lives in the cluster and registration is DECLARATIVE — the engine's `BOUNCER_KEY_*`
   env, not `cscli`. Rotation is therefore: `sops set` the new value → delete the old
@@ -80,8 +80,8 @@ redeploy the app **and** every consumer (e.g. Homepage, monitor-bridge, configar
   traefik deploy now fails loudly on a rejected key (its probe task), which is the guard.
   Verify after: `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list`
   (fresh `last_pull`) and a `docker logs traefik` free of LAPI 403s.
-  `crowdsec_bouncer_api_key` is LEGACY — it authenticated the retired local LAPI and is
-  retained only for the B2 rollback window.
+  (`crowdsec_bouncer_api_key` — the retired local LAPI's legacy key — and
+  `crowdsec_bouncer_docker_traefik_key` were both RETIRED 2026-08-13 with the Docker edge.)
 - `grafana_admin_password`, `*_password`: change in the app (or its env on first run).
 - `authelia_secret` / `authelia_jwt`: rotating forces all users to re-login (not breaking).
 - `authelia_oidc_hmac_secret` / `*_password_hash`: re-issues OIDC — re-pair jellyfin (the
