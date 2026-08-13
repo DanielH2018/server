@@ -218,8 +218,9 @@ def docker_base_or_raise(url: str) -> str:
     """
     if not url:
         raise RuntimeError(
-            "container tools are dark: the Docker plane retired and the cluster "
-            "cannot reach a docker-proxy (Security M1); use kubectl for cluster "
-            "workloads until the Phase G cluster-API successor"
+            "container tools are dark: the cluster is barred from the Docker socket "
+            "(Security M1). Use the cluster-API successors instead — list_pods, "
+            "workload_status, list_nodes, pod_logs. The Docker-plane originals "
+            "retire with the Phase F drain."
         )
     return url

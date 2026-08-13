@@ -253,6 +253,26 @@ its shrunk scope (design decision 1's debt). design.md §8 marked complete; the
 platform-filter guard tests collapse to their end-state (daniel-server's containers_list
 carries only the residual set); a final `/homelab-review` pass over the finished shape.
 
+**homelab-mcp successor EXECUTED 2026-08-13** (pulled ahead of the drain — pure code
+against the existing cluster): the dark Docker-socket tools have cluster-API successors
+— `list_pods` / `workload_status` / `list_nodes` / `pod_logs`, reading the Kubernetes
+API with the pod's own ServiceAccount (rbac.yaml: get/list on pods, pods/log, nodes,
+deployments, daemonsets — narrower than the shell's homelab-readonly SA, no watch). The
+Docker originals keep their clear dark error and retire with the drain.
+`claude_code_events` (dark since D7) is re-lit against the claude-otel Loki with the
+KL1 boundary enforced in code: rows project through `k8s_reads.CLAUDE_EVENT_FIELDS`
+(a whitelist — event_name/tool_name/decision/model/…), the log body is never returned
+in any form, and the projection is unit-tested against a content-bearing fixture.
+Verified end-to-end through the bearer gate 2026-08-13 (all four new tools + the
+whitelist observed from the client side). Logic lives in `files/k8s_reads.py`
+(offline-tested, same contract as safe_reads.py); trap for the next tool: the
+image-builder context is an EXPLICIT file map in tasks/main.yml — a new module must be
+added there or the image builds without it (found via CrashLoopBackOff, plus the
+in-place-rebuilt tag needing a rollout restart to re-pull).
+
+The REST of §G stays anchored to the drain: host flips, kopia runbook, design.md §8,
+guard-test collapse, the final review pass.
+
 ## Exit criteria
 
 1. daniel-server runs only: k3s agent, peanut/NUT, wg-easy, kopia, and node-level exporters.

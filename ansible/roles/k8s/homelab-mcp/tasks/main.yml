@@ -18,6 +18,7 @@
     image_builder_context_files:
       "{{ playbook_dir }}/roles/k8s/homelab-mcp/files/app.py": app.py
       "{{ playbook_dir }}/roles/k8s/homelab-mcp/files/safe_reads.py": safe_reads.py
+      "{{ playbook_dir }}/roles/k8s/homelab-mcp/files/k8s_reads.py": k8s_reads.py
 
 - name: Deploy homelab-mcp to the cluster
   ansible.builtin.include_role:
@@ -26,6 +27,8 @@
     manifests_service: homelab-mcp
     manifests_rollout: homelab-mcp
     manifests_files:
+      # rbac before deployment: the pod references the ServiceAccount at admission.
+      - rbac.yaml
       - deployment.yaml
       - service.yaml
     manifests_secret_files:

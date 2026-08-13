@@ -1,0 +1,34 @@
+# The MCP pod's own read-only cluster identity (Phase G: the cluster-API successors to
+# the Docker-socket tools). Deliberately narrower than the shell's homelab-readonly SA:
+# no watch, no secrets, no exec — get/list on workload shapes plus pods/log, which is
+# exactly the tool surface (list_pods / workload_status / list_nodes / pod_logs).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: homelab-mcp
+  namespace: {{ k8s_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: homelab-mcp-read
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, nodes]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [deployments, daemonsets]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: homelab-mcp-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: homelab-mcp-read
+subjects:
+  - kind: ServiceAccount
+    name: homelab-mcp
+    namespace: {{ k8s_namespace }}

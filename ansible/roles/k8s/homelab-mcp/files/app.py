@@ -23,12 +23,19 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, PlainTextResponse
 
+import k8s_reads
 import safe_reads
 
 TOKEN = os.environ.get("HOMELAB_MCP_TOKEN", "")
 HA_TOKEN = os.environ.get("HOMELAB_HA_TOKEN", "")
 PROMETHEUS = os.environ.get("PROMETHEUS_URL", "http://prometheus:9090")
 LOKI = os.environ.get("LOKI_URL", "http://loki:3100")
+# The claude-otel Loki (verbatim prompt/response content — KL1). Only the metadata
+# whitelist in k8s_reads.claude_event_rows ever leaves through this server.
+CLAUDE_LOKI = os.environ.get("CLAUDE_LOKI_URL", "")
+# In-cluster API access with the pod's own read-only ServiceAccount (rbac.yaml).
+KUBE_API = os.environ.get("KUBE_API_URL", "https://kubernetes.default.svc")
+_SA_DIR = Path("/var/run/secrets/kubernetes.io/serviceaccount")
 # Empty since the k8s rehome: the cluster is deliberately barred from the Docker socket
 # (Security M1), so the container tools are dark until their cluster-API successor
 # (Phase G). Set the URL to re-light them on a host that can reach a docker-proxy.
@@ -65,6 +72,31 @@ def _docker_base() -> str:
     return safe_reads.docker_base_or_raise(DOCKER_PROXY)
 
 
+_kube_client: httpx.Client | None = None
+
+
+def _kube_get(path: str, params: dict | None = None, raw: bool = False):
+    """GET a Kubernetes API path as the pod's ServiceAccount.
+
+    The client is built lazily (the SA dir only exists in-pod) and the token is
+    re-read per request — kubelet rotates bound tokens, and a cached one goes
+    stale after an hour.
+    """
+    global _kube_client
+    if _kube_client is None:
+        _kube_client = httpx.Client(
+            timeout=httpx.Timeout(15.0), verify=str(_SA_DIR / "ca.crt")
+        )
+    token = (_SA_DIR / "token").read_text().strip()
+    r = _kube_client.get(
+        f"{KUBE_API}{path}",
+        params=params,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    r.raise_for_status()
+    return r.text if raw else r.json()
+
+
 @mcp.tool()
 def query_metric(promql: str) -> list[dict]:
     """Prometheus instant query. Returns {metric labels, value} rows."""
@@ -98,6 +130,51 @@ def query_logs(logql: str, limit: int = 100, hours: float = 24.0) -> list[dict]:
 def scrape_targets() -> list[dict]:
     """Prometheus scrape-target health (up/down + last error)."""
     return safe_reads.parse_targets(_get_json(f"{PROMETHEUS}/api/v1/targets"))
+
+
+@mcp.tool()
+def list_pods(namespace: str = "") -> list[dict]:
+    """All cluster pods (or one namespace): phase, ready, restarts, node.
+
+    The cluster-API successor to list_containers (the Docker plane is retiring).
+    """
+    if namespace:
+        if not k8s_reads.k8s_name_valid(namespace):
+            raise ValueError("invalid namespace")
+        path = f"/api/v1/namespaces/{namespace}/pods"
+    else:
+        path = "/api/v1/pods"
+    return k8s_reads.parse_pod_list(_kube_get(path))
+
+
+@mcp.tool()
+def workload_status() -> list[dict]:
+    """Every Deployment and DaemonSet with ready/desired counts and images."""
+    return k8s_reads.parse_workloads(
+        _kube_get("/apis/apps/v1/deployments"),
+        _kube_get("/apis/apps/v1/daemonsets"),
+    )
+
+
+@mcp.tool()
+def list_nodes() -> list[dict]:
+    """Cluster nodes: Ready condition, schedulable, kubelet version."""
+    return k8s_reads.parse_nodes(_kube_get("/api/v1/nodes"))
+
+
+@mcp.tool()
+def pod_logs(name: str, namespace: str = "homelab", tail: int = 100) -> str:
+    """Last `tail` lines of a pod's logs (bounded; cluster-API successor to
+    container_logs)."""
+    if not k8s_reads.k8s_name_valid(name):
+        raise ValueError("invalid pod name")
+    if not k8s_reads.k8s_name_valid(namespace):
+        raise ValueError("invalid namespace")
+    return _kube_get(
+        f"/api/v1/namespaces/{namespace}/pods/{name}/log",
+        params={"tailLines": str(tail), "limitBytes": str(256 * 1024)},
+        raw=True,
+    )
 
 
 @mcp.tool()
@@ -259,17 +336,24 @@ def claude_code_usage() -> dict:
 
 @mcp.tool()
 def claude_code_events(limit: int = 100, hours: float = 24.0) -> list[dict]:
-    """Recent Claude Code event logs from the OTLP -> Loki pipeline: tool decisions,
-    api_request / api_error / api_refusal, mcp_server_connection, permission-mode changes.
-    Metadata only, no prompt/response/tool content. For arbitrary LogQL use query_logs.
+    """Recent Claude Code events: tool decisions, api_request / api_error /
+    api_refusal, mcp_server_connection, permission-mode changes.
 
-    Pinned to service_name="claude-code": Loki 3.x derives `service_name` for promtail
-    streams too, so a `=~".+"` selector returns every container's logs, not these events.
-    Only service_name is an indexed label — event_name, tool_name, decision, success and
-    the rest are structured metadata, so filter them after the selector, e.g.
-    `{service_name="claude-code"} | event_name="tool_decision" | decision="reject"`.
+    Metadata ONLY — the source (the claude-otel Loki) stores prompts, responses and
+    tool output verbatim, and that content must never gain a LAN-reachable path
+    (KL1), so rows are projected through k8s_reads.CLAUDE_EVENT_FIELDS and the log
+    body is dropped entirely. query_logs cannot reach this store; it reads the
+    homelab Loki.
     """
-    return _loki_range('{service_name="claude-code"}', limit, hours)
+    base = k8s_reads.claude_loki_base_or_raise(CLAUDE_LOKI)
+    params = safe_reads.loki_range_params(
+        '{service_name="claude-code"}',
+        limit,
+        hours,
+        datetime.now(timezone.utc).timestamp(),
+    )
+    parsed = safe_reads.parse_loki(_get_json(f"{base}/loki/api/v1/query_range", params))
+    return k8s_reads.claude_event_rows(parsed)
 
 
 @mcp.tool()

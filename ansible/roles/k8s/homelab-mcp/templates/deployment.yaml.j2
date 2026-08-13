@@ -17,6 +17,9 @@ spec:
       enableServiceLinks: false
       # Same posture as the compose template: uid 1000, read-only root, all caps dropped,
       # /tmp the only writable path.
+      # The pod's own read-only cluster identity (rbac.yaml) — get/list on workload
+      # shapes + pods/log, the exact surface of the Phase G cluster-API tools.
+      serviceAccountName: homelab-mcp
       securityContext:
         runAsUser: 1000
         runAsGroup: 1000
@@ -55,6 +58,11 @@ spec:
               value: http://prometheus.observability.svc.cluster.local:9090
             - name: LOKI_URL
               value: http://loki-homelab.{{ k8s_namespace }}.svc.cluster.local:3100
+            # The claude-otel Loki — verbatim prompt/response content (KL1). Only
+            # claude_code_events reads it, and only through the metadata whitelist
+            # (k8s_reads.claude_event_rows); the raw store stays without a LAN route.
+            - name: CLAUDE_LOKI_URL
+              value: http://loki.{{ k8s_observability_namespace }}.svc.cluster.local:3100
             - name: SCRUTINY_URL
               value: http://scrutiny.{{ k8s_namespace }}.svc.cluster.local:8080
             - name: HA_URL
