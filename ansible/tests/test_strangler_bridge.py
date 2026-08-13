@@ -30,27 +30,11 @@ GATE = (
     ANSIBLE / "roles" / "k8s" / "traefik" / "templates" / "livesync-gate-secret.yaml.j2"
 )
 DOMAIN = "example.com"
-VIP = "10.0.0.240"
 
 
 def _containers(host: str) -> list[dict]:
     data = yaml.safe_load((HOST_VARS / f"{host}.yml").read_text()) or {}
     return data.get("containers_list") or []
-
-
-def _docker_edge_config() -> dict:
-    """The Docker traefik file-provider config as Ansible would render it."""
-    env = Environment(
-        loader=FileSystemLoader(str(TRAEFIK)),
-        undefined=ChainableUndefined,
-        keep_trailing_newline=True,
-    )
-    rendered = env.get_template("config.yml.j2").render(
-        domain=DOMAIN,
-        k3s_metallb_ingress_vip=VIP,
-        hostvars={"daniel-box": {"containers_list": _containers("daniel-box")}},
-    )
-    return yaml.safe_load(rendered)
 
 
 def _gate_config() -> dict:
@@ -95,23 +79,13 @@ def test_no_bridge_hostname_key_survives_anywhere():
 
 
 def test_docker_edge_renders_no_bridge_machinery():
-    """The Docker edge carries NO bridge anything since the livesync gate moved to the
-    cluster: no routers referencing bridge services, no generated services/transports,
-    and no livesync routers (its names are the k8s file provider's now)."""
-    config = _docker_edge_config()
-    routers = config["http"].get("routers") or {}
-    for name, router in routers.items():
-        assert "-bridge-" not in router.get("service", ""), (
-            f"router {name} references a bridge service — the bridge is fully retired"
-        )
-        assert "livesync" not in name, (
-            f"router {name}: livesync routing belongs to the k8s edge's file provider"
-        )
-    assert "services" not in config["http"] or not any(
-        "-bridge-" in s for s in config["http"]["services"]
-    ), "generated bridge services reappeared at the Docker edge"
-    assert not (config["http"].get("serversTransports") or {}), (
-        "bridge serversTransports reappeared at the Docker edge"
+    """The Docker edge itself retired at E7 (2026-08-13): traefik + authelia are gone from
+    daniel-server, so there is no file-provider config left to render bridge machinery into.
+    This is now an absence guard, not a render check — a reappearing config.yml.j2 would mean
+    a second edge came back, which test_reverse_bridge_stays_retired also guards against."""
+    assert not (TRAEFIK / "config.yml.j2").exists(), (
+        "roles/containers/traefik/templates/config.yml.j2 reappeared — the Docker edge "
+        "retired at E7; a file-provider config here means bridge machinery could too"
     )
 
 

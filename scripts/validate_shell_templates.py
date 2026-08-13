@@ -43,9 +43,11 @@ from _render_guard import (
 
 def _ansible_search(value, pattern, ignorecase=False, multiline=False) -> bool:
     """Mirror Ansible's `search` Jinja test (ansible.plugins.test.core) — a plain regex search,
-    not a full match. Vanilla Jinja2 has no `search` test, so docker-user-rules.sh.j2's
-    `cloudflare_ips | reject('search', ':')` (splitting the IPv4/IPv6 Cloudflare ranges) would
-    otherwise fail to render here with `TemplateRuntimeError: No test named 'search'`."""
+    not a full match. Vanilla Jinja2 has no `search` test, so any template using Ansible's
+    `search` (e.g. `list | reject('search', pattern)`) would otherwise fail to render here
+    with `TemplateRuntimeError: No test named 'search'`. No current template needs it
+    (docker-user-rules.sh.j2, the last one that did, retired at E7 2026-08-13) — kept
+    registered so the next one that does just works."""
     flags = (re.I if ignorecase else 0) | (re.M if multiline else 0)
     return bool(re.search(pattern, str(value), flags))
 
@@ -78,9 +80,7 @@ def discover_templates() -> list[Path]:
 
 def build_env(template_dir: Path) -> Environment:
     env = make_env([template_dir, SHARED_TPL])
-    env.tests["search"] = (
-        _ansible_search  # used by docker-user-rules.sh.j2's IPv4/IPv6 split
-    )
+    env.tests["search"] = _ansible_search
     return env
 
 

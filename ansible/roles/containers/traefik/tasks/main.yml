@@ -6,101 +6,7 @@
     tasks_from: setup_dirs.yml
   vars:
     common_dirs_to_create:
-      - "{{ container_item.name }}/data"
-      - "{{ container_item.name }}/crowdsec-config/notifications"
-      - "{{ container_item.name }}/crowdsec-config/parsers/s02-enrich"
-
-- name: Create acme.json
-  tags: [config]
-  ansible.builtin.file:
-    path: "/home/{{ sys_user }}/server/containers/traefik/data/acme.json"
-    state: touch
-    mode: "0600"
-    modification_time: preserve
-    access_time: preserve
-
-- name: Render the Cloudflare DNS API token to a file (kept out of the container's Env)
-  tags: [config]
-  # CF_DNS_API_TOKEN is a zone-edit token; inlined as a compose env var it lands in the container's
-  # Env, readable via the read-only docker-proxy by any monitoring-net container. lego reads
-  # CF_DNS_API_TOKEN_FILE (stripping a trailing newline) — file-mounting keeps it out of container
-  # metadata. no_log so a -v/--diff run doesn't leak it (repo-wide secret-task discipline). 0600 like
-  # acme.json / config.yml; traefik reads it as root via DAC_OVERRIDE.
-  no_log: true
-  ansible.builtin.copy:
-    content: "{{ cloudflare_dns_token }}"
-    dest: "/home/{{ sys_user }}/server/containers/traefik/data/cf_dns_token"
-    mode: "0600"
-  register: traefik_cfg_cf_token
-
-- name: Configure logrotate for Traefik logs
-  tags: [config]
-  ansible.builtin.copy:
-    src: traefik-logrotate
-    dest: /etc/logrotate.d/traefik
-    mode: "0644"
-    owner: root
-    group: root
-  become: true
-
-- name: Create dynamic config directory
-  # Directory mount (not the old single-file bind mount): ansible's template module
-  # writes via tmp+rename, so a re-render swaps in a new inode. A single-file bind
-  # mount stays pinned to the OLD inode — Traefik's file-provider `watch: true` never
-  # fires and even a full re-render is invisible until the container is recreated.
-  # Bind-mounting the parent directory instead means the container follows the
-  # directory entry, not a specific inode, so renames within it ARE visible and
-  # watch actually works. 0700: traefik reads it as root via DAC_OVERRIDE (same as
-  # acme.json), so this only needs to keep other local users out.
-  tags: [config]
-  ansible.builtin.file:
-    path: "/home/{{ sys_user }}/server/containers/traefik/data/dynamic"
-    state: directory
-    mode: "0700"
-
-- name: Remove old single-file dynamic config (superseded by data/dynamic/config.yml)
-  tags: [config]
-  ansible.builtin.file:
-    path: "/home/{{ sys_user }}/server/containers/traefik/data/config.yml"
-    state: absent
-
-- name: Create config.yml from template
-  tags: [config]
-  # Embeds the CrowdSec LAPI bouncer key + the livesync X-Sync-Token — no_log so a -v/--diff
-  # run doesn't print them to stdout/ansible.log (matches the repo-wide secret-task discipline).
-  no_log: true
-  ansible.builtin.template:
-    src: config.yml.j2
-    dest: "/home/{{ sys_user }}/server/containers/traefik/data/dynamic/config.yml"
-    # 0600: embeds the CrowdSec LAPI bouncer key — keep it off other local users.
-    mode: "0600"
-  register: traefik_cfg_config
-
-- name: Create traefik.yml from template
-  tags: [config]
-  ansible.builtin.template:
-    src: traefik.yml.j2
-    dest: "/home/{{ sys_user }}/server/containers/traefik/data/traefik.yml"
-    mode: "0664"
-  register: traefik_cfg_static
-
-- name: Deploy CrowdSec local whitelist
-  tags: [config]
-  ansible.builtin.copy:
-    src: crowdsec-whitelist.yaml
-    dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/parsers/s02-enrich/whitelist.yaml"
-    mode: "0664"
-  become: true
-  register: traefik_cfg_whitelist
-
-- name: Deploy CrowdSec trusted-remote whitelist (pinned Mullvad exit)
-  tags: [config]
-  ansible.builtin.copy:
-    src: crowdsec-trusted-remote-whitelist.yaml
-    dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/parsers/s02-enrich/trusted-remote-whitelist.yaml"
-    mode: "0664"
-  become: true
-  register: traefik_cfg_trusted_remote_whitelist
+      - "{{ container_item.name }}/crowdsec-config"
 
 - name: Create CrowdSec acquis.yaml from template
   tags: [config]
@@ -111,167 +17,13 @@
   become: true
   register: traefik_cfg_acquis
 
-- name: Copy CrowdSec profiles.yaml
-  tags: [config]
-  ansible.builtin.copy:
-    src: crowdsec-profiles.yaml
-    dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/profiles.yaml"
-    mode: "0664"
-  become: true
-  register: traefik_cfg_profiles
-
-- name: Create CrowdSec discord.yaml from template
-  tags: [config]
-  # Embeds the CrowdSec Discord webhook URL — no_log so a -v/--diff run doesn't leak it to
-  # stdout/ansible.log (matches the repo-wide secret-task discipline).
-  no_log: true
-  ansible.builtin.template:
-    src: crowdsec-discord.yaml.j2
-    dest: "/home/{{ sys_user }}/server/containers/traefik/crowdsec-config/notifications/discord.yaml"
-    # 0600: embeds the Discord webhook URL.
-    mode: "0600"
-  become: true
-  register: traefik_cfg_discord
-
-- name: Deploy DOCKER-USER iptables rules script
-  tags: [config]
-  ansible.builtin.template:
-    src: docker-user-rules.sh.j2
-    dest: /etc/docker-user-rules.sh
-    owner: root
-    group: root
-    mode: "0750"
-  become: true
-  register: traefik_docker_user_rules_script
-
-- name: Deploy DOCKER-USER rules systemd service
-  tags: [config]
-  ansible.builtin.template:
-    src: docker-user-rules.service.j2
-    dest: /etc/systemd/system/docker-user-rules.service
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-  register: traefik_docker_user_rules_service
-
-- name: Enable docker-user-rules systemd service
-  tags: [config]
-  ansible.builtin.systemd:
-    name: docker-user-rules
-    enabled: true
-    state: started
-    daemon_reload: true
-  become: true
-
-- name: Restart docker-user-rules if script or service changed
-  tags: [config]
-  ansible.builtin.systemd:
-    name: docker-user-rules
-    state: restarted
-    daemon_reload: true
-  become: true
-  when: traefik_docker_user_rules_script.changed or traefik_docker_user_rules_service.changed
-
-- name: Deploy DOCKER-USER seed systemd service (pre-docker origin lock)
-  tags: [config]
-  # Runs the same apply script Before=docker.service so the lock is present before dockerd binds
-  # traefik's 80/443 on boot — the After=docker.service unit above can't (ports are already bound
-  # by the time it runs). Enable-only: this is the boot unit; deploy-time application is handled by
-  # the docker-user-rules restart task above, so no state:started/restart-on-change here.
-  ansible.builtin.template:
-    src: docker-user-seed.service.j2
-    dest: /etc/systemd/system/docker-user-seed.service
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-
-- name: Enable docker-user-seed systemd service
-  tags: [config]
-  ansible.builtin.systemd:
-    name: docker-user-seed
-    enabled: true
-    daemon_reload: true
-  become: true
-
-- name: Create the DOCKER-USER origin-lock monitor state directory
-  tags: [config]
-  # monitor-bridge bind-mounts this read-only (/docker-user) and its `docker_user` check alerts on a
-  # failed live-chain assert or staleness. Root-owned: the verify cron runs as root (iptables needs
-  # CAP_NET_ADMIN) and writes state.json here. Deploy traefik before monitor-bridge on a fresh host
-  # (traefik deploys first anyway) else Docker auto-creates the mount source.
-  ansible.builtin.file:
-    path: /var/lib/docker-user-rules
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
-- name: Deploy the shared traefik state-file helper
-  tags: [config]
-  # Sourced by every traefik host cron (docker-user-verify/appsec-verify/cloudflare-ip-drift/
-  # crowdsec-update-home-allowlist) for the atomic {ts,ok,msg} state write monitor-bridge polls
-  # (mirrors kopia-lib.sh). config-tagged + ordered first: docker-user-verify runs during the deploy
-  # (below), so the lib must be on disk before it — and before the 15-min crons fire.
-  ansible.builtin.copy:
-    src: traefik-lib.sh
-    dest: /usr/local/lib/traefik-lib.sh
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-
-- name: Deploy DOCKER-USER live-verify watchdog script
-  tags: [config]
-  ansible.builtin.template:
-    src: docker-user-verify.sh.j2
-    dest: /usr/local/bin/docker-user-verify.sh
-    owner: root
-    group: root
-    mode: "0750"
-  become: true
-
-- name: Refresh the DOCKER-USER verify state each deploy
-  tags: [config]
-  # Run the verify once per deploy so state.json exists, is fresh, and is world-readable (the script
-  # chmods it) before monitor-bridge reads it — so a fresh host / this very deploy don't false-page
-  # "never ran"; the 15-min cron owns ongoing refresh. A read-only iptables assert; failed_when:false
-  # so a failed assert is the monitor's page, not a deploy blocker (kopia state-seed idiom).
-  ansible.builtin.command: /usr/local/bin/docker-user-verify.sh
-  become: true
-  changed_when: false
-  failed_when: false
-
-- name: Schedule DOCKER-USER origin-lock verify
-  tags: [cron]
-  ansible.builtin.cron:
-    name: "Verify DOCKER-USER origin lock"
-    minute: "*/15"
-    user: root
-    job: /usr/local/bin/docker-user-verify.sh
-    state: present
-  become: true
-
 - name: Deploy Container
   tags: [deploy]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_deploy.yml
   vars:
-    # Recreate traefik+crowdsec only when a bind-mounted config changed. Excludes the
-    # host-level docker-user-rules/systemd units (handled by their own restart tasks).
-    # traefik_cfg_config (dynamic config.yml) is deliberately NOT in this OR: it's now
-    # bind-mounted via its parent directory (data/dynamic/), so Traefik's file-provider
-    # `watch: true` picks up edits live — no recreate needed. traefik_cfg_static
-    # (traefik.yml) stays in the OR since Traefik only reads its static config at boot.
-    common_config_changed: >-
-      {{ (traefik_cfg_static is changed)
-         or (traefik_cfg_cf_token is changed)
-         or (traefik_cfg_whitelist is changed) or (traefik_cfg_trusted_remote_whitelist is changed)
-         or (traefik_cfg_acquis is changed)
-         or (traefik_cfg_profiles is changed) or (traefik_cfg_discord is changed) }}
+    common_config_changed: "{{ traefik_cfg_acquis is changed }}"
 
 - name: Wait for CrowdSec to be healthy
   tags: [deploy]
@@ -312,25 +64,6 @@
   delay: 10
   when: traefik_crowdsec_wal_config.changed
 
-- name: Probe the cluster LAPI with the configured bouncer key (fail loudly)
-  # Slice-6 B2: this bouncer registers DECLARATIVELY on the in-cluster engine
-  # (BOUNCER_KEY_dockertraefik env in roles/k8s/crowdsec) — the local cscli delete/re-add
-  # rotation dance is gone with the local LAPI. What must remain is the loud failure: the
-  # plugin hot-reloads a rotated key from the directory-mounted dynamic config instantly
-  # and FAILS OPEN on auth errors — a silent WAF bypass. So a key the LAPI rejects fails
-  # the deploy here. Rotation runbook: docs/secret-rotation.md (delete the bouncer on the
-  # engine + update SOPS + redeploy both crowdsec (daniel-box) and traefik (this host)).
-  tags: [deploy]
-  community.docker.docker_container_exec:
-    container: crowdsec
-    command: >-
-      wget -q -O /dev/null --header "X-Api-Key: {{ crowdsec_bouncer_docker_traefik_key }}"
-      https://crowdsec-lapi-k8s.local.{{ domain }}/v1/decisions?limit=1
-  register: traefik_crowdsec_bouncer_probe
-  failed_when: (traefik_crowdsec_bouncer_probe.rc | default(1)) != 0
-  changed_when: false
-  no_log: true
-
 - name: Update CrowdSec hub
   tags: [deploy]
   community.docker.docker_container_exec:
@@ -347,43 +80,20 @@
 
 - name: Ensure CrowdSec dependency collections are installed
   # `cscli hub upgrade` refreshes installed items in place but NEVER installs a collection's
-  # newly-declared transitive dependency, so base-http-scenarios / linux sat "tainted by
-  # missing crowdsecurity/http-cve / whitelist-good-actors" indefinitely — silently dropping
-  # CVE-probe detection + good-actor false-positive suppression (2026-07-04 review M2). These
-  # are also in the crowdsec COLLECTIONS env (installed at container init), but re-asserting
-  # them here heals a deploy that doesn't recreate crowdsec and guards against a future hub
-  # bump silently regressing them. Idempotent; no --force, so a locally-modified item is never
-  # clobbered. `install` on an already-present item exits 0 ("nothing to install").
-  # appsec-virtual-patching + appsec-generic-rules install the inline-WAF rulesets + the
-  # crowdsecurity/appsec-default config the acquis references; re-asserting here heals a
-  # config-only deploy (no crowdsec recreate) the same way as the dep collections above.
+  # newly-declared transitive dependency, so linux sat "tainted by missing
+  # crowdsecurity/whitelist-good-actors" indefinitely — silently dropping good-actor
+  # false-positive suppression (2026-07-04 review M2). This is also in the crowdsec
+  # COLLECTIONS env (installed at container init), but re-asserting it here heals a deploy
+  # that doesn't recreate crowdsec and guards against a future hub bump silently regressing
+  # it. Idempotent; no --force, so a locally-modified item is never clobbered. `install` on
+  # an already-present item exits 0 ("nothing to install").
   tags: [deploy]
   community.docker.docker_container_exec:
     container: crowdsec
-    command: >-
-      cscli collections install crowdsecurity/http-cve crowdsecurity/whitelist-good-actors
-      crowdsecurity/appsec-virtual-patching crowdsecurity/appsec-generic-rules
+    command: cscli collections install crowdsecurity/whitelist-good-actors
   register: traefik_crowdsec_dep_collections
   changed_when: "'installed' in (traefik_crowdsec_dep_collections.stdout | lower)"
   failed_when: traefik_crowdsec_dep_collections.rc != 0
-
-- name: Deploy traefik-init systemd service
-  tags: [config]
-  ansible.builtin.template:
-    src: traefik-init.service.j2
-    dest: /etc/systemd/system/traefik-init.service
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-
-- name: Enable traefik-init systemd service
-  tags: [config]
-  ansible.builtin.systemd:
-    name: traefik-init
-    enabled: true
-    daemon_reload: true
-  become: true
 
 - name: Ensure Crowdsec hub update and upgrade job exists
   tags: [cron]
@@ -396,116 +106,84 @@
     state: present
   become: true
 
-# The home-allowlist updater MOVED to daniel-box at slice-6 B2 (k8s/crowdsec role):
-# `cscli allowlists` is LAPI-machine-only and the LAPI lives in the cluster now. These
-# absent-state tombstones unwind the live cron/script/state on this host; drop them once
-# every host has deployed past B2.
-- name: Retire the home-allowlist updater cron (moved to daniel-box at B2)
+# ── E7 retirement tombstones (2026-08-13) ──────────────────────────────────────────────────
+# The Docker edge (traefik + Authelia) retired: the k8s edge serves everything and its
+# Authelia owns auth.<domain> now. Everything below unwinds what the old edge left running on
+# this host — its systemd units, crons, scripts, and monitor state dirs — so a host that has
+# already deployed past E7 converges to the demoted-agent-only state above. Drop these
+# tombstones once every host has deployed past E7 (mirrors the home-allowlist tombstone this
+# block itself replaces, live since B2 and removed below).
+
+- name: Stop and disable retired traefik-edge systemd units
+  tags: [config]
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+    daemon_reload: true
+  become: true
+  failed_when: false
+  loop:
+    - docker-user-rules.service
+    - docker-user-seed.service
+    - traefik-init.service
+
+- name: Remove retired traefik-edge systemd unit files
+  tags: [config]
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  become: true
+  loop:
+    - docker-user-rules.service
+    - docker-user-seed.service
+    - traefik-init.service
+
+- name: Reload systemd after removing retired unit files
+  tags: [config]
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+- name: Retire the traefik-edge crons
   tags: [cron]
   ansible.builtin.cron:
-    name: "Update CrowdSec home IP allowlist"
-    user: "{{ sys_user }}"
+    name: "{{ item.name }}"
+    user: "{{ item.user }}"
     state: absent
+  become: true
+  loop:
+    - { name: "Verify DOCKER-USER origin lock", user: root }
+    - { name: "Check Cloudflare IP allowlist drift", user: "{{ sys_user }}" }
+    - { name: "Verify CrowdSec AppSec WAF", user: root }
 
-- name: Retire the home-allowlist updater script and state (moved to daniel-box at B2)
+- name: Remove retired traefik-edge scripts
   tags: [config]
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
+  become: true
   loop:
-    - /usr/local/bin/crowdsec-update-home-allowlist.sh
-    - /var/lib/crowdsec-home-allowlist
-  become: true
+    - /etc/docker-user-rules.sh
+    - /usr/local/bin/docker-user-verify.sh
+    - /usr/local/bin/cloudflare-ip-drift.sh
+    - /usr/local/bin/appsec-verify.sh
+    - /usr/local/lib/traefik-lib.sh
 
-- name: Create the Cloudflare-IP drift monitor state directory
+- name: Remove retired traefik-edge monitor state directories
   tags: [config]
-  # monitor-bridge bind-mounts this read-only (/cloudflare-drift) and its `cloudflare_drift` check
-  # alerts on a failed fetch, a mismatch, or staleness. Created sys_user-owned so the weekly cron can
-  # write state.json; traefik deploys before monitor-bridge (everything depends on it) so the mount
-  # source exists (else Docker auto-creates it root-owned and the non-root container can't read it).
   ansible.builtin.file:
-    path: /var/lib/cloudflare-ip-drift
-    state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
+    path: "{{ item }}"
+    state: absent
   become: true
+  loop:
+    - /var/lib/docker-user-rules
+    - /var/lib/cloudflare-ip-drift
+    - /var/lib/crowdsec-appsec
 
-- name: Deploy Cloudflare IP drift check script
+- name: Remove the retired Traefik logrotate config
   tags: [config]
-  ansible.builtin.template:
-    src: cloudflare-ip-drift.sh.j2
-    dest: /usr/local/bin/cloudflare-ip-drift.sh
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0750"
-  become: true
-
-- name: Seed the Cloudflare-IP drift state on deploy
-  tags: [cron]
-  # Run once now so state.json exists + is fresh before the first weekly cron tick — else the
-  # cloudflare_drift monitor false-DOWNs on staleness for up to a week on a fresh host (the kopia /
-  # docker-user state-seed idiom). failed_when:false so a transient fetch failure at deploy time is
-  # the monitor's page, not a deploy blocker.
-  ansible.builtin.command: /usr/local/bin/cloudflare-ip-drift.sh
-  become: true
-  become_user: "{{ sys_user }}"
-  changed_when: false
-  failed_when: false
-
-- name: Schedule weekly Cloudflare IP drift check
-  tags: [cron]
-  ansible.builtin.cron:
-    name: "Check Cloudflare IP allowlist drift"
-    minute: "17"
-    hour: "5"
-    weekday: "1"
-    user: "{{ sys_user }}"
-    job: /usr/local/bin/cloudflare-ip-drift.sh
-    state: present
-
-- name: Create the CrowdSec AppSec monitor state directory
-  tags: [config]
-  # monitor-bridge bind-mounts this read-only (/crowdsec-appsec) and its `appsec` check alerts on a
-  # failed live assert or staleness. Root-owned: the verify cron runs as root (docker exec) and writes
-  # state.json here. Traefik deploys before monitor-bridge (everything depends on it) so the mount
-  # source exists (else Docker auto-creates it and monitor-bridge reads "never ran").
   ansible.builtin.file:
-    path: /var/lib/crowdsec-appsec
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
-- name: Deploy CrowdSec AppSec live-verify watchdog script
-  tags: [config]
-  ansible.builtin.template:
-    src: appsec-verify.sh.j2
-    dest: /usr/local/bin/appsec-verify.sh
-    owner: root
-    group: root
-    mode: "0750"
-  become: true
-
-- name: Refresh the CrowdSec AppSec verify state each deploy
-  tags: [config]
-  # Run once now so state.json exists, is fresh, and is world-readable (the script chmods it) before
-  # monitor-bridge reads it — so a fresh host / this very deploy don't false-page "never ran"; the
-  # 15-min cron owns ongoing refresh. Read-only cscli asserts; failed_when:false so a failed assert is
-  # the monitor's page, not a deploy blocker (docker-user-verify / kopia state-seed idiom). Runs after
-  # the collections re-assert above, so the appsec rulesets are in place before the first check.
-  ansible.builtin.command: /usr/local/bin/appsec-verify.sh
-  become: true
-  changed_when: false
-  failed_when: false
-
-- name: Schedule CrowdSec AppSec live-verify
-  tags: [cron]
-  ansible.builtin.cron:
-    name: "Verify CrowdSec AppSec WAF"
-    minute: "*/15"
-    user: root
-    job: /usr/local/bin/appsec-verify.sh
-    state: present
+    path: /etc/logrotate.d/traefik
+    state: absent
   become: true

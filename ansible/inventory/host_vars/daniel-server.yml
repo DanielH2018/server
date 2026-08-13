@@ -21,14 +21,15 @@ scrutiny_nvme_device: /dev/nvme0
 happy_git_version: 3f161de70541b1cedaf0b7547ed70889d8dae22d
 containers_list:
   # Organization: Core Services (proxy network)
+  # traefik role now deploys only the demoted CrowdSec agent (E7, 2026-08-13) — the Docker
+  # edge (this traefik + the authelia entry below) retired; the k8s edge serves everything.
   - name: traefik
-    use_authelia: true
-    networks:
-      - proxy
-  - name: authelia
     use_authelia: false
     networks:
       - proxy
+  # authelia RETIRED 2026-08-13 (Phase E, slice-7-phase-e-server-retirement.md): the portal
+  # + OIDC issuer moved to the k8s authelia, which now owns auth.<domain>. Session keys
+  # retire in a later verified pass. Role archived at roles/containers/archive/authelia.
   # crowdsec (the Metabase dashboard — the engine always lived in the traefik role) retired
   # 2026-08-09 at slice-6 B2c: it rides in the cluster engine pod now, reading the LIVE
   # decision DB. The Docker copy had been showing the retired local LAPI's frozen DB since

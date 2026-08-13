@@ -138,10 +138,12 @@ def hand_written_routes(scalars: dict) -> list[tuple[str, str]]:
     """Scrape `.local` router rules written literally into Docker compose templates.
 
     Not every service gets its route from the shared `labels()` macro, and the ones that
-    don't are invisible to a containers_list scan — authelia is the important case, since it
-    has no `port` at all yet owns `auth.local.<domain>`, the login-redirect target every
-    other protected service bounces through. Omitting it produces a hosts file where each
-    service resolves but no login can complete.
+    don't are invisible to a containers_list scan (e.g. livesync/n8n's hand-rolled routers,
+    left in their Docker roles as build/reference source after their k8s migration).
+    Authelia was the important historical case — it had no `port` and hand-rolled
+    `auth.local.<domain>`, the login-redirect target every protected service bounced
+    through — but it moved to k8s at E7 (2026-08-13) with a real `port`, so the main
+    containers_list loop above finds it now; this scrape no longer needs to.
 
     k8s roles need no equivalent scrape: their routes all come from the ingressroute macro,
     which is driven by the same `hostname` key the loop above reads.

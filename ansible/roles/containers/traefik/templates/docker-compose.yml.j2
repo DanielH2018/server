@@ -21,38 +21,30 @@ services:
       - no-new-privileges:true
     environment:
       GID: "${GID-{{ pgid }}}"
-      # Slice-6 B2: demoted to a log-processing AGENT against the in-cluster LAPI. This
-      # host still originates the signals the cluster cannot see (auth.log, the Docker
-      # Authelia, this traefik's access log) and still runs the local AppSec listener the
-      # plugin points at — but decisions live in one place now. The entrypoint logs in as
-      # the machine below (registered by the k8s/crowdsec role at B2a); the old local
-      # LAPI's DB stays in the crowdsec-db volume untouched for rollback.
+      # Slice-6 B2: demoted to a log-processing AGENT against the in-cluster LAPI. E7
+      # (2026-08-13) retired the Docker traefik + Authelia containers this agent used to
+      # also feed logs from, and with them the local AppSec listener — this host now
+      # originates only auth.log (SSH). The entrypoint logs in as the machine below
+      # (registered by the k8s/crowdsec role at B2a); the old local LAPI's DB stays in
+      # the crowdsec-db volume untouched for rollback.
       DISABLE_LOCAL_API: "true"
       LOCAL_API_URL: "https://crowdsec-lapi-k8s.local.{{ domain }}"
       AGENT_USERNAME: "{{ crowdsec_k8s_server_agent_machine }}"
       AGENT_PASSWORD: "{{ crowdsec_k8s_agent_password }}"
-      # http-cve + whitelist-good-actors are transitive deps that base-http-scenarios /
-      # linux DECLARE but that `cscli hub upgrade` never auto-installs — left off this list
-      # they sit "tainted by missing collection", silently dropping CVE-probe detection +
-      # good-actor false-positive suppression (2026-07-04 review M2). The "Ensure CrowdSec
-      # dependency collections are installed" deploy task re-asserts them so a hub version
-      # bump can't silently regress them.
-      # appsec-virtual-patching (CVE signatures) + appsec-generic-rules (SQLi/SSTI/path-traversal)
-      # install the inline-WAF rulesets + the crowdsecurity/appsec-default config the acquis file
-      # references (crowdsec-acquis.yaml.j2). Deliberately NOT appsec-crs (full OWASP CRS is
-      # false-positive-prone for a homelab); these two are CrowdSec's recommended low-noise starter.
-      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik LePresidente/authelia crowdsecurity/http-cve crowdsecurity/whitelist-good-actors crowdsecurity/appsec-virtual-patching crowdsecurity/appsec-generic-rules"
+      # E7 (2026-08-13): the traefik/authelia/http-cve/appsec collections parsed the
+      # Docker edge's HTTP logs and fed the AppSec listener that died with it — the
+      # cluster edge's engine (roles/k8s/crowdsec) carries its own copies of those now.
+      # linux stays for auth.log/SSH; whitelist-good-actors suppresses good-actor false
+      # positives on those scenarios.
+      COLLECTIONS: "crowdsecurity/linux crowdsecurity/whitelist-good-actors"
     volumes:
       - ./crowdsec-config:/etc/crowdsec:rw
       - crowdsec-db:/var/lib/crowdsec/data/
-      - /var/log/traefik:/var/log/traefik/:ro
       - /var/log/auth.log:/var/log/auth.log:ro
-      - /var/log/authelia:/var/log/authelia/:ro
-    # `cscli version` exits 0 as soon as the binary runs — before LAPI is listening on :8080 — so
-    # traefik's `depends_on: service_healthy` could register the crowdsec@file bouncer during a
-    # brief fail-open WAF window on every recreate. `cscli lapi status` round-trips the local API
-    # (reads the agent creds, pings LAPI) and exits non-zero until LAPI accepts, so the gate now
-    # means "WAF is ready".
+    # `cscli version` exits 0 as soon as the binary runs — before the agent has logged
+    # into the cluster LAPI — so `cscli lapi status` (round-trips the cluster LAPI, reads
+    # the agent creds) is the real readiness gate; the deploy's "Wait for CrowdSec to be
+    # healthy" task polls it.
     {{ healthcheck('["CMD", "cscli", "lapi", "status"]', start_period='20s') }}
     ports:
       # Phase E2: LAN-published (host 9103 -> container 6060) for the cluster Prometheus
@@ -67,101 +59,19 @@ services:
       # is permanently down and the Grafana CrowdSec dashboards have no data.
       - monitoring
     labels:
-      # Keep :latest but pin against watchtower auto-updates — traefik depends_on this agent
-      # (service_healthy) and traefik-init gates the boot restart on its health, so an
-      # unsupervised pull that breaks crowdsec would block the edge's next start
-      # (matches flaresolverr/unbound, the other health-gating :latest sidecars).
+      # Keep :latest but pin against watchtower auto-updates — an unsupervised pull that
+      # breaks this agent would silently blind the host's auth.log/SSH signal to the
+      # cluster LAPI, with no health-gated edge left to catch it (the edge dependency
+      # retired at E7; this is now a standalone judgment call, not a gate).
       - "com.centurylinklabs.watchtower.enable=false"
       {{ kuma('crowdsec') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('1.0', '1024M', '0.10', '128M') }}
 
-  traefik:
-    image: traefik:v3.7.8
-    container_name: traefik
-    restart: unless-stopped
-    depends_on:
-      crowdsec:
-        condition: service_healthy
-    # Static Go binary that binds :80/:443 (<1024) → NET_BIND_SERVICE. Runs as root but
-    # acme.json is 0600 owned by uid 1000, so root needs DAC_OVERRIDE to read it at start
-    # and rewrite it on cert renewal — without it TLS breaks. Verify: a site loads over HTTPS.
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_BIND_SERVICE
-      - DAC_OVERRIDE
-    security_opt:
-      - no-new-privileges:true
-    networks:
-      # Traefik must share a Docker net with EVERY backend it routes to (Docker only resolves a
-      # service name on a shared net), so this list is the UNION of all routed backends' nets — it
-      # grows whenever a service lands on a brand-new net, or that service's route 502s.
-      # test_network_invariant.py's test_traefik_joins_every_routed_network enforces this: it fails
-      # pre-deploy if any routed service's route network (networks[0]) isn't in this list. proxy is
-      # the default; monitoring/media/apps reach those backends. (The kopia and terraria
-      # isolation nets retired with their services, 2026-08-10.)
-      - proxy
-      - monitoring
-      - media
-      - apps
-    ports:
-      # Bind v4-only (0.0.0.0). Docker does NOT manage ip6tables here (daemon
-      # Experimental:false, no ip6tables key), so a bare "80:80" makes docker-proxy
-      # also listen on [::] — and that v6 path bypasses the DOCKER-USER "Cloudflare-only
-      # origin" allowlist (which is iptables/v4-only). LAN *.local is already forced to
-      # v4 (dnsmasq AAAA=::) and no AAAA is published, so v4-only publish loses nothing.
-      - 0.0.0.0:80:80
-      - 0.0.0.0:443:443
-      # Phase E2: LAN-published (host 9104 -> container 8080, the internal `traefik` metrics
-      # entrypoint) for the cluster Prometheus (10.0.0.161:9104). Bound to server_ip, not
-      # 0.0.0.0 — unlike 80/443 this is unauthenticated and only daniel-box needs it. Locked to
-      # daniel-box only by the prometheus role's prometheus-exporters-lan-firewall.sh.
-      - "{{ server_ip }}:9104:8080"
-      # Raw-TCP game-server entrypoints bypass the CrowdSec + rate-limit chain
-      # (no HTTP middleware on TCP routers) — only publish when the server is live.
-      - 0.0.0.0:7777:7777/tcp  # terraria
-      # - 0.0.0.0:25565:25565/tcp  # minecraft (still archived)
-    environment:
-      - CF_API_EMAIL={{ email }}
-      # The DNS-01 zone-edit token is file-mounted, NOT inlined here: an inline env var lands in the
-      # container's Env, readable via the read-only docker-proxy by any monitoring-net container — and
-      # this token can repoint DNS / mint certs for the whole zone. lego (traefik's ACME lib) reads
-      # CF_DNS_API_TOKEN_FILE and strips a trailing newline, so file-mounting removes it from container
-      # metadata entirely. (CF_API_EMAIL isn't sensitive.) Rendered by the tasks/main.yml token task.
-      - CF_DNS_API_TOKEN_FILE=/run/secrets/cf_dns_token
-      # TZ (not an /etc/localtime mount): the image ships zoneinfo, so this gives access logs +
-      # CrowdSec decision logs the homelab's America/Chicago like every other container (host is
-      # UTC). Downstream-safe — promtail ships traefik lines on ingestion time (no timestamp
-      # stage) and CrowdSec parses the RFC3339-with-offset `time` field in absolute terms.
-      - TZ={{ tz }}
-    volumes:
-      - ./data/traefik.yml:/traefik.yml:ro
-      - ./data/acme.json:/acme.json
-      - ./data/dynamic:/dynamic:ro
-      - ./data/cf_dns_token:/run/secrets/cf_dns_token:ro
-      - /var/log/traefik:/var/log/traefik
-    {{ healthcheck('["CMD", "traefik", "healthcheck"]') }}
-    labels:
-      # Disable watchtower update — pinned + Renovate-managed
-      - "com.centurylinklabs.watchtower.enable=false"
-      {{ kuma('traefik') }}
-    # Resource caps for blast-radius containment (M1). Traefik is the ingress
-    # edge — keep headroom so it stays responsive; tune from cAdvisor/Grafana.
-    {{ resources('2.0', '1024M', '0.25', '256M') }}
-
 networks:
   proxy:
     external: true
   monitoring:
-    external: true
-  media:
-    external: true
-  apps:
-    external: true
-  kopia:
-    external: true
-  terraria:
     external: true
 
 volumes:

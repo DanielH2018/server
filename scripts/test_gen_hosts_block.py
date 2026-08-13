@@ -133,12 +133,15 @@ def real():
 
 
 def test_auth_portal_is_present(real):
-    """authelia has no `port` in containers_list, so only the template scrape finds it.
-
-    Without it every service resolves but no login can complete, since each protected route
-    redirects here.
+    """authelia moved to k8s at E7 (2026-08-13) and now carries `port`, so it needs no
+    hand-written-route scrape — the main containers_list loop finds it like any other k8s
+    service. The LAN login target is the SUFFIXED name: the `.local.` session cookie's
+    `authelia_url` points at `auth-k8s.local.<domain>`, not the bare `auth.local.<domain>`
+    (that unsuffixed name is the public/OIDC-issuer identity, resolved over real DNS, not
+    this Mullvad-DNS-leak workaround). Without it every service resolves but no LAN login
+    can complete, since each protected route redirects here.
     """
-    assert ("10.0.0.161", "auth.local.daniel-hunter.com") in real
+    assert ("10.0.0.240", "auth-k8s.local.daniel-hunter.com") in real
 
 
 def test_k8s_names_are_on_the_vip(real):

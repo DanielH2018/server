@@ -103,13 +103,14 @@
     },
     {
       "customType": "regex",
-      "description": "CrowdSec bouncer Traefik plugin pin in traefik.yml.j2 (Traefik static config). None of the other custom managers match this file, so this WAF-enforcement plugin would age silently \u2014 a stale version can lag Traefik API changes or miss plugin security fixes. depName is read from the moduleName line; track GitHub releases.",
+      "description": "CrowdSec bouncer Traefik plugin pin in k8s/traefik/defaults/main.yml. Re-homed at E7 (2026-08-13) when the Docker traefik role that used to carry the literal moduleName+version block retired \u2014 the k8s static config references this var instead of a literal, so the var is now the only place a regex manager can read the version. None of the other custom managers match this file, so this WAF-enforcement plugin would age silently \u2014 a stale version can lag Traefik API changes or miss plugin security fixes. depName is fixed (the var has no moduleName next to it); track GitHub releases.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/containers/traefik/templates/traefik\\.yml\\.j2$/"
+        "/(^|/)ansible/roles/k8s/traefik/defaults/main\\.yml$/"
       ],
       "matchStrings": [
-        "moduleName:\\s*\"github\\.com/(?<depName>[^\"]+?)\"\\s+version:\\s*\"(?<currentValue>[^\"]+)\""
+        "traefik_k8s_bouncer_plugin_version:\\s*\"?(?<currentValue>[^\"\\s]+)\"?"
       ],
+      "depNameTemplate": "maxlerebourg/crowdsec-bouncer-traefik-plugin",
       "datasourceTemplate": "github-releases"
     },
     {

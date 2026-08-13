@@ -22,10 +22,6 @@ def test_discover_templates_finds_the_known_set():
         "entrypoint.sh.j2",
         "crowdsec-update-home-allowlist.sh.j2",
         "crowdsec-appsec-verify.sh.j2",
-        "cloudflare-ip-drift.sh.j2",
-        "docker-user-rules.sh.j2",
-        "docker-user-verify.sh.j2",
-        "appsec-verify.sh.j2",
         "secret-rotate.sh.j2",
         "secret-rotation-audit.sh.j2",
         "pi-sd-health.sh.j2",
@@ -52,9 +48,10 @@ def test_discover_templates_excludes_vendored_collections():
 
 
 def test_ansible_search_test_mirrors_the_real_jinja_test():
-    # docker-user-rules.sh.j2 renders via `cloudflare_ips | reject('search', ':')` to split
-    # IPv4 from IPv6 ranges — vanilla Jinja2 has no `search` test at all (TemplateRuntimeError
-    # without this), so this pins the regex-search (not full-match) semantics that filter relies on.
+    # No current template uses Ansible's `search` Jinja test (the last one, docker-user-rules.sh.j2,
+    # retired at E7 2026-08-13) — vanilla Jinja2 has no `search` test at all (TemplateRuntimeError
+    # without this), so this pins the regex-search (not full-match) semantics for whichever
+    # template needs it next.
     assert v._ansible_search("172.64.0.0/13", ":") is False
     assert v._ansible_search("2400:cb00::/32", ":") is True
     assert v._ansible_search("ABC", "abc", ignorecase=True) is True

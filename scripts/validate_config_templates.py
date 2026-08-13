@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Render the high-value NON-compose YAML config templates (auth / proxy / monitoring) with
-stubbed vars and assert each parses as valid YAML.
+"""Render the high-value NON-compose YAML config templates (monitoring) with stubbed vars and
+assert each parses as valid YAML.
 
 The container *compose* templates already have this guard (validate_compose_templates.py), but
-the bind-mounted *config* templates did not — yet they re-render on every deploy of an
-auth/proxy/monitoring-critical service. A Jinja indentation bug here is exactly the class
+the bind-mounted *config* templates did not — yet they re-render on every deploy of the
+monitoring-critical services below. A Jinja indentation bug here is exactly the class
 ``check-yaml`` and ``ansible-lint`` miss (they don't render ``.j2``), so it would pass CI and
-only surface at deploy. Worse, a config-only push is health-gated but auth-critical, so that's a
-bad place to first discover a broken authelia/traefik config.
+only surface at deploy. The authelia/traefik entries this list once carried retired at E7
+(2026-08-13, the Docker edge's removal) — the k8s edge's manifests get the equivalent guard from
+``validate_k8s_manifests.py``.
 
 Structural check only: secrets and host vars are stubbed (StubUndefined), so no SOPS access is
 needed. Run directly or via the ``validate-config-templates`` prek hook. Exits non-zero on any
@@ -40,9 +41,6 @@ ROLES = ANSIBLE / "roles" / "containers"
 # auth / reverse-proxy / monitoring. The role's own templates dir takes loader precedence, so
 # `traefik/traefik.yml.j2` resolves to Traefik's STATIC config, not the shared labels macro.
 CONFIG_TEMPLATES = [
-    "authelia/configuration.yml.j2",
-    "traefik/config.yml.j2",
-    "traefik/traefik.yml.j2",
     "grafana/loki-config.yml.j2",
     "grafana/promtail-config.yml.j2",
 ]

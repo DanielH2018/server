@@ -148,7 +148,7 @@ def test_the_k8s_play_does_not_filter_an_already_filtered_list():
     )
 
 
-# --- 2. the two Authelias never share state ------------------------------------------------
+# --- 2. the k8s Authelia's state stays its own ----------------------------------------------
 
 
 def _k8s_authelia_config() -> dict:
@@ -174,24 +174,16 @@ def _k8s_authelia_config() -> dict:
     return yaml.safe_load(doc["stringData"]["configuration.yml"])
 
 
-def test_k8s_session_cookie_name_differs_from_the_docker_one():
-    """Both portals serve the cookie domain local.<domain>, and a browser holds one cookie
-    per (domain, name) pair. Sharing the name means logging in at one portal overwrites the
-    other's cookie — and with in-memory sessions the overwritten side bounces the user to
-    login. Symptom: signing into the k8s portal signs you out of everything on daniel-server."""
-    docker_config = (
-        ANSIBLE
-        / "roles"
-        / "containers"
-        / "authelia"
-        / "templates"
-        / "configuration.yml.j2"
-    ).read_text()
+def test_k8s_session_cookie_name_is_set():
+    """The Docker Authelia this once guarded against retired at E7 (2026-08-13, archived to
+    roles/containers/archive/authelia) — the k8s portal is the only one now, so the
+    cookie-collision risk this test used to check is moot. What's left worth pinning: the
+    session cookie name actually comes from the intended var, and every cookie variant
+    (the `.local.` LAN one and the public one) is named off it."""
     k8s_name = yaml.safe_load((K8S / "authelia" / "defaults" / "main.yml").read_text())[
         "authelia_k8s_cookie_name"
     ]
 
-    assert k8s_name not in docker_config
     session = _k8s_authelia_config()["session"]
     assert session["name"] == k8s_name
     assert all(c["name"].startswith(k8s_name) for c in session["cookies"])
