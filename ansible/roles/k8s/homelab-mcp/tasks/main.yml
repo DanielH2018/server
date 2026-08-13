@@ -10,12 +10,14 @@
     name: k8s/image-builder
   vars:
     image_builder_name: homelab-mcp
-    image_builder_dockerfile: "{{ role_path }}/templates/Dockerfile.j2"
+    # playbook_dir, not role_path: these render INSIDE image-builder, where role_path
+    # names the wrong role (bit the first deploy, 2026-08-13).
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/homelab-mcp/templates/Dockerfile.j2"
     # Raw files, not templates: app.py embeds PromQL whose {{...}} braces Jinja would
     # eat (the reason image_builder_context_files exists).
     image_builder_context_files:
-      "{{ role_path }}/files/app.py": app.py
-      "{{ role_path }}/files/safe_reads.py": safe_reads.py
+      "{{ playbook_dir }}/roles/k8s/homelab-mcp/files/app.py": app.py
+      "{{ playbook_dir }}/roles/k8s/homelab-mcp/files/safe_reads.py": safe_reads.py
 
 - name: Deploy homelab-mcp to the cluster
   ansible.builtin.include_role:
