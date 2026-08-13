@@ -6,6 +6,12 @@ metadata:
   namespace: {{ k8s_namespace }}
 spec:
   replicas: 1
+  # 30 min, because the Deployment's own default (600s) is the deadline that actually binds
+  # on a first boot — NOT manifests_rollout_timeout. Measured 2026-08-13: the first rollout
+  # was still pulling this image at 10 min and the Deployment was already marked
+  # ProgressDeadlineExceeded, failing the play while the pod carried on fine underneath.
+  # Between the image pull and the ~4.6 G SteamCMD download, first boot needs the room.
+  progressDeadlineSeconds: 1800
   # Same reasoning as terraria: RWO claims on single-replica Longhorn deadlock a rolling
   # update, and two servers writing one world would be worse than the deadlock.
   strategy:

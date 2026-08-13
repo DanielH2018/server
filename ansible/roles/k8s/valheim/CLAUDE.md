@@ -33,6 +33,11 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
   the startup budget. `:0998` is hex 2456. Like terraria's, it is a kernel-side bind check
   rather than a connect probe — anything that actually spoke to the port would log a join
   attempt every cycle.
+- **No Kuma tile, deliberately.** terraria gets one (`terraria-vip.json`, a TCP port check on
+  the node IP), but Kuma's port monitor is TCP-only and Valheim is UDP — the same reason
+  wg-easy's tunnel has no tile. Pod death surfaces through k3s Workload Health / the
+  pod-restart alerting instead. Do not "fix" this by adding a port monitor; it would probe a
+  closed TCP port and be permanently red.
 - **First rollout is slow.** An empty install PVC means SteamCMD downloads ~4.6 G before
   anything binds, hence `manifests_rollout_timeout: 900s` and `failureThreshold: 60` on the
   startupProbe. Later boots are a delta check plus world load and clear in under a minute.
