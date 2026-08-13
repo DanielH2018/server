@@ -1,7 +1,11 @@
 # daniel-box as master node — k3s migration design
 
 **Date:** 2026-08-01
+
+**Status:** Plan executed through Phase E. Current state in `slice-7-phase-e-server-retirement.md`; all 8-item Reworks list shipped.
+
 **Scope:** `daniel-server` (10.0.0.161) and `daniel-box` (10.0.0.215). `daniel-pi` explicitly out of scope.
+
 **Repo:** `DanielH2018/server`
 
 ## 1. Decisions taken

@@ -1,13 +1,14 @@
 # Server Homelab — Claude Code Context
 
 ## Project Overview
-Docker-based homelab managed with Ansible. ~50 containerized services deployed across two hosts via infrastructure-as-code. (Exact count: `grep -c '^  - name:' ansible/inventory/host_vars/*.yml` — don't hand-maintain a precise number here.)
+Docker + k3s homelab managed with Ansible. ~50 containerized services deployed across three hosts via infrastructure-as-code, with migration to k3s in final phases (see `docs/k3s-migration/`). (Exact count: `grep -c '^  - name:' ansible/inventory/host_vars/*.yml` — don't hand-maintain a precise number here.)
 
 **Hosts:**
-- `daniel-server` — main server (Intel XE graphics, LVM storage)
+- `daniel-box` — k3s single-node cluster (Traefik edge, Authelia+OIDC, Pi-hole DNS, Longhorn storage, most workloads since 2026-08 migration)
+- `daniel-server` — remaining Docker services (Intel XE graphics, LVM storage, UPS)
 - `daniel-pi` — Raspberry Pi
 
-**Key technologies:** Docker Compose, Ansible, Traefik (reverse proxy), Cloudflare DNS, Authelia (SSO), SOPS/age (secret encryption)
+**Key technologies:** Docker Compose, k3s (Kubernetes), Ansible, Traefik (reverse proxy), Cloudflare DNS, Authelia (SSO), SOPS/age (secret encryption), Longhorn (storage), CrowdSec (WAF)
 
 ## Directory Structure
 ```

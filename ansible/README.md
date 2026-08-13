@@ -275,14 +275,9 @@ reports SKIP. Run it after `deploy.yml` and again after working through the list
    The rest of HA's one-time setup — HACS, Zigbee pairing, the `light.bedroom_lights` group,
    companion-app sensors — is in [`roles/containers/home-assistant/SETUP.md`](roles/containers/home-assistant/SETUP.md).
 5. **Authelia**, on a genuinely fresh install: generate the OIDC HMAC secret, client password
-   hash and RSA key per [`roles/containers/authelia/CLAUDE.md`](roles/containers/authelia/CLAUDE.md)
-   ("Fresh install") — the role asserts they exist. Note `users_database.yml` is written
-   **first-run-only**, so `authelia_user`/`authelia_password` must be right before the first
-   deploy; later changes never reach the file.
-6. **Register a second host in Portainer** (Environments → Add), per
-   [`roles/containers/portainer-agent/CLAUDE.md`](roles/containers/portainer-agent/CLAUDE.md) —
-   Portainer keeps environments in its own BoltDB.
-
+   hash and RSA key per the setup instructions in [`roles/k8s/authelia/templates/config-secret.yaml.j2`](roles/k8s/authelia/templates/config-secret.yaml.j2)
+   (header comment explains fresh-install secrets) — the role asserts they exist. Note that
+   OIDC configuration is live as of E7 (2026-08-13).
 **Why these can't move into Ansible** (checked 2026-07-30, so it doesn't get re-litigated):
 Uptime-Kuma 2.x exposes setup and API-key minting over **Socket.IO only** — there is no REST
 route to drive, so items 1-2 are structurally manual. Home Assistant's `/api/onboarding/users`

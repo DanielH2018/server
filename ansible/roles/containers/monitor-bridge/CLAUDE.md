@@ -16,9 +16,9 @@ Uptime Kuma **push** monitors, so threshold problems actually page. See repo-roo
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **34 checks** (30 in `CHECKS` plus the four reachability
-  gates evaluated ahead of them) and pushes `status=up|down&msg=…` to one Kuma push
-  monitor each:
+  `INTERVAL` (300 s) it runs **30 monitors** (26 in `CHECKS` plus the four reachability
+  gates: prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
+  `status=up|down&msg=…` to one Kuma push monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the ten
     prom-dependent checks (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/ups/
@@ -138,38 +138,11 @@ Uptime Kuma **push** monitors, so threshold problems actually page. See repo-roo
     state file on this host to read, so the check, its `HOME_ALLOWLIST_*` env, its bind mount and
     its tests are gone. The monitor itself still exists — its AutoKuma label moved to the
     `uptime-kuma` role.
-  - **DOCKER-USER Origin Lock** (reads `/docker-user/state.json`, written **every 15 min** by the
-    **traefik** role's `docker-user-verify.sh` root cron — `down` on a failed live-chain assert or
-    >45 min staleness (3 missed runs), a missing/corrupt state file included. The Cloudflare-only-
-    origin lock is applied by two systemd units (`docker-user-seed.service` before Docker on boot +
-    `docker-user-rules.service` re-asserting after a docker restart) that write NO state, so this is
-    the only signal it's ACTUALLY applied: the cron re-reads the live `iptables DOCKER-USER` chain and
-    asserts the terminal DROP for :80/:443 plus a RETURN allow are present. A chain flushed after boot
-    (docker network reload, manual `iptables -F`, a Docker upgrade seeding a preempting RETURN) leaves
-    80/443 reachable direct — a Cloudflare/CrowdSec bypass — invisibly otherwise. Same state-file idiom;
-    pure `docker_user()` is unit-tested. `DOCKER_USER_MAX_AGE_MIN` tunes the staleness window.)
-  - **Cloudflare IP Drift** (reads `/cloudflare-drift/state.json`, written **weekly** by the
-    **traefik** role's `cloudflare-ip-drift.sh` cron — `down` on drift, a failed fetch, or >10 d
-    staleness (one missed weekly run), a missing/corrupt state file included. The hardcoded
-    `cloudflare_ips` allowlist (`group_vars/all.yml`) gates BOTH Traefik's `forwardedHeaders.trustedIPs`
-    AND the DOCKER-USER origin-lock DROP (`docker-user-rules.sh`), so if Cloudflare adds a range a
-    client arriving on it is silently DROPped at the edge firewall with NO log trail (reads like a
-    random regional outage). The cron diffs the baked-in list against Cloudflare's published
-    `ips-v4`/`ips-v6` and alerts on any mismatch — it never auto-applies a fetched list to a firewall.
-    Cloudflare changes these ~once per several years, so it's a low-frequency safety net. Same
-    state-file idiom; pure `cloudflare_drift()` is unit-tested. `CLOUDFLARE_DRIFT_MAX_AGE_D` tunes it.)
-  - **CrowdSec AppSec** (reads `/crowdsec-appsec/state.json`, written **every 15 min** by the
-    **traefik** role's `appsec-verify.sh` root cron — `down` on a failed live assert or >45 min
-    staleness (3 missed 15-min runs), a missing/corrupt state file included. The CrowdSec AppSec
-    inline L7 WAF (2026-07-14) fails **OPEN** (`crowdsecAppsecUnreachableBlock: false`), so if its
-    engine stops loading the appsec config/rulesets — a bad `cscli collections upgrade`, a hub rename
-    dropping `appsec-virtual-patching`/`appsec-generic-rules`, a broken `appsec-default` config — the
-    edge silently degrades to ban-list-only while the crowdsec container stays up + `cscli lapi status`
-    healthy, which Scrape Targets can't catch (it only sees a TOTAL crowdsec death). The cron asserts
-    the live agent has ≥1 enabled `cscli appsec-configs` **and** ≥1 inband `cscli appsec-rules` loaded
-    — both traffic-independent (the `cs_appsec_*` request counters read zero on a quiet homelab and
-    would false-page). It's the one fail-open edge control that lacked the repo's state-file→monitor
-    idiom. Same idiom as `docker_user`; pure `appsec()` is unit-tested. `APPSEC_MAX_AGE_MIN` tunes it.)
+  - **Public origin lock & AppSec verifiers** — RETIRED at E7 (2026-08-13) with the docker-edge
+    public 80/443 origin. The Cloudflare-only-origin (`docker-user-verify.sh` cron) and Cloudflare-IP-
+    drift checks guarded the legacy Traefik@docker; the CrowdSec AppSec verifier has re-homed to
+    daniel-box as a root cron pushing the same "CrowdSec AppSec" Kuma monitor directly from
+    `roles/k8s/crowdsec/templates/crowdsec-appsec-verify.sh.j2`.
   - **Disk Autoprune** (reads `/autofix-disk/state.json`, written hourly by the **autofix-bridge**
     role's disk-prune host cron — `down` on a FAILED prune command (docker image/builder/container
     prune erroring), >3 h staleness (cron broken / never ran), or a missing/corrupt state file. The

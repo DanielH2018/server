@@ -16,10 +16,10 @@ the path-specific detail not spelled out there:
   the backup plane is Longhorn-on-k8s, so Docker-tier state is deliberately unbacked-up —
   the services still on Docker hold regenerable or migrating state only.)
   - **Documented exception — named volumes** are the deliberate pattern for bulky, regenerable state:
-    `prometheus_data` (TSDB), `loki` (logs), `feed_cache`
-    (freshrss nginx), `karakeep_meili` (rebuildable search index), `crowdsec-db` (shared
-    traefik+crowdsec), `promtail_positions` (promtail's log-read cursor, regenerable). Don't flag
-    these; justify any new named volume with a comment.
+    `loki` (logs), `feed_cache` (freshrss nginx), `karakeep_meili` (rebuildable search index),
+    `crowdsec-db` (demoted crowdsec agent; retained for rollback of the pre-E7 local LAPI),
+    `promtail_positions` (promtail's log-read cursor, regenerable). Don't flag these; justify
+    any new named volume with a comment.
 - Pin image tags or use a stable channel. `latest` is acceptable for the homelab tier, but note when
   a specific version is preferred.
 - **`read_only: true` + `tmpfs:` — the `noexec` residual is an ACCEPTED trade-off, do not re-flag.**

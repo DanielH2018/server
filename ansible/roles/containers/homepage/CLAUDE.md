@@ -1,11 +1,16 @@
 # homepage — Application dashboard
 
+> **DOCKER DEPLOYMENT ARCHIVED.** The live homepage is `roles/k8s/homepage` on daniel-box since E3 (2026-08-12).
+> This role's templates remain load-bearing — the k8s config Secret sources them via `lookup('template')` for
+> `settings/bookmarks/widgets/custom.css`, which is why this role is kept, not archived.
+
 The landing dashboard (gethomepage) with service tiles, widgets and bookmarks.
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `ghcr.io/gethomepage/homepage:latest`
-- **Host:** daniel-server · **Port:** 3000 · **URL:** `homepage.<domain>` (Authelia: yes)
+- **Image:** `ghcr.io/gethomepage/homepage:latest` (archived Docker deployment)
+- **Live URL:** `homepage.<domain>` (served by k8s role from daniel-box)
+- **Config templates:** `templates/*.yaml.j2` — sourced by the k8s role for the live cluster deployment
 - **Networks:** apps, proxy, monitoring, media, homepage_private (spans many nets so
   widgets can reach the services they display)
 - **Depends on:** traefik, authelia

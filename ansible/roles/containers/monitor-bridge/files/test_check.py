@@ -1926,6 +1926,26 @@ def test_k8s_workloads_names_the_offenders():
     assert "n8n-runners(1), registry(2)" in msg
 
 
+def test_k8s_workloads_crash_loop_is_down_despite_available_replicas():
+    # The 2026-08-13 homepage incident: a CrashLoopBackOff pod passes readiness for a brief
+    # window each backoff cycle, so replica availability read healthy through 31 restarts.
+    # The restart counter is the signal that doesn't flap.
+    restarts = [({"pod": "homepage-58d867556f-7qbz9"}, 6.0)]
+    ok, msg = check.k8s_workloads_verdict(18, [], 5, restarts)
+    assert ok is False
+    assert "crash-looping" in msg
+    assert "homepage-58d867556f-7qbz9(6)" in msg
+
+
+def test_k8s_workloads_unavailable_replicas_outrank_the_restart_arm():
+    # Both arms firing is one incident; the replica message is the more actionable one.
+    offenders = [({"deployment": "homepage"}, 1.0)]
+    restarts = [({"pod": "homepage-x"}, 6.0)]
+    ok, msg = check.k8s_workloads_verdict(18, offenders, 5, restarts)
+    assert ok is False
+    assert "unavailable replicas" in msg
+
+
 # --- estate pinning once one Prometheus holds two estates (slice 3, B5) ------
 
 

@@ -289,6 +289,13 @@ def origin_sel(*matchers):
 # ClusterRole is deliberately scoped, so dropping `apps` from it would take every deployment series
 # away while the pod stays up and Ready.
 K8S_MIN_WORKLOADS = int(_env("K8S_MIN_WORKLOADS", "5"))
+# Crash-loop arm of the workload check: pods whose restart counter climbed more than
+# K8S_RESTART_MAX inside K8S_RESTART_WINDOW page even while readiness flaps green
+# (CrashLoopBackOff passes probes briefly each backoff cycle — the 2026-08-13 homepage
+# incident: 31 restarts overnight, tile and replica check mostly green throughout).
+# 3-in-1h ≈ steady-state backoff cadence; a legitimate deploy rollout restarts once.
+K8S_RESTART_WINDOW = _env("K8S_RESTART_WINDOW", "1h")
+K8S_RESTART_MAX = int(_env("K8S_RESTART_MAX", "3"))
 
 # Scrutiny SMART freshness + health: the collector cron runs daily (00:00) and has no usable
 # container healthcheck (cron is PID 1) — a silently-dead collector only shows as aging
@@ -1895,13 +1902,19 @@ def check_b2_reachable():
     return b2_reachable()
 
 
-def k8s_workloads_verdict(total, offenders, min_workloads):
+def k8s_workloads_verdict(total, offenders, min_workloads, restart_offenders=()):
     """Pure: (ok, msg) from the deployment-series COUNT and the unavailable-replica offenders.
 
     The count argument is what makes this fail closed. `unavailable > 0` returning nothing is
     ambiguous — it means either "every workload is healthy" or "there are no series at all" —
     and only the second is a fault. Reading the first interpretation onto both is how a monitor
     goes green while blind, so the count is checked BEFORE the offender list is trusted.
+
+    restart_offenders is the crash-loop arm (2026-08-13): a CrashLoopBackOff pod passes its
+    readiness probe for a brief window each backoff cycle, so replica availability AND a 60s
+    HTTP tile both mostly read healthy — homepage crash-looped 31 times overnight with this
+    check green. A restart counter that climbed past the threshold is down regardless of what
+    readiness says right now.
     """
     if total is None:
         return False, (
@@ -1922,6 +1935,14 @@ def k8s_workloads_verdict(total, offenders, min_workloads):
             )
         )
         return False, "k8s workloads with unavailable replicas: %s" % named
+    if restart_offenders:
+        named = ", ".join(
+            "%s(%d)" % (labels.get("pod", "?"), int(value))
+            for labels, value in sorted(
+                restart_offenders, key=lambda o: o[0].get("pod", "")
+            )
+        )
+        return False, "k8s pods crash-looping (restarts in window): %s" % named
     return True, "%d k8s workloads healthy" % int(total)
 
 
@@ -1944,7 +1965,13 @@ def check_k8s_workloads():
         base=CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    return k8s_workloads_verdict(total, offenders, K8S_MIN_WORKLOADS)
+    restart_offenders = prom_vector(
+        "increase(kube_pod_container_status_restarts_total[%s]) > %d"
+        % (K8S_RESTART_WINDOW, K8S_RESTART_MAX),
+        base=CLUSTER_PROM_URL,
+        source="cluster prometheus",
+    )
+    return k8s_workloads_verdict(total, offenders, K8S_MIN_WORKLOADS, restart_offenders)
 
 
 def check_cluster_targets():
