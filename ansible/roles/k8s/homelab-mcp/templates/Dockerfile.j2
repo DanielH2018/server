@@ -4,7 +4,11 @@ WORKDIR /app
 # mcp.server.fastmcp and crash-looped the container. Lift the pin only with an
 # app.py port to the 2.x API.
 RUN pip install --no-cache-dir 'mcp<2' httpx uvicorn
-# Flat COPY (the Docker role's compose build used app/): image-builder mounts its
-# ConfigMap context at the root and ConfigMap keys cannot contain '/'.
-COPY app.py safe_reads.py ./
+# COPY . (not `COPY app.py safe_reads.py`): the context is a ConfigMap mount, whose
+# files are symlinks into ..data/, and buildkit's followPaths optimization for a
+# multi-file COPY drops all but the first symlinked file from the transfer ("not
+# found", verified 2026-08-13 — a single-file COPY like n8n-runners' works). COPY .
+# ships the whole snapshot, so the ..data dir arrives and every symlink resolves.
+# The image gains the Dockerfile + ConfigMap dotdirs under /app — harmless.
+COPY . ./
 CMD ["python", "app.py"]
