@@ -157,6 +157,10 @@ stringData:
     {"type": "push", "name": "Daniel Pi Recovery", "interval": 600, "max_retries": 0, "push_token": "{{ pi_recovery_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   secret-rotation.json: |
     {"type": "push", "name": "Secret Rotation", "interval": 90000, "max_retries": 0, "push_token": "{{ secret_rotation_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% if manifest_prune_push_token | default('') %}
+  manifest-prune-check.json: |
+    {"type": "push", "name": "Manifest Prune Drift", "interval": 90000, "max_retries": 0, "push_token": "{{ manifest_prune_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
   # ── Transcribed 2026-08-10: the LIVE push fleet whose labels sit inert on the
   # monitor-bridge / autofix-bridge composes (the transcription ledger, pre-ON_DELETE flip).
   # Ids must keep matching the kuma() first arguments at those call sites.
