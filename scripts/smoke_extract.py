@@ -44,6 +44,16 @@ _SKIP_BARE_BOOT = frozenset(
         "lscr.io/linuxserver/wireguard",
         # interactive world-selection prompt on a bare boot (no world files mounted).
         "beardedio/terraria",
+        # exits with "Either CLOUDFLARE_API_TOKEN or CLOUDFLARE_API_TOKEN_FILE must be set"
+        # (observed run 31731079802) — config-required, same class as authelia/couchdb.
+        "favonia/cloudflare-ddns",
+        # Chrome's setuid sandbox is incompatible with this smoke's own
+        # --security-opt=no-new-privileges (observed run 31731079802); the karakeep
+        # deployment runs it with --no-sandbox, which a bare boot doesn't.
+        "zenika/alpine-chrome",
+        # master-web boots but its healthcheck needs the influxdb sidecar (observed run
+        # 31731079802). Repository-level match also skips master-collector.
+        "ghcr.io/analogj/scrutiny",
     }
 )
 
