@@ -102,7 +102,7 @@ read-only commands to fit it. Anything that writes or executes still prompts —
   `lsb_release`, `sensors`, `mailq`, `crontab -l` (the write forms — `dpkg -i`,
   `apt install`, `crontab -r`, `sensors -s`, … — still prompt)
 - Those same read-only commands run over `ssh daniel-server`/`ssh daniel-pi` — the remote
-  command is classified exactly like a local one, so `ssh daniel-server docker logs traefik
+  command is classified exactly like a local one, so `ssh daniel-server docker logs monitor-bridge
   --since 24h 2>&1 | tail -20` goes through. Connection flags (`-i`, `-p`, `-l`, `-q`, `-o`
   with a connection-only key) are fine; forwarding/proxying (`-L`/`-R`/`-D`/`-A`/`-F`,
   `-o ProxyCommand=…`), a second hop, any other host, and remote reads of secret paths or

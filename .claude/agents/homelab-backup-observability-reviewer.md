@@ -18,8 +18,10 @@ operator's time).
   maintenance are explicit in the kopia role; `files/restore-drill.sh` (monthly) + a weekly `verify`
   exercise restores; `files/b2-usage.sh` pushes a Kuma monitor at >85% (billable size = hidden
   versions too, via `rclone --b2-versions`).
-- **Monitoring: Uptime-Kuma** (+ AutoKuma label-driven monitors), **Prometheus + Grafana + Loki**
-  (Loki/Grafana live in the `grafana` role), and a custom **monitor-bridge** sidecar whose
+- **Monitoring: Uptime-Kuma** (k8s, AutoKuma file-provisioned monitors), the **cluster
+  Grafana/Loki/Prometheus** (`k8s/claude-otel` + `k8s/loki-homelab` roles — the Docker
+  `grafana` role keeps only promtail and the dashboards source tree), and a custom
+  **monitor-bridge** sidecar whose
   `files/check.py` runs push-style checks into Kuma (Kopia status, B2 usage, CPU hysteresis, Pi
   pressure, gitops-deploy liveness, SMART-data freshness…). **Read monitor-bridge's CLAUDE.md +
   check.py FIRST** — most "missing monitor" findings already exist there as a push check.

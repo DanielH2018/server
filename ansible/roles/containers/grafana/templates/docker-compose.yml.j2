@@ -10,8 +10,9 @@ services:
   # unsuffixed name and reads the same dashboards tree. The Docker loki cut (D.2 step 4)
   # executed 2026-08-13, four days early by operator decision — its container, `loki`
   # named volume, and pre-cutover history are gone. promtail stays a Docker-host tailer
-  # until the Phase F join (KL2: a DaemonSet can't see a non-node host's logs), pushing
-  # only to the cluster loki-homelab.
+  # until the DRAIN step (the F join happened 2026-08-13, but the cluster promtail DS is
+  # pinned to daniel-box until then to avoid double-shipping), pushing only to the
+  # cluster loki-homelab.
   promtail:
     image: grafana/promtail:latest
     container_name: promtail
