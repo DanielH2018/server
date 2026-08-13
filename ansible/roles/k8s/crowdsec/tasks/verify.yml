@@ -35,22 +35,11 @@
   delay: 10
   until: crowdsec_k8s_gate_banned.stdout == "403"
 
-- name: Probe the Docker edge from the banned Pi — expect 403 (B2, one LAPI both edges)
-  tags: [never, b1-gate]
-  # Same ban, other edge: daniel-server's traefik polls the SAME cluster LAPI from B2b on,
-  # so the decision must 403 there too. homepage is Docker-hosted — no bridge involved.
-  ansible.builtin.command:
-    cmd: >-
-      ssh daniel-pi curl -sk -o /dev/null -w '%{http_code}'
-      --resolve homepage.{{ domain }}:443:{{ hostvars['daniel-server'].server_ip }}
-      https://homepage.{{ domain }}/
-  register: crowdsec_k8s_gate_docker_banned
-  changed_when: false
-  # More patient than the VIP probe above: this bouncer's 60s stream poll AND its 60s
-  # per-IP clean-verdict cache both have to roll over before the ban shows.
-  retries: 15
-  delay: 10
-  until: crowdsec_k8s_gate_docker_banned.stdout == "403"
+# The Docker-edge leg of this gate ("B2, one LAPI both edges") retired at E7: it probed
+# homepage.<domain> resolved to daniel-server, a route E3 had already moved to the cluster
+# (the leg could only 404), and the Docker edge itself stands down with E7. NB the `never`
+# tag does not protect these tasks from `--tags crowdsec` — deploy.yml's per-role block
+# tag is added to every inner task, so the explicit service tag requests them.
 
 - name: Lift the test ban
   tags: [never, b1-gate]
