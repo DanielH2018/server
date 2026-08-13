@@ -35,6 +35,7 @@ spec:
         kubernetes.io/hostname: daniel-box
       restartPolicy: Never
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: crane
           image: {{ registry_k8s_crane_image }}

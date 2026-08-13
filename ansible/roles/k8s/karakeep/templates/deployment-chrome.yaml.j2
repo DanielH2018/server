@@ -15,6 +15,7 @@ spec:
         app: karakeep-chrome
     spec:
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: chrome
           image: {{ karakeep_k8s_chrome_image }}

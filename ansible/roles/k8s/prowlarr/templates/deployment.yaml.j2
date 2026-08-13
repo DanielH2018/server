@@ -26,6 +26,7 @@ spec:
       # \*arrs and trackers and never touches a file on disk. Mounting the media volume "for
       # consistency" would hand the fleet's most externally-connected service write access to the
       # library for nothing.
+      automountServiceAccountToken: false
       containers:
         - name: prowlarr
           image: {{ prowlarr_k8s_image }}

@@ -32,6 +32,7 @@ spec:
         # chown the whole library on every mount, and the files are already 1000:1000.
         runAsUser: {{ puid }}
         runAsGroup: {{ pgid }}
+      automountServiceAccountToken: false
       containers:
         - name: probe
           image: {{ media_volume_probe_image }}

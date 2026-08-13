@@ -21,6 +21,7 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: daniel-box
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: ical-proxy
           image: {{ ical_proxy_k8s_image }}

@@ -18,6 +18,7 @@ spec:
         app: karakeep-meilisearch
     spec:
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: meilisearch
           image: {{ karakeep_k8s_meili_image }}

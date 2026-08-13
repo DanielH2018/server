@@ -21,6 +21,7 @@ spec:
         runAsUser: {{ bento_pdf_k8s_uid }}
         runAsGroup: {{ bento_pdf_k8s_uid }}
         fsGroup: {{ bento_pdf_k8s_uid }}
+      automountServiceAccountToken: false
       containers:
         - name: bento-pdf
           image: {{ bento_pdf_k8s_image }}

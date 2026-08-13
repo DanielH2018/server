@@ -21,6 +21,7 @@ spec:
         app: flaresolverr
     spec:
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: flaresolverr
           image: {{ prowlarr_k8s_flaresolverr_image }}

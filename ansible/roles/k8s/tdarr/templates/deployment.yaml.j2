@@ -24,6 +24,7 @@ spec:
       securityContext:
         supplementalGroups:
           - {{ render_gid }}
+      automountServiceAccountToken: false
       containers:
         - name: tdarr
           image: {{ tdarr_k8s_image }}

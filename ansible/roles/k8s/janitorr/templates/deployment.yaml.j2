@@ -24,6 +24,7 @@ spec:
         runAsGroup: {{ pgid }}
         runAsNonRoot: true
         fsGroup: {{ pgid }}
+      automountServiceAccountToken: false
       containers:
         - name: janitorr
           image: {{ janitorr_k8s_image }}

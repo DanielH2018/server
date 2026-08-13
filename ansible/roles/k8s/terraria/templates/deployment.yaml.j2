@@ -19,6 +19,7 @@ spec:
         app: terraria
     spec:
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: terraria
           image: {{ terraria_k8s_image }}

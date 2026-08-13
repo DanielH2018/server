@@ -83,6 +83,7 @@ spec:
         app: otel-collector
     spec:
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: otel-collector
           image: {{ claude_otel_collector_image }}

@@ -78,6 +78,7 @@ spec:
             requests:
               cpu: 10m
               memory: 16Mi
+      automountServiceAccountToken: false
       containers:
         - name: authelia
           image: {{ authelia_k8s_image }}

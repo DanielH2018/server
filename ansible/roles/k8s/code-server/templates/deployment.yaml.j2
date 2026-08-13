@@ -26,6 +26,7 @@ spec:
       enableServiceLinks: false
       # No fsGroup: seed-volume restores ownership with `tar -p --numeric-owner` and the LSIO
       # image chowns /config itself on startup.
+      automountServiceAccountToken: false
       containers:
         - name: code-server
           image: {{ code_server_k8s_image }}

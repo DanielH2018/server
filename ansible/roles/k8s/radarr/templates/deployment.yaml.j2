@@ -23,6 +23,7 @@ spec:
       # No fsGroup: seed-volume restores ownership with `tar -p --numeric-owner`, the LSIO image
       # chowns /config itself on startup, and an fsGroup here would make the kubelet recursively
       # chown the 19 G media volume on every mount.
+      automountServiceAccountToken: false
       containers:
         - name: radarr
           image: {{ radarr_k8s_image }}

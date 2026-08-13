@@ -15,6 +15,7 @@ spec:
         app: freshrss-feed-cache
     spec:
       enableServiceLinks: false
+      automountServiceAccountToken: false
       containers:
         - name: nginx
           image: {{ freshrss_k8s_cache_image }}

@@ -25,6 +25,7 @@ spec:
       # `tar -p --numeric-owner`, and this LSIO image starts as root and chowns /config to
       # PUID/PGID itself. An fsGroup would recursively rewrite group ownership at mount time,
       # fighting both.
+      automountServiceAccountToken: false
       containers:
         - name: speedtest
           image: {{ speedtest_k8s_image }}
