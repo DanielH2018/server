@@ -2,6 +2,7 @@
 from datetime import datetime
 
 from deploy_logic import (
+    ChangeSet,
     services_from_changed_paths,
     broad_remediation,
     deferred_service_alerts,
@@ -17,7 +18,9 @@ from deploy_logic import (
     gate_services,
     apply_send_result,
     apply_drain_result,
+    declared_k8s_services,
     declared_services,
+    reroute_k8s_services,
     stale_rendered_services,
 )
 
@@ -1008,6 +1011,67 @@ def test_declared_services_last_entry_platform_k8s_with_no_trailing_entry():
     # the (?=^  - name: |\Z) lookahead must still terminate the block at EOF.
     text = "containers_list:\n  - name: traefik\n    port: 8080\n  - name: authelia\n    platform: k8s\n    port: 9091\n"
     assert declared_services(text) == {"traefik"}
+
+
+# --- declared_k8s_services / reroute_k8s_services -----------------------------------------
+# A path under ansible/roles/containers/<svc>/{templates,files}/ maps to <svc> by NAME ALONE
+# (services_from_changed_paths), with no knowledge of which platform THIS host actually runs
+# that service under. wg-easy is a real case: a Docker role (used by daniel-pi), but
+# platform: k8s on daniel-box — a template-only push there used to deploy `--tags wg-easy`,
+# which resolves to deploy.yml's K8S play, not the Docker one _ACTIVE_CONFIG assumed: an
+# idempotent no-op whose health gate is silently skipped too (containers_for() renders no
+# compose for a k8s entry). reroute_k8s_services moves such a match into cs.k8s instead, so it
+# gets the same defer-and-alert a direct ansible/roles/k8s/** change gets.
+def test_declared_k8s_services_parses_platform_k8s_entries():
+    text = (
+        "containers_list:\n"
+        "  - name: wg-easy\n"
+        "    platform: k8s\n"
+        "    port: 51821\n"
+        "  - name: traefik\n"
+        "    port: 8080\n"
+    )
+    assert declared_k8s_services(text) == {"wg-easy"}
+
+
+def test_declared_k8s_services_excludes_docker_entries():
+    text = "containers_list:\n  - name: traefik\n    port: 8080\n"
+    assert declared_k8s_services(text) == set()
+
+
+def test_reroute_k8s_services_moves_matched_service_to_k8s():
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2"]
+    )
+    assert cs.services == {"wg-easy"}
+    rerouted = reroute_k8s_services(cs, {"wg-easy"})
+    assert rerouted.services == set()
+    assert rerouted.k8s == {"wg-easy"}
+
+
+def test_reroute_k8s_services_leaves_docker_services_alone():
+    cs = services_from_changed_paths(
+        ["ansible/roles/containers/cadvisor/templates/docker-compose.yml.j2"]
+    )
+    rerouted = reroute_k8s_services(cs, {"wg-easy"})
+    assert rerouted.services == {"cadvisor"}
+    assert rerouted.k8s == set()
+
+
+def test_reroute_k8s_services_only_moves_the_matched_subset():
+    cs = ChangeSet(services={"cadvisor", "wg-easy"})
+    rerouted = reroute_k8s_services(cs, {"wg-easy"})
+    assert rerouted.services == {"cadvisor"}
+    assert rerouted.k8s == {"wg-easy"}
+
+
+def test_reroute_k8s_services_merges_into_existing_k8s_set():
+    # A single push can carry both a direct ansible/roles/k8s/** change and a containers/<svc>/
+    # template for a service that's k8s on this host — both must land in cs.k8s.
+    cs = ChangeSet(services={"wg-easy"}, k8s={"authelia"})
+    rerouted = reroute_k8s_services(cs, {"wg-easy"})
+    assert rerouted.services == set()
+    assert rerouted.k8s == {"wg-easy", "authelia"}
 
 
 def test_stale_rendered_services_flags_only_undeclared_dirs():

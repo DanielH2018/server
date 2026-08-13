@@ -41,20 +41,78 @@ class PR:
     )
 
 
-def find_dashboard(issues: list[dict]) -> str | None:
-    """Return the Renovate Dependency Dashboard issue's `updated_at`, or None if absent.
+def _find_dashboard_issue(issues: list[dict]) -> dict | None:
+    """Return the raw Dependency Dashboard issue dict, or None if absent.
 
     Fed GitHub's `/issues` payload (which also lists PRs — those carry a `pull_request`
     key and are skipped). Matches the dashboard by title AND a renovate-bot author, so a
-    human-created look-alike issue can't be mistaken for it. Pure — unit-tested without HTTP.
+    human-created look-alike issue can't be mistaken for it. Shared by find_dashboard
+    (staleness) and find_dashboard_problems (Repository Problems section) so both read
+    the same issue. Pure — unit-tested without HTTP.
     """
     for it in issues:
         if it.get("pull_request"):
             continue
         login = (it.get("user") or {}).get("login", "")
         if it.get("title") == DASHBOARD_TITLE and login.startswith("renovate"):
-            return it.get("updated_at")
+            return it
     return None
+
+
+def find_dashboard(issues: list[dict]) -> str | None:
+    """Return the Renovate Dependency Dashboard issue's `updated_at`, or None if absent."""
+    issue = _find_dashboard_issue(issues)
+    return issue.get("updated_at") if issue else None
+
+
+REPOSITORY_PROBLEMS_HEADER = "## Repository Problems"
+
+
+def parse_repository_problems(body: str) -> set[str]:
+    """Parse the dashboard body's "## Repository Problems" section into a set of problem
+    strings — per-package lookup failures, config warnings, etc. Renovate renders each as
+    a backtick-wrapped bullet (` - \\`<problem>\\` `) between the header and the next
+    top-level `## ` section. This is the bucket the PR digest can't see: a package whose
+    lookup starts failing gets no PR and doesn't touch dashboard staleness either (the
+    dashboard still updates fine) — it just silently stops receiving updates forever
+    (karakeep's gcr.io image, 2026-08). Absent section -> empty set."""
+    if REPOSITORY_PROBLEMS_HEADER not in (body or ""):
+        return set()
+    section = body.split(REPOSITORY_PROBLEMS_HEADER, 1)[1]
+    section = section.split("\n## ", 1)[0]  # stop at the next top-level section
+    problems = set()
+    for line in section.splitlines():
+        line = line.strip()
+        if line.startswith("-"):
+            problems.add(line.lstrip("- ").strip("`"))
+    return problems
+
+
+def find_dashboard_problems(issues: list[dict]) -> set[str]:
+    """Parse the dashboard issue's Repository Problems section (see
+    parse_repository_problems). Empty set when the dashboard is absent or has no
+    problems section."""
+    issue = _find_dashboard_issue(issues)
+    if issue is None:
+        return set()
+    return parse_repository_problems(issue.get("body") or "")
+
+
+def problems_fingerprint(problems: set[str]) -> str:
+    """Dedupe key for the Repository Problems bucket. Sorted so ordering is stable, but the
+    problem strings themselves are the key — a persistent problem set re-notifies only on
+    change, while a NEW problem (even alongside old ones) changes the string and re-pages."""
+    return ",".join(sorted(problems))
+
+
+PROBLEMS_HEADER = (
+    "\U0001f9e8 Renovate — Repository Problems (updates silently stalled):"
+)
+
+
+def render_problems(problems: set[str]) -> str:
+    lines = [PROBLEMS_HEADER] + [" • %s" % p for p in sorted(problems)]
+    return "\n".join(lines)
 
 
 def dashboard_stale(

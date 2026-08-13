@@ -12,7 +12,7 @@ and any recorded known-bad (hold) SHA.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 # A bind-mounted file under an active container role's templates/ or files/ dir — the
 # docker-compose.yml.j2 OR any config template / files/ asset (e.g. prometheus.yml.j2,
@@ -477,6 +477,36 @@ def declared_services(hostvars_text: str) -> set[str]:
         if platform == "docker":
             out.add(name)
     return out
+
+
+def declared_k8s_services(hostvars_text: str) -> set[str]:
+    """k8s-platform service names declared in a host's containers_list — the platform: k8s
+    counterpart to declared_services(), used to catch a same-named Docker role that's actually
+    k8s on THIS host (see reroute_k8s_services)."""
+    out: set[str] = set()
+    for m in _DECLARED_ENTRY.finditer(hostvars_text):
+        name, block = m.group(1), m.group(2)
+        pm = _ENTRY_PLATFORM.search(block)
+        platform = pm.group(1) if pm else "docker"
+        if platform == "k8s":
+            out.add(name)
+    return out
+
+
+def reroute_k8s_services(cs: ChangeSet, k8s_services: set[str]) -> ChangeSet:
+    """Move any `cs.services` entry that is platform: k8s on THIS host into `cs.k8s`.
+
+    services_from_changed_paths maps ansible/roles/containers/<svc>/{templates,files}/ changes to
+    <svc> by NAME ALONE, with no knowledge of which platform this host actually runs that service
+    under (e.g. wg-easy is a Docker role used by daniel-pi, but platform: k8s on daniel-box).
+    Deploying such a match with `--tags <svc>` resolves to deploy.yml's K8S play, not the Docker
+    one _ACTIVE_CONFIG assumed — an idempotent no-op whose health gate is silently skipped
+    (containers_for() finds no rendered docker-compose.yml for a k8s entry), instead of the
+    defer-and-alert a k8s-platform change should get (same as ansible/roles/k8s/** changes)."""
+    moved = cs.services & k8s_services
+    if not moved:
+        return cs
+    return replace(cs, services=cs.services - moved, k8s=cs.k8s | moved)
 
 
 def stale_rendered_services(rendered: list[str], declared: set[str]) -> list[str]:
