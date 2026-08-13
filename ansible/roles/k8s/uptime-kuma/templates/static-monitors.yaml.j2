@@ -63,6 +63,8 @@ stringData:
     {"type": "http", "name": "k3s speedtest", "url": "https://speedtest{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   freshrss-k8s.json: |
     {"type": "http", "name": "k3s FreshRSS", "url": "https://freshrss{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  headlamp-k8s.json: |
+    {"type": "http", "name": "k3s Headlamp", "url": "https://headlamp{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   healthchecks-k8s.json: |
     {"type": "http", "name": "k3s healthchecks", "url": "https://healthchecks{{ k8s_hostname_suffix }}.local.{{ domain }}/ping/00000000-0000-0000-0000-000000000000", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["404"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   livesync-k8s.json: |
