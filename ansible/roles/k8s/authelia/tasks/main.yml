@@ -40,12 +40,31 @@
   tags: [config]
   # Same algorithm and parameters as the Docker role, so the two instances' users databases
   # stay interchangeable for the slice-6 cutover.
+  #
+  # authelia's CLI (4.39.20) has no --password-file or env-var form — only a literal
+  # --password flag or an interactive terminal prompt (confirmed against the CLI
+  # reference), so the value has to reach `authelia` as an argv token somewhere. Putting
+  # it directly on the `kubectl run` command line put it in spec.containers[].command,
+  # which anything with `get pods` can read (homelab-readonly's view binding,
+  # homelab-mcp) and which persists in the object until the pod is GC'd — plus the node's
+  # process table for as long as `kubectl run`/the shell live. Piping it over stdin and
+  # having the in-pod shell `read` it into a local var, mirrored from the crowdsec role's
+  # `cscli machines add` task (roles/k8s/crowdsec/tasks/main.yml), keeps it out of the pod
+  # spec, the kubectl process argv, and the k8s exec audit trail entirely. It still lands
+  # in `authelia`'s own argv for the pod's brief lifetime once the shell expands "$pw" —
+  # that part is unavoidable without patching the CLI, and this task's own `ps` exposure
+  # is no worse than the interactive-prompt path would be.
+  #
+  # IFS= (not bare `read -r pw`) so a leading/trailing space in the password isn't
+  # stripped — `read` trims IFS whitespace by default, which would silently hash the
+  # wrong string while still producing a well-formed $argon2id$ hash.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} run authelia-hash
-      --rm --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
-      authelia crypto hash generate argon2 --password {{ authelia_password }}
-      --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32
+      --rm -i --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
+      sh -c 'IFS= read -r pw; authelia crypto hash generate argon2 --password "$pw"
+      --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32'
+    stdin: "{{ authelia_password }}"
   register: authelia_k8s_hash
   become: true
   changed_when: false
