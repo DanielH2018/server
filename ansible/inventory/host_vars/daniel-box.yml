@@ -477,6 +477,9 @@ containers_list:
     hostname: "pihole{{ k8s_hostname_suffix }}"
     port: 80
     use_authelia: true
+    # E7 follow-through (2026-08-13): claims the unsuffixed name from the retired Docker
+    # pihole — the homepage tile's pihole.<domain> href 404'd at the k8s edge without it.
+    unsuffixed_hostname: pihole
 
   # Slice-6 B5, pulled forward from slice 7 (2026-08-09): the operator moved ALL router
   # forwards — 51820/udp included — to this node, so wg-easy followed its port. The tunnel
