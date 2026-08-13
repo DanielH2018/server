@@ -71,15 +71,16 @@ redeploy the app **and** every consumer (e.g. Homepage, monitor-bridge, configar
   LAPI lives in the cluster and registration is DECLARATIVE — the engine's `BOUNCER_KEY_*`
   env, not `cscli`. Rotation is therefore: `sops set` the new value → delete the old
   registration on the engine (`kubectl -n homelab exec deploy/crowdsec -c crowdsec --
-  cscli bouncers delete <k8straefik|dockertraefik>`; `cscli machines delete <name>` for the
-  agent password) → redeploy `--tags crowdsec` on daniel-box → redeploy the consumer
-  (`--tags traefik` on daniel-server for its bouncer, `--tags traefik`/`--tags authelia` on
-  daniel-box for the sidecars). The delete is required because re-registration never
+  cscli bouncers delete k8straefik`; `cscli machines delete <name>` for the
+  agent password) → redeploy `--tags crowdsec` on daniel-box → redeploy the consumers
+  (`--tags traefik`/`--tags authelia` on daniel-box for the sidecars; the node-agent
+  DaemonSet pods re-register themselves on the crowdsec redeploy). The delete is
+  required because re-registration never
   UPDATES an existing key. **Do NOT just `sops set`**: the plugin hot-reloads the new key
   while the LAPI still holds the old hash, and it fails OPEN — a silent WAF bypass. The
   traefik deploy now fails loudly on a rejected key (its probe task), which is the guard.
   Verify after: `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list`
-  (fresh `last_pull`) and a `docker logs traefik` free of LAPI 403s.
+  (fresh `last_pull`) and a `kubectl -n homelab logs deploy/traefik` free of LAPI 403s.
   (`crowdsec_bouncer_api_key` — the retired local LAPI's legacy key — and
   `crowdsec_bouncer_docker_traefik_key` were both RETIRED 2026-08-13 with the Docker edge.)
 - `grafana_admin_password`, `*_password`: change in the app (or its env on first run).
@@ -128,9 +129,10 @@ instances of this discipline:
 - **`authelia_storage`** — the Authelia DB encryption key. Use Authelia's migration, never a
   raw swap (a raw swap makes the existing SQLite DB undecryptable → TOTP/sessions lost):
   ```bash
-  docker exec -it authelia authelia storage encryption change-key --help
+  kubectl -n homelab exec -it deploy/authelia -- authelia storage encryption change-key --help
   ```
-  Back up `containers/authelia/config/db.sqlite3` first.
+  Back up the DB first — it lives at `/config/db.sqlite3` on the authelia Longhorn PVC
+  (take a Longhorn snapshot, or copy the file out with `kubectl cp`).
 
 After any rotation, run `audit` to confirm the secret's window resets (green), and watch the
 "Secret Rotation" Kuma monitor.

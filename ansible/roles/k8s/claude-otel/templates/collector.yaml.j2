@@ -16,6 +16,10 @@ data:
     processors:
       batch:
         timeout: 5s
+    extensions:
+      health_check:
+        # Probe target only — in-cluster, never a hostPort, carries no telemetry.
+        endpoint: 0.0.0.0:13133
     exporters:
       prometheus:
         endpoint: 0.0.0.0:8889
@@ -36,6 +40,7 @@ data:
           # published anywhere, so this never leaves the node.
           insecure: true
     service:
+      extensions: [health_check]
       telemetry:
         logs:
           level: info
@@ -110,6 +115,22 @@ spec:
               containerPort: 8889
             - name: self-metrics
               containerPort: 8888
+            - name: health
+              containerPort: 13133
+          # The only pod in the stack without probes until 2026-08-13: a wedged collector
+          # kept its hostPort bound and telemetry silently blackholed until a human noticed.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 30
           volumeMounts:
             - name: config
               mountPath: /conf
