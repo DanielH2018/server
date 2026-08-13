@@ -16,14 +16,13 @@ in the same folders. UI edits are captured back into version control by re-runni
 
     python3 scripts/export_grafana_dashboards.py
 
-Requires a running ``grafana`` container; all API calls go through ``docker exec grafana
-wget`` against ``localhost:3000`` with the admin password read from its mounted file
-(``GF_SECURITY_ADMIN_PASSWORD__FILE``; the bare env var is empty since the password was
-file-mounted) so special characters in the password never have to survive URL/shell
-quoting. Idempotent; overwrites the JSON in the role.
+Run on daniel-box against the cluster grafana (observability/grafana — the live one
+since E1); API calls exec into the pod via ``sudo k3s kubectl`` and build the admin auth
+header in-pod from ``GF_SECURITY_ADMIN_PASSWORD``, so the password never leaves the pod
+and special characters never have to survive URL/shell quoting. Idempotent; overwrites
+the JSON in the role.
 """
 
-import base64
 import json
 import os
 import re
@@ -53,33 +52,29 @@ FILENAME_OVERRIDE = {"ddmlqvk12uozka": "traefik-custom"}
 
 
 def gapi(path):
-    """GET a Grafana API path via the container, authenticated as admin."""
-    pw = subprocess.run(
-        # The admin password is file-mounted (GF_SECURITY_ADMIN_PASSWORD__FILE) so it stays
-        # out of the container env — the bare GF_SECURITY_ADMIN_PASSWORD var is empty. Read
-        # the file it points at.
-        [
-            "docker",
-            "exec",
-            "grafana",
-            "sh",
-            "-c",
-            'cat "$GF_SECURITY_ADMIN_PASSWORD__FILE"',
-        ],
-        capture_output=True,
-        text=True,
-        timeout=15,
-    ).stdout.strip()
-    auth = base64.b64encode(("admin:%s" % pw).encode()).decode()
+    """GET a Grafana API path inside the cluster grafana pod, authenticated as admin.
+
+    Since E1 the live Grafana is the cluster one (observability/grafana); its route is
+    Authelia-gated, so API calls exec into the pod instead. The admin password never
+    leaves the pod: the auth header is built in-pod from GF_SECURITY_ADMIN_PASSWORD
+    (the grafana-admin Secret). Run on daniel-box; needs sudo because the plain
+    kubeconfig is the readonly SA, which cannot exec.
+    """
     out = subprocess.run(
         [
-            "docker",
+            "sudo",
+            "k3s",
+            "kubectl",
+            "-n",
+            "observability",
             "exec",
-            "grafana",
-            "wget",
-            "-qO-",
-            "--header=Authorization: Basic " + auth,
-            "http://localhost:3000" + path,
+            "deploy/grafana",
+            "--",
+            "sh",
+            "-c",
+            # busybox base64 has no -w0; tr strips the wrap instead.
+            'wget -qO- --header="Authorization: Basic $(printf %%s "admin:$GF_SECURITY_ADMIN_PASSWORD" | base64 | tr -d \'\\n\')" "http://localhost:3000%s"'
+            % path,
         ],
         capture_output=True,
         text=True,

@@ -101,6 +101,29 @@
       - grafana
   when: manifests_render is changed or manifests_secret_render is changed
 
+# GF_SECURITY_ADMIN_PASSWORD (the grafana-admin Secret) is only consulted when Grafana
+# initialises its database, so on an existing install a rotated grafana_admin_password
+# never reaches the live admin user — SOPS and the actual login diverge silently. Same
+# fix the retired Docker grafana role carried: `grafana cli admin reset-admin-password`
+# writes straight to the DB and needs no knowledge of the CURRENT password. Gated on the
+# secret render changing (also fires on a scrape-credentials rotation — harmless, it
+# re-sets the same password); retries because a freshly-rolled Grafana is still running
+# its schema migrations for a few seconds.
+- name: Sync the live Grafana admin password with SOPS # noqa no-handler
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_observability_namespace }} exec deploy/grafana --
+      grafana cli admin reset-admin-password {{ grafana_admin_password }}
+  become: true
+  when: manifests_secret_render is changed
+  register: claude_otel_admin_password_sync
+  until: (claude_otel_admin_password_sync.rc | default(1)) == 0
+  retries: 5
+  delay: 10
+  changed_when: (claude_otel_admin_password_sync.rc | default(1)) == 0
+  no_log: true
+
 - name: Read back the OTLP listener's bind address
   tags: [deploy]
   # The one property that cannot be inferred from a green rollout. hostPort/hostIP is what

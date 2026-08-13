@@ -1,4 +1,9 @@
 ---
+# Since E1 (grafana container -> cluster) and the 2026-08-13 loki cut, this role deploys
+# only promtail (a Docker-host tailer until the Phase F join, KL2). The E1-era tasks that
+# rendered datasources/dashboards/admin_password for the retired Docker grafana were
+# removed 2026-08-13 — the cluster grafana mounts its admin Secret directly and reads the
+# dashboards tree from this role's files/ via k8s/claude-otel/tasks/dashboards.yml.
 - name: Create required directories
   tags: [config]
   ansible.builtin.include_role:
@@ -6,61 +11,8 @@
     tasks_from: setup_dirs.yml
   vars:
     common_dirs_to_create:
-      - "{{ container_item.name }}/data"
-      - "{{ container_item.name }}/provisioning"
-      - "{{ container_item.name }}/dashboards"
+      - "{{ container_item.name }}"
 
-- name: Render the Grafana admin password to a file (kept out of the container's Env)
-  tags: [config]
-  # GF_SECURITY_ADMIN_PASSWORD inlined lands in grafana's Env, readable via the read-only
-  # docker-proxy by any monitoring-net container. Grafana reads GF_SECURITY_ADMIN_PASSWORD__FILE,
-  # so file-mounting keeps it out of container metadata (2026-07-15 review M2). no_log; 0600 owned
-  # by sys_user (grafana runs as UID 1000) — NO become.
-  no_log: true
-  ansible.builtin.copy:
-    content: "{{ grafana_admin_password }}"
-    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/admin_password"
-    mode: "0600"
-  register: grafana_cfg_admin_password
-
-- name: Provision Grafana datasources (Prometheus + Loki)
-  tags: [config]
-  ansible.builtin.template:
-    src: provisioning/datasources.yml.j2
-    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/provisioning/datasources.yml"
-    mode: "0664"
-  register: grafana_cfg_datasources
-
-- name: Provision Grafana dashboard file-provider
-  tags: [config]
-  ansible.builtin.template:
-    src: provisioning/dashboards.yml.j2
-    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/provisioning/dashboards.yml"
-    mode: "0664"
-  register: grafana_cfg_dashboards_cfg
-
-# Recurses subdirectories — with foldersFromFilesStructure: true each subdir
-# (e.g. dashboards/Security/) becomes a Grafana folder of the same name.
-# synchronize (not copy) so removing/renaming a dashboard in the role prunes its stale
-# file from the mount: plain copy is additive and a leftover file keeps the board
-# provisioned, so Grafana refuses to delete it ("provisioned dashboard cannot be deleted")
-# and it ghosts in its old folder forever.
-- name: Mirror provisioned dashboards (community seeds + exported custom boards)
-  tags: [config]
-  ansible.posix.synchronize:
-    src: "{{ role_path }}/files/dashboards/"
-    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/dashboards/"
-    archive: false
-    recursive: true
-    checksum: true
-    delete: true
-    rsync_opts:
-      - "--chmod=F664,D775"
-  register: grafana_cfg_dashboards
-
-# Docker loki cut 2026-08-13 (D.2 step 4, early by operator decision): its config render
-# is gone; the rendered loki-config.yaml and the container/volume are removed by the
-# cut's one-shot, not tombstoned here (single host, single execution).
 - name: Create promtail-config.yml from template
   tags: [config]
   ansible.builtin.template:
@@ -75,32 +27,4 @@
     name: common
     tasks_from: docker_deploy.yml
   vars:
-    common_config_changed: >-
-      {{ (grafana_cfg_datasources is changed) or (grafana_cfg_dashboards_cfg is changed)
-         or (grafana_cfg_dashboards is changed)
-         or (grafana_cfg_promtail is changed) or (grafana_cfg_admin_password is changed) }}
-
-# GF_SECURITY_ADMIN_PASSWORD__FILE is only consulted when Grafana initialises its database,
-# so on an existing install a rotated grafana_admin_password never reaches the live admin
-# user: SOPS and the actual login diverge silently and the runbook grew a "change it in the
-# UI" step. `grafana cli admin reset-admin-password` writes straight to the DB and needs no
-# knowledge of the CURRENT password — unlike PUT /api/admin/users/1/password, which
-# authenticates as admin and is therefore useless in exactly the case that matters.
-# Gated on the password file changing, so it fires on a fresh install and on a rotation and
-# is skipped on every other deploy.
-- name: Sync the live Grafana admin password with SOPS # noqa no-handler
-  tags: [deploy]
-  when: grafana_cfg_admin_password is changed
-  community.docker.docker_container_exec:
-    container: grafana
-    command: "grafana cli admin reset-admin-password {{ grafana_admin_password }}"
-  register: grafana_admin_password_sync
-  # A freshly-deployed Grafana is still running its schema migrations for a few seconds and
-  # the CLI exits non-zero until the user table exists. `| default(1)` guards the same crash
-  # class as the traefik/crowdsec execs: a not-yet-running container registers an error dict
-  # with no rc key at all.
-  until: (grafana_admin_password_sync.rc | default(1)) == 0
-  retries: 5
-  delay: 10
-  changed_when: (grafana_admin_password_sync.rc | default(1)) == 0
-  no_log: true
+    common_config_changed: "{{ grafana_cfg_promtail is changed }}"

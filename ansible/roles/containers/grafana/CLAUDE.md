@@ -28,12 +28,11 @@ role still owns:
   /var/lib/docker/containers) and persists its positions cursor in the
   `promtail_positions` named volume — without it every recreate re-reads all sources
   from the start and can trip Loki's ingestion rate limit.
-- **E1 leftovers, swept at Phase F/G with the role's endgame:** the tasks still render
-  datasources/dashboards/admin_password into `containers/grafana/` for the retired
-  Docker grafana (dead writes, harmless), and the "Sync the live Grafana admin password"
-  task still execs the nonexistent `grafana` container — a `grafana_admin_password`
-  rotation would fail this role's deploy until that task is removed or re-pointed at the
-  cluster grafana.
+- **E1 leftovers swept 2026-08-13:** the dead datasources/dashboards/admin_password
+  renders and the admin-password exec against the retired container are gone from
+  tasks/main.yml. A `grafana_admin_password` rotation reaches the live admin by
+  redeploying **claude-otel**, whose post-deploy reset task now carries the same
+  init-only-env fix this role used to (Grafana reads the Secret only at DB init).
 - `templates/provisioning/datasources.yml.j2` is no longer deployed anywhere live, but
   it stays the **uid registry** the `validate-grafana-dashboards` prek guard parses:
   every dashboard's datasource ref must resolve to a uid declared there (`EGdsQqhVk`
@@ -42,10 +41,9 @@ role still owns:
 ## Editing
 - Compose: `templates/docker-compose.yml.j2` (single `promtail` service) · Tailing:
   `templates/promtail-config.yml.j2`
-- Dashboards: edit `files/dashboards/**/*.json`, then deploy **claude-otel**.
-  `scripts/fetch_grafana_dashboards.py` refreshes the two community boards (1860, 14282).
-  **`scripts/export_grafana_dashboards.py` is BROKEN since E1** — it `docker exec`s the
-  retired `grafana` container; the UI→code round-trip needs re-pointing at the cluster
-  grafana pod (same F/G sweep as the leftovers above). Until then, UI edits in the
-  cluster grafana do not round-trip to the repo.
+- Dashboards: edit `files/dashboards/**/*.json` (or edit in the cluster grafana UI and
+  run `scripts/export_grafana_dashboards.py` to round-trip — it execs into the
+  observability/grafana pod via `sudo k3s kubectl`, so expect a sudo prompt), then
+  deploy **claude-otel**. `scripts/fetch_grafana_dashboards.py` refreshes the two
+  community boards (1860, 14282).
 - Deploy (promtail only): `uv run ansible-playbook ansible/deploy.yml --tags "grafana"`
