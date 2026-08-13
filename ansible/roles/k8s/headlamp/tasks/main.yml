@@ -1,0 +1,13 @@
+---
+# rbac.yaml is applied before the Deployment in the same `kubectl apply -f <dir>/` sweep;
+# ordering within the sweep does not matter because the pod retries until its SA exists.
+- name: Deploy headlamp to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: headlamp
+    manifests_files:
+      - rbac.yaml
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
