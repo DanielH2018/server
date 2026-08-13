@@ -10,6 +10,10 @@ home_assistant_k8s_enabled: true
 # whether the mod layer applies under containerd is a B3 gate, checked at first boot.
 home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.6.3-ls221
 
+# The LSIO image has no `install`; the config-install initContainer needs alpine instead.
+# Same init image peanut and zigbee2mqtt use.
+home_assistant_k8s_init_image: alpine:3.22
+
 # Mirrors resources('1.0', '1536M', '0.10', '256M') in the compose template.
 home_assistant_k8s_cpu_limit: "1"
 home_assistant_k8s_mem_limit: 1536Mi

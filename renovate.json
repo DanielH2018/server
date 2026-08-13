@@ -174,8 +174,11 @@
   ],
   "packageRules": [
     {
-      "description": "Watchtower owns mutable :latest tags \u2014 Renovate manages only version-pinned images, so leave latest alone",
+      "description": "Watchtower owns mutable :latest tags on the Docker compose plane \u2014 Renovate manages only version-pinned images there, so leave latest alone. Scoped to ansible/roles/containers/** so it can't also blind the k8s-defaults manager: several k8s roles deliberately keep the `latest` TAG but add a `@sha256` digest (littlelink, tdarr, dri-device-plugin, and others pinned 2026-08-13) precisely so Renovate keeps tracking them for digest-bump PRs \u2014 matching on tag alone was disabling that whole dependency axis for every k8s image whose currentValue extracts to `latest`, including the deliberately-pinned ones.",
       "matchCurrentValue": "/^latest$/",
+      "matchFileNames": [
+        "ansible/roles/containers/**"
+      ],
       "enabled": false
     },
     {

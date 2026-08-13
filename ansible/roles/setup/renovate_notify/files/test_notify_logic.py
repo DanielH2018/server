@@ -3,7 +3,15 @@ from datetime import datetime, timezone
 import notify_logic as nl
 
 
-def _pr(number=1, title="t", url="u", automerge=True, ci="success", conflicting=False):
+def _pr(
+    number=1,
+    title="t",
+    url="u",
+    automerge=True,
+    ci="success",
+    conflicting=False,
+    created_at="",
+):
     return nl.PR(
         number=number,
         title=title,
@@ -11,6 +19,7 @@ def _pr(number=1, title="t", url="u", automerge=True, ci="success", conflicting=
         automerge=automerge,
         ci=ci,
         conflicting=conflicting,
+        created_at=created_at,
     )
 
 
@@ -120,6 +129,67 @@ def test_fingerprint_is_sorted_and_stable():
 
 def test_fingerprint_empty_is_blank():
     assert nl.fingerprint([]) == ""
+
+
+# A `stuck` PR used to fingerprint on #number:bucket alone -> notify() fires once when it first
+# goes stuck, then the fingerprint never changes again while the PR just sits there, so it never
+# re-pages (PR #67, stuck since 2026-08-03, paged day 1 and went silent). The age dimension makes
+# the fingerprint change — and so re-notify — each time the PR's stuck-age crosses a threshold.
+# `manual` PRs deliberately carry no age dimension (nothing to escalate: they're waiting on a
+# merge, not getting worse).
+def test_fingerprint_stuck_pr_under_a_day_old_has_no_age_suffix():
+    now = datetime(2026, 8, 10, tzinfo=timezone.utc)
+    pr = _pr(number=67, created_at="2026-08-10T00:00:00Z")
+    assert nl.fingerprint([(pr, "stuck")], now=now) == "#67:stuck"
+
+
+def test_fingerprint_stuck_pr_crosses_1_day_threshold():
+    now = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    pr = _pr(number=67, created_at="2026-08-03T00:00:00Z")
+    assert nl.fingerprint([(pr, "stuck")], now=now) == "#67:stuck:1d"
+
+
+def test_fingerprint_stuck_pr_crosses_3_day_threshold():
+    now = datetime(2026, 8, 6, tzinfo=timezone.utc)
+    pr = _pr(number=67, created_at="2026-08-03T00:00:00Z")
+    assert nl.fingerprint([(pr, "stuck")], now=now) == "#67:stuck:3d"
+
+
+def test_fingerprint_stuck_pr_crosses_7_and_14_day_thresholds():
+    now = datetime(2026, 8, 10, tzinfo=timezone.utc)
+    pr = _pr(number=67, created_at="2026-08-03T00:00:00Z")
+    assert nl.fingerprint([(pr, "stuck")], now=now) == "#67:stuck:7d"
+    now = datetime(2026, 8, 17, tzinfo=timezone.utc)
+    assert nl.fingerprint([(pr, "stuck")], now=now) == "#67:stuck:14d"
+
+
+def test_fingerprint_stuck_pr_missing_created_at_omits_age():
+    # No timestamp available -> age unknown, same fingerprint as before this change.
+    now = datetime(2026, 8, 20, tzinfo=timezone.utc)
+    pr = _pr(number=67, created_at="")
+    assert nl.fingerprint([(pr, "stuck")], now=now) == "#67:stuck"
+
+
+def test_fingerprint_manual_pr_never_gets_age_suffix():
+    # `manual` PRs get no age dimension even when old — nothing to escalate on.
+    now = datetime(2026, 8, 20, tzinfo=timezone.utc)
+    pr = _pr(number=9, automerge=False, created_at="2026-08-01T00:00:00Z")
+    assert nl.fingerprint([(pr, "manual")], now=now) == "#9:manual"
+
+
+def test_should_notify_repages_when_stuck_pr_crosses_age_threshold():
+    # The escalation this closes: a stuck PR's fingerprint at day 1 differs from its fingerprint
+    # at day 3, so should_notify fires again instead of staying silent forever after the day-1 page.
+    day1 = nl.fingerprint(
+        [(_pr(number=67, created_at="2026-08-03T00:00:00Z"), "stuck")],
+        now=datetime(2026, 8, 4, tzinfo=timezone.utc),
+    )
+    day3 = nl.fingerprint(
+        [(_pr(number=67, created_at="2026-08-03T00:00:00Z"), "stuck")],
+        now=datetime(2026, 8, 6, tzinfo=timezone.utc),
+    )
+    assert day1 != day3
+    assert nl.should_notify(day1, day3) == (True, "digest")
 
 
 # --- should_notify ---

@@ -2,14 +2,25 @@
 """Extract newly-added container image references from a unified git diff.
 
 Used by the image-smoke workflow: a Renovate bump changes the literal
-`image: name:tag` line in a docker-compose.yml.j2; we pull+run just the new ref.
+`image: name:tag` line in a docker-compose.yml.j2, or a `<var>_image: repo:tag[@sha256:...]`
+line in a k8s role's defaults/main.yml — we pull+run just the new ref, from whichever shape.
 """
 
 import re
 import sys
 
 # Added line (starts with a single '+', not '+++'), an `image:` key, capture the ref.
-_IMAGE_RE = re.compile(r'^\+(?!\+\+)\s*image:\s*["\']?([^\s"\']+)["\']?\s*$')
+_IMAGE_RE = re.compile(r'^\+(?!\+\+)\s*image:\s*["\']?(?P<ref>[^\s"\']+)["\']?\s*$')
+
+# Same, for a k8s role default's `<var>_image: repo:tag[@sha256:...]` — optionally quoted,
+# optionally trailing a YAML comment. A Jinja-templated value (registry-built images like
+# n8n_k8s_image: "{{ k8s_registry_pull_host }}/n8n:latest") has a space inside the quotes, so the
+# bare-ref group can't reach the closing quote/comment and the whole line fails to match — those
+# are deliberately not a smoke target (no stable upstream ref to pull; see REGISTRY_BUILT_IMAGES
+# in scripts/test_renovate_managers.py).
+_K8S_DEFAULT_IMAGE_RE = re.compile(
+    r"""^\+(?!\+\+)\s*\w+_image:\s*(?P<quote>["'])?(?P<ref>[^\s"']+)(?P=quote)?(?:\s+\#.*)?$"""
+)
 
 # Images that can't pass image-smoke's bare `docker run` boot check without their real
 # config/creds — either they hard-exit (authelia/couchdb) or they stay up but their image-baked
@@ -28,6 +39,11 @@ _SKIP_BARE_BOOT = frozenset(
         # boots fine but its baked /api/health check is still "starting" past the ~60s poll window
         # (only reports "unhealthy" at ~t=69s) — false-fails on every Renovate digest-bump PR.
         "ghcr.io/karakeep-app/karakeep",
+        # needs NET_ADMIN + a mounted wg config; in the cluster it runs only as qbittorrent's
+        # sidecar initContainer, never standalone.
+        "lscr.io/linuxserver/wireguard",
+        # interactive world-selection prompt on a bare boot (no world files mounted).
+        "beardedio/terraria",
     }
 )
 
@@ -45,10 +61,10 @@ def _repository(ref: str) -> str:
 def extract_changed_images(diff_text: str) -> list[str]:
     seen: list[str] = []
     for line in diff_text.splitlines():
-        m = _IMAGE_RE.match(line)
+        m = _IMAGE_RE.match(line) or _K8S_DEFAULT_IMAGE_RE.match(line)
         if not m:
             continue
-        ref = m.group(1)
+        ref = m.group("ref")
         if _repository(ref) in _SKIP_BARE_BOOT:
             continue
         if ref not in seen:

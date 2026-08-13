@@ -30,7 +30,7 @@ spec:
       # and is never touched here.
       initContainers:
         - name: config-install
-          image: alpine:3.22
+          image: {{ zigbee2mqtt_k8s_init_image }}
           command:
             - sh
             - -c
@@ -47,6 +47,13 @@ spec:
               readOnly: true
             - name: data
               mountPath: /data
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
       containers:
         - name: zigbee2mqtt
           image: {{ zigbee2mqtt_k8s_image }}

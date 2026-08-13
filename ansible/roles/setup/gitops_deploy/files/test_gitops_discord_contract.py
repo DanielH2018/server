@@ -374,6 +374,22 @@ def _systemd_seconds(span: str) -> int:
     return int(m.group(1)) * (60 if m.group(2) in ("min", "m") else 1)
 
 
+# --- k8s defer-and-alert wiring (verified 2026-08-13: every ansible/roles/k8s/** change on
+# daniel-box fell into an empty ChangeSet -> the docs-only silent ff-merge, on the only host
+# where every one of 41 services is platform: k8s). deploy_logic's ChangeSet.k8s / _ACTIVE_K8S are
+# covered behaviourally (test_deploy_logic.py); main() itself is un-importable (module-level
+# cfg() reads /etc config absent in CI), so this pins that alert_deferred() — the sole call site
+# reached on BOTH the no-services branch and the post-deploy branch — actually reads cs.k8s,
+# instead of silently never alerting on it.
+
+
+def test_alert_deferred_handles_k8s_channel():
+    fn = _fn("alert_deferred")
+    assert any(
+        isinstance(n, ast.Attribute) and n.attr == "k8s" for n in ast.walk(fn)
+    ), "alert_deferred() must alert on cs.k8s (the k8s-role defer-and-alert channel)"
+
+
 def test_deploy_timeout_budget_survives_max_flock_contention():
     env = (_TEMPLATES / "config.env.j2").read_text()
     unit = (_TEMPLATES / "gitops-deploy.service.j2").read_text()

@@ -1,7 +1,9 @@
 ---
 # Same image the Docker role runs — both copies stay on the same tag through coexistence so
-# a difference in behaviour between them is never the image.
-speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest
+# a difference in behaviour between them is never the image. Tag KEPT alongside the digest
+# (repo:latest@sha256) so Renovate's k8s-defaults manager still tracks it for digest-bump PRs —
+# a bare repo@sha256 would freeze it with zero update signal (2026-08-13 pin).
+speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:e095f60b019819ea5a265e220bfb16d4e620c767f25005a065d73cab7c187c49
 # Mirrors resources('1.0', '512M', '0.10', '64M') in the compose template.
 speedtest_k8s_cpu_limit: "1"
 speedtest_k8s_mem_limit: 512Mi

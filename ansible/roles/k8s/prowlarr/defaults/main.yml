@@ -29,7 +29,11 @@ prowlarr_k8s_source_path: /home/ubuntu/server/containers/prowlarr/config
 # app=prowlarr only. INGRESS is the enforced direction on this cluster — n8n-broker proves it,
 # and B3 proved egress policies here do nothing — so this is a control that actually holds, and
 # the probe beside it says so rather than assuming.
-prowlarr_k8s_flaresolverr_image: ghcr.io/flaresolverr/flaresolverr:latest
+#
+# Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
+# tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal
+# (2026-08-13 pin).
+prowlarr_k8s_flaresolverr_image: ghcr.io/flaresolverr/flaresolverr:latest@sha256:139dfee1c6f89249c8d665d1333a42e8ec74ec0a86bc6bb1c8461e10d3a66a47
 prowlarr_k8s_flaresolverr_port: 8191
 prowlarr_k8s_flaresolverr_claim: prowlarr-flaresolverr-config
 # longhorn-nobackup: a browser profile cache, regenerated on first use. Losing it costs nothing.

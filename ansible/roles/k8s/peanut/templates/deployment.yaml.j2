@@ -35,7 +35,7 @@ spec:
           # alpine, not the app image: peanut's distroless-ish image has no cp
           # (StartError "executable file not found" at first deploy). Same init image
           # zigbee2mqtt and home-assistant use.
-          image: alpine:3.22
+          image: {{ peanut_k8s_init_image }}
           command: ["cp", "/config-seed/settings.yml", "/config/settings.yml"]
           securityContext:
             readOnlyRootFilesystem: true
@@ -49,6 +49,13 @@ spec:
               readOnly: true
             - name: config
               mountPath: /config
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
       containers:
         - name: peanut
           image: {{ peanut_k8s_image }}

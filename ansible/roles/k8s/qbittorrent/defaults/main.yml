@@ -13,8 +13,11 @@
 qbittorrent_k8s_enabled: true  # flipped 2026-08-07 by B4c — the Docker copy is stopped and unmanaged
 
 # Same tags the Docker copies run, so a behavioural difference between the two is never the image.
-qbittorrent_k8s_image: lscr.io/linuxserver/qbittorrent:latest
-qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest
+# Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
+# tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal
+# (2026-08-13 pin).
+qbittorrent_k8s_image: lscr.io/linuxserver/qbittorrent:latest@sha256:6816d2b144b1eb97665f886e41e18a14d026ba78c9d0953fc68a1211ea819433
+qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:3abfd4b82212106e357989750b9c0c9859aa511f5305a9a55c18c8de7198b655
 
 # ── one config volume, two containers ───────────────────────────────────────────────────────
 # Reproduces the Compose file exactly: wireguard and qbittorrent both mount `./config` at

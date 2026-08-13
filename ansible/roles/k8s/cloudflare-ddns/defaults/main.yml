@@ -1,7 +1,9 @@
 ---
 # Same image the Docker role runs — both copies stay on the same tag through coexistence so
-# a difference in behaviour between them is never the image.
-cloudflare_ddns_k8s_image: favonia/cloudflare-ddns:latest
+# a difference in behaviour between them is never the image. Tag KEPT alongside the digest
+# (repo:latest@sha256) so Renovate's k8s-defaults manager still tracks it for digest-bump PRs —
+# a bare repo@sha256 would freeze it with zero update signal (2026-08-13 pin).
+cloudflare_ddns_k8s_image: favonia/cloudflare-ddns:latest@sha256:61013368c8f95981c0bb8bf56d962078d8b4e95724a554fa2dabb20d6e478097
 # Mirrors resources('0.25', '64M', '0.05', '16M') in the compose template, per container.
 cloudflare_ddns_k8s_cpu_limit: "250m"
 cloudflare_ddns_k8s_mem_limit: 64Mi

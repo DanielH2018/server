@@ -85,6 +85,7 @@ def build_pr(repo: str, pr: dict) -> PR:
         automerge=parse_automerge(pr.get("body") or ""),
         ci=ci_rollup(runs, statuses),
         conflicting=conflicting,
+        created_at=pr.get("created_at", ""),
     )
 
 
