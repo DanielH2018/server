@@ -1,11 +1,19 @@
 ---
-# Unlike docker.yaml (never provided on the Docker side either), this file has to exist here
-# specifically because of how the gethomepage image behaves: servicesFromKubernetes() calls
-# checkAndCopyConfig("kubernetes.yaml") on EVERY service/widget lookup (service-helpers.js,
-# via getServiceItem's docker/kubernetes discovery fallback — unconditional, not gated on any
-# service actually using a kubernetes: widget). checkAndCopyConfig only copies its skeleton
-# when the file is missing; against this role's read-only Secret mount at /app/config that
-# copy fails with EROFS and the app calls process.exit(1) — a crash loop on the very first
-# widget poll. Pre-supplying an empty file here (parses to undefined; config?.mode is then
-# undefined, getKubeConfig() falls through to `default: return null`) avoids the write
-# entirely. No kubernetes-widget usage is configured, so `mode` stays unset on purpose.
+# This file has to exist whatever it contains, and that is separate from what it now says.
+#
+# Why it must exist: servicesFromKubernetes() calls checkAndCopyConfig("kubernetes.yaml") on
+# EVERY service/widget lookup (service-helpers.js, via getServiceItem's docker/kubernetes
+# discovery fallback — unconditional, not gated on any service actually using a kubernetes:
+# widget). checkAndCopyConfig only copies its skeleton when the file is missing; against a
+# read-only mount that copy fails with EROFS and the app calls process.exit(1) — a crash loop
+# on the very first widget poll. Since E3 the config lives on a writable emptyDir seeded from
+# the Secret, so this is no longer the crash it once was, but the file stays declared here so
+# our content wins over whatever skeleton the image would seed.
+#
+# What it says: `cluster` mode makes homepage authenticate to the API with the pod's mounted
+# ServiceAccount — the one rbac.yaml.j2 creates and deployment.yaml.j2 names. That backs both
+# the kubernetes info widget (cluster/node CPU + memory) and the per-tile pod stats in
+# services.yaml. No `ingress:`/`traefik:`/`gateway:` keys: homepage's automatic service
+# DISCOVERY stays off, because every tile here is hand-authored and a discovered duplicate of
+# one is worse than no tile at all.
+mode: cluster

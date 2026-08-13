@@ -639,6 +639,37 @@ def test_headlamp_keeps_its_serviceaccount_token_mounted():
     assert "-unsafe-use-service-account-token" in args
 
 
+def test_homepage_kubernetes_widget_wiring_holds_together():
+    """Three pieces have to agree or the widget renders EMPTY rather than erroring: the config
+    must ask for cluster mode, the pod must name the SA that mode authenticates with, and that
+    SA must be able to read the metrics API. Any one of them missing looks identical from the
+    dashboard — a tile with no numbers, which reads as "nothing to report"."""
+    role = K8S / "homepage"
+    assert "mode: cluster" in (role / "templates" / "kubernetes.yaml.j2").read_text()
+
+    deployment = yaml.safe_load(
+        _render(
+            role / "templates" / "deployment.yaml.j2",
+            container_item=next(c for c in _k8s_entries() if c["name"] == "homepage"),
+            **_role_defaults("homepage"),
+        )
+    )
+    assert deployment["spec"]["template"]["spec"]["serviceAccountName"] == "homepage"
+
+    rbac = [
+        d
+        for d in yaml.safe_load_all(
+            _render(role / "templates" / "rbac.yaml.j2", **_role_defaults("homepage"))
+        )
+        if d
+    ]
+    rules = [rule for d in rbac if d["kind"] == "ClusterRole" for rule in d["rules"]]
+    assert _grant_violations(rules) == []
+    assert any("metrics.k8s.io" in rule.get("apiGroups", []) for rule in rules), (
+        "no metrics.k8s.io read: every CPU/memory figure in the widget would be blank"
+    )
+
+
 def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
     """`view` covers no CRDs and nothing aggregates into it, so a group missing from the
     list degrades silently: the kubeconfig still works, that one `kubectl get` says

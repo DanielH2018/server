@@ -7,6 +7,23 @@
     memory: true
     disk: /
 
+# Cluster + per-node CPU/memory, read from metrics.k8s.io through the pod's ServiceAccount
+# (roles/k8s/homepage: kubernetes.yaml.j2 `mode: cluster` + rbac.yaml.j2). This template is
+# shared with the archived Docker role, where it is inert: that deployment has no cluster
+# identity, and homepage renders an unreachable info widget as nothing rather than erroring.
+- kubernetes:
+    cluster:
+      show: true
+      cpu: true
+      memory: true
+      showLabel: true
+      label: cluster
+    nodes:
+      show: true
+      cpu: true
+      memory: true
+      showLabel: true
+
 - search:
     provider: google
     target: _blank

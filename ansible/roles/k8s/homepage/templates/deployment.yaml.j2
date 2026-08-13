@@ -15,6 +15,11 @@ spec:
         app: homepage
     spec:
       enableServiceLinks: false
+      # The identity behind kubernetes.yaml's `mode: cluster` (rbac.yaml.j2). Without the
+      # name here the pod falls back to the namespace `default` SA and every kubernetes
+      # widget renders empty instead of failing.
+      serviceAccountName: homepage
+      automountServiceAccountToken: true
       # Copy-not-mount (the peanut pattern): homepage seeds every file of its skeleton
       # config set into /app/config at startup, and that set GROWS with the image —
       # custom.js and proxmox.yaml both joined it in 2026-08 updates, each crash-looping
