@@ -1,0 +1,36 @@
+---
+# The join ports, answered on the NODE's own address — the wg-easy-udp / terraria pattern.
+# The router's port-forward UI only targets devices it knows from DHCP/ARP, so the forward
+# has to land on daniel-box itself rather than on a MetalLB VIP. Local policy so the server
+# logs real client addresses instead of the node's.
+#
+# No Traefik in the path and none possible: this is a raw UDP game protocol, so it cannot
+# use the HTTP CrowdSec / rate-limit chain. The password is the only access control.
+#
+# Deliberately NOT published: 9001 (supervisord's HTTP control interface — unauthenticated
+# remote process control inside the container; it stays off by default via SUPERVISOR_HTTP)
+# and 2458 (crossplay backend, only bound when CROSSPLAY=true, which it isn't).
+apiVersion: v1
+kind: Service
+metadata:
+  name: valheim
+  namespace: {{ k8s_namespace }}
+spec:
+  # LoadBalancer, not ClusterIP: externalTrafficPolicy is only valid on externally
+  # accessible Service types. MetalLB assigns a VIP nobody uses — traffic arrives on the
+  # externalIP below.
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  externalIPs:
+    - {{ hostvars['daniel-box'].server_ip }}
+  selector:
+    app: valheim
+  ports:
+    - name: game
+      port: 2456
+      targetPort: 2456
+      protocol: UDP
+    - name: query
+      port: 2457
+      targetPort: 2457
+      protocol: UDP

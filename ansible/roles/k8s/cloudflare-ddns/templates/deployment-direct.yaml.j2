@@ -28,11 +28,12 @@ spec:
           env:
             - name: CLOUDFLARE_API_TOKEN_FILE
               value: /etc/ddns-secrets/cf_dns_token
-            # Only terraria is live. valheim/minecraft are archived — publishing their A
-            # records pointed unproxied home IP at nothing, needlessly exposing the raw IP.
-            # Re-add a domain here when its game server is reactivated.
+            # terraria and valheim (reactivated onto k3s 2026-08-13) are live; minecraft is
+            # still archived, and its record stays out — publishing an A record for a game
+            # server that does not exist points the unproxied home IP at nothing and
+            # needlessly exposes the raw IP. Re-add a domain here when its server comes back.
             - name: DOMAINS
-              value: "terraria.{{ domain }}"
+              value: "terraria.{{ domain }},valheim.{{ domain }}"
             - name: PROXIED
               value: "false"
             - name: IP6_PROVIDER

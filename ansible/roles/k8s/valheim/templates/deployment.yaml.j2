@@ -1,0 +1,99 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valheim
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # Same reasoning as terraria: RWO claims on single-replica Longhorn deadlock a rolling
+  # update, and two servers writing one world would be worse than the deadlock.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: valheim
+  template:
+    metadata:
+      labels:
+        app: valheim
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: valheim
+          image: {{ valheim_k8s_image }}
+          ports:
+            - name: game
+              containerPort: 2456
+              protocol: UDP
+            - name: query
+              containerPort: 2457
+              protocol: UDP
+          env:
+            - name: SERVER_NAME
+              value: "{{ valheim_k8s_server_name }}"
+            - name: WORLD_NAME
+              value: "{{ valheim_k8s_world_name }}"
+            - name: SERVER_PUBLIC
+              value: "{{ valheim_k8s_server_public }}"
+            - name: TZ
+              value: "{{ tz }}"
+            - name: SERVER_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: valheim-env
+                  key: SERVER_PASS
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                # Steam's threading layer raises its own thread priority at startup. Without
+                # it the server still runs but logs a failed-priority warning every boot —
+                # the archived compose carried the same cap_add for the same reason.
+                - SYS_NICE
+                # No DAC_OVERRIDE, unlike terraria: PUID/PGID default to 0, the seed pod
+                # restores the source's uid 0 with `tar -p --numeric-owner`, and root
+                # writing root-owned files needs no override. Add it only if a world save
+                # ever fails on the backup step.
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: server
+              mountPath: /opt/valheim
+          # Valheim speaks UDP, so terraria's /proc/net/tcp LISTEN check cannot work here —
+          # a UDP socket has no LISTEN state and never appears in that table. This greps
+          # /proc/net/udp for a bound socket on :2456 (hex 0998) instead, which is a real
+          # kernel-side bind check and, like terraria's, avoids touching the game protocol:
+          # a probe that actually spoke to the port would log a join attempt every cycle.
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "grep -q ':0998 ' /proc/net/udp"]
+            periodSeconds: 15
+            # 15 min. The FIRST boot on an empty /opt/valheim PVC downloads ~4.6 G through
+            # SteamCMD before anything binds; later boots are a delta check plus world load
+            # and clear this in well under a minute.
+            failureThreshold: 60
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "grep -q ':0998 ' /proc/net/udp"]
+            periodSeconds: 30
+            failureThreshold: 4
+          resources:
+            limits:
+              cpu: "{{ valheim_k8s_cpu_limit }}"
+              memory: {{ valheim_k8s_mem_limit }}
+            requests:
+              cpu: "{{ valheim_k8s_cpu_request }}"
+              memory: {{ valheim_k8s_mem_request }}
+          # The image traps SIGTERM to run a final world save; killing it early is how you
+          # lose the last session. Matches the archived compose's stop_grace_period: 2m.
+      terminationGracePeriodSeconds: 120
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ valheim_k8s_claim }}
+        - name: server
+          persistentVolumeClaim:
+            claimName: {{ valheim_k8s_server_claim }}
