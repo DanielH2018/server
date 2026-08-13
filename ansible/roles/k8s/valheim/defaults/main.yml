@@ -28,10 +28,11 @@ valheim_k8s_storage_class: longhorn
 # is also the uid the server runs as (PUID/PGID default to 0).
 valheim_k8s_source_path: /home/ubuntu/server/containers/valheim/valheim/config
 
-# /opt/valheim is the SteamCMD install — 4.6 G of game binaries, entirely re-downloadable.
+# /opt/valheim is the SteamCMD install — a 1.8 G download that unpacks to 3.8 G on the
+# volume (both measured on the first boot), and entirely re-downloadable.
 # nobackup, so it never costs B2 bytes (the cap is already a live constraint), but a real
 # PVC rather than an emptyDir: the image re-runs steamcmd on every start, and an emptyDir
-# would turn each pod recreate into a 4.6 G cold download instead of a delta check.
+# would turn each pod recreate into a 1.8 G cold download instead of a delta check.
 valheim_k8s_server_claim: valheim-server
 valheim_k8s_server_size: 10Gi
 valheim_k8s_server_storage_class: longhorn-nobackup

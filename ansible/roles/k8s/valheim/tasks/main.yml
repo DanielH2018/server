@@ -3,7 +3,7 @@
 # the world it left behind on daniel-server was last saved 2025-11-22 and is seeded here.
 #
 # Only /config is seeded. /opt/valheim (the SteamCMD install) gets an empty nobackup PVC and
-# the image populates it on first start — a ~4.6 G download that takes several minutes, so
+# the image populates it on first start — a ~1.8 G download that takes several minutes, so
 # the first rollout is slow and the startupProbe budget is sized for it.
 
 - name: Seed the valheim config volume
@@ -24,7 +24,7 @@
     manifests_service: valheim
     manifests_rollout: valheim
     # 300s is not enough for the first boot: the pod is not Ready until SteamCMD has pulled
-    # ~4.6 G into the empty install PVC and the world has loaded.
+    # ~1.8 G into the empty install PVC and the world has loaded.
     manifests_rollout_timeout: 900s
     manifests_files:
       - pvc.yaml
