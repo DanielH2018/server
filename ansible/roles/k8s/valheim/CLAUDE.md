@@ -16,7 +16,7 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
   the router forward has to target a DHCP/ARP-known device, so not a MetalLB VIP
 - **Storage:** two claims on deliberately different backup postures —
   `valheim-config` (`longhorn`, **backed up**) for worlds/lists/prefs, and
-  `valheim-server` (`longhorn-nobackup`) for the 4.6 G SteamCMD install
+  `valheim-server` (`longhorn-nobackup`) for the SteamCMD install (1.8 G download, 3.8 G on disk)
 - **Auth:** none possible — raw UDP game protocol, so no Traefik, no Authelia, no CrowdSec
   HTTP chain. The join password is the only access control.
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
@@ -27,18 +27,27 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
   `SERVER_PASS: ThisPasswordIsAwesome` until `c3330c5a` swapped it for a variable — but
   this repo is **public**, so the plaintext is still readable in the git log. Treat it as
   disclosed. The live value is a fresh one in SOPS as `valheim_server_pass`.
-- **The liveness probe reads `/proc/net/udp`, not `/proc/net/tcp`.** Copying terraria's
-  probe verbatim is the trap: Valheim is UDP, a UDP socket has no LISTEN state and never
-  appears in the TCP table, so that check can never pass and the pod would CrashLoop after
-  the startup budget. `:0998` is hex 2456. Like terraria's, it is a kernel-side bind check
-  rather than a connect probe — anything that actually spoke to the port would log a join
-  attempt every cycle.
+- **The probes read `/proc/net/udp` AND `/proc/net/udp6`, not `/proc/net/tcp`.** Two traps
+  stacked here, both hit on the first boot. Copying terraria's probe verbatim is the first:
+  Valheim is UDP, a UDP socket has no LISTEN state and never appears in the TCP table, so
+  that check can never pass. The second is that checking `/proc/net/udp` alone still never
+  matches — **the server binds v6, so the socket shows up only in `/proc/net/udp6`.** With
+  the v4-only check the pod sat un-Ready for 27 minutes with a completely working server
+  behind it, and would have been killed once the startup threshold expired. `:0998` is hex
+  2456. Like terraria's, it is a kernel-side bind check rather than a connect probe —
+  anything that actually spoke to the port would log a join attempt every cycle.
+- **`SETGID` is load-bearing, and its absence is silent.** The container runs its own cron
+  for the hourly world backup and the Steam update check; cron calls `initgroups()` before
+  every job, which needs `CAP_SETGID` even when the target user is already root. With caps
+  dropped to `ALL` + `SYS_NICE`, every tick failed with
+  `(CRON) error (do_command:initgroups(0) failed: Operation not permitted)` while the rest
+  of the log looked perfectly healthy — the backups would simply never have run.
 - **No Kuma tile, deliberately.** terraria gets one (`terraria-vip.json`, a TCP port check on
   the node IP), but Kuma's port monitor is TCP-only and Valheim is UDP — the same reason
   wg-easy's tunnel has no tile. Pod death surfaces through k3s Workload Health / the
   pod-restart alerting instead. Do not "fix" this by adding a port monitor; it would probe a
   closed TCP port and be permanently red.
-- **First rollout is slow.** An empty install PVC means SteamCMD downloads ~4.6 G before
+- **First rollout is slow.** An empty install PVC means SteamCMD downloads ~1.8 G before
   anything binds, hence `manifests_rollout_timeout: 900s` and `failureThreshold: 60` on the
   startupProbe. Later boots are a delta check plus world load and clear in under a minute.
 - **`/opt/valheim` is a PVC, not an emptyDir**, purely so that download happens once.

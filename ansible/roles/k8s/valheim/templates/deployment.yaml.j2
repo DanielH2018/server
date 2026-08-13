@@ -10,7 +10,7 @@ spec:
   # on a first boot — NOT manifests_rollout_timeout. Measured 2026-08-13: the first rollout
   # was still pulling this image at 10 min and the Deployment was already marked
   # ProgressDeadlineExceeded, failing the play while the pod carried on fine underneath.
-  # Between the image pull and the ~4.6 G SteamCMD download, first boot needs the room.
+  # Between the image pull and the ~1.8 G SteamCMD download, first boot needs the room.
   progressDeadlineSeconds: 1800
   # Same reasoning as terraria: RWO claims on single-replica Longhorn deadlock a rolling
   # update, and two servers writing one world would be worse than the deadlock.
@@ -59,6 +59,14 @@ spec:
                 # it the server still runs but logs a failed-priority warning every boot —
                 # the archived compose carried the same cap_add for the same reason.
                 - SYS_NICE
+                # The container runs its own cron — that is what drives the hourly world
+                # backup and the Steam update check. cron calls initgroups() before every
+                # job, which is setgroups(), which needs this even when the target user is
+                # already root. Without it every tick dies with
+                #   (CRON) error (do_command:initgroups(0) failed: Operation not permitted)
+                # and the log otherwise looks healthy — observed on the first boot here, so
+                # the backups would have silently never run.
+                - SETGID
                 # No DAC_OVERRIDE, unlike terraria: PUID/PGID default to 0, the seed pod
                 # restores the source's uid 0 with `tar -p --numeric-owner`, and root
                 # writing root-owned files needs no override. Add it only if a world save
@@ -70,20 +78,24 @@ spec:
               mountPath: /opt/valheim
           # Valheim speaks UDP, so terraria's /proc/net/tcp LISTEN check cannot work here —
           # a UDP socket has no LISTEN state and never appears in that table. This greps
-          # /proc/net/udp for a bound socket on :2456 (hex 0998) instead, which is a real
-          # kernel-side bind check and, like terraria's, avoids touching the game protocol:
-          # a probe that actually spoke to the port would log a join attempt every cycle.
+          # a bound socket on :2456 (hex 0998) instead, which is a real kernel-side check
+          # and, like terraria's, never touches the game protocol: a probe that actually
+          # spoke to the port would log a join attempt every cycle.
+          # BOTH tables, and that is not belt-and-braces — the server binds v6, so the
+          # socket appears ONLY in /proc/net/udp6. Checking /proc/net/udp alone never
+          # matched: measured here on first boot, the pod sat un-Ready for 27 minutes with
+          # a fully working server behind it, and would have been killed at the threshold.
           startupProbe:
             exec:
-              command: ["sh", "-c", "grep -q ':0998 ' /proc/net/udp"]
+              command: ["sh", "-c", "grep -q ':0998 ' /proc/net/udp /proc/net/udp6"]
             periodSeconds: 15
-            # 15 min. The FIRST boot on an empty /opt/valheim PVC downloads ~4.6 G through
+            # 15 min. The FIRST boot on an empty /opt/valheim PVC downloads ~1.8 G through
             # SteamCMD before anything binds; later boots are a delta check plus world load
             # and clear this in well under a minute.
             failureThreshold: 60
           livenessProbe:
             exec:
-              command: ["sh", "-c", "grep -q ':0998 ' /proc/net/udp"]
+              command: ["sh", "-c", "grep -q ':0998 ' /proc/net/udp /proc/net/udp6"]
             periodSeconds: 30
             failureThreshold: 4
           resources:
