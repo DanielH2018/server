@@ -91,7 +91,11 @@ def test_renovate_notify_role_change_is_broad():
 
 
 def test_bringup_playbooks_are_broad():
-    for p in ("ansible/initial_setup.yml", "ansible/bootstrap.yml"):
+    for p in (
+        "ansible/initial_setup.yml",
+        "ansible/bootstrap.yml",
+        "ansible/k3s-bringup.yml",
+    ):
         cs = services_from_changed_paths([p])
         assert cs.broad is True, p
         assert cs.services == set()
@@ -144,6 +148,7 @@ def test_broad_setup_plane_flags_broad_setup_not_deploy():
         "ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2",
         "ansible/initial_setup.yml",
         "ansible/bootstrap.yml",
+        "ansible/k3s-bringup.yml",
     ):
         cs = services_from_changed_paths([p])
         assert cs.broad is True, p
@@ -340,6 +345,48 @@ def test_role_meta_change_flags_meta_not_deploy():
     assert cs.tasks == set()
     assert cs.broad is False
     assert cs.secrets is False
+
+
+# k8s roles (ansible/roles/k8s/<role>/...) matched NONE of the regexes above (all containers/-
+# scoped), so services_from_changed_paths returned an EMPTY ChangeSet and main()'s `if not
+# cs.services:` branch took it as a plain docs-only ff-merge — silent, on every has_gitops host
+# (daniel-box, all 41 services platform: k8s). Maps to cs.k8s (defer-and-alert), never cs.services
+# — this deployer has no mechanism that ever auto-deploys a k8s-platform role.
+def test_k8s_role_change_flags_k8s_not_services():
+    cs = services_from_changed_paths(
+        ["ansible/roles/k8s/authelia/templates/deployment.yaml.j2"]
+    )
+    assert cs.k8s == {"authelia"}
+    assert cs.services == set()
+    assert cs.broad is False
+    assert cs.tasks == set()
+
+
+def test_k8s_role_matches_any_subdir_not_just_templates():
+    # Unlike containers/ (split into templates/tasks/meta channels), a k8s role has no separate
+    # auto-deploy path for any of its subdirs to scope against — the whole role dir shares one
+    # channel.
+    cs = services_from_changed_paths(["ansible/roles/k8s/authelia/tasks/main.yml"])
+    assert cs.k8s == {"authelia"}
+    assert cs.services == set()
+
+
+def test_k8s_role_docs_stay_silent():
+    cs = services_from_changed_paths(["ansible/roles/k8s/authelia/CLAUDE.md"])
+    assert cs.k8s == set()
+    assert cs.services == set()
+    assert cs.broad is False
+
+
+def test_k8s_and_docker_service_changes_are_independent():
+    cs = services_from_changed_paths(
+        [
+            "ansible/roles/k8s/authelia/templates/deployment.yaml.j2",
+            "ansible/roles/containers/cadvisor/templates/docker-compose.yml.j2",
+        ]
+    )
+    assert cs.k8s == {"authelia"}
+    assert cs.services == {"cadvisor"}
 
 
 # L2: a change under a container role's defaults/, vars/, or handlers/ matched none of the
@@ -933,6 +980,34 @@ def test_declared_services_parses_containers_list_names():
         "      - name: not-a-service-deeper-indent\n"
     )
     assert declared_services(text) == {"traefik", "monitor-bridge"}
+
+
+# Platform-aware (2026-08-13): declared_services used to match `- name:` regardless of platform,
+# so a platform: k8s entry counted as "declared" here even though deploy.yml's DOCKER play never
+# renders a compose for it. A leftover rendered containers/<svc>/ dir for a service that migrated
+# to k8s would then phantom-gate as "declared" instead of being flagged stale.
+def test_declared_services_skips_platform_k8s_entries():
+    text = (
+        "containers_list:\n"
+        "  - name: crowdsec\n"
+        "    platform: k8s\n"
+        "    port: 8080\n"
+        "  - name: traefik\n"
+        "    port: 8080\n"
+    )
+    assert declared_services(text) == {"traefik"}
+
+
+def test_declared_services_platform_docker_explicit_is_still_declared():
+    text = "containers_list:\n  - name: traefik\n    platform: docker\n    port: 8080\n"
+    assert declared_services(text) == {"traefik"}
+
+
+def test_declared_services_last_entry_platform_k8s_with_no_trailing_entry():
+    # The k8s entry is the LAST one in the file (no following `- name:` to bound its block on) —
+    # the (?=^  - name: |\Z) lookahead must still terminate the block at EOF.
+    text = "containers_list:\n  - name: traefik\n    port: 8080\n  - name: authelia\n    platform: k8s\n    port: 9091\n"
+    assert declared_services(text) == {"traefik"}
 
 
 def test_stale_rendered_services_flags_only_undeclared_dirs():

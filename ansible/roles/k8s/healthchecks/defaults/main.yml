@@ -1,7 +1,9 @@
 ---
 # Same image the Docker role runs — both copies stay on the same tag through coexistence so
-# a difference in behaviour between them is never the image.
-healthchecks_k8s_image: lscr.io/linuxserver/healthchecks:latest
+# a difference in behaviour between them is never the image. Tag KEPT alongside the digest
+# (repo:latest@sha256) so Renovate's k8s-defaults manager still tracks it for digest-bump PRs —
+# a bare repo@sha256 would freeze it with zero update signal (2026-08-13 pin).
+healthchecks_k8s_image: lscr.io/linuxserver/healthchecks:latest@sha256:f8a148973d8b90587549674db70836f154eda474c0b87382b86064f2442c2f43
 # Mirrors resources('0.50', '512M', '0.05', '64M') in the compose template.
 healthchecks_k8s_cpu_limit: "500m"
 healthchecks_k8s_mem_limit: 512Mi

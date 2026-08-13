@@ -45,6 +45,18 @@ _ACTIVE_META = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/meta/"
 # and meta/ have already claimed their paths; only the structural remainder reaches it. CLAUDE.md /
 # *.md are docs and keep the silent path (the caller excludes them). Same archive/ exclusion.
 _ACTIVE_ROLE = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/")
+# A change under a k8s-platform role's dir (ansible/roles/k8s/<role>/...). This deployer only ever
+# auto-deploys DOCKER-platform services (deploy(cs.services) runs the same --tags path _ACTIVE_CONFIG
+# feeds), so unlike _ACTIVE_TASKS/_ACTIVE_META there is no "rode the scoped redeploy" case to
+# subtract — a k8s role change is NEVER applied by this pipeline and must always defer-and-alert.
+# Before this, every path under ansible/roles/k8s/** matched NONE of the regexes above (they're all
+# containers/-scoped) and fell through to services_from_changed_paths returning an EMPTY ChangeSet,
+# which main()'s `if not cs.services:` branch takes as a plain docs-only ff-merge — silent, on EVERY
+# host with has_gitops (daniel-box, all 41 services platform: k8s). Matches the WHOLE role dir (not
+# split into templates/tasks/meta like containers/) since a k8s role has no separate auto-deploy path
+# for any of its subdirs to be scoped against — the alert just needs to name the role. *.md (role
+# CLAUDE.md) stays a silent ff-merge, same as the containers/ catch-all.
+_ACTIVE_K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 # A `container_name:` line in a rendered docker-compose.yml.
 _CONTAINER_NAME = re.compile(r'^\s*container_name:\s*["\']?([^\s"\']+)["\']?\s*$')
 # Changes whose blast radius we don't try to scope automatically. Split by which manual playbook
@@ -83,6 +95,7 @@ _BROAD_SETUP_PREFIXES = (
     # The bring-up playbooks — they only run by hand.
     "ansible/initial_setup.yml",
     "ansible/bootstrap.yml",
+    "ansible/k3s-bringup.yml",
 )
 # The SOPS-encrypted secrets file. A change here maps to no service template, but the new
 # value only reaches a container on its next deploy — so a secrets-ONLY push must NOT be
@@ -108,6 +121,11 @@ class ChangeSet:
     # of them, so the field keeps its name for continuity even though it's no longer tasks/-only.
     tasks: set[str] = field(default_factory=set)
     meta: set[str] = field(default_factory=set)
+    # k8s-platform role(s) that changed (ansible/roles/k8s/<role>/...). Distinct from `tasks`/`meta`:
+    # this deployer has no mechanism that EVER applies a k8s role change (deploy(cs.services) only
+    # ever tags Docker-platform roles matched by _ACTIVE_CONFIG), so it always defer-and-alerts —
+    # there's no "rode a scoped redeploy of the same service" case to subtract deployed against.
+    k8s: set[str] = field(default_factory=set)
 
 
 def services_from_changed_paths(paths: list[str]) -> ChangeSet:
@@ -135,6 +153,10 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         mt = _ACTIVE_META.match(p)
         if mt:
             cs.meta.add(mt.group(1))
+            continue
+        k = _ACTIVE_K8S.match(p)
+        if k and not p.endswith(".md"):
+            cs.k8s.add(k.group(1))
             continue
         # Catch-all: any other non-doc file under an active container role (defaults/, vars/,
         # handlers/, …). Not auto-deployed but it changes what a deploy does — defer-and-alert
@@ -427,15 +449,34 @@ def gate_services(services, health_fn, gate_deadline, now_fn) -> list[str]:
     return failed
 
 
-# `- name: <svc>` entries at the containers_list indent level in a host_vars file. Two-space
-# list indent is the repo-wide inventory convention; matching on it (rather than YAML-parsing)
-# keeps this module stdlib-only and immune to the Jinja expressions inventory values carry.
-_DECLARED_NAME = re.compile(r"^  - name: (\S+)", re.MULTILINE)
+# One containers_list entry: the `- name:` line plus everything indented under it up to the next
+# `- name:` at the same (2-space) indent, or EOF. Two-space list indent is the repo-wide inventory
+# convention; matching on it (rather than YAML-parsing) keeps this module stdlib-only and immune to
+# the Jinja expressions inventory values carry.
+_DECLARED_ENTRY = re.compile(
+    r"^  - name: (\S+)(.*?)(?=^  - name: |\Z)", re.MULTILINE | re.DOTALL
+)
+# `platform: <value>` at the sub-key indent (4 spaces) within one entry's block.
+_ENTRY_PLATFORM = re.compile(r"^    platform:\s*(\S+)", re.MULTILINE)
 
 
 def declared_services(hostvars_text: str) -> set[str]:
-    """Service names declared in a host's containers_list."""
-    return set(_DECLARED_NAME.findall(hostvars_text))
+    """Docker-platform service names declared in a host's containers_list.
+
+    `platform: k8s` entries (default `docker` when the key is absent — see
+    `ansible/inventory/host_vars/_example.yml`) are deliberately excluded: this deployer's
+    stale-compose watchdog (`stale_rendered_services`) diffs against `containers/<svc>/` dirs
+    rendered by deploy.yml's DOCKER play only, so a platform: k8s entry counting as "declared"
+    here would let a leftover rendered compose for a service that migrated to k8s (a real stale
+    dir) hide behind it as phantom-declared, instead of being flagged."""
+    out: set[str] = set()
+    for m in _DECLARED_ENTRY.finditer(hostvars_text):
+        name, block = m.group(1), m.group(2)
+        pm = _ENTRY_PLATFORM.search(block)
+        platform = pm.group(1) if pm else "docker"
+        if platform == "docker":
+            out.add(name)
+    return out
 
 
 def stale_rendered_services(rendered: list[str], declared: set[str]) -> list[str]:

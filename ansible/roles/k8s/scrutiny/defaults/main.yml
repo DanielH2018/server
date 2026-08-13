@@ -1,10 +1,12 @@
 ---
 # Rolling upstream-branch tags, SAME as the Docker copy and the same policy: manual-update
-# tier. Renovate cannot version-track a branch tag and MUST NOT be taught to — updating is
-# a deliberate redeploy with an image pull, never unsupervised `master` builds on a
-# stateful monitoring service.
-scrutiny_k8s_web_image: ghcr.io/analogj/scrutiny:master-web
-scrutiny_k8s_collector_image: ghcr.io/analogj/scrutiny:master-collector
+# tier. Renovate cannot VERSION-track a branch tag and MUST NOT be taught to — moving to a
+# different tag/branch is a deliberate redeploy with an image pull, never unsupervised `master`
+# builds on a stateful monitoring service. The @sha256 pin below only lets Renovate raise DIGEST
+# PRs for a new commit on the SAME tag; those aren't `minor`/`patch`, so the non-major group's
+# matchUpdateTypes automerge rule doesn't touch them — they still land manually (2026-08-13 pin).
+scrutiny_k8s_web_image: ghcr.io/analogj/scrutiny:master-web@sha256:192656ce791dc3e5bda7f7bf81cd3cb9f77ab2cde42a9bd0d8cac442b7e8bee1
+scrutiny_k8s_collector_image: ghcr.io/analogj/scrutiny:master-collector@sha256:e0d55d2742017c7025e491e05eb516bc71758c575f7e0bfefe34f9ce13aced89
 scrutiny_k8s_influxdb_image: influxdb:2.9
 
 # SC2: SMART history is trend data and the whole point of the tool — backed-up class.

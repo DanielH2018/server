@@ -23,7 +23,7 @@ spec:
       # seeds whatever else it invents next to them.
       initContainers:
         - name: seed-config
-          image: alpine:3.22
+          image: {{ homepage_k8s_init_image }}
           command: ["sh", "-c", "cp -L /config-secret/* /config/"]
           securityContext:
             readOnlyRootFilesystem: true
@@ -37,6 +37,13 @@ spec:
               readOnly: true
             - name: config-live
               mountPath: /config
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
       containers:
         - name: homepage
           image: {{ homepage_k8s_image }}

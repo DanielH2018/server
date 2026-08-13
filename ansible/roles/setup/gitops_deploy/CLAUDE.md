@@ -63,6 +63,22 @@ stay).
   `secrets_alerted_sha` marker) to redeploy the consumer(s). `secrets.yml` is deliberately
   NOT in the broad list — the `/add-secret` flow ships it WITH the consuming template, which
   stays a scoped single-service deploy (`deploy_logic.ChangeSet.secrets`).
+- **k8s-platform roles (`ansible/roles/k8s/<role>/...`) are defer-and-alert, never auto-deployed.**
+  This deployer's path→service mapping (`_ACTIVE_CONFIG`/`_ACTIVE_TASKS`/`_ACTIVE_META`) is
+  Docker-platform only — it feeds `deploy(cs.services)`, which is a Docker-role concept. On
+  daniel-box, where every `containers_list` entry is `platform: k8s`, a change under
+  `ansible/roles/k8s/**` used to match none of those regexes at all: `services_from_changed_paths`
+  returned an empty `ChangeSet`, and `main()`'s `if not cs.services:` branch took that as a
+  docs-only push — silently `--ff-only` merging a Traefik/Authelia/etc. manifest change with no
+  redeploy and no alert (verified 2026-08-13). `deploy_logic._ACTIVE_K8S` now matches the whole
+  role dir into `ChangeSet.k8s`, and `alert_deferred` (the same call site tasks/meta already use,
+  reached on both the no-services branch and after a successful deploy) alerts on it once per SHA
+  (`k8s_alerted_sha` marker) — still `--ff-only` merges, still doesn't deploy. **Compose/GitOps
+  mechanisms in this doc — `tasks/`, `meta/deps.yml`, `containers_for()`, the health gate — are
+  inert for k8s roles**; they only ever act on `containers/<svc>/docker-compose.yml`, which no k8s
+  role renders. Redeploy a k8s change by hand the same way the alert says:
+  `uv run ansible-playbook ansible/deploy.yml --tags <svc>` (deploy.yml's k8s play picks up
+  `platform: k8s` entries the Docker play filtered out).
 - **A service's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`) and `meta/deps.yml`**
   are ff-merged but NOT auto-deployed, so the deployer defers-and-alerts (once per SHA,
   `tasks_alerted_sha` / `meta_alerted_sha`) to redeploy the affected service(s) by hand. `tasks/` and

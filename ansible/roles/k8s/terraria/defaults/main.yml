@@ -1,7 +1,10 @@
 ---
 # Rolling tag, as under Docker: beardedio publishes vanilla-latest as the tserver channel;
-# there is no pinned-version stream worth tracking. Updates arrive on pod recreate.
-terraria_k8s_image: beardedio/terraria:vanilla-latest
+# there is no pinned-version stream worth tracking. The @sha256 digest below freezes the pod to
+# the build pulled at pin time — recreate now pulls that SAME digest, not whatever beardedio
+# has since pushed; updates arrive via a Renovate digest-bump PR + deliberate redeploy instead
+# of silently on next recreate (2026-08-13 pin).
+terraria_k8s_image: beardedio/terraria:vanilla-latest@sha256:901bc1178a9db0b331bf483724e6bac3d065c1dfd45a604818dfcbd4f755f4b0
 
 # 36 M of worlds + config at the port — `longhorn`, BACKED UP: this is the one
 # irreplaceable dataset the backup consolidation (backup-consolidation-longhorn.md, BL1)

@@ -1,7 +1,9 @@
 ---
 # Same image the Docker role runs — both copies stay on the same tag through coexistence so
-# a difference in behaviour between them is never the image.
-bento_pdf_k8s_image: ghcr.io/alam00000/bentopdf:latest
+# a difference in behaviour between them is never the image. Tag KEPT alongside the digest
+# (repo:latest@sha256) so Renovate's k8s-defaults manager still tracks it for digest-bump PRs —
+# a bare repo@sha256 would freeze it with zero update signal (2026-08-13 pin).
+bento_pdf_k8s_image: ghcr.io/alam00000/bentopdf:latest@sha256:165113f4579cc61ea353ad0597ed510cc2101ef879ec5e91875a3df0c0b219a0
 # Mirrors resources('0.50', '256M', '0.05', '32M') in the compose template.
 bento_pdf_k8s_cpu_limit: "500m"
 bento_pdf_k8s_mem_limit: 256Mi

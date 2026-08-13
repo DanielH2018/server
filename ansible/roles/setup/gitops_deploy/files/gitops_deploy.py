@@ -89,6 +89,10 @@ TASKS_ALERT_FILE = "/var/lib/gitops-deploy/tasks_alerted_sha"
 # Same throttle for a meta-only push (a role meta/deps.yml change — the cross-service deploy
 # graph, not auto-deployed): alert once per SHA so the operator redeploys the affected service(s).
 META_ALERT_FILE = "/var/lib/gitops-deploy/meta_alerted_sha"
+# Same throttle for a k8s-role push (ansible/roles/k8s/<role>/...): alert once per SHA so the
+# operator redeploys it by hand. Unlike tasks/meta this deployer has no mechanism that ever
+# applies a k8s role change, so there's no "rode a redeploy" case to dedupe against `deployed`.
+K8S_ALERT_FILE = "/var/lib/gitops-deploy/k8s_alerted_sha"
 # Undelivered post-merge alerts, retried at the TOP of every tick. The secrets/tasks/meta/combined
 # channels `git merge --ff-only` BEFORE their delivery-gated marker write, so once merged
 # local==origin and the next tick short-circuits at `noop` (main) before ever re-reaching the alert
@@ -278,7 +282,8 @@ def alert_once(marker_file: str, channel: str, origin: str, content: str) -> Non
 
 
 def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
-    """Fire the tasks/ and meta/deps.yml defer-and-alert for services NOT redeployed this tick.
+    """Fire the tasks/, meta/deps.yml, and k8s-role defer-and-alert for changes NOT redeployed
+    this tick.
 
     Runs on BOTH the no-services branch (deployed=set()) and after a SUCCESSFUL deploy
     (deployed=cs.services): a combined push (svcA template + svcB meta/deps.yml) deploys svcA but
@@ -307,6 +312,18 @@ def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
             f"service(s) — fast-forwarded but **not applied** (meta/ isn't auto-deployed; it "
             f"changes deploy ordering + dep closure). Redeploy the affected service(s) by hand: "
             f"`ansible-playbook ansible/deploy.yml --tags <svc>`.",
+        )
+    if cs.k8s:
+        # No `- deployed` subtraction (unlike tasks/meta): this deployer never auto-deploys a
+        # k8s-platform role at all, so there's no scoped redeploy for a k8s change to have ridden.
+        alert_once(
+            K8S_ALERT_FILE,
+            "k8s",
+            origin,
+            f"⚠️ gitops-deploy: k8s role(s) `{', '.join(sorted(cs.k8s))}` changed in "
+            f"`{origin[:8]}` — fast-forwarded but **not applied** (this deployer only "
+            f"auto-deploys Docker-platform services; k8s roles are defer-and-alert). Redeploy by "
+            f"hand: `ansible-playbook ansible/deploy.yml --tags <svc>`.",
         )
 
 

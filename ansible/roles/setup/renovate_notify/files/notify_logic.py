@@ -36,6 +36,9 @@ class PR:
     automerge: bool  # Renovate body says Automerge Enabled
     ci: str  # "success" | "pending" | "failure"
     conflicting: bool
+    created_at: str = (
+        ""  # GitHub's PR `created_at` (ISO-8601), already in the pulls-list payload
+    )
 
 
 def find_dashboard(issues: list[dict]) -> str | None:
@@ -130,8 +133,45 @@ _BUCKET_HEADER = {
 }
 
 
-def fingerprint(items: list[tuple[PR, str]]) -> str:
-    return ",".join(sorted("#%d:%s" % (pr.number, bucket) for pr, bucket in items))
+# Days-stuck thresholds for the fingerprint's age dimension. Ascending so the loop below keeps
+# overwriting `bucket` with the largest one crossed.
+_STUCK_AGE_THRESHOLDS = (1, 3, 7, 14)
+
+
+def _stuck_age_bucket(pr: PR, now: datetime) -> int:
+    """Largest `_STUCK_AGE_THRESHOLDS` value the PR's age has crossed, or 0 if under a day old
+    or `created_at` is missing/unparseable (age unknown -> no age dimension, same as before)."""
+    if not pr.created_at:
+        return 0
+    try:
+        created = datetime.fromisoformat(pr.created_at.replace("Z", "+00:00"))
+    except ValueError:
+        return 0
+    age_days = (now - created).total_seconds() / 86400
+    bucket = 0
+    for threshold in _STUCK_AGE_THRESHOLDS:
+        if age_days >= threshold:
+            bucket = threshold
+    return bucket
+
+
+def fingerprint(items: list[tuple[PR, str]], now: datetime | None = None) -> str:
+    """Dedupe key for the actionable PR set. `stuck` PRs carry a coarse age dimension
+    (`_stuck_age_bucket`) so a PR that's been stuck for a while re-pages at each threshold
+    crossing instead of paging once on day 1 and then going silent forever while it ages
+    (PR #67, stuck since 2026-08-03, is the case this closes — `manual` PRs don't get one:
+    they're "waiting on your merge", not "broken and getting worse", so there's nothing to
+    escalate on)."""
+    now = now or datetime.now(timezone.utc)
+    parts = []
+    for pr, bucket in items:
+        key = "#%d:%s" % (pr.number, bucket)
+        if bucket == "stuck":
+            age = _stuck_age_bucket(pr, now)
+            if age:
+                key += ":%dd" % age
+        parts.append(key)
+    return ",".join(sorted(parts))
 
 
 def should_notify(prev_fp: str, cur_fp: str) -> tuple[bool, str]:

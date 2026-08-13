@@ -26,7 +26,7 @@ spec:
         # comment). Only these named files are written; .storage/, the recorder DB, secrets
         # consumers, custom_components/ are PVC state this never touches.
         - name: config-install
-          image: alpine:3.22
+          image: {{ home_assistant_k8s_init_image }}
           command:
             - sh
             - -c
@@ -62,6 +62,13 @@ spec:
               readOnly: true
             - name: config
               mountPath: /config
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
       containers:
         - name: home-assistant
           image: {{ home_assistant_k8s_image }}

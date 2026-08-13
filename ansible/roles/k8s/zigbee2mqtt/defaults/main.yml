@@ -3,6 +3,10 @@
 # difference in behaviour between them is never the image.
 zigbee2mqtt_k8s_image: ghcr.io/koenkk/zigbee2mqtt:2.12.0
 
+# The config-install initContainer needs alpine (`install`). Same init image peanut and
+# home-assistant use.
+zigbee2mqtt_k8s_init_image: alpine:3.22
+
 # Mirrors resources('0.50', '256M', '0.05', '64M') in the compose template.
 zigbee2mqtt_k8s_cpu_limit: "500m"
 zigbee2mqtt_k8s_mem_limit: 256Mi

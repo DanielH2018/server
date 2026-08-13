@@ -24,7 +24,9 @@ from pathlib import Path
 import pytest
 
 _REPO = Path(__file__).resolve().parent.parent
-_MANAGERS = json.loads((_REPO / "renovate.json").read_text())["customManagers"]
+_RENOVATE_CONFIG = json.loads((_REPO / "renovate.json").read_text())
+_MANAGERS = _RENOVATE_CONFIG["customManagers"]
+_PACKAGE_RULES = _RENOVATE_CONFIG["packageRules"]
 
 
 def _tracked_files() -> list[str]:
@@ -46,6 +48,66 @@ def _file_pattern_to_regex(fp: str) -> re.Pattern:
         f"expected a /regex/ file pattern: {fp}"
     )
     return re.compile(fp[1:-1])
+
+
+def _slash_regex(pattern: str) -> re.Pattern:
+    """A Renovate `matchCurrentValue` value, wrapped /like/this/ same as a managerFilePattern."""
+    assert pattern.startswith("/") and pattern.endswith("/"), (
+        f"expected a /regex/ matchCurrentValue: {pattern}"
+    )
+    return re.compile(pattern[1:-1])
+
+
+def _minimatch_to_regex(glob: str) -> re.Pattern:
+    """Renovate `matchFileNames` entries are minimatch globs, not regexes — `**` crosses `/`,
+    a single `*` doesn't. Anchored full-match, repo-relative, forward-slash paths only."""
+    out = []
+    i = 0
+    while i < len(glob):
+        if glob[i : i + 2] == "**":
+            out.append(".*")
+            i += 2
+        elif glob[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        else:
+            out.append(re.escape(glob[i]))
+            i += 1
+    return re.compile("^" + "".join(out) + "$")
+
+
+def _disabling_currentvalue_rules(package_rules: list[dict]) -> list[dict]:
+    """packageRules that disable a dependency by matching its `currentValue` (e.g. the /^latest$/
+    rule that started this whole guard — see test_every_k8s_role_image_is_renovate_tracked).
+
+    Deliberately excludes package-NAME disables (e.g. influxdb's `matchPackageNames` rule) —
+    those are a targeted, reviewed exemption for one dependency, not a value-shaped trap that can
+    silently swallow a whole class of images the way the currentValue rule did."""
+    return [
+        r
+        for r in package_rules
+        if r.get("enabled") is False and "matchCurrentValue" in r
+    ]
+
+
+def _is_disabled_by_packagerule(
+    current_value: str, rel_path: str, rules: list[dict]
+) -> dict | None:
+    """The rule that disables `current_value` for `rel_path`, or None if none do.
+
+    A rule with no `matchFileNames` applies everywhere; one with `matchFileNames` applies only
+    where at least one of its globs matches. This is the check the pre-2026-08-13 disable rule
+    lacked scoping for: it matched every `currentValue: latest` regardless of file, silently
+    disabling 13 k8s roles' worth of deliberately digest-pinned images."""
+    for rule in rules:
+        if not _slash_regex(rule["matchCurrentValue"]).search(current_value):
+            continue
+        file_globs = rule.get("matchFileNames")
+        if file_globs is None or any(
+            _minimatch_to_regex(g).match(rel_path) for g in file_globs
+        ):
+            return rule
+    return None
 
 
 @pytest.fixture(scope="module")
@@ -180,25 +242,124 @@ def test_every_k8s_role_image_is_renovate_tracked() -> None:
     Per-var rather than aggregate, for the same reason as the compose guard: the manager
     matching SOMETHING passes even when one role's image slips the regex. An untagged or
     digest-only pin does exactly that, because the matchString requires an explicit :tag.
+
+    Regex-match alone is NOT sufficient, either (2026-08-13 review): the watchtower-era
+    `/^latest$/` packageRule disabled the WHOLE dependency for any k8s image whose extracted
+    currentValue was `latest` — including the deliberate `latest@sha256:...` digest pins
+    (littlelink, tdarr, dri-device-plugin) — even though every one of those lines matched this
+    manager's matchStrings just fine. Renovate never raised a single digest PR for 13 roles and
+    this test stayed green throughout. So beyond matching, assert nothing DISABLES the match:
+    walk packageRules the same way Renovate would and fail if an `enabled: false` rule applies
+    to this file's currentValue.
     """
     match_res = [
         re.compile(_to_python_regex(ms)) for ms in _k8s_image_manager()["matchStrings"]
     ]
+    disabling_rules = _disabling_currentvalue_rules(_PACKAGE_RULES)
     defaults = sorted((_REPO / "ansible/roles/k8s").glob("*/defaults/main.yml"))
     assert defaults, "no k8s role defaults found"
     untracked = []
     for f in defaults:
+        rel_path = str(f.relative_to(_REPO))
         for line in f.read_text().splitlines():
             if not re.match(r"\s*\w*_image:\s*\S", line):
                 continue
             if line.split(":", 1)[0].strip() in REGISTRY_BUILT_IMAGES:
                 continue
-            if not any(r.search(line) for r in match_res):
-                untracked.append(f"{f.relative_to(_REPO)}: {line.strip()}")
+            matches = (r.search(line) for r in match_res)
+            m = next((match for match in matches if match), None)
+            if m is None:
+                untracked.append(f"{rel_path}: {line.strip()} — matched no manager")
+                continue
+            disabling_rule = _is_disabled_by_packagerule(
+                m.group("currentValue"), rel_path, disabling_rules
+            )
+            if disabling_rule is not None:
+                untracked.append(
+                    f"{rel_path}: {line.strip()} — disabled by packageRule "
+                    f"{disabling_rule['description'][:60]!r}"
+                )
     assert not untracked, (
-        "k8s role image pin(s) NOT matched by the Renovate k8s-defaults manager (untagged / "
-        "digest-only / templated) — the pods run them and nothing will ever offer a bump:\n"
-        + "\n".join(untracked)
+        "k8s role image pin(s) the Renovate k8s-defaults manager will NOT actually update "
+        "(unmatched, or matched but disabled by a packageRule) — the pods run them and "
+        "nothing will ever offer a bump:\n" + "\n".join(untracked)
+    )
+
+
+def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
+    """Regression test for the exact bug the guard above now catches.
+
+    Proves _is_disabled_by_packagerule actually fires — without this, the strengthened
+    assertion above is vacuous the moment renovate.json is correct (it would pass whether or
+    not the disabled-by-rule branch works at all, the same 'passes on regex-match alone'
+    failure mode this whole file exists to prevent). Uses a fabricated rule, not the live
+    config, so it stays true regardless of what renovate.json currently contains.
+    """
+    fake_rules = [
+        {
+            "matchCurrentValue": "/^latest$/",
+            "matchFileNames": ["ansible/roles/containers/**"],
+            "enabled": False,
+        }
+    ]
+    # In scope: a compose template's `latest` is disabled.
+    assert (
+        _is_disabled_by_packagerule(
+            "latest",
+            "ansible/roles/containers/homepage/templates/docker-compose.yml.j2",
+            fake_rules,
+        )
+        is not None
+    )
+    # Out of scope: the same currentValue in a k8s role default must NOT be caught by a rule
+    # scoped to the compose plane — this is precisely what the un-scoped rule got wrong.
+    assert (
+        _is_disabled_by_packagerule(
+            "latest", "ansible/roles/k8s/littlelink/defaults/main.yml", fake_rules
+        )
+        is None
+    )
+    # A currentValue the rule doesn't match at all is never disabled.
+    assert (
+        _is_disabled_by_packagerule(
+            "v1.2.3",
+            "ansible/roles/containers/homepage/templates/docker-compose.yml.j2",
+            fake_rules,
+        )
+        is None
+    )
+
+
+# Every `image:` line in a k8s deployment template must come from a Jinja variable, not a
+# literal — a literal bypasses the k8s-defaults customManager above entirely (it only scans
+# defaults/main.yml, never templates/*.j2), so it would age with NO update signal at all, worse
+# than even the `latest` disable bug. Empty by design: as of 2026-08-13 every k8s template's
+# image is a var (the last 4 literals — homepage/peanut/home-assistant/zigbee2mqtt init
+# containers — were hoisted to defaults/main.yml the same review cycle this test was added).
+# Add an entry here only as a deliberate, reviewed exception; it defeats the point otherwise.
+IMAGE_LITERAL_ALLOWLIST: frozenset[str] = frozenset()
+
+
+def test_no_literal_image_lines_in_k8s_templates() -> None:
+    """No k8s deployment template hard-codes an `image:` ref outside a Jinja variable."""
+    literal_re = re.compile(r'^\s*image:\s*(?!["\']?\{\{)(?P<ref>\S.*)$')
+    templates = sorted((_REPO / "ansible/roles/k8s").glob("*/templates/*.j2"))
+    assert templates, "no k8s templates found"
+    offenders = []
+    for f in templates:
+        for lineno, line in enumerate(f.read_text().splitlines(), start=1):
+            if line.strip().startswith("#"):
+                continue
+            m = literal_re.match(line)
+            if not m:
+                continue
+            if m.group("ref").strip() in IMAGE_LITERAL_ALLOWLIST:
+                continue
+            offenders.append(f"{f.relative_to(_REPO)}:{lineno}: {line.strip()}")
+    assert not offenders, (
+        "Literal `image:` line(s) in a k8s template — not a Jinja var, so the k8s-defaults "
+        "customManager (which only scans defaults/main.yml) never sees it and it ages with "
+        "zero update signal:\n" + "\n".join(offenders)
     )
 
 
