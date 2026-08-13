@@ -198,16 +198,24 @@ data:
           - targets: ['tempo.{{ k8s_observability_namespace }}.svc:3200']
             labels:
               instance_role: observability
-      # Per-pod CPU/memory from each kubelet's cAdvisor, reached through the API server proxy
-      # rather than the kubelet's own :10250. The proxy path needs only nodes/proxy RBAC and no
-      # kubelet client certificate, which is why it is the usual choice for a single-node k3s.
+      # Per-pod CPU/memory from each kubelet's cAdvisor, dialed directly at the kubelet's
+      # :10250 rather than through the API server's /proxy/ path. `role: node` discovery
+      # already defaults __address__ to the node's kubelet endpoint (host:10250), so no
+      # __address__ relabel is needed — only the scheme, path and auth.
       #
-      # insecure_skip_verify is on the API server hop: k3s serves it with a cert whose SANs do
-      # not include the in-cluster Service name this relabels to. The bearer token is still
-      # verified by the API server, so this weakens transport identity inside the cluster, not
-      # authn.
+      # The direct path narrows the RBAC this needs: the kubelet's own authorizer maps
+      # /metrics/cadvisor (and /metrics, /metrics/resource) to the `nodes/metrics` subresource
+      # rather than `nodes/proxy` — same as when reached via the API server proxy, since the
+      # kubelet applies that mapping regardless of how the request arrived. `nodes/proxy` was
+      # only needed for the old /api/v1/nodes/<name>/proxy/... path and is dropped from the
+      # ClusterRole below now that nothing uses it.
+      #
+      # insecure_skip_verify is on the kubelet hop: k3s's kubelet serving cert doesn't carry a
+      # SAN Prometheus can validate against here. The bearer token is still verified by the API
+      # server via TokenReview, so this weakens transport identity, not authn.
       - job_name: kubernetes-cadvisor
         scheme: https
+        metrics_path: /metrics/cadvisor
         tls_config:
           ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
           insecure_skip_verify: true
@@ -217,17 +225,11 @@ data:
         relabel_configs:
           - action: labelmap
             regex: __meta_kubernetes_node_label_(.+)
-          - target_label: __address__
-            replacement: kubernetes.default.svc:443
-          - source_labels: [__meta_kubernetes_node_name]
-            regex: (.+)
-            target_label: __metrics_path__
-            replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
 ---
 # Prometheus authenticates to the API server as itself for the kubernetes_sd_configs discovery
-# above. Read-only and list/watch-only: it enumerates nodes to discover scrape targets and
-# proxies to their cAdvisor endpoints. It cannot mutate anything, and it is deliberately NOT
-# granted secrets or configmaps.
+# above (enumerating nodes for scrape targets), and its bearer token is presented to each
+# kubelet directly for the cadvisor scrape. Read-only and list/watch-only. It cannot mutate
+# anything, and it is deliberately NOT granted secrets or configmaps.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -243,11 +245,6 @@ rules:
   - apiGroups: [""]
     resources: [nodes, nodes/metrics, services, endpoints, pods]
     verbs: [get, list, watch]
-  # The cAdvisor scrape above goes through /api/v1/nodes/<name>/proxy/, which is authorized as
-  # a `get` on this subresource rather than on the node object.
-  - apiGroups: [""]
-    resources: [nodes/proxy]
-    verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

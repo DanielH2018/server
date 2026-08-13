@@ -22,6 +22,10 @@ spec:
       # Losing this plugin makes jellyfin and tdarr unschedulable rather than merely degraded, so
       # it must not be the thing evicted to make room for them.
       priorityClassName: system-node-critical
+      # No serviceAccountName is set (defaults SA) and the container never talks to the API
+      # server, so it has no use for the token — and a privileged pod is the last place to
+      # leave one mounted anyway.
+      automountServiceAccountToken: false
       tolerations:
         - operator: Exists
           effect: NoSchedule

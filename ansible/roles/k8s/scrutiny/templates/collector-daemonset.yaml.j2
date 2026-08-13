@@ -20,6 +20,10 @@ spec:
       # Docker spoke on daniel-server retired with it. Both hosts' SMART source is the
       # same /dev/nvme0 controller path (verified on daniel-server before the unpin).
       enableServiceLinks: false
+      # No serviceAccountName is set (defaults SA) and the collector never talks to the API
+      # server, so it has no use for the token — and a privileged pod is the last place to
+      # leave one mounted anyway.
+      automountServiceAccountToken: false
       containers:
         - name: collector
           image: {{ scrutiny_k8s_collector_image }}
