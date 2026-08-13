@@ -597,6 +597,12 @@ containers_list:
   # "WG Pi Peer Backup" monitor directly (the bridge's pi_peers check retired with it).
   - name: pi-peer-backup
     platform: k8s
+  # The Valheim sibling (2026-08-13), added with that server's reactivation. Same
+  # ordering constraint as terraria-stats above — it tails the valheim pod's console out
+  # of loki-homelab, so it MUST follow it. No port/route: its :9420 exporter is scraped
+  # in-cluster (claude-otel prometheus job valheim-stats), there is no web UI.
+  - name: valheim-stats
+    platform: k8s
   # Slice-7 Phase D (2026-08-10, slice-7-phase-d-scrutiny.md): SMART monitoring. The
   # collector DaemonSet adds this host's never-monitored NVMe; daniel-server's Docker
   # collector pushes into the same web API as a spoke until the Phase F join. UI behind

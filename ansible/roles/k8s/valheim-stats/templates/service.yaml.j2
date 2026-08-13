@@ -1,0 +1,15 @@
+---
+# Scraped in-cluster by claude-otel's prometheus (job_name: valheim-stats). No route and
+# no port in containers_list: there is no web UI, only the exporter.
+apiVersion: v1
+kind: Service
+metadata:
+  name: valheim-stats
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: valheim-stats
+  ports:
+    - name: metrics
+      port: 9420
+      targetPort: 9420

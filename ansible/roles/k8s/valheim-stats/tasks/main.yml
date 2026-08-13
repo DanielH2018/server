@@ -1,0 +1,63 @@
+---
+# valheim-stats (2026-08-13): reads the valheim pod's console lines from loki-homelab,
+# folds them into all-time per-player playtime/sessions/DEATHS (SQLite on a Longhorn PVC),
+# serves Prometheus metrics on :9420. Sibling of terraria-stats; the scrape job lives in
+# claude-otel's prometheus.yaml.j2 (job_name: valheim-stats).
+#
+# No seed-volume include, unlike terraria-stats: there is no Docker predecessor to import
+# from. The PVC is declared in templates/pvc.yaml.j2 and starts empty.
+
+- name: Create the staging directory
+  tags: [config]
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/valheim-stats
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Stage the stats script on the node
+  tags: [config]
+  ansible.builtin.copy:
+    src: valheim_stats.py
+    dest: /etc/rancher/k3s/valheim-stats/valheim_stats.py
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: valheim_stats_script
+
+# The script is Jinja-hostile (its Prometheus exposition strings carry {…} braces), so it
+# becomes a ConfigMap via kubectl --from-file, never via a template — the same reasoning
+# as terraria-stats, claude-otel's dashboards, and image-builder's context files.
+- name: Render the script ConfigMap manifest
+  tags: [config]
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      k3s kubectl -n {{ k8s_namespace }} create configmap valheim-stats-script
+      --from-file=valheim_stats.py=/etc/rancher/k3s/valheim-stats/valheim_stats.py
+      --dry-run=client -o yaml > /etc/rancher/k3s/valheim-stats/configmap.yaml
+    executable: /bin/bash
+  become: true
+  changed_when: valheim_stats_script is changed
+
+- name: Apply the script ConfigMap
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/valheim-stats/configmap.yaml
+  become: true
+  register: valheim_stats_cm_apply
+  changed_when: "'configured' in valheim_stats_cm_apply.stdout or 'created' in valheim_stats_cm_apply.stdout"
+
+- name: Deploy valheim-stats to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: valheim-stats
+    manifests_rollout: valheim-stats
+    manifests_files:
+      - pvc.yaml
+      - deployment.yaml
+      - service.yaml

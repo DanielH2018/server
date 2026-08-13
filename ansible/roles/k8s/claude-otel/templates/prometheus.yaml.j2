@@ -75,6 +75,12 @@ data:
       - job_name: terraria-stats
         static_configs:
           - targets: ['terraria-stats.{{ k8s_namespace }}.svc:9420']
+      # Same shape for Valheim (2026-08-13), added with that server's reactivation. Its
+      # exporter additionally carries per-player DEATHS, which the Terraria console cannot
+      # emit — see roles/k8s/valheim-stats/CLAUDE.md.
+      - job_name: valheim-stats
+        static_configs:
+          - targets: ['valheim-stats.{{ k8s_namespace }}.svc:9420']
       # ── Phase D dashboard triage (2026-08-10, PG1/PG2 — slice-7-phase-d-dashboards.md) ──
       # PG1: ported from the Docker prometheus, which scraped these cluster workloads from
       # the wrong side of the migration (through Traefik routes, over the LAN). Same job
