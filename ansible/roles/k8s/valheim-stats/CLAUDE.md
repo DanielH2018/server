@@ -40,7 +40,8 @@ Three consequences, each of which is a trap:
    built by ADJACENCY — the handshake, then the next spawn — because the console never puts
    the ID and the character name on one line, which is also how the other published parsers
    do it. Two players handshaking before either spawns can cross-bind; rare at homelab
-   scale and self-correcting on the next join. **Deaths are unaffected** — they key off the
+   scale, but a cross-bind mis-attributes **that session's** playtime permanently in SQLite
+   — only later sessions bind correctly. **Deaths are unaffected** — they key off the
    name directly, which is why they are the more trustworthy half of the board.
 
 ## Verification status — read before trusting the numbers
