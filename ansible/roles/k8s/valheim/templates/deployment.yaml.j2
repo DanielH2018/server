@@ -105,8 +105,9 @@ spec:
             requests:
               cpu: "{{ valheim_k8s_cpu_request }}"
               memory: {{ valheim_k8s_mem_request }}
-          # The image traps SIGTERM to run a final world save; killing it early is how you
-          # lose the last session. Matches the archived compose's stop_grace_period: 2m.
+          # Parity with the archived compose's stop_grace_period: 2m. A dedicated server
+          # wants room to finish its shutdown save rather than be SIGKILLed at the default
+          # 30s; the exact shutdown behaviour of this image has not been observed here.
       terminationGracePeriodSeconds: 120
       volumes:
         - name: config
