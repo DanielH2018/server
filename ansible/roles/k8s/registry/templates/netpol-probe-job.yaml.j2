@@ -32,10 +32,6 @@ spec:
       labels:
         app: registry-netpol-probe
     spec:
-      # Phase F: pinned to daniel-box like every other pod in the registry's loop — the registry
-      # is a loopback hostPort on that node only.
-      nodeSelector:
-        kubernetes.io/hostname: daniel-box
       restartPolicy: Never
       enableServiceLinks: false
       automountServiceAccountToken: false
