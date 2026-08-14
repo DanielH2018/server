@@ -8,6 +8,40 @@ describes). The backupstore lives off-site in B2 under
 in SOPS — which remains DR-closed exactly as before (age host keys backed up out-of-band +
 an off-box recovery recipient), so the capability survives a total loss.
 
+> **Kopia era closed 2026-08-14:** the repo was deleted 08-13, `kopia_password` retired with
+> it (8edb11cd), and the residual hidden object versions were hard-purged 08-14 (941
+> versions, 4.66 GB) — the bucket now holds `longhorn/` only. The `kopia_b2_*` secrets that
+> survive are the B2 *account* credentials, which render the `longhorn-b2` target Secret.
+
+## The off-site recovery kit (carried over from the kopia era — still the recovery spine)
+
+Recovery has three independent legs: **B2** holds the data, an **out-of-band age key**
+decrypts the secrets, and **GitHub** holds the only off-site copy of the encrypted
+`secrets.yml` + all the Ansible. The age key alone can't reconstruct `secrets.yml`, so a
+simultaneous loss of the hosts *and* the GitHub repo would strand the B2 credentials.
+Close that leg by keeping the complete kit in ONE off-site place: the age key plus a repo
+bundle refreshed whenever the key backup is (or after a `secrets.yml` change):
+
+```bash
+git bundle create "homelab-$(date +%F).bundle" --all
+# recover: git clone homelab-YYYY-MM-DD.bundle server   (sops -d needs the age key beside it)
+```
+
+`secrets.yml` inside the bundle stays SOPS-encrypted — useless without the age key — so the
+bundle is no more sensitive than the GitHub repo; the age key is the part to protect.
+
+## The external dead-man's switch (re-homed 2026-08-14; re-validate at drain close)
+
+The one backstop for a total in-house monitoring death is the external UptimeRobot monitor
+(dashboard `https://dashboard.uptimerobot.com/monitors/803270234`, probing
+`https://homepage.daniel-hunter.com`). Recorded here because an external SaaS can't be
+IaC-managed, so this record is its only audit trail. The kopia-era analysis (operator-
+accepted residual: the target is an Authelia-gated 302, so it back-stops host/edge/Authelia
+death but NOT a Kuma-only container death) predates the migration — the alert brain now
+lives on daniel-box (cluster Kuma) and homepage has a cluster identity, so the *shape* of
+the residual has moved even if the acceptance likely still holds. Re-validate the target
+choice in the final `/homelab-review` pass; history: `kopia-disaster-recovery.md`.
+
 ## What is and isn't in the backupstore
 
 Tiering is deliberate — see [`longhorn-backup-tiering.md`](longhorn-backup-tiering.md) for

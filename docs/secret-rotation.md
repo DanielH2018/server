@@ -105,12 +105,14 @@ These encrypt/anchor existing data; swapping the value alone **loses data**.
 A pinned secret anchors existing data, so treat rotation as a **staged cutover with a live fallback**,
 never a swap (harness-engineering's consequential-operation state machine — verify the new path
 before you destroy the old one):
-1. **Back up the anchored data first** (the kopia repo is remote + versioned; snapshot
-   `authelia/config/db.sqlite3`). This backup is the recovery path — keep it until step 5 passes.
-2. **Re-key through the tool, not `sops set`** (`kopia repository change-password` /
-   `authelia storage encryption change-key`) so the data is re-anchored to the new value.
-3. **Prove the new value opens the data BEFORE removing anything** (`kopia snapshot list` / an
-   Authelia login + TOTP). If this fails, the old artifact is still on disk and still works.
+1. **Back up the anchored data first** (snapshot `authelia/config/db.sqlite3` — a Longhorn
+   snapshot of the authelia PVC, or `kubectl cp` the file out). This backup is the recovery
+   path — keep it until step 5 passes.
+2. **Re-key through the tool, not `sops set`** (`authelia storage encryption change-key`;
+   retired instance: `kopia repository change-password`) so the data is re-anchored to the
+   new value.
+3. **Prove the new value opens the data BEFORE removing anything** (an Authelia login +
+   TOTP). If this fails, the old artifact is still on disk and still works.
 4. **Only then** `sops set` the new value and redeploy the consumer.
 5. **Verify live** (audit resets green, Kuma monitor green, a real restore/login works) — and only
    after that delete the pre-rotation backup. If any step fails, anchored data + old value are intact.
@@ -119,13 +121,13 @@ The failure this prevents: `sops set` first, redeploy, discover the data is now 
 the only value that could open it has already been overwritten. The two procedures below are concrete
 instances of this discipline:
 
-- **`kopia_password`** — RETIRING, not rotatable. kopia retired 2026-08-10 (backup
-  consolidation — `docs/k3s-migration/backup-consolidation-longhorn.md` BL2/BL3): the
-  container and role are gone, so the old `docker exec … change-password` procedure has
-  nothing to run against. The secret stays pinned ONLY until the kopia B2 repo is deleted
-  after the first verified Longhorn-only nightly (operator decision, no retention
-  window); it and its registry entry are removed with the repo. Never rotate it in the
-  interim — it is the only key that opens the residual repo.
+- **`kopia_password`** — REMOVED (8edb11cd, 2026-08-13). The kopia B2 repo it anchored was
+  deleted after the first verified Longhorn-only nightly, per the retirement plan
+  (`docs/k3s-migration/backup-consolidation-longhorn.md`), and the residual hidden object
+  versions were hard-purged 2026-08-14 — the value opens nothing anymore. Kept here as the
+  worked example of a pinned secret leaving the registry: the anchored data is destroyed
+  first, deliberately, and only then does the key go. (The `kopia_b2_*` credentials are NOT
+  kopia's — they are the B2 account keys, still live as Longhorn's backup-target credential.)
 - **`authelia_storage`** — the Authelia DB encryption key. Use Authelia's migration, never a
   raw swap (a raw swap makes the existing SQLite DB undecryptable → TOTP/sessions lost):
   ```bash

@@ -90,6 +90,13 @@ tool this migration is operated with), **kopia** (shrunk: host paths + Pi peer c
 backs up hosts, not workloads), the **k3s agent**, and node-level exporters. Everything else
 drains. `docker` itself stays installed for that residual trio — has_docker stays true.
 
+> **Residual set shrank in execution.** wg-easy left at slice-6 B5 (the operator moved all
+> router forwards to daniel-box, so the workload followed its port), and kopia RETIRED
+> outright at the 2026-08-10 backup consolidation instead of shrinking — the Longhorn plane
+> absorbed everything it uniquely protected (`backup-consolidation-longhorn.md`), its B2
+> repo was deleted 08-13, and the residual object versions were purged 08-14. The residual
+> set is therefore: k3s agent, peanut/NUT, and node-level exporters.
+
 ### D7 — homelab-mcp and otel-collector move LAST, after the join proves stable
 
 Both are instruments used to operate the migration (design §5 "don't remove your own
@@ -315,13 +322,19 @@ image-builder context is an EXPLICIT file map in tasks/main.yml — a new module
 added there or the image builds without it (found via CrashLoopBackOff, plus the
 in-place-rebuilt tag needing a rollout restart to re-pull).
 
-The REST of §G stays anchored to the drain: host flips, kopia runbook, design.md §8,
-guard-test collapse, the final review pass.
+The REST of §G stays anchored to the drain: host flips, design.md §8, guard-test collapse,
+the final review pass. The kopia runbook rewrite EXECUTED 2026-08-14 — with a changed
+premise: kopia didn't shrink (the design-decision-1 debt this line anticipated), it retired
+entirely at the consolidation. `kopia-disaster-recovery.md` is frozen as a historical doc,
+its still-live content (the off-site recovery kit, the external dead-man's-switch record)
+re-homed into `longhorn-disaster-recovery.md`, and `secret-rotation.md`'s pinned section
+now records `kopia_password` as removed (8edb11cd) rather than pinned-pending-deletion.
 
 ## Exit criteria
 
-1. daniel-server runs only: k3s agent, peanut/NUT, wg-easy, kopia, and node-level exporters.
-   Its Docker daemon serves exactly that residual set (D6).
+1. daniel-server runs only: k3s agent, peanut/NUT, and node-level exporters (the D6
+   residual set as amended — wg-easy left at slice-6 B5, kopia retired at the
+   consolidation). Its Docker daemon serves exactly that residual set.
 2. Longhorn: 2 replicas on every volume, verified healthy on both nodes; a daniel-box drain
    reschedules stateless workloads.
 3. One monitoring plane: cluster Prometheus/Grafana/Loki + migrated Uptime Kuma, with the
