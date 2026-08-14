@@ -35,12 +35,37 @@ rev = "v26.6.0"
 
 [[repos.hooks]]
 id = "ansible-lint"
-files = "\\.(yaml|yml)$"
+# Scoped to `ansible/` and paired with pass_filenames — ansible-lint now lints the files it is
+# GIVEN instead of walking the tree itself. Its cost is almost purely per-file (measured
+# 2026-08-14: one task file 1.45s, five 1.98s, the whole repo 37s locally / 89.7s on the
+# runner), so handing it a diff is what makes a PR's lint ~2s instead of ~90s.
+#
+# Coverage is unchanged on a full run. A walk examines 954 files, but exactly 325 of those are
+# YAML and all 325 are tracked files under `ansible/` — the rest are .py/.j2/.sh that
+# ansible-lint classifies and no ansible rule applies to. That 325 is precisely what this
+# files/exclude pair passes.
+#
+# The regex must do its own excluding: `.ansible-lint`'s exclude_paths are NOT honoured for
+# explicitly-passed files (verified — it happily lints `.github/workflows/ci.yml` when named
+# directly). `ansible/collections/` needs no exclude here because it is gitignored and prek
+# only ever passes tracked files, but secrets.yml is tracked AND encrypted, so it does.
+files = "^ansible/.*\\.ya?ml$"
+exclude = "^ansible/vars/secrets\\.yml$"
 # Cap ansible-core <3 so a surprise upstream major can't silently change lint behavior
 # or break this hook on a day nothing in the repo changed (these deps aren't lock-pinned).
 additional_dependencies = ["ansible-core>=2.18,<3.0", "jmespath"]
-entry = "bash -c 'ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint'"
-pass_filenames = false
+# NB the `--` sentinel and `"$@"`, same as bash-syntax-check below: prek appends the filenames
+# to the entry, and after `bash -c '<script>'` those become the SCRIPT's positional params. A
+# bare `... && ansible-lint -c .ansible-lint` would silently lint nothing at all.
+entry = "bash -c 'ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint \"$@\"' --"
+pass_filenames = true
+# REQUIRED, not a tuning knob. Without it prek shards the filenames across parallel
+# invocations — measured at 16 batches of ~21-39 files for a full run, each one re-running the
+# `ansible-galaxy install` and paying ansible-lint's startup again, which made `--all-files`
+# SLOWER than the walk it replaced (43.8s vs 37.0s) and lints each batch without sight of the
+# others. One invocation gets the whole list, and ansible-lint parallelises internally anyway
+# (it saturates ~3 cores on its own).
+require_serial = true
 
 # Secret scanning
 [[repos]]

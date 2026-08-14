@@ -23,11 +23,16 @@ jobs:
   #   ansible-lint  89.7s   pytest  13.5s   validate-k8s-manifests  2.2s
   #   validate-compose-templates  1.4s      everything else  <1s each      gitleaks  0.03s
   #
-  # Sharding ansible-lint away from the other 18 hooks turns that sum into a max: the two
+  # Sharding ansible-lint away from the other 19 hooks turns that sum into a max: the two
   # shards run concurrently, so the ~37s of non-ansible-lint work stops being time nothing
   # else can overlap. Each shard pays its own checkout + setup (~15s), which is why this is
   # only worth doing for a split this lopsided — do NOT shard further, the setup cost would
   # exceed what any additional shard removes.
+  #
+  # The split still earns its keep now that PRs lint only changed ansible files (see the run
+  # step below): a push to master lints all 325 and remains the long pole. On a PR the
+  # ansible-lint shard finishes in seconds and the `rest` shard sets the critical path — that
+  # costs a few runner minutes, not wall clock.
   hooks:
     name: hooks (${{ matrix.name }})
     runs-on: ubuntu-latest
@@ -104,11 +109,34 @@ jobs:
       - name: Install prek
         run: pip install prek==0.4.10  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
-      # Both shards still pass --all-files: the split is about WHICH hooks run here, never
+      # On a PR, lint only the ansible files the PR actually touches. ansible-lint's cost is
+      # per-file (one task file 1.45s, the whole tree 18.4s locally), so this is the difference
+      # between ~90s and ~2s — by far the largest single saving in this workflow.
+      #
+      # `--from-ref A --to-ref B` is a three-dot `A...B` expression, i.e. against the merge
+      # base, so it is the PR's own changes and not whatever else landed on master meanwhile.
+      # If the PR touches no ansible YAML the hook is skipped entirely and this is a fast green.
+      #
+      # What this gives up: ansible-lint does no cross-file variable analysis, so the residual
+      # gap is narrow — a change to file X will not re-lint an unchanged file Y that consumes
+      # it. The push-to-master run below still lints all 325, so such a case surfaces there
+      # rather than never. That is a deliberate trade of post-merge detection for PR latency.
+      - name: Run hooks (PR — ansible-lint on changed files only)
+        if: matrix.id == 'ansible-lint' && github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+        run: |
+          git fetch --no-tags origin "$BASE_REF"
+          prek run --color always --from-ref "origin/$BASE_REF" --to-ref HEAD ansible-lint
+
+      # Everything else, and every push to master: the full sweep.
+      #
+      # Both shards pass --all-files here: the split is about WHICH hooks run in each job, never
       # about narrowing the files any hook sees. Between them the two shards run every hook
       # exactly once, and `--skip ansible-lint` means a hook added to prek.toml later lands in
       # the `rest` shard automatically rather than being silently dropped by an allow-list.
       - name: Run hooks
+        if: matrix.id != 'ansible-lint' || github.event_name != 'pull_request'
         run: prek run --all-files --color always ${{ matrix.select }}
 
   # Branch protection requires the context "prek (lint + validate + tests + secrets)". The job
