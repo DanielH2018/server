@@ -5,16 +5,14 @@
 input=$(cat)
 
 cd /home/ubuntu/server || exit 0
-UV=/home/ubuntu/.local/bin/uv
 
-# Extract the file path from tool input. Routed through uv so the project-pinned
-# interpreter parses the hook JSON (not the system python3); --no-sync keeps it fast.
-file_path=$(echo "$input" | "$UV" run --no-sync --quiet python -c "
-import sys, json
-data = json.load(sys.stdin)
-tool_input = data.get('tool_input', {})
-print(tool_input.get('file_path', ''))
-" 2>/dev/null || echo "")
+# Extract the file path from tool input. This used to spin up `uv run --no-sync python`
+# to read one JSON field, which cost 39ms of the hook's 42ms on an edit this hook then
+# declined to lint -- and it ran on EVERY Edit and Write, ~2,200 of them in the week of
+# 2026-08-07. jq does the same job in 2ms and is already a hard dependency of the
+# PermissionRequest hooks. Same failure posture: unreadable input means no path, and the
+# guard below exits without linting.
+file_path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // ""' 2>/dev/null || echo "")
 
 # Only proceed if we have a file path
 if [[ -z "$file_path" ]]; then
