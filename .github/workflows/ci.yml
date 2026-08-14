@@ -113,9 +113,17 @@ jobs:
       # per-file (one task file 1.45s, the whole tree 18.4s locally), so this is the difference
       # between ~90s and ~2s — by far the largest single saving in this workflow.
       #
-      # `--from-ref A --to-ref B` is a three-dot `A...B` expression, i.e. against the merge
-      # base, so it is the PR's own changes and not whatever else landed on master meanwhile.
-      # If the PR touches no ansible YAML the hook is skipped entirely and this is a fast green.
+      # The file list is computed HERE rather than handed to prek's --from-ref/--to-ref, because
+      # that mode does not skip a hook whose matching-file set is empty: it runs the hook with
+      # NO filenames, and `ansible-lint` with no arguments falls back to walking the whole tree.
+      # Measured — this PR changes no ansible YAML, and --from-ref still spent 93s linting all
+      # 954 files while reporting a cheerful "Passed". The failure mode is slow, not unsafe, but
+      # it removes the entire saving for exactly the PRs that should be fastest.
+      #
+      # `A...B` (three dots) diffs against the merge base, so this is the PR's own changes and
+      # not whatever else landed on master meanwhile. --diff-filter=d drops deletions: a removed
+      # file is still "changed", but passing a path that no longer exists is an ansible-lint
+      # error, not a lint finding.
       #
       # What this gives up: ansible-lint does no cross-file variable analysis, so the residual
       # gap is narrow — a change to file X will not re-lint an unchanged file Y that consumes
@@ -126,8 +134,22 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
         run: |
+          set -euo pipefail
           git fetch --no-tags origin "$BASE_REF"
-          prek run --color always --from-ref "origin/$BASE_REF" --to-ref HEAD ansible-lint
+          # Filtered with grep rather than a git pathspec glob (`ansible/**/*.yml` behaves
+          # differently under git's wildmatch than it reads). secrets.yml is dropped here as
+          # well as by the hook's own exclude: were it the ONLY changed file, prek would filter
+          # the list to empty and fall straight back into the walk described above.
+          mapfile -t changed < <(git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" \
+            -- ansible/ | grep -E '\.ya?ml$' | grep -v '^ansible/vars/secrets\.yml$' || true)
+          if [ "${#changed[@]}" -eq 0 ]; then
+            echo "No ansible YAML changed in this PR — nothing for ansible-lint to do."
+            exit 0
+          fi
+          echo "Linting ${#changed[@]} changed file(s):"
+          printf '  %s\n' "${changed[@]}"
+          # Hook id BEFORE --files: --files is variadic and would otherwise swallow it.
+          prek run ansible-lint --color always --files "${changed[@]}"
 
       # Everything else, and every push to master: the full sweep.
       #
