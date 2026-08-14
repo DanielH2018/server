@@ -106,7 +106,9 @@ Run ansible through `uv run` so it uses the repo's pinned env (`ansible-core` + 
 (the uv-tool shim) lacks those module deps and deploys will fail.
 Deploy through `scripts/deploy.sh`. It takes `/var/lock/server-git-tree.lock` — the same
 lock `gitops-deploy.service` (30-min timer) and the weekly secret-rotate cron hold — so a
-deploy can't interleave with the automated pipeline or with another Claude session. Exit
+deploy can't interleave with the automated pipeline or with another Claude session. The
+lock guards the local git tree every deploy reads its templates from (gitops-deploy
+rewrites it with a `git pull` mid-run), so a `-e target=daniel-pi` deploy takes it too. Exit
 **75** means the lock stayed busy and *nothing was deployed*; it is not a playbook failure.
 `--check` runs unlocked. The bare `ansible-playbook` forms below still work and are what
 the wrapper runs; use them only when you deliberately want no lock.

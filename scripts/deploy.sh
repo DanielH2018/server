@@ -14,6 +14,10 @@
 # That alert is accurate (a deploy really was in progress) and the timer retries 30 minutes
 # later, so it is left as a true signal rather than suppressed.
 #
+# A `-e target=daniel-pi` deploy takes the lock too, even though it writes to the Pi: what
+# the lock guards is the local git tree every deploy reads its templates from, and
+# gitops-deploy rewrites that tree with a `git pull` mid-run.
+#
 # Usage: scripts/deploy.sh --tags "<service>" [-e target=daniel-pi] [...]
 #   --check runs unlocked; a dry run writes nothing worth serializing.
 
@@ -23,6 +27,8 @@ LOCK=/var/lock/server-git-tree.lock
 LOCK_WAIT=1500 # matches gitops-deploy's own end-to-end budget (TimeoutStartSec=25min)
 LOCK_BUSY=75
 
+# The checkout this session is working in, not the primary one — a session in a worktree
+# has always deployed its own tree, and running the wrapper must not change that.
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root" || exit 1
 

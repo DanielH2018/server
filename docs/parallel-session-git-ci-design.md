@@ -150,9 +150,14 @@ untangling a rebase.
 
 `deleteBranchOnMerge` is `false`. Current state:
 
-- `.claude/worktrees/containers-role-cleanup` — branch merged into `master`, worktree still on disk and **locked**
-- `.claude/worktrees/workload-tiering` — tracks `seed-affinity-fix-2`, which is merged
-- `.claude/worktrees/slice-polish` — untouched since 2026-08-09
+- `.claude/worktrees/slice-polish` — untouched since 2026-08-09, and **not registered with
+  git at all**: `git worktree list` doesn't show it, so neither `git worktree prune` nor any
+  removal path reaches it. Deleting the directory is the only way out.
+- `.claude/worktrees/containers-role-cleanup` and `.claude/worktrees/workload-tiering` —
+  both **live**, corrected from an earlier reading of this finding. Their branches have
+  merged and their locks are held, which looked like abandonment; checking the pid in each
+  lock reason against `/proc` shows a session is genuinely still working in both. The
+  accumulation problem is real, but these two were not examples of it.
 - 8 local branches, of which 5 are unmerged; ~12 remote `worktree-*`/feature branches beyond the Renovate set
 
 ### 5. Agent deploys bypass the existing mutex
