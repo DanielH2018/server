@@ -20,7 +20,7 @@ services:
       - no-new-privileges:true
     command: ["python", "/app/check.py"]
     # check.py touches /tmp/heartbeat (tmpfs) after every completed cycle; stale mtime
-    # means the loop HUNG (death already exits the container) -> unhealthy -> autoheal
+    # means the loop HUNG (death alone already exits the container) -> unhealthy -> autoheal
     # restart. 1000s ≈ 3×INTERVAL + slack. Kuma push silence remains the alerting path.
     {{ healthcheck("[\"CMD\", \"python3\", \"-c\", \"import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/heartbeat').st_mtime<1000 else 1)\"]", name=container_item.name) }}
     environment:
@@ -28,132 +28,22 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       - INTERVAL=300
-      # Startup/redeploy grace for the reach-out checks (STARTUP_GRACE in check.py: Backup Freshness /
-      # n8n Prod Workflows / Arr Queue Warnings / Prowlarr Indexers / SMART Data-Health / Pi Pressure).
-      # They poll a live app dependency with no reachability gate and no hysteresis, so the bridge's
-      # first cycle after the weekly host reboot — when kopia/n8n/sonarr/radarr/prowlarr/scrutiny/the
-      # Pi glances are still starting — flipped each max_retries=0 monitor DOWN for one transient
-      # cycle and paged. run_once now
-      # holds them `up` for the first GRACE_CYCLES-1 consecutive down cycles; only the
-      # GRACE_CYCLES'th straight down pages a genuinely-dead dependency (like HA_CONSECUTIVE=2).
-      - GRACE_CYCLES=2
-      # Repointed to the k3s cluster Prometheus (slice 3, B5). It holds this host's whole TSDB via
-      # remote-write since B3, so the twelve PROM_DEPENDENT checks read the same series they always
-      # did — verified before the flip by counting each affected selector on both instances and
-      # getting identical numbers (53/53 containers, 11/11 targets, 1/1 janitorr).
-      #
-      # Matching CLUSTER_PROMETHEUS_URL below is what switches PROM_ORIGIN on in check.py, so the
-      # container/`up` queries stay scoped to this host rather than widening to every workload in
-      # the homelab. That derivation is deliberate — see the PROM_ORIGIN comment — so these two
-      # URLs can never be pointed at different places by accident.
-      - PROMETHEUS_URL=https://prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}
+      # THE REMNANT (Phase F drain, 2026-08-14): every metric/API check moved to the
+      # cluster twin (roles/k8s/monitor-bridge — the SAME check.py, which sets the
+      # mirror-image CHECKS_SKIP). This deployment keeps exactly the checks that read
+      # THIS HOST's state files, because their producers are host crons here; each
+      # retires with its producer (the host flips in slice-7 §G). check.py refuses to
+      # start if this list names an unknown check, so the two lists can't drift apart
+      # silently. The twin's env — thresholds, URLs, API keys, the other 25 tokens —
+      # lives in the k8s role's env-secret, no longer in this host's container Env
+      # (which the read-only docker-proxy exposes to monitoring-net neighbors, the
+      # 2026-07-15 H2 concern that file-mounted credentials existed to dodge).
+      - CHECKS_ONLY=gitops_alive,gitops_status,pi_peers,disk_prune,renovate_alive
       # Re-pointed 2026-08-10 at the Phase D cutover: Kuma moved to the cluster, so the
       # Docker DNS name is gone. The `-k8s` name, NOT the bridged one (same-bridge hairpin —
-      # the N8N_URL lesson above). /api/push bypasses Authelia LAN-only on the k8s side.
+      # a container here cannot reach this host's own LAN address). /api/push bypasses
+      # Authelia LAN-only on the k8s side.
       - KUMA_URL=https://uptime-kuma{{ k8s_hostname_suffix }}.local.{{ domain }}
-      # kopia checks removed 2026-08-10 — backup plane is Longhorn
-      # (backup-consolidation-longhorn.md). This block used to carry KOPIA_URL, the Backup
-      # Freshness source path/staleness window, and the snapshot-shrink guard (size floor +
-      # presence/sentinel guards over Kopia's snapshot history).
-      # /boot: old kernels filling it quietly breaks upgrades; /boot/efi (vfat ESP):
-      # same failure class for firmware/bootloader updates (node-exporter exposes both)
-      - DISK_MOUNTPOINTS=/,/boot,/boot/efi
-      - DISK_MAX_PCT=90
-      - CERT_MIN_DAYS=14
-      - MEM_MAX_PCT=90
-      - OOM_WINDOW=1h
-      - CPU_WINDOW=15m
-      - CPU_THROTTLE_PCT=25
-      - CPU_MIN_THROTTLED_CORES=0.05
-      # Hysteresis: only the 3rd consecutive breaching cycle (~15 min) alerts; one- or
-      # two-cycle bursts log the offender but push up. A clean cycle resets the streak.
-      - CPU_CONSECUTIVE=3
-      - RESTART_WINDOW=15m
-      - RESTART_MAX=3
-      - TRAEFIK_5XX_PCT=5
-      - TRAEFIK_MIN_RPS=0.05
-      # Push tokens: we set them; Kuma honors client-supplied tokens. In secrets.yml.
-      - KUMA_PUSH_DISK={{ monitor_bridge_disk_push_token }}
-      - KUMA_PUSH_CERT={{ monitor_bridge_cert_push_token }}
-      - KUMA_PUSH_MEM={{ monitor_bridge_mem_push_token }}
-      - KUMA_PUSH_RESTARTS={{ monitor_bridge_restarts_push_token }}
-      - KUMA_PUSH_OOM={{ monitor_bridge_oom_push_token }}
-      - KUMA_PUSH_CPU={{ monitor_bridge_cpu_push_token }}
-      - KUMA_PUSH_TARGETS={{ monitor_bridge_targets_push_token }}
-      - KUMA_PUSH_TRAEFIK={{ monitor_bridge_traefik_push_token }}
-      - KUMA_PUSH_TRAEFIK_LATENCY={{ monitor_bridge_traefik_latency_push_token }}
-      # Prometheus reachability gate: probed once per cycle BEFORE the prom-dependent metric
-      # checks. When Prometheus is unreachable they're suppressed (pushed `up` w/ a skip msg,
-      # heartbeat kept alive) and only THIS monitor pages — one outage is one alert, not a storm.
-      - KUMA_PUSH_PROMETHEUS={{ monitor_bridge_prometheus_push_token }}
-      # n8n Prod-workflow failure monitoring (active workflows via the n8n public API).
-      # Per-workflow consecutive-failure streak: n8n hides successful runs
-      # (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none, to bound database.sqlite + its B2 backup churn),
-      # so check.py accumulates the streak across cycles (deduped by execution id). A workflow
-      # pages at N8N_CONSECUTIVE_MAX distinct failures — so a single transient fetch (e.g. an RSS
-      # feed 5xx, which flapped this monitor on 2026-07-21) doesn't page; its streak resets once
-      # its latest error ages past N8N_FAIL_WINDOW (recovered/idle). Systemic catch:
-      # N8N_SYSTEMIC_MAX+ workflows each failing N8N_SYSTEMIC_STREAK+ times = n8n-wide → page now
-      # as one alert, without waiting for each to hit N8N_CONSECUTIVE_MAX.
-      # n8n moved to k3s on 2026-08-06, so the old container-to-container `http://n8n:5678` over
-      # `apps` no longer resolves. Pointed at the -k8s name, which Pi-hole answers with the
-      # cluster ingress VIP, NOT at the bridged `n8n.local.<domain>` — that resolves to
-      # daniel-server, and a container here cannot reach this host's own LAN address (measured:
-      # 10.0.0.161:443 times out from monitor-bridge while 10.0.0.240:443 connects). Routing the
-      # check through the Docker edge would make it unreachable from the one container that
-      # needs it, and the check would go dark reading as "all healthy".
-      #
-      # Authelia is not in this path: the k8s/n8n role's `n8n-monitoring` IngressRoute matches
-      # the two API prefixes below at priority 100 with rate-limit only. X-N8N-API-KEY is still
-      # the gate.
-      - N8N_URL=https://n8n{{ k8s_hostname_suffix }}.local.{{ domain }}
-      - N8N_API_KEY={{ n8n_api_key }}
-      - N8N_FAIL_WINDOW=2h
-      - N8N_CONSECUTIVE_MAX=3
-      - N8N_SYSTEMIC_STREAK=2
-      - N8N_SYSTEMIC_MAX=2
-      - KUMA_PUSH_N8N={{ monitor_bridge_n8n_push_token }}
-      # Sonarr/Radarr queue warnings (2026-07-01 incident: an indexer served a poisoned
-      # fake-episode .exe; sonarr blocked the import itself and flagged the queue item
-      # trackedDownloadStatus "warning", but nothing paged, so it sat seeding for a day
-      # before a manual review caught it). Empty key = that app skipped; both empty =
-      # disabled, like N8N_API_KEY.
-      # Repointed at the cluster 2026-08-07 (slice 4, B4c). These were http://<name>:<port> on
-      # the `media` Docker network until sonarr/radarr/prowlarr moved to daniel-box.
-      #
-      # The `-k8s` hostname, NOT a bridged `*.local` name: the bridged names resolve to
-      # daniel-server, and a container on that host cannot reach a port its neighbour publishes
-      # on the same Docker bridge (same-bridge hairpin NAT — the failure that broke homepage's
-      # widgets and check_n8n). The suffixed name resolves to the cluster VIP, a different host.
-      #
-      # Each is served by a query-only `<svc>-monitoring` IngressRoute, guarded by ClientIP to
-      # this host and scoped to the one path the check reads. The X-Api-Key below is still the
-      # authentication; the route is the network gate in front of it.
-      - SONARR_URL=https://sonarr{{ k8s_hostname_suffix }}.local.{{ domain }}
-      - SONARR_API_KEY={{ sonarr_api_key }}
-      - RADARR_URL=https://radarr{{ k8s_hostname_suffix }}.local.{{ domain }}
-      - RADARR_API_KEY={{ radarr_api_key }}
-      - KUMA_PUSH_ARR_QUEUE={{ monitor_bridge_arr_queue_push_token }}
-      # Prowlarr sustained-indexer watchdog: Prowlarr's in-app health notification is binary
-      # (every flap pages, or — with warnings off — only the all-indexers-down red error). This
-      # polls /api/v1/indexerstatus and `down`s only when an indexer has been failing >= 1 week
-      # (age from Prowlarr's own initialFailure, so it survives a bridge redeploy), suppressing the
-      # sub-threshold flaps public trackers throw that self-clear inside Prowlarr's ~5-15min backoff.
-      # Set to a full week (10080 min) deliberately: only a genuinely long outage should page here —
-      # short/flaky drops are noise. Prowlarr's own all-indexers-down onHealthIssue is the fast backstop.
-      # Empty key = disabled (stays up), like N8N_API_KEY. Already on `media`, reaches prowlarr:9696.
-      - PROWLARR_URL=https://prowlarr{{ k8s_hostname_suffix }}.local.{{ domain }}
-      - PROWLARR_API_KEY={{ prowlarr_api_key }}
-      - PROWLARR_INDEXER_MIN_DOWN_MIN=10080
-      # Comma-separated indexer names never paged (case-insensitive) — chronically-flaky public
-      # trackers whose backend routinely 503s/times-out past the sustained-down gate while the other indexers
-      # cover the same searches. The Pirate Bay's apibay.org (503s + full timeouts) flapped this
-      # monitor up/down for hours on 2026-07-05. 1337x.to has hard-blocked our egress IP at Cloudflare
-      # (403 error code 1006) since 2026-07-12 — FlareSolverr (which 1337x already routes through)
-      # solves JS challenges but can't clear an IP ban, so it's a permanent upstream block, not a flap.
-      # Prowlarr's own all-down onHealthIssue is the backstop.
-      - PROWLARR_INDEXER_IGNORE=The Pirate Bay,1337x
-      - KUMA_PUSH_PROWLARR_INDEXERS={{ monitor_bridge_prowlarr_indexers_push_token }}
       # GitOps deployer liveness + deploy-status. State files are written on the host by
       # gitops_deploy.py and bind-mounted read-only at /gitops-state.
       - GITOPS_STATE_DIR=/gitops-state
@@ -165,306 +55,47 @@ services:
       - KUMA_PUSH_GITOPS_ALIVE={{ monitor_bridge_gitops_alive_push_token }}
       - KUMA_PUSH_GITOPS_STATUS={{ monitor_bridge_gitops_status_push_token }}
       # Daily wg-easy Pi-peer backup pull: the wg-easy role's daniel-server host cron writes
-      # state.json after rsyncing the Pi's un-rebuildable WireGuard peer keys into Kopia scope. The
-      # pull uses no --delete, so a broken pull leaves stale-but-present files in place while the
-      # peers go stale — this is the watchdog. Alert on a failed pull, >2.5d staleness, or a
+      # state.json after rsyncing the Pi's un-rebuildable WireGuard peer keys. The pull uses
+      # no --delete, so a broken pull leaves stale-but-present files in place while the peers
+      # go stale — this is the watchdog. Alert on a failed pull, >2.5d staleness, or a
       # missing/corrupt file.
       - PI_PEERS_STATE=/pi-peers/state.json
       - PI_PEERS_MAX_AGE_D=2.5
       - KUMA_PUSH_PI_PEERS={{ monitor_bridge_pi_peers_push_token }}
-      # E7 (2026-08-13): the DOCKER-USER origin-lock and Cloudflare-IP-drift checks retired
-      # with the public 80/443 they guarded; the AppSec verifier moved to daniel-box (the
-      # home-allowlist pattern - k8s/crowdsec's crowdsec-appsec-verify.sh pushes the same
-      # "CrowdSec AppSec" monitor directly, no monitor-bridge hop).
       # Hourly disk-autoprune host cron (autofix-bridge role): conservative docker/builder/
       # container prune when `/` used% crosses a threshold. Alert on a FAILED prune command
-      # or >3h staleness (cron broken / never ran) — a disk still full of real data after a
-      # clean prune is Root Disk's alert, not this one.
+      # or >3h staleness — a disk still full of real data after a clean prune is the twin's
+      # Root Disk alert, not this one.
       - DISK_PRUNE_STATE=/autofix-disk/state.json
       - DISK_PRUNE_MAX_AGE_H=3
       - KUMA_PUSH_DISK_PRUNE={{ monitor_bridge_disk_prune_push_token }}
-      # The fake-remux detector + reconciler moved to daniel-box (slice 4, B7c) with the media
-      # stack. Their {ts,ok,msg} state files were read over the bind mount below — a host-local
-      # path, and the THIRD time that coupling failed to survive a host move, after configarr and
-      # janitorr. A cron there pushes the same two monitors with the same tokens through a generic
-      # state-file reader (roles/setup/fake_remux/files/state_push.py); the AutoKuma labels moved
-      # to the uptime-kuma role.
-      # configarr's guide-sync moved to a k8s CronJob on daniel-box (slice 4, B7a), so this bridge
-      # cannot see it: the state file it used to read lived on this host, next to the sync. The
-      # k8s/configarr role's health cron runs on that node, reads the last Job, and pushes the
-      # SAME Kuma monitor with the same token — the monitor and its history are unchanged, only
-      # the pusher moved. The AutoKuma label went with it, to the uptime-kuma role.
-      # B2 REACHABILITY — Longhorn's own B2-backed backups need this probe. It used to also gate
-      # kopia's maintenance/verify/content-verify/usage/usage-trend checks, all removed 2026-08-10
-      # (kopia is retired, backup moved to Longhorn — see backup-consolidation-longhorn.md); on
-      # 2026-08-02 those six read green for 9.5h while B2 refused all requests
-      # (docs/b2-transaction-cap-monitoring-gaps.md). This authenticates against B2 directly, so a
-      # cap breach reports B2's own `transaction_cap_exceeded` directly.
-      #
-      # Throttled to one call per B2_PROBE_INTERVAL_S and BOTH outcomes cached: the fault being
-      # detected is a transaction cap, so an every-cycle probe (288/day at INTERVAL=300) would feed
-      # the budget it watches. 1800s = 48 calls/day.
-      #
-      # Kopia's credentials, under probe-specific names — kept even though kopia itself is retired,
-      # since this is still the credential B2 issued for this purpose. The check only needs to
-      # authenticate, so pointing these at a scoped read-only key later is an inventory edit, not a
-      # code change. The application key is FILE-mounted, not inlined — an inlined secret lands in
-      # the container's Config.Env, which the read-only docker-proxy exposes to any monitoring-net
-      # neighbor (2026-07-15 review H2). The key id is an identifier and cannot authenticate on its
-      # own.
-      - B2_PROBE_KEY_ID={{ kopia_b2_key_id }}
-      - B2_PROBE_APPLICATION_KEY_FILE=/run/secrets/b2_probe_application_key
-      - B2_PROBE_INTERVAL_S=1800
-      - KUMA_PUSH_B2_REACHABLE={{ monitor_bridge_b2_reachable_push_token }}
-      # k3s workload health via the CLUSTER's Prometheus — a second instance on daniel-box, not
-      # PROMETHEUS_URL. Closes the gap where seven k8s workloads (n8n-runners among them, which
-      # executes every workflow's code) had no monitor at all: three expose only a ClusterIP, four
-      # expose no Service, and none has an ingress route, so nothing here can probe them directly.
-      #
-      # The -k8s name, NOT the bridged one, for the same reason as N8N_URL above: a container here
-      # cannot reach this host's own LAN address, so anything routed via the Docker edge is
-      # unreachable from the very container that needs it. Pi-hole answers this name with the
-      # cluster VIP. The claude-otel role's `prometheus-monitoring` IngressRoute admits only
-      # /api/v1/query on it, and Prometheus runs without the admin/lifecycle flags, so the path is
-      # read-only by construction rather than by convention.
-      - CLUSTER_PROMETHEUS_URL=https://prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}
-      - K8S_MIN_WORKLOADS=5
-      # Floor for the DaemonSet arm of the same check — see K8S_MIN_DAEMONSETS in check.py for
-      # the nine DaemonSets it counts and the bump-on-retirement discipline.
-      - K8S_MIN_DAEMONSETS=9
-      - KUMA_PUSH_K8S_WORKLOADS={{ monitor_bridge_k8s_workloads_push_token }}
-      # The cluster's OWN scrape targets. B5 pinned Scrape Targets to origin="daniel-server"
-      # so it kept its original meaning, which left daniel-box's five targets watched by
-      # nothing — otel-collector and otel-collector-internal going down was silent, and those
-      # two carry the only copy of Claude Code's session/token/cost telemetry. Floor of 3 of 5,
-      # so an emptied vector reads as UNKNOWN rather than as nothing being wrong.
-      - CLUSTER_TARGETS_MIN=3
-      - KUMA_PUSH_CLUSTER_TARGETS={{ monitor_bridge_cluster_targets_push_token }}
-      - KUMA_PUSH_CLUSTER_PROMETHEUS={{ monitor_bridge_cluster_prometheus_push_token }}
-      # Scrutiny SMART freshness + health: the collector (cron-as-PID1, daily 00:00, no usable
-      # healthcheck) only shows death as aging collector_date in the web API; on TOP of freshness
-      # the check asserts each device's SMART/threshold status (device_status == 0), so a drive
-      # that goes SMART-FAILED while still reporting fresh data still pages (Scrutiny stores to
-      # InfluxDB not Prometheus and its own notifier is off — this is the only alert path).
-      # SCRUTINY_TEMP_MAX (°C) is an optional early-warning temperature ceiling; 0 disables it.
-      # Phase D SC5 (2026-08-10): the cluster web API via the Authelia /api LAN bypass —
-      # now covers BOTH nodes' devices (daniel-box's NVMe was never monitored before).
-      - SCRUTINY_URL=https://scrutiny{{ k8s_hostname_suffix }}.local.{{ domain }}
-      - SCRUTINY_MAX_AGE_H=26
-      - SCRUTINY_TEMP_MAX=0
-      - KUMA_PUSH_SCRUTINY={{ monitor_bridge_scrutiny_push_token }}
-      # UPS battery health via HA's Prometheus-scraped sensors (the APC UPS is on NUT/peanut). The
-      # only other UPS alert is an HA automation -> mobile push (a separate channel from this
-      # Kuma->Discord brain), and nothing trends the battery, so a slowly-degrading one — full-charge
-      # runtime decaying over years — is invisible until an outage collapses it. Page on a low battery
-      # RUNWAY: charge < UPS_CHARGE_MIN_PCT (deep discharge on battery) OR estimated runtime <
-      # UPS_RUNTIME_MIN_S (aged battery even at full charge, or a discharge nearing shutdown) — PLUS
-      # the UPS's own replace-battery self-test verdict (UPS_REPLACE_QUERY), an HA template
-      # binary_sensor over the NUT RB flag, which trips earliest (before the runway floors).
-      # Prom-dependent: ALL series absent (HA scrape down) -> up (Scrape Targets owns HA-source
-      # liveness; the nut healthcheck owns the NUT server); a partial drop pages. UPS_CONSECUTIVE
-      # rides out a one-cycle dip from a load spike. Queries env-driven (all empty disables it) so an
-      # entity rename needs no code edit.
-      - UPS_CHARGE_QUERY=hass_sensor_battery_percent{entity="sensor.apc_ups_battery_charge"}
-      - UPS_RUNTIME_QUERY=hass_sensor_duration_s{entity="sensor.apc_ups_battery_runtime"}
-      - UPS_REPLACE_QUERY=hass_binary_sensor_state{entity="binary_sensor.apc_ups_replace_battery"}
-      # HA's own scrape-up series — discriminates "all UPS arms absent because HA's scrape is down"
-      # (defer, Scrape Targets owns it) from "HA scraping fine but every UPS entity renamed" (page).
-      - UPS_HA_UP_QUERY=up{job="home-assistant"}
-      - UPS_CHARGE_MIN_PCT=50
-      - UPS_RUNTIME_MIN_S=300
-      - UPS_CONSECUTIVE=2
-      - KUMA_PUSH_UPS={{ monitor_bridge_ups_push_token }}
-      # Pi pressure: swap-thrash early warning for the 512MB Zero 2 W, polled from the
-      # glances API already running there (zero Pi-side footprint; the static Kuma HTTP
-      # monitor covers glances itself). 2026-06-11 fwupd incident: load5/core >1.7 with
-      # mem available bottoming at 13MB — invisible to every other monitor.
-      - PI_GLANCES_URL=http://{{ hostvars['daniel-pi'].server_ip }}:61208
-      - PI_LOAD_MAX=1.5
-      - PI_MEM_MIN_MB=50
-      # SD card usage via glances /api/4/fs (deduped by device) — the server-only
-      # Root Disk check can't see the Pi, and a filling SD card is the classic slow death.
-      - PI_DISK_MAX_PCT=90
-      - KUMA_PUSH_PI={{ monitor_bridge_pi_push_token }}
-      # HA automation-engine heartbeat: poll input_datetime.ha_heartbeat (stamped every minute by an
-      # HA time_pattern automation) with a long-lived token; `down` when it's stale -> a
-      # wedged-but-running HA (HTTP :8123 up, scheduler stuck) the liveness probe can't see.
-      # Empty HA_URL/HA_TOKEN = disabled (stays up). 300s = 5 missed 1-min beats.
-      # HA_CONSECUTIVE=2: hysteresis (like CPU_CONSECUTIVE) so a planned redeploy — API
-      # unreachable ~120s, then the scheduler a beat behind — doesn't false-page; only 2 straight
-      # down cycles (~one INTERVAL of continuous badness) go `down`. A real wedge still pages.
-      #
-      # Re-pointed 2026-08-10: HA moved to k3s on 2026-08-09 (slice 5, B3) and the old
-      # container-to-container `http://home-assistant:8123` name stopped resolving — this check
-      # sat DOWN for ~80 cycles before the slice-7 shrink survey caught it. The `-k8s` name, NOT
-      # the bridged one, for the same-bridge hairpin reason as N8N_URL above. No Authelia on
-      # HA's route by design; the token is still the gate.
-      - HA_URL=https://home-assistant{{ k8s_hostname_suffix }}.local.{{ domain }}
-      # HA_TOKEN is a full-access HA long-lived token (unscoped by design). File-mounted (below),
-      # NOT inline, so it stays out of the container Env the read-only docker-proxy exposes to every
-      # monitoring-net neighbor (2026-07-15 review H2). check.py reads HA_TOKEN_FILE.
-      - HA_TOKEN_FILE=/run/secrets/ha_token
-      - HA_HEARTBEAT_MAX_AGE=300
-      - HA_CONSECUTIVE=2
-      - KUMA_PUSH_HA={{ monitor_bridge_ha_push_token }}
       # Renovate manual-action notifier liveness: renovate_notify.py writes last_run on the
       # host (daily timer); bind-mounted read-only at /renovate-state. 36h = one missed run + slack.
       - RENOVATE_STATE_DIR=/renovate-state
       - RENOVATE_MAX_AGE_MIN=2160
       - KUMA_PUSH_RENOVATE_ALIVE={{ monitor_bridge_renovate_alive_push_token }}
-      # Loki log-ingestion freshness: Loki's /ready Kuma probe stays green even when promtail
-      # stops shipping (docker-proxy break, positions corruption). Two arms (see check.py):
-      # arm 1 counts the file-tail union (authlog+syslog+traefik, EXCLUDING the high-volume
-      # docker_sd `job:docker` stream) over a tolerant window (LOKI_FILETAIL_WINDOW) and `down`s at
-      # zero — a file-tail break silences all three at once, while syslog's routine volume keeps a
-      # quiet night alive; arm 2 counts {container=~".+"} (the docker stream) over LOKI_WINDOW.
-      # Phase D.2 KL4 (2026-08-10): points at the cluster Loki so the freshness check
-      # guards the pipeline that survives the Docker loki's retirement (the dual-write
-      # ships the same streams to both during the overlap).
-      - LOKI_URL=https://loki-homelab{{ k8s_hostname_suffix }}.local.{{ domain }}
-      # E7: the `traefik` job (the Docker edge access log) left the selector with the edge.
-      - LOKI_STREAM={job=~"authlog|syslog"}
-      - LOKI_WINDOW=30m
-      - LOKI_FILETAIL_WINDOW=3h
-      - KUMA_PUSH_LOKI={{ monitor_bridge_loki_push_token }}
-      # Loki reachability GATE (peer of the Prometheus gate): probed once per cycle before the
-      # Loki-querying checks (Loki Ingestion, Janitorr). When Loki is unreachable they're
-      # suppressed (pushed `up` w/ a skip msg) and only THIS monitor pages — one outage, one alert.
-      - KUMA_PUSH_LOKI_REACHABLE={{ monitor_bridge_loki_reachable_push_token }}
-      # Promtail dropped-entries watchdog: Prometheus already scrapes promtail:9080, exposing the
-      # promtail_dropped_entries_total{reason=...} counter. Loki Log Ingestion only catches TOTAL
-      # silence; this surfaces PARTIAL loss — entries promtail gave up shipping across ALL drop
-      # reasons (ingester_error / rate_limited / stream_limited / line_too_long — the code default
-      # dropped the reason filter, review M2). increase() over the window handles counter resets;
-      # alert only above PROMTAIL_DROPPED_MAX so a transient Loki restart doesn't page. Prom-dependent.
-      - PROMTAIL_DROPPED_WINDOW=1h
-      - PROMTAIL_DROPPED_MAX=1000
-      - KUMA_PUSH_PROMTAIL_DROPPED={{ monitor_bridge_promtail_dropped_push_token }}
-      # Discord delivery: GET-verify Kuma's own notification webhook is still valid — a
-      # rotated/revoked/deleted webhook makes Kuma's alert POSTs silently fail while every
-      # monitor stays green-in-UI (the alert chain's delivery hop no other monitor, not even
-      # the off-box UptimeRobot host dead-man, exercises). Same webhook the kuma() notification
-      # posts to. A GET (not POST) never spams the channel; DISCORD_CONSECUTIVE adds streak
-      # hysteresis so a transient blip on this internet-facing check doesn't false-page.
-      - DISCORD_WEBHOOK_URL={{ monitor_discord_webhook_url }}
-      # Also GET-verify the CrowdSec ban-alert webhook — CrowdSec POSTs to it directly (not via
-      # Kuma), so a rotated/revoked URL silently drops security-ban alerts with no Kuma backstop.
-      - DISCORD_CROWDSEC_WEBHOOK_URL={{ crowdsec_discord_webhook_url }}
-      # And the GitOps/Renovate webhook — it delivers the gitops-deploy rollback alert AND every
-      # renovate_notify digest, neither via Kuma. renovate_notify greens its liveness marker even
-      # when the POST fails, so a dead webhook here drops digests while its monitor stays green.
-      - DISCORD_GITOPS_WEBHOOK_URL={{ gitops_deploy_discord_webhook }}
-      # And the *arr health/event webhook — Sonarr/Radarr/Prowlarr POST their onHealthIssue alerts
-      # (indexer down, download-client errors) directly to it via in-app Discord Connect (config
-      # lives in the app DBs, not here); a rotated/revoked URL drops those with no Kuma backstop.
-      - DISCORD_ARR_WEBHOOK_URL={{ arr_discord_webhook_url }}
-      # And the healthchecks.io app's own Discord webhook — it POSTs its check-down/up alerts to it
-      # via a "webhook" channel (config only in hc.sqlite, not templated), NOT via Kuma. A rotated/
-      # revoked URL silently drops those; it's a redundant secondary to its SMTP path, still worth GET-verifying.
-      - DISCORD_HEALTHCHECKS_WEBHOOK_URL={{ healthchecks_discord_webhook_url }}
-      - DISCORD_CONSECUTIVE=2
-      - KUMA_PUSH_DISCORD={{ monitor_bridge_discord_push_token }}
-      # Alert-email backstop deliverability, folded into the Discord Delivery check: the uptime-kuma
-      # `email` notification (Gmail SMTP) is the independent 2nd channel attached only to Discord
-      # Delivery, so a silently-revoked app-password would leave that backstop dead undetected. A
-      # throttled SMTP login probe (same creds Kuma uses) flips this monitor down on a broken
-      # credential, which still pages via the working Discord channel. Reuses the acme `email` var.
-      - SMTP_USER={{ email }}
-      - SMTP_PASSWORD={{ smtp_notify_app_password }}
-      # janitorr's cleanup-error watchdog moved to a cluster-side cron on daniel-box (slice 4,
-      # B7b) with the workload itself. It read the error count from Loki and the uptime from
-      # container_start_time_seconds — cluster pod logs never reach Loki, and that cAdvisor series
-      # is the Docker container's, so both signals died with the port. The k8s/janitorr role's
-      # health cron pushes the SAME monitor with the same token; the AutoKuma label moved to the
-      # uptime-kuma role alongside the other cluster-side push monitors.
     volumes:
       - ./check.py:/app/check.py:ro
-      - ./ha_token:/run/secrets/ha_token:ro
-      - ./b2_probe_application_key:/run/secrets/b2_probe_application_key:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
       - /var/lib/renovate-notify:/renovate-state:ro
       - /var/lib/wg-easy-pi-peers:/pi-peers:ro
       - /var/lib/autofix-disk-prune:/autofix-disk:ro
     {{ service_networks() }}
     labels:
-      {# Container-liveness monitor + one push monitor per check (AutoKuma-provisioned).
-         max_retries=0 on every push monitor: with retries, Kuma parks a pushed `down`
-         (and its named-offender msg) in PENDING, then its 60s watchdog — which only an
-         `up` push satisfies — crosses maxretries first, so the visible DOWN event always
-         reads "No heartbeat in the time window". With 0 retries the bridge's own push
-         flips the state and the descriptive msg survives into the event + notification.
-         Trade-off: a dead bridge pages after one missed 600s window (no grace beats). -#}
+      {# Container-liveness monitor + one push monitor per remnant check. The 25 twin-owned
+         push monitors' declarations live in the cluster's kuma-static-monitors Secret
+         (they already did before the split — transcribed at the Kuma cutover); these five
+         stay label-declared HERE because their pusher is this container (declaration
+         follows pusher, the configarr/janitorr convention). max_retries=0 on every push
+         monitor: with retries, Kuma parks a pushed `down` in PENDING and the watchdog —
+         which only an `up` push satisfies — crosses maxretries first, so the DOWN event
+         reads "No heartbeat in the time window" instead of the check's named-offender msg. -#}
       {{ kuma('monitor-bridge') }}
-      {{ kuma('monitor-bridge-disk', monitor_type='push', name='Root Disk', interval=600, max_retries=0, push_token=monitor_bridge_disk_push_token) }}
-      {{ kuma('monitor-bridge-cert', monitor_type='push', name='TLS Cert Expiry', interval=600, max_retries=0, push_token=monitor_bridge_cert_push_token) }}
-      {{ kuma('monitor-bridge-mem', monitor_type='push', name='Memory', interval=600, max_retries=0, push_token=monitor_bridge_mem_push_token) }}
-      {{ kuma('monitor-bridge-restarts', monitor_type='push', name='Container Restarts', interval=600, max_retries=0, push_token=monitor_bridge_restarts_push_token) }}
-      {{ kuma('monitor-bridge-oom', monitor_type='push', name='Container OOM', interval=600, max_retries=0, push_token=monitor_bridge_oom_push_token) }}
-      {{ kuma('monitor-bridge-cpu', monitor_type='push', name='CPU Throttling', interval=600, max_retries=0, push_token=monitor_bridge_cpu_push_token) }}
-      {# Prometheus reachability — the root-cause monitor that gates the prom-dependent checks:
-         when it's down they're suppressed and only this one pages (no 9-monitor storm). -#}
-      {{ kuma('monitor-bridge-prometheus', monitor_type='push', name='Prometheus Reachable', interval=600, max_retries=0, push_token=monitor_bridge_prometheus_push_token) }}
-      {{ kuma('monitor-bridge-targets', monitor_type='push', name='Scrape Targets', interval=600, max_retries=0, push_token=monitor_bridge_targets_push_token) }}
-      {{ kuma('monitor-bridge-traefik', monitor_type='push', name='Traefik 5xx', interval=600, max_retries=0, push_token=monitor_bridge_traefik_push_token) }}
-      {# Latency, not errors: a slow route still answers 200, so the 5xx monitor above stays
-         green while a service is unusable. Nothing watched latency at all before this. -#}
-      {{ kuma('monitor-bridge-traefik-latency', monitor_type='push', name='Traefik Latency', interval=600, max_retries=0, push_token=monitor_bridge_traefik_latency_push_token) }}
-      {{ kuma('monitor-bridge-n8n', monitor_type='push', name='n8n Prod Workflows', interval=600, max_retries=0, push_token=monitor_bridge_n8n_push_token) }}
-      {# Arr Queue Warnings: check_arr_queue polls sonarr+radarr's own /queue for a
-         trackedDownloadStatus "warning" or blocked import (2026-07-01 poisoned-.exe
-         incident) and names the offending release + app. -#}
-      {{ kuma('monitor-bridge-arr-queue', monitor_type='push', name='Arr Queue Warnings', interval=600, max_retries=0, push_token=monitor_bridge_arr_queue_push_token) }}
-      {# Prowlarr sustained-indexer watchdog: check_prowlarr_indexers pages only when an indexer
-         has been failing >= PROWLARR_INDEXER_MIN_DOWN_MIN (1 week = 10080m) per Prowlarr's
-         initialFailure — the sustained-per-indexer signal Prowlarr's binary in-app warning can't express. -#}
-      {{ kuma('monitor-bridge-prowlarr-indexers', monitor_type='push', name='Prowlarr Indexers', interval=600, max_retries=0, push_token=monitor_bridge_prowlarr_indexers_push_token) }}
-      {# GitOps deployer: liveness (deployer ticking) + deploy-status (rollback hold), pushed by
-         check_gitops_alive/status from the host state files. interval 600s = 2× the 5-min loop. -#}
       {{ kuma('gitops-deploy-alive', monitor_type='push', name='GitOps Deploy — Alive', interval=600, max_retries=0, push_token=monitor_bridge_gitops_alive_push_token) }}
       {{ kuma('gitops-deploy-status', monitor_type='push', name='GitOps Deploy — Status', interval=600, max_retries=0, push_token=monitor_bridge_gitops_status_push_token) }}
-      {# WG Pi Peer Backup: check_pi_peers reads /pi-peers/state.json (written by the wg-easy role's
-         daily daniel-server pull cron) — the no-delete pull leaves stale-but-present files in place
-         when it fails, so this is the dedicated failed/stale/missing watchdog for it. -#}
       {{ kuma('wg-easy-pi-peers', monitor_type='push', name='WG Pi Peer Backup', interval=600, max_retries=0, push_token=monitor_bridge_pi_peers_push_token) }}
-      {# CrowdSec Home Allowlist moved to the uptime-kuma role's labels at slice-6 B2: the
-         updater cron lives on daniel-box now (k8s/crowdsec role) and pushes the monitor
-         directly — no state file on this host to read. -#}
-      {# Disk Autoprune: check_disk_prune reads /autofix-disk/state.json (written hourly by the
-         autofix-bridge role's disk-prune cron) — down on a FAILED prune command or >3h staleness. -#}
       {{ kuma('autofix-disk-prune', monitor_type='push', name='Disk Autoprune', interval=600, max_retries=0, push_token=monitor_bridge_disk_prune_push_token) }}
-      {# B2 reachability — Longhorn's own B2-backed backups need this probe. It used to also gate
-         kopia's maintenance/verify/content-verify/usage/usage-trend checks (removed 2026-08-10,
-         kopia retired — backup-consolidation-longhorn.md). -#}
-      {{ kuma('monitor-bridge-b2-reachable', monitor_type='push', name='B2 Reachable', interval=600, max_retries=0, push_token=monitor_bridge_b2_reachable_push_token) }}
-      {{ kuma('monitor-bridge-k8s-workloads', monitor_type='push', name='k3s Workload Health', interval=600, max_retries=0, push_token=monitor_bridge_k8s_workloads_push_token) }}
-      {{ kuma('monitor-bridge-cluster-targets', monitor_type='push', name='Cluster Scrape Targets', interval=600, max_retries=0, push_token=monitor_bridge_cluster_targets_push_token) }}
-      {{ kuma('monitor-bridge-cluster-prometheus', monitor_type='push', name='Cluster Prometheus Reachable', interval=600, max_retries=0, push_token=monitor_bridge_cluster_prometheus_push_token) }}
-      {{ kuma('monitor-bridge-scrutiny', monitor_type='push', name='SMART Data / Health', interval=600, max_retries=0, push_token=monitor_bridge_scrutiny_push_token) }}
-      {# UPS Battery Health: check_ups pages on a low battery RUNWAY (charge or estimated runtime under
-         the floor) from HA's Prometheus-scraped APC sensors — the slowly-degrading-battery signal the
-         HA mobile-push power-event automation and the nut healthcheck can't give. Prom-dependent. -#}
-      {{ kuma('monitor-bridge-ups', monitor_type='push', name='UPS Battery Health', interval=600, max_retries=0, push_token=monitor_bridge_ups_push_token) }}
-      {{ kuma('monitor-bridge-pi', monitor_type='push', name='Pi Pressure', interval=600, max_retries=0, push_token=monitor_bridge_pi_push_token) }}
-      {# HA automation-engine liveness: check_ha_heartbeat polls the HA heartbeat helper's freshness
-         over `apps`. interval 600s (2× the 300s loop), max_retries=0 like every bridge push monitor. -#}
-      {{ kuma('monitor-bridge-ha', monitor_type='push', name='Home Assistant Automations', interval=600, max_retries=0, push_token=monitor_bridge_ha_push_token) }}
       {{ kuma('renovate-notify-alive', monitor_type='push', name='Renovate Notifier — Alive', interval=600, max_retries=0, push_token=monitor_bridge_renovate_alive_push_token) }}
-      {# Loki log-ingestion freshness: check_loki_ingestion counts lines across all file-tailed
-         streams over 30m and `down` at zero — catches a dead promtail/Loki pipeline that /ready can't see. -#}
-      {{ kuma('monitor-bridge-loki', monitor_type='push', name='Loki Log Ingestion', interval=600, max_retries=0, push_token=monitor_bridge_loki_push_token) }}
-      {# Promtail Dropped Entries: check_promtail_dropped reads promtail_dropped_entries_total
-         (across all drop reasons) from Prometheus — down on sustained PARTIAL log loss (entries Loki
-         rejected + promtail dropped) that the total-silence Loki Log Ingestion check can't see. Prom-dependent. -#}
-      {{ kuma('monitor-bridge-promtail-dropped', monitor_type='push', name='Promtail Dropped Entries', interval=600, max_retries=0, push_token=monitor_bridge_promtail_dropped_push_token) }}
-      {# Loki reachability — the root-cause monitor that gates the Loki-querying checks: when it's
-         down they're suppressed and only this one pages (no Loki-Ingestion/Janitorr storm). -#}
-      {{ kuma('monitor-bridge-loki-reachable', monitor_type='push', name='Loki Reachable', interval=600, max_retries=0, push_token=monitor_bridge_loki_reachable_push_token) }}
-      {# Discord delivery: check_discord GET-verifies Kuma's notification webhook is still valid —
-         the alert chain's delivery hop that no other monitor (incl. UptimeRobot) exercises. -#}
-      {# extra_notifications=['email']: the ONLY monitor with the independent 2nd (Gmail) channel —
-         a dead/rotated Discord webhook flips THIS monitor down, and it can't self-report via the
-         dead webhook, so it also pages by email. The `email` notification is defined on uptime-kuma. -#}
-      {{ kuma('monitor-bridge-discord', monitor_type='push', name='Discord Delivery', interval=600, max_retries=0, push_token=monitor_bridge_discord_push_token, extra_notifications=['email']) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 

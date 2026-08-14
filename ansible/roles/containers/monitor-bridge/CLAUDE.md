@@ -1,8 +1,19 @@
-# monitor-bridge — metric & host-state alerting → Uptime Kuma
+# monitor-bridge — the host-state REMNANT (the metric/API checks live in the cluster twin)
 
-A tiny sidecar that turns Prometheus metrics, host-cron state files, and live app health into
-Uptime Kuma **push** monitors, so threshold problems actually page. See repo-root `CLAUDE.md`.
-(The kopia backup checks retired with kopia on 2026-08-10 — the backup plane is Longhorn;
+> **SPLIT at the Phase F drain (2026-08-14).** Every metric/API check moved to
+> `roles/k8s/monitor-bridge` — the SAME `files/check.py`, staged from this role, split by
+> env: the twin sets `CHECKS_SKIP`, this remnant sets `CHECKS_ONLY` with exactly the five
+> checks that read THIS host's state files (gitops_alive, gitops_status, pi_peers,
+> disk_prune, renovate_alive — their producers are host crons here; each retires with its
+> producer at the §G host flips). check.py refuses a filter naming an unknown check or a
+> gated check without its gate, and `test_checks_and_compose_push_env_agree` asserts the
+> two deployments' env partitions the token set. Most of the per-check documentation
+> below predates the split — the checks it describes still exist and behave as written,
+> but the ones outside the remnant's five now run (and keep their env) in the twin.
+
+A tiny sidecar that turns host-cron state files into Uptime Kuma **push** monitors, so
+threshold problems actually page. See repo-root `CLAUDE.md`. (The kopia backup checks
+retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 `backup-consolidation-longhorn.md`.)
 
 ## At a glance

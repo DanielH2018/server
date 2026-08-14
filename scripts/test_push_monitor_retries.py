@@ -51,9 +51,13 @@ def _push_monitors() -> list[tuple[str, str, str]]:
 def test_push_monitors_are_discovered():
     # Guard the guard: if the macro-call format drifts and the regex matches nothing, the real
     # assertion below would pass vacuously. Pin a floor well under today's count (~33 after the
-    # 2026-08-13 uptime-kuma role archival dropped its dead-man labels from the glob).
+    # 2026-08-13 uptime-kuma role archival dropped its dead-man labels from the glob; 7 after
+    # the 2026-08-14 Phase F bridge split — the 25 twin-owned monitors' declarations live in
+    # the kuma-static-monitors Secret now, outside this compose glob, and autofix-bridge's
+    # compose retired with its container. The five remnant state-file monitors + terraria's
+    # docker twin labels are what remain label-declared).
     monitors = _push_monitors()
-    assert len(monitors) >= 28, (
+    assert len(monitors) >= 5, (
         "found only %d push monitors — regex/format drift?" % len(monitors)
     )
 
