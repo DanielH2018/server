@@ -99,8 +99,8 @@ uv run python scripts/probe.py arr sonarr "/api/v3/qualityprofile" --json \
 - Health evaluator: `files/configarr_status.py` (pure exit-code/output verdict logic,
   unit-tested in `files/test_configarr_status.py`) — copied by `roles/k8s/configarr` into
   `/opt/configarr-health` on daniel-box, where a cron reads the last Job and pushes Kuma.
-  (`files/configarr_sync.py`, the Docker-era compose wrapper, is retired with the host
-  residue it wrote to — `/opt/configarr` and `/var/lib/configarr` were removed 2026-08-09.)
+  (Its Docker-era compose wrapper `files/configarr_sync.py` was deleted 2026-08-14, with the
+  host residue it wrote to — `/opt/configarr` and `/var/lib/configarr` — removed 2026-08-09.)
 - Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "configarr"` —
   the k8s role also runs a one-off `configarr-deploy` Job so the edit syncs immediately.
 - Verify a sync: `kubectl -n homelab logs job/configarr-deploy` (or the latest

@@ -37,9 +37,8 @@ HOST_RUN_SCRIPTS = [
     "ansible/roles/setup/fake_remux/files/fake_remux_logic.py",
     "ansible/roles/setup/fake_remux/files/fake_remux_replace.py",
     "ansible/roles/setup/fake_remux/files/fake_remux_replace_logic.py",
-    # configarr sync host cron + its pure core (crontab /usr/bin/python3, not a systemd unit).
-    # configarr_sync.py `from host_lib import`s the shared helper listed below. Keep all 3.12-clean.
-    "ansible/roles/k8s/configarr/files/configarr_sync.py",
+    # configarr's sync verdict core, imported by configarr_health_logic.py below (its own
+    # Docker-era cron shell was deleted with the migration). Keep 3.12-clean.
     "ansible/roles/k8s/configarr/files/configarr_status.py",
     # Cross-role shared lib: deployed INTO each script's /opt dir (a runtime sibling both `from
     # host_lib import`), so it loads under the same host /usr/bin/python3 — but its source lives in a
