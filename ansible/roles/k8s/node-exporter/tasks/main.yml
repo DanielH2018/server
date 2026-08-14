@@ -1,0 +1,13 @@
+---
+# node-exporter on k8s (Phase F drain, 2026-08-14): successor to the prometheus role's
+# Docker sidecar. Scraped per-pod (job `node` in claude-otel's prometheus.yaml.j2) with
+# an origin label per node, so monitor-bridge's origin-pinned Root Disk / Memory checks
+# keep their exact daniel-server scope.
+
+- name: Deploy node-exporter to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: node-exporter
+    manifests_files:
+      - daemonset.yaml

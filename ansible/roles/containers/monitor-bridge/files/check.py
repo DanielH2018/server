@@ -2216,9 +2216,10 @@ CHECKS = [
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
     ("cert", _env("KUMA_PUSH_CERT", ""), check_cert),
     ("memory", _env("KUMA_PUSH_MEM", ""), check_mem),
-    ("restarts", _env("KUMA_PUSH_RESTARTS", ""), check_restarts),
-    ("oom", _env("KUMA_PUSH_OOM", ""), check_oom),
-    ("cpu", _env("KUMA_PUSH_CPU", ""), check_cpu_throttle),
+    # restarts/oom/cpu retired 2026-08-14 with the Docker cadvisor (operator decision):
+    # their container_*{name=...} source series ended with it. The check functions stay
+    # (pure, tested) — retargeting them onto the kubernetes-cadvisor label shape
+    # (container/pod, no `name`) is the Phase G candidate for cluster-side depth.
     ("targets", _env("KUMA_PUSH_TARGETS", ""), check_targets_down),
     ("traefik5xx", _env("KUMA_PUSH_TRAEFIK", ""), check_traefik_5xx),
     (
@@ -2263,9 +2264,6 @@ PROM_DEPENDENT = frozenset(
         "disk",
         "cert",
         "memory",
-        "restarts",
-        "oom",
-        "cpu",
         "targets",
         "traefik5xx",
         "ups",  # queries HA's Prometheus-scraped UPS battery sensors
@@ -2284,7 +2282,6 @@ PROM_DEPENDENT = frozenset(
 # two exporters, so they're not mapped here.)
 EXPORTER_DEPENDENT = {
     "node": frozenset({"disk", "memory"}),
-    "cadvisor": frozenset({"restarts", "oom", "cpu"}),
 }
 
 # Loki-reachability gate — the peer of the Prometheus gate for the Loki-querying checks. A single

@@ -2345,9 +2345,11 @@ def test_down_exporters_flags_node_when_node_up_is_zero():
     assert check.down_exporters(up) == {"node"}
 
 
-def test_down_exporters_flags_both_when_both_down():
+def test_down_exporters_flags_only_mapped_exporters():
+    # cadvisor left EXPORTER_DEPENDENT when it retired (2026-08-14) — a down series under
+    # its old job name must no longer trigger suppression of anything.
     up = [({"job": "node"}, 0.0), ({"job": "cadvisor"}, 0.0)]
-    assert check.down_exporters(up) == {"node", "cadvisor"}
+    assert check.down_exporters(up) == {"node"}
 
 
 def test_down_exporters_empty_when_all_up():
@@ -2407,24 +2409,25 @@ def test_run_once_suppresses_node_dependents_when_node_exporter_down(monkeypatch
     assert "exporter" in by_tok["tok_disk"][1].lower()
 
 
-def test_run_once_suppresses_cadvisor_dependents_when_cadvisor_down(monkeypatch):
-    up = [({"job": "node"}, 1.0), ({"job": "cadvisor"}, 0.0)]
+def test_run_once_suppression_without_cadvisor_series(monkeypatch):
+    # Post-retirement shape: only the node job exists in `up`.
+    up = [({"job": "node"}, 0.0)]
     ran, _ = _wire_run_once_prom_up(
         monkeypatch,
         up,
-        ["restarts", "oom", "cpu", "targets"],
-        {"restarts", "oom", "cpu", "targets"},
+        ["disk", "memory", "targets"],
+        {"disk", "memory", "targets"},
     )
-    assert not ({"restarts", "oom", "cpu"} & set(ran))
+    assert not ({"disk", "memory"} & set(ran))
     assert "targets" in ran
 
 
 def test_run_once_no_suppression_when_exporters_up(monkeypatch):
-    up = [({"job": "node"}, 1.0), ({"job": "cadvisor"}, 1.0)]
+    up = [({"job": "node"}, 1.0)]
     ran, _ = _wire_run_once_prom_up(
-        monkeypatch, up, ["disk", "restarts"], {"disk", "restarts"}
+        monkeypatch, up, ["disk", "memory"], {"disk", "memory"}
     )
-    assert "disk" in ran and "restarts" in ran
+    assert "disk" in ran and "memory" in ran
 
 
 def test_run_once_up_probe_failure_does_not_suppress(monkeypatch):

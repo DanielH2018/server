@@ -600,5 +600,7 @@ def test_load_roles_derives_ownership_from_the_role_trees():
     roles = g.load_roles()
     if not roles.container_owners:
         pytest.skip("role trees not present")
-    assert roles.container_owners.get("node-exporter") == "prometheus"
+    # node-exporter was the fixture until its role archived (2026-08-14, Phase F drain —
+    # it is a k8s DaemonSet now); autoheal is the same un-inventoried-companion shape.
+    assert roles.container_owners.get("autoheal") == "autoheal"
     assert "configarr" in roles.batch_roles

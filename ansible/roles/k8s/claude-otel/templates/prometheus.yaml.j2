@@ -133,20 +133,31 @@ data:
       # Reproducing both keeps existing dashboard queries/legends matching unchanged. These five
       # jobs are being removed from daniel-server's prometheus.yml.j2 in this same change, so
       # there is no remaining remote-write source for these job names and no collision risk.
+      # Phase F drain (2026-08-14): the Docker node-exporter's LAN-published 9100 retired;
+      # the node-exporter DaemonSet is scraped per-pod. Each target keeps an `origin` label
+      # carrying its NODE name, so monitor-bridge's origin="daniel-server"-pinned Root Disk
+      # / Memory checks keep their exact scope while daniel-box gains node_* it never had.
+      # (hostNetwork pods — the pod IP is the node IP.)
       - job_name: node
         scrape_interval: 1m
-        static_configs:
-          - targets: ['{{ k8s_bridge_client_ip }}:9100']
-            labels:
-              instance: daniel-server
-              origin: daniel-server
-      - job_name: cadvisor
-        scrape_interval: 1m
-        static_configs:
-          - targets: ['{{ k8s_bridge_client_ip }}:9101']
-            labels:
-              instance: daniel-server
-              origin: daniel-server
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: node-exporter
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            action: keep
+            regex: "9100"
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: origin
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: instance
+      # The cadvisor job retired with the Docker cadvisor (2026-08-14, operator decision):
+      # its whole purpose was the Docker containers' restart/OOM/throttle series, and those
+      # three bridge checks retired with it. Cluster containers' cadvisor metrics come from
+      # the kubernetes-cadvisor job below; retargeting the retired checks onto its label
+      # shape (container/pod, no `name`) is a Phase G candidate, not a drop-in.
       # Phase F drain (2026-08-14): the Docker promtail's LAN-published 9102 retired with
       # it; the promtail DaemonSet is scraped per-pod like the otel/crowdsec jobs — one
       # target per node, no origin label (it leaves the origin-pinned Scrape Targets set,
