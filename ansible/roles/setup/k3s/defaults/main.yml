@@ -329,6 +329,12 @@ k3s_join_server_ports:  # allowed FROM each agent, ON the server
 k3s_join_agent_ports:  # allowed FROM the server, ON the agent
   - { port: "8472", proto: udp }
   - { port: "10250", proto: tcp }
+  # node-exporter DS is hostNetwork, so prometheus (on the server node) scrapes the
+  # agent's 9100 on its LAN address, masqueraded from the server's LAN IP — a path the
+  # vxlan/kubelet allows above never covered. Found 2026-08-14: the daniel-server node
+  # target sat down from the DS's first day; pod-IP scrapes (promtail) ride 8472 and
+  # masked the gap.
+  - { port: "9100", proto: tcp }
 
 # Agent node IPs the server-side firewall admits. Set in daniel-box host_vars once an
 # agent exists; empty means the allow tasks are no-ops.

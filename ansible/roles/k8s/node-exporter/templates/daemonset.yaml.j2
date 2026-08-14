@@ -17,10 +17,13 @@ spec:
       automountServiceAccountToken: false
       # Host networking + PID so node_* describes the NODE (network interfaces, /proc)
       # rather than a pod netns — the standard node-exporter posture. The 9100 listener
-      # this opens on each node is host-firewalled by ufw's default-deny INPUT (the LAN
-      # scrape path retired with the Docker exporter; prometheus scrapes the pod IP...
-      # which under hostNetwork IS the node IP, admitted by the flannel/UFW cluster
-      # allows the join already carries).
+      # this opens on each node is host-firewalled by ufw's default-deny INPUT except
+      # for the server node's LAN IP (k3s_join_agent_ports): under hostNetwork the
+      # "pod IP" prometheus scrapes IS the node's LAN IP, and cross-node that traffic
+      # arrives masqueraded from the scraping node — NOT over the vxlan the join allows
+      # already covered. (This comment originally claimed the join allows admitted it;
+      # wrong — the daniel-server target was down from day one until the 9100 allow
+      # landed 2026-08-14.)
       hostNetwork: true
       hostPID: true
       containers:

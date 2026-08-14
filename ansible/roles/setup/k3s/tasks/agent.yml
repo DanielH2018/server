@@ -111,6 +111,20 @@
 # images (first: nut) run on this node. Written after the install so a change can
 # restart the running agent; on a first join the installer's own start reads it too
 # late, and the restart below covers that case as well.
+#
+# The directory first: the agent installer never creates /etc/rancher/k3s (nothing else
+# is configured there on an agent), and template does not create parents — hit live at
+# the 2026-08-14 cutover.
+- name: Create the k3s config directory
+  tags: [k3s_agent]
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
 - name: Configure containerd's view of the in-cluster registry
   tags: [k3s_agent]
   ansible.builtin.template:
