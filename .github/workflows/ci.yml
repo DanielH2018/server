@@ -27,7 +27,17 @@ jobs:
   # aggregator cost another ~7s of runner acquisition on every run for 4s of work.
   #
   #   PR run, before: 46s wall (shards 26s + 36s, aggregator +7s)
-  #   PR run, after:  ~25s wall (one job, one setup, no aggregator)
+  #   PR run, after:  33s wall — one job, 30s (11s setup + 16s hooks), no aggregator
+  #
+  # Measured on THIS PR, which edits workflow files and so still trips pytest (they are in its
+  # `files` regex); ~16s of hooks is mostly that. A PR that trips neither pytest nor ansible-lint
+  # is setup-bound at roughly 20s — extrapolated from the step breakdown, not measured.
+  #
+  # NB the first run after this change is SLOWER, once: the hook-env cache key lost its per-shard
+  # component, so it restores via restore-keys from an old single-shard entry and rebuilds the
+  # other half in-step (measured: a 44s hook step). The union key is saved at the end of that run.
+  # Because a PR branch can only read its own and its base branch's caches, other open PR branches
+  # stay in that state until this lands on master.
   #
   # The trade is push-to-master, where both halves run --all-files and now serialise rather than
   # overlap: ~52s -> ~73s. That is deliberate and cheap here — gitops-deploy is a pull-based 30-min
