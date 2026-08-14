@@ -52,7 +52,7 @@ claude_otel_query_host_ip: 127.0.0.1
 # response is retained verbatim for this window.
 claude_otel_loki_retention: 744h
 # Dashboard folders ported from daniel-server's Grafana (slice 3, B4). These are the
-# subdirectories of roles/containers/grafana/files/dashboards, which stays the single source of
+# subdirectories of roles/k8s/claude-otel/files/dashboards, which stays the single source of
 # truth for the JSON — the cluster mounts the same files rather than keeping a second copy.
 #
 # `AI` was excluded during B4 (uid collision with a vendored copy), reconciled 2026-08-07 into

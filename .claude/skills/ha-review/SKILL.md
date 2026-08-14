@@ -25,7 +25,7 @@ override with a bigger `model` (e.g. the session model).
 
 **The agent is read+write — explicitly instruct it to make NO changes, only review.** Its prompt must
 include:
-- its **scope**: the home-assistant role (`ansible/roles/containers/home-assistant/`) — automations,
+- its **scope**: the home-assistant role (`ansible/roles/k8s/home-assistant/`) — automations,
   scenes, scripts, template sensors/macros, configuration — plus live state via `scripts/probe.py ha …`;
 - the **repo conventions** — `containers/` is generated/read-only, so cite the ansible role source,
   never `containers/`;

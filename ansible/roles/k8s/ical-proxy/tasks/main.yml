@@ -7,11 +7,11 @@
     name: k8s/image-builder
   vars:
     image_builder_name: ical-proxy
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/containers/ical-proxy/templates/Dockerfile.j2"
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/ical-proxy/templates/Dockerfile.j2"
     # The one file the Dockerfile COPYs, at the exact context path the COPY names
     # (flat — ConfigMap keys cannot contain '/').
     image_builder_context:
-      "{{ playbook_dir }}/roles/containers/ical-proxy/files/app.py": app.py
+      "{{ playbook_dir }}/roles/k8s/ical-proxy/files/app.py": app.py
 
 - name: Deploy ical-proxy to the cluster
   ansible.builtin.include_role:

@@ -27,13 +27,13 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/k8s/monitor-bridge/files",
   "ansible/roles/k8s/autofix-bridge/files",
   "ansible/roles/setup/fake_remux/files",
-  "ansible/roles/containers/configarr/files",
+  "ansible/roles/k8s/configarr/files",
   "ansible/roles/k8s/configarr/files",             # cluster-side configarr health-reader logic
   "ansible/roles/k8s/janitorr/files",              # cluster-side janitorr health-reader logic
   "ansible/roles/setup/fake_remux/files",          # generic {ts,ok,msg} state-file pusher
   "ansible/roles/k8s/terraria-stats/files",       # player-stats aggregator logic (moved at the Phase F drain)
   "ansible/roles/k8s/valheim-stats/files",        # the Valheim sibling: adds deaths + a steamid<->name map
-  "ansible/roles/containers/ical-proxy/files",
+  "ansible/roles/k8s/ical-proxy/files",
   "ansible/roles/k8s/homelab-mcp/files",
   ".claude/hooks",
   ".claude/scripts",                 # audit-permissions report/suggester logic tests
@@ -41,7 +41,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/setup/gitops_deploy/files",   # deploy_logic decision tests
   "ansible/roles/setup/renovate_notify/files", # notifier decision tests
   "ansible/roles/setup/common/files",          # shared host_lib helper tests
-  "ansible/roles/containers/home-assistant/tests", # HA Jinja macro logic tests
+  "ansible/roles/k8s/home-assistant/tests", # HA Jinja macro logic tests
   "evals",                                         # homelab eval-case schema validation
 ]
 # `-n auto` (pytest-xdist) fans the suite across the machine's cores: 5.6s -> 3.0s locally, and

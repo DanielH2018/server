@@ -85,7 +85,7 @@
     # Copied rather than duplicated for the same reason host_lib.py is: the sibling copy is what
     # `import configarr_status` resolves at runtime, and a second edited copy is how two callers
     # quietly stop agreeing about what a failed sync looks like.
-    - "{{ role_path }}/../../containers/configarr/files/configarr_status.py"
+    - "{{ role_path }}/files/configarr_status.py"
   become: true
 
 - name: Deploy the configarr sync heartbeat

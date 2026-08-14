@@ -10,10 +10,10 @@
     name: k8s/image-builder
   vars:
     image_builder_name: code-server
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/containers/code-server/templates/Dockerfile.j2"
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/code-server/templates/Dockerfile.j2"
     # The one file the Dockerfile COPYs (flat — ConfigMap keys cannot contain '/').
     image_builder_context:
-      "{{ playbook_dir }}/roles/containers/code-server/files/extensions.sh": extensions.sh
+      "{{ playbook_dir }}/roles/k8s/code-server/files/extensions.sh": extensions.sh
     # texlive-latex-extra + the font packages pull ~2 G of apt on a cold cache; the default
     # 900 s is not enough for a first build.
     image_builder_timeout: 1800

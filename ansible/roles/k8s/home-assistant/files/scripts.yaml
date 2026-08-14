@@ -1,0 +1,916 @@
+---
+# Managed by Ansible (roles/k8s/home-assistant/files/scripts.yaml).
+# Source of truth — copied to ./config and overwritten on deploy. HA UI script edits are
+# NOT persistent. To change, edit this file and run:
+#   uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"
+#
+# These scripts define the bedroom lights' "natural" state: what they would be with no manual
+# intervention. Adaptive Lighting (AL) is the default governor (sun-curve color + brightness);
+# time-based EXCEPTIONS override brightness only inside their window. Button 1 (press -> on) on
+# the Tap Dial and the morning reset both call bedroom_apply_natural, so the ramp math lives in
+# one place.
+
+# Helper: turn the lights on at a caller-chosen brightness + AL's CURRENT natural color, in ONE
+# light.turn_on (no adaptive_lighting.apply, so no turn-on flash), then arm the color tracker
+# (input_number.bedroom_light_expected_color_temp). Every exception/default calls this so the
+# color-read + tracker wiring lives in one place — a new exception never repeats it.
+bedroom_set_natural_brightness:
+  alias: "Bedroom — set brightness with natural color"
+  description: >-
+    Turn the bedroom lights on at a caller-supplied brightness and Adaptive Lighting's CURRENT
+    natural color temperature, in a single light.turn_on (no AL turn-on flash). Arms the color
+    tracker (input_number.bedroom_light_expected_color_temp) so bedroom_color_track treats this
+    color as "auto". The explicit brightness marks the group manually controlled (AL take_over).
+  mode: restart
+  fields:
+    brightness_pct:
+      description: Target brightness percent (0-100).
+      required: true
+      example: 24
+    transition:
+      description: Fade duration in seconds.
+      required: true
+      example: 2
+  sequence:
+    # AL keeps COMPUTING its sun-curve color even while taken over, so its color_temp_kelvin
+    # attribute is the right "time of day" color to apply. Fallback 2700K if unavailable.
+    - variables:
+        al_ct: "{{ state_attr('switch.bedroom_adaptive_lighting_bedroom', 'color_temp_kelvin') | int(2700) }}"
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        brightness_pct: "{{ brightness_pct | int }}"
+        color_temp_kelvin: "{{ al_ct }}"
+        transition: "{{ transition | int }}"
+    # Arm the color tracker: record the color we just set so bedroom_color_track recognizes it as auto.
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.bedroom_light_expected_color_temp
+      data:
+        value: "{{ al_ct }}"
+
+# Phase-2 mediator: THE single sanctioned writer for the bedroom lights' HELD state. AUTO callers
+# pass a `reason`; light_decision (lighting.jinja) applies the gate for that reason and this
+# delegates to the existing primitive. The manual Tap Dial is exempt (it writes the lights directly
+# by design). Reasons: presence (gated: manual_off/sleep/home/presence/lux/light-off), natural &
+# wake (ungated — the caller pre-gated), off.
+bedroom_lights_set:
+  alias: "Bedroom — lights mediator (single guarded writer)"
+  description: >-
+    Single sanctioned writer for the bedroom lights' held state. Applies the per-reason gate via the
+    light_decision macro, then delegates to apply_natural / apply_wake / light.turn_off.
+  mode: restart
+  fields:
+    reason:
+      description: "presence | natural | wake | wake_fallback | off"
+      required: true
+      example: presence
+    brightness_pct:
+      description: "wake_fallback only: the ramp-frame brightness for THIS minute (the caller computes it from the wake_brightness curve)"
+      required: false
+      example: 12
+  sequence:
+    - variables:
+        action: >-
+          {% from 'lighting.jinja' import light_decision %}{{ light_decision(reason,
+            is_state('input_boolean.bedroom_manual_off', 'on'),
+            is_state('input_boolean.bedroom_sleep_mode', 'on'),
+            is_state('person.daniel', 'home'),
+            is_state('binary_sensor.aqara_fp300_presence', 'on'),
+            is_state('binary_sensor.bedroom_auto_light_allowed', 'on'),
+            is_state('light.bedroom_lights', 'on')) }}
+    - choose:
+        - conditions: "{{ action == 'natural' }}"
+          sequence:
+            - service: script.bedroom_apply_natural
+        - conditions: "{{ action == 'wake' }}"
+          sequence:
+            - service: script.bedroom_apply_wake
+        # Fallback wake frame: the real wake ramp (apply_wake) reads sensor.bedroom_wake_start, which
+        # is unavailable when no watch alarm fired — so the fallback passes the precomputed frame
+        # brightness (same wake_brightness curve) directly. Warm 2200K like apply_wake.
+        - conditions: "{{ action == 'wake_fallback' }}"
+          sequence:
+            - service: light.turn_on
+              target:
+                entity_id: light.bedroom_lights
+              data:
+                brightness_pct: "{{ brightness_pct | int }}"
+                color_temp_kelvin: 2200
+                transition: 60
+        - conditions: "{{ action == 'off' }}"
+          sequence:
+            - service: light.turn_off
+              target:
+                entity_id: light.bedroom_lights
+      # action == 'noop' (gated out, or unknown reason): do nothing.
+
+# Wake frame: set the lights to the current sunrise-ramp brightness for NOW (warm 2200K), computed
+# from sensor.bedroom_wake_start via the wake_brightness macro. bedroom_wake_ramp calls this every
+# minute through the 45-min window; bedroom_apply_natural's wake exception also calls it so a mid-ramp
+# resume (a presence re-trigger) recomputes the right frame. No-op when no morning alarm is set.
+bedroom_apply_wake:
+  alias: "Bedroom — apply wake ramp frame"
+  mode: restart
+  sequence:
+    - variables:
+        ws: "{{ states('sensor.bedroom_wake_start') }}"
+    - condition: template
+      value_template: "{{ ws not in ['unknown', 'unavailable'] }}"
+    - variables:
+        wake_elapsed_min: "{{ (now() - as_datetime(ws)).total_seconds() / 60 }}"
+        # Latched at the wake-window open by bedroom_morning_reset (NOT the live sensor) so the curve
+        # shape stays fixed for the whole window — see that automation + the input_number comment.
+        sleep_min: "{{ states('input_number.bedroom_wake_sleep_min_latched') | float(0) }}"
+        target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(wake_elapsed_min, sleep_min) | int }}"
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        brightness_pct: "{{ target }}"
+        color_temp_kelvin: 2200
+        transition: 60
+
+# Test-only: preview the morning wake ramp on demand, COMPRESSED. Sweeps the 45-min window's frames
+# (elapsed 0 -> 15 -> 30 -> 45 = window start -> alarm -> alarm+15 -> alarm+30) using the SAME tested
+# wake_brightness macro the production ramp uses, applying each with a short fade so you watch
+# 1% -> ~12% -> 40% -> 100% in ~40s — without waiting for a real alarm or touching
+# automation.bedroom_wake_ramp. Warm 2200K, like bedroom_apply_wake. Driven only by
+# script.bedroom_run_scenario (the test harness).
+bedroom_preview_wake:
+  alias: "Bedroom — preview wake ramp (test, compressed)"
+  description: >-
+    Sweep the wake ramp's brightness frames in ~30s for testing, reusing the wake_brightness macro.
+    Not part of the production wake path; invoked by the scenario test harness only.
+  mode: restart
+  sequence:
+    - repeat:
+        for_each: [0, 7.5, 15, 22.5, 30, 37.5, 45]
+        sequence:
+          - variables:
+              target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(repeat.item, states('sensor.pixel_9_pro_sleep_duration') | float(0)) | int }}"
+          - service: light.turn_on
+            target:
+              entity_id: light.bedroom_lights
+            data:
+              brightness_pct: "{{ target }}"
+              color_temp_kelvin: 2200
+              transition: 5
+          - delay: "00:00:06"
+
+# Dispatcher: set the bedroom lights to their natural state for RIGHT NOW. Ordered choose: of
+# time-based exceptions, with full Adaptive Lighting (color + brightness) as the default.
+# This is the single source of truth for "what is natural".
+#
+# To ADD a future exception, drop a block above `default:`:
+#   - conditions:
+#       - condition: template
+#         value_template: "{{ now() >= today_at('21:00') and now() < today_at('21:30') }}"
+#     sequence:
+#       - service: script.bedroom_set_natural_brightness
+#         data: {brightness_pct: 15, transition: 5}   # flat; a ramp computes these from now()
+bedroom_apply_natural:
+  alias: "Bedroom — apply natural lighting state"
+  description: >-
+    Set the bedroom lights to what they would be with no manual intervention: a time-based
+    exception's brightness on AL's natural color, or full Adaptive Lighting outside every window.
+  mode: restart
+  sequence:
+    # Pick the active exception ONCE via the tested natural_exception macro (nightlight vs wake vs
+    # default). in_window is computed here (entity reads stay in the caller) and passed in; the
+    # macro encodes the nightlight<->wake mutual exclusion (tested in test_lighting_macros.py).
+    - variables:
+        exception: >-
+          {% set ws = states('sensor.bedroom_wake_start') %}
+          {% from 'lighting.jinja' import in_wake_window, natural_exception %}
+          {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) %}
+          {{ natural_exception(is_state('input_boolean.bedroom_sleep_mode', 'on'), now().hour, in_window) }}
+    - choose:
+        # Exception: night-time "got up" dim nightlight (sleep mode OR 00:00-05:00, yielding to the
+        # wake window) — a presence re-trigger gives the warm dim scene instead of full lighting.
+        - conditions: "{{ exception == 'nightlight' }}"
+          sequence:
+            - service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_nightlight
+        # Exception: morning wake ramp (45-min window, alarm-15 to alarm+30). Delegated to
+        # script.bedroom_apply_wake (warm 2200K), driven per-minute by automation.bedroom_wake_ramp.
+        - conditions: "{{ exception == 'wake' }}"
+          sequence:
+            - service: script.bedroom_apply_wake
+      # Default: ambient-fill brightness (time of day + current ambient lux) on AL's natural color.
+      # Read illuminance while the lights are off -> true ambient. set_natural_brightness applies
+      # the color and arms the color tracker; bedroom_color_track then drifts color with the sun.
+      default:
+        - service: script.bedroom_set_natural_brightness
+          data:
+            brightness_pct: "{% from 'lighting.jinja' import natural_brightness %}{{ natural_brightness(now().hour, states('sensor.aqara_fp300_illuminance')) | int }}"
+            transition: 2
+
+# Gated dispatcher: apply the natural lighting state if the shared darkness gate allows
+# (binary_sensor.bedroom_auto_light_allowed = wake window OR illuminance < 75, defined in
+# templates.yaml) OR the sun is below the horizon — otherwise turn the lights OFF, i.e. produce the
+# same outcome the automatic presence path would in a bright room. Used ONLY by the Tap Dial button-1
+# HOLD ("reset to auto"); the manual taps call the ungated bedroom_apply_natural directly.
+# The sun term is the deterministic fix for the FP300 illuminance reporting lag (~100s, sleepy battery
+# sensor): right after a manual/voice off the bulbs go dark but sensor.aqara_fp300_illuminance still
+# reads the STALE lights-on value, so the pure lux gate refused to relight on the first HOLD (it only
+# blipped — you had to hold a second time once the sensor caught up). At night a stale-bright reading
+# is physically impossible, so sun-below-horizon guarantees the reset lights on the first press; by
+# day we still honor the live lux (a genuinely bright room stays off). Scoped to this HOLD path only —
+# the automatic presence gate (the binary_sensor, used by bedroom_presence_on / the Button-4 sleep-exit)
+# is unchanged. The button-1 HOLD blip condition is the exact complement of this `if` (keep them in sync).
+bedroom_apply_natural_gated:
+  alias: "Bedroom — apply natural lighting, lux-gated"
+  mode: restart
+  sequence:
+    - if: "{{ is_state('binary_sensor.bedroom_auto_light_allowed', 'on') or is_state('sun.sun', 'below_horizon') }}"
+      then:
+        - service: script.bedroom_apply_natural
+      else:
+        - service: light.turn_off
+          target:
+            entity_id: light.bedroom_lights
+
+# Exit sleep mode: release the night/sleep state — clear the sleep-mode flag AND Adaptive Lighting's
+# sleep mode (the bedtime routine sets BOTH). Called FIRST by every Tap Dial LIGHT action that is NOT
+# on the Sleep button (button 3): touching the normal lights means you're up, so sleep should release.
+# Running it FIRST matters — bedroom_apply_natural serves the nightlight exception while sleep_mode is
+# on, so clearing it beforehand is what lets a Button-1 tap give daytime light instead of amber. Mirrors
+# the morning reset's sleep-clearing hygiene (same two service calls, now a shared single source).
+bedroom_exit_sleep:
+  alias: "Bedroom — exit sleep mode"
+  mode: single
+  sequence:
+    - service: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.bedroom_sleep_mode
+    - service: switch.turn_off
+      target:
+        entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+
+# Clear every overnight override: the three coordination booleans (manual-off, fan-manual, sleep
+# mode) + Adaptive Lighting's sleep mode. SINGLE source of truth shared by
+# automation.bedroom_morning_reset (daily hygiene) and the test harness's `reset` scenario
+# (script.bedroom_run_scenario), so "return the room to a clean baseline" lives in ONE place. Does
+# NOT re-apply lights/fan — each caller does that itself (the morning reset relights only on the
+# alarm trigger; the test reset re-applies both).
+bedroom_clear_overrides:
+  alias: "Bedroom — clear overnight overrides"
+  description: >-
+    Turn off the three override booleans (bedroom_manual_off, bedroom_fan_manual, bedroom_sleep_mode)
+    and Adaptive Lighting's sleep mode. Shared by the morning reset and the test-harness reset.
+  mode: single
+  sequence:
+    - service: input_boolean.turn_off
+      target:
+        entity_id:
+          - input_boolean.bedroom_manual_off
+          - input_boolean.bedroom_fan_manual
+          - input_boolean.bedroom_sleep_mode
+    - service: switch.turn_off
+      target:
+        entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+
+# Air-quality alert pulse: a brief red flash to flag bad air, then restore EXACTLY what was
+# showing. Snapshots the current light state into a throwaway scene, flashes red, and restores
+# the snapshot — so a manual scene / the morning ramp / Adaptive Lighting all come back intact
+# (vs. forcing AL and clobbering a chosen scene). Caller (bedroom_threshold_alert) gates this
+# on the lights already being on and calls it as a blocking service, so calls serialize and the
+# snapshot can never capture the red pulse itself. mode: single is belt-and-suspenders on that.
+bedroom_alert_pulse:
+  alias: "Bedroom — air-quality alert pulse"
+  description: >-
+    Snapshot the bedroom lights, flash red for ~2s to flag bad air quality, then restore the
+    snapshot. Only meaningful when the lights are already on (the caller enforces that), so it
+    never wakes you and never fights Adaptive Lighting at night.
+  mode: single
+  sequence:
+    - service: scene.create
+      data:
+        scene_id: bedroom_pre_alert
+        snapshot_entities:
+          - light.bedroom_lights
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        rgb_color: [255, 0, 0]
+        brightness_pct: 60
+        transition: 0.3
+    - delay: "00:00:02"
+    - service: scene.turn_on
+      target:
+        entity_id: scene.bedroom_pre_alert
+      data:
+        transition: 0.5
+
+# THE single "blip" primitive — ONE source of truth for the too-bright acknowledgement flash.
+# Both callers reference THIS script so the flash can never drift: (1) automation
+# bedroom_presence_blip (a too-bright arrival) and (2) the Tap Dial Button 1 HOLD "reset to auto"
+# branch in bedroom_tap_dial_control. Any new "the lights stayed off on purpose, acknowledge it"
+# feedback should call this script — do NOT re-roll an inline flash.
+bedroom_blip:
+  alias: "Bedroom — too-bright acknowledgement blip"
+  description: >-
+    THE single source of truth for the bedroom "blip": a soft warm flash (off -> 15% warm 2700K ->
+    off) that acknowledges the lights deliberately stayed OFF because the room is too bright for
+    auto-on (the lux gate binary_sensor.bedroom_auto_light_allowed is blocking). Referenced by BOTH
+    bedroom_presence_blip (too-bright arrival) and the Tap Dial Button 1 HOLD reset branch, so the
+    two are identical by construction. Inverse of bedroom_alert_pulse: it only runs when the lights
+    are already OFF (each caller enforces that), so no scene snapshot is needed — a plain turn_off
+    restores the known prior state.
+  mode: single
+  sequence:
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        brightness_pct: 15
+        color_temp_kelvin: 2700
+        transition: 0.4
+    - delay: "00:00:01"
+    - service: light.turn_off
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        transition: 0.6
+
+# Fan: set the DREO tower fan to its target speed for the CURRENT temperature + time. Single source
+# of truth for the temperature->band mapping, the 0.5°F hysteresis deadband, and the 22:00-06:00
+# night cap (Medium max). Works in the fan's 9 discrete LEVELS, not raw %, because the DREO
+# integration math.ceil()s a requested % up to the next level (so e.g. "67%" would land on level 7
+# = 77%). Callers (bedroom_fan_temperature, the morning reset, Tap Dial button 3) gate on the
+# bedroom_fan_manual override themselves — this just applies the right level, and only commands the
+# fan when the target level actually differs (avoids churn + self-echo manual-detects).
+bedroom_apply_fan:
+  alias: "Bedroom — apply temperature fan state"
+  description: >-
+    Set fan.tower_fan from sensor.bedroom_airgradient_one_temperature (°F): a smooth curve of ~0.8
+    DREO level per °F (off below ~72°F, 72→L1 .. ~82→L9), with a ~0.7-level hysteresis deadband, a
+    max-L4 cap during 22:00-06:00, and in sleep mode an outdoor-temp seasonal floor (L2/L3/L4) up to
+    an L5 ceiling.
+  mode: restart
+  sequence:
+    - variables:
+        # Temperature (°F; -1 if the sensor is unavailable).
+        t: "{{ states('sensor.bedroom_airgradient_one_temperature') | float(-1) }}"
+        # The fan's current LEVEL (0 if off) from its reported %. pct_to_level/level_to_pct live in
+        # custom_templates/fan.jinja — the single source of truth for the % <-> level conversion,
+        # shared with bedroom_fan_manual_detect so the round-trip can't drift.
+        cur_pct: "{{ state_attr('fan.tower_fan', 'percentage') | float(0) if is_state('fan.tower_fan', 'on') else 0 }}"
+        cur_level: "{% from 'fan.jinja' import pct_to_level %}{{ pct_to_level(cur_pct) | int }}"
+        # Clock + sleep flag + outdoor temp stay here (entity/time reads); the curve, hysteresis
+        # deadband, the night cap, and the sleep-mode seasonal floor/ceiling live in fan.jinja's
+        # fan_target_level (single source of truth, unit-tested in tests/test_fan_macros.py). TUNE
+        # the curve/bands there.
+        is_night: "{{ now().hour >= 22 or now().hour < 6 }}"
+        sleep: "{{ is_state('input_boolean.bedroom_sleep_mode', 'on') }}"
+        # Outdoor temp (°F) picks the sleep-mode seasonal floor/ceiling band; -999 when weather is
+        # unavailable -> winter band (quiet L2 floor).
+        outdoor_t: "{{ state_attr('weather.forecast_home', 'temperature') | float(-999) }}"
+        target_level: "{% from 'fan.jinja' import fan_target_level %}{{ fan_target_level(t, cur_level, is_night, sleep, outdoor_t) | int }}"
+        # % to SEND to hit target_level despite the integration's ceil (level -> midpoint %, via the
+        # shared fan.jinja macro): the midpoint of the level's range ceils to exactly L. 0 = off.
+        send_pct: "{% from 'fan.jinja' import level_to_pct %}{{ level_to_pct(target_level) | int }}"
+    # Sensor unavailable (t < 0) → do nothing rather than switch the fan off.
+    - condition: template
+      value_template: "{{ t >= 0 }}"
+    # Record the level we're about to command BEFORE issuing it, so bedroom_fan_manual_detect can
+    # tell our own (parent-less) cloud echo from a real manual change.
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.bedroom_fan_expected_level
+      data:
+        value: "{{ target_level }}"
+    - choose:
+        # Level 0 — turn the fan off only if it is currently on.
+        - conditions: "{{ target_level == 0 }}"
+          sequence:
+            - if: "{{ is_state('fan.tower_fan', 'on') }}"
+              then:
+                - service: fan.turn_off
+                  target:
+                    entity_id: fan.tower_fan
+      # On bands — set the speed only if the current level differs from the target.
+      default:
+        - if: "{{ not is_state('fan.tower_fan', 'on') or (cur_level != target_level) }}"
+          then:
+            - service: fan.turn_on
+              target:
+                entity_id: fan.tower_fan
+            - service: fan.set_percentage
+              target:
+                entity_id: fan.tower_fan
+              data:
+                percentage: "{{ send_pct }}"
+
+# Phase-2 fan mediator: front door for the fan's non-temperature writes. `auto` delegates the
+# temperature curve + caps (apply_fan); `boost` is the notification "Boost fan" action (max, engages
+# the manual override + arms the expected-level accumulator so the cloud echo isn't re-flagged);
+# `off` is the away turn-off. The Tap Dial + the temperature automations call apply_fan/fan_nudge
+# directly (sanctioned module members), so they are unchanged.
+bedroom_fan_set:
+  alias: "Bedroom — fan mediator"
+  description: "auto -> temperature band (apply_fan); boost -> max + manual override; off -> turn off."
+  mode: restart
+  fields:
+    reason:
+      description: "auto | boost | off"
+      required: true
+      example: auto
+  sequence:
+    - choose:
+        - conditions: "{{ reason == 'auto' }}"
+          sequence:
+            - service: script.bedroom_apply_fan
+        - conditions: "{{ reason == 'boost' }}"
+          sequence:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.bedroom_fan_manual
+            # Arm the accumulator to the level 100% maps to (9 = L9, the top of the DREO's 9 levels —
+            # see pct_to_level in fan.jinja) BEFORE commanding, so bedroom_fan_manual_detect treats the
+            # parent-less cloud echo as expected, not an external manual change. If the fan is ever
+            # swapped for a different level count, this 9 must track that count.
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.bedroom_fan_expected_level
+              data:
+                value: 9
+            - service: fan.turn_on
+              target:
+                entity_id: fan.tower_fan
+            - service: fan.set_percentage
+              target:
+                entity_id: fan.tower_fan
+              data:
+                percentage: 100
+        - conditions: "{{ reason == 'off' }}"
+          sequence:
+            - service: fan.turn_off
+              target:
+                entity_id: fan.tower_fan
+
+# Nudge the fan one DREO level (Tap Dial fan-dial mode: dial = +/-1 level). Driven off the
+# input_number.bedroom_fan_expected_level ACCUMULATOR (instant + server-side) rather than the fan's
+# laggy cloud-pushed percentage, so rapid dial turns accumulate correctly. Engages the manual
+# override (a hand-dialed fan is a manual change); writes the new expected level so
+# bedroom_fan_manual_detect treats our own cloud echo as expected (not an external change). Ignores
+# the night/sleep caps by design — you're explicitly in control. The level PERSISTS after fan-dial
+# mode reverts; clear it via Tap Dial button-4 tap or the morning reset. The % <-> level conversion
+# and the clamp live in fan.jinja (single source of truth).
+bedroom_fan_nudge:
+  alias: "Bedroom — nudge fan one level (Tap Dial fan-dial mode)"
+  description: >-
+    Step fan.tower_fan up/down one DREO level (clamped 0-9, 0 = off) from the
+    bedroom_fan_expected_level accumulator. Engages the manual fan override.
+  mode: queued
+  max: 10
+  fields:
+    delta:
+      description: "+1 to step up a level, -1 to step down."
+      example: 1
+  sequence:
+    - variables:
+        new_level: "{% from 'fan.jinja' import fan_nudge_level %}{{ fan_nudge_level(states('input_number.bedroom_fan_expected_level') | int(0), delta) | int }}"
+        send_pct: "{% from 'fan.jinja' import level_to_pct %}{{ level_to_pct(new_level) | int }}"
+    # Manual override: a hand-dialed fan must not be stomped by the temperature automation.
+    - service: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.bedroom_fan_manual
+    # Accumulator = source of truth (instant); also = expected level, so the parent-less cloud echo
+    # isn't mis-flagged as an external manual change by bedroom_fan_manual_detect.
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.bedroom_fan_expected_level
+      data:
+        value: "{{ new_level }}"
+    - choose:
+        # Level 0 — turn the fan off only if it's currently on.
+        - conditions: "{{ new_level | int == 0 }}"
+          sequence:
+            - if: "{{ is_state('fan.tower_fan', 'on') }}"
+              then:
+                - service: fan.turn_off
+                  target:
+                    entity_id: fan.tower_fan
+      default:
+        - service: fan.turn_on
+          target:
+            entity_id: fan.tower_fan
+        - service: fan.set_percentage
+          target:
+            entity_id: fan.tower_fan
+          data:
+            percentage: "{{ send_pct }}"
+
+# Bedtime / sleep routine: the single "going to sleep" action, shared by the bedroom_bedtime
+# automation (phone Bedtime mode) and the Tap Dial button-3 (Sleep) hold. Engages sleep mode (which caps the
+# fan to Low via bedroom_apply_fan — quiet but still temperature-responsive, NOT frozen), flips
+# Adaptive Lighting into sleep mode (warm/dim), and fades to the warm nightlight scene over 30 min. The morning reset
+# unwinds sleep mode + AL sleep mode. NOT gated on presence (sets the room up for sleep even if you're
+# brushing teeth); the caller gates on person==home so it never runs while away.
+bedroom_bedtime:
+  alias: "Bedroom — bedtime / sleep routine"
+  description: >-
+    Engage sleep mode (quiet fan cap), Adaptive Lighting sleep mode, and fade to the warm nightlight
+    scene over 30 min. Keeps the fan temperature-responsive but quiet; does not freeze it.
+  mode: single
+  fields:
+    fade:
+      description: Nightlight fade duration in seconds (default 1800 = 30 min).
+      required: false
+      example: 1800
+  sequence:
+    - service: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.bedroom_sleep_mode
+    # Mark AL hands-off FIRST so enabling AL sleep mode below can't force a ~45s pre-dim to
+    # sleep_brightness before the fade — the fade must be the only brightness change.
+    - service: adaptive_lighting.set_manual_control
+      data:
+        entity_id: switch.bedroom_adaptive_lighting_bedroom
+        manual_control: true
+    # The ONLY brightness change: a smooth 30-min fade from the current level to amber 3%. The bulb
+    # ramps internally (single Zigbee command, ZCL caps ~6553s), so an HA/Z2M restart mid-fade
+    # doesn't abort it. Lengthened 900 -> 1800 (2026-06-23): the 15-min descent felt too fast.
+    - service: scene.turn_on
+      target:
+        entity_id: scene.bedroom_nightlight
+      data:
+        transition: "{{ fade | default(1800) | int }}"
+    # Set AL's sleep target (warm/dim) for after the morning reset releases control. Harmless now —
+    # AL is already hands-off, so this can't move the lights.
+    - service: switch.turn_on
+      target:
+        entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+    # Re-apply the fan so the Low sleep cap takes effect now (gated on the manual-fan override).
+    - if: "{{ is_state('input_boolean.bedroom_fan_manual', 'off') }}"
+      then:
+        - service: script.bedroom_apply_fan
+
+# Routed notification: the single cross-cutting layer EVERY bedroom alert calls. Picks the Android
+# channel + importance from the alert's flags and the live "quiet" state (phone DND on OR sleep mode
+# on): `pierce` always sounds (high importance — can bypass DND if you allow the "Bedroom critical"
+# channel in Android); otherwise silent (low) while quiet, default when not. `watch` also mirrors to
+# the Pixel Watch. Flags default false so a bare call is routine + phone-only. ONE-TIME phone setup:
+# mark the "Bedroom critical" channel as a DND exception (Settings → Apps → Home Assistant →
+# Notifications) after the first critical alert creates it — high importance alone doesn't pierce DND.
+bedroom_notify:
+  alias: "Bedroom — routed notification"
+  description: >-
+    Send a bedroom alert with DND-aware channel/importance and optional watch mirroring. `pierce`
+    sounds even while quiet (DND/sleep); else silent while quiet. `watch` also buzzes the wrist.
+  fields:
+    title:
+      description: Notification title.
+      required: true
+    message:
+      description: Notification body.
+      required: true
+    tag:
+      description: Coalescing tag (a new alert with the same tag replaces the old one).
+      required: true
+    watch:
+      description: Also send to the Pixel Watch.
+      required: false
+      example: true
+    pierce:
+      description: Sound even while quiet (DND/sleep) via the high-importance channel.
+      required: false
+      example: true
+    critical_away:
+      description: >-
+        Deliver to the phone even while AWAY (bypass the away-hold) instead of parking it for the
+        arrival digest — for damage-class alerts (e.g. extreme temperature) whose whole point is to
+        reach you when nobody's home. Does NOT pierce DND at home (lower tier than `pierce`).
+      required: false
+      example: true
+    recovery:
+      description: This is an "all clear" — while away it cancels the held alert with the same tag instead of being delivered.
+      required: false
+      example: true
+    actions:
+      description: List of {action, title} button dicts for actionable notifications (phone only).
+      required: false
+      example: "[{action: BEDROOM_BOOST_FAN, title: Boost fan}]"
+  mode: parallel
+  max: 10
+  sequence:
+    - variables:
+        quiet: >-
+          {{ states('sensor.pixel_9_pro_do_not_disturb_sensor') not in ['off', 'unknown', 'unavailable']
+             or is_state('input_boolean.bedroom_sleep_mode', 'on') }}
+        importance: "{{ 'high' if (pierce | default(false)) else ('low' if quiet else 'default') }}"
+        channel: "{{ 'Bedroom critical' if (pierce | default(false)) else 'Bedroom alerts' }}"
+        away: "{{ states('person.daniel') not in ['home', 'unknown', 'unavailable'] }}"
+    # Away-aware hold: while you're outside the home geofence, non-critical alerts are parked as a
+    # persistent_notification (id hold_<tag>) instead of pushed — then either cancelled by their
+    # recovery (same tag) or flushed as a digest on arrival (bedroom_flush_held_notifications).
+    # Two flags fall straight through to the normal push instead of being held: `pierce` (the
+    # can't-miss tier) and `critical_away` (damage-class alerts like extreme temperature whose
+    # entire purpose is to reach you WHILE away — held-then-digested would defeat them; unlike
+    # pierce they don't also sound through DND at home). `away` fails open (unknown/unavailable ->
+    # deliver) so a tracker glitch over-notifies rather than swallowing.
+    - if: "{{ away and not (pierce | default(false)) and not (critical_away | default(false)) }}"
+      then:
+        - if: "{{ recovery | default(false) }}"
+          then:
+            # Resolved while away -> drop the held alert; you'll never see it.
+            - service: persistent_notification.dismiss
+              data:
+                notification_id: "hold_{{ tag }}"
+            # Also dismiss the bare-`tag` visibility note the fallback below creates when a
+            # watch/pierce-tier alert first fired WHILE HOME: this branch `stop`s before that
+            # fallback, so without this a recover-while-away strands a stale "⚠️" note (air
+            # quality / sensor-offline / UPS / zigbee-bridge) contradicting live state. Dismiss
+            # of an absent id no-ops, so it's safe for tags that never created a bare note.
+            - service: persistent_notification.dismiss
+              data:
+                notification_id: "{{ tag }}"
+          else:
+            # Park it (same tag updates in place) — held until you get home.
+            - service: persistent_notification.create
+              data:
+                notification_id: "hold_{{ tag }}"
+                title: "{{ title }}"
+                message: "{{ message }}"
+        - stop: "held while away (non-critical)"
+    # continue_on_error on both pushes: without it a renamed notify service (re-paired
+    # phone/watch → new notify.mobile_app_* slug) raises ServiceNotFound and ABORTS the
+    # script HERE — skipping the visibility fallback below, the exact failure it exists
+    # for (2026-07-03 review; the watch rename already happened once, 2026-06-20).
+    # Do not remove.
+    - service: notify.mobile_app_pixel_9_pro
+      continue_on_error: true
+      data:
+        title: "{{ title }}"
+        message: "{{ message }}"
+        data:
+          tag: "{{ tag }}"
+          channel: "{{ channel }}"
+          importance: "{{ importance }}"
+          # Action buttons (empty list = none). Taps fire mobile_app_notification_action ->
+          # bedroom_notification_action dispatches on the BEDROOM_* action id.
+          actions: "{{ actions | default([]) }}"
+    - if: "{{ watch | default(false) }}"
+      then:
+        - service: notify.mobile_app_pixel_watch_3
+          continue_on_error: true
+          data:
+            title: "{{ title }}"
+            message: "{{ message }}"
+            data:
+              tag: "{{ tag }}"
+    # Visibility fallback for the ELEVATED tiers (pierce / watch / critical_away): the alert ALSO lands
+    # in the HA UI as a persistent notification, so a critical/elevated event stays visible even if the
+    # mobile push silently fails (lapsed FCM token, or a re-paired phone → the notify.mobile_app_*
+    # service renamed → a service_not_found swallowed by the pushes' continue_on_error above —
+    # which is what makes this block reachable in that case). This is the backstop the runtime-error alert
+    # can't be: it deliberately ignores script.bedroom_notify's OWN logger to avoid a loop, so a broken
+    # notify service is otherwise invisible for these tiers (sensor-offline, air quality, extreme-temp
+    # away, UPS). notification_id = tag (a repeat replaces in place); a recovery — every recovery
+    # call-site passes recovery: true with the SAME tag — DISMISSES it once the condition clears.
+    # Severe air quality sets `pierce` but sends NO recovery push (cfg.recovery false) — the moderate
+    # recovery covers the all-clear; its persistent note is instead dismissed directly by the threshold
+    # automation's recovery else-branch (bedroom_threshold_alert) so the UI doesn't keep showing HIGH
+    # after recovery. Routine phone-only alerts (battery/humidity, and most recoveries) create no note;
+    # a stray dismiss of an absent id no-ops.
+    - choose:
+        - conditions: "{{ recovery | default(false) }}"
+          sequence:
+            - service: persistent_notification.dismiss
+              data:
+                notification_id: "{{ tag }}"
+        - conditions: "{{ (pierce | default(false)) or (watch | default(false)) or (critical_away | default(false)) }}"
+          sequence:
+            - service: persistent_notification.create
+              data:
+                notification_id: "{{ tag }}"
+                title: "{{ title }}"
+                message: "{{ message }}"
+
+# Test harness: run the selected scenario (input_select.bedroom_test_scenario) at the selected speed
+# (input_select.bedroom_test_speed = fast -> compressed ~30s + EPHEMERAL, real -> production timing + kept).
+# Drives the REAL scripts/automations so what you see is what fires for real — never a reimplementation.
+# FAST mode is a PREVIEW: it snapshots the room (sticky flags + light/fan via scene.create), runs the
+# scenario, then restores the exact prior state after an observe window — so e.g. bedtime's sleep_mode
+# doesn't stick. `reset` (the baseline) and real mode are NOT wrapped. Narrates as a persistent_notification
+# (id test_scenario, updates in place). Invoked by the dashboard Run button (ui-lovelace.yaml.j2). DIRECT
+# light write = the nightlight branch's scene.turn_on (sanctioned_writers light exemption); the restore
+# writes the 3 override booleans (declared in expected_override_writers.yml). The bedroom_pre_test
+# scene.turn_on restores the fan at runtime but is NOT a tracked write (runtime scene, not in scene_map).
+bedroom_run_scenario:
+  alias: "Bedroom — run test scenario"
+  description: >-
+    Exercise a bedroom scenario on demand (bedtime/wake/nightlight/away/arrive/reset) at compressed or
+    real speed, driving the real scripts/automations — for testing without waiting for night or
+    leaving home.
+  # CAVEAT (test-only tool): mode:restart + an in-sequence restore means pressing Run again DURING
+  # the observe window aborts the in-flight restore, leaving the snapshotted sticky flags
+  # (sleep_mode/manual_off/...) as the scenario set them. Recover with the `reset` scenario (or a
+  # Tap Dial reset). Acceptable for a manual test card; let one preview finish before starting the next.
+  mode: restart
+  sequence:
+    - variables:
+        scenario: "{{ states('input_select.bedroom_test_scenario') }}"
+        fast: "{{ is_state('input_select.bedroom_test_speed', 'fast') }}"
+        # Fast = ephemeral preview: snapshot the room, run the scenario, then restore the exact prior
+        # state. `reset` is the baseline (never wrapped); off/none never ran a scenario.
+        wrap: "{{ fast and scenario in ['bedtime', 'wake', 'nightlight', 'away', 'arrive'] }}"
+        # Observe window (s) before restore: bedtime's fade is async on the bulb (wait 30s);
+        # preview_wake already blocks ~30s while it sweeps (1s buffer); the instant ones get a few.
+        observe: "{{ 30 if scenario == 'bedtime' else (1 if scenario == 'wake' else 4) }}"
+    # Snapshot (fast preview only): capture the four sticky flags as sequence variables (in scope for
+    # the whole sequence) + the visible light/fan state via scene.create, so the restore below returns
+    # the room EXACTLY to its pre-test state. Same scene.create trick as bedroom_alert_pulse.
+    - if: "{{ wrap }}"
+      then:
+        - variables:
+            snap_sleep: "{{ states('input_boolean.bedroom_sleep_mode') }}"
+            snap_manual_off: "{{ states('input_boolean.bedroom_manual_off') }}"
+            snap_fan_manual: "{{ states('input_boolean.bedroom_fan_manual') }}"
+            snap_al_sleep: "{{ states('switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom') }}"
+            # AL pause state, by COUNT only (manual_control lists member BULBS, not the
+            # group — never test membership): the bedtime preview pauses AL via
+            # set_manual_control, which the scene/flag restores below don't touch.
+            snap_al_manual_empty: "{{ (state_attr('switch.bedroom_adaptive_lighting_bedroom', 'manual_control') or []) | count == 0 }}"
+        - service: scene.create
+          data:
+            scene_id: bedroom_pre_test
+            snapshot_entities:
+              - light.bedroom_lights
+              - fan.tower_fan
+    - choose:
+        # Bedtime fade — fast passes a 30s fade; real uses the production 30-min fade.
+        - conditions: "{{ scenario == 'bedtime' }}"
+          sequence:
+            - service: script.bedroom_bedtime
+              data:
+                fade: "{{ 30 if fast else 1800 }}"
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: bedtime ({{ 'fast' if fast else 'real' }})"
+                message: >-
+                  Engaged sleep mode + AL sleep; fading to amber 3% over
+                  {{ '30s' if fast else '30 min' }}; fan capped to Low. Run `reset` to clear.
+        # Wake ramp — fast sweeps the frames in ~30s; real applies the current frame only (the
+        # production per-minute ramp is alarm-driven — set a morning watch alarm to see it live).
+        - conditions: "{{ scenario == 'wake' }}"
+          sequence:
+            - if: "{{ fast }}"
+              then:
+                - service: script.bedroom_preview_wake
+              else:
+                - service: script.bedroom_apply_wake
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: wake ({{ 'fast' if fast else 'real' }})"
+                message: >-
+                  {{ 'Swept the wake ramp 1% to 12% to 40% to 100% in ~40s (warm 2200K).' if fast
+                     else 'Applied the current wake frame. The real ramp is alarm-driven — set a
+                     morning watch alarm to see it live.' }}
+        # Nightlight — the dim amber "got up overnight" scene, instantly.
+        - conditions: "{{ scenario == 'nightlight' }}"
+          sequence:
+            - service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_nightlight
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: nightlight"
+                message: "Applied scene.bedroom_nightlight (amber 3%). Run `reset` to return to normal."
+        # Away — ensure the lights are on (so there's something to turn off), then trigger the REAL
+        # away automation (skip_condition: its 10-min person trigger can't be faked).
+        - conditions: "{{ scenario == 'away' }}"
+          sequence:
+            - if: "{{ is_state('light.bedroom_lights', 'off') }}"
+              then:
+                - service: script.bedroom_lights_set
+                  data:
+                    reason: "natural"
+                - delay: "00:00:02"
+            - service: automation.trigger
+              target:
+                entity_id: automation.bedroom_away
+              data:
+                skip_condition: true
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: away"
+                message: >-
+                  Triggered the away response: bedroom lights + fan off, "Left on" notification sent.
+                  (The away notification-HOLD path needs a real away state — set person.daniel to
+                  not_home in Developer Tools then Set State to test that.)
+        # Arrive home — trigger the real arrive automation (its inline conditions still run).
+        - conditions: "{{ scenario == 'arrive' }}"
+          sequence:
+            - service: automation.trigger
+              target:
+                entity_id: automation.bedroom_arrive_home
+              data:
+                skip_condition: true
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: arrive"
+                message: >-
+                  Triggered arrive-home: fan resumes per temperature; lights re-check only if FP300
+                  present, not manual-off, and currently off.
+        # Reset — clear every override and return to a clean daytime baseline.
+        - conditions: "{{ scenario == 'reset' }}"
+          sequence:
+            - service: script.bedroom_clear_overrides
+            - service: script.bedroom_lights_set
+              data:
+                reason: "natural"
+            - service: script.bedroom_fan_set
+              data:
+                reason: "auto"
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: reset"
+                message: "Cleared overrides + AL sleep; re-applied natural lighting + temperature fan."
+      default:
+        - service: persistent_notification.create
+          data:
+            notification_id: test_scenario
+            title: "🧪 Scenario: none"
+            message: "Pick a scenario (not 'off') in the picker, then press Run."
+    # Restore (fast preview only): after the observe window, put the room back EXACTLY as it was — the
+    # visible light/fan state (from the snapshot scene) + the four sticky flags. This is what makes fast
+    # mode ephemeral (e.g. bedtime's sleep_mode no longer sticks). Real mode skips this entirely.
+    - if: "{{ wrap }}"
+      then:
+        - delay: "{{ observe }}"
+        - service: scene.turn_on
+          target:
+            entity_id: scene.bedroom_pre_test
+          data:
+            transition: 1
+        - if: "{{ snap_sleep == 'on' }}"
+          then:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.bedroom_sleep_mode
+          else:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_sleep_mode
+        - if: "{{ snap_manual_off == 'on' }}"
+          then:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.bedroom_manual_off
+          else:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_manual_off
+        - if: "{{ snap_fan_manual == 'on' }}"
+          then:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.bedroom_fan_manual
+          else:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_fan_manual
+        - if: "{{ snap_al_sleep == 'on' }}"
+          then:
+            - service: switch.turn_on
+              target:
+                entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+          else:
+            - service: switch.turn_off
+              target:
+                entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+        # Un-pause AL when the preview paused it: bedtime marks the bulbs manual_control
+        # (hands-off) and neither the snapshot scene nor the flags above clear that — without
+        # this, a fast bedtime preview left AL not adapting until the next wake release
+        # (2026-07-03 review). Only when the pre-test list was empty — a room that was
+        # genuinely paused before the test stays paused; the clear no-ops if already clear.
+        - if: "{{ snap_al_manual_empty }}"
+          then:
+            - service: adaptive_lighting.set_manual_control
+              data:
+                entity_id: switch.bedroom_adaptive_lighting_bedroom
+                manual_control: false
+        # The 'away' preview fires bedroom_away, which (person home during a test -> not held)
+        # pushes + leaves the "🏠 Left on" persistent note (id bedroom_away). Clear it so a fast
+        # preview cleans up after itself; a stray dismiss of an absent id no-ops for every other
+        # scenario, matching bedroom_arrive_home's own dismiss of this id.
+        - service: persistent_notification.dismiss
+          data:
+            notification_id: bedroom_away
+        - service: persistent_notification.create
+          data:
+            notification_id: test_scenario
+            title: "↩️ Preview restored"
+            message: "Fast preview complete — restored the room to its pre-test state."

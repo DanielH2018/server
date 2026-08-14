@@ -58,7 +58,7 @@ If the setting changes what HA sees (e.g. presence hold behavior), verify downst
 ## 4. Record it (the part people forget)
 
 Document the applied setting + value + rationale in
-`ansible/roles/containers/home-assistant/CLAUDE.md` (the FP300 tuning is already noted there),
+`ansible/roles/k8s/home-assistant/CLAUDE.md` (the FP300 tuning is already noted there),
 so it survives a re-pair and the next person knows it's intentional runtime state, not drift.
 
 ## Related

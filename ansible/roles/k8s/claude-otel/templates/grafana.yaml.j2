@@ -47,7 +47,7 @@ data:
           nodeGraph:
             enabled: true
       # --- Aliases carrying daniel-server's Grafana uids (slice 3, B4) ------------------
-      # Every dashboard in roles/containers/grafana/files/dashboards references its datasource
+      # Every dashboard in roles/k8s/claude-otel/files/dashboards references its datasource
       # by UID — `EGdsQqhVk` and `bf4q19tuivta8e`, baked into each panel; none references one by
       # NAME, so these aliases are free to be named whatever reads clearly. D6's lever is that a
       # matching uid makes all of them work here with no edit at all.
@@ -86,7 +86,7 @@ data:
   dashboards.yaml: |
     apiVersion: 1
     providers:
-      # Every board, from roles/containers/grafana/files/dashboards — one provider, because
+      # Every board, from roles/k8s/claude-otel/files/dashboards — one provider, because
       # foldersFromFilesStructure derives the Grafana folder from the directory name and so
       # reproduces the AI/Apps/Infrastructure/Logs/Networking/Security layout without naming any
       # of them here. The Claude Code board had its own provider until the two copies were

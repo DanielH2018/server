@@ -1,0 +1,186 @@
+# Managed by Ansible (roles/k8s/home-assistant) — ROOT YAML-mode dashboard.
+# This file IS the Home Assistant landing page (lovelace: mode: yaml). Edit here + deploy
+# (recreates HA), or for a faster loop edit the rendered file and use
+# Developer Tools → YAML → "Reload Lovelace" to apply without an HA restart.
+# Built-in cards only (no HACS resources required).
+title: Home
+views:
+  - title: Bedroom
+    path: bedroom
+    icon: mdi:bed
+    # Pin this view to the dark theme (defined in configuration.yaml.j2 frontend:) so it renders
+    # dark when cast to the Nest Hub — the cast receiver has no logged-in user, so it ignores the
+    # app/browser dark-mode profile and would otherwise show light. A view-level theme is forced
+    # regardless of device/user, so it also makes this dashboard dark on the phone/browser (already
+    # dark there, so no change). Remove this line to fall back to the per-user/default theme.
+    theme: nest_dark
+    cards:
+      # ── APC UPS ──────────────────────────────────────────────────────────
+      - type: vertical-stack
+        cards:
+          - type: horizontal-stack
+            cards:
+              - type: gauge
+                entity: sensor.apc_ups_battery_charge
+                name: Battery
+                unit: "%"
+                min: 0
+                max: 100
+                severity:
+                  green: 60
+                  yellow: 30
+                  red: 0
+              - type: gauge
+                entity: sensor.apc_ups_load
+                name: Load
+                unit: "%"
+                min: 0
+                max: 100
+                severity:
+                  green: 0
+                  yellow: 60
+                  red: 85
+          - type: entities
+            title: APC UPS
+            icon: mdi:power-plug
+            entities:
+              # NUT disables most sensors by default (disabled_by: integration); only
+              # enabled apc_ups sensors are used here. Runtime was enabled in the UI
+              # 2026-06-17 (disabled by default) — keep it enabled or this row breaks.
+              - entity: sensor.apc_ups_status
+                name: Status
+              - entity: sensor.apc_ups_battery_runtime
+                name: Runtime
+              - entity: sensor.apc_ups_input_voltage
+                name: Input Voltage
+      # ── AirGradient ONE air quality (the metrics the threshold alerts fire on) ──
+      - type: vertical-stack
+        cards:
+          - type: gauge
+            entity: sensor.bedroom_airgradient_one_carbon_dioxide
+            name: CO₂
+            unit: ppm
+            min: 400
+            max: 2500
+            # Mirrors the alert tiers: green to the moderate band, yellow up to severe, red past it.
+            severity:
+              green: 400
+              yellow: 1000
+              red: 1500
+          - type: glance
+            title: Air Quality
+            columns: 3
+            entities:
+              - entity: sensor.bedroom_airgradient_one_pm2_5
+                name: PM2.5
+              - entity: sensor.bedroom_airgradient_one_voc_index
+                name: VOC
+              - entity: sensor.bedroom_airgradient_one_nox_index
+                name: NOx
+              - entity: sensor.bedroom_airgradient_one_humidity
+                name: Humidity
+              - entity: sensor.bedroom_airgradient_one_temperature
+                name: Temp
+              - entity: sensor.bedroom_airgradient_one_pm10
+                name: PM10
+      # ── Outdoor weather + air quality (Met.no forecast + Open-Meteo AQI) ──
+      - type: vertical-stack
+        cards:
+          - type: weather-forecast
+            entity: weather.forecast_home
+            name: Outdoor
+            show_current: true
+            show_forecast: true
+            forecast_type: daily
+          - type: glance
+            title: Outdoor Air
+            columns: 4
+            entities:
+              - entity: sensor.outdoor_us_aqi
+                name: US AQI
+              - entity: sensor.outdoor_pm2_5
+                name: PM2.5
+              - entity: sensor.outdoor_pm10
+                name: PM10
+              - entity: sensor.outdoor_ozone
+                name: Ozone
+      # ── DREO Tower Fan (DR-HTF024S) ──────────────────────────────────────
+      - type: vertical-stack
+        cards:
+          - type: tile
+            entity: fan.tower_fan
+            name: Tower Fan
+            features:
+              - type: fan-speed
+          - type: entities
+            title: Tower Fan
+            icon: mdi:fan
+            entities:
+              - entity: sensor.tower_fan_temperature
+                name: Temperature
+              # Template switch (files/templates.yaml) — DREO exposes oscillation only as the
+              # fan.tower_fan `oscillating` attribute, not a native switch entity.
+              - entity: switch.tower_fan_oscillation
+                name: Oscillation
+              - entity: switch.tower_fan_display_auto_off
+                name: Display Auto-Off
+              - entity: switch.tower_fan_panel_sound
+                name: Panel Sound
+      # ── Bedroom lighting + automation overrides ──────────────────────────
+      - type: vertical-stack
+        cards:
+          # Light tile with inline brightness + color-temperature sliders (built-in tile
+          # features — no HACS). Tap the tile to open HA's more-info dialog for the full
+          # RGB color wheel (the Hue bulbs are color_temp + xy capable).
+          - type: tile
+            entity: light.bedroom_lights
+            name: Bedroom Lights
+            features:
+              - type: light-brightness
+              - type: light-color-temp
+          - type: entities
+            title: Bedroom Controls
+            icon: mdi:tune
+            entities:
+              - entity: switch.bedroom_adaptive_lighting_bedroom
+                name: Adaptive Lighting
+              - type: section
+                label: Automation overrides
+              # On = presence won't auto-on the lights (Tap Dial button 1 sets it; morning reset clears).
+              - entity: input_boolean.bedroom_manual_off
+                name: Hold lights off
+              # On = temperature automation won't drive the fan (Tap Dial button 3 / morning reset clears).
+              - entity: input_boolean.bedroom_fan_manual
+                name: Fan manual
+              # On = quiet fan cap + AL sleep mode (bedtime sets it; morning reset clears).
+              - entity: input_boolean.bedroom_sleep_mode
+                name: Sleep mode
+      # ── Aqara FP300 presence sensor (essentials only) ────────────────────
+      - type: glance
+        title: Aqara FP300
+        columns: 2
+        entities:
+          - entity: binary_sensor.aqara_fp300_presence
+            name: Presence
+          - entity: sensor.aqara_fp300_temperature
+            name: Temperature
+          - entity: sensor.aqara_fp300_illuminance
+            name: Illuminance
+          - entity: sensor.aqara_fp300_battery
+            name: Battery
+      # ── 🧪 Test scenarios (dev harness — script.bedroom_run_scenario) ─────
+      - type: entities
+        title: 🧪 Test scenarios
+        icon: mdi:test-tube
+        entities:
+          - entity: input_select.bedroom_test_scenario
+            name: Scenario
+          - entity: input_select.bedroom_test_speed
+            name: Speed
+          - type: button
+            name: Run scenario
+            icon: mdi:play
+            action_name: Run
+            tap_action:
+              action: perform-action
+              perform_action: script.bedroom_run_scenario

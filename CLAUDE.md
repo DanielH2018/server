@@ -25,23 +25,9 @@ docs/             # Runbooks, design specs, security notes
 
 > **`containers/` is not a directory in this repo** — it is untracked and rendered by Ansible onto the *target host* at `/home/<user>/server/containers/<svc>/docker-compose.yml`. Post-migration it exists only on `daniel-pi`; neither cluster node has one. It is still read-only: edits are overwritten on the next deploy, so always modify `ansible/roles/containers/*/templates/` instead. (The `block-protected-edits` hook enforces this.)
 
-> **Two roles trees, deliberately.** `roles/k8s/<name>` is where a service now lives; `roles/containers/<name>` is Docker. Several `roles/containers/` roles survive with no `containers_list` entry because they are the git-owned *source* a k8s role reads at deploy time — **deleting one breaks that k8s role's render, not its own**. These are **config sources, not deployable roles**: their `tasks/`, `meta/`, and `docker-compose.yml.j2` were removed once Docker left both cluster nodes, so nothing in them can be deployed and only the templates/files below are read. The full set, with what reads it:
+> **`roles/containers/` is now only the Pi.** Every role there is a Docker service live on `daniel-pi` — `autoheal`, `docker-proxy`, `dozzle`, `glances`, `wg-easy` — plus the shared `common` deploy path and `archive/`. A service's config lives in the role that deploys it, on both trees: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the tree boundary. (Until 2026-08-14 eleven roles here were config-only sources for a k8s counterpart; they moved into it. To revive one as a Docker service, take its Compose plumbing from git history.)
 >
-> | source role | read by |
-> |---|---|
-> | `grafana` | `k8s/claude-otel/tasks/dashboards.yml:80` (dashboard JSON) |
-> | `home-assistant` | `k8s/home-assistant/templates/configmap.yaml.j2:19-52` (automations/scenes/scripts/templates) |
-> | `homepage` | `k8s/homepage/templates/config-secret.yaml.j2:23-29`, `icons-configmap.yaml.j2:13` |
-> | `configarr` | `k8s/configarr/templates/config-secret.yaml.j2:22` + pytest `testpaths` |
-> | `janitorr` | `k8s/janitorr/templates/config-secret.yaml.j2:22` |
-> | `freshrss` | `k8s/freshrss/templates/configmap.yaml.j2:14` |
-> | `livesync` | `k8s/livesync/templates/configmap.yaml.j2:15` |
-> | `zigbee2mqtt` | `k8s/zigbee2mqtt/templates/config-secret.yaml.j2:21` |
-> | `n8n` | `k8s/n8n-images/tasks/main.yml:18,25,29` (two Dockerfiles + runners JSON) |
-> | `ical-proxy` | `k8s/ical-proxy/tasks/main.yml:10,14` + pytest `testpaths` |
-> | `code-server` | `k8s/code-server/tasks/main.yml:13,16` |
->
-> Plus `common`, the shared Docker deploy path for the Pi's roles. Don't "clean those up"; edit them as before. The rest of `roles/containers/` is either live on `daniel-pi` (`autoheal`, `docker-proxy`, `dozzle`, `glances`, `wg-easy` — these keep their full `tasks/` + compose plumbing) or belongs in `archive/`. To revive one of the config sources as a Docker service, take its Compose plumbing from git history, not from the tree.
+> **Where a k8s role's non-manifest config goes.** `roles/k8s/<name>/templates/` is for **manifests only** — `validate_k8s_manifests.py` renders every `*.j2` there and parses it as YAML. App config a manifest embeds via `lookup()` goes one level down in **`templates/config/`** (CouchDB's `local.ini`, HA's `configuration.yaml`, homepage's `custom.css` — none of them YAML manifests), and static assets go in `files/`. `Dockerfile*` is exempt and may sit in `templates/` directly; the validator skips it by name.
 
 ## Where to Look (task → start here)
 Route to the source of truth by what you're doing, before reading linearly:
@@ -53,7 +39,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Deploying or redeploying a service | `/deploy` skill · `## Common Commands` |
 | Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |
 | A Bash command keeps prompting for approval | `## Shell Commands — Shape Them to Auto-Approve` |
-| Editing HA automations / lighting / fans | `ansible/roles/containers/home-assistant/CLAUDE.md` (still the config source; the workload runs from `roles/k8s/home-assistant`) · `/ha-edit-automation` |
+| Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there) · `/ha-edit-automation` |
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `check.py` **first** — mature setup, most are handled |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment — the role needs a `checksum/config` pod annotation. See `roles/k8s/monitor-bridge/templates/deployment.yaml.j2` for the pattern. |

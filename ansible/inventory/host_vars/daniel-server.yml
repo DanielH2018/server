@@ -236,8 +236,8 @@ containers_list: []
   # entry, removing bridge_hostname/bridge_custom_routers from daniel-box's, and restoring the
   # livesync-utils labels in the livesync role's compose template.
   # ical-proxy moved to k3s on 2026-08-10 (slice-7 Phase C): stateless, built in-cluster
-  # from this repo's Dockerfile (roles/containers/ical-proxy REMAINS as the build source and
-  # test home — only this entry retired). The homepage_private isolation net's job — only
+  # from this repo's Dockerfile (the build source and tests now live in roles/k8s/ical-proxy
+  # itself; the Docker role they came from is gone). The homepage_private isolation net's job — only
   # homepage may read the unauthenticated private feeds — is done by the cluster route's
   # ClientIP(daniel-server) guard now; the net itself retires when homepage's compose stops
   # declaring it.

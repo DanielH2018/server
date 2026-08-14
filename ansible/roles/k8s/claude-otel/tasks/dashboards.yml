@@ -1,7 +1,7 @@
 ---
 # Ports daniel-server's Grafana dashboards into the cluster Grafana (slice 3, B4).
 #
-# The JSON is NOT copied into this role. roles/containers/grafana/files/dashboards stays the one
+# The JSON is NOT copied into this role. roles/k8s/claude-otel/files/dashboards stays the one
 # source of truth and both Grafanas mount the same files, so a board edited for one is not
 # silently stale in the other — a second copy is how the two Claude Code boards diverged in the
 # first place (see claude_otel_dashboard_folders for why `AI` is excluded).
@@ -75,9 +75,9 @@
 - name: Stage the shared Grafana dashboards on the node
   tags: [config]
   ansible.builtin.copy:
-    # `AI` is role-owned since D7 (this role's files/), the rest come from the Docker
-    # Grafana's shared tree — see claude_otel_dashboard_folders in defaults.
-    src: "{{ (item == 'AI') | ternary('dashboards/AI/', playbook_dir ~ '/roles/containers/grafana/files/dashboards/' ~ item ~ '/') }}"
+    # Every folder is role-owned now: `AI` since D7, the rest since the Docker Grafana role
+    # was retired and its shared tree moved into this role's files/.
+    src: "dashboards/{{ item }}/"
     dest: "/etc/rancher/k3s/dashboards/{{ item }}/"
     mode: "0644"
     owner: root

@@ -1,6 +1,6 @@
 """Guard: ical-proxy's Dockerfile pip pins must match uv.lock's dev-group versions.
 
-The ical-proxy test suite (`ansible/roles/containers/ical-proxy/files/test_app.py`) imports
+The ical-proxy test suite (`ansible/roles/k8s/ical-proxy/files/test_app.py`) imports
 `app.py`, which imports flask — so it validates the app against whatever flask/requests uv.lock
 pins for the `dev` group. The runtime image installs them via `pip install flask==X requests==Y`
 in `templates/Dockerfile.j2`. If those versions drift, the test certifies a flask the container
@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-DOCKERFILE = REPO / "ansible/roles/containers/ical-proxy/templates/Dockerfile.j2"
+DOCKERFILE = REPO / "ansible/roles/k8s/ical-proxy/templates/Dockerfile.j2"
 UV_LOCK = REPO / "uv.lock"
 
 _TRACKED = ("flask", "requests")

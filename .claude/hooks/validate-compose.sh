@@ -46,12 +46,11 @@ case "$file_path" in
     */ansible/templates/*.j2) run_compose=1 ;;
     */ansible/inventory/host_vars/*.yml) run_compose=1 ;;
     */ansible/inventory/group_vars/all.yml) run_compose=1 run_config=1 run_shell=1 ;;
-    */ansible/roles/containers/authelia/templates/configuration.yml.j2 | \
-    */ansible/roles/containers/traefik/templates/config.yml.j2 | \
-    */ansible/roles/containers/traefik/templates/traefik.yml.j2 | \
-    */ansible/roles/containers/prometheus/templates/prometheus.yml.j2 | \
-    */ansible/roles/containers/grafana/templates/loki-config.yml.j2 | \
-    */ansible/roles/containers/grafana/templates/promtail-config.yml.j2) run_config=1 ;;
+    # The per-file config arm listed authelia, traefik, prometheus and grafana templates,
+    # every one of which retired with its Docker role. validate_config_templates.py's own
+    # CONFIG_TEMPLATES list is empty for the same reason and says so ("may be empty between
+    # config-bearing eras"). group_vars/all.yml above still triggers the config render, so
+    # re-adding a path here is all a future config-bearing template needs.
     *.sh.j2) run_shell=1 ;;
     *) exit 0 ;;
 esac

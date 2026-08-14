@@ -28,7 +28,7 @@ from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ROLE_DIR = REPO_ROOT / "ansible/roles/containers/home-assistant"
+ROLE_DIR = REPO_ROOT / "ansible/roles/k8s/home-assistant"
 
 # templates/*.j2 render verbatim (no Ansible vars) -> copied to <name>.yaml.
 _TEMPLATE_FILES = ["configuration.yaml.j2", "customize.yaml.j2", "ui-lovelace.yaml.j2"]
@@ -123,7 +123,9 @@ def assemble_config(role_dir: Path, dest: Path) -> None:
     Raises HAConfigError if a templates/*.j2 contains Ansible templating, which would need a real
     render and violates the repo's copy-not-template rule for HA config files."""
     dest.mkdir(parents=True, exist_ok=True)
-    templates = role_dir / "templates"
+    # templates/config/, not templates/: the role's templates/ root holds k8s manifests, and
+    # validate_k8s_manifests.py parses every .j2 it finds there as YAML.
+    templates = role_dir / "templates" / "config"
     files = role_dir / "files"
     for tpl in _TEMPLATE_FILES:
         src = templates / tpl

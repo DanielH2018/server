@@ -39,7 +39,7 @@ UID_BY_PLUGIN = {
     "loki": ("bf4q19tuivta8e", "Loki"),
 }
 DASHBOARDS = {"node-exporter-full": 1860, "cadvisor": 14282}
-OUTDIR = Path("ansible/roles/containers/grafana/files/dashboards")
+OUTDIR = Path("ansible/roles/k8s/claude-otel/files/dashboards")
 
 # Grafana folder (subdir) each community board is provisioned into; default is the General
 # root. Keeps a re-fetch writing to the same folder the boards live in, so it doesn't

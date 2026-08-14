@@ -1,11 +1,10 @@
 
 
 {#
-  The sole services.yaml for Homepage. It began as a fork of the Docker role's
-  roles/containers/homepage/templates/services.yaml.j2, differing only in dropping the two
-  `server:`/`container:` pairs (see docker.yaml.j2 in this role for why). That Docker copy was
-  deleted once Docker left both cluster nodes, so there is no longer a second template to keep
-  in sync — edit tiles and widgets here and nowhere else.
+  The sole services.yaml for Homepage. It began as a fork of the Docker role's copy,
+  differing only in dropping the two `server:`/`container:` pairs (see docker.yaml.j2 in this
+  role for why). That copy was deleted once Docker left both cluster nodes, so there is no
+  longer a second template to keep in sync — edit tiles and widgets here and nowhere else.
 #}
 - Top Row:
     - Services:
