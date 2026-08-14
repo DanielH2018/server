@@ -154,3 +154,7 @@
   when:
     - manifests_rollout | default(manifests_service) | length > 0
     - manifests_render is changed or manifests_secret_render is changed
+    # Nothing was applied under --check, so there is no new rollout to watch. The gate's own
+    # kubectl reads are skipped in check mode too, which left its "no pods matched" assert
+    # reading an undefined stdout and failing every k8s --check run.
+    - not ansible_check_mode
