@@ -79,11 +79,6 @@ jobs:
       - name: Run all hooks
         run: prek run --all-files --color always
 
-      # TEMPORARY diagnostic — remove before merge.
-      - name: Per-hook timings
-        if: always()
-        run: grep -aE "run\{hook_id" ~/.cache/prek/prek.log | sed 's/.*run{/run{/' || true
-
   renovate-config:
     name: renovate config validator
     runs-on: ubuntu-latest
