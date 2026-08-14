@@ -15,10 +15,33 @@ permissions:
   contents: read
 
 jobs:
-  prek:
-    name: prek (lint + validate + tests + secrets)
+  # prek runs its hooks SEQUENTIALLY — the `concurrency=N` in its trace log is per-file
+  # batching *within* one hook, not hooks in parallel. So the step's wall clock is the sum of
+  # every hook, and one hook dominates it. Measured on the runner with warm caches
+  # (2026-08-14, from prek's own per-hook spans):
+  #
+  #   ansible-lint  89.7s   pytest  13.5s   validate-k8s-manifests  2.2s
+  #   validate-compose-templates  1.4s      everything else  <1s each      gitleaks  0.03s
+  #
+  # Sharding ansible-lint away from the other 18 hooks turns that sum into a max: the two
+  # shards run concurrently, so the ~37s of non-ansible-lint work stops being time nothing
+  # else can overlap. Each shard pays its own checkout + setup (~15s), which is why this is
+  # only worth doing for a split this lopsided — do NOT shard further, the setup cost would
+  # exceed what any additional shard removes.
+  hooks:
+    name: hooks (${{ matrix.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 20  # cap a wedged network hook (ansible-galaxy install) so it can't burn to the 6h default
+    strategy:
+      fail-fast: false  # a lint failure must not hide a test failure in the sibling shard
+      matrix:
+        include:
+          - id: ansible-lint
+            name: ansible-lint
+            select: ansible-lint
+          - id: rest
+            name: validate + tests + secrets
+            select: --skip ansible-lint
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
@@ -37,21 +60,25 @@ jobs:
           # the action itself, so a lock change invalidates it exactly.
           enable-cache: true
 
-      # prek bootstraps one isolated environment per remote hook repo and re-does it whenever
-      # its cache is cold — which, uncached, is EVERY CI run. Measured cold on daniel-box
-      # (2026-08-14): gitleaks 220s (a `language = "golang"` hook: prek downloads a ~270 MB
-      # managed Go toolchain and builds gitleaks from source, for a scan that itself takes
-      # 0.05s), ansible-lint 102s of which only 36s is the lint (the rest is pip-installing
-      # ansible-core into the hook env), shellcheck 5s, pre-commit-hooks 3s.
+      # prek bootstraps one isolated environment per remote hook repo whenever its cache is
+      # cold — uncached, that is every CI run. Worth ~14s here (the step measured 141s before
+      # these caches and 127s after). It is much cheaper on the runner than it is on a
+      # workstation: the `gitleaks` hook is `language = "golang"`, and where daniel-box has no
+      # Go and makes prek fetch a ~270 MB managed toolchain to build gitleaks from source
+      # (220s cold, for a scan that takes 0.05s), ubuntu-latest ships Go preinstalled and prek
+      # uses it. Hence a 45 MB cache rather than a 350 MB one.
       #
       # Only the environment dirs are cached. `~/.cache/prek/cache` is prek's own pip/uv
-      # DOWNLOAD cache (~500 MB) — pure redundancy once the envs it built are themselves
-      # restored, and large enough that carrying it would eat the saving in transfer time.
+      # DOWNLOAD cache — pure redundancy once the envs it built are themselves restored, and
+      # (~500 MB on a machine that does fetch a toolchain) large enough that carrying it would
+      # eat the saving in transfer time.
       #
       # restore-keys is safe here because prek's env dirs are content-addressed
       # (hooks/<language>-<hash>): a stale entry from an older prek.toml is ignored rather
       # than reused, so a partial hit still lets the UNCHANGED hooks skip their rebuild when
-      # one rev bumps. The fresh key then saves the union.
+      # one rev bumps. The fresh key then saves the union. Keyed per shard — the two shards
+      # build disjoint sets of hook envs, so a shared key would have them overwrite each
+      # other's save with a partial tree.
       - name: Cache prek hook environments
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -59,8 +86,8 @@ jobs:
             ~/.cache/prek/repos
             ~/.cache/prek/hooks
             ~/.cache/prek/tools
-          key: prek-${{ runner.os }}-${{ hashFiles('prek.toml') }}
-          restore-keys: prek-${{ runner.os }}-
+          key: prek-${{ runner.os }}-${{ matrix.id }}-${{ hashFiles('prek.toml') }}
+          restore-keys: prek-${{ runner.os }}-${{ matrix.id }}-
 
       # The ansible-lint hook's entry runs `ansible-galaxy collection install` before linting.
       # ansible/collections/ is gitignored, so that is a ~40 MB download of four collections on
@@ -68,6 +95,7 @@ jobs:
       # collections are already installed"). Versions are exactly pinned in requirements.yml,
       # so hashing it is an exact key with no staleness window — hence no restore-keys.
       - name: Cache Ansible collections
+        if: matrix.id == 'ansible-lint'  # the only shard that runs the hook needing them
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ansible/collections
@@ -76,8 +104,33 @@ jobs:
       - name: Install prek
         run: pip install prek==0.4.10  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
-      - name: Run all hooks
-        run: prek run --all-files --color always
+      # Both shards still pass --all-files: the split is about WHICH hooks run here, never
+      # about narrowing the files any hook sees. Between them the two shards run every hook
+      # exactly once, and `--skip ansible-lint` means a hook added to prek.toml later lands in
+      # the `rest` shard automatically rather than being silently dropped by an allow-list.
+      - name: Run hooks
+        run: prek run --all-files --color always ${{ matrix.select }}
+
+  # Branch protection requires the context "prek (lint + validate + tests + secrets)". The job
+  # that used to carry that name is now two matrix shards with names of their own, so this
+  # aggregator keeps the required context reporting — and makes it depend on BOTH shards.
+  # Without it, splitting the job would leave master's required check waiting on a context
+  # that no longer exists, blocking every PR.
+  prek:
+    name: prek (lint + validate + tests + secrets)
+    needs: hooks
+    if: always()  # must report a conclusion even when a shard fails, or it never reports at all
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # `needs.hooks.result` is the aggregate over the whole matrix: 'success' only if every
+      # shard succeeded, so this fails on a failed, cancelled, or skipped shard alike.
+      - name: Assert every hook shard passed
+        env:
+          RESULT: ${{ needs.hooks.result }}
+        run: |
+          echo "hook shards: $RESULT"
+          [ "$RESULT" = "success" ]
 
   renovate-config:
     name: renovate config validator
