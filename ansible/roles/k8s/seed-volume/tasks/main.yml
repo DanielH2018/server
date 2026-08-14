@@ -55,6 +55,57 @@
     group: root
   become: true
 
+# WHERE THE SEED POD HAS TO RUN. It mounts the service's RWO claim, so if the workload is
+# already running, that volume is attached to the node the workload sits on. An
+# unconstrained seed pod scheduled onto the *other* node wedges in ContainerCreating with
+#     Multi-Attach error for volume "pvc-..." Volume is already used by pod(s) ...
+# until the 180s wait below gives up and fails the play — taking every service ordered
+# after it in containers_list with it.
+#
+# This is not a race that retrying wins. Measured 2026-08-14 across seven services and ten
+# attempts: the scheduler put the seed pod on daniel-box every single time, while every
+# affected workload sat on daniel-server. It went unnoticed until then because it cannot
+# happen on a single-node cluster, and daniel-server only joined on 2026-08-13.
+#
+# So ask the cluster where the volume actually is, rather than hoping. Both lookups come
+# back empty on a first seed — the PVC is unbound and nothing is attached yet — and the
+# template then omits the nodeSelector, leaving the scheduler free to place the pod, which
+# is correct: there is no workload to collide with.
+- name: Find the PersistentVolume bound to {{ seed_volume_claim }}
+  tags: [config]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get pvc {{ seed_volume_claim }}
+      -o jsonpath={.spec.volumeName}
+  register: seed_volume_pv
+  become: true
+  changed_when: false
+  # A missing PVC is the first-seed case, not an error.
+  failed_when: false
+
+# VolumeAttachment is the authoritative answer to "which node is this volume on" — it is
+# what the attach/detach controller writes, and it is what the Multi-Attach check reads.
+# Filtering on status.attached matters: a detaching volume keeps its object briefly.
+- name: Find the attached node for {{ seed_volume_claim }}
+  tags: [config]
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      k3s kubectl get volumeattachment --no-headers
+      -o custom-columns=PV:.spec.source.persistentVolumeName,NODE:.spec.nodeName,ATTACHED:.status.attached
+      | awk -v pv={{ seed_volume_pv.stdout | quote }} '$1==pv && $3=="true" {print $2; exit}'
+    executable: /bin/bash
+  register: seed_volume_attachment
+  become: true
+  changed_when: false
+  failed_when: false
+  when: seed_volume_pv.stdout | default('') | length > 0
+
+- name: Note which node the seed pod must be pinned to
+  tags: [config]
+  ansible.builtin.set_fact:
+    seed_volume_node: "{{ (seed_volume_attachment.stdout | default('')) | trim }}"
+
 - name: Render the volume manifests for {{ seed_volume_service }}
   tags: [config]
   ansible.builtin.template:
