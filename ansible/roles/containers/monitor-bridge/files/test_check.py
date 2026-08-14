@@ -2615,9 +2615,12 @@ def _read_sibling(relpath):
 
 
 def test_checks_and_compose_push_env_agree():
-    # Every KUMA_PUSH_* check.py reads must have a compose `environment:` entry and vice-versa —
-    # a check added to CHECKS without its env silently never pushes (empty token) with no Kuma
-    # no-heartbeat to self-correct. This is the one wiring axis with no other automated guard.
+    # Every KUMA_PUSH_* check.py reads must have an env entry in exactly one of the two
+    # deployments — the Docker remnant's compose or the cluster twin's env-secret — and
+    # vice-versa. A check added to CHECKS without its env silently never pushes (empty
+    # token) with no Kuma no-heartbeat to self-correct. Since the Phase F split the two
+    # deployments partition the checks (CHECKS_ONLY/CHECKS_SKIP), so the union must equal
+    # the code and the halves must not overlap (an overlap = two pushers on one token).
 
     in_code = set(
         re.findall(r'_env\("(KUMA_PUSH_[A-Z0-9_]+)"', _read_sibling("check.py"))
@@ -2628,9 +2631,21 @@ def test_checks_and_compose_push_env_agree():
             _read_sibling("../templates/docker-compose.yml.j2"),
         )
     )
-    assert in_code == in_compose, "only in check.py=%s ; only in compose=%s" % (
-        sorted(in_code - in_compose),
-        sorted(in_compose - in_code),
+    in_twin = set(
+        re.findall(
+            r"^\s*(KUMA_PUSH_[A-Z0-9_]+):",
+            _read_sibling("../../../k8s/monitor-bridge/templates/env-secret.yaml.j2"),
+            re.MULTILINE,
+        )
+    )
+    assert in_compose.isdisjoint(in_twin), (
+        "declared in BOTH deployments (two pushers on one token): %s"
+        % sorted(in_compose & in_twin)
+    )
+    in_deployments = in_compose | in_twin
+    assert in_code == in_deployments, "only in check.py=%s ; only in deployments=%s" % (
+        sorted(in_code - in_deployments),
+        sorted(in_deployments - in_code),
     )
 
 

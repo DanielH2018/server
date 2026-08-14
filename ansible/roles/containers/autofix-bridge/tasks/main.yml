@@ -1,31 +1,10 @@
 ---
-- name: Create required directories
-  tags: [config]
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: setup_dirs.yml
-  vars:
-    common_dirs_to_create:
-      - "{{ container_item.name }}"
-
-- name: Deploy autofix-bridge script
-  tags: [config]
-  ansible.builtin.copy:
-    src: autofix.py
-    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/autofix.py"
-    mode: "0644"
-  register: autofix_bridge_script
-
-- name: Deploy Container
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: docker_deploy.yml
-  vars:
-    # autofix.py is bind-mounted; the loop reads it once at startup, so only a recreate
-    # applies a code change. Without this a script-only edit leaves recreate: auto and the
-    # new logic silently never deploys. See common/CLAUDE.md.
-    common_config_changed: "{{ autofix_bridge_script is changed }}"
+# The containerized *arr remediation sidecar moved to the cluster at the Phase F drain
+# (2026-08-14, roles/k8s/autofix-bridge — same files/autofix.py, staged from here). This
+# role keeps ONLY the host plane: the disk-autoprune cron, which prunes this host's
+# Docker daemon and retires with it. The compose template is gone with the container;
+# the entry stays in containers_list so these host tasks still run (the traefik-role
+# precedent from E7).
 
 - name: Create the disk-autoprune monitor state directory
   tags: [config]
