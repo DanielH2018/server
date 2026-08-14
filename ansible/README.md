@@ -208,9 +208,15 @@ Ansible runs through the repo's pinned uv env (see repo-root [`CLAUDE.md`](../CL
 
 ```bash
 uv run ansible-playbook ansible/preflight.yml       # read-only; asserts §1-§5 actually landed
-uv run ansible-playbook ansible/initial_setup.yml   # OS hardening; base pkgs, Docker, uv-tool CLIs, gitops deployer — needs §5 SOPS
-uv run ansible-playbook ansible/deploy.yml          # deploy all containers (dependency-ordered)
+uv run ansible-playbook ansible/initial_setup.yml   # OS hardening; base pkgs, uv-tool CLIs, gitops deployer — needs §5 SOPS
+uv run ansible-playbook ansible/k3s-bringup.yml     # cluster foundation (k3s, Longhorn, CRDs) — cluster nodes only
+uv run ansible-playbook ansible/deploy.yml          # deploy all workloads (Docker play dependency-ordered; k8s play in list order)
 ```
+
+> `initial_setup.yml` installs Docker only where `has_docker` is true. Both cluster nodes set
+> `has_docker: false` (daniel-server since the 2026-08-14 uninstall), so post-migration that
+> role applies to `daniel-pi` alone — the `has_docker: true` in `group_vars/all.yml` is now a
+> default that every real host except the Pi overrides.
 
 or `./ansible/bring-up.sh --continue [--host <name>]`, which runs those three in order and
 stops at the first failure. Add `-e target=<host>` to each command when driving another host
