@@ -1210,6 +1210,19 @@ def test_split_k8s_pilot_scope_restricts_eligibility():
     assert cs.k8s == {"littlelink"}
 
 
+def test_split_k8s_defers_when_the_tick_also_carries_docker_services():
+    # main()'s k8s branch returns before the Docker deploy + health gate, so promoting here
+    # would silently skip them. Defer instead.
+    paths = [
+        _SPEEDTEST_DEFAULTS,
+        "ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
+    ]
+    cs = _split(paths, denylist={"traefik"})
+    assert cs.k8s_deploy == set()
+    assert cs.k8s == {"speedtest"}
+    assert cs.services == {"dozzle"}
+
+
 def test_split_k8s_combined_push_deploys_eligible_defers_denylisted():
     paths = [_SPEEDTEST_DEFAULTS, "ansible/roles/k8s/traefik/defaults/main.yml"]
     cs = _split(paths, denylist={"traefik"})
