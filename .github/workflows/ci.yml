@@ -40,8 +40,11 @@ jobs:
   # stay in that state until this lands on master.
   #
   # The trade is push-to-master, where both halves run --all-files and now serialise rather than
-  # overlap: ~52s -> ~73s. That is deliberate and cheap here — gitops-deploy is a pull-based 30-min
-  # timer, so nothing waits on master's CI.
+  # overlap: 52s -> 108s, measured on the merge of #166 (89s job = 11s setup + a 67s full sweep).
+  # That is roughly double, and more than the ~73s first projected from the two shards' separate
+  # step times — the sweep costs more in one process than the shards' sum suggested. It is still
+  # deliberate and cheap here: gitops-deploy is a pull-based 30-min timer and Renovate's automerge
+  # gates on the PR run, so nothing waits on master's CI.
   #
   # If ansible-lint ever goes back to running unscoped on PRs, re-read that math before re-sharding.
   prek:
