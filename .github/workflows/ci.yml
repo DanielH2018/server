@@ -33,18 +33,16 @@ jobs:
   # `files` regex); ~16s of hooks is mostly that. A PR that trips neither pytest nor ansible-lint
   # is setup-bound at roughly 20s — extrapolated from the step breakdown, not measured.
   #
-  # NB the first run after this change is SLOWER, once: the hook-env cache key lost its per-shard
-  # component, so it restores via restore-keys from an old single-shard entry and rebuilds the
-  # other half in-step (measured: a 44s hook step). The union key is saved at the end of that run.
-  # Because a PR branch can only read its own and its base branch's caches, other open PR branches
-  # stay in that state until this lands on master.
-  #
   # The trade is push-to-master, where both halves run --all-files and now serialise rather than
-  # overlap: 52s -> 108s, measured on the merge of #166 (89s job = 11s setup + a 67s full sweep).
-  # That is roughly double, and more than the ~73s first projected from the two shards' separate
-  # step times — the sweep costs more in one process than the shards' sum suggested. It is still
-  # deliberate and cheap here: gitops-deploy is a pull-based 30-min timer and Renovate's automerge
-  # gates on the PR run, so nothing waits on master's CI.
+  # overlap: 52s -> 77s steady state, above the ~73s projected from the two shards' step times.
+  # Deliberate and cheap: gitops-deploy is a pull-based 30-min timer and Renovate's automerge gates
+  # on the PR run, so nothing waits on master's CI.
+  #
+  # NB the FIRST run on any given branch is slower, once — the merge of #166 took 108s, not 77s.
+  # The hook-env cache key lost its per-shard component, so a branch restores via restore-keys from
+  # an old single-shard entry and rebuilds the other half in-step (measured: a 44s hook step),
+  # saving the union key at the end. Caches are scoped per branch, so master paid this on its own
+  # first run and each open PR branch pays it once too. Don't read either as the steady state.
   #
   # If ansible-lint ever goes back to running unscoped on PRs, re-read that math before re-sharding.
   prek:
