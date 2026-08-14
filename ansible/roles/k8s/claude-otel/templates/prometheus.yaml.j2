@@ -147,13 +147,23 @@ data:
             labels:
               instance: daniel-server
               origin: daniel-server
+      # Phase F drain (2026-08-14): the Docker promtail's LAN-published 9102 retired with
+      # it; the promtail DaemonSet is scraped per-pod like the otel/crowdsec jobs — one
+      # target per node, no origin label (it leaves the origin-pinned Scrape Targets set,
+      # TARGETS_MIN 3->2, and joins the cluster-native count).
       - job_name: promtail
         scrape_interval: 1m
-        static_configs:
-          - targets: ['{{ k8s_bridge_client_ip }}:9102']
-            labels:
-              instance: daniel-server
-              origin: daniel-server
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: promtail
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            action: keep
+            regex: "9080"
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
       # Phase F drain (2026-08-13): the crowdsec_daniel-server job (the demoted Docker
       # agent's LAN-published 9103) retired with that agent. Its successor is the
       # node-agent DaemonSet — per-POD discovery like the otel jobs, one target per node.

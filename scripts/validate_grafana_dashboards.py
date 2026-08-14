@@ -16,12 +16,14 @@ import json
 import sys
 from pathlib import Path
 
-import yaml
+import re
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GRAFANA_ROLE = REPO_ROOT / "ansible/roles/containers/grafana"
 DASHBOARDS_DIR = GRAFANA_ROLE / "files/dashboards"
-DATASOURCES_TEMPLATE = GRAFANA_ROLE / "templates/provisioning/datasources.yml.j2"
+DATASOURCES_TEMPLATE = (
+    REPO_ROOT / "ansible/roles/k8s/claude-otel/templates/grafana.yaml.j2"
+)
 
 # Grafana built-in pseudo-datasources — always valid, never provisioned.
 BUILTIN_DATASOURCE_UIDS = {"-- Grafana --", "-- Mixed --", "-- Dashboard --", "grafana"}
@@ -30,17 +32,23 @@ BUILTIN_DATASOURCE_UIDS = {"-- Grafana --", "-- Mixed --", "-- Dashboard --", "g
 def provisioned_datasource_ids(
     datasources_template: Path = DATASOURCES_TEMPLATE,
 ) -> set[str]:
-    """uids AND names of every provisioned datasource. datasources.yml.j2 carries no Jinja
-    (it is pure YAML despite the .j2 extension), so we parse it directly. Including names as
-    well as uids means a legacy name-form datasource ref ("datasource": "Prometheus") also
+    """uids AND names of every provisioned datasource. Since the Docker grafana role's
+    deploy machinery retired (2026-08-14) the live declaration is the cluster grafana's
+    provisioning ConfigMap (claude-otel grafana.yaml.j2). That file carries Jinja, so the
+    datasource entries are extracted by line rather than yaml-parsed whole; including
+    names as well as uids means a legacy name-form ref ("datasource": "Prometheus") also
     resolves — a valid Grafana reference, not a bug."""
-    data = yaml.safe_load(datasources_template.read_text()) or {}
     ids: set[str] = set()
-    for ds in data.get("datasources", []) or []:
-        for key in ("uid", "name"):
-            value = ds.get(key)
-            if isinstance(value, str):
-                ids.add(value)
+    in_datasources = False
+    for line in datasources_template.read_text().splitlines():
+        stripped = line.strip()
+        if stripped == "datasources:":
+            in_datasources = True
+            continue
+        if in_datasources:
+            m = re.match(r"-?\s*(uid|name):\s*(\S+)$", stripped.lstrip("- "))
+            if m and "{{" not in m.group(2):
+                ids.add(m.group(2).strip("\"'"))
     return ids
 
 

@@ -130,7 +130,11 @@ def test_daniel_server_is_still_wholly_docker():
     # totals outreach Loki's backfill), which also re-lit its never-rescraped exporter.
     # Then 7: the traefik entry retired — after E7 it carried only the demoted crowdsec
     # agent, succeeded by the crowdsec-node-agent DaemonSet on BOTH nodes (daniel-box's
-    # host SSH signal is new coverage).
-    assert len(containers) == 7
-    assert len(filter_by_platform(containers, "docker")) == 7
+    # host SSH signal is new coverage). Then 6: the grafana entry retired 2026-08-14 —
+    # promtail, its last deployable, moved to the unpinned promtail DaemonSet (both
+    # nodes' host+pod logs; the Docker remnant's stdout stream deliberately went dark
+    # with it — residual-tier acceptance). The role directory stays as the cluster
+    # grafana's dashboards-tree source.
+    assert len(containers) == 6
+    assert len(filter_by_platform(containers, "docker")) == 6
     assert filter_by_platform(containers, "k8s") == []
