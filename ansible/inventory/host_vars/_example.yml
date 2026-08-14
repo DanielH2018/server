@@ -71,5 +71,4 @@ has_gitops: false
 # --- daniel-server). Override only when MOVING a role to this host, and make sure --------
 # --- the old host stops claiming it. -----------------------------------------------------
 # monitoring_controller_host: <hostname>
-# backup_controller_host: <hostname>
 # renovate_notify_host: <hostname>

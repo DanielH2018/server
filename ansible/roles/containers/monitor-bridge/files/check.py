@@ -148,19 +148,9 @@ GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
 # as long as the edit lasts. 6 h pages a genuinely-stuck host well inside a day while never firing
 # on a normal push or a long editing session.
 GITOPS_BEHIND_MAX_S = float(_env("GITOPS_BEHIND_MAX_MIN", "360")) * 60
-RENOVATE_STATE_DIR = _env("RENOVATE_STATE_DIR", "/renovate-state")
-RENOVATE_MAX_AGE_S = float(_env("RENOVATE_MAX_AGE_MIN", "2160")) * 60
-
-# Daily wg-easy Pi-peer backup pull: the wg-easy role's daniel-server host cron
-# (wg-easy-pull-pi-peers.sh) rsyncs the Pi's WireGuard peer configs (wg0.conf/wg0.json — private
-# keys a redeploy can't rebuild) into Kopia scope and writes {"ts": epoch, "ok": bool, "msg": str}.
-# It's the only Pi state pulled into the backup AND was the only backup cron with no watchdog: the
-# pull uses no --delete, so a broken pull (Pi unreachable, SSH/sudo break) leaves the last-good copy
-# in place while the peers silently go stale. We alert on a FAILED
-# pull, staleness (cron broken / never ran), or a missing/corrupt state file. 2.5d staleness = two
-# missed daily runs + slack.
-PI_PEERS_STATE = _env("PI_PEERS_STATE", "/pi-peers/state.json")
-PI_PEERS_MAX_AGE_S = float(_env("PI_PEERS_MAX_AGE_D", "2.5")) * 86400
+# pi_peers + renovate_alive checks REMOVED at the 2026-08-14 host flips: the peer pull
+# is the k8s/pi-peer-backup CronJob and the notifier's ExecStartPost pushes its own
+# beat — both push their Kuma monitors directly, so no state file and no check remain.
 
 # Every-5-min CrowdSec home-IP allowlist updater (traefik role's crowdsec-update-home-allowlist.sh):
 # keeps the operator's current home public IP in CrowdSec's `home-ips` allowlist so the public path
@@ -173,7 +163,7 @@ PI_PEERS_MAX_AGE_S = float(_env("PI_PEERS_MAX_AGE_D", "2.5")) * 86400
 
 # Hourly disk-autoprune host cron (autofix-bridge role): writes {"ts": epoch, "ok": bool, "msg":
 # str} after checking `/` used% against a threshold and, if crossed, running a conservative
-# docker/builder/container prune. Same state-file idiom as pi_peers. ok=false means the
+# docker/builder/container prune. Same {"ts","ok","msg"} state-file idiom. ok=false means the
 # prune command itself errored — a disk still full of real data after a clean prune is Root
 # Disk's alert, not this one. 3h staleness = 3x the hourly cron + slack.
 DISK_PRUNE_STATE = _env("DISK_PRUNE_STATE", "/autofix-disk/state.json")
@@ -464,7 +454,7 @@ DISCORD_WEBHOOK_URL = _env("DISCORD_WEBHOOK_URL", "")
 DISCORD_CROWDSEC_WEBHOOK_URL = _env("DISCORD_CROWDSEC_WEBHOOK_URL", "")
 # The GitOps/Renovate webhook is a THIRD independent hop: it delivers both the gitops-deploy
 # rollback alert AND every renovate_notify manual-action digest, neither via Kuma. renovate_notify
-# writes its "alive" liveness marker on every clean run regardless of whether the Discord POST
+# pushes its "alive" Kuma beat on every clean run regardless of whether the Discord POST
 # succeeded, so a rotated/revoked webhook here leaves the Renovate Notifier — Alive monitor GREEN
 # while every digest silently drops. Verify it too. Empty = not checked.
 DISCORD_GITOPS_WEBHOOK_URL = _env("DISCORD_GITOPS_WEBHOOK_URL", "")
@@ -1352,24 +1342,6 @@ def check_gitops_status():
     )
 
 
-def renovate_alive(age_s, max_age_s):
-    """Pure: is the notifier's last completed run recent enough? Returns (ok, msg)."""
-    if age_s <= max_age_s:
-        return True, "notifier ran %.0fm ago" % (age_s / 60)
-    return False, "notifier last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
-
-
-def check_renovate_alive():
-    try:
-        with open(os.path.join(RENOVATE_STATE_DIR, "last_run")) as fh:
-            ts = float(fh.read().strip())
-    except FileNotFoundError:
-        return False, "no last_run marker (notifier never completed a run?)"
-    except ValueError:
-        return False, "last_run marker unparseable"
-    return renovate_alive(time.time() - ts, RENOVATE_MAX_AGE_S)
-
-
 def scrutiny_freshness(summary, max_age_h, now=None):
     """`summary` is the data.summary dict of scrutiny's /api/summary."""
     now = now or datetime.now(timezone.utc)
@@ -1651,33 +1623,6 @@ def _check_state_file(path, missing_msg, bad_msg, decide):
     except ValueError, TypeError:
         return False, bad_msg
     return decide(state, age_s)
-
-
-def pi_peers(state, age_s, max_age_s):
-    """Pure: did the last wg-easy Pi-peer backup pull succeed, and recently? (ok, msg).
-
-    Same state-file idiom as disk_prune. The pull is the only path that carries the Pi's
-    un-rebuildable WireGuard peer keys into backup scope; because it never --deletes, a silently
-    failing pull leaves stale-but-present files in place — so a FAILED or STALE pull is the signal
-    that the offsite copy of those keys has quietly stopped refreshing.
-    """
-    if not state.get("ok"):
-        return False, "last Pi-peer backup pull FAILED: %s" % state.get("msg", "?")
-    if age_s > max_age_s:
-        return False, "last successful Pi-peer pull %.1fd ago (max %.1fd)" % (
-            age_s / 86400,
-            max_age_s / 86400,
-        )
-    return True, "Pi-peer pull ok %.1fd ago: %s" % (age_s / 86400, state.get("msg", ""))
-
-
-def check_pi_peers():
-    return _check_state_file(
-        PI_PEERS_STATE,
-        "no Pi-peer backup state (pull never ran?)",
-        "Pi-peer backup state unparseable",
-        lambda state, age_s: pi_peers(state, age_s, PI_PEERS_MAX_AGE_S),
-    )
 
 
 def disk_prune(state, age_s, max_age_s):
@@ -2236,13 +2181,11 @@ CHECKS = [
     ),
     ("gitops_alive", _env("KUMA_PUSH_GITOPS_ALIVE", ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
-    ("pi_peers", _env("KUMA_PUSH_PI_PEERS", ""), check_pi_peers),
     ("disk_prune", _env("KUMA_PUSH_DISK_PRUNE", ""), check_disk_prune),
     ("scrutiny", _env("KUMA_PUSH_SCRUTINY", ""), check_scrutiny),
     ("ups", _env("KUMA_PUSH_UPS", ""), check_ups),
     ("pi_pressure", _env("KUMA_PUSH_PI", ""), check_pi_pressure),
     ("ha_heartbeat", _env("KUMA_PUSH_HA", ""), check_ha_heartbeat),
-    ("renovate_alive", _env("KUMA_PUSH_RENOVATE_ALIVE", ""), check_renovate_alive),
     ("loki_ingestion", _env("KUMA_PUSH_LOKI", ""), check_loki_ingestion),
     (
         "promtail_dropped",
@@ -2339,7 +2282,8 @@ _grace_streaks = {}
 # Which checks THIS instance runs. The Phase F drain splits the bridge in two deployments of
 # this same file: the cluster twin owns every metric/API check, and the Docker remnant keeps
 # only the checks that read daniel-server host state files (gitops_alive, gitops_status,
-# pi_peers, disk_prune, renovate_alive) — split by env instead of a fork, so the twins can't
+# disk_prune; pi_peers + renovate_alive dissolved into direct pushers at the 2026-08-14
+# host flips) — split by env instead of a fork, so the twins can't
 # drift. CHECKS_ONLY (comma-separated names) enables exactly that set; CHECKS_SKIP drops
 # names from whatever is otherwise enabled. The four reachability gates participate under
 # the names their monitors push as (prometheus, loki_reachable, b2_reachable,

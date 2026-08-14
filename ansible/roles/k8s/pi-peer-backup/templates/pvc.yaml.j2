@@ -1,0 +1,16 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ pi_peer_backup_k8s_claim }}
+  namespace: {{ k8s_namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # Plain `longhorn` ON PURPOSE (not -nobackup): riding the 03:30 daily-backup group to
+  # B2 is this volume's entire reason to exist — it replaces the retired Kopia scope for
+  # the Pi's un-rebuildable WireGuard peer keys.
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 100Mi

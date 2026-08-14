@@ -1,0 +1,58 @@
+---
+# Host flip 1 (2026-08-14): successor to the daniel-server peer-pull host cron. A
+# nightly CronJob rsyncs daniel-pi's wg-easy peer configs into a Longhorn PVC (the
+# 03:30 daily-backup group carries it to B2, replacing the retired Kopia scope) and
+# pushes the "WG Pi Peer Backup" Kuma monitor directly — the monitor-bridge `pi_peers`
+# state-file check retired with this flip.
+
+- name: Authorize the pull key on daniel-pi
+  tags: [config]
+  delegate_to: daniel-pi
+  ansible.posix.authorized_key:
+    user: "{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}"
+    key: "{{ lookup('file', role_path ~ '/files/pi-peer-backup.pub') }}"
+    state: present
+
+# Over Ansible's own (operator-trusted) connection, so the job VERIFIES rather than
+# TOFU-accepts — same pattern the retired wg-easy peer-pull block used. Hard-fails on
+# an unreachable Pi by design: without the pin the Secret below cannot render.
+- name: Read daniel-pi's SSH host key for the known_hosts pin
+  tags: [config]
+  delegate_to: daniel-pi
+  ansible.builtin.slurp:
+    src: /etc/ssh/ssh_host_ed25519_key.pub
+  register: pi_peer_backup_hostkey
+
+# Decoded here, not in the template: the repo's manifest validator renders templates
+# with plain Jinja, which has no b64decode filter.
+- name: Compose the known_hosts pin line
+  tags: [config]
+  ansible.builtin.set_fact:
+    pi_peer_backup_known_hosts_line: >-
+      {{ hostvars['daniel-pi'].ansible_host }}
+      {{ (pi_peer_backup_hostkey.content | b64decode).split()[0] }}
+      {{ (pi_peer_backup_hostkey.content | b64decode).split()[1] }}
+
+- name: Build the pi-peer-backup image
+  ansible.builtin.include_role:
+    name: k8s/image-builder
+  vars:
+    image_builder_name: pi-peer-backup
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/pi-peer-backup/templates/Dockerfile.j2"
+    # Embedded verbatim (lookup('file')) — a shell script Jinja must not touch.
+    image_builder_context_files:
+      "{{ playbook_dir }}/roles/k8s/pi-peer-backup/files/pull-pi-peers.sh": pull-pi-peers.sh
+
+- name: Deploy pi-peer-backup to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: pi-peer-backup
+    # A CronJob — nothing to wait on at deploy; the first scheduled (or manually
+    # triggered) run is the proof.
+    manifests_rollout: ''
+    manifests_files:
+      - pvc.yaml
+      - cronjob.yaml
+    manifests_secret_files:
+      - secret.yaml

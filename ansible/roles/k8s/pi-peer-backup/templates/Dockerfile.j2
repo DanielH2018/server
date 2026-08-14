@@ -1,0 +1,11 @@
+FROM alpine:3.22
+
+RUN apk add --no-cache bash rsync openssh-client curl
+
+# COPY . (not a per-file COPY): the build context is a ConfigMap mount — see the nut
+# Dockerfile for the symlink trap this avoids.
+COPY . /build-context/
+RUN install -m 0755 /build-context/pull-pi-peers.sh /usr/local/bin/pull-pi-peers.sh \
+    && rm -rf /build-context
+
+ENTRYPOINT ["/usr/local/bin/pull-pi-peers.sh"]

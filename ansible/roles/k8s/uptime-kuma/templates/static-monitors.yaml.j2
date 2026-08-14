@@ -202,8 +202,11 @@ stringData:
     {"type": "push", "name": "GitOps Deploy — Alive", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_gitops_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   gitops-deploy-status.json: |
     {"type": "push", "name": "GitOps Deploy — Status", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_gitops_status_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # Host flip 1 (2026-08-14): pushed once nightly by the k8s/pi-peer-backup CronJob
+  # (23:30), not every bridge cycle — the window is 2.5 days (two missed runs + slack,
+  # the same tolerance the retired pi_peers check applied). Same token.
   wg-easy-pi-peers.json: |
-    {"type": "push", "name": "WG Pi Peer Backup", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_pi_peers_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "WG Pi Peer Backup", "interval": 216000, "max_retries": 0, "push_token": "{{ monitor_bridge_pi_peers_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # E7 (2026-08-13): DOCKER-USER Origin Lock + Cloudflare IP Drift retired with the public
   # 80/443 they guarded. CrowdSec AppSec stays — its feeder moved to daniel-box
   # (k8s/crowdsec's crowdsec-appsec-verify.sh cron, pushing directly; same token).
@@ -227,8 +230,11 @@ stringData:
     {"type": "push", "name": "Pi Pressure", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-ha.json: |
     {"type": "push", "name": "Home Assistant Automations", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_ha_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # Host flip 2 (2026-08-14): pushed once daily by renovate-notify's ExecStartPost on
+  # daniel-box (13:00 timer), not every bridge cycle — 36h window = one missed run +
+  # slack, the same tolerance the retired renovate_alive check applied. Same token.
   renovate-notify-alive.json: |
-    {"type": "push", "name": "Renovate Notifier — Alive", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_renovate_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Renovate Notifier — Alive", "interval": 129600, "max_retries": 0, "push_token": "{{ monitor_bridge_renovate_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-loki.json: |
     {"type": "push", "name": "Loki Log Ingestion", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_loki_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-promtail-dropped.json: |
