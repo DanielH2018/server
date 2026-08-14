@@ -27,6 +27,19 @@ spec:
       # consistency" would hand the fleet's most externally-connected service write access to the
       # library for nothing.
       automountServiceAccountToken: false
+      priorityClassName: homelab-standard
+      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
+      # Weighted so the pod still schedules if daniel-server is cordoned or full.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - daniel-server
       containers:
         - name: prowlarr
           image: {{ prowlarr_k8s_image }}

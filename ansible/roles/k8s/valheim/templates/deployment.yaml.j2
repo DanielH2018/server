@@ -38,6 +38,7 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: daniel-box
       enableServiceLinks: false
+      priorityClassName: homelab-standard
       containers:
         - name: valheim
           image: {{ valheim_k8s_image }}

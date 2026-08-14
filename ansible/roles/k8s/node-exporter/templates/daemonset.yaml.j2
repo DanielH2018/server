@@ -26,6 +26,7 @@ spec:
       # landed 2026-08-14.)
       hostNetwork: true
       hostPID: true
+      priorityClassName: homelab-best-effort
       containers:
         - name: node-exporter
           image: {{ node_exporter_k8s_image }}

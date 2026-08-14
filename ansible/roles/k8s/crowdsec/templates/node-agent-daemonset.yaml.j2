@@ -55,6 +55,7 @@ spec:
               cpu: 10m
               memory: 16Mi
       automountServiceAccountToken: false
+      priorityClassName: homelab-critical
       containers:
         - name: crowdsec-agent
           image: {{ crowdsec_k8s_image }}

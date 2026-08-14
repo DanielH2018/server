@@ -42,6 +42,7 @@ spec:
             runAsUser: {{ puid }}
             runAsGroup: {{ pgid }}
             runAsNonRoot: true
+          priorityClassName: homelab-best-effort
           containers:
             - name: configarr
               image: {{ configarr_k8s_image }}

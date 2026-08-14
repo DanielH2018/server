@@ -52,6 +52,19 @@ spec:
             requests:
               cpu: 10m
               memory: 16Mi
+      priorityClassName: homelab-best-effort
+      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
+      # Weighted so the pod still schedules if daniel-server is cordoned or full.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - daniel-server
       containers:
         - name: homepage
           image: {{ homepage_k8s_image }}

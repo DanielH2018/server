@@ -47,6 +47,7 @@ spec:
       # this DaemonSet is the only shipper and covers both nodes' host + pod logs.
       enableServiceLinks: false
       serviceAccountName: promtail
+      priorityClassName: homelab-best-effort
       containers:
         - name: promtail
           image: {{ loki_homelab_promtail_image }}
