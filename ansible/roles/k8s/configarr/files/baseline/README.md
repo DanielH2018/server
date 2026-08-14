@@ -11,5 +11,5 @@ ownership of it. The live definitions remain in Sonarr's DB (on its Longhorn PVC
   bespoke `Anime Profile N_N_N` tier scheme that selects releases.
 
 Refresh with the command in the role `CLAUDE.md`. The only scores Configarr actively enforces
-are the two release-group CFs in `templates/config.yml.j2` (`Fake/Mislabeled Remux Groups`
+are the two release-group CFs in `templates/config/config.yml.j2` (`Fake/Mislabeled Remux Groups`
 = -10000, `Trusted Anime Groups` = +200).

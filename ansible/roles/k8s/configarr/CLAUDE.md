@@ -15,17 +15,16 @@ can catch a title that lies — the only pre-grab lever is **release-group reput
 
 ## At a glance
 - **Image:** `ghcr.io/raydak-labs/configarr` (version-pinned, Renovate-managed)
-- **Host: daniel-box (k8s CronJob), since 2026-08-08 — slice 4, B7a.** This containers role no
-  longer deploys anywhere; it survives as the **config-source home**: `roles/k8s/configarr`
-  renders `templates/config.yml.j2` and copies `files/configarr_status.py`. Edit configarr
-  config HERE; deploy with `--tags configarr` (the k8s role) from daniel-box.
+- **Host: daniel-box (k8s CronJob), since 2026-08-08 — slice 4, B7a.** This role renders
+  `templates/config/config.yml.j2` and copies `files/configarr_status.py`. Edit configarr
+  config HERE; deploy with `--tags configarr` from daniel-box.
 - **No web UI**, no Authelia · targets the cluster sonarr/radarr
 - **One-shot (ephemeral):** a nightly k8s CronJob, plus a `configarr-deploy` Job the deploy
   creates from it so a config change syncs immediately. No healthcheck / AutoKuma — a batch
   job, not a service; its health signal is a daniel-box host cron (`/opt/configarr-health`)
   that reads the last Job's outcome via `configarr_status.py` (still owned + tested here) and
   pushes the "Configarr Sync" Kuma monitor.
-- **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
+- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 
 ## Scope — what configarr manages
 `delete_unmanaged_custom_formats` is left **OFF** everywhere, so Configarr never deletes CFs it
@@ -77,7 +76,7 @@ scores happened to accumulate in Sonarr/Radarr's DB. This only applies within th
 OFF there too).
 
 **To extend the Anime defense:** add release groups to the `^(NTRX)$` alternation (or a new local
-CF) in `templates/config.yml.j2`. To have Configarr own MORE of the Anime profile, add a
+CF) in `templates/config/config.yml.j2`. To have Configarr own MORE of the Anime profile, add a
 `quality_profiles` block for it — but that makes Configarr authoritative (UI edits get reverted),
 so weigh it against the bespoke scheme first.
 
@@ -96,7 +95,7 @@ uv run python scripts/probe.py arr sonarr "/api/v3/qualityprofile" --json \
 ```
 
 ## Editing
-- Compose: `templates/docker-compose.yml.j2` · Sync config: `templates/config.yml.j2`
+- Sync config: `templates/config/config.yml.j2`
 - Health evaluator: `files/configarr_status.py` (pure exit-code/output verdict logic,
   unit-tested in `files/test_configarr_status.py`) — copied by `roles/k8s/configarr` into
   `/opt/configarr-health` on daniel-box, where a cron reads the last Job and pushes Kuma.
@@ -107,5 +106,3 @@ uv run python scripts/probe.py arr sonarr "/api/v3/qualityprofile" --json \
 - Verify a sync: `kubectl -n homelab logs job/configarr-deploy` (or the latest
   `configarr-…` CronJob pod) — a healthy run lists the managed CFs and reports no errors.
 - Unit tests: `uv run pytest ansible/roles/k8s/configarr/files`.
-- `templates/docker-compose.yml.j2` is a frozen rollback artifact — it no longer deploys and
-  Renovate ignores it.

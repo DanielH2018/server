@@ -61,7 +61,5 @@ See repo-root `CLAUDE.md` for shared conventions.
   (`zigbee2mqtt.<domain>`) when adding devices, then disable.
 
 ## Editing
-- Z2M cfg: `templates/configuration.yaml.j2` (rendered into the k8s Secret by `roles/k8s/zigbee2mqtt`)
+- Z2M cfg: `templates/config/configuration.yaml.j2` (rendered into the k8s Secret by `roles/k8s/zigbee2mqtt`)
 - Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "zigbee2mqtt"`
-- `templates/docker-compose.yml.j2` is a frozen rollback artifact — it no longer deploys and
-  Renovate ignores it.

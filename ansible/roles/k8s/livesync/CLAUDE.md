@@ -15,12 +15,10 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 
 ## Notable
-- `templates/local.ini.j2` sets `require_valid_user` and smoosh auto-compaction ratios
+- `templates/config/local.ini.j2` sets `require_valid_user` and smoosh auto-compaction ratios
   (curbing `.couch` bloat from Obsidian LiveSync's MVCC revisions). Admin creds come from
   `ansible/vars/secrets.yml`.
 
 ## Editing
-- CouchDB cfg: `templates/local.ini.j2` (rendered into the k8s ConfigMap by `roles/k8s/livesync`)
+- CouchDB cfg: `templates/config/local.ini.j2` (rendered into the k8s ConfigMap by `roles/k8s/livesync`)
 - Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "livesync"`
-- `templates/docker-compose.yml.j2` is a frozen rollback artifact — it no longer deploys and
-  Renovate ignores it.

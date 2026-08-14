@@ -16,7 +16,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## Notable
 - Behaviour (retention rules, leaving-soon thresholds, dry-run flag) lives in
-  `templates/application.yml.j2`. **It deletes files** — `dry-run` was flipped off
+  `templates/config/application.yml.j2`. **It deletes files** — `dry-run` was flipped off
   2026-06-10 (operator decision after the initial trial period), so it now cleans for
   real. Tag media `janitorr-keep` in the *arrs to exempt it (see `exclusion-tags` in
   `application.yml.j2`). **NB:** Radarr/Sonarr reject underscores in tag labels
@@ -42,7 +42,5 @@ See repo-root `CLAUDE.md` for shared conventions.
   NOT clustered in a post-boot window (check `last reboot` + log timestamps first).
 
 ## Editing
-- Rules: `templates/application.yml.j2` (rendered into the k8s Secret by `roles/k8s/janitorr`)
+- Rules: `templates/config/application.yml.j2` (rendered into the k8s Secret by `roles/k8s/janitorr`)
 - Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "janitorr"`
-- `templates/docker-compose.yml.j2` is a frozen rollback artifact — it no longer deploys and
-  Renovate ignores it.

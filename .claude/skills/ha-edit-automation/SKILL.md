@@ -25,7 +25,7 @@ All under `ansible/roles/k8s/home-assistant/`:
 | Script | `files/scripts.yaml` |
 | Template sensor / binary_sensor | `files/templates.yaml` |
 | **Tunable math** (curve/threshold/ramp) | `files/custom_templates/*.jinja` macro **+ a test** |
-| HTTP/integrations/`threshold:`/`http:` etc. | `templates/configuration.yaml.j2` (Ansible-rendered) |
+| HTTP/integrations/`threshold:`/`http:` etc. | `templates/config/configuration.yaml.j2` (Ansible-rendered) |
 | Dashboard / entity friendly-names | `templates/ui-lovelace.yaml.j2` / `customize.yaml.j2` |
 
 **The rule that bites:** HA `{{ }}` Jinja goes in `files/` (copied byte-for-byte), **never**

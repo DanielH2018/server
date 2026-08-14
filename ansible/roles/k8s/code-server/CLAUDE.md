@@ -1,9 +1,8 @@
-# code-server — Browser-based VS Code (build source only)
+# code-server — Browser-based VS Code
 
-Moved to k3s on 2026-08-10 (slice-7 Phase C). This role no longer deploys a container — it
-remains the **build source** for the cluster image (`templates/Dockerfile.j2` +
-`files/extensions.sh`), same split as n8n/ical-proxy. The workload lives in
-`ansible/roles/k8s/code-server/`; the inventory entry is in `daniel-box.yml`.
+Moved to k3s on 2026-08-10 (slice-7 Phase C). This role owns both the workload and the image
+it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the inventory entry is in
+`daniel-box.yml`.
 
 ## At a glance
 - **Image:** built in-cluster by k8s/image-builder from `templates/Dockerfile.j2`

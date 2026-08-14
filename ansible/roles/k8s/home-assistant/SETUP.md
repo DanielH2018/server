@@ -72,7 +72,7 @@ These are **not** captured by `deploy.yml` — they're device/app/UI state:
 
 | File | What it holds | Deployed via |
 |---|---|---|
-| `templates/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 16 `threshold` sensors, `template: !include`, `recorder:` excludes, http/trusted-proxy, Lovelace | `template` (Ansible-rendered) |
+| `templates/config/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 16 `threshold` sensors, `template: !include`, `recorder:` excludes, http/trusted-proxy, Lovelace | `template` (Ansible-rendered) |
 | `files/automations.yaml` | the 33 automations | `copy` (verbatim — HA Jinja) |
 | `files/scripts.yaml` | the 16 scripts | `copy` |
 | `files/scenes.yaml` | `bedroom_bright` / `bedroom_nightlight` | `copy` |

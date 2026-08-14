@@ -10,11 +10,11 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   releases, so it belongs in the critical/stateful tier (like jellyfin/the *arr stack) — bump via
   Renovate PRs (the `/linuxserver/` regex tracks the tag), not watchtower's watch-all `:latest` pool.
   (LSIO is x86-64-maintained; only the 32-bit ARM variant was deprecated — fine for daniel-box.)
-- **Host: daniel-box (k8s), since 2026-08-09 — slice 5, B3.** This containers role no longer
-  deploys anywhere; it survives as the **config-authoring home** (validate-ha-config, the macro
-  tests, `sanctioned_writers.yml`, the skills all anchor here): `roles/k8s/home-assistant`
-  ships these `templates/` + `files/` into the cluster. Edit HA config HERE; deploy with
-  `--tags home-assistant` (the k8s role) from daniel-box.
+- **Host: daniel-box (k8s), since 2026-08-09 — slice 5, B3.** This role is both the workload
+  and the **config-authoring home** (validate-ha-config, the macro tests,
+  `sanctioned_writers.yml`, the skills all anchor here): its ConfigMap ships
+  `templates/config/` + `files/` into the cluster. Edit HA config HERE; deploy with
+  `--tags home-assistant` from daniel-box.
 - **Port:** 8123 · **Authelia:** no · unsuffixed `home-assistant.<domain>` forwards to the
   cluster via `bridge_hostname` (companion app unchanged) · MQTT via the in-cluster `mosquitto`
   Service · NUT via daniel-server's LAN `3493` (DOCKER-USER-locked)
@@ -654,9 +654,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   can't derive. Design + Phase-2 plan: `docs/superpowers/specs/2026-06-21-ha-state-model-phase*`.
 
 ## Editing
-- HA cfg: `templates/configuration.yaml.j2` + `files/` (shipped into the cluster by
+- HA cfg: `templates/config/configuration.yaml.j2` + `files/` (shipped into the cluster by
   `roles/k8s/home-assistant`)
 - Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"`
   — or the `/ha-deploy` skill, which adds the health + loaded-config gates
-- `templates/docker-compose.yml.j2` is a frozen rollback artifact — it no longer deploys and
-  Renovate ignores it.
