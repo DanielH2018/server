@@ -23,3 +23,5 @@
       - deployment-feed-cache.yaml
       - service.yaml
       - ingressroute.yaml
+
+- ansible.builtin.command: /bin/true
