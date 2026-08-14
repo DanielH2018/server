@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for the pure logic in check.py.
 
-Run: uv run pytest ansible/roles/containers/monitor-bridge/files
+Run: uv run pytest ansible/roles/k8s/monitor-bridge/files
 (or `uv run pytest` for the whole repo suite).
 
 Covers the parts that can be wrong without a live deploy noticing — chiefly the

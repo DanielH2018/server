@@ -25,7 +25,23 @@ docs/             # Runbooks, design specs, security notes
 
 > **`containers/` is not a directory in this repo** — it is untracked and rendered by Ansible onto the *target host* at `/home/<user>/server/containers/<svc>/docker-compose.yml`. Post-migration it exists only on `daniel-pi`; neither cluster node has one. It is still read-only: edits are overwritten on the next deploy, so always modify `ansible/roles/containers/*/templates/` instead. (The `block-protected-edits` hook enforces this.)
 
-> **Two roles trees, deliberately.** `roles/k8s/<name>` is where a service now lives; `roles/containers/<name>` is Docker. A few `roles/containers/` roles survive with no `containers_list` entry because they are the git-owned *source* a k8s role reads — notably `grafana` (dashboard JSON) and `home-assistant` (automations/scenes/scripts/templates, mounted via `roles/k8s/home-assistant`'s ConfigMap). Don't "clean those up"; edit them as before.
+> **Two roles trees, deliberately.** `roles/k8s/<name>` is where a service now lives; `roles/containers/<name>` is Docker. Several `roles/containers/` roles survive with no `containers_list` entry because they are the git-owned *source* a k8s role reads at deploy time — **deleting one breaks that k8s role's render, not its own**. The full set, with what reads it:
+>
+> | source role | read by |
+> |---|---|
+> | `grafana` | `k8s/claude-otel/tasks/dashboards.yml:80` (dashboard JSON) |
+> | `home-assistant` | `k8s/home-assistant/templates/configmap.yaml.j2:19-52` (automations/scenes/scripts/templates) |
+> | `homepage` | `k8s/homepage/templates/config-secret.yaml.j2:23-29`, `icons-configmap.yaml.j2:13` |
+> | `configarr` | `k8s/configarr/templates/config-secret.yaml.j2:22` + pytest `testpaths` |
+> | `janitorr` | `k8s/janitorr/templates/config-secret.yaml.j2:22` |
+> | `freshrss` | `k8s/freshrss/templates/configmap.yaml.j2:14` |
+> | `livesync` | `k8s/livesync/templates/configmap.yaml.j2:15` |
+> | `zigbee2mqtt` | `k8s/zigbee2mqtt/templates/config-secret.yaml.j2:21` |
+> | `n8n` | `k8s/n8n-images/tasks/main.yml:18,25,29` (two Dockerfiles + runners JSON) |
+> | `ical-proxy` | `k8s/ical-proxy/tasks/main.yml:10,14` + pytest `testpaths` |
+> | `code-server` | `k8s/code-server/tasks/main.yml:13,16` |
+>
+> Plus `common`, the shared Docker deploy path for the Pi's roles. Don't "clean those up"; edit them as before. The rest of `roles/containers/` is either live on `daniel-pi` (`autoheal`, `docker-proxy`, `dozzle`, `glances`, `wg-easy`) or belongs in `archive/`.
 
 ## Where to Look (task → start here)
 Route to the source of truth by what you're doing, before reading linearly:

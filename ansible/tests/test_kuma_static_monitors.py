@@ -5,9 +5,11 @@ cluster. Two silent failure modes get guards here:
 
 - A monitor without a notification link is created and never pages (the macro's
   conditional-emission trap, now a per-file responsibility).
-- A push monitor with retries > 0 flaps on a single missed cron beat
-  (scripts/test_push_monitor_retries.py's guarantee, whose compose-template corpus does not
-  see these files).
+- A push monitor with retries > 0 flaps on a single missed cron beat. This file is now the
+  SOLE guard of that rule: scripts/test_push_monitor_retries.py enforced it over the Docker
+  compose templates, but that corpus reached zero push monitors on 2026-08-14 when the
+  retired cloudflare-ddns role was archived (its two dead-men are declared here anyway), so
+  the guard was vacuous and was removed.
 
 Every entity also carries the fields AutoKuma v2.0.0 parses (`type` mandatory), and ids —
 the filenames — must stay unique.
@@ -94,9 +96,9 @@ def test_every_monitor_is_linked_to_the_discord_notification():
 
 
 def test_push_monitors_never_retry():
-    # scripts/test_push_monitor_retries.py's guarantee, extended to the static files its
-    # compose-template corpus cannot see: a cron-fed push monitor with retries > 0 turns
-    # one missed beat into interval*retries of silence instead of a page.
+    # The only remaining enforcement of this rule (see the module docstring): a cron-fed push
+    # monitor with retries > 0 turns one missed beat into interval*retries of silence
+    # instead of a page.
     for name, entity in _entities().items():
         if entity["type"] != "push":
             continue
