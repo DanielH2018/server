@@ -42,16 +42,17 @@ ansible/          # Playbooks, roles, inventory, templates   ← EDIT HERE
   filter_plugins/     # Custom dependency-resolution filters (toposort.py)
   inventory/          # hosts.ini, group_vars/all.yml, host_vars/<host>.yml
   vars/secrets.yml    # SOPS-encrypted secrets
-containers/       # Rendered docker-compose.yml files          ← GENERATED, do not edit
 scripts/          # Helper scripts (template validation, …)
 docs/             # Runbooks, design specs, security notes
   k3s-migration/      # Historical record of the Docker → k3s migration
 ```
 
-`containers/` is produced by Ansible from the role templates — edits there are overwritten
-on the next deploy. Always change `ansible/roles/containers/<svc>/templates/` instead. Since
-the migration it holds only the Pi's services; the cluster's equivalents are the rendered
-manifests under `ansible/roles/k8s/`.
+**`containers/` is not in this repo.** It is a *runtime* directory Ansible renders on the
+target host (`/home/<user>/server/containers/<svc>/docker-compose.yml`) and is untracked —
+`git ls-files containers/` returns nothing. Post-migration it exists only on `daniel-pi`;
+neither cluster node has one, since neither runs Docker. Edits there are overwritten on the
+next deploy: always change `ansible/roles/containers/<svc>/templates/` instead. The cluster's
+equivalent is the manifests rendered from `ansible/roles/k8s/`.
 
 ## Ingress and segmentation
 
@@ -88,9 +89,10 @@ flowchart TD
     end
 ```
 
-Kubernetes NetworkPolicies restrict **ingress** between workloads. Egress policies are
-written in places but are **not enforced** by the cluster's CNI — don't read an egress
-policy as a control.
+Network segmentation is **not** blanket-enforced: only a few roles define NetworkPolicies
+(`n8n`, `prowlarr`, `registry`) — everything else is reachable pod-to-pod within the
+namespace. Where policies do exist, **ingress** rules are enforced; **egress** rules are
+**not** enforced by this cluster's CNI, so never read an egress policy as a control.
 
 ## How deploys work
 

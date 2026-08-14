@@ -235,7 +235,7 @@ All set per-category in `bedroom_threshold_alert`'s `cfg` map or per-call to `be
 | Which alerts are critical / watch | `cfg` map in `bedroom_threshold_alert`; flags on `bedroom_notify` calls |
 
 After any edit, redeploy (§ top). Device-level settings (Z2M names, FP300 tuning) live in Z2M's
-`./data` (Kopia-backed, not git) — re-apply after a re-pair.
+Z2M's data volume (a Longhorn PVC backed up to B2, not git) — re-apply after a re-pair.
 
 ---
 

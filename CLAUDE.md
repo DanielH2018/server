@@ -18,13 +18,12 @@ ansible/          # Ansible playbooks, roles, inventory, templates  ← EDIT HER
   roles/k8s/        # One role per k3s workload (rendered manifests) — where most services live
   roles/containers/ # One role per Docker service (the Pi's) + the shared `common` role
     archive/        # Roles retired by the k3s migration, kept for reference
-containers/       # Docker Compose definitions deployed by Ansible  ← DO NOT EDIT
 scripts/          # Python helper scripts
 docs/             # Runbooks, design specs, security notes
   k3s-migration/    # Historical record of the completed Docker → k3s migration
 ```
 
-> **`containers/` is read-only.** Files here are generated and deployed by Ansible from templates in `ansible/roles/containers/*/templates/`. Any direct edits will be overwritten on the next deploy. Always modify the corresponding Ansible role template instead. Post-migration it holds only `daniel-pi`'s services.
+> **`containers/` is not a directory in this repo** — it is untracked and rendered by Ansible onto the *target host* at `/home/<user>/server/containers/<svc>/docker-compose.yml`. Post-migration it exists only on `daniel-pi`; neither cluster node has one. It is still read-only: edits are overwritten on the next deploy, so always modify `ansible/roles/containers/*/templates/` instead. (The `block-protected-edits` hook enforces this.)
 
 > **Two roles trees, deliberately.** `roles/k8s/<name>` is where a service now lives; `roles/containers/<name>` is Docker. A few `roles/containers/` roles survive with no `containers_list` entry because they are the git-owned *source* a k8s role reads — notably `grafana` (dashboard JSON) and `home-assistant` (automations/scenes/scripts/templates, mounted via `roles/k8s/home-assistant`'s ConfigMap). Don't "clean those up"; edit them as before.
 
