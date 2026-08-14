@@ -104,9 +104,16 @@ Docker at all, so a Compose role there deploys nothing.
 Run ansible through `uv run` so it uses the repo's pinned env (`ansible-core` + the
 `community.docker` deps `requests`/`docker` — see **Python & Tests**). Bare `ansible-playbook`
 (the uv-tool shim) lacks those module deps and deploys will fail.
+Deploy through `scripts/deploy.sh`. It takes `/var/lock/server-git-tree.lock` — the same
+lock `gitops-deploy.service` (30-min timer) and the weekly secret-rotate cron hold — so a
+deploy can't interleave with the automated pipeline or with another Claude session. Exit
+**75** means the lock stayed busy and *nothing was deployed*; it is not a playbook failure.
+`--check` runs unlocked. The bare `ansible-playbook` forms below still work and are what
+the wrapper runs; use them only when you deliberately want no lock.
+
 ```bash
 # Deploy a specific container
-uv run ansible-playbook ansible/deploy.yml --tags "<service-name>"
+./scripts/deploy.sh --tags "<service-name>"
 
 # Target the Pi from the server (NB: -e target=, NOT --limit — the play's hosts:
 # defaults to the local hostname, so --limit daniel-pi matches zero hosts)

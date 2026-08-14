@@ -22,9 +22,15 @@ deploy there with a `docker` command; it doesn't exist on those hosts.
 Steps:
 1. Confirm the service name matches a role, and note which of the two trees it's in.
 2. Ask if they want a dry run first (`--check` mode)
-3. If dry run: `uv run ansible-playbook ansible/deploy.yml --tags "<service>" --check`
-4. If dry run passes or they skip it: `uv run ansible-playbook ansible/deploy.yml --tags "<service>"`
+3. If dry run: `./scripts/deploy.sh --tags "<service>" --check`
+4. If dry run passes or they skip it: `./scripts/deploy.sh --tags "<service>"`
    (add `-e target=daniel-pi` for a Pi service)
+
+   Deploy through `scripts/deploy.sh`, not `ansible-playbook` directly — it takes
+   `/var/lock/server-git-tree.lock`, the same lock gitops-deploy.service and the
+   secret-rotate cron use, so a deploy can't interleave with the automated pipeline or with
+   another Claude session. `--check` runs unlocked. Exit 75 means the lock was busy for
+   25 minutes and **nothing was deployed** — that is not a playbook failure.
 5. **Verify it actually came up healthy** — Ansible reporting `ok`/`changed` only means the
    playbook ran, not that the workload is up (it can apply cleanly then crash-loop or fail
    its probes).
