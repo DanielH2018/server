@@ -1,5 +1,13 @@
 # daniel-box handoff — 2026-08-01
 
+> **HISTORICAL — superseded 2026-08-14.** This was written *before* the k3s migration, when
+> `daniel-server` was still the Docker host and `daniel-box` was the new machine being handed
+> over. Statements below about what runs where (notably "daniel-server is the Docker host",
+> the Kopia-backs-up-bind-paths section, and "Kopia and Longhorn share one B2 bucket") no
+> longer hold: Docker is gone from both cluster nodes and Kopia is retired. Kept for the
+> hardware/OS/network facts and the reasoning captured at handoff time. Current state:
+> repo-root [`README.md`](../README.md).
+
 Written for a Claude session running **on the server**. Everything below was verified on the
 host unless explicitly marked otherwise.
 

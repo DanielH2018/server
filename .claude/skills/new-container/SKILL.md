@@ -1,10 +1,23 @@
 ---
 name: new-container
-description: Scaffold a new container service for the homelab — creates the Ansible role, docker-compose template, and registers it in the host's containers_list (deploy tags derive automatically).
+description: Scaffold a new DOCKER service for daniel-pi — creates the Ansible role, docker-compose template, and registers it in the Pi's containers_list (deploy tags derive automatically). New cluster services go to ansible/roles/k8s/ instead; this skill does not scaffold those.
 allowed-tools: Read, Write, Edit, Glob, Bash, WebFetch, WebSearch
 ---
 
-Scaffold a new container service for the homelab following the existing patterns.
+> **STOP — check the target host first.** Since the k3s migration completed (2026-08-14),
+> `daniel-server` and `daniel-box` have **no Docker at all**. A Compose role scaffolded for
+> either host deploys nothing. This skill applies **only to `daniel-pi`** (LAN-only utilities,
+> WireGuard).
+>
+> For anything on the cluster — which is where nearly every new service belongs — do NOT use
+> this skill. Create a role under `ansible/roles/k8s/<name>/` rendering Deployment / Service /
+> IngressRoute / PVC manifests (copy the shape from `roles/k8s/freshrss` for a plain web app,
+> or `roles/k8s/sonarr` for one on the media volume), then add a `containers_list` entry in
+> `host_vars/daniel-box.yml` with `platform: k8s`, positioned **after** `traefik` (CRDs) and
+> after `authelia` if the route uses its middleware — that play runs in list order with no
+> toposort. See repo-root `CLAUDE.md` → "Adding a New Service".
+
+Scaffold a new Docker service for `daniel-pi` following the existing patterns.
 
 **First, ask:** Is this a brand-new container being built from scratch (custom Dockerfile, local build), or an existing image being pulled from a registry (e.g. Docker Hub, GHCR)?
 
@@ -20,7 +33,9 @@ Gather from the user (or infer from context):
 4. Persistent data volumes needed
 5. Whether it goes behind Traefik reverse proxy
 6. Whether it needs Authelia authentication
-7. Target host: `daniel-server` or `daniel-pi` (or both)
+7. Confirm the target host is `daniel-pi` — it is the only Docker host left. If the answer is
+   `daniel-server` or `daniel-box`, stop and scaffold a `roles/k8s/` role instead (see the note
+   at the top).
 
 Then create the following files:
 

@@ -1,6 +1,14 @@
 # SPEC — Self-host `slopus/happy` (standalone) for unified cross-machine Claude Code sessions
 
-**Status:** ready to execute in a fresh session. Self-contained — the executor has none of the
+> **Status: MOTHBALLED (2026-07-19), and no longer executable as written (2026-08-14).** The
+> service was archived — containers removed, data retained, the `containers_list` entry
+> commented out in `host_vars/daniel-server.yml`. The spec targets a Docker deploy on
+> `daniel-server`, which has had **no Docker since 2026-08-14**. Reviving happy now means
+> porting it to a `roles/k8s/happy` role on `daniel-box`, not running the steps below. The
+> upstream analysis in §2 (pnpm, standalone vs. `Dockerfile.server`, the separate webapp
+> build) is still the useful part.
+
+**Original status:** ready to execute in a fresh session. Self-contained — the executor has none of the
 planning conversation. Supersedes `docs/happy-server-selfhost-handoff.md` where they conflict
 (see **§2 Corrections to the handoff brief** — the brief predates reading current upstream source).
 

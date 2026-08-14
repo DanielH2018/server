@@ -2,7 +2,15 @@
 
 **Date:** 2026-08-01
 
-**Status:** Plan executed through Phase E. Current state in `slice-7-phase-e-server-retirement.md`; all 8-item Reworks list shipped.
+**Status: COMPLETE (2026-08-14).** The whole plan executed; Docker was uninstalled from
+`daniel-server` on 2026-08-14, which is the migration's end state. Everything in this
+directory is a **historical record of work already done** — read it for *why* a thing is
+shaped the way it is, not as a description of pending work or of current architecture. For
+current state, start at the repo-root [`README.md`](../../README.md) and
+[`CLAUDE.md`](../../CLAUDE.md).
+
+Phase-by-phase detail: `slice-7-phase-e-server-retirement.md` (server retirement),
+then Phase F (daniel-server rejoined as a k3s agent) and Phase G (books close-out).
 
 **Scope:** `daniel-server` (10.0.0.161) and `daniel-box` (10.0.0.215). `daniel-pi` explicitly out of scope.
 

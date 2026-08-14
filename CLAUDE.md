@@ -1,43 +1,71 @@
 # Server Homelab — Claude Code Context
 
 ## Project Overview
-Docker + k3s homelab managed with Ansible. ~50 containerized services deployed across three hosts via infrastructure-as-code, with migration to k3s in final phases (see `docs/k3s-migration/`). (Exact count: `grep -c '^  - name:' ansible/inventory/host_vars/*.yml` — don't hand-maintain a precise number here.)
+Docker + k3s homelab managed with Ansible. ~50 containerized services deployed across three hosts via infrastructure-as-code, the k3s migration **completed 2026-08-14** — `docs/k3s-migration/` is now a historical record of executed work, not a plan. Docker survives only on `daniel-pi`. (Exact count: `grep -c '^  - name:' ansible/inventory/host_vars/*.yml` — don't hand-maintain a precise number here.)
 
 **Hosts:**
-- `daniel-box` — k3s single-node cluster (Traefik edge, Authelia+OIDC, Pi-hole DNS, Longhorn storage, most workloads since 2026-08 migration)
+- `daniel-box` — k3s server / control-plane node (Traefik edge, Authelia+OIDC, Pi-hole DNS, Longhorn storage, most workloads since 2026-08 migration). Ansible runs on this host.
 - `daniel-server` — k3s agent node (Intel XE graphics, LVM storage, UPS hardware + the
   `nut_host` shutdown chain; Docker uninstalled 2026-08-14 — the migration's end state)
-- `daniel-pi` — Raspberry Pi
+- `daniel-pi` — Raspberry Pi, the **only** remaining Docker host (LAN-only: wg-easy, glances,
+  dozzle, autoheal, docker-proxy). Driven remotely over SSH with `-e target=daniel-pi`.
 
-**Key technologies:** Docker Compose, k3s (Kubernetes), Ansible, Traefik (reverse proxy), Cloudflare DNS, Authelia (SSO), SOPS/age (secret encryption), Longhorn (storage), CrowdSec (WAF)
+**Key technologies:** k3s (Kubernetes), Ansible, Docker Compose (Pi only), Traefik (reverse proxy), Cloudflare DNS, Authelia (SSO), SOPS/age (secret encryption), Longhorn (storage), CrowdSec (WAF)
 
 ## Directory Structure
 ```
 ansible/          # Ansible playbooks, roles, inventory, templates  ← EDIT HERE
+  roles/k8s/        # One role per k3s workload (rendered manifests) — where most services live
+  roles/containers/ # One role per Docker service (the Pi's) + the shared `common` role
+    archive/        # Roles retired by the k3s migration, kept for reference
 containers/       # Docker Compose definitions deployed by Ansible  ← DO NOT EDIT
 scripts/          # Python helper scripts
 docs/             # Runbooks, design specs, security notes
+  k3s-migration/    # Historical record of the completed Docker → k3s migration
 ```
 
-> **`containers/` is read-only.** Files here are generated and deployed by Ansible from templates in `ansible/roles/containers/*/templates/`. Any direct edits will be overwritten on the next deploy. Always modify the corresponding Ansible role template instead.
+> **`containers/` is read-only.** Files here are generated and deployed by Ansible from templates in `ansible/roles/containers/*/templates/`. Any direct edits will be overwritten on the next deploy. Always modify the corresponding Ansible role template instead. Post-migration it holds only `daniel-pi`'s services.
+
+> **Two roles trees, deliberately.** `roles/k8s/<name>` is where a service now lives; `roles/containers/<name>` is Docker. A few `roles/containers/` roles survive with no `containers_list` entry because they are the git-owned *source* a k8s role reads — notably `grafana` (dashboard JSON) and `home-assistant` (automations/scenes/scripts/templates, mounted via `roles/k8s/home-assistant`'s ConfigMap). Don't "clean those up"; edit them as before.
 
 ## Where to Look (task → start here)
 Route to the source of truth by what you're doing, before reading linearly:
 
 | If you're… | Start here |
 |---|---|
-| Adding / changing a container service | `## Adding a New Container Service` below · `/new-container` skill |
+| Adding / changing a service (k3s — the default) | `## Adding a New Service` below · a sibling role in `ansible/roles/k8s/` |
+| Adding / changing a Docker service (the Pi only) | `## Adding a New Service` → *Adding a Docker service* · `/new-container` skill |
 | Deploying or redeploying a service | `/deploy` skill · `## Common Commands` |
 | Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |
 | A Bash command keeps prompting for approval | `## Shell Commands — Shape Them to Auto-Approve` |
-| Editing HA automations / lighting / fans | `ansible/roles/containers/home-assistant/CLAUDE.md` · `/ha-edit-automation` |
+| Editing HA automations / lighting / fans | `ansible/roles/containers/home-assistant/CLAUDE.md` (still the config source; the workload runs from `roles/k8s/home-assistant`) · `/ha-edit-automation` |
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `check.py` **first** — mature setup, most are handled |
-| A config edit won't recreate the container | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
+| A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment — the role needs a `checksum/config` pod annotation. See `roles/k8s/monitor-bridge/templates/deployment.yaml.j2` for the pattern. |
+| A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
 | A host can't decrypt secrets | `## Secrets Management` → *Onboarding a host to SOPS* |
 | Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract* |
 
-## Adding a New Container Service
+## Adding a New Service
+
+**Default to k3s.** A new service belongs in `ansible/roles/k8s/<name>/` unless it must run
+on `daniel-pi` (LAN-only utilities, WireGuard) — `daniel-server` and `daniel-box` have no
+Docker at all, so a Compose role there deploys nothing.
+
+1. Create `ansible/roles/k8s/<name>/tasks/main.yml` plus the manifest templates it needs
+   (`deployment.yaml.j2`, `service.yaml.j2`, `ingressroute.yaml.j2`, `pvc.yaml.j2`).
+   Copy the shape from a close sibling — `roles/k8s/freshrss` for a plain web app,
+   `roles/k8s/sonarr` for one on the media volume.
+2. Add the service to `containers_list` in `ansible/inventory/host_vars/daniel-box.yml` with
+   `platform: k8s`. **Position matters**: that play has no toposort and runs in list order,
+   so place the entry *after* `traefik` (which installs the CRDs its IngressRoute needs) and
+   after `authelia` if the route uses the `authelia` middleware.
+3. Secrets: add to `ansible/vars/secrets.yml` (`sops ansible/vars/secrets.yml`), reference as
+   `{{ variable_name }}` in a `secret.yaml.j2`. Note `kubectl apply` leaves *stale* Secret
+   keys behind — removing a key from the manifest does not remove it live.
+4. Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "<name>"`.
+
+### Adding a Docker service (daniel-pi only)
 1. Create `ansible/roles/containers/<name>/tasks/main.yml`
 2. Add a `docker-compose.yml.j2` template in `ansible/roles/containers/<name>/templates/`.
    Use the shared macros in `ansible/templates/` rather than hand-rolling boilerplate:
@@ -46,7 +74,7 @@ Route to the source of truth by what you're doing, before reading linearly:
    the per-service and top-level `networks:` blocks), and `resources.yml.j2`
    (`resources(cpu_limit, mem_limit, cpu_res, mem_res)` — the `deploy.resources` caps).
    The `/new-container` skill has the canonical skeleton.
-3. Add the service to `containers_list` in `ansible/inventory/host_vars/<host>.yml`
+3. Add the service to `containers_list` in `ansible/inventory/host_vars/daniel-pi.yml`
    (`name`, `port` if web-facing, `use_authelia`, `networks`). Deploy tags derive from
    `name` automatically — `deploy.yml` needs no edit.
 4. Add any secrets to `ansible/vars/secrets.yml` (edit with `sops ansible/vars/secrets.yml`)
@@ -103,8 +131,9 @@ read-only commands to fit it. Anything that writes or executes still prompts —
   `lsb_release`, `sensors`, `mailq`, `crontab -l` (the write forms — `dpkg -i`,
   `apt install`, `crontab -r`, `sensors -s`, … — still prompt)
 - Those same read-only commands run over `ssh daniel-server`/`ssh daniel-pi` — the remote
-  command is classified exactly like a local one, so `ssh daniel-server docker logs monitor-bridge
-  --since 24h 2>&1 | tail -20` goes through. Connection flags (`-i`, `-p`, `-l`, `-q`, `-o`
+  command is classified exactly like a local one, so `ssh daniel-pi docker logs wg-easy
+  --since 24h 2>&1 | tail -20` goes through. (Pick a host that still has Docker — neither
+  cluster node does since 2026-08-14; for cluster logs use `kubectl logs` locally instead.) Connection flags (`-i`, `-p`, `-l`, `-q`, `-o`
   with a connection-only key) are fine; forwarding/proxying (`-L`/`-R`/`-D`/`-A`/`-F`,
   `-o ProxyCommand=…`), a second hop, any other host, and remote reads of secret paths or
   globs still prompt.
@@ -286,7 +315,8 @@ uv run pytest scripts         # just one suite
   `validate-compose-templates` hooks call `uv run`, so there's no duplicated dependency list.
   **uv must be on `PATH` for `prek run`** (CI installs it via `astral-sh/setup-uv`).
 - **Suites:** `ansible/tests/` (toposort deploy-ordering filters),
-  `ansible/roles/containers/monitor-bridge/files/` (B2/Prometheus/Loki check logic),
+  `ansible/roles/k8s/monitor-bridge/files/` + `ansible/roles/k8s/autofix-bridge/files/`
+  (B2/Prometheus/Loki check logic),
   `.claude/hooks/` (read-only Bash classifier), `scripts/` (image-diff parser).
 - **Test-placement gotcha:** pytest tests must NOT live under `ansible/filter_plugins/` —
   Ansible's plugin loader imports every `.py` there at deploy time and would choke on the
