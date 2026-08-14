@@ -30,6 +30,7 @@ spec:
         runAsGroup: {{ pgid }}
         runAsNonRoot: true
       automountServiceAccountToken: false
+      priorityClassName: homelab-best-effort
       containers:
         - name: autofix-bridge
           image: {{ autofix_bridge_k8s_image }}

@@ -24,6 +24,7 @@ spec:
       # server, so it has no use for the token — and a privileged pod is the last place to
       # leave one mounted anyway.
       automountServiceAccountToken: false
+      priorityClassName: homelab-best-effort
       containers:
         - name: collector
           image: {{ scrutiny_k8s_collector_image }}

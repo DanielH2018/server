@@ -94,6 +94,7 @@ spec:
               cpu: "10m"
               memory: 32Mi
       automountServiceAccountToken: false
+      priorityClassName: homelab-standard
       containers:
         - name: jellyfin
           image: {{ jellyfin_k8s_image }}

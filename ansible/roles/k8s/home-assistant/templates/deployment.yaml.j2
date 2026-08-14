@@ -70,6 +70,7 @@ spec:
               cpu: 10m
               memory: 16Mi
       automountServiceAccountToken: false
+      priorityClassName: homelab-automation
       containers:
         - name: home-assistant
           image: {{ home_assistant_k8s_image }}

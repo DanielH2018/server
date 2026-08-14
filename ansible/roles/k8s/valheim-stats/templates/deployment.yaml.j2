@@ -35,6 +35,19 @@ spec:
         # sqlite3.connect() died with "unable to open database file" and crash-looped.
         # fsGroup makes the kubelet chown the volume to this group at mount.
         fsGroup: {{ pgid }}
+      priorityClassName: homelab-best-effort
+      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
+      # Weighted so the pod still schedules if daniel-server is cordoned or full.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - daniel-server
       containers:
         - name: valheim-stats
           image: {{ valheim_stats_k8s_image }}
