@@ -1,9 +1,10 @@
-"""Pure decision core for the configarr sync host cron (configarr_sync.py).
+"""Pure decision core for judging whether a configarr sync run succeeded.
 
-Split from the I/O shell so it stays stdlib-only + host-Python-floor clean (runs under the deploy
-host's /usr/bin/python3, currently 3.12 — see ansible/tests/test_host_scripts_py312.py) and is
-unit-testable without docker. The shell runs `docker compose run --rm configarr`, captures its exit
-code + combined output, and hands both here to decide whether the sync actually succeeded.
+Written for the Docker-era host cron, whose I/O shell was retired with the k3s migration; the
+caller is now configarr_health_logic.py, reading the last CronJob's exit code + logs. Kept
+stdlib-only and host-Python-floor clean (runs under the deploy host's /usr/bin/python3,
+currently 3.12 — see ansible/tests/test_host_scripts_py312.py), and unit-testable without a
+cluster: the caller hands it an exit code plus combined output and it returns the verdict.
 
 Why not trust the exit code alone: recyclarr's healthcheck watched only the supercronic PROCESS, so
 the 2026-06-10 v8 breakage failed every nightly sync while the container looked healthy. Capturing

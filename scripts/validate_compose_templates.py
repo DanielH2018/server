@@ -347,9 +347,19 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
     name = ci.get("name")
     if not name:
         return None
-    tpl = ROLES / name / "templates" / "docker-compose.yml.j2"
+    role = ROLES / name
+    if not role.is_dir():
+        return (
+            f"no role at ansible/roles/containers/{name} — the inventory entry names a role "
+            "that "
+            "does not exist (moved, renamed, or retired without updating containers_list)"
+        )
+    tpl = role / "templates" / "docker-compose.yml.j2"
     if not tpl.exists():
-        return None  # role has no compose template (nothing to validate)
+        return (
+            f"role exists but has no ansible/roles/containers/{name}/templates/"
+            "docker-compose.yml.j2 — a Docker entry must render a compose file"
+        )
 
     env = build_env(name)
     ctx = {**host_ctx, "container_item": ci}
@@ -429,8 +439,12 @@ def main() -> int:
         host_ctx = {**BASE_CONTEXT, **all_vars, **host_vars}
         host_ctx.pop("containers_list", None)
 
-        print(f"== {host_file.name} ({len(containers)} active services) ==")
-        for ci in containers:
+        # k8s entries render manifests, not compose — validate_k8s_manifests.py owns them.
+        # Excluding them here is what lets a *Docker* entry with no template be an error
+        # rather than a silent [ok]; that blind spot let a broken glances role ship.
+        docker = [ci for ci in containers if ci.get("platform") != "k8s"]
+        print(f"== {host_file.name} ({len(docker)} Docker services) ==")
+        for ci in docker:
             err = check_container(host_ctx, ci)
             checked += 1
             name = ci.get("name", "<unnamed>")

@@ -20,14 +20,11 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 ## At a glance
 - **Image:** `python:3.14-alpine` (stdlib only — no build, no extra deps)
-- **Host:** daniel-server · **No web UI**, no Authelia
-- **Networks:** `monitoring` (deploy-ordering artifact only; Prometheus itself retired
-  2026-08-12) + `apps` + `media` — the kopia net retired with kopia; monitor-bridge reaches the
-  cluster prometheus via PROMETHEUS_URL (`https://prometheus-k8s.local.<domain>`). Kuma, n8n and
-  the *arrs are all reached over the LAN (`-k8s` names) since their cluster moves, so the
-  remaining memberships are a Phase E diet candidate.
+- **Host:** daniel-box — pinned by `nodeSelector` · **No web UI**, no Authelia
+- **Reaches:** the cluster prometheus via PROMETHEUS_URL
+  (`https://prometheus-k8s.local.<domain>`); Kuma, n8n and the *arrs over the LAN `-k8s` names.
 - **Depends on:** prometheus (`meta/deps.yml`)
-- **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
+- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
@@ -477,9 +474,12 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
    Discord notification defined on the `uptime-kuma` container. No per-monitor UI clicking.
 
 ## Editing & testing
-- Compose: `templates/docker-compose.yml.j2` · Logic: `files/check.py`
+- Manifests: `templates/deployment.yaml.j2`, `templates/env-secret.yaml.j2` · Logic:
+  `files/check.py`
 - Unit tests (parsing + every check's decision logic):
   `uv run pytest ansible/roles/k8s/monitor-bridge/files`.
   Also run automatically by the `pytest` prek hook (`prek run pytest --all-files`).
-- Smoke test one pass: `docker exec monitor-bridge python /app/check.py --once`
+- Smoke test one pass:
+  `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/check.py --once`
+  (the readonly SA plain `kubectl` uses holds no exec verb)
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "monitor-bridge"`

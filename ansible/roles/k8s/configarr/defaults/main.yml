@@ -10,7 +10,7 @@ configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.30.0
 # so the two schedules are independent — this one can move without touching monitoring.
 configarr_k8s_schedule: "30 4 * * *"
 
-# Matches CONFIGARR_TIMEOUT_S in the retired configarr_sync.py.
+# Carried over from CONFIGARR_TIMEOUT_S in the Docker-era sync cron.
 configarr_k8s_timeout: 300
 
 # Deliberately kept: `kubectl logs job/<n>` is the only record of what a run did, and the health
