@@ -132,23 +132,25 @@ name = "Validate Grafana dashboard datasource uids"
 entry = "uv run python scripts/validate_grafana_dashboards.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/containers/grafana/files/dashboards/.*\\.json|ansible/roles/containers/grafana/templates/provisioning/datasources\\.yml\\.j2|scripts/validate_grafana_dashboards\\.py)$"
+files = "^(ansible/roles/k8s/claude-otel/files/dashboards/.*\\.json|ansible/roles/k8s/claude-otel/templates/grafana\\.yaml\\.j2|scripts/validate_grafana_dashboards\\.py)$"
 
-# Render the high-value NON-compose YAML config templates (grafana) with stubbed vars and
-# assert each parses — the render-then-parse guard the compose templates already get
+# Render the high-value NON-compose YAML config templates with stubbed vars and assert each
+# parses — the render-then-parse guard the compose templates already get
 # (validate-compose-templates), extended to the bind-mounted config templates that re-render
 # every deploy. Catches a Jinja indentation bug that check-yaml/ansible-lint miss (they don't
 # render .j2). The authelia/traefik entries this hook once covered retired at E7 (2026-08-13,
-# the Docker edge's removal) — validate-k8s-manifests below covers their k8s successors.
+# the Docker edge's removal) and grafana's went with its role — validate-k8s-manifests below
+# covers their k8s successors, so CONFIG_TEMPLATES is deliberately empty right now and the
+# hook holds the wiring for the next config-bearing template.
 [[repos.hooks]]
 id = "validate-config-templates"
-name = "Validate rendered config templates (grafana)"
+name = "Validate rendered config templates"
 entry = "uv run python scripts/validate_config_templates.py"
 language = "system"
 pass_filenames = false
 # group_vars/all.yml is in scope because the validator renders with it (ALL_VARS) — an
 # edit there can change what these templates render to, same as the compose hook's scope.
-files = "^(ansible/roles/containers/grafana/templates/(loki-config|promtail-config)\\.yml\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate_config_templates\\.py)$"
+files = "^(ansible/inventory/group_vars/all\\.yml|scripts/validate_config_templates\\.py)$"
 
 # Same render-then-parse guard as the two above, for the k8s manifests the k3s migration adds.
 # Also parses the YAML *embedded* in ConfigMap/Secret values — the manifest wrapping Traefik's

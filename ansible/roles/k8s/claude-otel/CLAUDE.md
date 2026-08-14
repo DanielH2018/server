@@ -11,6 +11,24 @@ read them. Their Services stay ClusterIP; the `hostIP` pin is what keeps the nod
 listener off the LAN. Tempo's second port (otlp-grpc 4317) has no `hostPort` on purpose:
 the collector owns 4317, and two hostPorts on one number wedge a pod in `Pending`.
 
+## Dashboards
+
+`files/dashboards/**/*.json` is the source of truth for every provisioned board, in six
+folders (`claude_otel_dashboard_folders`). Five of them moved here on 2026-08-14 from the
+retired Docker grafana role, which had kept them only so this role could read them across
+the tree; `AI` has been role-owned since D7. `tasks/dashboards.yml` stages them and bakes a
+ConfigMap per folder.
+
+To change a board: edit the JSON here (or edit in the Grafana UI and round-trip with
+`scripts/export_grafana_dashboards.py`, which execs into the observability/grafana pod via
+`sudo k3s kubectl`, so expect a sudo prompt), then deploy **claude-otel**.
+`scripts/fetch_grafana_dashboards.py` refreshes the two community boards (1860, 14282).
+
+Every dashboard's datasource ref must resolve to a uid declared in this role's
+`templates/grafana.yaml.j2` — the `validate-grafana-dashboards` prek hook parses that file
+as the uid registry and fails on an unresolved reference, which is how a hand-imported
+board's stale uid gets caught before it renders "No data".
+
 ## The trap: an idle stack is indistinguishable from a broken one
 
 Verified 2026-08-05. The stack ran 47h with every pod Ready, zero export failures, and the

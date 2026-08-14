@@ -147,7 +147,7 @@ playbooks). The manual post-deploy setup Ansible can't do is verified by
   `ansible/roles/k8s/claude-otel/`, alongside `roles/k8s/loki-homelab` (Loki + a Promtail
   DaemonSet) for homelab logs. Prometheus scrapes node-exporter / cAdvisor / Traefik /
   CrowdSec. Grafana dashboards stay provisioned as code from
-  [`roles/containers/grafana/files/dashboards/`](ansible/roles/containers/grafana/) — that
+  [`roles/k8s/claude-otel/files/dashboards/`](ansible/roles/containers/grafana/) — that
   tree is the single source of truth and is mounted into the cluster Grafana, which is why
   the role survives the migration despite not being in any `containers_list`. Uptime Kuma
   takes monitors from AutoKuma labels and a static-monitors Secret; `monitor-bridge` turns

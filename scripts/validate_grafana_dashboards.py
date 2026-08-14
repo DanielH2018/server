@@ -19,7 +19,7 @@ from pathlib import Path
 import re
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-GRAFANA_ROLE = REPO_ROOT / "ansible/roles/containers/grafana"
+GRAFANA_ROLE = REPO_ROOT / "ansible/roles/k8s/claude-otel"
 DASHBOARDS_DIR = GRAFANA_ROLE / "files/dashboards"
 DATASOURCES_TEMPLATE = (
     REPO_ROOT / "ansible/roles/k8s/claude-otel/templates/grafana.yaml.j2"
