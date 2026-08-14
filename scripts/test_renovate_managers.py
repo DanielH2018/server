@@ -316,7 +316,7 @@ def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
     assert (
         _is_disabled_by_packagerule(
             "latest",
-            "ansible/roles/containers/homepage/templates/docker-compose.yml.j2",
+            "ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
             fake_rules,
         )
         is not None
@@ -333,7 +333,7 @@ def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
     assert (
         _is_disabled_by_packagerule(
             "v1.2.3",
-            "ansible/roles/containers/homepage/templates/docker-compose.yml.j2",
+            "ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
             fake_rules,
         )
         is None

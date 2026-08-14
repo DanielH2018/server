@@ -10,5 +10,5 @@ metadata:
   namespace: {{ k8s_namespace }}
 binaryData:
 {% for icon in ['limitless.png', 'LoLalytics.png', 'monarch.png', 'opgg.png', 'tacticstools.png', 'tftacademy.png'] %}
-  {{ icon }}: {{ lookup('pipe', 'base64 -w0 ' ~ playbook_dir ~ '/roles/containers/homepage/files/' ~ icon) }}
+  {{ icon }}: {{ lookup('pipe', 'base64 -w0 ' ~ playbook_dir ~ '/roles/k8s/homepage/files/' ~ icon) }}
 {% endfor %}
