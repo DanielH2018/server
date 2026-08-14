@@ -1,8 +1,9 @@
 ---
 # autofix-bridge on k8s (Phase F drain): the containerized *arr remediation sidecar,
 # running the SAME files/autofix.py as the Docker role shipped (staged from the
-# containers role, never forked). The host plane — the hourly disk-prune cron — stays
-# on daniel-server: it prunes that host's Docker daemon, which is not portable.
+# containers role, never forked). The host plane it used to carry is gone: the hourly
+# disk-prune cron pruned daniel-server's Docker daemon and retired with it (2026-08-14),
+# and the two fake-remux crons moved to roles/setup/fake_remux.
 
 - name: Create the staging directory
   tags: [config]

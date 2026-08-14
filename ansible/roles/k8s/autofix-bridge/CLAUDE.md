@@ -14,11 +14,12 @@ sidecar per fix. See repo-root `CLAUDE.md`.
 
 ## At a glance
 - **Image:** `python:3.14-alpine` (stdlib only — no build, no extra deps) · **No web UI**, no Authelia
-- **Host:** daniel-server
-- **Networks:** `media` (reach `sonarr:8989` / `radarr:7878` — queue read + blocklist/search
-  writes) + `monitoring` (push to `uptime-kuma:3001` AND egress to the *arr Discord webhook)
+- **Host:** daniel-box — pinned there by `nodeSelector`, so the drain and cold boot of
+  daniel-server cannot take the remediation loop down with it
+- **Reaches:** `sonarr:8989` / `radarr:7878` (queue read + blocklist/search writes),
+  `uptime-kuma:3001` (push), and the *arr Discord webhook (egress)
 - **Depends on:** sonarr, radarr, uptime-kuma (`meta/deps.yml`)
-- **Config in:** `ansible/inventory/host_vars/daniel-server.yml` → `containers_list`
+- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 - **Spec:** `docs/superpowers/specs/2026-07-06-autofix-bridge-disk-autoprune-design.md`
 
 ## Autonomous-role contract (it changes state with no human in the loop)
@@ -143,9 +144,13 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
   git-tracked selection-policy dict rendered to `policy.json`).
 
 ## Editing & testing
-- Sidecar: `files/autofix.py` (bind-mounted `:ro`; a code edit needs a **recreate** — the role
-  wires `common_config_changed` off the script's register so a script-only edit still recreates).
-- Disk-prune cron: `templates/autofix-disk-prune.sh.j2` · Compose: `templates/docker-compose.yml.j2`
+- Sidecar: `files/autofix.py`, staged to the node and mounted from a ConfigMap; the role's
+  `checksum/config` annotation rolls the pod on a script-only edit.
+- Manifests: `templates/deployment.yaml.j2`, `templates/env-secret.yaml.j2`
+- The disk-prune cron and its template are gone — they pruned daniel-server's Docker daemon,
+  uninstalled 2026-08-14, and monitor-bridge dropped the matching `disk_prune` check with them.
+- The two fake-remux crons now live in `ansible/roles/setup/fake_remux/files/`; the paths in the
+  next two bullets are relative to that role.
 - fake-remux scan cron: `files/fake_remux_scan.py` (I/O shell) + `files/fake_remux_logic.py` (pure
   core) · config `templates/fake-remux.config.env.j2`. Run it live report-only:
   `SONARR_API_KEY=… ARR_DISCORD_WEBHOOK_URL= STATE_FILE=/tmp/x.json
@@ -155,6 +160,6 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
   `FAKE_REMUX_REPLACE_MODE=shadow SONARR_API_KEY=… LEDGER_FILE=/tmp/l.json
   REPLACE_STATE_FILE=/tmp/rs.json OUTCOMES_FILE=/tmp/o.jsonl
   PYTHONPATH=ansible/roles/setup/common/files /usr/bin/python3 files/fake_remux_replace.py`.
-- Unit tests: `uv run pytest ansible/roles/k8s/autofix-bridge/files` (`files/test_autofix.py`,
-  `files/test_fake_remux_logic.py`, `files/test_fake_remux_replace_logic.py`).
+- Unit tests: `uv run pytest ansible/roles/k8s/autofix-bridge/files` (`test_autofix.py`) and
+  `uv run pytest ansible/roles/setup/fake_remux/files` (the two fake-remux logic suites).
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "autofix-bridge"`
