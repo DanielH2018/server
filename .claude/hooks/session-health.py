@@ -108,6 +108,41 @@ def target_problems():
     return bad
 
 
+def other_live_sessions(cwd):
+    """Lines describing the other Claude sessions working this repo right now.
+
+    Derived from git and /proc rather than from anything a session declares, so it cannot
+    go stale when a session forgets to announce itself or dies without cleaning up. Knowing
+    another session is already in a role is what stops two of them editing it at once.
+    """
+    sys.path.insert(0, os.path.join(REPO, "scripts"))
+    try:
+        from prune_worktrees import parse_worktree_list, session_is_alive
+    except ImportError:
+        return []
+
+    lines = []
+    for tree in parse_worktree_list(
+        _run(["git", "worktree", "list", "--porcelain"], 5).stdout
+    )[1:]:
+        if os.path.realpath(tree.path) == os.path.realpath(cwd):
+            continue
+        if not (tree.locked and session_is_alive(tree.lock_reason)):
+            continue
+        changed = _run(
+            ["git", "-C", tree.path, "diff", "--name-only", "origin/master...HEAD"], 5
+        ).stdout
+        dirty = _run(["git", "-C", tree.path, "status", "--porcelain"], 5).stdout
+        paths = sorted({p for p in changed.splitlines() if p})
+        shown = ", ".join(paths[:4]) or "no commits yet"
+        if len(paths) > 4:
+            shown += f", +{len(paths) - 4} more"
+        if dirty.strip():
+            shown += " (+ uncommitted)"
+        lines.append(f"  • {tree.branch or os.path.basename(tree.path)} — {shown}")
+    return lines
+
+
 def format_banner(problems):
     """Render the problem list as the session banner (empty string => print nothing)."""
     if not problems:
@@ -142,6 +177,17 @@ def main():
         print(
             "\U0001f3e0 Homelab health: all containers healthy, all scrape targets up."
         )
+
+    # Printed independently of health: another session's open work is information this
+    # session needs even when everything is green.
+    try:
+        sessions = other_live_sessions(os.getcwd())
+    except Exception:
+        sessions = []
+    if sessions:
+        print("\U0001f500 Other Claude sessions in this repo:")
+        for line in sessions:
+            print(line)
     return 0
 
 
