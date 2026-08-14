@@ -53,7 +53,7 @@ _ACTIVE_ROLE = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/")
 # Before this, every path under ansible/roles/k8s/** matched NONE of the regexes above (they're all
 # containers/-scoped) and fell through to services_from_changed_paths returning an EMPTY ChangeSet,
 # which main()'s `if not cs.services:` branch takes as a plain docs-only ff-merge — silent, on EVERY
-# host with has_gitops (daniel-box, all 41 services platform: k8s). Matches the WHOLE role dir (not
+# host with has_gitops (daniel-box, all 47 services platform: k8s). Matches the WHOLE role dir (not
 # split into templates/tasks/meta like containers/) since a k8s role has no separate auto-deploy path
 # for any of its subdirs to be scoped against — the alert just needs to name the role. *.md (role
 # CLAUDE.md) stays a silent ff-merge, same as the containers/ catch-all.
