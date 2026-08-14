@@ -50,8 +50,10 @@ containers_list: []
   #
   # It went first because it is the only migrated service with no Traefik route: no hostname
   # to repoint, no public path, and so none of the ingress work the others are still waiting
-  # on. The role under roles/containers/cloudflare-ddns is deliberately left in place — it is
-  # the rollback, and re-adding an entry here is the whole of it.
+  # on. The role was kept in place as the rollback until 2026-08-14, when Docker was
+  # uninstalled from this host — re-adding an entry here no longer rolls anything back, so
+  # the role moved to roles/containers/archive/cloudflare-ddns with the rest of the retired
+  # Compose plane. Reactivating it now means reinstalling Docker first.
   # Organization: Apps network
   # peanut RETIRED here 2026-08-14 (D6 reversed by the operator so Docker can leave this
   # host entirely): the web UI had moved to the cluster at E4, and the nut daemon now
