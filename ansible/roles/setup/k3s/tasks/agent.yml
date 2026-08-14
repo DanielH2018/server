@@ -46,6 +46,32 @@
     state: present
   become: true
 
+- name: Blacklist Longhorn devices from multipathd
+  tags: [k3s_agent]
+  # Same fix as the server flow (main.yml) — multipathd claims fresh /dev/longhorn
+  # devices and mounts fail; found live at the 2026-08-14 drain gate on both nodes.
+  ansible.builtin.blockinfile:
+    path: /etc/multipath.conf
+    create: true
+    mode: "0644"
+    owner: root
+    group: root
+    marker: "# {mark} ANSIBLE MANAGED - longhorn multipath blacklist"
+    block: |
+      blacklist {
+          devnode "^sd[a-z0-9]+"
+      }
+  become: true
+  register: k3s_agent_multipath_conf
+
+- name: Restart multipathd after a blacklist change # noqa no-handler
+  tags: [k3s_agent]
+  ansible.builtin.systemd:
+    name: multipathd
+    state: restarted
+  become: true
+  when: k3s_agent_multipath_conf is changed
+
 - name: Download the k3s installer
   tags: [k3s_agent]
   ansible.builtin.get_url:

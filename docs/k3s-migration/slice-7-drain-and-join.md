@@ -383,3 +383,30 @@ volumes; operator waived the full-nightly gate earlier on a clean manual backup 
   storm (that was the storage-cap shape, unresolvable by retry). Deliberately left armed:
   the transaction cap resets 00:00 UTC before the 03:30 nightly. B2 Reachable +
   k3s Longhorn Backup stay truthfully red until then.
+
+### GATES EXECUTED 2026-08-14 — drain-reschedule + cold boots (§F closed)
+
+Operator-approved same-day. All three §F disruptive/storage gates now PASSED; findings
+each folded back into source:
+
+- **Drain-reschedule (daniel-box)**: ~26 unpinned workloads rescheduled to daniel-server
+  and ran; Longhorn volumes failed over and back; routed-edge blackout during the window
+  as predicted (L2 pin + ETP-Local). Three real finds: (1) the agent join lacked the
+  kubelet `allowed-unsafe-sysctls` flag — wg-easy churned 707 SysctlForbidden pods
+  (#141); (2) the 917a7402 nodeSelector pins had NEVER been applied live for
+  n8n/ical-proxy/code-server — cluster manifests do NOT deploy via gitops, only via
+  explicit deploys (an earlier report claimed otherwise; corrected). Applying them
+  through the n8n role deadlocked on its seed pod vs the displaced RWO holder — the pins
+  were patched live instead, identical to the committed templates; (3) **multipathd
+  claims fresh /dev/longhorn devices and mounts fail** — the node CRs' standing
+  Multipathd:False warning finally bit on the mass reattach; fixed with the Longhorn KB
+  blacklist on both nodes, now codified in both host-prep flows.
+- **Cold boot daniel-server**: node rejoined Ready, all 8 Docker containers auto-started
+  healthy with networks intact, vip-kube-bypass timer survived, 27 reboot-killed
+  replicas rebuilt from the intact daniel-box copies (41/41 healthy in ~10 min).
+- **Cold boot daniel-box**: operator-run; both nodes Ready and 41/41 volumes healthy
+  within a minute of boot, full pod estate settled clean. The session's cron survived
+  via resume (CronList-before-CronCreate held).
+- **Open item**: the crowdsec-appsec-verify root cron's Kuma pushes do not land from
+  cron context (manual runs work, path verified end-to-end); suspect root-under-cron
+  DNS. Re-check the tile post-reboot; escalate to the final review if still red.

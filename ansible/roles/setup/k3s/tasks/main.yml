@@ -213,6 +213,37 @@
     state: present
   become: true
 
+- name: Blacklist Longhorn devices from multipathd
+  tags: [longhorn]
+  # The Longhorn KB's multipath fix (troubleshooting-volume-with-multipath): multipathd
+  # claims freshly attached /dev/longhorn devices and every mount fails "already in use".
+  # Latent behind the node CR's standing Multipathd:False warning until the 2026-08-14
+  # drain gate's mass reattach cycle stalled ten workloads on it at once.
+  ansible.builtin.blockinfile:
+    path: /etc/multipath.conf
+    create: true
+    mode: "0644"
+    owner: root
+    group: root
+    marker: "# {mark} ANSIBLE MANAGED - longhorn multipath blacklist"
+    block: |
+      blacklist {
+          devnode "^sd[a-z0-9]+"
+      }
+  become: true
+  register: k3s_multipath_conf
+
+- name: Restart multipathd after a blacklist change # noqa no-handler
+  tags: [longhorn]
+  # Not a handler on purpose: the role's play has no handler flush before the Longhorn
+  # verify tasks, and a deferred restart would leave multipathd claiming devices through
+  # the very checks that prove volumes mount.
+  ansible.builtin.systemd:
+    name: multipathd
+    state: restarted
+  become: true
+  when: k3s_multipath_conf is changed
+
 - name: Install Longhorn
   tags: [longhorn]
   ansible.builtin.command:
