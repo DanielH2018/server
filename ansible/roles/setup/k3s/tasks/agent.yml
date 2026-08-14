@@ -146,62 +146,24 @@
   become: true
   when: k3s_agent_registries is changed
 
-# ── VIP kube-proxy bypass (see the script header for the incident it prevents) ────────
-- name: Install the VIP bypass script
+# ── VIP kube-proxy bypass — RETIRED 2026-08-14 ────────────────────────────────────────
+# Existed for Docker-bridge (forwarded, non-node-source) traffic dialing the MetalLB
+# VIPs from this host: kube-proxy programs every VIP on every node, and with ETP Local
+# plus no local endpoint that traffic hit a filter-table "no local endpoints" DROP
+# (the Phase F join blackout, 2026-08-13). The Docker uninstall removed the last such
+# client, and the pins-permanent decision (design.md §10 #6) removed the prospect of
+# endpoints ever living here. These absent-state tasks reap the deployed script, unit
+# and timer; the iptables rules die with the timer at the next reboot and were removed
+# live at retirement.
+- name: Remove the retired VIP bypass units and script
   tags: [k3s_agent]
-  ansible.builtin.template:
-    src: vip-kube-bypass.sh.j2
-    dest: /usr/local/bin/vip-kube-bypass.sh
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-
-- name: Install the VIP bypass unit and timer
-  tags: [k3s_agent]
-  ansible.builtin.copy:
-    dest: "/etc/systemd/system/{{ item.name }}"
-    content: "{{ item.content }}"
-    mode: "0644"
-    owner: root
-    group: root
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
   loop:
-    - name: vip-kube-bypass.service
-      content: |
-        # Managed by Ansible (roles/setup/k3s) — do not edit.
-        [Unit]
-        Description=Exempt the MetalLB VIP range from kube-proxy on this Docker-carrying agent
-        After=k3s-agent.service
-        [Service]
-        Type=oneshot
-        ExecStart=/usr/local/bin/vip-kube-bypass.sh
-    - name: vip-kube-bypass.timer
-      content: |
-        # Managed by Ansible (roles/setup/k3s) — do not edit.
-        # Re-asserts rule POSITION every 5 minutes: kube components ensure their jumps
-        # by existence-check + insert-at-top, so a restart of any of them could climb
-        # above the bypass. -C can't detect that; periodic delete+insert can.
-        [Unit]
-        Description=Re-assert the VIP kube-proxy bypass position
-        [Timer]
-        OnBootSec=2min
-        OnUnitActiveSec=5min
-        [Install]
-        WantedBy=timers.target
-  loop_control:
-    label: "{{ item.name }}"
-  become: true
-
-- name: Enable the VIP bypass now and on boot
-  tags: [k3s_agent]
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    enabled: true
-    state: started
-    daemon_reload: true
-  loop:
-    - vip-kube-bypass.service
-    - vip-kube-bypass.timer
+    - /etc/systemd/system/vip-kube-bypass.timer
+    - /etc/systemd/system/vip-kube-bypass.service
+    - /usr/local/bin/vip-kube-bypass.sh
   become: true
 
 - name: Raise the inotify instance limit for pod log tailing

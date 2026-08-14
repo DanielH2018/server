@@ -21,7 +21,9 @@ spec:
       # Pinned to the VIP-announcing node while the MetalLB L2Advertisement is pinned
       # to daniel-box: with externalTrafficPolicy Local, a VIP-backed pod on the other
       # node makes the announcer DROP all forwarded LAN traffic (2026-08-14 post-boot
-      # DNS blackout). Unpin together with the L2 pin at drain completion.
+      # DNS blackout). Permanent posture (operator decision 2026-08-14): with ETP Local
+      # load-bearing for client IPs, announcement and placement stay on daniel-box as one
+      # unit — this pin only ever moves together with the L2Advertisement nodeSelector.
       nodeSelector:
         kubernetes.io/hostname: daniel-box
       # Edge/auth/DNS eviction ordering — see setup/k3s templates/priorityclass.yaml.j2.

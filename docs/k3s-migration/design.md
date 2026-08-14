@@ -243,7 +243,7 @@ Sequenced as thin end-to-end slices, each independently exercisable and reversib
 
 ## 10. Decisions resolved
 
-All five closed on 2026-08-01. Recorded with what each commits us to.
+The first five closed on 2026-08-01; #6 closed 2026-08-14 after the drain surfaced it. Recorded with what each commits us to.
 
 | # | Decision | Chosen | Commits us to |
 |---|---|---|---|
@@ -252,6 +252,7 @@ All five closed on 2026-08-01. Recorded with what each commits us to.
 | 3 | UPS / `peanut` | ~~Stays on daniel-server~~ **REVERSED 2026-08-14** (drain log "D6 REVERSED"): nut runs in-cluster, pinned to daniel-server for the USB | daniel-server fully drains — no residual Docker role; the host keeps only the k3s agent + the `nut_host` shutdown chain |
 | 4 | Portainer | Replaced | Homepage widget removed; the Pi's agent, `portainer_manager_host`, and the Pi's `DOCKER-USER` rule retire together |
 | 5 | Third node | Possible later | `--cluster-init` from day one; no other design change |
+| 6 | L2/VIP pins *(added 2026-08-14, post-drain)* | **Permanent.** The L2Advertisement pin and the four VIP-backed workloads' (pihole/mosquitto/terraria/traefik) daniel-box nodeSelectors — born as incident response to the two ETP-Local blackouts — are the declared posture, not debt | daniel-box is a named SPOF for DNS/MQTT/edge (already true in practice); those four never fail over. In exchange ETP Local keeps real client IPs for CrowdSec + the ClientIP gates. The pins move only as one unit; `vip-kube-bypass` retired with the Docker uninstall (no forwarded VIP client left on the agent) |
 
 **What's left is execution risk, not decision risk.** The two places this goes wrong *quietly* are the Kopia gap (§6) and the \*arr absolute paths (slice 4). Both are silent failures — they report success while being broken — and both have explicit gates written against them.
 

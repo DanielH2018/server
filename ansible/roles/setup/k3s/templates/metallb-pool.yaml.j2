@@ -46,7 +46,9 @@ spec:
   # container on that host lost the cluster: a Docker-bridge client cannot reach a VIP
   # its own host announces (the hairpin class again — crowdsec agent, terraria-stats and
   # promtail all crash-looped on "dial tcp 10.0.0.240:443: i/o timeout" from 15:05).
-  # Revisit at the drain, when no Docker workload dials VIPs from that host anymore.
+  # PERMANENT (operator decision 2026-08-14, design.md §10 #6): with ETP Local load-bearing
+  # for client-IP preservation and two asymmetric nodes, this pin and the four VIP-backed
+  # workloads' daniel-box nodeSelectors are one unit — never move either alone.
   nodeSelectors:
     - matchLabels:
         kubernetes.io/hostname: daniel-box
