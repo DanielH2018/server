@@ -53,7 +53,9 @@ containers_list:
       - proxy
       - monitoring
       - media
-      - homepage_private
+      # homepage_private dropped 2026-08-14: homepage retired at E3 and the net was
+      # deleted with it, which left this external-net reference failing the whole
+      # docker-proxy compose up (caught by the deferred manual deploy).
   - name: autoheal
     use_authelia: false
     networks:

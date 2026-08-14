@@ -206,7 +206,8 @@
     - monitoring
     - media
     - apps
-    - homepage_private
+    # homepage_private removed 2026-08-14 — retired with homepage at E3; recreating it
+    # here only masked the dangling reference in docker-proxy's compose.
     - lifecycle  # private net: Watchtower + Autoheal <-> docker-proxy-lifecycle only
     - codeserver # isolation net: code-server <-> docker-proxy-codeserver only (keeps the shared docker-proxy off apps — Security M1)
     - kopia      # isolation net: Kopia <-> Traefik only (unauthenticated repo not reachable by other apps)
