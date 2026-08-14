@@ -1,5 +1,5 @@
 ---
-# Managed by Ansible (roles/containers/home-assistant/files/templates.yaml).
+# Managed by Ansible (roles/k8s/home-assistant/files/templates.yaml).
 # Source of truth — copied to ./config (NOT templated: HA's {{ }} Jinja would be mangled by
 # Ansible's templater) and included via `template: !include templates.yaml` in configuration.yaml.
 # HA UI edits are NOT persistent. To change, edit this file and redeploy home-assistant.

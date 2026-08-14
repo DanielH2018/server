@@ -4,7 +4,7 @@ description: Author or edit a Home Assistant automation, scene, script, or templ
 allowed-tools: Read, Edit, Write, Bash, Glob
 ---
 
-Make a correct, idempotent HA change under `ansible/roles/containers/home-assistant/`. The repo
+Make a correct, idempotent HA change under `ansible/roles/k8s/home-assistant/`. The repo
 is the source of truth — **HA UI edits are overwritten on deploy.** Read the role `CLAUDE.md`
 (editing gotchas) and `SETUP.md` (how the bedroom suite fits together) before changing
 interdependent logic. Run everything from `/home/ubuntu/server`.
@@ -16,7 +16,7 @@ this role stays the only place to change config. What changed is where you deplo
 
 ## 1. Pick the right file
 
-All under `ansible/roles/containers/home-assistant/`:
+All under `ansible/roles/k8s/home-assistant/`:
 
 | Change | File (deployed by `copy`, verbatim) |
 |---|---|
@@ -59,7 +59,7 @@ won't recreate the container. See the role `tasks/main.yml` + role `CLAUDE.md`.
 
 ```
 uv run python scripts/validate_ha_config.py          # YAML, dup keys, !include, template syntax
-uv run pytest ansible/roles/containers/home-assistant/tests   # if you touched a macro
+uv run pytest ansible/roles/k8s/home-assistant/tests   # if you touched a macro
 ```
 (The `validate-ha-config` + `pytest` prek hooks run these on commit too.) Fix before deploying —
 validation catches Jinja-syntax and structural errors, but NOT HA schema or entity-existence

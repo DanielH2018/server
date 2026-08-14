@@ -1,12 +1,12 @@
 ---
 name: ha-deploy
-description: Deploy a Home Assistant config change and verify it actually took effect. Use after editing anything under ansible/roles/containers/home-assistant/ (automations, scenes, scripts, templates, configuration). Deploys via Ansible, gates on container health, then confirms the changed automation/entity actually loaded — not just that the playbook ran.
+description: Deploy a Home Assistant config change and verify it actually took effect. Use after editing anything under ansible/roles/k8s/home-assistant/ (automations, scenes, scripts, templates, configuration). Deploys via Ansible, gates on container health, then confirms the changed automation/entity actually loaded — not just that the playbook ran.
 allowed-tools: Bash, Glob
 ---
 
 Deploy the `home-assistant` role and **prove the change took**. Run from `/home/ubuntu/server`.
 **Since slice-5 B3 (2026-08-09) HA runs in the k3s cluster on `daniel-box`** — deploy from
-daniel-box; the config-authoring files stay in `roles/containers/home-assistant/`, and the
+daniel-box; the config-authoring files stay in `roles/k8s/home-assistant/`, and the
 `--tags home-assistant` deploy ships them via the k8s role (ConfigMaps + Secret, then a
 rollout restart). A restart is ~60-120s.
 
@@ -14,7 +14,7 @@ rollout restart). A restart is ~60-120s.
 
 1. **Validate first.** `uv run python scripts/validate_ha_config.py` (or rely on the
    `validate-ha-config` prek hook). If you touched a `custom_templates/*.jinja` macro, also
-   `uv run pytest ansible/roles/containers/home-assistant/tests`. Don't deploy a config that
+   `uv run pytest ansible/roles/k8s/home-assistant/tests`. Don't deploy a config that
    fails structural validation.
 
 2. **A new config file must be added to the k8s role's ConfigMap + init-container install

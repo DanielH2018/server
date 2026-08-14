@@ -63,11 +63,11 @@ def test_loader_malformed_yaml_raises(tmp_path):
 def test_assemble_rejects_ansible_markers(tmp_path):
     role = tmp_path / "role"
     _write(
-        role / "templates/configuration.yaml.j2",
+        role / "templates/config/configuration.yaml.j2",
         "homeassistant:\n  name: {{ ha_name }}\n",
     )
-    _write(role / "templates/customize.yaml.j2", "{}\n")
-    _write(role / "templates/ui-lovelace.yaml.j2", "{}\n")
+    _write(role / "templates/config/customize.yaml.j2", "{}\n")
+    _write(role / "templates/config/ui-lovelace.yaml.j2", "{}\n")
     with pytest.raises(HAConfigError, match="Ansible templating"):
         assemble_config(role, tmp_path / "dest")
 
@@ -139,11 +139,11 @@ def test_validate_real_config_is_clean(real_role_errors):
 def test_validate_reports_structural_error(tmp_path):
     role = tmp_path / "role"
     _write(
-        role / "templates/configuration.yaml.j2",
+        role / "templates/config/configuration.yaml.j2",
         "recorder:\n  x: 1\nrecorder:\n  y: 2\n",
     )
-    _write(role / "templates/customize.yaml.j2", "{}\n")
-    _write(role / "templates/ui-lovelace.yaml.j2", "{}\n")
+    _write(role / "templates/config/customize.yaml.j2", "{}\n")
+    _write(role / "templates/config/ui-lovelace.yaml.j2", "{}\n")
     for s in (
         "automations.yaml",
         "scenes.yaml",

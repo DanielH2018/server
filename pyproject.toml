@@ -41,7 +41,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/setup/gitops_deploy/files",   # deploy_logic decision tests
   "ansible/roles/setup/renovate_notify/files", # notifier decision tests
   "ansible/roles/setup/common/files",          # shared host_lib helper tests
-  "ansible/roles/containers/home-assistant/tests", # HA Jinja macro logic tests
+  "ansible/roles/k8s/home-assistant/tests", # HA Jinja macro logic tests
   "evals",                                         # homelab eval-case schema validation
 ]
 # `-n auto` (pytest-xdist) fans the suite across the machine's cores: 5.6s -> 3.0s locally, and

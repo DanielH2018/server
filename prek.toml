@@ -121,7 +121,7 @@ name = "Validate Home Assistant config"
 entry = "uv run python scripts/validate_ha_config.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/containers/home-assistant/(templates|files)/.*|scripts/validate_ha_config\\.py)$"
+files = "^(ansible/roles/k8s/home-assistant/(templates/config|files)/.*|scripts/validate_ha_config\\.py)$"
 
 # Validate that every provisioned Grafana dashboard's datasource references resolve to a
 # datasource declared in datasources.yml.j2 (uid or name) or a Grafana built-in. Catches the
@@ -259,7 +259,7 @@ pass_filenames = false
 # and stay 3.12-parseable) — the exact class that bricked the deployer on 2026-07-15. Plus setup-role
 # `templates/*.j2` (e.g. gitops_deploy/config.env.j2), which the gitops budget-arithmetic guard reads
 # to prove flock+RUN_BUDGET_S+HEALTH_TIMEOUT_S stays within TimeoutStartSec.
-files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/k8s/[^/]+/files/.*\\.py|ansible/roles/containers/home-assistant/tests/.*\\.py|ansible/roles/setup/[^/]+/files/.*\\.py|ansible/roles/setup/[^/]+/templates/.*\\.j2|ansible/roles/.*\\.service\\.j2|\\.claude/(hooks|scripts)/.*\\.py|scripts/.*\\.py|evals/.*\\.py|pyproject\\.toml|renovate\\.json|prek\\.toml|\\.ansible-lint|\\.python-version|ansible/requirements\\.yml|\\.github/workflows/[^/]+\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/roles/setup/(docker_install|sops_setup)/tasks/main\\.yml|ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/roles/(containers|k8s)/[^/]+/(templates|files)/[Dd]ockerfile[^/]*)$"
+files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/k8s/[^/]+/files/.*\\.py|ansible/roles/k8s/home-assistant/tests/.*\\.py|ansible/roles/setup/[^/]+/files/.*\\.py|ansible/roles/setup/[^/]+/templates/.*\\.j2|ansible/roles/.*\\.service\\.j2|\\.claude/(hooks|scripts)/.*\\.py|scripts/.*\\.py|evals/.*\\.py|pyproject\\.toml|renovate\\.json|prek\\.toml|\\.ansible-lint|\\.python-version|ansible/requirements\\.yml|\\.github/workflows/[^/]+\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/roles/setup/(docker_install|sops_setup)/tasks/main\\.yml|ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/roles/(containers|k8s)/[^/]+/(templates|files)/[Dd]ockerfile[^/]*)$"
 
 # Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
 # syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]; vendored

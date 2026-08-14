@@ -279,7 +279,7 @@ reports SKIP. Run it after `deploy.yml` and again after working through the list
 4. **Home Assistant onboarding**, then mint four long-lived tokens (Profile → Security) for
    `monitor_bridge_ha_token`, `homepage_ha_token`, `prometheus_ha_token`, `claude_ha_token`.
    The rest of HA's one-time setup — HACS, Zigbee pairing, the `light.bedroom_lights` group,
-   companion-app sensors — is in [`roles/containers/home-assistant/SETUP.md`](roles/containers/home-assistant/SETUP.md).
+   companion-app sensors — is in [`roles/k8s/home-assistant/SETUP.md`](roles/k8s/home-assistant/SETUP.md).
 5. **Authelia**, on a genuinely fresh install: generate the OIDC HMAC secret, client password
    hash and RSA key per the setup instructions in [`roles/k8s/authelia/templates/config-secret.yaml.j2`](roles/k8s/authelia/templates/config-secret.yaml.j2)
    (header comment explains fresh-install secrets) — the role asserts they exist. Note that
