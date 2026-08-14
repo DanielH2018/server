@@ -179,38 +179,41 @@ DIGEST_PINNED_EXEMPT = {
 }
 
 
-def test_every_deployed_image_is_renovate_tracked() -> None:
-    """Every `image:` line in an ACTIVE compose template must be captured by the docker manager.
+def test_no_custom_manager_tracks_the_retired_compose_plane() -> None:
+    """No customManager may target ansible/roles/containers/**.
 
-    The aggregate test above only proves the manager matches SOMETHING — it passes even if one
-    service's image slips the regex. A future image added untagged (implicit :latest), digest-only,
-    or Jinja-templated in place of a literal tag would then age with no signal (the docker
-    matchString requires an explicit :tag). This asserts per-image coverage so that gap fails CI
-    at commit time. `latest`-tagged images ARE matched (then filtered by the packageRule), so they
-    pass; a build-only service has no `image:` line and is skipped. archive/ is excluded by the
-    single-level glob (mirrors the manager's own managerFilePatterns)."""
-    match_res = [
-        re.compile(_to_python_regex(ms)) for ms in _docker_manager()["matchStrings"]
-    ]
-    templates = sorted(
-        (_REPO / "ansible/roles/containers").glob("*/templates/docker-compose.yml.j2")
+    Replaces the old per-compose coverage test, whose premise expired with the k3s migration.
+    Both cluster hosts are drained (daniel-server's containers_list is empty and Docker is
+    uninstalled; daniel-box is all platform: k8s), so the only composes left are daniel-pi's
+    five — and the Pi has has_gitops: false, no CI deploy path, and is deliberately untracked
+    per operator decision. Every remaining compose is therefore either dead or hand-deployed,
+    and tracking them only manufactured drift: PR #67 bumped the pihole and traefik compose
+    templates for services that now run in the cluster, against pins nothing reads.
+
+    Asserted rather than merely deleted, because re-adding a compose manager looks entirely
+    reasonable in isolation — this is the context that makes it wrong."""
+    offenders = []
+    for m in _MANAGERS:
+        for pattern in m["managerFilePatterns"]:
+            if "roles/containers" in pattern:
+                offenders.append(f"{pattern}: {m.get('description', '')[:80]}")
+    assert not offenders, (
+        "customManager(s) targeting the retired compose plane — those pins are dead or "
+        "Pi-only (untracked by decision):\n" + "\n".join(offenders)
     )
-    assert templates, "no active compose templates found"
-    untracked = []
-    for t in templates:
-        for line in t.read_text().splitlines():
-            if not re.match(r"\s*image:\s*\S", line):
-                continue
-            digest_only = re.match(
-                r"\s*image:\s*[\"']?(?P<repo>[^:\s\"'@]+)@sha256:", line
-            )
-            if digest_only and digest_only.group("repo") in DIGEST_PINNED_EXEMPT:
-                continue
-            if not any(r.search(line) for r in match_res):
-                untracked.append(f"{t.relative_to(_REPO)}: {line.strip()}")
-    assert not untracked, (
-        "Deployed image line(s) NOT matched by the Renovate docker manager (untagged / digest-only "
-        "/ templated) — they will age silently:\n" + "\n".join(untracked)
+
+
+def test_group_vars_images_are_tracked() -> None:
+    """Some customManager must scan inventory/group_vars/all.yml.
+
+    crowdsec_k8s_image was hoisted out of its role defaults into group_vars, which put it
+    outside the k8s-defaults manager's file patterns AND outside the glob the per-image
+    coverage test below uses — so the WAF core, the one image whose staleness is a security
+    problem, was the single pin that neither could see."""
+    scanned = [p for m in _MANAGERS for p in m["managerFilePatterns"]]
+    assert any("group_vars" in p for p in scanned), (
+        "no customManager scans inventory/group_vars/all.yml; an image pinned there "
+        "(crowdsec_k8s_image) ages with no update signal"
     )
 
 
@@ -258,8 +261,13 @@ def test_every_k8s_role_image_is_renovate_tracked() -> None:
         re.compile(_to_python_regex(ms)) for ms in _k8s_image_manager()["matchStrings"]
     ]
     disabling_rules = _disabling_currentvalue_rules(_PACKAGE_RULES)
+    # group_vars/all.yml is included deliberately: crowdsec_k8s_image was hoisted out of its
+    # role defaults into group_vars, and this glob's role-defaults-only form could not see it —
+    # so the test written to catch an untracked cluster image was structurally blind to the one
+    # image (the WAF core) whose staleness is a security problem.
     defaults = sorted((_REPO / "ansible/roles/k8s").glob("*/defaults/main.yml"))
     assert defaults, "no k8s role defaults found"
+    defaults.append(_REPO / "ansible/inventory/group_vars/all.yml")
     untracked = []
     for f in defaults:
         rel_path = str(f.relative_to(_REPO))

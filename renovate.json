@@ -13,7 +13,7 @@
     "before 6am on monday"
   ],
   "prHourlyLimit": 4,
-  "rebaseWhen": "behind-base-branch",
+  "rebaseWhen": "auto",
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
     "description": "CVE-driven bumps bypass the Monday-only window (schedule: at any time) so security PRs are RAISED immediately, and minimumReleaseAge shortens their auto-merge soak to 1 day \u2014 overriding the 7-day non-major default below, which otherwise made 'land ASAP' a misnomer (the PR appeared at once but still soaked a week). 1 day is fast enough to patch a live CVE while leaving a 24h window to catch a yanked/poisoned upstream release; the post-merge gitops-deploy host health gate + rollback is the final backstop. osvVulnerabilityAlerts adds OSV-database scanning for the version-pinned Docker images (GitHub-native Dependabot doesn't cover Docker), closing the one dependency axis without a 'silence != up-to-date' backstop. Requires repo Dependabot *alerts* (not PRs) enabled so Renovate can read the advisory feed.",
@@ -34,27 +34,7 @@
       "before 6am on monday"
     ]
   },
-  "ignorePaths": [
-    "ansible/roles/containers/configarr/templates/docker-compose.yml.j2",
-    "ansible/roles/containers/freshrss/templates/docker-compose.yml.j2",
-    "ansible/roles/containers/home-assistant/templates/docker-compose.yml.j2",
-    "ansible/roles/containers/janitorr/templates/docker-compose.yml.j2",
-    "ansible/roles/containers/livesync/templates/docker-compose.yml.j2",
-    "ansible/roles/containers/n8n/templates/docker-compose.yml.j2",
-    "ansible/roles/containers/zigbee2mqtt/templates/docker-compose.yml.j2"
-  ],
   "customManagers": [
-    {
-      "customType": "regex",
-      "description": "Docker image tags inside Ansible docker-compose Jinja templates (containers/ is generated, so the source of truth is the .j2). The ignorePaths list above freezes the compose templates of config-source roles whose services run only in k8s (their live pins are in ansible/roles/k8s/<svc>/defaults, tracked by the k8s manager below): those composes never deploy and exist as rollback artifacts, so bumping them would only manufacture drift from the state they were frozen at.",
-      "managerFilePatterns": [
-        "/^ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2$/"
-      ],
-      "matchStrings": [
-        "image:\\s*[\"']?(?<depName>[^:\\s\"'@]+):(?<currentValue>[^\\s\"'@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
-      ],
-      "datasourceTemplate": "docker"
-    },
     {
       "customType": "regex",
       "description": "Pinned hook revisions in prek.toml. Renovate's built-in pre-commit manager only scans .pre-commit-config.yaml, not prek.toml, so these (pre-commit-hooks, ansible-lint, gitleaks) would age silently. Match each GitHub repo URL with its adjacent rev tag.",
@@ -162,9 +142,10 @@
     },
     {
       "customType": "regex",
-      "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml). The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal.",
+      "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/test_renovate_managers.py globbed roles/k8s/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see.",
       "managerFilePatterns": [
-        "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/"
+        "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
+        "/^ansible/inventory/group_vars/all\\.yml$/"
       ],
       "matchStrings": [
         "_image:\\s*[\"']?(?<depName>[^:\\s\"'@]+):(?<currentValue>[^\\s\"'@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
@@ -174,15 +155,7 @@
   ],
   "packageRules": [
     {
-      "description": "Watchtower owns mutable :latest tags on the Docker compose plane \u2014 Renovate manages only version-pinned images there, so leave latest alone. Scoped to ansible/roles/containers/** so it can't also blind the k8s-defaults manager: several k8s roles deliberately keep the `latest` TAG but add a `@sha256` digest (littlelink, tdarr, dri-device-plugin, and others pinned 2026-08-13) precisely so Renovate keeps tracking them for digest-bump PRs \u2014 matching on tag alone was disabling that whole dependency axis for every k8s image whose currentValue extracts to `latest`, including the deliberately-pinned ones.",
-      "matchCurrentValue": "/^latest$/",
-      "matchFileNames": [
-        "ansible/roles/containers/**"
-      ],
-      "enabled": false
-    },
-    {
-      "description": "Bundle minor + patch image bumps into a single weekly PR to cut noise; majors stay separate so they get a deliberate look. Auto-merge once CI (prek + image-smoke) is green and the release has soaked 7 days (mirrors watchtower's COOLDOWN_DELAY \u2014 filters fresh upstream breakage); the host health gate is the post-merge safety net.",
+      "description": "Bundle minor + patch image bumps into a single weekly PR to cut noise; majors stay separate so they get a deliberate look. Auto-merge once CI (prek + image-smoke) is green and the release has soaked 7 days (mirrors the retired watchtower's COOLDOWN_DELAY \u2014 filters fresh upstream breakage). NOTE the k8s plane overrides the grouping below: it is split per service so the deployer's rollback unit equals its deploy unit.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -194,6 +167,33 @@
       "automerge": true,
       "platformAutomerge": true,
       "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "One PR per k8s service, overriding the shared non-major group above. gitops_deploy auto-deploys eligible k8s image bumps, and its rollback is a whole-tree `git reset --hard` + redeploy \u2014 so a grouped commit made ONE bad bump revert every good bump beside it, and a partially-deployed batch left the rest to re-converge with no trigger (the ff-merge happens before the deploy, so the next tick sees local==origin and noops). Per-service grouping makes the rollback unit equal the deploy unit. It also keeps each auto-deploy tick to a single service, which is what the deploy timeout is sized for.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "ansible/roles/k8s/**",
+        "ansible/inventory/group_vars/all.yml"
+      ],
+      "groupName": "k8s image {{depName}}"
+    },
+    {
+      "description": "Digest bumps on the k8s plane. 22 of 74 pins carry a @sha256 digest and 18 of those sit on a MUTABLE tag (latest, release, master-web/-collector, jvm-stable, vanilla-latest) where a VERSION bump can never be offered \u2014 only a digest one. That is ~28% of the fleet, and `matchUpdateTypes: [minor, patch]` above does not match updateType `digest`, so none of them auto-merged. Watchtower applied exactly this class automatically until it was retired 2026-08-09 with the note 'Renovate owns image updates' \u2014 leaving it manual was a regression against what it replaced, not a deliberate posture. minimumReleaseAge is 3 days rather than 7: there is no version to soak, only a re-push of the same tag, so the wait is purely to let a poisoned/yanked push be noticed. The auto-deploy denylist (roles/setup/gitops_deploy/defaults/main.yml) is the safety boundary \u2014 a denylisted service's digest PR still merges, it just never auto-deploys.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "ansible/roles/k8s/**",
+        "ansible/inventory/group_vars/all.yml"
+      ],
+      "matchUpdateTypes": [
+        "digest"
+      ],
+      "automerge": true,
+      "platformAutomerge": true,
+      "minimumReleaseAge": "3 days"
     },
     {
       "description": "LinuxServer.io images tag as <upstream-version>-lsNN (e.g. 4.0.17.2952-ls312). Regex versioning both orders these correctly and rejects non-release tags (commit hashes like 438eee94-ls46, nightlies) as invalid, so they're never offered. Optional 4th version part -> build, OS suffix (ubu2404) -> compatibility, -lsNN -> revision.",
@@ -242,12 +242,16 @@
       "automerge": false
     },
     {
-      "description": "influxdb (scrutiny's TSDB) is watchtower-tier \u2014 it stays on the pinned 2.9 line and watchtower patches within it (scrutiny/CLAUDE.md). It's the ONE watchtower-tier image on a non-`latest` mutable tag, so the '/^latest$/' disable above doesn't cover it and Renovate's docker manager would otherwise offer 2.10+/3.x (Renovate PR #8 already walked it 2.2->2.9 once), marching a stateful DB off its pinned major.minor. Disable Renovate here so the two update planes agree \u2014 watchtower owns it.",
+      "description": "influxdb (scrutiny's TSDB) stays on the pinned 2.x line: it changes on-disk format across majors and scrutiny reads that DB, so a version walk off 2.9 (Renovate PR #8 already walked it 2.2->2.9 once) risks a stateful DB the backup plane does not cover. The previous rule disabled Renovate here ENTIRELY on the stated grounds that 'watchtower owns it' \u2014 but watchtower was retired 2026-08-09 with the note 'Renovate owns image updates', so that left this pin with NO updater at all: the disable outlived the component it deferred to. Keep the line pinned by disabling major+minor only; patch bumps within 2.9 still flow, which is the security-relevant axis.",
       "matchDatasources": [
         "docker"
       ],
       "matchPackageNames": [
         "influxdb"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor"
       ],
       "enabled": false
     },
