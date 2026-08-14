@@ -18,6 +18,12 @@ spec:
       labels:
         app: terraria
     spec:
+      # Pinned to the VIP-announcing node while the MetalLB L2Advertisement is pinned
+      # to daniel-box: with externalTrafficPolicy Local, a VIP-backed pod on the other
+      # node makes the announcer DROP all forwarded LAN traffic (2026-08-14 post-boot
+      # DNS blackout). Unpin together with the L2 pin at drain completion.
+      nodeSelector:
+        kubernetes.io/hostname: daniel-box
       enableServiceLinks: false
       automountServiceAccountToken: false
       containers:
