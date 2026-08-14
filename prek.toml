@@ -245,7 +245,9 @@ pass_filenames = false
 # Mirror pyproject.toml [tool.pytest.ini_options] testpaths so a LOCAL commit touching only
 # one suite still runs pytest (CI runs --all-files regardless; this keeps the two in sync).
 # Also fire on the DATA files the scripts-suite guards read (renovate.json, prek.toml,
-# requirements.yml, the CI + image-smoke workflows, sops_setup's SOPS-binary pin, compose
+# requirements.yml, .ansible-lint (test_ansible_lint_scope reads it AND prek.toml — the guard is
+# useless if editing only one of the pair skips the suite), the CI + image-smoke workflows,
+# sops_setup's SOPS-binary pin, compose
 # templates, Dockerfiles, .python-version) — the
 # Renovate-manager/lockstep tests consume those, so an edit there must re-run them locally,
 # not just in CI. Likewise host_vars/group_vars/docker_install main.yml, which
@@ -255,7 +257,7 @@ pass_filenames = false
 # and stay 3.12-parseable) — the exact class that bricked the deployer on 2026-07-15. Plus setup-role
 # `templates/*.j2` (e.g. gitops_deploy/config.env.j2), which the gitops budget-arithmetic guard reads
 # to prove flock+RUN_BUDGET_S+HEALTH_TIMEOUT_S stays within TimeoutStartSec.
-files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/containers/(autofix-bridge|configarr|ical-proxy|monitor-bridge)/files/.*\\.py|ansible/roles/k8s/[^/]+/files/.*\\.py|ansible/roles/containers/home-assistant/tests/.*\\.py|ansible/roles/setup/[^/]+/files/.*\\.py|ansible/roles/setup/[^/]+/templates/.*\\.j2|ansible/roles/.*\\.service\\.j2|\\.claude/(hooks|scripts)/.*\\.py|scripts/.*\\.py|evals/.*\\.py|pyproject\\.toml|renovate\\.json|prek\\.toml|\\.python-version|ansible/requirements\\.yml|\\.github/workflows/[^/]+\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/roles/setup/(docker_install|sops_setup)/tasks/main\\.yml|ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/roles/(containers|k8s)/[^/]+/(templates|files)/[Dd]ockerfile[^/]*)$"
+files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/containers/(autofix-bridge|configarr|ical-proxy|monitor-bridge)/files/.*\\.py|ansible/roles/k8s/[^/]+/files/.*\\.py|ansible/roles/containers/home-assistant/tests/.*\\.py|ansible/roles/setup/[^/]+/files/.*\\.py|ansible/roles/setup/[^/]+/templates/.*\\.j2|ansible/roles/.*\\.service\\.j2|\\.claude/(hooks|scripts)/.*\\.py|scripts/.*\\.py|evals/.*\\.py|pyproject\\.toml|renovate\\.json|prek\\.toml|\\.ansible-lint|\\.python-version|ansible/requirements\\.yml|\\.github/workflows/[^/]+\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/roles/setup/(docker_install|sops_setup)/tasks/main\\.yml|ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/roles/(containers|k8s)/[^/]+/(templates|files)/[Dd]ockerfile[^/]*)$"
 
 # Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
 # syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]; vendored
