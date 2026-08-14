@@ -15,42 +15,33 @@ permissions:
   contents: read
 
 jobs:
-  # prek runs its hooks SEQUENTIALLY — the `concurrency=N` in its trace log is per-file
-  # batching *within* one hook, not hooks in parallel. So the step's wall clock is the sum of
-  # every hook, and one hook dominates it. Measured on the runner with warm caches
-  # (2026-08-14, from prek's own per-hook spans):
+  # ONE job, deliberately — the name is the branch-protection required context, so it must stay
+  # exactly "prek (lint + validate + tests + secrets)".
   #
-  #   ansible-lint  89.7s   pytest  13.5s   validate-k8s-manifests  2.2s
-  #   validate-compose-templates  1.4s      everything else  <1s each      gitleaks  0.03s
+  # This was briefly two matrix shards (ansible-lint | everything else) plus an aggregator job to
+  # re-report that context. That split existed because ansible-lint was a ~90s pole worth
+  # overlapping with the other ~37s of hooks. It stopped paying once BOTH halves became
+  # changed-files-scoped on a PR (see the run steps below): measured 2026-08-14 on the runner with
+  # warm caches, a PR's lint work is ~7s and the other 20 hooks ~2-4s, against ~11-13s of fixed
+  # per-job setup (checkout + uv + caches + prek install) that a second shard pays in full. The
+  # aggregator cost another ~7s of runner acquisition on every run for 4s of work.
   #
-  # Sharding ansible-lint away from the other 19 hooks turns that sum into a max: the two
-  # shards run concurrently, so the ~37s of non-ansible-lint work stops being time nothing
-  # else can overlap. Each shard pays its own checkout + setup (~15s), which is why this is
-  # only worth doing for a split this lopsided — do NOT shard further, the setup cost would
-  # exceed what any additional shard removes.
+  #   PR run, before: 46s wall (shards 26s + 36s, aggregator +7s)
+  #   PR run, after:  ~25s wall (one job, one setup, no aggregator)
   #
-  # The split still earns its keep now that PRs lint only changed ansible files (see the run
-  # step below): a push to master lints all 325 and remains the long pole. On a PR the
-  # ansible-lint shard finishes in seconds and the `rest` shard sets the critical path — that
-  # costs a few runner minutes, not wall clock.
-  hooks:
-    name: hooks (${{ matrix.name }})
+  # The trade is push-to-master, where both halves run --all-files and now serialise rather than
+  # overlap: ~52s -> ~73s. That is deliberate and cheap here — gitops-deploy is a pull-based 30-min
+  # timer, so nothing waits on master's CI.
+  #
+  # If ansible-lint ever goes back to running unscoped on PRs, re-read that math before re-sharding.
+  prek:
+    name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-latest
     timeout-minutes: 20  # cap a wedged network hook (ansible-galaxy install) so it can't burn to the 6h default
-    strategy:
-      fail-fast: false  # a lint failure must not hide a test failure in the sibling shard
-      matrix:
-        include:
-          - id: ansible-lint
-            name: ansible-lint
-            select: ansible-lint
-          - id: rest
-            name: validate + tests + secrets
-            select: --skip ansible-lint
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 0  # full clone; prek --all-files scans the worktree, so history isn't strictly required here — kept as belt-and-suspenders
+          fetch-depth: 0  # the merge-base diff below needs history
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -81,9 +72,7 @@ jobs:
       # restore-keys is safe here because prek's env dirs are content-addressed
       # (hooks/<language>-<hash>): a stale entry from an older prek.toml is ignored rather
       # than reused, so a partial hit still lets the UNCHANGED hooks skip their rebuild when
-      # one rev bumps. The fresh key then saves the union. Keyed per shard — the two shards
-      # build disjoint sets of hook envs, so a shared key would have them overwrite each
-      # other's save with a partial tree.
+      # one rev bumps. The fresh key then saves the union.
       - name: Cache prek hook environments
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -91,8 +80,8 @@ jobs:
             ~/.cache/prek/repos
             ~/.cache/prek/hooks
             ~/.cache/prek/tools
-          key: prek-${{ runner.os }}-${{ matrix.id }}-${{ hashFiles('prek.toml') }}
-          restore-keys: prek-${{ runner.os }}-${{ matrix.id }}-
+          key: prek-${{ runner.os }}-${{ hashFiles('prek.toml') }}
+          restore-keys: prek-${{ runner.os }}-
 
       # The ansible-lint hook's entry runs `ansible-galaxy collection install` before linting.
       # ansible/collections/ is gitignored, so that is a ~40 MB download of four collections on
@@ -100,7 +89,6 @@ jobs:
       # collections are already installed"). Versions are exactly pinned in requirements.yml,
       # so hashing it is an exact key with no staleness window — hence no restore-keys.
       - name: Cache Ansible collections
-        if: matrix.id == 'ansible-lint'  # the only shard that runs the hook needing them
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ansible/collections
@@ -109,78 +97,99 @@ jobs:
       - name: Install prek
         run: pip install prek==0.4.10  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
-      # On a PR, lint only the ansible files the PR actually touches. ansible-lint's cost is
-      # per-file (one task file 1.45s, the whole tree 18.4s locally), so this is the difference
-      # between ~90s and ~2s — by far the largest single saving in this workflow.
+      # On a PR, run every hook against only the files the PR actually touches — the same thing
+      # prek does locally at commit time, and what each hook's `files` regex in prek.toml is
+      # already written for. This is the largest single saving in the workflow: ansible-lint's
+      # cost is per-file (one task file 1.45s, the whole tree 18.4s locally, 36-90s on the
+      # runner), and of the other 20 hooks pytest alone is ~8-10s on-runner. Measured locally,
+      # the non-ansible sweep is 7.1s over --all-files and 0.10s over a one-file list.
       #
       # The file list is computed HERE rather than handed to prek's --from-ref/--to-ref, because
-      # that mode does not skip a hook whose matching-file set is empty: it runs the hook with
-      # NO filenames, and `ansible-lint` with no arguments falls back to walking the whole tree.
-      # Measured — this PR changes no ansible YAML, and --from-ref still spent 93s linting all
-      # 954 files while reporting a cheerful "Passed". The failure mode is slow, not unsafe, but
-      # it removes the entire saving for exactly the PRs that should be fastest.
+      # that mode does not skip a hook whose matching-file set is empty: it runs the hook with NO
+      # filenames, and `ansible-lint` with no arguments falls back to walking the whole tree.
+      # Measured — a PR changing no ansible YAML still spent 93s linting all 954 files while
+      # reporting a cheerful "Passed".
       #
-      # `A...B` (three dots) diffs against the merge base, so this is the PR's own changes and
-      # not whatever else landed on master meanwhile. --diff-filter=d drops deletions: a removed
-      # file is still "changed", but passing a path that no longer exists is an ansible-lint
-      # error, not a lint finding.
+      # NB that pathology is NOT specific to --from-ref, which is why the ansible file list below
+      # is kept separate and explicitly guarded. Re-measured 2026-08-14 with an explicit
+      # `--files docs/secret-rotation.md`: every other hook, local and remote, pass_filenames or
+      # not, correctly reports "(no files to check)Skipped" — but ansible-lint runs bare and walks
+      # the tree anyway (35s local, with and without require_serial; cause not identified). So the
+      # rule is: never hand ansible-lint a list that its own files/exclude pair can empty.
       #
-      # What this gives up: ansible-lint does no cross-file variable analysis, so the residual
-      # gap is narrow — a change to file X will not re-lint an unchanged file Y that consumes
-      # it. The push-to-master run below still lints all 325, so such a case surfaces there
-      # rather than never. That is a deliberate trade of post-merge detection for PR latency.
-      - name: Run hooks (PR — ansible-lint on changed files only)
-        if: matrix.id == 'ansible-lint' && github.event_name == 'pull_request'
+      # `A...B` (three dots) diffs against the merge base, so this is the PR's own changes and not
+      # whatever else landed on master meanwhile.
+      - name: Collect this PR's changed files
+        id: changed
+        if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
         run: |
           set -euo pipefail
           git fetch --no-tags origin "$BASE_REF"
+          # --no-renames so a rename is reported as its D + A halves rather than one R entry:
+          # the D is what trips the full-sweep fallback below, which is the behaviour we want.
+          base="origin/$BASE_REF...HEAD"
+          mapfile -t deleted < <(git diff --name-only --no-renames --diff-filter=D "$base")
+          # --diff-filter=d (lowercase) drops deletions: a removed file is still "changed", but
+          # passing a path that no longer exists is a hook error, not a lint finding.
+          git diff --name-only --no-renames --diff-filter=d "$base" > "$RUNNER_TEMP/changed.txt"
           # Filtered with grep rather than a git pathspec glob (`ansible/**/*.yml` behaves
-          # differently under git's wildmatch than it reads). secrets.yml is dropped here as
-          # well as by the hook's own exclude: were it the ONLY changed file, prek would filter
-          # the list to empty and fall straight back into the walk described above.
-          mapfile -t changed < <(git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" \
-            -- ansible/ | grep -E '\.ya?ml$' | grep -v '^ansible/vars/secrets\.yml$' || true)
-          if [ "${#changed[@]}" -eq 0 ]; then
-            echo "No ansible YAML changed in this PR — nothing for ansible-lint to do."
-            exit 0
+          # differently under git's wildmatch than it reads). secrets.yml is dropped here as well
+          # as by the hook's own exclude: were it the ONLY changed ansible file, the hook would
+          # filter the list to empty and fall straight back into the walk described above.
+          grep -E '^ansible/.*\.ya?ml$' "$RUNNER_TEMP/changed.txt" \
+            | grep -v '^ansible/vars/secrets\.yml$' > "$RUNNER_TEMP/ansible.txt" || true
+          # Fall back to the full sweep rather than a fast green when the scoped list cannot be
+          # trusted to represent the change: a PR that only deletes files yields an EMPTY changed
+          # list, and "skip everything" is the wrong answer there — dropping a template changes
+          # what the render validators produce. Deletions are rare on the PRs this optimises for
+          # (Renovate bumps, single-role edits), so the fast path stays the common one.
+          if [ "${#deleted[@]}" -gt 0 ]; then
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+            echo "PR deletes ${#deleted[@]} file(s) — running the full sweep."
+          elif [ ! -s "$RUNNER_TEMP/changed.txt" ]; then
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+            echo "No changed files resolved — running the full sweep."
+          else
+            echo "mode=scoped" >> "$GITHUB_OUTPUT"
+            echo "Scoping hooks to $(wc -l < "$RUNNER_TEMP/changed.txt") changed file(s):"
+            sed 's/^/  /' "$RUNNER_TEMP/changed.txt"
           fi
-          echo "Linting ${#changed[@]} changed file(s):"
-          printf '  %s\n' "${changed[@]}"
-          # Hook id BEFORE --files: --files is variadic and would otherwise swallow it.
-          prek run ansible-lint --color always --files "${changed[@]}"
 
-      # Everything else, and every push to master: the full sweep.
-      #
-      # Both shards pass --all-files here: the split is about WHICH hooks run in each job, never
-      # about narrowing the files any hook sees. Between them the two shards run every hook
-      # exactly once, and `--skip ansible-lint` means a hook added to prek.toml later lands in
-      # the `rest` shard automatically rather than being silently dropped by an allow-list.
-      - name: Run hooks
-        if: matrix.id != 'ansible-lint' || github.event_name != 'pull_request'
-        run: prek run --all-files --color always ${{ matrix.select }}
-
-  # Branch protection requires the context "prek (lint + validate + tests + secrets)". The job
-  # that used to carry that name is now two matrix shards with names of their own, so this
-  # aggregator keeps the required context reporting — and makes it depend on BOTH shards.
-  # Without it, splitting the job would leave master's required check waiting on a context
-  # that no longer exists, blocking every PR.
-  prek:
-    name: prek (lint + validate + tests + secrets)
-    needs: hooks
-    if: always()  # must report a conclusion even when a shard fails, or it never reports at all
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      # `needs.hooks.result` is the aggregate over the whole matrix: 'success' only if every
-      # shard succeeded, so this fails on a failed, cancelled, or skipped shard alike.
-      - name: Assert every hook shard passed
-        env:
-          RESULT: ${{ needs.hooks.result }}
+      - name: Run hooks (PR — scoped to changed files)
+        if: steps.changed.outputs.mode == 'scoped'
         run: |
-          echo "hook shards: $RESULT"
-          [ "$RESULT" = "success" ]
+          set -uo pipefail  # NOT -e: both invocations must run, see below
+          mapfile -t changed < "$RUNNER_TEMP/changed.txt"
+          mapfile -t ansible < "$RUNNER_TEMP/ansible.txt"
+          # Two invocations, and both always run: a lint failure must not hide a test failure
+          # (this is what `fail-fast: false` bought when these were separate matrix shards).
+          # Exit codes are collected and OR'd at the end.
+          rc=0
+          if [ "${#ansible[@]}" -gt 0 ]; then
+            echo "::group::ansible-lint (${#ansible[@]} file(s))"
+            # Hook id BEFORE --files: --files is variadic and would otherwise swallow it.
+            prek run ansible-lint --color always --files "${ansible[@]}" || rc=1
+            echo "::endgroup::"
+          else
+            echo "No ansible YAML changed in this PR — nothing for ansible-lint to do."
+          fi
+          echo "::group::all other hooks"
+          prek run --skip ansible-lint --color always --files "${changed[@]}" || rc=1
+          echo "::endgroup::"
+          exit "$rc"
+
+      # Every push to master, and any PR the scoping step declined to trust: the full sweep.
+      #
+      # This is what keeps the scoped path's residual gap bounded. ansible-lint does no cross-file
+      # variable analysis, and each other hook's `files` regex is hand-maintained — so a change to
+      # file X will not re-lint an unchanged file Y that consumes it, and a test added at a path
+      # pytest's regex does not match is skipped on the PR. Both surface on the merge to master
+      # rather than never: a deliberate trade of post-merge detection for PR latency.
+      - name: Run hooks (full sweep)
+        if: github.event_name != 'pull_request' || steps.changed.outputs.mode == 'full'
+        run: prek run --all-files --color always
 
   renovate-config:
     name: renovate config validator
@@ -196,9 +205,10 @@ jobs:
           node-version: "22"
 
       # `npx --yes --package renovate` re-downloads Renovate on every run — 33-39s, and with
-      # ansible-lint sharded off this job became the longest in the workflow. Skip it on PRs
-      # that do not touch the file it validates. renovate.json moved in 26 of the last 1600
-      # commits (~1.6%), so this is a fast green for essentially every PR.
+      # ansible-lint scoped to changed files this job is the longest in the workflow on a PR that
+      # touches renovate.json. Skip it on PRs that do not touch the file it validates.
+      # renovate.json moved in 26 of the last 1600 commits (~1.6%), so this is a fast green for
+      # essentially every PR.
       #
       # Caching was measured and rejected. npm's cache splits in two: keeping `_cacache` alone
       # (309 MB) still re-resolves from the registry and cuts the step to 7.2s, but the key

@@ -29,11 +29,17 @@ jobs:
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
+          # Kept, though this job no longer needs a specific interpreter (see below): the pin is
+          # asserted in lockstep with ci.yml and .python-version by
+          # scripts/test_renovate_managers.py::test_python_version_pins_in_lockstep, and the step
+          # measures 0s because ubuntu-latest preinstalls this version.
           python-version: "3.14"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@d31148d669074a8d0a63714ba94f3201e7020bc3  # v8.3.0  # no floating v8 tag is published; pin the exact release
-
+      # No setup-uv step: scripts/smoke_extract.py imports `re` and `sys` and nothing else, so it
+      # needs no project env — `uv run` here was resolving the whole `dev` group (uncached, since
+      # this workflow never set enable-cache) to run a stdlib script, ~3s of a ~10s job. If that
+      # script ever grows a third-party import, add `astral-sh/setup-uv` back WITH enable-cache
+      # and restore the `uv run` form below.
       - name: Collect changed image refs
         id: images
         env:
@@ -57,7 +63,7 @@ jobs:
           diff="$(git diff "origin/$BASE_REF"...HEAD -- \
             'ansible/roles/k8s/*/defaults/main.yml' \
             'ansible/inventory/group_vars/all.yml')"
-          images="$(printf '%s' "$diff" | uv run python scripts/smoke_extract.py)"
+          images="$(printf '%s' "$diff" | python scripts/smoke_extract.py)"
           {
             echo "list<<EOF"
             echo "$images"
