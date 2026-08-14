@@ -140,10 +140,11 @@ stringData:
   livesync-bridge.json: |
     {"type": "http", "name": "LiveSync (edge gate)", "url": "https://livesync.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["401"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # ── push monitors fed by host crons (tokens unchanged — monitors keep their history) ───
+  # docker-fleet + autofix-disk-prune keys removed at the Docker uninstall (2026-08-14):
+  # their producers (the fleet-health cron, the disk-prune cron) retired with the
+  # daemon. AutoKuma ON_DELETE=delete removes the live monitors on apply.
   crowdsec-home-allowlist.json: |
     {"type": "push", "name": "CrowdSec Home Allowlist", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_home_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  docker-fleet.json: |
-    {"type": "push", "name": "Docker Fleet Health", "interval": 600, "max_retries": 0, "push_token": "{{ docker_fleet_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   cloudflare-ddns-proxied-push.json: |
     {"type": "push", "name": "Cloudflare DDNS Proxied", "interval": 300, "max_retries": 0, "push_token": "{{ cloudflare_ddns_proxied_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   cloudflare-ddns-direct-push.json: |
@@ -212,8 +213,6 @@ stringData:
   # (k8s/crowdsec's crowdsec-appsec-verify.sh cron, pushing directly; same token).
   crowdsec-appsec.json: |
     {"type": "push", "name": "CrowdSec AppSec", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_appsec_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  autofix-disk-prune.json: |
-    {"type": "push", "name": "Disk Autoprune", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_disk_prune_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-b2-reachable.json: |
     {"type": "push", "name": "B2 Reachable", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_b2_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-k8s-workloads.json: |

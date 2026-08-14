@@ -71,6 +71,9 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+            - name: gitops-state
+              mountPath: /gitops-state
+              readOnly: true
           resources:
             requests:
               cpu: 20m
@@ -93,4 +96,12 @@ spec:
                 path: b2_probe_application_key
         - name: tmp
           emptyDir: {}
+        # daniel-box's own gitops-deploy state — this pod is pinned to that node (the
+        # alerting-brain placement above), which is exactly what makes a hostPath read
+        # of the deployer it watches legitimate. Took over from the retired Docker
+        # remnant at the uninstall (2026-08-14).
+        - name: gitops-state
+          hostPath:
+            path: /var/lib/gitops-deploy
+            type: Directory
       priorityClassName: homelab-critical

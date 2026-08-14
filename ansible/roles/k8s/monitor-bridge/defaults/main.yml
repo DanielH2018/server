@@ -1,10 +1,4 @@
 ---
-# The cluster twin of monitor-bridge (Phase F drain). Same check.py as the Docker
-# remnant — the split is CHECKS_SKIP here / CHECKS_ONLY there, so the two can't drift.
+# THE monitor-bridge since the Docker uninstall (2026-08-14) — the Phase F twin that
+# outlived its remnant. check.py lives in this role's files/ and every check runs here.
 monitor_bridge_k8s_image: python:3.14-alpine
-
-# The checks that read daniel-server host state files; the Docker remnant owns them
-# (its CHECKS_ONLY is exactly this list) and this twin skips them. Three since the
-# 2026-08-14 host flips — pi_peers and renovate_alive dissolved into direct pushers
-# (k8s/pi-peer-backup CronJob; renovate-notify's ExecStartPost).
-monitor_bridge_host_state_checks: gitops_alive,gitops_status,disk_prune

@@ -683,24 +683,6 @@ def test_touch_heartbeat_never_raises(monkeypatch):
     check.touch_heartbeat()
 
 
-# ── autofix-bridge disk-autoprune host cron (hourly; we alert on it) ──
-
-
-def test_disk_prune_ok():
-    ok, msg = check.disk_prune({"ok": True, "msg": "82% -> 74%"}, 600, 3 * 3600)
-    assert ok and "ok" in msg
-
-
-def test_disk_prune_failed():
-    ok, msg = check.disk_prune({"ok": False, "msg": "image prune failed"}, 60, 3 * 3600)
-    assert not ok and "FAILED" in msg
-
-
-def test_disk_prune_stale():
-    ok, msg = check.disk_prune({"ok": True, "msg": "x"}, 5 * 3600, 3 * 3600)
-    assert not ok and "ago" in msg
-
-
 # ── scrutiny SMART-data freshness (collector runs daily; web API holds last report) ──
 
 
@@ -2519,53 +2501,46 @@ def _read_sibling(relpath):
     return (Path(__file__).resolve().parent / relpath).read_text()
 
 
-def test_checks_and_compose_push_env_agree():
-    # Every KUMA_PUSH_* check.py reads must have an env entry in exactly one of the two
-    # deployments — the Docker remnant's compose or the cluster twin's env-secret — and
+def test_checks_and_env_secret_push_tokens_agree():
+    # Every KUMA_PUSH_* check.py reads must have an env entry in the env-secret and
     # vice-versa. A check added to CHECKS without its env silently never pushes (empty
-    # token) with no Kuma no-heartbeat to self-correct. Since the Phase F split the two
-    # deployments partition the checks (CHECKS_ONLY/CHECKS_SKIP), so the union must equal
-    # the code and the halves must not overlap (an overlap = two pushers on one token).
+    # token) with no Kuma no-heartbeat to self-correct. Single-deployment since the
+    # Docker uninstall (2026-08-14) — the remnant compose this used to partition
+    # against is archived.
 
     in_code = set(
         re.findall(r'_env\("(KUMA_PUSH_[A-Z0-9_]+)"', _read_sibling("check.py"))
     )
-    in_compose = set(
-        re.findall(
-            r"-\s*(KUMA_PUSH_[A-Z0-9_]+)=",
-            _read_sibling("../templates/docker-compose.yml.j2"),
-        )
-    )
     in_twin = set(
         re.findall(
             r"^\s*(KUMA_PUSH_[A-Z0-9_]+):",
-            _read_sibling("../../../k8s/monitor-bridge/templates/env-secret.yaml.j2"),
+            _read_sibling("../templates/env-secret.yaml.j2"),
             re.MULTILINE,
         )
     )
-    assert in_compose.isdisjoint(in_twin), (
-        "declared in BOTH deployments (two pushers on one token): %s"
-        % sorted(in_compose & in_twin)
-    )
-    in_deployments = in_compose | in_twin
-    assert in_code == in_deployments, "only in check.py=%s ; only in deployments=%s" % (
-        sorted(in_code - in_deployments),
-        sorted(in_deployments - in_code),
+    assert in_code == in_twin, "only in check.py=%s ; only in env-secret=%s" % (
+        sorted(in_code - in_twin),
+        sorted(in_twin - in_code),
     )
 
 
 def test_every_push_token_env_is_wired_to_a_monitor():
-    # Each KUMA_PUSH_*={{ var }} env value must also appear as push_token=var in a kuma() label,
-    # i.e. an AutoKuma push monitor actually exists to receive what the check pushes.
+    # Each KUMA_PUSH_* env value var must also appear as a push_token in the
+    # kuma-static-monitors Secret, i.e. a push monitor actually exists to receive what
+    # the check pushes. (Pre-uninstall this read AutoKuma labels on the remnant compose;
+    # the static Secret has been the declaration home for the cluster bridge all along.)
 
-    text = _read_sibling("../templates/docker-compose.yml.j2")
+    env_text = _read_sibling("../templates/env-secret.yaml.j2")
     env_vars = set(
-        re.findall(r"-\s*KUMA_PUSH_[A-Z0-9_]+=\{\{\s*([a-z0-9_]+)\s*\}\}", text)
+        re.findall(r"KUMA_PUSH_[A-Z0-9_]+: \"\{\{ ([a-z0-9_]+) \}\}\"", env_text)
     )
-    label_vars = set(re.findall(r"push_token=([a-z0-9_]+)", text))
+    monitors_text = _read_sibling("../../uptime-kuma/templates/static-monitors.yaml.j2")
+    label_vars = set(
+        re.findall(r'"push_token": "\{\{ ([a-z0-9_]+) \}\}"', monitors_text)
+    )
     assert env_vars, "no KUMA_PUSH_* env vars parsed — regex drift?"
-    assert env_vars <= label_vars, "env push tokens with no monitor label: %s" % sorted(
-        env_vars - label_vars
+    assert env_vars <= label_vars, (
+        "env push tokens with no monitor declared: %s" % sorted(env_vars - label_vars)
     )
 
 
@@ -2927,13 +2902,16 @@ def test_get_json_wraps_non_http_errors_without_leaking_the_url(monkeypatch):
 
 # The remnant's real config: only the host-state-file checks, every gate off. Three
 # since the 2026-08-14 host flips (pi_peers + renovate_alive became direct pushers).
-REMNANT_ONLY = frozenset({"gitops_alive", "gitops_status", "disk_prune"})
+# A representative CHECKS_ONLY subset. No deployment carries a filter since the Docker
+# uninstall (2026-08-14) retired the remnant — these tests keep the MECHANISM honest for
+# whenever a split is next expressed.
+SUBSET_ONLY = frozenset({"gitops_alive", "gitops_status"})
 
 
 def test_check_enabled_only_and_skip_semantics():
     assert check.check_enabled("disk", frozenset(), frozenset())
-    assert check.check_enabled("gitops_alive", REMNANT_ONLY, frozenset())
-    assert not check.check_enabled("disk", REMNANT_ONLY, frozenset())
+    assert check.check_enabled("gitops_alive", SUBSET_ONLY, frozenset())
+    assert not check.check_enabled("disk", SUBSET_ONLY, frozenset())
     assert not check.check_enabled("disk", frozenset(), frozenset({"disk"}))
     # skip wins even against an explicit only-listing
     assert not check.check_enabled("disk", frozenset({"disk"}), frozenset({"disk"}))
@@ -2962,23 +2940,22 @@ def test_validate_rejects_enabled_dependent_with_disabled_gate():
     assert "gate prometheus is disabled" in problems[0]
 
 
-def test_validate_accepts_the_remnant_and_twin_configs():
-    # The two real deployments: the Docker remnant (state-file checks only, no gates) and
-    # the cluster twin (everything except the state-file checks).
-    assert check.validate_check_filter(REMNANT_ONLY, frozenset(), check.CHECKS) == []
-    assert check.validate_check_filter(frozenset(), REMNANT_ONLY, check.CHECKS) == []
+def test_validate_accepts_only_and_skip_shapes():
+    # Both filter directions of a gate-free subset must validate clean.
+    assert check.validate_check_filter(SUBSET_ONLY, frozenset(), check.CHECKS) == []
+    assert check.validate_check_filter(frozenset(), SUBSET_ONLY, check.CHECKS) == []
 
 
-def test_remnant_names_are_real_checks():
-    # Guard (mirrors the PROM_DEPENDENT guard): the split set must track CHECKS renames.
+def test_subset_names_are_real_checks():
+    # Guard (mirrors the PROM_DEPENDENT guard): the subset must track CHECKS renames.
     names = {name for name, _, _ in check.CHECKS}
-    assert REMNANT_ONLY <= names
+    assert SUBSET_ONLY <= names
 
 
-def test_run_once_with_remnant_filter_touches_no_gate(monkeypatch):
-    # With the remnant's filter active, run_once must evaluate exactly the five state-file
-    # checks — no gate probe, no metric check, no push for anything else.
-    monkeypatch.setattr(check, "CHECKS_ONLY", REMNANT_ONLY)
+def test_run_once_with_only_filter_touches_no_gate(monkeypatch):
+    # With a CHECKS_ONLY filter active, run_once must evaluate exactly that set — no
+    # gate probe, no metric check, no push for anything else.
+    monkeypatch.setattr(check, "CHECKS_ONLY", SUBSET_ONLY)
     monkeypatch.setattr(check, "CHECKS_SKIP", frozenset())
     evaluated = []
     monkeypatch.setattr(
@@ -2987,5 +2964,5 @@ def test_run_once_with_remnant_filter_touches_no_gate(monkeypatch):
     pushed = []
     monkeypatch.setattr(check, "push", lambda token, ok, msg: pushed.append(msg))
     check.run_once()
-    assert set(evaluated) == REMNANT_ONLY
-    assert len(pushed) == len(REMNANT_ONLY)
+    assert set(evaluated) == SUBSET_ONLY
+    assert len(pushed) == len(SUBSET_ONLY)

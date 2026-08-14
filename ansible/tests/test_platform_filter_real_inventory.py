@@ -56,7 +56,7 @@ def test_every_entry_lands_in_exactly_one_platform(path):
     )
 
 
-def test_daniel_server_is_still_wholly_docker():
+def test_daniel_server_is_fully_drained():
     # The migration HAS started: cloudflare-ddns was cut over to k3s on 2026-08-05 (46 -> 45),
     # then speedtest (45 -> 44), littlelink (44 -> 43), freshrss (43 -> 42) and healthchecks
     # (42 -> 41) the same day, all behind the strangler bridge. Then tempo was ADDED on
@@ -145,7 +145,13 @@ def test_daniel_server_is_still_wholly_docker():
     # the nut daemon became the k8s/nut pod (pinned right back to daniel-server for the
     # USB, pulling its built image through the agent-side registries.yaml mirror that
     # same change plumbed). The host-shutdown chain moved to the nut_host role,
-    # contract unchanged (127.0.0.1:3493, now a hostPort).
-    assert len(containers) == 4
-    assert len(filter_by_platform(containers, "docker")) == 4
+    # contract unchanged (127.0.0.1:3493, now a hostPort). Then 0 — DOCKER UNINSTALLED
+    # 2026-08-14: the final four (docker-proxy+lifecycle, autoheal, monitor-bridge
+    # remnant, autofix-bridge host plane) retired together; the gitops checks re-homed
+    # to the cluster bridge against daniel-box's deployer, disk_prune died with the
+    # daemon, and has_docker/has_gitops flipped false. The migration this narrative
+    # documents is COMPLETE on this host; the count stays hardcoded so any entry that
+    # ever reappears here is a deliberate act, not drift.
+    assert len(containers) == 0
+    assert len(filter_by_platform(containers, "docker")) == 0
     assert filter_by_platform(containers, "k8s") == []

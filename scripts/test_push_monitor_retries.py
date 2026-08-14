@@ -54,10 +54,11 @@ def test_push_monitors_are_discovered():
     # 2026-08-13 uptime-kuma role archival dropped its dead-man labels from the glob; 7 after
     # the 2026-08-14 Phase F bridge split — the 25 twin-owned monitors' declarations live in
     # the kuma-static-monitors Secret now, outside this compose glob, and autofix-bridge's
-    # compose retired with its container. The five remnant state-file monitors + terraria's
-    # docker twin labels are what remain label-declared).
+    # compose retired with its container. Then 2 at the 2026-08-14 Docker uninstall — the
+    # remnant monitor-bridge compose archived with its last three label-declared push
+    # monitors; what remains label-declared is the Docker tier that still exists at all.
     monitors = _push_monitors()
-    assert len(monitors) >= 5, (
+    assert len(monitors) >= 2, (
         "found only %d push monitors — regex/format drift?" % len(monitors)
     )
 

@@ -17,7 +17,7 @@
 - name: Stage autofix.py on the node
   tags: [config]
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/roles/containers/autofix-bridge/files/autofix.py"
+    src: "{{ playbook_dir }}/roles/k8s/autofix-bridge/files/autofix.py"
     dest: /etc/rancher/k3s/autofix-bridge/autofix.py
     mode: "0644"
     owner: root

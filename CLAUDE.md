@@ -5,7 +5,8 @@ Docker + k3s homelab managed with Ansible. ~50 containerized services deployed a
 
 **Hosts:**
 - `daniel-box` — k3s single-node cluster (Traefik edge, Authelia+OIDC, Pi-hole DNS, Longhorn storage, most workloads since 2026-08 migration)
-- `daniel-server` — remaining Docker services (Intel XE graphics, LVM storage, UPS)
+- `daniel-server` — k3s agent node (Intel XE graphics, LVM storage, UPS hardware + the
+  `nut_host` shutdown chain; Docker uninstalled 2026-08-14 — the migration's end state)
 - `daniel-pi` — Raspberry Pi
 
 **Key technologies:** Docker Compose, k3s (Kubernetes), Ansible, Traefik (reverse proxy), Cloudflare DNS, Authelia (SSO), SOPS/age (secret encryption), Longhorn (storage), CrowdSec (WAF)
