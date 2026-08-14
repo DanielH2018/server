@@ -128,10 +128,15 @@ def test_target_problems_swallows_bad_json(monkeypatch):
 # --- main orchestration ------------------------------------------------------
 
 
-def _run_main(monkeypatch, stdin, *, dock=None, ok=True, targets=None, env=None):
+def _run_main(
+    monkeypatch, stdin, *, dock=None, ok=True, targets=None, env=None, sessions=None
+):
     monkeypatch.setattr(_mod.sys, "stdin", io.StringIO(stdin))
     monkeypatch.setattr(_mod, "docker_problems", lambda: (dock or [], ok))
     monkeypatch.setattr(_mod, "target_problems", lambda: targets or [])
+    # stubbed by default: the real one reads this machine's live worktrees, which would
+    # make every main() assertion depend on what else happens to be open right now
+    monkeypatch.setattr(_mod, "other_live_sessions", lambda cwd: sessions or [])
     if env:
         for k, v in env.items():
             monkeypatch.setenv(k, v)
@@ -150,6 +155,34 @@ def test_main_silent_on_compact(monkeypatch, capsys):
 
 def test_main_silent_when_green(monkeypatch, capsys):
     _run_main(monkeypatch, '{"source":"startup"}')
+    assert _mod.main() == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_main_lists_other_sessions_even_when_green(monkeypatch, capsys):
+    # another session's open work is information this session needs whether or not the
+    # homelab itself is healthy, so it is not gated on the health banner
+    _run_main(
+        monkeypatch, '{"source":"startup"}', sessions=["  • other-branch — roles/k8s/x"]
+    )
+    assert _mod.main() == 0
+    out = capsys.readouterr().out
+    assert "Other Claude sessions" in out and "other-branch" in out
+
+
+def test_main_stays_silent_when_no_other_session_is_live(monkeypatch, capsys):
+    _run_main(monkeypatch, '{"source":"startup"}', sessions=[])
+    assert _mod.main() == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_main_survives_a_broken_session_scan(monkeypatch, capsys):
+    # the scan shells out to git in other checkouts; it must never block session start
+    def boom(cwd):
+        raise OSError("git exploded")
+
+    _run_main(monkeypatch, '{"source":"startup"}')
+    monkeypatch.setattr(_mod, "other_live_sessions", boom)
     assert _mod.main() == 0
     assert capsys.readouterr().out == ""
 

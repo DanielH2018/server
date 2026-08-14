@@ -279,6 +279,25 @@ feedback + MLD discipline):
   beats a paragraph an agent has to remember. Before adding a don't-re-flag verdict, ask: is this a
   *class* (are there sibling instances the same principle governs), and should it be a lint instead?
 
+## Parallel Claude Sessions
+Several sessions work this repo at once, each in its own `.claude/worktrees/<name>` checkout.
+
+- **One worktree per session, one PR per session.** Need a second piece of work? Open a
+  second worktree rather than stacking it on the first.
+- **Name the worktree the branch slug you want.** `EnterWorktree` derives the branch from
+  the worktree name (prefixing `worktree-`), so `containers-role-cleanup` gets a readable
+  branch and `cleanup` doesn't. Accept the prefix; renaming the branch afterwards only
+  detaches it from the worktree git has registered.
+- **The SessionStart banner lists the other live sessions** and the paths each has changed
+  vs `origin/master`. It's derived from `git worktree list` and `/proc`, not from anything a
+  session declares, so check it before editing a file several sessions are near (`CLAUDE.md`,
+  `group_vars/`, a shared role) rather than assuming you're alone.
+- **Deploys serialize on a lock** — use `./scripts/deploy.sh`, see *Common Commands*.
+- **`uv run python scripts/prune_worktrees.py`** reports which worktrees are finished with;
+  `--prune` removes the merged, clean, unlocked ones. A lock held by a *running* session is
+  never overridden; a lock whose process is gone is ignored, because Claude Code doesn't
+  release the lock when a session ends.
+
 ## Secrets Management
 - Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age
 - `ansible/.sops.yaml` (tracked — public keys only) lists the age recipients new/updated
