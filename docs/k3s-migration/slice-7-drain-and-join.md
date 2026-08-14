@@ -541,3 +541,13 @@ debt, not blocking.
 daniel-server's end state: k3s agent + the nut pod's USB + the nut_host shutdown chain.
 containers_list is empty, has_docker/has_gitops false, and the guard suite asserts it
 stays that way. **Slice 7 is done.**
+
+**PINS DECLARED PERMANENT (2026-08-14, post-drain).** The L2Advertisement daniel-box pin
+and the four VIP-backed workloads' nodeSelectors (pihole/mosquitto/terraria/traefik) are
+the declared end state, not unwind debt — design.md §10 decision #6. Rationale: ETP Local
+is load-bearing (client IPs for CrowdSec + the ClientIP gates), and with two asymmetric
+nodes "pods and announcement both on daniel-box" is the only correct configuration; the
+pins are that configuration written down. Consequence accepted: daniel-box is a named
+SPOF for DNS/MQTT/edge and those four workloads never fail over. `vip-kube-bypass`
+(script + unit + timer + its iptables rules) retired from the agent role and reaped
+live — the Docker uninstall removed the last forwarded VIP client on daniel-server.

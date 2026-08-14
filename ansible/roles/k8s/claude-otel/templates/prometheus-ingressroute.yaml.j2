@@ -43,10 +43,10 @@ spec:
       # addresses (10.42.0.0-1 = daniel-box, 10.42.1.0-1 = daniel-server): a host-originated
       # query to the VIP takes kube-proxy's cluster-policy path and SNATs to one of them
       # (measured via authelia's remote_ip: daniel-box curls arrive as 10.42.0.1,
-      # daniel-server's as 10.42.1.0 — host-originated traffic never traverses the
-      # vip-kube-bypass, which is PREROUTING-only). Pods are always .2+ and stay excluded.
-      # Container traffic from daniel-server (monitor-bridge) DOES ride the bypass and
-      # arrives LAN-masqueraded as 10.0.0.161. OR'd matchers, NOT ClientIP(a, b): the
+      # daniel-server's as 10.42.1.0). Pods are always .2+ and stay excluded. (The
+      # vip-kube-bypass, which once LAN-masqueraded daniel-server's Docker-container
+      # traffic to 10.0.0.161, retired 2026-08-14 with the Docker uninstall — no
+      # forwarded VIP client remains on that host.) OR'd matchers, NOT ClientIP(a, b): the
       # multi-arg form fails rule parsing on this Traefik and the router vanishes.
       # /api/v1/targets joined /api/v1/query* 2026-08-14: probe.py's `targets` command
       # repointed here when the Docker prometheus retired — same read-only surface,

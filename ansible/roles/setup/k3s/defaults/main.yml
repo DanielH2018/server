@@ -339,9 +339,3 @@ k3s_join_agent_ports:  # allowed FROM the server, ON the agent
 # Agent node IPs the server-side firewall admits. Set in daniel-box host_vars once an
 # agent exists; empty means the allow tasks are no-ops.
 k3s_agent_node_ips: []
-
-# The MetalLB VIP estate as one CIDR: ingress .240/32 + homelab-pool .241-.250. /28
-# covers .240-.255; .251-.255 carry no LAN hosts, so the over-cover is harmless and one
-# rule beats eleven. Consumed by vip-kube-bypass.sh.j2 (agent nodes only — see the
-# script header for the ETP=Local blackout it prevents).
-k3s_vip_bypass_cidr: 10.0.0.240/28
