@@ -428,3 +428,41 @@ each folded back into source:
 - **Open item**: the crowdsec-appsec-verify root cron's Kuma pushes do not land from
   cron context (manual runs work, path verified end-to-end); suspect root-under-cron
   DNS. Re-check the tile post-reboot; escalate to the final review if still red.
+
+### D6 CUTOVER EXECUTED 2026-08-14 ~16:10 UTC — nut runs in-cluster; daniel-server: 4 containers
+
+PR #147 merged and cut over the same hour. Order run: agent registries.yaml + k3s-agent
+restart → registry deploy (ClusterIP pin + netpol ipBlock; BOTH pull selftests Completed,
+the agent one on daniel-server proving the ClusterIP mirror + flannel.1 ipBlock live) →
+Docker nut removed (~15:52, with the rebuild cron + nut-lan-firewall) → k8s/nut built and
+rolled out (pod 1/1 on daniel-server ~16:08; UPS-monitoring gap ≈16 min) → peanut web
+repointed to the `nut` Service → static "k3s nut (upsd)" monitor live. Verified from the
+host: `upsc apc-ups@127.0.0.1 battery.charge` → 100 through the hostPort, nut-monitor
+(secondary upsmon) active — the poweroff chain never changed. HA's NUT integration still
+needs its one-click reconfigure to `nut.homelab.svc.cluster.local`.
+
+Four findings, each folded back into source:
+- **/etc/rancher/k3s does not exist on an agent** — the installer never creates it and
+  `template` creates no parents; agent.yml now mkdirs first.
+- **hosts.ini pins BOTH nodes `ansible_connection=local`** (plays run on their target
+  host) — a one-shot "targeting daniel-server" from daniel-box silently runs on
+  daniel-box under the wrong inventory_hostname. Both nut one-shots carry explicit
+  `ansible_connection: ssh` + interpreter pins; any future cross-host one-shot must too.
+- **The ConfigMap-context multi-file COPY trap struck again** — identical to the
+  homelab-mcp 2026-08-13 find (per-file COPYs drop all but the first symlinked file);
+  nut's Dockerfile now stages with `COPY .` like homelab-mcp's documents.
+- **The node-exporter DS's daniel-server target was down from day one** — hostNetwork
+  scrapes arrive on the LAN address masqueraded from the server node, a path the join's
+  vxlan/kubelet allows never covered; 9100/tcp joined k3s_join_agent_ports and the DS
+  comment's wrong claim is corrected.
+
+Also observed at the same window: the morning's deleted Container Restarts/OOM/CPU
+monitors had been RECREATED by autokuma (ON_DELETE=delete cuts both ways — the live
+Secret still carried their declarations until the uptime-kuma deploy landed #145's key
+removals). The kuma pod restart blanks push-monitor metric series until each monitor's
+next push arrives — up to its interval, not an outage.
+
+Still open for the endgame, now including: four stale `Redeploy <svc>` crons on
+daniel-server referencing retired Docker builds (harmless no-ops; retire with the host
+flips), and the Docker uninstall itself (`has_docker: false`) once the remnant bridge
+dissolves.

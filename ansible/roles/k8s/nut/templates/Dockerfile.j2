@@ -9,8 +9,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Unlike the retired Docker build, /etc/nut is NOT baked in: this image is pushed to the
 # unauthenticated in-cluster registry, and upsd.users carries passwords. Config mounts
 # from the nut-config Secret at /nut-config; the entrypoint stages it into /etc/nut.
-COPY entrypoint.sh /entrypoint.sh
-COPY upssched-cmd /usr/local/bin/upssched-cmd
-RUN chmod +x /entrypoint.sh /usr/local/bin/upssched-cmd
+# COPY . (not per-file COPYs): the context is a ConfigMap mount, whose files are
+# symlinks into ..data/ — buildkit's transfer drops all but the first symlinked file
+# from per-file COPYs ("not found"; same trap homelab-mcp's Dockerfile documents,
+# verified 2026-08-13 and re-verified here 2026-08-14).
+COPY . /build-context/
+RUN install -m 0755 /build-context/entrypoint.sh /entrypoint.sh \
+    && install -m 0755 /build-context/upssched-cmd /usr/local/bin/upssched-cmd \
+    && rm -rf /build-context
 
 ENTRYPOINT ["/entrypoint.sh"]
