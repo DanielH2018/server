@@ -25,7 +25,7 @@ docs/             # Runbooks, design specs, security notes
 
 > **`containers/` is not a directory in this repo** — it is untracked and rendered by Ansible onto the *target host* at `/home/<user>/server/containers/<svc>/docker-compose.yml`. Post-migration it exists only on `daniel-pi`; neither cluster node has one. It is still read-only: edits are overwritten on the next deploy, so always modify `ansible/roles/containers/*/templates/` instead. (The `block-protected-edits` hook enforces this.)
 
-> **Two roles trees, deliberately.** `roles/k8s/<name>` is where a service now lives; `roles/containers/<name>` is Docker. Several `roles/containers/` roles survive with no `containers_list` entry because they are the git-owned *source* a k8s role reads at deploy time — **deleting one breaks that k8s role's render, not its own**. The full set, with what reads it:
+> **Two roles trees, deliberately.** `roles/k8s/<name>` is where a service now lives; `roles/containers/<name>` is Docker. Several `roles/containers/` roles survive with no `containers_list` entry because they are the git-owned *source* a k8s role reads at deploy time — **deleting one breaks that k8s role's render, not its own**. These are **config sources, not deployable roles**: their `tasks/`, `meta/`, and `docker-compose.yml.j2` were removed once Docker left both cluster nodes, so nothing in them can be deployed and only the templates/files below are read. The full set, with what reads it:
 >
 > | source role | read by |
 > |---|---|
@@ -41,7 +41,7 @@ docs/             # Runbooks, design specs, security notes
 > | `ical-proxy` | `k8s/ical-proxy/tasks/main.yml:10,14` + pytest `testpaths` |
 > | `code-server` | `k8s/code-server/tasks/main.yml:13,16` |
 >
-> Plus `common`, the shared Docker deploy path for the Pi's roles. Don't "clean those up"; edit them as before. The rest of `roles/containers/` is either live on `daniel-pi` (`autoheal`, `docker-proxy`, `dozzle`, `glances`, `wg-easy`) or belongs in `archive/`.
+> Plus `common`, the shared Docker deploy path for the Pi's roles. Don't "clean those up"; edit them as before. The rest of `roles/containers/` is either live on `daniel-pi` (`autoheal`, `docker-proxy`, `dozzle`, `glances`, `wg-easy` — these keep their full `tasks/` + compose plumbing) or belongs in `archive/`. To revive one of the config sources as a Docker service, take its Compose plumbing from git history, not from the tree.
 
 ## Where to Look (task → start here)
 Route to the source of truth by what you're doing, before reading linearly:

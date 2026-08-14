@@ -60,6 +60,8 @@ _CONTAINER_NAME = re.compile(
     r"^\s*container_name:\s*([A-Za-z0-9_.-]+)\s*$", re.MULTILINE
 )
 
+_MANIFEST_KIND = re.compile(r"^kind:\s*([A-Za-z]+)\s*$", re.MULTILINE)
+
 # `claude-otel` is one declared entry that expands to the whole observability
 # namespace (collector + loki + prometheus + tempo + grafana). Nothing else in
 # the inventory owns a namespace, so an explicit entry beats deriving it by
@@ -80,9 +82,8 @@ class RoleIndex:
 
     ``container_owners`` maps a container name to the role whose compose file
     declares it. ``batch_roles`` are roles that run something one-shot and leave
-    nothing behind — configarr is `compose run --rm` on a cron, and the k8s
-    image-build roles ship no manifests — so "not running" is correct for them,
-    not a fault.
+    nothing behind — a CronJob role fires and exits, and the k8s image-build
+    roles ship no manifests — so "not running" is correct for them, not a fault.
     """
 
     container_owners: dict[str, str]
@@ -109,7 +110,19 @@ def load_roles(repo_root: Path = REPO_ROOT) -> RoleIndex:
     # has no Deployment to find.
     k8s_roles = repo_root / "ansible" / "roles" / "k8s"
     for role in sorted(p for p in k8s_roles.glob("*") if p.is_dir()):
-        if not (role / "templates").is_dir():
+        templates = role / "templates"
+        if not templates.is_dir():
+            batch.add(role.name)
+            continue
+        # A role whose only workload is a CronJob leaves nothing running between
+        # firings. Derived here rather than from the Docker compose that used to
+        # declare no container name — that plumbing was deleted with the migration.
+        kinds = {
+            kind
+            for tpl in templates.glob("*.yaml.j2")
+            for kind in _MANIFEST_KIND.findall(tpl.read_text())
+        }
+        if "CronJob" in kinds and "Deployment" not in kinds:
             batch.add(role.name)
 
     return RoleIndex(container_owners=owners, batch_roles=frozenset(batch))

@@ -603,4 +603,9 @@ def test_load_roles_derives_ownership_from_the_role_trees():
     # node-exporter was the fixture until its role archived (2026-08-14, Phase F drain —
     # it is a k8s DaemonSet now); autoheal is the same un-inventoried-companion shape.
     assert roles.container_owners.get("autoheal") == "autoheal"
+    # Both are CronJob-only k8s roles. configarr used to qualify via its Docker
+    # compose declaring no container_name; that compose was deleted with the rest of
+    # the migrated roles' plumbing, so the classification is derived from the k8s
+    # manifests now — and pi-peer-backup, which the compose rule never saw, qualifies too.
     assert "configarr" in roles.batch_roles
+    assert "pi-peer-backup" in roles.batch_roles
