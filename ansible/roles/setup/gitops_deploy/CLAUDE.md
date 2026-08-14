@@ -63,7 +63,38 @@ stay).
   `secrets_alerted_sha` marker) to redeploy the consumer(s). `secrets.yml` is deliberately
   NOT in the broad list — the `/add-secret` flow ships it WITH the consuming template, which
   stays a scoped single-service deploy (`deploy_logic.ChangeSet.secrets`).
-- **k8s-platform roles (`ansible/roles/k8s/<role>/...`) are defer-and-alert, never auto-deployed.**
+- **k8s-platform roles are auto-deployed ONLY for an image-pin bump to a non-denylisted service;
+  every other k8s change still defers-and-alerts.** (Changed 2026-08-14 — this bullet used to read
+  "never auto-deployed", which is why the paragraph below is written against that older state.)
+  Eligibility is decided by `deploy_logic.split_k8s_auto_deploy` and is deliberately **diff-shape
+  first, identity second**: gating on the service name alone would not be safe, because
+  `_ACTIVE_K8S` matches the WHOLE role dir — a name-only allowlist would auto-deploy configmap,
+  `tasks/` and template pushes too, none of which carry Renovate's soak. A service qualifies only
+  when the feature is enabled, it is not in `gitops_deploy_k8s_autodeploy_denylist`, the pilot
+  scope (if set) names it, the only path the push touched under its role is
+  `defaults/main.yml`, and every changed line in that file assigns an `*_image:` var. Everything
+  else stays in `ChangeSet.k8s` and behaves exactly as described below.
+  - **The gate is inside the role, not here.** `roles/k8s/manifests` runs
+    apply → `rollout status --timeout` → `assert_stable.yml` (a post-Available soak that hard-fails
+    on a restart-count delta or a readiness shortfall). This deployer adds no health-poll phase for
+    k8s: `containers_for()` returns `[]` for a k8s service, which is exactly the 2026-08-08
+    configarr false-rollback. The denylist covers the roles that gate can't protect — see
+    `defaults/main.yml`, where every entry carries its reason.
+  - **A k8s rollback is local-only, and that is not sufficient on its own.** On failure the tick
+    holds the bad SHA, `git reset --hard`es, redeploys the prior pin, and pages. But `skip_hold`
+    matches only while `origin_head == hold_sha`, so **the bad pin is still on master** — the next
+    push past the held commit redeploys it. The Discord page says so; the fix is a revert on the
+    remote (or a Renovate `allowedVersions` pin), not just clearing the hold.
+  - **A clean k8s tick is the second place `hold_sha` clears.** `write_hold(None)` also sits in the
+    Docker health-gate branch, which an all-k8s host never reaches — without this the first
+    rollback would leave **GitOps Deploy — Status** red permanently and need a manual `rm`.
+  - **The deploy is time-bounded by `K8S_DEPLOY_TIMEOUT_S`, not `RUN_BUDGET_S`.** The latter feeds
+    `gate_services()` — the Docker gate — and is inert here, so without an explicit timeout the
+    only bound is systemd's `TimeoutStartSec` SIGTERM, which can land mid-rollback.
+  - Promotion is refused when the tick also carries Docker services: the k8s branch returns before
+    the Docker deploy would run. No host is mixed today.
+
+  The original rationale, still accurate for every non-eligible k8s change:
   This deployer's path→service mapping (`_ACTIVE_CONFIG`/`_ACTIVE_TASKS`/`_ACTIVE_META`) is
   Docker-platform only — it feeds `deploy(cs.services)`, which is a Docker-role concept. On
   daniel-box, where every `containers_list` entry is `platform: k8s`, a change under
