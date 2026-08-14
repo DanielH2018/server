@@ -1,0 +1,62 @@
+---
+# Host-side half of the UPS stack; the k8s/nut pod (upsd + driver + primary upsmon) is
+# the other half. Moved from the retired containers/peanut role when nut went in-cluster
+# (D6 reversed, 2026-08-14). Nothing here changed at that cutover: the pod re-creates
+# the same 127.0.0.1:3493 loopback publish (as a hostPort) the Docker container held.
+#
+# Runs from initial_setup.yml, gated to ups_host (group_vars/all.yml).
+
+- name: Install udev rule for APC UPS USB permissions
+  ansible.builtin.copy:
+    dest: /etc/udev/rules.d/99-nut-apc.rules
+    content: 'SUBSYSTEM=="usb", ATTR{idVendor}=="051d", ATTR{idProduct}=="0002", MODE="0666"'
+    mode: "0644"
+  become: true
+
+- name: Reload udev rules
+  ansible.builtin.command: udevadm control --reload-rules
+  become: true
+  changed_when: false
+
+- name: Trigger udev for USB subsystem
+  ansible.builtin.command: udevadm trigger --subsystem-match=usb
+  become: true
+  changed_when: false
+
+# ── Graceful shutdown (the part the pod CANNOT do) ──────────────────────────────
+# The pod's upsmon (primary) raises FSD but can't power off the host. This host-native
+# upsmon in `secondary` mode watches the same upsd over the pod's 127.0.0.1:3493
+# hostPort and runs the real poweroff.
+- name: Install NUT client (host-side upsmon)
+  ansible.builtin.apt:
+    name: nut-client
+    state: present
+  become: true
+
+- name: Configure host NUT mode (netclient)
+  ansible.builtin.template:
+    src: host-nut.conf.j2
+    dest: /etc/nut/nut.conf
+    owner: root
+    group: nut
+    mode: "0640"
+  become: true
+  register: nut_host_nutconf
+
+- name: Configure host upsmon (secondary, performs the actual poweroff)
+  ansible.builtin.template:
+    src: host-upsmon.conf.j2
+    dest: /etc/nut/upsmon.conf
+    owner: root
+    group: nut
+    mode: "0640"
+  no_log: true
+  become: true
+  register: nut_host_upsmon
+
+- name: Enable and start the host upsmon service
+  ansible.builtin.systemd_service:
+    name: nut-monitor
+    enabled: true
+    state: "{{ 'restarted' if (nut_host_nutconf is changed or nut_host_upsmon is changed) else 'started' }}"
+  become: true

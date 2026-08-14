@@ -154,15 +154,31 @@ k8s_registry_port: 5000
 # Loopback for the same reason claude-otel's OTLP receiver is: this registry has no auth and
 # no TLS, so it must not be reachable from the LAN.
 k8s_registry_host_ip: 127.0.0.1
-# Image references in manifests are `{{ k8s_registry_pull_host }}/<name>:<tag>`, which only
-# resolves on a node running this registry. Correct while the cluster is one node; it breaks
-# when daniel-server joins at slice 7, which is when this needs TLS and a real hostname.
+# Image references in manifests are `{{ k8s_registry_pull_host }}/<name>:<tag>`. The mirror
+# KEY in every node's registries.yaml is this same string, so one image reference is
+# node-portable — what differs per node is the mirror ENDPOINT behind it: daniel-box (which
+# runs the registry) resolves it to the loopback hostPort, agents to the pinned ClusterIP
+# below over flannel. Re-plumbed 2026-08-14 (nut→k8s port); before that the mirror only
+# existed on daniel-box and built images could not run anywhere else.
 k8s_registry_pull_host: "localhost:{{ k8s_registry_port }}"
+# The registry Service's pinned ClusterIP (spec.clusterIP in the registry role) — pinned
+# because agents' registries.yaml must name it as the mirror endpoint, and containerd is a
+# host process that resolves no cluster DNS. The value is what the Service already held when
+# the pin landed. Plain HTTP between nodes crosses the LAN inside the flannel vxlan,
+# unencrypted — accepted for the homelab tier (both endpoints are our own hosts on our own
+# switch; the alternative is a CA + cert rotation for one hop).
+k8s_registry_cluster_ip: 10.43.51.14
+# The node that runs the registry Deployment (nodeSelector) and therefore resolves the
+# mirror to its own loopback hostPort.
+k8s_registry_node: daniel-box
 # The PUSH half of the pair described above. Fully qualified rather than bare `registry`,
 # because a builder Job's pod may not carry a search domain that resolves the short name, and a
 # wrong namespace here surfaces inside the pod as a DNS failure that reads like a network fault
 # rather than a config one.
 k8s_registry_push_host: "registry.{{ k8s_namespace }}.svc.cluster.local:{{ k8s_registry_port }}"
+# The UPS's USB host: gates the nut_host role (host-side secondary upsmon + udev rule) in
+# initial_setup.yml, paired with the k8s/nut pod's nodeSelector.
+ups_host: daniel-server
 # The one host that pulls daniel-pi's wg-easy peer configs into its own Kopia backup
 # scope (see wg-easy CLAUDE.md) — daniel-pi itself is not parameterized here, it's the
 # one confirmed satellite with no sibling expected.

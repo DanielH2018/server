@@ -14,8 +14,6 @@ peanut_k8s_cpu_limit: "500m"
 peanut_k8s_mem_limit: 256Mi
 peanut_k8s_cpu_request: "50m"
 peanut_k8s_mem_request: 32Mi
-# The upsd port on daniel-server. Published to the LAN (server_ip:3493) and locked in
-# DOCKER-USER to daniel-box's egress address specifically — see the peanut Docker role's
-# nut-lan-firewall.sh.j2. NUT auth is a plaintext protocol password, so this stays a single
-# allowed host rather than the whole LAN /24.
+# upsd's port on the in-cluster `nut` Service (D6 reversed 2026-08-14 — the daemon left
+# daniel-server's Docker, and the LAN publish + DOCKER-USER lock retired with it).
 peanut_k8s_nut_port: 3493

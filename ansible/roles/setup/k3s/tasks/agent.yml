@@ -8,10 +8,6 @@
 # the server side.
 #
 # Deliberately NOT here:
-#   - registries.yaml — the in-cluster registry is a loopback hostPort on daniel-box
-#     (k8s_registry_pull_host = localhost:5000), unreachable from any other node.
-#     Workloads with locally-built images stay pinned to daniel-box until the drain
-#     step re-plumbs the registry (real cert + LAN endpoint, or a nodeSelector policy).
 #   - the no-Docker assert from main.yml — coexistence with the remaining Docker
 #     residuals is exactly what §F plans; the two iptables hazards slice 0 named
 #     (DOCKER-USER custom rules, wg-easy hairpin NAT) retired at E7 / live on the Pi.
@@ -108,6 +104,33 @@
     | difference(k3s_agent_unit.content | default('') | b64decode | replace("'", "") | split())
     | length > 0
   changed_when: true
+
+# ── Registry mirror (2026-08-14, nut→k8s port) ────────────────────────────────────────
+# Same template as the server node, but the mirror endpoint resolves to the registry
+# Service's pinned ClusterIP instead of a loopback hostPort — this is what lets built
+# images (first: nut) run on this node. Written after the install so a change can
+# restart the running agent; on a first join the installer's own start reads it too
+# late, and the restart below covers that case as well.
+- name: Configure containerd's view of the in-cluster registry
+  tags: [k3s_agent]
+  ansible.builtin.template:
+    src: registries.yaml.j2
+    dest: /etc/rancher/k3s/registries.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: k3s_agent_registries
+
+# Safe for running pods: k3s restarts its embedded containerd, but the containerd-shims
+# keep the containers alive across it (same property the k3s upgrade path relies on).
+- name: Restart the agent so containerd re-reads registries.yaml # noqa no-handler
+  tags: [k3s_agent]
+  ansible.builtin.systemd:
+    name: k3s-agent
+    state: restarted
+  become: true
+  when: k3s_agent_registries is changed
 
 # ── VIP kube-proxy bypass (see the script header for the incident it prevents) ────────
 - name: Install the VIP bypass script

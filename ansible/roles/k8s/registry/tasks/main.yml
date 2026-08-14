@@ -41,7 +41,8 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} delete job
-      registry-selftest-push registry-selftest-pull --ignore-not-found
+      registry-selftest-push registry-selftest-pull registry-selftest-pull-agent
+      --ignore-not-found
   become: true
   changed_when: true
 
@@ -76,12 +77,12 @@
   become: true
   changed_when: true
 
-- name: Wait for the pull self-test
+- name: Wait for the pull self-tests
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/registry-selftest-pull --timeout=180s
+      job/registry-selftest-pull job/registry-selftest-pull-agent --timeout=180s
   become: true
   changed_when: false
   register: registry_pull_probe
