@@ -519,3 +519,25 @@ B2 (the remnant's checks cost nothing overnight).
   purge (docker-ce, cli, containerd.io — k3s ships its OWN containerd, untouched),
   /var/lib/docker removed. Then deploy.yml --tags monitor-bridge + uptime-kuma on
   daniel-box, and the guard suite already asserts the empty end state.
+
+### DOCKER UNINSTALLED 2026-08-14 17:44 UTC — the drain is COMPLETE
+
+Executed the same evening (the nightly gate proved vacuous — the uninstall touches
+nothing the peer-backup depends on — while waiting would have let the dying deployer's
+6-hour behind-window push a false red overnight). Sequence: #151/#152 merged → cluster
+bridge redeployed (gitops takeover verified: `gitops_alive - deployer ran 4m ago`
+against daniel-box) → `retire-docker-daniel-server.yml` → verified: no docker binary,
+k3s-agent active, both nodes Ready, nut pod running.
+
+One live find, now memory-filed as a CLASS (`kubectl-apply-leaves-stale-secret-keys`):
+**kubectl apply does not remove Secret keys once ownership broke** (an early
+kubectl-replace). Bit twice in one evening — `monitor-bridge-env` kept `CHECKS_SKIP`
+(bridge crash-looped on unknown check names until patched), and `kuma-static-monitors`
+still carried ALL FIVE removed monitor files (including #145's restarts/oom/cpu — the
+morning's zombie-monitor incident, root-caused at last). Both patched out via one-shots;
+durable fix (server-side apply or a reconcile task in the manifests role) is follow-up
+debt, not blocking.
+
+daniel-server's end state: k3s agent + the nut pod's USB + the nut_host shutdown chain.
+containers_list is empty, has_docker/has_gitops false, and the guard suite asserts it
+stays that way. **Slice 7 is done.**
