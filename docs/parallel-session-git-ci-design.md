@@ -48,8 +48,34 @@ before CI" — and it is silently inoperative for every worktree session. CI sti
 catches the bug on push, so the consequence is wasted round-trips and misplaced
 confidence in-session, not a bad deploy. It is nevertheless a defect, not a risk.
 
-`ansible-lint.sh` already solved this. Lines 32–38 derive the owning checkout from the
-edited file's own path:
+**Reproduced, not inferred** (2026-08-14, from a worktree session). A deliberate Jinja
+break was appended to `ansible/roles/containers/dozzle/templates/docker-compose.yml.j2`
+inside `.claude/worktrees/parallel-sessions-design`, then the hook was invoked with that
+file's path as its `tool_input.file_path`:
+
+```
+validate-compose: render validation passed (compose_templates) ✓
+HOOK EXIT: 0
+```
+
+The same validator, pointed at the worktree's own copy, reports
+`54 template(s) checked, 1 failure(s).` The break was real; the hook did not see it.
+
+**The root cause is deeper than the `cd`.** `scripts/_render_guard.py:22` resolves the
+repo from the script's own location:
+
+```python
+REPO = Path(__file__).resolve().parent.parent
+ANSIBLE = REPO / "ansible"
+```
+
+Because the hook `cd`s to the primary checkout and invokes `scripts/validate_compose_templates.py`
+*relatively*, `__file__` is always the primary checkout's script, so `REPO` is always
+`/home/ubuntu/server` — regardless of cwd. Changing the `cd` alone would therefore fix
+nothing: the fix must invoke the *worktree's own copy* of the validator by absolute path.
+
+`ansible-lint.sh` already solved the equivalent problem for its own tool. Lines 32–38
+derive the owning checkout from the edited file's path:
 
 ```bash
 repo_root="${file_path%%/ansible/*}"
@@ -57,6 +83,22 @@ cd "$repo_root" || exit 0
 ```
 
 That fix was never applied to its sibling.
+
+### 1b. Worktrees have no uv environment (surfaced while reproducing)
+
+Running the validator from inside the worktree fails outright:
+
+```
+ModuleNotFoundError: No module named 'yaml'
+```
+
+The hooks pass `uv run --no-sync` to stay fast on the per-edit hot path, and a fresh
+worktree has no synced env for that to reuse. So the naive fix for (1) — just run the
+worktree's script from the worktree — trades a false green for a hard error. Slice 1 has
+to resolve this: either invoke the worktree's script through the primary checkout's
+environment (`cd` primary, absolute script path — `__file__` then correctly resolves to
+the worktree), or sync each worktree's env once on creation. The former is cheaper and is
+the recommended shape.
 
 ### 2. `block-protected-edits` misses worktree-local `containers/` (minor)
 
@@ -141,9 +183,12 @@ back the largest recurring cost.
 Derive the checkout from the edited file's path rather than hardcoding
 `/home/ubuntu/server`, using the pattern `ansible-lint.sh` already established.
 
-- `validate-compose.sh`: replace `cd /home/ubuntu/server` with a `repo_root` derived
-  from `$file_path`. The three validators are invoked as `scripts/<name>.py` relative
-  to cwd, so they follow automatically. Keep `UV` absolute.
+- `validate-compose.sh`: derive `repo_root` from `$file_path`, then invoke the
+  validators by **absolute path** into that checkout — `"$repo_root/scripts/<name>.py"` —
+  while keeping the working directory at the primary checkout so `uv run --no-sync`
+  finds a synced environment. `_render_guard.py` resolves `REPO` from `__file__`, so the
+  absolute script path is what actually redirects the validation; the `cd` is not the
+  lever. Keep `UV` absolute.
 - `block-protected-edits.py`: resolve `repo_root` from the target file's enclosing
   checkout (walk up to the nearest directory containing `.git`) instead of from the
   hook script's location.
@@ -171,8 +216,9 @@ merge into a broken `master` if they conflict semantically. The accepted judgeme
 that this risk is low *here* — the required checks are lint, template rendering, unit
 tests, and secret scanning, none of which are integration tests across PR boundaries —
 and that the GitOps deployer's health-gate-and-rollback on `master` is the backstop.
-If a semantic collision does land, the fallback is the merge queue (available on this
-repo: public, user-owned).
+If a semantic collision does land, the fallback is the merge queue — believed available
+on this repo (public, user-owned), but that is a product-tier claim that was not tested
+against the API. Verify before relying on it.
 
 **Exercisable:** open two trivial PRs, merge the first, confirm the second is still
 mergeable without a rebase.
@@ -208,8 +254,24 @@ inventing a second one.
   the documented one. The bare `ansible-playbook` invocation stays working for the
   `--check` dry-run case, which takes no lock because it writes nothing.
 
-`-w 180` matches the existing budget in `gitops-deploy.service.j2`, so a waiting agent
-deploy and a waiting GitOps run have the same patience.
+**Consequence to design around, not a solved point.** `gitops-deploy.service.j2:34`
+states that when its `flock -w 180` times out, "flock exits 1, failing the unit cleanly
+(OnFailure alerts)" — and the service budgets its own deploy phase at up to ~1020s. An
+agent deploy that holds the lock for more than 180 seconds therefore makes the next
+30-minute GitOps firing fail its unit and raise a Discord alert. A full playbook run
+plausibly exceeds 180s, so taking the lock naively trades a silent race for a noisy false
+alarm. Three ways out, to be decided in the implementation plan:
+
+1. Hold the lock only around the playbook invocation, not any surrounding health gate,
+   keeping the held window as short as the work allows.
+2. Give the agent path a **longer** wait than 180s, so the interactive session yields to
+   the timer rather than the reverse — the timer is the automated, unattended party and
+   should win.
+3. Accept the alert as the correct signal (a deploy genuinely was in progress) and
+   document it so it isn't chased as a fault.
+
+Option 2 is the recommended default: it inverts the current failure direction so a human-
+or agent-initiated deploy never breaks the unattended pipeline.
 
 **Exercisable:** start a deploy, start a second concurrently, confirm the second blocks
 and then proceeds rather than interleaving.
