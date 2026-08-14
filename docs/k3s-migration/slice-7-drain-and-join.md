@@ -357,3 +357,29 @@ now records `kopia_password` as removed (8edb11cd) rather than pinned-pending-de
 - **Claude Code OTLP loopback** — confirm the collector DaemonSet hostPort satisfies it on
   both nodes before retiring the Docker otel-collector.
 - **docker-proxy-codeserver / -lifecycle consumers** — enumerate before retiring the trio.
+
+### DRAIN EXECUTED 2026-08-14 — the bridge split (the long pole lands)
+
+Overnight, after the backup plane was proven (nightly green at 03:38 on 41 two-replica
+volumes; operator waived the full-nightly gate earlier on a clean manual backup probe):
+
+- **monitor-bridge split, not moved** (10b62b5a, 4555a523, #138, #139): a cluster twin
+  runs the 21 metric/API checks and the Docker remnant keeps the 5 host-state-file checks
+  — one check.py, split by CHECKS_ONLY/CHECKS_SKIP with a startup guard refusing a gated
+  check without its gate, and a test asserting the two envs PARTITION the token set. The
+  25 twin-owned monitor declarations were already in the kuma-static-monitors Secret; the
+  five remnant labels follow their pusher. Twin gotchas found live: /run/secrets shadows
+  the SA token mount (repo guard caught it pre-deploy) and Secret-volume files need
+  fsGroup + 0440 or non-root file-mounted credentials silently self-disable (#138).
+- **autofix-bridge's sidecar moved** (4555a523, #139): the cluster twin runs the *arr
+  remediation loop (DRY_RUN=false unchanged); the Docker container was removed inside the
+  twin's 15-min GRACE_CYCLES no-act window, so no double-remediation was possible. The
+  role keeps only the disk-autoprune host plane. daniel-server: 8 containers.
+- **Master pushes are PR-gated now** (guard appeared mid-session ~05:00); the cutover's
+  second half landed as #138/#139. Note: `git push -u origin <branch>` trips the guard's
+  master-detection — push without -u.
+- **B2 cap re-exceeded by the recovery itself** (retention catch-up + purge + nightly):
+  target flaps unavailable on failed `backup ls` polls at poll cadence — NOT the retry
+  storm (that was the storage-cap shape, unresolvable by retry). Deliberately left armed:
+  the transaction cap resets 00:00 UTC before the 03:30 nightly. B2 Reachable +
+  k3s Longhorn Backup stay truthfully red until then.
