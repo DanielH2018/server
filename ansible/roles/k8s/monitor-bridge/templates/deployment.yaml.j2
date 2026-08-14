@@ -31,6 +31,10 @@ spec:
       securityContext:
         runAsUser: {{ puid }}
         runAsGroup: {{ pgid }}
+        # Secret-volume files are root-owned; without fsGroup the 0440 credential files
+        # below are unreadable to this non-root uid and both file-mounted checks silently
+        # self-disable ("no URL/token" — found on the twin's first cycle, 2026-08-14).
+        fsGroup: {{ pgid }}
         runAsNonRoot: true
       automountServiceAccountToken: false
       containers:
@@ -81,7 +85,7 @@ spec:
         - name: credentials
           secret:
             secretName: monitor-bridge-env
-            defaultMode: 0400
+            defaultMode: 0440
             items:
               - key: ha_token
                 path: ha_token
