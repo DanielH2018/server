@@ -33,6 +33,19 @@
   loop: "{{ k3s_join_agent_ports }}"
   become: true
 
+- name: Install Longhorn prerequisites
+  tags: [k3s_agent]
+  # Same pair the server flow installs (main.yml). Found missing at the §F replica raise:
+  # the join omitted host prep, so daniel-server's Longhorn node sat RequiredPackages:False
+  # (nfs-common). open-iscsi is the not-optional one — without it volumes hang in
+  # "Attaching" with an error that never names the missing package.
+  ansible.builtin.apt:
+    name:
+      - open-iscsi
+      - nfs-common
+    state: present
+  become: true
+
 - name: Download the k3s installer
   tags: [k3s_agent]
   ansible.builtin.get_url:
