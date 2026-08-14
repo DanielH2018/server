@@ -18,7 +18,10 @@
 set -uo pipefail
 
 : "${PI_SRC:?}" "${KUMA_PUSH_URL:?}"
-DEST=/data
+# A subdir, not the PVC mountpoint: /data itself is root-owned (fsGroup grants group
+# write, not ownership), so rsync -a's final set-times on the dest dir EPERMs (exit 23).
+# A subdir we create is ours and takes attrs cleanly.
+DEST=/data/peers
 
 # The Secret volume is root-owned 0440 (group-read via fsGroup); ssh refuses a
 # group-readable identity file, so stage a private 0400 copy we own.
