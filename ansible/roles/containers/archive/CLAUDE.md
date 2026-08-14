@@ -7,6 +7,15 @@ reactivation. See the repo-root `CLAUDE.md` for shared conventions.
 ## Status
 - None of these appear (uncommented) in `ansible/inventory/host_vars/*.yml` →
   `containers_list`, so `deploy.yml` never touches them.
+- **That invariant is not enforced by anything, and it has silently broken once.** From
+  `7e6f4453` (2026-08-06) to 2026-08-14, `glances` sat here while `daniel-pi.yml` still
+  listed it: the commit retired glances on *daniel-server* and archived the role, but the
+  role is shared and the Pi's copy stayed deployed. `deploy.yml:110` resolves roles by
+  **bare name** against `roles_path` (`ansible.cfg:16`), which does not recurse into
+  `archive/` — so an untagged `-e target=daniel-pi` run would have failed "role not found".
+  Tagged deploys narrow `containers_list` and skipped it, which is why it went unnoticed.
+  **Before archiving a role, grep every host's `containers_list` for its name**, not just
+  the host you are retiring it from.
 - Most predate the `meta/deps.yml` dependency system (only `file-browser` and `minecraft`
   have a `meta/`), so the rest have **no dependency declarations**.
 

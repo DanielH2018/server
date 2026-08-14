@@ -479,7 +479,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 ## Editing & testing
 - Compose: `templates/docker-compose.yml.j2` · Logic: `files/check.py`
 - Unit tests (parsing + every check's decision logic):
-  `uv run pytest ansible/roles/containers/monitor-bridge/files`.
+  `uv run pytest ansible/roles/k8s/monitor-bridge/files`.
   Also run automatically by the `pytest` prek hook (`prek run pytest --all-files`).
 - Smoke test one pass: `docker exec monitor-bridge python /app/check.py --once`
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "monitor-bridge"`
