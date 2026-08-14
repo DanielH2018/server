@@ -28,9 +28,11 @@ Steps:
 
    Deploy through `scripts/deploy.sh`, not `ansible-playbook` directly — it takes
    `/var/lock/server-git-tree.lock`, the same lock gitops-deploy.service and the
-   secret-rotate cron use, so a deploy can't interleave with the automated pipeline or with
-   another Claude session. `--check` runs unlocked. Exit 75 means the lock was busy for
-   25 minutes and **nothing was deployed** — that is not a playbook failure.
+   secret-rotate cron use. What that lock guards is the local git tree every deploy reads
+   its templates from, which gitops-deploy rewrites with a `git pull` mid-run — so a Pi
+   deploy takes it too, even though the writes land on the Pi. `--check` runs unlocked.
+   Exit 75 means the lock stayed busy for 25 minutes and **nothing was deployed** — that is
+   not a playbook failure.
 5. **Verify it actually came up healthy** — Ansible reporting `ok`/`changed` only means the
    playbook ran, not that the workload is up (it can apply cleanly then crash-loop or fail
    its probes).
