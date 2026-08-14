@@ -169,18 +169,15 @@ stringData:
   # ── Transcribed 2026-08-10: the LIVE push fleet whose labels sit inert on the
   # monitor-bridge / autofix-bridge composes (the transcription ledger, pre-ON_DELETE flip).
   # Ids must keep matching the kuma() first arguments at those call sites.
+  # monitor-bridge-restarts/oom/cpu removed 2026-08-14 with the Docker cadvisor — the
+  # apply prunes the keys (baseline exists since the kubectl-replace reset) and the live
+  # monitors were kuma-cli-deleted at the same cutover.
   monitor-bridge-disk.json: |
     {"type": "push", "name": "Root Disk", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_disk_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-cert.json: |
     {"type": "push", "name": "TLS Cert Expiry", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_cert_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-mem.json: |
     {"type": "push", "name": "Memory", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_mem_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-restarts.json: |
-    {"type": "push", "name": "Container Restarts", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_restarts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-oom.json: |
-    {"type": "push", "name": "Container OOM", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_oom_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-cpu.json: |
-    {"type": "push", "name": "CPU Throttling", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_cpu_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-prometheus.json: |
     {"type": "push", "name": "Prometheus Reachable", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_prometheus_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-targets.json: |

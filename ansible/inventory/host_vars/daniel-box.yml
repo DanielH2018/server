@@ -569,6 +569,10 @@ containers_list:
   # Docker daemon). Neither has a route — both are pushers.
   - name: monitor-bridge
     platform: k8s
+  # Phase F drain (2026-08-14): host metrics for BOTH nodes (daniel-box never had a
+  # node-exporter before); successor to the prometheus role's Docker sidecar.
+  - name: node-exporter
+    platform: k8s
   - name: autofix-bridge
     platform: k8s
   # Slice-7 Phase D (2026-08-10, slice-7-phase-d-scrutiny.md): SMART monitoring. The

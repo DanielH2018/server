@@ -1,0 +1,84 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      # Host networking + PID so node_* describes the NODE (network interfaces, /proc)
+      # rather than a pod netns — the standard node-exporter posture. The 9100 listener
+      # this opens on each node is host-firewalled by ufw's default-deny INPUT (the LAN
+      # scrape path retired with the Docker exporter; prometheus scrapes the pod IP...
+      # which under hostNetwork IS the node IP, admitted by the flannel/UFW cluster
+      # allows the join already carries).
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: node-exporter
+          image: {{ node_exporter_k8s_image }}
+          args:
+            - --path.procfs=/host/proc
+            - --path.rootfs=/rootfs
+            - --path.sysfs=/host/sys
+            - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|var/lib/kubelet)($|/)
+            - --collector.textfile.directory=/textfile
+          ports:
+            - containerPort: 9100
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9100
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+            - name: rootfs
+              mountPath: /rootfs
+              readOnly: true
+            - name: textfile
+              mountPath: /textfile
+              readOnly: true
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: rootfs
+          hostPath:
+            path: /
+        # Host cron scripts may drop *.prom gauges here (the kopia-era B2-usage pattern);
+        # empty today, kept as the hook so a future host gauge needs no exporter change.
+        - name: textfile
+          hostPath:
+            path: /var/lib/node-exporter-textfile
+            type: DirectoryOrCreate

@@ -1,0 +1,4 @@
+---
+# Phase F drain: host metrics as a DaemonSet — daniel-box gains node_* coverage it never
+# had, daniel-server's LAN-published 9100 retires. Renovate tracks the pin.
+node_exporter_k8s_image: prom/node-exporter:v1.10.2

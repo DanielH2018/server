@@ -178,11 +178,13 @@ containers_list:
   # is unchanged, so the monitor and its history are the same object either way).
   # Organization: Monitoring
   # The prometheus service retired 2026-08-12 (E2 close) — the entry stays for
-  # node-exporter and cadvisor, which the cluster scrapes over the LAN until the Phase F
-  # join; no hostname/port, so no route or reverse-bridge host derives.
-  - name: prometheus
-    networks:
-      - monitoring
+  # node-exporter and cadvisor, which the cluster scraped over the LAN. The prometheus
+  # ENTRY retired 2026-08-14: node-exporter became a DaemonSet (roles/k8s/node-exporter,
+  # both nodes, per-pod scrape with per-node origin labels) and cadvisor RETIRED outright
+  # (operator decision) — its purpose was the Docker containers' restart/OOM/throttle
+  # series, and those three bridge checks retired with it (docker-fleet-health still
+  # pages on unhealthy/restarting). The exporter LAN firewall retired with the last
+  # published port. Role in roles/containers/archive/.
   # grafana's UI moved to the cluster grafana (E1, 2026-08-12) — the unsuffixed name is
   # served there now. The Docker loki cut executed 2026-08-13; the grafana ENTRY retired
   # 2026-08-14 when promtail — its last deployable — moved to the unpinned promtail

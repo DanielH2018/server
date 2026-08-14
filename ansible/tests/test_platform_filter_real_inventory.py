@@ -134,7 +134,13 @@ def test_daniel_server_is_still_wholly_docker():
     # promtail, its last deployable, moved to the unpinned promtail DaemonSet (both
     # nodes' host+pod logs; the Docker remnant's stdout stream deliberately went dark
     # with it — residual-tier acceptance). The role directory stays as the cluster
-    # grafana's dashboards-tree source.
-    assert len(containers) == 6
-    assert len(filter_by_platform(containers, "docker")) == 6
+    # grafana's dashboards-tree source. Then 5: the prometheus entry retired the same day
+    # — node-exporter became a DaemonSet (both nodes, per-pod scrape with per-node origin
+    # labels) and cadvisor RETIRED outright (operator decision): its purpose was the
+    # Docker containers' restart/OOM/throttle series, and those three bridge checks +
+    # their monitors retired with it. docker-fleet-health still pages on
+    # unhealthy/restarting; retargeting the depth checks onto kubelet-cadvisor's label
+    # shape is a Phase G candidate.
+    assert len(containers) == 5
+    assert len(filter_by_platform(containers, "docker")) == 5
     assert filter_by_platform(containers, "k8s") == []
