@@ -11,7 +11,10 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
   repo was renamed from `lloesche/valheim-server-docker`; only the new ghcr package
   publishes semver tags (the old one is stuck on `latest`/`dev`), and `1.1.0` and `latest`
   are the same digest today. No rolling-tag exception needed, unlike terraria.
-- **Host:** daniel-box · **Ports:** UDP 2456 (game) + 2457 (Steam query) via
+- **Host:** daniel-box, by a hard `nodeSelector` — a member of the **VIP unit** with
+  traefik, pihole, mosquitto and terraria. The pin and the MetalLB L2Advertisement
+  nodeSelector move together or not at all; see `roles/setup/k3s/templates/metallb-pool.yaml.j2`.
+- **Ports:** UDP 2456 (game) + 2457 (Steam query) via
   `Service type: LoadBalancer`, `externalTrafficPolicy: Local`, pinned to the node IP —
   the router forward has to target a DHCP/ARP-known device, so not a MetalLB VIP
 - **Storage:** two claims on deliberately different backup postures —
