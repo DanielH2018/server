@@ -30,6 +30,48 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@d31148d669074a8d0a63714ba94f3201e7020bc3  # v8.3.0  # no floating v8 tag is published; pin the exact release
+        with:
+          # Nine prek hooks shell out to `uv run`, which resolves the whole `dev` group
+          # (ansible-core, pytest, docker, flask, ruff, shellcheck-py) before the first one
+          # executes. Without this the download is repaid on every run. Keyed on uv.lock by
+          # the action itself, so a lock change invalidates it exactly.
+          enable-cache: true
+
+      # prek bootstraps one isolated environment per remote hook repo and re-does it whenever
+      # its cache is cold — which, uncached, is EVERY CI run. Measured cold on daniel-box
+      # (2026-08-14): gitleaks 220s (a `language = "golang"` hook: prek downloads a ~270 MB
+      # managed Go toolchain and builds gitleaks from source, for a scan that itself takes
+      # 0.05s), ansible-lint 102s of which only 36s is the lint (the rest is pip-installing
+      # ansible-core into the hook env), shellcheck 5s, pre-commit-hooks 3s.
+      #
+      # Only the environment dirs are cached. `~/.cache/prek/cache` is prek's own pip/uv
+      # DOWNLOAD cache (~500 MB) — pure redundancy once the envs it built are themselves
+      # restored, and large enough that carrying it would eat the saving in transfer time.
+      #
+      # restore-keys is safe here because prek's env dirs are content-addressed
+      # (hooks/<language>-<hash>): a stale entry from an older prek.toml is ignored rather
+      # than reused, so a partial hit still lets the UNCHANGED hooks skip their rebuild when
+      # one rev bumps. The fresh key then saves the union.
+      - name: Cache prek hook environments
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/prek/repos
+            ~/.cache/prek/hooks
+            ~/.cache/prek/tools
+          key: prek-${{ runner.os }}-${{ hashFiles('prek.toml') }}
+          restore-keys: prek-${{ runner.os }}-
+
+      # The ansible-lint hook's entry runs `ansible-galaxy collection install` before linting.
+      # ansible/collections/ is gitignored, so that is a ~40 MB download of four collections on
+      # every run; warm, the same command is a 0.4s no-op ("Nothing to do. All requested
+      # collections are already installed"). Versions are exactly pinned in requirements.yml,
+      # so hashing it is an exact key with no staleness window — hence no restore-keys.
+      - name: Cache Ansible collections
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ansible/collections
+          key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
 
       - name: Install prek
         run: pip install prek==0.4.10  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
