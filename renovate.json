@@ -300,6 +300,5 @@
       "groupName": "karakeep time-tagger pip deps (manual \u2014 track the pinned app)",
       "automerge": false
     }
-  ],
-  "bogusOptionThatDoesNotExist": true
+  ]
 }
