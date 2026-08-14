@@ -150,9 +150,10 @@ k3s_longhorn_backup_prefix: longhorn
 # - and the 03:30 nightly ran green in 4.5 min. Disarmed again the same morning: the
 # STORAGE cap tripped (hidden kopia versions + fresh nightly bytes), wedged retention
 # deletes retry-stormed (~31 errors/min from 6 stuck CRs) and drained the day's class
-# B/C transaction caps. Re-arm after the non-longhorn version purge lands (00:05 UTC
-# 08-14 sequence), so the target comes back below the storage cap with fresh transactions.
-k3s_longhorn_backup_armed: false
+# B/C transaction caps. Re-armed 2026-08-14 00:06 UTC: the approved purge removed all
+# 941 non-longhorn object versions (4.66 GB), so only longhorn/ bytes count against the
+# unchanged storage cap and the caps had just reset when the target came back.
+k3s_longhorn_backup_armed: true
 
 # Daily volume backup to that target. 03:30 keeps it clear of the Kopia run and of the daily
 # secret-rotation cron. 14 retained backups per volume is two weeks of daily recovery points
