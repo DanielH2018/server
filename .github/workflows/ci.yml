@@ -188,10 +188,41 @@ jobs:
     timeout-minutes: 20  # cap a wedged `npx renovate-config-validator` network fetch
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0  # the merge-base diff below needs history
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
+
+      # `npx --yes --package renovate` re-downloads Renovate on every run — 33-39s, and with
+      # ansible-lint sharded off this job became the longest in the workflow. Skip it on PRs
+      # that do not touch the file it validates. renovate.json moved in 26 of the last 1600
+      # commits (~1.6%), so this is a fast green for essentially every PR.
+      #
+      # Caching was measured and rejected. npm's cache splits in two: keeping `_cacache` alone
+      # (309 MB) still re-resolves from the registry and cuts the step to 7.2s, but the key
+      # cannot be content-derived from an unpinned package, so a rolling key would write a new
+      # 309 MB entry every run and churn the repo's 10 GB cache budget — likely evicting the
+      # prek and galaxy caches this workflow depends on. Also keeping `_npx` (341 MB) gets to
+      # 0.9s but SILENTLY PINS: that tree's manifest records `renovate: ^44.30.1`, npm sees the
+      # install satisfies it and reuses it without ever contacting the registry (it runs
+      # happily with --offline). That would quietly defeat the whole point of this job, below.
+      - name: Check whether this PR touches renovate.json
+        id: scope
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_REF"
+          # Three dots: against the merge base, so it is this PR's own change to the file.
+          if git diff --quiet "origin/$BASE_REF...HEAD" -- renovate.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "renovate.json untouched by this PR — it is validated on the merge to master."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
 
       # Semantic validation of renovate.json — the one dependency-management axis with no
       # fail-at-commit backstop. prek's `check-json` only proves the file is well-formed JSON;
@@ -200,6 +231,13 @@ jobs:
       # re-enable auto-merge of the stateful/DB-breaking bumps the automerge:false overrides
       # (getmeili/meilisearch, the crowdsec bouncer plugin, galaxy collections) exist to block.
       # `--strict` makes those warnings fail the build. Validates against the latest Renovate —
-      # the same hosted Mend app version that actually consumes the config.
+      # the same hosted Mend app version that actually consumes the config, which is why it is
+      # deliberately unpinned and why neither caching variant above was taken.
+      #
+      # Runs unconditionally on push to master, so the config still meets a freshly-resolved
+      # Renovate on every merge. That is what preserves the canary this job provides beyond
+      # validating edits: a config that Renovate itself stops accepting is caught within one
+      # merge, rather than only whenever renovate.json is next touched.
       - name: Validate renovate.json
+        if: github.event_name != 'pull_request' || steps.scope.outputs.changed == 'true'
         run: npx --yes --package renovate renovate-config-validator --strict renovate.json
