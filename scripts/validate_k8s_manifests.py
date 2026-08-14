@@ -247,6 +247,12 @@ def main() -> int:
         # image-builder (homelab-mcp). Shell is rendered and linted by
         # validate_shell_templates.py; a Dockerfile is consumed by buildctl. Parsing
         # either here reports a comment line as malformed YAML.
+        #
+        # The glob is deliberately non-recursive, which is what makes templates/config/
+        # work: an app config a manifest embeds via lookup() (CouchDB's local.ini,
+        # Home Assistant's configuration.yaml) is usually not YAML at all and must not be
+        # parsed as a manifest. Those live one level down, in templates/config/, and are
+        # validated by whatever tool understands their format, not by this script.
         templates = sorted(
             p
             for p in (K8S_ROLES / role / "templates").glob("*.j2")

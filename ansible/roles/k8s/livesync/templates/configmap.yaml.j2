@@ -12,4 +12,4 @@ data:
   to bound .couch bloat, and a copy that drifted would change how fast the volume grows on one
   side only — which then reads as a k8s problem.
 #}
-{{ lookup('template', playbook_dir + '/roles/containers/livesync/templates/local.ini.j2') | indent(4, true) }}
+{{ lookup('template', playbook_dir + '/roles/k8s/livesync/templates/config/local.ini.j2') | indent(4, true) }}

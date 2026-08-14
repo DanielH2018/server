@@ -4,9 +4,9 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
 
 ## At a glance
 - **Image:** `couchdb:3.5.2` (pinned + Renovate-managed, watchtower opts out)
-- **Host: daniel-box (k8s), since 2026-08-06 — slice 2.** This containers role no longer deploys
-  anywhere; it survives as the **config-source home**: `roles/k8s/livesync`'s ConfigMap renders
-  `templates/local.ini.j2`. Edit CouchDB config HERE; deploy with `--tags livesync` from daniel-box.
+- **Host: daniel-box (k8s), since 2026-08-06 — slice 2.** The Docker role this config came from
+  is gone; `local.ini.j2` now lives in this role's `templates/`, rendered into the ConfigMap.
+  Edit CouchDB config HERE; deploy with `--tags livesync` from daniel-box.
 - **Port:** 5984 · **URL:** `livesync.<domain>` (forwards to the cluster via `bridge_hostname`)
 - **Authelia:** **no** — CouchDB enforces its own auth (`require_valid_user = true`);
   the LiveSync client uses basic auth and can't pass Authelia 2FA
