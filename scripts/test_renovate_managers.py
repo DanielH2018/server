@@ -226,8 +226,8 @@ def test_group_vars_images_are_tracked() -> None:
 # is built from, and Renovate's built-in dockerfile manager already watches those
 # (test_every_dockerfile_is_renovate_visible asserts it sees them).
 REGISTRY_BUILT_IMAGES = {
-    "n8n_k8s_image",  # ansible/roles/containers/n8n/templates/Dockerfile.j2
-    "n8n_k8s_runners_image",  # ansible/roles/containers/n8n/templates/Dockerfile-runners.j2
+    "n8n_k8s_image",  # ansible/roles/k8s/n8n-images/templates/Dockerfile.j2
+    "n8n_k8s_runners_image",  # ansible/roles/k8s/n8n-images/templates/Dockerfile-runners.j2
     "ical_proxy_k8s_image",  # ansible/roles/k8s/ical-proxy/templates/Dockerfile.j2
     "code_server_k8s_image",  # ansible/roles/k8s/code-server/templates/Dockerfile.j2
     "homelab_mcp_k8s_image",  # ansible/roles/k8s/homelab-mcp/templates/Dockerfile.j2
