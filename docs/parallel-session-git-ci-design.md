@@ -264,14 +264,18 @@ alarm. Three ways out, to be decided in the implementation plan:
 
 1. Hold the lock only around the playbook invocation, not any surrounding health gate,
    keeping the held window as short as the work allows.
-2. Give the agent path a **longer** wait than 180s, so the interactive session yields to
-   the timer rather than the reverse — the timer is the automated, unattended party and
-   should win.
+2. Give the agent path a **longer** wait than 180s, so an interactive deploy queues behind
+   a running GitOps deploy rather than giving up.
 3. Accept the alert as the correct signal (a deploy genuinely was in progress) and
    document it so it isn't chased as a fault.
 
-Option 2 is the recommended default: it inverts the current failure direction so a human-
-or agent-initiated deploy never breaks the unattended pipeline.
+**These are not interchangeable — they fix opposite directions.** Option 2 only helps when
+GitOps holds the lock and the agent wants it; it does nothing about the case that produces
+the alert, which is the agent *holding* the lock past 180s. Only option 1 shortens that
+window, and it cannot shorten it below however long the playbook genuinely takes. So the
+implemented shape is 1 + 2 + 3 together: hold the lock around the playbook and nothing
+else, wait generously to acquire, and treat the resulting alert as true rather than
+suppressing it — the timer retries 30 minutes later.
 
 **Exercisable:** start a deploy, start a second concurrently, confirm the second blocks
 and then proceeds rather than interleaving.
