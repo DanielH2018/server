@@ -1,0 +1,17 @@
+---
+# The SteamCMD install only. The config claim is created by k8s/seed-volume, which must own
+# it — it renders and applies that PVC itself before the workload exists, so declaring it
+# here too would give two roles the same object.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ valheim_k8s_server_claim }}
+  namespace: {{ k8s_namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # nobackup: every byte here is re-downloadable from Steam, and B2 is the scarce resource.
+  storageClassName: {{ valheim_k8s_server_storage_class }}
+  resources:
+    requests:
+      storage: {{ valheim_k8s_server_size }}

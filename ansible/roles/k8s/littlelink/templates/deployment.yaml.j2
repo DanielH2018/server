@@ -21,6 +21,19 @@ spec:
       # so the image's own default user is what has been serving this page. Pinning a UID here
       # would be a behaviour change smuggled in under a platform move.
       automountServiceAccountToken: false
+      priorityClassName: homelab-best-effort
+      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
+      # Weighted so the pod still schedules if daniel-server is cordoned or full.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - daniel-server
       containers:
         - name: littlelink
           image: {{ littlelink_k8s_image }}

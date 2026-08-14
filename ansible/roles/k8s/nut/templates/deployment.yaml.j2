@@ -24,6 +24,7 @@ spec:
         kubernetes.io/hostname: daniel-server
       enableServiceLinks: false
       automountServiceAccountToken: false
+      priorityClassName: homelab-critical
       containers:
         - name: nut
           image: {{ nut_k8s_image }}

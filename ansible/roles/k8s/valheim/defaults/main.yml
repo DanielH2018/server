@@ -1,0 +1,57 @@
+---
+# Reactivated 2026-08-13 straight onto k3s, NOT back onto Docker: the Docker edge retired at
+# E7 and Phase F is draining daniel-server, so the archived compose role
+# (roles/containers/archive/valheim) and the archive/CLAUDE.md reactivation recipe both
+# describe a topology that no longer exists. terraria is the sibling this role copies.
+
+# The upstream repo moved: lloesche/valheim-server-docker is now community-valheim-tools,
+# and only the new package publishes semver tags (the old ghcr.io/lloesche/valheim-server
+# package is stuck on `latest`/`dev`). 1.1.0 and latest resolve to the same digest today, so
+# pinning costs nothing and hands the bump to Renovate — unlike terraria, this image does
+# NOT need a rolling-tag exception.
+valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.1.0
+
+# ── two volumes, deliberately on different backup postures ──────────────────────────────
+# /config is the irreplaceable half: worlds_local (the Dedicated world, ~7 M live plus the
+# image's own rotating .db/.fwl backups), adminlist/bannedlist/permittedlist, and prefs.
+# BACKED UP — this is the only reason the service is worth restoring at all.
+valheim_k8s_claim: valheim-config
+valheim_k8s_size: 5Gi
+valheim_k8s_storage_class: longhorn
+# Seeded from the Docker copy that has sat idle on daniel-server since the world's last save
+# (2025-11-22). The whole directory goes over, config/backups included: the image's own
+# rotation (BACKUPS_MAX_AGE=3 days) prunes those 385 M of 2025 zips on its first cycle, so
+# the backed-up volume self-cleans rather than needing a filtered copy. Nothing is moved —
+# the originals stay on daniel-server as the rollback.
+# The files are root-owned but world-readable (644/755), so unlike terraria's 600 worlds
+# this needs no sudo staging; the seed pod's `tar -p --numeric-owner` restores uid 0, which
+# is also the uid the server runs as (PUID/PGID default to 0).
+valheim_k8s_source_path: /home/ubuntu/server/containers/valheim/valheim/config
+
+# /opt/valheim is the SteamCMD install — a 1.8 G download that unpacks to 3.8 G on the
+# volume (both measured on the first boot), and entirely re-downloadable.
+# nobackup, so it never costs B2 bytes (the cap is already a live constraint), but a real
+# PVC rather than an emptyDir: the image re-runs steamcmd on every start, and an emptyDir
+# would turn each pod recreate into a 1.8 G cold download instead of a delta check.
+valheim_k8s_server_claim: valheim-server
+valheim_k8s_server_size: 10Gi
+valheim_k8s_server_storage_class: longhorn-nobackup
+
+# ── server identity ─────────────────────────────────────────────────────────────────────
+# Name and world carried over from the Docker compose so returning players' saved entries
+# and the existing world keep matching. The password did NOT carry over: the old value was
+# hardcoded in this PUBLIC repo's history (c3330c5a replaced it with a variable but the
+# plaintext is still in the log), so it is treated as disclosed and a fresh one lives in
+# SOPS as valheim_server_pass.
+valheim_k8s_server_name: "DBoy's Server"
+valheim_k8s_world_name: Dedicated
+# Listed in the in-game community browser, as before. Steam's server query (port 2457) only
+# answers for public servers; a private server is join-by-IP only.
+valheim_k8s_server_public: "true"
+
+# Mirrors the archived resources('4.0', '6144M', '0.5', '2048M') — the dedicated server
+# simulates the whole world in RAM and wants headroom, not a tight cap.
+valheim_k8s_cpu_limit: "4"
+valheim_k8s_mem_limit: 6144Mi
+valheim_k8s_cpu_request: "500m"
+valheim_k8s_mem_request: 2048Mi

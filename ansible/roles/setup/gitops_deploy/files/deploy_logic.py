@@ -12,6 +12,7 @@ and any recorded known-bad (hold) SHA.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
 # A bind-mounted file under an active container role's templates/ or files/ dir — the
@@ -52,7 +53,7 @@ _ACTIVE_ROLE = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/")
 # Before this, every path under ansible/roles/k8s/** matched NONE of the regexes above (they're all
 # containers/-scoped) and fell through to services_from_changed_paths returning an EMPTY ChangeSet,
 # which main()'s `if not cs.services:` branch takes as a plain docs-only ff-merge — silent, on EVERY
-# host with has_gitops (daniel-box, all 41 services platform: k8s). Matches the WHOLE role dir (not
+# host with has_gitops (daniel-box, all 47 services platform: k8s). Matches the WHOLE role dir (not
 # split into templates/tasks/meta like containers/) since a k8s role has no separate auto-deploy path
 # for any of its subdirs to be scoped against — the alert just needs to name the role. *.md (role
 # CLAUDE.md) stays a silent ff-merge, same as the containers/ catch-all.
@@ -126,6 +127,11 @@ class ChangeSet:
     # ever tags Docker-platform roles matched by _ACTIVE_CONFIG), so it always defer-and-alerts —
     # there's no "rode a scoped redeploy of the same service" case to subtract deployed against.
     k8s: set[str] = field(default_factory=set)
+    # k8s service(s) whose change is an image-pin bump ELIGIBLE for auto-deploy, split out of
+    # `k8s` by split_k8s_auto_deploy. `k8s` keeps its "defer-and-alert, never applied" meaning,
+    # so every existing consumer of that field is unchanged and this stays inert until a service
+    # actually qualifies.
+    k8s_deploy: set[str] = field(default_factory=set)
 
 
 def services_from_changed_paths(paths: list[str]) -> ChangeSet:
@@ -507,6 +513,93 @@ def reroute_k8s_services(cs: ChangeSet, k8s_services: set[str]) -> ChangeSet:
     if not moved:
         return cs
     return replace(cs, services=cs.services - moved, k8s=cs.k8s | moved)
+
+
+# A changed line in a unified diff that assigns a container image var, e.g.
+#   +speedtest_k8s_image: openspeedtest/latest:v2.0.5
+# Anchored on the `_image:` var-name suffix so it matches the same population the
+# renovate.json k8s-defaults customManager tracks. Leading whitespace is tolerated; a leading
+# `#` is not — a commented-out pin is not an image assignment.
+_DIFF_IMAGE_LINE = re.compile(r"^[+-][ \t]*[A-Za-z0-9_]+_image:[ \t]*\S")
+# Unified-diff file headers. They begin with -/+ but are metadata, not content, so they must be
+# skipped before classifying changed lines.
+_DIFF_HEADER = ("--- ", "+++ ")
+_K8S_DEFAULTS_PATH = "ansible/roles/k8s/{svc}/defaults/main.yml"
+
+
+def is_image_only_diff(diff_text: str) -> bool:
+    """True when every changed line in `diff_text` assigns an `*_image:` var.
+
+    The diff-shape half of k8s auto-deploy eligibility. Gating on the service NAME alone is not
+    enough: `_ACTIVE_K8S` matches the whole role dir, so a name-only gate would also auto-deploy
+    configmap / tasks/ / template pushes — none of which carry a Renovate soak behind them.
+
+    Fails closed: a diff with no changed lines (empty, unreadable, header-only) returns False, so
+    an unexpected git-output shape defers rather than deploys.
+    """
+    seen_change = False
+    for line in diff_text.splitlines():
+        if line.startswith(_DIFF_HEADER):
+            continue
+        if not line.startswith(("+", "-")):
+            continue
+        seen_change = True
+        if not _DIFF_IMAGE_LINE.match(line):
+            return False
+    return seen_change
+
+
+def split_k8s_auto_deploy(
+    cs: ChangeSet,
+    paths: list[str],
+    *,
+    denylist: frozenset[str] | set[str],
+    pilot: frozenset[str] | set[str],
+    enabled: bool,
+    image_only: Callable[[str], bool],
+) -> ChangeSet:
+    """Promote image-bump-only k8s changes from `cs.k8s` into `cs.k8s_deploy`.
+
+    A service qualifies only when ALL of:
+      * the feature is enabled;
+      * it is not denylisted (platform / observability / migrating-state / dependency-edge /
+        ungated-sub-deployment / stateful / nothing-to-gate / probe-less / games — each entry's
+        reason is in the role defaults and the design doc's denylist table);
+      * `pilot` is empty, or the service is named there (the slice-1 pilot scope);
+      * every path this push changed under that role dir is exactly its defaults/main.yml;
+      * `image_only(svc)` — that file's diff touches only `*_image:` lines.
+
+    The path check and the diff check are BOTH required: the path check alone would admit a push
+    editing defaults/main.yml's non-image vars, and the diff check alone would admit a push that
+    also edits tasks/.
+
+    Fail-closed by construction — anything not promoted stays in `cs.k8s`, which defer-and-alerts
+    exactly as it does today.
+    """
+    if not enabled:
+        return cs
+    if cs.services:
+        # A tick carrying Docker services too. The caller's k8s branch returns before reaching
+        # the Docker deploy + health gate, so promoting here would silently skip them. No host
+        # is mixed today (daniel-box is all-k8s and is the only has_gitops host), so defer the
+        # k8s half rather than grow a two-plane tick ordering this deployer doesn't model.
+        return cs
+    promoted: set[str] = set()
+    for svc in cs.k8s:
+        if svc in denylist:
+            continue
+        if pilot and svc not in pilot:
+            continue
+        role_prefix = f"ansible/roles/k8s/{svc}/"
+        changed_here = [p for p in paths if p.startswith(role_prefix)]
+        if changed_here != [_K8S_DEFAULTS_PATH.format(svc=svc)]:
+            continue
+        if not image_only(svc):
+            continue
+        promoted.add(svc)
+    if not promoted:
+        return cs
+    return replace(cs, k8s=cs.k8s - promoted, k8s_deploy=cs.k8s_deploy | promoted)
 
 
 def stale_rendered_services(rendered: list[str], declared: set[str]) -> list[str]:

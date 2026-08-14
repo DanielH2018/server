@@ -17,6 +17,19 @@ spec:
       labels:
         app: wg-easy
     spec:
+      # Pinned to the VIP-announcing node while the MetalLB L2Advertisement is pinned to
+      # daniel-box: with externalTrafficPolicy Local, a VIP-backed pod on the other node
+      # makes the announcer DROP all forwarded LAN traffic (2026-08-14 post-boot DNS
+      # blackout). This pin only ever moves together with the L2Advertisement nodeSelector.
+      #
+      # Added 2026-08-14 alongside valheim's, for the same reason and with more at stake:
+      # wg-easy-udp has carried ETP Local and VIP 10.0.0.244 since it went live with no
+      # placement guarantee, so it sat here only by scheduler accident. A reschedule onto
+      # daniel-server would black-hole UDP 51820 while the pod reported healthy — and
+      # because this IS the remote-access path, it would also remove the way back in to
+      # diagnose it.
+      nodeSelector:
+        kubernetes.io/hostname: daniel-box
       enableServiceLinks: false
       securityContext:
         # Both namespaced; kubelet only admits them because setup/k3s allow-lists them.
@@ -62,6 +75,10 @@ spec:
               cpu: 10m
               memory: 16Mi
       automountServiceAccountToken: false
+      # Tier 1, not tier 4 as a VPN utility first looks: this is the remote-access path.
+      # Evicting it under memory pressure removes the way back in to deal with whatever
+      # caused the pressure, so it ranks with the edge rather than with the dashboards.
+      priorityClassName: homelab-critical
       containers:
         - name: wg-easy
           image: {{ wg_easy_k8s_image }}

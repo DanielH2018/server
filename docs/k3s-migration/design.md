@@ -2,7 +2,15 @@
 
 **Date:** 2026-08-01
 
-**Status:** Plan executed through Phase E. Current state in `slice-7-phase-e-server-retirement.md`; all 8-item Reworks list shipped.
+**Status: COMPLETE (2026-08-14).** The whole plan executed; Docker was uninstalled from
+`daniel-server` on 2026-08-14, which is the migration's end state. Everything in this
+directory is a **historical record of work already done** — read it for *why* a thing is
+shaped the way it is, not as a description of pending work or of current architecture. For
+current state, start at the repo-root [`README.md`](../../README.md) and
+[`CLAUDE.md`](../../CLAUDE.md).
+
+Phase-by-phase detail: `slice-7-phase-e-server-retirement.md` (server retirement),
+then Phase F (daniel-server rejoined as a k3s agent) and Phase G (books close-out).
 
 **Scope:** `daniel-server` (10.0.0.161) and `daniel-box` (10.0.0.215). `daniel-pi` explicitly out of scope.
 
@@ -43,7 +51,7 @@ All figures measured on the hosts on 2026-08-01, not estimated.
 
 **Footprint** — `/home/ubuntu/server/containers` totals **31 G**, of which `data/` (media + torrents) is **17 G**; the remainder (~14 G) is per-service config volumes. Some `kopia/` and `portainer/` subdirs were unreadable as `ubuntu`, so the true total is slightly higher. This is small enough that replicating config volumes across two nodes is cheap.
 
-**Service count** — daniel-server's `containers_list` holds **46 active entries** (`grep -cE '^  - name:'`), plus `happy`, archived and commented out on 2026-07-19. daniel-box's `containers_list` is `[]` and nothing runs on it. `valheim` and `recyclarr` exist under `containers/` but are absent from the inventory — treat them as already dead, not as missed services.
+**Service count** — daniel-server's `containers_list` holds **46 active entries** (`grep -cE '^  - name:'`), plus `happy`, archived and commented out on 2026-07-19. daniel-box's `containers_list` is `[]` and nothing runs on it. `valheim` and `recyclarr` exist under `containers/` but are absent from the inventory — treat them as already dead, not as missed services. *(Update 2026-08-13: `valheim` was later reactivated, but as a native k8s role on daniel-box — `roles/k8s/valheim`, seeded from the Docker world dir. It was never a migration target; the statement above still holds for the survey it describes.)*
 
 **"Master node" already exists in this repo.** It is not a new concept to invent — it is four flags in `ansible/inventory/group_vars/all.yml`, all currently `daniel-server`:
 

@@ -1,5 +1,15 @@
 # B2 transaction cap, 2026-08-02 — what the monitoring did and didn't say
 
+> **Incident record — the open questions below are now closed (2026-08-14).** The recurring
+> driver was the two backup systems sharing one B2 account: Kopia's nightly plus Longhorn's.
+> That contention is gone — **Kopia was retired 2026-08-13 and its repo deleted 2026-08-14**,
+> leaving Longhorn as the sole B2 consumer (first green Longhorn-only nightly: 2026-08-13,
+> 10 volumes, 4.5 min). Read this for the *monitoring* lessons, which still apply; the
+> remediation steps that say `docker stop kopia` / `deploy.yml --tags kopia` on daniel-server
+> can no longer be run — that host has no Docker and no kopia. Current backup docs:
+> [`longhorn-backup-tiering.md`](longhorn-backup-tiering.md) and
+> [`longhorn-disaster-recovery.md`](longhorn-disaster-recovery.md).
+
 Backblaze B2 hit an **account transaction cap** on 2026-08-02. Every backup tier stopped
 working: Kopia could not read its own repository blob, and Longhorn could not list its backup
 store. Storage was never the constraint — the bucket sat at 6.05 / 10 GB (60%).

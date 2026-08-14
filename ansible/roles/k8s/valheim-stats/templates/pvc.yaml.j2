@@ -1,0 +1,16 @@
+---
+# Declared here rather than by k8s/seed-volume (which is what creates terraria-stats'
+# claim): that role exists to copy an existing Docker directory in, and there is nothing
+# to copy — this service has no predecessor.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ valheim_stats_k8s_claim }}
+  namespace: {{ k8s_namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ valheim_stats_k8s_storage_class }}
+  resources:
+    requests:
+      storage: {{ valheim_stats_k8s_pvc_size }}

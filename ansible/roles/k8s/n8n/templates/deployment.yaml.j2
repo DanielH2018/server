@@ -23,6 +23,19 @@ spec:
     spec:
       enableServiceLinks: false
       automountServiceAccountToken: false
+      priorityClassName: homelab-best-effort
+      # Preference, never a pin: CPU-bound workflow execution — daniel-box has 16 threads to daniel-server's 8.
+      # Weighted so the pod still schedules if daniel-box is cordoned or full.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - daniel-box
       containers:
         - name: n8n
           image: {{ n8n_k8s_image }}

@@ -24,6 +24,7 @@ spec:
       # chowns /config itself on startup, and an fsGroup here would make the kubelet recursively
       # chown the 19 G media volume on every mount.
       automountServiceAccountToken: false
+      priorityClassName: homelab-standard
       containers:
         - name: radarr
           image: {{ radarr_k8s_image }}

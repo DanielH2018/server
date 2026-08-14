@@ -110,6 +110,7 @@ spec:
               cpu: "{{ qbittorrent_k8s_wg_cpu_request }}"
               memory: {{ qbittorrent_k8s_wg_mem_request }}
       automountServiceAccountToken: false
+      priorityClassName: homelab-standard
       containers:
         - name: qbittorrent
           image: {{ qbittorrent_k8s_image }}

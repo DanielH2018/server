@@ -1,0 +1,132 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valheim
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # 30 min, because the Deployment's own default (600s) is the deadline that actually binds
+  # on a first boot — NOT manifests_rollout_timeout. Measured 2026-08-13: the first rollout
+  # was still pulling this image at 10 min and the Deployment was already marked
+  # ProgressDeadlineExceeded, failing the play while the pod carried on fine underneath.
+  # Between the image pull and the ~1.8 G SteamCMD download, first boot needs the room.
+  progressDeadlineSeconds: 1800
+  # Same reasoning as terraria: RWO claims on single-replica Longhorn deadlock a rolling
+  # update, and two servers writing one world would be worse than the deadlock.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: valheim
+  template:
+    metadata:
+      labels:
+        app: valheim
+    spec:
+      # Pinned to the VIP-announcing node while the MetalLB L2Advertisement is pinned
+      # to daniel-box: with externalTrafficPolicy Local, a VIP-backed pod on the other
+      # node makes the announcer DROP all forwarded LAN traffic (2026-08-14 post-boot
+      # DNS blackout). Permanent posture (operator decision 2026-08-14): with ETP Local
+      # load-bearing for client IPs, announcement and placement stay on daniel-box as one
+      # unit — this pin only ever moves together with the L2Advertisement nodeSelector.
+      #
+      # Added 2026-08-14 with the branch's merge: the Service has carried ETP Local and a
+      # homelab-pool VIP since it went live, but the Deployment had no pin, so the pod sat
+      # on daniel-box only by scheduler accident. A reschedule onto daniel-server would
+      # have black-holed the game port with the pod itself reporting healthy.
+      nodeSelector:
+        kubernetes.io/hostname: daniel-box
+      enableServiceLinks: false
+      priorityClassName: homelab-standard
+      containers:
+        - name: valheim
+          image: {{ valheim_k8s_image }}
+          ports:
+            - name: game
+              containerPort: 2456
+              protocol: UDP
+            - name: query
+              containerPort: 2457
+              protocol: UDP
+          env:
+            - name: SERVER_NAME
+              value: "{{ valheim_k8s_server_name }}"
+            - name: WORLD_NAME
+              value: "{{ valheim_k8s_world_name }}"
+            - name: SERVER_PUBLIC
+              value: "{{ valheim_k8s_server_public }}"
+            - name: TZ
+              value: "{{ tz }}"
+            - name: SERVER_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: valheim-env
+                  key: SERVER_PASS
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                # Steam's threading layer raises its own thread priority at startup. Without
+                # it the server still runs but logs a failed-priority warning every boot —
+                # the archived compose carried the same cap_add for the same reason.
+                - SYS_NICE
+                # The container runs its own cron — that is what drives the hourly world
+                # backup and the Steam update check. cron calls initgroups() before every
+                # job, which is setgroups(), which needs this even when the target user is
+                # already root. Without it every tick dies with
+                #   (CRON) error (do_command:initgroups(0) failed: Operation not permitted)
+                # and the log otherwise looks healthy — observed on the first boot here, so
+                # the backups would have silently never run.
+                - SETGID
+                # No DAC_OVERRIDE, unlike terraria: PUID/PGID default to 0, the seed pod
+                # restores the source's uid 0 with `tar -p --numeric-owner`, and root
+                # writing root-owned files needs no override. Add it only if a world save
+                # ever fails on the backup step.
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: server
+              mountPath: /opt/valheim
+          # Valheim speaks UDP, so terraria's /proc/net/tcp LISTEN check cannot work here —
+          # a UDP socket has no LISTEN state and never appears in that table. This greps
+          # a bound socket on :2456 (hex 0998) instead, which is a real kernel-side check
+          # and, like terraria's, never touches the game protocol: a probe that actually
+          # spoke to the port would log a join attempt every cycle.
+          # BOTH tables, and that is not belt-and-braces — the server binds v6, so the
+          # socket appears ONLY in /proc/net/udp6. Checking /proc/net/udp alone never
+          # matched: measured here on first boot, the pod sat un-Ready for 27 minutes with
+          # a fully working server behind it, and would have been killed at the threshold.
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "grep -q ':0998 ' /proc/net/udp /proc/net/udp6"]
+            periodSeconds: 15
+            # 15 min. The FIRST boot on an empty /opt/valheim PVC downloads ~1.8 G through
+            # SteamCMD before anything binds; later boots are a delta check plus world load
+            # and clear this in well under a minute.
+            failureThreshold: 60
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "grep -q ':0998 ' /proc/net/udp /proc/net/udp6"]
+            periodSeconds: 30
+            failureThreshold: 4
+          resources:
+            limits:
+              cpu: "{{ valheim_k8s_cpu_limit }}"
+              memory: {{ valheim_k8s_mem_limit }}
+            requests:
+              cpu: "{{ valheim_k8s_cpu_request }}"
+              memory: {{ valheim_k8s_mem_request }}
+          # Parity with the archived compose's stop_grace_period: 2m. A dedicated server
+          # wants room to finish its shutdown save rather than be SIGKILLed at the default
+          # 30s; the exact shutdown behaviour of this image has not been observed here.
+      terminationGracePeriodSeconds: 120
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ valheim_k8s_claim }}
+        - name: server
+          persistentVolumeClaim:
+            claimName: {{ valheim_k8s_server_claim }}

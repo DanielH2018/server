@@ -184,7 +184,7 @@
   become: true
   changed_when: "'created' in k3s_metallb_pool_apply.stdout or 'configured' in k3s_metallb_pool_apply.stdout"
 
-- name: Render the homelab-critical PriorityClass
+- name: Render the workload-tier PriorityClasses
   tags: [priorityclass]
   ansible.builtin.template:
     src: priorityclass.yaml.j2
@@ -194,7 +194,7 @@
     group: root
   become: true
 
-- name: Apply the homelab-critical PriorityClass
+- name: Apply the workload-tier PriorityClasses
   tags: [priorityclass]
   ansible.builtin.command:
     cmd: k3s kubectl apply -f /etc/rancher/k3s/priorityclass.yaml

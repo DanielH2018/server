@@ -546,6 +546,14 @@ containers_list:
   - name: terraria
     platform: k8s
 
+  # Reactivated 2026-08-13, straight onto k3s rather than back onto the retired Docker edge
+  # (the archived compose role and archive/CLAUDE.md's reactivation recipe both predate E7).
+  # Same shape as terraria above: no port/hostname, because nothing about it is HTTP — the
+  # game answers UDP 2456-2457 on the node IP via its own Service. The world was last saved
+  # 2025-11-22 and is seeded from the Docker copy still on daniel-server.
+  - name: valheim
+    platform: k8s
+
   # Slice-7 Phase D.2 KL1 (2026-08-10): the homelab log store — a SECOND cluster Loki,
   # deliberately separate from claude-otel's (that one holds verbatim prompts and stays
   # loopback-only; the D1 exception is documented in slice-7-phase-d-loki.md). hostname
@@ -589,6 +597,12 @@ containers_list:
   # "WG Pi Peer Backup" monitor directly (the bridge's pi_peers check retired with it).
   - name: pi-peer-backup
     platform: k8s
+  # The Valheim sibling (2026-08-13), added with that server's reactivation. Same
+  # ordering constraint as terraria-stats above — it tails the valheim pod's console out
+  # of loki-homelab, so it MUST follow it. No port/route: its :9420 exporter is scraped
+  # in-cluster (claude-otel prometheus job valheim-stats), there is no web UI.
+  - name: valheim-stats
+    platform: k8s
   # Slice-7 Phase D (2026-08-10, slice-7-phase-d-scrutiny.md): SMART monitoring. The
   # collector DaemonSet adds this host's never-monitored NVMe; daniel-server's Docker
   # collector pushes into the same web API as a spoke until the Phase F join. UI behind
@@ -604,6 +618,15 @@ containers_list:
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the
 # play with it, so a single bad service would take down the whole OS-hardening run.
 has_gitops: true
+# k8s auto-deploy, slice-1 pilot (2026-08-14). Eligibility is an image-only diff to a
+# non-denylisted service's defaults/main.yml — see roles/setup/gitops_deploy/defaults/main.yml,
+# where every denylist entry carries its reason. Scoped to one service until the induced-failure
+# drill has proven rollback + hold clearing; slice 3 clears the pilot list.
+# speedtest is the pilot: a real HTTP readinessProbe, no PVC, no dependents, so a failed rollout
+# costs nothing and the gate genuinely proves something.
+gitops_deploy_k8s_autodeploy_enabled: true
+gitops_deploy_k8s_autodeploy_pilot:
+  - speedtest
 # This is the k3s node — it must NOT have Docker. k3s brings its own containerd and its
 # flannel/kube-proxy iptables rules; daniel-box was chosen to go first precisely because it
 # had no container runtime. A bare `initial_setup.yml` (no --tags) installed Docker here on

@@ -27,6 +27,7 @@ spec:
             runAsUser: {{ puid }}
             runAsGroup: {{ pgid }}
             fsGroup: {{ pgid }}
+          priorityClassName: homelab-best-effort
           containers:
             - name: pull
               image: {{ pi_peer_backup_k8s_image }}

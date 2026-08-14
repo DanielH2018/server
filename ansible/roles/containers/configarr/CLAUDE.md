@@ -66,7 +66,7 @@ didn't create.
   506/705, none in the 100-399 gap). Blunt total-score lever, reversible via the API; the refreshed
   `files/baseline/anime-profile.json` snapshot is its only git record. A full read-only snapshot of the
   current Anime profile + CF scores lives in `files/baseline/` (documentation; not applied). The
-  live CF definitions stay in Sonarr's DB (Kopia-backed).
+  live CF definitions stay in Sonarr's DB (on its Longhorn PVC, backed up to B2).
 
 **Accepted trade-off from the recyclarr port:** `include:`'s `reset_unmatched_scores` behavior
 made Configarr authoritative for scores *inside the guide profiles it syncs* — on cutover it

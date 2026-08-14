@@ -1,12 +1,72 @@
-# The edge trio (traefik, authelia, pihole) references this class: all ingress, all auth,
-# and LAN DNS must not be the first pods evicted under node pressure — before this class
-# existed, the GPU device-plugin (system-node-critical, its own template documents why)
-# outranked all three. Below system-node-critical (2000001000) and system-cluster-critical
-# (2000000000) on purpose: the scheduler and CNI still win.
+# The homelab's workload tiers, as PriorityClasses. Four bands, all below
+# system-node-critical (2000001000) and system-cluster-critical (2000000000) on purpose:
+# the scheduler, CNI and kubelet plumbing still win every contest against a workload.
+#
+# WHAT THESE ACTUALLY DO, so the next reader does not overestimate them. Priority decides
+# two things and nothing else: which pod the scheduler preempts when a node has no room,
+# and the order the kubelet evicts under node pressure. It does NOT throttle CPU, reserve
+# memory, or influence normal placement. With requests sitting near 36% of both nodes, the
+# scheduler currently never has to preempt — so in practice these are insurance against
+# memory pressure on daniel-box, which runs at ~60% with limits overcommitted to 160%.
+#
+# QoS RANKS ABOVE PRIORITY AT EVICTION. The kubelet sorts by QoS class first (BestEffort,
+# then Burstable, then Guaranteed) and only uses priority to break ties within a class.
+# Essentially every workload here is Burstable (requests below limits), so the tiers do
+# discriminate — but a Guaranteed tier-4 pod would still outlive a Burstable tier-1 one.
+# Getting the tiers right is not a substitute for getting requests right.
+#
+# EVERY homelab workload should carry one of these. A pod with no priorityClassName sits at
+# 0, which is also where unclassified infrastructure in kube-system, longhorn-system and
+# observability sits — so leaving a tier-4 workload unclassed does not place it "below tier
+# 3", it merges it into a pile of pods that were never part of this model at all. That is
+# why homelab-best-effort exists as a real class rather than as the absence of one.
+---
+# TIER 1 — base infrastructure: all ingress, all auth, LAN DNS, the WAF, the image registry,
+# the alert bridge, the UPS primary, and wg-easy. Before this class existed the GPU
+# device-plugin (system-node-critical, its own template documents why) outranked the edge trio.
+#
+# The two that look out of place both earn it. `nut` runs the UPS primary — evicting it
+# breaks the chain that powers daniel-server down on a battery FSD, which is a hardware
+# risk, not a service outage. `wg-easy` is the remote-access path: evicting it removes the
+# way back in to deal with whatever caused the pressure.
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: homelab-critical
 value: 100000
 globalDefault: false
-description: "Edge/auth/DNS workloads evicted only after ordinary pods."
+description: "Tier 1 — edge, auth, DNS, WAF, registry, alerting. Evicted last."
+---
+# TIER 2 — home automation. Below the edge (a house with no lights is worse than a house
+# with no lights *and* no way to reach the dashboard, but only just) and above everything
+# discretionary. The three move as a group: home-assistant is useless without mosquitto,
+# and mosquitto is useless without zigbee2mqtt feeding it.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: homelab-automation
+value: 50000
+globalDefault: false
+description: "Tier 2 — Home Assistant and the Zigbee chain."
+---
+# TIER 3 — the services with users and state worth protecting: game servers (a killed
+# Valheim pod costs the players their session back to the last autosave) and the media /
+# reading stack.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: homelab-standard
+value: 10000
+globalDefault: false
+description: "Tier 3 — game servers, media stack, feeds and bookmarks."
+---
+# TIER 4 — everything discretionary: dashboards, utilities, batch work. tdarr belongs here
+# by design rather than by omission — it is the most preemptible thing in the cluster, and
+# a transcode killed mid-run simply reruns.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: homelab-best-effort
+value: 1000
+globalDefault: false
+description: "Tier 4 — dashboards, utilities and batch work. Evicted first."

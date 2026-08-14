@@ -22,40 +22,35 @@ desktop, so your real ISP IP is never exposed to anything.
 
 | Thing | Value |
 |---|---|
-| WireGuard endpoint | `wireguard.daniel-hunter.com:51820/udp` |
+| WireGuard endpoint | `wireguard.daniel-hunter.com:51820/udp` → wg-easy on `daniel-box` (k8s) |
 | wg-easy admin UI | `https://wg-easy.daniel-hunter.com` (behind Authelia) |
-| Server / Pi-hole IP | `10.0.0.161` — Docker-hosted services |
-| k3s ingress VIP | `10.0.0.240` — MetalLB, k3s-hosted services |
+| k3s ingress VIP | `10.0.0.240` — MetalLB; **every** `.local` service answers here |
+| Pi-hole DNS VIP | `10.0.0.243` — MetalLB |
 | WireGuard client subnet | `10.8.0.0/24` |
 | Home LAN subnet | `10.0.0.0/24` |
-| Service URLs | `https://<name>.local.daniel-hunter.com` — resolve to **either** IP above, see below |
+| Service URLs | `https://<name>.local.daniel-hunter.com` → `10.0.0.240` |
 | `.local` auth portal | `https://auth.local.daniel-hunter.com` (one_factor) |
-| New-client DNS default | `10.0.0.161` (server sets `WG_DEFAULT_DNS`) |
+| New-client DNS default | `10.0.0.243` (`default_dns: {{ dns_k8s_vip }}` on wg-easy's `containers_list` entry) |
 
-### Two IPs, not one
+### One ingress IP (since the migration completed, 2026-08-14)
 
-`.local` names no longer all point at `10.0.0.161`. Services migrated to the k3s cluster
-answer on the MetalLB ingress VIP `10.0.0.240` instead — a different host entirely
-(`daniel-box`), running its own Traefik. Pi-hole serves both correctly (a per-name
-`address=` override beats the `local.<domain>` wildcard), so **the split is invisible if
-you let Pi-hole resolve.** It only bites the hosts-file option in A3, and the
-`AllowedIPs` narrowing in A2 — both of which name IPs by hand.
+This doc previously described a **two-IP split** — Docker services on `10.0.0.161` and
+migrated ones on the k3s VIP. **That split is gone.** The k3s migration completed on
+2026-08-14 and Docker was uninstalled from `daniel-server`, so there is no Docker edge on
+`10.0.0.161` to reach. Pi-hole's `local.<domain>` wildcard now answers the cluster ingress
+VIP for everything (`pihole_wildcard_ip = k3s_metallb_ingress_vip` in
+`ansible/roles/k8s/pihole/templates/configmap.yaml.j2`).
 
-Migrating a service changes its IP, so don't hardcode this mapping anywhere you'd have
-to remember to update. The authoritative list is generated, not hand-kept: k3s names come
-from `daniel-box`'s `containers_list` (see `filter_by_platform('k8s')` in
-`ansible/roles/containers/pihole/templates/dnsmasq.yml.j2`).
+Practical consequences:
 
-**Docker (`10.0.0.161`)** — each is `<name>.local.daniel-hunter.com`: `homepage`,
-`jellyfin`, `sonarr`, `radarr`, `prowlarr`, `bazarr`, `tdarr`, `karakeep`, `freshrss`,
-`qbittorrent`, `n8n`, `home-assistant`, `code-server`, `portainer`, `grafana`,
-`prometheus`, `uptime-kuma`, `glances`, `scrutiny`, `healthchecks`, `pihole`, `peanut`,
-`kopia`, `wg-easy`, `speedtest`, `bento-pdf`, `livesync`, `crowdsec`, `traefik`, `zigbee2mqtt`,
-plus `auth` (the login portal, **required**) and `www` (littlelink).
-
-**k3s (`10.0.0.240`)** — migrated services carry a `-k8s` suffix so both copies can run
-side by side during the migration: `auth-k8s` (the cluster's own login portal) and
-`bento-pdf-k8s`. Slice 2 moves the bulk of the list above onto this IP.
+- **Let Pi-hole resolve** and you need no per-service mapping at all — one wildcard covers
+  every `.local` name.
+- The hosts-file option in A3 and the `AllowedIPs` narrowing in A2 (the two places that name
+  IPs by hand) now need **`10.0.0.240`** — plus `10.0.0.243` if you point at Pi-hole.
+- The transitional **`-k8s` hostname suffixes are retired**; services answer on their plain
+  names again. If a `<name>-k8s.local.…` URL is saved in a bookmark, drop the suffix.
+- `daniel-pi` runs a second, **LAN-only** wg-easy on `51822/udp`. It is deliberately not
+  forwarded and is not the endpoint above — don't point a remote client at it.
 
 ---
 
@@ -83,8 +78,8 @@ PersistentKeepalive = 25
 ```
 The `AllowedIPs` narrowing is what makes it a split tunnel: only the home LAN and WG peers
 route into this tunnel; everything else keeps Mullvad's default route. The whole `/24` is
-the right default **when away from home**, now that services live on two IPs (`10.0.0.161`
-and the k3s VIP `10.0.0.240`) — it survives the next migration, and costs no privacy since
+the right default **when away from home** — it covers the ingress VIP `10.0.0.240`, the DNS
+VIP `10.0.0.243`, and anything that moves later, and costs no privacy since
 the range is entirely private. `AllowedIPs` decides what enters the tunnel, so an IP
 missing here leaks out via Mullvad's default route and fails with a **timeout**, not a DNS
 error.
@@ -93,23 +88,19 @@ error.
 > installs that route at metric 0, which beats the connected route on the physical NIC
 > (metric ~100). Every LAN destination — including the gateway `10.0.0.1`, and `10.0.0.240`
 > which was directly reachable to begin with — then hairpins out to the WireGuard endpoint
-> and back. On a LAN client, either bring the tunnel down (nothing needs it; both IPs are
-> directly reachable) or list single hosts: `AllowedIPs = 10.0.0.161/32, 10.0.0.240/32,
-> 10.8.0.0/24`. The `/32` form costs one line per future migration, which is the correct
-> trade here.
+> and back. On a LAN client, either bring the tunnel down (nothing needs it; the VIPs are
+> directly reachable) or list single hosts: `AllowedIPs = 10.0.0.240/32, 10.0.0.243/32,
+> 10.8.0.0/24`.
 
 ### A3. DNS — pick ONE (both keep general DNS on Mullvad → no leak)
 - **Strict, any OS — hosts file.** Delete the `DNS =` line. Add to the OS hosts file
-  (`/etc/hosts`, or `C:\Windows\System32\drivers\etc\hosts`). **Mind the two IPs** —
-  Docker services take `10.0.0.161`, k3s services take `10.0.0.240`:
+  (`/etc/hosts`, or `C:\Windows\System32\drivers\etc\hosts`). Every service is on the one
+  ingress VIP now:
   ```
-  10.0.0.161 auth.local.daniel-hunter.com    # REQUIRED (login redirect)
-  10.0.0.161 homepage.local.daniel-hunter.com
-  10.0.0.161 jellyfin.local.daniel-hunter.com
-  # ...add the Docker services you actually use
-
-  10.0.0.240 auth-k8s.local.daniel-hunter.com      # k3s login portal
-  10.0.0.240 bento-pdf-k8s.local.daniel-hunter.com
+  10.0.0.240 auth.local.daniel-hunter.com    # REQUIRED (login redirect)
+  10.0.0.240 homepage.local.daniel-hunter.com
+  10.0.0.240 jellyfin.local.daniel-hunter.com
+  # ...add the services you actually use
   ```
   Hosts files don't support wildcards, so list each name you use. They never emit a DNS
   query, so general DNS stays entirely on Mullvad — but that is also the trap: a name you
@@ -118,12 +109,11 @@ error.
   found"**. A new or newly-migrated service reaching you as a DNS failure is this, not an
   outage — check the file before you debug the homelab.
 - **Linux convenience — split-DNS *(recommended)*.** Keep
-  `DNS = 10.0.0.161, local.daniel-hunter.com`. With `systemd-resolved` + `wg-quick`, the
+  `DNS = 10.0.0.243, local.daniel-hunter.com`. With `systemd-resolved` + `wg-quick`, the
   trailing domain makes Pi-hole authoritative **only** for `*.local.daniel-hunter.com`;
-  every other lookup stays on Mullvad's resolver. Pi-hole already knows both IPs and every
-  name, so new and migrated services just work — no client-side edit, ever. Prefer this
-  over the hosts file unless your OS can't do split-DNS; slice 2 moves ~30 more services
-  onto the k3s VIP, and each one is a hosts-file line you'd otherwise have to fix by hand.
+  every other lookup stays on Mullvad's resolver. Pi-hole answers the whole
+  `local.<domain>` space from one wildcard, so any new service just works — no client-side
+  edit, ever. Prefer this over the hosts file unless your OS can't do split-DNS.
 
 ### A4. Import & run *(Claude/you)*
 - Import the edited `.conf` into the standard **WireGuard** app (not the Mullvad app) as a
@@ -135,14 +125,14 @@ error.
 ### A5. Verify
 - `wg show` lists both interfaces; the personal one shows a recent handshake.
 - `curl -I https://homepage.local.daniel-hunter.com` → `200`/`302` (auth redirect), **not** `403`.
-- `curl -I https://auth-k8s.local.daniel-hunter.com` → `200`. Checks the *other* IP: this
-  one only passes if `10.0.0.240` both resolves and routes, so it catches a stale hosts
-  file or an `AllowedIPs` that still names `10.0.0.161` alone.
+- `curl -I https://auth.local.daniel-hunter.com` → `200`. This passes only if `10.0.0.240`
+  both resolves and routes, so it catches a stale hosts file or an `AllowedIPs` that still
+  names the retired `10.0.0.161` edge.
 - `https://am.i.mullvad.net` still shows a **Mullvad** exit → general traffic untouched.
 - Browse the dashboard hard → no 403 (CrowdSec isn't in this path).
 
 Distinguishing the two failure modes: **"Server not found"** is DNS (hosts file / split-DNS
-— A3), a **timeout** is routing (`AllowedIPs` — A2). `dig +short <name> @10.0.0.161` from
+— A3), a **timeout** is routing (`AllowedIPs` — A2). `dig +short <name> @10.0.0.243` from
 the client separates them: an answer means Pi-hole is fine and the problem is on your end.
 
 ### A6. If Mullvad's firewall blocks it
@@ -164,8 +154,8 @@ oif "wg0-mullvad" accept
 ip daddr 10.0.0.0/8 accept                                 # local network sharing, too late
 ```
 
-So LAN **HTTP** to `10.0.0.161:80` falls through to the `10.0.0.0/8` accept and works, while
-LAN **DNS** to `10.0.0.161:53` is rejected two rules earlier and never reaches it. That
+So LAN **HTTP** to `10.0.0.240:80` falls through to the `10.0.0.0/8` accept and works, while
+LAN **DNS** to `10.0.0.243:53` is rejected two rules earlier and never reaches it. That
 asymmetry is the whole confusion: the resolver looks dead while every other port on the same
 host answers. `reject with tcp reset` is what produces `connection refused` rather than a
 timeout.
@@ -175,7 +165,7 @@ doesn't control** — the ISP gateway:
 
 ```bash
 dig +short +time=3 @10.0.0.1 example.com     # refused too? → it's local, not the homelab
-dig +short +time=3 @10.0.0.161 jellyfin.local.daniel-hunter.com
+dig +short +time=3 @10.0.0.243 jellyfin.local.daniel-hunter.com
 ```
 
 If *both* refuse, nothing server-side is wrong: no homelab config can make `10.0.0.1`
@@ -193,13 +183,12 @@ Once identified, pick one:
    config, migrated services included. Simplest, and the desktop equivalent of Part B.
 2. **Hosts file** for the few names you always need. Works with Mullvad *up*, because a
    hosts entry emits no DNS query and so never meets the `:53` block. Costs a line per
-   service — see A3 for the two-IP split.
-3. **Mullvad → custom DNS = `10.0.0.161`.** Works with Mullvad up, but **avoid it**: all
+   service — see A3.
+3. **Mullvad → custom DNS = `10.0.0.243`.** Works with Mullvad up, but **avoid it**: all
    DNS then exits via the LAN to unbound, which recurses from the home IP while HTTP still
    exits via Mullvad. That correlation is exactly what A3's split-DNS design prevents.
 
-**On the home LAN, don't run the tunnel at all.** Both `10.0.0.161` and `10.0.0.240` are
-directly reachable there, so `wg0` adds nothing and brings the A2 hairpin hazard with it.
+**On the home LAN, don't run the tunnel at all.** The VIPs are directly reachable there, so `wg0` adds nothing and brings the A2 hairpin hazard with it.
 Part A is for remote access.
 
 ---
@@ -209,7 +198,7 @@ Part A is for remote access.
 iOS/Android permit only one active VPN tunnel, so Mullvad and the personal WG can't run
 together.
 1. In `wg-easy.daniel-hunter.com`, create a `phone` client and scan its QR into the
-   WireGuard app. It already carries `DNS = 10.0.0.161` and full-tunnel
+   WireGuard app. It already carries `DNS = 10.0.0.243` and full-tunnel
    `AllowedIPs = 0.0.0.0/0` — **leave as-is**.
 2. Keep Mullvad on day-to-day. When you need the homelab, turn Mullvad **off** and the
    WireGuard (homelab) tunnel **on**; `.local` names resolve via Pi-hole and load.
@@ -219,22 +208,19 @@ together.
 ---
 
 ## Server-side networking (already handled — don't undo)
-wg-easy runs on the **`monitoring`** Docker network, deliberately **not** `apps` or `proxy`.
-It must not share a bridge with the containers behind the host-published ports WG clients
-reach — Traefik 80/443 → `apps`, Pi-hole 53 → `apps`, Portainer 9000 → `proxy`,
-Jellyfin DLNA → `media`. A WG client hitting `10.0.0.161:<port>` is DNAT'd to that
-container; if it's on the **same** bridge as wg-easy, the reply returns straight across the
-bridge, bypasses the host's reverse-NAT, and conntrack drops it → the client times out
-(looks exactly like a firewall block, but it isn't — the 80/443 allow-list in
-`docker-user-rules.sh.j2` already permits `10.0.0.0/8` + `172.16.0.0/12`). `monitoring` is
-cross-bridge from all of those, so every host-published service returns symmetrically.
-**If wg-easy is ever moved back onto `apps`/`proxy`, `.local` and Portainer access over WG
-breaks.** (Set in `host_vars/daniel-server.yml`.)
+wg-easy is a **k8s workload on `daniel-box`** (`roles/k8s/wg-easy`, entry in
+`host_vars/daniel-box.yml`), reached on `51820/udp` — the router forward was moved to this
+node with the rest of the edge.
 
-This whole hairpin concern is specific to `10.0.0.161`. Traffic to the k3s VIP
-(`10.0.0.240`) leaves the server for `daniel-box` over the LAN, so no Docker bridge is
-involved and there's nothing to hairpin — a k3s service timing out over WG is `AllowedIPs`
-(A2), not this.
+The old **Docker-bridge hairpin hazard is gone.** It applied when wg-easy was a container on
+`daniel-server` sharing a bridge with the services behind host-published ports: the reply
+returned across the bridge, bypassed the host's reverse-NAT, and conntrack dropped it. That
+was why wg-easy was pinned to the `monitoring` network. Post-migration, a WG client's traffic
+goes to the MetalLB VIPs and is routed by the cluster, so there is no bridge to hairpin over.
+
+Practical upshot: **a service timing out over WG is now almost always `AllowedIPs` (A2)**,
+not a bridge-placement problem. Don't go looking for the old `monitoring`-network rule — the
+Pi's LAN-only wg-easy is the only Docker copy left, and it isn't on this path.
 
 ## Notes
 - You still authenticate everywhere: WireGuard keypair + Authelia one_factor on `.local`.

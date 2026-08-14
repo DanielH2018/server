@@ -17,3 +17,25 @@
       - service.yaml
       - ingressroute.yaml
       - promtail-daemonset.yaml
+
+- name: Restart the promtail DaemonSet after a config change
+  tags: [deploy]
+  # manifests_rollout above names the loki-homelab DEPLOYMENT, so the shared role's
+  # rollout-restart only ever reaches that one object; promtail reads the same ConfigMap and
+  # is a DaemonSet. This makes config delivery to it explicit, matching what claude-otel
+  # does for its own collector DaemonSet.
+  #
+  # Belt-and-braces by intent: promtail also reloads its config file on its own (it logs
+  # "Reloading configuration file"), so this is a guarantee rather than the sole delivery
+  # path — a ConfigMap propagating to a mounted volume is eventually-consistent, and a
+  # deploy that reports green should not depend on that timing.
+  #
+  # Skipped when this run created the DaemonSet — its pods start on the new config already,
+  # and `rollout restart` would race the initial rollout.
+  ansible.builtin.command:
+    cmd: k3s kubectl -n {{ k8s_namespace }} rollout restart daemonset/promtail
+  become: true
+  changed_when: true
+  when:
+    - manifests_render is changed
+    - not manifests_apply.stdout is search('daemonset\.apps/promtail created')

@@ -25,6 +25,7 @@ spec:
         supplementalGroups:
           - {{ render_gid }}
       automountServiceAccountToken: false
+      priorityClassName: homelab-best-effort
       containers:
         - name: tdarr
           image: {{ tdarr_k8s_image }}

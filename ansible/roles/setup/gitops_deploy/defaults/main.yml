@@ -1,0 +1,74 @@
+---
+# k8s auto-deploy — design: docs/superpowers/specs/2026-08-14-renovate-k8s-autodeploy-design.md
+#
+# Ships OFF. Slice 1 enables it scoped to the pilot service; slice 3 clears the pilot list once
+# the induced-failure drill has proven rollback + hold clearing.
+gitops_deploy_k8s_autodeploy_enabled: false
+
+# While non-empty, ONLY these services are eligible — the slice-1 pilot scope.
+gitops_deploy_k8s_autodeploy_pilot: []
+
+# Services that must NEVER auto-deploy, even on a clean image-only diff. This list is the safety
+# boundary: eligibility is (image-only diff) AND (not denylisted) AND (pilot scope, if set).
+# An EMPTY list disables the feature outright rather than allowing everything — see the
+# fail-closed guard in gitops_deploy.py.
+gitops_deploy_k8s_autodeploy_denylist:
+  # platform — a failed deploy here removes the ability to observe OR fix the failure, and
+  # etp-local-vips-blackout-on-node-join shows host probes stay green straight through it
+  - traefik
+  - authelia
+  - pihole
+  - crowdsec
+  - wg-easy
+  # observability — a broken monitor cannot page about being broken
+  - monitor-bridge
+  - autofix-bridge
+  - uptime-kuma
+  - claude-otel
+  - loki-homelab
+  - healthchecks
+  # migrating state — Recreate + RWO Longhorn migrates the volume BEFORE failure is detected, so
+  # the rollback redeploy can fail too and leave the pod crashlooping on data it can no longer
+  # read. home-assistant is the sharpest: the linuxserver -lsNN regex versioning makes
+  # 2026.6.3 -> 2026.7.0 a MINOR, so HA's breaking-change channel would auto-merge.
+  - home-assistant
+  - sonarr
+  - radarr
+  - jellyfin
+  - zigbee2mqtt
+  # dependency edges — this deployer models no intra-tick ordering. registry is the image-supply
+  # path for n8n, n8n-runners, homelab-mcp, ical-proxy, nut, pi-peer-backup and code-server
+  # (homelab-mcp pulls with imagePullPolicy: Always); mosquitto is the broker for zigbee2mqtt
+  # and home-assistant.
+  - registry
+  - mosquitto
+  # ungated sub-deployments — these roles render a SECOND Deployment that k8s/manifests never
+  # waits on (it gates deploy/{{ manifests_rollout | default(service) }}, exactly one). Remove
+  # once a role stops rendering two; the guard test in scripts/ enforces the invariant.
+  - prowlarr
+  - freshrss
+  # stateful / manual-upgrade — pinned influxdb; meilisearch DB-format migration; probe-less
+  # sub-deployments (karakeep time-tagger, n8n runners)
+  - scrutiny
+  - karakeep
+  - n8n
+  # nothing for `rollout status` to gate — CronJob / Job / volume / DaemonSet
+  - configarr
+  - pi-peer-backup
+  - media-volume
+  - n8n-images
+  - node-exporter
+  - dri-device-plugin
+  # probe-less Deployments — `rollout status` returns on Running and proves nothing
+  - cloudflare-ddns
+  - janitorr
+  - nut
+  - terraria
+  # games
+  - terraria-stats
+
+# Wall-clock cap for one `ansible-playbook` invocation on the k8s path, in seconds. Sized as
+# (max rollout wait + stabilise soak) x 2 so a forward rollout AND its rollback redeploy both fit
+# inside the unit's TimeoutStartSec=25min. RUN_BUDGET_S does NOT cover this path — it bounds only
+# the Docker health gate (gate_services), which is inert on an all-k8s host.
+gitops_deploy_k8s_timeout_s: 900

@@ -28,6 +28,7 @@ spec:
         kubernetes.io/hostname: daniel-box
       enableServiceLinks: false
       automountServiceAccountToken: false
+      priorityClassName: homelab-standard
       containers:
         - name: terraria
           image: {{ terraria_k8s_image }}

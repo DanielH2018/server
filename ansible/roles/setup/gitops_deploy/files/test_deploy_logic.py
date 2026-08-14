@@ -22,6 +22,8 @@ from deploy_logic import (
     declared_services,
     reroute_k8s_services,
     stale_rendered_services,
+    is_image_only_diff,
+    split_k8s_auto_deploy,
 )
 
 
@@ -1085,3 +1087,144 @@ def test_stale_rendered_services_flags_only_undeclared_dirs():
 
 def test_stale_rendered_services_empty_when_all_declared():
     assert stale_rendered_services(["traefik"], {"traefik", "monitor-bridge"}) == []
+
+
+# ── k8s auto-deploy: the diff-shape predicate ───────────────────────────────────────────────
+_SPEEDTEST_DEFAULTS = "ansible/roles/k8s/speedtest/defaults/main.yml"
+
+
+def _diff(*lines: str) -> str:
+    """A unified diff for _SPEEDTEST_DEFAULTS carrying the given changed lines."""
+    header = f"--- a/{_SPEEDTEST_DEFAULTS}\n+++ b/{_SPEEDTEST_DEFAULTS}\n@@ -2 +2 @@\n"
+    return header + "".join(line + "\n" for line in lines)
+
+
+def test_image_only_diff_accepts_a_pure_image_bump():
+    assert is_image_only_diff(
+        _diff(
+            "-speedtest_k8s_image: openspeedtest/latest:v2.0.4",
+            "+speedtest_k8s_image: openspeedtest/latest:v2.0.5",
+        )
+    )
+
+
+def test_image_only_diff_rejects_a_bundled_non_image_line():
+    assert not is_image_only_diff(
+        _diff(
+            "-speedtest_k8s_image: openspeedtest/latest:v2.0.4",
+            "+speedtest_k8s_image: openspeedtest/latest:v2.0.5",
+            "-speedtest_k8s_replicas: 1",
+            "+speedtest_k8s_replicas: 2",
+        )
+    )
+
+
+def test_image_only_diff_ignores_file_headers_not_content():
+    # `--- a/...` / `+++ b/...` start with -/+ but are metadata, not changed lines.
+    assert is_image_only_diff(
+        _diff("-speedtest_k8s_image: a:1", "+speedtest_k8s_image: a:2")
+    )
+
+
+def test_image_only_diff_rejects_an_empty_diff():
+    # Nothing to prove -> fail closed, so an unreadable/empty git diff defers.
+    assert not is_image_only_diff("")
+
+
+def test_image_only_diff_rejects_a_header_only_diff():
+    assert not is_image_only_diff(
+        f"--- a/{_SPEEDTEST_DEFAULTS}\n+++ b/{_SPEEDTEST_DEFAULTS}\n"
+    )
+
+
+def test_image_only_diff_rejects_a_commented_out_image_line():
+    assert not is_image_only_diff(
+        _diff("-# speedtest_k8s_image: a:1", "+# speedtest_k8s_image: a:2")
+    )
+
+
+def test_image_only_diff_accepts_a_digest_bump():
+    # The 18 mutable-tag digest pins are the population the digest automerge rule targets.
+    assert is_image_only_diff(
+        _diff(
+            "-littlelink_k8s_image: littlelink:latest@sha256:aaa",
+            "+littlelink_k8s_image: littlelink:latest@sha256:bbb",
+        )
+    )
+
+
+# ── k8s auto-deploy: the eligibility split ──────────────────────────────────────────────────
+def _split(
+    paths, *, denylist=frozenset(), pilot=frozenset(), enabled=True, image_only=True
+):
+    cs = services_from_changed_paths(paths)
+    return split_k8s_auto_deploy(
+        cs,
+        paths,
+        denylist=denylist,
+        pilot=pilot,
+        enabled=enabled,
+        image_only=lambda _svc: image_only,
+    )
+
+
+def test_split_k8s_promotes_an_image_only_bump():
+    cs = _split([_SPEEDTEST_DEFAULTS], denylist={"traefik"})
+    assert cs.k8s_deploy == {"speedtest"}
+    assert cs.k8s == set()
+
+
+def test_split_k8s_disabled_reproduces_todays_behaviour_exactly():
+    cs = _split([_SPEEDTEST_DEFAULTS], denylist={"traefik"}, enabled=False)
+    assert cs.k8s_deploy == set()
+    assert cs.k8s == {"speedtest"}
+
+
+def test_split_k8s_never_promotes_a_denylisted_service():
+    cs = _split([_SPEEDTEST_DEFAULTS], denylist={"speedtest"})
+    assert cs.k8s_deploy == set()
+    assert cs.k8s == {"speedtest"}
+
+
+def test_split_k8s_rejects_a_non_image_diff():
+    cs = _split([_SPEEDTEST_DEFAULTS], denylist={"traefik"}, image_only=False)
+    assert cs.k8s_deploy == set()
+    assert cs.k8s == {"speedtest"}
+
+
+def test_split_k8s_blocks_a_service_with_a_second_changed_path():
+    # Clean image bump, but the same push also edits the role's tasks/ — deploying would apply
+    # an unsoaked structural change alongside it.
+    cs = _split(
+        [_SPEEDTEST_DEFAULTS, "ansible/roles/k8s/speedtest/tasks/main.yml"],
+        denylist={"traefik"},
+    )
+    assert cs.k8s_deploy == set()
+    assert cs.k8s == {"speedtest"}
+
+
+def test_split_k8s_pilot_scope_restricts_eligibility():
+    paths = [_SPEEDTEST_DEFAULTS, "ansible/roles/k8s/littlelink/defaults/main.yml"]
+    cs = _split(paths, denylist={"traefik"}, pilot={"speedtest"})
+    assert cs.k8s_deploy == {"speedtest"}
+    assert cs.k8s == {"littlelink"}
+
+
+def test_split_k8s_defers_when_the_tick_also_carries_docker_services():
+    # main()'s k8s branch returns before the Docker deploy + health gate, so promoting here
+    # would silently skip them. Defer instead.
+    paths = [
+        _SPEEDTEST_DEFAULTS,
+        "ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
+    ]
+    cs = _split(paths, denylist={"traefik"})
+    assert cs.k8s_deploy == set()
+    assert cs.k8s == {"speedtest"}
+    assert cs.services == {"dozzle"}
+
+
+def test_split_k8s_combined_push_deploys_eligible_defers_denylisted():
+    paths = [_SPEEDTEST_DEFAULTS, "ansible/roles/k8s/traefik/defaults/main.yml"]
+    cs = _split(paths, denylist={"traefik"})
+    assert cs.k8s_deploy == {"speedtest"}
+    assert cs.k8s == {"traefik"}

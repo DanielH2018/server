@@ -65,6 +65,7 @@ spec:
               cpu: 10m
               memory: 16Mi
       automountServiceAccountToken: false
+      priorityClassName: homelab-automation
       containers:
         - name: mosquitto
           image: {{ mosquitto_k8s_image }}
