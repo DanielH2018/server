@@ -17,6 +17,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "flask",                          # ical-proxy app.py imports flask at module top (test_app.py)
   "ruff>=0.10",                     # first-party Python lint gate (prek hook); pinned via uv.lock
   "shellcheck-py==0.11.0.1",        # validate_shell_templates; pinned to match prek.toml's shellcheck-py rev
+  "actionlint-py",                  # workflow lint gate (prek hook); ships the actionlint binary as a wheel
 ]
 
 [tool.pytest.ini_options]

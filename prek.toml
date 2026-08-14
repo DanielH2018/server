@@ -158,6 +158,24 @@ pass_filenames = false
 # edit there can change what the rendered scripts contain.
 files = "^(ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate_shell_templates\\.py)$"
 
+# Lint the GitHub Actions workflows themselves. `check-yaml` above only proves they PARSE —
+# nothing until now checked that a job's `needs:` names a job that exists, that a `${{ }}`
+# expression references a real context, or that a matrix key is spelled the way the steps read
+# it. Those fail at trigger time, in a workflow whose whole job is to be the gate. actionlint
+# also runs shellcheck over every `run:` block (shellcheck-py is already a dev dep, so it is on
+# PATH under `uv run`), which the shellcheck hook above cannot do — identify tags a workflow as
+# yaml, so the shell embedded in it is invisible to a shell-typed hook.
+#
+# Via the actionlint-py wheel + `uv run`, matching the other local hooks, NOT the upstream
+# rhysd/actionlint pre-commit repo: that hook is `language = "golang"`, which on a machine
+# without Go (daniel-box) makes prek fetch a ~270 MB managed toolchain and build from source.
+[[repos.hooks]]
+id = "actionlint"
+name = "Lint GitHub Actions workflows"
+entry = "uv run actionlint"
+language = "system"
+files = "^\\.github/workflows/[^/]+\\.ya?ml$"
+
 # Gate that the secret-rotation registry (ansible/secret_rotation.yml) stays in sync with the
 # encrypted secrets.yml — fails the commit if a secret was added/removed without running
 # `secret_rotation.py sync`. Read-only: reads plaintext key NAMES only, never decrypts a value
