@@ -578,6 +578,12 @@ def split_k8s_auto_deploy(
     """
     if not enabled:
         return cs
+    if cs.services:
+        # A tick carrying Docker services too. The caller's k8s branch returns before reaching
+        # the Docker deploy + health gate, so promoting here would silently skip them. No host
+        # is mixed today (daniel-box is all-k8s and is the only has_gitops host), so defer the
+        # k8s half rather than grow a two-plane tick ordering this deployer doesn't model.
+        return cs
     promoted: set[str] = set()
     for svc in cs.k8s:
         if svc in denylist:

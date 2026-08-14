@@ -36,10 +36,12 @@ from deploy_logic import (  # noqa: E402
     gate_services,
     health_decision,
     is_diverged,
+    is_image_only_diff,
     next_action,
     reroute_k8s_services,
     services_from_changed_paths,
     should_alert_dirty,
+    split_k8s_auto_deploy,
     stale_rendered_services,
 )
 from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
@@ -153,6 +155,31 @@ def run(
 
 def log(msg: str) -> None:
     print(msg, flush=True)
+
+
+def _csv_set(raw: str) -> frozenset[str]:
+    return frozenset(s.strip() for s in raw.split(",") if s.strip())
+
+
+# ── k8s auto-deploy ───────────────────────────────────────────────────────────────────────────
+# Defined AFTER log() so the fail-closed guard below can report why it disarmed itself.
+# OFF unless the host explicitly enables it, so a host that has not re-templated config.env
+# behaves exactly as it does today.
+K8S_AUTODEPLOY_ENABLED = C.get("K8S_AUTODEPLOY_ENABLED", "false").lower() == "true"
+K8S_AUTODEPLOY_PILOT = _csv_set(C.get("K8S_AUTODEPLOY_PILOT", ""))
+K8S_AUTODEPLOY_DENYLIST = _csv_set(C.get("K8S_AUTODEPLOY_DENYLIST", ""))
+if K8S_AUTODEPLOY_ENABLED and not K8S_AUTODEPLOY_DENYLIST:
+    # Fail closed. An absent or empty denylist means "nothing is eligible", never "everything
+    # is" — a truncated or half-rendered config.env must not silently widen what auto-deploys
+    # to the whole cluster, platform roles included.
+    log(
+        "K8S_AUTODEPLOY_ENABLED is set but the denylist is empty — disabling k8s auto-deploy"
+    )
+    K8S_AUTODEPLOY_ENABLED = False
+# Bounds ONE ansible-playbook invocation on the k8s path. RUN_BUDGET_S does not reach here: it
+# feeds gate_services(), the Docker health gate, which is inert on an all-k8s host — so without
+# this the only bound is systemd's TimeoutStartSec SIGTERM, which can land mid-rollback.
+K8S_DEPLOY_TIMEOUT_S = int(C.get("K8S_DEPLOY_TIMEOUT_S", "900"))
 
 
 def is_ancestor(ancestor: str, descendant: str) -> bool:
@@ -433,6 +460,49 @@ def service_healthy(service: str, deadline: float | None = None) -> bool:
     return all(health_ok(c, deadline=deadline) for c in containers_for(service))
 
 
+def k8s_image_diff(local: str, origin: str, svc: str) -> str:
+    """Unified diff of one k8s role's defaults/main.yml across the incoming range.
+
+    -U0 drops context lines, so is_image_only_diff classifies changed lines only — an
+    unrelated neighbouring var sitting next to the pin cannot make a clean bump look dirty.
+    """
+    return run(
+        [
+            "git",
+            "diff",
+            "-U0",
+            f"{local}..{origin}",
+            "--",
+            f"ansible/roles/k8s/{svc}/defaults/main.yml",
+        ]
+    )
+
+
+def deploy_k8s(services: set[str], timeout: float) -> None:
+    """Deploy k8s services by tag. The rollout gate lives INSIDE the role.
+
+    No health-poll phase here on purpose: roles/k8s/manifests already runs
+    apply -> `rollout status --timeout` -> assert_stable.yml (a post-Available soak that
+    hard-fails on a restart-count delta or a readiness shortfall). Polling again would
+    duplicate it, and containers_for() — the Docker gate's input — returns [] for a k8s
+    service, which is exactly the 2026-08-08 configarr false-rollback.
+    """
+    tags = ",".join(sorted(services))
+    log(f"deploying k8s services: {tags} (timeout {timeout:.0f}s)")
+    run(
+        [
+            "uv",
+            "run",
+            "--frozen",
+            "ansible-playbook",
+            "ansible/deploy.yml",
+            "--tags",
+            tags,
+        ],
+        timeout=timeout,
+    )
+
+
 def deploy(services: set[str]) -> None:
     tags = ",".join(sorted(services))
     # Run via `uv run` so the deploy uses the repo's pinned env (ansible-core plus
@@ -543,6 +613,17 @@ def main() -> int:
     except OSError:
         k8s_services = set()
     cs = reroute_k8s_services(cs, k8s_services)
+    # Promote image-bump-only k8s changes to the auto-deploy channel. Everything not promoted
+    # stays in cs.k8s and defer-and-alerts exactly as before, so this is inert until a service
+    # passes BOTH the diff-shape test and the denylist.
+    cs = split_k8s_auto_deploy(
+        cs,
+        paths,
+        denylist=K8S_AUTODEPLOY_DENYLIST,
+        pilot=K8S_AUTODEPLOY_PILOT,
+        enabled=K8S_AUTODEPLOY_ENABLED,
+        image_only=lambda svc: is_image_only_diff(k8s_image_diff(local, origin, svc)),
+    )
 
     if cs.broad:
         # Broad doesn't ff-merge, so it re-evals next tick — the per-SHA marker (inside alert_once)
@@ -558,6 +639,40 @@ def main() -> int:
             f"{broad_remediation(cs.broad_deploy, cs.broad_setup)} on the host, then "
             f"`git merge --ff-only origin/{BRANCH}` to clear it.",
         )
+        return 0
+    if cs.k8s_deploy:
+        run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])
+        try:
+            deploy_k8s(cs.k8s_deploy, K8S_DEPLOY_TIMEOUT_S)
+        except Exception as exc:  # noqa: BLE001 — any playbook failure, or the timeout above
+            # Hold BEFORE the reset, same as the Docker paths: a hung rollback redeploy would
+            # otherwise be SIGTERMed before the marker is written, stranding the bad commit into
+            # a per-tick redeploy loop.
+            log(f"k8s deploy failed for {sorted(cs.k8s_deploy)}: {exc}; rolling back")
+            write_hold(origin)
+            run(["git", "reset", "--hard", local])
+            try:
+                deploy_k8s(cs.k8s_deploy, K8S_DEPLOY_TIMEOUT_S)
+            except Exception as exc2:  # noqa: BLE001 — best-effort restore; we still hold + alert
+                log(f"k8s rollback redeploy of the prior version also failed: {exc2}")
+            posted = discord(
+                f"🚨 gitops-deploy: **k8s deploy failed** on {HOSTNAME}.\n"
+                f"`{', '.join(sorted(cs.k8s_deploy))}` from `{origin[:8]}` failed its rollout "
+                f"gate:\n`{exc}`\n"
+                f"Rolled back locally to `{local[:8]}`.\n"
+                f"**The bad pin is still live on master.** The hold only skips THIS commit — "
+                f"`skip_hold` matches while `origin_head == hold_sha`, so the next push past it "
+                f"redeploys the same pin.\n"
+                f"**Action:** revert the offending commit on the remote, or pin the bad version "
+                f"out via Renovate `allowedVersions`."
+            )
+            return 0 if posted else 1
+        # The ONLY place a hold can clear on an all-k8s host. write_hold(None) otherwise lives
+        # solely in the Docker health-gate branch below, which such a host never reaches — so
+        # without this the first rollback would leave GitOps Deploy — Status red forever and
+        # need a manual rm (the trap this role's CLAUDE.md documents).
+        write_hold(None)
+        alert_deferred(origin, cs.k8s_deploy, cs)
         return 0
     if not cs.services:
         run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])  # docs-only etc.
