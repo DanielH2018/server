@@ -1,11 +1,11 @@
 
 
 {#
-  k8s fork of roles/containers/homepage/templates/services.yaml.j2 — kept in sync by hand, not
-  by a shared include: the only difference from the Docker copy is the two `server:`/
-  `container:` pairs below (dropped, see docker.yaml.j2 in this role for why). Everything else
-  — widget URLs, credentials, comments — must match the Docker template verbatim. If you're
-  editing tiles/widgets here, make the same edit in roles/containers/homepage/templates/ too.
+  The sole services.yaml for Homepage. It began as a fork of the Docker role's
+  roles/containers/homepage/templates/services.yaml.j2, differing only in dropping the two
+  `server:`/`container:` pairs (see docker.yaml.j2 in this role for why). That Docker copy was
+  deleted once Docker left both cluster nodes, so there is no longer a second template to keep
+  in sync — edit tiles and widgets here and nowhere else.
 #}
 - Top Row:
     - Services:

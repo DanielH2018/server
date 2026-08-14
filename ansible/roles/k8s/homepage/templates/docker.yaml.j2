@@ -1,9 +1,9 @@
 ---
-# k8s fork of roles/containers/homepage/templates/docker.yaml.j2 — genuinely diverges, so it
-# is not read from the Docker role's template like the rest of this Secret's keys are.
+# Owned by this role, not read from the Docker role's templates like the rest of this
+# Secret's keys are — it diverged, and the Docker copy has since been deleted.
 #
-# The Docker copy points Homepage's docker-proxy status dots at `my-docker` (docker-proxy on
+# That copy pointed Homepage's docker-proxy status dots at `my-docker` (docker-proxy on
 # the Docker network). There is no k8s equivalent yet — a kubernetes-widget-backed status dot
-# is a later decision — so this renders empty. services.yaml.j2 (this role's own fork) drops
+# is a later decision — so this renders empty. services.yaml.j2 (also this role's own) drops
 # the matching `server:`/`container:` keys so tiles render dot-less instead of erroring on a
 # `my-docker` host that doesn't exist here.
