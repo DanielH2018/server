@@ -491,3 +491,31 @@ Cutover residue play: `retire-host-flip-residue.yml` (peer-pull cron/script/stat
 renovate-notify units/dirs off daniel-server) — run after the CronJob's first green
 pull and the daniel-box notifier deploy; the old `pi-peers/` copy stays until the
 first nightly covers the new PVC.
+
+### DOCKER UNINSTALL PREPARED 2026-08-14 (PR: docker-uninstall) — execution gated on the nightly
+
+The repo side of the end state, built the same day as the host flips; execution waits
+for the 00:24 B2 cap-reset check and the 03:30 nightly proving the pi-peer PVC reached
+B2 (the remnant's checks cost nothing overnight).
+
+- **The cluster bridge becomes THE bridge**: check.py + tests moved into
+  `roles/k8s/monitor-bridge/files/`, every check runs there, and the gitops pair
+  RE-POINTS at daniel-box's own deployer (hostPath /var/lib/gitops-deploy — the pod is
+  pinned to that node) rather than retiring: after the uninstall exactly one gitops
+  deployer remains in the fleet, and it was the one with no watchdog. disk_prune
+  retired outright (containerd GC owns the k3s tier; Root Disk still pages on a full
+  disk). autofix.py moved to its k8s role; the fake_remux scripts moved into
+  setup/fake_remux (their only consumer).
+- **daniel-server's containers_list is EMPTY** (`has_docker`/`has_gitops` false); the
+  retirement ledger comments stay in the file as the migration record. deploy.yml is
+  a no-op there by construction (every Docker task sits behind a loop over the list).
+- **Monitors**: Docker Fleet Health + Disk Autoprune declarations removed (AutoKuma
+  ON_DELETE prunes the live monitors); their tokens deleted from SOPS + the rotation
+  registry. GitOps Deploy — Alive/Status live on under the cluster bridge. The
+  label-declared "monitor-bridge" container monitor becomes an orphan at docker rm —
+  delete via kuma-delete-by-name at execution.
+- **Execution play**: `retire-docker-daniel-server.yml` — crons (fleet-health,
+  disk-prune, stale Redeploys), gitops units/state, `docker rm` the final four, apt
+  purge (docker-ce, cli, containerd.io — k3s ships its OWN containerd, untouched),
+  /var/lib/docker removed. Then deploy.yml --tags monitor-bridge + uptime-kuma on
+  daniel-box, and the guard suite already asserts the empty end state.

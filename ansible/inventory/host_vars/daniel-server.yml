@@ -19,7 +19,7 @@ scrutiny_nvme_device: /dev/nvme0
 # the cli-* tags are the npm CLI package's own releases, not the server. Bump this SHA to
 # update; a redeploy then rebuilds from the new checkout.
 happy_git_version: 3f161de70541b1cedaf0b7547ed70889d8dae22d
-containers_list:
+containers_list: []
   # Organization: Core Services (proxy network)
   # traefik entry RETIRED 2026-08-13 (Phase F drain): after E7 it carried only the demoted
   # CrowdSec agent, whose successor is the crowdsec-node-agent DaemonSet (roles/k8s/crowdsec)
@@ -39,28 +39,6 @@ containers_list:
   # widget (and homepage's `proxy` net membership, which existed only for it), the Pi's
   # portainer-agent + its DOCKER-USER firewall, and portainer_manager_host. Role in
   # roles/containers/archive/.
-  - name: docker-proxy
-    use_authelia: false
-    # NOT on `apps` (Security M1, 2026-07-01): this read-only proxy runs CONTAINERS=1, and
-    # `GET /containers/{id}/json` returns EVERY container's Env (secrets). haproxy can't
-    # body-filter, so the only lever is who can reach it — keeping it off `apps` stops the
-    # internet-facing app fleet (n8n/karakeep/freshrss/livesync/…) from enumerating every
-    # service's secrets. code-server (the lone apps-side consumer) gets its own dedicated
-    # `docker-proxy-codeserver` on the private `codeserver` net instead. proxy/monitoring
-    # consumers (traefik provider, homepage, grafana, autokuma, prometheus/cadvisor, glances)
-    # are unaffected — they reach it over those nets.
-    networks:
-      - proxy
-      - monitoring
-      - media
-      # homepage_private dropped 2026-08-14: homepage retired at E3 and the net was
-      # deleted with it, which left this external-net reference failing the whole
-      # docker-proxy compose up (caught by the deferred manual deploy).
-  - name: autoheal
-    use_authelia: false
-    networks:
-      # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
-      - lifecycle
   # watchtower retired 2026-08-09 (slice-7 Phase B dissolve): Renovate owns image updates —
   # every remaining image is pinned and PR-driven, so an unsupervised puller was pure risk
   # (the per-service watchtower.enable=false labels it obeyed are now dead metadata and go
@@ -233,26 +211,6 @@ containers_list:
   #   use_authelia: false
   #   networks:
   #     - proxy
-  - name: monitor-bridge
-    port: false
-    use_authelia: false
-    networks:
-      # monitoring: reach prometheus (Kuma is reached over the LAN since its Phase D move;
-      # the kopia net retired with kopia, 2026-08-10). apps: formerly the n8n/HA Docker-DNS
-      # paths — both now cross the LAN too, but egress to the cluster VIP rides any net.
-      # media: reach sonarr:8989 + radarr:7878... also cluster-side now. Kept minimal-change
-      # at the kopia retirement; the net diet is a Phase E cleanup.
-      - monitoring
-      - apps
-      - media
-  - name: autofix-bridge
-    port: false
-    use_authelia: false
-    networks:
-      # media: reach sonarr:8989 + radarr:7878 (queue read + blocklist/search writes).
-      # monitoring: push to uptime-kuma:3001 AND egress to the *arr Discord webhook. No web UI.
-      - media
-      - monitoring
   # Organization: Miscellaneous (apps network)
   # healthchecks moved to k3s on 2026-08-05, the last of slice 2's routed services. Its
   # /ping/ bypass moved with it: that was a Docker label on this container, so it died with
@@ -301,3 +259,18 @@ containers_list:
   # prometheus (which nothing had scraped it with since the Docker prometheus retired —
   # the player-stats board had been dark for new data). Role archived at
   # roles/containers/archive/terraria-stats; stats.py + tests moved to the k8s role.
+  # ── DOCKER UNINSTALLED 2026-08-14 — the list ends empty ─────────────────────────
+  # The final four retired together: docker-proxy(+lifecycle) and autoheal (plumbing
+  # whose last tenants were each other), the monitor-bridge remnant (its three
+  # host-state checks dissolved — gitops pair re-pointed at daniel-box's deployer via
+  # the cluster bridge's hostPath, disk_prune with the daemon it pruned), and the
+  # autofix-bridge entry (host plane only since the drain). docker-fleet-health and the
+  # stale Redeploy crons retired in the same pass; Docker packages purged;
+  # has_docker/has_gitops false below. This host now runs the k3s agent, the nut pod's
+  # hardware, and the nut_host shutdown chain — nothing else. Roles in
+  # roles/containers/archive/; the comment ledger above stays as the migration record.
+
+# Docker uninstalled 2026-08-14 (drain complete): no engine, no deployer to run. The
+# gitops watchdog lives on — the cluster bridge watches daniel-box's deployer instead.
+has_docker: false
+has_gitops: false

@@ -1,8 +1,8 @@
 ---
-# monitor-bridge on k8s (Phase F drain): the metric/API half of the bridge, running
-# the SAME files/check.py as the Docker remnant (single source of truth — staged from
-# the containers role, never forked). The remnant keeps only the five checks that read
-# daniel-server host state files; this twin skips them via CHECKS_SKIP.
+# monitor-bridge: THE bridge since the Docker uninstall (2026-08-14). Born at the
+# Phase F drain as the cluster twin of the daniel-server sidecar; the remnant retired
+# with Docker, check.py moved into this role's files/, and every check runs here (the
+# gitops pair against daniel-box's own deployer via hostPath).
 
 - name: Create the staging directory
   tags: [config]
@@ -17,7 +17,7 @@
 - name: Stage check.py on the node
   tags: [config]
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/roles/containers/monitor-bridge/files/check.py"
+    src: "{{ playbook_dir }}/roles/k8s/monitor-bridge/files/check.py"
     dest: /etc/rancher/k3s/monitor-bridge/check.py
     mode: "0644"
     owner: root

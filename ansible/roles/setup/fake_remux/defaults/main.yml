@@ -9,9 +9,9 @@
 # (replacements.json), the scan seeding entries the reconciler acts on. The role's own docs warned
 # about repointing one half without the other.
 #
-# Scripts and the config template are sourced from roles/containers/autofix-bridge — that role
-# still owns them (and still runs the sidecar + disk-prune on daniel-server), so there is one copy
-# and no drift. Same cross-role idiom as host_lib.py.
+# Scripts and the config template live in THIS role's files/templates since the Docker
+# uninstall (2026-08-14) — containers/autofix-bridge archived, leaving this their only
+# consumer; still one copy, no drift.
 # fake_remux_host lives in group_vars/all.yml — initial_setup.yml's role `when:` needs it before
 # this file is in scope.
 

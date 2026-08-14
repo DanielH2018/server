@@ -1,11 +1,12 @@
 # autofix-bridge — generic auto-remediation (the writer twin of monitor-bridge)
 
-> **The containerized sidecar moved to the cluster at the Phase F drain (2026-08-14):**
-> `roles/k8s/autofix-bridge` runs the same `files/autofix.py` (staged from here) with the
-> same live settings. This role now deploys ONLY the host plane — the disk-autoprune cron,
-> which prunes this host's Docker daemon and retires with it. The sidecar sections below
-> are kept as the authoritative description of the loop's behavior and contract; only
-> where it runs changed.
+> **This IS the k8s role since the Docker uninstall (2026-08-14).** The sidecar moved
+> in-cluster at the Phase F drain; the Docker role's last piece — the disk-autoprune
+> cron — retired with the daemon it pruned, and `files/autofix.py` (+ its tests) moved
+> into this role. Sections below describing Docker-era plumbing (networks, compose,
+> containers_list) are the loop's HISTORY; the behavior and contract they document are
+> unchanged in the pod. Doc-path pointers: the Docker role is archived at
+> `roles/containers/archive/autofix-bridge/`.
 
 The homelab's **auto-remediation home** — where a read-only monitor-bridge signal earns a
 sanctioned automatic *fix*. Renamed from `arr-autoblock` (2026-07-06) to stop proliferating a

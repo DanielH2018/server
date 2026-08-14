@@ -141,6 +141,9 @@ PROWLARR_INDEXER_MIN_DOWN_MIN = float(_env("PROWLARR_INDEXER_MIN_DOWN_MIN", "30"
 # Prowlarr's own all-indexers-down onHealthIssue is the backstop if every indexer, ignored or not,
 # fails at once. Empty = ignore nothing.
 PROWLARR_INDEXER_IGNORE = _env("PROWLARR_INDEXER_IGNORE", "")
+# Since the Docker uninstall (2026-08-14) this reads daniel-box's own deployer state —
+# the pod is pinned to that node and hostPath-mounts /var/lib/gitops-deploy. One
+# deployer remains in the fleet (the Pi runs has_gitops: false), so one watcher.
 GITOPS_STATE_DIR = _env("GITOPS_STATE_DIR", "/gitops-state")
 GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
 # How long the host may sit behind origin before GitOps Status pages. Generous on purpose: the
@@ -161,13 +164,10 @@ GITOPS_BEHIND_MAX_S = float(_env("GITOPS_BEHIND_MAX_MIN", "360")) * 60
 # 5-min runs; the fast-path heartbeat keeps a healthy no-op green.
 
 
-# Hourly disk-autoprune host cron (autofix-bridge role): writes {"ts": epoch, "ok": bool, "msg":
-# str} after checking `/` used% against a threshold and, if crossed, running a conservative
-# docker/builder/container prune. Same {"ts","ok","msg"} state-file idiom. ok=false means the
-# prune command itself errored — a disk still full of real data after a clean prune is Root
-# Disk's alert, not this one. 3h staleness = 3x the hourly cron + slack.
-DISK_PRUNE_STATE = _env("DISK_PRUNE_STATE", "/autofix-disk/state.json")
-DISK_PRUNE_MAX_AGE_S = float(_env("DISK_PRUNE_MAX_AGE_H", "3")) * 3600
+# disk_prune check REMOVED at the Docker uninstall (2026-08-14): the hourly
+# docker/builder prune it watched existed for the Docker daemon's disk, and both retired
+# together. containerd's own image GC owns that concern on the k3s tier; a genuinely
+# full disk is still the Root Disk check's alert.
 
 # B2 REACHABILITY — the gap the 2026-08-02 transaction-cap incident exposed
 # (docs/b2-transaction-cap-monitoring-gaps.md). B2 caps TRANSACTIONS separately from storage
@@ -1625,34 +1625,6 @@ def _check_state_file(path, missing_msg, bad_msg, decide):
     return decide(state, age_s)
 
 
-def disk_prune(state, age_s, max_age_s):
-    """Pure: did the last disk-autoprune run succeed, and recently? (ok, msg).
-
-    Same state-file idiom as verify/pi_peers. ok=false means the last prune command errored; a
-    disk still full of real data after a clean prune is Root Disk's alert, not this one.
-    """
-    if not state.get("ok"):
-        return False, "last disk autoprune FAILED: %s" % state.get("msg", "?")
-    if age_s > max_age_s:
-        return False, "last disk autoprune %.1fh ago (max %.1fh)" % (
-            age_s / 3600,
-            max_age_s / 3600,
-        )
-    return True, "disk autoprune ok %.1fh ago: %s" % (
-        age_s / 3600,
-        state.get("msg", ""),
-    )
-
-
-def check_disk_prune():
-    return _check_state_file(
-        DISK_PRUNE_STATE,
-        "no disk-autoprune state (never ran?)",
-        "disk-autoprune state unparseable",
-        lambda state, age_s: disk_prune(state, age_s, DISK_PRUNE_MAX_AGE_S),
-    )
-
-
 def ha_heartbeat_fresh(state, max_age_s, now=None):
     """`state` is HA's /api/states/input_datetime.ha_heartbeat payload.
 
@@ -2181,7 +2153,6 @@ CHECKS = [
     ),
     ("gitops_alive", _env("KUMA_PUSH_GITOPS_ALIVE", ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
-    ("disk_prune", _env("KUMA_PUSH_DISK_PRUNE", ""), check_disk_prune),
     ("scrutiny", _env("KUMA_PUSH_SCRUTINY", ""), check_scrutiny),
     ("ups", _env("KUMA_PUSH_UPS", ""), check_ups),
     ("pi_pressure", _env("KUMA_PUSH_PI", ""), check_pi_pressure),
@@ -2279,12 +2250,13 @@ STARTUP_GRACE = frozenset(
 
 _grace_streaks = {}
 
-# Which checks THIS instance runs. The Phase F drain splits the bridge in two deployments of
-# this same file: the cluster twin owns every metric/API check, and the Docker remnant keeps
-# only the checks that read daniel-server host state files (gitops_alive, gitops_status,
-# disk_prune; pi_peers + renovate_alive dissolved into direct pushers at the 2026-08-14
-# host flips) — split by env instead of a fork, so the twins can't
-# drift. CHECKS_ONLY (comma-separated names) enables exactly that set; CHECKS_SKIP drops
+# Which checks THIS instance runs. The Phase F twin/remnant split ended with the Docker
+# uninstall (2026-08-14): the cluster deployment is now the ONLY bridge and runs every
+# check (the gitops checks re-pointed at daniel-box's deployer via a hostPath — the pod
+# is pinned there; disk_prune retired with the Docker daemon; pi_peers/renovate_alive
+# became direct pushers at the host flips). The CHECKS_ONLY/CHECKS_SKIP mechanism stays
+# — it is how any future split would be expressed, and the guards below keep it honest.
+# CHECKS_ONLY (comma-separated names) enables exactly that set; CHECKS_SKIP drops
 # names from whatever is otherwise enabled. The four reachability gates participate under
 # the names their monitors push as (prometheus, loki_reachable, b2_reachable,
 # cluster_prometheus). A filter that enables a gated check while disabling its gate would

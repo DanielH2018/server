@@ -255,10 +255,13 @@ def test_config_template_change_maps_to_service():
 
 
 def test_files_asset_change_maps_to_service():
+    # ical-proxy rather than monitor-bridge: the bridge's check.py moved to the k8s
+    # role at the Docker uninstall (2026-08-14), and k8s paths defer-and-alert instead
+    # of mapping to a service.
     cs = services_from_changed_paths(
-        ["ansible/roles/containers/monitor-bridge/files/check.py"]
+        ["ansible/roles/containers/ical-proxy/files/app.py"]
     )
-    assert cs.services == {"monitor-bridge"}
+    assert cs.services == {"ical-proxy"}
     assert cs.broad is False
 
 
