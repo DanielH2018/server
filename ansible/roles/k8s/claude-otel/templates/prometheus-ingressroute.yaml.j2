@@ -48,7 +48,10 @@ spec:
       # Container traffic from daniel-server (monitor-bridge) DOES ride the bypass and
       # arrives LAN-masqueraded as 10.0.0.161. OR'd matchers, NOT ClientIP(a, b): the
       # multi-arg form fails rule parsing on this Traefik and the router vanishes.
-      match: "Host(`prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}`) && PathPrefix(`/api/v1/query`) && (ClientIP(`{{ lan_subnet }}`) || ClientIP(`10.42.0.0/31`) || ClientIP(`10.42.1.0/31`))"
+      # /api/v1/targets joined /api/v1/query* 2026-08-14: probe.py's `targets` command
+      # repointed here when the Docker prometheus retired — same read-only surface,
+      # same LAN gate.
+      match: "Host(`prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}`) && (PathPrefix(`/api/v1/query`) || PathPrefix(`/api/v1/targets`)) && (ClientIP(`{{ lan_subnet }}`) || ClientIP(`10.42.0.0/31`) || ClientIP(`10.42.1.0/31`))"
       middlewares:
         - name: rate-limit
       services:

@@ -140,12 +140,18 @@ _AUTOMATION_ID_RE = re.compile(r"^- id:\s*(\S+)", re.MULTILINE)
 # --- URL builders (pure) ----------------------------------------------------
 
 
-def prom_query_url(ip, promql):
-    return f"http://{ip}:9090/api/v1/query?" + urlencode({"query": promql})
+def prom_query_url(base, promql):
+    return f"{base}/api/v1/query?" + urlencode({"query": promql})
 
 
-def prom_targets_url(ip):
-    return f"http://{ip}:9090/api/v1/targets"
+def prom_targets_url(base):
+    return f"{base}/api/v1/targets"
+
+
+def prom_endpoint():
+    """The cluster prometheus via its query-only IngressRoute (the Docker prometheus —
+    the old resolve_ip("prometheus") target — retired 2026-08-14 with the drain)."""
+    return k8s_endpoint("prometheus-k8s")
 
 
 def loki_labels_url(base):
@@ -849,9 +855,11 @@ def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint):
     ns = _build_parser().parse_args(args)
     cmd = ns.cmd
     if cmd == "metric":
-        return [curl_argv(prom_query_url(resolve_ip("prometheus"), ns.promql))]
+        base, pin = k8s_endpoint("prometheus-k8s")
+        return [curl_argv(prom_query_url(base, ns.promql), resolve=pin)]
     if cmd == "targets":
-        return [curl_argv(prom_targets_url(resolve_ip("prometheus")))]
+        base, pin = k8s_endpoint("prometheus-k8s")
+        return [curl_argv(prom_targets_url(base), resolve=pin)]
     if cmd == "loki-labels":
         base, pin = k8s_endpoint("loki-homelab-k8s")
         return [curl_argv(loki_labels_url(base), resolve=pin)]
@@ -916,8 +924,8 @@ def run_query(ns):
     """Fetch a metric / loki-query and print the formatted view (the default).
     `--json` and `--dry-run` never reach here — they take the raw streaming path."""
     if ns.cmd == "metric":
-        url = prom_query_url(resolve_ip("prometheus"), ns.promql)
-        pin = None
+        base, pin = prom_endpoint()
+        url = prom_query_url(base, ns.promql)
         formatter = format_metric
     else:
         base, pin = loki_endpoint()

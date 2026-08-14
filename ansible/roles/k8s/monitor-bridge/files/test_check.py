@@ -2293,6 +2293,84 @@ def test_run_once_suppresses_node_dependents_when_node_exporter_down(monkeypatch
     assert "exporter" in by_tok["tok_disk"][1].lower()
 
 
+# --- restarts / oom / cpu-throttle (retargeted onto kubernetes-cadvisor, by pod) ---
+
+
+def _fake_vectors(monkeypatch, by_query):
+    """prom_vector stub keyed by substring of the query."""
+
+    def fake(promql):
+        for key, vec in by_query.items():
+            if key in promql:
+                return vec
+        raise AssertionError("unexpected query: %s" % promql)
+
+    monkeypatch.setattr(check, "prom_vector", fake)
+
+
+def test_check_restarts_names_the_looping_pod(monkeypatch):
+    _fake_vectors(
+        monkeypatch,
+        {
+            "container_start_time_seconds": [
+                ({"pod": "n8n-abc"}, 7.0),
+                ({"pod": "quiet"}, 0.0),
+            ]
+        },
+    )
+    ok, msg = check.check_restarts()
+    assert not ok and "n8n-abc" in msg
+
+
+def test_check_restarts_quiet_is_up(monkeypatch):
+    _fake_vectors(
+        monkeypatch, {"container_start_time_seconds": [({"pod": "quiet"}, 1.0)]}
+    )
+    ok, _ = check.check_restarts()
+    assert ok
+
+
+def test_check_oom_names_the_killed_pod(monkeypatch):
+    _fake_vectors(
+        monkeypatch, {"container_oom_events_total": [({"pod": "karakeep-x"}, 2.0)]}
+    )
+    ok, msg = check.check_oom()
+    assert not ok and "karakeep-x" in msg
+
+
+def test_check_cpu_throttle_needs_both_gates_and_streak(monkeypatch):
+    # 90% throttled AND real cores lost — but only pages on the CPU_CONSECUTIVE-th
+    # consecutive breaching cycle.
+    check._cpu_breach_streak = 0
+    _fake_vectors(
+        monkeypatch,
+        {
+            "container_cpu_cfs_throttled_periods_total": [({"pod": "tdarr-y"}, 0.9)],
+            "container_cpu_cfs_throttled_seconds_total": [({"pod": "tdarr-y"}, 0.5)],
+        },
+    )
+    for _ in range(check.CPU_CONSECUTIVE - 1):
+        ok, msg = check.check_cpu_throttle()
+        assert ok and "tdarr-y" in msg  # named but not paging yet
+    ok, msg = check.check_cpu_throttle()
+    assert not ok and "tdarr-y" in msg
+    check._cpu_breach_streak = 0
+
+
+def test_check_cpu_throttle_tiny_loss_stays_up(monkeypatch):
+    # High ratio but negligible absolute cores lost — the volume floor gates it out.
+    check._cpu_breach_streak = 0
+    _fake_vectors(
+        monkeypatch,
+        {
+            "container_cpu_cfs_throttled_periods_total": [({"pod": "sidecar"}, 0.9)],
+            "container_cpu_cfs_throttled_seconds_total": [({"pod": "sidecar"}, 0.0001)],
+        },
+    )
+    ok, _ = check.check_cpu_throttle()
+    assert ok
+
+
 def test_run_once_suppression_without_cadvisor_series(monkeypatch):
     # Post-retirement shape: only the node job exists in `up`.
     up = [({"job": "node"}, 0.0)]

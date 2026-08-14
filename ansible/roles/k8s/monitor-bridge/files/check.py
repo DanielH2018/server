@@ -682,10 +682,10 @@ def check_restarts():
     Catches crash-loops that an intermittent up-check can miss.
     """
     vec = prom_vector(
-        "changes(container_start_time_seconds%s[%s])"
-        % (origin_sel('name!=""'), RESTART_WINDOW)
+        "sum by (pod) (changes(container_start_time_seconds%s[%s]))"
+        % (origin_sel('container!=""', 'container!="POD"'), RESTART_WINDOW)
     )
-    offenders = _top_offenders(vec, "name", lambda v: v > RESTART_MAX)
+    offenders = _top_offenders(vec, "pod", lambda v: v > RESTART_MAX)
     if offenders:
         desc = ", ".join("%s (%.0f)" % (n, v) for n, v in offenders[:5])
         return False, "%d container(s) restarting >%.0fx in %s: %s" % (
@@ -704,10 +704,10 @@ def check_oom():
     doesn't expose container_oom_events_total the query is empty and this stays green.
     """
     vec = prom_vector(
-        "sum(increase(container_oom_events_total%s[%s])) by (name)"
-        % (origin_sel('name!=""'), OOM_WINDOW)
+        "sum(increase(container_oom_events_total%s[%s])) by (pod)"
+        % (origin_sel('container!=""', 'container!="POD"'), OOM_WINDOW)
     )
-    offenders = _top_offenders(vec, "name", lambda v: v > 0)
+    offenders = _top_offenders(vec, "pod", lambda v: v > 0)
     if offenders:
         desc = ", ".join("%s (%.0f)" % (n, v) for n, v in offenders[:5])
         return False, "%d container(s) OOM-killed in %s: %s" % (
@@ -748,23 +748,23 @@ def check_cpu_throttle():
     the evidence stays in the bridge log without paging. A clean cycle resets the streak.
     """
     global _cpu_breach_streak
-    sel = origin_sel('name!=""')
+    sel = origin_sel('container!=""', 'container!="POD"')
     ratio_vec = prom_vector(
-        "sum(rate(container_cpu_cfs_throttled_periods_total%s[%s])) by (name) "
-        "/ sum(rate(container_cpu_cfs_periods_total%s[%s])) by (name)"
+        "sum(rate(container_cpu_cfs_throttled_periods_total%s[%s])) by (pod) "
+        "/ sum(rate(container_cpu_cfs_periods_total%s[%s])) by (pod)"
         % (sel, CPU_WINDOW, sel, CPU_WINDOW)
     )
     lost_cores = dict(
-        (m.get("name", "?"), v)
+        (m.get("pod", "?"), v)
         for m, v in prom_vector(
-            "sum(rate(container_cpu_cfs_throttled_seconds_total%s[%s])) by (name)"
+            "sum(rate(container_cpu_cfs_throttled_seconds_total%s[%s])) by (pod)"
             % (sel, CPU_WINDOW)
         )
     )
     threshold = CPU_THROTTLE_PCT / 100.0
     offenders = []
     for m, ratio in ratio_vec:
-        name = m.get("name", "?")
+        name = m.get("pod", "?")
         lost = lost_cores.get(name, 0.0)
         if ratio > threshold and lost > CPU_MIN_THROTTLED_CORES:
             offenders.append((name, ratio, lost))
@@ -2133,10 +2133,14 @@ CHECKS = [
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
     ("cert", _env("KUMA_PUSH_CERT", ""), check_cert),
     ("memory", _env("KUMA_PUSH_MEM", ""), check_mem),
-    # restarts/oom/cpu retired 2026-08-14 with the Docker cadvisor (operator decision):
-    # their container_*{name=...} source series ended with it. The check functions stay
-    # (pure, tested) — retargeting them onto the kubernetes-cadvisor label shape
-    # (container/pod, no `name`) is the Phase G candidate for cluster-side depth.
+    # restarts/oom/cpu RETARGETED 2026-08-14 (Phase G): retired with the Docker cadvisor
+    # the same morning, re-armed the same evening against the kubernetes-cadvisor job's
+    # label shape — grouped by pod (`name` is the runtime hash there). Same pure logic,
+    # same thresholds; complements k8s_workloads' crashloop paging with OOM + sustained-
+    # throttle depth the retirement dropped.
+    ("restarts", _env("KUMA_PUSH_RESTARTS", ""), check_restarts),
+    ("oom", _env("KUMA_PUSH_OOM", ""), check_oom),
+    ("cpu", _env("KUMA_PUSH_CPU", ""), check_cpu_throttle),
     ("targets", _env("KUMA_PUSH_TARGETS", ""), check_targets_down),
     ("traefik5xx", _env("KUMA_PUSH_TRAEFIK", ""), check_traefik_5xx),
     (
@@ -2178,6 +2182,9 @@ PROM_DEPENDENT = frozenset(
         "disk",
         "cert",
         "memory",
+        "restarts",
+        "oom",
+        "cpu",
         "targets",
         "traefik5xx",
         "ups",  # queries HA's Prometheus-scraped UPS battery sensors
