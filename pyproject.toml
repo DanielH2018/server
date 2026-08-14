@@ -33,7 +33,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/setup/fake_remux/files",          # generic {ts,ok,msg} state-file pusher
   "ansible/roles/k8s/terraria-stats/files",       # player-stats aggregator logic (moved at the Phase F drain)
   "ansible/roles/k8s/valheim-stats/files",        # the Valheim sibling: adds deaths + a steamid<->name map
-  "ansible/roles/containers/ical-proxy/files",
+  "ansible/roles/k8s/ical-proxy/files",
   "ansible/roles/k8s/homelab-mcp/files",
   ".claude/hooks",
   ".claude/scripts",                 # audit-permissions report/suggester logic tests

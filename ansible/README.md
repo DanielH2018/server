@@ -309,6 +309,6 @@ backlog.
 - **journald** log level and disk cap are managed by `initial_setup.yml` (the drop-in at
   `/etc/systemd/journald.conf.d/50-homelab.conf`) — nothing to do by hand.
 - **LaTeX editing in code-server:**
-  [`roles/containers/code-server/CLAUDE.md`](roles/containers/code-server/CLAUDE.md).
+  [`roles/k8s/code-server/CLAUDE.md`](roles/k8s/code-server/CLAUDE.md).
 - **Email-to-RSS** (the Cloudflare Worker submodule):
   [`docs/email-to-rss.md`](../docs/email-to-rss.md).

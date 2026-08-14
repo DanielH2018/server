@@ -1,6 +1,6 @@
 """Unit tests for the ical-proxy Obsidian transform in app.py.
 
-Run: uv run pytest ansible/roles/containers/ical-proxy/files
+Run: uv run pytest ansible/roles/k8s/ical-proxy/files
 (or `uv run pytest` for the whole repo suite).
 
 The obsidian-ical-plugin ships tasks as VTODOs whose only deep link lives in
