@@ -5,6 +5,10 @@ metadata:
   name: registry
   namespace: {{ k8s_namespace }}
 spec:
+  # Pinned so agents' /etc/rancher/k3s/registries.yaml can name it as the mirror endpoint:
+  # containerd is a host process that resolves no cluster DNS, and an auto-assigned
+  # ClusterIP would silently change on Service recreate, stranding every agent-side pull.
+  clusterIP: {{ k8s_registry_cluster_ip }}
   selector:
     app: registry
   ports:

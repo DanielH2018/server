@@ -1,0 +1,16 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nut \
+    nut-client \
+    util-linux \
+    && rm -rf /var/lib/apt/lists/*
+
+# Unlike the retired Docker build, /etc/nut is NOT baked in: this image is pushed to the
+# unauthenticated in-cluster registry, and upsd.users carries passwords. Config mounts
+# from the nut-config Secret at /nut-config; the entrypoint stages it into /etc/nut.
+COPY entrypoint.sh /entrypoint.sh
+COPY upssched-cmd /usr/local/bin/upssched-cmd
+RUN chmod +x /entrypoint.sh /usr/local/bin/upssched-cmd
+
+ENTRYPOINT ["/entrypoint.sh"]

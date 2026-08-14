@@ -30,6 +30,9 @@
     - { role: chezmoi_setup, tags: ["chezmoi"], when: has_chezmoi }
     - { role: claude_code, tags: ["claude_code"], when: has_claude_code }
     - { role: renovate_notify, tags: ["renovate_notify"], when: inventory_hostname == renovate_notify_host }
+    # Host half of the UPS stack (udev rule + secondary upsmon that performs the real
+    # poweroff); the primary is the k8s/nut pod pinned to the same host.
+    - { role: nut_host, tags: ["nut_host"], when: inventory_hostname == ups_host }
     - { role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == 'daniel-pi' }
     # Slice 4, B7c: the fake-remux detector + reconciler follow the media stack onto daniel-box.
     # Host-conditional like optimize_pi/renovate_notify — the scripts still live in the

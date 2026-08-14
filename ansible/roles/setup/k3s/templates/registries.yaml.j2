@@ -5,12 +5,18 @@
 # locally-built image sits in ImagePullBackOff with a TLS handshake error that reads like a
 # certificate problem rather than a scheme mismatch.
 #
-# Plain HTTP is acceptable ONLY because both ends are on this node: the registry publishes its
-# port on {{ k8s_registry_host_ip }} via hostPort, so the traffic never crosses a wire. That
-# stops being true when daniel-server joins the cluster at slice 7 — at that point this needs a
-# real certificate and the pull host stops being `localhost`, because a second node has no
-# registry on its own loopback.
+# The mirror KEY is the same on every node, so one image reference
+# ({{ k8s_registry_pull_host }}/<name>:<tag>) is node-portable; the ENDPOINT differs:
+#   - {{ k8s_registry_node }} (runs the registry): the loopback hostPort — the traffic
+#     never crosses a wire, which is why plain HTTP was acceptable single-node.
+#   - agents: the Service's pinned ClusterIP over flannel — plain HTTP that DOES cross
+#     the LAN, inside the vxlan; accepted trade-off, see k8s_registry_cluster_ip in
+#     group_vars/all.yml.
 mirrors:
   "{{ k8s_registry_pull_host }}":
     endpoint:
+{% if inventory_hostname == k8s_registry_node %}
       - "http://{{ k8s_registry_pull_host }}"
+{% else %}
+      - "http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_port }}"
+{% endif %}

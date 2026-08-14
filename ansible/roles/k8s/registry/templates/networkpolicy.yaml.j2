@@ -88,6 +88,14 @@ spec:
     - from:
         - ipBlock:
             cidr: {{ registry_k8s_netpol_cni_gateway }}
+        # The AGENT pull path (2026-08-14, nut→k8s port): containerd on daniel-server
+        # reaches the pinned ClusterIP through its registries.yaml mirror. Host-originated
+        # traffic entering the overlay is SNAT'd to the node's own flannel.1 address —
+        # `ip -4 addr show flannel.1` on daniel-server reads 10.42.1.0/32 (checked
+        # 2026-08-14). Same (a)/(b)/(c) caveats as the loopback ipBlock above; the
+        # daniel-server-pinned pull selftest is what distinguishes (b) loudly.
+        - ipBlock:
+            cidr: {{ registry_k8s_netpol_agent_flannel }}
       ports:
         - protocol: TCP
           port: {{ k8s_registry_port }}

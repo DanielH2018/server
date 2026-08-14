@@ -333,7 +333,7 @@ SCRUTINY_TEMP_MAX = float(_env("SCRUTINY_TEMP_MAX", "0"))
 # the earliest signal, which can trip while charge/runtime still read fine. Queries are env-driven
 # (all empty = disabled, like PI_GLANCES_URL) so a UPS/entity rename or removal needs no code edit.
 # Prom-dependent: an HA-scrape outage leaves ALL series absent -> up (Scrape Targets owns HA-source
-# liveness; the nut container healthcheck owns NUT-server death), so this never double-pages those;
+# liveness; the nut pod liveness probe owns NUT-server death), so this never double-pages those;
 # a PARTIAL drop (one arm gone) pages instead of silently monitoring the survivor. UPS_CONSECUTIVE
 # rides out a one-cycle dip from a transient load spike (like HA_CONSECUTIVE), so only a sustained
 # problem pages.
@@ -1494,7 +1494,7 @@ def check_ups():
       - both NUT NUMERIC arms (charge, runtime) absent while the replace-battery arm is still present
         -> the NUT server/integration dropped: HA drops the unavailable numeric sensors, but the
         replace-battery template FLOORS to 0 (stays present) in that same outage (templates.yaml), so
-        a NUT outage can't reach the all-absent branch above. The nut container healthcheck owns
+        a NUT outage can't reach the all-absent branch above. The nut pod liveness probe owns
         NUT-server death, so defer rather than double-paging it with a misdirecting "entity renamed?".
     A PARTIAL absence that is NEITHER of those (a single numeric arm gone, or the replace arm gone
     while the numerics report) is a specific entity rename/removal — it pages (through the streak)
@@ -1543,7 +1543,7 @@ def check_ups():
         # sensors HA drops from Prometheus when the source goes unavailable, while the replace-battery
         # arm is an HA template binary_sensor that FLOORS to 0 (stays present) in that same outage
         # (templates.yaml) — so a NUT outage reads as both numeric arms absent + replace present, past
-        # the all-absent branch above. The nut container healthcheck owns NUT-server death, so defer
+        # the all-absent branch above. The nut pod liveness probe owns NUT-server death, so defer
         # rather than double-paging it through the partial-absence path below with a misdirecting
         # "entity renamed?" msg. A single numeric arm gone (charge XOR runtime) is still a real rename.
         _ups_down_streak = 0

@@ -25,12 +25,10 @@ spec:
       labels:
         app: registry-selftest-pull
     spec:
-      # Phase F (2026-08-13): pinned to daniel-box — this image comes from the in-cluster
-      # registry, which is a loopback hostPort on that node only; a pod scheduled on
-      # daniel-server cannot pull it. The pin comes off when the drain re-plumbs the
-      # registry (real cert + LAN endpoint).
+      # Pinned to the registry node: this half proves the LOCAL pull path (mirror →
+      # loopback hostPort). The agent job below proves the other endpoint.
       nodeSelector:
-        kubernetes.io/hostname: daniel-box
+        kubernetes.io/hostname: {{ k8s_registry_node }}
       restartPolicy: Never
       enableServiceLinks: false
       automountServiceAccountToken: false
@@ -39,6 +37,47 @@ spec:
           image: {{ k8s_registry_pull_host }}/{{ registry_k8s_probe_repo }}:probe
           # imagePullPolicy: Always defeats the point. A cached layer from a previous run would
           # let this pass while the registry was down, which is the one thing it must not do.
+          imagePullPolicy: Always
+          command: ["/bin/true"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: "500m"
+              memory: 128Mi
+            requests:
+              cpu: "10m"
+              memory: 16Mi
+---
+# The AGENT pull path (2026-08-14 re-plumb): same proof, scheduled on daniel-server, so
+# a Completed pod means ITS containerd resolved the mirror to the pinned ClusterIP, was
+# admitted by the NetworkPolicy's flannel.1 ipBlock, and got the layers over the vxlan.
+# This is the job that fails loudly if that ipBlock's SNAT assumption is wrong.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: registry-selftest-pull-agent
+  namespace: {{ k8s_namespace }}
+spec:
+  activeDeadlineSeconds: 180
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: registry-selftest-pull
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: daniel-server
+      restartPolicy: Never
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      containers:
+        - name: pulled
+          image: {{ k8s_registry_pull_host }}/{{ registry_k8s_probe_repo }}:probe
           imagePullPolicy: Always
           command: ["/bin/true"]
           securityContext:

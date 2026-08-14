@@ -978,7 +978,7 @@ def test_check_ups_all_absent_ha_down_still_defers(monkeypatch):
 def test_check_ups_nut_server_down_defers_not_double_pages(monkeypatch):
     # A real NUT-server outage (peanut down / USB unplugged): HA drops the numeric charge+runtime
     # sensors (unavailable) while the replace-battery template FLOORS to 0 (stays present) ->
-    # charge=None, runtime=None, replace=0.0. That's the nut container healthcheck's page, NOT an
+    # charge=None, runtime=None, replace=0.0. That's the nut pod liveness probe's page, NOT an
     # entity rename, so check_ups must DEFER (up) — not partial-absence page with a misdirecting
     # "entity renamed?" msg (the 2026-07-14 review M1 double-page bug).
     check._ups_down_streak = 0

@@ -95,6 +95,12 @@ stringData:
     {"type": "http", "name": "k3s homepage", "url": "https://homepage{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   peanut-k8s.json: |
     {"type": "http", "name": "k3s peanut", "url": "https://peanut{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # Successor to the autokuma-derived "NUT" monitor that retired with the Docker
+  # container (D6 reversed, 2026-08-14). A TCP check of upsd over its ClusterIP Service
+  # — the pod's own liveness probe (upsc) owns UPS-side depth; this owns "upsd
+  # reachable", which is what the host's secondary upsmon depends on.
+  nut-k8s.json: |
+    {"type": "port", "name": "k3s nut (upsd)", "hostname": "nut.{{ k8s_namespace }}.svc.cluster.local", "port": 3493, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   grafana-k8s.json: |
     {"type": "http", "name": "k3s Grafana", "url": "https://grafana{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Tokenless probe of the mcp gate: a request without the bearer matches no router and

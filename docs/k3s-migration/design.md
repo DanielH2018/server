@@ -232,7 +232,7 @@ All five closed on 2026-08-01. Recorded with what each commits us to.
 |---|---|---|---|
 | 1 | Backup | Longhorn backup target → B2 | Kopia's role shrinks to host paths; `docs/kopia-disaster-recovery.md` and the pinned password-rotation procedure need rewriting |
 | 2 | Pi-hole | In-cluster, behind the VIP | The upstream `resolv.conf` rule and the cold-boot gate in §7 become mandatory work, not contingency |
-| 3 | UPS / `peanut` | Stays on daniel-server | daniel-server keeps a permanent residual role; it never fully drains |
+| 3 | UPS / `peanut` | ~~Stays on daniel-server~~ **REVERSED 2026-08-14** (drain log "D6 REVERSED"): nut runs in-cluster, pinned to daniel-server for the USB | daniel-server fully drains — no residual Docker role; the host keeps only the k3s agent + the `nut_host` shutdown chain |
 | 4 | Portainer | Replaced | Homepage widget removed; the Pi's agent, `portainer_manager_host`, and the Pi's `DOCKER-USER` rule retire together |
 | 5 | Third node | Possible later | `--cluster-init` from day one; no other design change |
 

@@ -19,12 +19,11 @@ spec:
       labels:
         app: registry
     spec:
-      # Phase F (2026-08-13): pinned to daniel-box — this image comes from the in-cluster
-      # registry, which is a loopback hostPort on that node only; a pod scheduled on
-      # daniel-server cannot pull it. The pin comes off when the drain re-plumbs the
-      # registry (real cert + LAN endpoint).
+      # Pinned to the registry node by design (2026-08-14 re-plumb): its loopback
+      # hostPort and its RWO PVC both live here, and every node's registries.yaml mirror
+      # (loopback on this node, pinned ClusterIP on agents) assumes it.
       nodeSelector:
-        kubernetes.io/hostname: daniel-box
+        kubernetes.io/hostname: {{ k8s_registry_node }}
       enableServiceLinks: false
       securityContext:
         # The registry image runs as root by default and writes to /var/lib/registry. fsGroup

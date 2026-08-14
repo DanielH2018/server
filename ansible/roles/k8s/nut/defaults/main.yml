@@ -1,0 +1,12 @@
+---
+# Built in-cluster (k8s/image-builder) from this role's Dockerfile — successor to the
+# Docker sidecar's `build: context: .`. Pulled on daniel-server through the agent-side
+# registries.yaml mirror (ClusterIP endpoint); see k8s_registry_cluster_ip in
+# group_vars/all.yml.
+nut_k8s_image: "{{ k8s_registry_pull_host }}/nut:latest"
+
+# Mirrors resources('0.50', '128M', '0.05', '16M') in the retired compose template.
+nut_k8s_cpu_limit: "500m"
+nut_k8s_mem_limit: 128Mi
+nut_k8s_cpu_request: "50m"
+nut_k8s_mem_request: 16Mi

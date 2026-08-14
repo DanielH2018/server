@@ -365,8 +365,8 @@ containers_list:
     port: 3000
     use_authelia: true
     unsuffixed_hostname: homepage
-  # Phase E4 (2026-08-12): UPS web UI. The nut daemon stays on daniel-server (USB) —
-  # upsd:3493 is LAN-published and DOCKER-USER-scoped to this node already (slice-5 B3).
+  # Phase E4 (2026-08-12): UPS web UI. Since 2026-08-14 (D6 reversed) it reads upsd over
+  # the in-cluster `nut` Service instead of the retired daniel-server LAN publish.
   - name: peanut
     platform: k8s
     hostname: "peanut{{ k8s_hostname_suffix }}"
@@ -574,6 +574,14 @@ containers_list:
   - name: node-exporter
     platform: k8s
   - name: autofix-bridge
+    platform: k8s
+  # D6 REVERSED (operator, 2026-08-14): the NUT primary (upsd + usbhid-ups + upsmon)
+  # moves in-cluster so Docker can leave daniel-server entirely. The pod is pinned to
+  # daniel-server (the UPS's USB host — a physical pin, never unwinds) and its built
+  # image pulls through the agent-side registries.yaml mirror this change plumbed. The
+  # host's secondary upsmon — the thing that actually powers daniel-server off on FSD —
+  # is the nut_host role and keeps its 127.0.0.1:3493 target via hostPort.
+  - name: nut
     platform: k8s
   # Slice-7 Phase D (2026-08-10, slice-7-phase-d-scrutiny.md): SMART monitoring. The
   # collector DaemonSet adds this host's never-monitored NVMe; daniel-server's Docker

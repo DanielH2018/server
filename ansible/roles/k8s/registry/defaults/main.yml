@@ -39,3 +39,8 @@ registry_k8s_netpol_probe_image: alpine:3.22
 # slice 7's TLS/LAN-hostname rework would need this widened (or turned into a list) to admit
 # that node's own cni0 gateway too.
 registry_k8s_netpol_cni_gateway: 10.42.0.1/32
+
+# daniel-server's flannel.1 address — `ip -4 addr show flannel.1` there reads 10.42.1.0/32
+# (checked 2026-08-14). Its containerd's pulls of the ClusterIP mirror endpoint arrive
+# SNAT'd to this; admitted so built images can run on that node (first consumer: nut).
+registry_k8s_netpol_agent_flannel: 10.42.1.0/32

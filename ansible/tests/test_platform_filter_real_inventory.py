@@ -140,7 +140,12 @@ def test_daniel_server_is_still_wholly_docker():
     # Docker containers' restart/OOM/throttle series, and those three bridge checks +
     # their monitors retired with it. docker-fleet-health still pages on
     # unhealthy/restarting; retargeting the depth checks onto kubelet-cadvisor's label
-    # shape is a Phase G candidate.
-    assert len(containers) == 5
-    assert len(filter_by_platform(containers, "docker")) == 5
+    # shape is a Phase G candidate. Then 4: the peanut entry retired 2026-08-14 — the
+    # operator REVERSED design decision D6 so Docker can leave this host entirely, and
+    # the nut daemon became the k8s/nut pod (pinned right back to daniel-server for the
+    # USB, pulling its built image through the agent-side registries.yaml mirror that
+    # same change plumbed). The host-shutdown chain moved to the nut_host role,
+    # contract unchanged (127.0.0.1:3493, now a hostPort).
+    assert len(containers) == 4
+    assert len(filter_by_platform(containers, "docker")) == 4
     assert filter_by_platform(containers, "k8s") == []

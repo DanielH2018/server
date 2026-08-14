@@ -97,6 +97,24 @@ drains. `docker` itself stays installed for that residual trio — has_docker st
 > repo was deleted 08-13, and the residual object versions were purged 08-14. The residual
 > set is therefore: k3s agent, peanut/NUT, and node-level exporters.
 
+> **D6 REVERSED (operator, 2026-08-14): the residual role dissolves entirely.** "Add it to
+> K3s so that docker can be entirely removed" — nut becomes the k8s/nut pod, pinned right
+> back to daniel-server for the USB (a physical pin, not a drain artifact). Two things made
+> the original trade obsolete in execution: (1) the shutdown chain was ALREADY host-native
+> (the secondary upsmon is host `nut-client`, not Docker — the pod re-creates the same
+> `127.0.0.1:3493` loopback publish as a hostPort, so the poweroff path is byte-identical
+> and gains no new failure coupling), and (2) the registry re-plumb the drain deferred got
+> a cheap shape: same `localhost:5000` mirror key on every node, endpoint = loopback
+> hostPort on daniel-box / pinned ClusterIP over flannel on agents (plain HTTP inside the
+> vxlan, accepted), proven per-node by a second, daniel-server-pinned pull selftest. The
+> pod is `privileged: true` — k8s has no compose `devices:` equivalent, so the Docker
+> cap-list + udev posture cannot be expressed; a USB device plugin is the noted follow-up.
+> Host half (udev rule + secondary upsmon) moved to the `nut_host` role
+> (`initial_setup.yml`, gated on `ups_host`). The nut-lan-firewall + LAN publish retired
+> (consumers — peanut web, HA — use the `nut` ClusterIP Service). End state: daniel-server
+> runs the k3s agent and NOTHING under Docker; the endgame (§G) now includes the two host
+> flips, remnant-bridge dissolution, and full Docker uninstall (`has_docker: false`).
+
 ### D7 — homelab-mcp and otel-collector move LAST, after the join proves stable
 
 Both are instruments used to operate the migration (design §5 "don't remove your own

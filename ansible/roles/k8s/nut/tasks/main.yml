@@ -1,0 +1,29 @@
+---
+# Design decision D6 REVERSED (operator, 2026-08-14): nut moves in-cluster, pinned to
+# daniel-server (the UPS's USB host), so Docker can be removed from that host entirely.
+# The host-side half of the stack — udev rule + secondary upsmon that performs the real
+# poweroff — lives in the nut_host role (initial_setup.yml), unchanged at cutover
+# because the pod re-creates the same 127.0.0.1:3493 loopback publish as a hostPort.
+
+- name: Build the nut image
+  ansible.builtin.include_role:
+    name: k8s/image-builder
+  vars:
+    image_builder_name: nut
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/nut/templates/Dockerfile.j2"
+    # Embedded verbatim (lookup('file')) — shell scripts Jinja must not touch.
+    image_builder_context_files:
+      "{{ playbook_dir }}/roles/k8s/nut/files/entrypoint.sh": entrypoint.sh
+      "{{ playbook_dir }}/roles/k8s/nut/files/upssched-cmd": upssched-cmd
+
+- name: Deploy nut to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: nut
+    manifests_rollout: nut
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+    manifests_secret_files:
+      - config-secret.yaml

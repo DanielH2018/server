@@ -75,13 +75,14 @@ containers_list:
   # on. The role under roles/containers/cloudflare-ddns is deliberately left in place — it is
   # the rollback, and re-adding an entry here is the whole of it.
   # Organization: Apps network
-  # peanut's web UI moved to the cluster (E4, 2026-08-12). The entry stays because the
-  # role still deploys nut (USB UPS daemon — hardware-bound until the Phase F join) and
-  # the LAN firewall for upsd:3493; no hostname/port, so no route and no reverse-bridge
-  # host derive from it.
-  - name: peanut
-    networks:
-      - apps
+  # peanut RETIRED here 2026-08-14 (D6 reversed by the operator so Docker can leave this
+  # host entirely): the web UI had moved to the cluster at E4, and the nut daemon now
+  # runs as the k8s/nut pod — pinned to THIS node (USB), pulling its built image through
+  # the agent-side registries.yaml mirror the same change plumbed. The host keeps the
+  # udev rule + secondary upsmon via the nut_host role (initial_setup.yml); the
+  # 127.0.0.1:3493 contract is unchanged (hostPort now). The LAN publish + DOCKER-USER
+  # nut-lan-firewall retired with it (consumers use the nut ClusterIP Service). Role in
+  # roles/containers/archive/.
   # pihole RETIRED 2026-08-13 (Phase E, slice-7-phase-e-server-retirement.md): the cluster
   # pihole at dns_k8s_vip owns LAN DNS. Gate cleared same night — the desktop (last real
   # client, ~4.3k queries/day) repointed to 10.0.0.243 and the query log flatlined; this

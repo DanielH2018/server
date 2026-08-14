@@ -1,0 +1,16 @@
+---
+# In-cluster upsd endpoint — successor to the Docker-era {{ '{{ server_ip }}' }}:3493 LAN
+# publish and the DOCKER-USER nut-lan-firewall that scoped it, both retired with the
+# port. Consumers: the peanut web UI and Home Assistant's NUT integration, both pods.
+# upsd's own auth (upsd.users) still applies on top of network reachability.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nut
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: nut
+  ports:
+    - port: 3493
+      targetPort: 3493

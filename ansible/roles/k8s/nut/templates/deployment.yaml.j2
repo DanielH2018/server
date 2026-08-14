@@ -1,0 +1,79 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nut
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # Recreate: the USB device and the loopback hostPort are both node-exclusive — a
+  # rolling update would leave the new pod fighting the old one for both.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nut
+  template:
+    metadata:
+      labels:
+        app: nut
+    spec:
+      # The UPS is USB-attached to daniel-server. This pin is physical, not a scheduling
+      # preference — it does NOT unwind with the drain's L2/VIP pins.
+      nodeSelector:
+        kubernetes.io/hostname: daniel-server
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      containers:
+        - name: nut
+          image: {{ nut_k8s_image }}
+          ports:
+            - containerPort: 3493
+              # Loopback publish for the HOST's own upsmon (secondary, nut_host role):
+              # it monitors apc-ups@127.0.0.1 and is what actually runs
+              # `systemctl poweroff` when FSD is raised — the pod cannot power off the
+              # node. Byte-identical to the Docker-era `127.0.0.1:3493:3493` publish,
+              # so the host config did not change at cutover.
+              hostIP: 127.0.0.1
+              hostPort: 3493
+          securityContext:
+            # privileged, and the Docker posture was cap-list + udev MODE=0666 with NO
+            # privileged — k8s cannot express that: there is no equivalent of compose's
+            # `devices:` whitelist, so a hostPath'd /dev/bus/usb node is refused by the
+            # non-privileged pod's device cgroup regardless of file permissions. The
+            # containment that remains: our own built image, pinned to one node, with
+            # only a loopback hostPort exposed. A generic USB device plugin could
+            # restore the unprivileged posture — noted as follow-up, not blocking the
+            # Docker removal this port exists for.
+            privileged: true
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+          volumeMounts:
+            - name: nut-config
+              mountPath: /nut-config
+              readOnly: true
+            - name: usb
+              mountPath: /dev/bus/usb
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - upsc {{ nut_ups_name | default('apc-ups') }}@localhost battery.charge
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: {{ nut_k8s_cpu_limit }}
+              memory: {{ nut_k8s_mem_limit }}
+            requests:
+              cpu: {{ nut_k8s_cpu_request }}
+              memory: {{ nut_k8s_mem_request }}
+      volumes:
+        - name: nut-config
+          secret:
+            secretName: nut-config
+        - name: usb
+          hostPath:
+            path: /dev/bus/usb
