@@ -38,7 +38,7 @@ services:
       # lives in the k8s role's env-secret, no longer in this host's container Env
       # (which the read-only docker-proxy exposes to monitoring-net neighbors, the
       # 2026-07-15 H2 concern that file-mounted credentials existed to dodge).
-      - CHECKS_ONLY=gitops_alive,gitops_status,pi_peers,disk_prune,renovate_alive
+      - CHECKS_ONLY=gitops_alive,gitops_status,disk_prune
       # Re-pointed 2026-08-10 at the Phase D cutover: Kuma moved to the cluster, so the
       # Docker DNS name is gone. The `-k8s` name, NOT the bridged one (same-bridge hairpin —
       # a container here cannot reach this host's own LAN address). /api/push bypasses
@@ -54,14 +54,6 @@ services:
       - GITOPS_BEHIND_MAX_MIN=360
       - KUMA_PUSH_GITOPS_ALIVE={{ monitor_bridge_gitops_alive_push_token }}
       - KUMA_PUSH_GITOPS_STATUS={{ monitor_bridge_gitops_status_push_token }}
-      # Daily wg-easy Pi-peer backup pull: the wg-easy role's daniel-server host cron writes
-      # state.json after rsyncing the Pi's un-rebuildable WireGuard peer keys. The pull uses
-      # no --delete, so a broken pull leaves stale-but-present files in place while the peers
-      # go stale — this is the watchdog. Alert on a failed pull, >2.5d staleness, or a
-      # missing/corrupt file.
-      - PI_PEERS_STATE=/pi-peers/state.json
-      - PI_PEERS_MAX_AGE_D=2.5
-      - KUMA_PUSH_PI_PEERS={{ monitor_bridge_pi_peers_push_token }}
       # Hourly disk-autoprune host cron (autofix-bridge role): conservative docker/builder/
       # container prune when `/` used% crosses a threshold. Alert on a FAILED prune command
       # or >3h staleness — a disk still full of real data after a clean prune is the twin's
@@ -69,20 +61,15 @@ services:
       - DISK_PRUNE_STATE=/autofix-disk/state.json
       - DISK_PRUNE_MAX_AGE_H=3
       - KUMA_PUSH_DISK_PRUNE={{ monitor_bridge_disk_prune_push_token }}
-      # Renovate manual-action notifier liveness: renovate_notify.py writes last_run on the
-      # host (daily timer); bind-mounted read-only at /renovate-state. 36h = one missed run + slack.
-      - RENOVATE_STATE_DIR=/renovate-state
-      - RENOVATE_MAX_AGE_MIN=2160
-      - KUMA_PUSH_RENOVATE_ALIVE={{ monitor_bridge_renovate_alive_push_token }}
     volumes:
       - ./check.py:/app/check.py:ro
       - /var/lib/gitops-deploy:/gitops-state:ro
-      - /var/lib/renovate-notify:/renovate-state:ro
-      - /var/lib/wg-easy-pi-peers:/pi-peers:ro
       - /var/lib/autofix-disk-prune:/autofix-disk:ro
     {{ service_networks() }}
     labels:
-      {# Container-liveness monitor + one push monitor per remnant check. The 25 twin-owned
+      {# Container-liveness monitor + one push monitor per remnant check (three since the
+         2026-08-14 host flips — WG Pi Peer Backup and Renovate Notifier — Alive are now
+         pushed by their successors and declared only in the static Secret). The twin-owned
          push monitors' declarations live in the cluster's kuma-static-monitors Secret
          (they already did before the split — transcribed at the Kuma cutover); these five
          stay label-declared HERE because their pusher is this container (declaration
@@ -93,9 +80,7 @@ services:
       {{ kuma('monitor-bridge') }}
       {{ kuma('gitops-deploy-alive', monitor_type='push', name='GitOps Deploy — Alive', interval=600, max_retries=0, push_token=monitor_bridge_gitops_alive_push_token) }}
       {{ kuma('gitops-deploy-status', monitor_type='push', name='GitOps Deploy — Status', interval=600, max_retries=0, push_token=monitor_bridge_gitops_status_push_token) }}
-      {{ kuma('wg-easy-pi-peers', monitor_type='push', name='WG Pi Peer Backup', interval=600, max_retries=0, push_token=monitor_bridge_pi_peers_push_token) }}
       {{ kuma('autofix-disk-prune', monitor_type='push', name='Disk Autoprune', interval=600, max_retries=0, push_token=monitor_bridge_disk_prune_push_token) }}
-      {{ kuma('renovate-notify-alive', monitor_type='push', name='Renovate Notifier — Alive', interval=600, max_retries=0, push_token=monitor_bridge_renovate_alive_push_token) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.10', '64M', '0.02', '16M') }}
 

@@ -583,6 +583,12 @@ containers_list:
   # is the nut_host role and keeps its 127.0.0.1:3493 target via hostPort.
   - name: nut
     platform: k8s
+  # Host flip 1 (2026-08-14): the daniel-server peer-pull host cron became this nightly
+  # CronJob — the Pi's WireGuard peer keys land on a Longhorn PVC the 03:30 daily-backup
+  # group carries to B2 (successor to the retired Kopia scope), and the job pushes the
+  # "WG Pi Peer Backup" monitor directly (the bridge's pi_peers check retired with it).
+  - name: pi-peer-backup
+    platform: k8s
   # Slice-7 Phase D (2026-08-10, slice-7-phase-d-scrutiny.md): SMART monitoring. The
   # collector DaemonSet adds this host's never-monitored NVMe; daniel-server's Docker
   # collector pushes into the same web API as a spoke until the Phase F join. UI behind

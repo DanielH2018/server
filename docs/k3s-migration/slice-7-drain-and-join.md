@@ -466,3 +466,28 @@ Still open for the endgame, now including: four stale `Redeploy <svc>` crons on
 daniel-server referencing retired Docker builds (harmless no-ops; retire with the host
 flips), and the Docker uninstall itself (`has_docker: false`) once the remnant bridge
 dissolves.
+
+### HOST FLIPS EXECUTED 2026-08-14 — the remnant bridge shrinks to three checks
+
+Both §G host flips shipped the same day as the D6 cutover:
+
+- **Flip 1 — the Pi peer pull went in-cluster** (`roles/k8s/pi-peer-backup`): a 23:30
+  CronJob (dedicated ed25519 key, host key pinned at deploy over Ansible's own
+  connection, `StrictHostKeyChecking=yes`) rsyncs the Pi's WireGuard peer keys onto a
+  plain-`longhorn` PVC — the 03:30 daily-backup group now carries them to B2, closing
+  the gap the Kopia retirement left. The job pushes "WG Pi Peer Backup" directly
+  (window 600s → 2.5d to match the once-nightly pusher). `backup_controller_host` is
+  gone; the wg-easy role's peer-pull block is a tombstone.
+- **Flip 2 — renovate-notify moved to daniel-box** (`renovate_notify_host` flipped):
+  same role, new host; its unit gained `ExecStartPost` pushing "Renovate Notifier —
+  Alive" directly (window 600s → 36h to match the daily timer).
+- **The remnant monitor-bridge drops to gitops_alive + gitops_status + disk_prune** —
+  pi_peers and renovate_alive checks, their pure functions, env, mounts, labels, and
+  tests are REMOVED from check.py (not parked): their successors own the same monitors.
+  What remains dissolves with the Docker uninstall itself (gitops with the deployer,
+  disk_prune with the daemon).
+
+Cutover residue play: `retire-host-flip-residue.yml` (peer-pull cron/script/state +
+renovate-notify units/dirs off daniel-server) — run after the CronJob's first green
+pull and the daniel-box notifier deploy; the old `pi-peers/` copy stays until the
+first nightly covers the new PVC.

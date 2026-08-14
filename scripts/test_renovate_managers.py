@@ -229,6 +229,7 @@ REGISTRY_BUILT_IMAGES = {
     "code_server_k8s_image",  # ansible/roles/containers/code-server/templates/Dockerfile.j2
     "homelab_mcp_k8s_image",  # ansible/roles/k8s/homelab-mcp/templates/Dockerfile.j2
     "nut_k8s_image",  # ansible/roles/k8s/nut/templates/Dockerfile.j2
+    "pi_peer_backup_k8s_image",  # ansible/roles/k8s/pi-peer-backup/templates/Dockerfile.j2
 }
 
 

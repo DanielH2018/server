@@ -49,6 +49,11 @@ WireGuard VPN with the wg-easy web admin, for remote access into the homelab.
   (`initial_setup` tasks, ~line 598) dropped; if it turns out to lean on direct IPv6, keep both. A
   crypto-authed WireGuard port with no valid peer key is safe to expose. (2026-07-06 review Finding 1,
   reframed from "gap" to intentional once the operator confirmed the backup-access purpose.)
+- **UPDATE 2026-08-14 (host flip 1): the two bullets below are history.** The peer pull
+  is now the `roles/k8s/pi-peer-backup` CronJob — same nightly rsync + file-count floor,
+  landing on a Longhorn PVC the 03:30 daily-backup group carries to B2 (Kopia is
+  retired), pushing the same **WG Pi Peer Backup** monitor directly. The
+  `backup_controller_host` var and the monitor-bridge `pi_peers` check retired with it.
 - **Pi peer configs are backed up to Kopia (2026-07-04).** The Pi is otherwise out of Kopia scope,
   but its wg-easy `wg0.conf`/`wg0.json` (WireGuard private keys) can't be rebuilt by a redeploy. So
   this role installs a daily cron on **`backup_controller_host`** (`group_vars/all.yml`, defaults to

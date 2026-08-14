@@ -683,67 +683,6 @@ def test_touch_heartbeat_never_raises(monkeypatch):
     check.touch_heartbeat()
 
 
-# ── wg-easy Pi-peer backup pull (daily host cron writes state.json; we alert on it) ──
-
-
-def _pi_peers_state(tmp_path, monkeypatch, ts, ok, msg):
-    p = tmp_path / "state.json"
-    p.write_text(
-        '{"ts": %s, "ok": %s, "msg": "%s"}' % (ts, "true" if ok else "false", msg)
-    )
-    monkeypatch.setattr(check, "PI_PEERS_STATE", str(p))
-
-
-def test_pi_peers_fresh_success_is_up(tmp_path, monkeypatch):
-    _pi_peers_state(
-        tmp_path,
-        monkeypatch,
-        time.time() - 3600,
-        True,
-        "pulled 3 peer file(s) from daniel-pi",
-    )
-    ok, msg = check.check_pi_peers()
-    assert ok
-    assert "3 peer file(s)" in msg
-
-
-def test_pi_peers_failure_is_down(tmp_path, monkeypatch):
-    # A failed pull (Pi unreachable / SSH break) must page — the whole point, since the no-delete
-    # pull otherwise leaves stale-but-present keys that keep Backup Freshness green.
-    _pi_peers_state(
-        tmp_path, monkeypatch, time.time(), False, "rsync exit 255: connection refused"
-    )
-    ok, msg = check.check_pi_peers()
-    assert not ok
-    assert "rsync exit 255" in msg
-
-
-def test_pi_peers_stale_success_is_down(tmp_path, monkeypatch):
-    # Daily cadence; a 4d-old success means the pull cron stopped running.
-    _pi_peers_state(
-        tmp_path, monkeypatch, time.time() - 4 * 86400, True, "pulled 2 peer file(s)"
-    )
-    ok, msg = check.check_pi_peers()
-    assert not ok
-    assert "ago" in msg
-
-
-def test_pi_peers_missing_state_is_down(tmp_path, monkeypatch):
-    monkeypatch.setattr(check, "PI_PEERS_STATE", str(tmp_path / "nope.json"))
-    ok, msg = check.check_pi_peers()
-    assert not ok
-    assert "never ran" in msg
-
-
-def test_pi_peers_unparseable_is_down(tmp_path, monkeypatch):
-    p = tmp_path / "state.json"
-    p.write_text("not json")
-    monkeypatch.setattr(check, "PI_PEERS_STATE", str(p))
-    ok, msg = check.check_pi_peers()
-    assert not ok
-    assert "unparseable" in msg
-
-
 # ── autofix-bridge disk-autoprune host cron (hourly; we alert on it) ──
 
 
@@ -1287,43 +1226,6 @@ def test_ha_heartbeat_disabled_when_no_url_token(monkeypatch):
     ok, msg = check.check_ha_heartbeat()
     assert ok
     assert "disabled" in msg
-
-
-# --- renovate_alive / check_renovate_alive ---------------------------------
-
-
-def test_renovate_alive_fresh():
-    ok, msg = check.renovate_alive(60, 129600)  # 36h = 129600s
-    assert ok
-    assert "1m ago" in msg
-
-
-def test_renovate_alive_at_threshold_is_ok():
-    ok, _ = check.renovate_alive(129600, 129600)
-    assert ok
-
-
-def test_renovate_alive_stale():
-    ok, msg = check.renovate_alive(140000, 129600)
-    assert not ok
-    assert "ago" in msg
-
-
-def test_check_renovate_alive_missing_marker_is_down(tmp_path, monkeypatch):
-    monkeypatch.setattr(check, "RENOVATE_STATE_DIR", str(tmp_path))
-    ok, msg = check.check_renovate_alive()
-    assert not ok
-    assert "no last_run marker" in msg
-
-
-def test_check_renovate_alive_fresh_file_is_up(tmp_path, monkeypatch):
-    import time as _t
-
-    monkeypatch.setattr(check, "RENOVATE_STATE_DIR", str(tmp_path))
-    monkeypatch.setattr(check, "RENOVATE_MAX_AGE_S", 129600)
-    (tmp_path / "last_run").write_text(str(_t.time()))
-    ok, _ = check.check_renovate_alive()
-    assert ok
 
 
 # --- loki ingestion freshness -----------------------------------------------
@@ -3023,10 +2925,9 @@ def test_get_json_wraps_non_http_errors_without_leaking_the_url(monkeypatch):
 
 # --- CHECKS_ONLY / CHECKS_SKIP (the Phase F twin/remnant split) ---------------------------
 
-# The remnant's real config: only the five host-state-file checks, every gate off.
-REMNANT_ONLY = frozenset(
-    {"gitops_alive", "gitops_status", "pi_peers", "disk_prune", "renovate_alive"}
-)
+# The remnant's real config: only the host-state-file checks, every gate off. Three
+# since the 2026-08-14 host flips (pi_peers + renovate_alive became direct pushers).
+REMNANT_ONLY = frozenset({"gitops_alive", "gitops_status", "disk_prune"})
 
 
 def test_check_enabled_only_and_skip_semantics():

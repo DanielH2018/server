@@ -1,0 +1,9 @@
+---
+# Built in-cluster (k8s/image-builder): alpine + rsync/openssh/curl around the pull
+# script. Pullable on either node since the 2026-08-14 registry re-plumb.
+pi_peer_backup_k8s_image: "{{ k8s_registry_pull_host }}/pi-peer-backup:latest"
+
+pi_peer_backup_k8s_claim: pi-peer-backup-data
+# 23:30 local, same slot the daniel-server host cron held (clear of the 03:30 Longhorn
+# nightly, which snapshots the PVC this fills).
+pi_peer_backup_k8s_schedule: "30 23 * * *"

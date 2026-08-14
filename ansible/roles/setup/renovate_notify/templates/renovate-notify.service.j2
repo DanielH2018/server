@@ -19,3 +19,8 @@ PrivateTmp=true
 ReadWritePaths=/var/lib/renovate-notify
 Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=/usr/bin/python3 /opt/renovate-notify/renovate_notify.py
+# Runs only when ExecStart succeeded — the direct "alive" beat that replaced the
+# monitor-bridge renovate_alive check (host flip 2, 2026-08-14). Failure still pages
+# twice: OnFailure hits Discord immediately, and the missed beat reds the Kuma monitor
+# at its 36h window.
+ExecStartPost=/bin/sh -c '. /etc/renovate-notify/config.env && curl -fsS -m 15 --get "$KUMA_PUSH_URL" --data-urlencode "msg=notifier ran" >/dev/null'

@@ -179,18 +179,19 @@ k8s_registry_push_host: "registry.{{ k8s_namespace }}.svc.cluster.local:{{ k8s_r
 # The UPS's USB host: gates the nut_host role (host-side secondary upsmon + udev rule) in
 # initial_setup.yml, paired with the k8s/nut pod's nodeSelector.
 ups_host: daniel-server
-# The one host that pulls daniel-pi's wg-easy peer configs into its own Kopia backup
-# scope (see wg-easy CLAUDE.md) — daniel-pi itself is not parameterized here, it's the
-# one confirmed satellite with no sibling expected.
-backup_controller_host: daniel-server
+# backup_controller_host removed 2026-08-14 (host flip 1): the daniel-server peer-pull
+# host cron became the k8s/pi-peer-backup CronJob (Longhorn PVC → the 03:30 B2 nightly),
+# so no host holds a backup-controller role anymore.
 # portainer_manager_host removed 2026-08-09 — retired with the Portainer cohort (slice-7
 # Phase B, design decision 4). It admitted daniel-server to the Pi's agent port; both ends
 # are gone.
 # The one host that checks for open Renovate PRs and posts the Discord digest (see
 # renovate_notify CLAUDE.md) — fleet-wide by nature (queries the GitHub repo, not
 # anything host-local), so running it on more than one host would just duplicate
-# every notification. Doesn't matter which host, but must be exactly one.
-renovate_notify_host: daniel-server
+# every notification. Doesn't matter which host, but must be exactly one — daniel-box
+# since 2026-08-14 (host flip 2, freeing daniel-server for the Docker removal); its
+# alive beat pushes Kuma directly now, not through the monitor-bridge remnant.
+renovate_notify_host: daniel-box
 # Slice 4, B7c. Which host runs the fake-remux detector + reconciler — daniel-box since the media
 # stack moved there. Lives here rather than in the role's defaults because initial_setup.yml's
 # `when:` on the role entry is evaluated before that role's defaults are in scope, the same reason

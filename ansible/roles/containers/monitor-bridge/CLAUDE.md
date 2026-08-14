@@ -2,14 +2,17 @@
 
 > **SPLIT at the Phase F drain (2026-08-14).** Every metric/API check moved to
 > `roles/k8s/monitor-bridge` — the SAME `files/check.py`, staged from this role, split by
-> env: the twin sets `CHECKS_SKIP`, this remnant sets `CHECKS_ONLY` with exactly the five
-> checks that read THIS host's state files (gitops_alive, gitops_status, pi_peers,
-> disk_prune, renovate_alive — their producers are host crons here; each retires with its
-> producer at the §G host flips). check.py refuses a filter naming an unknown check or a
-> gated check without its gate, and `test_checks_and_compose_push_env_agree` asserts the
-> two deployments' env partitions the token set. Most of the per-check documentation
-> below predates the split — the checks it describes still exist and behave as written,
-> but the ones outside the remnant's five now run (and keep their env) in the twin.
+> env: the twin sets `CHECKS_SKIP`, this remnant sets `CHECKS_ONLY` with exactly the
+> checks that read THIS host's state files — three since the 2026-08-14 host flips:
+> gitops_alive, gitops_status, disk_prune (their producers are host crons here; each
+> retires with its producer). pi_peers and renovate_alive DISSOLVED at those flips —
+> their successors (the k8s/pi-peer-backup CronJob; renovate-notify's ExecStartPost on
+> daniel-box) push the same Kuma monitors directly. check.py refuses a filter naming an
+> unknown check or a gated check without its gate, and
+> `test_checks_and_compose_push_env_agree` asserts the two deployments' env partitions
+> the token set. Most of the per-check documentation below predates the split — checks
+> it describes outside the remnant's three run (and keep their env) in the twin, except
+> the two dissolved ones, whose sections are history.
 
 A tiny sidecar that turns host-cron state files into Uptime Kuma **push** monitors, so
 threshold problems actually page. See repo-root `CLAUDE.md`. (The kopia backup checks

@@ -1,0 +1,77 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pi-peer-backup
+  namespace: {{ k8s_namespace }}
+spec:
+  schedule: "{{ pi_peer_backup_k8s_schedule }}"
+  # Same local wall-clock slot the daniel-server host cron held.
+  timeZone: {{ tz }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            app: pi-peer-backup
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          automountServiceAccountToken: false
+          securityContext:
+            runAsUser: {{ puid }}
+            runAsGroup: {{ pgid }}
+            fsGroup: {{ pgid }}
+          containers:
+            - name: pull
+              image: {{ pi_peer_backup_k8s_image }}
+              env:
+                - name: PI_SRC
+                  value: "{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}@{{ hostvars['daniel-pi'].ansible_host }}:/home/{{ sys_user }}/server/containers/wg-easy/config/"
+                - name: KUMA_PUSH_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: pi-peer-backup-ssh
+                      key: push_url
+                # ssh insists on resolving HOME even with every path given explicitly.
+                - name: HOME
+                  value: /tmp
+              securityContext:
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                - name: ssh
+                  mountPath: /ssh
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                limits:
+                  cpu: "500m"
+                  memory: 128Mi
+                requests:
+                  cpu: "10m"
+                  memory: 16Mi
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: {{ pi_peer_backup_k8s_claim }}
+            - name: ssh
+              secret:
+                secretName: pi-peer-backup-ssh
+                # Group-readable for the fsGroup (root-owned files, same trap the bridge
+                # twin hit) — but ssh refuses a group-readable identity, so the script
+                # stages a 0400 copy under $HOME before connecting.
+                defaultMode: 0440
+            - name: tmp
+              emptyDir: {}
