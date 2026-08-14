@@ -14,7 +14,11 @@
 
 input=$(cat)
 
-cd /home/ubuntu/server || exit 0
+# The uv env lives in the primary checkout only; worktrees have no synced venv, so
+# `uv run --no-sync` from one fails on the yaml import. Stay here for the interpreter
+# and reach into the owning checkout by script path instead (see $repo_root below).
+PRIMARY=/home/ubuntu/server
+cd "$PRIMARY" || exit 0
 UV=/home/ubuntu/.local/bin/uv
 
 # Route through uv so the project-pinned interpreter parses the hook JSON (not the
@@ -52,13 +56,21 @@ case "$file_path" in
     *) exit 0 ;;
 esac
 
+# Validate the checkout that owns the edited file, not always the primary one. The
+# validators resolve the repo they render from their own __file__ (scripts/_render_guard.py),
+# so passing an absolute path into a .claude/worktrees/<name>/ checkout is what redirects
+# them — the working directory does not. Running them relatively rendered the primary
+# checkout's templates and reported a pass for a file it never read.
+repo_root=$(git -C "$(dirname "$file_path")" rev-parse --show-toplevel 2>/dev/null)
+[[ -z "$repo_root" ]] && repo_root="$PRIMARY"
+
 ran=""
 for pair in "$run_compose:validate_compose_templates" \
             "$run_config:validate_config_templates" \
             "$run_shell:validate_shell_templates"; do
     flag="${pair%%:*}" script="${pair#*:}"
     [[ "$flag" == "1" ]] || continue
-    if ! output=$("$UV" run --no-sync --quiet python "scripts/${script}.py" 2>&1); then
+    if ! output=$("$UV" run --no-sync --quiet python "$repo_root/scripts/${script}.py" 2>&1); then
         echo "validate-compose: ${script} FAILED after editing $(basename "$file_path"):" >&2
         echo "$output" | grep -E '\[FAIL\]|failure|FAILED' >&2
         exit 2

@@ -24,6 +24,7 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 classify = _mod.classify
 is_sops_encrypted = _mod.is_sops_encrypted
+find_repo_root = _mod.find_repo_root
 
 # Repo root derived from THIS file's location (.claude/hooks/), NOT hardcoded — the test must
 # work in any checkout, incl. CI's /home/runner/work/... A hardcoded /home/ubuntu/server made
@@ -127,3 +128,55 @@ def test_nonexistent_file_does_not_crash():
 def test_blocks_the_real_secrets_file():
     # integration: the repo's actual encrypted secrets file must be blocked.
     assert classify("ansible/vars/secrets.yml", REPO) is not None
+
+
+# --- repo_root derivation (parallel-session worktrees) ----------------------
+# settings.json always invokes the PRIMARY checkout's copy of the hook, so repo_root
+# must come from the edited file, not from __file__ — otherwise the containers/ guard
+# stays aimed at the primary checkout and a worktree edit sidesteps it entirely.
+
+
+def _make_checkout(root, git_is_file):
+    root.mkdir(parents=True, exist_ok=True)
+    if git_is_file:
+        (root / ".git").write_text("gitdir: /somewhere/.git/worktrees/x\n")
+    else:
+        (root / ".git").mkdir()
+    return root
+
+
+def test_repo_root_is_the_worktree_that_owns_the_file(tmp_path):
+    primary = _make_checkout(tmp_path / "server", git_is_file=False)
+    worktree = _make_checkout(primary / ".claude/worktrees/feature", git_is_file=True)
+    edited = worktree / "ansible" / "roles" / "x" / "main.yml"
+    edited.parent.mkdir(parents=True)
+    edited.write_text("---\n")
+
+    assert find_repo_root(str(edited), str(primary)) == str(worktree)
+
+
+def test_repo_root_is_the_primary_checkout_for_a_file_outside_any_worktree(tmp_path):
+    primary = _make_checkout(tmp_path / "server", git_is_file=False)
+    edited = primary / "scripts" / "probe.py"
+    edited.parent.mkdir(parents=True)
+    edited.write_text("")
+
+    assert find_repo_root(str(edited), "/fallback") == str(primary)
+
+
+def test_repo_root_falls_back_when_no_checkout_encloses_the_file(tmp_path):
+    stray = tmp_path / "nowhere" / "file.yml"
+    stray.parent.mkdir(parents=True)
+    stray.write_text("")
+
+    assert find_repo_root(str(stray), "/fallback") == "/fallback"
+
+
+def test_containers_guard_fires_inside_a_worktree(tmp_path):
+    # the defect this derivation fixes: with repo_root pinned to the primary checkout,
+    # a worktree's containers/ path did not match the guard prefix and was allowed.
+    worktree = _make_checkout(tmp_path / "server/.claude/worktrees/feature", True)
+    edited = worktree / "containers" / "jellyfin" / "docker-compose.yml"
+
+    repo_root = find_repo_root(str(edited), str(tmp_path / "server"))
+    assert classify(str(edited), repo_root) is not None

@@ -90,16 +90,43 @@ def classify(file_path, repo_root):
     return None
 
 
+def find_repo_root(target, default):
+    """Return the checkout that owns target: nearest ancestor holding a `.git`.
+
+    A worktree's `.git` is a file rather than a directory, so both forms count.
+    """
+    current = os.path.dirname(os.path.abspath(target))
+    while True:
+        if os.path.exists(os.path.join(current, ".git")):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            return default
+        current = parent
+
+
 def main():
     try:
         data = json.load(sys.stdin)
     except Exception:
         return 0
     file_path = ((data.get("tool_input") or {}).get("file_path")) or ""
-    # repo_root = two levels up from .claude/hooks/
-    repo_root = os.path.dirname(
+    # Guard the checkout that owns the edited file. settings.json always invokes the
+    # primary checkout's copy of this hook, so deriving repo_root from __file__ aimed the
+    # containers/ guard at /home/ubuntu/server even for an edit inside a worktree, and
+    # that path never matched the guard prefix.
+    primary_root = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
+    if file_path:
+        target = (
+            file_path
+            if os.path.isabs(file_path)
+            else os.path.join(os.getcwd(), file_path)
+        )
+        repo_root = find_repo_root(target, primary_root)
+    else:
+        repo_root = primary_root
     reason = classify(file_path, repo_root)
     if reason:
         emit_pretooluse_decision("deny", reason)
