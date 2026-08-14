@@ -47,8 +47,10 @@ spec:
   # its own host announces (the hairpin class again — crowdsec agent, terraria-stats and
   # promtail all crash-looped on "dial tcp 10.0.0.240:443: i/o timeout" from 15:05).
   # PERMANENT (operator decision 2026-08-14, design.md §10 #6): with ETP Local load-bearing
-  # for client-IP preservation and two asymmetric nodes, this pin and the four VIP-backed
+  # for client-IP preservation and two asymmetric nodes, this pin and the five VIP-backed
   # workloads' daniel-box nodeSelectors are one unit — never move either alone.
+  # The five: traefik, pihole, mosquitto, terraria, valheim. Valheim joined 2026-08-14 —
+  # it had carried ETP Local and a homelab-pool VIP since going live, but no pin.
   nodeSelectors:
     - matchLabels:
         kubernetes.io/hostname: daniel-box
