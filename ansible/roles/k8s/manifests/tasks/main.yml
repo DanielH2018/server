@@ -91,14 +91,23 @@
   # TRAP: `apply` only prunes map keys (Secret/ConfigMap data entries) on objects it has a
   # last-applied baseline for. An object first created by anything else — `kubectl create`,
   # a bootstrap script — silently KEEPS removed keys forever while the deploy reports green.
-  # Bit the static-monitors Secret 2026-08-10 (retired Kuma tiles kept resurrecting). If a
-  # key removal must land on such an object, `kubectl replace -f` it once; apply prunes
-  # normally after that.
+  # Bit the static-monitors Secret 2026-08-10, and TWICE more on 2026-08-14 (the
+  # monitor-bridge-env CHECKS_SKIP crashloop; the zombie-monitor resurrection) — the
+  # earlier "kubectl replace it once" advice was itself the re-breaker: replace strips the
+  # last-applied annotation, so the crack reopens on every use. Secrets are therefore
+  # key-reconciled explicitly after this apply (verify_secret_keys.yml below).
   ansible.builtin.command:
     cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/{{ manifests_service }}/"
   register: manifests_apply
   become: true
   changed_when: "'created' in manifests_apply.stdout or 'configured' in manifests_apply.stdout"
+
+- name: Reconcile secret keys against the rendered manifests for {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.include_tasks: verify_secret_keys.yml
+  loop: "{{ manifests_secret_files | default([]) }}"
+  loop_control:
+    loop_var: secret_file
 
 - name: Roll the deployment after a config change for {{ manifests_service }}
   tags: [deploy]

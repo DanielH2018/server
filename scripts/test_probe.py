@@ -29,12 +29,15 @@ fake_resolve = IPS.__getitem__
 
 
 def test_prom_query_url_encodes_promql():
-    url = probe.prom_query_url("10.0.0.1", "up == 0")
-    assert url == "http://10.0.0.1:9090/api/v1/query?query=up+%3D%3D+0"
+    url = probe.prom_query_url("https://prom.example", "up == 0")
+    assert url == "https://prom.example/api/v1/query?query=up+%3D%3D+0"
 
 
 def test_prom_targets_url():
-    assert probe.prom_targets_url("10.0.0.1") == "http://10.0.0.1:9090/api/v1/targets"
+    assert (
+        probe.prom_targets_url("https://prom.example")
+        == "https://prom.example/api/v1/targets"
+    )
 
 
 def test_loki_labels_url():
@@ -94,16 +97,25 @@ def test_parse_ip_returns_none_when_no_ip():
 # --- plan(): routing for each subcommand ------------------------------------
 
 
-def test_plan_metric_resolves_prometheus():
-    stages = probe.plan(["metric", "up == 0"], fake_resolve)
+def test_plan_metric_uses_cluster_prometheus_route():
+    # The Docker prometheus (resolve_ip target) retired 2026-08-14 with the drain.
+    stages = probe.plan(["metric", "up == 0"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
-        probe.curl_argv("http://10.0.0.1:9090/api/v1/query?query=up+%3D%3D+0")
+        probe.curl_argv(
+            "https://prometheus-k8s.example/api/v1/query?query=up+%3D%3D+0",
+            resolve="prometheus-k8s.example:443:10.0.0.240",
+        )
     ]
 
 
-def test_plan_targets_resolves_prometheus():
-    stages = probe.plan(["targets"], fake_resolve)
-    assert stages == [probe.curl_argv("http://10.0.0.1:9090/api/v1/targets")]
+def test_plan_targets_uses_cluster_prometheus_route():
+    stages = probe.plan(["targets"], fake_resolve, fake_k8s_endpoint)
+    assert stages == [
+        probe.curl_argv(
+            "https://prometheus-k8s.example/api/v1/targets",
+            resolve="prometheus-k8s.example:443:10.0.0.240",
+        )
+    ]
 
 
 def fake_k8s_endpoint(hostname):

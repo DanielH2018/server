@@ -217,6 +217,23 @@ Sequenced as thin end-to-end slices, each independently exercisable and reversib
 
 **Slices 6-7 hazard — don't remove your own instruments.** `wg-easy` (remote access), `homelab-mcp` (diagnostics), and `otel-collector` (host-loopback OTLP for Claude Code) are the tools used to *operate* this migration. They go last, and `wg-easy` is a defensible candidate for never leaving Docker at all.
 
+> **§8 CLOSE-OUT (2026-08-14) — every slice's exit criterion met; the migration is
+> complete.** 0: both nodes Ready (daniel-box 08-02 solo per the plan correction;
+> daniel-server joined 08-13), scratch-PVC gate passed at 2 replicas. 1–2: the leaf
+> cohort served through the cluster edge with TLS/SSO/Kuma/backups from 08-05. 3: the
+> monitoring cluster + bridge landed at Phase D (08-10), alert-equivalent and then
+> better (per-check partition guards). 4: media moved as one hardlink-seam unit at B4c
+> with a verified hardware-transcoded playback (08-08). 5: Zigbee mesh survived with
+> PAN identity intact, HA automations firing (08-09). 6: the edge cutover finished at
+> E7 (08-13) — external access, OIDC, and LAN DNS all cluster-served, proven by the
+> Docker query-log flatline. 7: the drain completed 08-14 and its exit criterion was
+> SUPERSEDED by the operator's D6 reversal — not "peanut + DaemonSets remain" but
+> **nothing remains**: nut runs in-cluster on the USB host, Docker is uninstalled, and
+> daniel-server is a k3s agent with a host shutdown chain. The instruments survived
+> their own migration (wg-easy followed its router forwards at B5; homelab-mcp and the
+> otel-collector moved/dissolved at Phase E and D7). Execution record:
+> `slice-7-drain-and-join.md`.
+
 ## 9. Accepted limitations — stated plainly
 
 - **Resilience is asymmetric.** daniel-server dies → workloads reschedule, Longhorn replicas intact. daniel-box dies → the API server is gone, nothing reschedules, recovery is manual. Longhorn buys data safety in that second case, not availability. This is inherent to a single control plane and was accepted knowingly.

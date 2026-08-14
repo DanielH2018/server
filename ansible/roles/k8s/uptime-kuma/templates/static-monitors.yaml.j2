@@ -143,6 +143,15 @@ stringData:
   # docker-fleet + autofix-disk-prune keys removed at the Docker uninstall (2026-08-14):
   # their producers (the fleet-health cron, the disk-prune cron) retired with the
   # daemon. AutoKuma ON_DELETE=delete removes the live monitors on apply.
+  # Phase G retargeting (same evening): the restart/OOM/throttle depth checks re-armed
+  # against kubernetes-cadvisor, cluster-scoped and grouped by pod — fresh k3s-named
+  # monitors on the Docker-era tokens.
+  k3s-container-restarts.json: |
+    {"type": "push", "name": "k3s Container Restarts", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_restarts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  k3s-container-oom.json: |
+    {"type": "push", "name": "k3s Container OOM", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_oom_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  k3s-cpu-throttling.json: |
+    {"type": "push", "name": "k3s CPU Throttling", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_cpu_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   crowdsec-home-allowlist.json: |
     {"type": "push", "name": "CrowdSec Home Allowlist", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_home_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   cloudflare-ddns-proxied-push.json: |
