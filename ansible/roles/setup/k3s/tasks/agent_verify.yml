@@ -34,16 +34,17 @@
 # 2026-08-13 join): Longhorn only honors it when the cluster-level
 # `create-default-disk-labeled-nodes` setting is true, which this cluster never set — so
 # a default disk appeared on the new node with allowScheduling:true. The enforceable
-# lever is the node CR itself; this pair disables scheduling declaratively and proves no
-# replica landed. Storage participation (§F replica raise) flips it back deliberately.
-- name: Keep the new node out of Longhorn scheduling until the replica raise
+# lever is the node CR itself. Through the join window (k3s_agent_longhorn_scheduling:
+# false) this pair disables scheduling declaratively and proves no replica landed; the
+# §F replica raise flips the var, after which the same patch asserts participation.
+- name: Enforce the node's Longhorn scheduling participation
   tags: [k3s_agent]
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n longhorn-system patch nodes.longhorn.io {{ k3s_join_node }}
       --type=merge -p {{ sched_patch | quote }}
   vars:
-    sched_patch: '{"spec":{"allowScheduling":false}}'
+    sched_patch: '{"spec":{"allowScheduling":{{ k3s_agent_longhorn_scheduling | lower }}}}'
   become: true
   register: k3s_join_longhorn_sched
   changed_when: "'no change' not in k3s_join_longhorn_sched.stdout"
@@ -54,6 +55,9 @@
 
 - name: Verify no Longhorn replica sits on the new node
   tags: [k3s_agent]
+  # Only meaningful while the node is fenced out — once it participates, replicas
+  # landing there is the goal.
+  when: not k3s_agent_longhorn_scheduling
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n longhorn-system get replicas.longhorn.io
