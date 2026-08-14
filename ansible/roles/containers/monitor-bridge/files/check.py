@@ -2339,6 +2339,55 @@ STARTUP_GRACE = frozenset(
 
 _grace_streaks = {}
 
+# Which checks THIS instance runs. The Phase F drain splits the bridge in two deployments of
+# this same file: the cluster twin owns every metric/API check, and the Docker remnant keeps
+# only the checks that read daniel-server host state files (gitops_alive, gitops_status,
+# pi_peers, disk_prune, renovate_alive) — split by env instead of a fork, so the twins can't
+# drift. CHECKS_ONLY (comma-separated names) enables exactly that set; CHECKS_SKIP drops
+# names from whatever is otherwise enabled. The four reachability gates participate under
+# the names their monitors push as (prometheus, loki_reachable, b2_reachable,
+# cluster_prometheus). A filter that enables a gated check while disabling its gate would
+# reintroduce the alert storm the gate exists to prevent, so main() refuses to start on one
+# (validate_check_filter) — a crash-looping bridge is loud, a mis-gated one lies quietly.
+GATE_DEPENDENTS = {
+    "prometheus": PROM_DEPENDENT,
+    "loki_reachable": LOKI_DEPENDENT,
+    "b2_reachable": B2_DEPENDENT,
+    "cluster_prometheus": CLUSTER_DEPENDENT,
+}
+
+
+def _name_set(value):
+    return frozenset(n for n in value.replace(" ", "").split(",") if n)
+
+
+CHECKS_ONLY = _name_set(_env("CHECKS_ONLY", ""))
+CHECKS_SKIP = _name_set(_env("CHECKS_SKIP", ""))
+
+
+def check_enabled(name, only=None, skip=None):
+    only = CHECKS_ONLY if only is None else only
+    skip = CHECKS_SKIP if skip is None else skip
+    if only and name not in only:
+        return False
+    return name not in skip
+
+
+def validate_check_filter(only, skip, checks):
+    """Pure: return the list of problems with a CHECKS_ONLY/CHECKS_SKIP configuration."""
+    known = {name for name, _, _ in checks} | set(GATE_DEPENDENTS)
+    problems = ["unknown check name: %s" % n for n in sorted((only | skip) - known)]
+    for gate, dependents in sorted(GATE_DEPENDENTS.items()):
+        if check_enabled(gate, only, skip):
+            continue
+        enabled = sorted(d for d in dependents if check_enabled(d, only, skip))
+        if enabled:
+            problems.append(
+                "gate %s is disabled but its dependents are enabled: %s"
+                % (gate, ", ".join(enabled))
+            )
+    return problems
+
 
 def down_streak(count, threshold, msg, grace_note, held_label="down streak"):
     """Pure consecutive-down hysteresis step shared by every per-check grace (check_ha_heartbeat/
@@ -2414,16 +2463,18 @@ def run_once():
     # When it's down they're suppressed (pushed `up` with a skip msg, keeping each push monitor's
     # heartbeat alive) so only the Prometheus monitor pages; a real per-metric problem still alerts
     # whenever Prometheus is up.
-    prom_ok, prom_msg = _evaluate("prometheus", check_prometheus)
-    log("OK  " if prom_ok else "DOWN", "prometheus", "-", prom_msg)
-    push(_env("KUMA_PUSH_PROMETHEUS", ""), prom_ok, prom_msg)
+    prom_ok, prom_msg = True, "disabled by check filter"
+    if check_enabled("prometheus"):
+        prom_ok, prom_msg = _evaluate("prometheus", check_prometheus)
+        log("OK  " if prom_ok else "DOWN", "prometheus", "-", prom_msg)
+        push(_env("KUMA_PUSH_PROMETHEUS", ""), prom_ok, prom_msg)
 
     # Exporter-reachability gate (one level below the Prometheus gate): when Prometheus is up, probe
     # `up` once and suppress each dead exporter's dependents so a node-exporter/cadvisor death is one
     # page (Scrape Targets), not a 3-monitor false-page storm / silent-green split. A failure to
     # DETERMINE exporter health leaves `suppressed` empty (fail toward alerting, never masking).
     suppressed = set()
-    if prom_ok:
+    if prom_ok and check_enabled("prometheus"):
         try:
             for job in down_exporters(prom_vector("up%s" % origin_sel())):
                 suppressed |= EXPORTER_DEPENDENT[job]
@@ -2432,9 +2483,11 @@ def run_once():
 
     # Loki-reachability gate (peer of the Prometheus gate): probe Loki once so a single Loki outage
     # is one page (Loki Reachable), not a storm across every Loki-querying check (LOKI_DEPENDENT).
-    loki_ok, loki_msg = _evaluate("loki_reachable", check_loki_reachable)
-    log("OK  " if loki_ok else "DOWN", "loki_reachable", "-", loki_msg)
-    push(_env("KUMA_PUSH_LOKI_REACHABLE", ""), loki_ok, loki_msg)
+    loki_ok, loki_msg = True, "disabled by check filter"
+    if check_enabled("loki_reachable"):
+        loki_ok, loki_msg = _evaluate("loki_reachable", check_loki_reachable)
+        log("OK  " if loki_ok else "DOWN", "loki_reachable", "-", loki_msg)
+        push(_env("KUMA_PUSH_LOKI_REACHABLE", ""), loki_ok, loki_msg)
 
     # B2-reachability gate (peer of the two above): B2 caps TRANSACTIONS separately from storage
     # bytes, and the kopia-era state-file checks this used to gate all reported their last
@@ -2443,9 +2496,11 @@ def run_once():
     # needs B2. The probe is throttled inside b2_reachable (it must not spend the transaction
     # budget it is watching), but the cached verdict is pushed every cycle so this monitor's own
     # heartbeat stays alive.
-    b2_ok, b2_msg = _evaluate("b2_reachable", check_b2_reachable)
-    log("OK  " if b2_ok else "DOWN", "b2_reachable", "-", b2_msg)
-    push(_env("KUMA_PUSH_B2_REACHABLE", ""), b2_ok, b2_msg)
+    b2_ok, b2_msg = True, "disabled by check filter"
+    if check_enabled("b2_reachable"):
+        b2_ok, b2_msg = _evaluate("b2_reachable", check_b2_reachable)
+        log("OK  " if b2_ok else "DOWN", "b2_reachable", "-", b2_msg)
+        push(_env("KUMA_PUSH_B2_REACHABLE", ""), b2_ok, b2_msg)
 
     # Cluster-Prometheus gate (peer of the Prometheus gate, for the OTHER instance): the cluster
     # checks read daniel-box's Prometheus over the cluster ingress, a path none of the other gates
@@ -2457,19 +2512,28 @@ def run_once():
     # on an answered question and, worse, light up two Kuma monitors for one fact, which reads as
     # more coverage than exists. So the verdict is reused when the URLs match, and only genuinely
     # separate endpoints get a separate probe and a separate page.
-    if CLUSTER_PROM_URL and CLUSTER_PROM_URL == PROM_URL:
-        cluster_ok, cluster_msg = (
-            prom_ok,
-            "same instance as the Prometheus gate (%s)" % prom_msg,
-        )
-    else:
-        cluster_ok, cluster_msg = _evaluate(
-            "cluster_prometheus", check_cluster_prometheus
-        )
-    log("OK  " if cluster_ok else "DOWN", "cluster_prometheus", "-", cluster_msg)
-    push(_env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""), cluster_ok, cluster_msg)
+    cluster_ok, cluster_msg = True, "disabled by check filter"
+    if check_enabled("cluster_prometheus"):
+        # The same-instance reuse only holds when the prometheus gate actually probed.
+        if (
+            CLUSTER_PROM_URL
+            and CLUSTER_PROM_URL == PROM_URL
+            and check_enabled("prometheus")
+        ):
+            cluster_ok, cluster_msg = (
+                prom_ok,
+                "same instance as the Prometheus gate (%s)" % prom_msg,
+            )
+        else:
+            cluster_ok, cluster_msg = _evaluate(
+                "cluster_prometheus", check_cluster_prometheus
+            )
+        log("OK  " if cluster_ok else "DOWN", "cluster_prometheus", "-", cluster_msg)
+        push(_env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""), cluster_ok, cluster_msg)
 
     for name, token, fn in CHECKS:
+        if not check_enabled(name):
+            continue
         if not prom_ok and name in PROM_DEPENDENT:
             ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
             log("SKIP", name, "-", msg)
@@ -2508,7 +2572,16 @@ def touch_heartbeat():
 
 def main():
     once = "--once" in sys.argv
-    log("monitor-bridge starting (interval=%ss, once=%s)" % (INTERVAL, once))
+    problems = validate_check_filter(CHECKS_ONLY, CHECKS_SKIP, CHECKS)
+    if problems:
+        for p in problems:
+            log("FATAL: bad CHECKS_ONLY/CHECKS_SKIP:", p)
+        sys.exit(2)
+    enabled = [name for name, _, _ in CHECKS if check_enabled(name)]
+    log(
+        "monitor-bridge starting (interval=%ss, once=%s, checks=%d/%d)"
+        % (INTERVAL, once, len(enabled), len(CHECKS))
+    )
     while True:
         run_once()
         touch_heartbeat()

@@ -3001,3 +3001,72 @@ def test_get_json_wraps_non_http_errors_without_leaking_the_url(monkeypatch):
         check._get_json(url)
     assert "discord.com: timed out" == str(ei.value)
     assert "s3cr3t" not in str(ei.value)
+
+
+# --- CHECKS_ONLY / CHECKS_SKIP (the Phase F twin/remnant split) ---------------------------
+
+# The remnant's real config: only the five host-state-file checks, every gate off.
+REMNANT_ONLY = frozenset(
+    {"gitops_alive", "gitops_status", "pi_peers", "disk_prune", "renovate_alive"}
+)
+
+
+def test_check_enabled_only_and_skip_semantics():
+    assert check.check_enabled("disk", frozenset(), frozenset())
+    assert check.check_enabled("gitops_alive", REMNANT_ONLY, frozenset())
+    assert not check.check_enabled("disk", REMNANT_ONLY, frozenset())
+    assert not check.check_enabled("disk", frozenset(), frozenset({"disk"}))
+    # skip wins even against an explicit only-listing
+    assert not check.check_enabled("disk", frozenset({"disk"}), frozenset({"disk"}))
+
+
+def test_name_set_parses_csv_with_spaces():
+    assert check._name_set(" a, b ,c,,") == frozenset({"a", "b", "c"})
+    assert check._name_set("") == frozenset()
+
+
+def test_validate_rejects_unknown_names():
+    problems = check.validate_check_filter(
+        frozenset({"no_such_check"}), frozenset({"also_bogus"}), check.CHECKS
+    )
+    assert any("no_such_check" in p for p in problems)
+    assert any("also_bogus" in p for p in problems)
+
+
+def test_validate_rejects_enabled_dependent_with_disabled_gate():
+    # Skipping the prometheus gate while its dependents still run would reintroduce the
+    # one-outage-N-page storm the gate exists to prevent.
+    problems = check.validate_check_filter(
+        frozenset(), frozenset({"prometheus"}), check.CHECKS
+    )
+    assert len(problems) == 1
+    assert "gate prometheus is disabled" in problems[0]
+
+
+def test_validate_accepts_the_remnant_and_twin_configs():
+    # The two real deployments: the Docker remnant (state-file checks only, no gates) and
+    # the cluster twin (everything except the state-file checks).
+    assert check.validate_check_filter(REMNANT_ONLY, frozenset(), check.CHECKS) == []
+    assert check.validate_check_filter(frozenset(), REMNANT_ONLY, check.CHECKS) == []
+
+
+def test_remnant_names_are_real_checks():
+    # Guard (mirrors the PROM_DEPENDENT guard): the split set must track CHECKS renames.
+    names = {name for name, _, _ in check.CHECKS}
+    assert REMNANT_ONLY <= names
+
+
+def test_run_once_with_remnant_filter_touches_no_gate(monkeypatch):
+    # With the remnant's filter active, run_once must evaluate exactly the five state-file
+    # checks — no gate probe, no metric check, no push for anything else.
+    monkeypatch.setattr(check, "CHECKS_ONLY", REMNANT_ONLY)
+    monkeypatch.setattr(check, "CHECKS_SKIP", frozenset())
+    evaluated = []
+    monkeypatch.setattr(
+        check, "_evaluate", lambda name, fn: (evaluated.append(name), (True, "ok"))[1]
+    )
+    pushed = []
+    monkeypatch.setattr(check, "push", lambda token, ok, msg: pushed.append(msg))
+    check.run_once()
+    assert set(evaluated) == REMNANT_ONLY
+    assert len(pushed) == len(REMNANT_ONLY)
