@@ -58,9 +58,11 @@ jobs:
             'ansible/roles/k8s/*/defaults/main.yml' \
             'ansible/inventory/group_vars/all.yml')"
           images="$(printf '%s' "$diff" | uv run python scripts/smoke_extract.py)"
-          echo "list<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$images" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          {
+            echo "list<<EOF"
+            echo "$images"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
           echo "Changed images:"; echo "$images"
 
       - name: Pull + boot each image

@@ -17,6 +17,8 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "flask",                          # ical-proxy app.py imports flask at module top (test_app.py)
   "ruff>=0.10",                     # first-party Python lint gate (prek hook); pinned via uv.lock
   "shellcheck-py==0.11.0.1",        # validate_shell_templates; pinned to match prek.toml's shellcheck-py rev
+  "actionlint-py",                  # workflow lint gate (prek hook); ships the actionlint binary as a wheel
+  "pytest-xdist",                   # -n auto in addopts below; pytest was 13.5s of CI's hook budget
 ]
 
 [tool.pytest.ini_options]
@@ -42,7 +44,12 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/containers/home-assistant/tests", # HA Jinja macro logic tests
   "evals",                                         # homelab eval-case schema validation
 ]
-addopts = "-q"
+# `-n auto` (pytest-xdist) fans the suite across the machine's cores: 5.6s -> 3.0s locally, and
+# pytest was 13.5s of the ~24s of hook work in CI's `rest` shard. Set here rather than in the prek
+# hook so a bare `uv run pytest` gets it too. The suite is filesystem-read-only and order-
+# independent, so it parallelises cleanly — if you add a test that writes shared state, fix the
+# test rather than dropping this. Pass `-n0` to disable it for a debugging run (--pdb needs that).
+addopts = "-q -n auto"
 # filter_plugins: lets test_toposort import toposort. setup/common/files: host_lib is a cross-role
 # shared module (deployed INTO each setup script's /opt dir as a sibling) — on pythonpath so the
 # import-tested renovate_notify.py + test_host_lib.py resolve it in CI.

@@ -35,12 +35,37 @@ rev = "v26.6.0"
 
 [[repos.hooks]]
 id = "ansible-lint"
-files = "\\.(yaml|yml)$"
+# Scoped to `ansible/` and paired with pass_filenames — ansible-lint now lints the files it is
+# GIVEN instead of walking the tree itself. Its cost is almost purely per-file (measured
+# 2026-08-14: one task file 1.45s, five 1.98s, the whole repo 37s locally / 89.7s on the
+# runner), so handing it a diff is what makes a PR's lint ~2s instead of ~90s.
+#
+# Coverage is unchanged on a full run. A walk examines 954 files, but exactly 325 of those are
+# YAML and all 325 are tracked files under `ansible/` — the rest are .py/.j2/.sh that
+# ansible-lint classifies and no ansible rule applies to. That 325 is precisely what this
+# files/exclude pair passes.
+#
+# The regex must do its own excluding: `.ansible-lint`'s exclude_paths are NOT honoured for
+# explicitly-passed files (verified — it happily lints `.github/workflows/ci.yml` when named
+# directly). `ansible/collections/` needs no exclude here because it is gitignored and prek
+# only ever passes tracked files, but secrets.yml is tracked AND encrypted, so it does.
+files = "^ansible/.*\\.ya?ml$"
+exclude = "^ansible/vars/secrets\\.yml$"
 # Cap ansible-core <3 so a surprise upstream major can't silently change lint behavior
 # or break this hook on a day nothing in the repo changed (these deps aren't lock-pinned).
 additional_dependencies = ["ansible-core>=2.18,<3.0", "jmespath"]
-entry = "bash -c 'ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint'"
-pass_filenames = false
+# NB the `--` sentinel and `"$@"`, same as bash-syntax-check below: prek appends the filenames
+# to the entry, and after `bash -c '<script>'` those become the SCRIPT's positional params. A
+# bare `... && ansible-lint -c .ansible-lint` would silently lint nothing at all.
+entry = "bash -c 'ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint \"$@\"' --"
+pass_filenames = true
+# REQUIRED, not a tuning knob. Without it prek shards the filenames across parallel
+# invocations — measured at 16 batches of ~21-39 files for a full run, each one re-running the
+# `ansible-galaxy install` and paying ansible-lint's startup again, which made `--all-files`
+# SLOWER than the walk it replaced (43.8s vs 37.0s) and lints each batch without sight of the
+# others. One invocation gets the whole list, and ansible-lint parallelises internally anyway
+# (it saturates ~3 cores on its own).
+require_serial = true
 
 # Secret scanning
 [[repos]]
@@ -158,6 +183,24 @@ pass_filenames = false
 # edit there can change what the rendered scripts contain.
 files = "^(ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate_shell_templates\\.py)$"
 
+# Lint the GitHub Actions workflows themselves. `check-yaml` above only proves they PARSE —
+# nothing until now checked that a job's `needs:` names a job that exists, that a `${{ }}`
+# expression references a real context, or that a matrix key is spelled the way the steps read
+# it. Those fail at trigger time, in a workflow whose whole job is to be the gate. actionlint
+# also runs shellcheck over every `run:` block (shellcheck-py is already a dev dep, so it is on
+# PATH under `uv run`), which the shellcheck hook above cannot do — identify tags a workflow as
+# yaml, so the shell embedded in it is invisible to a shell-typed hook.
+#
+# Via the actionlint-py wheel + `uv run`, matching the other local hooks, NOT the upstream
+# rhysd/actionlint pre-commit repo: that hook is `language = "golang"`, which on a machine
+# without Go (daniel-box) makes prek fetch a ~270 MB managed toolchain and build from source.
+[[repos.hooks]]
+id = "actionlint"
+name = "Lint GitHub Actions workflows"
+entry = "uv run actionlint"
+language = "system"
+files = "^\\.github/workflows/[^/]+\\.ya?ml$"
+
 # Gate that the secret-rotation registry (ansible/secret_rotation.yml) stays in sync with the
 # encrypted secrets.yml — fails the commit if a secret was added/removed without running
 # `secret_rotation.py sync`. Read-only: reads plaintext key NAMES only, never decrypts a value
@@ -202,7 +245,9 @@ pass_filenames = false
 # Mirror pyproject.toml [tool.pytest.ini_options] testpaths so a LOCAL commit touching only
 # one suite still runs pytest (CI runs --all-files regardless; this keeps the two in sync).
 # Also fire on the DATA files the scripts-suite guards read (renovate.json, prek.toml,
-# requirements.yml, the CI + image-smoke workflows, sops_setup's SOPS-binary pin, compose
+# requirements.yml, .ansible-lint (test_ansible_lint_scope reads it AND prek.toml — the guard is
+# useless if editing only one of the pair skips the suite), the CI + image-smoke workflows,
+# sops_setup's SOPS-binary pin, compose
 # templates, Dockerfiles, .python-version) — the
 # Renovate-manager/lockstep tests consume those, so an edit there must re-run them locally,
 # not just in CI. Likewise host_vars/group_vars/docker_install main.yml, which
@@ -212,7 +257,7 @@ pass_filenames = false
 # and stay 3.12-parseable) — the exact class that bricked the deployer on 2026-07-15. Plus setup-role
 # `templates/*.j2` (e.g. gitops_deploy/config.env.j2), which the gitops budget-arithmetic guard reads
 # to prove flock+RUN_BUDGET_S+HEALTH_TIMEOUT_S stays within TimeoutStartSec.
-files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/containers/(configarr|ical-proxy)/files/.*\\.py|ansible/roles/k8s/[^/]+/files/.*\\.py|ansible/roles/containers/home-assistant/tests/.*\\.py|ansible/roles/setup/[^/]+/files/.*\\.py|ansible/roles/setup/[^/]+/templates/.*\\.j2|ansible/roles/.*\\.service\\.j2|\\.claude/(hooks|scripts)/.*\\.py|scripts/.*\\.py|evals/.*\\.py|pyproject\\.toml|renovate\\.json|prek\\.toml|\\.python-version|ansible/requirements\\.yml|\\.github/workflows/[^/]+\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/roles/setup/(docker_install|sops_setup)/tasks/main\\.yml|ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/roles/(containers|k8s)/[^/]+/(templates|files)/[Dd]ockerfile[^/]*)$"
+files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/containers/(configarr|ical-proxy)/files/.*\\.py|ansible/roles/k8s/[^/]+/files/.*\\.py|ansible/roles/containers/home-assistant/tests/.*\\.py|ansible/roles/setup/[^/]+/files/.*\\.py|ansible/roles/setup/[^/]+/templates/.*\\.j2|ansible/roles/.*\\.service\\.j2|\\.claude/(hooks|scripts)/.*\\.py|scripts/.*\\.py|evals/.*\\.py|pyproject\\.toml|renovate\\.json|prek\\.toml|\\.ansible-lint|\\.python-version|ansible/requirements\\.yml|\\.github/workflows/[^/]+\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/roles/setup/(docker_install|sops_setup)/tasks/main\\.yml|ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/roles/(containers|k8s)/[^/]+/(templates|files)/[Dd]ockerfile[^/]*)$"
 
 # Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
 # syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]; vendored
