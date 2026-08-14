@@ -184,12 +184,10 @@ containers_list:
     networks:
       - monitoring
   # grafana's UI moved to the cluster grafana (E1, 2026-08-12) — the unsuffixed name is
-  # served there now. The Docker loki cut executed 2026-08-13 (D.2 step 4, early by
-  # operator decision); the entry stays because the compose still carries promtail, a
-  # Docker-host tailer until the Phase F join (KL2). No hostname/port, so no route derives.
-  - name: grafana
-    networks:
-      - monitoring
+  # served there now. The Docker loki cut executed 2026-08-13; the grafana ENTRY retired
+  # 2026-08-14 when promtail — its last deployable — moved to the unpinned promtail
+  # DaemonSet (both nodes' host+pod logs). The role directory stays: files/dashboards is
+  # the cluster grafana's dashboards-tree source, read via playbook_dir at deploy time.
   # tempo RETIRED 2026-08-10 (slice-7 D7): its only feeder was the otel-collector's traces
   # pipeline, which now forwards to the cluster claude-otel collector — cluster tempo is
   # the successor (telemetry-health watches it). Role in roles/containers/archive/; the

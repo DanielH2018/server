@@ -258,12 +258,12 @@ PROM_ORIGIN = _env(
 )
 
 # Floor below which the `up` vector is treated as missing rather than clean — see
-# targets_verdict. The cluster prometheus scrapes exactly three origin="daniel-server" jobs
-# since the Phase F drain retired the demoted crowdsec agent's 9103 (2026-08-13; its
-# successor, the crowdsec-node-agent DaemonSet, is scraped per-pod under the cluster-native
-# set): node, cadvisor, promtail. promtail STAYS a Docker-host tailer until its own drain
-# slot, so this floor of 3 holds until then (2 after).
-TARGETS_MIN = int(_env("TARGETS_MIN", "3"))
+# targets_verdict. The cluster prometheus scrapes exactly two origin="daniel-server" jobs
+# since the Phase F drain retired the Docker promtail's 9102 (2026-08-14; its successor,
+# the unpinned promtail DaemonSet, is scraped per-pod under the cluster-native set, the
+# same move the crowdsec agent's 9103 made a day earlier): node, cadvisor. Their own
+# DaemonSet re-homes drop this to 0 and retire the check's origin arm.
+TARGETS_MIN = int(_env("TARGETS_MIN", "2"))
 # Same floor idea for the cluster's own scrape targets (see check_cluster_targets). Since the
 # otel-collector became a DaemonSet (Phase F drain, 2026-08-13) its two jobs are per-POD —
 # one target per node each — so the set is seven: prometheus, 2x otel-collector,

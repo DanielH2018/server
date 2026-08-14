@@ -41,7 +41,9 @@ ROLES = ANSIBLE / "roles" / "containers"
 # auth / reverse-proxy / monitoring. The role's own templates dir takes loader precedence, so
 # `traefik/traefik.yml.j2` resolves to Traefik's STATIC config, not the shared labels macro.
 CONFIG_TEMPLATES = [
-    "grafana/promtail-config.yml.j2",
+    # grafana/promtail-config.yml.j2 retired 2026-08-14 with the Docker promtail — the
+    # successor's config renders inside the loki-homelab ConfigMap, covered by the k8s
+    # manifest validator. The list may be empty between config-bearing eras.
 ]
 
 

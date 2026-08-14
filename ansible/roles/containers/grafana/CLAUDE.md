@@ -1,4 +1,13 @@
-# grafana — promtail host-tailer + the dashboards source tree
+# grafana — dashboards-tree source only (nothing deploys from here)
+
+> **Deploy machinery retired 2026-08-14** (Phase F drain): promtail — this role's last
+> deployable — moved to the unpinned promtail DaemonSet (roles/k8s/loki-homelab), which
+> ships BOTH nodes' authlog/syslog + pod logs to loki-homelab. What deliberately did NOT
+> move: the Docker remnant's container-stdout stream (docker_sd via docker-proxy) — the
+> residual Docker set's stdout is on-host only (`docker logs`), accepted with the
+> residual tier. `files/dashboards/` remains the cluster grafana's dashboards tree,
+> read at deploy time via playbook_dir by the claude-otel role — that is this role's
+> whole remaining purpose, and why the directory is not archived.
 
 See repo-root `CLAUDE.md` for shared conventions. The role name is historical: the
 **grafana container moved to the cluster** (E1, 2026-08-12 — the claude-otel role's

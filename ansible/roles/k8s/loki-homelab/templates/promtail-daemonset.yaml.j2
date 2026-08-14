@@ -43,18 +43,15 @@ spec:
       labels:
         app: promtail
     spec:
-      # Phase F join (2026-08-13): pinned to daniel-box while the Docker promtail still
-      # tails daniel-server's host logs — unpinned, this DaemonSet lands there too and
-      # double-ships authlog/syslog into loki-homelab. The pin comes off at the drain
-      # step, when the Docker promtail retires and this becomes the only shipper.
-      nodeSelector:
-        kubernetes.io/hostname: daniel-box
+      # Unpinned at the drain step (2026-08-14): the Docker promtail retired with it, so
+      # this DaemonSet is the only shipper and covers both nodes' host + pod logs.
       enableServiceLinks: false
       serviceAccountName: promtail
       containers:
         - name: promtail
           image: {{ loki_homelab_promtail_image }}
-          args: ["-config.file=/etc/promtail/promtail.yaml"]
+          # expand-env resolves ${HOSTNAME} (the downward-API nodeName) in the machine labels.
+          args: ["-config.file=/etc/promtail/promtail.yaml", "-config.expand-env=true"]
           env:
             # promtail drops any discovered target whose __host__ label doesn't match its
             # own hostname — which in a pod is the POD name, never the node name the

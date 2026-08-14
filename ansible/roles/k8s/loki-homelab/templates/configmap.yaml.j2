@@ -76,8 +76,10 @@ data:
             target_label: namespace
           - target_label: job
             replacement: k8s
+          # The node name, not a hardcoded host: since the drain unpinned the DaemonSet
+          # this config runs on both nodes ($HOSTNAME is the downward-API nodeName).
           - target_label: machine
-            replacement: daniel-box
+            replacement: ${HOSTNAME}
           - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
             separator: /
             target_label: __path__
@@ -90,12 +92,12 @@ data:
           - targets: [localhost]
             labels:
               job: syslog
-              machine: daniel-box
+              machine: ${HOSTNAME}
               __path__: /var/log/syslog
       - job_name: node-authlog
         static_configs:
           - targets: [localhost]
             labels:
               job: authlog
-              machine: daniel-box
+              machine: ${HOSTNAME}
               __path__: /var/log/auth.log
