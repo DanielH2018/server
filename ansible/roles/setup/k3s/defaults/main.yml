@@ -315,6 +315,7 @@ k3s_server_join_url: https://10.0.0.215:6443
 k3s_agent_args: >-
   agent --node-ip {{ server_ip }}
   --node-label node.longhorn.io/create-default-disk=false
+  --kubelet-arg=allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
 
 # Node-to-node traffic UFW must admit (both hosts default-deny INPUT, and unlike every
 # service port this traffic terminates in host processes, not Docker/kube NAT):
