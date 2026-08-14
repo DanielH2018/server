@@ -8,10 +8,9 @@ See repo-root `CLAUDE.md` for shared conventions.
   (currently the `jvm-stable` build pulled 2026-06-28). `jvm-stable` is a floating non-semver
   alias Renovate can't version-track, and janitorr deletes real media, so updates are deliberate.
   **Manual update:** pull `jvm-stable`, take the new digest, update the k8s role's default, redeploy.
-- **Host: daniel-box (k8s), since 2026-08-08 — slice 4, B7b.** This containers role no longer
-  deploys anywhere; it survives as the **config-source home**: `roles/k8s/janitorr`'s Secret
-  renders `templates/application.yml.j2`. Edit retention rules HERE; deploy with
-  `--tags janitorr` from daniel-box.
+- **Host: daniel-box (k8s), since 2026-08-08 — slice 4, B7b.** The Docker role this config came
+  from is gone; this role's Secret renders `templates/config/application.yml.j2`. Edit retention
+  rules HERE; deploy with `--tags janitorr` from daniel-box.
 - **No web UI**, no Authelia (background service) · targets the cluster sonarr/radarr/jellyfin
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 

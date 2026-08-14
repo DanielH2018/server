@@ -5,10 +5,9 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 - **Image:** `ghcr.io/koenkk/zigbee2mqtt:2.12.0` (pinned → Renovate-managed, not Watchtower)
-- **Host: daniel-box (k8s), since 2026-08-09 — slice 5, B2.** This containers role no longer
-  deploys anywhere; it survives as the **config-template source**: `roles/k8s/zigbee2mqtt`'s
-  Secret renders `templates/configuration.yaml.j2` (the configarr split). Edit Z2M config HERE,
-  deploy with `--tags zigbee2mqtt` (the k8s role) from daniel-box.
+- **Host: daniel-box (k8s), since 2026-08-09 — slice 5, B2.** The Docker role this config came
+  from is gone; this role's Secret renders `templates/config/configuration.yaml.j2`. Edit Z2M
+  config HERE, deploy with `--tags zigbee2mqtt` from daniel-box.
 - **Port:** 8080 · **URL:** `zigbee2mqtt.<domain>` (Authelia: yes; forwards to the cluster via
   `bridge_hostname`) · reaches the coordinator at `tcp://{{ slzb_ip }}:6638`, broker at the
   in-cluster `mosquitto` Service name

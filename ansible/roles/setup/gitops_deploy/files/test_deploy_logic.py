@@ -345,10 +345,8 @@ def test_template_and_tasks_same_service_deploys_and_flags_tasks():
 # push must be FLAGGED (defer-and-alert), not silently ff-merged as a docs edit — otherwise the
 # graph change is invisible. Maps to cs.meta (for the alert), NOT cs.services.
 def test_role_meta_change_flags_meta_not_deploy():
-    cs = services_from_changed_paths(
-        ["ansible/roles/containers/janitorr/meta/deps.yml"]
-    )
-    assert cs.meta == {"janitorr"}
+    cs = services_from_changed_paths(["ansible/roles/containers/dozzle/meta/deps.yml"])
+    assert cs.meta == {"dozzle"}
     assert cs.services == set()
     assert cs.tasks == set()
     assert cs.broad is False
@@ -477,12 +475,12 @@ def test_template_and_meta_same_service_deploys_and_flags_meta():
     # and records the meta flag too — the combined-push case that used to swallow the meta change.
     cs = services_from_changed_paths(
         [
-            "ansible/roles/containers/janitorr/templates/docker-compose.yml.j2",
-            "ansible/roles/containers/janitorr/meta/deps.yml",
+            "ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
+            "ansible/roles/containers/dozzle/meta/deps.yml",
         ]
     )
-    assert cs.services == {"janitorr"}
-    assert cs.meta == {"janitorr"}
+    assert cs.services == {"dozzle"}
+    assert cs.meta == {"dozzle"}
 
 
 # review-M1: the deploy path used to evaluate the tasks/meta defer-and-alert ONLY inside
@@ -496,11 +494,11 @@ def test_deferred_alerts_combined_push_flags_other_services_meta():
     cs = services_from_changed_paths(
         [
             "ansible/roles/containers/prometheus/templates/prometheus.yml.j2",
-            "ansible/roles/containers/janitorr/meta/deps.yml",
+            "ansible/roles/containers/dozzle/meta/deps.yml",
         ]
     )
     assert cs.services == {"prometheus"}
-    assert deferred_service_alerts(cs, cs.services) == (set(), {"janitorr"})
+    assert deferred_service_alerts(cs, cs.services) == (set(), {"dozzle"})
 
 
 def test_deferred_alerts_combined_push_flags_other_services_tasks():
@@ -519,8 +517,8 @@ def test_deferred_alerts_same_service_meta_rode_the_redeploy():
     # graph), so its bundled meta change needs no alert — the remainder is empty.
     cs = services_from_changed_paths(
         [
-            "ansible/roles/containers/janitorr/templates/docker-compose.yml.j2",
-            "ansible/roles/containers/janitorr/meta/deps.yml",
+            "ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
+            "ansible/roles/containers/dozzle/meta/deps.yml",
         ]
     )
     assert deferred_service_alerts(cs, cs.services) == (set(), set())
@@ -529,10 +527,8 @@ def test_deferred_alerts_same_service_meta_rode_the_redeploy():
 def test_deferred_alerts_docs_only_branch_flags_full_sets():
     # The no-services branch passes deployed=set(): a meta-only (or tasks-only) push flags the
     # whole set, preserving the original defer-and-alert behavior.
-    cs = services_from_changed_paths(
-        ["ansible/roles/containers/janitorr/meta/deps.yml"]
-    )
-    assert deferred_service_alerts(cs, set()) == (set(), {"janitorr"})
+    cs = services_from_changed_paths(["ansible/roles/containers/dozzle/meta/deps.yml"])
+    assert deferred_service_alerts(cs, set()) == (set(), {"dozzle"})
 
 
 def test_deferred_alerts_mixed_tasks_and_meta_remainders():
