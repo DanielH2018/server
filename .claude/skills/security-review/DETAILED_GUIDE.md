@@ -141,8 +141,9 @@ These risks are minimal in a pure Ansible/Docker infrastructure repo but apply t
 | Path | What to look for |
 |------|-----------------|
 | `ansible/vars/secrets.yml` | Must be SOPS-encrypted (first line should be `sops:`) |
-| `ansible/roles/containers/*/templates/*.j2` | No hardcoded secrets |
-| `containers/*/docker-compose.yml` | Read-only reference — flag if it contains plaintext secrets |
+| `ansible/roles/k8s/*/templates/*.j2` | **Main surface.** No hardcoded secrets; also privileged/hostPath/hostNetwork pods, over-broad RBAC, missing `securityContext`, secrets in env/ConfigMaps, IngressRoutes skipping the `authelia` middleware |
+| `ansible/roles/setup/k3s/` | Cluster RBAC, the read-only ServiceAccount |
+| `ansible/roles/containers/*/templates/*.j2` | No hardcoded secrets (daniel-pi tier; skip `archive/`) |
 | `ansible/inventory/group_vars/all.yml` | No secrets, only non-sensitive vars |
 | `ansible/inventory/host_vars/` | No secrets |
 | `scripts/*.py` | Input sanitisation, no hardcoded credentials |

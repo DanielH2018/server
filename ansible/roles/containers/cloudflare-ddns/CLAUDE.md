@@ -17,16 +17,17 @@ See repo-root `CLAUDE.md` for shared conventions.
   the compose) — the public, Cloudflare-proxied A records that track the homelab's dynamic IP.
 - **Manually-created, un-managed record — `*.local.<domain>` (grey-cloud / DNS-only):** a
   second, more-specific wildcard in the Cloudflare zone answers every `*.local.<domain>` name with
-  the server's LAN IP (`10.0.0.161`) directly (verified: `dig +short foo.local.<domain> @1.1.1.1`
-  → `10.0.0.161`). It is **not** managed by this role or any IaC — it's a hand-created zone entry
+  the cluster ingress VIP (`10.0.0.240`) directly (verified 2026-08-14: `dig +short
+  foo.local.<domain> @1.1.1.1` → `10.0.0.240`; it was repointed from the retired Docker edge
+  `10.0.0.161` during the k3s migration). It is **not** managed by this role or any IaC — it's a hand-created zone entry
   and a load-bearing piece of the split-horizon / WireGuard remote-access design
   (`docs/wireguard-private-homelab-access.md`): over the tunnel, `*.local` names resolve straight to
-  the LAN without Cloudflare's edge. Low-risk (10.0.0.161 is RFC1918, unroutable from the internet,
+  the LAN without Cloudflare's edge. Low-risk (10.0.0.240 is RFC1918, unroutable from the internet,
   so it bypasses nothing — CrowdSec/Authelia still gate the proxied edge), but recorded here so it
   isn't an orphan: nothing catches it being changed/deleted in the Cloudflare dashboard, and a
-  future operator has no other record of why it exists. Pi-hole's `dnsmasq.yml.j2`
-  (`address=/local.<domain>/{{ server_ip }}`) is the LAN-side twin for the documented client
-  configs. **Do not "fix" the internal-IP disclosure by deleting it without first migrating those
+  future operator has no other record of why it exists. Pi-hole's LAN-side twin is now
+  `ansible/roles/k8s/pihole/templates/configmap.yaml.j2`, which pins its `local.<domain>`
+  wildcard to `k3s_metallb_ingress_vip` (not the rendering host's `server_ip`). **Do not "fix" the internal-IP disclosure by deleting it without first migrating those
   WireGuard/split-DNS clients** — it's intentional infrastructure, not a leak.
 - **`wireguard.<domain>` inherits DDNS via CNAME flattening (don't misread it as stale):** the
   `wireguard.<domain>` record is a **grey-cloud (DNS-only) CNAME to the apex** — but a `dig +short

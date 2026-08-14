@@ -63,7 +63,8 @@ metadata) — it survives an in-place upgrade, but that is what a backup must pr
    Reboot if the kernel changed.
 
 2. Safety net — do both if possible:
-   - Confirm a fresh **Kopia backup** of the Docker volume data completed.
+   - Confirm a fresh **Longhorn volume backup to B2** completed (Kopia is retired — see
+     `docs/longhorn-backup-tiering.md`). On `daniel-pi`, confirm `pi-peer-backup` ran.
    - LVM rollback point (only if the VG has free space):
      ```bash
      sudo vgs                       # look at the VFree column
@@ -157,8 +158,10 @@ metadata) — it survives an in-place upgrade, but that is what a backup must pr
 - **LVM snapshot** (if created in Phase 0): boot from a live USB / rescue and
   `lvconvert --merge /dev/ubuntu-vg/root-snap`, then reboot. (Snapshot must not have
   filled up.)
-- **No snapshot:** reinstall 24.04 (or 22.04) clean, restore Docker volume data from
-  Kopia, then `ansible-playbook ansible/deploy.yml` to rebuild every service.
+- **No snapshot:** reinstall 24.04 (or 22.04) clean, then rebuild. On a cluster node that
+  means restoring Longhorn volumes from their B2 backups
+  (`docs/longhorn-disaster-recovery.md`) and re-running `ansible/k3s-bringup.yml` +
+  `ansible/deploy.yml`; on the Pi, `ansible/deploy.yml -e target=daniel-pi`.
 
 ## Follow-ups
 

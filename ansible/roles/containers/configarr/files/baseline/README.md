@@ -3,7 +3,7 @@
 Read-only snapshot of Sonarr's manually-managed **"Anime"** quality profile, captured
 2026-07-16 when the `configarr` role was introduced. Configarr does **not** apply these files;
 they document the bespoke scheme so it is reviewable/trackable in git without Configarr taking
-ownership of it. The live definitions remain in Sonarr's DB (Kopia-backed).
+ownership of it. The live definitions remain in Sonarr's DB (on its Longhorn PVC, backed up to B2).
 
 - `anime-profile.json` — the full profile as returned by `GET /api/v3/qualityprofile`
   (allowed qualities, `minFormatScore`/`cutoff`, and every custom-format score).

@@ -44,8 +44,11 @@ Issue every dispatch in a single message so they run concurrently (one agent per
 see the `dispatching-parallel-agents` skill; 4–6 parallel reviewers is normal here). Each agent prompt
 must include:
 - its **scope** (the area's surface);
-- the **repo conventions** — `containers/` is generated/read-only, so cite the
-  `ansible/roles/containers/<svc>/templates/` source, never `containers/`;
+- the **repo conventions** — nearly every service is a k3s workload, so cite the
+  `ansible/roles/k8s/<svc>/templates/` source; for the Pi's Docker services cite
+  `ansible/roles/containers/<svc>/templates/`, never the generated `containers/` tree
+  (which is untracked and exists only on the Pi). `roles/containers/archive/` is retired
+  code — out of scope;
 - its **domain don't-re-flag list** (from step 2) + the verify-first discipline;
 - the **falsify-before-flag rule**: cite the specific `file:line` that makes a finding true, and cite
   the `file:line` of the defense when clearing one — a comment, a reassuring name (`*_valid`,

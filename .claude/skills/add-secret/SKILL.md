@@ -22,7 +22,7 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
    for inspection — confirm the key isn't already present. If it is, stop and tell the user.
 
 2. **Classify the tier** (this changes how you add it):
-   - **pinned** (`kopia_password`, `authelia_storage_encryption_key`, and similar break-glass
+   - **pinned** (`authelia_storage_encryption_key` and similar break-glass
      keys): **DO NOT** `sops set` these — rotating/altering them is a DANGER procedure with
      data-loss risk. Stop and point the user at the `pinned` runbook in `docs/secret-rotation.md`.
    - **auto** — locally generated, no external coupling (e.g. a push token). Safe to generate.
