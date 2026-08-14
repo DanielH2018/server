@@ -1,0 +1,57 @@
+---
+# autofix-bridge on k8s (Phase F drain): the containerized *arr remediation sidecar,
+# running the SAME files/autofix.py as the Docker role shipped (staged from the
+# containers role, never forked). The host plane — the hourly disk-prune cron — stays
+# on daniel-server: it prunes that host's Docker daemon, which is not portable.
+
+- name: Create the staging directory
+  tags: [config]
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/autofix-bridge
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Stage autofix.py on the node
+  tags: [config]
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/roles/containers/autofix-bridge/files/autofix.py"
+    dest: /etc/rancher/k3s/autofix-bridge/autofix.py
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: autofix_bridge_script
+
+- name: Render the script ConfigMap manifest
+  tags: [config]
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      k3s kubectl -n {{ k8s_namespace }} create configmap autofix-bridge-script
+      --from-file=autofix.py=/etc/rancher/k3s/autofix-bridge/autofix.py
+      --dry-run=client -o yaml > /etc/rancher/k3s/autofix-bridge/configmap.yaml
+    executable: /bin/bash
+  become: true
+  changed_when: autofix_bridge_script is changed
+
+- name: Apply the script ConfigMap
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/autofix-bridge/configmap.yaml
+  become: true
+  register: autofix_bridge_cm_apply
+  changed_when: "'configured' in autofix_bridge_cm_apply.stdout or 'created' in autofix_bridge_cm_apply.stdout"
+
+- name: Deploy autofix-bridge to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: autofix-bridge
+    manifests_rollout: autofix-bridge
+    manifests_files:
+      - deployment.yaml
+    manifests_secret_files:
+      - env-secret.yaml

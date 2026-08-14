@@ -1,0 +1,75 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autofix-bridge
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # One remediation actor at a time: the candidate-grace streaks are in-process, and two
+  # pods could each independently act on the same queue item.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: autofix-bridge
+  template:
+    metadata:
+      labels:
+        app: autofix-bridge
+      annotations:
+        checksum/autofix-script: "{{ (autofix_bridge_script | default({})).checksum | default('unstaged') }}"
+    spec:
+      enableServiceLinks: false
+      # Off daniel-server for the same reason as the monitor-bridge twin: the drain and
+      # its cold boot must not take the remediation loop down alongside the Docker estate.
+      nodeSelector:
+        kubernetes.io/hostname: daniel-box
+      securityContext:
+        runAsUser: {{ puid }}
+        runAsGroup: {{ pgid }}
+        runAsNonRoot: true
+      automountServiceAccountToken: false
+      containers:
+        - name: autofix-bridge
+          image: {{ autofix_bridge_k8s_image }}
+          command: ["python", "/app/autofix.py"]
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          envFrom:
+            - secretRef:
+                name: autofix-bridge-env
+          # autofix.py touches /tmp/heartbeat after every completed cycle; a stale mtime
+          # means the loop HUNG. Same contract as the Docker healthcheck+autoheal pair.
+          livenessProbe:
+            exec:
+              command:
+                - python3
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/heartbeat').st_mtime<1000 else 1)"
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            failureThreshold: 3
+          volumeMounts:
+            - name: script
+              mountPath: /app
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      volumes:
+        - name: script
+          configMap:
+            name: autofix-bridge-script
+        - name: tmp
+          emptyDir: {}

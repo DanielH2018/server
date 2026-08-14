@@ -1,0 +1,59 @@
+---
+# monitor-bridge on k8s (Phase F drain): the metric/API half of the bridge, running
+# the SAME files/check.py as the Docker remnant (single source of truth — staged from
+# the containers role, never forked). The remnant keeps only the five checks that read
+# daniel-server host state files; this twin skips them via CHECKS_SKIP.
+
+- name: Create the staging directory
+  tags: [config]
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/monitor-bridge
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Stage check.py on the node
+  tags: [config]
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/roles/containers/monitor-bridge/files/check.py"
+    dest: /etc/rancher/k3s/monitor-bridge/check.py
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: monitor_bridge_script
+
+# check.py is Jinja-hostile (PromQL selectors carry {…} braces), so it becomes a
+# ConfigMap via kubectl --from-file — the terraria-stats/claude-otel pattern.
+- name: Render the script ConfigMap manifest
+  tags: [config]
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      k3s kubectl -n {{ k8s_namespace }} create configmap monitor-bridge-script
+      --from-file=check.py=/etc/rancher/k3s/monitor-bridge/check.py
+      --dry-run=client -o yaml > /etc/rancher/k3s/monitor-bridge/configmap.yaml
+    executable: /bin/bash
+  become: true
+  changed_when: monitor_bridge_script is changed
+
+- name: Apply the script ConfigMap
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/monitor-bridge/configmap.yaml
+  become: true
+  register: monitor_bridge_cm_apply
+  changed_when: "'configured' in monitor_bridge_cm_apply.stdout or 'created' in monitor_bridge_cm_apply.stdout"
+
+- name: Deploy monitor-bridge to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: monitor-bridge
+    manifests_rollout: monitor-bridge
+    manifests_files:
+      - deployment.yaml
+    manifests_secret_files:
+      - env-secret.yaml

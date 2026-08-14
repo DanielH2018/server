@@ -1,0 +1,5 @@
+---
+# The cluster home of autofix-bridge's containerized *arr remediation loop (Phase F
+# drain). The host plane (the disk-prune cron) stays on daniel-server with the Docker
+# daemon it prunes — see the containers role.
+autofix_bridge_k8s_image: python:3.14-alpine

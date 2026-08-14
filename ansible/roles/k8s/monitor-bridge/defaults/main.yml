@@ -1,0 +1,9 @@
+---
+# The cluster twin of monitor-bridge (Phase F drain). Same check.py as the Docker
+# remnant — the split is CHECKS_SKIP here / CHECKS_ONLY there, so the two can't drift.
+monitor_bridge_k8s_image: python:3.14-alpine
+
+# The five checks that read daniel-server host state files; the Docker remnant owns
+# them (its CHECKS_ONLY is exactly this list) and this twin skips them. Kept as one
+# var so the cutover commit that flips the remnant references the same source.
+monitor_bridge_host_state_checks: gitops_alive,gitops_status,pi_peers,disk_prune,renovate_alive

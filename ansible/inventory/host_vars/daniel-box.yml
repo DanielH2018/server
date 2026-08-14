@@ -562,6 +562,15 @@ containers_list:
   # in-cluster (claude-otel prometheus job terraria-stats), so no port/route derives.
   - name: terraria-stats
     platform: k8s
+  # Phase F drain (2026-08-14): the bridge twins. monitor-bridge runs every metric/API
+  # check (same check.py as the Docker remnant, split by CHECKS_SKIP/CHECKS_ONLY — the
+  # remnant keeps only the five daniel-server host-state-file checks); autofix-bridge is
+  # the *arr remediation loop (its disk-prune host cron stays with daniel-server's
+  # Docker daemon). Neither has a route — both are pushers.
+  - name: monitor-bridge
+    platform: k8s
+  - name: autofix-bridge
+    platform: k8s
   # Slice-7 Phase D (2026-08-10, slice-7-phase-d-scrutiny.md): SMART monitoring. The
   # collector DaemonSet adds this host's never-monitored NVMe; daniel-server's Docker
   # collector pushes into the same web API as a spoke until the Phase F join. UI behind

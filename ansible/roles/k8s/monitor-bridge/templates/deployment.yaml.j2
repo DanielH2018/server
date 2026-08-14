@@ -1,0 +1,92 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitor-bridge
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  # One evaluator at a time: the streak/hysteresis state (grace cycles, n8n failure
+  # streaks) is in-process, and two pods pushing the same tokens would interleave
+  # contradictory verdicts.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: monitor-bridge
+  template:
+    metadata:
+      labels:
+        app: monitor-bridge
+      annotations:
+        # Recreate the pod when check.py's source changes — the script is not a manifest,
+        # so the manifests role's own change detection never sees it.
+        checksum/check-script: "{{ (monitor_bridge_script | default({})).checksum | default('unstaged') }}"
+    spec:
+      enableServiceLinks: false
+      # Stays off daniel-server so the drain (and its eventual cold boot) never takes the
+      # alerting brain down with the thing it is alerting on.
+      nodeSelector:
+        kubernetes.io/hostname: daniel-box
+      securityContext:
+        runAsUser: {{ puid }}
+        runAsGroup: {{ pgid }}
+        runAsNonRoot: true
+      automountServiceAccountToken: false
+      containers:
+        - name: monitor-bridge
+          image: {{ monitor_bridge_k8s_image }}
+          command: ["python", "/app/check.py"]
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          envFrom:
+            - secretRef:
+                name: monitor-bridge-env
+          # check.py touches /tmp/heartbeat after every completed cycle; a stale mtime
+          # means the loop HUNG (death alone exits the pod). Same contract as the Docker
+          # healthcheck+autoheal pair — here a failing liveness recreates the pod.
+          livenessProbe:
+            exec:
+              command:
+                - python3
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/heartbeat').st_mtime<1000 else 1)"
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            failureThreshold: 3
+          volumeMounts:
+            - name: script
+              mountPath: /app
+              readOnly: true
+            - name: credentials
+              mountPath: /etc/bridge-credentials
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 96Mi
+      volumes:
+        - name: script
+          configMap:
+            name: monitor-bridge-script
+        - name: credentials
+          secret:
+            secretName: monitor-bridge-env
+            defaultMode: 0400
+            items:
+              - key: ha_token
+                path: ha_token
+              - key: b2_probe_application_key # gitleaks:allow — a Secret item NAME, not a value
+                path: b2_probe_application_key
+        - name: tmp
+          emptyDir: {}
+      priorityClassName: homelab-critical
