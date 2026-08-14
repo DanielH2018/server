@@ -92,7 +92,7 @@ the Configarr Sync monitor doesn't false-DOWN before the first daily cron tick.
 ## Refreshing the Anime baseline snapshot
 ```bash
 uv run python scripts/probe.py arr sonarr "/api/v3/qualityprofile" --json \
-  | jq '.[]|select(.name=="Anime")' > ansible/roles/containers/configarr/files/baseline/anime-profile.json
+  | jq '.[]|select(.name=="Anime")' > ansible/roles/k8s/configarr/files/baseline/anime-profile.json
 ```
 
 ## Editing
@@ -106,6 +106,6 @@ uv run python scripts/probe.py arr sonarr "/api/v3/qualityprofile" --json \
   the k8s role also runs a one-off `configarr-deploy` Job so the edit syncs immediately.
 - Verify a sync: `kubectl -n homelab logs job/configarr-deploy` (or the latest
   `configarr-…` CronJob pod) — a healthy run lists the managed CFs and reports no errors.
-- Unit tests: `uv run pytest ansible/roles/containers/configarr/files`.
+- Unit tests: `uv run pytest ansible/roles/k8s/configarr/files`.
 - `templates/docker-compose.yml.j2` is a frozen rollback artifact — it no longer deploys and
   Renovate ignores it.

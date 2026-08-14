@@ -27,7 +27,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/k8s/monitor-bridge/files",
   "ansible/roles/k8s/autofix-bridge/files",
   "ansible/roles/setup/fake_remux/files",
-  "ansible/roles/containers/configarr/files",
+  "ansible/roles/k8s/configarr/files",
   "ansible/roles/k8s/configarr/files",             # cluster-side configarr health-reader logic
   "ansible/roles/k8s/janitorr/files",              # cluster-side janitorr health-reader logic
   "ansible/roles/setup/fake_remux/files",          # generic {ts,ok,msg} state-file pusher
