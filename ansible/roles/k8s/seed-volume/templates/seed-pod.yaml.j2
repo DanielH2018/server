@@ -7,6 +7,14 @@ metadata:
   labels:
     app: seed-volume
 spec:
+{% if seed_volume_node | default('') %}
+  # Pinned to the node this claim is already attached to ({{ seed_volume_node }}), resolved
+  # from its VolumeAttachment. An RWO volume attaches to one node at a time, so a seed pod
+  # anywhere else cannot start — it wedges in ContainerCreating on a Multi-Attach error and
+  # fails the play. Absent on a first seed, when nothing holds the volume yet.
+  nodeSelector:
+    kubernetes.io/hostname: {{ seed_volume_node }}
+{% endif %}
   # Never restart. If the sleep dies the copy is already broken, and a restart would silently
   # present an empty-looking pod to a play that is waiting to stream into it.
   restartPolicy: Never
