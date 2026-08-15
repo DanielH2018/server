@@ -1,0 +1,24 @@
+---
+# The second backup target. Longhorn has supported more than one since v1.8.0, and a volume
+# picks its target through its own spec.backupTargetName — RecurringJob has no target field,
+# so daily-backup and weekly-backup keep scheduling exactly as before and each volume's
+# backups simply land wherever it points.
+#
+# Named `r2` rather than replacing `default`: `default` stays B2's, so the routing lists in
+# defaults/main.yml are the only thing that decides where a volume goes, and emptying
+# k3s_longhorn_r2_volumes returns everything to B2 without touching this object.
+#
+# Armed independently of B2. k3s_longhorn_backup_armed is the incident lever for B2's
+# transaction caps; R2 has its own allowance and its own failure modes, so one being blanked
+# must not blank the other. Same enforcement semantics though — a disarmed run writes an
+# empty backupTargetURL rather than leaving whatever is live.
+apiVersion: longhorn.io/v1beta2
+kind: BackupTarget
+metadata:
+  name: r2
+  namespace: longhorn-system
+spec:
+  backupTargetURL: "{% if k3s_longhorn_r2_armed | bool %}s3://{{ r2_bucket }}@{{ k3s_longhorn_r2_region }}/{{ k3s_longhorn_r2_backup_prefix }}{% endif %}"
+  credentialSecret: longhorn-r2
+  # Seconds, rendered as the duration string the CR wants. See k3s_longhorn_r2_poll_interval.
+  pollInterval: "{{ k3s_longhorn_r2_poll_interval }}s"

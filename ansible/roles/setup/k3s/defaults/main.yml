@@ -208,6 +208,45 @@ k3s_longhorn_weekly_backup_retain: 4
 # PVC names; the reconcile task swaps the volume's recurring-job group label. A PVC
 # recreated from the `longhorn` StorageClass reverts to daily until the next deploy — drift
 # in the over-backed-up direction, caught by the reconcile rerun.
+# ── Cloudflare R2: the second backup target ──────────────────────────────────────────────
+# Longhorn has supported more than one BackupTarget since v1.8.0; this cluster reached
+# v1.12.1 on 2026-08-15. A volume is routed by its OWN spec.backupTargetName, and
+# RecurringJob carries no target field — so daily-backup and weekly-backup keep working
+# unchanged and simply follow each volume to wherever it points. Nothing below changes how
+# any volume is scheduled, only where its backups land.
+#
+# R2 is here for the axis B2 ran out of, not for capacity: 10M Class B operations/month and
+# ZERO egress, against B2's 2,500/day Class B allowance whose exhaustion on 2026-08-15 took
+# the entire backup plane down and made a restore drill read as data loss. R2's free storage
+# is 10 GB against ~8.2 GB of live volume data, so it could not hold everything anyway.
+k3s_longhorn_r2_armed: true
+
+# R2's region component is literally "auto" and the account-specific part is the endpoint
+# host. Deliberately NOT derived the way k3s_longhorn_b2_region is derived from the Kopia
+# endpoint: R2 shares no configuration with Kopia, so a derivation would invent a coupling
+# that does not exist and would break the moment either side moved.
+k3s_longhorn_r2_region: auto
+k3s_longhorn_r2_backup_prefix: longhorn
+
+# 0 for the same reason B2 is 0 — see k3s_longhorn_backupstore_poll_interval. A poll costs a
+# metadata GET per volume per retained backup, and a target that starts failing retries far
+# faster than its interval, so the failure itself burns the allowance. R2 would absorb it
+# comfortably (~333k Class B/day available against a 300s poll's ~43k), which makes this
+# conservatism rather than necessity — but it is the right default to start from, and the
+# only cost is UI staleness between nightlies. Raise deliberately.
+k3s_longhorn_r2_poll_interval: 0
+
+# The volumes whose restore path must not be rate-limited: the TLS material the whole edge
+# depends on, the SSO store behind every authenticated route, and the two home-automation
+# stores that are slow and error-prone to rebuild by hand. Small, config-shaped, and exactly
+# the set worth putting on a target with free egress. Names are namespace/pvcName, matching
+# k3s_longhorn_weekly_volumes below.
+k3s_longhorn_r2_volumes:
+  - homelab/traefik-acme
+  - homelab/authelia-config
+  - homelab/home-assistant-config
+  - homelab/zigbee2mqtt-data
+
 k3s_longhorn_weekly_volumes:
   - homelab/code-server-config
   - homelab/jellyfin-config
