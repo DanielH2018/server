@@ -481,11 +481,17 @@ def k8s_image_diff(local: str, origin: str, svc: str) -> str:
 def deploy_k8s(services: set[str], timeout: float) -> None:
     """Deploy k8s services by tag. The rollout gate lives INSIDE the role.
 
-    No health-poll phase here on purpose: roles/k8s/manifests already runs
-    apply -> `rollout status --timeout` -> assert_stable.yml (a post-Available soak that
-    hard-fails on a restart-count delta or a readiness shortfall). Polling again would
-    duplicate it, and containers_for() — the Docker gate's input — returns [] for a k8s
-    service, which is exactly the 2026-08-08 configarr false-rollback.
+    No health-poll phase here on purpose: the play already runs apply (roles/k8s/manifests)
+    -> `rollout status --timeout` (roles/k8s/rollout-drain) -> a post-Available soak
+    (post_tasks/k8s_stabilise_gate.yml) that hard-fails on a restart-count delta or a
+    readiness shortfall. Polling again would duplicate it, and containers_for() — the Docker
+    gate's input — returns [] for a k8s service, which is exactly the 2026-08-08 configarr
+    false-rollback.
+
+    The wait and the soak moved out of roles/k8s/manifests in 5eea64e6, when rollouts were
+    batched and the stabilisation window deferred to end-of-play; the sequence above is
+    unchanged, but assert_stable.yml is no longer on this path (claude-otel still imports it
+    as its own variant, since it rolls itself).
     """
     tags = ",".join(sorted(services))
     log(f"deploying k8s services: {tags} (timeout {timeout:.0f}s)")

@@ -110,7 +110,8 @@ zigbee_ext_pan_id: [221, 187, 17, 34, 51, 68, 85, 102]
 # qualified name on all ~33 routes that follow for no isolation this homelab needs.
 k8s_namespace: homelab
 # How long a k8s role holds after `rollout status` returns before declaring the deploy healthy
-# (roles/k8s/manifests/tasks/assert_stable.yml). `rollout status` returns on Available, which
+# (post_tasks/k8s_stabilise_gate.yml; also claude-otel's own assert_stable.yml, which rolls
+# itself). `rollout status` returns on Available, which
 # READINESS alone satisfies, so a container killed by a failing LIVENESS probe reports a clean
 # deploy and then crashloops — observed 2026-08-07 with kube-state-metrics. Must exceed a probe's
 # initialDelaySeconds + failureThreshold x periodSeconds; the slowest in the repo is ~35s.

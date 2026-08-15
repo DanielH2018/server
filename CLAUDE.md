@@ -42,7 +42,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `check.py` **first** — mature setup, most are handled |
-| A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment — the role needs a `checksum/config` pod annotation. See `roles/k8s/monitor-bridge/templates/deployment.yaml.j2` for the pattern. |
+| A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart at `roles/k8s/manifests/tasks/main.yml:112`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
 | A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
 | A host can't decrypt secrets | `## Secrets Management` → *Onboarding a host to SOPS* |
 | Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract* |

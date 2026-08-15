@@ -298,7 +298,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     shipping is a different signal Loki Log Ingestion still surfaces. `LOKI_DEPENDENT` is guarded by
     a test against the live `CHECKS` so it can't drift.)
   - **Cluster Prometheus Reachable** (a `vector(1)` probe against the **k3s cluster's** Prometheus
-    at `prometheus-k8s.local.<domain>` — a SECOND instance on daniel-box, not the one `PROM_URL`
+    over its in-cluster Service DNS name — a SECOND instance on daniel-box, not the one `PROM_URL`
     points at. Its own gate rather than an arm of `PROM_DEPENDENT`, because they are two instances
     on two hosts reached by two paths: the Docker Prometheus being up says nothing about whether
     the cluster one is, and a gate that isn't watching a check's real source reports confidence it

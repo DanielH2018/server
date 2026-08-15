@@ -61,7 +61,7 @@ jobs:
           #
           # What this step proves is narrow: a bare `docker run` with no env, config or volumes
           # shows the image starts, not that the service works. The real gate is post-merge —
-          # roles/k8s/manifests runs `rollout status` + assert_stable, and for auto-deploy-eligible
+          # the play runs `rollout status` + the stabilisation gate, and for auto-deploy-eligible
           # services gitops_deploy rolls back and holds on failure. A ref added to _SKIP_BARE_BOOT
           # still has that backstop, but ONLY if the service is auto-deploy eligible; a denylisted
           # one is merged by Renovate and applied by hand, with this step its last automated check.

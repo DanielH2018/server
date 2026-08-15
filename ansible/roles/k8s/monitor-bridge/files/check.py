@@ -303,9 +303,11 @@ R2_FREE_ACTIONS = frozenset({"DeleteObject", "DeleteBucket", "AbortMultipartUplo
 # an ingress route. Their health is a Kubernetes API property, so kube-state-metrics is the only
 # thing that can express it as something this bridge can query.
 #
-# Reached over the cluster ingress at prometheus-k8s.local.<domain>, whose IngressRoute admits only
-# /api/v1/query. Not the ClusterIP (unreachable from this host) and not the node's :9090, which is
-# pinned to the cluster node's loopback. Empty = disabled (stays up), like N8N_API_KEY.
+# Reached over the in-cluster Service DNS name (see templates/env-secret.yaml.j2) — the bridge has
+# run in-cluster since 2026-08-14, so there is no VIP, no Traefik and no gate in this probe's path.
+# It went over the ingress while the bridge was on daniel-server; that route is now
+# prometheus.local.<domain>, the `-k8s` suffix having retired on 2026-08-15.
+# Empty = disabled (stays up), like N8N_API_KEY.
 CLUSTER_PROM_URL = _env("CLUSTER_PROMETHEUS_URL", "").rstrip("/")
 
 # Which estate the host-health checks mean, when one Prometheus holds two (slice 3, B5).

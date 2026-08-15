@@ -5,7 +5,7 @@ Longhorn holds every PVC in the cluster, supports **no downgrade**, and since v1
 verification, not a single version bump.
 
 The install path is `kubectl apply -f .../<version>/deploy/longhorn.yaml`
-(`roles/setup/k3s/tasks/main.yml`, task *Install Longhorn*), which is upstream's supported upgrade
+(`roles/setup/k3s/tasks/longhorn.yml`, task *Install Longhorn*), which is upstream's supported upgrade
 path for a minor bump. Everything below therefore goes through Ansible — a hand-run `kubectl apply`
 would deploy the same manifest while leaving the repo as a stale source of truth.
 

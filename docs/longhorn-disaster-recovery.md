@@ -1,4 +1,4 @@
-# Longhorn Disaster Recovery — restore from B2
+# Longhorn Disaster Recovery — restore from B2 (and R2)
 
 Recover the cluster's PVC state when **daniel-box is gone** (dead disk, lost host,
 total-loss event). Successor to [`kopia-disaster-recovery.md`](kopia-disaster-recovery.md)
@@ -12,6 +12,34 @@ an off-box recovery recipient), so the capability survives a total loss.
 > it (8edb11cd), and the residual hidden object versions were hard-purged 08-14 (941
 > versions, 4.66 GB) — the bucket now holds `longhorn/` only. The `kopia_b2_*` secrets that
 > survive are the B2 *account* credentials, which render the `longhorn-b2` target Secret.
+
+## Two targets: B2 is the default, R2 holds the crown jewels
+
+Since 2026-08-15 (`5ef0dc8e`) there are **two** backup targets, and a restore has to know
+which one holds the volume it wants. Routing is per-volume, via `spec.backupTargetName`:
+
+| Target | Longhorn name | Holds | Credential Secret | Rendered from |
+|---|---|---|---|---|
+| Backblaze B2 | `default` | everything not listed below | `longhorn-b2` | `kopia_b2_key_id` / `kopia_b2_application_key` |
+| Cloudflare R2 | `r2` | the four volumes below | `longhorn-r2` | `r2_access_key_id` / `r2_secret_access_key` / `r2_account_id` |
+
+The R2 set (`k3s_longhorn_r2_volumes`) is `homelab/traefik-acme`,
+`homelab/authelia-config`, `homelab/home-assistant-config`, `homelab/zigbee2mqtt-data` —
+the TLS material every route depends on, the SSO store behind every authenticated route,
+and the two home-automation stores that are slow to rebuild by hand. They are on **both**
+targets' worth of protection in the sense that matters: a B2 account-level failure (cap,
+billing, key revocation) does not take them with it.
+
+To list what is actually routed where, rather than trusting this table:
+
+```bash
+kubectl -n longhorn-system get volumes.longhorn.io \
+  -o custom-columns=VOL:.metadata.name,PVC:.status.kubernetesStatus.pvcName,TARGET:.spec.backupTargetName
+```
+
+Arming is independent per target (`k3s_longhorn_backup_armed`, `k3s_longhorn_r2_armed`),
+and step 3's cap caveat applies to B2 only — R2's free tier has no transaction cap, and its
+own headroom is watched by monitor-bridge's **R2 Free Tier Headroom** monitor.
 
 ## The off-site recovery kit (carried over from the kopia era — still the recovery spine)
 
@@ -66,18 +94,31 @@ the per-volume map and each exclusion's rationale:
    `ansible/.sops.yaml`, `sops updatekeys` from a host that can decrypt (or use the
    off-box recovery key if no host survives), commit, pull.
 2. **Cluster bring-up**: `uv run ansible-playbook ansible/k3s-bringup.yml`. Set
-   `k3s_longhorn_backup_armed: true` so the backup target arms (it renders the
-   `longhorn-b2` credential Secret from `kopia_b2_key_id`/`kopia_b2_application_key` and
-   points the target at the bucket).
+   `k3s_longhorn_backup_armed: true` so the B2 target arms (it renders the `longhorn-b2`
+   credential Secret from `kopia_b2_key_id`/`kopia_b2_application_key` and points the
+   target at the bucket), and `k3s_longhorn_r2_armed: true` for the R2 target — the four
+   volumes in the table above restore from *that* one, so a B2-only bring-up leaves them
+   with nothing to restore from.
 3. **Wait for the backupstore sync** — `kubectl -n longhorn-system get backuptarget`
-   `AVAILABLE true`, then Backup CRs appear (poll interval is 1h; force it in the
-   Longhorn UI with Backup → Sync). Mind the B2 transaction caps: a full-restore day is
-   exactly when the cap can bite again, and the storm ratchet is documented in
-   [`b2-transaction-cap-monitoring-gaps.md`](b2-transaction-cap-monitoring-gaps.md) — if
-   restores start 403ing, stop, blank the target (`k3s_longhorn_backup_armed: false` +
-   deploy), and resume after the 00:00 UTC reset.
+   `AVAILABLE true`, then Backup CRs appear. **The poll interval is `0`** — polling is
+   OFF (`k3s_longhorn_backupstore_poll_interval`, set to 0 on 2026-08-15 because even the
+   1h setting exhausted B2's Class-B cap by 11:00), so the sync will not happen on its
+   own: force it in the Longhorn UI with Backup → Sync.
+
+   Mind the B2 transaction caps: a full-restore day is exactly when the cap can bite
+   again, and the storm ratchet is documented in
+   [`b2-transaction-cap-monitoring-gaps.md`](b2-transaction-cap-monitoring-gaps.md).
+
+   **A cap denial does NOT surface as a 403 here.** The denied metadata GET arrives as
+   `cannot find volume.cfg in backupstore` — which reads exactly like the backup is
+   missing, i.e. like data loss, at the worst possible moment. That is what the first
+   drill hit (below). If you see it, check the caps in the B2 console **before**
+   concluding anything about the backup: stop, blank the target
+   (`k3s_longhorn_backup_armed: false` + deploy), and resume after the 00:00 UTC reset.
 4. **Restore volumes BEFORE any `deploy.yml`** — deploying first would provision fresh
-   empty PVCs under the same names. In the Longhorn UI (or per-backup `Volume` CRs with
+   empty PVCs under the same names. Restore from the target that holds each volume (the
+   table above); in the Longhorn UI the backups are listed per target, so the four R2
+   volumes will not appear under `default`. In the UI (or per-backup `Volume` CRs with
    `spec.fromBackup`): restore each backed-up volume under its original PV name, then use
    Longhorn's **Create PV/PVC** with the original namespace/PVC names
    (`homelab/<pvc-name>` — the names in `longhorn-backup-tiering.md`'s table).
@@ -92,6 +133,15 @@ the per-volume map and each exclusion's rationale:
 
 kopia's three-tier assurance (snapshot → weekly verify → monthly restore drill) is not
 yet rebuilt for Longhorn: backups are verified to *complete* (the backup-plane heartbeat)
-but not to *restore*. Until a drill exists, this runbook is exercised only by real
-incidents — treat a first restore as untested and lean on the 7-day hidden-version
-window (`daysFromHidingToDeleting: 7` on the bucket) if something looks wrong mid-restore.
+but not to *restore*.
+
+**The first restore drill ran on 2026-08-15, against `traefik-acme`, and it failed** — not
+on the data, but on a B2 Class-B cap already at 100%, which surfaced as
+`cannot find volume.cfg in backupstore` (see step 3). The restore path itself is therefore
+still unproven end to end, and the lesson worth carrying is the masked failure mode rather
+than any conclusion about the backups.
+
+Nothing yet watches whether the drill keeps running — a drill that silently stops looks
+identical to one that was never scheduled. Until that exists, treat a first restore as
+untested and lean on the 7-day hidden-version window
+(`daysFromHidingToDeleting: 7` on the bucket) if something looks wrong mid-restore.
