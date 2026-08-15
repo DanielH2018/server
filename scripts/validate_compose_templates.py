@@ -22,7 +22,6 @@ render or produces invalid YAML.
 from __future__ import annotations
 
 import hashlib
-import re
 import sys
 
 import yaml
@@ -136,66 +135,12 @@ CAP_DROP_EXEMPT: dict = {
 # drops the line, the way ical-proxy's indent drifted) can't omit it unnoticed.
 NO_NEW_PRIV_EXEMPT: dict = {}
 
-# The INTENTIONAL watchtower auto-update pool: mutable-tag services deliberately left for
-# watchtower to update unattended (disposable / stateless / trivially rolled back). A new
-# mutable-tag service is flagged until it either opts out (watchtower.enable=false) or is added
-# here on purpose — so the karakeep/janitorr "stateful service silently swept into auto-update"
-# drift can't recur. Version-pinned tags need no entry. Curated from the real render.
-# A service may not be BOTH here and opted out — find_autoupdate_optout_conflicts fails that.
-WATCHTOWER_AUTOUPDATE: frozenset = frozenset(
-    {
-        # Infra/monitoring sidecars + stateless/disposable services on rolling tags, intentionally
-        # kept current by watchtower (the critical/stateful tier is version-pinned + Renovate-managed
-        # instead — those use immutable tags so they don't appear here).
-        "autoheal",
-        "autokuma",
-        "watchtower",
-        "dozzle",
-        "glances",
-        "ddns-direct",
-        "ddns-proxied",
-        "peanut",
-        "grafana",
-        "loki",
-        "promtail",
-        "prometheus",
-        "node-exporter",
-        "homepage",
-        "healthchecks",
-        "bento-pdf",
-        "littlelink",
-        "speedtest",
-        "code-server",
-        "freshrss",
-        # nginx:alpine feed-cache sidecar (freshrss role) — stateless cache in front of
-        # freshrss, its content lives in the regenerable feed_cache named volume.
-        "feed-cache",
-        # python:3.14-alpine stdlib-only script sidecars — no state beyond bind-mounted
-        # code, trivially rolled back; a base-image patch bump is exactly what we want
-        # applied unattended.
-        "monitor-bridge",
-        "autofix-bridge",
-        "terraria-stats",
-        "terraria",
-        # influxdb:2.9 — non-critical SMART-history time-series store (scrutiny role);
-        # documented to stay on a pinned-major tag with watchtower patching within 2.9
-        # (see scrutiny/CLAUDE.md), unlike the critical/stateful tier above it.
-        "scrutiny-influxdb",
-    }
-)
-
-# Channel tags whose content changes under the same string (vs a version-bearing tag).
-_MUTABLE_TAGS = {
-    "latest",
-    "release",
-    "stable",
-    "main",
-    "master",
-    "dev",
-    "edge",
-    "nightly",
-    "rolling",
-}
+# The mutable-tag update-policy guard (WATCHTOWER_AUTOUPDATE, find_undeclared_update_policy,
+# find_autoupdate_optout_conflicts) was removed on 2026-08-15: watchtower retired 2026-08-09,
+# so nothing auto-updates any more. `docker_deploy.yml` deploys with `pull: policy`, which
+# never re-pulls a mutable tag already present locally, so a `latest` tag now ages in place
+# rather than drifting — the risk the guard existed to catch has no actor. An image refresh is
+# the deliberate `deploy.yml --tags <svc> -e common_pull=always`.
 
 
 def _cap_drops_all(spec: dict) -> bool:
@@ -250,96 +195,6 @@ def find_missing_no_new_privileges(docs, exempt=frozenset()) -> list:
             ):
                 missing.append(svc)
     return missing
-
-
-# Bare-major/major.minor, optionally with word suffixes: 2, 3.5, 3.14-alpine, 2-slim.
-# Three-plus numeric components (1.2.3, 2.1.2-alpine, v1.5.6-ls350) do NOT match — those
-# pin an exact release; one or two components get re-pointed by upstream every release.
-_BARE_MAJOR_TAG = re.compile(r"^v?\d+(\.\d+)?(-[a-z][a-z0-9]*)*$")
-
-
-def _is_mutable_tag(image: str) -> bool:
-    """True if the image reference uses a mutable channel tag (content can change under the same
-    string): untagged (implicit :latest), latest/release/stable/main/..., a channel word joined
-    to a component by a hyphen on EITHER side — a ``-stable`` suffix (jvm-stable) OR a ``master-``
-    prefix (master-web/master-collector) — a tag with NO digits at all (``alpine``,
-    ``vanilla-latest``: pure words are variant/channel names, never exact releases) — or a
-    bare-major/major.minor numeric tag, with or without word suffixes (``2``, ``3.5``,
-    ``3.14-alpine``), that upstream re-points at every new release under the same string
-    (e.g. couchdb:3, portainer-ce:2.39-alpine). A fully version-bearing tag (1.2.3, v1.41.0,
-    2026.05.0, 2.1.2-alpine, ...-lsNN) is not — three-plus numeric components pin an exact
-    release."""
-    ref = image.split("@", 1)[0]  # drop any digest
-    # repo:tag split on the LAST colon, unless that colon is a registry port (has a '/' after)
-    if ":" in ref and "/" not in ref.rsplit(":", 1)[1]:
-        tag = ref.rsplit(":", 1)[1]
-    else:
-        tag = ""  # no tag -> implicit :latest
-    if tag == "":
-        return True
-    low = tag.lower()
-    return (
-        low in _MUTABLE_TAGS
-        or any(low.endswith("-" + m) for m in _MUTABLE_TAGS)
-        or any(low.startswith(m + "-") for m in _MUTABLE_TAGS)
-        or not any(c.isdigit() for c in low)
-        or bool(_BARE_MAJOR_TAG.match(low))
-    )
-
-
-def _has_watchtower_optout(spec: dict) -> bool:
-    labels = spec.get("labels")
-    key = "com.centurylinklabs.watchtower.enable"
-    if isinstance(labels, list):
-        return any(
-            isinstance(lbl, str) and lbl.replace(" ", "") == key + "=false"
-            for lbl in labels
-        )
-    if isinstance(labels, dict):
-        return str(labels.get(key, "")).strip().lower() == "false"
-    return False
-
-
-def find_undeclared_update_policy(docs, autoupdate=frozenset()) -> list:
-    """Return service names on a MUTABLE image tag that have neither opted out of watchtower
-    (enable=false) nor been declared in ``autoupdate`` — forcing an explicit update-policy
-    choice so a stateful service can't be silently swept into watchtower's auto-update pool."""
-    undeclared = []
-    for doc in docs:
-        services = doc.get("services") if isinstance(doc, dict) else None
-        if not isinstance(services, dict):
-            continue
-        for svc, spec in services.items():
-            if not isinstance(spec, dict) or svc in autoupdate:
-                continue
-            image = spec.get("image")
-            if (
-                isinstance(image, str)
-                and _is_mutable_tag(image)
-                and not _has_watchtower_optout(spec)
-            ):
-                undeclared.append(svc)
-    return undeclared
-
-
-def find_autoupdate_optout_conflicts(docs, autoupdate=frozenset()) -> list:
-    """Return service names BOTH declared in ``autoupdate`` AND carrying the watchtower opt-out
-    label. The two contradict (the label wins at runtime), and the stale allowlist entry
-    short-circuits ``find_undeclared_update_policy`` — so if the label is ever dropped in a
-    refactor the service silently rejoins the auto-update pool with no CI signal."""
-    conflicts = []
-    for doc in docs:
-        services = doc.get("services") if isinstance(doc, dict) else None
-        if not isinstance(services, dict):
-            continue
-        for svc, spec in services.items():
-            if (
-                isinstance(spec, dict)
-                and svc in autoupdate
-                and _has_watchtower_optout(spec)
-            ):
-                conflicts.append(svc)
-    return conflicts
 
 
 def check_container(host_ctx: dict, ci: dict) -> str | None:
@@ -404,22 +259,6 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
             f"{', '.join(nnp_missing)}"
         )
 
-    undeclared = find_undeclared_update_policy(docs, WATCHTOWER_AUTOUPDATE)
-    if undeclared:
-        return (
-            "mutable image tag with no update-policy decision — add "
-            "`com.centurylinklabs.watchtower.enable=false` to opt out (pinned/Renovate tier), "
-            "or add the service to WATCHTOWER_AUTOUPDATE if it's intentionally auto-updated: "
-            f"{', '.join(undeclared)}"
-        )
-
-    conflicts = find_autoupdate_optout_conflicts(docs, WATCHTOWER_AUTOUPDATE)
-    if conflicts:
-        return (
-            "in WATCHTOWER_AUTOUPDATE but ALSO carries watchtower.enable=false — the label "
-            "wins, so the allowlist entry is stale and would mask a later-dropped label; "
-            f"remove from WATCHTOWER_AUTOUPDATE: {', '.join(conflicts)}"
-        )
     return None
 
 

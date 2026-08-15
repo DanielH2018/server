@@ -17,7 +17,6 @@ almost none of these.
 import json
 import subprocess
 import sys
-from pathlib import Path
 
 import probe
 
@@ -197,43 +196,9 @@ def check_authelia():
     return OK, f"healthy ({json.loads(body).get('status', '?')}), OIDC material present"
 
 
-# --- §9.6: Portainer environments --------------------------------------------
-# Portainer keeps environments in its own BoltDB, so a second host's agent runs
-# happily while Portainer has never heard of it.
-
-
-def check_portainer_hosts():
-    ip = container_ip("portainer")
-    key, err = secret("portainer_api_key")
-    if not key:
-        return FAIL, err
-    status, body = get(
-        f"http://{ip}:9000/api/endpoints", f'header = "X-API-Key: {key}"\n'
-    )
-    if status != 200:
-        return FAIL, f"HTTP {status} — portainer_api_key rejected"
-    envs = json.loads(body)
-    names = [e["Name"] for e in envs]
-    # Count rather than match by name: the local environment is named for the Portainer
-    # install ("primary"), not for its host, so only the agent-added ones carry hostnames.
-    hosts = inventory_hosts()
-    if len(envs) < len(hosts):
-        return FAIL, (
-            f"{len(envs)} environment(s) for {len(hosts)} host(s) "
-            f"({', '.join(names)}) — add the missing agent"
-        )
-    unreachable = [e["Name"] for e in envs if e.get("Status") != 1]
-    if unreachable:
-        return FAIL, "environment(s) down: " + ", ".join(unreachable)
-    return OK, f"{len(envs)} environment(s) up: {', '.join(names)}"
-
-
-def inventory_hosts():
-    """Hostnames with a host_vars file, i.e. the hosts this repo deploys to. Used
-    only to tell 'Portainer knows about every host' from 'it knows about one'."""
-    host_vars = Path(__file__).resolve().parent.parent / "ansible/inventory/host_vars"
-    return sorted(p.stem for p in host_vars.glob("*.yml") if not p.stem.startswith("_"))
-
+# §9.6 was Portainer environments, removed with Portainer itself on 2026-08-09
+# (slice-7 Phase B). The numbering below is left alone so §9.x keeps matching
+# ansible/README.md.
 
 CHECKS = [
     ("9.1", "Uptime-Kuma admin", check_kuma_monitors),
@@ -245,7 +210,6 @@ CHECKS = [
     ("9.3", "jellyfin API key", check_jellyfin_key),
     *[("9.4", name, (lambda n: lambda: check_ha_token(n))(name)) for name in HA_TOKENS],
     ("9.5", "Authelia", check_authelia),
-    ("9.6", "Portainer environments", check_portainer_hosts),
 ]
 
 
