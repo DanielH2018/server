@@ -91,17 +91,17 @@ def metallb_vip():
 
 
 def k8s_endpoint(hostname):
-    """(base_url, curl --resolve pin) for a cluster -k8s route. Split-horizon DNS: this
-    host's shell resolves -k8s names to the Docker Traefik (which 404s them), so curl
-    pins the name to the MetalLB ingress VIP; containers get the right answer from
-    Pi-hole and need no pin."""
+    """(base_url, curl --resolve pin) for a cluster route. This host's resolver bypasses
+    the LAN DNS, so a `.local` name does not resolve to the cluster edge from a shell
+    here; curl pins it to the MetalLB ingress VIP instead. Containers get the right
+    answer from Pi-hole and need no pin."""
     host = f"{hostname}.local.{sops_extract('domain')}"
     return f"https://{host}", f"{host}:443:{metallb_vip()}"
 
 
 def loki_endpoint():
     """The cluster Loki (Phase D.2 KL4)."""
-    return k8s_endpoint("loki-homelab-k8s")
+    return k8s_endpoint("loki-homelab")
 
 
 # claude_ha_token lives in the SOPS-encrypted secrets file (repo-root relative).
@@ -151,7 +151,7 @@ def prom_targets_url(base):
 def prom_endpoint():
     """The cluster prometheus via its query-only IngressRoute (the Docker prometheus —
     the old resolve_ip("prometheus") target — retired 2026-08-14 with the drain)."""
-    return k8s_endpoint("prometheus-k8s")
+    return k8s_endpoint("prometheus")
 
 
 def loki_labels_url(base):
@@ -855,19 +855,19 @@ def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint):
     ns = _build_parser().parse_args(args)
     cmd = ns.cmd
     if cmd == "metric":
-        base, pin = k8s_endpoint("prometheus-k8s")
+        base, pin = k8s_endpoint("prometheus")
         return [curl_argv(prom_query_url(base, ns.promql), resolve=pin)]
     if cmd == "targets":
-        base, pin = k8s_endpoint("prometheus-k8s")
+        base, pin = k8s_endpoint("prometheus")
         return [curl_argv(prom_targets_url(base), resolve=pin)]
     if cmd == "loki-labels":
-        base, pin = k8s_endpoint("loki-homelab-k8s")
+        base, pin = k8s_endpoint("loki-homelab")
         return [curl_argv(loki_labels_url(base), resolve=pin)]
     if cmd == "loki-query":
-        base, pin = k8s_endpoint("loki-homelab-k8s")
+        base, pin = k8s_endpoint("loki-homelab")
         return [curl_argv(loki_query_url(base, ns.logql, ns.limit), resolve=pin)]
     if cmd == "scrutiny":
-        base, pin = k8s_endpoint("scrutiny-k8s")
+        base, pin = k8s_endpoint("scrutiny")
         return [curl_argv(scrutiny_url(base), resolve=pin)]
     if cmd == "pi":
         return [curl_argv(pi_url(ns.subpath))]

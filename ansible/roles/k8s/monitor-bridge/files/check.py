@@ -208,6 +208,26 @@ B2_PROBE_APPLICATION_KEY = _env_file("B2_PROBE_APPLICATION_KEY")
 # went 9.5 hours unactioned.
 B2_PROBE_INTERVAL_S = float(_env("B2_PROBE_INTERVAL_S", "1800"))
 
+# B2 free-tier STORAGE headroom — the other half of the B2 budget, billed separately from the
+# transaction cap b2_reachable watches. kopia reported this as `kopia_b2_billable_bytes`; that
+# metric retired with kopia on 2026-08-10 and nothing replaced it, so the storage half went
+# unwatched at exactly the point Longhorn became its only client. Two Grafana panels kept querying
+# the dead gauge and rendered blank while looking authoritative.
+#
+# Listing versions is the only way to see the real number: hidden and unfinished versions bill as
+# stored bytes and do NOT appear in a plain object listing, which is how the cap filled unnoticed
+# before (hidden kopia bytes wedged retention deletes, 2026-08-13).
+B2_STORAGE_CAP_BYTES = float(_env("B2_STORAGE_CAP_BYTES", str(10 * 1000**3)))
+B2_STORAGE_MAX_PCT = float(_env("B2_STORAGE_MAX_PCT", "80"))
+# Daily rather than B2_PROBE_INTERVAL_S: a full listing costs one Class C call per 1000 versions,
+# and a check that guards a budget must not be a meaningful part of the spend. At ~5k versions
+# that is ~5 calls/day against a 2500/day Class C allowance.
+B2_STORAGE_INTERVAL_S = float(_env("B2_STORAGE_INTERVAL_S", "86400"))
+# Stop paging rather than walk forever if the bucket is far larger than expected. Hitting this is
+# itself reported, because a truncated sum under-reports usage — the direction that reads as
+# headroom we do not have.
+B2_STORAGE_MAX_PAGES = int(_env("B2_STORAGE_MAX_PAGES", "50"))
+
 # Cloudflare R2 free-tier headroom, via the GraphQL Analytics API. Cloudflare offers NO spending
 # cap or usage limit on R2 — on any plan — so the only boundary is one we watch and act on. The
 # Usage-Based Billing notification that would do this natively needs a Pro plan; this account is on
@@ -297,7 +317,9 @@ CLUSTER_PROM_URL = _env("CLUSTER_PROMETHEUS_URL", "").rstrip("/")
 # PROMETHEUS_URL points at the cluster, restarts / oom / cpu / janitorr / targets silently widen
 # from "daniel-server's containers" to "every container in the homelab", and would start naming k8s
 # pods as offenders. The remaining PROM_DEPENDENT checks that DON'T read traefik_* are pinned
-# (disk/cert/memory/restarts/oom/cpu/targets/ups/promtail_dropped). Since E2 the cluster edge also
+# (cert/restarts/oom/cpu/targets/ups/promtail_dropped). Disk and memory are the two exceptions:
+# they are HOST checks, and pinning them to one origin would leave the other host's root disk and
+# memory unwatched — so they group `by (origin)` and report the worst, covering both. Since E2 the cluster edge also
 # emits traefik_* (traefik-k8s job), so the unpinned traefik/cert checks now deliberately read the
 # CLUSTER edge's metrics.
 #
@@ -340,6 +362,15 @@ def origin_sel(*matchers):
     if PROM_ORIGIN:
         parts.append(PROM_ORIGIN)
     return "{%s}" % ", ".join(parts) if parts else ""
+
+
+def _origin_name(labels):
+    """The host a per-origin series belongs to, for naming an offender in an alert message.
+
+    The Docker Prometheus has no `origin` label at all (external_labels are applied on
+    remote-write, never to local queries), so an empty one means "the only host there is".
+    """
+    return labels.get("origin") or "host"
 
 
 # The floor below which the deployment series is treated as missing rather than healthy. THE
@@ -721,19 +752,23 @@ def parse_duration(s):
 
 
 def check_disk():
+    # Percentage computed per series, then grouped by origin, so avail and size always come from
+    # the SAME host and device. The previous form took max(avail) and max(size) as two separate
+    # queries: fine while one estate reported, but once daniel-server and daniel-box both landed
+    # in this Prometheus it paired one host's avail with the other's size, and a filling disk on
+    # the smaller host produced an arbitrarily wrong percentage rather than a high one.
     breaching = []
     for mp in DISK_MOUNTPOINTS:
         sel = '{mountpoint="%s"}' % mp
-        # max() collapses any duplicate device/fstype series for the same mountpoint to one
-        # deterministic value (duplicates share the value), so prom_scalar's result[0] order
-        # can't matter.
-        avail = prom_scalar("max(node_filesystem_avail_bytes" + sel + ")")
-        size = prom_scalar("max(node_filesystem_size_bytes" + sel + ")")
-        if avail is None or size is None or size == 0:
+        vec = prom_vector(
+            "max by (origin) (100 * (1 - node_filesystem_avail_bytes%s"
+            " / node_filesystem_size_bytes%s))" % (sel, sel)
+        )
+        if not vec:
             return False, "metric unavailable for %s" % mp
-        used_pct = 100.0 * (1 - avail / size)
-        if used_pct > DISK_MAX_PCT:
-            breaching.append("%s %.0f%%" % (mp, used_pct))
+        for labels, used_pct in vec:
+            if used_pct > DISK_MAX_PCT:
+                breaching.append("%s %s %.0f%%" % (_origin_name(labels), mp, used_pct))
     if breaching:
         return False, "disk over %.0f%%: %s" % (DISK_MAX_PCT, ", ".join(breaching))
     return True, "all mounts under %.0f%%" % DISK_MAX_PCT
@@ -751,14 +786,24 @@ def check_cert():
 def check_mem():
     # Host memory pressure only. Per-container OOM kills are reported (with the
     # offending container named) by check_oom — single source of truth.
-    avail = prom_scalar("node_memory_MemAvailable_bytes")
-    total = prom_scalar("node_memory_MemTotal_bytes")
-    if avail is None or total is None or total == 0:
+    #
+    # Per-origin for the same reason as check_disk: the bare prom_scalar form took result[0],
+    # so which host it reported was an ordering artifact of Prometheus's response once both
+    # estates emitted node_memory_*. The division pairs each host's avail with its own total.
+    vec = prom_vector(
+        "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)"
+    )
+    if not vec:
         return False, "memory metric unavailable"
-    used_pct = 100.0 * (1 - avail / total)
-    if used_pct > MEM_MAX_PCT:
-        return False, "mem %.0f%% (> %.0f%%)" % (used_pct, MEM_MAX_PCT)
-    return True, "mem %.0f%%" % used_pct
+    breaching = [
+        "%s %.0f%%" % (_origin_name(labels), pct)
+        for labels, pct in vec
+        if pct > MEM_MAX_PCT
+    ]
+    if breaching:
+        return False, "mem over %.0f%%: %s" % (MEM_MAX_PCT, ", ".join(breaching))
+    worst = max(pct for _, pct in vec)
+    return True, "mem %.0f%%" % worst
 
 
 def _top_offenders(vector, label, predicate):
@@ -1866,6 +1911,144 @@ def check_loki_reachable():
 
 
 _b2_probe = {"ts": 0.0, "ok": True, "msg": "not yet probed"}
+_b2_storage = {"ts": 0.0, "ok": False, "msg": "not yet probed"}
+
+
+def b2_authorize_data():
+    """The parsed b2_authorize_account response. Raises on any transport/HTTP failure."""
+    token = base64.b64encode(
+        ("%s:%s" % (B2_PROBE_KEY_ID, B2_PROBE_APPLICATION_KEY)).encode()
+    ).decode()
+    return _get_json(B2_PROBE_URL, headers={"Authorization": "Basic %s" % token})
+
+
+def b2_storage_api(auth):
+    """(api_url, authorization_token, bucket_id) from an authorize response.
+
+    v3 groups the storage endpoint under `apiInfo.storageApi` where v1/v2 had `apiUrl` at the top
+    level, so both shapes are read — the same version-tolerance b2_authorize applies to its own
+    fields. `bucketId` is present when the application key is bucket-scoped, which this one is;
+    without it there is no bucket to sum and the caller reports that rather than guessing.
+    """
+    storage = (auth.get("apiInfo") or {}).get("storageApi") or {}
+    api_url = storage.get("apiUrl") or auth.get("apiUrl")
+    bucket_id = storage.get("bucketId") or (auth.get("allowed") or {}).get("bucketId")
+    return api_url, auth.get("authorizationToken"), bucket_id
+
+
+def b2_sum_versions(pages):
+    """(total_bytes, version_count) over an iterable of b2_list_file_versions payloads.
+
+    Sums `contentLength` across ALL versions, including hidden ones and the unfinished large-file
+    parts that a plain object listing omits — those bill as stored bytes, and omitting them is the
+    specific way this number reads lower than the invoice.
+    """
+    total = 0
+    count = 0
+    for page in pages:
+        for f in page.get("files") or []:
+            size = f.get("contentLength")
+            if size is None:
+                size = f.get("size")
+            total += int(size or 0)
+            count += 1
+    return total, count
+
+
+def b2_storage_verdict(used_bytes, versions, truncated, cap=None, max_pct=None):
+    """(ok, msg) for B2 storage headroom against the free-tier cap."""
+    cap = B2_STORAGE_CAP_BYTES if cap is None else cap
+    max_pct = B2_STORAGE_MAX_PCT if max_pct is None else max_pct
+    if not cap:
+        return False, "B2 storage cap not configured"
+    pct = 100.0 * used_bytes / cap
+    detail = "%.2f GB of %.0f GB (%.0f%%), %d versions" % (
+        used_bytes / 1000**3,
+        cap / 1000**3,
+        pct,
+        versions,
+    )
+    if truncated:
+        # Under-reporting is the dangerous direction, so a truncated walk is a failure, not a
+        # smaller number reported confidently.
+        return (
+            False,
+            "B2 storage listing truncated at %d pages — %s is a FLOOR, not the total"
+            % (
+                B2_STORAGE_MAX_PAGES,
+                detail,
+            ),
+        )
+    if pct > max_pct:
+        return False, "B2 storage over %.0f%%: %s" % (max_pct, detail)
+    return True, "B2 storage %s" % detail
+
+
+def b2_storage_usage(now=None):
+    """Throttled B2 storage-headroom probe. (ok, msg).
+
+    SUCCESSES are cached for B2_STORAGE_INTERVAL_S and a failure is not, the
+    EMAIL_PROBE_INTERVAL_S idiom rather than b2_reachable's cache-both: a listing failure is far
+    more likely to be a transient 5xx than a cap, and b2_reachable already owns the cap signal, so
+    there is no spend spiral to protect against here. Empty credentials -> disabled (stays up).
+    """
+    if not B2_PROBE_KEY_ID or not B2_PROBE_APPLICATION_KEY:
+        return True, "B2 storage check disabled (no credentials)"
+    now = now if now is not None else time.time()
+    if _b2_storage["ok"] and now - _b2_storage["ts"] < B2_STORAGE_INTERVAL_S:
+        return _b2_storage["ok"], "%s (checked %.0fh ago)" % (
+            _b2_storage["msg"],
+            (now - _b2_storage["ts"]) / 3600,
+        )
+    try:
+        api_url, token, bucket_id = b2_storage_api(b2_authorize_data())
+        if not api_url or not token:
+            raise RuntimeError("B2 auth response carried no storage apiUrl/token")
+        if not bucket_id:
+            raise RuntimeError(
+                "B2 key is not bucket-scoped (no bucketId) — cannot size a bucket"
+            )
+        pages, truncated = b2_list_versions(api_url, token, bucket_id)
+        used, versions = b2_sum_versions(pages)
+        ok, msg = b2_storage_verdict(used, versions, truncated)
+    except Exception as e:
+        ok, msg = False, "B2 storage probe failed: %s" % e
+    _b2_storage["ts"] = now
+    _b2_storage["ok"] = ok
+    _b2_storage["msg"] = msg
+    return ok, msg
+
+
+def b2_list_versions(api_url, token, bucket_id):
+    """(pages, truncated) — every b2_list_file_versions page for the bucket.
+
+    Paginates on the (nextFileName, nextFileId) cursor B2 returns; a page with neither is the
+    last. Stops at B2_STORAGE_MAX_PAGES and says so, rather than looping on a cursor that never
+    clears.
+    """
+    pages = []
+    start_name = start_id = None
+    for _ in range(B2_STORAGE_MAX_PAGES):
+        payload = {"bucketId": bucket_id, "maxFileCount": 1000}
+        if start_name:
+            payload["startFileName"] = start_name
+        if start_id:
+            payload["startFileId"] = start_id
+        page = _post_json(
+            "%s/b2api/v3/b2_list_file_versions" % api_url.rstrip("/"),
+            payload,
+            headers={"Authorization": token},
+        )
+        pages.append(page)
+        start_name = page.get("nextFileName")
+        start_id = page.get("nextFileId")
+        if not start_name and not start_id:
+            return pages, False
+    return pages, True
+
+
+def check_b2_storage():
+    return b2_storage_usage()
 
 
 def b2_authorize():
@@ -2280,14 +2463,20 @@ def check_cluster_targets():
     otel-collector and otel-collector-internal going down was silent — and those two carry the
     only copy of Claude Code's session/token/cost telemetry.
 
-    `origin=""` selects series where the label is ABSENT, which is exactly the cluster-native set:
-    daniel-server's remote-written series all carry it. The same floor logic as its sibling, so an
-    emptied `up` reads as UNKNOWN rather than as nothing being wrong.
+    `origin!="daniel-server"` is everything the pinned sibling does NOT cover: cluster-native
+    series, whose `origin` label is absent (PromQL treats an absent label as empty, so `!=` on a
+    non-empty value matches them), plus daniel-box's own. The earlier `origin=""` caught only the
+    first, which left `up{job="node",origin="daniel-box"}` matching NEITHER check — daniel-box's
+    node-exporter could die watched by nothing. Complementary selectors, so every `up` series in
+    this Prometheus belongs to exactly one of the two checks. The same floor logic as its sibling,
+    so an emptied `up` reads as UNKNOWN rather than as nothing being wrong.
     """
     if not CLUSTER_PROM_URL:
         return True, "cluster target check disabled (no CLUSTER_PROMETHEUS_URL)"
     vec = prom_vector(
-        'up{origin=""}', base=CLUSTER_PROM_URL, source="cluster prometheus"
+        'up{origin!="daniel-server"}',
+        base=CLUSTER_PROM_URL,
+        source="cluster prometheus",
     )
     return targets_verdict(vec, CLUSTER_TARGETS_MIN)
 
@@ -2482,6 +2671,7 @@ CHECKS = [
     ),
     ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
     ("r2_usage", _env("KUMA_PUSH_R2_USAGE", ""), check_r2_usage),
+    ("b2_storage", _env("KUMA_PUSH_B2_STORAGE", ""), check_b2_storage),
     ("k8s_workloads", _env("KUMA_PUSH_K8S_WORKLOADS", ""), check_k8s_workloads),
     ("cluster_targets", _env("KUMA_PUSH_CLUSTER_TARGETS", ""), check_cluster_targets),
 ]
@@ -2535,9 +2725,13 @@ LOKI_DEPENDENT = frozenset({"loki_ingestion"})
 # read green through a nine-and-a-half-hour outage in which B2 refused every request. Those checks
 # were removed 2026-08-10 — kopia is retired, backup moved to Longhorn (see
 # docs/k3s-migration/backup-consolidation-longhorn.md) — leaving this empty. b2_reachable itself
-# stays: Longhorn still needs B2. Kept as infrastructure for any future check that reads B2-backed
-# state via a cron/state-file rather than querying B2 live.
-B2_DEPENDENT = frozenset()
+# stays: Longhorn still needs B2.
+#
+# b2_storage re-populated it on 2026-08-15. It queries B2 live rather than reading a cron's state
+# file, so it does not have the stale-state fault the original five had — but it is gated for the
+# other reason a gate exists: a transaction cap fails BOTH it and b2_reachable, and one root cause
+# must not light two monitors.
+B2_DEPENDENT = frozenset({"b2_storage"})
 
 # Checks that read the CLUSTER Prometheus (daniel-box) rather than the Docker one. Its own gate,
 # not an arm of PROM_DEPENDENT, because they are two instances on two hosts reached by two paths —

@@ -95,8 +95,9 @@ def test_offset_after_fraction():
 
 def test_disk_under_threshold_is_ok(monkeypatch):
     monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
-    # avail 0.5GB of 1GB -> 50% used, under default 90%
-    monkeypatch.setattr(check, "prom_scalar", _seq(0.5e9, 1e9))
+    monkeypatch.setattr(
+        check, "prom_vector", lambda q: [({"origin": "daniel-box"}, 50.0)]
+    )
     ok, msg = check.check_disk()
     assert ok
     assert "under" in msg
@@ -104,19 +105,91 @@ def test_disk_under_threshold_is_ok(monkeypatch):
 
 def test_disk_over_threshold_names_mount(monkeypatch):
     monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
-    # avail 0.05GB of 1GB -> 95% used, over default 90%
-    monkeypatch.setattr(check, "prom_scalar", _seq(0.05e9, 1e9))
+    monkeypatch.setattr(
+        check, "prom_vector", lambda q: [({"origin": "daniel-box"}, 95.0)]
+    )
     ok, msg = check.check_disk()
     assert not ok
     assert "/" in msg
     assert "95" in msg
 
 
-def test_disk_metric_unavailable_alerts(monkeypatch):
-    # check_disk binds BOTH avail and size before the None/zero guard -> feed two values
+def test_disk_names_the_breaching_host_not_the_healthy_one(monkeypatch):
+    """THE BUG THIS PINS (2026-08-15): avail and size were two separate max() queries, so once
+    both estates reported into one Prometheus a full disk on one host could be paired with the
+    other's size. A per-origin percentage keeps each host's numerator with its own denominator,
+    and the alert has to name WHICH host is full to be actionable."""
     monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
-    monkeypatch.setattr(check, "prom_scalar", _seq(None, 1e9))
+    monkeypatch.setattr(
+        check,
+        "prom_vector",
+        lambda q: [
+            ({"origin": "daniel-server"}, 96.0),
+            ({"origin": "daniel-box"}, 24.0),
+        ],
+    )
     ok, msg = check.check_disk()
+    assert not ok
+    assert "daniel-server" in msg
+    assert "daniel-box" not in msg
+
+
+def test_disk_groups_by_origin_so_neither_host_is_unwatched(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+
+    def fake_vector(promql):
+        seen["q"] = promql
+        return [({"origin": "daniel-box"}, 10.0)]
+
+    monkeypatch.setattr(check, "prom_vector", fake_vector)
+    check.check_disk()
+    assert "by (origin)" in seen["q"]
+    # The division must be inside the query, so the two series are paired by Prometheus on all
+    # their labels rather than by two independent aggregates here.
+    assert "node_filesystem_avail_bytes" in seen["q"]
+    assert "node_filesystem_size_bytes" in seen["q"]
+
+
+def test_disk_metric_unavailable_alerts(monkeypatch):
+    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(check, "prom_vector", lambda q: [])
+    ok, msg = check.check_disk()
+    assert not ok
+    assert "unavailable" in msg
+
+
+def test_mem_names_the_breaching_host(monkeypatch):
+    monkeypatch.setattr(
+        check,
+        "prom_vector",
+        lambda q: [
+            ({"origin": "daniel-server"}, 92.0),
+            ({"origin": "daniel-box"}, 30.0),
+        ],
+    )
+    ok, msg = check.check_mem()
+    assert not ok
+    assert "daniel-server" in msg
+
+
+def test_mem_reports_the_worst_host_when_all_are_healthy(monkeypatch):
+    monkeypatch.setattr(
+        check,
+        "prom_vector",
+        lambda q: [
+            ({"origin": "daniel-server"}, 41.0),
+            ({"origin": "daniel-box"}, 63.0),
+        ],
+    )
+    ok, msg = check.check_mem()
+    assert ok
+    assert "63" in msg
+
+
+def test_mem_metric_unavailable_alerts(monkeypatch):
+    monkeypatch.setattr(check, "prom_vector", lambda q: [])
+    ok, msg = check.check_mem()
     assert not ok
     assert "unavailable" in msg
 
@@ -1911,10 +1984,14 @@ def test_cluster_targets_is_cluster_dependent_not_prom_dependent():
     assert "cluster_targets" not in check.PROM_DEPENDENT
 
 
-def test_cluster_targets_selects_only_cluster_native_series(monkeypatch):
-    # origin="" matches series where the label is ABSENT. daniel-server's remote-written series
-    # all carry it, so this is exactly the cluster's own set — without the filter this check would
-    # re-report the 11 targets its sibling already covers.
+def test_cluster_targets_covers_everything_its_sibling_does_not(monkeypatch):
+    """`origin!="daniel-server"` is the complement of check_targets_down's pin, so every `up`
+    series belongs to exactly one of the two checks.
+
+    THE GAP THIS PINS (2026-08-15): the previous `origin=""` matched only series where the label
+    is ABSENT (cluster-native). daniel-box's node-exporter carries `origin="daniel-box"`, so it
+    matched NEITHER check and could have died watched by nothing.
+    """
     seen = {}
 
     def fake_vector(promql, base=None, source="prometheus"):
@@ -1925,7 +2002,7 @@ def test_cluster_targets_selects_only_cluster_native_series(monkeypatch):
     monkeypatch.setattr(check, "prom_vector", fake_vector)
     ok, _ = check.check_cluster_targets()
     assert ok is True
-    assert seen["q"] == 'up{origin=""}'
+    assert seen["q"] == 'up{origin!="daniel-server"}'
     assert seen["base"] == "https://cluster"
 
 
