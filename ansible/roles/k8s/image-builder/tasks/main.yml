@@ -55,6 +55,24 @@
   become: true
   changed_when: true
 
+# The digest the tag resolves to BEFORE the build, so it can be compared with the one after.
+# Every image here is pushed to a mutable tag (`:latest`), which means a rebuild changes what
+# the tag points at while leaving the Deployment spec byte-identical — and a Deployment whose
+# spec has not changed does not roll. Without this comparison a rebuilt image simply never
+# reaches a running pod unless some manifest happened to change in the same play.
+#
+# 404 is expected and not an error: the first ever build of an image has no previous digest.
+- name: Read the pre-build digest of {{ image_builder_name }}
+  tags: [deploy]
+  ansible.builtin.uri:
+    url: "http://{{ k8s_registry_host_ip }}:{{ k8s_registry_port }}/v2/{{ image_builder_name }}/manifests/{{ image_builder_tag }}"
+    method: HEAD
+    headers:
+      Accept: application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json
+    status_code: [200, 404]
+  register: image_builder_digest_before
+  changed_when: false
+
 # A Job's pod template is immutable, so an existing Job cannot be re-applied — and re-applying
 # a COMPLETED one would report success from the previous run's result, which is the failure
 # this whole role exists to make impossible.
@@ -136,3 +154,30 @@
   register: image_builder_tags
   failed_when: image_builder_tag not in (image_builder_tags.json.tags | default([]))
   changed_when: false
+
+- name: Read the post-build digest of {{ image_builder_name }}
+  tags: [deploy]
+  ansible.builtin.uri:
+    url: "http://{{ k8s_registry_host_ip }}:{{ k8s_registry_port }}/v2/{{ image_builder_name }}/manifests/{{ image_builder_tag }}"
+    method: HEAD
+    headers:
+      Accept: application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json
+    status_code: [200]
+  register: image_builder_digest_after
+  changed_when: false
+
+# Play-scoped, like k8s_pending_rollouts and for the same reason: k8s/manifests runs as a
+# separate role include and cannot read this role's variables. It reads this list to decide
+# whether the workload needs rolling even though no manifest changed.
+#
+# A missing digest on either side falls back to "changed", so an unreadable header rolls the
+# workload rather than silently skipping it — the safe direction for a deploy.
+- name: Record the changed image digest for {{ image_builder_name }}
+  tags: [deploy]
+  ansible.builtin.set_fact:
+    # noqa var-naming[no-role-prefix] — deliberately play-scoped, shared with k8s/manifests.
+    k8s_rebuilt_images: >-
+      {{ (k8s_rebuilt_images | default([])) + [image_builder_name] }}
+  when: >-
+    image_builder_digest_before.docker_content_digest | default('') !=
+    image_builder_digest_after.docker_content_digest | default('')
