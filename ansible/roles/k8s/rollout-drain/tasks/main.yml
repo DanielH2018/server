@@ -19,6 +19,17 @@
 # reports every failure in one place, where async would need a fire loop, an async_status poll
 # loop, and its own per-item timeout plumbing to say the same thing.
 #
+# EVERY TASK HERE IS `tags: [always]`, NOT `[deploy]`, AND THAT IS LOAD-BEARING. k8s_batch.yml
+# unions the service tag onto roles/k8s/manifests through `apply:`, so that role's `[deploy]` tasks
+# match `--tags <svc>`. This role gets no such union. Tagged `[deploy]` its tasks were filtered out
+# of every tag-filtered run — which is every gitops-deploy run — so nothing was ever waited on and
+# the stabilisation gate never fired, while the play still reported failed=0. Measured on a real
+# `--tags littlelink` deploy 2026-08-15: ok=94, failed=0, drain executed zero times.
+#
+# `always` is safe rather than over-eager because the tasks are guarded on an empty queue:
+# `--skip-tags deploy` skips the `[deploy]`-tagged queueing task in roles/k8s/manifests, leaving
+# k8s_pending_rollouts empty, and everything below no-ops.
+#
 # NOT `kubectl wait --for=condition=Available`, which looks like the tidy one-task version and is
 # wrong here. Available means `availableReplicas >= replicas - maxUnavailable`; every Deployment in
 # this namespace is single-replica, and the 13 RollingUpdate ones have maxUnavailable 25% -> 0, so
@@ -26,7 +37,7 @@
 # scheduled. Only `rollout status` gates on the new ReplicaSet.
 
 - name: Wait for the queued rollouts to finish
-  tags: [deploy]
+  tags: [always]
   when:
     - k8s_pending_rollouts | default([]) | length > 0
     - not ansible_check_mode
@@ -58,7 +69,7 @@
 # them right after `rollout restart` would capture the OUTGOING pod's counts; the replacement pod
 # starts at zero, so the gate's `after <= before` comparison would pass no matter what happened.
 - name: Snapshot restart counts for the workloads that changed
-  tags: [deploy]
+  tags: [always]
   when:
     - _k8s_drain_watch | length > 0
     - not ansible_check_mode
@@ -79,7 +90,7 @@
 # Same assertion the inline gate made, kept at the point the selector is read: a label that matches
 # nothing reports zero restarts and would sail through the comparison at the end of the play.
 - name: Fail if a pod selector matched no pods
-  tags: [deploy]
+  tags: [always]
   when: not ansible_check_mode
   ansible.builtin.assert:
     that: item.stdout | trim | length > 0
@@ -93,7 +104,7 @@
     label: "{{ item.item.name }}"
 
 - name: Carry the snapshot into the end-of-play stabilisation gate
-  tags: [deploy]
+  tags: [always]
   ansible.builtin.set_fact:
     k8s_stabilise_watch: >-
       {{ (k8s_stabilise_watch | default([]))
@@ -103,6 +114,6 @@
     label: "{{ item.item.name }}"
 
 - name: Clear the pending-rollout queue
-  tags: [deploy]
+  tags: [always]
   ansible.builtin.set_fact:
     k8s_pending_rollouts: []
