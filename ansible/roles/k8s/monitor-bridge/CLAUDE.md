@@ -21,8 +21,9 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 ## At a glance
 - **Image:** `python:3.14-alpine` (stdlib only — no build, no extra deps)
 - **Host:** daniel-box — pinned by `nodeSelector` · **No web UI**, no Authelia
-- **Reaches:** the cluster prometheus via PROMETHEUS_URL
-  (`https://prometheus-k8s.local.<domain>`); Kuma, n8n and the *arrs over the LAN `-k8s` names.
+- **Reaches:** prometheus, Kuma, n8n, the *arrs, scrutiny, HA and Loki over their in-cluster
+  Service names (see `templates/env-secret.yaml.j2`) — no VIP, no Traefik, no gate in a
+  probe's path. The LAN routes it used during the migration are gone, suffix and all.
 - **Depends on:** prometheus (`meta/deps.yml`)
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 
@@ -289,7 +290,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `k8s_workloads_verdict()` is unit-tested; `CLUSTER_DEPENDENT` is guarded against the live
     `CHECKS` and asserted disjoint from the other three skip sets.)
   - **Loki Log Ingestion** (two-arm LogQL freshness against the cluster `loki-homelab` via
-    its ClientIP-gated -k8s route since Phase D.2, `down`
+    its in-cluster Service, `down`
     if EITHER arm is silent — a silently-dead promtail→Loki pipeline (docker-proxy break,
     positions-file corruption, relabel regression) that Loki's `/ready` Kuma probe stays green
     through. **Arm 1 — file-tail union** `sum(count_over_time({job=~"authlog|syslog|traefik"}[3h]))`:

@@ -130,25 +130,19 @@ def test_gate_serves_every_token_router():
 
 def test_gate_stays_out_of_crd_objects():
     """The token's whole safety argument: it lives in a Secret (RBAC-denied to the
-    readonly kubeconfig), never in an IngressRoute. A livesync IngressRoute matching the
-    unsuffixed names would both leak routing back to CRDs and contest the gate's rules."""
-    livesync_route = (
+    readonly kubeconfig), never in an IngressRoute.
+
+    livesync therefore renders NO IngressRoute at all. It used to render one for the `-k8s`
+    names only; when that suffix retired (2026-08-15) the route was deleted rather than
+    collapsed onto the plain name, because a bare `Host(livesync…)` router beside the gate's
+    would break the gate's invariant — that a request without the token matches no router and
+    404s before CouchDB. Re-adding the template puts that hole back.
+    """
+    assert not (
         ANSIBLE / "roles" / "k8s" / "livesync" / "templates" / "ingressroute.yaml.j2"
-    ).read_text()
-    assert "unsuffixed_hostname" not in [
-        line
-        for line in livesync_route.splitlines()
-        if not line.lstrip().startswith(("#", "{#"))
-        and "unsuffixed" in line
-        and "=" in line
-    ], (
-        "livesync's IngressRoute must not claim the unsuffixed names — the gate owns them"
-    )
-    entry = next(c for c in _containers("daniel-box") if c["name"] == "livesync")
-    assert "unsuffixed_hostname" not in entry, (
-        "livesync's inventory entry must not set unsuffixed_hostname — the gate owns "
-        "the unsuffixed names"
-    )
+    ).exists(), "livesync must render no IngressRoute — the token gate owns its names"
+    tasks = (ANSIBLE / "roles" / "k8s" / "livesync" / "tasks" / "main.yml").read_text()
+    assert "ingressroute" not in tasks
 
 
 def test_reverse_bridge_stays_retired():
@@ -162,17 +156,29 @@ def test_reverse_bridge_stays_retired():
     tasks = (ANSIBLE / "roles" / "k8s" / "traefik" / "tasks" / "main.yml").read_text()
     assert "reverse-bridge" not in tasks
     authelia = next(e for e in _containers("daniel-box") if e["name"] == "authelia")
-    assert authelia.get("unsuffixed_hostname") == "auth", (
+    assert authelia.get("hostname") == "auth", (
         "the k8s portal must own the unsuffixed auth name — it is the OIDC issuer "
         "Jellyfin's SSO plugin points at"
     )
 
 
-def test_every_unsuffixed_hostname_belongs_to_a_routed_service():
-    """An unsuffixed_hostname on an entry with no hostname/port renders no IngressRoute at
-    all — the name would resolve (wildcard -> VIP) and then 404 with nothing behind it."""
+def test_dual_hostname_machinery_stays_retired():
+    """Every k8s service answers on exactly ONE name since 2026-08-15.
+
+    `unsuffixed_hostname` existed to give a service a second IngressRoute leg on the plain
+    name its Docker twin had owned, while `hostname` carried the transitional `-k8s` suffix.
+    Docker left both cluster nodes on 2026-08-14, so both halves retired together — the key,
+    the `k8s_hostname_suffix` var, and the macro's second route. Reintroducing either puts
+    two routers on one service again, which is what the whole migration was unwinding.
+    """
     for entry in _containers("daniel-box"):
-        if "unsuffixed_hostname" in entry:
-            assert entry.get("hostname") and entry.get("port"), (
-                f"{entry['name']}: unsuffixed_hostname without a routed hostname/port"
-            )
+        assert "unsuffixed_hostname" not in entry, (
+            f"{entry['name']}: unsuffixed_hostname is retired — `hostname` is the only name"
+        )
+        assert not (entry.get("hostname") or "").endswith("-k8s"), (
+            f"{entry['name']}: the -k8s hostname suffix is retired"
+        )
+    all_vars = (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
+    assert "\nk8s_hostname_suffix:" not in all_vars
+    macro = (ANSIBLE / "templates" / "ingressroute.yml.j2").read_text()
+    assert "unsuffixed_hostname" not in macro

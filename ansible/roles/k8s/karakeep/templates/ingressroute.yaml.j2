@@ -12,7 +12,6 @@
     container_item.port,
     container_item.use_authelia,
     extra_middlewares=['csp-karakeep'],
-    unsuffixed_hostname=container_item.unsuffixed_hostname | default(none),
     bypass_prefixes=container_item.bridge_bypass_prefixes | default([])
   )
 }}

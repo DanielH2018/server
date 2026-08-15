@@ -27,8 +27,8 @@
   ansible.builtin.command:
     cmd: >-
       ssh daniel-pi curl -sk -o /dev/null -w '%{http_code}'
-      --resolve jellyfin-k8s.local.{{ domain }}:443:{{ k3s_metallb_ingress_vip }}
-      https://jellyfin-k8s.local.{{ domain }}/
+      --resolve jellyfin.local.{{ domain }}:443:{{ k3s_metallb_ingress_vip }}
+      https://jellyfin.local.{{ domain }}/
   register: crowdsec_k8s_gate_banned
   changed_when: false
   retries: 8
@@ -55,8 +55,8 @@
   ansible.builtin.command:
     cmd: >-
       ssh daniel-pi curl -sk -o /dev/null -w '%{http_code}'
-      --resolve jellyfin-k8s.local.{{ domain }}:443:{{ k3s_metallb_ingress_vip }}
-      https://jellyfin-k8s.local.{{ domain }}/
+      --resolve jellyfin.local.{{ domain }}:443:{{ k3s_metallb_ingress_vip }}
+      https://jellyfin.local.{{ domain }}/
   register: crowdsec_k8s_gate_unbanned
   changed_when: false
   retries: 8

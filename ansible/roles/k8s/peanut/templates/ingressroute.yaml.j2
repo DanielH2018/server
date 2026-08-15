@@ -5,7 +5,6 @@
     container_item.hostname | default(container_item.name),
     container_item.port,
     container_item.use_authelia,
-    unsuffixed_hostname=container_item.unsuffixed_hostname | default(none)
   )
 }}
 ---

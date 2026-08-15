@@ -70,13 +70,13 @@ def test_k8s_service_maps_to_the_vip_not_the_server():
                 {
                     "name": "bento-pdf",
                     "platform": "k8s",
-                    "hostname": "bento-pdf{{ k8s_hostname_suffix }}",
+                    "hostname": "bento-pdf",
                     "port": 8080,
                 }
             ]
         }
     )
-    assert ("10.0.0.240", "bento-pdf-k8s.local.example.com") in g.entries(s)
+    assert ("10.0.0.240", "bento-pdf.local.example.com") in g.entries(s)
 
 
 def test_service_without_a_port_is_skipped():
@@ -135,19 +135,27 @@ def real():
 def test_auth_portal_is_present(real):
     """authelia moved to k8s at E7 (2026-08-13) and now carries `port`, so it needs no
     hand-written-route scrape — the main containers_list loop finds it like any other k8s
-    service. The LAN login target is the SUFFIXED name: the `.local.` session cookie's
-    `authelia_url` points at `auth-k8s.local.<domain>`, not the bare `auth.local.<domain>`
-    (that unsuffixed name is the public/OIDC-issuer identity, resolved over real DNS, not
-    this Mullvad-DNS-leak workaround). Without it every service resolves but no LAN login
-    can complete, since each protected route redirects here.
+    service. Since the `-k8s` suffix retired (2026-08-15) the LAN login target is the plain
+    `auth.local.<domain>` — the `.local.` session cookie's `authelia_url`. Without it every
+    service resolves but no LAN login can complete, since each protected route redirects
+    here.
     """
-    assert ("10.0.0.240", "auth-k8s.local.daniel-hunter.com") in real
+    assert ("10.0.0.240", "auth.local.daniel-hunter.com") in real
 
 
-def test_k8s_names_are_on_the_vip(real):
-    k8s = {fqdn: ip for ip, fqdn in real if "-k8s.local." in fqdn}
-    assert k8s, "expected at least one -k8s name"
-    assert set(k8s.values()) == {"10.0.0.240"}
+def test_no_k8s_suffixed_names_remain(real):
+    """The transitional `-k8s` suffix retired 2026-08-15 with the last Docker twin. A name
+    reappearing here means an inventory `hostname:` grew the suffix back, which would emit a
+    hosts entry for a hostname no IngressRoute serves."""
+    assert not [fqdn for _, fqdn in real if "-k8s.local." in fqdn]
+
+
+def test_cluster_names_are_on_the_vip(real):
+    cluster = {
+        fqdn: ip for ip, fqdn in real if fqdn.endswith(".local.daniel-hunter.com")
+    }
+    assert cluster, "expected at least one cluster name"
+    assert set(cluster.values()) == {"10.0.0.240"}
 
 
 def test_no_name_appears_twice(real):

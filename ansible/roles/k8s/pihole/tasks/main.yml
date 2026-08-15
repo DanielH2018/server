@@ -1,7 +1,7 @@
 ---
 # Slice 6, B3 (build half). Standing this up unattended is safe by design (D4): the DNS VIP
-# serves nobody until the router's DHCP DNS option flips at cutover, and the web UI hostname
-# carries the -k8s suffix while the Docker copy keeps pihole.<domain>.
+# serves nobody until the router's DHCP DNS option flips at cutover. (The web UI carried a
+# `-k8s` suffix while a Docker copy held pihole.<domain>; both retired 2026-08-14/15.)
 
 - name: Deploy pihole to the cluster
   ansible.builtin.include_role:

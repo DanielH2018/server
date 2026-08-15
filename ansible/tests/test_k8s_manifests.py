@@ -344,9 +344,8 @@ AUTHELIA_BYPASS_ROUTES = {
     # emitted by the ingressroute() macro from each entry's bridge_bypass_prefixes once
     # k8s_public_route flipped. Each reproduces a hole the Docker edge already serves for the
     # same session-less callers; post-B5 those callers arrive at this edge directly.
-    "healthchecks-public-ping": (
-        "Monitored jobs POST /ping/<uuid> with no credentials to the unsuffixed public name."
-    ),
+    # ("healthchecks-public-ping" retired 2026-08-15 with the -k8s suffix: once
+    # `healthchecks-ping` covered the public name too, this was a strict subset of it.)
     "n8n-public-webhook": (
         "External services POST /webhook/ with no session; gating it silently breaks every "
         "registered webhook while the callers keep reporting success."

@@ -64,11 +64,7 @@ spec:
             # value the Docker copy used, and the one two initial_setup crons hardcode. Before
             # cutover it follows the inventory hostname so the -k8s copy shows URLs that work.
             - name: SITE_ROOT
-{% if container_item.unsuffixed_hostname is defined %}
-              value: "https://{{ container_item.unsuffixed_hostname }}.{{ domain }}"
-{% else %}
-              value: "https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
-{% endif %}
+              value: "https://{{ container_item.hostname | default(container_item.name) }}.{{ domain }}"
             # Django rejects any request whose Host header is not listed here with a bare 400,
             # which reads as a Traefik or ingress fault rather than an application setting.
             # The -k8s host is what the k8s copy is reached on today; the public and LAN names

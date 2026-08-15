@@ -17,7 +17,7 @@
             # /api/status-page bypasses Authelia LAN-only on the k8s side.
             widget:
                 type: uptimekuma
-                url: https://uptime-kuma{{ k8s_hostname_suffix }}.local.{{ domain }}
+                url: https://uptime-kuma.local.{{ domain }}
                 slug: containers
         - Pihole:
             icon: pi-hole.png
@@ -38,7 +38,7 @@
             # session-less widget (broke when the slice-7 teardown removed the bridge route).
             widget:
                 type: speedtest
-                url: https://speedtest{{ k8s_hostname_suffix }}.local.{{ domain }}
+                url: https://speedtest.local.{{ domain }}
         - FreshRSS:
             icon: freshrss.png
             href: https://freshrss.{{ domain }}/
@@ -47,7 +47,7 @@
             # -k8s monitoring route, because the native route's Authelia 401s the widget.
             widget:
                 type: freshrss
-                url: https://freshrss{{ k8s_hostname_suffix }}.local.{{ domain }}
+                url: https://freshrss.local.{{ domain }}
                 username: {{ freshrss_username }}
                 password: {{ freshrss_password }}
         - Karakeep:
@@ -59,7 +59,7 @@
             # the widget.
             widget:
                 type: karakeep
-                url: https://karakeep{{ k8s_hostname_suffix }}.local.{{ domain }}
+                url: https://karakeep.local.{{ domain }}
                 key: {{ karakeep_homepage_api_key }}
         - UPS:
             icon: apc.png
@@ -70,13 +70,13 @@
                 # The -k8s monitoring route (ClientIP-gated, no Authelia) — the old
                 # Docker-internal name died with the shared bridge. peanut's own basic
                 # auth (username/password below) is the gate on this path.
-                url: https://peanut{{ k8s_hostname_suffix }}.local.{{ domain }}
+                url: https://peanut.local.{{ domain }}
                 key: {{ nut_ups_name | default('apc-ups') }}
                 username: {{ peanut_username }}
                 password: {{ peanut_password }}
         - Headlamp:
             icon: kubernetes.png
-            href: https://headlamp{{ k8s_hostname_suffix }}.{{ domain }}/
+            href: https://headlamp.{{ domain }}/
             description: Cluster UI
             # k8s-only tile, and the one place this fork diverges from the Docker template
             # beyond the documented server/container drop: Headlamp has no Docker twin, and
@@ -122,13 +122,13 @@
               timezone: {{ tz }}
               integrations:
                 - type: ical
-                  url: https://ical-proxy{{ k8s_hostname_suffix }}.local.{{ domain }}/calendar1.ics
+                  url: https://ical-proxy.local.{{ domain }}/calendar1.ics
                   name: Daniel
                   color: indigo
                   params:
                       showName: true
                 - type: ical
-                  url: https://ical-proxy{{ k8s_hostname_suffix }}.local.{{ domain }}/calendar2.ics
+                  url: https://ical-proxy.local.{{ domain }}/calendar2.ics
                   name: Work
                   color: slate
                   params:
@@ -140,7 +140,7 @@
                   params:
                       showName: true
                 - type: ical
-                  url: https://ical-proxy{{ k8s_hostname_suffix }}.local.{{ domain }}/calendar4.ics
+                  url: https://ical-proxy.local.{{ domain }}/calendar4.ics
                   name: Tasks
                   color: emerald
                   params:
@@ -162,7 +162,7 @@
         description: Mediaserver
         widget:
             type: jellyfin
-            url: https://jellyfin{{ k8s_hostname_suffix }}.local.{{ domain }}
+            url: https://jellyfin.local.{{ domain }}
             key: {{ jellyfin_api_key }}
     - Sonarr:
         icon: sonarr.png
