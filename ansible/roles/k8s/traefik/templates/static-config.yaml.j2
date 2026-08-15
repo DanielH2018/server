@@ -105,8 +105,8 @@ data:
         filename: /etc/traefik-file/livesync-gate.yml
         watch: true
       kubernetesCRD:
-        # Scoped to the workload namespace: Traefik should not pick up an IngressRoute
-        # someone drops in kube-system or longhorn-system.
+        # Scoped to named namespaces: Traefik should not pick up an IngressRoute someone
+        # drops in an arbitrary one (kube-system in particular).
         namespaces:
           - {{ k8s_namespace }}
           # Telemetry stack (claude-otel). A namespace absent from this list is not merely
@@ -118,6 +118,10 @@ data:
           # rate-limit and authelia Middlewares rather than reaching into this one, which
           # keeps a route in any watched namespace from referencing another's middlewares.
           - {{ k8s_observability_namespace }}
+          # Longhorn's namespace, for the single route roles/k8s/longhorn-ui adds to its UI.
+          # Same deal as the line above: its middlewares are local copies, not references
+          # into this namespace, and everything Traefik will find there is Ansible-rendered.
+          - {{ k8s_longhorn_namespace }}
 
     certificatesResolvers:
       cloudflare:

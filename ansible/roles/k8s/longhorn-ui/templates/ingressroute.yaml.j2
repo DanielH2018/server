@@ -1,0 +1,21 @@
+{% from 'ingressroute.yml.j2' import ingressroute with context %}
+---
+{#
+  The Service is `longhorn-frontend`, not the containers_list entry name (`longhorn-ui`):
+  the macro's first argument names both the IngressRoute and the Service it targets, and the
+  Service here is created by the upstream Longhorn manifest the k3s setup role applies.
+
+  `public=false`. Longhorn's UI is the storage control plane — it deletes volumes, replicas
+  and B2 backups, and it ships with no authentication of its own, so the only gate on it is
+  the authelia middleware below. It stays on the LAN name; flip this if remote access is
+  wanted, in which case the public name lands on Authelia's two_factor rule for `*.{{ domain }}`.
+#}
+{{ ingressroute(
+    'longhorn-frontend',
+    container_item.hostname,
+    container_item.port,
+    container_item.use_authelia,
+    namespace=k8s_longhorn_namespace,
+    public=false
+  )
+}}
