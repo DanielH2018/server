@@ -39,6 +39,14 @@ spec:
                     secretKeyRef:
                       name: pi-peer-backup-ssh
                       key: push_url
+                # Optional off-premises ping; empty when unconfigured. No checksum/config
+                # annotation is needed to pick up a Secret change here the way a Deployment
+                # would: each scheduled run creates a fresh pod that reads the Secret at start.
+                - name: HC_PING_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: pi-peer-backup-ssh
+                      key: hc_ping_url
                 # ssh insists on resolving HOME even with every path given explicitly.
                 - name: HOME
                   value: /tmp

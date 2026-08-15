@@ -174,3 +174,18 @@ curl -fsS --max-time 10 -G \
   --data-urlencode "msg=${MSG}" \
   "$PUSH_URL" >/dev/null \
   || logger -t longhorn-backup-health "push failed (status=${STATUS}: ${MSG})"
+
+# Off-premises dead-man's switch. The push above targets Kuma, which runs ON the cluster this
+# script watches — a cluster or WAN outage kills the push AND the monitor waiting for it, so
+# nothing alerts and the failure is invisible until someone looks. hc-ping.com is off-site and
+# alerts on SILENCE, the one signal an on-prem monitor structurally cannot produce. Optional:
+# with no key configured this renders empty and the block is skipped, leaving the host unchanged.
+HC_PING_KEY="{{ healthchecks_ping_key | default('') }}"
+if [[ -n "$HC_PING_KEY" ]]; then
+  # Bare slug, deliberately NOT ?create=1 — auto-provisioning turns a typo'd slug into a brand
+  # new check that nobody is watching and that reads green forever.
+  HC_URL="https://hc-ping.com/${HC_PING_KEY}/longhorn-backup-health"
+  [[ "$STATUS" == "up" ]] || HC_URL="${HC_URL}/fail"
+  curl -fsS --max-time 10 --retry 3 --data-raw "$MSG" "$HC_URL" >/dev/null \
+    || logger -t longhorn-backup-health "healthchecks ping failed (status=${STATUS})"
+fi
