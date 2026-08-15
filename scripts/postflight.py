@@ -33,7 +33,7 @@ def get(url, header=None, timeout=TIMEOUT, resolve=None):
     """GET url, returning (http_status, body). `header` is a full `curl --config`
     body (e.g. `header = "X-Api-Key: ..."`) fed via stdin so credentials stay out
     of argv. `resolve` is a curl --resolve pin (probe.k8s_endpoint's second element)
-    for -k8s routes the host shell can't resolve. status 0 means curl itself failed
+    for cluster routes the host shell can't resolve. status 0 means curl itself failed
     (connection refused, DNS, timeout)."""
     argv = [
         "curl",
@@ -81,9 +81,9 @@ def secret(name):
 
 def _cluster_prom_query(promql):
     """Query the CLUSTER prometheus through its LAN query route (the uptime-kuma job
-    moved there at the Phase D dashboard triage, PG1). VIP-pinned — the host shell
-    resolves -k8s names to the wrong Traefik (split-horizon)."""
-    base, pin = probe.k8s_endpoint("prometheus-k8s")
+    moved there at the Phase D dashboard triage, PG1). VIP-pinned — this host's
+    resolver bypasses the LAN DNS, so the name alone does not reach the cluster edge."""
+    base, pin = probe.k8s_endpoint("prometheus")
     from urllib.parse import urlencode
 
     url = f"{base}/api/v1/query?" + urlencode({"query": promql})

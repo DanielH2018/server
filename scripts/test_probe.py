@@ -102,8 +102,8 @@ def test_plan_metric_uses_cluster_prometheus_route():
     stages = probe.plan(["metric", "up == 0"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
         probe.curl_argv(
-            "https://prometheus-k8s.example/api/v1/query?query=up+%3D%3D+0",
-            resolve="prometheus-k8s.example:443:10.0.0.240",
+            "https://prometheus.example/api/v1/query?query=up+%3D%3D+0",
+            resolve="prometheus.example:443:10.0.0.240",
         )
     ]
 
@@ -112,8 +112,8 @@ def test_plan_targets_uses_cluster_prometheus_route():
     stages = probe.plan(["targets"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
         probe.curl_argv(
-            "https://prometheus-k8s.example/api/v1/targets",
-            resolve="prometheus-k8s.example:443:10.0.0.240",
+            "https://prometheus.example/api/v1/targets",
+            resolve="prometheus.example:443:10.0.0.240",
         )
     ]
 
@@ -128,8 +128,8 @@ def test_plan_loki_labels_uses_cluster_endpoint_with_vip_pin():
     stages = probe.plan(["loki-labels"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
         probe.curl_argv(
-            "https://loki-homelab-k8s.example/loki/api/v1/labels",
-            resolve="loki-homelab-k8s.example:443:10.0.0.240",
+            "https://loki-homelab.example/loki/api/v1/labels",
+            resolve="loki-homelab.example:443:10.0.0.240",
         )
     ]
 
@@ -140,8 +140,8 @@ def test_plan_loki_query_with_limit():
     )
     assert stages == [
         probe.curl_argv(
-            probe.loki_query_url("https://loki-homelab-k8s.example", '{job="x"}', 50),
-            resolve="loki-homelab-k8s.example:443:10.0.0.240",
+            probe.loki_query_url("https://loki-homelab.example", '{job="x"}', 50),
+            resolve="loki-homelab.example:443:10.0.0.240",
         )
     ]
 
@@ -150,8 +150,8 @@ def test_plan_scrutiny_uses_cluster_endpoint_with_vip_pin():
     stages = probe.plan(["scrutiny"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
         probe.curl_argv(
-            "https://scrutiny-k8s.example/api/summary",
-            resolve="scrutiny-k8s.example:443:10.0.0.240",
+            "https://scrutiny.example/api/summary",
+            resolve="scrutiny.example:443:10.0.0.240",
         )
     ]
 
@@ -847,3 +847,27 @@ def test_format_longhorn_summary_passes_when_every_volume_has_blocks():
 def test_format_longhorn_summary_treats_no_objects_as_failure():
     text, code = probe.format_longhorn_summary({})
     assert code == 1 and "no Longhorn backup objects" in text
+
+
+def test_no_cluster_route_carries_the_retired_k8s_suffix():
+    """The `-k8s` suffix retired 2026-08-15 (870723e8), but probe.py kept building it for
+    another five hours: every cluster subcommand 404'd against Traefik's no-Host-match while
+    the fixtures below asserted the stale name, so CI ratified the break. Assert on the
+    hostnames plan() actually asks for, so a reintroduced suffix fails here first."""
+    asked = []
+
+    def record(hostname):
+        asked.append(hostname)
+        return fake_k8s_endpoint(hostname)
+
+    for argv in (
+        ["metric", "up"],
+        ["targets"],
+        ["loki-labels"],
+        ["loki-query", '{job="x"}'],
+        ["scrutiny"],
+    ):
+        probe.plan(argv, fake_resolve, record)
+
+    assert asked, "expected plan() to route these subcommands through k8s_endpoint"
+    assert not [h for h in asked if h.endswith("-k8s")]
