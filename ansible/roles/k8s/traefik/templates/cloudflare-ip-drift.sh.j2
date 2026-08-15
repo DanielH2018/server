@@ -1,0 +1,76 @@
+#!/bin/bash
+# Daily drift check: is the hardcoded cloudflare_ips allowlist (group_vars/all.yml) still equal to
+# Cloudflare's PUBLISHED ranges? That list is baked into this role's static-config.yaml.j2 as the
+# forwardedHeaders.trustedIPs of BOTH the http and https entrypoints, so it governs which upstream
+# is trusted to set X-Forwarded-For. If Cloudflare adds a range, requests arriving on it are no
+# longer trusted proxies and Traefik falls back to the socket peer address: every downstream
+# consumer of the real client IP silently reads Cloudflare's edge instead. That breaks CrowdSec
+# decisions (bans land on a Cloudflare IP, not the attacker), the Authelia remote_ip log, and
+# Home Assistant's use_x_forwarded_for trust chain — with no error anywhere.
+#
+# It ALERTS on drift, it never auto-applies a fetched list. Cloudflare changes these ranges on a
+# multi-year cadence, so daily is a safety net, not a control loop.
+#
+# HISTORY: the Docker-era predecessor (containers/traefik) wrote a state file that monitor-bridge
+# polled, and it guarded the DOCKER-USER origin-lock DROP as well as trustedIPs. It retired with
+# that lock in 84733119 (E7) — but only the origin-lock half actually went away, leaving the
+# trustedIPs half unmonitored. Re-homed here 2026-08-15 in the crowdsec-appsec-verify.sh shape:
+# pushes its Kuma monitor directly, no state file and no monitor-bridge hop.
+#
+# set -uo (not -euo): a failed curl must be captured + reported, not swallowed by an early exit.
+set -uo pipefail
+
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin # cron ships a bare PATH
+
+PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/{{ monitor_bridge_cloudflare_drift_push_token }}"
+
+push() { # up|down msg
+  curl -fsS --max-time 10 -G "$PUSH_URL" \
+    --data-urlencode "status=$1" --data-urlencode "msg=$2" -o /dev/null \
+    || logger -t cloudflare-ip-drift "kuma push failed ($1: $2)"
+}
+
+# The expected set: the cloudflare_ips baked in at template time (group_vars/all.yml), one CIDR
+# per line. Rendered inside a quoted heredoc so nothing in it is shell-expanded.
+EXPECTED=$(
+  sort <<'CFIPS'
+{% for ip in cloudflare_ips %}
+{{ ip }}
+{% endfor %}
+CFIPS
+)
+
+if ! LIVE_V4=$(curl -sf --max-time 15 https://www.cloudflare.com/ips-v4); then
+  push down "failed to fetch Cloudflare ips-v4 — allowlist unverified"
+  exit 1
+fi
+if ! LIVE_V6=$(curl -sf --max-time 15 https://www.cloudflare.com/ips-v6); then
+  push down "failed to fetch Cloudflare ips-v6 — allowlist unverified"
+  exit 1
+fi
+
+# printf, not `cat`/`echo` of the two bodies: ips-v4 comes back WITHOUT a trailing newline, so
+# concatenating them directly glues the last v4 range onto the first v6 one ("131.0.72.0/22" +
+# "2400:cb00::/32" = one junk line), which reads as one added and two stale ranges — a false
+# drift alert. Command substitution strips trailing newlines and printf re-adds exactly one.
+LIVE=$(printf '%s\n%s\n' "$LIVE_V4" "$LIVE_V6" | sed '/^[[:space:]]*$/d' | sort)
+
+# A truncated-but-successful fetch would otherwise read as "everything was removed upstream".
+# Cloudflare has published >20 ranges for years; anything under 10 is a bad response, not drift.
+LIVE_COUNT=$(printf '%s\n' "$LIVE" | grep -c .)
+if [ "$LIVE_COUNT" -lt 10 ]; then
+  push down "Cloudflare published only $LIVE_COUNT ranges — implausible, treating as a bad fetch"
+  exit 1
+fi
+
+if [ "$LIVE" = "$EXPECTED" ]; then
+  push up "cloudflare_ips matches upstream ($LIVE_COUNT CIDRs)"
+  exit 0
+fi
+
+# Drift: name what changed. "added" = published upstream but missing from ours (the dangerous
+# direction — real clients on it stop being trusted). "stale" = in ours but no longer published.
+ADDED=$(comm -23 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
+STALE=$(comm -13 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
+push down "cloudflare_ips DRIFTED from upstream — added:[${ADDED}] stale:[${STALE}] — update cloudflare_ips in group_vars/all.yml + redeploy traefik"
+exit 1
