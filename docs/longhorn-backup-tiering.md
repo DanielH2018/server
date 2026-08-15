@@ -20,28 +20,35 @@ backed-up PVC checked against the kopia rules).
 
 ## Tier map
 
-| Volume | Tier | kopia rule preserved |
-|---|---|---|
-| home-assistant-config | daily | `.cache/` diverted to emptyDir; `hacs_frontend/` stays (static — see below) |
-| zigbee2mqtt-data | daily | `log/` diverted to emptyDir |
-| n8n-data, n8n-files | daily | `.cache/` diverted; WAL churn accepted (below) |
-| karakeep-data | daily | `uv-cache/` was already an emptyDir in the time-tagger pod |
-| freshrss-config | daily | `data/cache/` diverted to emptyDir |
-| healthchecks-config | daily | `log/` diverted to emptyDir |
-| authelia-config | daily | logs were already an emptyDir |
-| wg-easy-config | daily | clean (peer keys — the one thing kopia pulled from the Pi) |
-| traefik-acme | daily | clean (acme-only; access logs already emptyDir) |
-| code-server-config | weekly | extensions/caches stay — see deliberate deviations |
-| jellyfin-config | weekly | `transcodes/` already emptyDir; metadata stays — see deviations |
-| sonarr/radarr/prowlarr/bazarr/qbittorrent-config | weekly | MediaCover/logs/Definitions stay — weekly cadence bounds them |
-| tdarr-server, tdarr-configs | weekly | `transcode_cache/` + logs already emptyDir; `Backups/` zips diverted |
-| terraria-config | weekly | `.wld.bak*` churn accepted at weekly cadence (retired service; live `.wld` backed up, same operator call as kopia's) |
-| scrutiny-web-config | weekly | clean |
-| scrutiny-influxdb-data | **no-backup** | kopia: `scrutiny/influxdb2/` — the volume IS the TSDB (single mount, verified) |
-| uptime-kuma-data | **no-backup** | kopia: `uptime-kuma/data*/` — monitors regenerate from the static-monitors Secret; admin recreated by hand; history not kept (kopia's own caveat, now in this doc) |
-| crowdsec-db | **no-backup** | Docker's crowdsec-db named volume was deliberately outside kopia scope |
-| autokuma-data | **no-backup** | regenerates from the static-monitors Secret |
-| pihole-etc, livesync-data, grafana-data, registry/prometheus/loki/tempo/speedtest/karakeep-meili/mosquitto/flaresolverr | no-backup (pre-existing) | consistent with kopia: FTL/gravity, couchdb-data, plugins, TSDBs were all excluded; the configs kopia *kept* are Ansible-rendered here |
+**Target** is which backupstore the volume's backups land in (`spec.backupTargetName`).
+Four volumes moved to Cloudflare R2 on 2026-08-15 (`5ef0dc8e`) so the TLS material, the SSO
+store and the two home-automation stores survive a B2 account-level failure — cap, billing,
+or key revocation — that would take the whole B2 target with it. Restoring them means
+selecting the `r2` target, not `default`; see
+[`longhorn-disaster-recovery.md`](longhorn-disaster-recovery.md).
+
+| Volume | Tier | Target | kopia rule preserved |
+|---|---|---|---|
+| home-assistant-config | daily | **R2** | `.cache/` diverted to emptyDir; `hacs_frontend/` stays (static — see below) |
+| zigbee2mqtt-data | daily | **R2** | `log/` diverted to emptyDir |
+| n8n-data, n8n-files | daily | B2 | `.cache/` diverted; WAL churn accepted (below) |
+| karakeep-data | daily | B2 | `uv-cache/` was already an emptyDir in the time-tagger pod |
+| freshrss-config | daily | B2 | `data/cache/` diverted to emptyDir |
+| healthchecks-config | daily | B2 | `log/` diverted to emptyDir |
+| authelia-config | daily | **R2** | logs were already an emptyDir |
+| wg-easy-config | daily | B2 | clean (peer keys — the one thing kopia pulled from the Pi) |
+| traefik-acme | daily | **R2** | clean (acme-only; access logs already emptyDir) |
+| code-server-config | weekly | B2 | extensions/caches stay — see deliberate deviations |
+| jellyfin-config | weekly | B2 | `transcodes/` already emptyDir; metadata stays — see deviations |
+| sonarr/radarr/prowlarr/bazarr/qbittorrent-config | weekly | B2 | MediaCover/logs/Definitions stay — weekly cadence bounds them |
+| tdarr-server, tdarr-configs | weekly | B2 | `transcode_cache/` + logs already emptyDir; `Backups/` zips diverted |
+| terraria-config | weekly | B2 | `.wld.bak*` churn accepted at weekly cadence (retired service; live `.wld` backed up, same operator call as kopia's) |
+| scrutiny-web-config | weekly | B2 | clean |
+| scrutiny-influxdb-data | **no-backup** | — | kopia: `scrutiny/influxdb2/` — the volume IS the TSDB (single mount, verified) |
+| uptime-kuma-data | **no-backup** | — | kopia: `uptime-kuma/data*/` — monitors regenerate from the static-monitors Secret; admin recreated by hand; history not kept (kopia's own caveat, now in this doc) |
+| crowdsec-db | **no-backup** | — | Docker's crowdsec-db named volume was deliberately outside kopia scope |
+| autokuma-data | **no-backup** | — | regenerates from the static-monitors Secret |
+| pihole-etc, livesync-data, grafana-data, registry/prometheus/loki/tempo/speedtest/karakeep-meili/mosquitto/flaresolverr | no-backup (pre-existing) | — | consistent with kopia: FTL/gravity, couchdb-data, plugins, TSDBs were all excluded; the configs kopia *kept* are Ansible-rendered here |
 
 ## Deliberate deviations from kopiaignore (all in the cheap direction)
 

@@ -145,7 +145,7 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
 
 ## Editing & testing
 - Sidecar: `files/autofix.py`, staged to the node and mounted from a ConfigMap; the role's
-  `checksum/config` annotation rolls the pod on a script-only edit.
+  `checksum/autofix-script` annotation rolls the pod on a script-only edit.
 - Manifests: `templates/deployment.yaml.j2`, `templates/env-secret.yaml.j2`
 - The disk-prune cron and its template are gone — they pruned daniel-server's Docker daemon,
   uninstalled 2026-08-14, and monitor-bridge dropped the matching `disk_prune` check with them.

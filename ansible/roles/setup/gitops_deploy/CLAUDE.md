@@ -74,9 +74,12 @@ stay).
   scope (if set) names it, the only path the push touched under its role is
   `defaults/main.yml`, and every changed line in that file assigns an `*_image:` var. Everything
   else stays in `ChangeSet.k8s` and behaves exactly as described below.
-  - **The gate is inside the role, not here.** `roles/k8s/manifests` runs
-    apply → `rollout status --timeout` → `assert_stable.yml` (a post-Available soak that hard-fails
-    on a restart-count delta or a readiness shortfall). This deployer adds no health-poll phase for
+  - **The gate is in the play, not here.** `roles/k8s/manifests` applies,
+    `roles/k8s/rollout-drain` runs `rollout status --timeout`, and
+    `ansible/post_tasks/k8s_stabilise_gate.yml` holds the post-Available soak that hard-fails
+    on a restart-count delta or a readiness shortfall. (All three lived in
+    `roles/k8s/manifests` until 5eea64e6 batched the rollouts and deferred the soak to
+    end-of-play.) This deployer adds no health-poll phase for
     k8s: `containers_for()` returns `[]` for a k8s service, which is exactly the 2026-08-08
     configarr false-rollback. The denylist covers the roles that gate can't protect — see
     `defaults/main.yml`, where every entry carries its reason.
