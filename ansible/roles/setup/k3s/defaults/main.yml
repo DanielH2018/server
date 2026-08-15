@@ -143,6 +143,15 @@ k3s_longhorn_backupstore_poll_interval: 0
 # default-group volume, so the global scope costs nothing.
 k3s_longhorn_backup_detached_volumes: "true"
 
+# How many volume engines Longhorn upgrades per node once the manager moves to a new version.
+# Upstream ships 0, which means engines NEVER follow the manager — after a version bump every
+# volume keeps running the old engine image until someone walks the UI. Across the v1.7.2 ->
+# v1.12.1 ladder (docs/longhorn-upgrade.md) that lag would compound over five hops, and a
+# manager more than one engine version ahead is outside what upstream tests. 3 upgrades the
+# healthy volumes a few at a time rather than all 42 at once; Longhorn skips any volume that
+# is degraded, so this cannot stampede a rebuild.
+k3s_longhorn_concurrent_engine_upgrade: 3
+
 # Read-only cluster access for {{ sys_user }}. The admin kubeconfig k3s writes is root:root
 # 0640, so every `kubectl` otherwise goes through sudo — which is passworded on this host and
 # therefore needs a TTY, blocking anything unattended (diagnostics, health checks, an agent

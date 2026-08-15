@@ -303,6 +303,20 @@
   become: true
   changed_when: "'no change' not in k3s_longhorn_detached_backup.stdout"
 
+- name: Let volume engines follow the Longhorn manager version
+  tags: [longhorn]
+  # Upstream's 0 means engines never follow a manager upgrade, so a version bump leaves every
+  # volume on the old engine image. See the variable's comment in defaults/main.yml.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch settings.longhorn.io concurrent-automatic-engine-upgrade-per-node-limit
+      --type=merge -p {{ engine_upgrade_patch | quote }}
+  vars:
+    engine_upgrade_patch: '{"value":"{{ k3s_longhorn_concurrent_engine_upgrade }}"}'
+  register: k3s_longhorn_engine_upgrade
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_engine_upgrade.stdout"
+
 - name: Render the Longhorn StorageClass
   tags: [longhorn]
   # The setting patched above only governs volumes whose StorageClass stays quiet about
@@ -340,25 +354,37 @@
   become: true
   changed_when: "'no change' not in k3s_longhorn_sc_configmap.stdout"
 
-- name: Read the replica count pinned by the live StorageClass
+- name: Read the parameters pinned by the live StorageClass
   tags: [longhorn]
   ansible.builtin.command:
-    cmd: k3s kubectl get storageclass longhorn -o jsonpath={.parameters.numberOfReplicas}
-  register: k3s_longhorn_sc_replicas
+    cmd: k3s kubectl get storageclass longhorn -o jsonpath={.parameters}
+  register: k3s_longhorn_sc_params
   become: true
   changed_when: false
   failed_when: false
 
-- name: Delete the StorageClass while it still pins a replica count
+- name: Delete the StorageClass while its parameters differ from the rendered class
   tags: [longhorn]
-  # StorageClass parameters are immutable, so `apply` cannot remove one — the class has to be
-  # recreated. This is safe: parameters are read at provision time only, so deleting the class
-  # neither touches an existing PV nor unbinds a PVC. The task skips itself once the pin is
-  # gone, which is what makes this pair idempotent rather than a delete/recreate every run.
+  # StorageClass parameters are immutable, so `apply` can neither remove nor add one — the
+  # class has to be recreated. This is safe: parameters are read at provision time only, so
+  # deleting the class neither touches an existing PV nor unbinds a PVC. The task skips itself
+  # once live and desired agree, which is what makes this pair idempotent rather than a
+  # delete/recreate every run.
+  #
+  # Compares the WHOLE parameter map rather than just numberOfReplicas (which is what this
+  # guard originally watched, since dropping upstream's "3" was the only change the role
+  # made). A version bump can also ADD a parameter — v1.8.0 introduces backupTargetName — and
+  # a numberOfReplicas-only test never fires for that, leaving `apply` to fail on an immutable
+  # field instead. See docs/longhorn-upgrade.md.
   ansible.builtin.command:
     cmd: k3s kubectl delete storageclass longhorn
   become: true
-  when: k3s_longhorn_sc_replicas.stdout | default('', true) | length > 0
+  vars:
+    live_params: "{{ k3s_longhorn_sc_params.stdout | default('', true) | from_json }}"
+    desired_params: "{{ (lookup('file', 'longhorn-storageclass.yaml') | from_yaml).parameters }}"
+  when:
+    - k3s_longhorn_sc_params.stdout | default('', true) | length > 0
+    - live_params != desired_params
   changed_when: true
 
 - name: Apply the Longhorn StorageClass
