@@ -7,7 +7,77 @@
   vars:
     manifests_service: headlamp
     manifests_files:
+      # The policy is listed FIRST so it exists before the pod can be scheduled. `kubectl apply
+      # -f <dir>` does not guarantee that ordering, which is why the gap is also survivable: the
+      # pod takes seconds to pull and start, and the policy is applied in the same call.
+      - networkpolicy.yaml
       - rbac.yaml
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
+
+# ── prove the policy is enforced, rather than merely applied ────────────────────────────────
+# Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and
+# a Job's pod template is immutable, so a Job left beside the Deployments would be re-applied as
+# either a no-op or an error.
+- name: Create the headlamp probe manifest directory
+  tags: [config]
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/manifests/headlamp-netpol
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+
+- name: Render the headlamp isolation probe
+  tags: [config]
+  ansible.builtin.template:
+    src: netpol-probe-job.yaml.j2
+    dest: /etc/rancher/k3s/manifests/headlamp-netpol/netpol-probe-job.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Clear the previous headlamp probe run
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete job headlamp-netpol-probe
+      --ignore-not-found --wait=true
+  become: true
+  changed_when: true
+
+- name: Run the headlamp isolation probe
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      /etc/rancher/k3s/manifests/headlamp-netpol/netpol-probe-job.yaml
+  become: true
+  changed_when: true
+
+- name: Wait for the headlamp isolation probe
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
+      job/headlamp-netpol-probe --timeout=120s
+  become: true
+  changed_when: false
+  register: headlamp_k8s_netpol_probe
+  failed_when: headlamp_k8s_netpol_probe.rc != 0
+
+- name: Report the headlamp isolation probe
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/headlamp-netpol-probe"
+  become: true
+  changed_when: false
+  register: headlamp_k8s_netpol_log
+
+- name: Show the headlamp isolation result
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: "{{ headlamp_k8s_netpol_log.stdout_lines }}"

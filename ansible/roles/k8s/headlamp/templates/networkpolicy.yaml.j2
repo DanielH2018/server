@@ -1,0 +1,39 @@
+---
+# Closes the exposure rbac.yaml.j2's header describes: Authelia guards the IngressRoute, but the
+# ClusterIP Service does not go through Traefik at all. Headlamp runs with
+# `-unsafe-use-service-account-token` (deployment.yaml.j2), so anything that reaches the pod acts
+# as the headlamp SA — a cluster-wide `view` binding. Any pod in {{ k8s_namespace }} that
+# processes untrusted input (qbittorrent, karakeep's headless chrome, the n8n runners) could read
+# every workload, node, PV, CRD and RBAC binding without passing Traefik, Authelia or CrowdSec.
+#
+# INGRESS, the direction proven enforced on this cluster — an Egress policy selects pods
+# correctly and blocks nothing (measured 2026-08-07). netpol-probe-job.yaml.j2 beside this file
+# re-checks the policy on every deploy rather than trusting that it took.
+#
+# This does not narrow the RBAC, which is the other half of the exposure and is deliberately
+# read-only: the SA holds no secrets, no pods/exec and no write verbs (rbac.yaml.j2, enforced by
+# ansible/tests/test_k8s_manifests.py).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: headlamp
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: headlamp
+  policyTypes:
+    - Ingress
+  ingress:
+    # Traefik is the only legitimate caller: every human path to Headlamp arrives through the
+    # IngressRoute, where the Authelia middleware runs. Kubelet's probe traffic needs no rule —
+    # it reaches the pod IP directly and kube-router does not subject that path to ingress
+    # enforcement (flaresolverr has run on probes under an equally strict policy since
+    # 2026-08-13).
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+      ports:
+        - protocol: TCP
+          port: {{ container_item.port }}
