@@ -12,6 +12,18 @@
   "schedule": [
     "before 6am"
   ],
+  "description": "ignorePaths: roles/containers/archive/ holds the 48 Compose roles the k3s migration retired (2026-08-14) — 62 image pins that deploy nothing, kept only for git-history reference. The BUILT-IN docker-compose manager scans them (every custom manager here is pinned to a live file, but the built-in ones are not), so an archived pin raises a PR against a dead path: PR #42 bumped getmeili/meilisearch in archive/karakeep while the LIVE pin sits in roles/k8s/karakeep/defaults/main.yml. The 8 globs below the archive entry are NOT decoration — they are :ignoreModulesAndTests, inherited via config:recommended, and a local ignorePaths REPLACES a preset's array rather than appending to it. Dropping them would silently re-enable scanning of node_modules/vendor/test fixtures. Re-check them against the preset before editing this list.",
+  "ignorePaths": [
+    "ansible/roles/containers/archive/**",
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/vendor/**",
+    "**/examples/**",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/tests/**",
+    "**/__fixtures__/**"
+  ],
   "prHourlyLimit": 4,
   "rebaseWhen": "auto",
   "osvVulnerabilityAlerts": true,
