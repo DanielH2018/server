@@ -102,6 +102,22 @@ patches run**, so a removed or renamed setting fails *after* the new version is 
 is recoverable (fix the task, re-run), but expect it once per hop where upstream reorganises
 settings.
 
+**A tag can hide the same breakage.** `backupstore-poll-interval` was caught because its task is
+tagged `[longhorn, longhorn_backup]` and the ladder ran `--tags longhorn`. The two tasks that set
+the target itself are tagged `longhorn_backup` **only**, so they were never exercised during the
+upgrade — and by v1.12.1 the `backup-target` and `backup-target-credential-secret` settings are
+*also* gone. They now patch `backuptargets.longhorn.io/default` at `spec.backupTargetURL` and
+`spec.credentialSecret`.
+
+The arm/disarm semantics are unchanged and were re-verified against a disarmed cluster: with
+`--type=merge`, an empty string is written rather than the field being removed, so
+`k3s_longhorn_backup_armed=false` still *enforces* the blank instead of leaving whatever is live.
+After the migration a disarmed run reported `changed=0` and the target stayed
+`backupTargetURL=""`, `available=false`.
+
+**When a hop finishes, run every tag the role owns, not just the one you upgraded under** —
+otherwise a whole code path stays untested until the night you need it.
+
 ### Expected-red node conditions
 
 Two node-CR conditions read `False` here and neither is an upgrade failure:
