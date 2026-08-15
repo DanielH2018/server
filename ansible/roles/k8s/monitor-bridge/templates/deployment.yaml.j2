@@ -94,6 +94,8 @@ spec:
                 path: ha_token
               - key: b2_probe_application_key # gitleaks:allow — a Secret item NAME, not a value
                 path: b2_probe_application_key
+              - key: cf_analytics_token # gitleaks:allow — a Secret item NAME, not a value
+                path: cf_analytics_token
         - name: tmp
           emptyDir: {}
         # daniel-box's own gitops-deploy state — this pod is pinned to that node (the
