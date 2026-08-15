@@ -13,8 +13,9 @@
 #
 # Reporting: pushes the "WG Pi Peer Backup" Kuma monitor DIRECTLY (up on success, down
 # with the error otherwise) — the monitor-bridge `pi_peers` state-file check this
-# replaces retired with the flip. `set -uo` (not -euo) so the rsync exit code is
-# captured and reported, not swallowed.
+# replaces retired with the flip. It also pings an off-premises Healthchecks.io check when
+# HC_PING_URL is set, which is what still alerts when the whole cluster (Kuma included) is
+# down. `set -uo` (not -euo) so the rsync exit code is captured and reported, not swallowed.
 set -uo pipefail
 
 : "${PI_SRC:?}" "${KUMA_PUSH_URL:?}"
@@ -32,6 +33,16 @@ push() { # status msg
   curl -fsS -m 10 --get "$KUMA_PUSH_URL" \
     --data-urlencode "status=$1" --data-urlencode "msg=$2" >/dev/null \
     || echo "kuma push failed ($1: $2)" >&2
+
+  # Kuma resolves to a Service in this cluster, so a cluster outage silences the push above and
+  # the monitor waiting for it — nothing alerts. hc-ping.com is off-site and alerts on the
+  # silence instead. Empty when no ping key is configured, in which case this is a no-op.
+  if [[ -n "${HC_PING_URL:-}" ]]; then
+    local url="$HC_PING_URL"
+    [[ "$1" == "up" ]] || url="$url/fail"
+    curl -fsS -m 10 --retry 3 --data-raw "$2" "$url" >/dev/null \
+      || echo "healthchecks ping failed ($1: $2)" >&2
+  fi
 }
 
 OUT=$(rsync -a --chmod=D700 \

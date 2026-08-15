@@ -16,7 +16,10 @@ replaced the retired Kopia scope for the Pi.
 - **Alerting:** the job pushes "WG Pi Peer Backup" (Kuma push monitor, 2.5-day window)
   directly — up on success with the file count, down with the rsync error or the
   file-count-floor breach (>= 2 files required; no `--delete`, so an empty source can
-  never wipe the copy).
+  never wipe the copy). It also pings an off-premises Healthchecks.io check
+  (`HC_PING_URL`, slug `pi-peer-backup`) when one is configured: Kuma resolves to a
+  Service in this cluster, so a cluster outage silences both the push and the monitor
+  waiting for it. See `docs/healthchecks-io-deadman.md`.
 - **Manual run/proof:** `kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup`
 
 ## Editing
