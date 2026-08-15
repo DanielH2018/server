@@ -57,6 +57,10 @@ gitops_deploy_k8s_autodeploy_denylist:
   - pi-peer-backup
   - media-volume
   - n8n-images
+  # route-only role: renders an IngressRoute + Middlewares into longhorn-system and owns no
+  # Deployment at all (Longhorn itself comes from roles/setup/k3s), so there is nothing for
+  # `rollout status` to gate. It also pins no image, so it can never qualify anyway.
+  - longhorn-ui
   - node-exporter
   - dri-device-plugin
   # probe-less Deployments — `rollout status` returns on Running and proves nothing

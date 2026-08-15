@@ -122,6 +122,10 @@ k8s_rollout_stabilise_seconds: 60
 # under the CRD provider's watched namespaces — Traefik ignores IngressRoutes in namespaces
 # it is not told to watch, silently, with the route reporting no error at all.
 k8s_observability_namespace: observability
+# Longhorn's own namespace, fixed by the upstream manifest roles/setup/k3s applies. Named
+# here because TWO roles need it: longhorn-ui puts its route and middleware copies there,
+# and the traefik role must list it under the CRD provider's watched namespaces.
+k8s_longhorn_namespace: longhorn-system
 # Whether k8s IngressRoutes also match the PUBLIC host (`<svc>.<domain>`) alongside the LAN
 # `<svc>.local.<domain>`. Flipped at slice-6 B4 (2026-08-09), once the k8s edge carried the
 # CrowdSec bouncer + AppSec (B1) and the reverse bridge existed for Docker-hosted names —

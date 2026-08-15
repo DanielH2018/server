@@ -1,0 +1,16 @@
+---
+# Route-only role: Longhorn itself (namespace, Deployments, Services) is installed by
+# roles/setup/k3s from the upstream manifest. This role adds nothing but the door — the
+# IngressRoute plus the middlewares it must reference from inside longhorn-system.
+#
+# `manifests_rollout: ''` because there is no Deployment of ours to roll; the shared role
+# would otherwise wait on deploy/longhorn-ui, which does not exist.
+- name: Deploy the Longhorn UI route to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: longhorn-ui
+    manifests_rollout: ''
+    manifests_files:
+      - middlewares.yaml
+      - ingressroute.yaml

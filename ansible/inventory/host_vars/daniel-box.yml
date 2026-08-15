@@ -98,6 +98,16 @@ containers_list:
     hostname: "headlamp"
     port: 4466
     use_authelia: true
+  # Route-only entry: Longhorn's workloads come from the upstream manifest roles/setup/k3s
+  # applies, and this role adds nothing but the IngressRoute (plus the middleware copies it
+  # needs inside longhorn-system). `port` is longhorn-frontend's Service port, and the UI is
+  # LAN-only by choice — see the role's ingressroute.yaml.j2 for why. use_authelia is the
+  # entire access control: Longhorn's UI has no login of its own.
+  - name: longhorn-ui
+    platform: k8s
+    hostname: "longhorn"
+    port: 80
+    use_authelia: true
   # Claude Code telemetry sink. No `port` and no `hostname` on purpose: it has no Traefik
   # route at all. Claude Code runs on this HOST and exports to 127.0.0.1:4317, reaching the
   # collector through a hostPort rather than the ingress — content logging is on, so nothing
