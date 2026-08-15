@@ -288,6 +288,21 @@
   become: true
   changed_when: "'no change' not in k3s_longhorn_poll_interval.stdout"
 
+- name: Allow recurring backups of detached volumes
+  tags: [longhorn, longhorn_backup]
+  # Without this the nightly silently skips any volume that happens to be detached at
+  # 03:30 — which pi-peer-backup-data always is. See the variable's comment in
+  # defaults/main.yml.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch settings.longhorn.io allow-recurring-job-while-volume-detached
+      --type=merge -p {{ detached_patch | quote }}
+  vars:
+    detached_patch: '{"value":"{{ k3s_longhorn_backup_detached_volumes }}"}'
+  register: k3s_longhorn_detached_backup
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_detached_backup.stdout"
+
 - name: Render the Longhorn StorageClass
   tags: [longhorn]
   # The setting patched above only governs volumes whose StorageClass stays quiet about
