@@ -274,7 +274,7 @@
   changed_when: "'no change' not in k3s_longhorn_replicas.stdout"
 
 - name: Set the Longhorn backup-store poll interval
-  tags: [longhorn]
+  tags: [longhorn, longhorn_backup]
   # Rate-limits the only recurring B2 caller in the cluster. See the variable's comment in
   # defaults/main.yml — at upstream's 300s this exhausted Backblaze's Class C transaction
   # allowance and took every backup tier down for 13h.
