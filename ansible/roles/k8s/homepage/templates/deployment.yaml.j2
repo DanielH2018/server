@@ -95,7 +95,7 @@ spec:
             # homepage at once, and Homepage rejects any Host header not listed here.
             - name: HOMEPAGE_ALLOWED_HOSTS
               value: >-
-                homepage.{{ domain }},homepage.local.{{ domain }},homepage{{ k8s_hostname_suffix }}.{{ domain }},homepage{{ k8s_hostname_suffix }}.local.{{ domain }}
+                homepage.{{ domain }},homepage.local.{{ domain }},homepage.{{ domain }},homepage.local.{{ domain }}
           volumeMounts:
             - name: config-live
               mountPath: /app/config

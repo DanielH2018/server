@@ -74,33 +74,23 @@ spec:
             # never by this variable. What it can change is the Test URL shown in the editor,
             # which n8n previously derived from N8N_HOST/N8N_PROTOCOL/N8N_PORT and now takes from
             # here; the production URL is unchanged because the value is the same.
-{% if container_item.unsuffixed_hostname is defined %}
             - name: N8N_HOST
-              value: "{{ container_item.unsuffixed_hostname }}.{{ domain }}"
+              value: "{{ container_item.hostname | default(container_item.name) }}.{{ domain }}"
             - name: N8N_WEBHOOK_URL
-              value: "https://{{ container_item.unsuffixed_hostname }}.{{ domain }}/"
-{% else %}
-            - name: N8N_HOST
-              value: "{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
-            - name: N8N_WEBHOOK_URL
-              value: "https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}/"
-{% endif %}
+              value: "https://{{ container_item.hostname | default(container_item.name) }}.{{ domain }}/"
             - name: N8N_PORT
               value: "{{ container_item.port }}"
             - name: N8N_PROTOCOL
               value: https
-            # TWO proxies once bridged, not one: the Docker edge Traefik forwards to the cluster
-            # Traefik, which forwards here. The compose value of 1 was correct when Docker
-            # Traefik was the only hop. Getting this wrong does not break routing — it makes n8n
-            # attribute every request to the wrong client IP, which is what its login throttling
-            # and audit log key on. Conditional so the pre-cutover -k8s route, which really does
-            # have one proxy, is also right.
+            # Two proxy hops, unconditional since the `-k8s` suffix retired (2026-08-15) — the
+            # value the bridged route has carried all along, kept verbatim rather than
+            # re-derived here. Getting this wrong does not break routing; it makes n8n
+            # attribute every request to the wrong client IP, which is what its login
+            # throttling and audit log key on. NOTE: the second hop was the Docker edge
+            # Traefik, uninstalled 2026-08-14 — re-measure `X-Forwarded-For` depth before
+            # trusting this, and drop to 1 if the cluster Traefik is now the only hop.
             - name: N8N_PROXY_HOPS
-{% if container_item.unsuffixed_hostname is defined %}
               value: "2"
-{% else %}
-              value: "1"
-{% endif %}
             - name: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
               value: "true"
             - name: N8N_RUNNERS_ENABLED

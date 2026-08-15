@@ -6,8 +6,8 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 
 ## At a glance
 - **Image:** built in-cluster by k8s/image-builder from `templates/Dockerfile.j2`
-- **Host:** daniel-box (k3s) · **Port:** 8443 · **URL:** `code-server.<domain>` via
-  bridge_hostname, `code-server-k8s.local.<domain>` native (Authelia: yes)
+- **Host:** daniel-box (k3s) · **Port:** 8443 · **URL:** `code-server.<domain>` /
+  `code-server.local.<domain>` (Authelia: yes)
 - **Ported WITHOUT docker plumbing** (operator decision 2026-08-10): no DOCKER_HOST, so the
   in-IDE docker CLI and devcontainers are gone; docker-proxy-codeserver and the `codeserver`
   net dissolved with the Docker copy (`has_code_server: false` in daniel-server host_vars).

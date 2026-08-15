@@ -57,21 +57,21 @@ stringData:
     {"type": "http", "name": "Daniel Pi WG Easy", "url": "http://{{ hostvars['daniel-pi'].server_ip }}:51821", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # ── k3s ingress monitors ───────────────────────────────────────────────────────────────
   auth-k8s.json: |
-    {"type": "http", "name": "k3s Authelia Portal", "url": "https://auth{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s Authelia Portal", "url": "https://auth.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   bento-pdf-k8s.json: |
-    {"type": "http", "name": "k3s Ingress (bento-pdf)", "url": "https://bento-pdf{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s Ingress (bento-pdf)", "url": "https://bento-pdf.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   littlelink-k8s.json: |
-    {"type": "http", "name": "k3s littlelink", "url": "https://www{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s littlelink", "url": "https://www.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   speedtest-k8s.json: |
-    {"type": "http", "name": "k3s speedtest", "url": "https://speedtest{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s speedtest", "url": "https://speedtest.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   freshrss-k8s.json: |
-    {"type": "http", "name": "k3s FreshRSS", "url": "https://freshrss{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s FreshRSS", "url": "https://freshrss.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   headlamp-k8s.json: |
-    {"type": "http", "name": "k3s Headlamp", "url": "https://headlamp{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s Headlamp", "url": "https://headlamp.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   healthchecks-k8s.json: |
-    {"type": "http", "name": "k3s healthchecks", "url": "https://healthchecks{{ k8s_hostname_suffix }}.local.{{ domain }}/ping/00000000-0000-0000-0000-000000000000", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["404"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s healthchecks", "url": "https://healthchecks.local.{{ domain }}/ping/00000000-0000-0000-0000-000000000000", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["404"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   livesync-k8s.json: |
-    {"type": "http", "name": "k3s LiveSync", "url": "https://livesync{{ k8s_hostname_suffix }}.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["401"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s LiveSync", "url": "https://livesync.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["401"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   mosquitto-k8s.json: |
     {"type": "port", "name": "k3s Mosquitto (VIP)", "hostname": "{{ mqtt_k8s_vip }}", "port": 1883, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # VIP port tiles (kube-proxy ETP-Local DROP mode): joining a Docker host to k3s can
@@ -84,17 +84,17 @@ stringData:
   # wg-easy's VIP is WireGuard-over-UDP — Kuma port monitors are TCP-only, so it cannot get
   # a port-check tile here.
   zigbee2mqtt-k8s.json: |
-    {"type": "http", "name": "k3s Zigbee2MQTT", "url": "https://zigbee2mqtt{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s Zigbee2MQTT", "url": "https://zigbee2mqtt.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   slzb-coordinator.json: |
     {"type": "port", "name": "SLZB-06M Coordinator", "hostname": "{{ slzb_ip }}", "port": 6638, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # max_redirects 0 was ABSENT from the label this transcribes — the monitor then follows
   # the 302 to the Authelia portal and fails on the resulting 200. Made explicit here.
   crowdsec-dashboard-k8s.json: |
-    {"type": "http", "name": "k3s CrowdSec Dashboard", "url": "https://crowdsec-k8s.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s CrowdSec Dashboard", "url": "https://crowdsec.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   homepage-k8s.json: |
-    {"type": "http", "name": "k3s homepage", "url": "https://homepage{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s homepage", "url": "https://homepage.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   peanut-k8s.json: |
-    {"type": "http", "name": "k3s peanut", "url": "https://peanut{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s peanut", "url": "https://peanut.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Successor to the autokuma-derived "NUT" monitor that retired with the Docker
   # container (D6 reversed, 2026-08-14). A TCP check of upsd over its ClusterIP Service
   # — the pod's own liveness probe (upsc) owns UPS-side depth; this owns "upsd
@@ -102,7 +102,7 @@ stringData:
   nut-k8s.json: |
     {"type": "port", "name": "k3s nut (upsd)", "hostname": "nut.{{ k8s_namespace }}.svc.cluster.local", "port": 3493, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   grafana-k8s.json: |
-    {"type": "http", "name": "k3s Grafana", "url": "https://grafana{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s Grafana", "url": "https://grafana.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Tokenless probe of the mcp gate: a request without the bearer matches no router and
   # the edge itself answers 404 — that 404 IS the healthy signal (same shape as the
   # livesync probe's expected 401). Edge-down/DNS breakage still fails the tile; a dead
@@ -110,25 +110,25 @@ stringData:
   homelab-mcp-k8s.json: |
     {"type": "http", "name": "k3s homelab-mcp (edge gate)", "url": "https://mcp.local.{{ domain }}/mcp", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["404"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   home-assistant-k8s.json: |
-    {"type": "http", "name": "k3s Home Assistant", "url": "https://home-assistant{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s Home Assistant", "url": "https://home-assistant.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Transcribed 2026-08-10 (Phase D.2 step 3): id `loki` was the grafana compose's
   # kuma('loki') label; the tile now probes the CLUSTER loki-homelab through its
   # ClientIP-gated route (this pod's CIDR is admitted; hostAliases pin the -k8s name to
   # the VIP). /ready 503s ~15s after a restart while the ingester warms — brief PENDING
   # after a deploy is normal, carried over from the Docker tile's notes.
   loki.json: |
-    {"type": "http", "name": "Loki", "url": "https://loki-homelab{{ k8s_hostname_suffix }}.local.{{ domain }}/ready", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "Loki", "url": "https://loki-homelab.local.{{ domain }}/ready", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Phase D scrutiny move (2026-08-10, SC5): /api/health rides the LAN Authelia bypass
   # (this pod's CIDR ⊂ 10.0.0.0/8), so a plain 200 — no 302 dance. Covers the cluster
   # web+influxdb pair; the per-node collectors are covered by SMART Data Freshness.
   scrutiny-k8s.json: |
-    {"type": "http", "name": "k3s Scrutiny", "url": "https://scrutiny{{ k8s_hostname_suffix }}.local.{{ domain }}/api/health", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s Scrutiny", "url": "https://scrutiny.local.{{ domain }}/api/health", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   karakeep-k8s.json: |
-    {"type": "http", "name": "k3s karakeep", "url": "https://karakeep{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s karakeep", "url": "https://karakeep.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   ical-proxy-k8s.json: |
-    {"type": "http", "name": "iCal Proxy k8s", "url": "https://ical-proxy{{ k8s_hostname_suffix }}.local.{{ domain }}/calendar1.ics", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "iCal Proxy k8s", "url": "https://ical-proxy.local.{{ domain }}/calendar1.ics", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   code-server-k8s.json: |
-    {"type": "http", "name": "k3s code-server", "url": "https://code-server{{ k8s_hostname_suffix }}.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s code-server", "url": "https://code-server.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   pihole-k8s-dns.json: |
     {"type": "dns", "name": "Pi-hole k8s DNS", "hostname": "homepage.local.{{ domain }}", "dns_resolve_server": "{{ dns_k8s_vip }}", "dns_resolve_type": "A", "port": 53, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # ── livesync edge-gate probe ───────────────────────────────────────────────────────────

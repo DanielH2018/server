@@ -51,7 +51,7 @@ spec:
       # /api/v1/targets joined /api/v1/query* 2026-08-14: probe.py's `targets` command
       # repointed here when the Docker prometheus retired — same read-only surface,
       # same LAN gate.
-      match: "Host(`prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}`) && (PathPrefix(`/api/v1/query`) || PathPrefix(`/api/v1/targets`)) && (ClientIP(`{{ lan_subnet }}`) || ClientIP(`10.42.0.0/31`) || ClientIP(`10.42.1.0/31`))"
+      match: "Host(`prometheus.local.{{ domain }}`) && (PathPrefix(`/api/v1/query`) || PathPrefix(`/api/v1/targets`)) && (ClientIP(`{{ lan_subnet }}`) || ClientIP(`10.42.0.0/31`) || ClientIP(`10.42.1.0/31`))"
       middlewares:
         - name: rate-limit
       services:
@@ -81,7 +81,7 @@ spec:
     # limiter here would convert a brief outage into permanent gaps. The single-source ClientIP
     # guard already bounds who can generate this load.
     - kind: Rule
-      match: "Host(`prometheus{{ k8s_hostname_suffix }}.local.{{ domain }}`) && PathPrefix(`/api/v1/write`) && ClientIP(`{{ k8s_bridge_client_ip }}/32`)"
+      match: "Host(`prometheus.local.{{ domain }}`) && PathPrefix(`/api/v1/write`) && ClientIP(`{{ k8s_bridge_client_ip }}/32`)"
       services:
         - name: prometheus
           port: 9090

@@ -13,7 +13,6 @@
     container_item.hostname,
     container_item.port,
     container_item.use_authelia,
-    unsuffixed_hostname=container_item.unsuffixed_hostname | default(none),
     namespace=k8s_observability_namespace
   )
 }}

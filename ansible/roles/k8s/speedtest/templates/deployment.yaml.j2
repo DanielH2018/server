@@ -73,11 +73,7 @@ spec:
             # hand a public visitor asset and redirect URLs on a LAN-only host that does not
             # resolve for them. Bridged, this matches the Docker copy's APP_URL exactly.
             - name: APP_URL
-{% if container_item.unsuffixed_hostname is defined %}
-              value: "https://{{ container_item.unsuffixed_hostname }}.{{ domain }}"
-{% else %}
-              value: "https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
-{% endif %}
+              value: "https://{{ container_item.hostname | default(container_item.name) }}.{{ domain }}"
             # Results are stored in UTC by design (APP_TIMEZONE stays default); this is
             # the UI-display timezone, which otherwise also defaults to Etc/UTC.
             - name: DISPLAY_TIMEZONE

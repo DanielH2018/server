@@ -80,7 +80,6 @@ def load_vars(domain: str | None = None) -> dict:
     all_vars = yaml.safe_load((INVENTORY / "group_vars" / "all.yml").read_text()) or {}
     out = {
         "domain": domain or read_domain(),
-        "k8s_hostname_suffix": all_vars["k8s_hostname_suffix"],
         "k3s_metallb_ingress_vip": all_vars["k3s_metallb_ingress_vip"],
     }
     for host in (*LOCAL_NAME_HOSTS, "daniel-pi"):
@@ -93,7 +92,7 @@ def load_vars(domain: str | None = None) -> dict:
 def resolve(value: str, scalars: dict) -> str:
     """Substitute `{{ var }}` against the scalar map, erroring on anything unresolved.
 
-    Failing loudly matters: a silently unresolved `auth{{ k8s_hostname_suffix }}` would emit a
+    Failing loudly matters: a silently unresolved `{{ some_var }}` in a hostname would emit a
     hosts entry for a hostname that does not exist, and the symptom (one service unreachable)
     looks nothing like its cause.
     """

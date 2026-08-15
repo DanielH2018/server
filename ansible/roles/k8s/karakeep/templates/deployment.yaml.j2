@@ -93,11 +93,7 @@ spec:
             # pod goes ready and login breaks, bouncing users to a host that will not resolve
             # for them. Same treatment as speedtest's APP_URL.
             - name: NEXTAUTH_URL
-{% if container_item.unsuffixed_hostname is defined %}
-              value: "https://{{ container_item.unsuffixed_hostname }}.{{ domain }}"
-{% else %}
-              value: "https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
-{% endif %}
+              value: "https://{{ container_item.hostname | default(container_item.name) }}.{{ domain }}"
             - name: DISABLE_NEW_USERS_REGISTRATION
               value: "true"
             - name: OPENAI_BASE_URL

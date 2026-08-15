@@ -9,8 +9,11 @@
 
   Arguments mirror labels() where they can:
     name               Service (and IngressRoute) name; matches the k8s Service
-    hostname           Host label, WITHOUT the domain. Callers pass the -k8s-suffixed name
-                       while the Docker twin still serves the unsuffixed one.
+    hostname           Host label, WITHOUT the domain. ONE name per service since the
+                       transitional `-k8s` suffix retired (2026-08-15): during the migration
+                       a service answered on both a `-k8s` name and the unsuffixed one its
+                       Docker twin had owned, and this macro emitted a second route for the
+                       latter. Docker is gone, so the unsuffixed name is the only name.
     port               Service port to route to
     authelia           attach the forward-auth Middleware (containers_list use_authelia)
     extra_middlewares  additional Middleware names, applied after the standard two
@@ -21,7 +24,7 @@
   Docker instance's. The Docker side repeats the same block on each hand-rolled file-provider
   router for the same reason.
 #}
-{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, unsuffixed_hostname=none, public=true, bypass_prefixes=[]) -%}
+{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, public=true, bypass_prefixes=[]) -%}
 {#
   namespace defaults to k8s_namespace — every slice-2 service wants that. It is overridable
   because the telemetry stack runs in its own namespace, and an IngressRoute must live
@@ -56,31 +59,6 @@ spec:
       services:
         - name: {{ name }}
           port: {{ port }}
-{% if unsuffixed_hostname %}
-    # The service's PRE-MIGRATION names, served natively (bridge-teardown BT1/BT2 — the
-    # forward bridge and its ClientIP-gated route are gone; slice-7-bridge-teardown.md).
-    # The `.local` leg exists for the LAN wildcard's arrival at this edge (BT3); the public
-    # leg for direct internet arrivals since the 80/443 flip. Authelia is applied here (the
-    # k8s portal owns the public cookie domain) — one portal, no double login.
-    #
-    # public_native=false opts a service out — livesync's names stay on the REVERSE bridge
-    # (through the Docker edge) because its X-Sync-Token gate lives in that edge's file
-    # provider, where the readonly kubeconfig cannot read it; an IngressRoute rule carrying
-    # the token would hand it to anything holding that kubeconfig.
-    - kind: Rule
-      match: "Host(`{{ unsuffixed_hostname }}.local.{{ domain }}`){% if k8s_public_route and public %} || Host(`{{ unsuffixed_hostname }}.{{ domain }}`){% endif %}"
-      middlewares:
-        - name: rate-limit
-{% if authelia %}
-        - name: authelia
-{% endif %}
-{% for middleware in extra_middlewares %}
-        - name: {{ middleware }}
-{% endfor %}
-      services:
-        - name: {{ name }}
-          port: {{ port }}
-{% endif %}
   tls:
     certResolver: cloudflare
     # Explicit, and deliberately not named `default` — Traefik reserves that name for the
@@ -93,7 +71,7 @@ spec:
         sans:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
-{% if k8s_public_route and public and unsuffixed_hostname %}
+{% if k8s_public_route and public %}
 {% for prefix in bypass_prefixes %}
 {% set slug = prefix | trim('/') | replace('/', '-') %}
 ---
@@ -114,7 +92,7 @@ spec:
     - https
   routes:
     - kind: Rule
-      match: "Host(`{{ unsuffixed_hostname }}.{{ domain }}`) && PathPrefix(`{{ prefix }}`)"
+      match: "Host(`{{ hostname }}.{{ domain }}`) && PathPrefix(`{{ prefix }}`)"
       priority: 100
       middlewares:
         - name: rate-limit
@@ -140,10 +118,14 @@ spec:
   route to these services when they left that host (slice 4, B4c). Modelled on
   prometheus-monitoring / n8n-monitoring, which exist for exactly this problem.
 
-  IT MUST BE THE `-k8s` HOSTNAME, not a bridged `*.local` name. The bridged names resolve to
-  daniel-server, and a container ON that host cannot reach a port its neighbour publishes on
-  the same Docker bridge (same-bridge hairpin NAT — it broke homepage's widgets and check_n8n).
-  The suffixed name resolves to the cluster VIP, which is a different machine entirely.
+  It served the `-k8s` hostname until that suffix retired (2026-08-15), and the reason it HAD
+  to is now history: the caller was a container on daniel-server, which cannot reach a port
+  its neighbour publishes on the same Docker bridge (same-bridge hairpin NAT — it broke
+  homepage's widgets and check_n8n), so only a name resolving to the cluster VIP worked.
+  Docker left both cluster nodes on 2026-08-14 and the callers are pods, so this now shares
+  the service's one plain `.local` hostname. What keeps it distinct from the app's own route
+  is the ClientIP + PathPrefix pair below plus `priority: 100`, NOT a separate hostname —
+  do not "fix" a widget by inventing a second name for it.
 
   THE `tls:` BLOCK AT THE BOTTOM IS LOAD-BEARING, and its absence is what broke this macro for
   most of 2026-08-07. An IngressRoute on the `https` entrypoint with no `spec.tls` becomes a
