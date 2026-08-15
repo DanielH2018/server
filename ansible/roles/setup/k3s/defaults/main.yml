@@ -169,7 +169,12 @@ k3s_longhorn_backup_prefix: longhorn
 # B/C transaction caps. Re-armed 2026-08-14 00:06 UTC: the approved purge removed all
 # 941 non-longhorn object versions (4.66 GB), so only longhorn/ bytes count against the
 # unchanged storage cap and the caps had just reset when the target came back.
-k3s_longhorn_backup_armed: true
+# Disarmed 2026-08-15 ~11:20 UTC: the first restore drill hit a Class-B cap already at
+# 100% (the denied metadata GET surfaced as "cannot find volume.cfg in backupstore", NOT
+# as a 403 — a masked failure mode to remember) and the BackupVolume controllers then
+# retry-stormed LISTs at ~60/min into the exhausted Class-C cap. Re-arm after the 00:00
+# UTC reset.
+k3s_longhorn_backup_armed: false
 
 # Daily volume backup to that target. 03:30 keeps it clear of the Kopia run and of the daily
 # secret-rotation cron. 14 retained backups per volume is two weeks of daily recovery points
