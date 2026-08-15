@@ -40,7 +40,10 @@ push() { # status msg
   if [[ -n "${HC_PING_URL:-}" ]]; then
     local url="$HC_PING_URL"
     [[ "$1" == "up" ]] || url="$url/fail"
-    curl -fsS -m 10 --retry 3 --data-raw "$2" "$url" >/dev/null \
+    # Deliberately not "$2": an rsync failure echoes PI_SRC, which carries the Pi's LAN IP and
+    # ssh user, and Healthchecks.io stores ping bodies. The status is what has to escape the
+    # house; the detail stays in Kuma, which is on the LAN.
+    curl -fsS -m 10 --retry 3 --data-raw "peer pull reported $1; detail in Kuma" "$url" >/dev/null \
       || echo "healthchecks ping failed ($1: $2)" >&2
   fi
 }

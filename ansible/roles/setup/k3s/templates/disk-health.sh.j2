@@ -41,7 +41,11 @@ curl -fsS --max-time 10 -G \
 # Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
 # Short version: Kuma runs on the cluster this watches, so an outage silences both the push and
 # the monitor. hc-ping.com alerts on the silence instead. Skipped when no key is configured.
-HC_PING_KEY="{{ healthchecks_ping_key | default('') }}"
+# Sourced rather than inlined: this script is 0755 so the {{ sys_user }} cron can execute it,
+# which would make an inlined key readable by every local account. The env file is 0640.
+HC_PING_KEY=""
+# shellcheck source=/dev/null
+[[ -r /etc/healthchecks/ping.env ]] && . /etc/healthchecks/ping.env
 if [[ -n "$HC_PING_KEY" ]]; then
   # Bare slug, never auto-provisioned — a typo would silently create an unwatched check that
   # reads green forever.
