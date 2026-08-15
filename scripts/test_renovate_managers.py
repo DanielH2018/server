@@ -217,6 +217,51 @@ def test_group_vars_images_are_tracked() -> None:
     )
 
 
+_CONTROL_PLANE_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
+
+
+def test_control_plane_version_pins_are_tracked() -> None:
+    """Every `*_version:` pin in roles/setup/k3s/defaults must be matched by a customManager.
+
+    k3s, MetalLB and Longhorn were pinned here with no manager reaching the file at all: the
+    k8s-images manager one directory over scans roles/k8s/*/defaults and matches `_image:` keys,
+    so neither its file patterns nor the per-image coverage test above could ever see these
+    (2026-08-15 review H5). Widening that test's glob would NOT have caught it — these are
+    version vars, not image vars — which is why this is a separate guard.
+
+    Written to read the pins out of the file rather than assert three known names, so a fourth
+    component pinned here later (cilium, cert-manager, a k3s addon) fails this test until it is
+    tracked, instead of quietly repeating the same escape."""
+    text = (_REPO / _CONTROL_PLANE_DEFAULTS).read_text()
+    pins = re.findall(r"^([a-z0-9_]*_version):\s*\"?(v[^\"\s]+)", text, re.MULTILINE)
+    assert pins, (
+        f"no `<name>_version: vX.Y.Z` pins found in {_CONTROL_PLANE_DEFAULTS} — either they "
+        "moved or their formatting changed, so this test is no longer guarding anything"
+    )
+    covering = [
+        m
+        for m in _MANAGERS
+        if any(
+            _file_pattern_to_regex(p).search(_CONTROL_PLANE_DEFAULTS)
+            for p in m["managerFilePatterns"]
+        )
+    ]
+    untracked = [
+        f"{name}: {value}"
+        for name, value in pins
+        if not any(
+            re.search(_to_python_regex(ms), f"{name}: {value}")
+            for m in covering
+            for ms in m["matchStrings"]
+        )
+    ]
+    assert not untracked, (
+        "control-plane version pin(s) no customManager tracks — the Kubernetes version, the "
+        "LoadBalancer implementation, or the storage layer under every PVC would age with no "
+        "update signal:\n" + "\n".join(untracked)
+    )
+
+
 # Images BUILT by this repo and pushed to the node-local registry, not pulled from an upstream
 # registry — so there is no upstream ref for Renovate to compare against and no version for it to
 # offer. Exempt by variable name rather than by pattern, so adding one is a deliberate act with a

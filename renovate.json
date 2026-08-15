@@ -107,6 +107,42 @@
     },
     {
       "customType": "regex",
+      "description": "k3s control-plane pin in roles/setup/k3s/defaults/main.yml. The k8s-images manager one directory over (roles/k8s/*/defaults) matches `_image:` keys only, so this file was invisible to every manager AND to the coverage tests — the same one-directory-short escape crowdsec_k8s_image made from group_vars (2026-08-15 review H5). This is the highest-stakes untracked pin in the tree: it is the Kubernetes version itself, where staleness means unpatched CVEs. NOTE the `+k3sN` suffix is semver build metadata and is IGNORED when comparing, so an upstream-version bump (v1.36.2 -> v1.37.0) is offered but a same-version k3s re-tag (+k3s1 -> +k3s2) is not; that is the axis worth having, and stating it beats shipping a manager whose blind spot is undocumented (the shellcheck-py failure mode recorded above).",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/setup/k3s/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "k3s_version:\\s*\"?(?<currentValue>v[^\"\\s]+)\"?"
+      ],
+      "depNameTemplate": "k3s-io/k3s",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "MetalLB pin in roles/setup/k3s/defaults/main.yml — the manifest URL in tasks/main.yml interpolates this var, so it decides which MetalLB the cluster installs. Same file, same blind spot as the k3s pin above; separate manager because a regex manager takes one depNameTemplate. Every LoadBalancer VIP in the estate (Traefik's edge, Pi-hole's DNS) is served by this component.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/setup/k3s/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "k3s_metallb_version:\\s*\"?(?<currentValue>v[^\"\\s]+)\"?"
+      ],
+      "depNameTemplate": "metallb/metallb",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Longhorn pin in roles/setup/k3s/defaults/main.yml — the storage layer holding every PVC in the cluster, and the one pin in this file where a careless bump is worse than a stale one: the file header records that Longhorn has version-to-version upgrade constraints and does not support arbitrary version skips. Tracked for the signal, never automerged (packageRule below).",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/setup/k3s/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "k3s_longhorn_version:\\s*\"?(?<currentValue>v[^\"\\s]+)\"?"
+      ],
+      "depNameTemplate": "longhorn/longhorn",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
       "description": "CI test-runner Python pin (`python-version:` input in the workflows). helpers:pinGitHubActionDigests tracks the setup-python ACTION digest but not its version INPUT, so this was one of the two last silently-aging pins in the repo. A bump PR runs the whole test suite ON the new interpreter, which is exactly the compatibility proof; keep it moving with the host toolchain rather than frozen at the requires-python floor. Scans EVERY workflow file (not just ci.yml): image-smoke.yml pins the same `python-version` and a ci.yml-only pattern let its twin age silently until it drifted (2026-07-10 review). Both hold the same value, so one bump PR edits them in lockstep.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/[^/]+\\.yml$/"
@@ -286,6 +322,19 @@
         "getsops/sops"
       ],
       "groupName": "sops binary (manual \u2014 finish the per-arch sha256 from checksums.txt)",
+      "automerge": false
+    },
+    {
+      "description": "k3s control plane, MetalLB and Longhorn (roles/setup/k3s/defaults). NEVER automerged, for three different reasons that all land in the same place: Longhorn does not support arbitrary version skips (the file header says so) and its upgrade rewrites the storage layer under every PVC; MetalLB owns the LoadBalancer VIPs, so a bad one takes the edge and DNS offline together; and a k3s bump reinstalls the control plane on a single-server cluster. None of that is provable by CI \u2014 the PR is a SIGNAL to plan an upgrade, and the operator drives it. Same manual-finish class as the SOPS and crowdsec-plugin rules above.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "k3s-io/k3s",
+        "metallb/metallb",
+        "longhorn/longhorn"
+      ],
+      "groupName": "k3s control plane (manual \u2014 plan the upgrade, mind Longhorn's version skips)",
       "automerge": false
     },
     {
