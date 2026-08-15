@@ -61,7 +61,7 @@ kubectl -n longhorn-system get volumes.longhorn.io \
 | 0 | v1.7.3 | Patch, same minor. StorageClass is identical to v1.7.2's. A rehearsal of the loop at the lowest possible risk. |
 | 1 | v1.8.2 | **See the landmine below.** Multiple backup targets arrive here; the StorageClass gains `backupTargetName: "default"`. |
 | 2 | v1.9.2 | No deprecations noted upstream. |
-| 3 | v1.10.2 | Fixes an upgrade bug that leaves a stale unknown OS condition on node CRs — check node CRs afterwards. |
+| 3 | v1.10.2 | Image refs become fully qualified (`docker.io/longhornio/...`), so every node re-pulls rather than reusing its cached copy — expect a transient `ImagePullBackOff` and `Ready=False` while that happens. Adds a `KernelModulesLoaded` node condition; see below. |
 | 4 | v1.11.3 | Requires **Kubernetes ≥ v1.34** (CSI external-provisioner v6.3.0). Confirm CSI pods land before declaring done. |
 | 5 | v1.12.1 | Deprecates legacy **V2** linked-clone volumes. Does not apply while every volume is `dataEngine: v1` — re-check before the hop. |
 
@@ -101,6 +101,19 @@ The general lesson for the remaining hops: **the manager manifest applies before
 patches run**, so a removed or renamed setting fails *after* the new version is already live. That
 is recoverable (fix the task, re-run), but expect it once per hop where upstream reorganises
 settings.
+
+### Expected-red node conditions
+
+Two node-CR conditions read `False` here and neither is an upgrade failure:
+
+- **`Multipathd=False`** — long-standing. `multipathd` runs, and the role blacklists Longhorn
+  devices from it (`/etc/multipath.conf`). Longhorn flags the daemon's presence regardless.
+- **`KernelModulesLoaded=False`** — new node condition, first seen at hop 3. It reports
+  `dm_crypt` missing, which is only required for **encrypted** volumes. Nothing here uses volume
+  encryption, so this is informational. It would become real if an encrypted StorageClass were ever
+  added.
+
+Check `Ready` for the actual health signal; the other conditions are advisory.
 
 ## Staying current afterwards
 
