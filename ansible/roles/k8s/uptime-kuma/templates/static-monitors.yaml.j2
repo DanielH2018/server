@@ -231,9 +231,17 @@ stringData:
   # the same tolerance the retired pi_peers check applied). Same token.
   wg-easy-pi-peers.json: |
     {"type": "push", "name": "WG Pi Peer Backup", "interval": 216000, "max_retries": 0, "push_token": "{{ monitor_bridge_pi_peers_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # E7 (2026-08-13): DOCKER-USER Origin Lock + Cloudflare IP Drift retired with the public
-  # 80/443 they guarded. CrowdSec AppSec stays — its feeder moved to daniel-box
-  # (k8s/crowdsec's crowdsec-appsec-verify.sh cron, pushing directly; same token).
+  # E7 (2026-08-13): DOCKER-USER Origin Lock retired with the public 80/443 it guarded.
+  # CrowdSec AppSec stays — its feeder moved to daniel-box (k8s/crowdsec's
+  # crowdsec-appsec-verify.sh cron, pushing directly; same token).
+  #
+  # Cloudflare IP Drift retired alongside it and should NOT have: only the origin-lock half
+  # of what it watched went away, and cloudflare_ips still gates forwardedHeaders.trustedIPs
+  # on both entrypoints. Restored 2026-08-15 with the same id, name and token, fed by
+  # k8s/traefik's cloudflare-ip-drift.sh daily cron (same direct-push shape). 90000s (25h)
+  # gives a daily push one missed run of slack, matching Secret Rotation / Manifest Prune.
+  cloudflare-ip-drift.json: |
+    {"type": "push", "name": "Cloudflare IP Drift", "interval": 90000, "max_retries": 0, "push_token": "{{ monitor_bridge_cloudflare_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   crowdsec-appsec.json: |
     {"type": "push", "name": "CrowdSec AppSec", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_appsec_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-b2-reachable.json: |

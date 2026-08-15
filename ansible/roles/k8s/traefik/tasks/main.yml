@@ -89,3 +89,31 @@
       {{ k3s_metallb_ingress_vip }}. MetalLB does not re-evaluate an existing allocation when
       pools or annotations change — delete the Service and redeploy to force reallocation.
     success_msg: "Traefik holds the reserved ingress VIP {{ k3s_metallb_ingress_vip }}"
+
+- name: Deploy the Cloudflare IP drift check
+  tags: [cron]
+  # The cloudflare_ips allowlist gates forwardedHeaders.trustedIPs on both entrypoints
+  # (static-config.yaml.j2). Its Docker-era watchdog retired in 84733119 with the
+  # DOCKER-USER origin lock it also guarded, leaving this half unmonitored until 2026-08-15.
+  ansible.builtin.template:
+    src: cloudflare-ip-drift.sh.j2
+    dest: /usr/local/bin/cloudflare-ip-drift.sh
+    mode: "0750"
+    owner: root
+    group: root
+  become: true
+
+- name: Schedule the Cloudflare IP drift check
+  tags: [cron]
+  # Daily, not weekly like its predecessor: the check is two curls, and the Kuma monitor's
+  # 90000s (25h) interval needs a push more often than that to stay green. Cloudflare
+  # changes these ranges on a multi-year cadence — the cadence is about the heartbeat,
+  # not about catching drift fast. Pushes "Cloudflare IP Drift" directly, no bridge hop.
+  ansible.builtin.cron:
+    name: "Cloudflare IP drift"
+    minute: "25"
+    hour: "5"
+    user: root
+    job: "/usr/local/bin/cloudflare-ip-drift.sh"
+    cron_file: cloudflare-ip-drift
+  become: true
