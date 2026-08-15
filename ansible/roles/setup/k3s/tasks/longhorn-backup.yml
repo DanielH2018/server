@@ -27,27 +27,23 @@
       s3://<bucket>@<region>/<prefix>. Set k3s_longhorn_b2_region explicitly in host_vars
       rather than loosening the regex.
 
-- name: Look for an existing Longhorn backup credential
+# Reconciled on every run, not created-if-absent. It WAS created-if-absent, which made rotating
+# kopia_b2_application_key in SOPS a guaranteed no-op against the cluster: nothing compared the
+# live value, so the registry recorded a rotation as complete while Longhorn kept authenticating
+# with the old key — the dangerous direction if the rotation was prompted by a suspected leak.
+#
+# Fed on stdin rather than `create --from-literal`, which put the plaintext key in the process
+# argv and so in /proc/<pid>/cmdline for any local account to read for the life of the call.
+# no_log covers Ansible's own output; it never covered argv.
+- name: Reconcile the Longhorn backup credential
   tags: [longhorn_backup]
   ansible.builtin.command:
-    cmd: k3s kubectl -n longhorn-system get secret longhorn-b2 -o name
-  register: k3s_longhorn_secret
-  become: true
-  changed_when: false
-  failed_when: false
-
-- name: Create the Longhorn backup credential
-  tags: [longhorn_backup]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n longhorn-system create secret generic longhorn-b2
-      --from-literal=AWS_ACCESS_KEY_ID={{ kopia_b2_key_id }}
-      --from-literal=AWS_SECRET_ACCESS_KEY={{ kopia_b2_application_key }}
-      --from-literal=AWS_ENDPOINTS=https://s3.{{ k3s_longhorn_b2_region }}.backblazeb2.com
+    cmd: k3s kubectl -n longhorn-system apply -f -
+    stdin: "{{ lookup('template', 'longhorn-b2-secret.yaml.j2') }}"
+  register: k3s_longhorn_b2_secret_apply
   become: true
   no_log: true
-  when: k3s_longhorn_secret.rc != 0
-  changed_when: true
+  changed_when: "'unchanged' not in k3s_longhorn_b2_secret_apply.stdout"
 
 # Declarative in BOTH directions: k3s_longhorn_backup_armed=false enforces a BLANK target.
 # It used to arm unconditionally, which silently resurrected a deliberately blanked target
@@ -102,29 +98,15 @@
   until: k3s_backup_available.stdout == "true"
   when: k3s_longhorn_backup_armed | bool
 
-- name: Look for an existing Longhorn R2 credential
+- name: Reconcile the Longhorn R2 credential
   tags: [longhorn_backup, longhorn_r2]
   ansible.builtin.command:
-    cmd: k3s kubectl -n longhorn-system get secret longhorn-r2 -o name
-  register: k3s_longhorn_r2_secret
-  become: true
-  changed_when: false
-  failed_when: false
-
-- name: Create the Longhorn R2 credential
-  tags: [longhorn_backup, longhorn_r2]
-  # Same three keys as the B2 secret — Longhorn speaks S3 to both. Only the endpoint differs,
-  # and R2's is account-scoped rather than region-scoped.
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n longhorn-system create secret generic longhorn-r2
-      --from-literal=AWS_ACCESS_KEY_ID={{ r2_access_key_id }}
-      --from-literal=AWS_SECRET_ACCESS_KEY={{ r2_secret_access_key }}
-      --from-literal=AWS_ENDPOINTS=https://{{ r2_account_id }}.r2.cloudflarestorage.com
+    cmd: k3s kubectl -n longhorn-system apply -f -
+    stdin: "{{ lookup('template', 'longhorn-r2-secret.yaml.j2') }}"
+  register: k3s_longhorn_r2_secret_apply
   become: true
   no_log: true
-  when: k3s_longhorn_r2_secret.rc != 0
-  changed_when: true
+  changed_when: "'unchanged' not in k3s_longhorn_r2_secret_apply.stdout"
 
 - name: Render the R2 backup target
   tags: [longhorn_backup, longhorn_r2]
