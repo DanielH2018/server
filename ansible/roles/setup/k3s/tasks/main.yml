@@ -661,6 +661,34 @@
       and confirm the object exists under the '{{ k3s_longhorn_backup_prefix }}/' prefix in
       bucket '{{ kopia_b2_bucket }}' by listing it from outside the cluster.
 
+- name: Create the Healthchecks.io credential directory
+  tags: [backup-health, disk-health, manifest-prune]
+  ansible.builtin.file:
+    path: /etc/healthchecks
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Deploy the Healthchecks.io ping key
+  tags: [backup-health, disk-health, manifest-prune]
+  # NOT inlined into the heartbeat scripts. Those land at 0755 (they must be executable by the
+  # {{ sys_user }} crons), so a key inlined there is readable by every local account on this
+  # host — and a project ping key is broader than the Kuma push tokens already exposed that
+  # way: a Kuma token spoofs one monitor, this one can hold every check in the project green
+  # and so suppress the alerts the whole mechanism exists to deliver. 0640 root:{{ sys_user }}
+  # covers both callers — manifest-prune-check runs as root (owner), the other two as
+  # {{ sys_user }} (group). Same shape as /etc/renovate-notify/config.env.
+  ansible.builtin.copy:
+    content: "HC_PING_KEY={{ healthchecks_ping_key | default('') }}\n"
+    dest: /etc/healthchecks/ping.env
+    mode: "0640"
+    owner: root
+    group: "{{ sys_user }}"
+  become: true
+  no_log: true  # renders the Healthchecks.io ping key
+
 - name: Deploy the Longhorn backup-plane heartbeat
   tags: [backup-health]
   # Runs as {{ sys_user }}, not root: it reads the cluster through that user's read-only

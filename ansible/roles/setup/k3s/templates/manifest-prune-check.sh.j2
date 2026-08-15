@@ -138,11 +138,19 @@ curl -fsS --max-time 10 -G \
 # Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
 # Short version: Kuma runs on the cluster this watches, so an outage silences both the push and
 # the monitor. hc-ping.com alerts on the silence instead. Skipped when no key is configured.
-HC_PING_KEY="{{ healthchecks_ping_key | default('') }}"
+# Sourced rather than inlined: this script is 0755, so an inlined key would be readable by
+# every local account. The env file is 0640 root:{{ sys_user }} and this cron runs as root.
+HC_PING_KEY=""
+# shellcheck source=/dev/null
+[[ -r /etc/healthchecks/ping.env ]] && . /etc/healthchecks/ping.env
 if [[ -n "$HC_PING_KEY" ]]; then
   # Bare slug, never ?create=1 — a typo would silently create an unwatched, permanently-green check.
   HC_URL="https://hc-ping.com/${HC_PING_KEY}/manifest-prune-check"
   [[ "$STATUS" == "up" ]] || HC_URL="${HC_URL}/fail"
-  curl -fsS --max-time 10 --retry 3 --data-raw "$MSG" "$HC_URL" >/dev/null \
+  # Deliberately NOT $MSG. That names live IngressRoute/Middleware objects — internal service
+  # and hostname fragments — and Healthchecks.io stores ping bodies (first 100 kB). The status
+  # is what has to escape the house; the detail stays in Kuma, which is on the LAN.
+  curl -fsS --max-time 10 --retry 3 --data-raw "drift detected; object names withheld, see Kuma" \
+    "$HC_URL" >/dev/null \
     || logger -t manifest-prune-check "healthchecks ping failed (status=${STATUS})"
 fi
