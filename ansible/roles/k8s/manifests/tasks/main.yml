@@ -7,6 +7,11 @@
 #   manifests_secret_files  list rendered 0600 with no_log (anything carrying a secret)
 #   manifests_rollout       Deployment to wait on; set '' to skip the wait entirely
 #
+# Derived here, not passed in:
+#   manifests_image_changed  true when k8s/image-builder rebuilt this service's image to a new
+#                            digest in this play — a rollout trigger in its own right, since a
+#                            rebuild behind a mutable tag leaves the Deployment spec unchanged
+#
 # Named `manifests` rather than `common` so its ansible-lint variable prefix does not
 # collide with the Docker-side roles/containers/common namespace.
 #
@@ -109,12 +114,26 @@
   loop_control:
     loop_var: secret_file
 
+# Whether k8s/image-builder rebuilt THIS service's image to a new digest earlier in the play.
+# Keyed on manifests_service because every built image is named after the role that deploys it
+# — including n8n, whose image is built by the separate n8n-images role in an earlier batch,
+# which works because k8s_rebuilt_images is play-scoped rather than role-scoped.
+- name: Note whether a rebuilt image needs rolling for {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.set_fact:
+    manifests_image_changed: "{{ manifests_service in (k8s_rebuilt_images | default([])) }}"
+
 - name: Roll the deployment after a config change for {{ manifests_service }}
   tags: [deploy]
   # A ConfigMap/Secret edit does not restart the pods consuming it — `kubectl apply` updates
   # the object and nothing else. Without this a config change deploys green and only takes
   # effect at the next unrelated restart. Same failure the docker_deploy role's
   # common_config_changed wiring exists to prevent (roles/containers/common/CLAUDE.md).
+  #
+  # A REBUILT IMAGE needs this too, for the same reason. Built images are pushed to a mutable
+  # tag, so a rebuild changes what `:latest` resolves to while leaving the Deployment spec
+  # byte-identical — nothing in the spec changed, so nothing rolls, and the new image sits in
+  # the registry unused. k8s/image-builder records which images actually changed digest.
   #
   # Skipped when this run created the Deployment: it is already running the new config, and
   # `rollout restart` on one whose pods have not appeared yet races the initial rollout.
@@ -126,7 +145,7 @@
   changed_when: true
   when:
     - manifests_rollout | default(manifests_service) | length > 0
-    - manifests_render is changed or manifests_secret_render is changed
+    - manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
     - not manifests_apply.stdout is search('deployment.apps/' ~ (manifests_rollout | default(manifests_service)) ~ ' created')
 
 - name: Queue the batch drain for the rollout of {{ manifests_service }}
@@ -149,6 +168,7 @@
            'namespace': k8s_namespace,
            'kind': 'deploy',
            'timeout': manifests_rollout_timeout | default('300s'),
-           'changed': (manifests_render is changed) or (manifests_secret_render is changed),
+           'changed': (manifests_render is changed) or (manifests_secret_render is changed)
+                      or manifests_image_changed,
          }] }}
   when: manifests_rollout | default(manifests_service) | length > 0
