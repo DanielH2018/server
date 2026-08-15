@@ -14,8 +14,10 @@ that caused them. The vendored `ansible/collections/` changelog YAMLs are the li
 trip `yaml[indentation]`, and today they stay out only because they are gitignored AND the regex
 is scoped to what prek tracks.
 
-Companion to test_prek_pytest_files_cover_testpaths.py, which closes the same class of drift
-between prek.toml and pyproject.toml.
+This is the same class of drift test_prek_pytest_always_runs.py addresses, though that one
+resolves it by removing the hand-maintained regex rather than keeping it honest — the `pytest`
+hook takes no filenames, so it could drop its `files` gate entirely. ansible-lint genuinely
+lints the files it is given, so its regex has to stay and has to be checked.
 """
 
 import fnmatch

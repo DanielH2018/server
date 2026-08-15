@@ -244,26 +244,33 @@ name = "Run Python unit tests (toposort + monitor-bridge + readonly-hook + smoke
 entry = "uv run python -m pytest"
 language = "system"
 pass_filenames = false
-# Mirror pyproject.toml [tool.pytest.ini_options] testpaths so a LOCAL commit touching only
-# one suite still runs pytest (CI runs --all-files regardless; this keeps the two in sync).
-# Also fire on the DATA files the scripts-suite guards read (renovate.json, prek.toml,
-# requirements.yml, .ansible-lint (test_ansible_lint_scope reads it AND prek.toml — the guard is
-# useless if editing only one of the pair skips the suite), the CI + image-smoke workflows,
-# sops_setup's SOPS-binary pin, compose
-# templates, Dockerfiles, .python-version) — the
-# Renovate-manager/lockstep tests consume those, so an edit there must re-run them locally,
-# not just in CI. Likewise host_vars/group_vars/docker_install main.yml, which
-# test_network_invariant.py reads to check every referenced net is created on a fresh host.
-# And any setup-role script + `.service.j2` unit template, whose bare-python3 ExecStarts feed
-# test_host_scripts_py312.py's completeness guard (a new host-python3 unit must join HOST_RUN_SCRIPTS
-# and stay 3.12-parseable) — the exact class that bricked the deployer on 2026-07-15. Plus setup-role
-# `templates/*.j2` (e.g. gitops_deploy/config.env.j2), which the gitops budget-arithmetic guard reads
-# to prove flock+RUN_BUDGET_S+HEALTH_TIMEOUT_S stays within TimeoutStartSec.
-# Setup-role tasks/*.yml is matched as a whole directory, not the two files it used to name:
-# test_k3s_node_ip_pinned, test_longhorn_storageclass and test_gen_infra_map all parse those
-# task files, and the 2026-08-15 split of k3s/initial_setup main.yml broke all three without
-# firing this hook — CI caught it, a local commit would not have.
-files = "^(ansible/filter_plugins/.*\\.py|ansible/tests/.*\\.py|ansible/roles/k8s/[^/]+/files/.*\\.py|ansible/roles/k8s/home-assistant/tests/.*\\.py|ansible/roles/setup/[^/]+/files/.*\\.py|ansible/roles/setup/[^/]+/templates/.*\\.j2|ansible/roles/.*\\.service\\.j2|\\.claude/(hooks|scripts)/.*\\.py|scripts/.*\\.py|evals/.*\\.py|pyproject\\.toml|renovate\\.json|prek\\.toml|\\.ansible-lint|\\.python-version|ansible/requirements\\.yml|\\.github/workflows/[^/]+\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/roles/setup/[^/]+/tasks/.*\\.yml|ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/roles/(containers|k8s)/[^/]+/(templates|files)/[Dd]ockerfile[^/]*)$"
+# ALWAYS run — no `files` gate. Deliberate, and the one hook here that must not have one.
+#
+# This hook takes no filenames (pass_filenames = false), so it runs the entire suite whenever it
+# fires. A `files` regex therefore buys nothing when the hook runs and costs full coverage when
+# it doesn't — not a latency trade, just a gap. That gap became load-bearing when ci.yml started
+# scoping PR runs to changed files: the regex this replaces was written as a LOCAL-commit
+# convenience, under a premise its own comment stated ("CI runs --all-files regardless"), and the
+# scoping change silently promoted it into a CI coverage gate it was never designed to be.
+#
+# The concrete failure: several tests here discover their own inputs by walking the tree
+# (test_validate_shell_templates' pinned roster, test_healthchecks_pings' rglob). A PR adding a
+# new *.sh.j2 matched no path in the regex, so pytest never ran, so those tests could not fail on
+# the PR that broke them — only on the push to master afterwards. That is how registry-gc.sh.j2
+# put master red for six consecutive pushes on 2026-08-15 behind six green PRs.
+#
+# The regex is not worth repairing. Its comment block had become a ledger of past misses, one
+# clause appended per incident — the .ansible-lint/prek.toml pairing, the 2026-07-15 deployer
+# brick, gitops config.env.j2, and (added the same day this was removed) setup-role tasks/*.yml
+# after the k3s/initial_setup split broke three tests without firing the hook. A list that grows
+# an entry every time something escapes is the wrong mechanism, not a list needing one more entry.
+# Git history has the full text if the per-path rationale is ever needed again.
+#
+# Cost of always running: the suite is ~3s locally (-n auto) and ~8-10s on the runner, against a
+# CI job that already takes 24-44s. Residual gap, stated honestly: this covers tests under
+# [tool.pytest.ini_options] testpaths only — a whole-tree scanner added outside those entries
+# still escapes, but that is a short explicit list in pyproject.toml rather than a regex.
+always_run = true
 
 # Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
 # syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]; vendored
