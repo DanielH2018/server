@@ -58,6 +58,27 @@ spec:
             # would mean this pod. See group_vars/all.yml for the address pair.
             - --output
             - type=image,name={{ k8s_registry_push_host }}/{{ image_builder_name }}:{{ image_builder_tag }},push=true,registry.insecure=true
+            # Layer cache, kept in the registry beside the image it belongs to. buildkitd's
+            # own state is an emptyDir that dies with the Job, so without this EVERY build is
+            # cold: re-pull the base, re-run every apt/pip/npm step, re-fetch everything the
+            # Dockerfile downloads — even when the Dockerfile is byte-identical to last time.
+            #
+            # mode=min, not max, and that is sufficient here rather than a compromise: max
+            # only adds the layers of intermediate BUILD STAGES, and all seven Dockerfiles
+            # this role builds are single-stage, so every RUN already produces a layer of the
+            # resulting image that min exports. max would cost registry space for nothing.
+            #
+            # image-manifest+oci-mediatypes are what make the cache storable in a standard
+            # distribution registry (ours is registry:3.0.0) rather than needing a
+            # buildkit-aware one.
+            #
+            # The `:buildcache` tag is a real tag, so registry GC — which only sweeps
+            # UNTAGGED blobs — will not reclaim it. The cache is therefore bounded by the
+            # number of built images, not by how often they are rebuilt.
+            - --import-cache
+            - type=registry,ref={{ k8s_registry_push_host }}/{{ image_builder_name }}:buildcache,registry.insecure=true
+            - --export-cache
+            - type=registry,ref={{ k8s_registry_push_host }}/{{ image_builder_name }}:buildcache,mode=min,image-manifest=true,oci-mediatypes=true,registry.insecure=true
           # Rootless BuildKit needs these two, and this is the least-confined workload in the
           # fleet — everything else runs cap_drop: ALL and nothing else relaxes seccomp. Stated
           # plainly rather than buried: building an image means unpacking arbitrary base-image
@@ -90,9 +111,10 @@ spec:
             - name: context
               mountPath: /workspace
               readOnly: true
-            # buildkitd's state. An emptyDir, not a PVC: the layer cache is worth keeping for a
-            # single build's duration and not worth a Longhorn volume, since every base layer is
-            # re-pullable and the images are rebuilt from scratch on demand anyway.
+            # buildkitd's state. Still an emptyDir, and still not a PVC — but for a different
+            # reason than before: cross-build caching now lives in the registry (see
+            # --export-cache above), so this only has to survive one build. A Longhorn volume
+            # would duplicate that at higher cost, and would pin builds to one node.
             - name: buildkitd
               mountPath: /home/user/.local/share/buildkit
           resources:
