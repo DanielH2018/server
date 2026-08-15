@@ -1,0 +1,175 @@
+---
+# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
+# =========================================================================
+# Pi memory safety — MUST run before the heavy apt below.
+# The Zero 2 W has 512 MB RAM; apt-show-versions' cache build and
+# `upgrade: dist` OOM-kill mid-dpkg without disk-backed swap, corrupting the
+# package DB (the classic "dpkg was interrupted" deploy hang). The thrash can
+# also trip the optimize_pi watchdog (max-load-1=24) into rebooting mid-apt,
+# so we stop the watchdog for the run — optimize_pi re-enables it at the end.
+# This lives here, not in optimize_pi, because optimize_pi runs LAST in
+# initial_setup.yml — too late to protect these apt tasks.
+# =========================================================================
+- name: Gather service facts
+  tags: [pi-swap]
+  ansible.builtin.service_facts:
+  when: inventory_hostname == 'daniel-pi'
+
+- name: Stop the hardware watchdog during provisioning (Pi)
+  tags: [pi-swap]
+  ansible.builtin.systemd:
+    name: watchdog
+    state: stopped
+  become: true
+  when:
+    - inventory_hostname == 'daniel-pi'
+    - "'watchdog.service' in (ansible_facts.services | default({}))"
+
+- name: Create swap file (Pi)
+  tags: [pi-swap]
+  ansible.builtin.command:
+    cmd: "fallocate -l {{ pi_swapfile_size }} {{ pi_swapfile_path }}"
+    creates: "{{ pi_swapfile_path }}"
+  become: true
+  register: initial_setup_swapfile_create
+  when: inventory_hostname == 'daniel-pi'
+
+- name: Secure swap file permissions (Pi)
+  tags: [pi-swap]
+  ansible.builtin.file:
+    path: "{{ pi_swapfile_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  when: inventory_hostname == 'daniel-pi'
+
+- name: Format swap file (Pi)
+  tags: [pi-swap]
+  ansible.builtin.command:
+    cmd: "mkswap {{ pi_swapfile_path }}"
+  become: true
+  changed_when: true
+  when:
+    - inventory_hostname == 'daniel-pi'
+    - initial_setup_swapfile_create is changed
+
+- name: Persist swap file in fstab (Pi)
+  tags: [pi-swap]
+  ansible.posix.mount:
+    path: none
+    src: "{{ pi_swapfile_path }}"
+    fstype: swap
+    opts: sw
+    state: present
+  become: true
+  when: inventory_hostname == 'daniel-pi'
+
+- name: Activate swap file (Pi)
+  tags: [pi-swap]
+  ansible.builtin.command:
+    cmd: "swapon {{ pi_swapfile_path }}"
+  become: true
+  changed_when: true
+  when:
+    - inventory_hostname == 'daniel-pi'
+    - initial_setup_swapfile_create is changed
+
+- name: Update and upgrade system packages
+  tags: [apt-upgrade]
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: dist
+  become: true
+
+- name: Install Raspberry Pi-specific packages
+  # openvswitch-switch-dpdk was removed from this list 2026-06-11: it was never
+  # configured (no bridges, no netplan stanzas) and mlockall-pinned ~14 MB on the
+  # 512 MB board — optimize_pi's debloat task now purges it, and listing it here
+  # would reinstall it on every full run.
+  tags: [packages]
+  ansible.builtin.apt:
+    name:
+      - linux-raspi
+      - wireguard
+    state: present
+  become: true
+  when: inventory_hostname == 'daniel-pi'
+
+# apt-show-versions hooks EVERY apt invocation with a full cache rebuild — 10-30 min
+# of swap-thrash on the 512 MB Pi (caused the 2026-06-08 dpkg corruption pre-swapfile,
+# and the 2026-06-10 "hung play" → stacked-run → watchdog-reboot incident). The Pi
+# gets nothing from it (apticron-style reporting), so it's roomy-hosts-only.
+# The Pi removal runs BEFORE any other package work so a missing base package
+# can't trigger one final hook grind on the way in.
+- name: Remove apt-show-versions (daniel-pi — apt-hook tax on 512 MB)
+  ansible.builtin.apt:
+    name: apt-show-versions
+    state: absent
+    purge: true
+  become: true
+  when: inventory_hostname == 'daniel-pi'
+  tags: [packages]
+
+- name: Install required packages
+  ansible.builtin.apt:
+    name:
+      - unzip
+      - unattended-upgrades
+      - update-notifier-common
+      - fail2ban
+      - libpam-tmpdir
+      - debsums
+      - jq  # Claude Code plugin hooks (ralph-loop stop-hook) parse hook JSON with it
+    state: present
+  become: true
+  tags: [packages]
+
+- name: Install apt-show-versions (non-Pi hosts only)
+  ansible.builtin.apt:
+    name: apt-show-versions
+    state: present
+  become: true
+  when: inventory_hostname != 'daniel-pi'
+  tags: [packages]
+
+- name: Resolve the deploy user's home directory
+  # Dual-tagged: registers a fact consumed by BOTH the uv tasks (tooling) and the
+  # prek task (git-hooks); a tag-scoped run of either still needs it.
+  tags: [tooling, git-hooks]
+  # The play runs become:true, so gather_facts escalated and ansible_facts.env.HOME is
+  # /root. The uv/prek tasks below run become:false (per-user installs as the connecting
+  # user), so they need THAT user's home, not root's. Capture it explicitly here rather
+  # than re-gathering env facts globally (config_files/docker_install also read env facts).
+  ansible.builtin.shell: echo "$HOME"
+  become: false
+  changed_when: false
+  register: initial_setup_user_home
+
+- name: Install uv (per-user; PEP 668-safe on 24.04+)
+  tags: [tooling]
+  # 24.04 / Python 3.12 marks the system environment externally-managed (PEP 668), so a
+  # global `pip install` errors. uv is a standalone binary (no system Python needed),
+  # installed per-user into ~/.local/bin via the official script. Run as the connecting
+  # user (not the play's become: true) so it lands in the repo owner's home.
+  ansible.builtin.shell:
+    cmd: set -o pipefail && curl -LsSf https://astral.sh/uv/install.sh | sh
+    creates: "{{ initial_setup_user_home.stdout }}/.local/bin/uv"
+    executable: /bin/bash
+  become: false
+
+- name: Install Python CLI tooling as uv tools
+  tags: [tooling]
+  # uv manages global CLI tools in isolated venvs (~/.local/share/uv/tools), exposing
+  # shims in ~/.local/bin — the pipx replacement. Pinned to Python 3.14 to match the
+  # repo's .python-version (the test/validate `uv run` hooks); ansible-core also backs
+  # those hooks (via pyproject.toml), but as a CLI tool here it is what runs deploys.
+  # Per-user, so `prek install` (below) finds prek on ~/.local/bin.
+  ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool install --python 3.14 {{ item }}"
+  args:
+    creates: "{{ initial_setup_user_home.stdout }}/.local/share/uv/tools/{{ item }}"
+  loop:
+    - ansible-core
+    - ansible-lint
+    - prek
+  become: false

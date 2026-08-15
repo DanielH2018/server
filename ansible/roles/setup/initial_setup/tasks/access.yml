@@ -1,0 +1,113 @@
+---
+# Unattended security upgrades, fail2ban, and SSH hardening.
+# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
+
+- name: Enable periodic unattended security upgrades
+  tags: [unattended-upgrades]
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Download-Upgradeable-Packages "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Set local unattended-upgrades policy
+  tags: [unattended-upgrades]
+  # Security origins are enabled by the distro's 50unattended-upgrades. This local
+  # drop-in pins the bits we care about: no surprise reboots (the weekly "Weekly
+  # system restart" cron owns reboots) and cleanup of obsolete kernels/deps.
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/52unattended-upgrades-local
+    content: |
+      Unattended-Upgrade::Automatic-Reboot "false";
+      Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+      Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Enable and start fail2ban
+  tags: [fail2ban]
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: started
+    enabled: true
+  become: true
+
+- name: Deploy fail2ban jail configuration
+  tags: [fail2ban]
+  ansible.builtin.template:
+    src: fail2ban_homelab.conf.j2
+    dest: /etc/fail2ban/jail.d/homelab.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart fail2ban
+
+- name: Set SSH directory permissions
+  tags: [ssh]
+  ansible.builtin.file:
+    path: ~/.ssh
+    mode: "0700"
+    owner: ubuntu
+    group: ubuntu
+    recurse: true
+
+- name: Create ssh-users group
+  tags: [ssh]
+  ansible.builtin.group:
+    name: ssh-users
+    state: present
+  become: true
+
+- name: Add sys user to ssh-users group
+  tags: [ssh]
+  ansible.builtin.user:
+    name: "{{ sys_user }}"
+    groups: ssh-users
+    append: true
+  become: true
+
+- name: Configure SSH security settings
+  tags: [ssh]
+  ansible.builtin.lineinfile:
+    path: "{{ ssh_config_path }}"
+    regexp: "^#?{{ item.key }}"
+    line: "{{ item.key }} {{ item.value }}"
+  loop:
+    - { key: "PasswordAuthentication", value: "no" }
+    - { key: "PermitEmptyPasswords", value: "no" }
+    - { key: "PermitRootLogin", value: "no" }
+    - { key: "IgnoreRhosts", value: "yes" }
+    - { key: "ChallengeResponseAuthentication", value: "no" }
+    - { key: "MaxAuthTries", value: "3" }
+    - { key: "MaxSessions", value: "2" }
+    - { key: "ClientAliveCountMax", value: "2" }
+    - { key: "LoginGraceTime", value: "30" }
+    - { key: "LogLevel", value: "VERBOSE" }
+    - { key: "DisableForwarding", value: "yes" }
+    - { key: "AllowTcpForwarding", value: "no" }
+    - { key: "AllowAgentForwarding", value: "no" }
+    - { key: "X11Forwarding", value: "no" }
+    - { key: "Compression", value: "no" }
+    - { key: "TCPKeepAlive", value: "no" }
+    - { key: "AllowGroups", value: "ssh-users" }
+  notify: Restart SSH
+
+- name: Configure SSH Match block for sys user forwarding
+  tags: [ssh]
+  ansible.builtin.blockinfile:
+    path: "{{ ssh_config_path }}"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - sys user forwarding"
+    block: |
+      Match User {{ sys_user }}
+          AllowTcpForwarding local
+          DisableForwarding no
+  notify: Restart SSH

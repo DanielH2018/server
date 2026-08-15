@@ -1,0 +1,107 @@
+---
+# IPv4 forwarding, kernel security sysctls, and the UFW ruleset.
+# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
+
+- name: Enable IPv4 forwarding
+  tags: [sysctl]
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    state: present
+    reload: true
+  become: true
+
+- name: Apply kernel security hardening
+  tags: [sysctl]
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop:
+    - { name: "net.ipv4.conf.all.rp_filter", value: "2" }
+    - { name: "net.ipv4.conf.all.accept_redirects", value: "0" }
+    - { name: "net.ipv4.conf.default.accept_redirects", value: "0" }
+    - { name: "net.ipv4.conf.all.send_redirects", value: "0" }
+    - { name: "net.ipv4.conf.default.send_redirects", value: "0" }
+    # Reject source-routed packets (IPv4 + IPv6) — the companion to the redirect
+    # rules above. `default.*` is the template every NEW interface inherits, which
+    # matters here because Docker constantly spins up bridge/veth interfaces; the
+    # host default for default.accept_source_route was 1 (accept).
+    - { name: "net.ipv4.conf.all.accept_source_route", value: "0" }
+    - { name: "net.ipv4.conf.default.accept_source_route", value: "0" }
+    - { name: "net.ipv6.conf.all.accept_source_route", value: "0" }
+    - { name: "net.ipv6.conf.default.accept_source_route", value: "0" }
+    - { name: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1" }
+    - { name: "net.ipv4.conf.all.log_martians", value: "1" }
+    - { name: "net.ipv4.conf.default.log_martians", value: "1" }
+    - { name: "kernel.sysrq", value: "0" }
+    - { name: "kernel.dmesg_restrict", value: "1" }
+    - { name: "kernel.kptr_restrict", value: "2" }
+    - { name: "net.core.bpf_jit_harden", value: "2" }
+    - { name: "fs.suid_dumpable", value: "0" }
+    - { name: "fs.protected_fifos", value: "2" }
+    - { name: "dev.tty.ldisc_autoload", value: "0" }
+  become: true
+
+- name: Remove plain SSH allow rule (superseded by rate-limit)
+  tags: [firewall]
+  community.general.ufw:
+    rule: allow
+    port: ssh
+    proto: tcp
+    delete: true
+  become: true
+  failed_when: false
+
+# Pin UFW's default policies in IaC rather than relying on the distro default.
+# `deny incoming` is the host's baseline — only the explicit allow/limit rules
+# below (SSH, WireGuard) open ports. Default-deny is safe to set over an active
+# SSH session because the explicit `limit ssh` rule that follows takes precedence
+# over the default policy. The FORWARD/routed policy is deliberately NOT managed
+# here: Docker owns the FORWARD chain via its own iptables rules (DOCKER-USER),
+# and the WireGuard containers depend on host forwarding — letting UFW set a
+# routed default would fight Docker and risk breaking container/VPN routing.
+- name: Set UFW default policy - deny incoming
+  tags: [firewall]
+  community.general.ufw:
+    default: deny
+    direction: incoming
+  become: true
+
+- name: Set UFW default policy - allow outgoing
+  tags: [firewall]
+  community.general.ufw:
+    default: allow
+    direction: outgoing
+  become: true
+
+- name: Configure UFW firewall - rate-limit SSH
+  tags: [firewall]
+  community.general.ufw:
+    rule: limit
+    port: ssh
+    proto: tcp
+  become: true
+
+- name: Remove the stale WireGuard 51820/udp allow on the Pi
+  tags: [firewall]
+  # History: written when the Pi's wg-easy listened on 51820; the Pi moved to 51822
+  # (both hosts share one public IP, so the listen ports must differ) and this rule
+  # was never updated. No replacement is added: wg-easy publishes its UDP port via
+  # Docker, whose nat/FORWARD rules bypass UFW INPUT entirely — proven by the Pi's
+  # dozzle/glances web UIs being LAN-reachable with no UFW allows for 8080/61208.
+  # The Pi's manually-added 51822 allow is left in place (harmless, documents intent).
+  # Kept as a delete-task (not just removed) so existing hosts converge.
+  community.general.ufw:
+    rule: allow
+    port: "51820"
+    proto: udp
+    delete: true
+  become: true
+  when: inventory_hostname == 'daniel-pi'
+
+- name: Enable UFW firewall
+  tags: [firewall]
+  community.general.ufw:
+    state: enabled

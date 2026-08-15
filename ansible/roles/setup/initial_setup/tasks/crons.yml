@@ -1,0 +1,134 @@
+---
+# Host crons: secret-rotation audit + rotation, the weekly restart, image
+# pruning, ansible.log truncation, and the infrastructure-map refresh.
+# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
+
+- name: Deploy the daily secret-rotation audit wrapper (server only)
+  tags: [crons]
+  # Server-only: the authoritative repo + SOPS live here. Reads names from the encrypted
+  # secrets.yml (values stay encrypted) and the rotation registry; see scripts/secret_rotation.py.
+  when: inventory_hostname == 'daniel-server'
+  ansible.builtin.template:
+    src: secret-rotation-audit.sh.j2
+    dest: /usr/local/bin/secret-rotation-audit.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0700"
+  become: true
+  no_log: true  # renders secret_rotation_push_token (gitops_deploy wrapper parity)
+
+- name: Schedule the daily secret-rotation audit (server only)
+  tags: [crons]
+  # 08:00 — after the Sunday 07:30 reboot + 07:15 CrowdSec-hub jobs settle; clear of the
+  # 06:xx redeploy window. Pushes the "Secret Rotation" Kuma monitor (uptime-kuma role).
+  when: inventory_hostname == 'daniel-server'
+  ansible.builtin.cron:
+    name: "Daily secret rotation audit"
+    minute: "0"
+    hour: "8"
+    job: "/usr/local/bin/secret-rotation-audit.sh"
+    user: "{{ sys_user }}"
+  become: true
+
+- name: Deploy the weekly secret-rotation wrapper (server only)
+  tags: [crons]
+  # Unattended rotation of coming-due auto-tier push tokens (rotate --commit --deploy +
+  # git push; anything due within ROTATE_LEAD_DAYS rotates BEFORE it goes overdue).
+  # Reverts on failure; cross-host tokens stay manual. See scripts/secret_rotation.py +
+  # docs/secret-rotation.md.
+  when: inventory_hostname == 'daniel-server'
+  ansible.builtin.template:
+    src: secret-rotate.sh.j2
+    dest: /usr/local/bin/secret-rotate.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0700"
+  become: true
+  no_log: true  # renders secret_rotation_push_token (gitops_deploy wrapper parity)
+
+- name: Schedule the weekly secret rotation (server only)
+  tags: [crons]
+  # Sunday 09:00 — after the 07:30 reboot, the 06:xx redeploys, and the 08:00 daily audit
+  # have all settled; quiet window minimises any clash with a concurrent operator session.
+  when: inventory_hostname == 'daniel-server'
+  ansible.builtin.cron:
+    name: "Weekly secret rotation (auto tier)"
+    minute: "0"
+    hour: "9"
+    weekday: "0"
+    job: "/usr/local/bin/secret-rotate.sh"
+    user: "{{ sys_user }}"
+  become: true
+
+- name: Schedule sudo crontab for weekly restart
+  tags: [crons]
+  # Pings the Healthchecks "Reboot" monitor, then reboots. The ping lives INSIDE the
+  # Ansible-managed job (not a manual crontab append, which a later [crons] deploy would
+  # strip — that silent regression is exactly why this check went stale). `;` not `&&`:
+  # the reboot must happen even if the ping fails. UUID = the check's dashed code.
+  ansible.builtin.cron:
+    name: "Weekly system restart"
+    minute: "30"
+    hour: "7"
+    weekday: "0"
+    job: "curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/ea0ed733-f631-4bd5-b1c9-4ab394bd13eb ; /sbin/shutdown -r +5"
+    user: root
+  become: true
+
+- name: Schedule Docker image cleanup
+  # `until=168h` keeps anything created in the last week: after a bad Renovate
+  # bump the previous pinned image is still local, so rollback = git revert +
+  # redeploy with no registry re-pull. Older unused images/build cache still go
+  # daily. (Caveat: `until` filters on CreatedAt, so an upstream image built >1wk
+  # ago is pruned as soon as it's unused — the window protects fresh builds/pulls.)
+  # Pings the Healthchecks "Docker Image Prune" monitor ON SUCCESS (`&&`): a failed
+  # prune leaves the check un-pinged so it alerts. Ping kept in the Ansible-managed job
+  # so a [crons] redeploy can't silently strip it (the late-May regression). Dashed UUID.
+  ansible.builtin.cron:
+    name: "Clean unused Docker images"
+    minute: "30"
+    hour: "6"
+    job: '/usr/bin/docker system prune -a -f --filter "until=168h" && curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/6c716f7f-219c-42e1-9f8b-d1d964b6cc35'
+    user: "{{ ansible_facts.user_id }}"
+  become: true
+  tags: [prune, crons]
+
+
+- name: Create cron job to clear ansible.log weekly
+  # ansible.cfg sets `log_path = ./ansible.log`, which resolves relative to the CWD
+  # the playbook is run from (the repo root) — i.e. server/ansible.log, NOT
+  # server/ansible/ansible.log. Truncate the file that actually grows.
+  ansible.builtin.cron:
+    name: "Clear ansible log file"
+    minute: "0"
+    hour: "6"
+    weekday: "0" # 0 is Sunday
+    job: "truncate -s 0 /home/{{ sys_user }}/server/ansible.log"
+  become: true
+  tags: [crons]
+
+- name: Schedule the infrastructure-map refresh (box only)
+  tags: [crons, infra-map]
+  # Regenerates the declared-vs-live HTML map (scripts/gen_infra_map.py). Runs on daniel-box
+  # because that is where kubectl is local; the daniel-server half arrives over ONE ssh call
+  # per run, well clear of the `ufw limit ssh` 6-connections-per-30s reject threshold.
+  #
+  # No Healthchecks ping, unlike the crons above: a failed run leaves the previous page in
+  # place rather than corrupting anything, and the page prints the timestamp it was generated
+  # at — so a run that stops working shows up as a visibly stale date on the artifact itself.
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.cron:
+    name: "Refresh homelab infrastructure map"
+    minute: "*/15"
+    # PATH and KUBECONFIG are both set explicitly, because cron inherits neither and each
+    # omission blinds the k3s half of the map while the Docker half keeps working — a page
+    # that renders fine and quietly reports declared-only for every k8s service.
+    #   PATH:       cron's default `/usr/bin:/bin` omits /usr/local/bin, where kubectl lives.
+    #   KUBECONFIG: unset, k3s's kubectl falls back to /etc/rancher/k3s/k3s.yaml, which is
+    #               root-owned 0640. An interactive shell exports the user copy, so this
+    #               only ever fails unattended.
+    # The script defends itself against both as well (find_tool / find_kubeconfig); these
+    # are the second layer, kept because they are also the documentation.
+    job: "cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/gen_infra_map.py -o /home/{{ sys_user }}/.claude/artifacts/homelab-infra-map.html"
+    user: "{{ sys_user }}"
+  become: true
