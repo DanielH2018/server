@@ -39,7 +39,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Deploying or redeploying a service | `/deploy` skill · `## Common Commands` |
 | Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |
 | A Bash command keeps prompting for approval | `## Shell Commands — Shape Them to Auto-Approve` |
-| Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there) · `/ha-edit-automation` |
+| Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `check.py` **first** — mature setup, most are handled |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment — the role needs a `checksum/config` pod annotation. See `roles/k8s/monitor-bridge/templates/deployment.yaml.j2` for the pattern. |

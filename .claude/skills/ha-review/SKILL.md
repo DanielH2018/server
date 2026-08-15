@@ -13,7 +13,9 @@ Stop after the report; let the operator drive any changes.
 This is a **mature** setup: a cold agent will re-flag dozens of settled decisions. Before dispatching,
 read the most recent `review-*-state` memories and the HA-relevant accepted-decision ("don't re-flag")
 memories from the auto-memory index. Extract the don't-re-flag items **plus** the discipline: *verify a
-candidate finding against the home-assistant role's CLAUDE.md, `sanctioned_writers.yml`, and existing
+candidate finding against the home-assistant role's CLAUDE.md **and its `docs/` split** (platform,
+lighting-and-presence, alerts-and-notifications, climate-and-air — most settled decisions live there,
+not in CLAUDE.md), `sanctioned_writers.yml`, and existing
 automations BEFORE reporting it.* Pull this at runtime — never rely on a hardcoded list (it goes stale,
 the exact failure mode these reviews keep finding).
 
