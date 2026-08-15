@@ -32,6 +32,26 @@ K3S = ANSIBLE / "roles" / "setup" / "k3s"
 STORAGECLASS = K3S / "files" / "longhorn-storageclass.yaml"
 
 
+def _flatten(entries):
+    """Tasks in run order, descending into block/rescue/always.
+
+    The walk was flat until 2026-08-15, which made it blind to anything nested: kubeconfig.yml
+    and longhorn.yml both use `block:`, so every task inside them was invisible to the ordering
+    and command assertions here while the suite still read as covering the role.
+    """
+    out: list[dict] = []
+    for entry in entries or []:
+        if not isinstance(entry, dict):
+            continue
+        nested = [entry.get(k) for k in ("block", "rescue", "always") if entry.get(k)]
+        if nested:
+            for section in nested:
+                out += _flatten(section)
+        else:
+            out.append(entry)
+    return out
+
+
 def _tasks():
     """Every task the role runs, in the order it runs them.
 
@@ -43,10 +63,10 @@ def _tasks():
     for entry in yaml.safe_load((K3S / "tasks" / "main.yml").read_text()) or []:
         imported = entry.get("ansible.builtin.import_tasks")
         if not imported:
-            tasks.append(entry)
+            tasks += _flatten([entry])
             continue
         loaded = yaml.safe_load((K3S / "tasks" / imported).read_text()) or []
-        tasks += [t for t in loaded if isinstance(t, dict)]
+        tasks += _flatten(loaded)
     return tasks
 
 

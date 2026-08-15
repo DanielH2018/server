@@ -224,3 +224,58 @@ def test_configarr_drains_before_reconciling() -> None:
     assert drain_at < job_at, (
         "configarr's rollout drain must come BEFORE it creates the reconcile Job."
     )
+
+
+def test_batch_applies_the_service_tag_to_the_included_role() -> None:
+    """`apply.tags` is what makes a tag-filtered k8s deploy deploy anything at all.
+
+    A plain `tags:` on an include_role does NOT reach the included tasks; `apply:` does, and it
+    propagates transitively through the nested include_role/tasks_from inside roles/k8s/manifests.
+    Service roles carry no `apply:` of their own, so this one block is the single hop that unions
+    `--tags <svc>` onto the role's `[deploy]`-tagged apply/reconcile/rollout tasks.
+
+    Drop it and every gitops tick and every documented per-service deploy applies nothing while
+    reporting success — the same silent-success shape as the drain bug 5eea64e6/e3b7d84e produced,
+    which a real `--tags littlelink` run reported as ok=94 failed=0. A MISTYPED key fails
+    ansible-lint in CI, so this guards the removal case, which is syntactically valid and silent.
+    """
+    run_roles = [t for t in _tasks(_BATCH) if t.get("name") == "Run k8s roles"]
+    assert len(run_roles) == 1, (
+        "k8s_batch.yml no longer has exactly one 'Run k8s roles' task"
+    )
+    include = run_roles[0]["ansible.builtin.include_role"]
+    applied = include.get("apply", {}).get("tags")
+    assert applied, (
+        "k8s_batch.yml's 'Run k8s roles' lost its apply.tags. Without it the service tag never "
+        "reaches roles/k8s/manifests' [deploy] tasks and a --tags deploy applies nothing, "
+        "silently and successfully."
+    )
+    assert "container_item" in str(applied), (
+        "apply.tags must derive from the looped item (its tags, or its name), not a constant: %r"
+        % (applied,)
+    )
+
+
+def test_manifests_queues_the_drain_under_the_deploy_tag() -> None:
+    """The queueing task's `tags: [deploy]` is the entire safety argument for the drain and the
+    gate being `always`.
+
+    `always` ignores --tags filtering and is NOT removed by `--skip-tags deploy`, so the documented
+    config-only path (root CLAUDE.md: `--tags <svc> --skip-tags deploy`) stays a no-op only because
+    this task is skipped, leaving k8s_pending_rollouts empty for the always-tagged consumers to
+    iterate over. Retag it `always` and a config-only run starts draining and soaking rollouts it
+    was explicitly asked not to touch.
+    """
+    queueing = [
+        t
+        for t in _tasks(_MANIFESTS)
+        if str(t.get("name", "")).startswith("Queue the batch drain")
+    ]
+    assert len(queueing) == 1, (
+        "roles/k8s/manifests no longer has exactly one queueing task"
+    )
+    tags = queueing[0].get("tags", [])
+    assert tags == ["deploy"], (
+        "the queueing task must be tagged exactly [deploy] — it is what keeps --skip-tags deploy "
+        "a no-op for the always-tagged drain and gate; got %r" % (tags,)
+    )
