@@ -28,8 +28,11 @@ PRUNE = {
     "traefik_user",
     "traefik_password",
     "monitor_bridge_docker_user_push_token",
-    "monitor_bridge_cloudflare_drift_push_token",
     "authelia_beszel_password_hash",
+    # NOT pruned, deliberately: monitor_bridge_cloudflare_drift_push_token. Its check
+    # died with the Docker origin lock in 84733119, but the cloudflare_ips allowlist it
+    # watched is still live at roles/k8s/traefik/templates/static-config.yaml.j2:26,55
+    # gating forwardedHeaders.trustedIPs. The token is held for restoring that watchdog.
 }
 
 

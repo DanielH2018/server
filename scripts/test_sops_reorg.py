@@ -49,9 +49,13 @@ def test_prune_set_matches_the_audit():
         "traefik_user",
         "traefik_password",
         "monitor_bridge_docker_user_push_token",
-        "monitor_bridge_cloudflare_drift_push_token",
         "authelia_beszel_password_hash",
     }
+
+
+def test_the_cloudflare_drift_token_is_kept():
+    """Held on purpose: the cloudflare_ips allowlist it watched is still live."""
+    assert "monitor_bridge_cloudflare_drift_push_token" not in sops_reorg.PRUNE
 
 
 def test_a_pruned_key_does_not_take_its_section_with_it():
