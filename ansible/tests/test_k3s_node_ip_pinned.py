@@ -36,18 +36,26 @@ def _defaults() -> dict:
 
 # main.yml became a list of import_tasks in the 2026-08-15 split, so expand the imports —
 # otherwise these assertions pass vacuously against a file holding nothing but imports.
+# Both helpers below expand the SAME set, in import order: globbing tasks/*.yml instead
+# would also pull in agent.yml/agent_verify.yml, which main.yml does not import and which
+# the server-side assertions here are not about.
+def _imported_files() -> list[Path]:
+    tasks_dir = K3S / "tasks"
+    return [
+        tasks_dir / entry["ansible.builtin.import_tasks"]
+        for entry in yaml.safe_load((tasks_dir / "main.yml").read_text()) or []
+        if entry.get("ansible.builtin.import_tasks")
+    ]
+
+
 def _task_text() -> str:
-    return "\n".join(p.read_text() for p in sorted((K3S / "tasks").glob("*.yml")))
+    return "\n".join(p.read_text() for p in _imported_files())
 
 
 def _tasks() -> list[dict]:
     tasks: list[dict] = []
-    for entry in yaml.safe_load((K3S / "tasks" / "main.yml").read_text()) or []:
-        imported = entry.get("ansible.builtin.import_tasks")
-        if not imported:
-            tasks.append(entry)
-            continue
-        loaded = yaml.safe_load((K3S / "tasks" / imported).read_text()) or []
+    for path in _imported_files():
+        loaded = yaml.safe_load(path.read_text()) or []
         tasks += [t for t in loaded if isinstance(t, dict)]
     return tasks
 
