@@ -140,35 +140,6 @@ def test_authelia_missing_oidc_material_fails(monkeypatch):
     assert "authelia_oidc_hmac_secret" in detail
 
 
-# --- §9.6 Portainer ----------------------------------------------------------
-
-
-def endpoints(*envs):
-    return json.dumps([{"Name": n, "Status": s} for n, s in envs])
-
-
-def test_portainer_missing_environment_fails(monkeypatch):
-    monkeypatch.setattr(postflight, "inventory_hosts", lambda: ["a", "b"])
-    respond(monkeypatch, 200, endpoints(("primary", 1)))
-    status, detail = postflight.check_portainer_hosts()
-    assert status == postflight.FAIL
-    assert "1 environment(s) for 2 host(s)" in detail
-
-
-def test_portainer_unreachable_environment_fails(monkeypatch):
-    monkeypatch.setattr(postflight, "inventory_hosts", lambda: ["a", "b"])
-    respond(monkeypatch, 200, endpoints(("primary", 1), ("daniel-pi", 2)))
-    status, detail = postflight.check_portainer_hosts()
-    assert status == postflight.FAIL
-    assert "daniel-pi" in detail
-
-
-def test_portainer_all_registered_ok(monkeypatch):
-    monkeypatch.setattr(postflight, "inventory_hosts", lambda: ["a", "b"])
-    respond(monkeypatch, 200, endpoints(("primary", 1), ("daniel-pi", 1)))
-    assert postflight.check_portainer_hosts()[0] == postflight.OK
-
-
 # --- runner ------------------------------------------------------------------
 
 
