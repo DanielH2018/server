@@ -278,12 +278,17 @@
   # Rate-limits the only recurring B2 caller in the cluster. See the variable's comment in
   # defaults/main.yml — at upstream's 300s this exhausted Backblaze's Class C transaction
   # allowance and took every backup tier down for 13h.
+  #
+  # Lives on the BackupTarget CR, not in settings: v1.8.0 moved backup-target config out of
+  # the global settings and onto backuptargets.longhorn.io as part of supporting more than
+  # one target. The `backupstore-poll-interval` setting no longer exists, and patching it
+  # fails NotFound. The CR takes a duration string, where the setting took bare seconds.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n longhorn-system patch settings.longhorn.io backupstore-poll-interval
+      k3s kubectl -n longhorn-system patch backuptargets.longhorn.io default
       --type=merge -p {{ poll_patch | quote }}
   vars:
-    poll_patch: '{"value":"{{ k3s_longhorn_backupstore_poll_interval }}"}'
+    poll_patch: '{"spec":{"pollInterval":"{{ k3s_longhorn_backupstore_poll_interval }}s"}}'
   register: k3s_longhorn_poll_interval
   become: true
   changed_when: "'no change' not in k3s_longhorn_poll_interval.stdout"

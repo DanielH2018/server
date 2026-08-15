@@ -78,10 +78,29 @@ replica count*), but that guard only fires when `numberOfReplicas` is present:
 when: k3s_longhorn_sc_replicas.stdout | default('', true) | length > 0
 ```
 
-A `backupTargetName` addition does not match it. Before hop 1, generalise the guard to compare the
-whole live parameter set against the desired one and delete the class when they differ. Deleting is
-safe — parameters are read at provision time only, so it neither touches an existing PV nor unbinds
-a PVC.
+A `backupTargetName` addition does not match it. The guard now compares the whole live parameter
+map against the rendered class and deletes when they differ. Deleting is safe — parameters are read
+at provision time only, so it neither touches an existing PV nor unbinds a PVC.
+
+### Second landmine at hop 1: backup-target config moved out of settings
+
+v1.8.0 moved backup-target configuration off the global settings and onto
+`backuptargets.longhorn.io`, as part of supporting more than one target. The
+`backupstore-poll-interval` **setting no longer exists**, so the role's patch failed with:
+
+```
+Error from server (NotFound): settings.longhorn.io "backupstore-poll-interval" not found
+```
+
+The task now patches `backuptargets.longhorn.io/default` at `spec.pollInterval`, which takes a
+duration string (`"0s"`) where the setting took bare seconds (`0`). The upgrade itself migrates the
+existing value across correctly — the CR came out of the hop already holding `0s` — so the risk is
+the play aborting mid-hop, not a lost setting.
+
+The general lesson for the remaining hops: **the manager manifest applies before the role's settings
+patches run**, so a removed or renamed setting fails *after* the new version is already live. That
+is recoverable (fix the task, re-run), but expect it once per hop where upstream reorganises
+settings.
 
 ## Staying current afterwards
 
