@@ -1,0 +1,224 @@
+---
+# The Longhorn backup plane: B2 and R2 targets, their credentials, per-volume
+# target routing, and the recurring backup job.
+# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
+
+- name: Derive the B2 region from the Kopia endpoint
+  tags: [longhorn_backup]
+  # Longhorn's S3 target is s3://<bucket>@<region>/<prefix>; Kopia stores a hostname.
+  # Derived rather than duplicated so the two can't drift apart in SOPS.
+  # Deliberately not the capture-group form of regex_search: on no match it returns None,
+  # and `None | first` raises a Jinja error before any default can catch it — so a bad
+  # endpoint would blow up here instead of hitting the assert below with a usable message.
+  # Search-then-replace degrades to an empty string instead, which the assert reports.
+  ansible.builtin.set_fact:
+    k3s_longhorn_b2_region: >-
+      {{ kopia_b2_endpoint
+         | regex_search('s3\.[a-z0-9-]+\.backblazeb2\.com')
+         | default('', true)
+         | regex_replace('^s3\.([a-z0-9-]+)\.backblazeb2\.com$', '\1') }}
+
+- name: Fail if the B2 region could not be derived
+  tags: [longhorn_backup]
+  ansible.builtin.assert:
+    that: k3s_longhorn_b2_region | length > 0
+    fail_msg: >-
+      Could not derive a B2 region from kopia_b2_endpoint. Longhorn needs
+      s3://<bucket>@<region>/<prefix>. Set k3s_longhorn_b2_region explicitly in host_vars
+      rather than loosening the regex.
+
+- name: Look for an existing Longhorn backup credential
+  tags: [longhorn_backup]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n longhorn-system get secret longhorn-b2 -o name
+  register: k3s_longhorn_secret
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Create the Longhorn backup credential
+  tags: [longhorn_backup]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system create secret generic longhorn-b2
+      --from-literal=AWS_ACCESS_KEY_ID={{ kopia_b2_key_id }}
+      --from-literal=AWS_SECRET_ACCESS_KEY={{ kopia_b2_application_key }}
+      --from-literal=AWS_ENDPOINTS=https://s3.{{ k3s_longhorn_b2_region }}.backblazeb2.com
+  become: true
+  no_log: true
+  when: k3s_longhorn_secret.rc != 0
+  changed_when: true
+
+# Declarative in BOTH directions: k3s_longhorn_backup_armed=false enforces a BLANK target.
+# It used to arm unconditionally, which silently resurrected a deliberately blanked target
+# on every role run — that re-arm restarted the B2 transaction-cap death spiral twice
+# (2026-08-10 and 2026-08-12; docs/b2-transaction-cap-monitoring-gaps.md). Blanking is the
+# incident lever that stops all backupstore S3 traffic, so a blank must survive deploys
+# until an operator flips the var back.
+#
+# Both patches address the BackupTarget CR, not settings: v1.8.0 moved backup-target config
+# onto backuptargets.longhorn.io to support more than one target, and by v1.12.1 the
+# `backup-target` and `backup-target-credential-secret` settings no longer exist at all —
+# patching them fails NotFound. The arm/disarm semantics are unchanged: --type=merge writes
+# an empty string for backupTargetURL (only an explicit null would remove the field), so a
+# disarmed run still ENFORCES the blank rather than leaving whatever is live.
+- name: Point Longhorn at the backup target (or enforce the blanked target)
+  tags: [longhorn_backup]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch backuptargets.longhorn.io default
+      --type=merge -p {{ target_patch | quote }}
+  vars:
+    target_patch: >-
+      {"spec":{"backupTargetURL":"{% if k3s_longhorn_backup_armed | bool %}s3://{{ kopia_b2_bucket }}@{{ k3s_longhorn_b2_region }}/{{ k3s_longhorn_backup_prefix }}{% endif %}"}}
+  register: k3s_longhorn_target
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_target.stdout"
+
+- name: Point Longhorn at the backup credential
+  tags: [longhorn_backup]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch backuptargets.longhorn.io default
+      --type=merge -p {{ secret_patch | quote }}
+  vars:
+    secret_patch: '{"spec":{"credentialSecret":"longhorn-b2"}}'
+  register: k3s_longhorn_target_secret
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_target_secret.stdout"
+
+# Skipped while disarmed: a blank target is never `available`, so this gate would fail the
+# play before the recurring-job and label-reconcile tasks below it — which must keep
+# converging exactly when the target is deliberately down.
+- name: Check whether Longhorn can reach the backup target
+  tags: [longhorn_backup]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n longhorn-system get backuptarget default -o jsonpath={.status.available}
+  register: k3s_backup_available
+  become: true
+  changed_when: false
+  retries: 12
+  delay: 10
+  until: k3s_backup_available.stdout == "true"
+  when: k3s_longhorn_backup_armed | bool
+
+- name: Look for an existing Longhorn R2 credential
+  tags: [longhorn_backup, longhorn_r2]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n longhorn-system get secret longhorn-r2 -o name
+  register: k3s_longhorn_r2_secret
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Create the Longhorn R2 credential
+  tags: [longhorn_backup, longhorn_r2]
+  # Same three keys as the B2 secret — Longhorn speaks S3 to both. Only the endpoint differs,
+  # and R2's is account-scoped rather than region-scoped.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system create secret generic longhorn-r2
+      --from-literal=AWS_ACCESS_KEY_ID={{ r2_access_key_id }}
+      --from-literal=AWS_SECRET_ACCESS_KEY={{ r2_secret_access_key }}
+      --from-literal=AWS_ENDPOINTS=https://{{ r2_account_id }}.r2.cloudflarestorage.com
+  become: true
+  no_log: true
+  when: k3s_longhorn_r2_secret.rc != 0
+  changed_when: true
+
+- name: Render the R2 backup target
+  tags: [longhorn_backup, longhorn_r2]
+  ansible.builtin.template:
+    src: longhorn-backuptarget-r2.yaml.j2
+    dest: /etc/rancher/k3s/longhorn-backuptarget-r2.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Apply the R2 backup target
+  tags: [longhorn_backup, longhorn_r2]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/longhorn-backuptarget-r2.yaml
+  register: k3s_longhorn_r2_target
+  become: true
+  changed_when: "'created' in k3s_longhorn_r2_target.stdout or 'configured' in k3s_longhorn_r2_target.stdout"
+
+- name: Read where each Longhorn volume currently sends its backups
+  tags: [longhorn_backup, longhorn_r2]
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - -o
+      - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{" "}{.spec.backupTargetName}{"\n"}{end}'
+  become: true
+  changed_when: false
+  register: k3s_longhorn_volume_targets
+
+# Declarative in both directions, like the recurring-job group pairs above: this claims the
+# listed volumes, the next task releases anything no longer listed. Both skip themselves once
+# the volume already points where it should, so a converged cluster reports no change.
+- name: Route the selected volumes to R2
+  tags: [longhorn_backup, longhorn_r2]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch volumes.longhorn.io {{ item.split(' ')[0] }}
+      --type=merge -p {{ r2_route_patch | quote }}
+  vars:
+    r2_route_patch: '{"spec":{"backupTargetName":"r2"}}'
+  loop: "{{ k3s_longhorn_volume_targets.stdout_lines }}"
+  when:
+    - item.split(' ')[1] in k3s_longhorn_r2_volumes
+    - item.split(' ')[2] | default('', true) != 'r2'
+  become: true
+  changed_when: true
+
+- name: Return de-listed volumes to the default backup target
+  tags: [longhorn_backup, longhorn_r2]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch volumes.longhorn.io {{ item.split(' ')[0] }}
+      --type=merge -p {{ default_route_patch | quote }}
+  vars:
+    default_route_patch: '{"spec":{"backupTargetName":"default"}}'
+  loop: "{{ k3s_longhorn_volume_targets.stdout_lines }}"
+  when:
+    - item.split(' ')[2] | default('', true) == 'r2'
+    - item.split(' ')[1] not in k3s_longhorn_r2_volumes
+  become: true
+  changed_when: true
+
+- name: Render the Longhorn recurring backup job
+  tags: [longhorn_backup]
+  ansible.builtin.template:
+    src: longhorn-recurringjob.yaml.j2
+    dest: /etc/rancher/k3s/longhorn-recurringjob.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Apply the Longhorn recurring backup job
+  tags: [longhorn_backup]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/longhorn-recurringjob.yaml
+  register: k3s_longhorn_recurringjob
+  become: true
+  changed_when: "'created' in k3s_longhorn_recurringjob.stdout or 'configured' in k3s_longhorn_recurringjob.stdout"
+
+- name: Report what still needs proving by hand
+  tags: [longhorn_backup]
+  # available:true proves credentials and reachability. It does NOT prove an object was
+  # ever written, and "a backup system that reports success while storing nothing" is the
+  # exact failure this slice exists to prevent. Only listing the bucket settles it.
+  ansible.builtin.debug:
+    msg: >-
+      Longhorn reports the backup target reachable. This does NOT prove an object was
+      written. Before migrating any service (slice 1), snapshot a test volume, back it up,
+      and confirm the object exists under the '{{ k3s_longhorn_backup_prefix }}/' prefix in
+      bucket '{{ kopia_b2_bucket }}' by listing it from outside the cluster.

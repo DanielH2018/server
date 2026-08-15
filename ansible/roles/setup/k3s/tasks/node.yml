@@ -1,0 +1,62 @@
+---
+# Node-level host config: the agent-join firewall allows, pinned DNS upstreams,
+# and the inotify limit pod log tailing needs.
+# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
+
+# Phase F: node-to-node cluster traffic terminates in host processes (apiserver, kubelet,
+# flannel), not the Docker/kube NAT paths every service port rides — so it is the one
+# class of traffic that actually meets UFW's default-deny INPUT and needs explicit
+# allows. No-op while k3s_agent_node_ips is empty.
+- name: Allow cluster traffic from agent nodes
+  tags: [join-firewall]
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ item.0 }}"
+    port: "{{ item.1.port }}"
+    proto: "{{ item.1.proto }}"
+  loop: "{{ k3s_agent_node_ips | product(k3s_join_server_ports) | list }}"
+  become: true
+
+- name: Create the systemd-resolved drop-in directory
+  tags: [node-dns]
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Pin the node's DNS to upstream resolvers
+  tags: [node-dns]
+  ansible.builtin.template:
+    src: node-dns.conf.j2
+    dest: /etc/systemd/resolved.conf.d/50-homelab-upstream.conf
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: k3s_node_dns_dropin
+
+- name: Restart systemd-resolved to apply the pinned upstreams # noqa no-handler
+  tags: [node-dns]
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: restarted
+  become: true
+  when: k3s_node_dns_dropin.changed
+
+- name: Raise the inotify instance limit for pod log tailing
+  tags: [node-sysctl]
+  # Kernel default is 128 instances PER UID — and every root-uid process on the node
+  # (kubelet's log watchers plus each root container) draws from the same budget. The
+  # crowdsec agent sidecar was the straw that broke it at slice-6 B1: its file
+  # acquisition died with "couldn't initialize inotify: too many open files" while the
+  # node sat well under every other limit. 1024 matches what log-shipping DaemonSet
+  # docs (promtail/vector) recommend for container nodes.
+  ansible.posix.sysctl:
+    name: fs.inotify.max_user_instances
+    value: "1024"
+    state: present
+    reload: true
+  become: true

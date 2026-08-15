@@ -1,0 +1,103 @@
+---
+# Host crons that push heartbeats for the backup plane, root-disk headroom and
+# manifest drift, plus the shared Healthchecks.io ping key they use.
+# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
+
+- name: Create the Healthchecks.io credential directory
+  tags: [backup-health, disk-health, manifest-prune]
+  ansible.builtin.file:
+    path: /etc/healthchecks
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Deploy the Healthchecks.io ping key
+  tags: [backup-health, disk-health, manifest-prune]
+  # NOT inlined into the heartbeat scripts. Those land at 0755 (they must be executable by the
+  # {{ sys_user }} crons), so a key inlined there is readable by every local account on this
+  # host — and a project ping key is broader than the Kuma push tokens already exposed that
+  # way: a Kuma token spoofs one monitor, this one can hold every check in the project green
+  # and so suppress the alerts the whole mechanism exists to deliver. 0640 root:{{ sys_user }}
+  # covers both callers — manifest-prune-check runs as root (owner), the other two as
+  # {{ sys_user }} (group). Same shape as /etc/renovate-notify/config.env.
+  ansible.builtin.copy:
+    content: "HC_PING_KEY={{ healthchecks_ping_key | default('') }}\n"
+    dest: /etc/healthchecks/ping.env
+    mode: "0640"
+    owner: root
+    group: "{{ sys_user }}"
+  become: true
+  no_log: true  # renders the Healthchecks.io ping key
+
+- name: Deploy the Longhorn backup-plane heartbeat
+  tags: [backup-health]
+  # Runs as {{ sys_user }}, not root: it reads the cluster through that user's read-only
+  # kubeconfig, which is the whole point — the cron cannot mutate anything.
+  ansible.builtin.template:
+    src: longhorn-backup-health.sh.j2
+    dest: /usr/local/bin/longhorn-backup-health.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Schedule the Longhorn backup-plane heartbeat
+  tags: [backup-health]
+  ansible.builtin.cron:
+    name: "Longhorn backup health"
+    minute: "{{ k3s_longhorn_backup_health_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: "/usr/local/bin/longhorn-backup-health.sh"
+    cron_file: longhorn-backup-health
+  become: true
+
+- name: Deploy the root-disk headroom heartbeat
+  tags: [disk-health]
+  ansible.builtin.template:
+    src: disk-health.sh.j2
+    dest: /usr/local/bin/disk-health.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Schedule the root-disk headroom heartbeat
+  tags: [disk-health]
+  ansible.builtin.cron:
+    name: "daniel-box disk health"
+    minute: "{{ k3s_disk_health_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: "/usr/local/bin/disk-health.sh"
+    cron_file: disk-health
+  become: true
+
+- name: Deploy the manifest-prune drift check
+  tags: [manifest-prune]
+  # Root-owned AND root-run (see the cron task below): /etc/rancher/k3s/manifests/*/ is mode
+  # 0700 (k8s/manifests role), so comparing live objects against the staged manifests needs
+  # root at the OS level. The kubectl calls inside the script stay scoped to the read-only
+  # ServiceAccount kubeconfig regardless, same as the heartbeats above — root here buys
+  # filesystem access, not cluster-mutation ability.
+  ansible.builtin.template:
+    src: manifest-prune-check.sh.j2
+    dest: /usr/local/bin/manifest-prune-check.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Schedule the manifest-prune drift check
+  tags: [manifest-prune]
+  ansible.builtin.cron:
+    name: "Manifest prune drift check"
+    minute: "{{ k3s_manifest_prune_cron_minute }}"
+    hour: "{{ k3s_manifest_prune_cron_hour }}"
+    user: root
+    job: "/usr/local/bin/manifest-prune-check.sh"
+    cron_file: manifest-prune-check
+  become: true
