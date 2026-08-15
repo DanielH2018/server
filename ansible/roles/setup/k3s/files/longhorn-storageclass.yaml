@@ -15,7 +15,7 @@
 # and recreating the class — cheap today on an empty cluster, not cheap once services run
 # on it.
 #
-# Everything else is verbatim from longhorn v1.10.2 deploy/longhorn.yaml. Keep it that way on
+# Everything else is verbatim from longhorn v1.11.3 deploy/longhorn.yaml. Keep it that way on
 # a version bump, and do NOT paste numberOfReplicas back in when re-syncing from upstream —
 # ansible/tests/test_longhorn_storageclass.py fails if it reappears.
 kind: StorageClass
