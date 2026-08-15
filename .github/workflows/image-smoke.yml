@@ -45,7 +45,12 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
         run: |
-          git fetch origin "$BASE_REF" --depth=1
+          # No --depth here. The checkout above is full (fetch-depth: 0) precisely so the
+          # three-dot diff below can find a merge base; a shallow fetch writes a shallow
+          # boundary over origin/$BASE_REF and the merge base becomes unreachable, failing
+          # the step with "no merge base". ci.yml's equivalent fetch is depth-less for the
+          # same reason.
+          git fetch --no-tags origin "$BASE_REF"
           # Scope is the k8s image plane: role defaults plus group_vars/all.yml (crowdsec_k8s_image
           # lives there). The compose half was dropped 2026-08-14 — both cluster hosts are drained
           # and daniel-pi has no CI deploy path, so that glob matched nothing deployable.
