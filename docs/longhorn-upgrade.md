@@ -63,7 +63,7 @@ kubectl -n longhorn-system get volumes.longhorn.io \
 | 2 | v1.9.2 | No deprecations noted upstream. |
 | 3 | v1.10.2 | Image refs become fully qualified (`docker.io/longhornio/...`), so every node re-pulls rather than reusing its cached copy — expect a transient `ImagePullBackOff` and `Ready=False` while that happens. Adds a `KernelModulesLoaded` node condition; see below. |
 | 4 | v1.11.3 | Requires **Kubernetes ≥ v1.34** (CSI external-provisioner v6.3.0). Confirm CSI pods land before declaring done. |
-| 5 | v1.12.1 | Deprecates legacy **V2** linked-clone volumes. Does not apply while every volume is `dataEngine: v1` — re-check before the hop. |
+| 5 | v1.12.1 | Deprecates legacy **V2** linked-clone volumes. Does not apply while every volume is `dataEngine: v1` — re-check before the hop. `default-replica-count` becomes a per-data-engine map (`{"v1":"2","v2":"2"}`); the role still patches a scalar `"2"` and Longhorn normalises it, so the task stays idempotent. |
 
 ### Landmine at hop 1: StorageClass parameters are immutable
 
