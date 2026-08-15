@@ -34,8 +34,22 @@ def _defaults() -> dict:
     return yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
 
 
+# main.yml became a list of import_tasks in the 2026-08-15 split, so expand the imports —
+# otherwise these assertions pass vacuously against a file holding nothing but imports.
+def _task_text() -> str:
+    return "\n".join(p.read_text() for p in sorted((K3S / "tasks").glob("*.yml")))
+
+
 def _tasks() -> list[dict]:
-    return yaml.safe_load((K3S / "tasks" / "main.yml").read_text())
+    tasks: list[dict] = []
+    for entry in yaml.safe_load((K3S / "tasks" / "main.yml").read_text()) or []:
+        imported = entry.get("ansible.builtin.import_tasks")
+        if not imported:
+            tasks.append(entry)
+            continue
+        loaded = yaml.safe_load((K3S / "tasks" / imported).read_text()) or []
+        tasks += [t for t in loaded if isinstance(t, dict)]
+    return tasks
 
 
 def _install_task() -> dict:
@@ -85,8 +99,7 @@ def test_installer_is_not_guarded_on_the_binary_existing():
 
 def test_role_asserts_the_registered_node_ip():
     """The runtime half: catch a wrong address on the next play, not hours later."""
-    text = (K3S / "tasks" / "main.yml").read_text()
-    assert "k3s_node_ip.stdout == server_ip" in text, (
+    assert "k3s_node_ip.stdout == server_ip" in _task_text(), (
         "The role must assert the node's registered InternalIP equals server_ip. "
         "`kubectl` from the host keeps working over 127.0.0.1 when this is wrong, so "
         "nothing else surfaces it."

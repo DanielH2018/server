@@ -33,7 +33,21 @@ STORAGECLASS = K3S / "files" / "longhorn-storageclass.yaml"
 
 
 def _tasks():
-    return yaml.safe_load((K3S / "tasks" / "main.yml").read_text())
+    """Every task the role runs, in the order it runs them.
+
+    main.yml became a list of import_tasks in the 2026-08-15 split, so the imports are
+    expanded here — in import order, not alphabetically. The ordering assertions below
+    compare task positions, so a wrong order would silently invert what they check.
+    """
+    tasks: list[dict] = []
+    for entry in yaml.safe_load((K3S / "tasks" / "main.yml").read_text()) or []:
+        imported = entry.get("ansible.builtin.import_tasks")
+        if not imported:
+            tasks.append(entry)
+            continue
+        loaded = yaml.safe_load((K3S / "tasks" / imported).read_text()) or []
+        tasks += [t for t in loaded if isinstance(t, dict)]
+    return tasks
 
 
 def _commands(tasks: list[dict]) -> list[str]:
