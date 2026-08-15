@@ -48,6 +48,9 @@ finish() {
   mkdir -p "$STATE_DIR"
   printf '{"ts":"%s","status":"%s","msg":"%s"}\n' \
     "$(date -Is)" "$STATUS" "${MSG//\"/\'}" > "$STATE_FILE"
+  # Explicit, because root's umask here renders this 0640 and the operator reading it after a
+  # run is not root. Nothing secret is in it — a status, a timestamp and a count.
+  chmod 0644 "$STATE_FILE"
 
   if [[ -n "$PUSH_TOKEN" ]]; then
     curl -fsS --max-time 10 -G \
@@ -98,10 +101,6 @@ if [[ "$ACTIVE_BUILDS" -gt 0 ]]; then
   exit 0
 fi
 
-BEFORE=$(k3s kubectl -n longhorn-system get volumes.longhorn.io \
-  -o jsonpath='{range .items[?(@.status.kubernetesStatus.pvcName=="{{ registry_k8s_claim }}")]}{.status.actualSize}{end}' \
-  2>/dev/null)
-
 $KUBECTL scale "deploy/${DEPLOY}" --replicas=0 >/dev/null 2>&1
 # Wait for the pod to actually exit. Scaling returns immediately, and GC must not start while
 # the old process still holds the store.
@@ -118,13 +117,15 @@ fi
 
 if $KUBECTL wait --for=condition=complete "job/${JOB}" \
      --timeout={{ registry_k8s_gc_deadline_s }}s >/dev/null 2>&1; then
-  AFTER=$(k3s kubectl -n longhorn-system get volumes.longhorn.io \
-    -o jsonpath='{range .items[?(@.status.kubernetesStatus.pvcName=="{{ registry_k8s_claim }}")]}{.status.actualSize}{end}' \
-    2>/dev/null)
+  # Count what GC actually removed, from its own log. Longhorn's actualSize was the obvious
+  # metric here and it is the WRONG one: it reports blocks allocated to the volume, not
+  # filesystem usage, so it stays flat after a deletion until something trims the volume. The
+  # first real run deleted 209 blobs and read as "10719551488 -> 10722729984 bytes" — an
+  # unchanged, slightly larger number, which reads as a failed run.
+  DELETED=$($KUBECTL logs "job/${JOB}" 2>/dev/null | grep -c 'Deleting blob')
+  LINKS=$($KUBECTL logs "job/${JOB}" 2>/dev/null | grep -c 'Deleting layer link')
   STATUS=up
-  # actualSize is Longhorn's view and settles after the trim, so treat it as indicative. The
-  # authoritative record of what GC removed is the Job's own log, kept by ttlSecondsAfterFinished.
-  MSG="gc completed; longhorn actualSize ${BEFORE:-?} -> ${AFTER:-?} bytes"
+  MSG="gc completed; ${DELETED} blob(s) and ${LINKS} layer link(s) deleted"
 else
   MSG="gc job did not complete within {{ registry_k8s_gc_deadline_s }}s — see: kubectl -n ${NS} logs job/${JOB}"
   exit 1
