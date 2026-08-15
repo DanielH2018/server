@@ -1,0 +1,262 @@
+---
+# rkhunter, /etc/login.defs policy, core-dump suppression, Postfix hardening,
+# and the AIDE file-integrity baseline + weekly check.
+# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
+
+- name: Install rkhunter malware scanner
+  tags: [rkhunter]
+  ansible.builtin.apt:
+    name: rkhunter
+    state: present
+  become: true
+
+- name: Update rkhunter data files
+  tags: [rkhunter]
+  ansible.builtin.command: rkhunter --update --nocolors
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Initialize rkhunter file-properties baseline (first run only)
+  tags: [rkhunter]
+  # --propupd rewrites the *trusted* baseline of file hashes/properties. Running it
+  # on every play would silently re-bless any tampering that happened between runs,
+  # defeating the weekly --check. Guard it to first install; the APT_AUTOGEN setting
+  # below keeps the baseline fresh after *legitimate* package upgrades instead.
+  ansible.builtin.command: rkhunter --propupd --nocolors
+  args:
+    creates: /var/lib/rkhunter/db/rkhunter.dat
+  become: true
+
+- name: Refresh rkhunter baseline automatically after apt operations
+  tags: [rkhunter]
+  # With APT_AUTOGEN=true, rkhunter --propupd runs via the package-manager hook after
+  # apt installs/upgrades (including unattended-upgrades), so the only file-property
+  # changes the weekly scan flags are ones NOT explained by a trusted package event.
+  ansible.builtin.lineinfile:
+    path: /etc/default/rkhunter
+    regexp: '^APT_AUTOGEN='
+    line: 'APT_AUTOGEN="true"'
+  become: true
+
+- name: Schedule weekly rkhunter scan
+  tags: [rkhunter]
+  ansible.builtin.cron:
+    name: "Weekly rkhunter malware scan"
+    minute: "0"
+    hour: "2"
+    # Wednesday, staggered off the Monday AIDE check: both scans run >1h on the
+    # Pi's 4 slow cores and used to overlap (rkhunter 02:00 still running when
+    # AIDE started at 03:00). nice/ionice-idle so a scan can never starve
+    # containers — found 2026-06-11 while chasing Pi swap-thrash storms.
+    weekday: "3"
+    job: "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/rkhunter --check --nocolors --skip-keypress --report-warnings-only 2>&1 | /usr/bin/logger -t rkhunter"
+    user: root
+  become: true
+
+- name: Set default umask to 027 in /etc/login.defs
+  tags: [login-defs]
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^UMASK\s'
+    line: "UMASK\t\t027"
+  become: true
+
+- name: Configure password hash rounds in /etc/login.defs
+  tags: [login-defs]
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^#?\s*{{ item.key }}\s'
+    line: "{{ item.key }}\t{{ item.value }}"
+  loop:
+    - { key: "SHA_CRYPT_MIN_ROUNDS", value: "65536" }
+    - { key: "SHA_CRYPT_MAX_ROUNDS", value: "65536" }
+  become: true
+
+- name: Configure password age policy in /etc/login.defs
+  tags: [login-defs]
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^{{ item.key }}\s'
+    line: "{{ item.key }}\t{{ item.value }}"
+  loop:
+    - { key: "PASS_MIN_DAYS", value: "1" }
+    - { key: "PASS_MAX_DAYS", value: "365" }
+    - { key: "PASS_WARN_AGE", value: "14" }
+  become: true
+
+- name: Disable core dumps in /etc/security/limits.conf
+  tags: [coredumps]
+  ansible.builtin.lineinfile:
+    path: /etc/security/limits.conf
+    line: "* hard core 0"
+    state: present
+  become: true
+
+- name: Create systemd coredump drop-in directory
+  tags: [coredumps]
+  ansible.builtin.file:
+    path: /etc/systemd/coredump.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Disable core dumps via systemd coredump
+  tags: [coredumps]
+  ansible.builtin.copy:
+    dest: /etc/systemd/coredump.conf.d/disable.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Coredump]
+      Storage=none
+      ProcessSizeMax=0
+  become: true
+
+- name: Bind Postfix to loopback only (send-only local mailer)
+  tags: [postfix]
+  # Postfix here only delivers local system mail (cron/AIDE/rkhunter -> root); it
+  # never needs to accept SMTP from the network. The package default
+  # `inet_interfaces = all` binds 0.0.0.0:25 — exposed to the whole LAN (and to the
+  # internet if the router ever forwards 25). `mynetworks` already restricts RELAY to
+  # loopback so it's not an open relay, but loopback-only removes the listener from
+  # the network surface entirely while local submission + delivery keep working.
+  # Needs a RESTART (notify below), not reload — inet_interfaces rebinds sockets.
+  ansible.builtin.lineinfile:
+    path: /etc/postfix/main.cf
+    regexp: '^inet_interfaces\s*='
+    line: "inet_interfaces = loopback-only"
+  become: true
+  notify: Restart Postfix
+
+- name: Harden Postfix SMTP banner to hide OS info
+  tags: [postfix]
+  ansible.builtin.lineinfile:
+    path: /etc/postfix/main.cf
+    regexp: '^smtpd_banner\s*='
+    line: "smtpd_banner = $myhostname ESMTP"
+  become: true
+  notify: Reload Postfix
+
+- name: Disable Postfix VRFY command
+  tags: [postfix]
+  ansible.builtin.lineinfile:
+    path: /etc/postfix/main.cf
+    regexp: '^disable_vrfy_command\s*='
+    line: "disable_vrfy_command = yes"
+  become: true
+  notify: Reload Postfix
+
+- name: Install AIDE file integrity monitor
+  tags: [aide]
+  ansible.builtin.apt:
+    name: aide
+    state: present
+  become: true
+
+- name: Deploy local AIDE exclusions for Docker homelab
+  tags: [aide]
+  ansible.builtin.template:
+    src: 98_aide_local.conf.j2
+    dest: /etc/aide/aide.conf.d/98_aide_local.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Initialize AIDE database with progress monitoring
+  tags: [aide]
+  ansible.builtin.shell: |
+    set -o pipefail
+    aideinit &
+    AIDEINIT_PID=$!
+    sleep 5
+    AIDE_PID=$(pgrep -P "$AIDEINIT_PID" -x aide 2>/dev/null || pgrep -x aide 2>/dev/null)
+    PREV_BYTES=0
+    while kill -0 "$AIDEINIT_PID" 2>/dev/null; do
+      if [ -n "$AIDE_PID" ] && [ -f "/proc/$AIDE_PID/io" ]; then
+        BYTES=$(awk '/^read_bytes/{print $2}' "/proc/$AIDE_PID/io" 2>/dev/null)
+        GB=$(( BYTES / 1073741824 ))
+        RATE_MB=$(( (BYTES - PREV_BYTES) / 1048576 ))
+        echo "AIDE progress: ${GB}GB read, ${RATE_MB}MB/min"
+        PREV_BYTES=$BYTES
+      else
+        echo "AIDE initializing..."
+      fi
+      sleep 60
+    done
+    wait "$AIDEINIT_PID"
+  args:
+    creates: /var/lib/aide/aide.db
+    # pipefail (and the $!/arithmetic bashisms above) need bash, not dash (/bin/sh).
+    executable: /bin/bash
+  become: true
+  changed_when: false
+
+- name: Schedule weekly AIDE integrity check
+  tags: [aide]
+  # nice/ionice-idle: the check reads the whole filesystem for >1h (Pi); at normal
+  # priority it competes with containers for CPU and SD-card IO. The rkhunter scan
+  # is staggered to Wednesday for the same reason.
+  ansible.builtin.cron:
+    name: "Weekly AIDE file integrity check"
+    minute: "0"
+    hour: "3"
+    weekday: "1"
+    job: "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --check 2>&1 | /usr/bin/logger -t aide"
+    user: root
+  become: true
+
+- name: Mask the Debian dailyaidecheck timer (duplicates our weekly cron)
+  tags: [aide]
+  # Found 2026-06-11: the aide package ships dailyaidecheck.timer, so both hosts ran
+  # a FULL integrity check nightly on top of the weekly cron above — ~1h20m of CPU
+  # per night on the Pi Zero 2 W. The timer's run is also alert-broken (the _aide
+  # user can't mail(1) without extra capabilities; it warned every run), while the
+  # weekly cron logs to syslog as root. Mask rather than disable so a package
+  # upgrade can't re-enable it.
+  ansible.builtin.systemd_service:
+    name: dailyaidecheck.timer
+    enabled: false
+    state: stopped
+    masked: true
+  become: true
+
+- name: Check the masked AIDE timer for a stale pre-mask failed state # noqa command-instead-of-module
+  tags: [aide]
+  # Found 2026-06-12: masking doesn't clear a unit's last recorded state — the timer
+  # was already `failed` when the task above masked it (the broken _aide mail(1)
+  # alert), so systemd pins it in memory as masked/failed forever and it pollutes
+  # `systemctl --failed` on every incident triage. Only reset-failed clears it.
+  ansible.builtin.command: systemctl is-failed dailyaidecheck.timer
+  register: initial_setup_aide_timer_state
+  changed_when: false
+  failed_when: false
+  check_mode: false # read-only query; must run under --check or the when: below breaks
+  become: true
+
+- name: Clear the stale failed state (masking alone keeps the flag forever)
+  tags: [aide]
+  ansible.builtin.command: systemctl reset-failed dailyaidecheck.timer
+  when: initial_setup_aide_timer_state.stdout == 'failed'
+  changed_when: true
+  become: true
+
+- name: Mask networkd-dispatcher (no hooks installed — pure veth-event noise)
+  tags: [debloat]
+  # Found 2026-06-11: Ubuntu ships this Python daemon enabled, but its only job is
+  # running hook scripts from /etc/networkd-dispatcher/*.d — and every one of those
+  # dirs is empty on both hosts. Meanwhile each Docker container create/destroy is a
+  # veth link event, so it wakes constantly, forks a `networkctl` per event (extra
+  # churn on the Pi), and races the vanishing veth — the recurring journal error
+  # `networkctl[...]: Interface "vethXXX" not found`. Mask rather than purge:
+  # zero package-dependency risk, and an apt upgrade can't re-enable it.
+  ansible.builtin.systemd_service:
+    name: networkd-dispatcher.service
+    enabled: false
+    state: stopped
+    masked: true
+  become: true

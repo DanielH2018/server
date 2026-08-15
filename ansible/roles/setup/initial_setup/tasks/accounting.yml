@@ -1,0 +1,90 @@
+---
+# sysstat/psacct accounting, the login banners, and the two weekly apt-hygiene crons.
+# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
+
+- name: Install sysstat for system accounting
+  tags: [accounting]
+  ansible.builtin.apt:
+    name: sysstat
+    state: present
+  become: true
+
+- name: Enable sysstat data collection
+  tags: [accounting]
+  ansible.builtin.lineinfile:
+    path: /etc/default/sysstat
+    regexp: '^ENABLED='
+    line: 'ENABLED="true"'
+  become: true
+
+- name: Enable and start sysstat service
+  tags: [accounting]
+  ansible.builtin.systemd:
+    name: sysstat
+    state: started
+    enabled: true
+    daemon_reload: true
+  become: true
+
+- name: Install process accounting tools
+  tags: [accounting]
+  ansible.builtin.apt:
+    name: acct
+    state: present
+  become: true
+
+- name: Enable and start process accounting service
+  tags: [accounting]
+  ansible.builtin.systemd:
+    name: acct
+    state: started
+    enabled: true
+  become: true
+
+- name: Set login banner for local console (/etc/issue)
+  tags: [banners]
+  ansible.builtin.copy:
+    dest: /etc/issue
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      WARNING: Unauthorized access to this system is prohibited.
+      All connections are monitored and recorded.
+      Disconnect immediately if you are not an authorized user.
+  become: true
+
+- name: Set login banner for network logins (/etc/issue.net)
+  tags: [banners]
+  ansible.builtin.copy:
+    dest: /etc/issue.net
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      WARNING: Unauthorized access to this system is prohibited.
+      All connections are monitored and recorded.
+      Disconnect immediately if you are not an authorized user.
+  become: true
+
+- name: Schedule weekly package autoremove
+  tags: [crons]
+  ansible.builtin.cron:
+    name: "Weekly apt autoremove"
+    minute: "0"
+    hour: "2"
+    weekday: "0"
+    job: "/usr/bin/apt-get autoremove -y -q 2>&1 | /usr/bin/logger -t apt-autoremove"
+    user: root
+  become: true
+
+- name: Schedule weekly purge of removed-package config remnants
+  tags: [crons]
+  ansible.builtin.cron:
+    name: "Weekly dpkg purge orphaned configs"
+    minute: "15"
+    hour: "2"
+    weekday: "0"
+    job: "dpkg -l | awk '/^rc/{print $2}' | xargs -r dpkg --purge 2>&1 | /usr/bin/logger -t dpkg-purge"
+    user: root
+  become: true
