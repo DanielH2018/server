@@ -270,6 +270,13 @@ k3s_longhorn_weekly_volumes:
 # 40 minutes late".
 k3s_longhorn_backup_max_age_hours: 30
 
+# The weekly tier's equivalent bound, for the volumes in k3s_longhorn_weekly_volumes. Same
+# reasoning scaled to a Sunday 04:30 job: 8 days plus 6h, so one late or skipped run pages while
+# a normal ~7-day-old backup does not. Without a second bound these eleven volumes were walked by
+# nothing — the daily 30h could never apply to them, so they were simply left out of the coverage
+# loop and could stop backing up indefinitely with the tile green.
+k3s_longhorn_weekly_backup_max_age_hours: 198
+
 # */10 rather than the Pi crons' */5: this queries the k8s API rather than reading a local file,
 # and nothing here changes faster than the daily backup it watches. The Kuma monitor's heartbeat
 # interval must stay above this (see the uptime-kuma role) so a dead cron trips the watchdog.

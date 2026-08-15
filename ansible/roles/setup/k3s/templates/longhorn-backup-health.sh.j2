@@ -27,6 +27,7 @@ KUMA_HOST="uptime-kuma.local.{{ domain }}"
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 PUSH_URL="https://${KUMA_HOST}/api/push/{{ longhorn_backup_push_token }}"
 MAX_AGE_S=$(( {{ k3s_longhorn_backup_max_age_hours }} * 3600 ))
+WEEKLY_MAX_AGE_S=$(( {{ k3s_longhorn_weekly_backup_max_age_hours }} * 3600 ))
 
 PROBLEMS=""
 add() { PROBLEMS="${PROBLEMS:+$PROBLEMS; }$1"; }
@@ -34,11 +35,18 @@ add() { PROBLEMS="${PROBLEMS:+$PROBLEMS; }$1"; }
 # 1. Is the backup store reachable at all? This is the condition that was false for 13h on
 #    2026-08-02. Note what it does NOT prove — slice 0 flagged this — reachability is not
 #    evidence any object was ever written, which is what check 2 is for.
-AVAILABLE=$($KUBECTL get backuptarget default -o jsonpath='{.status.available}' 2>&1)
-if [[ "$AVAILABLE" != "true" ]]; then
-  REASON=$($KUBECTL get backuptarget default -o jsonpath='{.status.conditions[0].message}' 2>/dev/null | head -c 160)
-  add "backup target unavailable: ${REASON:-$AVAILABLE}"
-fi
+#    Both targets are checked by name. Until 2026-08-15 only `default` (B2) was, so R2 going
+#    unavailable had no fast signal at all: its four volumes are caught by check 4, but only once
+#    they age past MAX_AGE_S, and that message names no target — triage would start in the wrong
+#    place. Naming the target in the message is the point of the loop.
+BACKUP_TARGETS=(default{% if k3s_longhorn_r2_armed %} r2{% endif %})
+for TARGET in "${BACKUP_TARGETS[@]}"; do
+  AVAILABLE=$($KUBECTL get backuptarget "$TARGET" -o jsonpath='{.status.available}' 2>&1)
+  if [[ "$AVAILABLE" != "true" ]]; then
+    REASON=$($KUBECTL get backuptarget "$TARGET" -o jsonpath='{.status.conditions[0].message}' 2>/dev/null | head -c 160)
+    add "backup target ${TARGET} unavailable: ${REASON:-$AVAILABLE}"
+  fi
+done
 
 # 2. Has anything actually landed recently? A recurring job that silently stops producing
 #    backups leaves the target perfectly "available" and the backup plane perfectly dead.
@@ -90,35 +98,48 @@ NOW_S=$(date +%s)
 UNCOVERED=""
 CHECKED=0
 
-while read -r VOL CREATED CLAIM; do
-  # A Pending PVC has no volumeName yet — nothing to back up, and not a fault.
-  [[ -z "$VOL" ]] && continue
+# Run once per backup TIER. Until 2026-08-15 only the `default` group was walked, so the eleven
+# volumes moved to the weekly group (k3s_longhorn_weekly_volumes) had no per-volume staleness check
+# at all — they could stop backing up indefinitely with every tile green. They cannot share the
+# daily bound either: a weekly volume is legitimately ~7 days old, so MAX_AGE_S would page all
+# eleven every day. Each tier carries its own bound, and the message names which tier is late.
+check_tier() {
+  local selector="$1" max_age_s="$2" tier="$3"
+  local VOL CREATED CLAIM LATEST CREATED_S LATEST_S
 
-  LATEST=$(printf '%s\n' "$COVERAGE" | awk -v v="$VOL" '$1 == v && $2 != "" { print $2 }' | sort -r | head -1)
+  while read -r VOL CREATED CLAIM; do
+    # A Pending PVC has no volumeName yet — nothing to back up, and not a fault.
+    [[ -z "$VOL" ]] && continue
 
-  # Grace applies ONLY to a volume with no backup at all, and only until it has had time for a
-  # scheduled run — a service deployed this afternoon must not redden the backup plane before
-  # its first 03:30. It deliberately does NOT extend to a volume that HAS a backup: freshrss and
-  # healthchecks bound their PVCs 21h before this check was written and were already backed up,
-  # so a blanket young-PVC skip would have excused the two volumes the check exists for.
-  if [[ -z "$LATEST" ]]; then
-    CREATED_S=$(date -d "$CREATED" +%s 2>/dev/null) || CREATED_S=0
-    if (( CREATED_S > 0 && NOW_S - CREATED_S < MAX_AGE_S )); then
+    LATEST=$(printf '%s\n' "$COVERAGE" | awk -v v="$VOL" '$1 == v && $2 != "" { print $2 }' | sort -r | head -1)
+
+    # Grace applies ONLY to a volume with no backup at all, and only until it has had time for a
+    # scheduled run — a service deployed this afternoon must not redden the backup plane before
+    # its first 03:30. It deliberately does NOT extend to a volume that HAS a backup: freshrss and
+    # healthchecks bound their PVCs 21h before this check was written and were already backed up,
+    # so a blanket young-PVC skip would have excused the two volumes the check exists for.
+    if [[ -z "$LATEST" ]]; then
+      CREATED_S=$(date -d "$CREATED" +%s 2>/dev/null) || CREATED_S=0
+      if (( CREATED_S > 0 && NOW_S - CREATED_S < max_age_s )); then
+        continue
+      fi
+      UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} (${tier}, no backup)"
       continue
     fi
-    UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} (no backup)"
-    continue
-  fi
 
-  CHECKED=$(( CHECKED + 1 ))
-  LATEST_S=$(date -d "$LATEST" +%s 2>/dev/null) || LATEST_S=0
-  if (( LATEST_S == 0 )); then
-    UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} (unparseable timestamp)"
-  elif (( NOW_S - LATEST_S > MAX_AGE_S )); then
-    UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} ($(( (NOW_S - LATEST_S) / 3600 ))h)"
-  fi
-done < <($KUBECTL get volumes.longhorn.io -l recurring-job-group.longhorn.io/default=enabled \
-  -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.creationTimestamp}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}' 2>/dev/null)
+    CHECKED=$(( CHECKED + 1 ))
+    LATEST_S=$(date -d "$LATEST" +%s 2>/dev/null) || LATEST_S=0
+    if (( LATEST_S == 0 )); then
+      UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} (${tier}, unparseable timestamp)"
+    elif (( NOW_S - LATEST_S > max_age_s )); then
+      UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} (${tier}, $(( (NOW_S - LATEST_S) / 3600 ))h)"
+    fi
+  done < <($KUBECTL get volumes.longhorn.io -l "$selector" \
+    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.creationTimestamp}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}' 2>/dev/null)
+}
+
+check_tier "recurring-job-group.longhorn.io/default=enabled" "$MAX_AGE_S" daily
+check_tier "recurring-job-group.longhorn.io/weekly-backup=enabled" "$WEEKLY_MAX_AGE_S" weekly
 
 if [[ -n "$UNCOVERED" ]]; then
   add "backed-up volumes stale or missing: ${UNCOVERED}"
@@ -142,14 +163,33 @@ DAY_AGO_S=$(( NOW_S - 86400 ))
 RECENT_N=0
 RECENT_BYTES=0
 
-while read -r CREATED SIZE; do
+#    Counts B2-destined backups ONLY. The four volumes routed to R2 (k3s_longhorn_r2_volumes)
+#    spend Cloudflare's allowance, not B2's, so counting them here inflates a number compared
+#    against a B2-shaped budget — the direction that slowly desensitises the check until it stops
+#    meaning anything. R2 has its own headroom monitor (check_r2_usage in monitor-bridge).
+#    The routed set is read from the volumes' own spec.backupTargetName rather than from the
+#    inventory list: that is what Longhorn actually acts on, it is already in the same name space
+#    as a Backup's .status.volumeName (pvc-<uuid>, not namespace/pvcName), and it cannot drift
+#    from the inventory the way a second copy of the list would.
+R2_VOLUMES=$($KUBECTL get volumes.longhorn.io \
+  -o jsonpath='{range .items[?(@.spec.backupTargetName=="r2")]}{.metadata.name}{" "}{end}' 2>/dev/null)
+is_r2_volume() {
+  local vol="$1" candidate
+  for candidate in $R2_VOLUMES; do
+    [[ "$vol" == "$candidate" ]] && return 0
+  done
+  return 1
+}
+
+while read -r VOL CREATED SIZE; do
   [[ -z "$CREATED" ]] && continue
+  is_r2_volume "$VOL" && continue
   CREATED_S=$(date -d "$CREATED" +%s 2>/dev/null) || continue
   (( CREATED_S < DAY_AGO_S )) && continue
   RECENT_N=$(( RECENT_N + 1 ))
   RECENT_BYTES=$(( RECENT_BYTES + ${SIZE:-0} ))
 done < <($KUBECTL get backups.longhorn.io \
-  -o jsonpath='{range .items[*]}{.status.snapshotCreatedAt}{" "}{.status.size}{"\n"}{end}' 2>/dev/null)
+  -o jsonpath='{range .items[*]}{.status.volumeName}{" "}{.status.snapshotCreatedAt}{" "}{.status.size}{"\n"}{end}' 2>/dev/null)
 
 if (( RECENT_N > {{ k3s_longhorn_daily_backup_budget }} )); then
   add "$RECENT_N backups in 24h exceeds the {{ k3s_longhorn_daily_backup_budget }} budget \
@@ -162,7 +202,7 @@ if [[ -z "$PROBLEMS" ]]; then
   # The counts are in the green message on purpose: "newest backup 8h old" was true even while a
   # volume had no backup at all, and it was true throughout the 2026-08-08 transaction-cap outage.
   # The two numbers are what make this green mean something.
-  MSG="backup target available, newest backup $(( AGE_S / 3600 ))h old, ${CHECKED} backed-up volume(s) covered, ${RECENT_N} backup(s)/24h (budget {{ k3s_longhorn_daily_backup_budget }})"
+  MSG="backup target(s) ${BACKUP_TARGETS[*]} available, newest backup $(( AGE_S / 3600 ))h old, ${CHECKED} backed-up volume(s) covered across daily+weekly, ${RECENT_N} B2 backup(s)/24h (budget {{ k3s_longhorn_daily_backup_budget }})"
 else
   STATUS=down
   MSG="$PROBLEMS"
