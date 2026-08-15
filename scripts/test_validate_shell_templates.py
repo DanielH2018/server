@@ -40,6 +40,7 @@ def test_discover_templates_finds_the_known_set():
         "janitorr-health.sh.j2",
         "fake-remux-health.sh.j2",
         "docker-fleet-health.sh.j2",
+        "registry-gc.sh.j2",
     }
 
 
