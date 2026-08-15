@@ -6,8 +6,10 @@
 # symptom would be an empty dashboard days later — the same shape as the Longhorn backup
 # target that sat unavailable for 13h on 2026-08-02 because nothing polled it.
 #
-# Push, not poll: monitor-bridge reads daniel-server's Docker socket and cannot see this
-# cluster. Same reasoning, and the same curl, as longhorn-backup-health.sh (k3s role).
+# Push, not poll: this is a host cron that reports its own verdict. It was written when
+# monitor-bridge ran on daniel-server against that host's Docker socket and genuinely could
+# not see the cluster; monitor-bridge moved in-cluster at the 2026-08-14 Docker uninstall, so
+# the split is now cron ownership rather than visibility. Same curl as longhorn-backup-health.sh.
 #
 # Reads the cluster through the read-only ServiceAccount kubeconfig, so the cron needs no
 # sudo and cannot mutate anything. The two in-cluster HTTP calls go to ClusterIPs resolved at

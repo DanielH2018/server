@@ -2,9 +2,10 @@
 # fake-remux heartbeats — managed by Ansible (setup/fake_remux role); edits overwritten.
 #
 # Pushes the SAME two Kuma monitors monitor-bridge used to push, with the same tokens, so both keep
-# their history. Only the pusher moved: monitor-bridge reads daniel-server's Docker socket and bind-
-# mounted /var/lib/autofix-fake-remux from that host, and the crons writing those files now run
-# here.
+# their history. Only the pusher moved: monitor-bridge then ran on daniel-server, reading that
+# host's Docker socket and its bind-mounted /var/lib/autofix-fake-remux, and the crons writing
+# those files now run here. (monitor-bridge itself moved in-cluster at the 2026-08-14 Docker
+# uninstall; that changed nothing for this script.)
 #
 # Thin on purpose — the verdict logic is in state_push.py, a plain file with unit tests and a 3.12
 # floor check. This exists only because the push tokens have to be templated in, and a secret-

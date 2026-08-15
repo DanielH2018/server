@@ -6,7 +6,10 @@
 # push token has to be templated in, and a secret-carrying file should hold as little logic as
 # possible. Same shape as configarr-health.sh and longhorn-backup-health.sh.
 #
-# Push, not poll: monitor-bridge reads daniel-server's Docker socket and cannot see this cluster.
+# Push, not poll: this is a host cron that reports its own verdict. It was written when
+# monitor-bridge ran on daniel-server against that host's Docker socket and genuinely could not
+# see the cluster; monitor-bridge moved in-cluster at the 2026-08-14 Docker uninstall, so the
+# split is now cron ownership rather than visibility.
 # It used to read the error count from Loki and the uptime from a cAdvisor series — cluster pod
 # logs do not reach Loki, and that series is the Docker container's, so both died with the port.
 #
