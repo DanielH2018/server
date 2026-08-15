@@ -146,3 +146,52 @@
       NetworkPolicy registry verified: a pod with neither netpol-role=image-builder nor an
       admitted selftest label cannot reach registry:{{ k8s_registry_port }}, and the push/pull
       selftests above prove the admitted pods can.
+
+# ── garbage collection ──────────────────────────────────────────────────────
+# Scheduled, not run on deploy. GC takes the registry down for its duration, and a deploy is
+# exactly when a build is most likely to want it — the two must not share a window.
+- name: Render the registry garbage-collection job
+  tags: [config, registry-gc]
+  ansible.builtin.template:
+    src: gc-job.yaml.j2
+    dest: /etc/rancher/k3s/manifests/registry/gc-job.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Deploy the registry garbage-collection script
+  tags: [config, registry-gc]
+  # Root-owned and root-run: unlike the read-only heartbeats in roles/setup/k3s, this one uses
+  # the root kubeconfig because it must scale the registry Deployment. 0700 so the credential
+  # path it implies isn't readable by other local accounts.
+  ansible.builtin.template:
+    src: registry-gc.sh.j2
+    dest: /usr/local/bin/registry-gc.sh
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Create the registry garbage-collection state directory
+  tags: [config, registry-gc]
+  ansible.builtin.file:
+    path: /var/lib/registry-gc
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Schedule the registry garbage collection
+  tags: [config, registry-gc]
+  ansible.builtin.cron:
+    name: "Registry garbage collection"
+    weekday: "{{ registry_k8s_gc_cron_weekday }}"
+    minute: "{{ registry_k8s_gc_cron_minute }}"
+    hour: "{{ registry_k8s_gc_cron_hour }}"
+    user: root
+    job: "/usr/local/bin/registry-gc.sh"
+    cron_file: registry-gc
+  become: true
