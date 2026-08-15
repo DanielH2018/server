@@ -48,7 +48,10 @@ HOST_VARS = ANSIBLE / "inventory" / "host_vars" / "daniel-box.yml"
 # image-builder is the third of these: its Job and ConfigMap render from vars a caller passes
 # (which image, which Dockerfile), so there is nothing to render standalone and no service to
 # have an entry.
-SKIP_ROLES = {"manifests", "seed-volume", "image-builder"}
+# rollout-drain is the fourth and renders nothing at all — it is pure tasks, waiting on the
+# rollouts a batch of roles queued into k8s_pending_rollouts. It lives under roles/k8s/ only so
+# that both deploy.yml and configarr can include it by name.
+SKIP_ROLES = {"manifests", "seed-volume", "image-builder", "rollout-drain"}
 
 
 def k8s_entries() -> dict[str, dict]:

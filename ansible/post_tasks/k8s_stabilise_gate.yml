@@ -1,0 +1,111 @@
+---
+# The post-rollout stabilisation gate, hoisted out of roles/k8s/manifests and run ONCE for the
+# whole play. Previously roles/k8s/manifests/tasks/assert_stable.yml paused
+# k8s_rollout_stabilise_seconds inline, per changed service: 26 changed services on 2026-08-15 meant
+# 1561s — 26 minutes — of serial sleep in a 59-minute run, for a check that is a wall-clock window,
+# not work.
+#
+# WHY OVERLAPPING THE WINDOWS IS SAFE, and in fact stricter. A crashlooping pod accumulates
+# container restarts whether or not anybody is watching that particular minute. Deferring the
+# comparison to the end of the play means the earliest-deployed workloads are observed for the whole
+# remainder of the run rather than for exactly 60s — strictly more sensitive, never less. The 60s
+# floor still applies to the last batch, which is the only one that has not already had longer.
+#
+# WHAT THE GATE IS FOR (unchanged, from assert_stable.yml). `kubectl rollout status` returns on
+# Available, and Available is driven by READINESS. A container whose LIVENESS probe is misconfigured
+# passes readiness, flips the Deployment to Available, and only THEN starts getting killed — so the
+# rollout reports success while the workload settles into CrashLoopBackOff. Hit for real
+# 2026-08-07: kube-state-metrics' liveness probe pointed at a port where /livez does not exist,
+# every start logged clean, the kubelet killed it ~35s later on a 404, and the deploy reported
+# ok=41 failed=0.
+#
+# THE TWO CHECKS ARE NOT REDUNDANT, and batching changes which one does the work. Restart counts
+# catch a workload that flaps and recovers (invisible to every readiness-derived field — with the
+# probe re-broken deliberately the Deployment read desired=1 ready=1 updated=1 while the pod sat at
+# RESTARTS 3). Readiness catches one that stays down. Under batching a workload that finished
+# rolling early, crashlooped, and settled into a long backoff can show a zero restart-delta across
+# the final window — so the readiness assert is the PRIMARY check for early finishers, not the
+# backstop it was when every service had its own freshly-started window. Do not make it conditional.
+
+- name: Let liveness probes run before declaring the deploy healthy
+  tags: [deploy]
+  when:
+    - k8s_stabilise_watch | default([]) | length > 0
+    - not ansible_check_mode
+  # One pause for the entire play, not one per service. Sized to exceed a probe's
+  # initialDelaySeconds + failureThreshold x periodSeconds — see k8s_rollout_stabilise_seconds.
+  ansible.builtin.pause:
+    seconds: "{{ k8s_rollout_stabilise_seconds }}"
+
+- name: Re-read restart counts after the stabilisation window
+  tags: [deploy]
+  when:
+    - k8s_stabilise_watch | default([]) | length > 0
+    - not ansible_check_mode
+  become: true
+  changed_when: false
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ item.namespace }} get pods
+      -l app={{ item.name }}
+      -o jsonpath={.items[*].status.containerStatuses[*].restartCount}
+  loop: "{{ k8s_stabilise_watch | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: k8s_stabilise_restarts_after
+
+- name: Re-read workload readiness after the stabilisation window
+  tags: [deploy]
+  when:
+    - k8s_stabilise_watch | default([]) | length > 0
+    - not ansible_check_mode
+  become: true
+  changed_when: false
+  # DaemonSets carry the same desired|ready|updated triple under different field names.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ item.namespace }} get {{ item.kind }} {{ item.name }}
+      -o jsonpath={{ '{.status.desiredNumberScheduled}|{.status.numberReady}|{.status.updatedNumberScheduled}'
+      if item.kind == 'daemonset'
+      else '{.spec.replicas}|{.status.readyReplicas}|{.status.updatedReplicas}' }}
+  loop: "{{ k8s_stabilise_watch | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: k8s_stabilise_ready_after
+
+- name: Fail if a workload restarted during the stabilisation window
+  tags: [deploy]
+  when: not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - (item.1.stdout.split() | select() | map('int') | sum)
+        <= (item.0.restarts_before.split() | select() | map('int') | sum)
+    fail_msg: >-
+      {{ item.0.name }} restarted after its rollout reported success — container restarts went from
+      {{ item.0.restarts_before.split() | select() | map('int') | sum }} to
+      {{ item.1.stdout.split() | select() | map('int') | sum }}. A liveness probe that fails after
+      readiness has already passed produces exactly this, and the application log will look clean
+      because every start genuinely succeeds. Inspect it with:
+      k3s kubectl -n {{ item.0.namespace }} describe pod -l app={{ item.0.name }}
+    quiet: true
+  loop: >-
+    {{ (k8s_stabilise_watch | default([]))
+       | zip(k8s_stabilise_restarts_after.results | default([])) | list }}
+  loop_control:
+    label: "{{ item.0.name }}"
+
+- name: Fail if a workload is not fully ready after the stabilisation window
+  tags: [deploy]
+  when: not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      # An absent readyReplicas renders as an empty string, not 0 — hence the default() on each.
+      - (item.stdout.split('|')[1] | default('0', true) | int) == (item.stdout.split('|')[0] | int)
+      - (item.stdout.split('|')[2] | default('0', true) | int) == (item.stdout.split('|')[0] | int)
+    fail_msg: >-
+      {{ item.item.name }} is not fully ready after its rollout reported success
+      (desired|ready|updated = {{ item.stdout }}).
+    quiet: true
+  loop: "{{ k8s_stabilise_ready_after.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"

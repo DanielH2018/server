@@ -165,15 +165,30 @@
       when: containers_list | length > 0
       tags: always
 
+    - name: Start with an empty rollout queue
+      # Facts persist for the host across plays and across a resumed run, so a queue left over
+      # from an earlier play would be drained here against workloads this play never touched.
+      ansible.builtin.set_fact:
+        k8s_pending_rollouts: []
+        k8s_stabilise_watch: []
+      tags: always
+
   tasks:
-    - name: Run k8s roles
-      ansible.builtin.include_role:
-        # Path-qualified: a bare `traefik` would resolve to roles/containers/traefik, which
-        # is first in roles_path. See the roles_path comment in ansible.cfg.
-        name: "k8s/{{ container_item.name }}"
-        apply:
-          tags: "{{ container_item.tags | default([container_item.name]) }}"
-      loop: "{{ containers_list }}"
+    # Batched rather than one flat loop: roles/k8s/manifests no longer waits on its own rollout
+    # (see tasks/k8s_rollout_drain.yml), so the batch boundary is what bounds how many workloads
+    # roll at once. List order still holds within and across batches, which is what traefik's CRDs
+    # and authelia's middleware depend on.
+    - name: Deploy k8s workloads in batches
+      ansible.builtin.include_tasks: tasks/k8s_batch.yml
+      loop: "{{ containers_list | batch(k8s_rollout_batch_width | int) | list }}"
       loop_control:
-        loop_var: container_item
+        loop_var: container_batch
+        label: "{{ container_batch | map(attribute='name') | join(', ') }}"
+      tags: always
+
+  post_tasks:
+    # One stabilisation window for the whole play instead of one per changed service. Runs after
+    # the last batch has drained, so every workload it watches has completed its rollout.
+    - name: Confirm every rollout stayed healthy
+      ansible.builtin.include_tasks: post_tasks/k8s_stabilise_gate.yml
       tags: always

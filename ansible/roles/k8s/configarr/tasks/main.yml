@@ -18,6 +18,20 @@
     # which is the whole reason that option exists.
     manifests_rollout: ""
 
+# THE ONE CONSUMER-SIDE BARRIER IN THE k8s PLAY. The reconcile below runs against sonarr and radarr
+# over HTTP, and both are listed BEFORE configarr in containers_list. While roles/k8s/manifests
+# waited on its own rollout inline, that ordering alone guaranteed they were live by now; it no
+# longer does, because the wait is deferred to the end of the batch. Without this drain the Job
+# fires into sonarr's ~5-minute startup (its unpinned striptracks DOCKER_MODS reinstalls on every
+# boot, which is why it carries manifests_rollout_timeout: 660s) and reconciles against a dead API.
+#
+# Draining HERE rather than making sonarr/radarr wait inline is what keeps the batching worth
+# having: they still roll concurrently with their batch, and this pays max(sonarr, radarr) once
+# instead of sonarr + radarr serially.
+- name: Wait for the *arrs to finish rolling out before reconciling against them
+  ansible.builtin.include_role:
+    name: k8s/rollout-drain
+
 # Carried over from the Docker role, which reconciled on every deploy: a config.yml edit that only
 # took effect at the next 04:30 would leave a deploy reporting success while the *arrs still run
 # yesterday's policy. Fixed name, deleted first, so deploys do not accumulate Jobs.
