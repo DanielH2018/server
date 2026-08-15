@@ -28,7 +28,7 @@
 # backstop it was when every service had its own freshly-started window. Do not make it conditional.
 
 - name: Let liveness probes run before declaring the deploy healthy
-  tags: [deploy]
+  tags: [always]
   when:
     - k8s_stabilise_watch | default([]) | length > 0
     - not ansible_check_mode
@@ -38,7 +38,7 @@
     seconds: "{{ k8s_rollout_stabilise_seconds }}"
 
 - name: Re-read restart counts after the stabilisation window
-  tags: [deploy]
+  tags: [always]
   when:
     - k8s_stabilise_watch | default([]) | length > 0
     - not ansible_check_mode
@@ -55,7 +55,7 @@
   register: k8s_stabilise_restarts_after
 
 - name: Re-read workload readiness after the stabilisation window
-  tags: [deploy]
+  tags: [always]
   when:
     - k8s_stabilise_watch | default([]) | length > 0
     - not ansible_check_mode
@@ -74,7 +74,7 @@
   register: k8s_stabilise_ready_after
 
 - name: Fail if a workload restarted during the stabilisation window
-  tags: [deploy]
+  tags: [always]
   when: not ansible_check_mode
   ansible.builtin.assert:
     that:
@@ -95,7 +95,7 @@
     label: "{{ item.0.name }}"
 
 - name: Fail if a workload is not fully ready after the stabilisation window
-  tags: [deploy]
+  tags: [always]
   when: not ansible_check_mode
   ansible.builtin.assert:
     that:

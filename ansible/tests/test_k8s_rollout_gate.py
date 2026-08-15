@@ -31,6 +31,7 @@ _REPO = Path(__file__).resolve().parents[2]
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 _DRAIN = _REPO / "ansible/roles/k8s/rollout-drain/tasks/main.yml"
 _CONFIGARR = _REPO / "ansible/roles/k8s/configarr/tasks/main.yml"
+_GATE = _REPO / "ansible/post_tasks/k8s_stabilise_gate.yml"
 _DEPLOY = _REPO / "ansible/deploy.yml"
 _BATCH = _REPO / "ansible/tasks/k8s_batch.yml"
 _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
@@ -178,6 +179,28 @@ def test_batch_width_is_declared_and_conservative() -> None:
         "Longhorn detach/attach cycles and availability gaps, not extra surge replicas. Widen "
         "only against a measured run."
     )
+
+
+def test_drain_and_gate_tasks_are_tagged_always() -> None:
+    """`tags: [deploy]` here makes the whole gate vanish on a tag-filtered deploy.
+
+    Caught by a real `--tags littlelink` run on 2026-08-15, which reported ok=94 failed=0 while
+    executing none of the drain. `k8s_batch.yml` unions the service tag onto roles/k8s/manifests
+    via `apply:`, so its `[deploy]` tasks match `--tags <svc>`. The drain and the gate get no such
+    union, so tasks tagged only `[deploy]` are filtered out — meaning no rollout is ever waited on
+    and the crashloop gate never runs, on every gitops-deploy run (which is always tag-filtered).
+
+    They are safe as `always` because both are guarded on an empty accumulator: `--skip-tags
+    deploy` skips the `[deploy]`-tagged queueing task in roles/k8s/manifests, so the queue is empty
+    and the drain and gate no-op.
+    """
+    for path in (_DRAIN, _GATE):
+        for task in _tasks(path):
+            tags = task.get("tags", [])
+            assert "always" in tags, (
+                f"{path.name}: task {task.get('name')!r} is tagged {tags}, not [always]. "
+                "A tag-filtered deploy would skip it and the gate would silently not run."
+            )
 
 
 def test_configarr_drains_before_reconciling() -> None:
