@@ -119,15 +119,20 @@ k3s_agent_longhorn_scheduling: true
 # its own repository blob and every backup tier went down for 13h+, with the bucket at
 # 6.05/10 GB. Storage was never the constraint.
 #
-# 3600 cuts that 12x, to 24 polls/day. What it costs is freshness of the backup *list* in the
-# Longhorn UI, which is worth nothing here — backups are driven by a recurring job, not by
-# someone watching the list. 0 disables polling entirely, but then the UI never reflects
-# reality without a manual sync, which is a worse trade than an hour of staleness.
+# 3600 cut that 12x and fixed the Class C math — but each poll ALSO GETs the .cfg of every
+# volume and every retained backup, and those are Class B (same 2,500/day cap, counted
+# separately). That read count grows with retention: by 2026-08-15 (~a week into the 14-day
+# daily tier) ~100-150 cfg GETs/poll x 24 polls hit the Class B cap by ~11:00 UTC with zero
+# restore traffic — surfacing as the restore drill failing with a masked "cannot find
+# volume.cfg in backupstore" (a cap 403, not data loss). 0 disables polling entirely:
+# Longhorn still syncs a volume's backup list right after each backup completes, so the
+# only loss is UI staleness between nightlies (manual sync: Backup -> Sync). That also
+# removes the poll's LISTs from Class C.
 #
-# The failure mode this guards against is a ratchet: once the cap trips, Longhorn keeps
-# polling and Kopia retries each GetBlob 10 times, so the failed state itself burns
-# transactions and eats into the next day's allowance.
-k3s_longhorn_backupstore_poll_interval: 3600
+# The failure mode 0 guards against is a ratchet: once the cap trips, every BackupVolume
+# controller retries its denied LISTs (~60/min observed 2026-08-15), so the failed state
+# itself burns transactions and eats into the next day's allowance.
+k3s_longhorn_backupstore_poll_interval: 0
 
 # Back up detached volumes too. pi-peer-backup-data is mounted only for the minutes its
 # nightly pull CronJob runs, so at the 03:30 daily-backup tick it is detached — and with
