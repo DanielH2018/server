@@ -11,6 +11,26 @@ registry_k8s_claim: registry-data
 registry_k8s_storage_class: longhorn-nobackup
 registry_k8s_size: 10Gi
 
+# ── garbage collection (registry-gc.sh, gc-job.yaml) ───────────────────────────────────────
+# Nothing reclaimed this volume for its first nine days: DELETE_ENABLED only permits deletes,
+# and the registry never collects on its own. Every rebuild pushes the same `latest` tag, which
+# orphans the previous manifest, so the store grew until it filled and every cluster image build
+# failed. Weekly is sized to that observed fill rate with room to spare.
+#
+# Sunday 04:20 — after the 03:30 Longhorn backup group and the weekly 07:30 host reboot's blast
+# radius, and off the 30-min gitops-deploy tick's busiest hours. GC takes the registry offline
+# for its duration, so this wants the quietest window available.
+registry_k8s_gc_cron_weekday: "0"
+registry_k8s_gc_cron_hour: "4"
+registry_k8s_gc_cron_minute: "20"
+
+# The registry stays DOWN for up to this long, so it bounds an outage rather than just a job.
+# Observed full-store GC over ~10 GiB is minutes; 20 min is generous without being open-ended.
+registry_k8s_gc_deadline_s: 1200
+# Keep the finished Job around long enough that the next weekly run's operator can still read
+# what the last one deleted — the Job log is the only authoritative record of that.
+registry_k8s_gc_ttl_s: 604800
+
 # The proof-of-loop pair (see tasks/main.yml). crane rather than docker or skopeo: it is a
 # static binary in a distroless image, needs no daemon, and copies between registries directly
 # without a local store to fill the node's disk.

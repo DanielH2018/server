@@ -1,0 +1,72 @@
+---
+# Garbage-collect the registry's blob store. Applied by registry-gc.sh, which scales the
+# registry Deployment to 0 first — see that script for why this must never run against a live
+# registry.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: registry-gc
+  namespace: {{ k8s_namespace }}
+spec:
+  # One attempt. A retry would restart GC against a store the previous attempt was partway
+  # through mutating, and the script's scale-back-up runs on a timer it can't extend, so a
+  # silent retry could still be deleting blobs after the registry is serving again.
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ registry_k8s_gc_deadline_s }}
+  ttlSecondsAfterFinished: {{ registry_k8s_gc_ttl_s }}
+  template:
+    spec:
+      restartPolicy: Never
+      # Same node as the registry: registry-data is RWO, so the Job can only attach where the
+      # volume already lives.
+      nodeSelector:
+        kubernetes.io/hostname: daniel-box
+      securityContext:
+        # Matches the registry Deployment. The blob tree on the PVC is owned by 1000:1000, and
+        # a root process without DAC_OVERRIDE cannot delete another uid's files — running as
+        # root here would fail on exactly the unlink calls GC exists to make.
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      automountServiceAccountToken: false
+      containers:
+        - name: gc
+          image: {{ registry_k8s_image }}
+          # The binary directly, not the image's entrypoint — that starts a serving registry.
+          # No shell is assumed: registry 3.x images are minimal, so anything wrapping this in
+          # `sh -c` would break on an image bump.
+          command: ["/bin/registry"]
+          # --delete-untagged is the whole point. Plain garbage-collect only sweeps blobs no
+          # MANIFEST references, and every rebuild here pushes the same `latest` tag, which
+          # leaves the previous manifest untagged but still referencing its layers. Without
+          # this flag GC walks the store and reclaims nothing, which is how registry-data
+          # reached 99.8% with delete-enabled already set.
+          args:
+            - "garbage-collect"
+            - "--delete-untagged"
+            - "/etc/distribution/config.yml"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
+              value: /var/lib/registry
+            - name: REGISTRY_STORAGE_DELETE_ENABLED
+              value: "true"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/registry
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+            requests:
+              cpu: "100m"
+              memory: 64Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ registry_k8s_claim }}

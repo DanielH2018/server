@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# Registry garbage collection — managed by Ansible (k8s/registry role); edits overwritten.
+#
+# WHY THIS EXISTS: deployment.yaml.j2 sets REGISTRY_STORAGE_DELETE_ENABLED=true, which only
+# PERMITS deletes — the registry never collects on its own. Nothing ever ran garbage-collect, so
+# every rebuild's superseded layers accumulated until registry-data hit 99.8% of 10 GiB on
+# 2026-08-15 and every image build in the cluster failed with "no space left on device". At that
+# point all eight repositories held exactly one tag each, so the live content was a handful of
+# images and the rest was orphaned blobs.
+#
+# STOP-THE-WORLD, NOT OPTIONAL. Upstream: "You should ensure that the registry is in read-only
+# mode or not running at all. If you were to upload an image while garbage collection is running,
+# there is the risk that the image's layers are mistakenly deleted leading to a corrupted image."
+# That failure is worse than it sounds here: a corrupt image still PULLS, and only crashloops the
+# workload later, with nothing pointing back at GC. The volume is longhorn-nobackup because
+# losing it costs a rebuild rather than data — that tolerance covers losing the volume, NOT
+# silently serving a broken image. Hence scale-to-0 for the duration.
+#
+# ROOT KUBECONFIG, unlike every sibling script deployed by this repo. disk-health.sh,
+# longhorn-backup-health.sh and manifest-prune-check.sh all use the read-only ServiceAccount
+# precisely so a bug there cannot mutate the cluster. This one MUST scale a Deployment, so it
+# holds a credential that can. Everything it does is scoped to the registry Deployment and its
+# own Job; keep it that way.
+
+set -uo pipefail
+
+# Cron's default PATH (/usr/bin:/bin) omits /usr/local/bin, where the k3s installer puts the
+# binary. Without this every kubectl call below silently resolves to nothing.
+export PATH="/usr/local/bin:${PATH}"
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+NS="{{ k8s_namespace }}"
+KUBECTL="k3s kubectl -n ${NS}"
+DEPLOY=registry
+JOB=registry-gc
+JOB_MANIFEST=/etc/rancher/k3s/manifests/registry/gc-job.yaml
+STATE_DIR=/var/lib/registry-gc
+STATE_FILE="${STATE_DIR}/state.json"
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+PUSH_TOKEN="{{ registry_gc_push_token | default('') }}"
+
+STATUS=down
+MSG="did not complete"
+
+finish() {
+  mkdir -p "$STATE_DIR"
+  printf '{"ts":"%s","status":"%s","msg":"%s"}\n' \
+    "$(date -Is)" "$STATUS" "${MSG//\"/\'}" > "$STATE_FILE"
+
+  if [[ -n "$PUSH_TOKEN" ]]; then
+    curl -fsS --max-time 10 -G \
+      --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
+      --data-urlencode "status=${STATUS}" \
+      --data-urlencode "msg=${MSG}" \
+      "https://${KUMA_HOST}/api/push/${PUSH_TOKEN}" >/dev/null \
+      || logger -t registry-gc "push failed (status=${STATUS}: ${MSG})"
+  else
+    logger -t registry-gc "registry_gc_push_token not set — skipping push (see /add-secret)"
+  fi
+
+  # Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
+  # Kuma runs on the cluster this mutates, so a cluster outage silences both the push above and
+  # the monitor waiting for it. Skipped when no key is configured.
+  local hc_key=""
+  # shellcheck source=/dev/null
+  [[ -r /etc/healthchecks/ping.env ]] && . /etc/healthchecks/ping.env && hc_key="${HC_PING_KEY:-}"
+  if [[ -n "$hc_key" ]]; then
+    local url="https://hc-ping.com/${hc_key}/registry-gc"
+    [[ "$STATUS" == "up" ]] || url="${url}/fail"
+    curl -fsS --max-time 10 --retry 3 --data-raw "$MSG" "$url" >/dev/null \
+      || logger -t registry-gc "healthchecks ping failed (status=${STATUS})"
+  fi
+}
+
+# The registry MUST come back even if GC dies, the deadline trips, or cron kills us. Without
+# this a failed run leaves the cluster unable to pull any locally-built image until a human
+# notices — a worse outage than the full disk this fixes.
+scale_up_and_report() {
+  $KUBECTL scale "deploy/${DEPLOY}" --replicas=1 >/dev/null 2>&1
+  $KUBECTL rollout status "deploy/${DEPLOY}" --timeout=180s >/dev/null 2>&1 \
+    || { STATUS=down; MSG="${MSG}; registry did NOT come back — check deploy/${DEPLOY}"; }
+  finish
+}
+trap scale_up_and_report EXIT
+
+# A build in flight is the exact race the scale-down exists to prevent: buildkit pushes blobs
+# whose manifest is not written yet, and GC would see them as unreferenced. Jobs are named
+# build-<image> by the image-builder role.
+ACTIVE_BUILDS=$($KUBECTL get jobs -o \
+  jsonpath='{range .items[?(@.status.active)]}{.metadata.name}{"\n"}{end}' 2>/dev/null \
+  | grep -c '^build-' )
+if [[ "$ACTIVE_BUILDS" -gt 0 ]]; then
+  STATUS=up
+  MSG="skipped — ${ACTIVE_BUILDS} image build(s) in flight"
+  trap finish EXIT   # nothing was scaled down, so do not touch the Deployment
+  exit 0
+fi
+
+BEFORE=$(k3s kubectl -n longhorn-system get volumes.longhorn.io \
+  -o jsonpath='{range .items[?(@.status.kubernetesStatus.pvcName=="{{ registry_k8s_claim }}")]}{.status.actualSize}{end}' \
+  2>/dev/null)
+
+$KUBECTL scale "deploy/${DEPLOY}" --replicas=0 >/dev/null 2>&1
+# Wait for the pod to actually exit. Scaling returns immediately, and GC must not start while
+# the old process still holds the store.
+if ! $KUBECTL wait --for=delete pod -l app="${DEPLOY}" --timeout=120s >/dev/null 2>&1; then
+  MSG="registry pod did not terminate within 120s — aborted before touching the blob store"
+  exit 1
+fi
+
+$KUBECTL delete job "$JOB" --ignore-not-found >/dev/null 2>&1
+if ! $KUBECTL apply -f "$JOB_MANIFEST" >/dev/null 2>&1; then
+  MSG="could not apply ${JOB_MANIFEST}"
+  exit 1
+fi
+
+if $KUBECTL wait --for=condition=complete "job/${JOB}" \
+     --timeout={{ registry_k8s_gc_deadline_s }}s >/dev/null 2>&1; then
+  AFTER=$(k3s kubectl -n longhorn-system get volumes.longhorn.io \
+    -o jsonpath='{range .items[?(@.status.kubernetesStatus.pvcName=="{{ registry_k8s_claim }}")]}{.status.actualSize}{end}' \
+    2>/dev/null)
+  STATUS=up
+  # actualSize is Longhorn's view and settles after the trim, so treat it as indicative. The
+  # authoritative record of what GC removed is the Job's own log, kept by ttlSecondsAfterFinished.
+  MSG="gc completed; longhorn actualSize ${BEFORE:-?} -> ${AFTER:-?} bytes"
+else
+  MSG="gc job did not complete within {{ registry_k8s_gc_deadline_s }}s — see: kubectl -n ${NS} logs job/${JOB}"
+  exit 1
+fi
