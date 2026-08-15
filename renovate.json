@@ -10,13 +10,13 @@
     "dependencies"
   ],
   "schedule": [
-    "before 6am on monday"
+    "before 6am"
   ],
   "prHourlyLimit": 4,
   "rebaseWhen": "auto",
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
-    "description": "CVE-driven bumps bypass the Monday-only window (schedule: at any time) so security PRs are RAISED immediately, and minimumReleaseAge shortens their auto-merge soak to 1 day \u2014 overriding the 7-day non-major default below, which otherwise made 'land ASAP' a misnomer (the PR appeared at once but still soaked a week). 1 day is fast enough to patch a live CVE while leaving a 24h window to catch a yanked/poisoned upstream release; the post-merge gitops-deploy host health gate + rollback is the final backstop. osvVulnerabilityAlerts adds OSV-database scanning for the version-pinned Docker images (GitHub-native Dependabot doesn't cover Docker), closing the one dependency axis without a 'silence != up-to-date' backstop. Requires repo Dependabot *alerts* (not PRs) enabled so Renovate can read the advisory feed.",
+    "description": "CVE-driven bumps bypass the daily before-6am window (schedule: at any time) so security PRs are RAISED immediately, and minimumReleaseAge shortens their auto-merge soak to 1 day \u2014 overriding the 7-day non-major default below, which otherwise made 'land ASAP' a misnomer (the PR appeared at once but still soaked a week). 1 day is fast enough to patch a live CVE while leaving a 24h window to catch a yanked/poisoned upstream release; the post-merge gitops-deploy host health gate + rollback is the final backstop. osvVulnerabilityAlerts adds OSV-database scanning for the version-pinned Docker images (GitHub-native Dependabot doesn't cover Docker), closing the one dependency axis without a 'silence != up-to-date' backstop. Requires repo Dependabot *alerts* (not PRs) enabled so Renovate can read the advisory feed.",
     "enabled": true,
     "schedule": [
       "at any time"
@@ -28,10 +28,10 @@
     ]
   },
   "lockFileMaintenance": {
-    "description": "pyproject.toml uses unbounded ranges (ansible-core >=2.18 etc.), so Renovate sees nothing to bump while uv.lock keeps exact pins frozen forever \u2014 silence \u2260 up-to-date. A weekly lock refresh PR rides the same CI gate. NO automerge: >= ranges mean a refresh can contain major jumps (ansible-core 3.x one day); those deserve a deliberate look.",
+    "description": "pyproject.toml uses unbounded ranges (ansible-core >=2.18 etc.), so Renovate sees nothing to bump while uv.lock keeps exact pins frozen forever \u2014 silence \u2260 up-to-date. A daily lock refresh PR rides the same CI gate (one PR at a time — Renovate reuses the open one rather than opening a second, so the daily window costs no extra CI while it sits unmerged). NO automerge: >= ranges mean a refresh can contain major jumps (ansible-core 3.x one day); those deserve a deliberate look.",
     "enabled": true,
     "schedule": [
-      "before 6am on monday"
+      "before 6am"
     ]
   },
   "customManagers": [
@@ -191,7 +191,7 @@
   ],
   "packageRules": [
     {
-      "description": "Bundle minor + patch image bumps into a single weekly PR to cut noise; majors stay separate so they get a deliberate look. Auto-merge once CI (prek + image-smoke) is green and the release has soaked 7 days (mirrors the retired watchtower's COOLDOWN_DELAY \u2014 filters fresh upstream breakage). NOTE the k8s plane overrides the grouping below: it is split per service so the deployer's rollback unit equals its deploy unit.",
+      "description": "Bundle minor + patch image bumps into a single rolling PR to cut noise — the schedule is a daily before-6am window, so the group PR refreshes each morning rather than once a week; majors stay separate so they get a deliberate look. Auto-merge once CI (prek + image-smoke) is green and the release has soaked 7 days (mirrors the retired watchtower's COOLDOWN_DELAY \u2014 filters fresh upstream breakage). NOTE the k8s plane overrides the grouping below: it is split per service so the deployer's rollback unit equals its deploy unit.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -242,7 +242,7 @@
       "versioning": "regex:^v?(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:\\.(?<build>\\d+))?(?<compatibility>[a-z]+\\d+)?-ls(?<revision>\\d+)$"
     },
     {
-      "description": "Keep prek.toml hook bumps in their own weekly group, separate from the container-image group. They match the custom.regex manager, so the non-major auto-merge + 7-day soak rule above already applies; this only overrides the group name. Majors stay manual (no automerge rule matches them).",
+      "description": "Keep prek.toml hook bumps in their own group, separate from the container-image group. They match the custom.regex manager, so the non-major auto-merge + 7-day soak rule above already applies; this only overrides the group name. Majors stay manual (no automerge rule matches them).",
       "matchFileNames": [
         "prek.toml"
       ],
