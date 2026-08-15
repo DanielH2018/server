@@ -14,8 +14,10 @@
     # The one file the Dockerfile COPYs (flat — ConfigMap keys cannot contain '/').
     image_builder_context:
       "{{ playbook_dir }}/roles/k8s/code-server/files/extensions.sh": extensions.sh
-    # texlive-latex-extra + the font packages pull ~2 G of apt on a cold cache; the default
-    # 900 s is not enough for a first build.
+    # texlive-latex-extra still pulls several hundred MB of apt, and the extension step
+    # fetches seven VSIXs from upstream APIs; the default 900 s is not enough for a build
+    # that misses the registry layer cache (first build after any Dockerfile edit, or after
+    # the linuxserver base moves). A cache hit finishes in a fraction of this.
     image_builder_timeout: 1800
 
 # Seeded BEFORE the workload so first boot never runs against an empty /config. The cutover

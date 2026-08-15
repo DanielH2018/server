@@ -1,6 +1,10 @@
 FROM lscr.io/linuxserver/code-server:latest
 
 # 1. Install system dependencies
+#    texlive-fonts-extra is deliberately NOT here: it is a 1.7 G leaf package, on its own
+#    ~60% of the unpacked image, and texlive-fonts-recommended already carries the Computer
+#    Modern / Latin Modern / URW families ordinary documents use. If a document ever fails on
+#    a missing font family, add that one texlive-fonts-* package by name rather than -extra.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     python3 \
@@ -8,7 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     texlive-latex-extra \
     texlive-fonts-recommended \
-    texlive-fonts-extra \
     latexmk \
     curl \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
@@ -16,28 +19,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s /usr/bin/python3 /usr/bin/python
 
-# 2. Python virtual environment outside /config so it survives volume mounts
+# 2. Python virtual environment outside /config so it survives volume mounts, with its
+#    packages and its ownership settled in the SAME layer. `chown -R` rewrites every file,
+#    and a rewritten file is a new file to the layer format — so doing it in a later step
+#    stored a second full copy of the venv (89 M compressed) on top of the one already
+#    written here. The chown must stay last: pip writes into the venv after it exists.
 ENV VIRTUAL_ENV=/opt/venv
-RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+#    pip is called by its absolute path, not via PATH: python3-pip also ships /usr/bin/pip,
+#    and installing into the system interpreter instead of the venv would fail silently.
+RUN python3 -m venv $VIRTUAL_ENV \
+    && $VIRTUAL_ENV/bin/pip install --no-cache-dir \
+        uv \
+        pandas \
+        requests \
+        ruff \
+        ty \
+        structlog \
+        python-dotenv \
+    && chown -R {{ puid }}:{{ pgid }} $VIRTUAL_ENV
 
-# 3. Python packages
-RUN pip install --no-cache-dir \
-    uv \
-    pandas \
-    requests \
-    ruff \
-    ty \
-    structlog \
-    python-dotenv
+# 3. Claude Code CLI. npm's download cache is ~96 M that the running container never reads,
+#    so it is dropped in the same layer that creates it — a later `rm` would not shrink this
+#    one.
+RUN npm install -g @anthropic-ai/claude-code \
+    && npm cache clean --force
 
-# 4. Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
-
-# 5. Fix venv ownership for container user
-RUN chown -R {{ puid }}:{{ pgid }} $VIRTUAL_ENV
-
-# 6. Download all VS Code extensions at build time.
+# 4. Download all VS Code extensions at build time.
 #    Open VSX: fetched via their public API.
 #    MS Marketplace: proprietary extensions not published to Open VSX.
 RUN mkdir -p /opt/vsix && \
@@ -74,6 +82,6 @@ RUN mkdir -p /opt/vsix && \
         echo "Downloaded from MS Marketplace: ${ext}"; \
     done
 
-# 7. Startup script installs all /opt/vsix extensions into the config volume
+# 5. Startup script installs all /opt/vsix extensions into the config volume
 COPY extensions.sh /custom-cont-init.d/10-extensions.sh
 RUN chmod +x /custom-cont-init.d/10-extensions.sh
