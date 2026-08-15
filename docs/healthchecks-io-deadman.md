@@ -102,7 +102,7 @@ The `/10`-minute checks report within ten minutes of the deploy. To force the da
 
 ```bash
 sudo /usr/local/bin/manifest-prune-check.sh
-kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup
+sudo k3s kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup
 ```
 
 A failed ping is logged locally (`logger -t <script>`, or the job's stderr) and nowhere else,
