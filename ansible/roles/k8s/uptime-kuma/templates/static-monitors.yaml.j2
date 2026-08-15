@@ -139,6 +139,20 @@ stringData:
   # identity and history; only the display name updates in place.
   livesync-bridge.json: |
     {"type": "http", "name": "LiveSync (edge gate)", "url": "https://livesync.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["401"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # ── off-cluster services ───────────────────────────────────────────────────────────────
+  # Email-to-RSS is a Cloudflare Worker, not a homelab workload (docs/email-to-rss.md), so
+  # nothing else in the alerting spine sees it — this tile is its only coverage. Probing
+  # /admin/login for a 200 checks that the route is live AND the script runs: the login page
+  # is the only thing that emits a 200 there. The obvious alternative, a 404 from
+  # /rss/<bogus>, is worse — the catch-all `app.all('*')` returns the same 404, so a deploy
+  # that broke the router would keep the tile green. Interval 300 (not the LAN tiles' 60):
+  # this leaves the house, and Cloudflare's own availability isn't worth a 60s poll.
+  # Ingest (ForwardEmail → /api/inbound → KV) stays unmonitored — see the doc.
+  # No accepted_statuscodes/max_redirects pair here, unlike the -k8s tiles above: those
+  # exist to stop a 302 being followed into an Authelia 200. This endpoint answers 200
+  # directly (verified), so the server-side ["200-299"] default is exactly right.
+  email-to-rss.json: |
+    {"type": "http", "name": "Email-to-RSS (Worker)", "url": "https://email-rss.{{ domain }}/admin/login", "interval": 300, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # ── push monitors fed by host crons (tokens unchanged — monitors keep their history) ───
   # docker-fleet + autofix-disk-prune keys removed at the Docker uninstall (2026-08-14):
   # their producers (the fleet-health cron, the disk-prune cron) retired with the
