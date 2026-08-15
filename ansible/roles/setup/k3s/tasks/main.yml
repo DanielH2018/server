@@ -669,6 +669,97 @@
   until: k3s_backup_available.stdout == "true"
   when: k3s_longhorn_backup_armed | bool
 
+- name: Look for an existing Longhorn R2 credential
+  tags: [longhorn_backup, longhorn_r2]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n longhorn-system get secret longhorn-r2 -o name
+  register: k3s_longhorn_r2_secret
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Create the Longhorn R2 credential
+  tags: [longhorn_backup, longhorn_r2]
+  # Same three keys as the B2 secret — Longhorn speaks S3 to both. Only the endpoint differs,
+  # and R2's is account-scoped rather than region-scoped.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system create secret generic longhorn-r2
+      --from-literal=AWS_ACCESS_KEY_ID={{ r2_access_key_id }}
+      --from-literal=AWS_SECRET_ACCESS_KEY={{ r2_secret_access_key }}
+      --from-literal=AWS_ENDPOINTS=https://{{ r2_account_id }}.r2.cloudflarestorage.com
+  become: true
+  no_log: true
+  when: k3s_longhorn_r2_secret.rc != 0
+  changed_when: true
+
+- name: Render the R2 backup target
+  tags: [longhorn_backup, longhorn_r2]
+  ansible.builtin.template:
+    src: longhorn-backuptarget-r2.yaml.j2
+    dest: /etc/rancher/k3s/longhorn-backuptarget-r2.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Apply the R2 backup target
+  tags: [longhorn_backup, longhorn_r2]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/longhorn-backuptarget-r2.yaml
+  register: k3s_longhorn_r2_target
+  become: true
+  changed_when: "'created' in k3s_longhorn_r2_target.stdout or 'configured' in k3s_longhorn_r2_target.stdout"
+
+- name: Read where each Longhorn volume currently sends its backups
+  tags: [longhorn_backup, longhorn_r2]
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - -o
+      - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{" "}{.spec.backupTargetName}{"\n"}{end}'
+  become: true
+  changed_when: false
+  register: k3s_longhorn_volume_targets
+
+# Declarative in both directions, like the recurring-job group pairs above: this claims the
+# listed volumes, the next task releases anything no longer listed. Both skip themselves once
+# the volume already points where it should, so a converged cluster reports no change.
+- name: Route the selected volumes to R2
+  tags: [longhorn_backup, longhorn_r2]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch volumes.longhorn.io {{ item.split(' ')[0] }}
+      --type=merge -p {{ r2_route_patch | quote }}
+  vars:
+    r2_route_patch: '{"spec":{"backupTargetName":"r2"}}'
+  loop: "{{ k3s_longhorn_volume_targets.stdout_lines }}"
+  when:
+    - item.split(' ')[1] in k3s_longhorn_r2_volumes
+    - item.split(' ')[2] | default('', true) != 'r2'
+  become: true
+  changed_when: true
+
+- name: Return de-listed volumes to the default backup target
+  tags: [longhorn_backup, longhorn_r2]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch volumes.longhorn.io {{ item.split(' ')[0] }}
+      --type=merge -p {{ default_route_patch | quote }}
+  vars:
+    default_route_patch: '{"spec":{"backupTargetName":"default"}}'
+  loop: "{{ k3s_longhorn_volume_targets.stdout_lines }}"
+  when:
+    - item.split(' ')[2] | default('', true) == 'r2'
+    - item.split(' ')[1] not in k3s_longhorn_r2_volumes
+  become: true
+  changed_when: true
+
 - name: Render the Longhorn recurring backup job
   tags: [longhorn_backup]
   ansible.builtin.template:
