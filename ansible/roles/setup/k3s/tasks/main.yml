@@ -622,15 +622,22 @@
 # (2026-08-10 and 2026-08-12; docs/b2-transaction-cap-monitoring-gaps.md). Blanking is the
 # incident lever that stops all backupstore S3 traffic, so a blank must survive deploys
 # until an operator flips the var back.
+#
+# Both patches address the BackupTarget CR, not settings: v1.8.0 moved backup-target config
+# onto backuptargets.longhorn.io to support more than one target, and by v1.12.1 the
+# `backup-target` and `backup-target-credential-secret` settings no longer exist at all —
+# patching them fails NotFound. The arm/disarm semantics are unchanged: --type=merge writes
+# an empty string for backupTargetURL (only an explicit null would remove the field), so a
+# disarmed run still ENFORCES the blank rather than leaving whatever is live.
 - name: Point Longhorn at the backup target (or enforce the blanked target)
   tags: [longhorn_backup]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n longhorn-system patch settings.longhorn.io backup-target
+      k3s kubectl -n longhorn-system patch backuptargets.longhorn.io default
       --type=merge -p {{ target_patch | quote }}
   vars:
     target_patch: >-
-      {"value":"{% if k3s_longhorn_backup_armed | bool %}s3://{{ kopia_b2_bucket }}@{{ k3s_longhorn_b2_region }}/{{ k3s_longhorn_backup_prefix }}{% endif %}"}
+      {"spec":{"backupTargetURL":"{% if k3s_longhorn_backup_armed | bool %}s3://{{ kopia_b2_bucket }}@{{ k3s_longhorn_b2_region }}/{{ k3s_longhorn_backup_prefix }}{% endif %}"}}
   register: k3s_longhorn_target
   become: true
   changed_when: "'no change' not in k3s_longhorn_target.stdout"
@@ -639,10 +646,10 @@
   tags: [longhorn_backup]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n longhorn-system patch settings.longhorn.io backup-target-credential-secret
+      k3s kubectl -n longhorn-system patch backuptargets.longhorn.io default
       --type=merge -p {{ secret_patch | quote }}
   vars:
-    secret_patch: '{"value":"longhorn-b2"}'
+    secret_patch: '{"spec":{"credentialSecret":"longhorn-b2"}}'
   register: k3s_longhorn_target_secret
   become: true
   changed_when: "'no change' not in k3s_longhorn_target_secret.stdout"
