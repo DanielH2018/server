@@ -129,6 +129,15 @@ k3s_agent_longhorn_scheduling: true
 # transactions and eats into the next day's allowance.
 k3s_longhorn_backupstore_poll_interval: 3600
 
+# Back up detached volumes too. pi-peer-backup-data is mounted only for the minutes its
+# nightly pull CronJob runs, so at the 03:30 daily-backup tick it is detached — and with
+# this off, Longhorn silently skips it (first observed 2026-08-15: 13/14 default-group
+# volumes backed up, the WireGuard peer copy with zero backups and no off-site copy since
+# the Kopia scope retired). "true" attaches such a volume in maintenance mode for the
+# backup and detaches it after; the attach is brief and it is the only detached
+# default-group volume, so the global scope costs nothing.
+k3s_longhorn_backup_detached_volumes: "true"
+
 # Read-only cluster access for {{ sys_user }}. The admin kubeconfig k3s writes is root:root
 # 0640, so every `kubectl` otherwise goes through sudo — which is passworded on this host and
 # therefore needs a TTY, blocking anything unattended (diagnostics, health checks, an agent
