@@ -3,8 +3,13 @@ FROM lscr.io/linuxserver/code-server:latest
 # 1. Install system dependencies
 #    texlive-fonts-extra is deliberately NOT here: it is a 1.7 G leaf package, on its own
 #    ~60% of the unpacked image, and texlive-fonts-recommended already carries the Computer
-#    Modern / Latin Modern / URW families ordinary documents use. If a document ever fails on
-#    a missing font family, add that one texlive-fonts-* package by name rather than -extra.
+#    Modern / Latin Modern / URW families ordinary documents use.
+#
+#    If a document ever fails on a missing font family, the recovery is to put
+#    texlive-fonts-extra back on the line below and redeploy. Debian offers no finer split —
+#    the only texlive-fonts-* packages are `recommended` and `extra` (plus their -doc/-links),
+#    so there is no single-family package to add instead. A Debian fonts-* package is usually
+#    not enough on its own either, since LaTeX needs the accompanying .sty/.map plumbing.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     python3 \
