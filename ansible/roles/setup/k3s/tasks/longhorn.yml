@@ -1,0 +1,372 @@
+---
+# Longhorn install, StorageClasses, and the recurring-job group reconciliation
+# that moves a bound volume between the daily / weekly / no-backup tiers.
+# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
+
+- name: Install Longhorn prerequisites
+  tags: [longhorn]
+  # open-iscsi is not optional: without it volumes hang in "Attaching" with an error that
+  # never names the missing package.
+  ansible.builtin.apt:
+    name:
+      - open-iscsi
+      - nfs-common
+    state: present
+  become: true
+
+- name: Blacklist Longhorn devices from multipathd
+  tags: [longhorn]
+  # The Longhorn KB's multipath fix (troubleshooting-volume-with-multipath): multipathd
+  # claims freshly attached /dev/longhorn devices and every mount fails "already in use".
+  # Latent behind the node CR's standing Multipathd:False warning until the 2026-08-14
+  # drain gate's mass reattach cycle stalled ten workloads on it at once.
+  ansible.builtin.blockinfile:
+    path: /etc/multipath.conf
+    create: true
+    mode: "0644"
+    owner: root
+    group: root
+    marker: "# {mark} ANSIBLE MANAGED - longhorn multipath blacklist"
+    block: |
+      blacklist {
+          devnode "^sd[a-z0-9]+"
+      }
+  become: true
+  register: k3s_multipath_conf
+
+- name: Restart multipathd after a blacklist change # noqa no-handler
+  tags: [longhorn]
+  # Not a handler on purpose: the role's play has no handler flush before the Longhorn
+  # verify tasks, and a deferred restart would leave multipathd claiming devices through
+  # the very checks that prove volumes mount.
+  ansible.builtin.systemd:
+    name: multipathd
+    state: restarted
+  become: true
+  when: k3s_multipath_conf is changed
+
+- name: Install Longhorn
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      https://raw.githubusercontent.com/longhorn/longhorn/{{ k3s_longhorn_version }}/deploy/longhorn.yaml
+  register: k3s_longhorn_apply
+  become: true
+  changed_when: "'created' in k3s_longhorn_apply.stdout or 'configured' in k3s_longhorn_apply.stdout"
+
+- name: Wait for the Longhorn driver deployer
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n longhorn-system rollout status deploy/longhorn-driver-deployer --timeout=600s
+  become: true
+  changed_when: false
+
+- name: Set the default Longhorn replica count
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch settings.longhorn.io default-replica-count
+      --type=merge -p {{ replica_patch | quote }}
+  vars:
+    replica_patch: '{"value":"{{ k3s_longhorn_replica_count }}"}'
+  register: k3s_longhorn_replicas
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_replicas.stdout"
+
+- name: Set the Longhorn backup-store poll interval
+  tags: [longhorn, longhorn_backup]
+  # Rate-limits the only recurring B2 caller in the cluster. See the variable's comment in
+  # defaults/main.yml — at upstream's 300s this exhausted Backblaze's Class C transaction
+  # allowance and took every backup tier down for 13h.
+  #
+  # Lives on the BackupTarget CR, not in settings: v1.8.0 moved backup-target config out of
+  # the global settings and onto backuptargets.longhorn.io as part of supporting more than
+  # one target. The `backupstore-poll-interval` setting no longer exists, and patching it
+  # fails NotFound. The CR takes a duration string, where the setting took bare seconds.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch backuptargets.longhorn.io default
+      --type=merge -p {{ poll_patch | quote }}
+  vars:
+    poll_patch: '{"spec":{"pollInterval":"{{ k3s_longhorn_backupstore_poll_interval }}s"}}'
+  register: k3s_longhorn_poll_interval
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_poll_interval.stdout"
+
+- name: Allow recurring backups of detached volumes
+  tags: [longhorn, longhorn_backup]
+  # Without this the nightly silently skips any volume that happens to be detached at
+  # 03:30 — which pi-peer-backup-data always is. See the variable's comment in
+  # defaults/main.yml.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch settings.longhorn.io allow-recurring-job-while-volume-detached
+      --type=merge -p {{ detached_patch | quote }}
+  vars:
+    detached_patch: '{"value":"{{ k3s_longhorn_backup_detached_volumes }}"}'
+  register: k3s_longhorn_detached_backup
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_detached_backup.stdout"
+
+- name: Let volume engines follow the Longhorn manager version
+  tags: [longhorn]
+  # Upstream's 0 means engines never follow a manager upgrade, so a version bump leaves every
+  # volume on the old engine image. See the variable's comment in defaults/main.yml.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch settings.longhorn.io concurrent-automatic-engine-upgrade-per-node-limit
+      --type=merge -p {{ engine_upgrade_patch | quote }}
+  vars:
+    engine_upgrade_patch: '{"value":"{{ k3s_longhorn_concurrent_engine_upgrade }}"}'
+  register: k3s_longhorn_engine_upgrade
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_engine_upgrade.stdout"
+
+- name: Render the Longhorn StorageClass
+  tags: [longhorn]
+  # The setting patched above only governs volumes whose StorageClass stays quiet about
+  # replicas, and upstream's class does not: it pins numberOfReplicas: "3". Without this
+  # block every PVC lands at 3 replicas on a one-node cluster and sits Degraded forever.
+  # Full reasoning in the header of files/longhorn-storageclass.yaml.
+  ansible.builtin.copy:
+    src: longhorn-storageclass.yaml
+    dest: /etc/rancher/k3s/longhorn-storageclass.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Render the StorageClass ConfigMap patch
+  tags: [longhorn]
+  # longhorn-driver-deployer recreates the class from this ConfigMap whenever it is absent,
+  # and `Install Longhorn` above re-applies upstream's "3" into it on every run. Patching it
+  # from the same file the class is applied from stops the two disagreeing.
+  ansible.builtin.copy:
+    content: "{{ {'data': {'storageclass.yaml': lookup('file', 'longhorn-storageclass.yaml')}} | to_json }}"
+    dest: /etc/rancher/k3s/longhorn-storageclass-configmap-patch.json
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Keep the StorageClass ConfigMap in step with the rendered class
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch configmap longhorn-storageclass --type=merge
+      --patch-file /etc/rancher/k3s/longhorn-storageclass-configmap-patch.json
+  register: k3s_longhorn_sc_configmap
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_sc_configmap.stdout"
+
+- name: Read the parameters pinned by the live StorageClass
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: k3s kubectl get storageclass longhorn -o jsonpath={.parameters}
+  register: k3s_longhorn_sc_params
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Delete the StorageClass while its parameters differ from the rendered class
+  tags: [longhorn]
+  # StorageClass parameters are immutable, so `apply` can neither remove nor add one — the
+  # class has to be recreated. This is safe: parameters are read at provision time only, so
+  # deleting the class neither touches an existing PV nor unbinds a PVC. The task skips itself
+  # once live and desired agree, which is what makes this pair idempotent rather than a
+  # delete/recreate every run.
+  #
+  # Compares the WHOLE parameter map rather than just numberOfReplicas (which is what this
+  # guard originally watched, since dropping upstream's "3" was the only change the role
+  # made). A version bump can also ADD a parameter — v1.8.0 introduces backupTargetName — and
+  # a numberOfReplicas-only test never fires for that, leaving `apply` to fail on an immutable
+  # field instead. See docs/longhorn-upgrade.md.
+  ansible.builtin.command:
+    cmd: k3s kubectl delete storageclass longhorn
+  become: true
+  vars:
+    live_params: "{{ k3s_longhorn_sc_params.stdout | default('', true) | from_json }}"
+    desired_params: "{{ (lookup('file', 'longhorn-storageclass.yaml') | from_yaml).parameters }}"
+  when:
+    - k3s_longhorn_sc_params.stdout | default('', true) | length > 0
+    - live_params != desired_params
+  changed_when: true
+
+- name: Apply the Longhorn StorageClass
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/longhorn-storageclass.yaml
+  register: k3s_longhorn_sc_apply
+  become: true
+  changed_when: "'created' in k3s_longhorn_sc_apply.stdout or 'configured' in k3s_longhorn_sc_apply.stdout"
+
+- name: Render the no-backup Longhorn StorageClass
+  tags: [longhorn]
+  # Opt-in class for bulky, high-churn or sensitive state that must stay out of B2. It has
+  # to be a StorageClass rather than a PVC label: Longhorn reads recurring-job labels off its
+  # own Volume CRs, and PVC labels do not reach them. Reasoning in the file header.
+  ansible.builtin.copy:
+    src: longhorn-storageclass-nobackup.yaml
+    dest: /etc/rancher/k3s/longhorn-storageclass-nobackup.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Apply the no-backup Longhorn StorageClass
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/longhorn-storageclass-nobackup.yaml
+  register: k3s_longhorn_nobackup_sc_apply
+  become: true
+  changed_when: >-
+    'created' in k3s_longhorn_nobackup_sc_apply.stdout
+    or 'configured' in k3s_longhorn_nobackup_sc_apply.stdout
+
+# The StorageClass above only decides a volume's recurring-job group at PROVISION time, and a
+# PVC's storageClassName is immutable — so a volume that must LEAVE the backup set after it is
+# bound cannot be moved by editing either one. Longhorn reads the group off its own Volume CR
+# label, and that label is mutable, so this reconciles it. Declarative rather than a one-off
+# `kubectl label`, because the alternative is a live cluster that silently disagrees with the repo
+# about what is backed up.
+- name: Find backed-up Longhorn volumes that should be excluded
+  tags: [longhorn]
+  # argv, not cmd: the jsonpath contains spaces, and a folded `cmd` scalar collapses the newlines
+  # into them — command's shell-like split then tears `{range .items[*]}` into two arguments.
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - -l
+      - recurring-job-group.longhorn.io/default=enabled
+      - -o
+      - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}'
+  become: true
+  changed_when: false
+  register: k3s_longhorn_backed_up
+
+# Naturally idempotent: a volume that has already moved no longer carries the `default` label, so
+# it does not come back from the query above and this loop has nothing to do on a second run.
+- name: Move excluded volumes into the no-backup recurring-job group
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
+      recurring-job-group.longhorn.io/no-backup=enabled
+      recurring-job-group.longhorn.io/default- --overwrite
+  loop: "{{ k3s_longhorn_backed_up.stdout_lines }}"
+  when: item.split(' ')[1] in k3s_longhorn_nobackup_volumes
+  become: true
+  changed_when: true
+
+# The move above is one-way, and the defaults file used to claim otherwise ("removing a name from
+# this list is what restores scheduled protection"). It did not: the query feeding it selects on
+# `default=enabled`, so a volume that has already left never comes back from it and nothing returns
+# it. That made the list a trapdoor rather than a declaration. These two tasks are the other
+# direction, so the list means what it says.
+#
+# The reverse CANNOT be "anything labelled no-backup and absent from the list" — most of the
+# no-backup volumes (prometheus-data, loki-data, registry-data, tempo-data, karakeep-meili, …) were
+# never in it. They are excluded by their StorageClass at creation, and sweeping them into the
+# backup set is precisely the transaction blowup this file exists to prevent. So the intent is read
+# from the class: `longhorn` asks for backups, `longhorn-nobackup` does not, and the list overrides
+# the class for volumes bound before the distinction existed.
+- name: Find PVCs whose StorageClass asks for backups
+  tags: [longhorn]
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - get
+      - pvc
+      - --all-namespaces
+      - -o
+      - 'jsonpath={range .items[?(@.spec.storageClassName=="longhorn")]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}'
+  become: true
+  changed_when: false
+  register: k3s_longhorn_backup_class_pvcs
+
+- name: Find excluded Longhorn volumes that should be backed up again
+  tags: [longhorn]
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - -l
+      - recurring-job-group.longhorn.io/no-backup=enabled
+      - -o
+      - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}'
+  become: true
+  changed_when: false
+  register: k3s_longhorn_excluded
+
+# Idempotent for the same reason as its mirror: a volume that has moved back no longer carries the
+# `no-backup` label, so the query above stops returning it.
+- name: Return volumes to the default recurring-job group
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
+      recurring-job-group.longhorn.io/default=enabled
+      recurring-job-group.longhorn.io/no-backup- --overwrite
+  loop: "{{ k3s_longhorn_excluded.stdout_lines }}"
+  when:
+    - item.split(' ')[1] in k3s_longhorn_backup_class_pvcs.stdout_lines
+    - item.split(' ')[1] not in k3s_longhorn_nobackup_volumes
+    - item.split(' ')[1] not in k3s_longhorn_weekly_volumes
+  become: true
+  changed_when: true
+
+# ── weekly tier (mirrors the no-backup pair above, same idempotence argument) ────────────
+# NB a weekly→no-backup move routes THROUGH default (this pair returns it to default, the
+# no-backup pair above claims it on the NEXT run) — converges on the second deploy.
+- name: Move weekly-tier volumes out of the daily group
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
+      recurring-job-group.longhorn.io/weekly-backup=enabled
+      recurring-job-group.longhorn.io/default- --overwrite
+  loop: "{{ k3s_longhorn_backed_up.stdout_lines }}"
+  when: item.split(' ')[1] in k3s_longhorn_weekly_volumes
+  become: true
+  changed_when: true
+
+- name: Find weekly-tier volumes that should be daily again
+  tags: [longhorn]
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - -l
+      - recurring-job-group.longhorn.io/weekly-backup=enabled
+      - -o
+      - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}'
+  become: true
+  changed_when: false
+  register: k3s_longhorn_weekly_labelled
+
+- name: Return weekly-tier volumes to the default recurring-job group
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
+      recurring-job-group.longhorn.io/default=enabled
+      recurring-job-group.longhorn.io/weekly-backup- --overwrite
+  loop: "{{ k3s_longhorn_weekly_labelled.stdout_lines }}"
+  when: item.split(' ')[1] not in k3s_longhorn_weekly_volumes
+  become: true
+  changed_when: true
