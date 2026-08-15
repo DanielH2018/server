@@ -1,15 +1,21 @@
 # Email-to-RSS (Cloudflare Worker)
 
 Converts email newsletters to RSS feeds. Runs as a Cloudflare Worker (not a Docker container).
-Tracked as a **git submodule** at `~/server/Email-to-RSS` (upstream
-<https://github.com/yl8976/Email-to-RSS>, pinned to a known-good commit in `.gitmodules`).
+Tracked as a **git submodule** at `~/server/Email-to-RSS`, pinned to a known-good commit.
+The submodule URL points at the fork <https://github.com/DanielH2018/Email-to-RSS> (moved off
+upstream `yl8976/Email-to-RSS` in `77ed09ec` so local patches have somewhere to land).
 Admin UI at <https://email-rss.daniel-hunter.com/admin>.
+
+**Deploys run from `daniel-server`.** That is the only host carrying the deploy state:
+`~/server/Email-to-RSS/wrangler.toml`, `node_modules/`, and the Cloudflare credential in
+`~/.config/.wrangler`. `daniel-box` has the submodule checked out but none of those and no
+`wrangler` on `PATH`, so `npm run deploy` there does nothing useful. Node comes from `fnm`
+in the interactive zsh — a non-interactive `ssh daniel-server npm …` won't find it.
 
 `wrangler.toml` (KV namespace ids, routes) is ignored by the submodule's own `.gitignore`
 and stays local-only — recreate it from `wrangler-example.toml` + step 5 below on a fresh
 machine. To pull upstream changes: `cd Email-to-RSS && git pull`, redeploy, then commit the
-new submodule pointer here. If local patches are ever needed, fork upstream and re-point
-the submodule URL at the fork.
+new submodule pointer here.
 
 **Prerequisites:** Node.js 20+, Cloudflare account, ForwardEmail account, domain managed in Cloudflare DNS.
 
@@ -36,13 +42,23 @@ the submodule URL at the fork.
 - TXT @  v=spf1 include:spf.forwardemail.net -all
 - TXT @  `forward-email=https://email-rss.daniel-hunter.com/api/inbound`  — webhook to Worker
 
-**Known limitation:** The DOMAIN variable controls both email addresses and RSS feed URLs. Since the
-Worker is deployed on a subdomain (email-rss.daniel-hunter.com) but email must be received at the root
-domain (daniel-hunter.com), these can't be the same value. DOMAIN is set to daniel-hunter.com so email
-addresses are correct. When copying RSS feed URLs from the admin UI, manually replace daniel-hunter.com
-with email-rss.daniel-hunter.com (e.g. `https://email-rss.daniel-hunter.com/rss/{feedId}`).
+**DOMAIN vs the Worker hostname:** email must be received at the root domain
+(daniel-hunter.com) while the Worker is routed on a subdomain (email-rss.daniel-hunter.com),
+so the two can't be one value. `DOMAIN` is set to daniel-hunter.com and now scopes *only* the
+generated email addresses. Feed URLs are no longer derived from it — `admin.ts` and `rss.ts`
+build `site_url`/`feed_url` from the request origin, so URLs copied out of the admin UI are
+already correct. (Before commit `fb7f2e9` they weren't, and this section told you to
+hand-edit them; that step is obsolete.)
 
-**Redeploying after changes:**
+**Monitoring:** Uptime Kuma probes <https://email-rss.daniel-hunter.com/admin/login> for a
+200 every 5 min — monitor id `email-to-rss`, declared in
+`ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`. That covers "the Worker is
+routed and its script runs"; it deliberately does **not** cover the ingest path (mail landing
+via ForwardEmail, KV writes), which is unmonitored — a silent stop in newsletter delivery
+still surfaces only as feeds going quiet.
+
+**Redeploying after changes** (on `daniel-server`):
 
 1. `cd ~/server/Email-to-RSS`
 2. `npm run deploy`
+3. Commit the new submodule pointer in `~/server` if the checkout moved.
