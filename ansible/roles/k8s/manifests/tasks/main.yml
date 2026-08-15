@@ -129,32 +129,26 @@
     - manifests_render is changed or manifests_secret_render is changed
     - not manifests_apply.stdout is search('deployment.apps/' ~ (manifests_rollout | default(manifests_service)) ~ ' created')
 
-- name: Wait for the rollout of {{ manifests_service }}
+- name: Queue the batch drain for the rollout of {{ manifests_service }}
   tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} rollout status
-      deploy/{{ manifests_rollout | default(manifests_service) }}
-      --timeout={{ manifests_rollout_timeout | default('300s') }}
-  become: true
-  changed_when: false
+  # noqa var-naming[no-role-prefix] — k8s_pending_rollouts is deliberately play-scoped, not
+  # manifests_-scoped: it is an accumulator every role in a batch appends to and
+  # roles/k8s/rollout-drain consumes. A role prefix would make it look role-local, which is
+  # exactly the wrong mental model for a fact that outlives this role.
+  # DOES NOT WAIT. The rollout is watched by ansible/tasks/k8s_rollout_drain.yml at the end of this
+  # role's batch, together with every other rollout the batch started — 1386s of serial waiting
+  # across 31 services on 2026-08-15 becomes max() per batch instead of sum().
+  #
+  # `changed` is recorded here, not recomputed at the drain: it decides whether the stabilisation
+  # gate watches this workload, and manifests_render/manifests_secret_render are role-scoped facts
+  # that the next role in the batch overwrites.
+  ansible.builtin.set_fact:
+    k8s_pending_rollouts: >-
+      {{ (k8s_pending_rollouts | default([])) + [{
+           'name': manifests_rollout | default(manifests_service),
+           'namespace': k8s_namespace,
+           'kind': 'deploy',
+           'timeout': manifests_rollout_timeout | default('300s'),
+           'changed': (manifests_render is changed) or (manifests_secret_render is changed),
+         }] }}
   when: manifests_rollout | default(manifests_service) | length > 0
-
-- name: Confirm the rollout stayed healthy for {{ manifests_service }}
-  tags: [deploy]
-  # The wait above returns on Available, which readiness alone satisfies — see assert_stable.yml
-  # for the failure it therefore cannot see. Only run when this deploy actually changed
-  # something: an unchanged run has nothing new to destabilise, and the gate costs a
-  # k8s_rollout_stabilise_seconds pause every time it runs.
-  ansible.builtin.include_tasks: assert_stable.yml
-  vars:
-    manifests_stabilise_namespace: "{{ k8s_namespace }}"
-    manifests_stabilise_deployments:
-      - "{{ manifests_rollout | default(manifests_service) }}"
-  when:
-    - manifests_rollout | default(manifests_service) | length > 0
-    - manifests_render is changed or manifests_secret_render is changed
-    # Nothing was applied under --check, so there is no new rollout to watch. The gate's own
-    # kubectl reads are skipped in check mode too, which left its "no pods matched" assert
-    # reading an undefined stdout and failing every k8s --check run.
-    - not ansible_check_mode

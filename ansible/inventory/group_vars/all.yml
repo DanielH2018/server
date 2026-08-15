@@ -117,6 +117,18 @@ k8s_namespace: homelab
 # Global rather than a role default because the shared role and claude-otel's own loop both use it.
 k8s_rollout_stabilise_seconds: 60
 
+# How many k8s roles deploy.yml applies before draining their rollouts (ansible/tasks/k8s_batch.yml).
+# THIS IS A CONCURRENCY LIMIT ON ROLLOUTS, NOT ON WATCHING THEM. The inline `rollout status` that
+# used to sit in every role is what held the cluster to one rolling service at a time; batching
+# removes it, so the width is now the only thing bounding how many workloads restart at once.
+#
+# Sized deliberately low. 37 of the 50 Deployments here use strategy `Recreate`, which deletes the
+# old pod before starting the new one — so a wide batch is not "extra surge replicas", it is N
+# simultaneous Longhorn RWO detach/attach cycles and N simultaneous availability gaps. This cluster
+# has been bitten by Longhorn under exactly that kind of load (the retry storm, the seed-pod
+# Multi-Attach abort). Widen only against a measured run.
+k8s_rollout_batch_width: 5
+
 # Telemetry lives apart from the service workloads. Global rather than a role default because
 # TWO roles need it: claude-otel puts its workloads here, and the traefik role must list it
 # under the CRD provider's watched namespaces — Traefik ignores IngressRoutes in namespaces

@@ -1,0 +1,31 @@
+---
+# One batch of k8s roles: apply them all, then drain their rollouts together.
+#
+# The batch is the unit of rollout concurrency. Every role in it queues itself into
+# k8s_pending_rollouts instead of waiting inline, so all of them are rolling by the time the drain
+# runs and the batch costs max(rollout) instead of sum(rollout). Width is k8s_rollout_batch_width —
+# see the comment on it in group_vars/all.yml for why it is deliberately small.
+#
+# The drain also snapshots restart counts, which is why it cannot simply be moved to the end of the
+# play alongside the stabilisation window: the snapshot has to be taken once the rollout is done and
+# the new pod exists.
+
+- name: Run k8s roles
+  ansible.builtin.include_role:
+    # Path-qualified: a bare `traefik` would resolve to roles/containers/traefik, which is first in
+    # roles_path. See the roles_path comment in ansible.cfg.
+    name: "k8s/{{ container_item.name }}"
+    apply:
+      tags: "{{ container_item.tags | default([container_item.name]) }}"
+  loop: "{{ container_batch }}"
+  loop_control:
+    loop_var: container_item
+  tags: always
+
+- name: Drain the rollouts queued by this batch
+  # A role rather than a task file so configarr can include the same drain by name — a cross-role
+  # include_tasks would need a {{ playbook_dir }}-qualified path, which ansible-lint resolves
+  # statically and reports as a missing file.
+  ansible.builtin.include_role:
+    name: k8s/rollout-drain
+  tags: always

@@ -1,0 +1,108 @@
+---
+# Drain the pending-rollout accumulator: wait for every rollout queued since the last drain,
+# CONCURRENTLY, then snapshot restart counts for the deferred stabilisation gate.
+#
+# WHY THIS EXISTS. roles/k8s/manifests used to run `kubectl rollout status` inline, immediately
+# after its own apply. Measured 2026-08-15 over a full deploy (pid 1636455 in ansible.log,
+# profile_tasks): 1386s across 31 such waits, against 435s of actual work in the whole 59-minute
+# run. The waits were serial because Ansible is serial, not because anything about the cluster is
+# — `kubectl apply` is asynchronous and k3s reconciles every workload concurrently.
+#
+# WHAT IT CHANGES. The inline wait was also, incidentally, the only thing holding the cluster to
+# one rolling workload at a time. Draining in batches (ansible/tasks/k8s_batch.yml) makes
+# k8s_rollout_batch_width the explicit bound on that instead of an accident of the task order.
+#
+# WHY A SHELL LOOP RATHER THAN async/async_status. Each rollout needs its OWN timeout — sonarr and
+# radarr carry manifests_rollout_timeout: 660s because their unpinned striptracks DOCKER_MODS
+# reinstalls on every start (~5 min; the 300s default was timing out and failing deploys on
+# 2026-08-09). Backgrounding N `rollout status` calls in one task expresses that directly and
+# reports every failure in one place, where async would need a fire loop, an async_status poll
+# loop, and its own per-item timeout plumbing to say the same thing.
+#
+# NOT `kubectl wait --for=condition=Available`, which looks like the tidy one-task version and is
+# wrong here. Available means `availableReplicas >= replicas - maxUnavailable`; every Deployment in
+# this namespace is single-replica, and the 13 RollingUpdate ones have maxUnavailable 25% -> 0, so
+# the OLD pod satisfies it for the entire rolling update and the wait returns before the new pod is
+# scheduled. Only `rollout status` gates on the new ReplicaSet.
+
+- name: Wait for the queued rollouts to finish
+  tags: [deploy]
+  when:
+    - k8s_pending_rollouts | default([]) | length > 0
+    - not ansible_check_mode
+  become: true
+  changed_when: false
+  ansible.builtin.shell:
+    executable: /bin/bash
+    # `wait -n` is not used: we want every failure reported, not the first. Each background job
+    # writes its own name on failure so the output names the workload, which the serial version
+    # got for free from the task label.
+    cmd: |
+      set -uo pipefail
+      declare -a pids=() names=()
+      {% for r in k8s_pending_rollouts %}
+      k3s kubectl -n {{ r.namespace }} rollout status {{ r.kind }}/{{ r.name }} \
+        --timeout={{ r.timeout }} >/dev/null 2>&1 &
+      pids+=($!); names+=("{{ r.name }}")
+      {% endfor %}
+      rc=0
+      for i in "${!pids[@]}"; do
+        if ! wait "${pids[$i]}"; then
+          echo "rollout did not complete: ${names[$i]}" >&2
+          rc=1
+        fi
+      done
+      exit $rc
+
+# Restart counts are snapshotted HERE, after the rollouts complete — not back in the role. Reading
+# them right after `rollout restart` would capture the OUTGOING pod's counts; the replacement pod
+# starts at zero, so the gate's `after <= before` comparison would pass no matter what happened.
+- name: Snapshot restart counts for the workloads that changed
+  tags: [deploy]
+  when:
+    - _k8s_drain_watch | length > 0
+    - not ansible_check_mode
+  become: true
+  changed_when: false
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ item.namespace }} get pods
+      -l app={{ item.name }}
+      -o jsonpath={.items[*].status.containerStatuses[*].restartCount}
+  loop: "{{ _k8s_drain_watch }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _k8s_drain_restarts
+  vars:
+    _k8s_drain_watch: "{{ k8s_pending_rollouts | default([]) | selectattr('changed') | list }}"
+
+# Same assertion the inline gate made, kept at the point the selector is read: a label that matches
+# nothing reports zero restarts and would sail through the comparison at the end of the play.
+- name: Fail if a pod selector matched no pods
+  tags: [deploy]
+  when: not ansible_check_mode
+  ansible.builtin.assert:
+    that: item.stdout | trim | length > 0
+    fail_msg: >-
+      No pods matched `-l app={{ item.item.name }}` in namespace {{ item.item.namespace }}, so the
+      stabilisation gate has nothing to watch. Either the workload sets a different pod label than
+      `app: {{ item.item.name }}`, or it has no pods at all.
+    quiet: true
+  loop: "{{ _k8s_drain_restarts.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Carry the snapshot into the end-of-play stabilisation gate
+  tags: [deploy]
+  ansible.builtin.set_fact:
+    k8s_stabilise_watch: >-
+      {{ (k8s_stabilise_watch | default([]))
+         + [item.item | combine({'restarts_before': item.stdout})] }}
+  loop: "{{ _k8s_drain_restarts.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Clear the pending-rollout queue
+  tags: [deploy]
+  ansible.builtin.set_fact:
+    k8s_pending_rollouts: []
