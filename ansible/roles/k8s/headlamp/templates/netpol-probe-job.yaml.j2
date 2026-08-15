@@ -1,0 +1,56 @@
+---
+# The negative test for networkpolicy.yaml.j2: a pod that is not traefik must not reach headlamp.
+#
+# INVERTED — this Job SUCCEEDS when the connection FAILS, and it leads with a CONTROL for the
+# reason prowlarr's probe records: B3 produced three probes that were green before they were
+# correct. The control reaches traefik:80, which is open to the whole namespace and is up
+# whenever the cluster serves anything, so a failure below is attributable to the policy rather
+# than to DNS, the image, or a pod with no network.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: headlamp-netpol-probe
+  namespace: {{ k8s_namespace }}
+spec:
+  activeDeadlineSeconds: 120
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: headlamp-netpol-probe
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      containers:
+        - name: probe
+          image: {{ headlamp_k8s_netpol_probe_image }}
+          command:
+            - sh
+            - -c
+            - |
+              if ! nc -w 5 -z traefik 80; then
+                echo "CONTROL FAILED: cannot reach traefik:80 either, so this probe proves"
+                echo "nothing about the policy. Check DNS and the Service."
+                exit 1
+              fi
+              echo "control ok: traefik:80 reachable from this pod"
+              if nc -w 5 -z headlamp {{ container_item.port }}; then
+                echo "POLICY NOT ENFORCED: reached headlamp:{{ container_item.port }} from a pod"
+                echo "that is not traefik. Headlamp serves a cluster-wide read API with no auth"
+                echo "of its own, so every workload in the namespace can read the whole cluster."
+                exit 1
+              fi
+              echo "isolated: headlamp:{{ container_item.port }} unreachable except from traefik"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
