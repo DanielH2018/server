@@ -2035,6 +2035,7 @@ R2_QUERY = """query {
         orderBy: [datetime_DESC]
       ) {
         max { payloadSize metadataSize uploadCount }
+        dimensions { datetime }
       }
       operations: r2OperationsAdaptiveGroups(
         limit: 100
@@ -2060,8 +2061,11 @@ def r2_query_usage(now):
         "account": json.dumps(CF_ACCOUNT_ID),
         "bucket": json.dumps(R2_BUCKET),
         "month_start": json.dumps(month_start.strftime(fmt)),
-        # Storage is a point-in-time series, not a sum: take the most recent datapoint and look
-        # back far enough that a quiet bucket still has one.
+        # Storage is a point-in-time series, not a sum: one row per datetime bucket, so take the
+        # most recent and look back far enough that a quiet bucket still has one. `datetime` is
+        # selected as a dimension because the orderBy key has to be one — Cloudflare's own storage
+        # example does exactly this, and dropping it risks a rejected query, which this check
+        # would then report as `down` every cycle.
         "storage_since": json.dumps(
             (datetime.fromtimestamp(now, timezone.utc) - timedelta(days=2)).strftime(
                 fmt

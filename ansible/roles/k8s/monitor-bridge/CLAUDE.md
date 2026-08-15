@@ -218,6 +218,9 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     Cloudflare blip through `STARTUP_GRACE` instead of through a stale verdict.
     A 200 carrying a populated `errors` array — how an under-scoped token arrives — is raised, not
     parsed: unchecked it reads as a zero-usage bucket, a monitor green because it is blind.
+    **The free tier is per-ACCOUNT; this query filters by `bucketName`.** Identical while there is
+    one bucket, and silently under-reporting the day there is a second — at which point drop the
+    `bucketName` filter rather than raising the thresholds.
     Empty `CF_ACCOUNT_ID`/`CF_ANALYTICS_TOKEN`/`R2_BUCKET` = disabled (stays up). Pure
     `r2_month_start()`/`r2_classify_operations()`/`r2_usage_verdict()` are unit-tested.)
   - **SMART Data / Health** (scrutiny web API `/api/summary` over `monitoring`: every
@@ -505,7 +508,12 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
    exactly one permission: **Account → Account Analytics → Read**, scoped to this account. It is
    file-mounted (`CF_ANALYTICS_TOKEN_FILE=/etc/bridge-credentials/cf_analytics_token`) for the same
    H2 reason as `ha_token`. tier `assisted` (rotate = revoke + reissue in the dashboard). The
-   check also reads the existing `r2_account_id` and `r2_bucket`.
+   check also reads the existing `r2_account_id` and `r2_bucket`. Run
+   `uv run python scripts/secret_rotation.py sync` after adding both, or the prek registry hook
+   fails. Then smoke-test the query for real —
+   `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/check.py --once` — the
+   unit tests mock the payload, so this is the first thing that proves Cloudflare accepts the
+   query and that the token is scoped correctly.
 
    **Do NOT give this token write or R2 permissions.** A token that could revoke R2 access would
    let the bridge hard-stop the bucket at the threshold, but that means parking a strictly more
