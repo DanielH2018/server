@@ -248,6 +248,7 @@ LIVE_KEYS = [
     "monitor_bridge_cluster_prometheus_push_token",
     "monitor_bridge_cluster_targets_push_token",
     "monitor_bridge_n8n_push_token",
+    "monitor_bridge_r2_usage_push_token",
     "monitor_bridge_docker_user_push_token",
     "monitor_bridge_cloudflare_drift_push_token",
 ]

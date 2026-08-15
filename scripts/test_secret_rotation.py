@@ -18,8 +18,8 @@ def test_provider_creds_are_external():
 
 
 def test_pinned_secrets_need_special_procedure():
-    assert sr.classify("kopia_password") == "pinned"
     assert sr.classify("authelia_storage") == "pinned"
+    assert sr.classify("zigbee_network_key") == "pinned"
 
 
 def test_usernames_and_config_are_ignored():
