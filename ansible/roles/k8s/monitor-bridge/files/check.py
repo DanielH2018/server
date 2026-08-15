@@ -208,6 +208,74 @@ B2_PROBE_APPLICATION_KEY = _env_file("B2_PROBE_APPLICATION_KEY")
 # went 9.5 hours unactioned.
 B2_PROBE_INTERVAL_S = float(_env("B2_PROBE_INTERVAL_S", "1800"))
 
+# Cloudflare R2 free-tier headroom, via the GraphQL Analytics API. Cloudflare offers NO spending
+# cap or usage limit on R2 — on any plan — so the only boundary is one we watch and act on. The
+# Usage-Based Billing notification that would do this natively needs a Pro plan; this account is on
+# Free. Overage is cheap ($0.015/GB-month, $4.50/M Class A, $0.36/M Class B, egress free), so this
+# is a headroom guard, not a bill-shock alarm: it exists to notice a runaway client (the shape of
+# the 2026-08-13 Longhorn retry storm, which burned ~2.5k B2 Class B/day against a cap) while the
+# fix is still a config edit.
+#
+# CF_ANALYTICS_TOKEN is file-mounted like HA_TOKEN and the B2 key, for the same reason (H2): an
+# account-scoped credential must not sit inline in the container Env. Its ONLY permission is
+# Account Analytics: Read — it cannot touch bucket data, which is why the check reads usage and
+# pages rather than revoking anything itself.
+CF_GRAPHQL_URL = _env("CF_GRAPHQL_URL", "https://api.cloudflare.com/client/v4/graphql")
+CF_ACCOUNT_ID = _env("CF_ACCOUNT_ID", "")
+CF_ANALYTICS_TOKEN = _env_file("CF_ANALYTICS_TOKEN")
+R2_BUCKET = _env("R2_BUCKET", "")
+R2_STORAGE_MAX_GB = float(_env("R2_STORAGE_MAX_GB", "10"))
+R2_CLASS_A_MAX = float(_env("R2_CLASS_A_MAX", "1000000"))
+R2_CLASS_B_MAX = float(_env("R2_CLASS_B_MAX", "10000000"))
+R2_USAGE_MAX_PCT = float(_env("R2_USAGE_MAX_PCT", "80"))
+# Outstanding incomplete multipart uploads. These bill as stored bytes but do NOT appear in a
+# normal object listing, so they are the quiet way a 10 GB budget fills. The durable fix is a
+# bucket lifecycle rule (AbortIncompleteMultipartUpload) — a one-time operator step, see this
+# role's CLAUDE.md — and this arm is the backstop that notices when it is absent or not working.
+R2_UPLOADS_MAX = float(_env("R2_UPLOADS_MAX", "25"))
+# SUCCESSES are cached for this long; a failure re-probes next cycle. The opposite of
+# B2_PROBE_INTERVAL_S's cache-both, and deliberately so: the fault B2 detects is a spend cap that
+# retrying makes worse, whereas GraphQL analytics calls are free and count against no R2 budget.
+# So this follows EMAIL_PROBE_INTERVAL_S's cache-successes-only idiom, and rides out a transient
+# Cloudflare blip through STARTUP_GRACE rather than through a stale cached failure.
+R2_PROBE_INTERVAL_S = float(_env("R2_PROBE_INTERVAL_S", "1800"))
+
+# R2 bills operations in two classes, and the GraphQL API reports raw actionType names without
+# saying which class each falls in — so the mapping has to live here. From the R2 pricing page.
+# DeleteObject, DeleteBucket and AbortMultipartUpload are free and counted in neither.
+R2_CLASS_A_ACTIONS = frozenset(
+    {
+        "ListBuckets",
+        "PutBucket",
+        "ListObjects",
+        "PutObject",
+        "CopyObject",
+        "CompleteMultipartUpload",
+        "CreateMultipartUpload",
+        "LifecycleStorageTierTransition",
+        "ListMultipartUploads",
+        "UploadPart",
+        "UploadPartCopy",
+        "ListParts",
+        "PutBucketEncryption",
+        "PutBucketCors",
+        "PutBucketLifecycleConfiguration",
+    }
+)
+R2_CLASS_B_ACTIONS = frozenset(
+    {
+        "HeadBucket",
+        "HeadObject",
+        "GetObject",
+        "UsageSummary",
+        "GetBucketEncryption",
+        "GetBucketLocation",
+        "GetBucketCors",
+        "GetBucketLifecycleConfiguration",
+    }
+)
+R2_FREE_ACTIONS = frozenset({"DeleteObject", "DeleteBucket", "AbortMultipartUpload"})
+
 # k3s workload health, via the CLUSTER's Prometheus — a SECOND Prometheus, not the one PROM_URL
 # points at. Slice 3 D8 (docs/k3s-migration/slice-3-monitoring-plane.md). Seven k8s workloads ran
 # from slice 2 with no monitor of any kind, n8n-runners among them, because none of them is
@@ -546,6 +614,30 @@ def _get_json(url, headers=None):
         # endpoint and the server's own explanation, not the status again.
         detail = " ".join((body or "").split())[:FETCH_BODY_MAX]
         e.msg = "%s: %s" % (endpoint_label(url), detail or e.msg)
+        raise
+    except Exception as e:
+        raise RuntimeError(describe_fetch_failure(url, e)) from e
+
+
+def _post_json(url, payload, headers=None):
+    """POST a JSON body and return the parsed JSON response. Same failure contract as _get_json.
+
+    Only the Cloudflare GraphQL endpoint needs this — every other source here is a GET.
+    """
+    hdrs = {"User-Agent": "monitor-bridge", "Content-Type": "application/json"}
+    if headers is not None:
+        hdrs.update(headers)
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=body, headers=hdrs, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310
+            return json.load(resp)
+    except urllib.error.HTTPError as e:
+        try:
+            detail = " ".join(e.read().decode("utf-8", "replace").split())
+        except Exception:
+            detail = ""
+        e.msg = "%s: %s" % (endpoint_label(url), detail[:FETCH_BODY_MAX] or e.msg)
         raise
     except Exception as e:
         raise RuntimeError(describe_fetch_failure(url, e)) from e
@@ -1831,6 +1923,227 @@ def check_b2_reachable():
     return b2_reachable()
 
 
+def r2_month_start(now):
+    """UTC midnight on the 1st of the calendar month containing `now` (epoch seconds).
+
+    R2's free tier resets on the calendar month, so month-to-date is the only window whose
+    percentages mean anything — a rolling 30d window would report headroom that does not exist
+    on the 2nd and headroom that has already been given back on the 30th.
+    """
+    d = datetime.fromtimestamp(now, timezone.utc)
+    return d.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def r2_classify_operations(rows):
+    """(class_a, class_b, unknown_actions) from r2OperationsAdaptiveGroups rows.
+
+    An actionType in neither published class list counts toward CLASS A — the expensive one — and
+    is named in the verdict. Cloudflare adds operations over time, and the alternative readings are
+    both worse: counting an unknown as Class B under-reports the arm with a 10x tighter limit, and
+    dropping it makes new operations invisible. Over-counting reports headroom we do not have,
+    which is the direction a guard should err in, and the named action says why the numbers moved.
+    """
+    class_a = class_b = 0
+    unknown = {}
+    for row in rows:
+        action = (row.get("dimensions") or {}).get("actionType") or "unknown"
+        requests = (row.get("sum") or {}).get("requests") or 0
+        if action in R2_CLASS_B_ACTIONS:
+            class_b += requests
+        elif action in R2_FREE_ACTIONS:
+            continue
+        elif action in R2_CLASS_A_ACTIONS:
+            class_a += requests
+        else:
+            class_a += requests
+            unknown[action] = unknown.get(action, 0) + requests
+    return class_a, class_b, sorted(unknown)
+
+
+def _pct(used, limit):
+    """Percent of `limit` used, or None when the limit is disabled (<= 0)."""
+    if limit <= 0:
+        return None
+    return 100.0 * used / limit
+
+
+def r2_usage_verdict(
+    storage_bytes,
+    uploads,
+    class_a,
+    class_b,
+    unknown_actions,
+    storage_max_gb=None,
+    class_a_max=None,
+    class_b_max=None,
+    uploads_max=None,
+    max_pct=None,
+):
+    """(ok, msg) from month-to-date R2 usage against the free-tier limits.
+
+    Reports all three arms every cycle whether or not any breaches, so the Kuma message carries
+    the trend and not just the alarm — the point of the monitor is to see a runaway client early.
+    """
+    storage_max_gb = R2_STORAGE_MAX_GB if storage_max_gb is None else storage_max_gb
+    class_a_max = R2_CLASS_A_MAX if class_a_max is None else class_a_max
+    class_b_max = R2_CLASS_B_MAX if class_b_max is None else class_b_max
+    uploads_max = R2_UPLOADS_MAX if uploads_max is None else uploads_max
+    max_pct = R2_USAGE_MAX_PCT if max_pct is None else max_pct
+
+    storage_gb = storage_bytes / 1e9  # R2 bills decimal GB, not GiB
+    arms = (
+        ("storage", storage_gb, storage_max_gb, "%.2f/%.0f GB"),
+        ("Class A", class_a, class_a_max, "%.0f/%.0f"),
+        ("Class B", class_b, class_b_max, "%.0f/%.0f"),
+    )
+    parts = []
+    breaching = []
+    for label, used, limit, fmt in arms:
+        pct = _pct(used, limit)
+        if pct is None:
+            parts.append("%s %s (no limit set)" % (label, fmt % (used, limit)))
+            continue
+        parts.append("%s %s (%.0f%%)" % (label, fmt % (used, limit), pct))
+        if pct >= max_pct:
+            breaching.append("%s at %.0f%%" % (label, pct))
+
+    if uploads_max > 0 and uploads > uploads_max:
+        breaching.append(
+            "%d incomplete multipart uploads (they bill as storage and do not show in a "
+            "listing — check the bucket's AbortIncompleteMultipartUpload lifecycle rule)"
+            % uploads
+        )
+
+    msg = "R2 month-to-date: " + ", ".join(parts)
+    if unknown_actions:
+        msg += " [unclassified ops counted as Class A: %s]" % ", ".join(unknown_actions)
+    if breaching:
+        return False, "over %.0f%% of free tier — %s. %s" % (
+            max_pct,
+            "; ".join(breaching),
+            msg,
+        )
+    return True, msg
+
+
+R2_QUERY = """query {
+  viewer {
+    accounts(filter: {accountTag: %(account)s}) {
+      storage: r2StorageAdaptiveGroups(
+        limit: 1
+        filter: {bucketName: %(bucket)s, datetime_geq: %(storage_since)s}
+        orderBy: [datetime_DESC]
+      ) {
+        max { payloadSize metadataSize uploadCount }
+        dimensions { datetime }
+      }
+      operations: r2OperationsAdaptiveGroups(
+        limit: 100
+        filter: {bucketName: %(bucket)s, datetime_geq: %(month_start)s}
+      ) {
+        dimensions { actionType }
+        sum { requests }
+      }
+    }
+  }
+}"""
+
+
+def r2_query_usage(now):
+    """(storage_bytes, uploads, class_a, class_b, unknown_actions) for the current month.
+
+    One POST for both datasets — same account scope, so splitting it would double the calls and
+    the error paths for nothing.
+    """
+    month_start = r2_month_start(now)
+    fmt = "%Y-%m-%dT%H:%M:%SZ"
+    query = R2_QUERY % {
+        "account": json.dumps(CF_ACCOUNT_ID),
+        "bucket": json.dumps(R2_BUCKET),
+        "month_start": json.dumps(month_start.strftime(fmt)),
+        # Storage is a point-in-time series, not a sum: one row per datetime bucket, so take the
+        # most recent and look back far enough that a quiet bucket still has one. `datetime` is
+        # selected as a dimension because the orderBy key has to be one — Cloudflare's own storage
+        # example does exactly this, and dropping it risks a rejected query, which this check
+        # would then report as `down` every cycle.
+        "storage_since": json.dumps(
+            (datetime.fromtimestamp(now, timezone.utc) - timedelta(days=2)).strftime(
+                fmt
+            )
+        ),
+    }
+    data = _post_json(
+        CF_GRAPHQL_URL,
+        {"query": query},
+        headers={"Authorization": "Bearer %s" % CF_ANALYTICS_TOKEN},
+    )
+    # Cloudflare answers 200 with a populated `errors` on a bad query or an under-scoped token, so
+    # this is the only place a wrong token surfaces. Left unchecked it would read as a zero-usage
+    # bucket — a monitor green because it is blind, the failure this file keeps re-learning.
+    errors = data.get("errors")
+    if errors:
+        raise RuntimeError(
+            "Cloudflare GraphQL: %s"
+            % "; ".join(str(e.get("message", e)) for e in errors)[:FETCH_BODY_MAX]
+        )
+    accounts = ((data.get("data") or {}).get("viewer") or {}).get("accounts") or []
+    if not accounts:
+        raise RuntimeError(
+            "Cloudflare GraphQL returned no account for accountTag — wrong CF_ACCOUNT_ID, "
+            "or the token is not scoped to this account"
+        )
+    account = accounts[0]
+    storage_rows = account.get("storage") or []
+    if storage_rows:
+        peak = storage_rows[0].get("max") or {}
+        storage_bytes = (peak.get("payloadSize") or 0) + (peak.get("metadataSize") or 0)
+        uploads = peak.get("uploadCount") or 0
+    else:
+        # An empty bucket genuinely reports no storage rows; that is 0 bytes, not a fault.
+        storage_bytes = uploads = 0
+    class_a, class_b, unknown = r2_classify_operations(account.get("operations") or [])
+    return storage_bytes, uploads, class_a, class_b, unknown
+
+
+# ts=None means never probed. An explicit sentinel rather than 0.0: "0 seconds since the epoch" is
+# indistinguishable from a real timestamp by the arithmetic below, and only the sheer size of a
+# real time.time() keeps that from reading as a fresh cache entry on the first cycle.
+_r2_probe = {"ts": None, "ok": True, "msg": ""}
+
+
+def r2_usage(now=None):
+    """Throttled R2 free-tier headroom check. (ok, msg).
+
+    SUCCESSES are cached for R2_PROBE_INTERVAL_S — month-to-date aggregates do not move on a 300s
+    cycle, and Cloudflare's GraphQL API is rate-limited per account. A FAILURE is not cached: these
+    calls are free and count against no R2 budget, so unlike b2_reachable there is nothing to
+    protect by holding a stale verdict, and a re-probe next cycle detects recovery sooner. The
+    one-cycle blip that re-probing would otherwise page on is absorbed by STARTUP_GRACE.
+    """
+    if not CF_ACCOUNT_ID or not CF_ANALYTICS_TOKEN or not R2_BUCKET:
+        return True, "R2 usage check disabled (no account id / token / bucket)"
+    now = now if now is not None else time.time()
+    if (
+        _r2_probe["ts"] is not None
+        and _r2_probe["ok"]
+        and now - _r2_probe["ts"] < R2_PROBE_INTERVAL_S
+    ):
+        return True, "%s (checked %.0fm ago)" % (
+            _r2_probe["msg"],
+            (now - _r2_probe["ts"]) / 60,
+        )
+    storage_bytes, uploads, class_a, class_b, unknown = r2_query_usage(now)
+    ok, msg = r2_usage_verdict(storage_bytes, uploads, class_a, class_b, unknown)
+    _r2_probe["ts"] = now
+    _r2_probe["ok"] = ok
+    _r2_probe["msg"] = msg
+    return ok, msg
+
+
+def check_r2_usage():
+    return r2_usage()
+
+
 def k8s_workloads_verdict(
     total,
     offenders,
@@ -2168,6 +2481,7 @@ CHECKS = [
         check_promtail_dropped,
     ),
     ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
+    ("r2_usage", _env("KUMA_PUSH_R2_USAGE", ""), check_r2_usage),
     ("k8s_workloads", _env("KUMA_PUSH_K8S_WORKLOADS", ""), check_k8s_workloads),
     ("cluster_targets", _env("KUMA_PUSH_CLUSTER_TARGETS", ""), check_cluster_targets),
 ]
@@ -2240,7 +2554,8 @@ B2_DEPENDENT = frozenset()
 CLUSTER_DEPENDENT = frozenset({"k8s_workloads", "cluster_targets"})
 
 # Reach-out checks that poll a live app dependency (n8n/sonarr/radarr/prowlarr/scrutiny/the Pi
-# glances) with NO reachability gate above them and NO per-check hysteresis of their own — unlike
+# glances/the Cloudflare GraphQL API) with NO reachability gate above them and NO per-check
+# hysteresis of their own — unlike
 # check_ha_heartbeat/check_discord, whose HA_CONSECUTIVE/DISCORD_CONSECUTIVE grace rides out exactly
 # this. On the bridge's first cycle after the weekly host reboot those dependencies are still
 # starting, so an un-graced check flips its max_retries=0 monitor DOWN on that one transient cycle
@@ -2252,7 +2567,7 @@ CLUSTER_DEPENDENT = frozenset({"k8s_workloads", "cluster_targets"})
 # that every un-gated _get_json reach-out check is in here (prowlarr_indexers/scrutiny were added
 # 2026-07-14 after they were found missing — the weekly-reboot flap's original set omitted them).
 STARTUP_GRACE = frozenset(
-    {"n8n", "arr_queue", "pi_pressure", "prowlarr_indexers", "scrutiny"}
+    {"n8n", "arr_queue", "pi_pressure", "prowlarr_indexers", "scrutiny", "r2_usage"}
 )
 
 _grace_streaks = {}

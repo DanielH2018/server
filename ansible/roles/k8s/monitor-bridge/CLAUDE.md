@@ -29,8 +29,8 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 ## Notable
 - `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs **30 monitors** (26 in `CHECKS` plus the four reachability
-  gates: prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
+  `INTERVAL` (300 s) it runs every entry in `CHECKS` plus the four reachability
+  gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   `status=up|down&msg=…` to one Kuma push monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the ten
@@ -192,6 +192,37 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `b2_authorize_account` is itself subject to the cap — Backblaze's endpoint docs list
     403/`transaction_cap_exceeded` among its errors. If a future breach leaves this monitor green,
     point `B2_PROBE_URL` at a Class C call instead; it's a URL swap by design.)
+  - **R2 Free Tier Headroom** (Cloudflare's GraphQL Analytics API, `r2StorageAdaptiveGroups` +
+    `r2OperationsAdaptiveGroups` in ONE POST: month-to-date storage bytes, Class A and Class B
+    operation counts as a percentage of the free tier (10 GB / 1M / 10M), `down` past
+    `R2_USAGE_MAX_PCT` (80) on any arm. **Cloudflare offers no spending cap or usage limit on R2,
+    on any plan** — the Usage-Based Billing notification that would do this natively needs a Pro
+    plan and this account is Free — so a watched threshold is the only boundary that exists. It is
+    a headroom guard, not a bill-shock alarm: overage is $0.015/GB-month, $4.50/M Class A, $0.36/M
+    Class B with egress free, so the realistic worst case is under a dollar. What it actually
+    catches is a **runaway client** while the fix is still a config edit — the shape of the
+    2026-08-13 Longhorn retry storm, which drove ~2.5k B2 Class B/day against a hard cap.
+    A fourth arm counts **outstanding incomplete multipart uploads** (`R2_UPLOADS_MAX`, 25): they
+    bill as stored bytes and do NOT appear in an object listing, which is the quiet way a 10 GB
+    budget fills. The durable fix for those is a bucket lifecycle rule (below); this arm is the
+    backstop for that rule being absent, deleted, or not working.
+    Operation classes are NOT in the API response — Cloudflare returns raw `actionType` names — so
+    the Class A / Class B mapping lives in `check.py` from the pricing page. An actionType in
+    neither published list counts toward **Class A** (the tighter, more expensive arm) and is named
+    in the message: over-counting reports headroom we do not have, which is the safe direction, and
+    the name explains why the numbers moved when Cloudflare adds an operation.
+    **SUCCESSES are cached for `R2_PROBE_INTERVAL_S` (1800 s); a failure is NOT** — the inverse of
+    `b2_reachable`'s cache-both, deliberately: B2's cached failure protects a spend cap that
+    retrying would deepen, whereas GraphQL analytics calls are free and count against no R2 budget.
+    So this follows `EMAIL_PROBE_INTERVAL_S`'s cache-successes-only idiom and rides out a transient
+    Cloudflare blip through `STARTUP_GRACE` instead of through a stale verdict.
+    A 200 carrying a populated `errors` array — how an under-scoped token arrives — is raised, not
+    parsed: unchecked it reads as a zero-usage bucket, a monitor green because it is blind.
+    **The free tier is per-ACCOUNT; this query filters by `bucketName`.** Identical while there is
+    one bucket, and silently under-reporting the day there is a second — at which point drop the
+    `bucketName` filter rather than raising the thresholds.
+    Empty `CF_ACCOUNT_ID`/`CF_ANALYTICS_TOKEN`/`R2_BUCKET` = disabled (stays up). Pure
+    `r2_month_start()`/`r2_classify_operations()`/`r2_usage_verdict()` are unit-tested.)
   - **SMART Data / Health** (scrutiny web API `/api/summary` over `monitoring`: every
     non-archived device must have a `collector_date` within 26 h **AND a passing `device_status`**
     (0 = SMART self-assessment + Scrutiny's attribute thresholds both OK; non-zero decodes to
@@ -458,7 +489,9 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   exporter is surfaced, not silently green.
 
 ## Operator prerequisites
-1. Add the 34 push tokens to `secrets.yml` (`sops ansible/vars/secrets.yml`). **They must
+1. Add a push token to `secrets.yml` (`sops ansible/vars/secrets.yml`) for every `KUMA_PUSH_*`
+   entry in `templates/env-secret.yaml.j2` — a test asserts that set matches what `check.py`
+   reads, so the template is the list. **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI
@@ -470,7 +503,34 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
    2026-07-02 (its `containers_list` entry in `ansible/inventory/host_vars/daniel-server.yml`);
    if `media` is ever dropped from that entry, the check pages `down` every cycle
    (unresolvable host) rather than failing silent.
-4. Notifications attach **automatically** — the `kuma()` macro tags every monitor with
+4. For the R2 Free Tier Headroom monitor: add `cloudflare_analytics_token` to `secrets.yml`. Mint
+   it at **Cloudflare dashboard → My Profile → API Tokens → Create Token → Custom token**, with
+   exactly one permission: **Account → Account Analytics → Read**, scoped to this account. It is
+   file-mounted (`CF_ANALYTICS_TOKEN_FILE=/etc/bridge-credentials/cf_analytics_token`) for the same
+   H2 reason as `ha_token`. tier `assisted` (rotate = revoke + reissue in the dashboard). The
+   check also reads the existing `r2_account_id` and `r2_bucket`. Run
+   `uv run python scripts/secret_rotation.py sync` after adding both, or the prek registry hook
+   fails. Then smoke-test the query for real —
+   `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/check.py --once` — the
+   unit tests mock the payload, so this is the first thing that proves Cloudflare accepts the
+   query and that the token is scoped correctly.
+
+   **Do NOT give this token write or R2 permissions.** A token that could revoke R2 access would
+   let the bridge hard-stop the bucket at the threshold, but that means parking a strictly more
+   privileged standing credential in the cluster to protect against sub-dollar overage, and its
+   firing would break the backup path it is guarding. Deliberate trade: this monitor pages, and a
+   human decides. If a hard stop is ever wanted, the manual procedure is **R2 → Manage R2 API
+   Tokens → revoke the key** — and the way back is re-minting it and updating `r2_access_key_id` /
+   `r2_secret_access_key`, so treat it as a break-glass step, not a routine one.
+
+   **One-time bucket setting, not codified here:** set an `AbortIncompleteMultipartUpload`
+   lifecycle rule (7 days) on the bucket —
+   `npx wrangler r2 bucket lifecycle add <bucket> --name abort-mpu --abort-multipart-days 7`, or
+   dashboard → R2 → the bucket → Settings → Object Lifecycle Rules. It needs the S3 API or
+   Wrangler, neither of which the stdlib-only bridge has, and hand-rolling a SigV4 signer that
+   could not be tested against the live bucket from here would be worse than a documented step.
+   The monitor's uploads arm is what notices if this is missing.
+5. Notifications attach **automatically** — the `kuma()` macro tags every monitor with
    `notification_name_list=["{{ kuma_notification_id }}"]`, linking it to the AutoKuma-managed
    Discord notification defined on the `uptime-kuma` container. No per-monitor UI clicking.
 

@@ -240,6 +240,8 @@ stringData:
     {"type": "push", "name": "B2 Reachable", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_b2_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-k8s-workloads.json: |
     {"type": "push", "name": "k3s Workload Health", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_k8s_workloads_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  monitor-bridge-r2-usage.json: |
+    {"type": "push", "name": "R2 Free Tier Headroom", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_r2_usage_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-cluster-targets.json: |
     {"type": "push", "name": "Cluster Scrape Targets", "interval": 600, "max_retries": 0, "push_token": "{{ monitor_bridge_cluster_targets_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-cluster-prometheus.json: |
