@@ -1,0 +1,94 @@
+# Longhorn upgrade runbook
+
+Longhorn holds every PVC in the cluster, supports **no downgrade**, and since v1.5.0 supports
+**only one minor version per hop**. So an upgrade is a ladder of discrete hops, each with its own
+verification, not a single version bump.
+
+The install path is `kubectl apply -f .../<version>/deploy/longhorn.yaml`
+(`roles/setup/k3s/tasks/main.yml`, task *Install Longhorn*), which is upstream's supported upgrade
+path for a minor bump. Everything below therefore goes through Ansible — a hand-run `kubectl apply`
+would deploy the same manifest while leaving the repo as a stale source of truth.
+
+## The gate — before any hop
+
+Upstream's own instruction is *"Always back up volumes before upgrading. If anything goes wrong,
+you can restore the volume using the backup."* With no downgrade path, that is the whole safety net.
+
+```bash
+# 1. The backup target must be armed and reachable
+kubectl -n longhorn-system get backuptarget default \
+  -o jsonpath='{.spec.backupTargetURL}{"  avail="}{.status.available}'
+
+# 2. A restore must actually succeed. A green backup job is not proof — on 2026-08-15 a B2
+#    Class-B cap denial surfaced as "cannot find volume.cfg in backupstore", which reads as
+#    data loss. Run the drill.
+
+# 3. Every volume accounted for: no volume in an unknown state, or you cannot tell
+#    upgrade damage from what was already broken.
+kubectl -n longhorn-system get volumes.longhorn.io \
+  -o custom-columns='NAME:.metadata.name,STATE:.status.state,ROBUST:.status.robustness'
+```
+
+## Per-hop procedure
+
+1. **Bump** `k3s_longhorn_version` in `ansible/roles/setup/k3s/defaults/main.yml` to the latest
+   patch of the *next* minor. Never skip a minor.
+2. **Re-sync the StorageClass.** Diff the new version's `storageclass.yaml` block inside
+   `deploy/longhorn.yaml` against `roles/setup/k3s/files/longhorn-storageclass.yaml`, carry over any
+   new parameters, and update the provenance line in its header. **Never** paste
+   `numberOfReplicas` back in — `default-replica-count` is the single source of truth, and
+   `ansible/tests/test_longhorn_storageclass.py` fails if the parameter reappears.
+   Apply the same diff to `longhorn-storageclass-nobackup.yaml`.
+3. **Deploy**, on daniel-box (the play refuses to run anywhere else):
+   ```bash
+   uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn
+   ```
+   The role already waits on the `longhorn-driver-deployer` rollout.
+4. **Upgrade the engines.** `concurrent-automatic-engine-upgrade-per-node-limit` is `0`, so engines
+   do *not* follow the manager automatically. Upgrade them, then confirm the previous engine image
+   has dropped to zero references before starting the next hop — otherwise engine lag compounds
+   across hops:
+   ```bash
+   kubectl -n longhorn-system get engineimages.longhorn.io
+   ```
+5. **Verify** before declaring the hop done: every volume healthy, the StorageClass still carries no
+   `numberOfReplicas`, and `default-replica-count` still reads its expected value.
+
+## Hop-specific notes
+
+| Hop | Target | Note |
+|---|---|---|
+| 0 | v1.7.3 | Patch, same minor. StorageClass is identical to v1.7.2's. A rehearsal of the loop at the lowest possible risk. |
+| 1 | v1.8.2 | **See the landmine below.** Multiple backup targets arrive here; the StorageClass gains `backupTargetName: "default"`. |
+| 2 | v1.9.2 | No deprecations noted upstream. |
+| 3 | v1.10.2 | Fixes an upgrade bug that leaves a stale unknown OS condition on node CRs — check node CRs afterwards. |
+| 4 | v1.11.3 | Requires **Kubernetes ≥ v1.34** (CSI external-provisioner v6.3.0). Confirm CSI pods land before declaring done. |
+| 5 | v1.12.1 | Deprecates legacy **V2** linked-clone volumes. Does not apply while every volume is `dataEngine: v1` — re-check before the hop. |
+
+### Landmine at hop 1: StorageClass parameters are immutable
+
+v1.8.2 adds `backupTargetName: "default"` to the default StorageClass. Kubernetes forbids updating
+`parameters` on an existing StorageClass, so `kubectl apply` **cannot** make this change — it fails
+rather than silently diverging.
+
+The role already handles one instance of this (*Delete the StorageClass while it still pins a
+replica count*), but that guard only fires when `numberOfReplicas` is present:
+
+```yaml
+when: k3s_longhorn_sc_replicas.stdout | default('', true) | length > 0
+```
+
+A `backupTargetName` addition does not match it. Before hop 1, generalise the guard to compare the
+whole live parameter set against the desired one and delete the class when they differ. Deleting is
+safe — parameters are read at provision time only, so it neither touches an existing PV nor unbinds
+a PVC.
+
+## Staying current afterwards
+
+Renovate tracks the pin (`renovate.json`, manager for
+`ansible/roles/setup/k3s/defaults/main.yml`) with `automerge: false`. While the ladder is being
+walked it will offer the newest release — several minors ahead and therefore **not** directly
+mergeable. Treat those PRs as a signal to take the next hop, not as the hop itself.
+
+Once current, you are at most one minor behind at any time and the no-skip rule stops binding, so
+the PR becomes directly actionable via the per-hop procedure above.
