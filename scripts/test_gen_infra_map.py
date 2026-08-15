@@ -573,10 +573,14 @@ def test_refresh_cron_sets_kubeconfig():
 
 
 def _refresh_cron_job():
-    tasks = REPO_ROOT / "ansible/roles/setup/initial_setup/tasks/main.yml"
-    if not tasks.is_file():
+    # main.yml became a list of import_tasks in the 2026-08-15 split, so scan every task
+    # file in the directory — the cron now lives in crons.yml, not the entry point.
+    task_dir = REPO_ROOT / "ansible/roles/setup/initial_setup/tasks"
+    if not task_dir.is_dir():
         pytest.skip("ansible role tree not present")
-    loaded = yaml.safe_load(tasks.read_text())
+    loaded = []
+    for path in sorted(task_dir.glob("*.yml")):
+        loaded += yaml.safe_load(path.read_text()) or []
     jobs = [
         t["ansible.builtin.cron"]["job"]
         for t in loaded
