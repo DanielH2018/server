@@ -75,7 +75,7 @@ _BROAD_DEPLOY_PREFIXES = (
     # inventory/roles_path/collections_path/fact-caching, so a bad value mis-attributes a later
     # unrelated deploy's failure (2026-07-15 review M1). It changes rarely and operator-driven, so
     # broad (defer-and-alert) fits. pyproject.toml + uv.lock are deliberately NOT broad: they churn on
-    # a predictable weekly cadence (renovate.json lockFileMaintenance + every dep-pin bump re-resolves
+    # a predictable schedule (renovate.json lockFileMaintenance, daily + every dep-pin bump re-resolves
     # uv.lock), and the broad path never ff-merges — it parks local behind origin, and since broad is
     # checked before services, every later image bump (incl. CVE automerges) then piles up unapplied
     # behind the stuck lockfile until a manual full deploy (2026-07-15 review H1). A bad lockfile is

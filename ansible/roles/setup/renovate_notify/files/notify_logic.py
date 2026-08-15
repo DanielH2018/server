@@ -9,12 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-# Renovate rewrites its Dependency Dashboard issue on every run (daily, in this repo's
-# before-6am window, plus at-any-time security runs). If the dashboard goes stale or
+# Renovate rewrites its Dependency Dashboard issue on every run (~daily on this repo's
+# daily schedule + at-any-time security/lockfile runs). If the dashboard goes stale or
 # vanishes, the Renovate App or renovate.json is broken and dependency updates have
 # silently stopped — and because there are then NO PRs, the PR digest reads as a healthy
-# "backlog cleared". 8 days is now several times the run cadence (it was sized for the
-# older Monday-only schedule); kept as-is so a few skipped App runs can't false-fire.
+# "backlog cleared". 8 days = comfortably past the run cadence without false-firing.
 DASHBOARD_STALE_DAYS = 8
 DASHBOARD_TITLE = "Dependency Dashboard"
 
