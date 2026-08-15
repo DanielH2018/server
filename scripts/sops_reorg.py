@@ -29,8 +29,7 @@ PRUNE = {
     "traefik_password",
     "monitor_bridge_docker_user_push_token",
     "monitor_bridge_cloudflare_drift_push_token",
-    # Uncomment once beszel is confirmed retired for good:
-    # "authelia_beszel_password_hash",
+    "authelia_beszel_password_hash",
 }
 
 

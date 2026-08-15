@@ -43,6 +43,25 @@ def test_pruned_keys_are_dropped_and_counted():
     assert "domain: example.com" in result
 
 
+def test_prune_set_matches_the_audit():
+    """Guards the reviewed list -- a key added here without an audit fails the suite."""
+    assert sops_reorg.PRUNE == {
+        "traefik_user",
+        "traefik_password",
+        "monitor_bridge_docker_user_push_token",
+        "monitor_bridge_cloudflare_drift_push_token",
+        "authelia_beszel_password_hash",
+    }
+
+
+def test_a_pruned_key_does_not_take_its_section_with_it():
+    text = "authelia_beszel_password_hash: h\nauthelia_jwt: j\n"
+    result, dropped = sops_reorg.reorganize(text)
+    assert dropped == 1
+    assert "beszel" not in result
+    assert "authelia_jwt: j" in result
+
+
 def test_block_scalars_keep_their_continuation_lines():
     text = (
         "pi_peer_backup_ssh_key: |\n"
