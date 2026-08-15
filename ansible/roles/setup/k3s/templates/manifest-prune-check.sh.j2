@@ -83,18 +83,32 @@ if [[ ! -d "$MANIFEST_ROOT" ]]; then
   exit 0
 fi
 
-# Namespaces this check does not own: kube-system/longhorn-system/metallb-system ship their own
+# Namespace/kind pairs this check does not own. kube-system and metallb-system ship their own
 # objects outside our staged manifests, and `default` carries the kubectl-provisioned
-# `kubernetes` Service — none of these are ours to prune-check.
-EXCLUDED_NS=(kube-system longhorn-system metallb-system default)
+# `kubernetes` Service, so every kind ("*") is excluded in those.
+#
+# longhorn-system was a blanket exclusion on the same reasoning, and that stopped being true on
+# 2026-08-15: a9f32939 gave the Longhorn UI an ingress, making it the first namespace we stage
+# objects into. A retired or renamed route there would have kept serving the storage control
+# plane while every repo-side check read green. Its Services are still Longhorn's own (five, none
+# carrying an ownerReference to skip them by), so `service` stays excluded there while the kinds
+# we DO own are checked.
+EXCLUDED_NS_KINDS=(
+  "kube-system:*"
+  "metallb-system:*"
+  "default:*"
+  "longhorn-system:service"
+)
 
 ORPHANS=""
 add_orphan() { ORPHANS="${ORPHANS:+$ORPHANS; }$1"; }
 
 is_excluded_ns() {
-  local ns="$1" candidate
-  for candidate in "${EXCLUDED_NS[@]}"; do
-    [[ "$ns" == "$candidate" ]] && return 0
+  local ns="$1" kind="$2" entry entry_kind
+  for entry in "${EXCLUDED_NS_KINDS[@]}"; do
+    [[ "$ns" == "${entry%%:*}" ]] || continue
+    entry_kind="${entry#*:}"
+    [[ "$entry_kind" == "*" || "$entry_kind" == "$kind" ]] && return 0
   done
   return 1
 }
@@ -103,7 +117,7 @@ check_kind() {
   local kind="$1" ns name owner
   while IFS=' ' read -r ns name owner; do
     [[ -z "$ns" || -z "$name" ]] && continue
-    is_excluded_ns "$ns" && continue
+    is_excluded_ns "$ns" "$kind" && continue
     # An ownerReference means a controller (Longhorn, MetalLB, ...) created this object as a
     # child of something else — our templates would never declare it, so its absence here is
     # expected, not drift.
@@ -116,13 +130,15 @@ check_kind() {
     2>/dev/null)
 }
 
-for KIND in ingressroute middleware service; do
+# tlsoption joined on 2026-08-15: the Longhorn UI stages one, and the kind had never been checked
+# at all, so an orphan of it was invisible everywhere rather than in one namespace.
+for KIND in ingressroute middleware service tlsoption; do
   check_kind "$KIND"
 done
 
 if [[ -z "$ORPHANS" ]]; then
   STATUS=up
-  MSG="no orphaned IngressRoute/Middleware/Service objects found"
+  MSG="no orphaned IngressRoute/Middleware/Service/TLSOption objects found"
 else
   STATUS=down
   MSG="live but absent from staged manifests: ${ORPHANS}"
