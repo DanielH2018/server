@@ -7,7 +7,7 @@
 # reconfigure would silently upgrade the control plane as a side effect of editing a flag.
 k3s_version: v1.36.2+k3s1
 k3s_metallb_version: v0.14.8
-k3s_longhorn_version: v1.11.3
+k3s_longhorn_version: v1.12.1
 
 # Flags for the k3s server install:
 #   --cluster-init       embedded etcd from day one. Not a one-way door (k3s converts
