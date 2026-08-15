@@ -175,7 +175,7 @@ def _cross_role_shared_imports(script: Path) -> set[str]:
 
 def test_host_run_scripts_list_is_complete() -> None:
     # The parse-guard above only covers the scripts hand-listed in HOST_RUN_SCRIPTS. This closes the
-    # drift one level up (the same lockstep pattern as test_prek_pytest_files_cover_testpaths /
+    # drift one level up (the same lockstep pattern as test_ansible_lint_scope /
     # test_renovate_managers): a future setup role adding `ExecStart=/usr/bin/python3 …/<x>.py` would
     # otherwise silently escape the 3.12 floor-check — the exact class that bricked the deployer on
     # 2026-07-15 (a 3.14-only `except A, B:` that passed ruff/CI but SyntaxErrors on the host).
