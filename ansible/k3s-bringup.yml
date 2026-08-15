@@ -10,7 +10,8 @@
 # fail-closed guards below (daniel-box only, no Docker) are the real safety net.
 #
 # Deliberately a separate playbook rather than a role in initial_setup.yml: that playbook
-# runs on every host, and k3s must not land on daniel-server until slice 7.
+# runs on every host, and the server role must land on daniel-box alone. daniel-server joined
+# as an AGENT in slice 7 (2026-08-14) — that is the opt-in join play further down, not this one.
 - name: Bring up the k3s cluster
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
   # Facts are gathered explicitly after the SOPS sudo password is set — same reason as
@@ -27,14 +28,14 @@
       tags: always
 
     - name: Refuse to run anywhere but daniel-box
-      # daniel-server joins the cluster in slice 7, after its Docker workload has drained.
-      # Running this against it today would put k3s's iptables rules on top of Docker's on
-      # the host that serves everything.
+      # daniel-box is the single control-plane node. daniel-server is an AGENT — running the
+      # server role against it would stand up a second control plane on a node that already
+      # belongs to this cluster.
       ansible.builtin.assert:
         that: inventory_hostname == 'daniel-box'
         fail_msg: >-
-          This playbook targets daniel-box only. daniel-server joins the cluster in slice 7
-          — see docs/k3s-migration/slice-0-cluster-foundation.md.
+          This playbook's server role targets daniel-box only. To (re)join daniel-server as an
+          agent, use the opt-in join plays below with -e join_agent=daniel-server.
       tags: always
   roles:
     - { role: k3s, tags: ["k3s"] }

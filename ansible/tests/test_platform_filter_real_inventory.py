@@ -110,8 +110,9 @@ def test_daniel_server_is_fully_drained():
     # retired" (or added), and a drop nobody edited means the default regressed and production
     # services silently stopped being managed.
     #
-    # Every remaining entry must still be `docker`. daniel-server does not run k3s and will
-    # not until slice 7, so a k8s entry here would be deployed by neither play.
+    # Every remaining entry must still be `docker`. daniel-server is a k3s AGENT (joined
+    # 2026-08-14) — cluster workloads are declared on daniel-box, the control-plane node that
+    # runs the k8s play, so a k8s entry here would be deployed by neither play.
     containers = _containers(HOST_VARS / "daniel-server.yml")
 
     # 14 since E3 retired homepage (2026-08-12; peanut/grafana kept their entries for the

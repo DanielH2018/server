@@ -1,9 +1,9 @@
 ---
-# Slice 0 of the k3s migration — see docs/k3s-migration/slice-0-cluster-foundation.md.
-# This role brings up a SINGLE-NODE cluster on daniel-box. daniel-server deliberately does
-# not join until slice 7: k3s ships its own containerd and flannel/kube-proxy iptables
-# rules, and landing those on the host running 46 containers, the custom DOCKER-USER rule
-# and the wg-easy hairpin-NAT setup is the riskiest possible starting point.
+# Originally slice 0 of the k3s migration — see docs/k3s-migration/slice-0-cluster-foundation.md.
+# This role installs the k3s SERVER (control plane) on daniel-box. daniel-server joined as an
+# agent in slice 7 (2026-08-14) via tasks/agent.yml, once its Docker workload had drained: k3s
+# ships its own containerd and flannel/kube-proxy iptables rules, and landing those alongside
+# Docker's DOCKER-USER chain and the wg-easy hairpin NAT was the risk the ordering avoided.
 
 - name: Refuse to run on a host that already runs Docker containers
   tags: [k3s_server]
