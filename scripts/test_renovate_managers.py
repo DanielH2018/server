@@ -203,6 +203,50 @@ def test_no_custom_manager_tracks_the_retired_compose_plane() -> None:
     )
 
 
+def test_ignore_paths_keeps_the_inherited_preset_globs() -> None:
+    """renovate.json's ignorePaths must still carry every glob from :ignoreModulesAndTests.
+
+    A local ignorePaths REPLACES the preset's array rather than appending to it, and
+    config:recommended pulls :ignoreModulesAndTests in. So adding one repo-specific entry
+    (roles/containers/archive/**) silently re-enables scanning of node_modules, vendor, and
+    test fixtures unless the inherited eight are restated alongside it.
+
+    renovate-config-validator does not catch this — the shortened array is perfectly valid
+    config, just wider in scope than the author intended."""
+    inherited = {
+        "**/node_modules/**",
+        "**/bower_components/**",
+        "**/vendor/**",
+        "**/examples/**",
+        "**/__tests__/**",
+        "**/test/**",
+        "**/tests/**",
+        "**/__fixtures__/**",
+    }
+    configured = set(_RENOVATE_CONFIG.get("ignorePaths", []))
+    assert inherited <= configured, (
+        "ignorePaths dropped glob(s) inherited from :ignoreModulesAndTests via "
+        "config:recommended — a local array replaces the preset's, so these must be "
+        f"restated: {sorted(inherited - configured)}"
+    )
+
+
+def test_archived_compose_plane_is_ignored() -> None:
+    """ignorePaths must cover roles/containers/archive/**.
+
+    The retired Compose roles hold 62 image pins that deploy nothing. Every customManager is
+    pinned to a live file (test_no_custom_manager_tracks_the_retired_compose_plane guards
+    that), but the BUILT-IN docker-compose manager has no such scoping and scans them anyway
+    — which is how PR #42 came to bump getmeili/meilisearch in archive/karakeep while the
+    live pin sits in roles/k8s/karakeep/defaults/main.yml."""
+    assert "ansible/roles/containers/archive/**" in _RENOVATE_CONFIG.get(
+        "ignorePaths", []
+    ), (
+        "archived compose roles are being scanned by the built-in docker-compose manager; "
+        "they deploy nothing, so every pin there is a dead-path PR"
+    )
+
+
 def test_group_vars_images_are_tracked() -> None:
     """Some customManager must scan inventory/group_vars/all.yml.
 
