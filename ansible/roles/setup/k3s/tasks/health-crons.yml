@@ -44,6 +44,21 @@
   become: true
   no_log: true  # renders the Kuma push token
 
+- name: Deploy the orphaned-backup reaper
+  tags: [backup-health]
+  # Installed but DELIBERATELY NOT SCHEDULED. It deletes backups, and the set that is safe to
+  # delete depends on live state — as of 2026-08-16 the answer is "none of them", because the
+  # weekly tier has produced nothing and the strays are the only recovery those volumes have.
+  # The script enforces that floor itself, but an operator should read its dry run before any
+  # cron does. Run: /usr/local/bin/longhorn-reap-orphan-backups.sh [--apply]
+  ansible.builtin.template:
+    src: longhorn-reap-orphan-backups.sh.j2
+    dest: /usr/local/bin/longhorn-reap-orphan-backups.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
 - name: Schedule the Longhorn backup-plane heartbeat
   tags: [backup-health]
   ansible.builtin.cron:
