@@ -144,6 +144,11 @@ else
   MSG="live but absent from staged manifests: ${ORPHANS}"
 fi
 
+# Unconditional, before the push — see longhorn-backup-health.sh.j2 for the full rationale.
+# Short version: the `|| logger` below only fires when the curl fails, so a successfully-pushed
+# DOWN leaves no durable record and `probe.py alerts` can never reconstruct this monitor.
+logger -t manifest-prune-check "status=${STATUS} ${MSG}"
+
 curl -fsS --max-time 10 -G \
   --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
   --data-urlencode "status=${STATUS}" \

@@ -292,6 +292,14 @@ k3s_longhorn_weekly_volumes:
 # 40 minutes late".
 k3s_longhorn_backup_max_age_hours: 30
 
+# How far back the Error-state check looks. An Error Backup object is immortal once the job that
+# created it is gone: Longhorn's `retain: N` prunes only Completed backups owned by a live job,
+# and the reaper skips every state that is not Completed. Unbounded, one bad night pins the
+# backup monitor red permanently — 11 failures from 2026-08-16 04:30 were still being reported
+# on every 10-minute tick with no way to clear them. 24h is one full daily cycle, so a real
+# failure pages through its own retry window and then clears itself.
+k3s_longhorn_backup_error_max_age_hours: 24
+
 # The weekly tier's equivalent bound, for the volumes in k3s_longhorn_weekly_volumes. Same
 # reasoning scaled to a weekly 04:30 job: 8 days plus 6h, so one late or skipped run pages while
 # a normal ~7-day-old backup does not. Without a second bound these volumes were walked by
