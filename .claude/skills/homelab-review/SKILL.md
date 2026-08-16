@@ -9,6 +9,10 @@ domain **in parallel**, then synthesize their findings into a single deduplicate
 report. **READ-ONLY: this skill reviews and recommends — it does NOT implement, deploy, or commit.**
 Stop after the report; let the operator drive any changes.
 
+The steps run in the order they are numbered: scope → prime → dispatch → collect → **deduplicate →
+verify** → report. Deduplicating before verification is what keeps the skeptic pass from paying
+twice for one defect.
+
 ## 1. Resolve scope
 Default: all six areas. If the user named a subset (e.g. `homelab-review security,network`), run only
 those. Home Assistant is NOT one of them — its review lives in the separate `/ha-review` skill; if the
@@ -41,6 +45,9 @@ discipline: *verify a candidate finding against the role's CLAUDE.md, role crons
 `check.py` BEFORE reporting it.* Pull this at runtime — never rely on a hardcoded list (it goes stale,
 the exact failure mode these reviews keep finding).
 
+**Done when** every in-scope area has a don't-re-flag list — or an explicit "none recorded for this
+area". An area you skipped reading for is not an area with nothing to skip.
+
 ## 3. Dispatch all selected agents IN PARALLEL
 Issue every dispatch in a single message so they run concurrently (one agent per independent domain —
 see the `dispatching-parallel-agents` skill; 4–6 parallel reviewers is normal here). Each agent prompt
@@ -58,7 +65,7 @@ must include:
 - the **output format** below.
 
 `security-review` is the only reviewer without `Bash` (see Notes) — don't hand it a brief that
-depends on running `git log`, `kubectl`, or `probe.py`; its live/history checks belong to step 5.
+depends on running `git log`, `kubectl`, or `probe.py`; its live/history checks belong to step 6.
 
 ## 4. Output format each agent must return
 Findings grouped **High / Medium / Low**. Each: a 1-line title, the `file:line` (ansible source), what's
@@ -66,12 +73,31 @@ wrong, and a concrete fix — tagged **[GAP] / [IMPROVEMENT] / [ADDITION]**. Not
 one line. End with a **3-bullet top-priorities** summary. Be specific and skeptical: 5 real findings beat
 20 speculative ones.
 
-## 5. Adversarially verify High/Medium findings (before they reach the report)
+**Severity is a gate, not a flavour** — it decides what step 6 adversarially verifies, so calibrate it
+the same way in every brief:
+- **High** — data loss or an unrecoverable restore path, credential/secret exposure, something
+  reachable from the internet that shouldn't be, or a deploy/boot path that is already broken.
+- **Medium** — real degradation, a missing defense, or an alerting/backup gap that has a workaround
+  or needs a second failure to bite.
+- **Low** — hygiene, consistency, and clarity: nothing changes behaviour today.
+
+Uncertain between two tiers? Take the higher one — the cost of a wrong tier is one extra skeptic.
+
+## 5. Deduplicate (before anything is verified)
+Merge findings that several agents surfaced — e.g. a healthcheck gap seen by both the security and
+container reviewers is one finding, not two.
+
+**Anti-merge:** only merge findings that are the *same* defect (same `file:line` + same mechanism +
+same fix). Do NOT collapse findings that differ in file, parameter, service, or remediation — two
+issues that need different fixes are two findings, even at one service. A merged finding keeps the
+highest severity of its inputs and lists every agent that raised it.
+
+## 6. Adversarially verify High/Medium findings (before they reach the report)
 Reviews here have a misfire history (an Authelia `trusted_proxies` proposal that would have
 crash-looped it; a PEP-758 `except X, Y:` misread as a syntax bug; and in the 2026-08-15 run both a
 proposed `N8N_PROXY_HOPS` change and a Pi `:latest`-pinning "fix" would have caused damage) — a
-wrong finding costs the operator more than a missed one. So: **deduplicate first** (below), then for each surviving
-High/Medium finding dispatch one skeptic — `general-purpose`, **`model: sonnet`**, all in one
+wrong finding costs the operator more than a missed one. So: for each deduplicated High/Medium
+finding dispatch one skeptic — `general-purpose`, **`model: sonnet`**, all in one
 parallel message — whose ONLY job is to try to **refute** it against: the role's CLAUDE.md
 (accepted trade-offs), the role's tasks/templates + shared macros, monitor-bridge `check.py` +
 role crons, the don't-re-flag memories, **git history (`git log`/`git blame` the cited lines — a
@@ -80,6 +106,13 @@ and live state via `scripts/probe.py` where relevant. **`probe.py health <svc>` 
 inspect`, so it only answers for the Pi's Compose services** — for a cluster workload use
 `kubectl get`/`logs`/`describe` (the readonly SA covers get/list/watch, not Secrets or `exec`), or
 `probe.py targets | metric | alerts | b2-longhorn`.
+
+**Merged history is not the whole history.** Several sessions work this repo at once, one branch each,
+so a fix can be real and not yet on master: also check `gh pr list` (and `gh pr diff <n>` when a title
+looks related) plus the other live worktrees' changed paths from the SessionStart banner. A finding
+already fixed on an open branch is REFUTED-as-live and reported as "fixed in PR #n, unmerged", not
+re-raised.
+
 Verdict per finding: **CONFIRMED** (refutation failed), **REFUTED** (cite the disproving
 evidence), or **UNCERTAIN**. Refuted findings drop to a one-line "refuted in verification"
 appendix; UNCERTAIN ones stay but are marked unverified. Lows skip verification.
@@ -88,24 +121,25 @@ a candidate with no row was *skipped*, not cleared (a verification miss, not an 
 that rests on a comment, a name, or a "by design" claim is not done until it is re-checked against the
 executable code.
 
-## 6. Synthesize (your job once agents return)
-- **Deduplicate** findings multiple agents surfaced (e.g. a healthcheck gap seen by both the security
-  and container reviewers — report it once) — this happens BEFORE step 5's verification pass.
-  **Anti-merge:** only merge findings that are the *same* defect (same `file:line` + same mechanism +
-  same fix). Do NOT collapse findings that differ in file, parameter, service, or remediation — two
-  issues that need different fixes are two findings, even at one service.
+## 7. Synthesize and close the loop (your job once the verdicts are in)
 - **Surface cross-cutting THEMES** no single agent can see (e.g. a "co-located failure domain" spanning
   security + backups + network) — this is the main value of synthesizing over relaying.
 - Present **one consolidated report** grouped by severity, with a top-priorities shortlist and a clear
   recommendation. Cite each finding's ansible `file:line`.
-- **STOP.** Recommend next steps; do not implement, deploy, or commit. Offer to record a new
-  `review-<date>-state` memory capturing the run's verified-correct + deferred (don't-re-flag) outcomes
-  — the established pattern that keeps the next review high-signal.
+- **STOP.** Recommend next steps; do not implement, deploy, or commit.
+- Offer to record a new `review-<date>-state` memory — the established pattern that keeps the next
+  review high-signal, and the thing step 2 reads. It is what step 2 needs or it is noise, so give it:
+  a one-line headline; then, **tagged by area** (the step-1 names, so a later run can filter to its
+  own domain), the **confirmed** findings and what happened to each (shipped / open / deferred), the
+  **refuted** ones *with the evidence that disproved them* (a bare "refuted" teaches the next run
+  nothing), and the **deliberate trade-offs** not to re-flag. If a `review-<date>-state` memory
+  already exists for today, write the next letter suffix (`…-state`, `…b-state`) rather than
+  overwriting — the earlier run's ledger stays live.
 
 ## Notes
 - All six reviewer agents are read-only investigators. `security-review` is the one without `Bash`
   (`Read, Grep, Glob` only), so it cannot run `git log`, `kubectl`, or `probe.py` — its findings reach
-  live/history evidence only through the step-5 skeptic pass, which is where that verification belongs.
+  live/history evidence only through the step-6 skeptic pass, which is where that verification belongs.
 - Home Assistant review is handled by the separate `/ha-review` skill.
 - This skill is the **review** half of the flow only. Implementation (implement → deploy via `/deploy`
   → commit) stays an explicit, operator-gated sequence — keep it out of this skill.
