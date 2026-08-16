@@ -205,10 +205,21 @@ echo "deleted ${DELETED} stranded snapshot(s)."
 # it into its parent, which is what snapshotPurge asks for — so a run that stops at the delete
 # reads as a success that reclaimed nothing.
 if (( DELETED > 0 )); then
-  BACKEND=$($KUBECTL get svc longhorn-backend -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+  # The manager pod on THIS node, not the longhorn-backend ClusterIP. The Service has an endpoint
+  # per node and kube-proxy picks between them per connection, but a process in the host netns can
+  # only reach its own node's pod CIDR — so a ClusterIP call fails whenever it lands on the other
+  # node's manager. Measured 2026-08-16 on the trim sweep's first real run: 27 of 37 calls failed
+  # that way. Same API, same trap, so the same resolution.
+  NODE=$(hostname)
+  BACKEND=$($KUBECTL get pods -l app=longhorn-manager -o json 2>/dev/null \
+    | jq -r --arg node "$NODE" '.items[]
+        | select(.spec.nodeName == $node)
+        | select(.status.phase == "Running")
+        | select([.status.containerStatuses[].ready] | all)
+        | .status.podIP' | head -1)
   if [[ -z "$BACKEND" ]]; then
-    echo "WARNING: could not resolve the longhorn-backend service; snapshots are marked removed" >&2
-    echo "but not purged. Purge them from the Longhorn UI, or re-run once the service resolves." >&2
+    echo "WARNING: no ready longhorn-manager pod on ${NODE}; snapshots are marked removed but" >&2
+    echo "NOT purged, so nothing is reclaimed yet. Purge from the Longhorn UI, or re-run." >&2
     exit 1
   fi
   for VOL in "${!TOUCHED[@]}"; do

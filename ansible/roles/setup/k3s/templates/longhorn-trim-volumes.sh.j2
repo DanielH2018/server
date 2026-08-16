@@ -29,11 +29,24 @@ export KUBECONFIG=/home/{{ sys_user }}/.kube/config
 KUBECTL="k3s kubectl -n longhorn-system"
 
 # The manager API, not kubectl: trim is an action rather than a field, so there is nothing on the
-# Volume CR to set. Resolved at run time because a ClusterIP survives most things but not a
-# recreate of the service, and a hardcoded IP would fail silently as a connection timeout.
-BACKEND=$($KUBECTL get svc longhorn-backend -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+# Volume CR to set.
+#
+# THE POD ON THIS NODE, NOT THE longhorn-backend ClusterIP. The Service has one endpoint per node
+# and kube-proxy picks between them per connection, but a process in the HOST netns can only
+# reach the pod CIDR of its own node — so roughly three quarters of the calls landed on
+# daniel-server's manager and died with "Failed to connect ... port 9500". Measured on the first
+# real run, 2026-08-16: trimmed 10, failed 27. Direct probe confirms it is the routing and not
+# the service: daniel-box's manager pod answers 200, daniel-server's times out from the same
+# shell. Nothing retries its way out of that, so resolve the local endpoint and use it.
+NODE=$(hostname)
+BACKEND=$($KUBECTL get pods -l app=longhorn-manager -o json 2>/dev/null \
+  | jq -r --arg node "$NODE" '.items[]
+      | select(.spec.nodeName == $node)
+      | select(.status.phase == "Running")
+      | select([.status.containerStatuses[].ready] | all)
+      | .status.podIP' | head -1)
 if [[ -z "$BACKEND" ]]; then
-  echo "ABORT: could not resolve the longhorn-backend service ClusterIP." >&2
+  echo "ABORT: no ready longhorn-manager pod on ${NODE}; nothing local to send trims to." >&2
   exit 1
 fi
 
