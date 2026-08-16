@@ -16,6 +16,7 @@ from prune_worktrees import (
     KEEP,
     REMOVABLE,
     Worktree,
+    cherry_says_merged,
     classify,
     find_orphan_dirs,
     parse_worktree_list,
@@ -167,3 +168,27 @@ def test_detached_head_is_kept_rather_than_guessed_about():
     verdict, reason = classify(_tree(branch=None), merged=True, dirty=False)
     assert verdict == KEEP
     assert "detached" in reason
+
+
+def test_rebase_merged_branch_reads_as_merged():
+    # The case that made this script keep merged worktrees forever: `gh pr merge --rebase`
+    # replays the commit onto master as a new object, so it is not an ancestor — but its
+    # patch is upstream, which is what `-` means.
+    assert cherry_says_merged("- edf6dd1ec3ff0d5bfa201364a3fdf3ab5e072736") is True
+
+
+def test_a_branch_with_unlanded_work_is_not_merged():
+    assert cherry_says_merged("+ 4f5515ed1c0e4a2b8d3f9a7c6b5e4d3c2b1a0f9e") is False
+
+
+def test_a_partly_landed_branch_is_not_merged():
+    # One commit upstream, one not. Removing this worktree would lose the `+` commit.
+    assert cherry_says_merged("- aaaaaaa\n+ bbbbbbb") is False
+
+
+def test_nothing_ahead_of_upstream_reads_as_merged():
+    assert cherry_says_merged("") is True
+
+
+def test_blank_lines_do_not_change_the_verdict():
+    assert cherry_says_merged("\n- aaaaaaa\n\n") is True
