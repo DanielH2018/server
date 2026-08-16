@@ -1153,7 +1153,13 @@ def test_image_only_diff_accepts_a_digest_bump():
 
 # ── k8s auto-deploy: the eligibility split ──────────────────────────────────────────────────
 def _split(
-    paths, *, denylist=frozenset(), pilot=frozenset(), enabled=True, image_only=True
+    paths,
+    *,
+    denylist=frozenset(),
+    pilot=frozenset(),
+    enabled=True,
+    image_only=True,
+    max_per_tick=0,
 ):
     cs = services_from_changed_paths(paths)
     return split_k8s_auto_deploy(
@@ -1163,6 +1169,7 @@ def _split(
         pilot=pilot,
         enabled=enabled,
         image_only=lambda _svc: image_only,
+        max_per_tick=max_per_tick,
     )
 
 
@@ -1176,6 +1183,35 @@ def test_split_k8s_disabled_reproduces_todays_behaviour_exactly():
     cs = _split([_SPEEDTEST_DEFAULTS], denylist={"traefik"}, enabled=False)
     assert cs.k8s_deploy == set()
     assert cs.k8s == {"speedtest"}
+
+
+def _defaults_for(svc):
+    return f"ansible/roles/k8s/{svc}/defaults/main.yml"
+
+
+def test_split_k8s_caps_how_many_services_one_tick_takes_on():
+    # The promoted set shares ONE ansible-playbook run and one K8S_DEPLOY_TIMEOUT_S, and a
+    # timeout git-resets the whole merged range — so an uncapped tick can discard four good
+    # image bumps because the fifth failed to roll out.
+    paths = [_defaults_for(s) for s in ("speedtest", "freshrss", "sonarr", "radarr")]
+    cs = _split(paths, max_per_tick=2)
+    assert len(cs.k8s_deploy) == 2
+    # The surplus is DEFERRED, not dropped: it stays in cs.k8s, which defer-and-alerts and is
+    # picked up by a later tick. Merged-but-never-deployed would be the dangerous outcome.
+    assert cs.k8s == {"speedtest", "freshrss", "sonarr", "radarr"} - cs.k8s_deploy
+
+
+def test_split_k8s_cap_is_deterministic():
+    # Same input, same promotion — otherwise which bumps land depends on set iteration order.
+    paths = [_defaults_for(s) for s in ("speedtest", "freshrss", "sonarr", "radarr")]
+    assert _split(paths, max_per_tick=2).k8s_deploy == (
+        _split(paths, max_per_tick=2).k8s_deploy
+    )
+
+
+def test_split_k8s_cap_of_zero_promotes_everything_eligible():
+    paths = [_defaults_for(s) for s in ("speedtest", "freshrss")]
+    assert _split(paths, max_per_tick=0).k8s_deploy == {"speedtest", "freshrss"}
 
 
 def test_split_k8s_never_promotes_a_denylisted_service():

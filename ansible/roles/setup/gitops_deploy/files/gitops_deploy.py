@@ -167,6 +167,10 @@ def _csv_set(raw: str) -> frozenset[str]:
 # behaves exactly as it does today.
 K8S_AUTODEPLOY_ENABLED = C.get("K8S_AUTODEPLOY_ENABLED", "false").lower() == "true"
 K8S_AUTODEPLOY_PILOT = _csv_set(C.get("K8S_AUTODEPLOY_PILOT", ""))
+# 0 disables the cap. See split_k8s_auto_deploy: the whole promoted set shares one
+# ansible-playbook run and one K8S_DEPLOY_TIMEOUT_S, and a timeout rolls the batch back
+# together.
+K8S_AUTODEPLOY_MAX_PER_TICK = int(C.get("K8S_AUTODEPLOY_MAX_PER_TICK", "0"))
 K8S_AUTODEPLOY_DENYLIST = _csv_set(C.get("K8S_AUTODEPLOY_DENYLIST", ""))
 if K8S_AUTODEPLOY_ENABLED and not K8S_AUTODEPLOY_DENYLIST:
     # Fail closed. An absent or empty denylist means "nothing is eligible", never "everything
@@ -629,6 +633,7 @@ def main() -> int:
         pilot=K8S_AUTODEPLOY_PILOT,
         enabled=K8S_AUTODEPLOY_ENABLED,
         image_only=lambda svc: is_image_only_diff(k8s_image_diff(local, origin, svc)),
+        max_per_tick=K8S_AUTODEPLOY_MAX_PER_TICK,
     )
 
     if cs.broad:

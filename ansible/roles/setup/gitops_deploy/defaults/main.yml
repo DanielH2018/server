@@ -8,6 +8,22 @@ gitops_deploy_k8s_autodeploy_enabled: false
 # While non-empty, ONLY these services are eligible — the slice-1 pilot scope.
 gitops_deploy_k8s_autodeploy_pilot: []
 
+# Most services one tick may promote; 0 disables the cap. deploy_k8s joins every promoted
+# service into a SINGLE ansible-playbook run under one K8S_DEPLOY_TIMEOUT_S (900s), and the
+# failure path is `git reset --hard local` over the whole merged range — so a batch that
+# overruns discards the good bumps along with the bad one. At roughly 2.5 min of rollout and
+# soak per service, 900s is spent around five or six.
+#
+# renovate.json states the intent ("keeps each auto-deploy tick to a single service, which is
+# what the deploy timeout is sized for") but nothing enforced it: a tick diffs local..origin,
+# spanning every commit since the last one, and the per-service k8s PRs share one daily window
+# with platformAutomerge. The pilot list happens to bound this today at one service; this
+# survives the pilot being cleared, which is when it would otherwise start to matter.
+#
+# 3 rather than 1: a cap of 1 would defer routine multi-bump mornings a tick at a time for no
+# safety gain, since three services fit the timeout with room to spare.
+gitops_deploy_k8s_autodeploy_max_per_tick: 3
+
 # Services that must NEVER auto-deploy, even on a clean image-only diff. This list is the safety
 # boundary: eligibility is (image-only diff) AND (not denylisted) AND (pilot scope, if set).
 # An EMPTY list disables the feature outright rather than allowing everything — see the
