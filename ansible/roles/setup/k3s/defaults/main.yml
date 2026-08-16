@@ -5,8 +5,8 @@
 # k3s is pinned because the install task re-runs the installer whenever k3s_server_args
 # changes, and get.k3s.io installs the latest stable unless told otherwise — an unpinned
 # reconfigure would silently upgrade the control plane as a side effect of editing a flag.
-k3s_version: v1.36.2+k3s1
-k3s_metallb_version: v0.14.8
+k3s_version: v1.36.3+k3s1
+k3s_metallb_version: v0.16.0
 k3s_longhorn_version: v1.12.1
 
 # Flags for the k3s server install:
