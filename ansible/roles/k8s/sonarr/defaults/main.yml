@@ -66,3 +66,21 @@ sonarr_k8s_mem_request: 128Mi
 
 # busybox nslookup is all the isolation probe needs.
 sonarr_k8s_probe_image: alpine:3.24
+
+# Logging, bound through Sonarr's own config system rather than config.xml — the *arr apps read
+# `<App>:Log` from IConfiguration, and AddEnvironmentVariables() is registered with NO prefix
+# filter, so the section maps to SONARR__LOG__*. Verified against Sonarr's Bootstrap.cs
+# (`services.Configure<LogOptions>(config.GetSection("Sonarr:Log"))`) and LogOptions.cs, which
+# declares Level and Rotate; radarr and prowlarr bind the identical shape under their own names.
+#
+# WHY: upstream's defaults are LogLevel=debug, Rotate=50, SizeLimit=1MB — so every *arr sits at
+# a 50 MB steady state of debug chatter it rewrites continuously. Measured 2026-08-16: sonarr
+# and prowlarr each held 51 MiB in /config/logs, radarr 25 MiB. The size is capped, so this is
+# not primarily a space fix; it is a CHURN fix. Longhorn backs up allocated device blocks, and
+# a directory that rewrites 50 MB in a rolling window leaves freed-but-undiscarded blocks that
+# the backup ships forever. sonarr-config backed up at 278 MiB against 91 MiB of live files.
+#
+# info keeps every message the UI's log view and the support workflow actually use; debug is a
+# developer setting upstream ships on. Rotate 10 caps the directory at ~10 MB.
+sonarr_k8s_log_level: info
+sonarr_k8s_log_rotate: "10"
