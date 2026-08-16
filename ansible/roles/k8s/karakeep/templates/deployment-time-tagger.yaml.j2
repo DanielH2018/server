@@ -42,6 +42,10 @@ spec:
                       break
                   except OSError:
                       time.sleep(5)
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
           resources:
             limits:
               cpu: 250m

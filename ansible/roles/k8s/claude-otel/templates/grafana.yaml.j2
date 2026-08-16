@@ -141,6 +141,10 @@ spec:
       containers:
         - name: grafana
           image: {{ claude_otel_grafana_image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
           env:
             - name: GF_SECURITY_ADMIN_PASSWORD
               valueFrom:
