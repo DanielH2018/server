@@ -459,15 +459,20 @@ agent. Do not skip the verification and do not claim it passed. Use this sudo-fr
 which reproduces what systemd will actually do, and then ask the user to run the real start:
 
 ```bash
-# Both units run as User=ubuntu, so systemd sets HOME=/home/ubuntu and uv finds the
-# user-installed interpreter. Reproduce that environment exactly rather than inheriting
-# an interactive shell's, which would hide a missing HOME/PATH dependency.
-cd / && env -i HOME=/home/ubuntu USER=ubuntu PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin \
-  /usr/local/bin/uv run --no-project --python 3.14.6 python -V
+/usr/local/bin/uv run --no-project --python 3.14.6 python -V
 ```
 
-Expected: `Python 3.14.6`. This proves the interpreter resolves under systemd's environment, which
-is the failure mode that matters; it does not prove the script itself runs, which the user's
+Expected: `Python 3.14.6`. Invoke uv by its absolute path — that is what the unit does, and it is
+the part that can break. Note both units run as `User={{ sys_user }}`, so systemd hands them
+`HOME=/home/{{ sys_user }}`: the same home that holds uv's managed interpreters, which is why this
+resolves under systemd at all.
+
+Do **not** try to reproduce systemd's environment with `env -i HOME=… `. A session guard in this
+repo refuses any command that sets `HOME` (it cannot verify where git would then write) and also
+refuses `env`-wrapped invocations, so that form is unrunnable by an agent — it was in an earlier
+draft of this plan and had to be removed.
+
+This proves the interpreter resolves; it does not prove the script runs, which the user's
 `systemctl start` does.
 
 - [ ] **Step 4: Commit**
@@ -509,11 +514,21 @@ ExecStart=/usr/bin/flock -w 180 /var/lock/server-git-tree.lock /usr/local/bin/uv
 
 Leave the `flock` invocation, its timeout and the lock path exactly as they are — that lock is what stops the pipeline interleaving with a manual deploy.
 
-**`--no-project` is load-bearing here specifically.** This unit sets
-`WorkingDirectory=/home/{{ sys_user }}/server` (line 17), and that directory *is* a uv project.
-Without `--no-project`, uv would resolve that project's environment instead of the pinned
-interpreter — and it would still run, just not on 3.14.6, which is the silent-wrong-interpreter
-failure this plan is trying to make impossible. Task 7's guard asserts the flag is present.
+**`--no-project` matters here specifically, though not for the reason you might assume.** This unit
+sets `WorkingDirectory=/home/{{ sys_user }}/server` (line 17), and that directory *is* a uv project.
+
+Measured 2026-08-16, so state it accurately: with an explicit `--python 3.14.6`, uv honours the pin
+**either way** — `uv run --no-project --python 3.14.6 python -V` and `uv run --python 3.14.6
+python -V` both print `Python 3.14.6` from inside a repo worktree. `--no-project` is therefore not
+what selects the interpreter. What it does is stop uv resolving and **syncing the repo project's
+environment**, which under systemd means the unit would depend on that project being healthy and
+would touch (or race) the repo's `.venv` — from a unit that holds the git-tree lock and runs
+alongside deploys. That is the reason to keep it, and it is enough of one.
+
+The flag *is* load-bearing where no `--python` is passed: `uv python find 3.14` from a worktree
+resolved that worktree's `.venv` rather than a managed interpreter. Every invocation in this plan
+passes `--python` explicitly, so the belt and the braces are both on. Task 7's guard asserts the
+flag is present.
 
 - [ ] **Step 3: Deploy**
 
@@ -529,19 +544,18 @@ journalctl -u gitops-deploy.service -n 40 --no-pager
 
 Expected: `ExecStart` names uv, and the journal shows the deployer running to a normal conclusion — not `203/EXEC`, not a `SyntaxError` traceback, and not a uv project-resolution error.
 
-As in Task 5, `sudo` is denied to agents. Run the same `env -i` substitute first — and here it is
-worth running it **from the unit's own `WorkingDirectory`**, since that is the directory whose
-project `--no-project` has to suppress:
+As in Task 5, `sudo` is denied to agents. Run the substitute first, from a uv project directory so
+it exercises the project-suppression path:
 
 ```bash
-cd /home/ubuntu/server && env -i HOME=/home/ubuntu USER=ubuntu \
-  PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin \
-  /usr/local/bin/uv run --no-project --python 3.14.6 python -V
+/usr/local/bin/uv run --no-project --python 3.14.6 python -V
 ```
 
-Expected: `Python 3.14.6`. Then hand the `systemctl start` to the user — do not mark this task
-complete on the substitute alone. This is the deploy pipeline; it is the one unit whose real run
-must be observed.
+Expected: `Python 3.14.6`. Verified 2026-08-16 from a repo worktree — it passes today, so a failure
+here means Task 1's install has regressed, not that the command is wrong.
+
+Then hand the `systemctl start` to the user — do not mark this task complete on the substitute
+alone. This is the deploy pipeline; it is the one unit whose real run must be observed.
 
 Then confirm the timer is still armed: `systemctl list-timers gitops-deploy* --no-pager`
 
