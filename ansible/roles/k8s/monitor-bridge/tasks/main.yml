@@ -57,3 +57,7 @@
       - deployment.yaml
     manifests_secret_files:
       - env-secret.yaml
+      # Listed here so verify_secret_keys reconciles it too — and so the three keys removed
+      # from env-secret.yaml are patched OUT of the live monitor-bridge-env Secret, which
+      # `kubectl apply` would otherwise leave behind indefinitely.
+      - credentials-secret.yaml

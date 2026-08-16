@@ -86,8 +86,10 @@ spec:
           configMap:
             name: monitor-bridge-script
         - name: credentials
+          # Deliberately NOT monitor-bridge-env: that Secret is consumed by envFrom, which
+          # injects every key it holds as an env var. See credentials-secret.yaml.j2.
           secret:
-            secretName: monitor-bridge-env
+            secretName: monitor-bridge-credentials
             defaultMode: 0440
             items:
               - key: ha_token
