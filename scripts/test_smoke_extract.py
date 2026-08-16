@@ -64,6 +64,17 @@ def test_skips_never_healthy_image():
     assert extract_changed_images(diff) == []
 
 
+def test_skips_cli_entrypoint_image():
+    # The uv base image's Cmd is ["/usr/local/bin/uv"], so a bare `docker run` invokes the CLI
+    # with no arguments: help text, exit 1. It never satisfies the boot step's "stays up, or
+    # exits 0" rule at any tag, and the karakeep manifests override `command:` anyway.
+    diff = (
+        "+karakeep_k8s_tagger_image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim"
+        "@sha256:7cf77f594be8042dab6daa9fe326f90962252268b4f120a7f5dccce4d947e6c1\n"
+    )
+    assert extract_changed_images(diff) == []
+
+
 def test_skip_list_is_repo_scoped_not_substring():
     # A different repo whose name merely contains a skipped one is still smoked.
     diff = "+    image: ghcr.io/example/couchdb-exporter:1.0\n"
