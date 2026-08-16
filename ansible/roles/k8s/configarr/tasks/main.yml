@@ -136,7 +136,9 @@
 - name: Report what the health reader makes of the reconcile
   tags: [deploy]
   ansible.builtin.command:
-    cmd: /usr/bin/python3 /opt/configarr-health/configarr_health.py
+    cmd: >-
+      /usr/local/bin/uv run --no-project --python {{ host_python_version }}
+      /opt/configarr-health/configarr_health.py
   environment:
     CONFIGARR_NAMESPACE: "{{ k8s_namespace }}"
     CONFIGARR_MAX_AGE_H: "{{ configarr_k8s_max_age_hours }}"
