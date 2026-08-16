@@ -81,10 +81,28 @@ fi
 
 # 3. A backup that reached Error state is a failure the two checks above both miss: the target
 #    stays available, and an older Completed backup keeps the freshness check green.
-ERRORED=$($KUBECTL get backups.longhorn.io \
-  -o jsonpath='{range .items[?(@.status.state=="Error")]}{.metadata.name}{" "}{end}' 2>/dev/null)
-if [[ -n "${ERRORED// /}" ]]; then
-  add "backups in Error state: ${ERRORED% }"
+#
+#    BOUNDED BY AGE, and that bound is the point. Longhorn's `retain: N` prunes only Completed
+#    backups belonging to a job that still runs, so an Error object whose owning job has been
+#    deleted is immortal: nothing in Longhorn, and nothing in the reaper (which skips any state
+#    that is not Completed), will ever remove it. Unbounded, this check re-reported the 11
+#    failures from 04:30 on 2026-08-16 on every 10-minute tick, forever — a monitor that is red
+#    for a reason no action can clear stops carrying information, and the operator learns to
+#    read past the whole message. A transient failure should page and then clear on its own.
+#
+#    Named by volume as well as object: the object IDs are opaque, and an operator seeing
+#    `backup-4a471c15` has to go look up which service just lost a backup. Error objects have an
+#    EMPTY .status.volumeName, so the attribution has to come from the metadata label.
+ERROR_CUTOFF_S=$(( $(date +%s) - {{ k3s_longhorn_backup_error_max_age_hours }} * 3600 ))
+ERRORED=$($KUBECTL get backups.longhorn.io -o json 2>/dev/null \
+  | jq -r --argjson cutoff "$ERROR_CUTOFF_S" '
+      .items[]
+      | select(.status.state == "Error")
+      | select(((.metadata.creationTimestamp // "") | try fromdateiso8601 catch 0) > $cutoff)
+      | "\(.metadata.name) (\(.metadata.labels["backup-volume"] // "volume unknown"))"' \
+  | paste -sd', ')
+if [[ -n "$ERRORED" ]]; then
+  add "backups that failed in the last {{ k3s_longhorn_backup_error_max_age_hours }}h: ${ERRORED}"
 fi
 
 # 4. Is every backed-up volume covered, or just the loud ones? Checks 2 and 3 are fleet-wide:
@@ -279,6 +297,14 @@ else
   STATUS=down
   MSG="$PROBLEMS"
 fi
+
+# Log the verdict BEFORE pushing it, unconditionally. The `|| logger` below fires only when the
+# curl itself fails, so a DOWN status that pushes successfully — the ordinary case — left no
+# trace anywhere: Kuma keeps current state only, and `probe.py alerts` / the Alert History board
+# reconstruct outage history from monitor-bridge's Loki stream, which this cron is not part of.
+# The result was that this monitor could be down all day with no record of when it started or
+# how long it lasted. promtail's node-syslog job carries this line into Loki.
+logger -t longhorn-backup-health "status=${STATUS} ${MSG}"
 
 curl -fsS --max-time 10 -G \
   --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
