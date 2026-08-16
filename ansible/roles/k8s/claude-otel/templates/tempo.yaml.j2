@@ -83,6 +83,10 @@ spec:
         - name: tempo
           image: {{ claude_otel_tempo_image }}
           args: ["-config.file=/etc/tempo/config.yaml"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
           ports:
             - name: http
               containerPort: 3200

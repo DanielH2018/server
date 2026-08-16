@@ -1,0 +1,163 @@
+"""Every workload container drops its capabilities — asserted at the CONTAINER, not the pod.
+
+A pod-level `securityContext` and a container-level one are different objects governing
+different things: `runAsUser`/`fsGroup` are pod-level, while `capabilities`,
+`allowPrivilegeEscalation` and `readOnlyRootFilesystem` only exist per container. A container
+with no `securityContext` keeps the runtime's default capability set (CHOWN, DAC_OVERRIDE,
+SETUID, SETGID, NET_RAW, ...) however locked-down the pod block looks.
+
+That distinction is why this went unnoticed. A grep for `securityContext` across the fleet
+matched the pod block and reported the templates clean, and a 2026-08-15 review recorded
+securityContext as verified across all 48 deployment templates on that basis. Five templates
+had no container block at all — loki-homelab plus four of claude-otel's — and one role
+(claude-otel) was internally inconsistent, since its kube-state-metrics manifest did carry one.
+
+Nothing else enforces this: the cluster has no PodSecurity admission labels on any namespace,
+so an absent container securityContext is simply honoured.
+
+Rendering goes through validate_k8s_manifests' own machinery rather than a second stub set, so
+this cannot drift from what that validator considers a renderable manifest.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+import yaml
+
+_REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_REPO / "scripts"))
+
+from validate_k8s_manifests import (  # noqa: E402 — needs the path insert above
+    ALL_VARS,
+    ANSIBLE,
+    BASE_CONTEXT,
+    K8S_ROLES,
+    SKIP_ROLES,
+    SHARED_TPL,
+    k8s_entries,
+    load_yaml,
+    make_env,
+    make_lookup,
+    render_or_error,
+    resolve_vars,
+    role_defaults,
+)
+from toposort import filter_by_platform  # noqa: E402
+
+_POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet", "Job", "CronJob"}
+
+# Containers that run `privileged: true`, each for a hardware reason k8s cannot express any
+# other way. Asking a privileged container to drop capabilities is meaningless — privileged
+# restores them — so these skip the two checks below and are allowlisted instead. That makes
+# the allowlist the real guard: a NEW privileged container fails until it is added here with a
+# justification, which is the decision worth forcing.
+_PRIVILEGED = {
+    # Raw USB access to the UPS; k8s has no equivalent of compose's `devices:`. Contained by a
+    # single-node pin and a loopback-only hostPort. See roles/k8s/nut/CLAUDE.md.
+    ("nut", "nut"),
+    # Registers a gRPC socket in the kubelet's device-plugin dir and hands it device file
+    # descriptors. It is privileged so the nine media workloads consuming `devic.es/dri` do
+    # not have to be.
+    ("dri-device-plugin", "generic-device-plugin"),
+    # SMART reads: the Docker cap set plus a CharDevice hostPath is not enough under k8s, as
+    # the device cgroup still refuses the open. Resolved as a deliberate trade 2026-08-10.
+    ("scrutiny", "collector"),
+}
+
+
+def _rendered_docs():
+    """(role, template name, parsed doc) for every manifest the validator would render."""
+    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
+    base = resolve_vars(base, base)
+    entries = k8s_entries()
+
+    for role_dir in sorted(d for d in K8S_ROLES.iterdir() if d.is_dir()):
+        role = role_dir.name
+        if role in SKIP_ROLES or role not in entries:
+            continue
+        ctx = {**base, **role_defaults(role, base), "container_item": entries[role]}
+        env = make_env([role_dir / "templates", SHARED_TPL])
+        env.globals["lookup"] = make_lookup(ctx)
+        env.filters["filter_by_platform"] = filter_by_platform
+
+        for tpl in sorted(role_dir.glob("templates/*.j2")):
+            if tpl.name.endswith(".sh.j2") or tpl.name.startswith("Dockerfile"):
+                continue
+            rendered, err = render_or_error(env, tpl.name, ctx)
+            if err:
+                pytest.fail(f"{role}/{tpl.name} failed to render: {err}")
+            for doc in yaml.safe_load_all(rendered):
+                if isinstance(doc, dict) and doc.get("kind") in _POD_KINDS:
+                    yield role, tpl.name, doc
+
+
+def _pod_specs(doc: dict):
+    spec = doc.get("spec", {})
+    if doc["kind"] == "CronJob":
+        spec = spec.get("jobTemplate", {}).get("spec", {})
+    return spec.get("template", {}).get("spec", {})
+
+
+def _containers():
+    """(role, template, container name, securityContext) for every container in the fleet."""
+    for role, tpl, doc in _rendered_docs():
+        pod = _pod_specs(doc)
+        for key in ("initContainers", "containers"):
+            for container in pod.get(key) or []:
+                yield (
+                    role,
+                    tpl,
+                    container.get("name", "<unnamed>"),
+                    container.get("securityContext") or {},
+                )
+
+
+def test_privileged_containers_are_allowlisted():
+    privileged = {
+        (role, name)
+        for role, _tpl, name, sc in _containers()
+        if sc.get("privileged") is True
+    }
+    assert privileged == _PRIVILEGED, (
+        "the set of privileged containers changed — added: "
+        f"{sorted(privileged - _PRIVILEGED)}, removed: {sorted(_PRIVILEGED - privileged)}. "
+        "A privileged container holds every capability regardless of what it drops, so each "
+        "one needs a justification recorded in _PRIVILEGED."
+    )
+
+
+def test_every_container_drops_all_capabilities():
+    offenders = []
+    seen = 0
+
+    for role, tpl, name, sc in _containers():
+        if (role, name) in _PRIVILEGED:
+            continue
+        seen += 1
+        dropped = (sc.get("capabilities") or {}).get("drop") or []
+        if "ALL" not in [str(d).upper() for d in dropped]:
+            offenders.append(f"{role}/{tpl}:{name}")
+
+    assert seen > 40, (
+        f"only inspected {seen} containers — the collector stopped matching"
+    )
+    assert not offenders, (
+        "these containers keep the runtime's default capability set, because a pod-level "
+        "securityContext does not grant one: " + ", ".join(sorted(offenders))
+    )
+
+
+def test_no_container_allows_privilege_escalation():
+    offenders = [
+        f"{role}/{tpl}:{name}"
+        for role, tpl, name, sc in _containers()
+        if (role, name) not in _PRIVILEGED
+        and sc.get("allowPrivilegeEscalation") is not False
+    ]
+    assert not offenders, (
+        "these containers can gain privileges through a setuid binary: "
+        + ", ".join(sorted(offenders))
+    )
