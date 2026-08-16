@@ -43,6 +43,12 @@
     name: k8s/manifests
   vars:
     manifests_service: n8n
+    # deployment-runners.yaml is a second Deployment running a second built image. Without this
+    # it was rolled by nothing: the rebuilt-image trigger keys on manifests_service (`n8n`) while
+    # image-builder records `n8n-runners`, and the rollout targets one name regardless.
+    manifests_extra_rollouts:
+      - name: n8n-runners
+        image: n8n-runners
     manifests_files:
       - pvc-files.yaml
       - networkpolicy.yaml
