@@ -47,4 +47,4 @@ media_volume_rsync_flags: "-rlptDH --delete"
 
 # busybox `stat`/`ln` are all the hardlink probe needs, and a tiny image keeps it off the
 # critical path of a cutover window.
-media_volume_probe_image: alpine:3.22
+media_volume_probe_image: alpine:3.24

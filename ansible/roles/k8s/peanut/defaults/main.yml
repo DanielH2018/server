@@ -7,7 +7,7 @@ peanut_k8s_image: brandawg93/peanut:latest@sha256:6629dce915da8b313f08b2e73dd2e5
 # peanut's image has no cp (StartError "executable file not found" at first deploy), so the
 # seed-config initContainer uses alpine instead. Same init image zigbee2mqtt and
 # home-assistant use.
-peanut_k8s_init_image: alpine:3.22
+peanut_k8s_init_image: alpine:3.24
 # Mirrors resources('0.50', '256M', '0.05', '32M') in the compose template (peanut service only —
 # the nut sidecar stays on Docker, the UPS is USB-attached to daniel-server).
 peanut_k8s_cpu_limit: "500m"

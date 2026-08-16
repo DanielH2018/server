@@ -41,7 +41,7 @@ prowlarr_k8s_flaresolverr_storage_class: longhorn-nobackup
 prowlarr_k8s_flaresolverr_size: 1Gi
 
 # busybox nc is all the isolation probe needs.
-prowlarr_k8s_probe_image: alpine:3.22
+prowlarr_k8s_probe_image: alpine:3.24
 
 # Mirrors resources('1.0', '1024M', '0.10', '128M') for prowlarr and
 # resources('2.0', '1024M', '0.10', '128M') for flaresolverr.
