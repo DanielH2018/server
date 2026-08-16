@@ -319,10 +319,18 @@ Replace `/usr/bin/python3` with `/usr/local/bin/uv run --no-project --python {{ 
 
 Run: `uv run ansible-playbook ansible/initial_setup.yml --tags fake_remux`
 
-- [ ] **Step 3: Verify the crontab took the new invocation**
+- [ ] **Step 3: Verify the deployed cron file took the new invocation**
 
-Run: `crontab -l | grep fake_remux`
-Expected: both lines name `/usr/local/bin/uv run --no-project --python 3.14.6`.
+Both jobs use `cron_file:`, so they land in `/etc/cron.d/autofix-fake-remux` and **never** appear in
+`crontab -l` — and that file is not world-readable, with `sudo` denied, so it cannot be read directly
+either. Verify by idempotence instead: re-run step 2 and require **`changed=0`** with both
+`Schedule the fake-remux …` tasks reporting `ok`. Ansible's `cron` module compares the rendered job
+line against the file's contents, so `ok` on a second run is proof the on-disk line matches the
+template — a stale file would re-report `changed`.
+
+`--check` does **not** work here: the play aborts earlier at *"sonarr has no ClusterIP in homelab"*,
+because check mode skips the `command` that looks the address up. That is the recorded
+check-mode-breaks-downstream-consumers class, not a real failure.
 
 - [ ] **Step 4: Run one by hand rather than waiting for the timer**
 
