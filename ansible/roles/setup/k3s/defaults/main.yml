@@ -189,7 +189,28 @@ k3s_longhorn_backup_prefix: longhorn
 # retry-stormed LISTs at ~60/min into the exhausted Class-C cap. Re-armed 2026-08-16
 # 00:05 UTC on fresh caps, with the structural fix (backupstore-poll-interval 0) already
 # landed and the four rate-limit-sensitive volumes moved to the R2 target.
-k3s_longhorn_backup_armed: true
+#
+# DISARMED AGAIN 2026-08-16 ~20:45 UTC — seventh cap event, and the re-arm above is what set it
+# up: fresh caps at 00:05, the daily run completed normally 03:33-03:37 (14 volumes), and the
+# legitimate per-block HEAD/LIST spend then exhausted the cap during the morning. Everything
+# after that is the same death spiral, now measured precisely rather than estimated:
+#
+#   BackupVolumeController.reconcile runs `longhorn backup ls --volume <vol>` — ONE LIST PER
+#   BackupVolume CR, and there are 36. B2 answers `AccessDenied Transaction cap exceeded`. A
+#   FAILED reconcile is requeued; a successful one is not. So the loop is driven purely by
+#   failure, and pollInterval is already 0s on both targets — the poll interval was never the
+#   thing driving it. Rate: 64-192 req/min, i.e. 92k-276k/day against a 2,500/day cap.
+#
+# That is 40-110x the entire daily allowance, which is why it cannot recover on its own and why
+# the reset alone is not a fix.
+#
+# DO NOT RE-ARM ON A TIMER. Re-arming at 00:05 on fresh caps is exactly what produced this event,
+# and doing it again reproduces it a third time: steady-state spend genuinely exceeds 2,500/day
+# (a prune round alone measured ~2,738 LISTs). Re-arm only after the spend is below the cap, or
+# after the caps are raised. The R2 target stays armed independently (k3s_longhorn_r2_armed), so
+# traefik-acme, authelia-config, home-assistant-config and zigbee2mqtt-data keep backing up
+# while this is off.
+k3s_longhorn_backup_armed: false
 
 # Daily volume backup to that target. 03:30 keeps it clear of the Kopia run and of the daily
 # secret-rotation cron. 14 retained backups per volume is two weeks of daily recovery points
