@@ -100,6 +100,22 @@ def _host_python_scripts_in_units() -> set[str]:
     return found
 
 
+def _hook_scripts_in_text(text: str) -> set[str]:
+    """The per-file half of _host_python_scripts_in_hooks, split out so it can be exercised against
+    a fixture. See test_the_scrapers_still_match_their_shapes for why that matters."""
+    found: set[str] = set()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if (
+            stripped.startswith("#")
+            or "uv run" in stripped
+            or "python3" not in stripped
+        ):
+            continue
+        found.update(re.findall(r"([\w.-]+\.py)\b", stripped))
+    return found
+
+
 def _host_python_scripts_in_hooks() -> set[str]:
     """Basenames of every repo .py a .claude/hooks/*.sh wrapper runs under a BARE python3 (the host
     interpreter, chosen for hook latency — NOT `uv run`, which would pin CI's 3.14). session-health.sh
@@ -109,15 +125,7 @@ def _host_python_scripts_in_hooks() -> set[str]:
     closes that gap the same way. Skips comment lines and `uv run` (3.14-pinned) invocations."""
     found: set[str] = set()
     for wrapper in _REPO.glob(".claude/hooks/*.sh"):
-        for line in wrapper.read_text().splitlines():
-            stripped = line.strip()
-            if (
-                stripped.startswith("#")
-                or "uv run" in stripped
-                or "python3" not in stripped
-            ):
-                continue
-            found.update(re.findall(r"([\w.-]+\.py)\b", stripped))
+        found |= _hook_scripts_in_text(wrapper.read_text())
     return found
 
 
@@ -173,6 +181,38 @@ def _cross_role_shared_imports(script: Path) -> set[str]:
     return found
 
 
+def test_the_scrapers_still_match_their_shapes() -> None:
+    """Prove the scan machinery works, independently of what live config happens to contain.
+
+    test_host_run_scripts_list_is_complete asserts `found - covered` is empty. A broken regex
+    returns an empty `found` and passes that vacuously — which is why it used to assert three
+    known script names were present. That guard is unusable during a migration whose entire
+    purpose is to remove those names one at a time, so pin the regexes to fixtures instead. This
+    keeps working after the last host script migrates and `found` is legitimately empty.
+    """
+    unit = (
+        "[Service]\n"
+        "ExecStart=/usr/bin/python3 /opt/x/alpha.py\n"
+        "ExecStart=/usr/bin/env python3 /opt/x/beta.py\n"
+        "ExecStart=/usr/bin/flock -w 180 /var/lock/l /usr/bin/python3 /opt/x/gamma.py\n"
+        # Already migrated: names uv, so it must NOT be reported as on the host interpreter.
+        "ExecStart=/usr/local/bin/uv run --no-project --python 3.14.6 /opt/x/delta.py\n"
+    )
+    assert {p.rsplit("/", 1)[-1] for p in _EXECSTART_HOST_PY.findall(unit)} == {
+        "alpha.py",
+        "beta.py",
+        "gamma.py",
+    }
+
+    hook = (
+        "#!/usr/bin/env bash\n"
+        "# python3 commented.py must be ignored\n"
+        'python3 "$(dirname "$0")/epsilon.py" 2>/dev/null\n'
+        "exec /home/u/.local/bin/uv run --no-project --python 3.14.6 /opt/x/zeta.py\n"
+    )
+    assert _hook_scripts_in_text(hook) == {"epsilon.py"}
+
+
 def test_host_run_scripts_list_is_complete() -> None:
     # The parse-guard above only covers the scripts hand-listed in HOST_RUN_SCRIPTS. This closes the
     # drift one level up (the same lockstep pattern as test_ansible_lint_scope /
@@ -180,10 +220,13 @@ def test_host_run_scripts_list_is_complete() -> None:
     # otherwise silently escape the 3.12 floor-check — the exact class that bricked the deployer on
     # 2026-07-15 (a 3.14-only `except A, B:` that passed ruff/CI but SyntaxErrors on the host).
     found = _host_python_scripts_in_units() | _host_python_scripts_in_hooks()
-    # Sanity: a broken glob/regex finding nothing would make the coverage assert vacuously pass.
-    assert {"gitops_deploy.py", "renovate_notify.py", "session-health.py"} <= found, (
-        f"expected the known host-run scripts among the unit/hook templates; found {sorted(found)}"
-    )
+    # NB: no non-empty assert here. This set is SUPPOSED to shrink to nothing — a script that no
+    # longer runs under a bare host python3 is no longer exposed to the 3.12 floor, which is the
+    # whole point of docs/host-python-314-plan.md. Asserting the three known names were still
+    # present made tasks 4, 5 and 6 of that plan literally uncommittable: prek's pytest hook is
+    # always_run, so each repoint failed the suite on the very change that made it correct.
+    # Vacuity is covered instead by test_the_scrapers_still_match_their_shapes, which pins the
+    # regex against a fixture rather than against live config that is deliberately in motion.
     covered = {Path(rel).name for rel in HOST_RUN_SCRIPTS}
     missing = found - covered
     assert not missing, (
