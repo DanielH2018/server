@@ -177,9 +177,14 @@ spec:
             - name: db
               mountPath: /metabase-data
           # Slow-booting JVM + H2 init — mirror the Docker 90s start_period as a
-          # startupProbe; no readiness beyond it (a slow dashboard must not affect the
-          # engine pod's Service endpoints for LAPI/AppSec — kubelet gates per-container
-          # anyway, and this container serves only the dashboard port).
+          # startupProbe. NOTE: this does NOT isolate the dashboard from LAPI/AppSec, as
+          # was once assumed here. Pod Ready is the AND of all containers, and a container
+          # with no readinessProbe counts Ready only once its startupProbe passes — so a
+          # slow metabase withholds the crowdsec Service endpoints that front LAPI/AppSec.
+          # Observed 2026-08-16: LAPI was serving while the pod sat 1/2 with no endpoints.
+          # Isolating it properly means a separate Deployment, which is not free — metabase
+          # mounts the same RWO `db` PVC as the engine. The edge tolerates the gap instead,
+          # via updateMaxFailure in the bouncer middleware (k8s/traefik dynamic.yaml.j2).
           startupProbe:
             httpGet:
               path: /

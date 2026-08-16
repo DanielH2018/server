@@ -105,6 +105,21 @@ spec:
       crowdsecLapiHost: "crowdsec:{{ crowdsec_k8s_lapi_port }}"
       crowdsecMode: stream
       updateIntervalSeconds: 60
+      # Consecutive failed stream polls tolerated before the plugin declares the stream
+      # unhealthy. The plugin's default is 0 — ONE missed poll flips it, and an unhealthy
+      # stream is a blanket 403 for every IP (bouncer.go ServeHTTP: "if we cannot join the
+      # stream we forbid the request to go on"), which is a self-inflicted edge outage, not
+      # a security control. This Deployment is replicas:1 + strategy:Recreate on an RWO PVC,
+      # so a LAPI gap on every roll is EXPECTED, not exceptional: 2026-08-16 a routine
+      # crowdsec roll took the whole fleet 403 for 2 minutes.
+      #
+      # 5 ≈ 6 min of tolerance, which covers a roll whose metabase image pull is cold.
+      # Safe because the cache lookup happens BEFORE this health gate: an IP already in the
+      # decision cache is still blocked, and AppSec below still inspects inline. Only a
+      # NEWLY added ban is delayed by up to the tolerance window. Not -1 (never flip) — a
+      # permanently dead LAPI must still eventually fail closed rather than serve a
+      # silently frozen ban-list forever.
+      updateMaxFailure: 5
       # AppSec Component — inline L7 WAF. stream mode above is the reactive ban-list (bans
       # an IP after a pattern of log lines); this inspects each request inline BEFORE the
       # backend, so a first-hit malicious payload (CVE string / SQLi / path traversal) is
