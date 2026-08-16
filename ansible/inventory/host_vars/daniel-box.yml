@@ -54,8 +54,14 @@ containers_list:
   # Slice 6, B1. BEFORE traefik deliberately: the traefik pod carries a crowdsec agent
   # sidecar that logs into this engine's LAPI, and the machine credential is registered by
   # a post-deploy task in this role — so the engine must be up (and the machine exist)
-  # before a traefik rollout starts the sidecar. Safe on fresh bring-up: this role uses no
-  # Traefik CRDs (the LAPI IngressRoute arrives at B2, after traefik has installed them).
+  # before a traefik rollout starts the sidecar. This ordering is asserted by
+  # ansible/tests/test_containers_list_ordering.py, which also holds the reason.
+  #
+  # The claim this comment used to make -- "safe on fresh bring-up: this role uses no
+  # Traefik CRDs" -- stopped being true when the LAPI IngressRoute landed at B2 and moved
+  # into this role. It renders one, ahead of traefik installing the CRDs. Harmless on the
+  # running cluster, where they already exist; on a rebuild this role's apply is the one
+  # first-run ordering cost we accept, because the credential constraint above outranks it.
   - name: crowdsec
     platform: k8s
     # B2 (D3): the LAPI's LAN face — daniel-server's demoted agent + its traefik bouncer
