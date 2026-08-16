@@ -46,3 +46,17 @@ autokuma_k8s_mem_request: 32Mi
 # new monitor cannot be added without one (the GitOps tile was the known instance; the gap was
 # every push monitor).
 kuma_push_resend_interval_minutes: 360
+
+# One monitor is held at 0, deliberately and temporarily.
+#
+# `k3s Longhorn Backup` has been DOWN since 04:30 on 2026-08-16 and cannot come back on its own:
+# the weekly tier has never completed a backup, so all 22 sharded volumes report as uncovered,
+# and the earliest any shard can clear is its next weekly run. It also notifies email, not just
+# Discord. Turning on a 6-hourly resend against a condition with no available action is how the
+# channel gets muted, which costs the NEXT alert — the same reasoning that set 360 everywhere
+# else, pointed the other way.
+#
+# LIFT THIS when the first weekly-backup-dN run completes and the tile goes green: delete the
+# override, delete the entry in test_kuma_static_monitors.py's held set, redeploy uptime-kuma.
+# It is a hold, not a revert — the fleet-wide 360 above is unchanged.
+kuma_longhorn_backup_resend_interval_minutes: 0

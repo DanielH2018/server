@@ -173,7 +173,7 @@ stringData:
   cloudflare-ddns-direct-push.json: |
     {"type": "push", "name": "Cloudflare DDNS Direct", "interval": 300, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ cloudflare_ddns_direct_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   longhorn-backup.json: |
-    {"type": "push", "name": "k3s Longhorn Backup", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ longhorn_backup_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "k3s Longhorn Backup", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_longhorn_backup_resend_interval_minutes }}, "push_token": "{{ longhorn_backup_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   daniel-box-disk.json: |
     {"type": "push", "name": "daniel-box Disk", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ daniel_box_disk_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   claude-otel-health.json: |

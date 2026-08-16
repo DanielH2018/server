@@ -60,8 +60,15 @@ STUBS = {
     "pi_sd_health_push_token": "t" * 32,
     "pi_recovery_push_token": "t" * 32,
     "secret_rotation_push_token": "t" * 32,
-    "kuma_push_resend_interval_minutes": 360,
 }
+
+# The resend intervals come from the role's real defaults, not from a stub. Stubbing them would
+# make every assertion below a statement about this file rather than about what deploys — the
+# same "measured the wrong artifact" shape these guards exist to catch. A stubbed 360 would have
+# reported a healthy resend on a monitor the role actually holds at 0.
+ROLE_DEFAULTS = yaml.safe_load(
+    (ANSIBLE / "roles/k8s/uptime-kuma/defaults/main.yml").read_text()
+)
 
 
 def _entities() -> dict[str, dict]:
@@ -70,7 +77,7 @@ def _entities() -> dict[str, dict]:
         trim_blocks=True,
         keep_trailing_newline=True,
     )
-    rendered = env.get_template(TEMPLATE.name).render(**STUBS)
+    rendered = env.get_template(TEMPLATE.name).render(**{**ROLE_DEFAULTS, **STUBS})
     doc = yaml.safe_load(rendered)
     return {name: json.loads(body) for name, body in doc["stringData"].items()}
 
@@ -109,6 +116,19 @@ def test_push_monitors_never_retry():
         )
 
 
+# Monitors deliberately held at resendInterval 0, with the condition that lifts each hold. A
+# hold is for a tile that is down, cannot recover without an event no operator controls, and
+# would otherwise resend into a channel until it gets muted. Enumerated here rather than left to
+# the template so that adding one is a visible decision and forgetting to remove one is a test
+# that keeps naming it.
+RESEND_HELD = {
+    # Down since 04:30 2026-08-16; the weekly tier has never completed a backup, so every
+    # sharded volume reports uncovered until the first weekly-backup-dN run succeeds. Notifies
+    # email as well as Discord. LIFT: first green weekly shard run.
+    "k3s Longhorn Backup",
+}
+
+
 def test_push_monitors_re_notify_while_still_down():
     # Kuma's `resendInterval` default is 0, meaning "notify once on the down transition, then
     # never again". Every push monitor here ran that way until 2026-08-16: the Longhorn backup
@@ -119,6 +139,12 @@ def test_push_monitors_re_notify_while_still_down():
         if entity["type"] != "push":
             continue
         resend = entity.get("resendInterval")
+        if entity.get("name") in RESEND_HELD:
+            assert resend == 0, (
+                f"{name} is in RESEND_HELD, so it must be held at 0 — a hold that drifts to a "
+                f"non-zero value is worse than no hold, got {resend!r}"
+            )
+            continue
         assert isinstance(resend, int) and resend > 0, (
             f"{name}: push monitor needs a non-zero resendInterval or a sustained outage "
             f"pages exactly once, got {resend!r}"
