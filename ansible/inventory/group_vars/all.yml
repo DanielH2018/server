@@ -24,6 +24,12 @@ cloudflare_ips:
   - "2a06:98c0::/29"
   - "2c0f:f248::/32"
 
+# Exact patch, not `3.14`. uv resolves a bare minor to whatever it already has, which is how the
+# two hosts ended up on 3.14.6 and 3.14.5 with nothing asking for either. Eighteen host scripts
+# run on this, and they must be the same interpreter on both machines. The minor must track
+# .python-version — ansible/tests/test_host_python_pin.py enforces both halves.
+host_python_version: "3.14.6"
+
 # Linux Vars
 sys_user: ubuntu
 tz: America/Chicago
@@ -129,6 +135,58 @@ k8s_rollout_stabilise_seconds: 60
 # has been bitten by Longhorn under exactly that kind of load (the retry storm, the seed-pod
 # Multi-Attach abort). Widen only against a measured run.
 k8s_rollout_batch_width: 5
+
+# Opt-in no-mutation mode for the k8s plane: `-e k8s_dry_run=true`, or `scripts/deploy.sh
+# --dry-run`. Renders every manifest to a temp dir and runs `kubectl apply --dry-run=server`
+# against the LIVE API server, so CRDs, admission and schema defaulting all judge the manifests
+# for real, then throws the temp dir away. Nothing is staged, applied, patched or rolled.
+#
+# This is deliberately weaker than a staging cluster and stronger than `--check`: --check skips
+# the apply entirely (the command module no-ops), so the manifests are never seen by an API
+# server at all, and its skipped tasks break downstream consumers besides. Dry-run catches
+# render bugs, bad apiVersions/field names, CRD-ordering mistakes and schema drift. It does NOT
+# catch scheduling, PVC binding, probe or rollout behaviour — that needs a real cluster.
+#
+# Global rather than a role default: deploy.yml's own pre_tasks apply the namespace, so the
+# flag must be visible before any role runs.
+k8s_dry_run: false
+# "This run must not change the cluster", whichever mode asked for it. `--check` and
+# k8s_dry_run want the same tasks skipped for different reasons, and a role that guards only
+# one of them is guarded against neither in practice — image-builder was fully `--check`-clean
+# and would still have built and PUSHED an image under a dry run.
+k8s_no_mutate: "{{ ansible_check_mode or (k8s_dry_run | bool) }}"
+# Roles that mutate the cluster OUTSIDE roles/k8s/manifests and are therefore not covered by
+# the flag — sidecar ConfigMaps built with `kubectl create`, netpol-probe Jobs deleted and
+# recreated, `exec -i` piping config into a live pod, image builds pushed to the registry,
+# seed-volume scaling Deployments to zero. Dry-running these would half-apply: the manifest
+# apply is suppressed while the side-car mutation still fires.
+#
+# deploy.yml asserts against this list and REFUSES the run rather than half-applying. Shrinking
+# it means guarding a role's own kubectl calls on k8s_no_mutate and deleting its entry.
+#
+# The refusal keys on `ansible_run_tags`, so it only reaches roles the operator NAMES. That is
+# sound for every role below because none of them is reachable as a dependency — verified by
+# test_k8s_dry_run.py, since the k8s roles carry no meta/main.yml and include one another only
+# by literal name. `seed-volume` and `image-builder` ARE reachable that way (25 and 7 callers),
+# which is why they are guarded internally on k8s_no_mutate instead of listed here.
+k8s_dry_run_unsupported:
+  - autofix-bridge
+  - claude-otel
+  - configarr
+  - crowdsec
+  - headlamp
+  - loki-homelab
+  - media-volume
+  - monitor-bridge
+  - n8n
+  - n8n-images
+  - pihole
+  - prowlarr
+  - registry
+  - sonarr
+  - terraria-stats
+  - traefik
+  - valheim-stats
 
 # Telemetry lives apart from the service workloads. Global rather than a role default because
 # TWO roles need it: claude-otel puts its workloads here, and the traefik role must list it

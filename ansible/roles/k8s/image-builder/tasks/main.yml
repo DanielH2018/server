@@ -7,6 +7,15 @@
 # them, where it would drift.
 #
 # Callers set image_builder_name / _dockerfile / _context / _tag; see defaults/main.yml.
+#
+# UNDER --check the BUILD is skipped and the three REGISTRY READS still run. Building and pushing
+# an image is the most mutating thing in this play, so a dry run must not do it; but the reads
+# are HTTP GETs against the registry, and running them is what keeps check mode honest. With no
+# build, the pre- and post-build digests are read from the same unchanged tag and compare equal,
+# so `k8s_rebuilt_images` correctly stays empty and no workload is queued for a rollout.
+#
+# Left unguarded, every dry run reached "Fail on an unsuccessful build" — check mode skips the
+# Job apply, so nothing ever succeeded — and failed the whole play with an empty build log.
 
 - name: Assert the builder was given something to build
   tags: [config]
@@ -48,6 +57,7 @@
 
 - name: Apply the build context for {{ image_builder_name }}
   tags: [deploy]
+  when: not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl apply -f
@@ -72,12 +82,15 @@
     status_code: [200, 404]
   register: image_builder_digest_before
   changed_when: false
+  # Reads only, and its counterpart below reads the same tag — see the header.
+  check_mode: false
 
 # A Job's pod template is immutable, so an existing Job cannot be re-applied — and re-applying
 # a COMPLETED one would report success from the previous run's result, which is the failure
 # this whole role exists to make impossible.
 - name: Clear the previous build of {{ image_builder_name }}
   tags: [deploy]
+  when: not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} delete job build-{{ image_builder_name }}
@@ -87,6 +100,7 @@
 
 - name: Build and push {{ image_builder_name }}
   tags: [deploy]
+  when: not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl apply -f
@@ -99,6 +113,7 @@
 # assert below is what turns "finished" into "succeeded".
 - name: Wait for the build to finish for {{ image_builder_name }}
   tags: [deploy]
+  when: not k8s_no_mutate
   ansible.builtin.shell:
     cmd: >-
       set -o pipefail &&
@@ -112,6 +127,11 @@
 
 - name: Read the build result for {{ image_builder_name }}
   tags: [deploy]
+  # Skipped WITH the build rather than run as a read: it reads the Job the tasks above create,
+  # and in a no-mutation run there is none. The two consumers below therefore lead with
+  # `not k8s_no_mutate` — Ansible short-circuits a `when` list, so that clause is what keeps
+  # them from dereferencing this task's absent stdout.
+  when: not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get job build-{{ image_builder_name }}
@@ -125,7 +145,9 @@
 # operator to find after it is gone.
 - name: Show the failed build log for {{ image_builder_name }}
   tags: [deploy]
-  when: image_builder_result.stdout | trim != "1"
+  when:
+    - not k8s_no_mutate
+    - image_builder_result.stdout | trim != "1"
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} logs job/build-{{ image_builder_name }} --tail=50
@@ -136,7 +158,9 @@
 
 - name: Fail on an unsuccessful build of {{ image_builder_name }}
   tags: [deploy]
-  when: image_builder_result.stdout | trim != "1"
+  when:
+    - not k8s_no_mutate
+    - image_builder_result.stdout | trim != "1"
   ansible.builtin.fail:
     msg: >-
       Building {{ image_builder_name }}:{{ image_builder_tag }} failed. Last lines of the build
@@ -154,6 +178,11 @@
   register: image_builder_tags
   failed_when: image_builder_tag not in (image_builder_tags.json.tags | default([]))
   changed_when: false
+  # Runs under --check, where it asserts something slightly weaker but still worth knowing: the
+  # registry serves the tag the manifests reference. Only a host that has never built this image
+  # fails here in check mode, and "the registry has no {{ image_builder_name }}" is a true and
+  # useful thing for a dry run to say.
+  check_mode: false
 
 - name: Read the post-build digest of {{ image_builder_name }}
   tags: [deploy]
@@ -165,6 +194,7 @@
     status_code: [200]
   register: image_builder_digest_after
   changed_when: false
+  check_mode: false
 
 # Play-scoped, like k8s_pending_rollouts and for the same reason: k8s/manifests runs as a
 # separate role include and cannot read this role's variables. It reads this list to decide

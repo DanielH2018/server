@@ -2,7 +2,7 @@
 # janitorr cleanup-error heartbeat — managed by Ansible (k8s/janitorr role); edits overwritten.
 #
 # Thin on purpose. Everything that decides up-or-down is in janitorr_health.py + its pure core,
-# which are plain files with unit tests and a 3.12 floor check; this exists only because the Kuma
+# which are plain files with unit tests; this exists only because the Kuma
 # push token has to be templated in, and a secret-carrying file should hold as little logic as
 # possible. Same shape as configarr-health.sh and longhorn-backup-health.sh.
 #
@@ -31,7 +31,7 @@ PUSH_URL="https://${KUMA_HOST}/api/push/{{ monitor_bridge_janitorr_push_token }}
 # The reader prints `up<TAB>msg` or `down<TAB>msg` and always exits 0. A nonzero exit or empty
 # output therefore means the reader ITSELF broke — report that rather than pushing nothing, which
 # would leave the monitor to time out with no explanation.
-if ! OUT=$(/usr/bin/python3 /opt/janitorr-health/janitorr_health.py 2>&1) || [[ -z "$OUT" ]]; then
+if ! OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/janitorr-health/janitorr_health.py 2>&1) || [[ -z "$OUT" ]]; then
   STATUS=down
   MSG="janitorr health reader failed: ${OUT:-(no output)}"
 else

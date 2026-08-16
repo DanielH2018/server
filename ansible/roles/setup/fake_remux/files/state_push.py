@@ -12,8 +12,8 @@ monitor-bridge reads it over a `:ro` bind mount, which stops working the moment 
 host. `disk_prune`, `fake_remux`, `fake_remux_replace`, `verify`, `pi_peers` and half a dozen more
 in check.py are all literally this shape, so the port is a parameter, not a rewrite.
 
-Runs under daniel-box's /usr/bin/python3 (3.12 floor — see ansible/tests/test_host_scripts_py312.py).
-Carries no secrets: the push URL lives in the templated wrapper.
+Runs on daniel-box via `uv run --no-project --python <pin>` (host_python_version in
+ansible/inventory/group_vars/all.yml). Carries no secrets: the push URL lives in the templated wrapper.
 
 Usage: state_push.py <label> <state-file> <max-age-hours> [<label> <state-file> <max-age-hours> ...]
 """

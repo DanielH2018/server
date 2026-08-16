@@ -69,6 +69,10 @@
   register: traefik_k8s_lb_ip
   become: true
   changed_when: false
+  # Runs under --check too: this only reads. Without it the command is skipped, stdout is
+  # empty, `until` can never match, and the run dies after 12 pointless retries — taking the
+  # VIP assertion below with it, which is the one thing --check could usefully have checked.
+  check_mode: false
   retries: 12
   delay: 5
   until: traefik_k8s_lb_ip.stdout | length > 0

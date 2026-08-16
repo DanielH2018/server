@@ -54,6 +54,13 @@ _SKIP_BARE_BOOT = frozenset(
         # master-web boots but its healthcheck needs the influxdb sidecar (observed run
         # 31731079802). Repository-level match also skips master-collector.
         "ghcr.io/analogj/scrutiny",
+        # Entrypoint is the `uv` binary, not an interpreter: with no arguments it prints its
+        # help and exits 1 (observed run 31972614283). That breaks the boot step's stated
+        # assumption that a base image "runs a REPL that exits 0 on EOF" — true of
+        # python:*-alpine, false here — so a bare boot of this image can never pass, at any
+        # tag. Nothing is lost by skipping: the three karakeep manifests that use it all
+        # override `command:`, so the bare entrypoint is not what runs in the cluster.
+        "ghcr.io/astral-sh/uv",
     }
 )
 
