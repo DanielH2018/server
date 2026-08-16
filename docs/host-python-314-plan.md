@@ -452,7 +452,23 @@ sudo systemctl start renovate-notify.service
 systemctl status renovate-notify.service --no-pager | tail -20
 ```
 
-Expected: `ExecStart` names uv, and the run completes without `203/EXEC` or a `SyntaxError`. If `sudo` is unavailable in your session, ask the user to run the start — do not skip the verification.
+Expected: `ExecStart` names uv, and the run completes without `203/EXEC` or a `SyntaxError`.
+
+`sudo` **is** denied to Claude sessions in this repo, so `systemctl start` is not runnable by an
+agent. Do not skip the verification and do not claim it passed. Use this sudo-free substitute,
+which reproduces what systemd will actually do, and then ask the user to run the real start:
+
+```bash
+# Both units run as User=ubuntu, so systemd sets HOME=/home/ubuntu and uv finds the
+# user-installed interpreter. Reproduce that environment exactly rather than inheriting
+# an interactive shell's, which would hide a missing HOME/PATH dependency.
+cd / && env -i HOME=/home/ubuntu USER=ubuntu PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin \
+  /usr/local/bin/uv run --no-project --python 3.14.6 python -V
+```
+
+Expected: `Python 3.14.6`. This proves the interpreter resolves under systemd's environment, which
+is the failure mode that matters; it does not prove the script itself runs, which the user's
+`systemctl start` does.
 
 - [ ] **Step 4: Commit**
 
@@ -493,6 +509,12 @@ ExecStart=/usr/bin/flock -w 180 /var/lock/server-git-tree.lock /usr/local/bin/uv
 
 Leave the `flock` invocation, its timeout and the lock path exactly as they are — that lock is what stops the pipeline interleaving with a manual deploy.
 
+**`--no-project` is load-bearing here specifically.** This unit sets
+`WorkingDirectory=/home/{{ sys_user }}/server` (line 17), and that directory *is* a uv project.
+Without `--no-project`, uv would resolve that project's environment instead of the pinned
+interpreter — and it would still run, just not on 3.14.6, which is the silent-wrong-interpreter
+failure this plan is trying to make impossible. Task 7's guard asserts the flag is present.
+
 - [ ] **Step 3: Deploy**
 
 Run: `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy`
@@ -506,6 +528,20 @@ journalctl -u gitops-deploy.service -n 40 --no-pager
 ```
 
 Expected: `ExecStart` names uv, and the journal shows the deployer running to a normal conclusion — not `203/EXEC`, not a `SyntaxError` traceback, and not a uv project-resolution error.
+
+As in Task 5, `sudo` is denied to agents. Run the same `env -i` substitute first — and here it is
+worth running it **from the unit's own `WorkingDirectory`**, since that is the directory whose
+project `--no-project` has to suppress:
+
+```bash
+cd /home/ubuntu/server && env -i HOME=/home/ubuntu USER=ubuntu \
+  PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin \
+  /usr/local/bin/uv run --no-project --python 3.14.6 python -V
+```
+
+Expected: `Python 3.14.6`. Then hand the `systemctl start` to the user — do not mark this task
+complete on the substitute alone. This is the deploy pipeline; it is the one unit whose real run
+must be observed.
 
 Then confirm the timer is still armed: `systemctl list-timers gitops-deploy* --no-pager`
 
