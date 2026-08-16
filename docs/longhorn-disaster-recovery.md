@@ -79,6 +79,17 @@ the per-volume map and each exclusion's rationale:
 - **Weekly tier** (all 21 B2 volumes since the 2026-08-16 sharding, retain 4): up to a week
   old, each volume on its own weekday (~3/day — B2's 2,500/day transaction caps couldn't
   absorb a batch). Acceptable by design — configs, largely regenerable.
+
+  > **Transitional until roughly 2026-09-13, and worse than the line above reads.** "retain 4"
+  > is the steady state; depth builds one backup per volume per week from the volume's first
+  > shard run. As of 2026-08-16 it is **zero** — no weekly-tier backup has ever completed
+  > (the tier was created 2026-08-12 and every attempt has failed), so each of these volumes
+  > has exactly one recovery point: the frozen `daily-backup` object it kept from before it
+  > moved tier. Restoring one of them today restores that date, not "up to a week old".
+  >
+  > Those frozen dailies are load-bearing until the weekly tier produces something —
+  > `/usr/local/bin/longhorn-reap-orphan-backups.sh` refuses to touch a volume whose current
+  > tier has produced nothing, for exactly this reason. Do not delete them by hand.
 - **No-backup** (16 volumes): rebuilt, not restored. The notable rebuild paths:
   uptime-kuma (recreate the first-run admin by hand; AutoKuma backfills monitors from the
   static-monitors Secret; history is gone), scrutiny (TSDB refills from collector runs),

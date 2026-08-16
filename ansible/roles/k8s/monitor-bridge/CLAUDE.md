@@ -10,8 +10,12 @@
 > without its gate, and `test_checks_and_env_secret_push_tokens_agree` asserts the
 > env-secret carries exactly the token set the code reads. Much of the per-check
 > documentation below predates the moves — Docker-era plumbing details (compose, bind
-> mounts, networks) are history (`roles/containers/archive/monitor-bridge/`), but each
-> check's behavior and thresholds are documented accurately.
+> mounts, networks) are history (`roles/containers/archive/monitor-bridge/`).
+>
+> **`files/check.py`'s `CHECKS` list is the authority on which checks exist.** This file is
+> prose and nothing tests it: until 2026-08-16 the three retired above were still written up
+> here in the present tense, as live checks with unit-tested pure functions, four weeks after
+> the functions were deleted. If a bullet below disagrees with `CHECKS`, `CHECKS` is right.
 
 A tiny sidecar that turns host-cron state files into Uptime Kuma **push** monitors, so
 threshold problems actually page. See repo-root `CLAUDE.md`. (The kopia backup checks
@@ -137,14 +141,11 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     design, so only sustained behind-ness is a fault. hold/diverged are reported ahead of it — they
     name the cause where "behind" names the symptom. Pure `gitops_status()`/`_parse_behind()` are
     unit-tested; an unparseable marker reads as not-behind rather than paging forever on garbage.)
-  - **WG Pi Peer Backup** (reads `/pi-peers/state.json`, written daily by the **wg-easy** role's
-    daniel-server `wg-easy-pull-pi-peers.sh` host cron — `down` on a FAILED pull (Pi unreachable /
-    SSH-sudo break / file-count floor tripped), >2.5 d staleness, or a missing/corrupt state file.
-    The pull rsyncs the Pi's un-rebuildable WireGuard peer keys into backup scope; it uses **no
-    `--delete`**, so a silently-failing pull leaves the last-good copy in place while the peers go
-    stale. This is the dedicated watchdog for that gap (added 2026-07-05 — it was the one backup
-    cron with no monitor). Same state-file idiom as DOCKER-USER Origin Lock / Cloudflare IP Drift;
-    pure `pi_peers()` is unit-tested.)
+  - **WG Pi Peer Backup** — RETIRED from this container at the host flips (2026-08-14). The pull
+    became the `pi-peer-backup` k8s CronJob, which pushes its Kuma monitor directly, so there is
+    no `/pi-peers/state.json` on this host and no `pi_peers()` check here. The monitor and the
+    gap it watches are unchanged: the rsync uses no `--delete`, so a silently-failing pull leaves
+    the last-good copy in place while the Pi's un-rebuildable WireGuard peer keys go stale.
   - **CrowdSec Home Allowlist** — RETIRED from this container at slice-6 B2 (2026-08-09). `cscli
     allowlists` is LAPI-machine-only, so the updater cron followed the LAPI into the cluster
     (`roles/k8s/crowdsec`) and pushes the Kuma monitor directly from daniel-box; there is no
@@ -156,14 +157,10 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     drift checks guarded the legacy Traefik@docker; the CrowdSec AppSec verifier has re-homed to
     daniel-box as a root cron pushing the same "CrowdSec AppSec" Kuma monitor directly from
     `roles/k8s/crowdsec/templates/crowdsec-appsec-verify.sh.j2`.
-  - **Disk Autoprune** (reads `/autofix-disk/state.json`, written hourly by the **autofix-bridge**
-    role's disk-prune host cron — `down` on a FAILED prune command (docker image/builder/container
-    prune erroring), >3 h staleness (cron broken / never ran), or a missing/corrupt state file. The
-    cron conservatively reclaims dangling images/build cache/stopped containers (never `-a`, never
-    volumes) when `/` used% crosses a threshold, keeping Root Disk from ever needing a manual prune
-    as image churn grows. A disk still full of real data after a clean prune is Root Disk's alert,
-    not this one — single-purpose monitors, no double-paging. Same state-file idiom as
-    WG Pi Peer Backup; pure `disk_prune()` is unit-tested.)
+  - **Disk Autoprune** — RETIRED at the Docker uninstall (2026-08-14), with no successor. The
+    cron pruned daniel-server's Docker daemon, which no longer exists; containerd's own image GC
+    owns that concern now (`files/check.py:167-170`). Root Disk's threshold pager is what is
+    left on that axis — alerting without remediation, deliberately.
   - **Fake Remux Scan / Fake Remux Replace** — no longer bridge checks. The detector +
     reconciler crons moved to daniel-box with the media stack (2026-08-08, slice 4 B7c;
     `roles/setup/fake_remux`), and their Kuma pushes go directly from that host via
@@ -284,11 +281,11 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     pages. Empty `HA_URL`/`HA_TOKEN` = disabled (stays up). Pure `ha_heartbeat_fresh()` + the
     streak wrapper are unit-tested.
     Spec: `docs/superpowers/specs/2026-06-19-ha-automation-heartbeat-watchdog-design.md`.)
-  - **Renovate Notifier — Alive** (reads `/renovate-state/last_run`, a bind-mounted host
-    timestamp the `renovate_notify` daily timer rewrites each clean run; `down` once it's
-    older than `RENOVATE_MAX_AGE_MIN` (2160 = 36 h, one missed daily run + slack) — i.e. the
-    notifier stalled / host down. Same state-file dead-man's-switch pattern as the GitOps
-    monitors. Spec: `docs/superpowers/specs/2026-06-19-renovate-manual-action-notifier-design.md`.)
+  - **Renovate Notifier — Alive** — RETIRED from this container at the host flips (2026-08-14).
+    The notifier pushes its own Kuma monitor from an `ExecStartPost` now, so there is no
+    `/renovate-state/last_run` bind mount and no `renovate_alive()` check here. The monitor and
+    its dead-man semantics are unchanged.
+    Spec: `docs/superpowers/specs/2026-06-19-renovate-manual-action-notifier-design.md`.
   - **Loki Reachable** (a fixed `/loki/api/v1/labels` probe — the root-cause GATE for the
     Loki-querying checks, the peer of Prometheus Reachable. Evaluated each cycle: when Loki is
     unreachable the `LOKI_DEPENDENT` check (loki_ingestion) is
@@ -431,7 +428,11 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
   so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
   silence remains the alerting path; the healthcheck adds auto-recovery.
-- Push tokens (`monitor_bridge_{disk,cert,mem,restarts,oom,cpu,targets,traefik,prometheus,n8n,arr_queue,prowlarr_indexers,gitops_alive,gitops_status,scrutiny,ups,pi,pi_peers,docker_user,cloudflare_drift,appsec,b2_reachable,ha,renovate_alive,loki,loki_reachable,promtail_dropped,disk_prune,fake_remux,fake_remux_replace,discord}_push_token`)
+- Push tokens — 29 of them, and **`templates/env-secret.yaml.j2`'s `KUMA_PUSH_*` keys are the
+  list**; no test reads this prose, so treat the names below as a reading aid that can go stale
+  rather than as the source of truth. (It had: it carried eight tokens retired at the
+  2026-08-14 host flips and was missing six added since.) As of 2026-08-16:
+  `monitor_bridge_{arr_queue,b2_reachable,b2_storage,cert,cluster_prometheus,cluster_targets,cpu,discord,disk,gitops_alive,gitops_status,ha,k8s_workloads,loki,loki_reachable,mem,n8n,oom,pi,prometheus,promtail_dropped,prowlarr_indexers,r2_usage,restarts,scrutiny,targets,traefik,traefik_latency,ups}_push_token`
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -451,14 +452,10 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   Prometheus/Kopia/n8n source. That dir must exist owned by the deploy user before deploy; the
   `gitops_deploy` role creates it, so deploy `gitops_deploy` before `monitor-bridge` (else Docker
   auto-creates the mount source root-owned and the non-root container can't read it).
-- Similarly, the **Renovate Notifier — Alive** monitor bind-mounts
-  `/var/lib/renovate-notify:/renovate-state:ro` (written by the `renovate_notify` daily timer).
-  Deploy `renovate_notify` before `monitor-bridge` for the same reason — so the dir is created
-  and owned by the deploy user, not root.
-- Likewise, the **WG Pi Peer Backup** monitor bind-mounts `/var/lib/wg-easy-pi-peers:/pi-peers:ro`
-  (written by the `wg-easy` role's daniel-server pull cron). The `wg-easy` role creates that dir
-  sys_user-owned (and its file task re-chowns it if Docker got there first), so deploy `wg-easy`
-  before `monitor-bridge` on a fresh host.
+  (The **Renovate Notifier — Alive** and **WG Pi Peer Backup** monitors had the same
+  deploy-ordering requirement, for `/renovate-state` and `/pi-peers`. Both dissolved into direct
+  pushers at the 2026-08-14 host flips, so neither mount nor either ordering constraint exists
+  now.)
 - The **Cloudflare IP Drift** monitor's
   `/var/lib/cloudflare-ip-drift:/cloudflare-drift:ro` mount (written weekly by the `traefik` role's
   `cloudflare-ip-drift.sh`, seeded once on deploy) is created sys_user-owned by that role, which
@@ -467,11 +464,9 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   every 15 min by the same role's `appsec-verify.sh`, seeded once on deploy) follows the same
   ordering — but that dir is **root-owned** (the verify cron runs as root via `docker exec`, like
   `docker-user-verify.sh`), and the script `chmod 0644`s its state file for the non-root reader.
-- The **Disk Autoprune** monitor bind-mounts `/var/lib/autofix-disk-prune:/autofix-disk:ro`
-  (written by the `autofix-bridge` role's hourly disk-prune cron). That role creates the dir
-  sys_user-owned, so on a fresh host deploy `autofix-bridge` before `monitor-bridge` (else Docker
-  auto-creates the mount source root-owned and the non-root container can't read it). The **Fake
-  Remux Scan** monitor's `/var/lib/autofix-fake-remux:/fake-remux:ro` mount (written daily by the
+- (The **Disk Autoprune** monitor bind-mounted `/var/lib/autofix-disk-prune:/autofix-disk:ro`
+  and required `autofix-bridge` to deploy first. Retired with the Docker daemon on 2026-08-14 —
+  no mount, no ordering constraint.) The **Fake Remux Scan** monitor's `/var/lib/autofix-fake-remux:/fake-remux:ro` mount (written daily by the
   same role's `fake_remux_scan.py` cron, seeded once on deploy) is created the same way with the
   same ordering. The **Fake Remux Replace** monitor reuses that same mount — its
   `fake_remux_replace.py` cron writes `replace_state.json` into the same directory.
@@ -490,8 +485,10 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 ## Operator prerequisites
 1. Add a push token to `secrets.yml` (`sops ansible/vars/secrets.yml`) for every `KUMA_PUSH_*`
-   entry in `templates/env-secret.yaml.j2` — a test asserts that set matches what `check.py`
-   reads, so the template is the list. **They must
+   entry in `templates/env-secret.yaml.j2` — `test_every_push_token_env_is_wired_to_a_monitor`
+   asserts that template's keys match the AutoKuma monitors, so the template is the list. (It
+   does not read this file; the token names quoted above are prose and have drifted before.)
+   **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others, e.g. `openssl rand -hex 16`);
    AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
 2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI

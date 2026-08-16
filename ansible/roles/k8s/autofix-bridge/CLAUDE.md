@@ -21,6 +21,7 @@ sidecar per fix. See repo-root `CLAUDE.md`.
 - **Depends on:** sonarr, radarr, uptime-kuma (`meta/deps.yml`)
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 - **Spec:** `docs/superpowers/specs/2026-07-06-autofix-bridge-disk-autoprune-design.md`
+  (historical — its disk-autoprune half retired 2026-08-14, see the host plane below)
 
 ## Autonomous-role contract (it changes state with no human in the loop)
 This is a **change-producing autonomous role** — its authority is written down so a future edit can't
@@ -30,8 +31,8 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
   nothing else. **Never** `docker prune -a`, **never** volumes, **never** a delete before the
   replacement is ffprobe-verified genuine, **never** a legit in-progress download (VPN/client-outage
   patterns are held out).
-- **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live) · disk
-  `autofix_disk_dry_run` · fake-remux `FAKE_REMUX_REPLACE_MODE` (off/shadow/live; template default
+- **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live) · fake-remux
+  `FAKE_REMUX_REPLACE_MODE` (off/shadow/live; template default
   `shadow`, but **host_vars runs it `live`** — see the reconciler bullet below).
   Returning any plane to report-only is one env flip + redeploy — preserve that.
 - **Authoritative sources:** sonarr/radarr `/api/v3/queue`, ffprobe truth (via `docker exec jellyfin`
@@ -58,12 +59,14 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
 2. **Host plane** — two daily/hourly crons doing work the locked-down container can't (docker
    daemon, `docker exec`, ffprobe), each reporting via a `{ts,ok,msg}` state file monitor-bridge
    reads. Both run as `sys_user` ∈ docker group (no root).
-   - **disk-autoprune** (`templates/autofix-disk-prune.sh.j2` → `/usr/local/bin/`, hourly
-     `minute:0`). Rails: threshold-gated (prune only when `/` used% ≥ `autofix_disk_threshold_pct`,
-     default 80, below monitor-bridge's `DISK_MAX_PCT=90` pager) → conservative `docker
-     image/builder/container prune -f` (**never `-a`, never volumes**; `container prune` carries
-     `--filter until=24h` so a stopped container kept for forensics survives a day) → jq state
-     `{ts,ok,msg}` → `/var/lib/autofix-disk-prune/state.json`.
+   - **disk-autoprune — RETIRED 2026-08-14, no successor.** It pruned daniel-server's Docker
+     daemon, which was uninstalled that day; the template survives only under
+     `roles/containers/archive/`, `autofix_disk_threshold_pct`/`autofix_disk_dry_run` are set
+     nowhere, and monitor-bridge dropped the matching `disk_prune` check with it
+     (`monitor-bridge/files/check.py:167-170`). **Nothing prunes disk on the cluster nodes now**
+     — containerd's own image GC is the only reclaim, and monitor-bridge's Root Disk threshold
+     pager (`DISK_MAX_PCT=90`) is the only signal. That is alerting without remediation, which
+     is a deliberate state, not an oversight: revisit if `/` pressure ever becomes routine.
    - **fake-remux scan** (`files/fake_remux_scan.py` + pure `fake_remux_logic.py` →
      `/opt/autofix-fake-remux/`, daily `04:45`, config in `/etc/autofix-fake-remux/config.env`
      0600). ffprobe-backed detection of files whose quality claims a **Remux** but whose video
@@ -114,16 +117,6 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
   drop-in that silently won (systemd merges drop-ins last-wins-by-filename), cutting the journal 5x
   and turning the 1G into dead config. The role now REMOVES any stale `60-autofix-journald.conf` so
   there is one source of truth for the journald cap. Don't reintroduce a journald drop-in here.
-- **Deploy `autofix-bridge` before `monitor-bridge` on a fresh host** — monitor-bridge bind-mounts
-  `/var/lib/autofix-disk-prune:/autofix-disk:ro` for its **Disk Autoprune** check; this role creates
-  that dir `sys_user`-owned first (else Docker auto-creates the mount source root-owned and the
-  non-root container can't read it). The state file is **seeded on first deploy** (a `command:` +
-  `creates:` mirroring the kopia/wg-easy pattern) so Disk Autoprune doesn't false-DOWN for up to an
-  hour on a fresh host / bare-metal DR, before the first hourly tick.
-- **`disk_prune` reports only its OWN failure** (`ok=false` on a prune-command error). A disk still
-  full of *real data* after a clean prune is **Root Disk's** alert — single-purpose monitors, no
-  double-paging. At `/` ≈ 25% the prune is preventive standing hygiene (it takes the green no-op
-  path today); it exists so Root Disk never needs a manual prune as image churn grows.
 - **Auto-fix survey verdict (don't re-propose):** the *arr queue was the best-fit case in the
   fleet; disk was the one other genuinely-additive one. prowlarr indexers / b2 / recyclarr / targets
   were evaluated and REJECTED (self-heal via backoff, or autoheal/watchtower already cover
@@ -138,8 +131,7 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
   (it bind-mounts the state dir `:ro`). Both host crons import the shared `host_lib.py` (copied from
   `roles/setup/common`) and are registered in the 3.12-floor guard
   (`ansible/tests/test_host_scripts_py312.py`).
-- **Tunables (host_vars):** `autofix_disk_threshold_pct`, `autofix_disk_dry_run`;
-  `autofix_fake_remux_gop_max_s`, `autofix_fake_remux_max_per_scan`;
+- **Tunables (host_vars):** `autofix_fake_remux_gop_max_s`, `autofix_fake_remux_max_per_scan`;
   `autofix_fake_remux_replace_mode` (off/shadow/live), `autofix_fake_remux_policy` (the
   git-tracked selection-policy dict rendered to `policy.json`).
 
