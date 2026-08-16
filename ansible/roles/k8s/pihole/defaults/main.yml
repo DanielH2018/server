@@ -10,6 +10,11 @@ pihole_k8s_image: pihole/pihole:2026.07.2
 pihole_k8s_unbound_image: klutchell/unbound:v1.25.2
 
 pihole_k8s_claim: pihole-etc
+# Second instance, for deploy-time DNS continuity. Its own claim because /etc/pihole is RWO
+# and single-writer; the contents are fully derivable (see the note on pihole_k8s_claim), so
+# two independent copies reconciled from the same declaration stay equivalent without sharing
+# a volume.
+pihole_k8s_claim_2: pihole-etc-2
 # nobackup: every byte of /etc/pihole is derivable — gravity.db from the declared adlists
 # below, pihole.toml from the FTLCONF env (diffed clean against the live Docker copy's toml,
 # 2026-08-09), dnsmasq.d from the shared template. pihole-FTL.db is query history: stats,

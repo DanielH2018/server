@@ -8,7 +8,10 @@
     name: k8s/manifests
   vars:
     manifests_service: pihole
-    manifests_rollout: pihole
+    # Restarting is done explicitly below, in sequence. The shared role fires its restarts
+    # back to back and defers every wait to the end-of-batch drain, which would take both
+    # Pi-holes down at once — exactly the outage the second instance exists to prevent.
+    manifests_rollout: ''
     manifests_files:
       - pvc.yaml
       - configmap.yaml
@@ -18,16 +21,81 @@
     manifests_secret_files:
       - secret.yaml
 
+# LIMITATION: this sequencing only gates the *restart*, not the apply above it. Both
+# Deployments render into one deployment.yaml and `kubectl apply -f <dir>/` applies both at
+# once, so any change to deployment.yaml.j2 itself (a Renovate image bump, a resource tweak)
+# changes both pod templates in the same apply and the controller Recreate-cycles both
+# Deployments simultaneously — before this loop ever runs. The redundancy here genuinely
+# protects ConfigMap/Secret-only changes (the common case: blocklist/adlist edits, secret
+# rotation), which don't touch deployment.yaml.j2 and so aren't rolled by the controller at
+# apply time at all. Closing this gap means applying the two Deployments from separate
+# manifest files/applies so a template change also goes one instance at a time — future work,
+# see docs/zero-downtime-deploys-plan-2.md.
+- name: Roll the Pi-hole instances one at a time
+  tags: [deploy]
+  ansible.builtin.include_tasks: roll_one.yml
+  # Only when this role actually changed something — otherwise a full-fleet deploy
+  # Recreate-cycles both Pi-holes (and their Longhorn volumes) every run for nothing, up to
+  # 2x180s, and never reports idempotent. Same three facts the shared role itself gates its
+  # own restart on (roles/k8s/manifests/tasks/main.yml:155); registered inside the include_role
+  # above, they stay in scope here because `register` sets a play-scoped fact, not one local
+  # to the included role.
+  when: manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
+  loop:
+    - pihole
+    - pihole-2
+  loop_control:
+    loop_var: pihole_instance
+
+# `kubectl exec deploy/<name>` resolves a pod through the Deployment's spec.selector, which
+# is `app: pihole` on BOTH Deployments (spec.selector is immutable, so it can't carry the
+# per-instance label). Both loop iterations below would therefore land on whichever pod that
+# shared selector picks — never guaranteed to be the one named by `item`. Resolve the actual
+# pod by the pod-only `instance` label first and exec that pod name explicitly.
+#
+# No `[0]` index in the jsonpath: on zero matches (pod still Pending, crashlooping, or the
+# instance was just created) `.items[0]...` makes kubectl error with "array index out of
+# bounds" and rc != 0, failing every deploy that catches an instance mid-start. `.items[*]...`
+# on an empty list just returns an empty string with rc 0, so retry/until can wait out a slow
+# start instead. It must still fail loudly if an instance genuinely never produces a pod —
+# that's what failed_when is for once retries are exhausted.
+- name: Find the pod backing each Pi-hole instance
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get pod -l instance={{ item }}
+      --field-selector=status.phase=Running
+      -o jsonpath={.items[*].metadata.name}
+  become: true
+  register: pihole_pods
+  changed_when: false
+  retries: 30
+  delay: 10
+  until: pihole_pods.stdout | trim != ''
+  failed_when: pihole_pods.stdout | trim == ''
+  loop:
+    - pihole
+    - pihole-2
+
+- name: Map each Pi-hole instance name to its pod name
+  tags: [deploy]
+  ansible.builtin.set_fact:
+    pihole_pod_by_instance: "{{ dict(pihole_pods.results | map(attribute='item') | zip(pihole_pods.results | map(attribute='stdout') | map('regex_replace', '\\s.*$', ''))) }}"
+
 # Blocklist state is DECLARED (defaults/main.yml), not seeded — see the defaults for why a
 # coexistence volume seed can never verify. SQL travels over exec stdin; total_changes() on
 # the last line makes changed_when honest. Runs after the rollout wait, so FTL has already
 # initialised the gravity.db schema on a first boot. INSERTs rely on the gravity schema's
 # AFTER INSERT triggers to attach new rows to the default group.
+# The name deliberately omits `{{ item }}`: Ansible renders a looped task's name once, before
+# the loop binds `item`, so interpolating it emits a "'item' is undefined" template warning on
+# every deploy and prints the error text in place of the instance name. Ansible already appends
+# `=> (item=pihole)` per iteration, which is the per-instance label this was reaching for.
 - name: Reconcile the declared adlists and regex denies into gravity.db
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} exec -i deploy/pihole -c pihole --
+      k3s kubectl -n {{ k8s_namespace }} exec -i {{ pihole_pod_by_instance[item] }} -c pihole --
       pihole-FTL sqlite3 /etc/pihole/gravity.db
     stdin: |
       {% for a in pihole_k8s_adlists %}
@@ -45,15 +113,48 @@
       SELECT total_changes();
   register: pihole_k8s_gravity_sql
   become: true
+  # changed_when is evaluated per loop iteration against that iteration's own result, so
+  # this expression (unchanged from the single-instance version) judges each instance on
+  # its own stdout, not the accumulated .results list. Verified against a local no-op
+  # playbook: a registered loop task's changed_when sees the current iteration's fields
+  # under the registered var's own name, exactly as it would outside a loop.
   changed_when: (pihole_k8s_gravity_sql.stdout_lines | last | default('0') | int) > 0
+  loop:
+    - pihole
+    - pihole-2
 
 # Only when the declaration actually changed something — gravity downloads big.oisd
-# (~200k domains) and rebuilds the blocklist table, ~1-2 min.
+# (~200k domains) and rebuilds the blocklist table, ~1-2 min. `is changed` on a registered
+# loop result is true if ANY iteration changed (verified the same way as above), which is
+# the behaviour wanted here: either instance's declaration changing should rebuild both, so
+# they stay equivalent.
+# Name omits `{{ item }}` for the same reason as the reconcile task above.
 - name: Rebuild gravity after a blocklist change # noqa no-handler
   tags: [deploy]
   when: pihole_k8s_gravity_sql is changed
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} exec deploy/pihole -c pihole -- pihole -g
+      k3s kubectl -n {{ k8s_namespace }} exec {{ pihole_pod_by_instance[item] }} -c pihole -- pihole -g
   become: true
   changed_when: true
+  loop:
+    - pihole
+    - pihole-2
+
+# Both instances have rolled by this point (or the play already failed loudly in roll_one.yml
+# if a restart would have taken DNS down). This confirms they came up and both have a ready
+# endpoint — it is not the stabilisation soak the shared drain gives most workloads.
+# k8s_pending_rollouts is deliberately NOT used here: the drain snapshots restart counts with
+# `-l app={{ item.name }}`, which matches both Pi-hole instances identically, so it could
+# never tell which one actually restarted. That soak is knowingly given up for pihole.
+- name: Verify both Pi-hole instances have a ready DNS endpoint
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get endpointslice -l kubernetes.io/service-name=pihole-dns
+      -o jsonpath={.items[*].endpoints[?(@.conditions.ready==true)].targetRef.name}
+  become: true
+  register: pihole_dns_ready_endpoints
+  changed_when: false
+  when: manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
+  failed_when: (pihole_dns_ready_endpoints.stdout.split() | length) < 2
