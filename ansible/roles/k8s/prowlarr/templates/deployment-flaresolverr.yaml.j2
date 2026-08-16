@@ -99,4 +99,10 @@ spec:
               memory: {{ prowlarr_k8s_fs_mem_request }}
       volumes:
         - name: config
-          emptyDir: {}
+          # sizeLimit preserves the cap the retired 1Gi PVC used to provide. Most siblings here
+          # use a bare `emptyDir: {}`, but this one holds a Chrome profile: uncapped, runaway
+          # growth becomes node ephemeral-storage pressure and the kubelet evicts OTHER pods on
+          # the node, turning one browser's disk leak into someone else's outage. Capped, the
+          # blast radius is the pod that caused it.
+          emptyDir:
+            sizeLimit: 1Gi
