@@ -29,9 +29,15 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   - **Anything new worth keeping must go under one of those four paths.** Dropping a file
     elsewhere in `/config` leaves it live but unbacked, which looks identical until a restore.
 - `/config/.local/share/code-server/extensions` held 5.8 G as of 2026-08-16 and the server
-  never reads it — it runs with `--extensions-dir /config/extensions`. Orphaned, and the
-  reason the config volume sits near its 10 Gi ceiling. Confirm what writes it before
-  deleting, so it does not regrow.
+  never reads it — it runs with `--extensions-dir /config/extensions` (637 M). Cause found and
+  fixed the same day: `extensions.sh` invoked the CLI without `--extensions-dir` from its first
+  commit, so every install landed in code-server's default directory instead, and each image
+  rebuild added another version of all seven without removing the last. **The fix stops it
+  growing; it does not remove what accumulated.** Deleting the tree is a one-off by hand, and
+  is not urgent — `du` accounts for ~6.7 G of the 10 Gi volume, so the filesystem is around
+  two-thirds full, and since the volume left the backup set the waste costs only local replica
+  space. (Longhorn's `actualSize` reads ~96% because it counts the snapshot chain, not
+  filesystem usage.)
 - Because the image is built, bump it by redeploying the k8s role — there is no registry tag
   for Renovate to track (`code_server_k8s_image` is in the REGISTRY_BUILT_IMAGES carve-out).
 
