@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """GitOps deployer — runs once per systemd-timer tick, on every host with has_gitops set.
 
-Flow: fetch origin/master; if it advanced, map changed templates to services;
-ff-merge; deploy each via the existing ansible-playbook path; health-gate each
-container. On failure: reset to the previous HEAD, redeploy the prior version,
+Flow: fetch origin/master; if it advanced, require the tip's CI to be green; map changed
+templates to services; ff-merge; deploy each via the existing ansible-playbook path;
+health-gate each container. On failure: reset to the previous HEAD, redeploy the prior version,
 record the bad SHA as a hold marker, and alert the dedicated Discord webhook.
 
 Config comes from /etc/gitops-deploy/config.env (KEY=VALUE), written by Ansible:
-  REPO_DIR, BRANCH, HOSTNAME, DISCORD_WEBHOOK, HEALTH_TIMEOUT_S
+  REPO_DIR, BRANCH, HOSTNAME, DISCORD_WEBHOOK, HEALTH_TIMEOUT_S,
+  REQUIRE_CI, CI_CONTEXTS, GITHUB_REPO
 Stdlib only.
 """
 
@@ -18,6 +19,8 @@ import os
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -28,6 +31,7 @@ from deploy_logic import (  # noqa: E402
     apply_send_result,
     behind_marker,
     broad_remediation,
+    ci_verdict,
     containers_to_gate,
     declared_k8s_services,
     declared_services,
@@ -97,6 +101,11 @@ META_ALERT_FILE = "/var/lib/gitops-deploy/meta_alerted_sha"
 # operator redeploys it by hand. Unlike tasks/meta this deployer has no mechanism that ever
 # applies a k8s role change, so there's no "rode a redeploy" case to dedupe against `deployed`.
 K8S_ALERT_FILE = "/var/lib/gitops-deploy/k8s_alerted_sha"
+# Same throttle for a master tip that FAILED CI: alert once per SHA so the operator fixes or
+# reverts, instead of re-paging every 30-min tick for as long as master stays red. There is no
+# marker for the `ci_pending` path — an unfinished run is the normal state for the first tick or
+# two after a push and resolves itself, so it logs and stays silent.
+CI_ALERT_FILE = "/var/lib/gitops-deploy/ci_alerted_sha"
 # Undelivered post-merge alerts, retried at the TOP of every tick. The secrets/tasks/meta/combined
 # channels `git merge --ff-only` BEFORE their delivery-gated marker write, so once merged
 # local==origin and the next tick short-circuits at `noop` (main) before ever re-reaching the alert
@@ -184,6 +193,60 @@ if K8S_AUTODEPLOY_ENABLED and not K8S_AUTODEPLOY_DENYLIST:
 # feeds gate_services(), the Docker health gate, which is inert on an all-k8s host — so without
 # this the only bound is systemd's TimeoutStartSec SIGTERM, which can land mid-rollback.
 K8S_DEPLOY_TIMEOUT_S = int(C.get("K8S_DEPLOY_TIMEOUT_S", "900"))
+
+# ── CI gate ───────────────────────────────────────────────────────────────────────────────────
+# Refuse to deploy a master tip whose CI is red or unfinished. Without this the deployer applies
+# whatever landed on master, green or red: nothing in the pull path ever consulted a workflow
+# result, so a broken commit reached the homelab on the next 30-min tick.
+#
+# OFF unless config.env says otherwise, so a host that has not been re-templated keeps its current
+# behaviour, and REQUIRE_CI=false is the documented way back out.
+REQUIRE_CI = C.get("REQUIRE_CI", "false").lower() == "true"
+# GitHub check-run NAMES that must be green — the same strings branch protection calls contexts.
+# Comma-separated; the names contain spaces and parens, never commas.
+CI_CONTEXTS = _csv_set(C.get("CI_CONTEXTS", ""))
+CI_REPO = C.get("GITHUB_REPO", "")
+if REQUIRE_CI and not (CI_CONTEXTS and CI_REPO):
+    # Fail closed the same way the k8s denylist does, but in the opposite direction: an empty
+    # context list would make ci_verdict() return `pass` for everything, turning a half-rendered
+    # config.env into a silently ungated deployer. Better to disarm loudly.
+    log(
+        "REQUIRE_CI is set but CI_CONTEXTS/GITHUB_REPO is empty — disabling the CI gate"
+    )
+    REQUIRE_CI = False
+
+
+def fetch_ci_verdict(sha: str) -> str:
+    """`pass` / `pending` / `fail` for `sha`, from GitHub's check-runs API.
+
+    The repo is public, so this is an unauthenticated GET — no token to provision or rotate. The
+    rate limit is 60/hour per IP against one call per 30-min tick.
+
+    An unreachable or malformed API reads as `pending`, never `pass`: the gate has to fail closed
+    or it is not a gate. That defers the tick and retries in 30 minutes, and because the tick still
+    completes normally (writing `last_run`), a GitHub outage does NOT trip GitOps-Alive the way a
+    RetryableFetchError would. Sustained unavailability instead leaves the host behind origin,
+    which `behind_marker` records and the 6h behind-origin watchdog pages on.
+    """
+    if not REQUIRE_CI:
+        return "pass"
+    url = (
+        f"https://api.github.com/repos/{CI_REPO}/commits/{sha}/check-runs?per_page=100"
+    )
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "gitops-deploy",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            payload = json.load(resp)
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
+        log(f"CI status unavailable for {sha[:8]} ({e}) — deferring this tick")
+        return "pending"
+    return ci_verdict(payload.get("check_runs", []), CI_CONTEXTS)
 
 
 def is_ancestor(ancestor: str, descendant: str) -> bool:
@@ -578,7 +641,13 @@ def main() -> int:
         DIVERGED_FILE,
         origin if is_diverged(origin, local, origin_ahead, local_ahead) else None,
     )
-    action = next_action(local, origin, hold, dirty, origin_ahead)
+    # Only spend the GitHub call on a tick that would otherwise deploy. These conditions mirror
+    # next_action's own short-circuits above it, so a noop/dirty/held tick costs no API request —
+    # which keeps the unauthenticated 60/hour rate limit irrelevant at one tick per 30 min.
+    ci = "pass"
+    if not dirty and origin_ahead and origin != local and origin != hold:
+        ci = fetch_ci_verdict(origin)
+    action = next_action(local, origin, hold, dirty, origin_ahead, ci)
     if action == "dirty":
         # Healthy skip (operator mid-edit). Throttle the page to twice a day at
         # ~08:00 and ~20:00 CT instead of every 30-min tick (see DIRTY_ALERT_FILE).
@@ -605,6 +674,23 @@ def main() -> int:
         return 0
     if action == "skip_hold":
         log(f"origin at known-bad {origin[:8]}; holding")
+        return 0
+    if action == "ci_pending":
+        # Normal for the first tick after a push: the workflow is still running. No alert — it
+        # resolves on its own, and a host left behind for hours is the behind-origin watchdog's
+        # job, not this branch's.
+        log(f"origin {origin[:8]}: CI not finished — deferring, will retry next tick")
+        return 0
+    if action == "ci_failed":
+        alert_once(
+            CI_ALERT_FILE,
+            "ci",
+            origin,
+            f"⛔ gitops-deploy: CI is RED on `{origin[:8]}` — NOT deploying on {HOSTNAME}. "
+            f"The host stays on `{local[:8]}` until master is green; fix forward or revert. "
+            "(GitOps Status pages separately once the host has been behind for 6h.)",
+        )
+        log(f"origin {origin[:8]}: CI failed — not deploying")
         return 0
 
     paths = run(["git", "diff", "--name-only", f"{local}..{origin}"]).splitlines()

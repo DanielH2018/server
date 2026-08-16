@@ -35,6 +35,32 @@ host, delete its `containers/<svc>/docker-compose.yml` on that host (config/ and
 stay).
 
 ## Safety
+- **CI gate — the tip must be green before anything is merged or deployed** (`REQUIRE_CI`,
+  `deploy_logic.ci_verdict`). Before this the deployer applied whatever landed on master: nothing
+  in the pull path consulted a workflow result, so a red commit reached the homelab on the next
+  tick. It queries GitHub's check-runs API **unauthenticated** (public repo) for `origin/master`,
+  and only on a tick that would otherwise deploy — a noop/dirty/held tick spends no request, which
+  keeps the 60/hour anonymous limit irrelevant at one tick per 30 min.
+  - `fail` → `next_action` returns **`ci_failed`**: no ff-merge, no deploy, and a Discord alert
+    throttled once per SHA (`ci_alerted_sha`).
+  - `pending` → **`ci_pending`**: silent deferral. Unfinished CI is the normal state for the first
+    tick after a push, so it logs and retries; only *sustained* behind-ness is a problem.
+  - **An unreachable or malformed API reads as `pending`, never `pass`** — the gate fails closed or
+    it is not a gate. The tick still completes and writes `last_run`, so a GitHub outage does NOT
+    trip GitOps-Alive the way `RetryableFetchError` would.
+  - Both outcomes leave the host parked on `local`, which `behind_marker` records — so a
+    persistently red master pages through the existing **6h behind-origin watchdog** rather than
+    needing an escalation path of its own. That reuse is deliberate; don't add a second timer.
+  - **This gates the DEPLOY; branch protection gates the MERGE.** They are not redundant: PR CI is
+    scoped to changed files while master runs the full sweep, so a whole-tree failure can only
+    appear *after* the merge — which is exactly the window this closes.
+  - `cancelled`/`stale` count as **no verdict, not failure**: `ci.yml` sets
+    `concurrency: cancel-in-progress` on `github.ref`, so two pushes in quick succession cancel the
+    first run. Mapping those to a failure would page on an ordinary back-to-back push.
+  - `CI_CONTEXTS` holds GitHub check-run **names**, which must match `ci.yml`'s `name:` exactly
+    (that file carries a comment saying so). An empty list or repo **disarms** the gate with a log
+    line rather than passing everything — the same fail-closed shape as the k8s denylist. Set
+    `gitops_deploy_require_ci: false` to turn it off.
 - Read-only against the repo (no push); rollback is local-only + self-guarding.
 - Refuses to *deploy* from a dirty working tree (operator mid-edit) but the tick still
   completes normally and writes `last_run` (`next_action(..., dirty=True) -> "dirty"`) — the

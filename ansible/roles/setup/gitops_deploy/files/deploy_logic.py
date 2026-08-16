@@ -213,12 +213,65 @@ def deferred_service_alerts(
     return cs.tasks - deployed, cs.meta - deployed
 
 
+# ── CI gate ───────────────────────────────────────────────────────────────────────────────────
+# A GitHub check-run conclusion that counts as "this commit is good". `skipped` and `neutral` are
+# passes on purpose: ci.yml's renovate-config job runs unconditionally but gates its real work on a
+# per-PR step condition, so it legitimately reports a non-`success` completion.
+_CI_PASS_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
+# Deliberately NOT failures — these mean "no verdict for this SHA", not "this SHA is bad".
+# ci.yml sets `concurrency: cancel-in-progress` keyed on github.ref, so two pushes to master in
+# quick succession CANCEL the first run. Mapping `cancelled` to a failure would page on an
+# ordinary back-to-back push; the tip's own run is the one that supplies the verdict.
+_CI_NO_VERDICT_CONCLUSIONS = frozenset(
+    {"cancelled", "stale", "skipped_by_concurrency", None}
+)
+
+
+def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> str:
+    """Reduce GitHub's check-runs for ONE commit to `pass` / `pending` / `fail`.
+
+    `required` is the set of check-run NAMES that must be green — the same strings GitHub reports
+    as branch-protection contexts (`prek (lint + validate + tests + secrets)`). An empty set means
+    the gate is disarmed, which returns `pass` so a host that hasn't re-templated config.env keeps
+    behaving exactly as it does today.
+
+    A name can carry SEVERAL runs (a re-run, or the same workflow triggered by both `push` and
+    `pull_request`), so each name is reduced over all of its runs and the worst outcome wins: any
+    outright failure makes the whole verdict `fail`, and a name that is missing, still running, or
+    has only no-verdict conclusions holds the verdict at `pending`. Pending is the safe direction —
+    the caller defers the tick and retries in 30 minutes.
+    """
+    if not required:
+        return "pass"
+    states: dict[str, set[str]] = {}
+    for run in check_runs:
+        name = run.get("name")
+        if name not in required:
+            continue
+        if run.get("status") != "completed":
+            state = "pending"
+        elif run.get("conclusion") in _CI_PASS_CONCLUSIONS:
+            state = "pass"
+        elif run.get("conclusion") in _CI_NO_VERDICT_CONCLUSIONS:
+            state = "pending"
+        else:
+            state = "fail"
+        states.setdefault(name, set()).add(state)
+    if any("fail" in s for s in states.values()):
+        return "fail"
+    # A name with no runs at all is a freshly-pushed SHA whose workflow hasn't registered yet.
+    if any("pending" in states.get(name, {"pending"}) for name in required):
+        return "pending"
+    return "pass"
+
+
 def next_action(
     local_head: str,
     origin_head: str,
     hold_sha: str | None,
     dirty: bool = False,
     origin_ahead: bool = True,
+    ci: str = "pass",
 ) -> str:
     # A dirty working tree (operator mid-edit) is a healthy skip, not an outage,
     # and must never be deployed from — so it short-circuits every other outcome.
@@ -236,6 +289,16 @@ def next_action(
     # mis-fire a redeploy + false rollback, so treat it as a no-op.
     if not origin_ahead:
         return "noop"
+    # CI gate. `origin` is the tip we would `--ff-only` onto, and the tip is the SHA whose
+    # check-runs decide the tick. A tick can span local..origin — several commits — and the
+    # intermediate ones are NOT individually gated; that is intentional, because the tip is the
+    # tree the host actually ends up running. Both outcomes return WITHOUT ff-merging, so the host
+    # stays parked on `local` and `behind_marker` records it — a persistently red master therefore
+    # pages through the existing behind-origin watchdog rather than needing its own escalation.
+    if ci == "fail":
+        return "ci_failed"
+    if ci == "pending":
+        return "ci_pending"
     return "deploy"
 
 
