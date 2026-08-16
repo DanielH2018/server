@@ -57,6 +57,9 @@ must include:
   `# intentional`), or "handled by Traefik/Authelia/upstream" is NOT evidence; verify it in code;
 - the **output format** below.
 
+`security-review` is the only reviewer without `Bash` (see Notes) — don't hand it a brief that
+depends on running `git log`, `kubectl`, or `probe.py`; its live/history checks belong to step 5.
+
 ## 4. Output format each agent must return
 Findings grouped **High / Medium / Low**. Each: a 1-line title, the `file:line` (ansible source), what's
 wrong, and a concrete fix — tagged **[GAP] / [IMPROVEMENT] / [ADDITION]**. Note verified-clean areas in
