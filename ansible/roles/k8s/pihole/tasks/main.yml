@@ -8,7 +8,10 @@
     name: k8s/manifests
   vars:
     manifests_service: pihole
-    manifests_rollout: pihole
+    # Restarting is done explicitly below, in sequence. The shared role fires its restarts
+    # back to back and defers every wait to the end-of-batch drain, which would take both
+    # Pi-holes down at once — exactly the outage the second instance exists to prevent.
+    manifests_rollout: ''
     manifests_files:
       - pvc.yaml
       - configmap.yaml
@@ -17,6 +20,15 @@
       - ingressroute.yaml
     manifests_secret_files:
       - secret.yaml
+
+- name: Roll the Pi-hole instances one at a time
+  tags: [deploy]
+  ansible.builtin.include_tasks: roll_one.yml
+  loop:
+    - pihole
+    - pihole-2
+  loop_control:
+    loop_var: pihole_instance
 
 # Blocklist state is DECLARED (defaults/main.yml), not seeded — see the defaults for why a
 # coexistence volume seed can never verify. SQL travels over exec stdin; total_changes() on

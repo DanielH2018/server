@@ -1,0 +1,18 @@
+---
+# One instance: restart, then block until it is serving again. Included per instance so the
+# next Pi-hole is never taken down while this one is still coming back.
+- name: Restart Pi-hole instance {{ pihole_instance }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: "k3s kubectl -n {{ k8s_namespace }} rollout restart deploy/{{ pihole_instance }}"
+  become: true
+  changed_when: true
+
+- name: Wait for Pi-hole instance to be serving again {{ pihole_instance }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout status deploy/{{ pihole_instance }}
+      --timeout=180s
+  become: true
+  changed_when: false
