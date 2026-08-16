@@ -33,8 +33,10 @@ report-only by nature — its findings are stale-doc edits for the operator, nev
 
 ## 2. Prime from memory FIRST (the signal-booster — do this before dispatching)
 This is a **mature** setup: a cold agent will re-flag dozens of settled decisions. Before dispatching,
-read the most recent `review-*-state` memories and the accepted-decision ("don't re-flag") memories
-from the auto-memory index. For each area, extract its relevant don't-re-flag items **plus** the
+read **every** `review-*-state` memory, newest first (there is more than one, and same-day runs carry
+a letter suffix — e.g. `review-2026-08-15-state` *and* `review-2026-08-15b-state`; the later one is
+not a superset of the earlier), plus the accepted-decision ("don't re-flag") memories from the
+auto-memory index. For each area, extract its relevant don't-re-flag items **plus** the
 discipline: *verify a candidate finding against the role's CLAUDE.md, role crons, and monitor-bridge
 `check.py` BEFORE reporting it.* Pull this at runtime — never rely on a hardcoded list (it goes stale,
 the exact failure mode these reviews keep finding).
@@ -55,6 +57,9 @@ must include:
   `# intentional`), or "handled by Traefik/Authelia/upstream" is NOT evidence; verify it in code;
 - the **output format** below.
 
+`security-review` is the only reviewer without `Bash` (see Notes) — don't hand it a brief that
+depends on running `git log`, `kubectl`, or `probe.py`; its live/history checks belong to step 5.
+
 ## 4. Output format each agent must return
 Findings grouped **High / Medium / Low**. Each: a 1-line title, the `file:line` (ansible source), what's
 wrong, and a concrete fix — tagged **[GAP] / [IMPROVEMENT] / [ADDITION]**. Note verified-clean areas in
@@ -63,14 +68,18 @@ one line. End with a **3-bullet top-priorities** summary. Be specific and skepti
 
 ## 5. Adversarially verify High/Medium findings (before they reach the report)
 Reviews here have a misfire history (an Authelia `trusted_proxies` proposal that would have
-crash-looped it; a PEP-758 `except X, Y:` misread as a syntax bug) — a wrong finding costs the
-operator more than a missed one. So: **deduplicate first** (below), then for each surviving
+crash-looped it; a PEP-758 `except X, Y:` misread as a syntax bug; and in the 2026-08-15 run both a
+proposed `N8N_PROXY_HOPS` change and a Pi `:latest`-pinning "fix" would have caused damage) — a
+wrong finding costs the operator more than a missed one. So: **deduplicate first** (below), then for each surviving
 High/Medium finding dispatch one skeptic — `general-purpose`, **`model: sonnet`**, all in one
 parallel message — whose ONLY job is to try to **refute** it against: the role's CLAUDE.md
 (accepted trade-offs), the role's tasks/templates + shared macros, monitor-bridge `check.py` +
 role crons, the don't-re-flag memories, **git history (`git log`/`git blame` the cited lines — a
 finding already fixed in a later commit or intentionally reverted with a rationale is not live)**,
-and live state via `scripts/probe.py` where relevant.
+and live state via `scripts/probe.py` where relevant. **`probe.py health <svc>` shells `docker
+inspect`, so it only answers for the Pi's Compose services** — for a cluster workload use
+`kubectl get`/`logs`/`describe` (the readonly SA covers get/list/watch, not Secrets or `exec`), or
+`probe.py targets | metric | alerts | b2-longhorn`.
 Verdict per finding: **CONFIRMED** (refutation failed), **REFUTED** (cite the disproving
 evidence), or **UNCERTAIN**. Refuted findings drop to a one-line "refuted in verification"
 appendix; UNCERTAIN ones stay but are marked unverified. Lows skip verification.
@@ -94,7 +103,9 @@ executable code.
   — the established pattern that keeps the next review high-signal.
 
 ## Notes
-- All five agents are read-only investigators.
+- All six reviewer agents are read-only investigators. `security-review` is the one without `Bash`
+  (`Read, Grep, Glob` only), so it cannot run `git log`, `kubectl`, or `probe.py` — its findings reach
+  live/history evidence only through the step-5 skeptic pass, which is where that verification belongs.
 - Home Assistant review is handled by the separate `/ha-review` skill.
 - This skill is the **review** half of the flow only. Implementation (implement → deploy via `/deploy`
   → commit) stays an explicit, operator-gated sequence — keep it out of this skill.
