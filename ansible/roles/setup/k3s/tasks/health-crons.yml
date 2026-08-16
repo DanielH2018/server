@@ -116,3 +116,47 @@
     job: "/usr/local/bin/manifest-prune-check.sh"
     cron_file: manifest-prune-check
   become: true
+
+- name: Deploy the off-box etcd snapshot credentials
+  tags: [etcd-snapshot]
+  # 0600 root:root, not 0640 root:{{ sys_user }} like the Healthchecks key above: these are the
+  # R2 write credentials for the bucket that also holds every Longhorn backup, and the only
+  # caller is a root cron. Kept out of the script itself because that lands 0755 — the same
+  # reasoning as ping.env, one tier stricter because the blast radius is the backup store.
+  ansible.builtin.copy:
+    content: |
+      AWS_ACCESS_KEY_ID={{ r2_access_key_id }}
+      AWS_SECRET_ACCESS_KEY={{ r2_secret_access_key }}
+      ETCD_S3_BUCKET={{ r2_bucket }}
+      ETCD_S3_ENDPOINT={{ r2_account_id }}.r2.cloudflarestorage.com
+    dest: /etc/rancher/k3s/etcd-s3.env
+    mode: "0600"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders the R2 access key and secret
+
+- name: Deploy the off-box etcd snapshot
+  tags: [etcd-snapshot]
+  # Root-run: `k3s etcd-snapshot save` talks to the local etcd through the server's own data-dir
+  # and token. Unlike the heartbeats above it cannot use the read-only ServiceAccount at all —
+  # this is a control-plane operation, not a cluster API read.
+  ansible.builtin.template:
+    src: etcd-snapshot-offbox.sh.j2
+    dest: /usr/local/bin/etcd-snapshot-offbox.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Schedule the off-box etcd snapshot
+  tags: [etcd-snapshot]
+  ansible.builtin.cron:
+    name: "Off-box etcd snapshot"
+    minute: "{{ k3s_etcd_s3_cron_minute }}"
+    hour: "{{ k3s_etcd_s3_cron_hour }}"
+    user: root
+    job: "/usr/local/bin/etcd-snapshot-offbox.sh"
+    cron_file: etcd-snapshot-offbox
+  become: true

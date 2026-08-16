@@ -29,20 +29,15 @@
 # orphaned object (in ANY staged file, not just its own kind) reads as "still declared" and the
 # real orphan is missed.
 #
-# CONFIRMED GAP, not hypothetical: k8s/manifests' "Render manifests" task only writes the files
-# CURRENTLY listed in manifests_files/manifests_secret_files — it has no step that deletes a
-# staged file whose entry was later removed from that list, so a stale render sits on disk and
-# keeps getting swept into every future `kubectl apply -f <dir>/` regardless of what the
-# templates say today. This is why claude-otel-ingest (named above) is still live: commit
-# 753b5786 removed BOTH `ingest-ingressroute.yaml` from claude-otel's manifests_files AND its
-# .j2 source, but the already-rendered /etc/rancher/k3s/manifests/claude-otel/
-# ingest-ingressroute.yaml was never cleaned up, so it is very likely still there and this
-# check's own `grep` will find "name: claude-otel-ingest" in it and report the orphan as
-# present — a false "up" on the exact incident this script exists to catch. Closing this for
-# real needs a prune step in k8s/manifests (delete any staged file not in the current file
-# list, before apply) — out of scope for this change; until that lands, or until the stale
-# staged file is manually removed, treat this script as a guard against NEW drift (an object
-# hand-applied outside any template) rather than proof against the one that motivated it.
+# THE STAGED-FILE HOLE THIS USED TO WARN ABOUT IS CLOSED. It was real: k8s/manifests only wrote
+# the files currently listed in manifests_files/manifests_secret_files and never deleted a staged
+# file whose entry had been removed, so a stale render kept getting swept into every
+# `kubectl apply -f <dir>/` — and this script's own grep then found the orphan's name in that
+# stale file and reported a false "up" on exactly the incident it exists to catch. The
+# "Prune staged manifests dropped from the file lists" task in roles/k8s/manifests/tasks/main.yml
+# now deletes those files before the apply, so a name dropped from the list disappears from the
+# staged set on the next deploy and this check sees the orphan. Deploy the owning role once after
+# retiring a manifest: until that role next runs, its stale staged file is still on disk.
 set -uo pipefail
 
 # Runs as root under cron, whose default PATH (/usr/bin:/bin) omits /usr/local/bin — where
@@ -93,11 +88,19 @@ fi
 # plane while every repo-side check read green. Its Services are still Longhorn's own (five, none
 # carrying an ownerReference to skip them by), so `service` stays excluded there while the kinds
 # we DO own are checked.
+#
+# longhorn-system gained two more kind exclusions on 2026-08-16 with the workload kinds below:
+# Longhorn's own six Deployments (csi-*, longhorn-ui, longhorn-driver-deployer) and two
+# DaemonSets carry no ownerReference — they come from the Longhorn install, not from a staged
+# manifest, so every one of them would report as an orphan. longhorn-ui's IngressRoute is ours
+# and stays checked; the workloads behind it are not.
 EXCLUDED_NS_KINDS=(
   "kube-system:*"
   "metallb-system:*"
   "default:*"
   "longhorn-system:service"
+  "longhorn-system:deployment"
+  "longhorn-system:daemonset"
 )
 
 ORPHANS=""
@@ -132,13 +135,32 @@ check_kind() {
 
 # tlsoption joined on 2026-08-15: the Longhorn UI stages one, and the kind had never been checked
 # at all, so an orphan of it was invisible everywhere rather than in one namespace.
-for KIND in ingressroute middleware service tlsoption; do
+#
+# deployment/daemonset/cronjob joined on 2026-08-16. Until then the check covered only routing
+# objects, so a retired *workload* — the thing that actually consumes CPU, memory and a PVC —
+# was invisible to it: drop a Deployment from manifests_files and its pods keep running forever
+# while every repo-side check reads green. The routing kinds were the ones that had bitten us,
+# not the ones with the most to lose.
+#
+# WHICH KINDS ARE DELIBERATELY ABSENT, from a live survey on 2026-08-16 rather than from taste —
+# each would make this monitor red on day one, and a monitor nobody trusts is worse than none:
+#   configmap  — 8 kube-root-ca.crt (one per namespace, no owner, injected by the apiserver) and
+#                7 build-context-* ConfigMaps that k8s/image-builder creates at build time and
+#                no template declares.
+#   secret     — the read-only ServiceAccount this runs as is Forbidden on Secrets entirely
+#                ("get list watch" does not cover them), so the query returns an error, not a
+#                list, and every Secret would read as absent-from-live rather than orphaned.
+#   pvc        — 43 unowned claims whose staging path (k8s/seed-volume creates some of them
+#                outside the owning role's manifests_files) has not been audited. A false red on
+#                the storage plane is the most expensive kind here; add it after the audit, not
+#                before.
+for KIND in ingressroute middleware service tlsoption deployment daemonset cronjob; do
   check_kind "$KIND"
 done
 
 if [[ -z "$ORPHANS" ]]; then
   STATUS=up
-  MSG="no orphaned IngressRoute/Middleware/Service/TLSOption objects found"
+  MSG="no orphaned routing (IngressRoute/Middleware/Service/TLSOption) or workload (Deployment/DaemonSet/CronJob) objects found"
 else
   STATUS=down
   MSG="live but absent from staged manifests: ${ORPHANS}"
