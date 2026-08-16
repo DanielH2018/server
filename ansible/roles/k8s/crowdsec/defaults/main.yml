@@ -38,7 +38,7 @@ crowdsec_k8s_mem_request: 128Mi
 # unpinned rebuild retires with it). The app DB is DELIBERATELY ephemeral: the Docker copy
 # kept it in an image layer rebuilt weekly, so pod restarts resetting it is not a
 # regression — the seed zip IS the state.
-crowdsec_k8s_metabase_image: metabase/metabase:v0.63.2
+crowdsec_k8s_metabase_image: metabase/metabase:v0.63.5
 crowdsec_k8s_metabase_seed_url: https://crowdsec-statics-assets.s3-eu-west-1.amazonaws.com/metabase_sqlite.zip
 crowdsec_k8s_dashboard_port: 3000
 crowdsec_k8s_metabase_mem_limit: 2048Mi
