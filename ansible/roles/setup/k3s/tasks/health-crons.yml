@@ -50,7 +50,12 @@
   # delete depends on live state — as of 2026-08-16 the answer is "none of them", because the
   # weekly tier has produced nothing and the strays are the only recovery those volumes have.
   # The script enforces that floor itself, but an operator should read its dry run before any
-  # cron does. Run: /usr/local/bin/longhorn-reap-orphan-backups.sh [--apply]
+  # cron does.
+  #   dry run: /usr/local/bin/longhorn-reap-orphan-backups.sh
+  #   delete:  sudo /usr/local/bin/longhorn-reap-orphan-backups.sh --apply
+  # The dry run reads through the {{ sys_user }} read-only kubeconfig; --apply needs the
+  # root-only admin one and refuses to start without it, rather than issuing deletes that come
+  # back Forbidden while the run reports success.
   ansible.builtin.template:
     src: longhorn-reap-orphan-backups.sh.j2
     dest: /usr/local/bin/longhorn-reap-orphan-backups.sh
