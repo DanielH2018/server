@@ -16,6 +16,8 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
+from validate_k8s_manifests import ansible_bool
+
 ANSIBLE = Path(__file__).resolve().parents[1]
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
 K8S = ANSIBLE / "roles" / "k8s"
@@ -57,6 +59,9 @@ def _role_defaults(role: str) -> dict:
         **yaml.safe_load((K8S / role / "defaults" / "main.yml").read_text()),
     }
     env = Environment(loader=FileSystemLoader([str(ANSIBLE / "templates")]))
+    # `bool` is an Ansible filter, not a Jinja builtin — a group_var using it (k8s_no_mutate)
+    # would fail this loop with "No filter named 'bool'". Same shim scripts/ registers.
+    env.filters["bool"] = ansible_bool
     for _ in range(5):
         pending = {k: v for k, v in values.items() if isinstance(v, str) and "{{" in v}
         if not pending:

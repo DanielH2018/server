@@ -60,6 +60,17 @@ def k8s_entries() -> dict[str, dict]:
     return {c["name"]: c for c in entries if c.get("platform") == "k8s"}
 
 
+def ansible_bool(value) -> bool:
+    """Ansible's `bool` filter: the strings Ansible treats as true, plus ordinary truthiness.
+
+    `-e k8s_dry_run=true` reaches a play as the STRING "true", which is why the filter exists
+    at all — and why "false" must map to False here rather than to non-empty-string truthiness.
+    """
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "yes", "on", "1"}
+    return bool(value)
+
+
 def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
     """Expand ``{{ ... }}`` inside variable VALUES, the way Ansible does before templating.
 
@@ -75,6 +86,11 @@ def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
     recursion the operator can see, instead of hanging CI.
     """
     env = make_env([SHARED_TPL])
+    # `bool` is an Ansible filter, not a Jinja builtin, so a group_var that uses it renders
+    # here as "No filter named 'bool'" — a render failure pointing at a variable that is
+    # perfectly valid under Ansible. Shimmed for the same reason the compose guard shims
+    # `hash` and the shell guard shims `search`; see make_env's docstring.
+    env.filters["bool"] = ansible_bool
     resolved = dict(values)
     for _ in range(passes):
         pending = {

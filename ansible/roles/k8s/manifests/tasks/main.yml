@@ -27,10 +27,40 @@
 # directory on every restart and takes ownership of what it finds, which fights Ansible
 # for the same resources.
 
+- name: Create a throwaway render directory for {{ manifests_service }}
+  # [config, deploy], not [config]: the apply task below is deploy-tagged and now reads
+  # manifests_dest_dir, so a `--tags deploy` run would otherwise reach it undefined.
+  tags: [config, deploy]
+  # Dry-run renders somewhere real and then discards it, rather than into
+  # /etc/rancher/k3s/manifests/. `--check` cannot be used for this: it skips the template
+  # writes, so a dry-run apply would have nothing on disk to read.
+  #
+  # A temp dir rather than the real staging tree because a dry-run is normally run from an
+  # UNCOMMITTED branch. Staging that branch's manifests on the live tree leaves them where the
+  # next `kubectl apply -f <dir>/` picks them up — gitops-deploy re-renders from master every
+  # 30 minutes so the window closes on its own, but "my dry run deployed" is not a window worth
+  # having. Cost: the prune task below is not exercised, and mode/owner differ from the real
+  # path. Neither is something `kubectl apply` judges.
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: "-{{ manifests_service }}-dryrun"
+  register: manifests_dry_run_dir
+  become: true
+  when: k8s_dry_run | bool
+
+- name: Select the render directory for {{ manifests_service }}
+  tags: [config, deploy]
+  # Single source of truth for every path below, so a future task cannot render to the real
+  # tree while the apply reads the temp one.
+  ansible.builtin.set_fact:
+    manifests_dest_dir: >-
+      {{ manifests_dry_run_dir.path if k8s_dry_run | bool
+         else '/etc/rancher/k3s/manifests/' ~ manifests_service }}
+
 - name: Create the manifest directory for {{ manifests_service }}
   tags: [config]
   ansible.builtin.file:
-    path: "/etc/rancher/k3s/manifests/{{ manifests_service }}"
+    path: "{{ manifests_dest_dir }}"
     state: directory
     mode: "0700"
     owner: root
@@ -41,7 +71,7 @@
   tags: [config]
   ansible.builtin.template:
     src: "{{ playbook_dir }}/roles/k8s/{{ manifests_service }}/templates/{{ item }}.j2"
-    dest: "/etc/rancher/k3s/manifests/{{ manifests_service }}/{{ item }}"
+    dest: "{{ manifests_dest_dir }}/{{ item }}"
     mode: "0644"
     owner: root
     group: root
@@ -57,7 +87,7 @@
   no_log: true
   ansible.builtin.template:
     src: "{{ playbook_dir }}/roles/k8s/{{ manifests_service }}/templates/{{ item }}.j2"
-    dest: "/etc/rancher/k3s/manifests/{{ manifests_service }}/{{ item }}"
+    dest: "{{ manifests_dest_dir }}/{{ item }}"
     mode: "0600"
     owner: root
     group: root
@@ -68,10 +98,11 @@
 - name: Find staged manifests for {{ manifests_service }}
   tags: [config]
   ansible.builtin.find:
-    paths: "/etc/rancher/k3s/manifests/{{ manifests_service }}"
+    paths: "{{ manifests_dest_dir }}"
     file_type: file
   register: manifests_staged
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Prune staged manifests dropped from the file lists for {{ manifests_service }}
   tags: [config]
@@ -82,14 +113,18 @@
   # 18:53 deploy from its stale staged file. Deleting the file here makes dropping a name
   # from the list the complete staging-side retirement; the already-live object still needs
   # one kubectl delete, which the manifest-prune-check cron flags.
+  #
+  # Skipped under dry-run: the render dir is a fresh tempfile, so there is nothing stale in it
+  # to prune and `manifests_staged` was never registered.
   ansible.builtin.file:
-    path: "/etc/rancher/k3s/manifests/{{ manifests_service }}/{{ item }}"
+    path: "{{ manifests_dest_dir }}/{{ item }}"
     state: absent
   loop: >-
     {{ manifests_staged.files | map(attribute='path') | map('basename')
        | difference((manifests_files | default([])) + (manifests_secret_files | default([])))
        | list }}
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Apply manifests for {{ manifests_service }}
   tags: [deploy]
@@ -101,18 +136,34 @@
   # earlier "kubectl replace it once" advice was itself the re-breaker: replace strips the
   # last-applied annotation, so the crack reopens on every use. Secrets are therefore
   # key-reconciled explicitly after this apply (verify_secret_keys.yml below).
+  #
+  # `--dry-run=server` under k8s_dry_run: the request goes to the real API server and through
+  # schema validation, defaulting and admission, and is discarded instead of persisted. That is
+  # the whole point of the mode — the manifests are judged by the same code path that would
+  # accept them for real.
   ansible.builtin.command:
-    cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/{{ manifests_service }}/"
+    cmd: >-
+      k3s kubectl apply -f {{ manifests_dest_dir }}/
+      {{ '--dry-run=server' if k8s_dry_run | bool else '' }}
   register: manifests_apply
   become: true
-  changed_when: "'created' in manifests_apply.stdout or 'configured' in manifests_apply.stdout"
+  # Dry-run stdout carries the same "created"/"configured" words as a real apply, so the live
+  # expression would report changed and cascade into the rollout triggers below — which are
+  # skipped under dry-run, but `changed` is also what the batch drain and the stabilisation
+  # gate key on. Pin it false: nothing changed, because nothing was persisted.
+  changed_when: >-
+    not (k8s_dry_run | bool)
+    and ('created' in manifests_apply.stdout or 'configured' in manifests_apply.stdout)
 
 - name: Reconcile secret keys against the rendered manifests for {{ manifests_service }}
   tags: [deploy]
+  # Skipped under dry-run: reconcile_secret_doc.yml `kubectl patch`es the LIVE Secret to drop
+  # stale keys. That is a mutation, and it is one the dry-run apply cannot have made necessary.
   ansible.builtin.include_tasks: verify_secret_keys.yml
   loop: "{{ manifests_secret_files | default([]) }}"
   loop_control:
     loop_var: secret_file
+  when: not k8s_dry_run | bool
 
 # Whether k8s/image-builder rebuilt THIS service's image to a new digest earlier in the play.
 # Keyed on manifests_service because every built image is named after the role that deploys it
@@ -144,6 +195,10 @@
   #
   # Skipped when this run created the Deployment: it is already running the new config, and
   # `rollout restart` on one whose pods have not appeared yet races the initial rollout.
+  #
+  # The k8s_dry_run guard has to be explicit rather than falling out of the change conditions
+  # below: a dry run renders into a FRESH temp dir every time, so manifests_render is always
+  # `changed` and this would restart the live Deployment on every dry run.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} rollout restart
@@ -151,6 +206,7 @@
   become: true
   changed_when: true
   when:
+    - not k8s_dry_run | bool
     - manifests_rollout | default(manifests_service) | length > 0
     - manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
     - not manifests_apply.stdout is search('deployment.apps/' ~ (manifests_rollout | default(manifests_service)) ~ ' created')
@@ -178,7 +234,11 @@
            'changed': (manifests_render is changed) or (manifests_secret_render is changed)
                       or manifests_image_changed,
          }] }}
-  when: manifests_rollout | default(manifests_service) | length > 0
+  # Leaving the queue empty under dry-run is what makes roles/k8s/rollout-drain and the
+  # post_tasks stabilisation gate no-op — neither needs a k8s_dry_run condition of its own.
+  when:
+    - not k8s_dry_run | bool
+    - manifests_rollout | default(manifests_service) | length > 0
 
 # Everything above handles ONE Deployment per role. A role that renders several (n8n: n8n and
 # n8n-runners; karakeep: four) names the others here as {name, image} pairs, where `image` is
@@ -195,6 +255,7 @@
   loop_control:
     label: "{{ item.name }}"
   when:
+    - not k8s_dry_run | bool
     - manifests_render is changed or manifests_secret_render is changed
       or (item.image | default(item.name)) in (k8s_rebuilt_images | default([]))
     - not manifests_apply.stdout is search('deployment.apps/' ~ item.name ~ ' created')
@@ -219,3 +280,18 @@
   loop: "{{ manifests_extra_rollouts | default([]) }}"
   loop_control:
     label: "{{ item.name }}"
+  when: not k8s_dry_run | bool
+
+- name: Discard the throwaway render directory for {{ manifests_service }}
+  tags: [config, deploy]
+  # Unconditional cleanup: a failed dry-run apply is exactly when a temp dir is most likely to
+  # be left lying around, and the premise of the mode is that it leaves nothing behind. The
+  # path appears in the apply task's own failure output, so a debugging session can still read
+  # the rendered manifests off the console before this runs.
+  ansible.builtin.file:
+    path: "{{ manifests_dry_run_dir.path }}"
+    state: absent
+  become: true
+  when:
+    - k8s_dry_run | bool
+    - manifests_dry_run_dir.path is defined
