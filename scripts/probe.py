@@ -30,6 +30,7 @@ Subcommands:
     ha get <api-path>        Raw GET /api/<path>, e.g. `ha get error_log`
     ha trace <id|alias>      Why an automation last ran/no-op'd (per-condition WS trace; alias: why)
     ha verify-automations    Assert every automation in automations.yaml loaded (exit 0 = all loaded)
+    ha verify-entities       Assert every entity in external_entities.yml still exists live
     ha-state [--inventory]   Live view of the derived HA state model
 
 `metric` and `loki-query` print a formatted view by default (one `<labels> = <value>`
@@ -123,11 +124,15 @@ GROUP_VARS_PATH = os.path.join(
 
 # Git-managed automation source (repo-root relative to this file) — the "expected" set for
 # the verify-automations post-deploy gate. The deployed config is copied from here verbatim.
+# `k8s`, not `containers`: HA moved at the slice-5 B3 cutover and this constant did not follow,
+# so the gate raised FileNotFoundError from the cutover until the 2026-08-16 review. The old
+# test only asserted argparse wiring and never opened the file — test_verify_automations_path_exists
+# now pins the path itself.
 AUTOMATIONS_YAML = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "ansible",
     "roles",
-    "containers",
+    "k8s",
     "home-assistant",
     "files",
     "automations.yaml",
@@ -136,6 +141,22 @@ AUTOMATIONS_YAML = os.path.join(
 # Top-level automation list items only: `- id: <slug>` anchored at column 0. A trigger/condition
 # `id:` is always indented, so it can never be mistaken for an automation id.
 _AUTOMATION_ID_RE = re.compile(r"^- id:\s*(\S+)", re.MULTILINE)
+
+# The generated snapshot of integration-provided entities that validate_ha_config.py resolves
+# config references against — the "expected" set for the verify-entities gate.
+EXTERNAL_ENTITIES_YAML = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "ansible",
+    "roles",
+    "k8s",
+    "home-assistant",
+    "state",
+    "external_entities.yml",
+)
+
+# `  - domain.object_id` list items. Matched by regex rather than a YAML parse to keep probe.py
+# dependency-free, consistent with expected_automation_ids above.
+_SNAPSHOT_ENTITY_RE = re.compile(r"^\s*-\s+([a-z_]+\.[A-Za-z0-9_]+)\s*$", re.MULTILINE)
 
 # --- URL builders (pure) ----------------------------------------------------
 
@@ -326,6 +347,26 @@ def expected_automation_ids(text: str) -> set[str]:
     """The `id:` of every top-level automation in automations.yaml text. Regex over the raw
     text (no YAML parse) — robust to the HA Jinja inside the file; ids are simple slugs."""
     return set(_AUTOMATION_ID_RE.findall(text))
+
+
+def snapshot_entity_ids(text: str) -> set[str]:
+    """Every `domain.object_id` listed in external_entities.yml text."""
+    return set(_SNAPSHOT_ENTITY_RE.findall(text))
+
+
+def vanished_snapshot_entities(snapshot_ids, live_entity_ids):
+    """Ids present in state/external_entities.yml that no longer exist live, sorted.
+
+    The snapshot is what validate_ha_config.py resolves config references against, and it is
+    only rewritten by an explicit `ha_state_model.py refresh`. That makes the resolution guard
+    good at catching a TYPO and structurally blind to a DISAPPEARANCE: an integration entity
+    that goes away stays in the snapshot, so every reference to it keeps validating clean while
+    `states()` quietly returns 'unknown' at runtime. That is exactly how
+    sensor.pixel_9_pro_do_not_disturb_sensor and _sleep_duration disabled three bedroom features
+    without any check going red (2026-08-16 review). This turns that class into a live gate.
+    """
+    live = set(live_entity_ids)
+    return sorted(e for e in set(snapshot_ids) if e not in live)
 
 
 def automation_load_errors(expected_ids, live_automations):
@@ -836,6 +877,10 @@ def _build_parser():
         "verify-automations",
         help="assert every automation in automations.yaml loaded (exit 0 = all loaded)",
     )
+    hasub.add_parser(
+        "verify-entities",
+        help="assert every entity in state/external_entities.yml still exists live",
+    )
     hst = sub.add_parser("ha-state", help="live view of the derived state model")
     hst.add_argument(
         "--inventory",
@@ -1123,6 +1168,31 @@ def run_ha(ns):
                 print(e)
             return 1
         print(f"all {len(expected)} automations loaded")
+        return 0
+    if ns.ha_cmd == "verify-entities":
+        if ns.dry_run:
+            print(
+                " ".join(ha_curl_argv(ha_get_url("<ha-ip>", "states")))
+                + f"   # + Bearer; compare live entity_ids against {EXTERNAL_ENTITIES_YAML}"
+            )
+            return 0
+        states = json.loads(
+            ha_get(ha_get_url(ha_base(), "states"), ha_token(), resolve=ha_resolve())
+        )
+        with open(EXTERNAL_ENTITIES_YAML, encoding="utf-8") as f:
+            snapshot = snapshot_entity_ids(f.read())
+        gone = vanished_snapshot_entities(
+            snapshot, [s.get("entity_id", "") for s in states]
+        )
+        if gone:
+            for e in gone:
+                print(f"{e} is in external_entities.yml but no longer exists live")
+            print(
+                f"{len(gone)} vanished; re-point the config that reads them, then run "
+                "`ha_state_model.py refresh` + `generate`"
+            )
+            return 1
+        print(f"all {len(snapshot)} snapshot entities still exist")
         return 0
     if ns.dry_run:
         argv = ha_curl_argv(_ha_url("<ha-ip>", ns))

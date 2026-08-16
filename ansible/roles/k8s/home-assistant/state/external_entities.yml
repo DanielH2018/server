@@ -10,6 +10,7 @@ entities:
   - automation.bedroom_color_tracking
   - automation.bedroom_display_go_ambient_when_dark_or_sleeping
   - automation.bedroom_display_keep_dashboard_up
+  - automation.bedroom_fallback_wake_no_watch_alarm
   - automation.bedroom_fan_manual_override_detect
   - automation.bedroom_fan_startup_reconcile
   - automation.bedroom_fan_temperature_control
@@ -20,6 +21,7 @@ entities:
   - automation.bedroom_presence_blip_too_bright
   - automation.bedroom_presence_on
   - automation.bedroom_sensor_offline_alert
+  - automation.bedroom_sleep_mode_fan_reapply
   - automation.bedroom_suppress_al_self_on_at_startup
   - automation.bedroom_tap_dial_control
   - automation.bedroom_threshold_alert
@@ -33,8 +35,6 @@ entities:
   - automation.zigbee_bridge_offline_alert
   - binary_sensor.aqara_fp300_pir_detection
   - binary_sensor.aqara_fp300_presence
-  - binary_sensor.pixel_9_pro_android_auto
-  - binary_sensor.pixel_9_pro_is_charging
   - binary_sensor.pixel_watch_3_bedtime_mode
   - binary_sensor.pixel_watch_3_on_body_sensor
   - binary_sensor.zigbee2mqtt_bridge_connection_state
@@ -55,6 +55,7 @@ entities:
   - device_tracker.pixel_watch_3
   - event.backup_automatic_backup
   - fan.tower_fan
+  - input_number.bedroom_wake_sleep_min_latched
   - input_select.bedroom_test_scenario
   - input_select.bedroom_test_speed
   - light.0x001788010ff46108
@@ -190,11 +191,6 @@ entities:
   - sensor.pixel_9_pro_battery_level
   - sensor.pixel_9_pro_battery_state
   - sensor.pixel_9_pro_charger_type
-  - sensor.pixel_9_pro_do_not_disturb_sensor
-  - sensor.pixel_9_pro_next_alarm
-  - sensor.pixel_9_pro_sleep_confidence
-  - sensor.pixel_9_pro_sleep_duration
-  - sensor.pixel_9_pro_sleep_segment
   - sensor.pixel_watch_3_battery_level
   - sensor.pixel_watch_3_battery_state
   - sensor.pixel_watch_3_charger_type
@@ -224,6 +220,7 @@ entities:
   - switch.behind_bed
   - switch.desk_surge_protector_strip
   - switch.tower_fan_display_auto_off
+  - switch.tower_fan_oscillation
   - switch.tower_fan_panel_sound
   - switch.zigbee2mqtt_bridge_permit_join
   - text.0x001788010ff46108_effect_color

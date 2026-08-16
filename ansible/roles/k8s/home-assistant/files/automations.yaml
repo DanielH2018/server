@@ -478,20 +478,6 @@
       at: "09:00:00"
       id: fallback
   action:
-    # Latch the sleep duration ONCE at the wake-window open (alarm trigger only) so the ramp's curve
-    # shape is fixed for the whole window. bedroom_apply_wake reads this latched value, not the live
-    # sensor: the Google Sleep API can finalize sleep_duration mid-window, and re-reading it live each
-    # minute let the curve shape change under the ramp — a short-night value crossing the 360-min knee
-    # mid-ramp could step brightness DOWN (a wake light visibly dimming). Latching at open keeps it
-    # monotonic; a still-stale 0 here yields the normal curve, consistent with the documented
-    # best-effort/stale-at-alarm-15 fallback. Not gated on home, so a mid-window arrival uses today's value.
-    - if: "{{ trigger.id == 'alarm' }}"
-      then:
-        - service: input_number.set_value
-          target:
-            entity_id: input_number.bedroom_wake_sleep_min_latched
-          data:
-            value: "{{ states('sensor.pixel_9_pro_sleep_duration') | float(0) }}"
     # Daily hygiene (BOTH triggers): clear every overnight override (3 booleans + AL sleep) via the
     # shared script so sleep state / manual-off can't persist into the day. Single source of truth
     # with the test-harness reset (script.bedroom_clear_overrides).
@@ -520,18 +506,10 @@
         - service: script.bedroom_lights_set
           data:
             reason: "natural"
-        # Sleep-quality note: "you slept N h" (gentler wake if <6h — apply_wake softens the EARLY
-        # curve, knee ~24% at alarm+15, though it still reaches 100% by alarm+30). Skipped if
-        # sleep_duration is unknown/0 (Google Sleep API may lag).
-        - variables:
-            slept_h: "{{ (states('sensor.pixel_9_pro_sleep_duration') | float(0) / 60) | round(1) }}"
-        - if: "{{ slept_h > 0 }}"
-          then:
-            - service: script.bedroom_notify
-              data:
-                title: "{{ '😴 Short night' if slept_h < 6 else '☀️ Good morning' }}"
-                message: "You slept {{ slept_h }}h{{ ' — gentler wake.' if slept_h < 6 else '.' }}"
-                tag: sleep_morning
+        # The "you slept N h" morning note was removed 2026-08-16 along with the short-night wake
+        # curve: its only source, sensor.pixel_9_pro_sleep_duration, no longer exists and has no
+        # replacement on either device, so the `slept_h > 0` gate could never open. See the
+        # wake_brightness comment in custom_templates/lighting.jinja.
 
 # Per-minute sunrise ramp. While inside the 45-min wake window, set the current ramp frame
 # (script.bedroom_apply_wake) each minute — stateless ticks resume cleanly after an HA restart. On
@@ -644,18 +622,16 @@
           {{ (now().timestamp() - state_attr('input_datetime.bedroom_last_wake', 'timestamp')) / 60
              if wake_today else -1 }}
         in_window: "{% from 'lighting.jinja' import in_wake_window %}{{ in_wake_window(elapsed) | bool }}"
-        sleep_min: "{{ states('input_number.bedroom_wake_sleep_min_latched') | float(0) }}"
-        target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(elapsed, sleep_min) | int }}"
+        target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(elapsed) | int }}"
         # AL is "still paused for this room" when its manual_control list is non-empty (it lists the
         # member BULBS, not the group id — test length, not membership).
         al_still_manual: "{{ (state_attr('switch.bedroom_adaptive_lighting_bedroom', 'manual_control') or []) | count > 0 }}"
         release_due: "{% from 'lighting.jinja' import in_wake_release_window %}{{ in_wake_release_window(elapsed) | bool and al_still_manual }}"
     - choose:
         # START (first eligible minute of the window, nothing stamped yet today): stamp the anchor,
-        # latch the sleep duration once (fixes the curve shape for the window — mirrors
-        # bedroom_morning_reset), clear overnight overrides, re-apply the fan (person-home is a
-        # top-level condition, so no extra `if home`), greet, then apply the first frame (~1%). Setup
-        # runs EXACTLY once because stamping last_wake flips wake_today true on the next tick.
+        # clear overnight overrides, re-apply the fan (person-home is a top-level condition, so no
+        # extra `if home`), greet, then apply the first frame (~1%). Setup runs EXACTLY once because
+        # stamping last_wake flips wake_today true on the next tick.
         - conditions:
             - "{{ no_real_wake }}"
             - "{{ in_start_window }}"
@@ -666,11 +642,6 @@
                 entity_id: input_datetime.bedroom_last_wake
               data:
                 datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
-            - service: input_number.set_value
-              target:
-                entity_id: input_number.bedroom_wake_sleep_min_latched
-              data:
-                value: "{{ states('sensor.pixel_9_pro_sleep_duration') | float(0) }}"
             - service: script.bedroom_clear_overrides
             - service: script.bedroom_apply_fan
             - service: script.bedroom_notify
@@ -682,7 +653,7 @@
               data:
                 reason: "wake_fallback"
                 brightness_pct: >-
-                  {% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(0, states('sensor.pixel_9_pro_sleep_duration') | float(0)) | int }}
+                  {% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(0) | int }}
         # RAMP: inside the 45-min window on a stamped fallback morning -> apply ONE frame via the
         # sanctioned single writer. A mid-window HA restart resumes HERE on the next tick, because
         # elapsed is derived from the persisted anchor, not an in-process loop.
@@ -1003,8 +974,12 @@
               data:
                 notification_id: "{{ tag }}"
 
-# Temperature → fan: drive fan.tower_fan from the AirGradient temperature via script.bedroom_apply_fan
-# (off <72 / Low 72-74 / Medium 74-76 / High >=76 °F; Medium cap 22:00-06:00; 0.5°F deadband).
+# Temperature → fan: drive fan.tower_fan from the AirGradient temperature via script.bedroom_apply_fan.
+# The curve, the deadband and the caps all live in fan_target_level (custom_templates/fan.jinja) —
+# TUNE THEM THERE, not here. This comment used to restate them as discrete bands (off <72 / Low 72-74 /
+# Medium 74-76 / High >=76 °F; Medium cap 22:00-06:00; 0.5 °F deadband); every one of those numbers was
+# superseded by the continuous (t-71)/1.3 curve with a ±0.7-level deadband, an L4 night cap and the
+# sleep-mode seasonal floor / L5 ceiling, so a tuner following them would have changed the wrong thing.
 # Re-evaluates on every temperature change and at the night-cap boundaries (22:00 / 06:00) so the cap
 # engages/releases even when the temperature is steady. Skipped while the manual override is on.
 - id: bedroom_fan_temperature
@@ -1538,14 +1513,22 @@
       value_template: "{{ states.update | selectattr('state', 'eq', 'on') | list | count > 0 }}"
   action:
     - variables:
-        pending: "{{ states.update | selectattr('state', 'eq', 'on') | list }}"
         # One bullet per pending update: "• <name> (<installed> → <latest>)". Zigbee versions are
         # opaque build integers / IEEE names until devices are renamed in Z2M — still informative.
+        #
+        # The selectattr runs INSIDE each expression rather than being hoisted into its own
+        # `pending` variable. A State object does not survive being stored in one `variables:` entry
+        # and read from the next — it arrives as a plain string, so `u.name` / `u.entity_id` raised
+        # "'str object' has no attribute 'entity_id'" and the automation aborted during variable
+        # rendering, BEFORE the notify step. That failed silently every Sunday from 2026-06-18 until
+        # the 2026-08-16 review found it: the digest never once delivered. Read the versions off
+        # `u.attributes` for the same reason — no second lookup by entity_id.
+        count: "{{ states.update | selectattr('state', 'eq', 'on') | list | count }}"
         lines: >-
-          {% for u in pending %}{{ '\n• ' ~ u.name ~ ' (' ~ (state_attr(u.entity_id, 'installed_version') | string) ~ ' → ' ~ (state_attr(u.entity_id, 'latest_version') | string) ~ ')' }}{% endfor %}
+          {% for u in states.update | selectattr('state', 'eq', 'on') %}{{ '\n• ' ~ u.name ~ ' (' ~ (u.attributes.installed_version | string) ~ ' → ' ~ (u.attributes.latest_version | string) ~ ')' }}{% endfor %}
     - service: script.bedroom_notify
       data:
-        title: "📦 {{ pending | count }} update(s) available"
+        title: "📦 {{ count }} update(s) available"
         message: "{{ lines }}"
         tag: update_digest
 

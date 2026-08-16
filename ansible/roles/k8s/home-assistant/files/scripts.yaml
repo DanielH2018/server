@@ -120,10 +120,7 @@ bedroom_apply_wake:
       value_template: "{{ ws not in ['unknown', 'unavailable'] }}"
     - variables:
         wake_elapsed_min: "{{ (now() - as_datetime(ws)).total_seconds() / 60 }}"
-        # Latched at the wake-window open by bedroom_morning_reset (NOT the live sensor) so the curve
-        # shape stays fixed for the whole window — see that automation + the input_number comment.
-        sleep_min: "{{ states('input_number.bedroom_wake_sleep_min_latched') | float(0) }}"
-        target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(wake_elapsed_min, sleep_min) | int }}"
+        target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(wake_elapsed_min) | int }}"
     - service: light.turn_on
       target:
         entity_id: light.bedroom_lights
@@ -149,7 +146,7 @@ bedroom_preview_wake:
         for_each: [0, 7.5, 15, 22.5, 30, 37.5, 45]
         sequence:
           - variables:
-              target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(repeat.item, states('sensor.pixel_9_pro_sleep_duration') | float(0)) | int }}"
+              target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(repeat.item) | int }}"
           - service: light.turn_on
             target:
               entity_id: light.bedroom_lights
@@ -235,7 +232,8 @@ bedroom_apply_natural_gated:
 
 # Exit sleep mode: release the night/sleep state — clear the sleep-mode flag AND Adaptive Lighting's
 # sleep mode (the bedtime routine sets BOTH). Called FIRST by every Tap Dial LIGHT action that is NOT
-# on the Sleep button (button 3): touching the normal lights means you're up, so sleep should release.
+# on the Sleep button (button 2 since the 2026-07-18 remap): touching the normal lights means you're
+# up, so sleep should release.
 # Running it FIRST matters — bedroom_apply_natural serves the nightlight exception while sleep_mode is
 # on, so clearing it beforehand is what lets a Button-1 tap give daytime light instead of amber. Mirrors
 # the morning reset's sleep-clearing hygiene (same two service calls, now a shared single source).
@@ -341,7 +339,7 @@ bedroom_blip:
 # of truth for the temperature->band mapping, the 0.5°F hysteresis deadband, and the 22:00-06:00
 # night cap (Medium max). Works in the fan's 9 discrete LEVELS, not raw %, because the DREO
 # integration math.ceil()s a requested % up to the next level (so e.g. "67%" would land on level 7
-# = 77%). Callers (bedroom_fan_temperature, the morning reset, Tap Dial button 3) gate on the
+# = 77%). Callers (bedroom_fan_temperature, the morning reset, Tap Dial button 4) gate on the
 # bedroom_fan_manual override themselves — this just applies the right level, and only commands the
 # fan when the target level actually differs (avoids churn + self-echo manual-detects).
 bedroom_apply_fan:
@@ -507,7 +505,7 @@ bedroom_fan_nudge:
             percentage: "{{ send_pct }}"
 
 # Bedtime / sleep routine: the single "going to sleep" action, shared by the bedroom_bedtime
-# automation (phone Bedtime mode) and the Tap Dial button-3 (Sleep) hold. Engages sleep mode (which caps the
+# automation (phone Bedtime mode) and the Tap Dial button-2 (Sleep) hold. Engages sleep mode (which caps the
 # fan to Low via bedroom_apply_fan — quiet but still temperature-responsive, NOT frozen), flips
 # Adaptive Lighting into sleep mode (warm/dim), and fades to the warm nightlight scene over 30 min. The morning reset
 # unwinds sleep mode + AL sleep mode. NOT gated on presence (sets the room up for sleep even if you're
@@ -600,8 +598,13 @@ bedroom_notify:
   max: 10
   sequence:
     - variables:
+        # DND comes from the WATCH, not the phone: the watch is on-body, so its DND is the better
+        # "actually asleep" signal, and the phone's sensor silently disappeared once already
+        # (2026-08-16 review) — a missing entity renders 'unknown', which is inside the exclusion
+        # list below, so the term fails quiet-OFF and every routine alert pushed at `default`.
+        # Watch states are off / priority_only / alarms_only / total_silence.
         quiet: >-
-          {{ states('sensor.pixel_9_pro_do_not_disturb_sensor') not in ['off', 'unknown', 'unavailable']
+          {{ states('sensor.pixel_watch_3_do_not_disturb_sensor') not in ['off', 'unknown', 'unavailable']
              or is_state('input_boolean.bedroom_sleep_mode', 'on') }}
         importance: "{{ 'high' if (pierce | default(false)) else ('low' if quiet else 'default') }}"
         channel: "{{ 'Bedroom critical' if (pierce | default(false)) else 'Bedroom alerts' }}"
@@ -914,3 +917,21 @@ bedroom_run_scenario:
             notification_id: test_scenario
             title: "↩️ Preview restored"
             message: "Fast preview complete — restored the room to its pre-test state."
+    # Re-arm the picker to its safe default (added 2026-08-16). OUTSIDE the `wrap` block on
+    # purpose: it must also run at `real` speed, which is the dangerous combination. The picker
+    # was found parked on bedtime/real, leaving the dashboard's Run button one tap from a
+    # production bedtime — sleep mode on, AL sleep on, a 30-min fade to amber 3%, fan capped.
+    # `off` being the first option is the whole reason this is an input_select rather than an
+    # input_boolean (only input_select has a creation default), so drifting off it forfeits that.
+    # No automation triggers on either picker, so writing them here cannot re-enter the script.
+    # mode:restart means a re-press mid-run aborts before this, same caveat as the restore above.
+    - service: input_select.select_option
+      target:
+        entity_id: input_select.bedroom_test_scenario
+      data:
+        option: "off"
+    - service: input_select.select_option
+      target:
+        entity_id: input_select.bedroom_test_speed
+      data:
+        option: fast

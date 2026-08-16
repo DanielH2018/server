@@ -1,5 +1,7 @@
-# Managed by Ansible (roles/k8s/home-assistant) — ROOT YAML-mode dashboard.
-# This file IS the Home Assistant landing page (lovelace: mode: yaml). Edit here + deploy
+# Managed by Ansible (roles/k8s/home-assistant) — YAML-mode dashboard.
+# Registered under `lovelace: dashboards:` in configuration.yaml (url path `lovelace`, sidebar
+# title "Bedroom"), NOT as the root `lovelace: mode: yaml` this header used to claim — the root
+# dashboard remains storage-mode/UI-managed. Edit here + deploy
 # (recreates HA), or for a faster loop edit the rendered file and use
 # Developer Tools → YAML → "Reload Lovelace" to apply without an HA restart.
 # Built-in cards only (no HACS resources required).
@@ -149,7 +151,7 @@ views:
               # On = presence won't auto-on the lights (Tap Dial button 1 sets it; morning reset clears).
               - entity: input_boolean.bedroom_manual_off
                 name: Hold lights off
-              # On = temperature automation won't drive the fan (Tap Dial button 3 / morning reset clears).
+              # On = temperature automation won't drive the fan (Tap Dial button 4 / morning reset clears).
               - entity: input_boolean.bedroom_fan_manual
                 name: Fan manual
               # On = quiet fan cap + AL sleep mode (bedtime sets it; morning reset clears).

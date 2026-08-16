@@ -1,5 +1,6 @@
 """Unit tests for the bedroom lighting macros in custom_templates/lighting.jinja."""
 
+import pytest
 from jinja_harness import render_macro
 
 LIGHT = "lighting.jinja"
@@ -13,8 +14,8 @@ def _release_window(elapsed):
     return render_macro(LIGHT, "in_wake_release_window", elapsed)
 
 
-def _brightness(elapsed, sleep_min):
-    return int(render_macro(LIGHT, "wake_brightness", elapsed, sleep_min))
+def _brightness(elapsed):
+    return int(render_macro(LIGHT, "wake_brightness", elapsed))
 
 
 def _allowed(in_window, illuminance):
@@ -48,32 +49,34 @@ def test_in_wake_release_window_is_a_bounded_catchup():
 
 
 def test_wake_brightness_curve_endpoints():
-    assert _brightness(0, 0) == 1  # 1% at window start (alarm-15)
-    assert _brightness(15, 0) == 8  # ~8% at the alarm (soft, non-jarring)
+    assert _brightness(0) == 1  # 1% at window start (alarm-15)
+    assert _brightness(15) == 8  # ~8% at the alarm (soft, non-jarring)
     assert (
-        _brightness(35, 0) == 20
+        _brightness(35) == 20
     )  # still-dim knee at alarm+20 -> stays gentle past the alarm
-    assert _brightness(45, 0) == 100  # 100% at alarm+30 -> seamless AL hand-off, no pop
+    assert _brightness(45) == 100  # 100% at alarm+30 -> seamless AL hand-off, no pop
 
 
 def test_wake_brightness_is_gentle_then_steep():
     # Each segment is steeper than the last, with the climb pushed into the final 10 min:
     # pre-alarm 7%/15min, alarm->knee 12%/20min (a dim plateau), knee->full 80%/10min.
-    assert _brightness(7.5, 0) == 4  # 1 + (8-1)*0.5 = 4.5 -> banker's round -> 4
-    assert _brightness(25, 0) == 14  # 8 + (20-8)*(10/20) -> ~06:10 stays dim
+    assert _brightness(7.5) == 4  # 1 + (8-1)*0.5 = 4.5 -> banker's round -> 4
+    assert _brightness(25) == 14  # 8 + (20-8)*(10/20) -> ~06:10 stays dim
     assert (
-        _brightness(40, 0) == 60
+        _brightness(40) == 60
     )  # 20 + (100-20)*(5/10) -> the steep tail near window end
 
 
-def test_wake_brightness_short_night_lowers_curve():
-    assert _brightness(15, 300) == 5  # 0 < 300 < 360 -> gentler ~5% at the alarm
-    assert _brightness(35, 300) == 14  # ...and ~14% knee
-    assert (
-        _brightness(45, 300) == 100
-    )  # ...but STILL reaches 100% (else the AL pop returns)
-    assert _brightness(15, 0) == 8  # unknown/0 sleep -> normal
-    assert _brightness(15, 400) == 8  # long night -> normal
+def test_wake_brightness_takes_only_elapsed():
+    """The short-night softening was removed 2026-08-16 with its dead sensor.
+
+    A second `sleep_min` argument scaled the mid/knee down for a night under 6 h, but its only
+    source (sensor.pixel_9_pro_sleep_duration) no longer exists on any device, so every caller
+    passed 0 and the branch was unreachable. Pinning the arity keeps a caller from silently
+    reintroducing an argument the macro would ignore.
+    """
+    with pytest.raises(TypeError):
+        render_macro(LIGHT, "wake_brightness", 15, 300)
 
 
 def test_auto_light_allowed_truth_table():
