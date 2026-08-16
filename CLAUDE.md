@@ -289,8 +289,9 @@ Hand-running an auto-approved *write* verb creates drift from the Ansible source
   `alerts [--days N --check X]` reconstructs monitor-bridge's DOWN alert history from Loki (Kuma
   keeps only current state) — one row per firing episode; the same view is the "Alert History"
   Grafana board (Infrastructure folder). `health <svc>` is a k8s post-deploy gate: it exits 0 only
-  when the Deployment is fully rolled out (observed generation caught up, every replica updated +
-  ready + available) **and** no container restarted in the last 180s. Both halves matter — readiness
+  when the Deployment **or DaemonSet** is fully rolled out (observed generation caught up, every
+  replica updated + ready + available) **and** no container restarted in the last 180s. An
+  unreadable restart time counts as recent, so it fails closed. Both halves matter — readiness
   flips a Deployment to Available before a bad liveness probe starts killing it, so a rollout check
   alone reports green on a crashlooping pod. `--docker` inspects the Pi's container over ssh
   instead; that was the only mode until 2026-08-16, which is why it died with

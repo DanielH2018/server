@@ -621,14 +621,14 @@ def format_health(data, container):
 RECENT_RESTART_SECONDS = 180
 
 
-def k8s_deploy_argv(service, namespace):
+def k8s_deploy_argv(service, namespace, kind="deploy"):
     return [
         "k3s",
         "kubectl",
         "-n",
         namespace,
         "get",
-        "deploy",
+        kind,
         service,
         "-o",
         "json",
@@ -663,10 +663,36 @@ def _seconds_since(timestamp, now):
     return (now - when).total_seconds()
 
 
+def _rollout_counts(workload):
+    """(desired, updated, ready, available) for a Deployment or a DaemonSet.
+
+    DaemonSets carry the same four numbers under different names, and `desired` is the count of
+    nodes the scheduler picked rather than a spec field — so a DaemonSet pinned to one node is
+    complete at 1/1, not at one-per-node.
+    """
+    spec, status = workload.get("spec") or {}, workload.get("status") or {}
+    if workload.get("kind") == "DaemonSet":
+        return (
+            status.get("desiredNumberScheduled", 0),
+            status.get("updatedNumberScheduled", 0),
+            status.get("numberReady", 0),
+            status.get("numberAvailable", 0),
+        )
+    return (
+        spec.get("replicas", 1),
+        status.get("updatedReplicas", 0),
+        status.get("readyReplicas", 0),
+        status.get("availableReplicas", 0),
+    )
+
+
 def format_k8s_health(deploy, pods, service, now):
-    """Summarize a Deployment's rollout + its pods' restarts. Returns (text, exit_code).
+    """Summarize a workload's rollout + its pods' restarts. Returns (text, exit_code).
 
     Pure: takes the two parsed kubectl JSON documents and a `now`, returns what to print.
+    `deploy` is a Deployment or a DaemonSet — six workloads here are DaemonSets (promtail,
+    node-exporter, the crowdsec node agent, dri-device-plugin, ...) and a gate that silently
+    could not check them would be a gate with holes exactly where the node-level agents are.
 
     exit_code is 0 only when the rollout is COMPLETE (the observed generation has caught up and
     every replica is updated, ready and available) AND no container restarted within
@@ -676,20 +702,13 @@ def format_k8s_health(deploy, pods, service, now):
     """
     if not deploy:
         return (
-            f"{service}: no Deployment in this namespace "
+            f"{service}: no Deployment or DaemonSet in this namespace "
             "(wrong name, wrong namespace, or the deploy never ran?)",
             1,
         )
 
-    meta, spec, status = (
-        deploy.get("metadata") or {},
-        deploy.get("spec") or {},
-        deploy.get("status") or {},
-    )
-    desired = spec.get("replicas", 1)
-    updated = status.get("updatedReplicas", 0)
-    ready = status.get("readyReplicas", 0)
-    available = status.get("availableReplicas", 0)
+    meta, status = deploy.get("metadata") or {}, deploy.get("status") or {}
+    desired, updated, ready, available = _rollout_counts(deploy)
     # A spec edit bumps metadata.generation immediately; status.observedGeneration only catches
     # up once the controller has acted. Comparing them is what distinguishes "rolled out" from
     # "the controller has not looked at my change yet" — the old ReplicaSet satisfies every
@@ -711,10 +730,15 @@ def format_k8s_health(deploy, pods, service, now):
                 "finishedAt"
             )
             age = _seconds_since(finished, now)
-            if age is not None and age < RECENT_RESTART_SECONDS:
-                recent.append(
-                    f"{pod_name}/{cs.get('name', '?')} restarted {int(age)}s ago"
-                )
+            where = f"{pod_name}/{cs.get('name', '?')}"
+            # A restart whose time cannot be read counts as RECENT. Treating "unknown" as "long
+            # ago" would fail open — the one direction a gate must never fail — and this branch
+            # is reachable whenever kubectl's timestamp format shifts under us (every finishedAt
+            # in this cluster is second-precision UTC today; fractional seconds parse as None).
+            if age is None:
+                recent.append(f"{where} restarted at an unreadable time ({finished!r})")
+            elif age < RECENT_RESTART_SECONDS:
+                recent.append(f"{where} restarted {int(age)}s ago")
 
     line = f"{service}: {ready}/{desired} ready, {updated} updated, restarts={restarts}"
     if stale:
@@ -1192,7 +1216,8 @@ def run_health(container, docker=False):
     """
     if docker:
         # daniel-pi is the only Docker host left, and probe.py runs on daniel-box, so this is
-        # necessarily remote. Read-only, and the ssh form the auto-approve classifier passes.
+        # necessarily remote. The ssh is internal to the script, so it is covered by probe.py's
+        # own allow-list entry and never reaches the Bash classifier.
         argv = ["ssh", PI_HOST] + inspect_argv(container)
         out = subprocess.run(argv, capture_output=True, text=True)
         try:
@@ -1204,7 +1229,12 @@ def run_health(container, docker=False):
         return code
 
     ns = k8s_namespace()
-    deploy = _json_or_none(k8s_deploy_argv(container, ns))
+    # Deployment first, DaemonSet second — the fleet is overwhelmingly Deployments, and asking
+    # for the wrong kind just returns non-zero, so the fallback costs one extra call only for
+    # the six DaemonSets and for a name that matches neither.
+    deploy = _json_or_none(k8s_deploy_argv(container, ns)) or _json_or_none(
+        k8s_deploy_argv(container, ns, kind="daemonset")
+    )
     pods = _json_or_none(k8s_pods_argv(container, ns)) if deploy else None
     text, code = format_k8s_health(deploy, pods, container, datetime.now(timezone.utc))
     print(text)
@@ -1422,6 +1452,10 @@ def main(argv=None):
             else:
                 ns_name = k8s_namespace()
                 print(" ".join(k8s_deploy_argv(ns.container, ns_name)))
+                print(
+                    " ".join(k8s_deploy_argv(ns.container, ns_name, kind="daemonset"))
+                    + "   # only if the Deployment lookup misses"
+                )
                 print(" ".join(k8s_pods_argv(ns.container, ns_name)))
             return 0
         return run_health(ns.container, docker=ns.docker)

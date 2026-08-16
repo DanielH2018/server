@@ -354,9 +354,28 @@ def test_k8s_health_old_restart_does_not_fail():
 
 
 def test_k8s_health_unparseable_restart_timestamp_does_not_fail_open():
-    """An unreadable finishedAt must not be silently treated as 'long ago'."""
+    """An unreadable finishedAt must count as RECENT, not as 'long ago'.
+
+    Treating unknown as old is the one direction a gate must never fail. Reachable whenever
+    kubectl's timestamp format shifts — fractional seconds, for instance, parse as None.
+    """
     assert probe._seconds_since("not-a-timestamp", _NOW) is None
     assert probe._seconds_since(None, _NOW) is None
+
+    text, code = probe.format_k8s_health(
+        _deploy(), _pods(("app", 1, "2026-08-16T11:59:30.123456Z")), "freshrss", _NOW
+    )
+    assert code == 1
+    assert "unreadable time" in text
+
+
+def test_k8s_health_restart_with_no_laststate_fails_closed():
+    """restartCount > 0 with no terminated state is still an unexplained restart."""
+    text, code = probe.format_k8s_health(
+        _deploy(), _pods(("app", 2, None)), "freshrss", _NOW
+    )
+    assert code == 1
+    assert "unreadable time" in text
 
 
 def test_k8s_health_checks_every_container_in_the_pod():
@@ -367,6 +386,44 @@ def test_k8s_health_checks_every_container_in_the_pod():
     )
     assert code == 1
     assert "sidecar" in text
+
+
+def _daemonset(generation=1, observed=1, desired=2, updated=2, ready=2, available=2):
+    return {
+        "kind": "DaemonSet",
+        "metadata": {"generation": generation},
+        "status": {
+            "observedGeneration": observed,
+            "desiredNumberScheduled": desired,
+            "updatedNumberScheduled": updated,
+            "numberReady": ready,
+            "numberAvailable": available,
+        },
+    }
+
+
+def test_k8s_health_reads_a_daemonset():
+    """Six workloads here are DaemonSets — promtail, node-exporter, the crowdsec node agent.
+    They carry the same four numbers under different status field names."""
+    text, code = probe.format_k8s_health(
+        _daemonset(), _pods(("app", 0, None)), "promtail", _NOW
+    )
+    assert code == 0
+    assert "2/2 ready" in text
+
+
+def test_k8s_health_daemonset_missing_a_node_exits_one():
+    """Scheduled on 2 nodes, ready on 1 — a Deployment's readyReplicas would read 0 here, so
+    the field mapping has to be per-kind rather than a shared default."""
+    text, code = probe.format_k8s_health(
+        _daemonset(ready=1, available=1), _pods(("app", 0, None)), "promtail", _NOW
+    )
+    assert code == 1
+    assert "rollout incomplete" in text
+
+
+def test_k8s_health_argv_can_ask_for_a_daemonset():
+    assert "daemonset" in probe.k8s_deploy_argv("promtail", "homelab", kind="daemonset")
 
 
 def test_k8s_health_argv_targets_the_named_namespace():
