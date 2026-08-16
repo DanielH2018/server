@@ -8,11 +8,18 @@ against that same single name. Two role shapes therefore auto-deploy without a w
     `kubectl apply -f <dir>/` but never waited on, so a bump to its image is deployed and never
     verified (prowlarr's flaresolverr and freshrss's feed-cache are the live instances);
   * a role passing `manifests_rollout: ''`, which skips the rollout wait AND the stability soak
-    outright.
+    outright;
+  * a role whose Deployment declares no `readinessProbe`: `rollout status` then returns the
+    moment the pod reports Running, which proves only that the image exists.
 
-Both are fine for a hand-deployed role — an operator is watching. Neither is fine for an
+All three are fine for a hand-deployed role — an operator is watching. None is fine for an
 auto-deployed one, so the denylist must cover them. Asserting it here means a role that later
 grows a second Deployment fails the suite instead of silently auto-deploying ungated.
+
+These guards were belt-and-braces while `gitops_deploy_k8s_autodeploy_pilot` named a single
+service; clearing the pilot on 2026-08-16 made them the only thing standing between a role shape
+and an ungated auto-deploy. The probe guard was added in that same commit, after six services
+turned out to match an existing exclusion class while sitting outside the denylist.
 """
 
 from __future__ import annotations
@@ -80,6 +87,29 @@ def test_auto_deployable_roles_render_exactly_one_deployment() -> None:
         "Auto-deployable role(s) with an ungated Deployment — add to "
         "gitops_deploy_k8s_autodeploy_denylist with a reason, or give the role a single "
         "Deployment:\n" + "\n".join(offenders)
+    )
+
+
+def _has_readiness_probe(role: Path) -> bool:
+    return any(
+        "readinessProbe" in (role / "templates" / name).read_text()
+        for name in _deployment_templates(role)
+    )
+
+
+def test_auto_deployable_roles_declare_a_readiness_probe() -> None:
+    denylist = _denylist()
+    offenders = [
+        f"{role.name}: Deployment has no readinessProbe — `rollout status` returns on Running"
+        for role in _roles()
+        if role.name not in denylist
+        and _deployment_templates(role)
+        and not _has_readiness_probe(role)
+    ]
+    assert not offenders, (
+        "Auto-deployable role(s) whose rollout gate proves nothing — add to "
+        "gitops_deploy_k8s_autodeploy_denylist with a reason, or give the Deployment a "
+        "readinessProbe:\n" + "\n".join(offenders)
     )
 
 

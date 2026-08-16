@@ -1247,6 +1247,26 @@ def test_split_k8s_pilot_scope_restricts_eligibility():
     assert cs.k8s == {"littlelink"}
 
 
+def test_split_k8s_empty_pilot_means_the_denylist_governs():
+    # Slice 3 (2026-08-16) cleared the pilot list. An empty pilot must mean "everything not
+    # denylisted", never "nothing" — the opposite reading of the same falsy value, and the one
+    # that would silently disarm the feature instead of widening it.
+    paths = [_SPEEDTEST_DEFAULTS, _defaults_for("littlelink"), _defaults_for("sonarr")]
+    cs = _split(paths, denylist={"sonarr"}, pilot=frozenset())
+    assert cs.k8s_deploy == {"speedtest", "littlelink"}
+    assert cs.k8s == {"sonarr"}
+
+
+def test_split_k8s_denies_the_services_the_pilot_used_to_mask():
+    # These six sat outside the denylist only because the pilot named neither them nor anything
+    # else; each matches an exclusion class the design already publishes. Clearing the pilot
+    # without adding them would have armed all six at once.
+    masked = ("qbittorrent", "bazarr", "tdarr", "livesync", "valheim", "valheim-stats")
+    cs = _split([_defaults_for(s) for s in masked], denylist=set(masked))
+    assert cs.k8s_deploy == set()
+    assert cs.k8s == set(masked)
+
+
 def test_split_k8s_defers_when_the_tick_also_carries_docker_services():
     # main()'s k8s branch returns before the Docker deploy + health gate, so promoting here
     # would silently skip them. Defer instead.
