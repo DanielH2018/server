@@ -154,8 +154,20 @@ For the ~35 workloads that stay on `Recreate`, the gap can still be cut:
 - **Image pre-pull**, so a new tag is not pulled *inside* the gap. Pinned digests are already
   the convention; the gap case is a changed tag.
 
-This does not reach zero. It is expected to move an estimated 15–45s window to roughly
-5–15s across the holdouts — an estimate to be replaced with measurement in slice 1.
+**Measured, and withdrawn.** This section proposed the tuning above on the strength of an
+estimated 15–45s window. The measurement in [`zero-downtime-baseline.md`](zero-downtime-baseline.md)
+does not support it: median start→ready across the fleet is 11s, p90 is 31s, and
+`terminationGracePeriodSeconds` only contributes at all when an app ignores SIGTERM — which
+nothing here is shown to do. `minReadySeconds` runs the wrong way; it delays a rollout being
+called complete rather than shrinking a gap.
+
+The real outliers are radarr (310s) and sonarr (250s), an order of magnitude past the estimate
+and caused by application startup that no Kubernetes setting touches.
+
+So approach B's fleet-wide tuning is dropped. The baseline's recommendation stands in its place:
+leave the ~35 typical holdouts alone, treat radarr and sonarr as an application question if their
+4–5 minute gaps matter, and add `readinessProbe`s to the 14 workloads with none — a correctness
+fix, and a prerequisite for ever converting them.
 
 ## Approach A items (folded into B)
 
