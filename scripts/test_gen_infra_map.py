@@ -333,25 +333,37 @@ def test_find_extra_containers_marks_a_stopped_extra_down():
     assert g.find_extra_containers(live, set(), ROLES)[0]["status"] == "down"
 
 
-# --- classify_migration -----------------------------------------------------
+# --- services_on_host -------------------------------------------------------
+#
+# The inventory declares every k8s service under daniel-box, so a host panel
+# built from `containers_list` rendered daniel-server as empty while it ran 47
+# pods. These pin the panel to placement instead.
 
 
-def test_classify_migration_splits_cutover_dual_and_docker_only():
-    box = [
-        service("freshrss", platform="k8s"),
-        service("traefik", platform="k8s"),
+def test_services_on_host_lists_what_landed_there_not_what_declares_it():
+    k8s = [
+        {**service("sonarr", platform="k8s"), "nodes": ["daniel-server"]},
+        {**service("traefik", platform="k8s"), "nodes": ["daniel-box"]},
     ]
-    server = [service("traefik"), service("sonarr")]
-    result = g.classify_migration(box, server)
-    assert result["cutover"] == ["freshrss"]
-    assert result["dual"] == ["traefik"]
-    assert result["docker_only"] == ["sonarr"]
+    assert [s["name"] for s in g.services_on_host("daniel-server", [], k8s)] == [
+        "sonarr"
+    ]
 
 
-def test_classify_migration_ignores_undeclared_docker_containers():
-    """A companion container is not an un-migrated service."""
-    server = [service("node-exporter", declared=False, status="companion")]
-    assert g.classify_migration([], server)["docker_only"] == []
+def test_services_on_host_shows_a_spread_service_on_both():
+    k8s = [
+        {**service("loki", platform="k8s"), "nodes": ["daniel-box", "daniel-server"]}
+    ]
+    assert g.services_on_host("daniel-box", [], k8s)
+    assert g.services_on_host("daniel-server", [], k8s)
+
+
+def test_services_on_host_keeps_an_unplaced_service_with_its_declaring_host():
+    """A one-shot job has no pods; it must not fall off the page entirely."""
+    declared = [{**service("configarr", platform="k8s", status="job"), "nodes": []}]
+    assert [s["name"] for s in g.services_on_host("daniel-box", declared, [])] == [
+        "configarr"
+    ]
 
 
 # --- build_model ------------------------------------------------------------
