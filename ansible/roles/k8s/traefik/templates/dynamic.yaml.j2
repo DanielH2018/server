@@ -63,6 +63,41 @@ spec:
     period: 1m
 ---
 apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  # Response compression, attached ENTRYPOINT-WIDE in static-config.yaml.j2 rather than
+  # per-router: there is no service here that wants its HTML/JSON shipped uncompressed, so
+  # an opt-in list would only ever be a list of everything, drifting one service at a time.
+  # Nothing compressed anything before this (2026-08-16) — invisible on the LAN, and the
+  # reason a Grafana board or an *arr UI feels heavy over WireGuard or through Cloudflare.
+  name: compress
+  namespace: {{ k8s_namespace }}
+spec:
+  compress:
+    # An ALLOW-list, not excludedContentTypes. Two reasons, and the first is a correctness
+    # trap: Traefik compares excludedContentTypes by parsed media type EQUALITY, so the
+    # obvious-looking `video/` prefix entry matches nothing and Jellyfin's streams would be
+    # gzipped — CPU burned to make already-compressed bytes slightly larger. Enumerating
+    # every video/image/archive type instead is a list that silently rots as new types
+    # appear. Naming what compresses well is the closed set; everything else — video, audio,
+    # images, torrents, fonts, downloads — is excluded by construction.
+    includedContentTypes:
+      - text/html
+      - text/plain
+      - text/css
+      - text/javascript
+      - text/xml
+      - application/javascript
+      - application/json
+      - application/manifest+json
+      - application/xml
+      - application/rss+xml
+      - image/svg+xml
+    # Below this the Content-Encoding/Vary header overhead costs more than the saving.
+    # Matches Traefik's own default; stated because it is a tuning knob, not a constant.
+    minResponseBodyBytes: 1024
+---
+apiVersion: traefik.io/v1alpha1
 kind: TLSOption
 metadata:
   # NOT `default`. That name is reserved: Traefik registers a TLSOption called `default` as
