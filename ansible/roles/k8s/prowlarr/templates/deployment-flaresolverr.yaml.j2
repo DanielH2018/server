@@ -10,8 +10,16 @@ metadata:
   namespace: {{ k8s_namespace }}
 spec:
   replicas: 1
+  # No authoritative state: /config is a browser profile cache the app rebuilds on first use
+  # (see the note in tasks/main.yml), so it moved to an emptyDir and the RWO constraint that
+  # forced Recreate is gone. maxUnavailable 0 is what makes this actually zero-downtime — on a
+  # single replica it forces the new pod Ready before the old one is removed, where the 25%
+  # default would round down to 0 anyway but says nothing about intent.
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: flaresolverr
@@ -77,5 +85,4 @@ spec:
               memory: {{ prowlarr_k8s_fs_mem_request }}
       volumes:
         - name: config
-          persistentVolumeClaim:
-            claimName: {{ prowlarr_k8s_flaresolverr_claim }}
+          emptyDir: {}

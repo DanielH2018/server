@@ -102,10 +102,6 @@ _RECREATE = {
     # ── workspace ──
     ("code-server", "code-server"): "live workspace on an RWO PVC",
     # ── stateless, pending conversion ──
-    (
-        "prowlarr",
-        "flaresolverr",
-    ): "not yet converted; see docs/zero-downtime-deploys-plan-1.md",
 }
 
 

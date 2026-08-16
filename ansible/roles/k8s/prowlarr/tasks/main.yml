@@ -43,7 +43,6 @@
       # also cannot be reached in the gap: it takes seconds to pull and start, and the policy is
       # applied in the same call.
       - networkpolicy.yaml
-      - pvc-flaresolverr.yaml
       - deployment-flaresolverr.yaml
       - service-flaresolverr.yaml
       - deployment.yaml
@@ -51,6 +50,20 @@
       - ingressroute.yaml
       # The query-only door for monitor-bridge on daniel-server (slice 4, B4c).
       - ingressroute-monitoring.yaml
+
+# flaresolverr's config PVC was retired when the Deployment moved to an emptyDir. Dropping
+# pvc-flaresolverr.yaml from manifests_files stops it being staged but does not remove the
+# live object, so it is deleted here. --ignore-not-found makes this idempotent, which is what
+# lets it stay in the role rather than being a one-shot play someone has to remember to run.
+- name: Retire the flaresolverr config PVC
+  tags: [deploy]
+  when: prowlarr_k8s_enabled | bool
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete pvc {{ prowlarr_k8s_flaresolverr_claim }}
+      --ignore-not-found --wait=false
+  become: true
+  changed_when: false
 
 # ── prove the flaresolverr isolation survived the move ──────────────────────────────────────
 # Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and
