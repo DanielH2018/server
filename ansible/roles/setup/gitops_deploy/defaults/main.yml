@@ -99,7 +99,10 @@ gitops_deploy_k8s_autodeploy_denylist:
   - node-exporter
   - dri-device-plugin
   # NetworkPolicy-only role: renders no Deployment, so there is nothing for `rollout status` to
-  # gate. It also pins no image, so it can never qualify anyway.
+  # gate. NOT redundant — it DOES pin an image (netpol_baseline_probe_image: alpine:3.24, the
+  # probe Job), and renovate.json's k8s-images manager matches `_image:` across
+  # roles/k8s/*/defaults/main.yml, so Renovate tracks it and will open a bump PR that this entry
+  # is the only thing holding back from auto-deploying ungated.
   - netpol-baseline
   # probe-less Deployments — `rollout status` returns on Running and proves nothing
   - cloudflare-ddns

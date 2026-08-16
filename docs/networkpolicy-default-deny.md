@@ -1,6 +1,9 @@
 # Default-deny ingress NetworkPolicies
 
-Design doc. Written 2026-08-16. Status: **approved approach, not yet implemented.**
+Design doc. Written 2026-08-16. Status: **slice 1 implemented and inert; not yet activated.**
+The `netpol-baseline` role, the six labelled apps and the probe job are all in the tree, but
+`netpol_baseline_enforced` is still `false` — the policy renders an allow-all body, so nothing
+is fenced. Turning it on is a separate deploy, and slices 2–5 are still design only.
 
 ## The problem
 
@@ -169,7 +172,7 @@ reason below.
 
 | # | Scope | Why here |
 |---|---|---|
-| **1** | Leaf apps: bento-pdf, littlelink, speedtest, healthchecks, ical-proxy, code-server, terraria, valheim | Only caller is Traefik. Exercises the whole mechanism — baseline policy, var flip, probe job — at near-zero blast radius, and a mistake surfaces as a 502, not silence |
+| **1** | Leaf apps: bento-pdf, littlelink, speedtest, healthchecks, ical-proxy, code-server | Traefik is the only in-cluster caller of these six. Exercises the whole mechanism — baseline policy, var flip, probe job — at near-zero blast radius, and a mistake surfaces as a 502, not silence. terraria and valheim are deliberately NOT here: they are reached over their own MetalLB VIPs by game clients on the LAN, not through Traefik, so the baseline's traefik rule would not cover them and fencing them would need per-workload peers this slice does not design |
 | **2** | Media stack + bridges: sonarr, radarr, prowlarr, bazarr, jellyfin, tdarr, qbittorrent, configarr, janitorr, monitor-bridge, autofix-bridge | Densest genuine app-to-app mesh; several callers are DB-configured and unprobeable |
 | **3** | `observability` namespace | Four hostPort ingress paths, cross-namespace inbound from three homelab workloads, thick intra-namespace mesh |
 | **4** | Infra tier: traefik, authelia, crowdsec, pihole, mosquitto, nut, registry, headlamp, n8n | Highest consequence; do it once the pattern is proven |
