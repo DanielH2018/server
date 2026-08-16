@@ -557,6 +557,7 @@ def split_k8s_auto_deploy(
     pilot: frozenset[str] | set[str],
     enabled: bool,
     image_only: Callable[[str], bool],
+    max_per_tick: int = 0,
 ) -> ChangeSet:
     """Promote image-bump-only k8s changes from `cs.k8s` into `cs.k8s_deploy`.
 
@@ -599,6 +600,19 @@ def split_k8s_auto_deploy(
         promoted.add(svc)
     if not promoted:
         return cs
+    # Cap what one tick takes on. deploy_k8s joins every promoted service into a SINGLE
+    # ansible-playbook invocation under one shared K8S_DEPLOY_TIMEOUT_S, and on timeout the
+    # failure path is `git reset --hard local` across the whole merged range — so an overlong
+    # batch discards the good bumps alongside the bad one. renovate.json states the intent
+    # ("keeps each auto-deploy tick to a single service, which is what the deploy timeout is
+    # sized for") but nothing enforced it: a tick diffs local..origin, spanning every commit
+    # since the last one, and per-service k8s PRs share one daily window with platformAutomerge.
+    #
+    # The surplus stays in cs.k8s, which defer-and-alerts — the same fail-closed path as any
+    # unpromotable change — so it is deferred rather than merged-but-undeployed. It is picked up
+    # on a later tick.
+    if max_per_tick > 0 and len(promoted) > max_per_tick:
+        promoted = set(sorted(promoted)[:max_per_tick])
     return replace(cs, k8s=cs.k8s - promoted, k8s_deploy=cs.k8s_deploy | promoted)
 
 
