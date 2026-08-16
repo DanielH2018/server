@@ -118,6 +118,13 @@
 # Keyed on manifests_service because every built image is named after the role that deploys it
 # — including n8n, whose image is built by the separate n8n-images role in an earlier batch,
 # which works because k8s_rebuilt_images is play-scoped rather than role-scoped.
+#
+# "named after the role" holds for six of the seven built images. It does NOT hold for
+# n8n-runners, which n8n-images builds under its own name while the n8n role deploys it — so
+# `manifests_service in k8s_rebuilt_images` was False for a runners-only rebuild, and the
+# rollout below targets a single Deployment name anyway. A rebuilt runners image therefore
+# reached the registry and never reached a pod, with the deploy reporting green. Roles that
+# deploy more than one Deployment declare the rest in manifests_extra_rollouts.
 - name: Note whether a rebuilt image needs rolling for {{ manifests_service }}
   tags: [deploy]
   ansible.builtin.set_fact:
@@ -172,3 +179,43 @@
                       or manifests_image_changed,
          }] }}
   when: manifests_rollout | default(manifests_service) | length > 0
+
+# Everything above handles ONE Deployment per role. A role that renders several (n8n: n8n and
+# n8n-runners; karakeep: four) names the others here as {name, image} pairs, where `image` is
+# the k8s/image-builder name whose rebuild should roll it. Optional and empty by default, so
+# every single-Deployment role behaves exactly as before.
+- name: Roll the extra deployments after a config or image change for {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout restart deploy/{{ item.name }}
+  become: true
+  changed_when: true
+  loop: "{{ manifests_extra_rollouts | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - manifests_render is changed or manifests_secret_render is changed
+      or (item.image | default(item.name)) in (k8s_rebuilt_images | default([]))
+    - not manifests_apply.stdout is search('deployment.apps/' ~ item.name ~ ' created')
+
+- name: Queue the batch drain for the extra rollouts of {{ manifests_service }}
+  tags: [deploy]
+  # noqa var-naming[no-role-prefix] — see the primary queue task above.
+  # `changed` is computed per-image, NOT from manifests_image_changed: that fact is keyed on
+  # manifests_service, so reusing it here would queue a runners-only rebuild with changed=false
+  # and the stabilisation gate would skip the very workload whose image just moved — a restart
+  # that fires but is never soaked.
+  ansible.builtin.set_fact:
+    k8s_pending_rollouts: >-
+      {{ (k8s_pending_rollouts | default([])) + [{
+           'name': item.name,
+           'namespace': k8s_namespace,
+           'kind': 'deploy',
+           'timeout': manifests_rollout_timeout | default('300s'),
+           'changed': (manifests_render is changed) or (manifests_secret_render is changed)
+                      or ((item.image | default(item.name)) in (k8s_rebuilt_images | default([]))),
+         }] }}
+  loop: "{{ manifests_extra_rollouts | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"

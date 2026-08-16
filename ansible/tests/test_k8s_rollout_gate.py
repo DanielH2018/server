@@ -256,6 +256,75 @@ def test_batch_applies_the_service_tag_to_the_included_role() -> None:
     )
 
 
+def _walk(tasks) -> list[dict]:
+    """Every task, descending into block/rescue/always."""
+    found: list[dict] = []
+    for task in tasks or []:
+        if not isinstance(task, dict):
+            continue
+        found.append(task)
+        for key in ("block", "rescue", "always"):
+            found.extend(_walk(task.get(key)))
+    return found
+
+
+def _role_includes(role_name: str) -> list[dict]:
+    """The `vars` of every include of `role_name` across roles/k8s/*/tasks/*.yml."""
+    out: list[dict] = []
+    for path in sorted((_REPO / "ansible/roles/k8s").glob("*/tasks/*.yml")):
+        for task in _walk(_tasks(path)):
+            inc = task.get("ansible.builtin.include_role")
+            if isinstance(inc, dict) and inc.get("name") == role_name:
+                out.append(task.get("vars") or {})
+    return out
+
+
+def test_every_built_image_reaches_a_running_pod() -> None:
+    """A rebuilt image must be rolled by something, or explicitly opted out.
+
+    image-builder pushes to a MUTABLE tag, so a rebuild changes what `:latest` resolves to while
+    leaving the Deployment spec byte-identical — nothing rolls unless the rebuilt-image trigger
+    fires. That trigger keys on `manifests_service`, which assumes one built image per role,
+    named after the role that deploys it.
+
+    `n8n-runners` broke both halves of that assumption: it is built under its own name by the
+    n8n-images role and deployed by the n8n role as a SECOND Deployment. So the trigger never
+    matched, and even if it had, the rollout targets a single name. The rebuilt image reached the
+    registry and never reached a pod, with the deploy reporting green. This is the executable
+    form of that finding: it fails until every built image is either rolled or opted out.
+    """
+    built = {
+        str(v["image_builder_name"])
+        for v in _role_includes("k8s/image-builder")
+        if "image_builder_name" in v
+    }
+    assert built, "no image_builder_name found — the collector stopped matching"
+
+    rolled: set[str] = set()
+    opted_out: set[str] = set()
+    for v in _role_includes("k8s/manifests"):
+        service = v.get("manifests_service")
+        if not service:
+            continue
+        # An explicit empty manifests_rollout means "no Deployment of ours to roll" — a CronJob
+        # (pi-peer-backup) picks the new image up on its next scheduled run.
+        if "manifests_rollout" in v and not v["manifests_rollout"]:
+            opted_out.add(str(service))
+        else:
+            rolled.add(str(service))
+        for extra in v.get("manifests_extra_rollouts") or []:
+            if isinstance(extra, dict):
+                rolled.add(str(extra.get("image", extra.get("name"))))
+
+    stranded = built - rolled - opted_out
+    assert not stranded, (
+        "these built images are rolled by nothing, so a rebuild would sit unused in the "
+        f"registry while the deploy reports green: {sorted(stranded)}. Either add the "
+        "Deployment to that role's manifests_extra_rollouts, or set manifests_rollout: '' "
+        "if the workload legitimately needs no rollout."
+    )
+
+
 def test_manifests_queues_the_drain_under_the_deploy_tag() -> None:
     """The queueing task's `tags: [deploy]` is the entire safety argument for the drain and the
     gate being `always`.
@@ -271,11 +340,16 @@ def test_manifests_queues_the_drain_under_the_deploy_tag() -> None:
         for t in _tasks(_MANIFESTS)
         if str(t.get("name", "")).startswith("Queue the batch drain")
     ]
-    assert len(queueing) == 1, (
-        "roles/k8s/manifests no longer has exactly one queueing task"
+    # Two: the primary Deployment, and the optional manifests_extra_rollouts list added
+    # 2026-08-16 for roles that render more than one Deployment (n8n + n8n-runners).
+    assert len(queueing) == 2, (
+        "roles/k8s/manifests must queue both the primary rollout and the extra rollouts; "
+        f"found {len(queueing)} queueing task(s)"
     )
-    tags = queueing[0].get("tags", [])
-    assert tags == ["deploy"], (
-        "the queueing task must be tagged exactly [deploy] — it is what keeps --skip-tags deploy "
-        "a no-op for the always-tagged drain and gate; got %r" % (tags,)
-    )
+    for task in queueing:
+        tags = task.get("tags", [])
+        assert tags == ["deploy"], (
+            "every queueing task must be tagged exactly [deploy] — it is what keeps "
+            "--skip-tags deploy a no-op for the always-tagged drain and gate; "
+            "%r has %r" % (task.get("name"), tags)
+        )
