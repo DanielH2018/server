@@ -81,7 +81,13 @@ metadata:
   name: baseline-ingress
   namespace: homelab
 spec:
-  podSelector: {}                       # every pod in the namespace
+  podSelector:
+{% if netpol_baseline_scope == 'namespace' %}
+    {}                                   # slice 5: every pod in the namespace
+{% else %}
+    matchLabels:
+      netpol-baseline: enforced          # slices 1-4: only labelled workloads
+{% endif %}
   policyTypes: [Ingress]
   ingress:
 {% if netpol_baseline_enforced %}
@@ -95,6 +101,18 @@ spec:
     - {}                                # OFF: one empty rule = allow all
 {% endif %}
 ```
+
+### The selector migrates, it does not start wide
+
+`podSelector: {}` fences every pod in the namespace the instant it is applied, which would make
+slice 1 a whole-namespace change wearing a six-app label. The selector therefore starts as an
+opt-in label (`netpol-baseline: enforced`), each slice labels its own workloads, and a final
+slice switches `netpol_baseline_scope` to `namespace`.
+
+That last switch is **slice 5, with its own PR**, and it is the risky one: at that moment every
+pod nobody remembered to label gets fenced at once, including anything added between now and
+then. It is gated on a check that enumerates pods in the namespace lacking the label and fails
+if the list is non-empty, which turns a silent catch-all into an explicit reconciliation.
 
 ### Rollback is a variable, never a deletion
 
@@ -155,6 +173,7 @@ reason below.
 | **2** | Media stack + bridges: sonarr, radarr, prowlarr, bazarr, jellyfin, tdarr, qbittorrent, configarr, janitorr, monitor-bridge, autofix-bridge | Densest genuine app-to-app mesh; several callers are DB-configured and unprobeable |
 | **3** | `observability` namespace | Four hostPort ingress paths, cross-namespace inbound from three homelab workloads, thick intra-namespace mesh |
 | **4** | Infra tier: traefik, authelia, crowdsec, pihole, mosquitto, nut, registry, headlamp, n8n | Highest consequence; do it once the pattern is proven |
+| **5** | Switch `netpol_baseline_scope` to `namespace` | Makes a workload fenced-by-default instead of opt-in. Gated on zero unlabelled pods |
 
 **Why observability moved from first to third.** It is small in pod count but dense in
 exactly the paths that are hardest — `loki:3100`, `tempo:3200`, `prometheus:9090` and
@@ -182,6 +201,22 @@ it first means debugging slices 2–4 with the monitoring possibly impaired.
 Each slice extends the existing `netpol-probe-job.yaml.j2` pattern: an inverted Job that
 **succeeds when a connection fails**, leading with a control that dials `traefik:80` so a
 failure is attributable to the policy rather than to DNS or a pod with no network.
+
+### The liveness target must be an unauthenticated route
+
+A probe's liveness assertion — the one that proves the target app is actually up, so that
+"unreachable" cannot be mistaken for enforcement — must target a route with
+`use_authelia: false`. Authelia's `access_control` has no bypass rule for
+`*.local.<domain>`, so on an Authelia-gated route the forwardauth middleware answers an
+unauthenticated request *before* Traefik proxies to the pod.
+
+Both outcomes are wrong: a 401 makes the probe permanently red for a reason unrelated to
+enforcement, and a 302-to-portal prints a passing liveness result without ever contacting
+the app — which restores the exact false-pass the four-assertion design exists to
+eliminate. Slice 1 uses `littlelink` (`use_authelia: false`, hostname `www`, port 3000) for
+this reason. Later slices must pick their own unauthenticated target rather than copying
+the app name. This is the same trap already recorded in this repo as "an Authelia 302
+doesn't prove the backend was reached."
 
 Positive-path probes are new work — they need a pod carrying the *caller's* labels, which
 the existing inverted jobs do not require.
