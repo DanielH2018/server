@@ -9,6 +9,6 @@
 # scripts. `--no-project` because uv resolves a project from the cwd and a hook's
 # cwd is arbitrary. `2>/dev/null` + `exit 0` guarantee the hook never surfaces an
 # error (even if uv were missing); it cannot block.
-/home/ubuntu/.local/bin/uv run --no-project --python 3.14.6 \
+/home/ubuntu/.local/bin/uv run --no-project --no-python-downloads --python 3.14.6 \
   "$(dirname "$(readlink -f "$0")")/log-instructions.py" 2>/dev/null
 exit 0

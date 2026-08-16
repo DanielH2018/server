@@ -137,7 +137,7 @@
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
-      /usr/local/bin/uv run --no-project --python {{ host_python_version }}
+      /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }}
       /opt/configarr-health/configarr_health.py
   environment:
     CONFIGARR_NAMESPACE: "{{ k8s_namespace }}"
