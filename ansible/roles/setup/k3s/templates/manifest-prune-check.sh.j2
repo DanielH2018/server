@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Manifest-prune drift check — managed by Ansible (k3s role); edits overwritten.
+# Deployed-artifact drift check — managed by Ansible (k3s role); edits overwritten.
+#
+# Two arms, both answering "is what is live still what the repo says?": orphaned cluster objects
+# that no staged manifest declares (below), and setup-plane scripts on this host that no longer
+# match their source in the repo (second arm, further down).
 #
 # `kubectl apply -f <staged-dir>/` (k8s/manifests role) only ADDS/UPDATES what is IN the
 # staged manifest set — it never removes a live object whose entry was deleted from the
@@ -136,12 +140,48 @@ for KIND in ingressroute middleware service tlsoption; do
   check_kind "$KIND"
 done
 
-if [[ -z "$ORPHANS" ]]; then
+# SECOND ARM: is the code deployed on this host the code in the repo?
+#
+# The k8s plane is deployed by the gitops tick and re-rendered on every run, so it converges on
+# its own. The setup plane does not: /opt/gitops-deploy and /usr/local/bin are written only by a
+# manual `initial_setup.yml`, and nothing compared them against the repo. On 2026-08-16 the
+# deployer had been running 2-day-old code since a batch of fixes merged — with every monitor
+# green, because a stale deployer still writes its `last_run` heartbeat exactly like a current
+# one would. Nothing about the failure was visible from anything that watches it.
+#
+# Only `copy:`-deployed artifacts are compared. The heartbeat scripts beside this one are
+# `template:`-rendered, so their on-disk form legitimately differs from the .j2 source and a
+# digest comparison against it would report permanent drift — the shape this check exists to
+# catch, rebuilt one level up. Rendering them here would need every role's vars and secrets, the
+# same reason the orphan arm above reads staged manifests rather than templates.
+REPO_DIR=/home/{{ sys_user }}/server
+DRIFTED=""
+
+check_deployed() {
+  local live="$1" src="$2"
+  [[ -r "$src" ]] || return 0            # not a file this repo ships on this host
+  if [[ ! -r "$live" ]]; then
+    DRIFTED="${DRIFTED:+$DRIFTED, }${live} (missing)"
+    return 0
+  fi
+  cmp -s "$live" "$src" || DRIFTED="${DRIFTED:+$DRIFTED, }${live}"
+}
+
+check_deployed /opt/gitops-deploy/gitops_deploy.py \
+  "${REPO_DIR}/ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"
+check_deployed /opt/gitops-deploy/deploy_logic.py \
+  "${REPO_DIR}/ansible/roles/setup/gitops_deploy/files/deploy_logic.py"
+check_deployed /opt/gitops-deploy/host_lib.py \
+  "${REPO_DIR}/ansible/roles/setup/common/files/host_lib.py"
+
+if [[ -z "$ORPHANS" && -z "$DRIFTED" ]]; then
   STATUS=up
-  MSG="no orphaned IngressRoute/Middleware/Service/TLSOption objects found"
+  MSG="no orphaned IngressRoute/Middleware/Service/TLSOption objects found; deployed scripts match the repo"
 else
   STATUS=down
-  MSG="live but absent from staged manifests: ${ORPHANS}"
+  MSG=""
+  [[ -n "$ORPHANS" ]] && MSG="live but absent from staged manifests: ${ORPHANS}"
+  [[ -n "$DRIFTED" ]] && MSG="${MSG:+$MSG; }deployed code differs from the repo (run initial_setup.yml): ${DRIFTED}"
 fi
 
 # Unconditional, before the push — see longhorn-backup-health.sh.j2 for the full rationale.
