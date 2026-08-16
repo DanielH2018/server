@@ -10,6 +10,15 @@
 
 **Spec:** `docs/zero-downtime-deploys-design.md`
 
+**Execution status (worktree-zero-downtime-deploys-spec, commits `7a9bc10e`..`c1d473d5`):**
+Task 1 and Task 2 complete. Task 3 steps 1–11 complete (flaresolverr converted to
+`RollingUpdate` + `emptyDir`, guard passing, committed). Task 3 steps 12–15 (deploy, verify
+live, measure the rollout, record the result) NOT run — they require an authorised live
+deploy, and none has been authorised on this branch. Task 4 (baseline the holdouts) NOT run,
+same reason. The individual step checkboxes below are left unchecked rather than hand-ticked:
+`.superpowers/sdd/` — where a real execution ledger would live — is gitignored and does not
+merge, so this block is the source of truth for what actually ran instead of the checkboxes.
+
 ## Global Constraints
 
 - Ansible is the only write path to the cluster. Plain `kubectl` authenticates as `system:serviceaccount:kube-system:homelab-readonly` (`get list watch` only); `sudo` is denied. Anything that changes cluster state goes through `uv run ansible-playbook`.
@@ -737,6 +746,8 @@ In a third terminal, once the probe says it is polling:
 Expected: `PASS: zero failed requests`, exit 0.
 
 If the probe reports failures, the conversion is not done. The likely causes, in order: the new pod could not be scheduled (check `kubectl -n homelab describe pod -l app=flaresolverr` for scheduling events); the readinessProbe passes before the browser can serve (raise `initialDelaySeconds`); or the port-forward itself dropped when the old pod died, which is a measurement artefact rather than a service gap — re-run polling an in-cluster client instead before concluding anything.
+
+**What this does and does not measure:** the probe polls `GET /`, which FlareSolverr answers as soon as its HTTP server binds — not proof it can actually solve. A real solve is `POST /v1` and can take seconds to a minute. A `PASS: zero failed requests` result here says the pod stayed reachable across the rollout; it does not say an in-flight solve survives it. Separately, the old pod is terminated after the new one goes Ready with the default 30s grace period and no `preStop` hook, so a `POST /v1` in flight on the old pod when it's removed is a real dropped request that this `/` probe never issues and never sees. Do not report this step's result as "zero-downtime for solves" — it is "zero-downtime for reachability, solve-in-flight behaviour unmeasured."
 
 - [ ] **Step 15: Record the result**
 

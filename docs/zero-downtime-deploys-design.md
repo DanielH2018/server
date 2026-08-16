@@ -2,6 +2,16 @@
 
 **Date:** 2026-08-16
 **Status:** design approved, spec pending review
+
+**Branch status (worktree-zero-downtime-deploys-spec):** slice 1 partially landed. The triage
+table and counts below are the historical record from the 2026-08-16 triage and are left
+unchanged; they no longer match the live repo. `prowlarr-flaresolverr` converted from
+`Recreate` to `RollingUpdate` + `emptyDir`, so the live counts are now **40 `Recreate` / 15
+rolling of 55**, and **20** Longhorn volumes report `accessMode: rwo` once this deploys (the
+table below still says 41/14/21). No deploy has been authorised on this branch, so the
+rollout-gap measurement slice 1 exists to produce is still outstanding — there is no
+"Measured results" section here because nothing has been measured yet.
+
 **Scope:** approaches B + C from the 2026-08-16 triage, plus the A-items B builds on.
 
 ## Problem
@@ -170,6 +180,13 @@ corrupt a database.
 
 Every Postgres migration needs a rehearsed rollback: dump sqlite → import → verify → **keep
 the sqlite volume until the migration is proven**.
+
+**Waiver recorded — flaresolverr (slice 1):** the write-model half of the gate was confirmed
+(`/config` is a regenerable browser profile cache); the multi-instance half was not confirmed
+against FlareSolverr's own documentation — see the strategy comment in
+`deployment-flaresolverr.yaml.j2` for the risk assessment and why it's an inference, not a
+citation. Recorded here because this gate also protects the database migrations in later
+slices, and an unrecorded waiver on the first conversion sets the wrong precedent.
 
 ## Slices
 
