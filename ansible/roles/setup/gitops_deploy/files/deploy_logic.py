@@ -609,8 +609,16 @@ def split_k8s_auto_deploy(
     # since the last one, and per-service k8s PRs share one daily window with platformAutomerge.
     #
     # The surplus stays in cs.k8s, which defer-and-alerts — the same fail-closed path as any
-    # unpromotable change — so it is deferred rather than merged-but-undeployed. It is picked up
-    # on a later tick.
+    # unpromotable change. It is NOT picked up on a later tick, and it is worth being exact
+    # about that: the ff-merge runs before deploy_k8s, so once the tick succeeds local == origin
+    # and next_action() returns "noop" from then on. renovate.json states this correctly for the
+    # same mechanism. What actually carries the surplus is the Discord message alert_deferred()
+    # posts, which names the services and the tags to deploy them by hand — so the surplus is
+    # operator-visible, but only once, and unlike hold_sha/diverged_sha/behind_since it leaves no
+    # state behind for a monitor to notice.
+    #
+    # Do NOT "fix" this by deferring the ff-merge: that strands the tree behind pods already
+    # running the new images.
     if max_per_tick > 0 and len(promoted) > max_per_tick:
         promoted = set(sorted(promoted)[:max_per_tick])
     return replace(cs, k8s=cs.k8s - promoted, k8s_deploy=cs.k8s_deploy | promoted)

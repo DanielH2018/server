@@ -91,6 +91,14 @@ stay).
   - **A clean k8s tick is the second place `hold_sha` clears.** `write_hold(None)` also sits in the
     Docker health-gate branch, which an all-k8s host never reaches — without this the first
     rollback would leave **GitOps Deploy — Status** red permanently and need a manual `rm`.
+  - **One tick promotes at most `gitops_deploy_k8s_autodeploy_max_per_tick` services (default 3).**
+    Every promoted service shares a single `ansible-playbook` run under one
+    `K8S_DEPLOY_TIMEOUT_S`, and the failure path resets the whole merged range — so an
+    overlong batch discards the good bumps with the bad one. The surplus stays in `ChangeSet.k8s`
+    and defer-and-alerts, which posts a Discord message naming the services to deploy by hand.
+    **It is not retried on a later tick**: the ff-merge runs before the deploy, so a successful
+    tick leaves `local == origin` and every subsequent `next_action()` is a noop. The pilot list
+    happens to bound this at one service today; the cap is what survives the pilot being cleared.
   - **The deploy is time-bounded by `K8S_DEPLOY_TIMEOUT_S`, not `RUN_BUDGET_S`.** The latter feeds
     `gate_services()` — the Docker gate — and is inert here, so without an explicit timeout the
     only bound is systemd's `TimeoutStartSec` SIGTERM, which can land mid-rollback.
