@@ -57,6 +57,21 @@ push_healthchecks() {
   fi
 }
 
+# Every exit path reports through here, and the log line is UNCONDITIONAL — see
+# longhorn-backup-health.sh.j2 for the full rationale, and manifest-prune-check.sh.j2 for the same
+# pattern. Short version: the `|| logger` inside the push helpers only fires when the curl itself
+# fails, so a successfully-pushed status leaves no durable local record. That makes journald
+# silence ambiguous — a run that succeeded quietly and a cron that never fired look identical —
+# and it is what `probe.py alerts` reads to reconstruct a monitor's history from Loki. Bit for
+# real on 2026-08-16: the first manual run of this script produced no output and no journal entry,
+# and proving it had worked needed root and a `kubectl get etcdsnapshotfile`.
+report() {
+  local status="$1" msg="$2"
+  logger -t etcd-snapshot-offbox "status=${status} ${msg}"
+  push_kuma "$status" "$msg"
+  push_healthchecks "$status"
+}
+
 # Armed state is rendered as a value and branched on at RUNTIME rather than with a Jinja
 # `{% raw %}{% if %}{% endraw %}` around an early exit: a template that renders two different
 # shapes makes half the script unreachable in whichever shape validate_shell_templates renders,
@@ -66,8 +81,7 @@ ARMED="{{ 1 if k3s_etcd_s3_armed else 0 }}"
 if [[ "$ARMED" != "1" ]]; then
   # Report the disarmed state rather than exiting silently green, so a deliberate pause is
   # visible in Kuma instead of looking like a healthy backup.
-  push_kuma down "off-box etcd snapshots are DISARMED (k3s_etcd_s3_armed=false)"
-  push_healthchecks down
+  report down "off-box etcd snapshots are DISARMED (k3s_etcd_s3_armed=false)"
   exit 0
 fi
 
@@ -75,16 +89,14 @@ fi
 # command line: k3s reads AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from the environment, so the
 # keys never appear in `ps` output the way --s3-access-key would.
 if [[ ! -r /etc/rancher/k3s/etcd-s3.env ]]; then
-  push_kuma down "/etc/rancher/k3s/etcd-s3.env missing — cannot authenticate to R2"
-  push_healthchecks down
+  report down "/etc/rancher/k3s/etcd-s3.env missing — cannot authenticate to R2"
   exit 0
 fi
 # shellcheck source=/dev/null
 . /etc/rancher/k3s/etcd-s3.env
 
 if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" || -z "${ETCD_S3_BUCKET:-}" || -z "${ETCD_S3_ENDPOINT:-}" ]]; then
-  push_kuma down "etcd-s3.env is present but incomplete — check r2_* secrets in SOPS"
-  push_healthchecks down
+  report down "etcd-s3.env is present but incomplete — check r2_* secrets in SOPS"
   exit 0
 fi
 export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
@@ -103,13 +115,10 @@ OUTPUT=$(k3s etcd-snapshot save \
 RC=$?
 
 if [[ $RC -eq 0 ]]; then
-  push_kuma up "etcd snapshot uploaded to s3://${ETCD_S3_BUCKET}/{{ k3s_etcd_s3_folder }}"
-  push_healthchecks up
+  report up "etcd snapshot uploaded to s3://${ETCD_S3_BUCKET}/{{ k3s_etcd_s3_folder }}"
 else
-  # The message reaches Kuma on the LAN. It can name the bucket; the keys are never in $OUTPUT
-  # because they were passed through the environment.
+  # The message reaches Kuma on the LAN and the local journal. It can name the bucket; the keys
+  # are never in $OUTPUT because they were passed through the environment.
   SUMMARY=$(printf '%s' "$OUTPUT" | tail -n 3 | tr '\n' ' ')
-  push_kuma down "etcd snapshot FAILED (rc=${RC}): ${SUMMARY}"
-  push_healthchecks down
-  logger -t etcd-snapshot-offbox "snapshot failed rc=${RC}: ${SUMMARY}"
+  report down "etcd snapshot FAILED (rc=${RC}): ${SUMMARY}"
 fi
