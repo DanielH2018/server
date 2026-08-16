@@ -322,7 +322,7 @@ Still open:
 | 2 | pihole (DNS) | 2026-08-16 | 881 | 0 | 0.00s | real UDP DNS queries from daniel-server |
 
 **Slice 2 is the stronger of the two results**, and for the reason slice 1 lacked: the signal is
-an actual request loop. `scripts/../jobs/.../dns_witness.py` sent a real UDP A query for
+an actual request loop. `scripts/dns_witness.py` sent a real UDP A query for
 `pi.hole` at the `pihole-dns` VIP (10.0.0.243) every 0.25s **from daniel-server**, counting a
 sample as OK only on a well-formed response with rcode 0 and at least one answer. So this
 measures what a LAN client experiences, from a host that is not the one being deployed — not
@@ -351,6 +351,35 @@ What the 881 samples actually covered:
   phase 1). The only `changed` was `kubectl apply` itself, which always reports changed. This is
   the idempotence property the gate exists for: a full-fleet deploy must not Recreate-cycle both
   Pi-holes and their Longhorn volumes every run.
+
+**The failover was real, not vacuous.** For roughly 45s — instance 1's 30s termination grace
+plus its replacement's startup — `pihole-2` was the *only* ready endpoint on `pihole-dns`. On a
+0.25s sampling interval that is on the order of 180 of the 881 queries answered by the new
+instance alone. The zero is a measured handover, not an artefact of nothing having moved.
+
+**"Redundancy" here means deploy-scoped, and only that.** Both instances are pinned to
+`daniel-box` by `nodeSelector`, so losing that node still takes all LAN DNS with it. The pin is
+forced and correct — MetalLB's L2Advertisement is pinned to `daniel-box` and the Service is
+`externalTrafficPolicy: Local`, so a pod on the other node would be announced from a node that
+cannot reach it. Stated explicitly because the word "redundancy" invites the stronger reading.
+
+**A silently-dead instance 2 is already detected — no new monitoring needed.** The obvious worry
+about two pods behind one Service is that losing one is invisible: DNS keeps answering from the
+survivor, and you are back to a single instance with no signal until the next deploy takes LAN
+DNS down. That is covered. `monitor-bridge`'s `k8s_workloads` check queries
+`kube_deployment_status_replicas_unavailable > 0` with **no deployment-name filter**
+(`roles/k8s/monitor-bridge/files/check.py:2426`, registered in `CHECKS` at `:2677`), and each
+instance is its own `replicas: 1` Deployment with readiness and liveness probes — so a dead
+`pihole-2` shows up as one unavailable replica regardless of what the Service is still serving.
+A crashlooper that flickers through readiness is caught by the same check's restart arm. The
+coverage is incidental rather than Pi-hole-specific: nothing in the repo monitors Pi-hole by
+name beyond DNS resolution.
+
+**There is one VIP, not two.** The original sketch imagined a second `dns_k8s_vip` for the
+router's DHCP to hand out. The implementation did not need it: both instances carry `app: pihole`
+and sit behind the single `pihole-dns` LoadBalancer (10.0.0.243), which kube-proxy already
+load-balances across both endpoints. No router or DHCP change is required, and none should be
+made — there is no second address to distribute.
 
 **What slice 2 did NOT exercise.** The both-instances-roll path. On this deploy instance 2 was
 newly created, so its `roll_one` iteration had nothing to restart and was skipped; only instance
