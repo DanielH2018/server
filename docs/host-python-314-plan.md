@@ -870,6 +870,36 @@ recorded here because the execution ledger is gitignored and would not survive:
   place. This plan pins the interpreter and leaves the same hole one level up, in the tool that
   installs it. Closing it is a follow-up, not part of this migration.
 
+## What uv actually does, measured
+
+Three claims this plan made about uv turned out to be wrong or imprecise. Recorded together
+because each was believed on reasoning and corrected by running something.
+
+**`--no-project` does not pin the version.** `--python <exact>` does. Both flags are still
+mandatory, but for different jobs — see Global Constraints.
+
+**`--no-project` does not stop uv activating a `.venv` in the working directory.** Measured
+2026-08-16 from a worktree with no ambient `VIRTUAL_ENV` in the calling shell: uv exported
+`VIRTUAL_ENV=<worktree>/.venv` and prepended that venv's `bin` to `PATH` anyway. So a host script's
+*subprocesses* inherit a venv the flag reads as excluding. Benign for gitops-deploy, whose
+`WorkingDirectory` holds the very project its nested `uv run --frozen` wants — and the nesting was
+tested end to end (inner call returned 0, Python 3.14.6, ansible 2.21.1). Worth knowing before
+running a host script from a directory that carries an unrelated project.
+
+**uv needs a writable cache on every invocation, warm or cold.** This is what made Task 5 a
+two-line change instead of one. `renovate-notify.service` is the repo's only sandboxed unit
+(`grep -rln ProtectHome ansible/roles --include='*.service.j2'` matches it alone), and
+`ProtectHome=read-only` makes the default `$HOME/.cache/uv` unwritable — uv exits 2 before Python
+starts. A warm cache does not help: uv opens cache files for write at init regardless. The fix is
+`Environment=UV_CACHE_DIR=` pointing somewhere writable; verified that with the cache redirected,
+uv writes **nothing** under `$HOME` (zero files modified anywhere beneath `~/.cache/uv` across a
+run), so read-only HOME is satisfied and the managed interpreter under `~/.local/share/uv` is only
+read.
+
+Consequence for the open item below: on that unit, `python-downloads: automatic` cannot self-heal a
+missing interpreter either, since the download needs the same unwritable cache. A missing 3.14.6 is
+a hard failure there whatever the operator decides.
+
 ## Open items from the Task 3 review
 
 Findings raised by review that are real but deliberately not fixed inside this migration. Listed
