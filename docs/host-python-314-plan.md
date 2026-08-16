@@ -696,6 +696,27 @@ for systemd and cron is arbitrary."
 
 **"The playbook succeeded" is not acceptance.** A systemd unit with an unexecutable `ExecStart` deploys perfectly and fails at every tick.
 
+## Operational log
+
+Actions taken against the hosts during this migration that are **not** represented in any diff,
+recorded here because the execution ledger is gitignored and would not survive:
+
+- **2026-08-16 — `uv self update` on daniel-server, 0.11.19 → 0.12.5.** Task 1 step 7 failed with
+  `No download found for request: cpython-3.14.6-linux-x86_64-gnu`: that host's uv predated the
+  3.14.6 build metadata, while daniel-box's 0.12.1 resolved it fine. Updating uv was the
+  narrowest thing that unblocked the authorised step, and is the same character of action (a
+  user-scoped tool under `~/.local/bin`). **The hosts' uv versions are now asymmetric —
+  daniel-box 0.12.1, daniel-server 0.12.5 — and that is fine:** what this plan requires to match
+  is the *interpreter*, and both report 3.14.6. Do not "reconcile" uv toward daniel-box.
+
+- **Known hole, deliberately not closed here.** uv itself is unpinned. The install task at
+  `ansible/roles/setup/initial_setup/tasks/host-basics.yml:156` is
+  `curl -LsSf https://astral.sh/uv/install.sh | sh` guarded by `creates:`, so it takes whatever
+  is latest at first run and then never updates and never pins. Host uv drift is therefore
+  guaranteed by design — it is how the interpreters reached 3.14.6 and 3.14.5 in the first
+  place. This plan pins the interpreter and leaves the same hole one level up, in the tool that
+  installs it. Closing it is a follow-up, not part of this migration.
+
 ## Risks
 
 - **System services depend on a user-scoped uv.** `/usr/local/bin/uv` is a symlink into `/home/<sys_user>/.local/bin/`, and the interpreters it manages live under that home too. If the home is unavailable, or someone runs `uv python uninstall`, `gitops-deploy` and `renovate-notify` stop executing. Accepted — uv is already how this repo runs Python, and the alternative is a third-party apt PPA — but it is a real new coupling for the deploy pipeline, not a free win.
