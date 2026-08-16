@@ -864,6 +864,23 @@ def test_an_uncollected_cluster_does_not_paint_its_nodes_down():
     assert "s-unknown" in diagram
 
 
+def test_the_storage_plane_is_not_reddened_by_a_route_only_service():
+    """longhorn-ui declares an IngressRoute; its Deployment is the chart's, in
+    another namespace, so the name lookup reports it missing. The storage plane
+    must not inherit that — it is read from the volumes."""
+    cluster = {
+        "ok": True,
+        "error": "",
+        "nodes": {},
+        "pods": [],
+        "volumes": 42,
+        "backup_targets": [],
+    }
+    diagram = g._diagram_view(model_for({}, cluster))
+    longhorn = diagram[diagram.index('y="706"') - 60 : diagram.index('y="706"')]
+    assert "s-missing" not in longhorn
+
+
 def test_a_services_node_placement_reaches_the_page():
     """Placement is collected for a reason; an untagged service hides it."""
     service = {
