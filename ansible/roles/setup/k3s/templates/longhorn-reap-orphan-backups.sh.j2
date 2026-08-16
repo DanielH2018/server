@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Reap Longhorn Backup objects left stranded by a tier move — managed by Ansible; edits overwritten.
+#
+# DRY RUN BY DEFAULT. Pass --apply to delete. There is deliberately NO cron for this: it is an
+# operator-invoked tool, because the safe-to-delete set depends on live state this script can
+# check but cannot guarantee will still hold a week from now.
+#
+# THE PROBLEM. Longhorn enforces a RecurringJob's `retain: N` only as a side effect of that job
+# executing against a volume currently in its `groups:`. When a volume moves tier — the daily
+# group to a weekday shard, or to no-backup — the job that made its existing backups stops
+# selecting it, and so can never prune them again. They are stranded by construction. There is
+# no global backup GC and no backup-target-level cleanup. On 2026-08-16 that was 94 objects
+# across 24 volumes, growing monotonically against a 10 GB cap whose exhaustion has already
+# wedged retention deletes once.
+#
+# WHY THIS IS NOT A ONE-LINER. The obvious rule — "delete backups whose RecurringJob no longer
+# selects this volume" — would, on 2026-08-16, have deleted the ONLY recovery points 22 volumes
+# had. Not one weekly-tier backup had ever completed, so those stranded daily backups were the
+# entire backup coverage for the volumes they belonged to. A cleanup that reads as hygiene can
+# be the deletion of the last copy, so the floor below is the point of the script, not a
+# refinement of it.
+set -uo pipefail
+
+export KUBECONFIG=/home/{{ sys_user }}/.kube/config
+KUBECTL="k3s kubectl -n longhorn-system"
+
+APPLY=0
+[[ "${1:-}" == "--apply" ]] && APPLY=1
+
+# Which RecurringJob owns each volume right now, derived from the volume's own group labels —
+# the same source the reconcile writes and the health check reads.
+declare -A OWNER
+while read -r VOL LABELS; do
+  [[ -z "$VOL" ]] && continue
+  for LABEL in $LABELS; do
+    case "$LABEL" in
+      recurring-job-group.longhorn.io/*) OWNER["$VOL"]="${LABEL#recurring-job-group.longhorn.io/}" ;;
+    esac
+  done
+done < <($KUBECTL get volumes.longhorn.io \
+  -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .metadata.labels}{@}{" "}{end}{"\n"}{end}' 2>/dev/null)
+
+# Backups, newest first per volume, so the floor below keeps the newest.
+CANDIDATES=""
+KEPT_FLOOR=""
+declare -A CURRENT_TIER_COUNT
+declare -A SEEN
+
+while IFS='|' read -r NAME VOL CREATED JOB STATE; do
+  [[ -z "$NAME" || -z "$VOL" ]] && continue
+  [[ "$STATE" != "Completed" ]] && continue
+  [[ "$JOB" == "${OWNER[$VOL]:-}" ]] && CURRENT_TIER_COUNT["$VOL"]=$(( ${CURRENT_TIER_COUNT[$VOL]:-0} + 1 ))
+done < <($KUBECTL get backups.longhorn.io \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.status.volumeName}{"|"}{.status.snapshotCreatedAt}{"|"}{.status.labels.RecurringJob}{"|"}{.status.state}{"\n"}{end}' 2>/dev/null)
+
+while IFS='|' read -r NAME VOL CREATED JOB STATE; do
+  [[ -z "$NAME" || -z "$VOL" ]] && continue
+  [[ "$STATE" != "Completed" ]] && continue
+  # Produced by the job that still owns this volume: current, not stranded.
+  [[ "$JOB" == "${OWNER[$VOL]:-}" ]] && continue
+
+  # FLOOR 1: the volume's current tier has produced nothing, so these strays are all the
+  # recovery it has. Leave every one of them alone — this is the 2026-08-16 state.
+  if (( ${CURRENT_TIER_COUNT[$VOL]:-0} == 0 )); then
+    KEPT_FLOOR="${KEPT_FLOOR}  ${NAME}  ${VOL}  (current tier has produced no backup)"$'\n'
+    continue
+  fi
+
+  # FLOOR 2: keep the newest stray per volume regardless, as a second recovery point behind
+  # whatever the current tier has managed. Input is sorted newest-first per volume.
+  if [[ -z "${SEEN[$VOL]:-}" ]]; then
+    SEEN["$VOL"]=1
+    KEPT_FLOOR="${KEPT_FLOOR}  ${NAME}  ${VOL}  (newest stray, kept as a floor)"$'\n'
+    continue
+  fi
+
+  CANDIDATES="${CANDIDATES}${NAME} ${VOL} ${CREATED} ${JOB}"$'\n'
+done < <($KUBECTL get backups.longhorn.io \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.status.volumeName}{"|"}{.status.snapshotCreatedAt}{"|"}{.status.labels.RecurringJob}{"|"}{.status.state}{"\n"}{end}' 2>/dev/null \
+  | sort -t'|' -k2,2 -k3,3r)
+
+echo "== kept by a floor =="
+printf '%s' "${KEPT_FLOOR:-  (none)
+}"
+echo
+echo "== reapable =="
+printf '%s' "${CANDIDATES:-  (none)
+}"
+echo
+COUNT=$(printf '%s' "$CANDIDATES" | grep -c . || true)
+
+if (( APPLY == 0 )); then
+  echo "dry run — ${COUNT} object(s) would be deleted. Re-run with --apply to delete."
+  exit 0
+fi
+
+echo "deleting ${COUNT} object(s)..."
+printf '%s' "$CANDIDATES" | while read -r NAME _REST; do
+  [[ -z "$NAME" ]] && continue
+  $KUBECTL delete backups.longhorn.io "$NAME" --ignore-not-found
+done
