@@ -137,7 +137,22 @@ while IFS='|' read -r NAME VOL CREATED JOB REMOVED; do
   [[ -z "$JOB" ]] && continue
 
   # Made by the job that still owns this volume: current, not stranded.
-  [[ "$JOB" == "${OWNER[$VOL]:-}" ]] && continue
+  #
+  # PREFIX match, not equality, and this is load-bearing. Longhorn records a TRUNCATED job name
+  # in the RecurringJob label: all seven weekly shards (weekly-backup-d0 .. weekly-backup-d6)
+  # write "weekly-backup". Verified 2026-08-16 — 11 weekly snapshots, every one labelled
+  # `weekly-backup`, against volumes whose group resolves to `weekly-backup-d3` and friends.
+  # An equality test therefore reports every weekly-tier volume's CURRENT snapshots as stranded,
+  # and FLOOR 1 only protects the newest — so the second-newest current snapshot of every weekly
+  # volume becomes a deletion candidate. That is a live-data bug, not a cosmetic one.
+  #
+  # The comparison is deliberately asymmetric and errs toward keeping: OWNER (the full job name)
+  # must START WITH the label the snapshot carries. A stranded `weekly-backup` snapshot on a
+  # volume that has since moved to a different weekday shard therefore reads as current and is
+  # kept. That is the right way to be wrong — the shard that made it is not recoverable from the
+  # label anyway.
+  OWNER_JOB="${OWNER[$VOL]:-}"
+  [[ -n "$OWNER_JOB" && "$OWNER_JOB" == "$JOB"* ]] && continue
 
   # FLOOR 2: too recent to be confidently stale.
   CREATED_EPOCH=$(date -u -d "$CREATED" +%s 2>/dev/null || echo 0)
