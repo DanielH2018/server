@@ -124,7 +124,11 @@
       k3s kubectl -n {{ k8s_observability_namespace }} exec deploy/grafana --
       grafana cli admin reset-admin-password {{ grafana_admin_password }}
   become: true
-  when: manifests_secret_render is changed
+  # NOT under --check, unlike the read-only probe below: this resets a live credential. It is
+  # also latently broken there — check mode skips the command, so `rc` is undefined, the
+  # `until` below can never match, and the run would die after 5 retries. That only stays
+  # hidden while the secret happens not to differ, which is the condition guarding it.
+  when: manifests_secret_render is changed and not ansible_check_mode
   register: claude_otel_admin_password_sync
   until: (claude_otel_admin_password_sync.rc | default(1)) == 0
   retries: 5
@@ -145,6 +149,10 @@
   register: claude_otel_bind
   become: true
   changed_when: false
+  # Runs under --check too: this only reads. Skipped, it leaves stdout empty and the assert
+  # below fails the run — losing exactly the check that keeps a prompt-carrying receiver off
+  # the LAN, on the one mode where you most want it evaluated before touching anything.
+  check_mode: false
 
 - name: Fail if the OTLP receiver is not pinned to loopback
   tags: [deploy]

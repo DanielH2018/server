@@ -135,4 +135,18 @@
   become: true
 
 - name: Enforcement gate (opt-in via --tags b1-gate)
+  # NOT UNDER --check. The gate proves enforcement by mutating real state — it bans a real
+  # LAN host, then probes from that host expecting 403. Check mode skips `command`, so the
+  # ban never happens; but the probe carries retries/until, and a skipped task has no stdout
+  # for `until: ... == "403"` to match. It therefore burned all 8 retries and failed the run,
+  # every time, on a task that had correctly changed nothing.
+  #
+  # Skipping is the only honest option: the gate is unprovable in check mode BY CONSTRUCTION,
+  # since you cannot demonstrate a ban is enforced without taking the ban. Making it run
+  # anyway (check_mode: false) would have a dry run ban a host and reach out over ssh, which
+  # is exactly what --check exists to promise it will not do.
+  #
+  # `when` on an import_tasks propagates to every task in the file, so this one line covers
+  # all four. Nothing is lost: the gate carries no persistent state for --check to drift-detect.
+  when: not ansible_check_mode
   ansible.builtin.import_tasks: verify.yml

@@ -2,6 +2,12 @@
 # B4b's two proofs. Neither is "the pod is Running", which for this service means very little:
 # a healthy-looking tunnel with a kill-switch that has eaten the cluster's return path, or a
 # dead tunnel leaking in the clear, both present as a green rollout.
+#
+# UNDER --check, proof 1 RUNS and proof 2 does not. The split is what each task does to the
+# cluster, not how useful it is: proof 1 only reads (a `get`, an outbound GET, and an exec that
+# runs curl in a pod that already exists), so a dry run can evaluate the leak assertion for real
+# — which is the single most valuable thing --check can tell you about this service. Proof 2
+# CREATES a pod, and a dry run must not.
 
 - name: Find the qbittorrent pod
   tags: [deploy]
@@ -11,6 +17,7 @@
       -o jsonpath={.items[0].metadata.name}
   become: true
   changed_when: false
+  check_mode: false
   register: qbittorrent_k8s_pod
 
 # ── proof 1: egress really leaves through Mullvad ───────────────────────────────────────────
@@ -24,6 +31,7 @@
     url: https://api.ipify.org
     return_content: true
   become: false
+  check_mode: false
   register: qbittorrent_k8s_host_ip
 
 - name: Read the public address the tunnel presents
@@ -34,6 +42,7 @@
       curl -fsm 15 https://api.ipify.org
   become: true
   changed_when: false
+  check_mode: false
   register: qbittorrent_k8s_tunnel_ip
 
 - name: Fail if qbittorrent's traffic is not going through the tunnel
@@ -59,6 +68,11 @@
 # This is the D11 trap, tested at the only source address that can detect it.
 - name: Reach the WebUI from a pod, as Traefik does
   tags: [deploy]
+  # Skipped under --check, unlike proof 1 above: this is the one task in the file that creates a
+  # cluster object rather than reading one. `--rm` cleans it up, but a dry run should not be
+  # scheduling pods at all — and there is no read-only way to ask this question, since the whole
+  # point is to originate the request from the pod CIDR.
+  when: not ansible_check_mode
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} run qbittorrent-reach-probe

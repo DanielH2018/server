@@ -12,6 +12,9 @@
     cmd: "k3s kubectl -n {{ k8s_namespace }} get svc sonarr -o jsonpath={.spec.clusterIP}"
   become: true
   changed_when: false
+  # Runs under --check too: reads only. Skipped, stdout is empty, the URL below is built from
+  # nothing and the assert dies while resolving its own args.
+  check_mode: false
   register: sonarr_k8s_svc
 
 - name: Read the cluster copy's root folders
@@ -25,6 +28,10 @@
       X-Api-Key: "{{ sonarr_api_key }}"
     return_content: true
   register: sonarr_k8s_rootfolders
+  # A GET, so it is safe under --check — and this is the role's actual deliverable (proving
+  # the library resolves inside the pod), which is worth evaluating on a dry run rather than
+  # skipping into a failed assert.
+  check_mode: false
   until: sonarr_k8s_rootfolders.status | default(0) == 200
   retries: 12
   delay: 10
@@ -63,6 +70,9 @@
       X-Api-Key: "{{ sonarr_api_key }}"
     return_content: true
   register: sonarr_k8s_series
+  # A GET, so safe under --check. Skipped, the register holds a bare dict with no `.json` and
+  # the assert below dies resolving its own fail_msg.
+  check_mode: false
 
 - name: Count the series the Docker copy knows about
   tags: [deploy]
@@ -80,6 +90,10 @@
       | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))'
   become: false
   changed_when: false
+  # Counts over ssh and mutates nothing, so it is safe under --check. Currently moot — the
+  # rehearsal flag guarding it is off since the Docker copy retired — but left correct so the
+  # comparison does not fail a dry run if the flag is ever turned back on.
+  check_mode: false
   register: sonarr_docker_count
 
 - name: Fail if the cluster library is not the Docker library

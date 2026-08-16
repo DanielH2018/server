@@ -105,6 +105,11 @@
 
 - name: Carry the snapshot into the end-of-play stabilisation gate
   tags: [always]
+  # Same guard as the assert above, which this one was missing: the snapshot task is skipped
+  # under --check, so its results carry no `stdout` and building the fact off item.stdout
+  # fails while resolving its own args. There is nothing to gate on in check mode anyway —
+  # no rollout happened — and the end-of-play gate defaults this to an empty list.
+  when: not ansible_check_mode
   ansible.builtin.set_fact:
     k8s_stabilise_watch: >-
       {{ (k8s_stabilise_watch | default([]))

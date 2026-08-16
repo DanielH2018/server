@@ -44,6 +44,9 @@
   become: true
   register: dri_plugin_allocatable
   changed_when: false
+  # Runs under --check too: reads only. Skipped, stdout is empty, so `until` can never match
+  # and the run dies after 24 retries (two full minutes) before reaching the assert below.
+  check_mode: false
   retries: 24
   delay: 5
   until: dri_plugin_allocatable.stdout | default('') | length > 0
