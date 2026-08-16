@@ -34,6 +34,6 @@ SyslogLevel=notice
 # flock exits 1, failing the unit cleanly (OnFailure alerts) and the next 30-min timer tick
 # retries rather than racing. /run/lock is world-writable+sticky, so the unprivileged
 # {{ sys_user }} can create the lockfile.
-ExecStart=/usr/bin/flock -w 180 /var/lock/server-git-tree.lock /usr/bin/python3 /opt/gitops-deploy/gitops_deploy.py
+ExecStart=/usr/bin/flock -w 180 /var/lock/server-git-tree.lock /usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_deploy.py
 # SOPS age key is already in the user's home; filter plugins auto-load next to
 # ansible/deploy.yml, so no ANSIBLE_CONFIG is needed.
