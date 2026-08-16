@@ -2,6 +2,9 @@
 # Live enforcement gate (slice-6 B1, reusable at B2/B5): ban a real LAN host, prove the
 # bouncer rejects it at the VIP, lift the ban, prove service resumes. Runs only when asked:
 #   uv run ansible-playbook ansible/deploy.yml --tags b1-gate
+# Every task here mutates real state or reaches a real host, so the importer in main.yml
+# gates the whole file on `not ansible_check_mode` — see the reasoning there. Keep that guard
+# with any new task added below.
 # The probe runs FROM daniel-pi because a ban is enforced against the connecting IP — no
 # way to prove enforcement from an unbanned host. The probe MUST name a Host that matches
 # a real router: "entrypoint-wide" middlewares attach to each router's chain, so a request
