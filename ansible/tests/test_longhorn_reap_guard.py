@@ -108,9 +108,32 @@ def test_reaper_does_not_delete_under_the_readonly_kubeconfig():
     assert "/etc/rancher/k3s/k3s.yaml" in body, (
         "--apply must use the admin kubeconfig; the read-only one cannot delete"
     )
-    assert re.search(r"if\s*\(\(\s*APPLY\s*==\s*1\s*\)\)", body), (
-        "the kubeconfig choice must be conditional on --apply, so dry runs stay read-only"
+    assert re.search(r"if\s*\(\(\s*NEEDS_ADMIN\s*==\s*1\s*\)\)", body), (
+        "the admin kubeconfig must be selected only when a delete flag is set, so a dry run "
+        "stays read-only and cannot delete anything even by accident"
     )
+    assert re.search(
+        r"NEEDS_ADMIN=\$\(\(\s*APPLY\s*\|\s*APPLY_DELETED_VOLUMES\s*\)\)", body
+    ), "every flag that deletes must require the admin kubeconfig, not just --apply"
     assert re.search(r"if\s*!\s*\$KUBECTL delete", body), (
         "each delete's return code must be checked, or a Forbidden run reports success"
     )
+
+
+def test_deleted_volume_strays_need_their_own_flag():
+    """A backup whose volume is gone is reaped only under --apply-deleted-volumes.
+
+    It is genuinely dead weight — the volume can never come back, so no floor will ever release
+    it — but a deleted PVC is also exactly when someone reaches for a restore. Keeping it off
+    --apply means the routine cleanup can never take the one thing a recovery would need.
+    """
+    body = REAPER.read_text()
+    assert "--apply-deleted-volumes" in body, (
+        "the deleted-volume bucket needs its own flag"
+    )
+    assert re.search(r"DELETED_VOLUME_STRAYS", body), (
+        "deleted-volume strays must be collected into their own bucket, not CANDIDATES"
+    )
+    assert re.search(
+        r"APPLY_DELETED_VOLUMES\s*==\s*1\s*\)\)\s*&&\s*delete_bucket\s+\"orphaned", body
+    ), "the orphan bucket must be deleted only under its own flag, never under --apply"
