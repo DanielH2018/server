@@ -179,14 +179,24 @@ def test_prune_is_skipped_under_the_flag() -> None:
         )
 
 
-def test_dry_run_facts_are_visible_to_deploy_tagged_tasks() -> None:
-    """The apply is deploy-tagged and reads manifests_dest_dir, so its source must be too."""
+def test_the_render_directory_fact_survives_every_tag_selection() -> None:
+    """manifests_dest_dir is read by config-tagged renders AND the deploy-tagged apply.
+
+    `[config, deploy]` looks like it covers both and does the opposite: tags union, so the task
+    is skipped by `--skip-tags deploy` — the config-only form CLAUDE.md documents — and the
+    renders then die on `'manifests_dest_dir' is undefined`. Measured 2026-08-16 with
+    `--tags freshrss --skip-tags deploy`. Only `always` survives all three selections.
+    """
     tasks = _tasks(_MANIFESTS)
-    for fragment in ("throwaway render directory", "Select the render directory"):
+    for fragment in (
+        "throwaway render directory",
+        "Select the render directory",
+        "Discard the throwaway render directory",
+    ):
         tags = _named(tasks, fragment).get("tags", [])
-        assert "deploy" in tags, (
-            f"{fragment!r} is not deploy-tagged, so `--tags deploy` reaches the apply with "
-            "manifests_dest_dir undefined."
+        assert tags == ["always"], (
+            f"{fragment!r} is tagged {tags}, not ['always']. Any narrower tag is dropped by one "
+            "of --tags config / --tags deploy / --skip-tags deploy."
         )
 
 

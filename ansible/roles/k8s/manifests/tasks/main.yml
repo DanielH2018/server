@@ -28,9 +28,12 @@
 # for the same resources.
 
 - name: Create a throwaway render directory for {{ manifests_service }}
-  # [config, deploy], not [config]: the apply task below is deploy-tagged and now reads
-  # manifests_dest_dir, so a `--tags deploy` run would otherwise reach it undefined.
-  tags: [config, deploy]
+  # `always`, because manifests_dest_dir is read by BOTH config-tagged tasks (the renders) and
+  # the deploy-tagged apply, and neither tag alone survives every documented invocation. Tags
+  # union in Ansible, so `[config, deploy]` reads like "either" and behaves like "both": it is
+  # skipped by `--skip-tags deploy`, which is exactly the config-only form CLAUDE.md documents,
+  # and the config-tagged renders then fail with `'manifests_dest_dir' is undefined`.
+  tags: [always]
   # Dry-run renders somewhere real and then discards it, rather than into
   # /etc/rancher/k3s/manifests/. `--check` cannot be used for this: it skips the template
   # writes, so a dry-run apply would have nothing on disk to read.
@@ -49,7 +52,7 @@
   when: k8s_dry_run | bool
 
 - name: Select the render directory for {{ manifests_service }}
-  tags: [config, deploy]
+  tags: [always]
   # Single source of truth for every path below, so a future task cannot render to the real
   # tree while the apply reads the temp one.
   ansible.builtin.set_fact:
@@ -283,7 +286,7 @@
   when: not k8s_dry_run | bool
 
 - name: Discard the throwaway render directory for {{ manifests_service }}
-  tags: [config, deploy]
+  tags: [always]
   # Unconditional cleanup: a failed dry-run apply is exactly when a temp dir is most likely to
   # be left lying around, and the premise of the mode is that it leaves nothing behind. The
   # path appears in the apply task's own failure output, so a debugging session can still read
