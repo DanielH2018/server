@@ -129,17 +129,23 @@ the per-volume map and each exclusion's rationale:
    green as services come up. Restore the Kuma admin + check tiles last (its DB was
    deliberately not restored).
 
-## Assurance gap (known, open)
+## Assurance gap (known, narrowing)
 
 kopia's three-tier assurance (snapshot → weekly verify → monthly restore drill) is not
 yet rebuilt for Longhorn: backups are verified to *complete* (the backup-plane heartbeat)
-but not to *restore*.
+and the restore path has now been proven once, but nothing recurs.
 
 **The first restore drill ran on 2026-08-15, against `traefik-acme`, and it failed** — not
 on the data, but on a B2 Class-B cap already at 100%, which surfaced as
-`cannot find volume.cfg in backupstore` (see step 3). The restore path itself is therefore
-still unproven end to end, and the lesson worth carrying is the masked failure mode rather
-than any conclusion about the backups.
+`cannot find volume.cfg in backupstore` (see step 3). The lesson worth carrying is the
+masked failure mode, not any conclusion about the backups.
+
+**The retry on 2026-08-16 00:11 UTC passed**: the 2026-08-15 nightly of `traefik-acme`
+restored from B2 into a fresh volume in ~21 s, and a probe pod confirmed real data
+(`acme.json` 16 KB, certificate present, expected domain matched) before full teardown.
+The drill playbook lives at `/home/ubuntu/migration-oneshots/restore-drill.yml`; note a
+restore Volume CR needs `spec.backupTargetName` since the v1.12 multi-target change, or
+it resolves against the volume's default target.
 
 Nothing yet watches whether the drill keeps running — a drill that silently stops looks
 identical to one that was never scheduled. Until that exists, treat a first restore as
