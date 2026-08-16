@@ -1,18 +1,24 @@
 # Zero-downtime deploys — design
 
 **Date:** 2026-08-16
-**Status:** design approved, spec pending review
+**Status:** slice 1 shipped; scope reduced 2026-08-16 to three remaining items
 
-**Branch status (worktree-zero-downtime-deploys-spec):** slice 1 partially landed. The triage
-table and counts below are the historical record from the 2026-08-16 triage and are left
-unchanged; they no longer match the live repo. `prowlarr-flaresolverr` converted from
-`Recreate` to `RollingUpdate` + `emptyDir`, so the live counts are now **40 `Recreate` / 15
-rolling of 55**, and **20** Longhorn volumes report `accessMode: rwo` once this deploys (the
-table below still says 41/14/21). No deploy has been authorised on this branch, so the
-rollout-gap measurement slice 1 exists to produce is still outstanding — there is no
-"Measured results" section here because nothing has been measured yet.
+**Scope reduction.** This spec originally proposed approaches B and C across nine slices. Slice
+1 shipped and its measurement withdrew approach B's fleet-wide tuning; the open questions then
+cut two more slices. What remains is **Pi-hole redundancy** plus two pieces of hygiene. The
+Postgres work is deferred to a separate programme justified by data durability rather than
+downtime — see *Slices* for why. The sections below are kept as the reasoning that led here,
+not as work in flight.
 
-**Scope:** approaches B + C from the 2026-08-16 triage, plus the A-items B builds on.
+**Branch status (worktree-zero-downtime-deploys-spec):** slice 1 shipped and is deployed.
+`prowlarr-flaresolverr` runs `RollingUpdate` + `emptyDir` on the live cluster, its PVC is
+retired, and the rollout was measured — see *Measured results*. The triage table and counts
+below are the historical record from the 2026-08-16 triage and are deliberately left unchanged;
+they say 41/14/21 where the live figures are now **40 `Recreate` / 15 rolling of 55** and **20**
+Longhorn RWO volumes.
+
+**Original scope:** approaches B + C from the 2026-08-16 triage, plus the A-items B builds on.
+Superseded by the scope reduction above; retained because the reasoning below argues from it.
 
 ## Problem
 
@@ -202,20 +208,42 @@ slices, and an unrecorded waiver on the first conversion sets the wrong preceden
 
 ## Slices
 
-Sequenced so each is independently exercisable, and so the platform cost is paid only after
-the cheap wins have landed.
+**Scope reduced 2026-08-16, after slice 1 measured.** The original nine slices are below with
+their outcome. Three remain.
 
-| # | Slice | Exercisable by | New platform |
-|---|---|---|---|
-| 1 | B: gap-shrinking across the holdouts + flaresolverr → rolling + enforcement pytest | time a deploy before/after | — |
-| 2 | Pi-hole redundancy (2nd instance, own PVC + VIP) | `dig` loop while one instance rolls | — |
-| 3 | CNPG operator + 2-instance cluster + nightly `pg_dump` | scratch DB; kill primary, watch switchover | CNPG |
-| 4 | **grafana** → Postgres, 2 replicas, RollingUpdate | request loop across a rollout, zero failures | — |
-| 5 | Redis + **authelia** → Postgres, 2 replicas | request loop + session survives the rollout | Redis |
-| 6 | **healthchecks** → Postgres, 2 replicas | request loop | — |
-| 7 | **freshrss** → Postgres (rolling only if sessions resolve) | request loop + login persists | — |
-| 8 | **sonarr / radarr / prowlarr** → Postgres, stay Recreate | app starts, library intact | — |
-| 9 | **n8n / karakeep** → pending confirmation | request loop | — |
+| # | Slice | Status |
+|---|---|---|
+| 1 | Measurement probe, strategy guard, flaresolverr → rolling | **done** — PR #233 |
+| 1b | Baseline the holdouts | **done** — and it withdrew approach B's tuning |
+| 2 | **Pi-hole redundancy** (2nd instance, own PVC + VIP) | **keep — highest value remaining** |
+| 3–6, 8 | CNPG + grafana / authelia / healthchecks / \*arr migrations | **deferred to its own programme** (below) |
+| 7 | freshrss → Postgres, rolling | **cut** — sessions are file-based |
+| 9 | n8n / karakeep | **cut** — see Resolved questions |
+
+Plus two pieces of hygiene slice 1 surfaced, both cheap:
+
+| Item | Why |
+|---|---|
+| Widen the 3.12 syntax guard to every `scripts/*.py` with a `python3` shebang | `ruff format` stripping `except (A, B)` parentheses bit **three times** on one branch. Three recurrences is the threshold for an executable check. |
+| Add `readinessProbe`s to the 14 workloads with none | Their pods are Ready the instant the container starts. Harmless under `Recreate`; a correctness bug the moment any is converted. |
+
+### Why CNPG is deferred rather than dropped
+
+The Postgres work was justified in this spec by zero-downtime. That justification did not
+survive the slice-1 measurement and the cuts above: with freshrss and n8n/karakeep gone, it
+converts **three** services — grafana, authelia, healthchecks — at the cost of two new platform
+components (CNPG, Redis) and several data migrations. That is not a highest-value item.
+
+**The durability argument is separate and still stands.** sqlite on a single-replica RWO volume
+is the likeliest corruption risk in this homelab, and moving the \*arr databases off it was
+wanted for its own sake. That is a data-integrity programme, not a zero-downtime one, and it
+should be specced on those terms — with its own justification, its own risk assessment, and
+rolling replicas as an incidental bonus for the three services that can take them.
+
+Conflating the two is what made this spec propose two platform components for a benefit that
+measurement then shrank. Kept here so the rationale is not lost.
+
+### Retained detail for the deferred work
 
 Grafana leads the conversions rather than Authelia deliberately: it is confirmed
 multi-instance-safe, needs no Redis, and its blast radius on failure is one dashboard.
@@ -257,12 +285,34 @@ These stay `Recreate` and the enforcement lint should expect them to:
 
 ## Open questions
 
-1. n8n queue-mode requirements — the doc page 404'd. Gates slice 9.
-2. karakeep's data model and multi-instance behaviour. Gates slice 9.
-3. FreshRSS session storage — determines whether slice 7 delivers rolling or only Postgres.
-4. Pi-hole client distribution across two VIPs: DHCP option, router config, or both — may
-   be outside Ansible's reach.
-5. Whether the CNPG PVCs should be excluded from Longhorn backups once `pg_dump` covers them.
+Resolved 2026-08-16:
+
+1. **n8n queue-mode requirements — still unanswered, and no longer worth answering.** Every
+   docs URL tried returned 404. Queue mode means Redis plus separate main and worker
+   processes; n8n here is a single-user automation tool whose gap delays a trigger rather than
+   losing one. Cut on effort-to-payoff rather than blocked on research.
+2. **karakeep — answered from the repo, not its docs.** It is two Deployments, and
+   `karakeep-meilisearch` holds an exclusive LMDB lock, so it stays `Recreate` regardless of
+   what happens to karakeep's own database. Converting half a service leaves the gap. Cut.
+3. **FreshRSS session storage — file-based.** The role carries no PHP session configuration, so
+   it runs the image default: sessions on disk in the data directory. Two replicas would log
+   users out at random. Rolling is cut; Postgres for durability belongs to the deferred
+   durability programme.
+4. **Pi-hole client distribution — two VIPs, one per node, both handed to clients by router
+   DHCP.** The tidier-looking option of one VIP with two backing pods does not work here: the
+   Service is `externalTrafficPolicy: Local`, so a pod on the non-announcing node receives
+   nothing, and putting both on one node dies with that node. Accepted caveat: failover is
+   client-side, so a client whose primary is down stalls until its resolver times out. Still
+   far better than every client failing for the length of a rollout.
+5. **CNPG PVCs and Longhorn backups — exclude them; use `pg_dump`.** The `longhorn-nobackup`
+   storage class exists for this. Volume backups of a live Postgres are crash-consistent but
+   restore the whole cluster rather than one app's database, and this B2 account has a
+   documented history of breaching its cap. Carried into the deferred durability programme.
+
+Still open:
+
+6. Whether the FlareSolverr multi-instance waiver (see *Conversion gate*) should be closed with
+   a documented confirmation. Low priority — the risk is small and the rollout measured clean.
 
 ## Measured results
 
