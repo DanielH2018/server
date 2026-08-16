@@ -1,0 +1,45 @@
+---
+# One weekly shard's membership reconcile, included per shard (0-6) from longhorn.yml.
+# Mirrors the no-backup pair's idempotence argument: a volume that has moved no longer
+# matches this shard's label query, so a converged cluster reports no change.
+
+- name: Find volumes in weekly shard d{{ shard }}
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - -l
+      - recurring-job-group.longhorn.io/weekly-backup-d{{ shard }}=enabled
+      - -o
+      - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}'
+  become: true
+  changed_when: false
+  register: k3s_longhorn_shard_labelled
+
+- name: Return de-listed volumes to the default recurring-job group from shard d{{ shard }}
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
+      recurring-job-group.longhorn.io/default=enabled
+      recurring-job-group.longhorn.io/weekly-backup-d{{ shard }}- --overwrite
+  loop: "{{ k3s_longhorn_shard_labelled.stdout_lines }}"
+  when: item.split(' ')[1] not in k3s_longhorn_weekly_volumes
+  become: true
+  changed_when: true
+
+- name: Move volumes whose weekday changed out of shard d{{ shard }}
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
+      recurring-job-group.longhorn.io/weekly-backup-d{{ k3s_longhorn_weekly_volumes.index(item.split(' ')[1]) % 7 }}=enabled
+      recurring-job-group.longhorn.io/weekly-backup-d{{ shard }}- --overwrite
+  loop: "{{ k3s_longhorn_shard_labelled.stdout_lines }}"
+  when:
+    - item.split(' ')[1] in k3s_longhorn_weekly_volumes
+    - (k3s_longhorn_weekly_volumes.index(item.split(' ')[1]) % 7) != shard
+  become: true
+  changed_when: true

@@ -20,7 +20,7 @@ which one holds the volume it wants. Routing is per-volume, via `spec.backupTarg
 
 | Target | Longhorn name | Holds | Credential Secret | Rendered from |
 |---|---|---|---|---|
-| Backblaze B2 | `default` | everything not listed below | `longhorn-b2` | `kopia_b2_key_id` / `kopia_b2_application_key` |
+| Backblaze B2 | `default` | everything not listed below (weekly, weekday-sharded since 2026-08-16) | `longhorn-b2` | `kopia_b2_key_id` / `kopia_b2_application_key` |
 | Cloudflare R2 | `r2` | the four volumes below | `longhorn-r2` | `r2_access_key_id` / `r2_secret_access_key` / `r2_account_id` |
 
 The R2 set (`k3s_longhorn_r2_volumes`) is `homelab/traefik-acme`,
@@ -75,9 +75,10 @@ choice in the final `/homelab-review` pass; history: `kopia-disaster-recovery.md
 Tiering is deliberate — see [`longhorn-backup-tiering.md`](longhorn-backup-tiering.md) for
 the per-volume map and each exclusion's rationale:
 
-- **Daily tier** (10 volumes, retain 14): day-old at worst.
-- **Weekly tier** (11 volumes, Sundays, retain 4): up to a week old. Acceptable by design
-  — configs, largely regenerable.
+- **Daily tier** (the four R2 volumes, retain 14): day-old at worst.
+- **Weekly tier** (all 21 B2 volumes since the 2026-08-16 sharding, retain 4): up to a week
+  old, each volume on its own weekday (~3/day — B2's 2,500/day transaction caps couldn't
+  absorb a batch). Acceptable by design — configs, largely regenerable.
 - **No-backup** (16 volumes): rebuilt, not restored. The notable rebuild paths:
   uptime-kuma (recreate the first-run admin by hand; AutoKuma backfills monitors from the
   static-monitors Secret; history is gone), scrutiny (TSDB refills from collector runs),

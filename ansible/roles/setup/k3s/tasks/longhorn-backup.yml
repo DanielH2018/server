@@ -193,6 +193,18 @@
   become: true
   changed_when: "'created' in k3s_longhorn_recurringjob.stdout or 'configured' in k3s_longhorn_recurringjob.stdout"
 
+# The flat Sunday `weekly-backup` job was replaced by the seven weekday shards on 2026-08-16,
+# and `kubectl apply` never deletes what the manifest stopped mentioning — the live job would
+# keep firing every Sunday against a group nothing belongs to. Explicit delete, idempotent via
+# --ignore-not-found.
+- name: Remove the retired flat weekly-backup recurring job
+  tags: [longhorn_backup]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n longhorn-system delete recurringjob weekly-backup --ignore-not-found
+  register: k3s_longhorn_legacy_weekly
+  become: true
+  changed_when: "'deleted' in k3s_longhorn_legacy_weekly.stdout"
+
 - name: Report what still needs proving by hand
   tags: [longhorn_backup]
   # available:true proves credentials and reachability. It does NOT prove an object was
