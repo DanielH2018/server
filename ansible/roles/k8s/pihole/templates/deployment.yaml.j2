@@ -18,6 +18,12 @@ spec:
     metadata:
       labels:
         app: pihole
+        # Pod-only label — do NOT add to spec.selector.matchLabels above, which is
+        # `apps/v1` immutable. It's how tasks/main.yml and roll_one.yml address a specific
+        # instance's pod: `kubectl exec deploy/<name>` resolves through the Deployment's
+        # selector, which is `app: pihole` on both Deployments, so it always lands on
+        # whichever pod that selector happens to pick — never guaranteed to be this one.
+        instance: {{ inst.name }}
     spec:
       # Pinned to the VIP-announcing node while the MetalLB L2Advertisement is pinned
       # to daniel-box: with externalTrafficPolicy Local, a VIP-backed pod on the other

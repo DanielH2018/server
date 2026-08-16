@@ -24,11 +24,41 @@
 - name: Roll the Pi-hole instances one at a time
   tags: [deploy]
   ansible.builtin.include_tasks: roll_one.yml
+  # Only when this role actually changed something — otherwise a full-fleet deploy
+  # Recreate-cycles both Pi-holes (and their Longhorn volumes) every run for nothing, up to
+  # 2x180s, and never reports idempotent. Same three facts the shared role itself gates its
+  # own restart on (roles/k8s/manifests/tasks/main.yml:155); registered inside the include_role
+  # above, they stay in scope here because `register` sets a play-scoped fact, not one local
+  # to the included role.
+  when: manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
   loop:
     - pihole
     - pihole-2
   loop_control:
     loop_var: pihole_instance
+
+# `kubectl exec deploy/<name>` resolves a pod through the Deployment's spec.selector, which
+# is `app: pihole` on BOTH Deployments (spec.selector is immutable, so it can't carry the
+# per-instance label). Both loop iterations below would therefore land on whichever pod that
+# shared selector picks — never guaranteed to be the one named by `item`. Resolve the actual
+# pod by the pod-only `instance` label first and exec that pod name explicitly.
+- name: Find the pod backing each Pi-hole instance
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get pod -l instance={{ item }}
+      --field-selector=status.phase=Running
+      -o jsonpath={.items[0].metadata.name}
+  become: true
+  register: pihole_pods
+  changed_when: false
+  loop:
+    - pihole
+    - pihole-2
+
+- name: Map each Pi-hole instance name to its pod name
+  ansible.builtin.set_fact:
+    pihole_pod_by_instance: "{{ dict(pihole_pods.results | map(attribute='item') | zip(pihole_pods.results | map(attribute='stdout'))) }}"
 
 # Blocklist state is DECLARED (defaults/main.yml), not seeded — see the defaults for why a
 # coexistence volume seed can never verify. SQL travels over exec stdin; total_changes() on
@@ -39,7 +69,7 @@
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} exec -i deploy/{{ item }} -c pihole --
+      k3s kubectl -n {{ k8s_namespace }} exec -i {{ pihole_pod_by_instance[item] }} -c pihole --
       pihole-FTL sqlite3 /etc/pihole/gravity.db
     stdin: |
       {% for a in pihole_k8s_adlists %}
@@ -77,9 +107,27 @@
   when: pihole_k8s_gravity_sql is changed
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} exec deploy/{{ item }} -c pihole -- pihole -g
+      k3s kubectl -n {{ k8s_namespace }} exec {{ pihole_pod_by_instance[item] }} -c pihole -- pihole -g
   become: true
   changed_when: true
   loop:
     - pihole
     - pihole-2
+
+# Both instances have rolled by this point (or the play already failed loudly in roll_one.yml
+# if a restart would have taken DNS down). This confirms they came up and both have a ready
+# endpoint — it is not the stabilisation soak the shared drain gives most workloads.
+# k8s_pending_rollouts is deliberately NOT used here: the drain snapshots restart counts with
+# `-l app={{ item.name }}`, which matches both Pi-hole instances identically, so it could
+# never tell which one actually restarted. That soak is knowingly given up for pihole.
+- name: Verify both Pi-hole instances have a ready DNS endpoint
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get endpointslice -l kubernetes.io/service-name=pihole-dns
+      -o jsonpath={.items[*].endpoints[?(@.conditions.ready==true)].targetRef.name}
+  become: true
+  register: pihole_dns_ready_endpoints
+  changed_when: false
+  when: manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
+  failed_when: (pihole_dns_ready_endpoints.stdout.split() | length) < 2
