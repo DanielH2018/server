@@ -57,7 +57,7 @@
 
 - name: Apply the build context for {{ image_builder_name }}
   tags: [deploy]
-  when: not ansible_check_mode
+  when: not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl apply -f
@@ -90,7 +90,7 @@
 # this whole role exists to make impossible.
 - name: Clear the previous build of {{ image_builder_name }}
   tags: [deploy]
-  when: not ansible_check_mode
+  when: not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} delete job build-{{ image_builder_name }}
@@ -100,7 +100,7 @@
 
 - name: Build and push {{ image_builder_name }}
   tags: [deploy]
-  when: not ansible_check_mode
+  when: not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl apply -f
@@ -113,7 +113,7 @@
 # assert below is what turns "finished" into "succeeded".
 - name: Wait for the build to finish for {{ image_builder_name }}
   tags: [deploy]
-  when: not ansible_check_mode
+  when: not k8s_no_mutate
   ansible.builtin.shell:
     cmd: >-
       set -o pipefail &&
@@ -128,10 +128,10 @@
 - name: Read the build result for {{ image_builder_name }}
   tags: [deploy]
   # Skipped WITH the build rather than run as a read: it reads the Job the tasks above create,
-  # and in check mode there is none. The two consumers below therefore lead with
-  # `not ansible_check_mode` — Ansible short-circuits a `when` list, so that clause is what keeps
+  # and in a no-mutation run there is none. The two consumers below therefore lead with
+  # `not k8s_no_mutate` — Ansible short-circuits a `when` list, so that clause is what keeps
   # them from dereferencing this task's absent stdout.
-  when: not ansible_check_mode
+  when: not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get job build-{{ image_builder_name }}
@@ -146,7 +146,7 @@
 - name: Show the failed build log for {{ image_builder_name }}
   tags: [deploy]
   when:
-    - not ansible_check_mode
+    - not k8s_no_mutate
     - image_builder_result.stdout | trim != "1"
   ansible.builtin.command:
     cmd: >-
@@ -159,7 +159,7 @@
 - name: Fail on an unsuccessful build of {{ image_builder_name }}
   tags: [deploy]
   when:
-    - not ansible_check_mode
+    - not k8s_no_mutate
     - image_builder_result.stdout | trim != "1"
   ansible.builtin.fail:
     msg: >-
