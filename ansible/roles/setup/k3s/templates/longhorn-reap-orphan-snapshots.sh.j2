@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+# Reap Longhorn Snapshots left stranded by a tier move — managed by Ansible; edits overwritten.
+#
+# DRY RUN BY DEFAULT. Pass --apply to delete. No cron, for the same reason as its sibling
+# longhorn-reap-orphan-backups.sh: the safe-to-delete set depends on live state this script can
+# check now but cannot guarantee a week from now.
+#
+# THE PROBLEM, and why it is NOT the same problem as stranded backups. A RecurringJob's
+# `retain: N` prunes only the snapshots of volumes currently in its `groups:`. Move a volume from
+# the daily group to a weekday shard, or to no-backup, and the snapshots the old job took are
+# never pruned again — they are stranded exactly the way stranded backups are. The difference is
+# where the cost lands: a stranded BACKUP costs B2 storage, while a stranded SNAPSHOT costs local
+# Longhorn replica space AND blocks reclamation, which is the reason this script exists.
+#
+# WHY IT BLOCKS RECLAMATION. Longhorn backs up allocated device blocks, not live files, and
+# `filesystem trim` is the only thing that hands freed blocks back. Quoting the description of
+# the remove-snapshots-during-filesystem-trim setting, verbatim from longhorn-manager
+# types/setting.go:
+#
+#     "Since Longhorn filesystem trim feature can be applied to the volume head and the followed
+#      continuous removed or system snapshots only, trying to trim a removed file from a valid
+#      snapshot will do nothing"
+#
+# So one retained snapshot anywhere in the chain pins every block beneath it against trim. On
+# 2026-08-16 that was 24 stranded snapshots across 15 volumes, dated 08-09 to 08-12 — all from
+# before the weekly sharding and the no-backup decisions — and they were why `zigbee2mqtt-data`
+# held 2.7 MiB of live files against 274 MiB of backup. Reaping them is the step that makes a
+# subsequent trim able to do anything at all.
+#
+# THE ALTERNATIVE, REJECTED. Setting remove-snapshots-during-filesystem-trim=true makes trim mark
+# the latest snapshot and its ancestors removed by itself. That reclaims more, cluster-wide,
+# automatically — and silently destroys recovery points on every trim of every volume forever.
+# Operator decision 2026-08-16: leave it false and delete specific, identified, stale snapshots
+# instead. Deleting a snapshot is LOCAL ONLY — the backups in B2 are independent objects and are
+# not touched.
+set -uo pipefail
+
+# Operator-invoked, so PATH is normally fine — set anyway, so that cronning this later (or
+# calling it from a play) cannot fail with "k3s: command not found" on a box where the install
+# script's /usr/local/bin is outside cron's default PATH.
+export PATH="/usr/local/bin:${PATH}"
+KUBECTL="k3s kubectl -n longhorn-system"
+
+# A stranded snapshot younger than this is left alone. Tier moves and deploys both create a brief
+# window where the new tier has not run yet, and a snapshot from three days ago may still be the
+# most useful local restore point on a volume whose new job has not fired.
+MIN_AGE_DAYS={{ k3s_longhorn_snapshot_reap_min_age_days }}
+
+APPLY=0
+for ARG in "$@"; do
+  case "$ARG" in
+    --apply) APPLY=1 ;;
+    *) echo "unknown argument: $ARG (expected --apply)" >&2; exit 2 ;;
+  esac
+done
+
+# Reads go through the read-only kubeconfig; deletes cannot. homelab-readonly holds get/list/watch
+# only, and this script runs without `set -e`, so an unchecked delete loop would announce success
+# having done nothing — the exact failure the backup reaper documents having shipped once.
+if (( APPLY == 1 )); then
+  if [[ ! -r /etc/rancher/k3s/k3s.yaml ]]; then
+    echo "deleting needs the admin kubeconfig at /etc/rancher/k3s/k3s.yaml, which is root-only." >&2
+    echo "Re-run as: sudo /usr/local/bin/longhorn-reap-orphan-snapshots.sh --apply" >&2
+    exit 1
+  fi
+  export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+else
+  export KUBECONFIG=/home/{{ sys_user }}/.kube/config
+fi
+
+# GROUP -> JOB, read from the RecurringJob CRs rather than assumed from the names.
+#
+# This indirection is the point. A volume's label records its GROUP (`default`,
+# `weekly-backup-d3`); a snapshot records the JOB that made it (`daily-backup`). Those two
+# strings are equal for the weekly shards and NOT equal for the daily tier, whose `daily-backup`
+# job sits in the `default` group. Comparing label-suffix to job name directly therefore reports
+# every daily-tier volume's own current snapshots as stranded. That is a fail-SAFE error — the
+# floors below then keep everything — but it makes the script inert on exactly the volumes it
+# should work on, so the map is built properly here.
+declare -A GROUP_JOB
+while read -r JOB GROUP; do
+  [[ -z "$JOB" || -z "$GROUP" ]] && continue
+  GROUP_JOB["$GROUP"]="$JOB"
+done < <($KUBECTL get recurringjobs.longhorn.io -o json 2>/dev/null \
+  | jq -r '.items[] | .metadata.name as $job | (.spec.groups // [])[] | "\($job) \(.)"')
+
+# VOLUME -> the job that owns it right now, via its group label.
+declare -A OWNER
+OWNER_COUNT=0
+while read -r VOL GROUP; do
+  [[ -z "$VOL" || -z "$GROUP" ]] && continue
+  OWNER["$VOL"]="${GROUP_JOB[$GROUP]:-}"
+  OWNER_COUNT=$(( OWNER_COUNT + 1 ))
+done < <($KUBECTL get volumes.longhorn.io -o json 2>/dev/null \
+  | jq -r '.items[]
+      | .metadata.name as $name
+      | (.metadata.labels // {})
+      | keys[]
+      | select(startswith("recurring-job-group.longhorn.io/"))
+      | "\($name) \(sub("^recurring-job-group\\.longhorn\\.io/"; ""))"')
+
+# Same abort as the backup reaper: every volume carries exactly one group label, so an empty map
+# means the lookup broke, and a broken lookup is indistinguishable from "nothing is stranded".
+VOLUME_COUNT=$($KUBECTL get volumes.longhorn.io -o name 2>/dev/null | grep -c . || true)
+if (( VOLUME_COUNT > 0 && OWNER_COUNT == 0 )); then
+  echo "ABORT: ${VOLUME_COUNT} volume(s) exist but none has a resolvable recurring-job group." >&2
+  echo "The ownership lookup is broken; every floor below depends on it. Refusing to continue." >&2
+  exit 1
+fi
+
+NOW=$(date -u +%s)
+CUTOFF=$(( NOW - MIN_AGE_DAYS * 86400 ))
+
+CANDIDATES=""
+KEPT_FLOOR=""
+declare -A NEWEST_SEEN
+
+# Sorted by volume, then creation time descending — so the first row for each volume is its
+# newest snapshot, which FLOOR 1 always keeps.
+while IFS='|' read -r NAME VOL CREATED JOB REMOVED; do
+  [[ -z "$NAME" || -z "$VOL" ]] && continue
+
+  # FLOOR 1: the newest snapshot on a volume is never a candidate, whoever made it. It is the
+  # volume's current local restore point and the basis the next incremental backup diffs against.
+  if [[ -z "${NEWEST_SEEN[$VOL]:-}" ]]; then
+    NEWEST_SEEN["$VOL"]=1
+    continue
+  fi
+
+  # Already marked removed — the engine will coalesce it on the next purge. Nothing to do, and
+  # deleting it again is not idempotent noise worth printing.
+  [[ "$REMOVED" == "true" ]] && continue
+
+  # No RecurringJob label: taken by hand, or a system snapshot Longhorn made on attach. Never
+  # reaped — same rule as the backup reaper, and for the same reason. Its absence there once let
+  # a hand-triggered probe stand in as proof that a volume's tier was working.
+  [[ -z "$JOB" ]] && continue
+
+  # Made by the job that still owns this volume: current, not stranded.
+  [[ "$JOB" == "${OWNER[$VOL]:-}" ]] && continue
+
+  # FLOOR 2: too recent to be confidently stale.
+  CREATED_EPOCH=$(date -u -d "$CREATED" +%s 2>/dev/null || echo 0)
+  if (( CREATED_EPOCH == 0 )); then
+    KEPT_FLOOR="${KEPT_FLOOR}  ${NAME}  ${VOL}  (unparseable creationTime: ${CREATED})"$'\n'
+    continue
+  fi
+  if (( CREATED_EPOCH > CUTOFF )); then
+    KEPT_FLOOR="${KEPT_FLOOR}  ${NAME}  ${VOL}  (younger than ${MIN_AGE_DAYS}d)"$'\n'
+    continue
+  fi
+
+  CANDIDATES="${CANDIDATES}${NAME} ${VOL} ${CREATED} ${JOB}"$'\n'
+done < <($KUBECTL get snapshots.longhorn.io \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.spec.volume}{"|"}{.status.creationTime}{"|"}{.status.labels.RecurringJob}{"|"}{.status.markRemoved}{"\n"}{end}' 2>/dev/null \
+  | sort -t'|' -k2,2 -k3,3r)
+
+echo "== kept by a floor =="
+printf '%s' "${KEPT_FLOOR:-  (none)
+}"
+echo
+echo "== reapable =="
+printf '%s' "${CANDIDATES:-  (none)
+}"
+echo
+COUNT=$(printf '%s' "$CANDIDATES" | grep -c . || true)
+
+if (( APPLY == 0 )); then
+  echo "dry run — ${COUNT} stranded snapshot(s) would be deleted."
+  echo "  --apply  deletes them, then asks each affected volume to purge"
+  exit 0
+fi
+
+# Process substitution, not a pipe: a `while` on the right of a pipe runs in a subshell, so both
+# counters would be discarded and the summary would report on an empty count.
+DELETED=0
+declare -A TOUCHED
+while read -r NAME VOL _rest; do
+  [[ -z "$NAME" ]] && continue
+  if ! $KUBECTL delete snapshots.longhorn.io "$NAME" --ignore-not-found; then
+    echo "delete FAILED for ${NAME} after ${DELETED} deletion(s) — stopping." >&2
+    exit 1
+  fi
+  DELETED=$(( DELETED + 1 ))
+  TOUCHED["$VOL"]=1
+done < <(printf '%s' "$CANDIDATES")
+echo "deleted ${DELETED} stranded snapshot(s)."
+
+# Deleting the CR only marks the snapshot removed. The blocks come back when the engine coalesces
+# it into its parent, which is what snapshotPurge asks for — so a run that stops at the delete
+# reads as a success that reclaimed nothing.
+if (( DELETED > 0 )); then
+  BACKEND=$($KUBECTL get svc longhorn-backend -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+  if [[ -z "$BACKEND" ]]; then
+    echo "WARNING: could not resolve the longhorn-backend service; snapshots are marked removed" >&2
+    echo "but not purged. Purge them from the Longhorn UI, or re-run once the service resolves." >&2
+    exit 1
+  fi
+  for VOL in "${!TOUCHED[@]}"; do
+    echo "purging ${VOL}..."
+    curl -sS -m 30 -X POST -H 'Content-Type: application/json' -d '{}' \
+      "http://${BACKEND}:9500/v1/volumes/${VOL}?action=snapshotPurge" >/dev/null \
+      || echo "  purge request failed for ${VOL} — retry from the Longhorn UI." >&2
+  done
+fi
+exit 0
