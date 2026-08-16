@@ -324,9 +324,11 @@ def _read_pending() -> dict[str, str]:
         with open(PENDING_ALERTS_FILE) as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
-    # Split (not `except (A, B)`): this runs on the host's Python 3.12, but ruff (3.14 target, from
-    # requires-python) reformats a parenthesized tuple into the 3.14-only `except A, B:` that
-    # SyntaxErrors on 3.12. Two clauses give ruff nothing to rewrite. See test_host_scripts_py312.py.
+    # Split (not `except (A, B)`): ruff (3.14 target, from requires-python) reformats a
+    # parenthesized tuple into the 3.14-only `except A, B:` form. Two clauses give ruff nothing
+    # to rewrite. Still load-bearing: unlike its siblings this unit has NOT yet moved to the
+    # pinned 3.14 (docs/host-python-314-plan.md, task 6), so it runs on the host's 3.12 today and
+    # the rewritten form would SyntaxError. Keep the split until that task lands.
     except FileNotFoundError:
         return {}
     except json.JSONDecodeError:

@@ -1,7 +1,7 @@
 """Pure decision core for the configarr health cron (configarr_health.py).
 
-Split from the I/O shell so it stays stdlib-only, host-Python-floor clean (daniel-box runs
-/usr/bin/python3 3.12 — see ansible/tests/test_host_scripts_py312.py) and unit-testable without a
+Split from the I/O shell so it stays stdlib-only (daniel-box runs it via `uv run --no-project
+--python <pin>`, host_python_version in ansible/inventory/group_vars/all.yml) and unit-testable without a
 cluster. The shell runs the kubectl reads and the Kuma push; everything that decides up-or-down
 lives here.
 

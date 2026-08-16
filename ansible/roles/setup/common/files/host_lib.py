@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Shared I/O-shell helpers for the host-run setup notifiers (gitops_deploy.py, renovate_notify.py).
 
-Both run under the deploy host's ``/usr/bin/python3`` (3.12 floor — keep this file 3.12-clean; see
-ansible/tests/test_host_scripts_py312.py) and are deployed into their own ``/opt`` dir, where each
+Both run via ``uv run --no-project --python <pin>`` (host_python_version in
+ansible/inventory/group_vars/all.yml) and are deployed into their own ``/opt`` dir, where each
 does a ``sys.path.insert(0, <own dir>)`` so ``from host_lib import ...`` resolves the copy sitting
 alongside. Single source of truth for the three helpers that had drifted between the two scripts
 (the Cloudflare-1010 User-Agent on the Discord POST, the torn-write-safe atomic state write, the

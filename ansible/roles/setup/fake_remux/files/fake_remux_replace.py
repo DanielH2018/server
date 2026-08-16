@@ -13,8 +13,8 @@ This file only talks to Sonarr/jellyfin/Discord and feeds their results in. `FAK
 gates blast radius: `off` skips entirely, `shadow` previews searches/grabs into outcomes.jsonl with
 zero Sonarr mutations, `live` executes grabs/deletes/imports/blocklists.
 
-Runs under the host's /usr/bin/python3 (3.12 floor — keep 3.12-clean, see
-ansible/tests/test_host_scripts_py312.py). Config comes from /etc/autofix-fake-remux/config.env — the
+Runs via `uv run --no-project --python <pin>` (host_python_version in
+ansible/inventory/group_vars/all.yml). Config comes from /etc/autofix-fake-remux/config.env — the
 same file the detector reads (0600, SONARR_API_KEY + Discord webhook) — plus a FAKE_REMUX_POLICY JSON the pure core
 reads (release-group allow/deny, size band, attempt caps — see fake_remux_replace_logic.py).
 """
@@ -185,7 +185,9 @@ def _host_ffprobe(ffprobe_bin, path, args, timeout):
             text=True,
             timeout=timeout,
         )
-    except Exception as e:  # OSError (no binary/file) / TimeoutExpired — single except stays 3.12-clean
+    except (
+        Exception
+    ) as e:  # OSError (no binary/file) / TimeoutExpired — single except, no tuple form
         log("host ffprobe failed for %s: %s" % (path, e))
         return ""
     if out.returncode != 0:
