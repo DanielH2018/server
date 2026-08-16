@@ -265,7 +265,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ### Task 3: The four-part probe job
 
-The existing four probe jobs assert one thing: a non-caller cannot reach a restricted pod. That assertion is **insufficient here** — slice 1's apps have no in-cluster callers at all, so "the probe pod cannot reach bento-pdf" is equally true when the policy works, when the label was never applied, and when bento-pdf is simply down. This job asserts four things so that only real enforcement passes.
+The existing four probe jobs assert one thing: a non-caller cannot reach a restricted pod. That assertion is **insufficient here** — slice 1's apps have no in-cluster callers at all, so "the probe pod cannot reach the app" is equally true when the policy works, when the label was never applied, and when the app is simply down. This job asserts four things so that only real enforcement passes.
+
+> **Correction applied during execution (commit `40d9a3ad`).** The code below names **bento-pdf** as the liveness and isolation target. That was wrong: bento-pdf has `use_authelia: true`, and Authelia has no bypass rule for `*.local.<domain>`, so the forwardauth middleware answers an unauthenticated request *before* Traefik proxies to the pod — the assertion would have measured the auth chain, not the app. A 401 would make the probe permanently red for an unrelated reason; a 302-to-portal would print "liveness ok" without ever contacting the app, restoring the exact false-pass this job exists to eliminate.
+>
+> Assertions 3 and 4 target **littlelink** instead (`use_authelia: false`, hostname `www`, port `3000`, and it carries the label from Task 2). The shipped file is the truth; treat the block below as the design rationale, not the current source. This is the same trap recorded in this repo as "an Authelia 302 doesn't prove the backend was reached" — cited in Task 4 step 9 below and then walked into here.
 
 **Files:**
 - Create: `ansible/roles/k8s/netpol-baseline/templates/netpol-probe-job.yaml.j2`
@@ -533,7 +537,7 @@ Expected: no errors. `--check` runs unlocked.
 
 Run: `./scripts/deploy.sh --tags "netpol-baseline"`
 Expected: the probe Job completes and the debug task prints all four lines —
-`control ok`, `negative control ok`, `liveness ok`, `isolated: bento-pdf:8080 unreachable except through traefik`.
+`control ok`, `negative control ok`, `liveness ok`, `isolated: littlelink:3000 unreachable except through traefik`.
 
 Exit **75** means the git-tree lock was busy and **nothing deployed** — retry, do not treat it as a failure.
 
@@ -553,7 +557,7 @@ which would silently un-fence that workload.
 `domain` is a SOPS secret, so it is not available as a shell variable — read the host from the
 live IngressRoute rather than hardcoding it:
 
-Run: `kubectl -n homelab get ingressroute bento-pdf -o jsonpath='{.spec.routes[0].match}{"\n"}'`
+Run: `kubectl -n homelab get ingressroute littlelink -o jsonpath='{.spec.routes[0].match}{"\n"}'`
 
 Then check all six services are still green end-to-end:
 
