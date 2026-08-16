@@ -260,7 +260,10 @@ k3s_longhorn_r2_volumes:
 # moves volumes to a different weekday (harmless beyond a one-off cadence wobble), but append
 # new volumes at the END so existing assignments stay put.
 k3s_longhorn_weekly_volumes:
-  - homelab/code-server-config # Sun
+  # SWAPPED IN PLACE for code-server-config (2026-08-16), not appended: a volume's weekday is
+  # its index mod 7, so removing index 0 would have shifted all twenty volumes below it by a
+  # day and could have stacked two heavy volumes on one cap-day.
+  - homelab/code-server-workspace # Sun
   - homelab/jellyfin-config # Mon
   - homelab/valheim-config # Tue
   - homelab/karakeep-data # Wed
@@ -427,6 +430,15 @@ k3s_longhorn_nobackup_volumes:
   # (.claude/rules/docker.md) — decisions expire and re-derive from logs; Metabase
   # dashboards are provisioned.
   - homelab/crowdsec-db
+  # 2026-08-16: measured composition, not an estimate. `du` inside the pod put 5.8 G in
+  # .local/share/code-server/extensions — a directory the server does NOT read, since it runs
+  # with `--extensions-dir /config/extensions` (637 M, complete) — plus 223 M of caches and
+  # 17 M of code-server state, against 2.4 M of workspace. Backing up the whole volume made
+  # one service 52% of the 13.72 GiB backup set and 3,668 of 7,023 blocks; at one Class-B GET
+  # per block on restore, that volume alone was 147% of B2's 2,500/day cap and could not be
+  # restored inside a day. The keepers moved to the code-server-workspace claim, which IS
+  # backed up. Not a class change, because storageClassName is immutable once bound.
+  - homelab/code-server-config
 
 # Slice-6 D8/A1: upstream resolvers the k3s node is pinned to. The node must NEVER resolve
 # through the in-cluster Pi-hole VIP — a cold cluster start needs DNS (image pulls, Longhorn,
