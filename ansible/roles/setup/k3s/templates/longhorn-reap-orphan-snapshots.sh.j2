@@ -99,6 +99,21 @@ done < <($KUBECTL get volumes.longhorn.io -o json 2>/dev/null \
       | select(startswith("recurring-job-group.longhorn.io/"))
       | "\($name) \(sub("^recurring-job-group\\.longhorn\\.io/"; ""))"')
 
+# Which volumes are ATTACHED. A snapshot on a detached volume cannot be reaped: there is no
+# running engine to coalesce it, so the delete does not stick — Longhorn's snapshot controller
+# re-creates the CR on resync and the underlying data is untouched. Observed 2026-08-16 on
+# terraria-config, whose workload is scaled to zero: kubectl printed "deleted", and the CR was
+# still present afterwards carrying its ORIGINAL 2026-08-12 creationTimestamp.
+#
+# Reaping them is therefore churn that reads as progress, which is worse than skipping. Same
+# constraint the trim sweep already honours for the same reason.
+declare -A ATTACHED
+while IFS='|' read -r VOL STATE; do
+  [[ -z "$VOL" ]] && continue
+  [[ "$STATE" == "attached" ]] && ATTACHED["$VOL"]=1
+done < <($KUBECTL get volumes.longhorn.io \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.status.state}{"\n"}{end}' 2>/dev/null)
+
 # Same abort as the backup reaper: every volume carries exactly one group label, so an empty map
 # means the lookup broke, and a broken lookup is indistinguishable from "nothing is stranded".
 VOLUME_COUNT=$($KUBECTL get volumes.longhorn.io -o name 2>/dev/null | grep -c . || true)
@@ -130,6 +145,14 @@ while IFS='|' read -r NAME VOL CREATED JOB REMOVED; do
   # Already marked removed — the engine will coalesce it on the next purge. Nothing to do, and
   # deleting it again is not idempotent noise worth printing.
   [[ "$REMOVED" == "true" ]] && continue
+
+  # FLOOR 0: the volume is detached, so nothing can coalesce this snapshot even if the CR goes
+  # away. Reported rather than silently dropped — a scaled-to-zero workload is a normal state to
+  # come back from, and its stranded snapshots become reapable the moment it is running again.
+  if [[ -z "${ATTACHED[$VOL]:-}" ]]; then
+    KEPT_FLOOR="${KEPT_FLOOR}  ${NAME}  ${VOL}  (volume detached — no engine to purge it)"$'\n'
+    continue
+  fi
 
   # No RecurringJob label: taken by hand, or a system snapshot Longhorn made on attach. Never
   # reaped — same rule as the backup reaper, and for the same reason. Its absence there once let
@@ -189,12 +212,26 @@ fi
 # Process substitution, not a pipe: a `while` on the right of a pipe runs in a subshell, so both
 # counters would be discarded and the summary would report on an empty count.
 DELETED=0
+PARTIAL=0
 declare -A TOUCHED
 while read -r NAME VOL _rest; do
   [[ -z "$NAME" ]] && continue
-  if ! $KUBECTL delete snapshots.longhorn.io "$NAME" --ignore-not-found; then
-    echo "delete FAILED for ${NAME} after ${DELETED} deletion(s) — stopping." >&2
-    exit 1
+  # --timeout is NOT optional, and the first real run is what proved it. `kubectl delete` waits
+  # for the finalizer by default, with no deadline: on 2026-08-16 this reaped 21 of 24 snapshots
+  # and then hung on the 22nd for 23 minutes with the process holding no socket to the API server
+  # at all, so the target CR never even gained a deletionTimestamp. Unbounded, the failure mode is
+  # a run that neither finishes nor reports — and because the purge below only happens after the
+  # loop, a hang also means nothing that WAS deleted gets reclaimed.
+  #
+  # A timeout converts that into a named failure on one snapshot. Stopping the loop rather than
+  # continuing is deliberate: a delete that will not complete usually means the engine is busy or
+  # unreachable, and hammering the rest makes the diagnosis worse. Re-running is cheap and the
+  # dry run shows exactly what is left.
+  if ! $KUBECTL delete snapshots.longhorn.io "$NAME" --ignore-not-found --timeout={{ k3s_longhorn_snapshot_reap_delete_timeout }}; then
+    echo "delete FAILED or timed out for ${NAME} after ${DELETED} deletion(s) — stopping." >&2
+    echo "Re-run the dry run to see what is left; ${DELETED} deletion(s) are already durable." >&2
+    PARTIAL=1
+    break
   fi
   DELETED=$(( DELETED + 1 ))
   TOUCHED["$VOL"]=1
@@ -228,5 +265,14 @@ if (( DELETED > 0 )); then
       "http://${BACKEND}:9500/v1/volumes/${VOL}?action=snapshotPurge" >/dev/null \
       || echo "  purge request failed for ${VOL} — retry from the Longhorn UI." >&2
   done
+fi
+
+# Exit non-zero when the loop broke early, so a wrapper or a cron notices. This comes AFTER the
+# purge deliberately: a partial run's completed deletions still need coalescing, and skipping the
+# purge to report the failure sooner would leave those volumes marked-removed-but-not-reclaimed —
+# the exact half-state the 2026-08-16 hang produced when it was killed before this point.
+if (( PARTIAL == 1 )); then
+  echo "run was PARTIAL — re-run the dry run to see what remains." >&2
+  exit 1
 fi
 exit 0

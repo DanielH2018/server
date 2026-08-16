@@ -330,6 +330,17 @@ k3s_longhorn_trim_cron_minute: "10"
 # motivated the script were four to seven days old.
 k3s_longhorn_snapshot_reap_min_age_days: 3
 
+# Deadline on each individual `kubectl delete` in the reaper. `kubectl delete` waits for the
+# finalizer with NO deadline by default, and on 2026-08-16 that reaped 21 of 24 snapshots and
+# then hung on the 22nd for 23 minutes — the process holding no socket to the API server at all,
+# so the target CR never even gained a deletionTimestamp. Unbounded, the failure mode is a run
+# that neither finishes nor reports, and since the purge only runs after the delete loop, a hang
+# also means nothing that WAS deleted gets reclaimed until someone notices and kills it.
+#
+# 120s matches the one-shot BackupVolume play's timeout. A healthy delete here returns in well
+# under a second, so this is a wedge detector, not a work budget.
+k3s_longhorn_snapshot_reap_delete_timeout: 120s
+
 # Daily-backup-volume budget, added 2026-08-08 after B2's TRANSACTION cap fired for the second
 # time (docs/b2-transaction-cap-monitoring-gaps.md, gap G2 — bytes were monitored, transactions
 # were not). B2 exposes no cap-headroom API, so nothing can measure the remaining allowance
