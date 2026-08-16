@@ -1,7 +1,7 @@
 """Pure decision core for the fake-remux host scan (fake_remux_scan.py).
 
-Split from the I/O shell so it stays stdlib-only + host-Python-floor clean (runs under the deploy
-host's /usr/bin/python3, currently 3.12 — see ansible/tests/test_host_scripts_py312.py) and fully
+Split from the I/O shell so it stays stdlib-only (runs via `uv run --no-project --python <pin>`,
+host_python_version in ansible/inventory/group_vars/all.yml) and fully
 unit-testable without docker/HTTP. The shell reads Sonarr's library, runs ffprobe inside jellyfin,
 and hands the results here to decide which "remux"-quality files are actually re-encodes.
 
@@ -89,7 +89,7 @@ def parse_encoder_tag(ffprobe_stream_json):
     if not ffprobe_stream_json:
         return None
     # Single-exception except only: repo ruff targets 3.14 and would rewrite a tuple `except (A, B)`
-    # into PEP 758 `except A, B` — a SyntaxError on the host's 3.12 floor (test_host_scripts_py312).
+    # into PEP 758 `except A, B`, which older tooling reading this file may not parse.
     try:
         data = json.loads(ffprobe_stream_json)
     except ValueError:

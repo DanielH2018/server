@@ -130,8 +130,8 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
   disk-prune: so monitor-bridge's **Fake Remux Scan** / **Fake Remux Replace** checks don't
   false-DOWN on a fresh host before the first tick. Deploy `autofix-bridge` before `monitor-bridge`
   (it bind-mounts the state dir `:ro`). Both host crons import the shared `host_lib.py` (copied from
-  `roles/setup/common`) and are registered in the 3.12-floor guard
-  (`ansible/tests/test_host_scripts_py312.py`).
+  `roles/setup/common`) and run via `uv run --no-project --python <pin>`, the
+  `host_python_version` pin in `ansible/inventory/group_vars/all.yml`.
 - **Tunables (host_vars):** `autofix_fake_remux_gop_max_s`, `autofix_fake_remux_max_per_scan`;
   `autofix_fake_remux_replace_mode` (off/shadow/live), `autofix_fake_remux_policy` (the
   git-tracked selection-policy dict rendered to `policy.json`).
@@ -147,12 +147,12 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
 - fake-remux scan cron: `files/fake_remux_scan.py` (I/O shell) + `files/fake_remux_logic.py` (pure
   core) · config `templates/fake-remux.config.env.j2`. Run it live report-only:
   `SONARR_API_KEY=… ARR_DISCORD_WEBHOOK_URL= STATE_FILE=/tmp/x.json
-  PYTHONPATH=ansible/roles/setup/common/files /usr/bin/python3 files/fake_remux_scan.py`.
+  PYTHONPATH=ansible/roles/setup/common/files /usr/local/bin/uv run --no-project --python 3.14.6 files/fake_remux_scan.py`.
 - fake-remux reconcile cron: `files/fake_remux_replace.py` (I/O shell) + pure
   `files/fake_remux_replace_logic.py`, same config.env. Run it shadow (no side effects):
   `FAKE_REMUX_REPLACE_MODE=shadow SONARR_API_KEY=… LEDGER_FILE=/tmp/l.json
   REPLACE_STATE_FILE=/tmp/rs.json OUTCOMES_FILE=/tmp/o.jsonl
-  PYTHONPATH=ansible/roles/setup/common/files /usr/bin/python3 files/fake_remux_replace.py`.
+  PYTHONPATH=ansible/roles/setup/common/files /usr/local/bin/uv run --no-project --python 3.14.6 files/fake_remux_replace.py`.
 - Unit tests: `uv run pytest ansible/roles/k8s/autofix-bridge/files` (`test_autofix.py`) and
   `uv run pytest ansible/roles/setup/fake_remux/files` (the two fake-remux logic suites).
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "autofix-bridge"`

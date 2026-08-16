@@ -2,7 +2,7 @@
 # configarr guide-sync heartbeat — managed by Ansible (k8s/configarr role); edits overwritten.
 #
 # Thin on purpose. Everything that decides up-or-down is in configarr_health.py + its pure core,
-# which are plain files with unit tests and a 3.12 floor check; this exists only because the Kuma
+# which are plain files with unit tests; this exists only because the Kuma
 # push token has to be templated in, and a secret-carrying file should hold as little logic as
 # possible. Same shape as longhorn-backup-health.sh and telemetry-health.sh.
 #

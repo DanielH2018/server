@@ -14,8 +14,8 @@
 
 - **Never change `/usr/bin/python3` or the `python3` name.** `ansible.cfg:21` sets `interpreter_python = auto_silent`, so Ansible's own modules resolve the target's system interpreter, and apt depends on it. Replacing it is a distro break, not a Python upgrade.
 - **Every host invocation goes through `uv run`.** Not a direct interpreter path, not a symlinked `python3.14`. uv is the single entry point for Python in this repo and stays so on the hosts.
-- **`--no-project` is mandatory on every invocation.** `uv run` searches upward from the current directory for a project, and systemd and cron have arbitrary working directories. This is not hypothetical: while benchmarking this plan, `uv python find 3.14` run from a repo worktree resolved to that worktree's `.venv/bin/python3` rather than a standalone interpreter. Without `--no-project`, what a host script runs depends on where it was started from.
-- **Pin the exact patch version.** The uv-managed 3.14 has already drifted between hosts — `daniel-box` 3.14.6, `daniel-server` 3.14.5 — because nothing pins it. Syntax-level behaviour is exactly the sort that can differ across patch levels.
+- **`--python <exact pin>` is what guarantees the version, and `--no-project` is what keeps the invocation standalone.** Both are mandatory, but do not confuse their jobs — an earlier draft of this plan did. `uv run` searches upward from the current directory for a project, and systemd and cron have arbitrary working directories; gitops-deploy's `WorkingDirectory` is itself a uv project. `--no-project` stops uv resolving and syncing that project. It does **not** by itself pin the interpreter, and measured 2026-08-16 it does not even suppress `.venv` discovery from the cwd — `uv run --no-project --python 3.14.6` from a worktree root still reported that worktree's `.venv/bin/python3`, at the correct 3.14.6. The version guarantee comes from `--python`, which was confirmed to win over a mismatched venv (asking for `--python 3.12` from the same cwd resolved a 3.12 interpreter, not the 3.14 venv).
+- **Pin the exact patch version.** The uv-managed 3.14 had drifted between hosts — `daniel-box` 3.14.6, `daniel-server` 3.14.5 — because nothing pinned it. Syntax-level behaviour is exactly the sort that can differ across patch levels. (Task 1 closed this: both hosts now carry 3.14.6, verified. The drift is the *reason* for the pin, not a current state.)
 - **`.python-version` must not be edited by this plan.** `scripts/test_renovate_managers.py::test_python_version_pins_in_lockstep` couples it to both workflows' `python-version:` inputs. The host pin tracks that minor rather than diverging from it.
 - Cron and systemd inherit no useful `PATH`; every invocation names uv by absolute path.
 - Tests live in a directory already in `pyproject.toml` `testpaths` (`ansible/tests`, `scripts`, `.claude/hooks`).
@@ -377,7 +377,7 @@ Update each wrapper's comment. They currently justify running "system python3 di
 - [ ] **Step 2: Verify both run**
 
 ```bash
-.claude/hooks/session-health.sh; echo "session-health exit=$?"
+.claude/hooks/session-health.sh </dev/null; echo "session-health exit=$?"
 .claude/hooks/log-instructions.sh </dev/null; echo "log-instructions exit=$?"
 ```
 
@@ -391,7 +391,7 @@ Then verify the invocation resolves on **daniel-server** too, since this is the 
 runs there and the only place the wrong uv path would go unnoticed:
 
 ```bash
-ssh daniel-server 'cd /tmp && /home/ubuntu/.local/bin/uv run --no-project --python 3.14.6 -c "import sys; print(sys.version)"'
+ssh daniel-server 'cd /tmp && /home/ubuntu/.local/bin/uv run --no-project --python 3.14.6 python -c "import sys; print(sys.version)"'
 ```
 
 Expected: `3.14.6`. (The hook *scripts* on that host come from its own checkout of this repo, so
@@ -455,25 +455,38 @@ systemctl status renovate-notify.service --no-pager | tail -20
 Expected: `ExecStart` names uv, and the run completes without `203/EXEC` or a `SyntaxError`.
 
 `sudo` **is** denied to Claude sessions in this repo, so `systemctl start` is not runnable by an
-agent. Do not skip the verification and do not claim it passed. Use this sudo-free substitute,
-which reproduces what systemd will actually do, and then ask the user to run the real start:
+agent. **You do not need it.** This unit is timer-driven, so the correct verification is to deploy
+and then let the scheduler run it — which is strictly better evidence than a manual start, because
+it exercises the real environment (systemd's `HOME`/`PATH`, not your shell's) rather than a
+reproduction of it.
+
+First, the cheap precondition — that uv resolves the pinned interpreter at all:
 
 ```bash
 /usr/local/bin/uv run --no-project --python 3.14.6 python -V
 ```
 
-Expected: `Python 3.14.6`. Invoke uv by its absolute path — that is what the unit does, and it is
-the part that can break. Note both units run as `User={{ sys_user }}`, so systemd hands them
-`HOME=/home/{{ sys_user }}`: the same home that holds uv's managed interpreters, which is why this
-resolves under systemd at all.
+Expected: `Python 3.14.6`. Invoke uv by its absolute path, because that is what the unit does.
+(Both units run as `User={{ sys_user }}`, so systemd hands them `HOME=/home/{{ sys_user }}` — the
+home that holds uv's managed interpreters. That is why this resolves under systemd at all.)
 
-Do **not** try to reproduce systemd's environment with `env -i HOME=… `. A session guard in this
-repo refuses any command that sets `HOME` (it cannot verify where git would then write) and also
-refuses `env`-wrapped invocations, so that form is unrunnable by an agent — it was in an earlier
-draft of this plan and had to be removed.
+Then wait for a tick and read the result. `journalctl` **is** readable by `{{ sys_user }}` (that
+account is in group `adm`; verified 2026-08-16), so no privilege is needed:
 
-This proves the interpreter resolves; it does not prove the script runs, which the user's
-`systemctl start` does.
+```bash
+systemctl list-timers 'renovate-notify*' --no-pager      # when the next tick lands
+journalctl -u renovate-notify.service --since "-1h" --no-pager | tail -30
+```
+
+Expected after the tick: no `203/EXEC`, no `SyntaxError`, and the unit reaching its
+`ExecStartPost`. That `ExecStartPost` is the strongest single signal available here — it runs
+**only when `ExecStart` succeeded** and pushes to Kuma, so a Kuma beat after the tick is positive
+proof the new invocation executed.
+
+Do **not** try to reproduce systemd's environment with `env -i HOME=…`. A session guard in this
+repo refuses any command that sets `HOME`, and also refuses `env`-wrapped invocations, so that form
+is unrunnable by an agent — it was in an earlier draft of this plan and had to be removed. Waiting
+for the tick replaces it and is better evidence anyway.
 
 - [ ] **Step 4: Commit**
 
@@ -544,8 +557,8 @@ journalctl -u gitops-deploy.service -n 40 --no-pager
 
 Expected: `ExecStart` names uv, and the journal shows the deployer running to a normal conclusion — not `203/EXEC`, not a `SyntaxError` traceback, and not a uv project-resolution error.
 
-As in Task 5, `sudo` is denied to agents. Run the substitute first, from a uv project directory so
-it exercises the project-suppression path:
+As in Task 5, `sudo` is denied to agents and is **not needed** — this unit runs on a 30-minute
+timer, so deploy and then read the next tick. Precondition first:
 
 ```bash
 /usr/local/bin/uv run --no-project --python 3.14.6 python -V
@@ -554,8 +567,29 @@ it exercises the project-suppression path:
 Expected: `Python 3.14.6`. Verified 2026-08-16 from a repo worktree — it passes today, so a failure
 here means Task 1's install has regressed, not that the command is wrong.
 
-Then hand the `systemctl start` to the user — do not mark this task complete on the substitute
-alone. This is the deploy pipeline; it is the one unit whose real run must be observed.
+Then observe a real tick:
+
+```bash
+systemctl list-timers 'gitops*' --no-pager
+journalctl -u gitops-deploy.service --since "-45min" --no-pager -o cat | tail -40
+```
+
+**Read the exit status carefully, because this unit has a benign failure mode that looks like a
+break.** `ExecStart` wraps the deployer in `flock -w 180` on `/var/lock/server-git-tree.lock`, and
+on lock-timeout flock exits 1 — failing the unit *by design*, with the next tick retrying rather
+than racing (the unit file says so at the `ExecStart` comment). Observed 2026-08-16: three such
+failures (17:03, 17:27, 18:51) with **no output at all**, while the 21:53 tick succeeded — the
+failures coincided with manual deploys holding that same lock.
+
+So distinguish them:
+- `status=1/FAILURE` with **no** deployer output → lock contention. Not your change. Re-check on a
+  later tick, ideally one where no deploy is running.
+- `203/EXEC` → the `ExecStart` path is wrong. **That is this change**, and it is the failure this
+  task is ordered last to avoid.
+- A `SyntaxError` traceback or a uv project-resolution error → also this change.
+
+Do not mark this task complete on the precondition alone. This is the deploy pipeline; it is the
+one unit whose real run must be observed.
 
 Then confirm the timer is still armed: `systemctl list-timers gitops-deploy* --no-pager`
 
@@ -658,23 +692,65 @@ def test_no_host_invocation_names_an_interpreter_directly():
     )
 
 
-def test_uv_invocations_disable_project_discovery():
-    """`uv run` searches upward for a project from its working directory, and systemd and cron
-    have arbitrary ones. Without --no-project, what a host script runs depends on where it was
-    started — observed while planning this: `uv python find 3.14` from a repo worktree resolved
-    that worktree's .venv rather than a standalone interpreter."""
-    offenders = []
+def _pinned_uv_lines():
+    """Only the host-script invocations this migration created.
+
+    The discriminator is `--python`. A `uv run` that names an interpreter is a standalone host
+    script and must not touch a project; a `uv run` without one is deliberately using the repo
+    project's environment because it needs repo dependencies. The repo has at least six of the
+    latter and they are all correct — auto-approve-readonly.sh:10, block-protected-edits.sh:8,
+    auto-approve-remote-ssh.sh:13 (`--no-sync --quiet python`), redeploy_cron.yml:22 and
+    gitops-deploy's own `uv run ansible-playbook`, and secret-rotation-audit.sh.j2:44
+    (`--frozen`). An earlier draft of this guard scanned every `uv run` line and would have
+    failed on all of them.
+    """
     for path in _candidate_files():
         for n, line in enumerate(path.read_text().splitlines(), 1):
             stripped = line.strip()
-            if stripped.startswith("#") or "uv run" not in line:
+            if stripped.startswith("#") or "uv run" not in line or "--python" not in line:
                 continue
-            if "--no-project" not in line:
-                offenders.append(f"{path.relative_to(_REPO)}:{n}: {stripped[:100]}")
+            yield path, n, stripped
 
+
+def test_pinned_uv_invocations_disable_project_discovery():
+    """`uv run` searches upward for a project from its working directory, and systemd and cron
+    have arbitrary ones. gitops-deploy's WorkingDirectory is itself a uv project. --no-project
+    stops uv resolving and syncing that project from a unit that holds the git-tree lock.
+
+    It also guards the interpreter where no --python is passed: observed while planning this,
+    `uv python find 3.14` from a repo worktree resolved that worktree's .venv. (Measured
+    2026-08-16: with an explicit --python the pin is honoured either way, so this test is
+    defending the project-resolution half, not the version half.)"""
+    offenders = [
+        f"{p.relative_to(_REPO)}:{n}: {s[:100]}"
+        for p, n, s in _pinned_uv_lines()
+        if "--no-project" not in s
+    ]
     assert not offenders, (
-        "`uv run` without --no-project resolves whatever project the working directory happens "
-        "to sit in:\n  " + "\n  ".join(sorted(offenders))
+        "`uv run --python` without --no-project resolves whatever project the working directory "
+        "happens to sit in:\n  " + "\n  ".join(sorted(offenders))
+    )
+
+
+def test_the_two_uv_paths_are_used_on_the_right_hosts():
+    """There are exactly two correct absolute uv paths, and picking the wrong one fails silently.
+
+    `/usr/local/bin/uv` is a symlink Task 1 creates on daniel-box only. The Claude hooks are the
+    one group that also runs on daniel-server, where that path does not exist (verified
+    2026-08-16: `ls -l /usr/local/bin/uv` -> "No such file or directory"), so they must use
+    `/home/<user>/.local/bin/uv`, which exists on both and is what their sibling hooks already
+    use. The hooks route stderr to /dev/null and exit 0 by design, so the wrong path there is
+    invisible — this test is the only thing that would notice.
+    """
+    hook_offenders = [
+        f"{p.name}:{n}: {line.strip()[:100]}"
+        for p in sorted((_REPO / ".claude/hooks").glob("*.sh"))
+        for n, line in enumerate(p.read_text().splitlines(), 1)
+        if "/usr/local/bin/uv" in line and not line.strip().startswith("#")
+    ]
+    assert not hook_offenders, (
+        "the Claude hooks run on daniel-server too, where /usr/local/bin/uv does not exist. Use "
+        "/home/<user>/.local/bin/uv:\n  " + "\n  ".join(hook_offenders)
     )
 
 
@@ -793,6 +869,46 @@ recorded here because the execution ledger is gitignored and would not survive:
   guaranteed by design — it is how the interpreters reached 3.14.6 and 3.14.5 in the first
   place. This plan pins the interpreter and leaves the same hole one level up, in the tool that
   installs it. Closing it is a follow-up, not part of this migration.
+
+## Open items from the Task 3 review
+
+Findings raised by review that are real but deliberately not fixed inside this migration. Listed
+so they are decisions rather than omissions.
+
+**The pin is a request, not an enforcement — needs a decision.** uv's `python-downloads` default is
+`automatic`, so `--python 3.14.6` against a host that lacks that build does not fail: uv fetches
+one. Three consequences. A pin bump deployed with `--tags fake_remux` (which does not run the
+`tooling`-tagged install task) would have the *cron* fetch the interpreter, at 04:45, while holding
+`flock -w 600` on the fake-remux lock — blocking the `*/20` reconcile behind it. A pruned or
+restored home silently gets a freshly-built 3.14.6 rather than an error. And "both hosts run the
+identical interpreter" is enforced by nothing at runtime.
+
+`UV_PYTHON_DOWNLOADS=never` (or `--no-python-downloads`) closes all three. It is not applied here
+because it converts a self-healing failure into a hard one, and the group it would affect most is
+group E — the deploy pipeline, where a hard failure removes the ability to ship the fix. That
+trade-off is a judgement call about which failure is worse, and it belongs to the operator, not to
+this plan. **Recommendation: apply it to groups A–D and leave group E self-healing**, so the
+pipeline degrades rather than stops.
+
+**Deploy-time and runtime interpreters must be repointed together.** The review found
+`ansible/roles/k8s/configarr/tasks/main.yml:139` running the health reader under `/usr/bin/python3`
+at deploy time while its cron ran 3.14 — and that task's own comment says it exists to prove the
+reader works. A proof on the wrong interpreter is worse than no proof, since it is `failed_when:
+false` and passes quietly. Fixed (commit `fb7989c2`), but the class is worth remembering: grep for
+the *script* name, not just for wrappers, when repointing a group.
+
+**Not fixed, low severity, recorded:**
+- The crons keep `>/dev/null 2>&1`, but the set of things that can fail *before Python starts* is
+  now larger (uv binary, symlink target, interpreter resolution, cache lock). All of them collapse
+  to the same generic `logger` line. Detection still exists via the Kuma staleness monitors
+  (`fake_remux_replace_max_age_hours: 1.2`, `fake_remux_scan_max_age_hours: 26`), which is why this
+  is tolerable. Dropping `2>&1` would let uv's own message through.
+- `/usr/local/bin/uv` is a root-owned symlink whose target is user-writable. No live defect — every
+  consumer runs as `{{ sys_user }}` — but a future root-run consumer would be trusting a
+  user-writable binary. The Risks section below names the availability half of this coupling; this
+  is the permission half.
+- `host-basics.yml`'s `changed_when: "'Installed' in ...stdout"` may under-report, if uv writes its
+  "Installed Python" line to stderr. Unconfirmed — it would make a real install report `ok`.
 
 ## Risks
 

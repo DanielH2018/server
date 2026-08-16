@@ -12,8 +12,8 @@ in a genuine replacement; this script itself never deletes a file or re-searches
 health the same way the other host crons do: a {ts,ok,msg} state file that monitor-bridge reads over a
 :ro bind mount and turns into the "Fake Remux Scan" Kuma monitor, plus a per-fake Discord line.
 
-Runs under the host's /usr/bin/python3 (3.12 floor — keep 3.12-clean, see
-ansible/tests/test_host_scripts_py312.py). Config comes from /etc/autofix-fake-remux/config.env
+Runs via `uv run --no-project --python <pin>` (host_python_version in
+ansible/inventory/group_vars/all.yml). Config comes from /etc/autofix-fake-remux/config.env
 (0600, embeds SONARR_API_KEY + the Discord webhook). ffprobe uses jellyfin because it mounts the media
 read-only at /data/media, so Sonarr's absolute path resolves unchanged (no translation) and a probe
 can't write.
