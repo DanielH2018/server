@@ -1,0 +1,548 @@
+# Host Python 3.14 Migration Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Move every host-run Python script off the Ubuntu 24.04 system 3.12 and onto a pinned 3.14, so the 3.12 syntax floor — and the whole class of bugs it hides — stops existing.
+
+**Architecture:** Install a version-pinned CPython 3.14 with uv (already Ansible-managed on both hosts), expose it at a stable `/usr/local/bin/python3.14`, and repoint the 18 host invocations at it in risk order: leaf health scripts first, the deploy pipeline last. `/usr/bin/python3` is never touched. The existing 3.12 guard is replaced — not deleted — by an inverted guard that forbids regressing to the system interpreter.
+
+**Tech Stack:** Ansible, uv, systemd, cron, pytest.
+
+**Context:** `origin/master` at `59686be0` already carries the container-side 3.14 work (PR #236). That PR deliberately excluded the host interpreter; this plan is that excluded half.
+
+## Global Constraints
+
+- **Never change `/usr/bin/python3` or the `python3` name.** `ansible.cfg:21` sets `interpreter_python = auto_silent`, so Ansible's own modules resolve the target's system interpreter. Ubuntu 24.04 ships 3.12 and apt tooling depends on it. Replacing it is a distro break, not a Python upgrade.
+- **Pin the exact patch version.** The uv-managed 3.14 has already drifted between hosts — `daniel-box` has 3.14.6, `daniel-server` has 3.14.5 — because nothing pins it. An unpinned install inherits that drift into all 18 invocations, and syntax-level behaviour can differ by patch level.
+- **`.python-version` must not be edited by this plan.** `scripts/test_renovate_managers.py::test_python_version_pins_in_lockstep` asserts it stays on the same minor as both workflows' `python-version:` inputs. The host pin must track that minor, not diverge from it.
+- Cron and systemd have no useful inherited `PATH`. Every repointed invocation uses an absolute interpreter path.
+- Tests live in a directory already in `pyproject.toml` `testpaths` (`ansible/tests`, `scripts`, `.claude/hooks`).
+- Commits are signed. Never `--no-verify` / `--no-gpg-sign`.
+- Deploys go through `./scripts/deploy.sh`. Exit **75** means the git-tree lock was busy and nothing deployed — not a failure.
+
+## The 18 host-run scripts
+
+Enumerated by `ansible/tests/test_host_scripts_py312.py`, grouped by how they are invoked. **This grouping is the task order**, chosen so that a mistake is contained before it can reach the deploy pipeline.
+
+| Group | Invoked by | Scripts |
+|---|---|---|
+| A — health wrappers | `configarr-health.sh`, `janitorr-health.sh`, `fake-remux-health.sh` (templated, `/usr/bin/python3` hardcoded) | `configarr_health.py`, `configarr_health_logic.py`, `configarr_status.py`, `janitorr_health.py`, `janitorr_health_logic.py`, `state_push.py` |
+| B — crons | `ansible/roles/setup/fake_remux/tasks/main.yml:111,124` | `fake_remux_scan.py`, `fake_remux_logic.py`, `fake_remux_replace.py`, `fake_remux_replace_logic.py` |
+| C — Claude hooks | `.claude/hooks/session-health.sh`, `log-instructions.sh` (bare `python3`, stderr to `/dev/null`) | `session-health.py`, `log-instructions.py` |
+| D — systemd | `renovate-notify.service` | `renovate_notify.py`, `notify_logic.py` |
+| E — systemd, **the deploy pipeline** | `gitops-deploy.service` | `gitops_deploy.py`, `deploy_logic.py` |
+| shared | imported by several of the above | `host_lib.py` |
+
+---
+
+### Task 1: Install a pinned Python 3.14 on both hosts
+
+**Files:**
+- Modify: `ansible/roles/setup/initial_setup/tasks/host-basics.yml`
+- Modify: `ansible/inventory/group_vars/all.yml` — the `initial_setup` role has no `defaults/` or `vars/` directory (only `tasks/` and `templates/`), and this repo puts global vars in `group_vars/all.yml`
+- Test: `ansible/tests/test_host_python_pin.py`
+
+**Interfaces:**
+- Produces: `/usr/local/bin/python3.14` on both hosts, and the variable `host_python_version` (exact patch, e.g. `3.14.6`) that every later task's invocations depend on.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `ansible/tests/test_host_python_pin.py`:
+
+```python
+"""The host Python pin is exact, and tracks the repo's minor.
+
+Two failure modes, both silent:
+
+  * An UNPINNED `uv python install 3.14` resolves to whatever uv offers per host. That already
+    happened: daniel-box carried 3.14.6 and daniel-server 3.14.5 with nothing requesting either.
+    Once 18 host scripts run on it, a patch-level difference between the two hosts is a
+    difference in what actually executes.
+  * A pin that DRIFTS from `.python-version` puts the host on one minor while `uv run`, CI and
+    the image pins move to the next — reintroducing exactly the split-interpreter problem this
+    migration exists to end, in the other direction.
+
+`.python-version` is deliberately not edited by this plan; it is the source of truth this pin
+follows. test_python_version_pins_in_lockstep already couples it to both workflows.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import yaml
+
+_REPO = Path(__file__).resolve().parents[2]
+_ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
+_PYTHON_VERSION = _REPO / ".python-version"
+
+
+def _pin() -> str:
+    return yaml.safe_load(_ALL_VARS.read_text())["host_python_version"]
+
+
+def test_host_python_version_is_pinned_to_an_exact_patch():
+    pin = _pin()
+    assert re.fullmatch(r"\d+\.\d+\.\d+", pin), (
+        f"host_python_version is {pin!r}; it must be an exact patch version. An unpinned or "
+        "minor-only pin lets uv resolve differently per host, which is how daniel-box ended up "
+        "on 3.14.6 and daniel-server on 3.14.5."
+    )
+
+
+def test_host_python_pin_tracks_the_repo_minor():
+    pin_minor = ".".join(_pin().split(".")[:2])
+    repo_minor = ".".join(_PYTHON_VERSION.read_text().strip().split(".")[:2])
+    assert pin_minor == repo_minor, (
+        f"host_python_version is on {pin_minor} but .python-version is on {repo_minor}. The host "
+        "interpreter must track the repo's minor, or host scripts and `uv run` diverge again."
+    )
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run: `uv run pytest ansible/tests/test_host_python_pin.py -v -n0`
+Expected: FAIL — `KeyError: 'host_python_version'`, because the variable does not exist yet.
+
+- [ ] **Step 3: Add the pin**
+
+In `ansible/inventory/group_vars/all.yml`, add:
+
+```yaml
+# Exact patch, not `3.14`. uv resolves a bare minor to whatever it has, which is how the two
+# hosts ended up on 3.14.6 and 3.14.5 with nothing asking for either. 18 host scripts run on
+# this interpreter; they must be the same interpreter on both machines. The minor must track
+# .python-version — ansible/tests/test_host_python_pin.py enforces both halves.
+host_python_version: "3.14.6"
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `uv run pytest ansible/tests/test_host_python_pin.py -v -n0`
+Expected: PASS, 2 tests. If `test_host_python_pin_tracks_the_repo_minor` fails, `.python-version` has moved — change `host_python_version` to match its minor, never the other way round.
+
+- [ ] **Step 5: Install it and publish a stable path**
+
+In `ansible/roles/setup/initial_setup/tasks/host-basics.yml`, immediately after the `Install Python CLI tooling as uv tools` task, add:
+
+```yaml
+- name: Install the pinned host Python
+  tags: [tooling]
+  # Per-user like uv itself (become: false), because uv installs interpreters under its own
+  # data dir. The symlink below is what makes it usable from cron and systemd.
+  ansible.builtin.command:
+    cmd: "{{ initial_setup_user_home.stdout }}/.local/bin/uv python install {{ host_python_version }}"
+  register: initial_setup_host_python
+  changed_when: "'Installed' in initial_setup_host_python.stdout"
+  become: false
+
+- name: Resolve the pinned host Python's real path
+  tags: [tooling]
+  ansible.builtin.command:
+    cmd: "{{ initial_setup_user_home.stdout }}/.local/bin/uv python find {{ host_python_version }}"
+  register: initial_setup_host_python_path
+  changed_when: false
+  become: false
+
+- name: Publish the pinned host Python at a stable path
+  tags: [tooling]
+  # /usr/local/bin/python3.14, NOT /usr/bin/python3. ansible.cfg sets
+  # interpreter_python = auto_silent, so Ansible's own modules resolve the target's system
+  # interpreter — Ubuntu 24.04's 3.12, which apt also depends on. Shadowing it would be a
+  # distro break rather than a Python upgrade. This is purely additive: nothing resolves it
+  # unless a caller names it.
+  #
+  # The target lives under the connecting user's home, so these system services now depend on
+  # that home being present and on nobody running `uv python uninstall`. Accepted: uv is
+  # already how this repo manages Python, and the alternative is a third-party apt PPA on both
+  # hosts.
+  ansible.builtin.file:
+    src: "{{ initial_setup_host_python_path.stdout | trim }}"
+    dest: /usr/local/bin/python3.14
+    state: link
+    force: true
+  become: true
+```
+
+- [ ] **Step 6: Deploy to both hosts and verify**
+
+Run: `uv run ansible-playbook ansible/initial_setup.yml --tags tooling`
+
+Then verify on **both** hosts — this is the step the whole plan rests on:
+
+```bash
+/usr/local/bin/python3.14 -V
+ssh daniel-server /usr/local/bin/python3.14 -V
+```
+
+Expected: `Python 3.14.6` from both, identical. If they differ, stop: the pin did not take, and repointing anything on top of a drifting interpreter reintroduces the problem this plan exists to remove.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add ansible/roles/setup/initial_setup ansible/tests/test_host_python_pin.py
+git commit -m "Install a pinned Python 3.14 on the hosts, beside the system 3.12
+
+Ubuntu 24.04 ships only 3.12 and apt depends on it, and ansible.cfg's
+interpreter_python = auto_silent means Ansible's own modules resolve that
+same interpreter — so /usr/bin/python3 is not ours to move. This adds 3.14
+alongside it at /usr/local/bin/python3.14 and changes nothing else yet.
+
+The version is pinned to an exact patch because the unpinned uv installs had
+already drifted: daniel-box carried 3.14.6 and daniel-server 3.14.5, with
+nothing requesting either. Eighteen host scripts are about to run on this."
+```
+
+---
+
+### Task 2: Repoint group A — the health wrappers
+
+Lowest risk in the set: each wrapper pushes a monitor result, so a failure shows up as one monitor going stale rather than as anything breaking.
+
+**Files:**
+- Modify: `ansible/roles/k8s/configarr/templates/configarr-health.sh.j2:33`
+- Modify: `ansible/roles/k8s/janitorr/templates/janitorr-health.sh.j2:34`
+- Modify: `ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2:23`
+
+- [ ] **Step 1: Repoint all three**
+
+In each file, replace `/usr/bin/python3` with `/usr/local/bin/python3.14`. There is exactly one occurrence per file, at the line noted above. Do not change anything else in these wrappers.
+
+- [ ] **Step 2: Verify the templates still render**
+
+Run: `uv run python scripts/validate_shell_templates.py`
+Expected: exit 0. (This is the `bash -n` + shellcheck gate; the change is a literal path, so a failure here means a typo.)
+
+- [ ] **Step 3: Deploy**
+
+```bash
+./scripts/deploy.sh --tags configarr
+./scripts/deploy.sh --tags janitorr
+uv run ansible-playbook ansible/initial_setup.yml --tags fake_remux
+```
+
+- [ ] **Step 4: Verify each actually ran under 3.14**
+
+```bash
+/usr/local/bin/configarr-health.sh; echo "configarr exit=$?"
+/usr/local/bin/janitorr-health.sh; echo "janitorr exit=$?"
+```
+
+Expected: exit 0 from both, with output. An exit 0 with EMPTY output is a failure in disguise — both wrappers test `[[ -z "$OUT" ]]` precisely because a silent interpreter error is the failure mode here.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add ansible/roles/k8s/configarr ansible/roles/k8s/janitorr ansible/roles/setup/fake_remux
+git commit -m "Run the health wrappers under the pinned 3.14
+
+First of the host scripts to move, because a wrapper failure surfaces as one
+stale monitor rather than as broken deployment machinery."
+```
+
+---
+
+### Task 3: Repoint group B — the fake-remux crons
+
+**Files:**
+- Modify: `ansible/roles/setup/fake_remux/tasks/main.yml:111` and `:124`
+
+- [ ] **Step 1: Repoint both cron jobs**
+
+Replace `/usr/bin/python3` with `/usr/local/bin/python3.14` in both `ansible.builtin.cron` job strings. Cron inherits no useful `PATH`, which is why both already use an absolute path — keep it absolute.
+
+- [ ] **Step 2: Deploy**
+
+Run: `uv run ansible-playbook ansible/initial_setup.yml --tags fake_remux`
+
+- [ ] **Step 3: Verify the crontab took the new path**
+
+Run: `crontab -l | grep fake_remux`
+Expected: both lines name `/usr/local/bin/python3.14`.
+
+- [ ] **Step 4: Run one by hand rather than waiting for the timer**
+
+Run: `/usr/local/bin/python3.14 /opt/autofix-fake-remux/fake_remux_scan.py; echo "exit=$?"`
+Expected: exit 0. (`fake_remux_opt_dir` is `/opt/autofix-fake-remux` —
+`ansible/roles/setup/fake_remux/defaults/main.yml:56`.)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add ansible/roles/setup/fake_remux
+git commit -m "Run the fake-remux crons under the pinned 3.14"
+```
+
+---
+
+### Task 4: Repoint group C — the Claude hooks
+
+These are the ones with a proven silent-failure history: `session-health.py` shipped a 3.14-only `except A, B, C:` that SyntaxErrored on the host and was never noticed, because the wrapper sends stderr to `/dev/null` and exits 0 by design.
+
+**Files:**
+- Modify: `.claude/hooks/session-health.sh`
+- Modify: `.claude/hooks/log-instructions.sh:11`
+
+- [ ] **Step 1: Repoint both wrappers**
+
+Replace the bare `python3` invocation with `/usr/local/bin/python3.14` in each. Keep the `2>/dev/null` and the `exit 0` — a hook must not be able to block a session, and that is a deliberate property, not an oversight.
+
+Update each wrapper's comment: they currently explain that they "run system python3 directly" for latency. The latency reason still holds — an absolute interpreter path is just as fast, and faster than `uv run` — but "system python3" is no longer accurate.
+
+- [ ] **Step 2: Verify both run**
+
+```bash
+.claude/hooks/session-health.sh; echo "session-health exit=$?"
+.claude/hooks/log-instructions.sh </dev/null; echo "log-instructions exit=$?"
+```
+
+Expected: exit 0 from both. Because these swallow stderr, also confirm the interpreter resolves at all:
+
+Run: `/usr/local/bin/python3.14 .claude/hooks/session-health.py; echo "direct exit=$?"`
+Expected: runs and exits 0 — this is the invocation whose failure the wrapper would hide.
+
+- [ ] **Step 3: Run the hook test suite**
+
+Run: `uv run pytest .claude/hooks -q`
+Expected: pass.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add .claude/hooks
+git commit -m "Run the Claude hooks under the pinned 3.14
+
+These are the invocations with a proven silent-failure history:
+session-health.py once shipped a 3.14-only except clause that SyntaxErrored
+on the host 3.12 and went unnoticed, because the wrapper routes stderr to
+/dev/null and exits 0 so a hook can never block a session. That property is
+kept; the interpreter that made it dangerous is not."
+```
+
+---
+
+### Task 5: Repoint group D — renovate-notify
+
+**Files:**
+- Modify: `ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2:21`
+
+- [ ] **Step 1: Repoint the unit**
+
+Replace `ExecStart=/usr/bin/python3 /opt/renovate-notify/renovate_notify.py` with `ExecStart=/usr/local/bin/python3.14 /opt/renovate-notify/renovate_notify.py`.
+
+- [ ] **Step 2: Deploy**
+
+Run: `uv run ansible-playbook ansible/initial_setup.yml --tags renovate_notify`
+
+- [ ] **Step 3: Verify the unit runs, not just that it deployed**
+
+```bash
+systemctl cat renovate-notify.service | grep ExecStart
+sudo systemctl start renovate-notify.service
+systemctl status renovate-notify.service --no-pager | tail -20
+```
+
+Expected: `ExecStart` names `/usr/local/bin/python3.14`, and the run completes without a `203/EXEC` or `SyntaxError`. If `sudo` is unavailable in your session, ask the user to run the start — do not skip the verification.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add ansible/roles/setup/renovate_notify
+git commit -m "Run renovate-notify under the pinned 3.14"
+```
+
+---
+
+### Task 6: Repoint group E — gitops-deploy, the deploy pipeline
+
+**This is the one that can break the machine that fixes things.** `gitops-deploy.service` is the pull-based deploy pipeline on a 30-minute timer; if its `ExecStart` names an interpreter that is not there, it dies every tick, and this repo has history of the deployer being broken behind green monitors. It goes last, and it gets verified by a real run.
+
+**Files:**
+- Modify: `ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2:37`
+
+- [ ] **Step 1: Confirm the interpreter is present on both hosts before touching the unit**
+
+```bash
+/usr/local/bin/python3.14 -V
+ssh daniel-server /usr/local/bin/python3.14 -V
+```
+
+Expected: identical `Python 3.14.6`. If either is missing, STOP and fix Task 1 — do not proceed.
+
+- [ ] **Step 2: Repoint the unit**
+
+The line wraps the interpreter in `flock`. Replace only the interpreter:
+
+```
+ExecStart=/usr/bin/flock -w 180 /var/lock/server-git-tree.lock /usr/local/bin/python3.14 /opt/gitops-deploy/gitops_deploy.py
+```
+
+Leave the `flock` invocation, its timeout, and the lock path exactly as they are — that lock is what stops the pipeline interleaving with a manual deploy.
+
+- [ ] **Step 3: Deploy**
+
+Run: `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy`
+
+- [ ] **Step 4: Verify by a real run, not by the unit file**
+
+```bash
+systemctl cat gitops-deploy.service | grep ExecStart
+sudo systemctl start gitops-deploy.service
+journalctl -u gitops-deploy.service -n 40 --no-pager
+```
+
+Expected: the ExecStart names `/usr/local/bin/python3.14`, and the journal shows the deployer running to a normal conclusion — not `203/EXEC` (interpreter not found) and not a `SyntaxError` traceback.
+
+Then confirm the timer is still armed: `systemctl list-timers gitops-deploy* --no-pager`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add ansible/roles/setup/gitops_deploy
+git commit -m "Run gitops-deploy under the pinned 3.14
+
+Last of the eighteen deliberately: this unit is the deploy pipeline, so an
+interpreter it cannot exec kills the thing that would otherwise ship the fix,
+and a dead deployer has hidden behind green monitors here before."
+```
+
+---
+
+### Task 7: Replace the 3.12 guard with its inverse
+
+Only after every group is verified on **both** hosts. The 3.12 guard is currently the single executable check for the `except (A, B)` / PEP 758 trap — `ruff format` strips the parentheses and the result is a SyntaxError below 3.14. Deleting it in the same change that repoints callers would leave a half-migrated host able to hit the bug with nothing watching. It is replaced rather than removed, so the check becomes "no host invocation may fall back to the system interpreter".
+
+**Files:**
+- Delete: `ansible/tests/test_host_scripts_py312.py`
+- Create: `ansible/tests/test_host_python_invocations.py`
+
+- [ ] **Step 1: Confirm the migration is actually complete on both hosts**
+
+Run: `grep -rn "/usr/bin/python3\b" ansible/roles .claude/hooks --include='*.j2' --include='*.yml' --include='*.sh'`
+Expected: no hits outside container contexts (Dockerfiles and compose healthchecks are a container's own interpreter and are not in scope).
+
+- [ ] **Step 2: Write the replacement guard**
+
+Create `ansible/tests/test_host_python_invocations.py`:
+
+```python
+"""No host invocation may run under the system interpreter.
+
+This replaces test_host_scripts_py312.py. That guard existed because the hosts ran Ubuntu
+24.04's Python 3.12 while the repo was on 3.14, so 3.13+ syntax parsed in CI and SyntaxErrored
+on the host — silently, in the case of session-health.py, whose wrapper routes stderr to
+/dev/null. Those scripts now run a pinned 3.14 at /usr/local/bin/python3.14 and the floor is
+gone.
+
+What replaces it is the regression guard: a new systemd unit, cron entry, or hook wrapper that
+reaches for `/usr/bin/python3` puts one script back on 3.12 without putting the syntax check
+back, which is the same silent failure with none of the detection.
+
+Container contexts are deliberately out of scope — a Dockerfile or a compose healthcheck names
+the interpreter inside its own image, which is pinned by digest and has nothing to do with the
+host.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+_REPO = Path(__file__).resolve().parents[2]
+_SEARCH_ROOTS = [_REPO / "ansible/roles", _REPO / ".claude/hooks"]
+_SUFFIXES = {".j2", ".yml", ".sh"}
+
+# A container's own interpreter, not the host's.
+_CONTAINER_CONTEXT = re.compile(r"Dockerfile|docker-compose|deployment\.yaml|healthcheck")
+
+
+def _candidate_files():
+    for root in _SEARCH_ROOTS:
+        for path in root.rglob("*"):
+            if path.suffix not in _SUFFIXES or not path.is_file():
+                continue
+            if "archive" in path.parts or _CONTAINER_CONTEXT.search(str(path)):
+                continue
+            yield path
+
+
+def test_no_host_invocation_uses_the_system_interpreter():
+    offenders = []
+    for path in _candidate_files():
+        for n, line in enumerate(path.read_text().splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("#") or _CONTAINER_CONTEXT.search(line):
+                continue
+            if "/usr/bin/python3" in line:
+                offenders.append(f"{path.relative_to(_REPO)}:{n}: {stripped[:100]}")
+
+    assert not offenders, (
+        "these invoke the host's system Python (Ubuntu 24.04's 3.12) instead of the pinned "
+        "/usr/local/bin/python3.14. That silently puts a script back below the repo's syntax "
+        "floor:\n  " + "\n  ".join(sorted(offenders))
+    )
+```
+
+- [ ] **Step 3: Run it, and prove it catches a regression**
+
+Run: `uv run pytest ansible/tests/test_host_python_invocations.py -v -n0`
+Expected: PASS.
+
+Then temporarily revert one caller to prove the guard bites:
+
+```bash
+sed -i 's|/usr/local/bin/python3.14 /opt/janitorr-health|/usr/bin/python3 /opt/janitorr-health|' ansible/roles/k8s/janitorr/templates/janitorr-health.sh.j2
+uv run pytest ansible/tests/test_host_python_invocations.py -q -n0
+```
+
+Expected: FAIL, naming `janitorr-health.sh.j2`. Then restore with `git checkout ansible/roles/k8s/janitorr/templates/janitorr-health.sh.j2` and re-run to confirm PASS.
+
+- [ ] **Step 4: Remove the obsolete guard**
+
+```bash
+git rm ansible/tests/test_host_scripts_py312.py
+```
+
+- [ ] **Step 5: Full gate**
+
+```bash
+uv run pytest -q
+prek run --all-files
+```
+Expected: both pass.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add ansible/tests
+git commit -m "Replace the 3.12 syntax floor guard with a regression guard
+
+The floor is gone: every host script now runs the pinned 3.14, so the guard
+that kept them parseable under Ubuntu's 3.12 has nothing left to protect.
+
+Replaced rather than deleted, because what remains dangerous is the way back.
+A new unit, cron or hook wrapper reaching for /usr/bin/python3 would put one
+script under 3.12 again without restoring any check that notices — the same
+silent failure that let session-health.py ship a SyntaxError behind a
+/dev/null stderr."
+```
+
+---
+
+## Acceptance
+
+The migration is done when, on **both** hosts:
+
+1. `/usr/local/bin/python3.14 -V` reports the identical pinned version.
+2. Every group A–E invocation has been run once and produced its normal output — not merely deployed.
+3. `grep -rn "/usr/bin/python3" ansible/roles .claude/hooks` returns nothing outside container contexts.
+4. `uv run pytest -q` and `prek run --all-files` pass.
+
+"The playbook succeeded" is not acceptance for any of these. A systemd unit with an unexecutable `ExecStart` deploys perfectly and fails at every tick.
+
+## Risks
+
+- **The deploy pipeline depends on a user-scoped interpreter.** `/usr/local/bin/python3.14` resolves into `/home/<sys_user>/.local/share/uv/python/…`. If that home is unavailable, or someone runs `uv python uninstall`, `gitops-deploy` and `renovate-notify` stop executing. Accepted because uv is already how this repo manages Python and the alternative is a third-party apt PPA on both hosts — but it is a genuine new coupling, not a free win.
+- **Patch drift is the failure this plan is most likely to reintroduce.** The pin exists to stop it; `test_host_python_pin.py` enforces the pin's shape, but nothing continuously asserts the two hosts agree at runtime. Step 6 of Task 1 and step 1 of Task 6 check it by hand at the two moments it matters.
+- **Rollback is per-task and cheap** until Task 7: each group is one path string, revertible by `git revert` plus a redeploy of that role. After Task 7 the old guard is gone, so a rollback should restore it.
