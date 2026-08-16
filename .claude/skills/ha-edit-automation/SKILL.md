@@ -1,6 +1,6 @@
 ---
 name: ha-edit-automation
-description: Author or edit a Home Assistant automation, scene, script, or template sensor the repo's way. Use when adding or changing HA automation/lighting/fan/notification/alert logic in this homelab. Enforces copy-not-template, math-in-a-tested-Jinja-macro, config-change wiring, then validate → deploy → confirm-loaded.
+description: Author or edit a Home Assistant automation, scene, script, or template sensor the repo's way. Use when adding or changing HA automation/lighting/fan/notification/alert logic in this homelab. Enforces copy-not-template, math-in-a-tested-Jinja-macro, ConfigMap wiring and the state model, then validate → deploy → confirm-loaded.
 allowed-tools: Read, Edit, Write, Bash, Glob
 ---
 
@@ -25,12 +25,15 @@ All under `ansible/roles/k8s/home-assistant/`:
 | Script | `files/scripts.yaml` |
 | Template sensor / binary_sensor | `files/templates.yaml` |
 | **Tunable math** (curve/threshold/ramp) | `files/custom_templates/*.jinja` macro **+ a test** |
-| HTTP/integrations/`threshold:`/`http:` etc. | `templates/config/configuration.yaml.j2` (Ansible-rendered) |
-| Dashboard / entity friendly-names | `templates/ui-lovelace.yaml.j2` / `customize.yaml.j2` |
+| HTTP/integrations/`threshold:`/`http:` etc. | `templates/config/configuration.yaml.j2` |
+| Dashboard / entity friendly-names | `templates/config/ui-lovelace.yaml.j2` / `templates/config/customize.yaml.j2` |
 
-**The rule that bites:** HA `{{ }}` Jinja goes in `files/` (copied byte-for-byte), **never**
-inline in `configuration.yaml.j2` (which Ansible templates — it would try to render HA's `{{ }}`
-and fail). `template: !include templates.yaml` pulls template sensors in. Never edit `containers/`.
+**The rule that bites:** HA `{{ }}` Jinja goes in `files/`, **never** inline in
+`configuration.yaml.j2`. Both trees ship verbatim (`lookup('file')` in `configmap.yaml.j2`,
+never `lookup('template')`), and `validate_ha_config.py` **rejects any `{{`/`{% %}` in
+`templates/config/`** — the `.j2` suffix there is vestigial. `template: !include templates.yaml`
+pulls template sensors in. `secrets.yaml.j2` is the only Ansible-templated config file.
+The role's `templates/` root is k8s manifests only — never put HA config there.
 
 ## 2. If it's math, put it in a tested macro — don't inline
 
@@ -48,17 +51,32 @@ and time reads (`states()`, `now()`) stay in the YAML caller and are passed in a
 Keep cross-cutting logic single-sourced: the lux gate lives **only** in
 `binary_sensor.bedroom_auto_light_allowed`; alerts route **only** through `script.bedroom_notify`.
 
-## 3. Wire config-change recreation (only for a NEW bind-mounted file)
+## 3. Carry a NEW config file into the ConfigMap
 
-The existing automations/scenes/scripts/templates/configuration tasks already feed
-`common_config_changed`. If you add a *new* bind-mounted config file, `register:` its config task
-(`<role>_`-prefixed) and OR it into `common_config_changed` on the deploy include, or an edit
-won't recreate the container. See the role `tasks/main.yml` + role `CLAUDE.md`.
+Files that already exist redeploy automatically — the ConfigMap embeds them, so an edit changes
+the rendered manifest and `k8s/manifests` rolls the pod. But a **new** `files/*.yaml` or
+`custom_templates/*.jinja` needs its own `lookup('file', …)` line in
+`templates/configmap.yaml.j2` (and its install line in `deployment.yaml.j2`, plus an `!include`
+if HA must load it). Miss that and the deploy is green while the pod never sees the file.
+This replaced the Docker-era `common_config_changed` wiring — there are no bind mounts now.
+
+## 3b. Regenerate the state model if you changed who writes what
+
+Adding/moving a service call that writes an entity makes `state/derived_state.yml` + `STATE.md`
+stale, and `validate_ha_config.py` fails on it:
+
+```
+uv run python scripts/ha_state_model.py generate
+```
+
+Review the diff. If the single-writer invariant (`state/sanctioned_writers.yml`) or the
+override-boolean tripwire (`state/expected_override_writers.yml`) fires, declare the new writer
+there deliberately — those two are hand-maintained on purpose; don't widen them on reflex.
 
 ## 4. Validate
 
 ```
-uv run python scripts/validate_ha_config.py          # YAML, dup keys, !include, template syntax
+uv run python scripts/validate_ha_config.py          # YAML, dup keys, !include, template syntax, state-model guardrails
 uv run pytest ansible/roles/k8s/home-assistant/tests   # if you touched a macro
 ```
 (The `validate-ha-config` + `pytest` prek hooks run these on commit too.) Fix before deploying —

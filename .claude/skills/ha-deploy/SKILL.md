@@ -25,11 +25,15 @@ rollout restart). A restart is ~60-120s.
 
 3. **Deploy:**
    ```
-   uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"
+   ./scripts/deploy.sh --tags "home-assistant"
    ```
-   (Always via `uv run` — bare `ansible-playbook` lacks the `community.docker` deps.) Use
-   `--check` first for a dry run if the change is risky. For config-only changes that should NOT
-   recreate the container, see the `--skip-tags deploy` note in repo-root `CLAUDE.md`.
+   The wrapper takes `/var/lock/server-git-tree.lock` so the deploy can't interleave with
+   gitops-deploy or another Claude session; **exit 75 means the lock stayed busy and nothing
+   was deployed** — not a playbook failure. It runs `uv run ansible-playbook` underneath (bare
+   `ansible-playbook` lacks the deps). Use `uv run ansible-playbook ansible/deploy.yml --tags
+   "home-assistant" --check` for an unlocked dry run if the change is risky. There is no
+   config-only mode for the k8s role: the config *is* the ConfigMap, so shipping it is the
+   rollout.
 
 4. **Gate on health:**
    ```
