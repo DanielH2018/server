@@ -139,7 +139,13 @@ check_tier() {
 }
 
 check_tier "recurring-job-group.longhorn.io/default=enabled" "$MAX_AGE_S" daily
-check_tier "recurring-job-group.longhorn.io/weekly-backup=enabled" "$WEEKLY_MAX_AGE_S" weekly
+# One tier per weekday shard (2026-08-16). The retired flat `weekly-backup` label is walked
+# too: no RecurringJob selects it any more, so a volume stuck with it is backed up by nothing
+# — exactly the state this check exists to page on, once it ages past the weekly bound.
+for SHARD in 0 1 2 3 4 5 6; do
+  check_tier "recurring-job-group.longhorn.io/weekly-backup-d${SHARD}=enabled" "$WEEKLY_MAX_AGE_S" "weekly-d${SHARD}"
+done
+check_tier "recurring-job-group.longhorn.io/weekly-backup=enabled" "$WEEKLY_MAX_AGE_S" weekly-legacy
 
 if [[ -n "$UNCOVERED" ]]; then
   add "backed-up volumes stale or missing: ${UNCOVERED}"

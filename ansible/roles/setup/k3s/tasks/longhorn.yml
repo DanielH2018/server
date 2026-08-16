@@ -327,21 +327,26 @@
   changed_when: true
 
 # ── weekly tier (mirrors the no-backup pair above, same idempotence argument) ────────────
-# NB a weekly→no-backup move routes THROUGH default (this pair returns it to default, the
-# no-backup pair above claims it on the NEXT run) — converges on the second deploy.
+# Sharded across weekdays since 2026-08-16: a volume's group is weekly-backup-d<N> where N is
+# its index mod 7 in k3s_longhorn_weekly_volumes (0=Sunday). NB a weekly→no-backup move routes
+# THROUGH default (the shard reconcile returns it to default, the no-backup pair above claims
+# it on the NEXT run) — converges on the second deploy.
 - name: Move weekly-tier volumes out of the daily group
   tags: [longhorn]
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
-      recurring-job-group.longhorn.io/weekly-backup=enabled
+      recurring-job-group.longhorn.io/weekly-backup-d{{ k3s_longhorn_weekly_volumes.index(item.split(' ')[1]) % 7 }}=enabled
       recurring-job-group.longhorn.io/default- --overwrite
   loop: "{{ k3s_longhorn_backed_up.stdout_lines }}"
   when: item.split(' ')[1] in k3s_longhorn_weekly_volumes
   become: true
   changed_when: true
 
-- name: Find weekly-tier volumes that should be daily again
+# Pre-shard volumes carry the retired flat `weekly-backup` label, which no RecurringJob selects
+# any more — a volume stuck with it is silently unprotected, so this sweep stays permanently as
+# the guard against hand-applied legacy labels, not just as one-time migration.
+- name: Find volumes still carrying the legacy weekly-backup label
   tags: [longhorn]
   ansible.builtin.command:
     argv:
@@ -359,7 +364,19 @@
   changed_when: false
   register: k3s_longhorn_weekly_labelled
 
-- name: Return weekly-tier volumes to the default recurring-job group
+- name: Migrate legacy weekly-backup labels to their weekday shard
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
+      recurring-job-group.longhorn.io/weekly-backup-d{{ k3s_longhorn_weekly_volumes.index(item.split(' ')[1]) % 7 }}=enabled
+      recurring-job-group.longhorn.io/weekly-backup- --overwrite
+  loop: "{{ k3s_longhorn_weekly_labelled.stdout_lines }}"
+  when: item.split(' ')[1] in k3s_longhorn_weekly_volumes
+  become: true
+  changed_when: true
+
+- name: Return legacy weekly-tier volumes to the default recurring-job group
   tags: [longhorn]
   ansible.builtin.command:
     cmd: >-
@@ -370,3 +387,16 @@
   when: item.split(' ')[1] not in k3s_longhorn_weekly_volumes
   become: true
   changed_when: true
+
+# Per-shard membership: returns de-listed volumes to default and moves volumes whose weekday
+# changed (a list reorder) to their current shard. Dynamic include, so the tags must be applied
+# to the included tasks explicitly — the include's own tag only gates the include itself.
+- name: Reconcile each weekly shard's membership
+  tags: [longhorn]
+  ansible.builtin.include_tasks:
+    file: longhorn-weekly-shard.yml
+    apply:
+      tags: [longhorn]
+  loop: "{{ range(0, 7) | list }}"
+  loop_control:
+    loop_var: shard

@@ -194,17 +194,23 @@ k3s_longhorn_backup_armed: true
 # Daily volume backup to that target. 03:30 keeps it clear of the Kopia run and of the daily
 # secret-rotation cron. 14 retained backups per volume is two weeks of daily recovery points
 # — Longhorn backups are incremental at the block level, so the marginal cost of depth here is
-# small compared to the first full.
+# small compared to the first full. Since the 2026-08-16 sharding this group is, in steady
+# state, only the four R2-routed volumes plus any newly provisioned PVC awaiting reconcile —
+# every B2-destined volume lives in a weekday shard below.
 k3s_longhorn_backup_cron: "30 3 * * *"
 k3s_longhorn_backup_retain: 14
 
-# Weekly tier (fifth cap event's fix, 2026-08-12): B2 transaction spend scales with volume
-# COUNT per run — each backup pays fixed lock/list/config overhead plus per-block existence
-# checks — and 25 volumes nightly blew the daily class B/C caps two clean-cap nights in a
-# row. Volumes listed in k3s_longhorn_weekly_volumes back up Sundays instead: config-heavy,
-# slow-changing state whose week-old copy restores just as well (arr configs are largely
-# configarr-regenerable; code-server and tdarr are tooling). retain 4 ≈ a month of weeklies.
-k3s_longhorn_weekly_backup_cron: "30 4 * * 0"
+# Weekly tier (fifth cap event's fix, 2026-08-12; sharded across weekdays after the sixth,
+# 2026-08-16): B2 transaction spend scales with volume COUNT per run — each backup pays fixed
+# lock/list/config overhead plus per-block existence checks (HeadObject, Class B; the August
+# console census read 34k Heads / 37k Lists) — and even the Sunday-only weekly batch, stacked
+# with the daily tier, retention pruning on both, and the 07:30 Sunday-reboot resync, blew
+# both 2,500/day caps on 2026-08-16. Every B2-destined volume now backs up WEEKLY, sharded
+# across the seven weekdays (list index mod 7 = cron day-of-week, 0=Sunday) so no single
+# cap-day carries more than 3 volumes' worth of transactions. Week-old worst-case restore for
+# the B2 set was accepted by the operator on 2026-08-16; the four R2-routed volumes keep the
+# daily cadence, R2's caps being monthly and vast. retain 4 ≈ a month of weeklies.
+k3s_longhorn_weekly_backup_minute_hour: "30 4"
 k3s_longhorn_weekly_backup_retain: 4
 # PVC names; the reconcile task swaps the volume's recurring-job group label. A PVC
 # recreated from the `longhorn` StorageClass reverts to daily until the next deploy — drift
@@ -248,18 +254,33 @@ k3s_longhorn_r2_volumes:
   - homelab/home-assistant-config
   - homelab/zigbee2mqtt-data
 
+# ORDER MATTERS: a volume's backup weekday is its list index mod 7 (0=Sunday). The list is
+# laid out in columns of seven — positions 0-6 are the seven largest volumes, one per day,
+# then the next seven, then the smallest — so no weekday stacks two heavy volumes. Reordering
+# moves volumes to a different weekday (harmless beyond a one-off cadence wobble), but append
+# new volumes at the END so existing assignments stay put.
 k3s_longhorn_weekly_volumes:
-  - homelab/code-server-config
-  - homelab/jellyfin-config
-  - homelab/sonarr-config
-  - homelab/radarr-config
-  - homelab/prowlarr-config
-  - homelab/bazarr-config
-  - homelab/qbittorrent-config
-  - homelab/tdarr-server
-  - homelab/tdarr-configs
-  - homelab/scrutiny-web-config
-  - homelab/terraria-config
+  - homelab/code-server-config # Sun
+  - homelab/jellyfin-config # Mon
+  - homelab/valheim-config # Tue
+  - homelab/karakeep-data # Wed
+  - homelab/prowlarr-config # Thu
+  - homelab/freshrss-config # Fri
+  - homelab/sonarr-config # Sat
+  - homelab/n8n-data # Sun
+  - homelab/tdarr-server # Mon
+  - homelab/radarr-config # Tue
+  - homelab/terraria-config # Wed
+  - homelab/qbittorrent-config # Thu
+  - homelab/bazarr-config # Fri
+  - homelab/scrutiny-web-config # Sat
+  - homelab/terraria-stats-data # Sun
+  - homelab/valheim-stats-data # Mon
+  - homelab/tdarr-configs # Tue
+  - homelab/healthchecks-config # Wed
+  - homelab/wg-easy-config # Thu
+  - homelab/n8n-files # Fri
+  - homelab/pi-peer-backup-data # Sat
 
 # Backup-plane heartbeat (templates/longhorn-backup-health.sh.j2). Pushes to a static Kuma
 # monitor rather than being polled, because monitor-bridge runs on daniel-server and cannot
@@ -272,10 +293,11 @@ k3s_longhorn_weekly_volumes:
 k3s_longhorn_backup_max_age_hours: 30
 
 # The weekly tier's equivalent bound, for the volumes in k3s_longhorn_weekly_volumes. Same
-# reasoning scaled to a Sunday 04:30 job: 8 days plus 6h, so one late or skipped run pages while
-# a normal ~7-day-old backup does not. Without a second bound these eleven volumes were walked by
+# reasoning scaled to a weekly 04:30 job: 8 days plus 6h, so one late or skipped run pages while
+# a normal ~7-day-old backup does not. Without a second bound these volumes were walked by
 # nothing — the daily 30h could never apply to them, so they were simply left out of the coverage
-# loop and could stop backing up indefinitely with the tile green.
+# loop and could stop backing up indefinitely with the tile green. The bound is per-volume, so
+# the weekday sharding (each volume still backed up every 7 days) leaves it unchanged.
 k3s_longhorn_weekly_backup_max_age_hours: 198
 
 # */10 rather than the Pi crons' */5: this queries the k8s API rather than reading a local file,
@@ -295,8 +317,10 @@ k3s_longhorn_backup_health_cron_minute: "*/10"
 # budget is deliberately well under what Longhorn alone could consume — the headroom left over is
 # for the other two consumers.
 #
-# 17, set against the 15 volumes in the backup group after the eight slice-4 config volumes were
-# returned to it on 2026-08-08 (see below), leaving room for a couple of additions.
+# 8, set against the sharded steady state (2026-08-16): 3 B2 shard backups per night, plus a
+# shard growing to 4 when the weekly list passes 21 names, plus a newly provisioned PVC or two
+# that land in the daily default group (and, unless routed to R2, on B2) until the next deploy
+# reconciles them. It was 17 against the pre-shard 15-volume nightly set.
 #
 # It was 10 for a few hours, against the reduced set of 7. Raising it back is NOT silencing the
 # warning — this arm counts backups, not what they cost, so at 15/day it would fire every morning
@@ -310,7 +334,7 @@ k3s_longhorn_backup_health_cron_minute: "*/10"
 # (4 -> 7 -> 15 in three days) and where it ended.
 #
 # Raise it only together with a decision about the cap itself, never to silence the warning.
-k3s_longhorn_daily_backup_budget: 17
+k3s_longhorn_daily_backup_budget: 8
 
 # Root-disk headroom heartbeat (templates/disk-health.sh.j2). 75, not the fleet's 90: Longhorn's
 # storageMinimalAvailablePercentage=25 stops replica scheduling once the disk passes 75% used, so

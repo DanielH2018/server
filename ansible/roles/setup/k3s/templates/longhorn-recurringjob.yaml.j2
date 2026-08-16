@@ -27,20 +27,27 @@ spec:
   retain: {{ k3s_longhorn_backup_retain }}
   concurrency: 1
 ---
-# The weekly tier (fifth cap event, 2026-08-12): B2 transaction spend scales with volume
-# count per run, and 25 nightly volumes blew the class B/C caps on two clean-cap nights.
-# Config-heavy, slow-changing volumes (k3s_longhorn_weekly_volumes in defaults) back up
-# Sundays instead — an hour after the daily run so the two never overlap.
+# The weekly tier, sharded across weekdays (sixth cap event, 2026-08-16): one Sunday batch of
+# 11 volumes — stacked with the daily tier, double retention pruning, and the 07:30 reboot
+# resync — blew both B2 2,500/day caps. Each B2-destined volume backs up once a week, on the
+# weekday given by its index mod 7 in k3s_longhorn_weekly_volumes; the label reconcile in
+# tasks/longhorn.yml assigns the matching weekly-backup-d<N> group. An hour after the daily
+# run so the two never overlap.
+{% for shard in range(7) %}
+{% if not loop.first %}
+---
+{% endif %}
 apiVersion: longhorn.io/v1beta2
 kind: RecurringJob
 metadata:
-  name: weekly-backup
+  name: weekly-backup-d{{ shard }}
   namespace: longhorn-system
 spec:
-  name: weekly-backup
-  cron: "{{ k3s_longhorn_weekly_backup_cron }}"
+  name: weekly-backup-d{{ shard }}
+  cron: "{{ k3s_longhorn_weekly_backup_minute_hour }} * * {{ shard }}"
   task: backup
   groups:
-    - weekly-backup
+    - weekly-backup-d{{ shard }}
   retain: {{ k3s_longhorn_weekly_backup_retain }}
   concurrency: 1
+{% endfor %}

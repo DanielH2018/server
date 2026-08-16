@@ -13,7 +13,11 @@ express a path exclude, so each rule translates one of three ways:
    re-uploaded), so churn — logs, caches, rewritten zips — is what actually spends
    transactions. Divert those; leave static weight alone.
 3. **Everything else → cadence**: the daily/weekly split (see `k3s_longhorn_weekly_volumes`)
-   bounds what a rule-less volume can cost.
+   bounds what a rule-less volume can cost. Since 2026-08-16 (the sixth cap event) the split
+   follows the target: the four R2-routed volumes are the whole daily tier, and **every
+   B2-destined volume backs up weekly**, sharded across the seven weekdays (~3 volumes per
+   day, list index mod 7 = day-of-week) so no single B2 cap-day carries a batch. Week-old
+   worst-case restore for the B2 set is an accepted trade.
 
 Both audits ran against the live deployment templates on 2026-08-12 (every mount on every
 backed-up PVC checked against the kopia rules).
@@ -31,19 +35,22 @@ selecting the `r2` target, not `default`; see
 |---|---|---|---|
 | home-assistant-config | daily | **R2** | `.cache/` diverted to emptyDir; `hacs_frontend/` stays (static — see below) |
 | zigbee2mqtt-data | daily | **R2** | `log/` diverted to emptyDir |
-| n8n-data, n8n-files | daily | B2 | `.cache/` diverted; WAL churn accepted (below) |
-| karakeep-data | daily | B2 | `uv-cache/` was already an emptyDir in the time-tagger pod |
-| freshrss-config | daily | B2 | `data/cache/` diverted to emptyDir |
-| healthchecks-config | daily | B2 | `log/` diverted to emptyDir |
+| n8n-data, n8n-files | weekly (Sun/Fri) | B2 | `.cache/` diverted; WAL churn accepted (below) |
+| karakeep-data | weekly (Wed) | B2 | `uv-cache/` was already an emptyDir in the time-tagger pod |
+| freshrss-config | weekly (Fri) | B2 | `data/cache/` diverted to emptyDir |
+| healthchecks-config | weekly (Wed) | B2 | `log/` diverted to emptyDir |
 | authelia-config | daily | **R2** | logs were already an emptyDir |
-| wg-easy-config | daily | B2 | clean (peer keys — the one thing kopia pulled from the Pi) |
+| wg-easy-config | weekly (Thu) | B2 | clean (peer keys — the one thing kopia pulled from the Pi) |
 | traefik-acme | daily | **R2** | clean (acme-only; access logs already emptyDir) |
-| code-server-config | weekly | B2 | extensions/caches stay — see deliberate deviations |
-| jellyfin-config | weekly | B2 | `transcodes/` already emptyDir; metadata stays — see deviations |
-| sonarr/radarr/prowlarr/bazarr/qbittorrent-config | weekly | B2 | MediaCover/logs/Definitions stay — weekly cadence bounds them |
-| tdarr-server, tdarr-configs | weekly | B2 | `transcode_cache/` + logs already emptyDir; `Backups/` zips diverted |
-| terraria-config | weekly | B2 | `.wld.bak*` churn accepted at weekly cadence (retired service; live `.wld` backed up, same operator call as kopia's) |
-| scrutiny-web-config | weekly | B2 | clean |
+| code-server-config | weekly (Sun) | B2 | extensions/caches stay — see deliberate deviations |
+| jellyfin-config | weekly (Mon) | B2 | `transcodes/` already emptyDir; metadata stays — see deviations |
+| sonarr/radarr/prowlarr/bazarr/qbittorrent-config | weekly (sharded) | B2 | MediaCover/logs/Definitions stay — weekly cadence bounds them |
+| tdarr-server, tdarr-configs | weekly (Mon/Tue) | B2 | `transcode_cache/` + logs already emptyDir; `Backups/` zips diverted |
+| terraria-config | weekly (Wed) | B2 | `.wld.bak*` churn accepted at weekly cadence (retired service; live `.wld` backed up, same operator call as kopia's) |
+| scrutiny-web-config | weekly (Sat) | B2 | clean |
+| valheim-config | weekly (Tue) | B2 | post-doc addition (2026-08-13, pwd→SOPS recovery); world saves |
+| valheim-stats-data, terraria-stats-data | weekly (Mon/Sun) | B2 | post-doc additions; small stats DBs |
+| pi-peer-backup-data | weekly (Sat) | B2 | post-doc addition (2026-08-14); the Pi's nightly rsync lands at 04:30 UTC, so a Saturday 04:30 backup captures the previous day's sync — crash-consistent either way |
 | scrutiny-influxdb-data | **no-backup** | — | kopia: `scrutiny/influxdb2/` — the volume IS the TSDB (single mount, verified) |
 | uptime-kuma-data | **no-backup** | — | kopia: `uptime-kuma/data*/` — monitors regenerate from the static-monitors Secret; admin recreated by hand; history not kept (kopia's own caveat, now in this doc) |
 | crowdsec-db | **no-backup** | — | Docker's crowdsec-db named volume was deliberately outside kopia scope |
