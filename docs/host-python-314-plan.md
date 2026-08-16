@@ -359,7 +359,16 @@ These have a proven silent-failure history: `session-health.py` once shipped a 3
 
 - [ ] **Step 1: Repoint both wrappers**
 
-Replace the bare `python3` invocation with `/usr/local/bin/uv run --no-project --python 3.14.6`. These are not Ansible templates, so the version is literal — see the note in Task 7 about keeping it consistent.
+Replace the bare `python3` invocation with `/home/ubuntu/.local/bin/uv run --no-project --python 3.14.6`. These are not Ansible templates, so the version is literal — see the note in Task 7 about keeping it consistent.
+
+**Not `/usr/local/bin/uv`, unlike every other group in this plan.** That symlink is created by
+Task 1 on daniel-box only; Task 1's ruling deliberately did not create it on daniel-server, and
+group C is the one group that runs on **both** hosts. Verified 2026-08-16: `ls -l
+/usr/local/bin/uv` on daniel-server returns *"No such file or directory"*, so the `/usr/local`
+path would leave the hooks broken there — silently, which is exactly this group's failure mode.
+`/home/ubuntu/.local/bin/uv` exists on both hosts and is already what the sibling hooks
+(`auto-approve-readonly.sh:10`, `block-protected-edits.sh:8`) use, so this follows the local
+convention rather than inventing one.
 
 Keep the `2>/dev/null` and the `exit 0`: a hook must not be able to block a session, and that is deliberate.
 
@@ -375,8 +384,18 @@ Update each wrapper's comment. They currently justify running "system python3 di
 Expected: exit 0 from both. Because these swallow stderr, also confirm the underlying invocation independently — this is the one whose failure the wrapper hides:
 
 ```bash
-cd /tmp && /usr/local/bin/uv run --no-project --python 3.14.6 "$OLDPWD/.claude/hooks/session-health.py"; echo "direct exit=$?"
+cd /tmp && /home/ubuntu/.local/bin/uv run --no-project --python 3.14.6 "$OLDPWD/.claude/hooks/session-health.py"; echo "direct exit=$?"
 ```
+
+Then verify the invocation resolves on **daniel-server** too, since this is the only group that
+runs there and the only place the wrong uv path would go unnoticed:
+
+```bash
+ssh daniel-server 'cd /tmp && /home/ubuntu/.local/bin/uv run --no-project --python 3.14.6 -c "import sys; print(sys.version)"'
+```
+
+Expected: `3.14.6`. (The hook *scripts* on that host come from its own checkout of this repo, so
+they carry the change once it is pulled — this step is checking the interpreter path, not the file.)
 
 - [ ] **Step 3: Run the hook test suite**
 
