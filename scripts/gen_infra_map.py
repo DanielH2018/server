@@ -737,19 +737,22 @@ def find_extra_containers(
     return extras
 
 
-def classify_migration(box_services: list[dict], server_services: list[dict]) -> dict:
-    """Split services by where the k3s strangler migration has reached.
+def services_on_host(
+    host: str, declared_here: list[dict], k8s_services: list[dict]
+) -> list[dict]:
+    """What a k3s host is actually running, rather than what declares it.
 
-    ``dual`` is the interesting bucket: a k8s copy on daniel-box running
-    alongside the Docker twin that still serves the unsuffixed hostname.
+    Every k8s entry in the inventory is declared under daniel-box, so listing a
+    host by its own ``containers_list`` renders daniel-server empty while it
+    runs half the fleet. Placement is the honest answer to "what is on this
+    box", so a service is shown wherever its pods landed — on both hosts when
+    it is spread across both. A service with no pods anywhere (a one-shot job,
+    or something genuinely missing) stays with the host that declares it, so
+    nothing drops off the page.
     """
-    box_names = {s["name"] for s in box_services if s["platform"] == "k8s"}
-    server_names = {s["name"] for s in server_services if s["declared"]}
-    return {
-        "cutover": sorted(box_names - server_names),
-        "dual": sorted(box_names & server_names),
-        "docker_only": sorted(server_names - box_names),
-    }
+    placed = [s for s in k8s_services if host in (s.get("nodes") or [])]
+    unplaced = [s for s in declared_here if not s.get("nodes")]
+    return sorted(placed + unplaced, key=lambda s: s["name"])
 
 
 def build_model(
@@ -808,10 +811,6 @@ def build_model(
         services.sort(key=lambda s: (not s["declared"], s["name"]))
         per_host_services[host] = services
 
-        counts: dict[str, int] = {}
-        for service in services:
-            counts[service["status"]] = counts.get(service["status"], 0) + 1
-
         node = cluster["nodes"].get(host) if platform == "k8s" else None
         hosts.append(
             {
@@ -822,19 +821,36 @@ def build_model(
                 "node": ({**node, "pods": pods_by_node.get(host, 0)} if node else None),
                 "reachable": info["ok"],
                 "error": info.get("error", ""),
-                "services": services,
-                "counts": counts,
                 "declared_count": len(declared),
-                "routed_count": sum(1 for s in services if s["hostname"]),
-                "authelia_count": sum(1 for s in services if s["authelia"]),
             }
         )
 
-    migration = classify_migration(
-        per_host_services.get("daniel-box", []),
-        per_host_services.get("daniel-server", []),
-    )
-    all_services = [s for host in hosts for s in host["services"]]
+    # `per_host_services` stays declaration-based — it is the canonical list the
+    # table, the totals and the grouping count exactly once. The host panels
+    # answer a different question ("what is on this box"), and for the k3s hosts
+    # that is placement, not declaration.
+    k8s_services = [
+        s
+        for host, services in per_host_services.items()
+        if HOST_PLANE.get(host) == "k8s"
+        for s in services
+    ]
+    for host in hosts:
+        declared_here = per_host_services[host["name"]]
+        shown = (
+            services_on_host(host["name"], declared_here, k8s_services)
+            if host["platform"] == "k8s"
+            else declared_here
+        )
+        counts: dict[str, int] = {}
+        for service in shown:
+            counts[service["status"]] = counts.get(service["status"], 0) + 1
+        host["services"] = shown
+        host["counts"] = counts
+        host["routed_count"] = sum(1 for s in shown if s["hostname"])
+        host["authelia_count"] = sum(1 for s in shown if s["authelia"])
+
+    all_services = [s for services in per_host_services.values() for s in services]
     totals = {
         "services": len(all_services),
         "healthy": sum(1 for s in all_services if s["status"] == "healthy"),
@@ -848,7 +864,7 @@ def build_model(
     return {
         "generated_at": generated_at,
         "hosts": hosts,
-        "migration": migration,
+        "services": all_services,
         "totals": totals,
         "domain": global_vars.get("domain", ""),
         "hostname_suffix": global_vars.get("k8s_hostname_suffix", ""),
@@ -953,17 +969,6 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 .legend span { display: flex; align-items: center; gap: .4rem; }
 .legend .dot { margin-top: 0; }
 
-.mig { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
-.mig-col { background: var(--mantle); border: 1px solid var(--surface0); border-radius: 10px; padding: 1rem 1.1rem; }
-.mig-col h4 { margin: 0 0 .2rem; font-size: .95rem; font-weight: 600; }
-.mig-col .why { color: var(--overlay0); font-size: .82rem; margin: 0 0 .75rem; }
-.mig-col ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: .35rem; }
-.mig-col li { font-family: var(--mono); font-size: .8rem; background: var(--surface0);
-              border: 1px solid var(--surface1); border-radius: 5px; padding: .12rem .45rem; }
-.mig-col.cutover h4 { color: var(--green); }
-.mig-col.dual h4 { color: var(--yellow); }
-.mig-col.docker h4 { color: var(--blue); }
-
 .warn-box { background: rgba(243,139,168,.1); border: 1px solid var(--red); border-radius: 8px;
             padding: .7rem .9rem; margin: .75rem 0 0; color: var(--text); font-size: .87rem; }
 
@@ -1063,9 +1068,19 @@ def _host_panel(host: dict) -> str:
         for key in ("healthy", "degraded", "down", "missing", "undeclared", "unknown")
         if counts.get(key)
     ]
-    platform_label = (
+    platform_label = host["role"] or (
         "k3s / Kubernetes" if host["platform"] == "k8s" else "Docker Compose"
     )
+    node = host.get("node")
+    if host["platform"] == "k8s":
+        # Say what is *running here*, not what declares it — the inventory
+        # declares every k8s service under daniel-box, and a "0 declared" line
+        # on daniel-server reads as an idle box while it carries half the pods.
+        scope = f"{len(host['services'])} services running here"
+        if node:
+            scope += f" &middot; {node['pods']} pods"
+    else:
+        scope = f"{host['declared_count']} declared"
     warn = ""
     if not host["reachable"]:
         warn = (
@@ -1077,45 +1092,12 @@ def _host_panel(host: dict) -> str:
         f'<section class="host"><div class="host-head">'
         f'<div class="row"><h3>{e(host["name"])}</h3>'
         f'<span class="meta">{e(platform_label)}</span></div>'
-        f'<div class="host-sub">{e(host["ip"])} &middot; {host["declared_count"]} declared '
+        f'<div class="host-sub">{e(host["ip"])} &middot; {scope} '
         f"&middot; {host['routed_count']} routed &middot; {host['authelia_count']} SSO-gated</div>"
-        f'<div class="host-sub">{e(" &middot; ".join(summary_bits)) if summary_bits else ""}</div>'
+        f'<div class="host-sub">{" &middot; ".join(e(bit) for bit in summary_bits)}</div>'
         f"{warn}</div>"
         f'<div class="host-body">{rows}</div></section>'
     )
-
-
-def _migration_section(migration: dict, suffix: str) -> str:
-    columns = [
-        (
-            "cutover",
-            "Cut over to k3s",
-            "Only on daniel-box. The Docker entry is gone; these serve their real hostname.",
-            migration["cutover"],
-        ),
-        (
-            "dual",
-            "Running in both",
-            f"Mid-strangler: the k8s copy answers <code>{e(suffix)}</code> while the Docker twin still serves the unsuffixed name.",
-            migration["dual"],
-        ),
-        (
-            "docker",
-            "Docker only",
-            "Not yet migrated — still exclusively on daniel-server.",
-            migration["docker_only"],
-        ),
-    ]
-    out = []
-    for css, title, why, names in columns:
-        items = (
-            "".join(f"<li>{e(n)}</li>" for n in names) or '<li class="mono">none</li>'
-        )
-        out.append(
-            f'<div class="mig-col {css}"><h4>{title} ({len(names)})</h4>'
-            f'<p class="why">{why}</p><ul>{items}</ul></div>'
-        )
-    return f'<div class="mig">{"".join(out)}</div>'
 
 
 # Functional grouping for the workload strip under the diagram. This is the one
@@ -1194,12 +1176,11 @@ def group_services(model: dict) -> list[dict]:
     by_group["Other"] = []
     lookup = {name: group for group, names in SERVICE_GROUPS for name in names}
 
-    for host in model["hosts"]:
-        for service in host["services"]:
-            if host["platform"] == "docker":
-                by_group["Pi · LAN-only"].append(service)
-            else:
-                by_group[lookup.get(service["name"], "Other")].append(service)
+    for service in model["services"]:
+        if service["platform"] == "docker":
+            by_group["Pi · LAN-only"].append(service)
+        else:
+            by_group[lookup.get(service["name"], "Other")].append(service)
 
     groups = []
     for name, services in by_group.items():
@@ -1539,23 +1520,25 @@ def _groups_view(model: dict) -> str:
 
 def _table_view(model: dict) -> str:
     rows = []
-    for host in model["hosts"]:
-        for service in host["services"]:
-            rows.append(
-                "<tr>"
-                f'<td class="mono">{e(service["name"])}</td>'
-                f"<td>{e(host['name'])}</td>"
-                f"<td>{e(service['platform'])}</td>"
-                f"<td>{e(STATUS_LABELS.get(service['status'], service['status']))}</td>"
-                f'<td class="mono">{e(service["hostname"] or "—")}</td>'
-                f'<td class="mono">{e(service["image"] or "—")}</td>'
-                f"<td>{e(service['detail'] or '—')}</td>"
-                "</tr>"
-            )
+    for service in model["services"]:
+        # "Runs on" is where the pods landed; a k8s service with none falls back
+        # to the host that declares it.
+        runs_on = ", ".join(service.get("nodes") or []) or service.get("host", "")
+        rows.append(
+            "<tr>"
+            f'<td class="mono">{e(service["name"])}</td>'
+            f'<td class="mono">{e(runs_on)}</td>'
+            f"<td>{e(service['platform'])}</td>"
+            f"<td>{e(STATUS_LABELS.get(service['status'], service['status']))}</td>"
+            f'<td class="mono">{e(service["hostname"] or "—")}</td>'
+            f'<td class="mono">{e(service["image"] or "—")}</td>'
+            f"<td>{e(service['detail'] or '—')}</td>"
+            "</tr>"
+        )
     return (
         "<details><summary>Full service table (sortable by eye, copy-pasteable)</summary>"
         '<div class="scroll"><table><thead><tr>'
-        "<th>Service</th><th>Host</th><th>Platform</th><th>Status</th>"
+        "<th>Service</th><th>Runs on</th><th>Platform</th><th>Status</th>"
         "<th>Hostname</th><th>Image</th><th>Detail</th>"
         f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div></details>"
     )
@@ -1570,7 +1553,7 @@ def render_html(model: dict) -> str:
         ("warn", totals["degraded"], "Degraded"),
         ("bad", totals["down"], "Down / missing"),
         ("alt", totals["undeclared"], "Undeclared"),
-        ("info", len(model["migration"]["cutover"]), "Cut over to k3s"),
+        ("info", model["cluster"]["pod_count"], "Pods running"),
     ]
     kpi_html = "".join(
         f'<div class="kpi"><div class="n {css}">{value}</div><div class="l">{e(label)}</div></div>'
@@ -1603,9 +1586,6 @@ edits to the inventory and drift in the running fleet both show up here on their
 
 <h2>Workloads by function</h2>
 {_groups_view(model)}
-
-<h2>k3s migration</h2>
-{_migration_section(model["migration"], model["hostname_suffix"])}
 
 <h2>Hosts</h2>
 <div class="hosts">{hosts_html}</div>
