@@ -547,6 +547,58 @@ def test_verify_automations_subcommand_parses():
     assert ns.cmd == "ha" and ns.ha_cmd == "verify-automations"
 
 
+def test_snapshot_entity_ids_parses_list_items():
+    from probe import snapshot_entity_ids
+
+    text = (
+        "# generated\n"
+        "entities:\n"
+        "  - sensor.pixel_watch_3_do_not_disturb_sensor\n"
+        "  - binary_sensor.aqara_fp300_presence\n"
+        "  - not_an_entity\n"
+    )
+    assert snapshot_entity_ids(text) == {
+        "sensor.pixel_watch_3_do_not_disturb_sensor",
+        "binary_sensor.aqara_fp300_presence",
+    }
+
+
+def test_vanished_snapshot_entities_reports_only_absent_ids():
+    from probe import vanished_snapshot_entities
+
+    snapshot = {"sensor.a", "sensor.gone", "sensor.b"}
+    live = ["sensor.a", "sensor.b", "sensor.extra_not_in_snapshot"]
+    # Only snapshot ids missing live are reported; live-only ids are not the gate's business.
+    assert vanished_snapshot_entities(snapshot, live) == ["sensor.gone"]
+    assert vanished_snapshot_entities(snapshot, list(snapshot)) == []
+
+
+def test_verify_entities_snapshot_path_exists():
+    """Same pinning as the automations gate — the snapshot must be readable and parseable."""
+    from probe import EXTERNAL_ENTITIES_YAML, snapshot_entity_ids
+
+    assert os.path.isfile(EXTERNAL_ENTITIES_YAML), f"{EXTERNAL_ENTITIES_YAML} missing"
+    with open(EXTERNAL_ENTITIES_YAML, encoding="utf-8") as f:
+        assert snapshot_entity_ids(f.read()), "no entity ids parsed from the snapshot"
+
+
+def test_verify_automations_path_exists():
+    """The gate's source file must actually be readable.
+
+    This assertion is the whole point: AUTOMATIONS_YAML pointed at the pre-k3s
+    `roles/containers/home-assistant/` path from the slice-5 cutover until 2026-08-16, so
+    `probe.py ha verify-automations` raised FileNotFoundError every time it ran. The parse
+    test above passed throughout, because it never opens the file. Reading it here means a
+    future move of the role breaks a test instead of the post-deploy gate.
+    """
+    from probe import AUTOMATIONS_YAML, expected_automation_ids
+
+    assert os.path.isfile(AUTOMATIONS_YAML), f"{AUTOMATIONS_YAML} is not readable"
+    with open(AUTOMATIONS_YAML, encoding="utf-8") as f:
+        ids = expected_automation_ids(f.read())
+    assert ids, "no automation ids parsed from the git-managed source"
+
+
 # --- metric / loki-query output formatters ----------------------------------
 # These replace the `probe.py metric … | python3 -c "…reshape JSON…"` one-liners
 # that kept prompting: the reshape now lives in the allow-listed script instead.

@@ -462,23 +462,34 @@ def load_external_entities() -> set[str]:
 def cmd_refresh(get_states=None, get_services=None) -> int:
     """Snapshot live external entity ids + the live service registry into external_entities.yml /
     external_services.yml. get_states/get_services are injected for tests; both default to live HA
-    (needs the host age key + a running HA, present on daniel-server)."""
+    (needs the host age key + a running HA, reached through the cluster ingress VIP).
+
+    Talks to HA the same way probe.py's own `ha` subcommands do — base URL + --resolve pin. It
+    used to call probe.resolve_ip(probe.HA_CONTAINER), a Docker-era container lookup that stopped
+    existing when HA moved to k3s, so `refresh` died with AttributeError from that cutover until
+    2026-08-16. It is the ONLY live path in this script, which is why a stale external_entities.yml
+    silently outlived two removed sensors."""
     if get_states is None or get_services is None:
         import json
         import probe
 
-        ip = probe.resolve_ip(probe.HA_CONTAINER)
+        base = probe.ha_base()
+        resolve = probe.ha_resolve()
         token = probe.ha_token()
     if get_states is None:
         live = [
             s["entity_id"]
-            for s in json.loads(probe.ha_get(probe.ha_get_url(ip, "states"), token))
+            for s in json.loads(
+                probe.ha_get(probe.ha_get_url(base, "states"), token, resolve=resolve)
+            )
         ]
     else:
         live = list(get_states())
     if get_services is None:
         services = parse_services(
-            json.loads(probe.ha_get(probe.ha_get_url(ip, "services"), token))
+            json.loads(
+                probe.ha_get(probe.ha_get_url(base, "services"), token, resolve=resolve)
+            )
         )
     else:
         services = set(get_services())

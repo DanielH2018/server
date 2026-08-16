@@ -15,9 +15,11 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `sanctioned_writers.yml`, the skills all anchor here): its ConfigMap ships
   `templates/config/` + `files/` into the cluster. Edit HA config HERE; deploy with
   `--tags home-assistant` from daniel-box.
-- **Port:** 8123 · **Authelia:** no · unsuffixed `home-assistant.<domain>` forwards to the
-  cluster via `bridge_hostname` (companion app unchanged) · MQTT via the in-cluster `mosquitto`
-  Service · NUT via daniel-server's LAN `3493` (DOCKER-USER-locked)
+- **Port:** 8123 · **Authelia:** no · `home-assistant.<domain>` is served directly by the cluster
+  Traefik (companion app unchanged). The `bridge_hostname` forward this used to describe died with
+  the suffix retirement (`870723e8`) — the key now appears only in host_vars *comments*, nowhere as
+  a live setting · MQTT via the in-cluster `mosquitto` Service · NUT via daniel-server's LAN `3493`
+  (DOCKER-USER-locked)
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 
 

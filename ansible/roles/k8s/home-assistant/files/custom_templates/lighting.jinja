@@ -34,17 +34,21 @@
    to its daytime target). Three segments: 1% at window start (e=0) -> a low mid at the alarm (e=15)
    -> a still-dim knee at alarm+20 (e=35) -> 100% at alarm+30 (e=45). The steep run is deliberately
    pushed into the final 10 min: you get a soft, non-jarring alarm (~8%) and it only gets bright once
-   you should already be up. Sleep-aware: a short night (0 < sleep_min < 360) scales the mid/knee down
-   to wake you even more gently, but STILL reaches 100% by e=45 — ending below full would reintroduce
-   the AL hand-off pop, which is exactly what ramping to 100% removes. Re-evaluated once a minute by
-   bedroom_wake_ramp, so a single call returns the level for the current elapsed. #}
-{%- macro wake_brightness(elapsed_min, sleep_min) -%}
+   you should already be up. Re-evaluated once a minute by bedroom_wake_ramp, so a single call
+   returns the level for the current elapsed.
+
+   Sleep-awareness was REMOVED 2026-08-16. The curve took a second `sleep_min` argument and softened
+   the mid/knee for a short night (0 < sleep_min < 360), sourced from
+   `sensor.pixel_9_pro_sleep_duration`. That entity no longer exists in HA and no replacement exists
+   on either device — the watch exposes next_alarm / bedtime_mode / on_body, but no sleep duration —
+   so every caller passed `| float(0)`, the knee was unreachable, and the branch was dead code that
+   read as live. Rebuilding it means a locally-derived signal (e.g. bedtime_mode's last_changed),
+   not another cloud sensor that can vanish silently. #}
+{%- macro wake_brightness(elapsed_min) -%}
 {%- set e = elapsed_min | float(0) -%}
-{%- set s = sleep_min | float(0) -%}
-{%- set short = (0 < s < 360) -%}
 {%- set start = 1 -%}
-{%- set mid = 5 if short else 8 -%}
-{%- set knee = 14 if short else 20 -%}
+{%- set mid = 8 -%}
+{%- set knee = 20 -%}
 {%- set full = 100 -%}
 {%- if e <= 15 -%}
 {{ (start + (mid - start) * e / 15) | round(0) | int }}
