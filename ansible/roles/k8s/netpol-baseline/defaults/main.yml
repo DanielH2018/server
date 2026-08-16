@@ -1,0 +1,18 @@
+---
+# Off by default in this first commit so the role can land and apply without fencing anything.
+# Task 3 flips it to true in its own commit, which is also the rollback lever: set false and
+# redeploy. NOT a deletion — `kubectl apply` does not prune, so removing this role's template
+# would leave the live policy enforcing with nothing in the repo describing it.
+netpol_baseline_enforced: false
+
+# `label`     — the policy selects only pods carrying `netpol-baseline: enforced` (slices 1-4)
+# `namespace` — the policy selects every pod via `podSelector: {}` (slice 5)
+netpol_baseline_scope: label
+
+# The node-side bridge addresses, for traffic that arrives with a node IP: containerd image
+# pulls, hostPort paths, and the three host crons that dial traefik. Verified per node with
+# `ip -4 -o addr show cni0`. These are /32 HOST addresses on purpose — see the plan's Global
+# Constraints for why a /16 here would silently cancel the whole policy.
+netpol_baseline_node_cidrs:
+  - 10.42.0.1/32
+  - 10.42.1.1/32

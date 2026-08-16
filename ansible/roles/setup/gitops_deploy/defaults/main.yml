@@ -98,6 +98,9 @@ gitops_deploy_k8s_autodeploy_denylist:
   - longhorn-ui
   - node-exporter
   - dri-device-plugin
+  # NetworkPolicy-only role: renders no Deployment, so there is nothing for `rollout status` to
+  # gate. It also pins no image, so it can never qualify anyway.
+  - netpol-baseline
   # probe-less Deployments — `rollout status` returns on Running and proves nothing
   - cloudflare-ddns
   - janitorr

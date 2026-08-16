@@ -72,6 +72,10 @@ containers_list:
   - name: traefik
     platform: k8s
     port: 8080
+  # Immediately after traefik: the baseline references `app: traefik` and every workload below
+  # is fenced by it. That play has no toposort and runs in list order.
+  - name: netpol-baseline
+    platform: k8s
   - name: authelia
     platform: k8s
     hostname: "auth"

@@ -1,0 +1,11 @@
+---
+# No Deployment, so manifests_rollout is empty — there is nothing to wait on. The policy takes
+# effect on apply.
+- name: Deploy the namespace ingress baseline
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: netpol-baseline
+    manifests_rollout: ""
+    manifests_files:
+      - networkpolicy.yaml
