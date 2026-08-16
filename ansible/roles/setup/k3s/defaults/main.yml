@@ -383,8 +383,12 @@ k3s_manifest_prune_cron_minute: "15"
 k3s_etcd_s3_armed: true
 k3s_etcd_s3_folder: etcd-snapshots
 # 14 daily snapshots. Larger than k3s's local default of 5 because this is the copy that exists
-# after the box is gone, and an etcd snapshot of this cluster is ~30 MB against R2's 10 GB free
-# tier — two weeks costs ~0.4 GB, which is affordable next to the ~8.2 GB of Longhorn data.
+# after the box is gone. MEASURED 2026-08-16 on the first two real runs: 7.85 MB and 7.87 MB
+# compressed, against the 104 MB the uncompressed local snapshots beside them take — --snapshot-compress
+# is doing the work. Two weeks therefore costs ~110 MB, not the ~0.4 GB estimated before there was
+# anything to measure, and it is nothing against R2's 10 GB free tier next to ~8.2 GB of Longhorn
+# data. Retention could go considerably higher on cost grounds; 14 days is the recovery window,
+# not the budget.
 k3s_etcd_s3_retention: 14
 # 02:45 — before the 03:30 nightly Longhorn backup rather than after, so the two never contend
 # for upload bandwidth, and comfortably clear of the 05:15 manifest-prune check.
