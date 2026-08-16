@@ -10,6 +10,6 @@
 # scripts. `--no-project` because uv resolves a project from the cwd and a hook's
 # cwd is arbitrary. `2>/dev/null` + `exit 0` guarantee the hook can never surface
 # an error or block session start.
-/home/ubuntu/.local/bin/uv run --no-project --python 3.14.6 \
+/home/ubuntu/.local/bin/uv run --no-project --no-python-downloads --python 3.14.6 \
   "$(dirname "$(readlink -f "$0")")/session-health.py" 2>/dev/null
 exit 0

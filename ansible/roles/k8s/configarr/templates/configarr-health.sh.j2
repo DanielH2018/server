@@ -30,7 +30,7 @@ PUSH_URL="https://${KUMA_HOST}/api/push/{{ monitor_bridge_configarr_push_token }
 # The reader prints `up<TAB>msg` or `down<TAB>msg` and always exits 0. A nonzero exit or empty
 # output therefore means the reader ITSELF broke — report that rather than pushing nothing, which
 # would leave the monitor to time out with no explanation.
-if ! OUT=$(/usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/configarr-health/configarr_health.py 2>&1) || [[ -z "$OUT" ]]; then
+if ! OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/configarr-health/configarr_health.py 2>&1) || [[ -z "$OUT" ]]; then
   STATUS=down
   MSG="configarr health reader failed: ${OUT:-(no output)}"
 else

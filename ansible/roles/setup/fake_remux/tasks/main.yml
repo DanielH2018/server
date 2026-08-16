@@ -108,7 +108,7 @@
     # FAKE_REMUX_CONFIG / FAKE_REMUX_REPLACE_CONFIG) — so it read nothing and reported "disabled".
     job: >-
       /usr/bin/flock -w 600 {{ fake_remux_lock }}
-      /usr/local/bin/uv run --no-project --python {{ host_python_version }} {{ fake_remux_opt_dir }}/fake_remux_scan.py
+      /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ fake_remux_opt_dir }}/fake_remux_scan.py
       >/dev/null 2>&1 || logger -t fake-remux-scan 'scan wrapper failed'
     cron_file: fake-remux-scan
   become: true
@@ -121,7 +121,7 @@
     user: "{{ sys_user }}"
     job: >-
       /usr/bin/flock -w 600 {{ fake_remux_lock }}
-      /usr/local/bin/uv run --no-project --python {{ host_python_version }} {{ fake_remux_opt_dir }}/fake_remux_replace.py
+      /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ fake_remux_opt_dir }}/fake_remux_replace.py
       >/dev/null 2>&1 || logger -t fake-remux-reconcile 'reconcile wrapper failed'
     cron_file: fake-remux-reconcile
   become: true

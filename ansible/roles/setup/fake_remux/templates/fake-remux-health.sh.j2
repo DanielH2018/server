@@ -20,7 +20,7 @@ KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 
 # Order is load-bearing: state_push.py prints one line per triple, in argument order, and the two
 # tokens below are consumed in that same order.
-mapfile -t LINES < <(/usr/local/bin/uv run --no-project --python {{ host_python_version }} {{ fake_remux_opt_dir }}/state_push.py \
+mapfile -t LINES < <(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ fake_remux_opt_dir }}/state_push.py \
   "fake-remux scan" "{{ fake_remux_state_dir }}/state.json" "{{ fake_remux_scan_max_age_hours }}" \
   "fake-remux replace" "{{ fake_remux_state_dir }}/replace_state.json" "{{ fake_remux_replace_max_age_hours }}")
 
