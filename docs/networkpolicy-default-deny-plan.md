@@ -494,7 +494,29 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 Run: `kubectl -n homelab get pods -l 'app in (bento-pdf,littlelink,speedtest,healthchecks,ical-proxy,code-server)'`
 Expected: six pods, all `1/1 Running`. If one is already unhealthy, fix or exclude it first — otherwise the probe's liveness assertion will fail and be misread as a policy fault.
 
-- [ ] **Step 2: Flip the variable**
+- [ ] **Step 2: Deploy the six app roles FIRST, while the policy is still allow-all**
+
+The label added in Task 2 lives in six pod templates, and `--tags netpol-baseline` does **not**
+deploy them — that tag covers only the baseline role. Deploying the flip without this step leaves
+zero pods carrying the label, so the policy selects nothing and the probe's assertion 4 fails.
+
+Deploying the label first is also the safer order in its own right: `netpol_baseline_enforced` is
+still `false`, so the live policy renders `ingress: [{}]` (allow-all) and the label is inert. Three
+of the six (`speedtest`, `healthchecks`, `code-server`) use `strategy: Recreate` on RWO Longhorn
+PVCs and will briefly restart — doing that under allow-all separates "the pods restarted" from
+"the fencing broke something".
+
+Run: `./scripts/deploy.sh --tags "bento-pdf,littlelink,speedtest,healthchecks,ical-proxy,code-server"`
+Expected: six roles deploy, all pods return to `1/1 Running`.
+
+- [ ] **Step 3: Verify exactly six pods carry the label, before anything is enforced**
+
+Run: `kubectl -n homelab get pods -l netpol-baseline=enforced --no-headers | wc -l`
+Expected: `6`. If this is `0`, the label did not reach the pod template — stop and fix that before
+flipping the flag, because the flip would otherwise produce a policy that fences nothing while
+reading as enforced.
+
+- [ ] **Step 4: Flip the variable**
 
 In `ansible/roles/k8s/netpol-baseline/defaults/main.yml`:
 
@@ -502,12 +524,12 @@ In `ansible/roles/k8s/netpol-baseline/defaults/main.yml`:
 netpol_baseline_enforced: true
 ```
 
-- [ ] **Step 3: Dry run**
+- [ ] **Step 5: Dry run**
 
 Run: `uv run ansible-playbook ansible/deploy.yml --tags "netpol-baseline" --check`
 Expected: no errors. `--check` runs unlocked.
 
-- [ ] **Step 4: Deploy**
+- [ ] **Step 6: Deploy the baseline**
 
 Run: `./scripts/deploy.sh --tags "netpol-baseline"`
 Expected: the probe Job completes and the debug task prints all four lines —
@@ -515,17 +537,18 @@ Expected: the probe Job completes and the debug task prints all four lines —
 
 Exit **75** means the git-tree lock was busy and **nothing deployed** — retry, do not treat it as a failure.
 
-- [ ] **Step 5: Verify the live policy matches intent**
+- [ ] **Step 7: Verify the live policy matches intent**
 
 Run: `kubectl -n homelab get networkpolicy baseline-ingress -o jsonpath='{.spec}'`
 Expected: `podSelector` is `{"matchLabels":{"netpol-baseline":"enforced"}}`, `policyTypes` is `["Ingress"]`, and the `from` list has exactly four peers — traefik, the AND'd observability/prometheus pair, and the two `/32` ipBlocks.
 
-- [ ] **Step 6: Verify exactly six pods are selected**
+- [ ] **Step 8: Re-verify exactly six pods are selected, now that enforcement is on**
 
 Run: `kubectl -n homelab get pods -l netpol-baseline=enforced --no-headers | wc -l`
-Expected: `6`.
+Expected: `6` — the same count as step 3. A drop here means a pod restarted without its label,
+which would silently un-fence that workload.
 
-- [ ] **Step 7: Confirm the six apps still serve through Traefik**
+- [ ] **Step 9: Confirm the six apps still serve through Traefik**
 
 `domain` is a SOPS secret, so it is not available as a shell variable — read the host from the
 live IngressRoute rather than hardcoding it:
@@ -541,7 +564,7 @@ Note that a `302` to Authelia does **not** prove the backend was reached — the
 the middleware, before Traefik proxies. The probe Job's liveness assertion (step 3 of the Job) is
 what actually proves Traefik reaches the pod.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add ansible/roles/k8s/netpol-baseline/defaults/main.yml
