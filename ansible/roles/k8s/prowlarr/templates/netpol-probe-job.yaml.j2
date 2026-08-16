@@ -14,7 +14,10 @@ metadata:
   name: flaresolverr-netpol-probe
   namespace: {{ k8s_namespace }}
 spec:
-  activeDeadlineSeconds: 120
+  # 240s, not 120s: the control below retries for up to 150s to ride out prowlarr's restart.
+  # This must stay above that retry budget, or the Job is killed mid-control and the race the
+  # retry exists to fix comes back wearing a different error message.
+  activeDeadlineSeconds: 240
   backoffLimit: 0
   # Backstop cleanup: the deploy task always deletes this Job before re-applying it, but a day's
   # TTL means a completed Job doesn't sit around indefinitely if that step is ever skipped.
@@ -34,12 +37,30 @@ spec:
             - sh
             - -c
             - |
-              if ! nc -w 5 -z prowlarr {{ container_item.port }}; then
-                echo "CONTROL FAILED: cannot reach prowlarr:{{ container_item.port }} either, so"
-                echo "this probe proves nothing about the policy. Check DNS and the Service."
-                exit 1
-              fi
-              echo "control ok: prowlarr:{{ container_item.port }} reachable from this pod"
+              # The control RETRIES, because it races prowlarr's own restart. Any change to this
+              # role's rendered manifests fires an unwaited `rollout restart deploy/prowlarr` a
+              # few tasks earlier (roles/k8s/manifests/tasks/main.yml), and prowlarr is Recreate
+              # with a 15s readiness initialDelay — so when this Job starts, the prowlarr Service
+              # routinely has NO ready endpoint. A single-shot control therefore failed on
+              # precisely the deploys that changed something, which is every deploy worth probing,
+              # and reported CONTROL FAILED for a policy that was fine.
+              #
+              # Budget: 30 attempts x (3s connect timeout + 2s sleep) = 150s worst case, which is
+              # why activeDeadlineSeconds is 240 and the Ansible wait is 300s. Those three numbers
+              # move together — shrinking the deadline below the retry budget silently restores
+              # the race. ansible/tests/test_netpol_probe_race.py pins the ordering.
+              attempt=0
+              until nc -w 3 -z prowlarr {{ container_item.port }}; do
+                attempt=$((attempt + 1))
+                if [ "$attempt" -ge 30 ]; then
+                  echo "CONTROL FAILED: cannot reach prowlarr:{{ container_item.port }} after"
+                  echo "${attempt} attempts (~150s), so this probe proves nothing about the"
+                  echo "policy. prowlarr is not merely restarting. Check DNS and the Service."
+                  exit 1
+                fi
+                sleep 2
+              done
+              echo "control ok: prowlarr:{{ container_item.port }} reachable from this pod (attempt $((attempt + 1)))"
               if nc -w 5 -z flaresolverr {{ prowlarr_k8s_flaresolverr_port }}; then
                 echo "POLICY NOT ENFORCED: reached flaresolverr:{{ prowlarr_k8s_flaresolverr_port }}"
                 echo "from a pod that is not prowlarr. The headless browser that renders hostile"
