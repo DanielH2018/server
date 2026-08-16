@@ -31,10 +31,6 @@ cells:
     domain: input_boolean
     entity: input_boolean.bedroom_sleep_mode
     name: Bedroom sleep mode
-  bedroom_wake_sleep_min_latched:
-    domain: input_number
-    entity: input_number.bedroom_wake_sleep_min_latched
-    name: Bedroom wake sleep minutes (latched)
   ha_heartbeat:
     domain: input_datetime
     entity: input_datetime.ha_heartbeat
@@ -84,9 +80,10 @@ writes:
   input_number.bedroom_light_expected_color_temp:
     - automation.bedroom_color_tracking
     - script.bedroom_set_natural_brightness
-  input_number.bedroom_wake_sleep_min_latched:
-    - automation.bedroom_fallback_wake_no_watch_alarm
-    - automation.bedroom_morning_reset_and_wake
+  input_select.bedroom_test_scenario:
+    - script.bedroom_run_scenario
+  input_select.bedroom_test_speed:
+    - script.bedroom_run_scenario
   light.bedroom_lights:
     - automation.bedroom_color_tracking
     - automation.bedroom_tap_dial_control

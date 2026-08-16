@@ -109,16 +109,6 @@ input_number:
     step: 1
     unit_of_measurement: K
     mode: box
-  # Sleep duration (min) latched ONCE at the wake-window open so the ramp's curve shape stays fixed
-  # for the whole window — bedroom_apply_wake reads this, not the live sensor (which the Google Sleep
-  # API can finalize mid-window, changing the curve under the ramp and stepping brightness DOWN).
-  bedroom_wake_sleep_min_latched:
-    name: Bedroom wake sleep minutes (latched)
-    min: 0
-    max: 1440
-    step: 1
-    unit_of_measurement: min
-    mode: box
 
 # Heartbeat helper — the `ha_heartbeat` automation (files/automations.yaml) stamps this with now()
 # every minute, so its last_changed is fresh ONLY while the automation scheduler is executing.
@@ -372,25 +362,28 @@ prometheus:
 
 http:
   use_x_forwarded_for: true
-  # Trust the Docker bridge range (RFC1918 172.16/12) so HA honors X-Forwarded-For from
-  # Traefik regardless of which bridge subnet it connects from (HA is on the shared `apps`
-  # bridge; Traefik's IP there isn't pinned, so this can't be scoped to a single /32).
-  # NOT the same as Traefik's forwardedHeaders.trustedIPs, which was narrowed to Cloudflare +
-  # 10.0.0.0/24 (07-12) and governs Traefik trusting ITS upstream (real clients arrive as CF
-  # IPs); here Traefik IS HA's proxy and legitimately needs XFF trust. Broader than strictly
-  # necessary — defense in depth only: MFA, not ip_ban, is the real gate (see below).
+  # Who HA honors X-Forwarded-For from. NOT the same as Traefik's forwardedHeaders.trustedIPs,
+  # which governs Traefik trusting ITS upstream (real clients arrive as Cloudflare IPs); here
+  # Traefik IS HA's proxy and legitimately needs XFF trust. Getting this WRONG in the narrow
+  # direction is what makes ip_ban ban the proxy instead of the client, so the list must cover
+  # every hop that actually reaches HA. MFA, not ip_ban, is the real gate (see below).
+  #
+  # Trimmed to the pod CIDR alone on 2026-08-16. Two entries were carried over from the Docker
+  # era and no longer describe any live hop:
+  #   - 172.16.0.0/12 was the Docker bridge, for when HA sat on the shared `apps` bridge with an
+  #     unpinned Traefik IP. Neither cluster node has run Docker since 2026-08-14, so nothing can
+  #     connect from a bridge address at all.
+  #   - 10.0.0.161/32 (daniel-server's LAN IP) was a slice-5 B3 prereq for the chain
+  #     CF -> daniel-server Traefik -> cluster Traefik -> HA. That middle hop retired with the
+  #     Docker edge on 2026-08-13.
+  # Verified before trimming rather than inferred from the retirement dates: Traefik is a k8s
+  # LoadBalancer Service (MetalLB VIPs 10.0.0.240/215) and HA is a pod, so the connection Traefik
+  # opens to HA is pod-to-pod and arrives from 10.42.x — never SNAT'd to a node LAN IP.
+  # /16 not a /24: the pod CIDR grows a /24 per node.
+  # If a real client ever starts getting ip_ban'd after this, the hop chain gained something this
+  # list no longer covers — re-add the specific source, don't widen back to /12.
   trusted_proxies:
-    - 172.16.0.0/12
-    # Slice 5, B3 prereqs — the proxy chain once HA runs in the cluster is
-    # CF -> daniel-server Traefik -> (bridge, egressing as the server's LAN IP) -> cluster
-    # Traefik pod (10.42.x) -> HA. HA walks X-Forwarded-For past every hop it trusts, so both
-    # new hops must be here or ip_ban starts banning the proxies instead of the client.
-    # /16 not the node's /24: the pod CIDR grows a /24 per node and daniel-server joins at
-    # slice 7. Harmless while HA is still on Docker (nothing connects from these ranges).
-    # The /32 is daniel-server's LAN IP, literal because this file is copied verbatim
-    # (validate-ha-config rejects Ansible markers here) — it is `server_ip` in host_vars.
     - 10.42.0.0/16
-    - 10.0.0.161/32
   # Brute-force defense for the internet-facing login. Authelia is intentionally OFF on this route
   # (it breaks the companion app), so HA's own login is the last gate — CrowdSec + per-router
   # rate-limit front it, this hardens the gate itself. Auto-bans an IP after 5 failed logins (writes

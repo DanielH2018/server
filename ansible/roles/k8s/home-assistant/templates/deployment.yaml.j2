@@ -25,6 +25,13 @@ spec:
         # Lay the git-owned config plane into the PVC on every start (see the ConfigMap's
         # comment). Only these named files are written; .storage/, the recorder DB, secrets
         # consumers, custom_components/ are PVC state this never touches.
+        #
+        # custom_templates/ is CLEARED before the install because `install` only overwrites what
+        # it is given: a .jinja dropped from the ConfigMap would otherwise survive on the PVC and
+        # keep being loaded, green deploy and all, with the repo showing it gone. The whole
+        # directory is git-owned, so deleting it wholesale is safe. The named files above are
+        # each overwritten every start, so they can't go stale the same way — but REMOVING one
+        # from the ConfigMap still leaves the PVC copy behind, and that needs a manual delete.
         - name: config-install
           image: {{ home_assistant_k8s_init_image }}
           command:
@@ -35,6 +42,7 @@ spec:
               /cm/rest.yaml /config/ &&
               install -m 600 /sec/secrets.yaml /config/secrets.yaml &&
               mkdir -p /config/custom_templates &&
+              find /config/custom_templates -maxdepth 1 -name '*.jinja' -delete &&
               install -m 644 /ct/diagnostics.jinja /ct/fan.jinja /ct/lighting.jinja
               /ct/ventilation.jinja /config/custom_templates/
           securityContext:
