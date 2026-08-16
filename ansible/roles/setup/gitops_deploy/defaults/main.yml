@@ -1,4 +1,23 @@
 ---
+# ── CI gate ───────────────────────────────────────────────────────────────────────────────────
+# Refuse to deploy a master tip whose CI is red or still running. Until this existed the deployer
+# applied whatever landed on master: nothing in the pull path consulted a workflow result, so a
+# broken commit reached the homelab on the next 30-min tick. Branch protection can't cover it
+# either — a required status check gates the MERGE, and this gates the DEPLOY, which is the half
+# that matters once a whole-tree failure only shows up on master (PR CI is scoped to changed
+# files). Set false to go back to deploying whatever is on master.
+gitops_deploy_require_ci: true
+
+# Check-run names that must be green. These are GitHub's check-run NAMES, which are also the
+# strings branch protection calls contexts — they must match ci.yml's `name:` EXACTLY, and that
+# file carries a comment saying as much. `renovate config validator` is deliberately not required:
+# it self-skips its real work off a per-PR condition, so on a master push it proves nothing.
+gitops_deploy_ci_contexts:
+  - prek (lint + validate + tests + secrets)
+
+# Queried unauthenticated (public repo), one GET per tick that would otherwise deploy.
+gitops_deploy_github_repo: DanielH2018/server
+
 # k8s auto-deploy — design: docs/superpowers/specs/2026-08-14-renovate-k8s-autodeploy-design.md
 #
 # Ships OFF. Slice 1 enables it scoped to the pilot service; slice 3 clears the pilot list once

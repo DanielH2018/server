@@ -24,6 +24,7 @@ from deploy_logic import (
     stale_rendered_services,
     is_image_only_diff,
     split_k8s_auto_deploy,
+    ci_verdict,
 )
 
 
@@ -1262,3 +1263,105 @@ def test_split_k8s_combined_push_deploys_eligible_defers_denylisted():
     cs = _split(paths, denylist={"traefik"})
     assert cs.k8s_deploy == {"speedtest"}
     assert cs.k8s == {"traefik"}
+
+
+# ── CI gate ───────────────────────────────────────────────────────────────────────────────────
+
+_PREK = "prek (lint + validate + tests + secrets)"
+_REQUIRED = frozenset({_PREK})
+
+
+def _run(name, status="completed", conclusion="success"):
+    return {"name": name, "status": status, "conclusion": conclusion}
+
+
+def test_ci_verdict_passes_when_required_context_is_green():
+    assert ci_verdict([_run(_PREK)], _REQUIRED) == "pass"
+
+
+def test_ci_verdict_fails_on_failure():
+    assert ci_verdict([_run(_PREK, conclusion="failure")], _REQUIRED) == "fail"
+    assert ci_verdict([_run(_PREK, conclusion="timed_out")], _REQUIRED) == "fail"
+
+
+def test_ci_verdict_pending_while_still_running():
+    assert ci_verdict(
+        [_run(_PREK, status="in_progress", conclusion=None)], _REQUIRED
+    ) == ("pending")
+    assert (
+        ci_verdict([_run(_PREK, status="queued", conclusion=None)], _REQUIRED)
+        == "pending"
+    )
+
+
+def test_ci_verdict_pending_when_the_context_has_not_reported_at_all():
+    # A SHA pushed seconds ago has no check-runs yet. Absence must never read as success.
+    assert ci_verdict([], _REQUIRED) == "pending"
+    assert ci_verdict([_run("some other job")], _REQUIRED) == "pending"
+
+
+def test_ci_verdict_treats_cancelled_as_no_verdict_not_failure():
+    # ci.yml sets concurrency cancel-in-progress on github.ref, so two pushes in quick succession
+    # CANCEL the first run. That means "no verdict for this SHA", not "this SHA is bad" — mapping
+    # it to a failure would page on an ordinary back-to-back push.
+    assert ci_verdict([_run(_PREK, conclusion="cancelled")], _REQUIRED) == "pending"
+    assert ci_verdict([_run(_PREK, conclusion="stale")], _REQUIRED) == "pending"
+
+
+def test_ci_verdict_skipped_and_neutral_count_as_green():
+    assert ci_verdict([_run(_PREK, conclusion="skipped")], _REQUIRED) == "pass"
+    assert ci_verdict([_run(_PREK, conclusion="neutral")], _REQUIRED) == "pass"
+
+
+def test_ci_verdict_failure_wins_over_a_second_run_of_the_same_name():
+    # One name can carry several runs (a re-run, or push + pull_request on the same SHA).
+    # The worst outcome has to win, or a green re-run would paper over a red one.
+    runs = [_run(_PREK), _run(_PREK, conclusion="failure")]
+    assert ci_verdict(runs, _REQUIRED) == "fail"
+    assert ci_verdict(list(reversed(runs)), _REQUIRED) == "fail"
+
+
+def test_ci_verdict_pending_when_one_run_of_the_name_is_unfinished():
+    runs = [_run(_PREK), _run(_PREK, status="in_progress", conclusion=None)]
+    assert ci_verdict(runs, _REQUIRED) == "pending"
+
+
+def test_ci_verdict_all_of_several_required_contexts_must_be_green():
+    required = frozenset({_PREK, "renovate config validator"})
+    assert ci_verdict([_run(_PREK)], required) == "pending"
+    assert (
+        ci_verdict([_run(_PREK), _run("renovate config validator")], required) == "pass"
+    )
+
+
+def test_ci_verdict_empty_required_set_disarms_the_gate():
+    # An un-templated config.env leaves CI_CONTEXTS empty; that host must keep its old behaviour
+    # rather than deferring every tick forever.
+    assert ci_verdict([], frozenset()) == "pass"
+    assert ci_verdict([_run(_PREK, conclusion="failure")], frozenset()) == "pass"
+
+
+def test_next_action_defers_when_ci_has_not_finished():
+    assert next_action("aaa", "bbb", None, ci="pending") == "ci_pending"
+
+
+def test_next_action_refuses_to_deploy_a_red_tip():
+    assert next_action("aaa", "bbb", None, ci="fail") == "ci_failed"
+
+
+def test_next_action_deploys_when_ci_is_green():
+    assert next_action("aaa", "bbb", None, ci="pass") == "deploy"
+
+
+def test_next_action_defaults_to_deploying_when_no_ci_verdict_is_supplied():
+    # Back-compat: every existing caller and test omits `ci`, and must still deploy.
+    assert next_action("aaa", "bbb", None) == "deploy"
+
+
+def test_ci_never_overrides_the_earlier_short_circuits():
+    # dirty / noop / skip_hold all outrank the CI gate: a red tip we were never going to deploy
+    # must not start reporting itself as a CI failure.
+    assert next_action("aaa", "bbb", None, dirty=True, ci="fail") == "dirty"
+    assert next_action("aaa", "aaa", None, ci="fail") == "noop"
+    assert next_action("aaa", "bad", "bad", ci="fail") == "skip_hold"
+    assert next_action("aaa", "bbb", None, origin_ahead=False, ci="fail") == "noop"
