@@ -561,11 +561,17 @@ it mid-rollout and requests drop."
 
 - [ ] **Step 1: Remove the allowlist entry so the guard fails first**
 
-In `ansible/tests/test_deploy_strategy.py`, delete this line:
+In `ansible/tests/test_deploy_strategy.py`, delete this entry. `ruff format` wraps it across
+four lines because the key plus reason exceeds the 88-column default, so delete all four:
 
 ```python
-    ("prowlarr", "flaresolverr"): "not yet converted; see docs/zero-downtime-deploys-plan-1.md",
+    (
+        "prowlarr",
+        "flaresolverr",
+    ): "not yet converted; see docs/zero-downtime-deploys-plan-1.md",
 ```
+
+Leave the rest of `_RECREATE` untouched, and do not reflow the other entries.
 
 - [ ] **Step 2: Run the guard to verify it fails**
 
