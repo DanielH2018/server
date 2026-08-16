@@ -65,6 +65,14 @@ data:
             # crowdsec first: a banned IP is rejected before any headers work is done.
             - {{ k8s_namespace }}-crowdsec@kubernetescrd
             - {{ k8s_namespace }}-default-headers@kubernetescrd
+            # compress LAST, and the order is load-bearing. An entrypoint chain wraps in
+            # list order on the way in, so the last entry is the INNERMOST — it sees the
+            # backend's response first and compresses it, and the two above then add their
+            # headers on top of an already-encoded body. Listed first it would instead try
+            # to compress after default-headers had run, which is harmless but pointless,
+            # and it would sit outside crowdsec — doing compression work for requests that
+            # are about to be rejected with a 403.
+            - {{ k8s_namespace }}-compress@kubernetescrd
       ping:
         address: ":{{ traefik_k8s_ping_port }}"
 

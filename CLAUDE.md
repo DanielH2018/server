@@ -96,8 +96,12 @@ deploy can't interleave with the automated pipeline or with another Claude sessi
 lock guards the local git tree every deploy reads its templates from (gitops-deploy
 rewrites it with a `git pull` mid-run), so a `-e target=daniel-pi` deploy takes it too. Exit
 **75** means the lock stayed busy and *nothing was deployed*; it is not a playbook failure.
-`--check` runs unlocked. The bare `ansible-playbook` forms below still work and are what
-the wrapper runs; use them only when you deliberately want no lock.
+`--check` runs unlocked. Exit **2** means a `--tags` value matched no service and *nothing
+was deployed* — Ansible itself exits 0 on an unmatched tag, so the wrapper checks the tags
+against `containers_list` first (`scripts/deploy_tags.py`); `--list-services` prints every
+valid value and `--skip-tag-check` bypasses. The bare `ansible-playbook` forms below still
+work and are what the wrapper runs, but they have neither the lock nor the tag check; use
+them only when you deliberately want that.
 
 ```bash
 # Deploy a specific container
