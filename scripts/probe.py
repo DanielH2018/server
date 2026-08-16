@@ -23,7 +23,8 @@ Subcommands:
     scrutiny                 Disk SMART summary              (cluster scrutiny, both nodes)
     pi <subpath>             Pi glances API, e.g. `pi fs`    (daniel-pi.lan:61208)
     cert <host[:port]>       Served TLS cert subj/dates [--sni NAME]
-    health <container>       Container state + healthcheck rollup (exit 0 = healthy)
+    health <service>         k8s rollout + recent-restart rollup (exit 0 = healthy)
+                             [--docker inspects the Pi's container instead]
     arr <app> <api-path>     Read-only *arr API GET [--json] (sonarr/radarr/prowlarr)
     ha state <entity_id>     Live HA entity state + attrs    (home-assistant :8123)
     ha automation <id|alias> One automation's on/off + last_triggered (resolves alias!=id)
@@ -57,7 +58,7 @@ import re
 import subprocess
 import sys
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
@@ -192,6 +193,9 @@ def loki_query_url(base, logql, limit, start=None, end=None, direction=None):
 
 def scrutiny_url(base):
     return f"{base}/api/summary"
+
+
+PI_HOST = "daniel-pi"
 
 
 def pi_url(subpath):
@@ -608,6 +612,120 @@ def format_health(data, container):
     )
 
 
+# A container that crashlooped this recently is not healthy, however ready it reads right now.
+# Ansible's post-rollout gate soaks for 60s (k8s_rollout_stabilise_seconds) watching the restart
+# COUNT, because a pod that crashes and recovers within a second passes every readiness-derived
+# field — see roles/k8s/manifests/tasks/assert_stable.yml. probe.py takes ONE sample instead of
+# soaking, so it reads the same signal from the other end: how long ago the last restart was.
+# Wider than the Ansible window, since a single sample can land anywhere in a crash cycle.
+RECENT_RESTART_SECONDS = 180
+
+
+def k8s_deploy_argv(service, namespace):
+    return [
+        "k3s",
+        "kubectl",
+        "-n",
+        namespace,
+        "get",
+        "deploy",
+        service,
+        "-o",
+        "json",
+    ]
+
+
+def k8s_pods_argv(service, namespace):
+    return [
+        "k3s",
+        "kubectl",
+        "-n",
+        namespace,
+        "get",
+        "pods",
+        "-l",
+        f"app={service}",
+        "-o",
+        "json",
+    ]
+
+
+def _seconds_since(timestamp, now):
+    """Seconds between an RFC3339 kubectl timestamp and `now`, or None if unparseable."""
+    if not timestamp:
+        return None
+    try:
+        when = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError, TypeError:
+        return None
+    return (now - when).total_seconds()
+
+
+def format_k8s_health(deploy, pods, service, now):
+    """Summarize a Deployment's rollout + its pods' restarts. Returns (text, exit_code).
+
+    Pure: takes the two parsed kubectl JSON documents and a `now`, returns what to print.
+
+    exit_code is 0 only when the rollout is COMPLETE (the observed generation has caught up and
+    every replica is updated, ready and available) AND no container restarted within
+    RECENT_RESTART_SECONDS. Both halves are load-bearing: readiness alone flips Available before
+    a bad liveness probe starts killing the container, which is the failure that produced a green
+    deploy and a crashlooping kube-state-metrics on 2026-08-07.
+    """
+    if not deploy:
+        return (
+            f"{service}: no Deployment in this namespace "
+            "(wrong name, wrong namespace, or the deploy never ran?)",
+            1,
+        )
+
+    meta, spec, status = (
+        deploy.get("metadata") or {},
+        deploy.get("spec") or {},
+        deploy.get("status") or {},
+    )
+    desired = spec.get("replicas", 1)
+    updated = status.get("updatedReplicas", 0)
+    ready = status.get("readyReplicas", 0)
+    available = status.get("availableReplicas", 0)
+    # A spec edit bumps metadata.generation immediately; status.observedGeneration only catches
+    # up once the controller has acted. Comparing them is what distinguishes "rolled out" from
+    # "the controller has not looked at my change yet" — the old ReplicaSet satisfies every
+    # replica count in the meantime.
+    stale = status.get("observedGeneration", 0) < meta.get("generation", 0)
+    rolled_out = (
+        not stale and updated == desired and ready == desired and available == desired
+    )
+
+    restarts, recent = 0, []
+    for pod in (pods or {}).get("items") or []:
+        pod_name = (pod.get("metadata") or {}).get("name", "?")
+        for cs in (pod.get("status") or {}).get("containerStatuses") or []:
+            count = cs.get("restartCount", 0)
+            restarts += count
+            if not count:
+                continue
+            finished = ((cs.get("lastState") or {}).get("terminated") or {}).get(
+                "finishedAt"
+            )
+            age = _seconds_since(finished, now)
+            if age is not None and age < RECENT_RESTART_SECONDS:
+                recent.append(
+                    f"{pod_name}/{cs.get('name', '?')} restarted {int(age)}s ago"
+                )
+
+    line = f"{service}: {ready}/{desired} ready, {updated} updated, restarts={restarts}"
+    if stale:
+        line += " — spec changed, rollout not observed yet"
+    elif not rolled_out:
+        line += " — rollout incomplete"
+    if recent:
+        line += f" — RECENT RESTART: {'; '.join(recent)}"
+    return (line, 0 if rolled_out and not recent else 1)
+
+
 def cert_stages(host, port, sni):
     """Two-stage pipeline: open a TLS session (with SNI) and decode the served
     leaf cert's subject/issuer/validity. Read-only — no data is sent.
@@ -840,9 +958,14 @@ def _build_parser():
     ct.add_argument("target", help="host or host:port")
     ct.add_argument("--sni", help="SNI servername (defaults to host)")
     hl = sub.add_parser(
-        "health", help="container state + healthcheck rollup (exit 0 = healthy)"
+        "health", help="k8s rollout + restart rollup (exit 0 = healthy)"
     )
-    hl.add_argument("container", help="container name, e.g. jellyfin")
+    hl.add_argument("container", help="service name, e.g. jellyfin")
+    hl.add_argument(
+        "--docker",
+        action="store_true",
+        help="inspect the Pi's Docker container instead of a k8s Deployment",
+    )
     ar = sub.add_parser(
         "arr", help="read-only *arr API GET (key from SOPS, fed via stdin)"
     )
@@ -1040,13 +1163,50 @@ def run_alerts(ns):
     return 0
 
 
-def run_health(container):
-    out = subprocess.run(inspect_argv(container), capture_output=True, text=True)
+def k8s_namespace():
+    """The workload namespace, read from inventory (plaintext, not a secret)."""
+    with open(GROUP_VARS_PATH) as f:
+        for line in f:
+            if line.startswith("k8s_namespace:"):
+                return line.split(":", 1)[1].strip()
+    raise SystemExit(f"k8s_namespace not found in {GROUP_VARS_PATH}")
+
+
+def _json_or_none(argv):
+    out = subprocess.run(argv, capture_output=True, text=True)
+    if out.returncode != 0:
+        return None
     try:
-        data = json.loads(out.stdout) if out.returncode == 0 else []
+        return json.loads(out.stdout)
     except json.JSONDecodeError:
-        data = []
-    text, code = format_health(data, container)
+        return None
+
+
+def run_health(container, docker=False):
+    """k8s Deployment health by default, the Pi's Docker container with --docker.
+
+    k8s first because that is where ~50 of the ~55 services live since the 2026-08-14 Docker
+    retirement. Before that this command ran `docker inspect` unconditionally and had been
+    dead on both cluster nodes ever since — it died with `FileNotFoundError: 'docker'`,
+    because neither node has the binary at all.
+    """
+    if docker:
+        # daniel-pi is the only Docker host left, and probe.py runs on daniel-box, so this is
+        # necessarily remote. Read-only, and the ssh form the auto-approve classifier passes.
+        argv = ["ssh", PI_HOST] + inspect_argv(container)
+        out = subprocess.run(argv, capture_output=True, text=True)
+        try:
+            data = json.loads(out.stdout) if out.returncode == 0 else []
+        except json.JSONDecodeError:
+            data = []
+        text, code = format_health(data, container)
+        print(text)
+        return code
+
+    ns = k8s_namespace()
+    deploy = _json_or_none(k8s_deploy_argv(container, ns))
+    pods = _json_or_none(k8s_pods_argv(container, ns)) if deploy else None
+    text, code = format_k8s_health(deploy, pods, container, datetime.now(timezone.utc))
     print(text)
     return code
 
@@ -1257,9 +1417,14 @@ def main(argv=None):
     # `health` parses/formats docker inspect rather than streaming a pipeline.
     if ns.cmd == "health":
         if ns.dry_run:
-            print(" ".join(inspect_argv(ns.container)))
+            if ns.docker:
+                print(" ".join(["ssh", PI_HOST] + inspect_argv(ns.container)))
+            else:
+                ns_name = k8s_namespace()
+                print(" ".join(k8s_deploy_argv(ns.container, ns_name)))
+                print(" ".join(k8s_pods_argv(ns.container, ns_name)))
             return 0
-        return run_health(ns.container)
+        return run_health(ns.container, docker=ns.docker)
     # `ha` resolves a token + talks to the HA REST API rather than streaming a pipeline.
     if ns.cmd == "ha":
         return run_ha(ns)

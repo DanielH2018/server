@@ -288,12 +288,14 @@ Hand-running an auto-approved *write* verb creates drift from the Ansible source
   alerts | scrutiny | pi <path> | cert <host> | health <svc> | ha <state|automation|get> …>`.
   `alerts [--days N --check X]` reconstructs monitor-bridge's DOWN alert history from Loki (Kuma
   keeps only current state) — one row per firing episode; the same view is the "Alert History"
-  Grafana board (Infrastructure folder). `health <svc>`
-  exits 0 only when the container is running + healthy, but it shells out to `docker` and probe.py
-  has **no kubectl path at all** — so on either cluster node it dies with
-  `FileNotFoundError: 'docker'` (measured 2026-08-16). It is a daniel-pi tool now, not the
-  post-deploy gate it is often reached for; gate a k8s deploy on `kubectl rollout status` plus the
-  role's own stabilisation gate instead. `ha …`
+  Grafana board (Infrastructure folder). `health <svc>` is a k8s post-deploy gate: it exits 0 only
+  when the Deployment is fully rolled out (observed generation caught up, every replica updated +
+  ready + available) **and** no container restarted in the last 180s. Both halves matter — readiness
+  flips a Deployment to Available before a bad liveness probe starts killing it, so a rollout check
+  alone reports green on a crashlooping pod. `--docker` inspects the Pi's container over ssh
+  instead; that was the only mode until 2026-08-16, which is why it died with
+  `FileNotFoundError: 'docker'` on both cluster nodes for the two days after the Docker
+  retirement. `ha …`
   reads live Home Assistant state (authed with the SOPS `claude_ha_token`); `ha automation
   <id-or-alias>` resolves the alias-slug≠id trap. See the home-assistant role's CLAUDE.md.
 - **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
