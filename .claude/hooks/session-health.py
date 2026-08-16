@@ -63,9 +63,11 @@ def docker_problems():
             ],
             5,
         )
-    # Two clauses, not `except (A, B, C)`: this runs under the host's bare python3 (3.12 via
-    # session-health.sh), and ruff (3.14 target) rewrites a parenthesized tuple into the 3.14-only
-    # `except A, B:` that SyntaxErrors on 3.12. See ansible/tests/test_host_scripts_py312.py.
+    # Two clauses, not `except (A, B, C)`: ruff (3.14 target) rewrites a parenthesized tuple into
+    # the unparenthesized `except A, B:` form. That is now harmless — session-health.sh runs this
+    # on the pinned 3.14 via uv — but the split is kept because this file is where that bug
+    # actually shipped: the wrapper sends stderr to /dev/null and exits 0, so the SyntaxError was
+    # invisible until someone noticed the banner had stopped appearing.
     except subprocess.TimeoutExpired:
         return ["  ✗ docker unreachable (dockerd wedged)"], False
     except OSError:
