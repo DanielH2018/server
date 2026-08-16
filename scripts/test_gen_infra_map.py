@@ -848,3 +848,34 @@ def test_the_diagram_reports_a_disarmed_backup_target():
         ],
     }
     assert "disarmed" in g._diagram_view(model_for({}, cluster))
+
+
+def test_an_uncollected_cluster_does_not_claim_the_backups_are_disarmed():
+    """Disarmed is a deliberate state here — a failed query must not announce it."""
+    diagram = g._diagram_view(model_for({}))
+    assert "disarmed" not in diagram
+    assert "not collected" in diagram
+
+
+def test_an_uncollected_cluster_does_not_paint_its_nodes_down():
+    """Same false alarm on the nodes: unknown is not NotReady."""
+    diagram = g._diagram_view(model_for({}))
+    assert "s-down" not in diagram
+    assert "s-unknown" in diagram
+
+
+def test_a_services_node_placement_reaches_the_page():
+    """Placement is collected for a reason; an untagged service hides it."""
+    service = {
+        "name": "sonarr",
+        "status": "healthy",
+        "hostname": None,
+        "port": None,
+        "authelia": False,
+        "networks": [],
+        "namespace": "homelab",
+        "declared": True,
+        "detail": "",
+        "nodes": ["daniel-server"],
+    }
+    assert "daniel-server" in g._service_row(service)

@@ -947,6 +947,7 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 .tag.route { background: var(--blue); color: var(--crust); border-color: var(--blue); }
 .tag.net { background: transparent; color: var(--teal); border-color: var(--surface2); }
 .tag.ns { background: transparent; color: var(--peach); border-color: var(--surface2); }
+.tag.node { background: transparent; color: var(--lavender); border-color: var(--surface2); }
 
 .legend { display: flex; gap: 1.1rem; flex-wrap: wrap; margin: 1rem 0 0; font-size: .82rem; color: var(--subtext0); }
 .legend span { display: flex; align-items: center; gap: .4rem; }
@@ -974,6 +975,7 @@ figure.diagram { margin: 0; }
 .dg .box.s-degraded { stroke: var(--yellow); }
 .dg .box.s-down, .dg .box.s-missing { stroke: var(--red); }
 .dg .box.s-job { stroke: var(--teal); }
+.dg .box.s-unknown { stroke: var(--overlay0); stroke-dasharray: 4 3; }
 .dg .t-title { fill: var(--text); font-size: 13px; font-weight: 550;
                 font-family: system-ui, -apple-system, sans-serif; }
 .dg .t-sub { fill: var(--subtext0); font-size: 11px; font-family: var(--mono); }
@@ -1035,6 +1037,8 @@ def _service_row(service: dict) -> str:
         tags.append('<span class="tag auth">SSO</span>')
     if service.get("namespace"):
         tags.append(f'<span class="tag ns">ns/{e(service["namespace"])}</span>')
+    for node in service.get("nodes") or []:
+        tags.append(f'<span class="tag node">{e(node)}</span>')
     for net in service["networks"]:
         tags.append(f'<span class="tag net">{e(net)}</span>')
     if not service["declared"]:
@@ -1339,7 +1343,11 @@ def _diagram_view(model: dict) -> str:
         )
     )
 
-    public_label = f"*.{domain}" if ep["public_routes"] else "LAN-only routes"
+    # k8s_public_route decides whether IngressRoutes *match* the public hostname,
+    # not whether the router forwards 80/443 here. Say only the first.
+    public_label = (
+        f"routes match *.{domain}" if ep["public_routes"] else "LAN-only routes"
+    )
     parts.append(_svg_edge("350,74 350,108", "A/AAAA", (356, 96)))
     parts.append(_svg_edge("590,74 590,108", "DHCP-assigned resolver", (596, 96)))
     parts.append(_svg_edge("350,160 350,178 430,178 430,196", public_label, (250, 190)))
@@ -1390,7 +1398,14 @@ def _diagram_view(model: dict) -> str:
     ]
     for index, node in enumerate(node_boxes[:2]):
         roles = ", ".join(node["roles"]) or "agent"
-        state = "healthy" if node["ready"] else "down"
+        # Only claim NotReady when the query actually answered. An uncollected
+        # cluster and a failed node look identical in this dict, and painting the
+        # second when it was the first is the false alarm that teaches a reader
+        # to stop believing red.
+        if not cluster["ok"]:
+            state = "unknown"
+        else:
+            state = "healthy" if node["ready"] else "down"
         parts.append(
             _svg_box(
                 70 + index * 510,
@@ -1398,7 +1413,11 @@ def _diagram_view(model: dict) -> str:
                 490,
                 110,
                 f"{node['name']}  ·  {roles}",
-                f"{node['ip']}  ·  {node['pods']} pods  ·  {node['version']}",
+                (
+                    f"{node['ip']}  ·  {node['pods']} pods  ·  {node['version']}"
+                    if cluster["ok"]
+                    else f"{node['ip']}  ·  not collected"
+                ),
                 state,
             )
         )
@@ -1416,11 +1435,16 @@ def _diagram_view(model: dict) -> str:
             _service_status(model, "longhorn-ui"),
         )
     )
+    # Same rule as the nodes, and it matters more here: "disarmed" is a real and
+    # deliberate state in this repo, so a failed query must not be able to
+    # announce it. No targets collected means unknown, not unarmed.
     targets = cluster["backup_targets"] or [
         {"name": "default", "url": "", "armed": False, "available": False}
     ]
     for index, target in enumerate(targets[:2]):
-        if not target["armed"]:
+        if not cluster["ok"] or not cluster["backup_targets"]:
+            state, detail = "unknown", "not collected"
+        elif not target["armed"]:
             state, detail = "missing", "disarmed — no backup target URL"
         elif target["available"]:
             state, detail = "healthy", target["url"]
