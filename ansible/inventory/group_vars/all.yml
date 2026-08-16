@@ -24,6 +24,12 @@ cloudflare_ips:
   - "2a06:98c0::/29"
   - "2c0f:f248::/32"
 
+# Exact patch, not `3.14`. uv resolves a bare minor to whatever it already has, which is how the
+# two hosts ended up on 3.14.6 and 3.14.5 with nothing asking for either. Eighteen host scripts
+# run on this, and they must be the same interpreter on both machines. The minor must track
+# .python-version — ansible/tests/test_host_python_pin.py enforces both halves.
+host_python_version: "3.14.6"
+
 # Linux Vars
 sys_user: ubuntu
 tz: America/Chicago

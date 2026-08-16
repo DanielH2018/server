@@ -173,3 +173,28 @@
     - ansible-lint
     - prek
   become: false
+
+- name: Install the pinned host Python
+  tags: [tooling]
+  # become: false to match how uv itself is installed above — uv keeps interpreters under the
+  # connecting user's data dir.
+  ansible.builtin.command:
+    cmd: "{{ initial_setup_user_home.stdout }}/.local/bin/uv python install {{ host_python_version }}"
+  register: initial_setup_host_python
+  changed_when: "'Installed' in initial_setup_host_python.stdout"
+  become: false
+
+- name: Publish uv at a stable path for systemd and cron
+  tags: [tooling]
+  # Host scripts run through `uv run`, so what needs a stable absolute path is UV, not a Python.
+  # systemd and cron inherit no useful PATH and cannot expand ~, and hardcoding the connecting
+  # user's home into unit files couples them to a path that is not guaranteed.
+  #
+  # Deliberately NOT a python3.14 symlink: a second system-level interpreter would be a second
+  # way to run Python on these hosts, and the whole point is that there is one way — uv.
+  ansible.builtin.file:
+    src: "{{ initial_setup_user_home.stdout }}/.local/bin/uv"
+    dest: /usr/local/bin/uv
+    state: link
+    force: true
+  become: true
