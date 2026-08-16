@@ -6,7 +6,7 @@ whether a rollout was zero-downtime, which is the part a wrong answer would misl
 
 from __future__ import annotations
 
-from measure_rollout_gap import GapReport, summarize
+from measure_rollout_gap import GapReport, ready_count, summarize
 
 
 def test_all_ok_reports_no_gap():
@@ -57,3 +57,21 @@ def test_empty_samples_is_not_a_pass():
     report = summarize([])
     assert report.total == 0
     assert report.failures == 0
+
+
+def test_ready_count_counts_only_ready_endpoints():
+    assert ready_count("true\nfalse\ntrue\n") == 2
+
+
+def test_ready_count_of_no_endpoints_is_zero():
+    """An empty EndpointSlice is the outage this mode exists to catch, not a parse error."""
+    assert ready_count("") == 0
+
+
+def test_ready_count_ignores_blank_lines_and_padding():
+    """kubectl's jsonpath output carries stray newlines between slices."""
+    assert ready_count("\n true \n\nfalse\n\n true\n") == 2
+
+
+def test_ready_count_treats_unready_as_not_ready():
+    assert ready_count("false\nfalse\n") == 0

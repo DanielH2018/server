@@ -278,8 +278,23 @@ The rollout was real and fell inside the sampling window: the deploy that trigge
 the `emptyDir` `sizeLimit`, `Roll the extra deployments … => (item=flaresolverr)` fired, and the
 pod came back on a new ReplicaSet hash.
 
-**Tooling gap this exposed:** `measure_rollout_gap.py` has no endpoints mode, so this result was
-produced by a throwaway script and is not reproducible from the repo as it stands. Any workload
-fenced by a NetworkPolicy — or with no ingress route — has the same problem. Adding an
-`--endpoints` mode is the fix; until then, do not cite this row as if a committed tool produced
-it.
+**Reproducing it.** The row above was originally produced by a throwaway script, because
+`measure_rollout_gap.py` had no way to measure a workload a request loop cannot reach. That gap
+is now closed — the mode is committed, and the same measurement is:
+
+```bash
+uv run python scripts/measure_rollout_gap.py --endpoints flaresolverr --seconds 280 --interval 0.25
+# then, in another terminal, a deploy that actually changes a rendered manifest:
+./scripts/deploy.sh --tags prowlarr
+```
+
+The mode reports peak ready backends alongside the gap count, and says plainly when it never
+observed two at once — so a future reader gets the caveat from the tool rather than having to
+remember it. It exits non-zero when it never saw a ready backend at all, so a mistyped service
+name fails rather than reading as a clean pass.
+
+**A deploy only measures something if it changes something.** The rollout is triggered by
+`manifests_render is changed`; a deploy that re-applies identical manifests performs no rollout,
+and polling across it yields a meaningless PASS against a stable service. That happened once
+while producing this row. Check the pod's age or ReplicaSet hash afterwards to confirm a rollout
+actually occurred before recording any result.
