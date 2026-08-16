@@ -65,4 +65,4 @@ sonarr_k8s_cpu_request: "100m"
 sonarr_k8s_mem_request: 128Mi
 
 # busybox nslookup is all the isolation probe needs.
-sonarr_k8s_probe_image: alpine:3.22
+sonarr_k8s_probe_image: alpine:3.24

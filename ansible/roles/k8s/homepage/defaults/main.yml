@@ -5,7 +5,7 @@
 # a bare repo@sha256 would freeze it with zero update signal (2026-08-13 pin).
 homepage_k8s_image: ghcr.io/gethomepage/homepage:latest@sha256:a0b71c8e757298d02560186bab9fbe3fc2d375c523a62cc1019177b37e48aa28
 # The seed-config initContainer just needs `cp`; alpine is the smallest image that has it.
-homepage_k8s_init_image: alpine:3.22
+homepage_k8s_init_image: alpine:3.24
 # Mirrors resources('0.50', '256M', '0.05', '32M') in the compose template.
 homepage_k8s_cpu_limit: "500m"
 homepage_k8s_mem_limit: 256Mi

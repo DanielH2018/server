@@ -15,7 +15,7 @@ seed_volume_storage_class: longhorn
 seed_volume_mount: /data
 # busybox tar + sha256sum are enough, and a small image keeps the seed pod's own startup off
 # the critical path of a migration window where the Docker service is already stopped.
-seed_volume_image: alpine:3.22
+seed_volume_image: alpine:3.24
 # How long the seed pod lingers before its own timeout kills it, in case a play dies between
 # creating the pod and deleting it. Long enough for a slow copy, short enough not to leak.
 seed_volume_pod_ttl: 3600

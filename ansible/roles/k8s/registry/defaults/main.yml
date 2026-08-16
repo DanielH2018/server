@@ -49,7 +49,7 @@ registry_k8s_probe_repo: registry-selftest
 # alpine:3.22 for the same reason prowlarr's and sonarr's probes use it: busybox `nc` and musl
 # `getent` both need to be present, and this image already ships in the cluster as
 # registry_k8s_probe_source above.
-registry_k8s_netpol_probe_image: alpine:3.22
+registry_k8s_netpol_probe_image: alpine:3.24
 
 # The CNI bridge gateway on daniel-box — `ip -4 addr show cni0` reads `10.42.0.1/24`, matching
 # the live podCIDR `kubectl get node daniel-box -o jsonpath='{.spec.podCIDR}'` = 10.42.0.0/24
