@@ -1,5 +1,21 @@
 # Host Python 3.14 Migration Implementation Plan
 
+> **STATUS: complete — all 7 tasks executed and verified (2026-08-16), PR #239.**
+> `grep -rn /usr/bin/python3 ansible/roles .claude/hooks` returns nothing outside container
+> contexts. Each group was verified by *running* it, not by the playbook succeeding: the `*/20`
+> cron by a real tick at 22:20:01, the health wrappers by execution, the Claude hooks through the
+> invocation that bypasses their stderr suppression, and both systemd units by real service runs
+> (`Result=success`, `ExecMainStatus=0`).
+>
+> Two things the plan did not anticipate, both recorded below in full: renovate-notify needed a
+> second line because `ProtectHome=read-only` makes uv's cache unwritable, and the 3.12 guard's
+> vacuity check had to move onto fixtures before tasks 4–6 could be committed at all.
+>
+> The `UV_PYTHON_DOWNLOADS` open item was **decided and applied**: enforcement on every group
+> except gitops-deploy, which keeps uv's self-healing download because a hard failure there stops
+> the machine that ships the fix. Both halves are pinned by
+> `ansible/tests/test_host_python_invocations.py`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move every host-run Python script off the Ubuntu 24.04 system 3.12 and onto a pinned 3.14 **invoked through uv**, so the 3.12 syntax floor — and the class of silent failures it hides — stops existing, without introducing a second way of running Python on these hosts.
