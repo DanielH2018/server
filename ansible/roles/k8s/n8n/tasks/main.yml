@@ -85,6 +85,27 @@
   become: true
   changed_when: true
 
+# The probe's FIRST act is a control check against n8n:5678, and it exits 1 if that fails —
+# deliberately, because a probe that cannot reach the service proves nothing about the policy.
+# That control races n8n's own rollout. roles/k8s/manifests no longer waits inline; it queues the
+# rollout for k8s/rollout-drain, which drains at the END of the play (see that role's header), so
+# without this wait the probe fires while n8n is still rolling and the control fails on a service
+# that is merely not up YET. Observed 2026-08-16: n8n's pod started 14:52, the probe ran 14:53:04
+# and failed 4s later with "CONTROL FAILED: cannot reach n8n:5678 either" — a red deploy that said
+# nothing about the NetworkPolicy. Re-running against an already-up n8n passed.
+#
+# `rollout status`, NOT `kubectl wait --for=condition=Available`: n8n is single-replica, so the OLD
+# pod satisfies Available for the whole rolling update and the wait returns before the new pod is
+# even scheduled. Same reasoning, and the same measurement, as rollout-drain/tasks/main.yml:32.
+- name: Wait for n8n to finish rolling before probing it
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout status
+      deploy/n8n --timeout=300s
+  become: true
+  changed_when: false
+
 - name: Run the broker-isolation probe
   tags: [deploy]
   ansible.builtin.command:
