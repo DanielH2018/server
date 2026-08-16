@@ -70,20 +70,28 @@ These are **not** captured by `deploy.yml` — they're device/app/UI state:
 
 ## 4. Files in this role
 
-| File | What it holds | Deployed via |
-|---|---|---|
-| `templates/config/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 16 `threshold` sensors, `template: !include`, `recorder:` excludes, http/trusted-proxy, Lovelace | `template` (Ansible-rendered) |
-| `files/automations.yaml` | the 33 automations | `copy` (verbatim — HA Jinja) |
-| `files/scripts.yaml` | the 16 scripts | `copy` |
-| `files/scenes.yaml` | `bedroom_bright` / `bedroom_nightlight` | `copy` |
-| `files/templates.yaml` | `sensor.bedroom_wake_start` template sensor | `copy` |
-| `files/rest.yaml` | Open-Meteo outdoor AQI sensors, pulled in via `rest: !include rest.yaml` | `copy` |
-| `files/custom_templates/*.jinja` | shared HA Jinja macros, auto-loaded at startup — `fan` (`pct_to_level`/`level_to_pct`), `lighting` (wake-ramp math), `ventilation` (window advisor), `diagnostics` (runtime-error alert scope). The pure ones are unit-tested under `tests/`. | `copy` (whole directory) |
-| `templates/customize.yaml.j2` | entity friendly-name / icon overrides | `template` |
-| `templates/ui-lovelace.yaml.j2` | the Bedroom dashboard | `template` |
+Everything below is carried into the cluster by `templates/configmap.yaml.j2` with
+`lookup('file')` — i.e. **verbatim**, whatever the `.j2` suffix suggests — and installed onto the
+`/config` PVC by the Deployment's init container on every pod start.
 
-> **HA Jinja (`{{ }}`) only goes in the copy'd `files/` — never inline in `configuration.yaml.j2`**,
-> which Ansible renders (even a brace pair in a comment breaks the deploy). That's why template
+| File | What it holds |
+|---|---|
+| `templates/config/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 16 `threshold` sensors, `template: !include`, `recorder:` excludes, http/trusted-proxy, Lovelace |
+| `files/automations.yaml` | the 33 automations |
+| `files/scripts.yaml` | the 16 scripts |
+| `files/scenes.yaml` | `bedroom_bright` / `bedroom_nightlight` |
+| `files/templates.yaml` | `sensor.bedroom_wake_start` template sensor |
+| `files/rest.yaml` | Open-Meteo outdoor AQI sensors, pulled in via `rest: !include rest.yaml` |
+| `files/custom_templates/*.jinja` | shared HA Jinja macros, auto-loaded at startup — `fan` (`pct_to_level`/`level_to_pct`), `lighting` (wake-ramp math), `ventilation` (window advisor), `diagnostics` (runtime-error alert scope). The pure ones are unit-tested under `tests/`. |
+| `templates/config/customize.yaml.j2` | entity friendly-name / icon overrides |
+| `templates/config/ui-lovelace.yaml.j2` | the Bedroom dashboard |
+
+The one exception is `templates/config/secrets.yaml.j2` — the only genuinely Ansible-templated
+config file, rendered with `lookup('template')` into the role's Secret (see §11c).
+
+> **HA Jinja (`{{ }}`) only goes in `files/` — never inline in `configuration.yaml.j2`.**
+> `validate_ha_config.py` rejects any `{{`/`{% %}` in `templates/config/` outright (even a brace
+> pair in a comment), so that split is enforced, not just conventional. That's why template
 > sensors live in `files/templates.yaml` and are pulled in with `template: !include templates.yaml`.
 
 ---
@@ -292,7 +300,8 @@ native `!secret` indirection backed by an Ansible-generated `secrets.yaml`.
    (`sops ansible/vars/secrets.yml`; registered in `ansible/secret_rotation.yml`, tier `assisted`).
    No `api_key` (skipped — `request_sync` works via the service account) and no `secure_devices_pin`
    (no locks/covers exposed).
-2. **`templates/secrets.yaml.j2`** (Ansible-rendered → `config/secrets.yaml`, `no_log`) derives the
+2. **`templates/config/secrets.yaml.j2`** (Ansible-rendered via the role's Secret →
+   `config/secrets.yaml`, mode 600) derives the
    `!secret` values from that one JSON with `| from_json` / `| to_json` — the `to_json` flattens the
    multi-line PEM key into one escaped scalar: `google_assistant_project_id`,
    `google_assistant_sa_client_email`, `google_assistant_sa_private_key`, plus `external_url` /
@@ -311,7 +320,8 @@ native `!secret` indirection backed by an Ansible-generated `secrets.yaml`.
        light.bedroom_lights: {name: Bedroom Lights, expose: true}
        fan.tower_fan: {name: Bedroom Fan, expose: true}
    ```
-   Both new config tasks are wired into `common_config_changed`. Deploy: `ha-deploy`.
+   Both files are already carried by the role's ConfigMap/Secret, so editing them rolls the pod
+   on the next deploy. Deploy: `ha-deploy`.
 4. **Finish in the Google Home app:** link the `[test] <action>` (§11b step 5), then say
    "Hey Google, sync my devices". Expose another device later = one more `entity_config` entry with
    `expose: true`, redeploy, resync.

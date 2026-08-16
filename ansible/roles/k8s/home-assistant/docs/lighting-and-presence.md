@@ -87,8 +87,8 @@ and the bedtime/wake routines that drive them.
   `reason` from the declared vocabulary (`MEDIATOR_REASONS`) — a missing/typo'd reason or the
   unquoted-`off`→YAML-`false` no-op fails CI. Add a new reason to `MEDIATOR_REASONS` when you add
   one to the mediator.
-- **`files/scripts.yaml` — the "natural lighting state" dispatcher (templated via `copy`, like
-  automations/scenes; wired via `script: !include scripts.yaml`; feeds `common_config_changed`).**
+- **`files/scripts.yaml` — the "natural lighting state" dispatcher (shipped verbatim, like
+  automations/scenes; wired via `script: !include scripts.yaml`; an edit rolls the pod).**
   `script.bedroom_apply_natural` sets the bedroom group to what it would be with no manual
   intervention RIGHT NOW: an ordered `choose:` of time-based **exceptions** (brightness overrides
   on AL's natural color) with **AL color + ambient-fill brightness (`natural_brightness(hour,
