@@ -21,31 +21,7 @@ this cannot drift from what that validator considers a renderable manifest.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-import pytest
-import yaml
-
-_REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_REPO / "scripts"))
-
-from validate_k8s_manifests import (  # noqa: E402 — needs the path insert above
-    ALL_VARS,
-    ANSIBLE,
-    BASE_CONTEXT,
-    K8S_ROLES,
-    SKIP_ROLES,
-    SHARED_TPL,
-    k8s_entries,
-    load_yaml,
-    make_env,
-    make_lookup,
-    render_or_error,
-    resolve_vars,
-    role_defaults,
-)
-from toposort import filter_by_platform  # noqa: E402
+from _k8s_render import rendered_docs
 
 _POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet", "Job", "CronJob"}
 
@@ -68,32 +44,6 @@ _PRIVILEGED = {
 }
 
 
-def _rendered_docs():
-    """(role, template name, parsed doc) for every manifest the validator would render."""
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
-    base = resolve_vars(base, base)
-    entries = k8s_entries()
-
-    for role_dir in sorted(d for d in K8S_ROLES.iterdir() if d.is_dir()):
-        role = role_dir.name
-        if role in SKIP_ROLES or role not in entries:
-            continue
-        ctx = {**base, **role_defaults(role, base), "container_item": entries[role]}
-        env = make_env([role_dir / "templates", SHARED_TPL])
-        env.globals["lookup"] = make_lookup(ctx)
-        env.filters["filter_by_platform"] = filter_by_platform
-
-        for tpl in sorted(role_dir.glob("templates/*.j2")):
-            if tpl.name.endswith(".sh.j2") or tpl.name.startswith("Dockerfile"):
-                continue
-            rendered, err = render_or_error(env, tpl.name, ctx)
-            if err:
-                pytest.fail(f"{role}/{tpl.name} failed to render: {err}")
-            for doc in yaml.safe_load_all(rendered):
-                if isinstance(doc, dict) and doc.get("kind") in _POD_KINDS:
-                    yield role, tpl.name, doc
-
-
 def _pod_specs(doc: dict):
     spec = doc.get("spec", {})
     if doc["kind"] == "CronJob":
@@ -103,7 +53,9 @@ def _pod_specs(doc: dict):
 
 def _containers():
     """(role, template, container name, securityContext) for every container in the fleet."""
-    for role, tpl, doc in _rendered_docs():
+    for role, tpl, doc in rendered_docs():
+        if doc.get("kind") not in _POD_KINDS:
+            continue
         pod = _pod_specs(doc)
         for key in ("initContainers", "containers"):
             for container in pod.get(key) or []:

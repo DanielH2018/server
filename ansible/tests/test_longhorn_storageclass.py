@@ -27,6 +27,8 @@ from pathlib import Path
 
 import yaml
 
+from _k8s_render import rendered_docs
+
 ANSIBLE = Path(__file__).resolve().parents[1]
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
 STORAGECLASS = K3S / "files" / "longhorn-storageclass.yaml"
@@ -135,4 +137,102 @@ def test_storageclass_is_applied_after_upstream_longhorn():
     assert install < patch_configmap, (
         "The ConfigMap patch must run AFTER `kubectl apply -f longhorn.yaml`, which "
         're-applies upstream\'s numberOfReplicas: "3" into it on every run.'
+    )
+
+
+# ── backup routing lists ────────────────────────────────────────────────────────────────────
+# Three hand-maintained lists of `namespace/pvcName` decide where every volume's backups go and
+# how often: r2 (daily, Cloudflare), weekly (sharded across weekdays, B2), nobackup (neither).
+# They are plain YAML with no schema and no cross-check, and the consequence of a typo is
+# silent: a misspelt weekly entry leaves that volume in the daily group, so it keeps paying
+# daily B2 transactions — the exact spend the weekday sharding exists to cut, and the sixth cap
+# event is what sharding was the response to. Nothing would report it.
+
+_ROUTING_LISTS = (
+    "k3s_longhorn_r2_volumes",
+    "k3s_longhorn_weekly_volumes",
+    "k3s_longhorn_nobackup_volumes",
+)
+
+
+def _k3s_defaults() -> dict:
+    return yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+
+
+def _declared_pvcs() -> set[str]:
+    """Every `namespace/name` a k8s role gets a PersistentVolumeClaim for.
+
+    Two sources, and both are needed. A few roles render their own PVC manifest, but most get
+    theirs from the shared `seed-volume` role via a `*_claim` var in their defaults — so a
+    collector that only reads rendered manifests finds 20 of the 29 routed volumes and its
+    "missing" list is mostly noise.
+
+    The manifests are read RENDERED rather than text-scanned, because a PVC's name is a Jinja
+    expression: scanning the templates would match `{{ ... }}` and find almost nothing, which
+    reads as a clean result rather than as no coverage.
+    """
+    namespace = "homelab"
+    names = {
+        doc["metadata"]["name"]
+        for _role, _tpl, doc in rendered_docs()
+        if doc.get("kind") == "PersistentVolumeClaim"
+        and doc.get("metadata", {}).get("name")
+    }
+    for defaults_file in (ANSIBLE / "roles" / "k8s").glob("*/defaults/main.yml"):
+        values = yaml.safe_load(defaults_file.read_text()) or {}
+        names |= {
+            value
+            for key, value in values.items()
+            if key.endswith("_claim") and isinstance(value, str) and "{{" not in value
+        }
+    # A few roles pass the claim name to seed-volume as a literal rather than through a
+    # defaults var (terraria-stats), so the defaults sweep alone misses them.
+    for tasks_file in (ANSIBLE / "roles" / "k8s").glob("*/tasks/*.yml"):
+        for line in tasks_file.read_text().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("seed_volume_claim:") and "{{" not in stripped:
+                names.add(stripped.split(":", 1)[1].strip().strip("\"'"))
+    return {f"{namespace}/{name}" for name in names}
+
+
+def test_backup_routing_lists_are_pairwise_disjoint():
+    defaults = _k3s_defaults()
+    lists = {name: set(defaults.get(name) or []) for name in _ROUTING_LISTS}
+    overlaps = []
+    for i, left in enumerate(_ROUTING_LISTS):
+        for right in _ROUTING_LISTS[i + 1 :]:
+            shared = lists[left] & lists[right]
+            if shared:
+                overlaps.append(f"{left} ∩ {right} = {sorted(shared)}")
+    assert not overlaps, (
+        "a volume in two routing lists has an ambiguous backup destination: "
+        + "; ".join(overlaps)
+    )
+
+
+def test_backup_routing_lists_have_no_duplicates():
+    defaults = _k3s_defaults()
+    for name in _ROUTING_LISTS:
+        entries = defaults.get(name) or []
+        dupes = sorted({e for e in entries if entries.count(e) > 1})
+        assert not dupes, f"{name} lists {dupes} more than once"
+
+
+def test_every_routed_volume_is_a_real_pvc():
+    # A typo here does not fail anything at deploy — the label reconcile simply matches no
+    # volume and moves on, leaving the PVC on whatever tier it was already in.
+    defaults = _k3s_defaults()
+    declared = _declared_pvcs()
+    assert len(declared) > 20, (
+        f"only found {len(declared)} PVC names — the collector stopped matching"
+    )
+    unknown = {
+        f"{name}: {entry}"
+        for name in _ROUTING_LISTS
+        for entry in (defaults.get(name) or [])
+        if entry not in declared
+    }
+    assert not unknown, (
+        "these routing entries name no PVC declared by any k8s role, so they route "
+        f"nothing: {sorted(unknown)}"
     )
