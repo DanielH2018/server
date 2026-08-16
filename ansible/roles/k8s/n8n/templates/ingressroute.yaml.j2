@@ -14,61 +14,22 @@
     bypass_prefixes=container_item.bridge_bypass_prefixes | default([])
   )
 }}
----
-# The monitoring read path, and the reason it cannot go through the bridge like everything else.
-#
-# monitor-bridge's check_n8n polls n8n's API every cycle. Under Compose that was a
-# container-to-container call to http://n8n:5678 on the `apps` network, which the migration
-# removes outright. The obvious replacement — bridge_lan_prefixes, then still in use for
-# freshrss and speedtest — does not work here: a container cannot reach hostIP:publishedPort
-# when the publishing container shares its own Docker bridge, and Traefik publishes from `apps`
-# (measured 2026-08-06, `monitor-bridge` → 10.0.0.161:443 times out while → 10.0.0.240:443
-# connects; full evidence in docs/k3s-migration/slice-2-leaf-apps.md). So anything routed via
-# the Docker edge is unreachable from the very container that needs it. The cluster VIP is
-# reachable, so the check talked to the cluster route directly and this is what admitted it.
-# (Since the bridge moved in-cluster on 2026-08-14 it reaches n8n over the Service DNS name
-# instead, so this route no longer has that caller — see the caller-census note below before
-# pruning it.)
-#
-# That turned out to be the general answer, not a workaround for this one case: both LAN
-# prefixes were removed on 2026-08-06 once homepage was likewise repointed at the VIP.
-#
-# NARROW ON PURPOSE. n8n's /api/v1 is READ-WRITE — it can create, modify, activate and delete
-# workflows — a categorically larger blast radius than the read-only widget endpoints those LAN
-# prefixes exposed. So this matches the two exact paths check.py fetches, not /api/v1/.
-# X-N8N-API-KEY is the gate; this route only decides who may present one.
-#
-# LAN-only: the macro's route is .local while k8s_public_route is false, and that name has no
-# public DNS record. Not reachable from the internet, and must not become so.
-#
-# CALLER CENSUS BEFORE REMOVING THIS ROUTE. Its documented caller (monitor-bridge) now reaches
-# n8n over the in-cluster Service, so this looks unused — but "looks unused" is how two of three
-# past allowlist narrowings broke a real caller. Check Traefik's access log for this router
-# before concluding it has none.
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: {{ container_item.name }}-monitoring
-  namespace: {{ k8s_namespace }}
-spec:
-  entryPoints:
-    - https
-  routes:
-    - kind: Rule
-      match: "Host(`{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}`) && (PathPrefix(`/api/v1/workflows`) || PathPrefix(`/api/v1/executions`))"
-      # Higher than the UI route so Traefik matches this first.
-      priority: 100
-      middlewares:
-        - name: rate-limit
-      services:
-        - name: {{ container_item.name }}
-          port: {{ container_item.port }}
-  tls:
-    certResolver: cloudflare
-    options:
-      name: modern
-    domains:
-      - main: "{{ domain }}"
-        sans:
-          - "*.{{ domain }}"
-          - "*.local.{{ domain }}"
+{#
+  There was an `n8n-monitoring` route here until 2026-08-16: a rate-limited-only door onto
+  /api/v1/workflows and /api/v1/executions, admitted so monitor-bridge's check_n8n could poll
+  n8n from daniel-server. That caller moved in-cluster on 2026-08-14 and now reaches n8n over
+  the Service DNS name, leaving the route with no known caller.
+
+  The route's own comment demanded a caller census before removal, because "looks unused" is
+  how two of three past allowlist narrowings broke a real caller. That census was run on
+  2026-08-16: `traefik_router_requests_total{router=~".*n8n-monitoring.*"}` returned zero
+  series across the full 30-day Prometheus retention — not zero requests recently, no series at
+  all. So it was deleted rather than narrowed.
+
+  It mattered because /api/v1 is READ-WRITE — it can create, modify, activate and delete
+  workflows — and this was the one route in the fleet reaching it with neither Authelia nor a
+  ClientIP matcher in front. X-N8N-API-KEY was the only gate.
+
+  If a future caller needs this again, add it through the shared monitoring_route() macro so it
+  inherits the ClientIP matcher, rather than reintroducing a hand-rolled twin.
+#}

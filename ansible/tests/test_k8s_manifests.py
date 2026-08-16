@@ -331,15 +331,10 @@ AUTHELIA_BYPASS_ROUTES = {
         "loudly — every check would silently go red while the jobs kept working. Carried over "
         "from the Docker role's hand-rolled healthchecks-ping router."
     ),
-    "n8n-monitoring": (
-        "monitor-bridge's check_n8n polls /api/v1/workflows and /api/v1/executions every "
-        "cycle and has no way to pass Authelia. It cannot use the bridge like the other "
-        "cross-service calls either: containers on daniel-server cannot reach daniel-server's "
-        "own LAN address, so it talks to this -k8s route via the cluster VIP instead. "
-        "X-N8N-API-KEY is the gate. Scoped to those two paths rather than /api/v1/, because "
-        "n8n's API is read-WRITE — it can create, modify and delete workflows, unlike the "
-        "read-only widget endpoints the LAN bypasses on the Docker side expose."
-    ),
+    # ("n8n-monitoring" retired 2026-08-16: monitor-bridge moved in-cluster on 2026-08-14 and
+    # a 30-day Traefik access-log census found no other caller, so the route was deleted
+    # rather than narrowed. It was the only route reaching a read-write API with neither
+    # Authelia nor a ClientIP matcher.)
     # The three below are the B5-prep NATIVE public bypasses on the UNSUFFIXED names —
     # emitted by the ingressroute() macro from each entry's bridge_bypass_prefixes once
     # k8s_public_route flipped. Each reproduces a hole the Docker edge already serves for the

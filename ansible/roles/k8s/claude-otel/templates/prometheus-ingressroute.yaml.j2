@@ -57,34 +57,26 @@ spec:
       services:
         - name: prometheus
           port: 9090
-    # The northbound write door (slice 3, B3). A SEPARATE route rather than a widened match, so
-    # the read door above stays as narrow as it was: the two have disjoint paths and disjoint
-    # guards, and neither inherits the other's. Folding write into the query rule would have made
-    # every LAN host able to inject metrics.
+    # The northbound write door (slice 3, B3) was here until 2026-08-16: /api/v1/write guarded
+    # by ClientIP(k8s_bridge_client_ip/32), i.e. daniel-server. Its only sender was that host's
+    # Docker Prometheus, whose five scrape jobs were removed in the Phase E2 change on
+    # 2026-08-12 — see prometheus.yaml.j2, which records that this left "no remaining
+    # remote-write source for these job names". The host's LAN-published node-exporter followed
+    # in Phase F on 2026-08-14.
     #
-    # ClientIP is the whole control here — there is no authentication in front of Prometheus, and
-    # remote-write is an unauthenticated append to the TSDB that monitor-bridge will alert from
-    # after B5. Two facts make the guard real rather than decorative, both checked 2026-08-07
-    # rather than assumed:
-    #   1. Traefik matches ClientIP against the TCP peer address, NOT X-Forwarded-For, so a
-    #      LAN host cannot claim to be daniel-server by setting a header.
-    #   2. The cluster Traefik Service is externalTrafficPolicy=Local
-    #      (`kubectl get svc traefik -n homelab -o jsonpath='{.spec.externalTrafficPolicy}'`).
-    #      Under `Cluster` kube-proxy would SNAT the source to a node IP and this matcher would
-    #      match nothing at all — so that setting is load-bearing for this route, not incidental.
-    # Same /32 as the strangler bridge's own guard (k8s_bridge_client_ip, group_vars/all.yml).
+    # Removed rather than left standing: remote-write is an UNAUTHENTICATED append to a TSDB
+    # that monitor-bridge alerts from, so a door onto it with no live sender is pure surface.
+    # A census on 2026-08-16 found no write-route series at all in
+    # traefik_router_requests_total across the 30-day retention (the only prometheus-router
+    # series was a single GET on the read route).
     #
-    # No rate-limit middleware, unlike the read route, and that asymmetry is on purpose. When the
-    # sender has been unable to write for a while it shards up and replays its backlog as fast as
-    # the receiver accepts it — precisely the moment it would blow past 300 req/min and start
-    # taking 429s. Remote-write treats those as failures and eventually drops the samples, so a
-    # limiter here would convert a brief outage into permanent gaps. The single-source ClientIP
-    # guard already bounds who can generate this load.
-    - kind: Rule
-      match: "Host(`prometheus.local.{{ domain }}`) && PathPrefix(`/api/v1/write`) && ClientIP(`{{ k8s_bridge_client_ip }}/32`)"
-      services:
-        - name: prometheus
-          port: 9090
+    # If remote-write is needed again, note what made the old guard real, both checked
+    # 2026-08-07: Traefik matches ClientIP against the TCP peer address rather than
+    # X-Forwarded-For, so a LAN host cannot claim to be another by setting a header; and the
+    # Traefik Service is externalTrafficPolicy=Local, without which kube-proxy would SNAT the
+    # source to a node IP and the matcher would match nothing. It also deliberately carried no
+    # rate-limit, because a sender replaying a backlog would take 429s and drop samples,
+    # turning a brief outage into permanent gaps.
   tls:
     certResolver: cloudflare
     options:
