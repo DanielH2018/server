@@ -15,7 +15,7 @@ first** and scope with `--tags` when iterating.
 Every task carries a block tag (placed right under `name:`), so e.g.
 `--tags fail2ban` or `--tags "ssh,firewall"` runs just that slice:
 `pi-swap` (Pi swapfile + watchdog-stop preamble) · `apt-upgrade` (the full dist-upgrade)
-· `packages` · `tooling` (uv + CLI tools) · `unattended-upgrades` · `fail2ban` · `ssh`
+· `packages` · `tooling` (uv + CLI tools) · `unattended-upgrades` · `sudo-timestamp` · `fail2ban` · `ssh`
 · `crons` (restart / prune / log-truncate / autoremove / dpkg-purge / infra-map; the prune cron
 also answers to `prune`, and the daniel-box-only infrastructure-map refresh to `infra-map`)
 · `journald` · `tuning` (server CPU governor + swappiness) · `debloat`
@@ -40,6 +40,11 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   plain allow), then enable. No WireGuard allow: Docker-published ports (incl. wg-easy's UDP
   port) bypass UFW INPUT via Docker's own chains; a stale Pi-only `51820/udp` allow from the
   pre-port-split era is actively deleted (the Pi listens on 51822).
+- **sudo credential cache:** `/etc/sudoers.d/10-timestamp` sets `timestamp_type=global`
+  (+ a 60-min timeout), so one authentication covers every tmux pane and every shell with no
+  tty. Without it, sudo keys the ticket on its parent pid when no terminal is present and each
+  Claude Code `!` command re-prompts. Written with `validate: visudo -cf %s` — a malformed
+  drop-in locks sudo out, and sudo is the only write path to the cluster.
 - **Kernel/network hardening:** IPv4 forwarding, sysctl security knobs, blacklist rare network
   modules, load + persist the WireGuard module.
 - **Auditing & accounting:** `auditd` + rules (`notify: Reload audit rules`), `sysstat`,
