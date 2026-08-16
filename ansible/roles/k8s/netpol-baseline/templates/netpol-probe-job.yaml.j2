@@ -12,7 +12,14 @@ metadata:
   name: netpol-baseline-probe
   namespace: {{ k8s_namespace }}
 spec:
-  activeDeadlineSeconds: 180
+  # Deliberately BELOW the `kubectl wait --timeout=180s` in tasks/main.yml, not equal to it. The
+  # two clocks start at different moments, so equal values make it a coin flip which one fires on
+  # a slow cold image pull — and the two failures read completely differently. Lower here means
+  # the Job is always the clock that expires first, so the pod is terminal (and its logs final)
+  # by the time the wait gives up and the log fetch runs. Costs no wall time either way: with
+  # backoffLimit: 0 a failed Job never satisfies --for=condition=complete, so the wait burns its
+  # full 180s regardless.
+  activeDeadlineSeconds: 120
   backoffLimit: 0
   ttlSecondsAfterFinished: 86400
   template:
@@ -42,8 +49,12 @@ spec:
               echo "control ok: traefik:80 reachable"
 
               # 2. NEGATIVE CONTROL — an UNFENCED pod is still reachable from here. homepage
-              #    carries no netpol-baseline label (it is slice 4), so if this fails the probe
-              #    pod's own networking is broken and assertion 3 would pass for the wrong
+              #    carries no netpol-baseline label and is in no slice of the rollout table; it
+              #    is first fenced at slice 5, when the selector becomes podSelector: {} and
+              #    every pod in the namespace is covered. THIS ASSERTION NEEDS A DIFFERENT
+              #    CONTROL AT SLICE 5 — by construction there is no unfenced pod left in the
+              #    namespace then, so the replacement has to come from outside it. If this fails
+              #    the probe pod's own networking is broken and assertion 3 would pass for the wrong
               #    reason. Port 3000 here is homepage's Service — unrelated to littlelink's own
               #    port 3000 used in assertions 3-4 below; they are different Services reached by
               #    different names.
@@ -70,9 +81,20 @@ spec:
               #    another unauthed one instead of adding a bypass rule for this probe.
               if ! wget -q -T 10 --no-check-certificate -O /dev/null \
                    "https://www.local.{{ domain }}/"; then
-                echo "LIVENESS FAILED: littlelink is not reachable through traefik. Either the"
-                echo "app is down or the baseline's traefik rule is wrong. Assertion 4 below"
-                echo "cannot distinguish enforcement from an app that is simply not listening."
+                echo "LIVENESS FAILED: littlelink is not reachable through traefik. Three causes,"
+                echo "and the third is the one that looks like the other two:"
+                echo "  1. the app is down;"
+                echo "  2. the baseline's traefik rule is wrong;"
+                echo "  3. this wget never got as far as the policy — DNS or TLS. This is the"
+                echo "     only busybox-TLS call in the repo, so ssl_client in this image and"
+                echo "     busybox wget's option surface are both unexercised, and Pi-hole"
+                echo "     answers AAAA for .local names with ::, which getaddrinfo may try"
+                echo "     first. Check from inside this pod before touching the policy:"
+                echo "       nslookup www.local.{{ domain }}   # does it resolve, and to what"
+                echo "       nc -w 5 -z traefik 443            # is the TLS port even open"
+                echo "       wget -S -O /dev/null --no-check-certificate https://www.local.{{ domain }}/"
+                echo "Assertion 4 below cannot distinguish enforcement from an app that is"
+                echo "simply not listening."
                 exit 1
               fi
               echo "liveness ok: littlelink reachable through traefik"

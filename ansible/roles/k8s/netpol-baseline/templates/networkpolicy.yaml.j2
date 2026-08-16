@@ -25,7 +25,11 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{% if netpol_baseline_enforced %}
+{# `| bool`, matching the `when:` in tasks/main.yml. Without it the two disagree for a STRING:
+   `-e netpol_baseline_enforced=false` is truthy to Jinja (this branch renders, fencing applied)
+   and False to Ansible's `when:` (every probe task skipped) — enforcement with no probe, from
+   the exact override an operator reaches for mid-incident. #}
+{% if netpol_baseline_enforced | bool %}
     # Three callers legitimately reach almost every pod. Stating them once here is the whole
     # design; the alternative is restating them in ~50 per-workload policies.
     - from:
