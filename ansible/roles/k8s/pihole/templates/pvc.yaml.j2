@@ -13,3 +13,16 @@ spec:
   resources:
     requests:
       storage: {{ pihole_k8s_size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ pihole_k8s_claim_2 }}
+  namespace: {{ k8s_namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ pihole_k8s_storage_class }}
+  resources:
+    requests:
+      storage: {{ pihole_k8s_size }}

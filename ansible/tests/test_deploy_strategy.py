@@ -99,6 +99,10 @@ _RECREATE = {
         "pihole",
         "pihole",
     ): "owns the LAN DNS VIP; redundancy is a second instance, not a replica",
+    (
+        "pihole",
+        "pihole-2",
+    ): "owns the LAN DNS VIP; redundancy is a second instance, not a replica",
     # ── workspace ──
     ("code-server", "code-server"): "live workspace on an RWO PVC",
 }

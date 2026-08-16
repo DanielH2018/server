@@ -1,8 +1,10 @@
 ---
+{% for inst in [{'name': 'pihole', 'claim': pihole_k8s_claim},
+                {'name': 'pihole-2', 'claim': pihole_k8s_claim_2}] %}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: pihole
+  name: {{ inst.name }}
   namespace: {{ k8s_namespace }}
 spec:
   replicas: 1
@@ -23,6 +25,10 @@ spec:
       # DNS blackout). Permanent posture (operator decision 2026-08-14): with ETP Local
       # load-bearing for client IPs, announcement and placement stay on daniel-box as one
       # unit — this pin only ever moves together with the L2Advertisement nodeSelector.
+      # BOTH instances pin here, deliberately. Every VIP is announced from daniel-box only
+      # (setup/k3s metallb-pool.yaml.j2, marked PERMANENT), and externalTrafficPolicy: Local
+      # means a pod on the other node would receive nothing. Redundancy here is against a
+      # rollout, not against node loss.
       nodeSelector:
         kubernetes.io/hostname: daniel-box
       # Edge/auth/DNS eviction ordering — see setup/k3s templates/priorityclass.yaml.j2.
@@ -154,7 +160,9 @@ spec:
       volumes:
         - name: etc-pihole
           persistentVolumeClaim:
-            claimName: {{ pihole_k8s_claim }}
+            claimName: {{ inst.claim }}
         - name: dns-config
           configMap:
             name: pihole-dns-config
+{{ "---" if not loop.last else "" }}
+{% endfor %}
