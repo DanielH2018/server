@@ -17,16 +17,25 @@
     # Deployments use Recreate (RWO Longhorn volume), so there is a gap with zero ready pods
     # behind pihole-dns. Fail loudly rather than proceed — the alternative is a household DNS
     # outage that this play would report as a success.
+    # A freshly-created sibling Deployment is still provisioning a Longhorn PVC when the
+    # first-ever deploy reaches this task — retry rather than fail instantly, matching the
+    # 300s budget rollout status below waits with. Failing loudly once retries are exhausted
+    # is still correct: proceeding would knowingly cause a household DNS outage.
     - name: Verify the sibling instance is ready before restarting {{ pihole_instance }}
       ansible.builtin.command:
+        # Single-quoted deliberately: the command module shlex-splits cmd, which would
+        # otherwise strip the quotes around "Ready" and leave an invalid jsonpath.
         cmd: >-
           k3s kubectl -n {{ k8s_namespace }} get pod -l instance={{ pihole_sibling_instance }}
           --field-selector=status.phase=Running
-          -o jsonpath={.items[0].status.conditions[?(@.type=="Ready")].status}
+          -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}'
       become: true
       register: pihole_sibling_ready
       changed_when: false
       failed_when: pihole_sibling_ready.stdout != "True"
+      retries: 30
+      delay: 10
+      until: pihole_sibling_ready.stdout == "True"
 
     - name: Restart Pi-hole instance {{ pihole_instance }}
       ansible.builtin.command:

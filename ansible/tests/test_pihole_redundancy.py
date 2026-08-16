@@ -194,20 +194,34 @@ def test_roll_one_restarts_then_waits_for_the_same_instance():
 
 def test_roll_one_checks_sibling_readiness_before_restarting():
     """Restarting an instance with no ready sibling is a LAN-wide DNS outage (both
-    Deployments use Recreate on a single-writer volume)."""
+    Deployments use Recreate on a single-writer volume). Matching on `pihole_sibling_instance`
+    specifically (not just any `instance=`) rules out a spurious pass where the check names
+    the very instance about to be restarted instead of its sibling — that would check nothing.
+    Requiring it to precede the restart also rules out a check that runs too late to matter."""
     tasks = _roll_one_tasks()
-    ready_check = next(
+
+    def _cmd(task: dict) -> str:
+        return str(task.get("ansible.builtin.command", {}).get("cmd", ""))
+
+    ready_idx = next(
         (
-            t
-            for t in tasks
-            if "instance=" in str(t.get("ansible.builtin.command", {}).get("cmd", ""))
-            and "failed_when" in t
+            i
+            for i, t in enumerate(tasks)
+            if "pihole_sibling_instance" in _cmd(t) and "failed_when" in t
         ),
         None,
     )
-    assert ready_check is not None, (
-        "roll_one.yml must verify the sibling instance is ready before restarting — "
+    restart_idx = next(
+        (i for i, t in enumerate(tasks) if "rollout restart" in _cmd(t)), None
+    )
+    assert ready_idx is not None, (
+        "roll_one.yml must verify pihole_sibling_instance is ready before restarting — "
         "otherwise the first deploy (or a week-stale sibling) is a full DNS outage"
+    )
+    assert restart_idx is not None, "roll_one.yml is missing the rollout restart"
+    assert ready_idx < restart_idx, (
+        "the sibling-readiness check must run before the restart, not after — checking "
+        "afterwards can no longer prevent the outage it exists to catch"
     )
 
 

@@ -21,6 +21,16 @@
     manifests_secret_files:
       - secret.yaml
 
+# LIMITATION: this sequencing only gates the *restart*, not the apply above it. Both
+# Deployments render into one deployment.yaml and `kubectl apply -f <dir>/` applies both at
+# once, so any change to deployment.yaml.j2 itself (a Renovate image bump, a resource tweak)
+# changes both pod templates in the same apply and the controller Recreate-cycles both
+# Deployments simultaneously — before this loop ever runs. The redundancy here genuinely
+# protects ConfigMap/Secret-only changes (the common case: blocklist/adlist edits, secret
+# rotation), which don't touch deployment.yaml.j2 and so aren't rolled by the controller at
+# apply time at all. Closing this gap means applying the two Deployments from separate
+# manifest files/applies so a template change also goes one instance at a time — future work,
+# see docs/zero-downtime-deploys-plan-2.md.
 - name: Roll the Pi-hole instances one at a time
   tags: [deploy]
   ansible.builtin.include_tasks: roll_one.yml
@@ -42,23 +52,35 @@
 # per-instance label). Both loop iterations below would therefore land on whichever pod that
 # shared selector picks — never guaranteed to be the one named by `item`. Resolve the actual
 # pod by the pod-only `instance` label first and exec that pod name explicitly.
+#
+# No `[0]` index in the jsonpath: on zero matches (pod still Pending, crashlooping, or the
+# instance was just created) `.items[0]...` makes kubectl error with "array index out of
+# bounds" and rc != 0, failing every deploy that catches an instance mid-start. `.items[*]...`
+# on an empty list just returns an empty string with rc 0, so retry/until can wait out a slow
+# start instead. It must still fail loudly if an instance genuinely never produces a pod —
+# that's what failed_when is for once retries are exhausted.
 - name: Find the pod backing each Pi-hole instance
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get pod -l instance={{ item }}
       --field-selector=status.phase=Running
-      -o jsonpath={.items[0].metadata.name}
+      -o jsonpath={.items[*].metadata.name}
   become: true
   register: pihole_pods
   changed_when: false
+  retries: 30
+  delay: 10
+  until: pihole_pods.stdout | trim != ''
+  failed_when: pihole_pods.stdout | trim == ''
   loop:
     - pihole
     - pihole-2
 
 - name: Map each Pi-hole instance name to its pod name
+  tags: [deploy]
   ansible.builtin.set_fact:
-    pihole_pod_by_instance: "{{ dict(pihole_pods.results | map(attribute='item') | zip(pihole_pods.results | map(attribute='stdout'))) }}"
+    pihole_pod_by_instance: "{{ dict(pihole_pods.results | map(attribute='item') | zip(pihole_pods.results | map(attribute='stdout') | map('regex_replace', '\\s.*$', ''))) }}"
 
 # Blocklist state is DECLARED (defaults/main.yml), not seeded — see the defaults for why a
 # coexistence volume seed can never verify. SQL travels over exec stdin; total_changes() on

@@ -512,6 +512,17 @@ git commit -m "Record the measured Pi-hole redundancy result"
 
 ## What this plan does not cover
 
+- **Template changes still restart both instances at once.** The sequenced restart in
+  `roll_one.yml` only gates the `rollout restart` calls — it cannot gate Kubernetes' own
+  rollout controller. Both `pihole` and `pihole-2` Deployments render into a single
+  `deployment.yaml`, applied in one `kubectl apply -f <dir>/`. A change to
+  `deployment.yaml.j2` itself (a Renovate image bump, a resource limit tweak) changes both
+  pod templates in that single apply, and the Deployment controller Recreate-cycles both
+  instances simultaneously — before `roll_one.yml` runs at all. This plan's redundancy
+  covers the common case (ConfigMap/Secret-only changes: blocklist edits, secret rotation,
+  which don't touch `deployment.yaml.j2`) but not a template change. The real fix is
+  splitting the two Deployments into separately-applied manifest files, so each instance's
+  template can change and roll independently; that is future work, not part of this plan.
 - **Node-level DNS redundancy.** Out of scope; it requires revisiting the daniel-box announcement pin, which is marked PERMANENT and protects against a failure that has already happened twice.
 - **The 14 workloads with no `readinessProbe`** — the other remaining scope item, and independent of this. Its own plan.
 - **The Python 3.14 migration**, which is another session's work. Do not touch `ansible/tests/test_host_scripts_py312.py` here; that session deletes it.
