@@ -42,7 +42,8 @@ selecting the `r2` target, not `default`; see
 | authelia-config | daily | **R2** | logs were already an emptyDir |
 | wg-easy-config | weekly (Thu) | B2 | clean (peer keys — the one thing kopia pulled from the Pi) |
 | traefik-acme | daily | **R2** | clean (acme-only; access logs already emptyDir) |
-| code-server-config | weekly (Sun) | B2 | extensions/caches stay — see deliberate deviations |
+| code-server-workspace | weekly (Sun) | B2 | **replaced code-server-config 2026-08-16** — see below |
+| code-server-config | **no-backup** | — | the deviation below was reversed once its cost was measured |
 | jellyfin-config | weekly (Mon) | B2 | `transcodes/` already emptyDir; metadata stays — see deviations |
 | sonarr/radarr/prowlarr/bazarr/qbittorrent-config | weekly (sharded) | B2 | MediaCover/logs/Definitions stay — weekly cadence bounds them |
 | tdarr-server, tdarr-configs | weekly (Mon/Tue) | B2 | `transcode_cache/` + logs already emptyDir; `Backups/` zips diverted |
@@ -59,10 +60,27 @@ selecting the `r2` target, not `default`; see
 
 ## Deliberate deviations from kopiaignore (all in the cheap direction)
 
-- **code-server extensions (+VSIX caches)**: kopia excluded them as reinstallable; here
+- ~~**code-server extensions (+VSIX caches)**: kopia excluded them as reinstallable; here
   they stay on the PVC because an emptyDir would lose them on every pod restart (kopia
   could exclude-but-keep-local; a block backup can't). Weekly cadence caps the cost at
-  one Sunday delta of the week's extension churn.
+  one Sunday delta of the week's extension churn.~~
+  **Reversed 2026-08-16**, once the cost was measured rather than assumed. `du` inside the
+  pod: 5.8 G in `.local/share/code-server/extensions`, 637 M in `/config/extensions`, 223 M
+  of caches, 17 M of code-server state — against **2.4 M of workspace**. Weekly cadence had
+  not capped anything, because the cost that mattered was never the nightly delta: the volume
+  was 52% of the 13.72 GiB backup set and 3,668 of its 7,023 blocks, and Longhorn's restore
+  path issues one Class-B GET per block, putting a code-server restore at **147% of B2's
+  2,500/day allowance — not restorable inside one day**.
+  The third option this table's framing missed is neither "keep it" nor "emptyDir": a
+  **second claim holding only the keepers**. `code-server-workspace` carries `workspace`,
+  `.ssh`, `.config` and the git identity (~2.5 M) by subPath, and `code-server-config` moved
+  to `k3s_longhorn_nobackup_volumes`. Nothing is deleted and nothing stops persisting across
+  restarts — only the backup scope changed. Extensions were always the safest thing to drop:
+  all seven are baked into the image as `.vsix` and reinstalled by
+  `/custom-cont-init.d/10-extensions.sh` on **every** container start, so they need no network
+  and no upstream service in the recovery path.
+  Note the 5.8 G is orphaned regardless: the server runs with
+  `--extensions-dir /config/extensions` and never reads it.
 - **jellyfin metadata/attachments/subtitles**: excluded by kopia as re-fetchable, kept
   here — re-fetching a whole library's metadata on restart hammers the metadata
   providers, and the tree is static-ish so its block-delta cost is small.

@@ -40,6 +40,8 @@
     manifests_service: code-server
     manifests_rollout: code-server
     manifests_files:
+      # Before the Deployment: the workload's initContainer cannot start without this claim.
+      - pvc-workspace.yaml
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
