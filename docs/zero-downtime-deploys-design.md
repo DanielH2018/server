@@ -251,3 +251,35 @@ These stay `Recreate` and the enforcement lint should expect them to:
 4. Pi-hole client distribution across two VIPs: DHCP option, router config, or both — may
    be outside Ansible's reach.
 5. Whether the CNPG PVCs should be excluded from Longhorn backups once `pg_dump` covers them.
+
+## Measured results
+
+| Slice | Service | Date | Samples | Zero-ready | Longest gap | Signal |
+|---|---|---|---|---|---|---|
+| 1 | flaresolverr | 2026-08-16 | 1029 | 0 | 0.00s | ready Service endpoints |
+
+**Read this before quoting the result.** It is weaker than the acceptance test this spec
+prescribes, in two specific ways, and neither is a formality:
+
+1. **It is not a request loop.** `scripts/measure_rollout_gap.py` polls HTTP, and flaresolverr
+   cannot be polled that way: its NetworkPolicy refuses node-originated traffic (verified —
+   `curl` to the ClusterIP from daniel-box fails), and a `kubectl port-forward` dies with the
+   pod it attached to, which would fabricate a gap at exactly the moment being measured. So the
+   signal is the count of *ready Service endpoints*, sampled every ~0.27s across a real rollout.
+   That is the property `maxUnavailable: 0` actually promises, and it has no measurement
+   artefact — but it proves a backend was routable, not that a request succeeded.
+2. **The two-pod overlap was never directly observed.** Peak ready count was 1, not 2, so the
+   EndpointSlice most likely swapped the old address for the new within a single update rather
+   than briefly listing both. The result is consistent with a seamless handover and rules out a
+   window with no backend at all; it does not demonstrate that an in-flight request survived
+   termination.
+
+The rollout was real and fell inside the sampling window: the deploy that triggered it changed
+the `emptyDir` `sizeLimit`, `Roll the extra deployments … => (item=flaresolverr)` fired, and the
+pod came back on a new ReplicaSet hash.
+
+**Tooling gap this exposed:** `measure_rollout_gap.py` has no endpoints mode, so this result was
+produced by a throwaway script and is not reproducible from the repo as it stands. Any workload
+fenced by a NetworkPolicy — or with no ingress route — has the same problem. Adding an
+`--endpoints` mode is the fix; until then, do not cite this row as if a committed tool produced
+it.
