@@ -205,6 +205,16 @@ data:
       # now read that edge's series alone.
       # First Longhorn scrape (2026-08-13): volume robustness/fullness and node storage
       # headroom have had no series at all until now. Check-arm wiring comes later.
+      #
+      # It then had none for a second reason (2026-08-15 to 2026-08-16): Longhorn v1.12 ships
+      # NetworkPolicies that admit only its own components, so this target read `up == 0` with a
+      # connection refused and nothing noticed, because the disclosure above reads the same
+      # whether the scrape is unwired or fenced off. Reopened by
+      # roles/setup/k3s/files/longhorn-metrics-networkpolicy.yaml.
+      #
+      # KNOWN, not yet fixed: this is a static_configs target against the ClusterIP, so it
+      # round-robins the two longhorn-manager pods and gets roughly half of each one's series
+      # per scrape. The fix is kubernetes_sd_configs with role: endpoints on longhorn-backend.
       - job_name: longhorn
         scrape_interval: 1m
         static_configs:
