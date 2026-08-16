@@ -32,6 +32,36 @@
     mode: "0644"
   become: true
 
+- name: Scope the sudo credential cache to the user rather than the terminal
+  tags: [sudo-timestamp]
+  # sudo's default timestamp_type is `tty`, and when there is NO controlling terminal it
+  # falls back to keying the ticket on sudo's parent pid. Every Claude Code `!` command and
+  # every `ssh host cmd` is a freshly spawned shell with a new pid, so each one gets a ticket
+  # that nothing afterwards can match — the credential is re-requested every single time, and
+  # no timeout value fixes that because the ticket is never *found*, only ever created.
+  # `global` keys the ticket on the user alone, so one authentication covers every pane and
+  # every non-tty shell for the window. Measured on daniel-box 2026-08-16: two `sudo -v` calls
+  # in one pane prompted once (per-tty caching was already working), while `sudo -n -v` from a
+  # `!` command reported "a password is required" — the no-tty path, not expiry.
+  #
+  # This weakens the per-invocation veto and is a deliberate trade: within the window, sudo
+  # called from inside a script or play no longer draws the ~/.local/bin/tmux-askpass popup,
+  # so it succeeds without being seen. A password is still required to open the window.
+  # Pairs with SUDO_ASKPASS + the ~/.local/bin/sudo shim in chezmoi's dot_zshenv, which solve
+  # *where* to prompt; this solves how often. Audited — audit-and-kernel.yml watches
+  # /etc/sudoers.d. `validate` is not optional: a malformed drop-in locks sudo out entirely,
+  # and sudo is the only write path to the cluster (the k3s SA is read-only).
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/10-timestamp
+    content: |
+      # Managed by Ansible (roles/setup/initial_setup) — edits here are overwritten.
+      Defaults timestamp_type=global, timestamp_timeout=60
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+  become: true
+
 - name: Enable and start fail2ban
   tags: [fail2ban]
   ansible.builtin.systemd:
