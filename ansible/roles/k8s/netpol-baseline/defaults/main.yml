@@ -16,3 +16,6 @@ netpol_baseline_scope: label
 netpol_baseline_node_cidrs:
   - 10.42.0.1/32
   - 10.42.1.1/32
+
+# Matches headlamp_k8s_netpol_probe_image and registry_k8s_netpol_probe_image.
+netpol_baseline_probe_image: alpine:3.24

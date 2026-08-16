@@ -9,3 +9,74 @@
     manifests_rollout: ""
     manifests_files:
       - networkpolicy.yaml
+
+# ── prove the policy is enforced, rather than merely applied ────────────────────────────────
+# Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and
+# a Job's pod template is immutable, so a Job left beside the policy would be re-applied as
+# either a no-op or an error.
+- name: Create the netpol-baseline probe manifest directory
+  tags: [config]
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/manifests/netpol-baseline-probe
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+
+- name: Render the netpol-baseline probe
+  tags: [config]
+  ansible.builtin.template:
+    src: netpol-probe-job.yaml.j2
+    dest: /etc/rancher/k3s/manifests/netpol-baseline-probe/netpol-probe-job.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Clear the previous netpol-baseline probe run
+  tags: [deploy]
+  when: netpol_baseline_enforced
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete job netpol-baseline-probe
+      --ignore-not-found --wait=true
+  become: true
+  changed_when: true
+
+- name: Run the netpol-baseline probe
+  tags: [deploy]
+  when: netpol_baseline_enforced
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      /etc/rancher/k3s/manifests/netpol-baseline-probe/netpol-probe-job.yaml
+  become: true
+  changed_when: true
+
+- name: Wait for the netpol-baseline probe
+  tags: [deploy]
+  when: netpol_baseline_enforced
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
+      job/netpol-baseline-probe --timeout=180s
+  become: true
+  changed_when: false
+  register: netpol_baseline_probe
+  failed_when: netpol_baseline_probe.rc != 0
+
+- name: Report the netpol-baseline probe
+  tags: [deploy]
+  when: netpol_baseline_enforced
+  ansible.builtin.command:
+    cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/netpol-baseline-probe"
+  become: true
+  changed_when: false
+  register: netpol_baseline_probe_log
+
+- name: Show the netpol-baseline probe result
+  tags: [deploy]
+  when: netpol_baseline_enforced
+  ansible.builtin.debug:
+    msg: "{{ netpol_baseline_probe_log.stdout_lines }}"
