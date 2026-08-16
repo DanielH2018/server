@@ -24,18 +24,19 @@ service alone, **not** sufficient to justify converting one (see *Conversion gat
 
 | Blocker class | Count | Services |
 |---|---|---|
-| sqlite / embedded DB / local config store | 15 | sonarr, radarr, bazarr, prowlarr, jellyfin, freshrss, healthchecks, speedtest, uptime-kuma, n8n, home-assistant, authelia, crowdsec, grafana, scrutiny-web |
+| sqlite / embedded DB / local config store | 16 | sonarr, radarr, bazarr, prowlarr, jellyfin, freshrss, healthchecks, speedtest, uptime-kuma, n8n, home-assistant, authelia, crowdsec, grafana, scrutiny-web, karakeep |
 | single-writer TSDB / index | 6 | prometheus, loki, loki-homelab, tempo, scrutiny-influxdb, karakeep-meilisearch |
 | single-writer datastore / world save | 5 | livesync (couchdb), mosquitto, valheim, terraria, tdarr |
 | node-exclusive hardware or netns | 5 | nut (USB), zigbee2mqtt (radio accepts one client), wg-easy, qbittorrent (VPN killswitch netns), registry (hostPort) |
-| in-process state | 6 | monitor-bridge, autofix-bridge, janitorr, karakeep-tagger, valheim-stats, terraria-stats |
+| in-process state | 5 | monitor-bridge, autofix-bridge, janitorr, valheim-stats, terraria-stats |
 | ingress / DNS topology | 2 | traefik, pihole |
 | workspace | 1 | code-server |
 | stateless — convertible today | 1 | prowlarr-flaresolverr |
 
-Rows sum to 41. The `claude-otel` role contributes four entries (grafana, prometheus, loki,
-tempo), `karakeep` two (meilisearch, time-tagger), `scrutiny` two (influxdb, web), and
-`prowlarr` two (prowlarr, flaresolverr).
+Rows sum to 41, verified against the rendered manifests rather than counted by hand. The
+`claude-otel` role contributes four entries (grafana, prometheus, loki, tempo), `karakeep`
+two (karakeep, meilisearch — its `karakeep-chrome` and `karakeep-time-tagger` deployments
+already roll), `scrutiny` two (influxdb, web), and `prowlarr` two (prowlarr, flaresolverr).
 
 Two lines of attack were checked and closed:
 
@@ -220,6 +221,8 @@ These stay `Recreate` and the enforcement lint should expect them to:
 - **Game worlds** (valheim, terraria) and **tdarr** — two writers is worse than a gap.
 - **In-process state** (monitor-bridge, autofix-bridge, janitorr, the stats sidecars) —
   grace-cycle and hysteresis streaks do not survive being split across two pods.
+- **karakeep** — sqlite on its data PVC. Its `karakeep-chrome` and `karakeep-time-tagger`
+  deployments already roll and are not holdouts.
 - **home-assistant**, **code-server**, **livesync**, **mosquitto**, **crowdsec**,
   **uptime-kuma**, **speedtest**, **jellyfin**, **bazarr**, **karakeep-meilisearch**.
 
