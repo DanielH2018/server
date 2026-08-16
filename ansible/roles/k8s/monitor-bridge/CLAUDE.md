@@ -117,8 +117,9 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `check_arr_queue` convention — no grace). Pairs with Prowlarr set to
     `includeHealthWarnings=false` (keeps `onHealthIssue` = the instant all-down red backstop).
     `PROWLARR_INDEXER_IGNORE` (comma-separated names, case-insensitive) drops chronically-flaky
-    public trackers from the offender list — set to `The Pirate Bay` after its apibay.org backend
-    503'd/timed-out for hours and flapped this monitor up/down on 2026-07-05 (the other 7 indexers
+    public trackers from the offender list — set to `The Pirate Bay,1337x` — the first after its
+    apibay.org backend 503'd/timed-out for hours and flapped this monitor up/down on 2026-07-05,
+    the second for the same chronic flapping (the remaining indexers
     cover the same searches; the all-down onHealthIssue is still the backstop). Pure
     `indexers_down()` is unit-tested. Spec: `docs/superpowers/specs/2026-07-04-prowlarr-indexer-watchdog-design.md`.)
   - **GitOps Deploy — Alive** (reads `/gitops-state/last_run`, a bind-mounted host timestamp the
@@ -175,9 +176,11 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     Content Verify, Backup Maintenance, B2 Storage Usage, B2 Usage Trend) that read green for nine
     and a half hours during that incident because they reported their cron's LAST SUCCESSFUL RUN
     rather than current B2 health. Those checks were removed 2026-08-10 — kopia is retired, backup
-    moved to Longhorn (`docs/k3s-migration/backup-consolidation-longhorn.md`) — leaving
-    `B2_DEPENDENT` empty; kept as infrastructure for any future check that reads B2-backed state
-    via a cron/state-file rather than querying B2 live. This check reports B2's own
+    moved to Longhorn (`docs/k3s-migration/backup-consolidation-longhorn.md`) — which left
+    `B2_DEPENDENT` empty for five days. **It is not empty now:** `check_b2_storage` (B2 Storage
+    Usage) was added 2026-08-15 and is gated here, so a transaction-cap incident does not page
+    twice for one root cause. That check queries B2 live rather than reading a cron's state file,
+    which is what made the five kopia-era checks report a stale success in the first place. This check reports B2's own
     `transaction_cap_exceeded` error text directly. **Throttled**, unlike the other two gates: the
     probe runs at most once per `B2_PROBE_INTERVAL_S` (1800 s = 48 calls/day) and **both** outcomes
     are cached, because the fault being detected is a transaction cap and an every-cycle probe
@@ -314,14 +317,22 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     transaction cap (2026-08-02) and the gitops-behind defer (2026-08-07). The floor also covers a
     partially-loaded kube-state-metrics: its ClusterRole is deliberately scoped, so dropping `apps`
     would take every deployment series away while the pod stays up and Ready. That fault is
-    invisible to the reachability gate above, which is why both exist. Pure
+    invisible to the reachability gate above, which is why both exist.
+    **A second arm covers DaemonSets** (added 2026-08-13):
+    `kube_daemonset_status_number_unavailable`, with its own `K8S_MIN_DAEMONSETS` floor (9) and
+    the same fail-closed-on-absent-series logic — a Deployment-shaped census cannot see promtail,
+    node-exporter or the otel collector, which run one pod per node and are exactly the workloads
+    a node problem takes out first. A third arm reports crash-looping restarts. Pure
     `k8s_workloads_verdict()` is unit-tested; `CLUSTER_DEPENDENT` is guarded against the live
     `CHECKS` and asserted disjoint from the other three skip sets.)
   - **Loki Log Ingestion** (two-arm LogQL freshness against the cluster `loki-homelab` via
     its in-cluster Service, `down`
     if EITHER arm is silent — a silently-dead promtail→Loki pipeline (docker-proxy break,
     positions-file corruption, relabel regression) that Loki's `/ready` Kuma probe stays green
-    through. **Arm 1 — file-tail union** `sum(count_over_time({job=~"authlog|syslog|traefik"}[3h]))`:
+    through. **Arm 1 — file-tail union** `sum(count_over_time({job=~"authlog|syslog"}[3h]))`:
+    (`check.py`'s in-code default also lists `traefik`, but `LOKI_STREAM` in
+    `templates/env-secret.yaml.j2` overrides it and does not — the deployed selector is the two
+    named here, so traefik's freshness is NOT covered by this arm.)
     counts the file-tailed streams — not one, so if promtail dies they ALL fall silent together
     while syslog's routine volume keeps a quiet night alive (no single low-volume file trips it) —
     over a TOLERANT window. It deliberately EXCLUDES the docker_sd stream: promtail stamps that
@@ -424,10 +435,12 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   **disjoint from every run_once skip set** (so a graced check reaches the eval path each cycle and
   its streak advances) — both invariants guarded by a test against `CHECKS`. `GRACE_CYCLES` is
   env-tunable. Pure `apply_startup_grace()` is unit-tested.
-- **Container healthcheck (2026-06-10):** check.py touches `/tmp/heartbeat` (tmpfs) after
-  every cycle; the compose healthcheck goes unhealthy when the mtime exceeds ~3×INTERVAL,
-  so autoheal restarts a *hung* loop (death alone already exits the container). Kuma push
-  silence remains the alerting path; the healthcheck adds auto-recovery.
+- **Liveness probe (2026-06-10, k8s since the migration):** check.py touches `/tmp/heartbeat`
+  (tmpfs) after every cycle; the `livenessProbe` in `templates/deployment.yaml.j2` fails when the
+  mtime exceeds ~3×INTERVAL, so **the kubelet** restarts a *hung* loop (death alone already exits
+  the container). Kuma push silence remains the alerting path; the probe adds auto-recovery.
+  (This was a Compose healthcheck restarted by autoheal until the k8s migration. autoheal now
+  runs only on daniel-pi, so looking for its log line here finds nothing.)
 - Push tokens — 29 of them, and **`templates/env-secret.yaml.j2`'s `KUMA_PUSH_*` keys are the
   list**; no test reads this prose, so treat the names below as a reading aid that can go stale
   rather than as the source of truth. (It had: it carried eight tokens retired at the
@@ -495,9 +508,11 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
    (**Settings → n8n API**), scoped to read **Workflow** + **Execution** permissions.
 3. For the Arr Queue Warnings monitor: `sonarr_api_key`/`radarr_api_key` already exist in
    `secrets.yml` (configarr/janitorr/homepage reference them too — get the plaintext from
-   `docker exec sonarr cat /config/config.xml` / `docker exec radarr cat /config/config.xml`
-   if you need to re-derive them). monitor-bridge joined the `media` network for this on
-   2026-07-02 (its `containers_list` entry in `ansible/inventory/host_vars/daniel-server.yml`);
+   `sudo k3s kubectl -n homelab exec deploy/sonarr -- cat /config/config.xml` (likewise radarr)
+   if you need to re-derive them — both are k8s pods now, and neither cluster node has had
+   Docker since 2026-08-14, so the `docker exec` this line used to give has no target).
+   monitor-bridge joined the `media` network for this on
+   2026-07-02 (its `containers_list` entry in `ansible/inventory/host_vars/daniel-box.yml`);
    if `media` is ever dropped from that entry, the check pages `down` every cycle
    (unresolvable host) rather than failing silent.
 4. For the R2 Free Tier Headroom monitor: add `cloudflare_analytics_token` to `secrets.yml`. Mint
