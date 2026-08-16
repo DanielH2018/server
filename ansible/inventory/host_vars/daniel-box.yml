@@ -72,10 +72,6 @@ containers_list:
   - name: traefik
     platform: k8s
     port: 8080
-  # Immediately after traefik: the baseline references `app: traefik` and every workload below
-  # is fenced by it. That play has no toposort and runs in list order.
-  - name: netpol-baseline
-    platform: k8s
   - name: authelia
     platform: k8s
     hostname: "auth"
@@ -616,6 +612,26 @@ containers_list:
     hostname: "scrutiny"
     port: 8080
     use_authelia: true
+  # LAST on purpose, and it must NOT sit in traefik's rollout batch.
+  #
+  # It does not need to follow traefik for the usual "after traefik" reason — that convention
+  # exists because IngressRoute/Middleware are Traefik CRDs the traefik role installs, and this
+  # role renders neither. NetworkPolicy is core `networking.k8s.io/v1`, and a peer podSelector
+  # is a label match evaluated at connection time, so `app: traefik` resolves whether or not a
+  # traefik pod exists when the policy is applied.
+  #
+  # What DOES constrain the position is the role's probe job. tasks/k8s_batch.yml drains
+  # rollouts only at the END of a batch, and traefik is replicas: 1 with strategy: Recreate, so
+  # inside traefik's own batch there is a window with zero traefik pods — and the probe's first
+  # assertion dials traefik:80. Sharing a batch would make the probe fail on timing, aborting
+  # the play with the fencing already applied. Running last also guarantees littlelink (the
+  # probe's liveness and isolation target) is deployed and settled before the probe runs.
+  #
+  # Being last is safe: the selector is the opt-in label `netpol-baseline: enforced`, so the
+  # policy only ever affects pods that already carry it, and those pods being unfenced until
+  # this entry runs is exactly today's steady state.
+  - name: netpol-baseline
+    platform: k8s
 # Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
 # finished green — the condition README §4 sets. It stays false before that because the
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the
