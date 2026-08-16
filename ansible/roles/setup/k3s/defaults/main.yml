@@ -359,6 +359,38 @@ k3s_disk_health_cron_minute: "*/10"
 k3s_manifest_prune_cron_hour: "5"
 k3s_manifest_prune_cron_minute: "15"
 
+# ── Off-box etcd snapshots (templates/etcd-snapshot-offbox.sh.j2) ────────────────────────────
+# k3s already takes scheduled etcd snapshots — 00:00 and 12:00, 5 retained — but they land in
+# ${data-dir}/server/db/snapshots on daniel-box's own disk, which is the one thing a snapshot is
+# supposed to survive. Longhorn covers PVC *data*; nothing covered the cluster's own object
+# store. "Ansible rebuilds it" is not the same guarantee: Ansible reproduces what the repo
+# declares, and the manifest-prune check beside this file exists precisely because live state and
+# declared state drift.
+#
+# DELIBERATELY A CRON, NOT A SERVER FLAG. `--etcd-s3` and friends can be set on the k3s server,
+# but changing k3s_server_args re-runs the install script and restarts the control plane — on a
+# cluster with MetalLB ETP-Local VIP pinning and two logged LAN-wide blackouts, with Pi-hole
+# serving LAN DNS from it. `k3s etcd-snapshot save --s3 ...` takes the identical flag surface as
+# a one-shot against the running server (verified against `k3s etcd-snapshot save --help`,
+# v1.36.2+k3s1), so the whole feature lands with no restart and no server-arg change.
+#
+# Destination is the R2 bucket the Longhorn secondary target already uses, under its OWN folder.
+# Not B2: snapshot uploads are Class-B transaction volume and B2's cap has fired six times. Not
+# the `longhorn` prefix: the orphaned-backup reaper and the pre-shard prune both walk that space.
+# (Both currently reconcile Longhorn Backup CRs rather than raw objects, so they could not see an
+# etcd snapshot anyway — the separate folder means that stays true if either ever grows a
+# bucket-level sweep.)
+k3s_etcd_s3_armed: true
+k3s_etcd_s3_folder: etcd-snapshots
+# 14 daily snapshots. Larger than k3s's local default of 5 because this is the copy that exists
+# after the box is gone, and an etcd snapshot of this cluster is ~30 MB against R2's 10 GB free
+# tier — two weeks costs ~0.4 GB, which is affordable next to the ~8.2 GB of Longhorn data.
+k3s_etcd_s3_retention: 14
+# 02:45 — before the 03:30 nightly Longhorn backup rather than after, so the two never contend
+# for upload bandwidth, and comfortably clear of the 05:15 manifest-prune check.
+k3s_etcd_s3_cron_hour: "2"
+k3s_etcd_s3_cron_minute: "45"
+
 # Bound volumes forced OUT of the backup set, as `namespace/pvcName` — an override for volumes
 # whose StorageClass says `longhorn` (back me up) but which should not be. Needed as a separate
 # lever because storageClassName is immutable: a volume that must leave the backup set after it is

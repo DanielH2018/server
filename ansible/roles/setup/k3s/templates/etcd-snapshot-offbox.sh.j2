@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Off-box etcd snapshot — managed by Ansible (k3s role); edits overwritten.
+#
+# k3s's own scheduled snapshots write to ${data-dir}/server/db/snapshots on this host's disk.
+# That covers an accidental `kubectl delete` and nothing else: the disk holding the snapshots is
+# the disk whose loss the snapshot exists for. This uploads one to R2 daily so a copy survives
+# daniel-box. See k3s_etcd_s3_* in the role defaults for why this is a cron rather than the
+# `--etcd-s3` server flags (short version: a server-arg change restarts the control plane, and
+# LAN DNS is behind it).
+#
+# WHAT THIS DOES NOT COVER. An etcd snapshot restores the cluster's OBJECTS — Deployments,
+# Services, Secrets, PVC bindings. It does not restore PVC *contents*: that is Longhorn's
+# backups, in the same bucket under the `longhorn` prefix. A full recovery needs both, and the
+# order matters — restore etcd first so the PVC objects exist, then restore the volumes.
+# docs/k3s-etcd-restore.md has the procedure.
+set -uo pipefail
+
+# Cron's PATH (/usr/bin:/bin) omits /usr/local/bin, where the k3s install script puts the binary.
+# Without this the snapshot silently never runs and this script pushes a permanent false "up" —
+# the same trap documented in cron-path-omits-usr-local-bin.md and guarded the same way in
+# manifest-prune-check.sh beside it.
+export PATH="/usr/local/bin:${PATH}"
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+# Pinned to the cluster ingress VIP, same as the sibling heartbeats: this name resolves through
+# Pi-hole's wildcard, and a DNS outage is exactly when the push must still land.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+PUSH_TOKEN="{{ etcd_snapshot_push_token | default('') }}"
+
+push_kuma() {
+  local status="$1" msg="$2"
+  [[ -z "$PUSH_TOKEN" ]] && return 0
+  curl -fsS --max-time 10 -G \
+    --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
+    --data-urlencode "status=${status}" \
+    --data-urlencode "msg=${msg}" \
+    "https://${KUMA_HOST}/api/push/${PUSH_TOKEN}" >/dev/null \
+    || logger -t etcd-snapshot-offbox "push failed (status=${status}: ${msg})"
+}
+
+# Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale. Kuma
+# runs on the cluster this backs up, so an outage silences both the push and the monitor;
+# hc-ping.com alerts on the silence instead. Sourced, not inlined: this script is 0755.
+push_healthchecks() {
+  local status="$1"
+  HC_PING_KEY=""
+  # shellcheck source=/dev/null
+  [[ -r /etc/healthchecks/ping.env ]] && . /etc/healthchecks/ping.env
+  # Positive `-n` guard rather than an early `-z` return: test_healthchecks_pings.py matches this
+  # shape specifically, so that an unconfigured host provably cannot curl a malformed URL.
+  if [[ -n "$HC_PING_KEY" ]]; then
+    # Bare slug, never ?create=1 — a typo would silently create an unwatched, permanently-green check.
+    local url="https://hc-ping.com/${HC_PING_KEY}/etcd-snapshot-offbox"
+    [[ "$status" == "up" ]] || url="${url}/fail"
+    curl -fsS --max-time 10 --retry 3 "$url" >/dev/null \
+      || logger -t etcd-snapshot-offbox "healthchecks ping failed (status=${status})"
+  fi
+}
+
+# Armed state is rendered as a value and branched on at RUNTIME rather than with a Jinja
+# `{% raw %}{% if %}{% endraw %}` around an early exit: a template that renders two different
+# shapes makes half the script unreachable in whichever shape validate_shell_templates renders,
+# and shellcheck flags it (SC2317). Also no `| bool` — that validator renders with a plain Jinja
+# environment which has no Ansible filters.
+ARMED="{{ 1 if k3s_etcd_s3_armed else 0 }}"
+if [[ "$ARMED" != "1" ]]; then
+  # Report the disarmed state rather than exiting silently green, so a deliberate pause is
+  # visible in Kuma instead of looking like a healthy backup.
+  push_kuma down "off-box etcd snapshots are DISARMED (k3s_etcd_s3_armed=false)"
+  push_healthchecks down
+  exit 0
+fi
+
+# Credentials come from a 0600 root-only env file, not from this 0755 script and not from the
+# command line: k3s reads AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from the environment, so the
+# keys never appear in `ps` output the way --s3-access-key would.
+if [[ ! -r /etc/rancher/k3s/etcd-s3.env ]]; then
+  push_kuma down "/etc/rancher/k3s/etcd-s3.env missing — cannot authenticate to R2"
+  push_healthchecks down
+  exit 0
+fi
+# shellcheck source=/dev/null
+. /etc/rancher/k3s/etcd-s3.env
+
+if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" || -z "${ETCD_S3_BUCKET:-}" || -z "${ETCD_S3_ENDPOINT:-}" ]]; then
+  push_kuma down "etcd-s3.env is present but incomplete — check r2_* secrets in SOPS"
+  push_healthchecks down
+  exit 0
+fi
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+
+# --name is a BASE name; k3s appends the node name and a UNIX timestamp, so successive runs do
+# not overwrite each other and --s3-retention has distinct objects to age out.
+OUTPUT=$(k3s etcd-snapshot save \
+  --name offbox \
+  --snapshot-compress \
+  --s3 \
+  --s3-bucket "$ETCD_S3_BUCKET" \
+  --s3-folder "{{ k3s_etcd_s3_folder }}" \
+  --s3-endpoint "$ETCD_S3_ENDPOINT" \
+  --s3-region "{{ k3s_longhorn_r2_region }}" \
+  --s3-retention {{ k3s_etcd_s3_retention }} 2>&1)
+RC=$?
+
+if [[ $RC -eq 0 ]]; then
+  push_kuma up "etcd snapshot uploaded to s3://${ETCD_S3_BUCKET}/{{ k3s_etcd_s3_folder }}"
+  push_healthchecks up
+else
+  # The message reaches Kuma on the LAN. It can name the bucket; the keys are never in $OUTPUT
+  # because they were passed through the environment.
+  SUMMARY=$(printf '%s' "$OUTPUT" | tail -n 3 | tr '\n' ' ')
+  push_kuma down "etcd snapshot FAILED (rc=${RC}): ${SUMMARY}"
+  push_healthchecks down
+  logger -t etcd-snapshot-offbox "snapshot failed rc=${RC}: ${SUMMARY}"
+fi
