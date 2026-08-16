@@ -35,11 +35,11 @@
 # the last line makes changed_when honest. Runs after the rollout wait, so FTL has already
 # initialised the gravity.db schema on a first boot. INSERTs rely on the gravity schema's
 # AFTER INSERT triggers to attach new rows to the default group.
-- name: Reconcile the declared adlists and regex denies into gravity.db
+- name: Reconcile the declared adlists and regex denies into gravity.db on {{ item }}
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} exec -i deploy/pihole -c pihole --
+      k3s kubectl -n {{ k8s_namespace }} exec -i deploy/{{ item }} -c pihole --
       pihole-FTL sqlite3 /etc/pihole/gravity.db
     stdin: |
       {% for a in pihole_k8s_adlists %}
@@ -57,15 +57,29 @@
       SELECT total_changes();
   register: pihole_k8s_gravity_sql
   become: true
+  # changed_when is evaluated per loop iteration against that iteration's own result, so
+  # this expression (unchanged from the single-instance version) judges each instance on
+  # its own stdout, not the accumulated .results list. Verified against a local no-op
+  # playbook: a registered loop task's changed_when sees the current iteration's fields
+  # under the registered var's own name, exactly as it would outside a loop.
   changed_when: (pihole_k8s_gravity_sql.stdout_lines | last | default('0') | int) > 0
+  loop:
+    - pihole
+    - pihole-2
 
 # Only when the declaration actually changed something — gravity downloads big.oisd
-# (~200k domains) and rebuilds the blocklist table, ~1-2 min.
-- name: Rebuild gravity after a blocklist change # noqa no-handler
+# (~200k domains) and rebuilds the blocklist table, ~1-2 min. `is changed` on a registered
+# loop result is true if ANY iteration changed (verified the same way as above), which is
+# the behaviour wanted here: either instance's declaration changing should rebuild both, so
+# they stay equivalent.
+- name: Rebuild gravity after a blocklist change on {{ item }} # noqa no-handler
   tags: [deploy]
   when: pihole_k8s_gravity_sql is changed
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} exec deploy/pihole -c pihole -- pihole -g
+      k3s kubectl -n {{ k8s_namespace }} exec deploy/{{ item }} -c pihole -- pihole -g
   become: true
   changed_when: true
+  loop:
+    - pihole
+    - pihole-2
