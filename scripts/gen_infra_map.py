@@ -6,8 +6,15 @@ Two layers are merged into one page:
 * **Declared state** — ``containers_list`` from ``ansible/inventory/host_vars/``,
   the source of truth for what is *supposed* to run where. This is what changes
   when you edit the repo.
-* **Live state** — ``docker ps`` on daniel-server and ``kubectl get deployments``
-  on daniel-box, overlaid onto the declared skeleton so drift is visible.
+* **Live state** — ``kubectl`` against the k3s cluster and ``docker ps`` on
+  daniel-pi, overlaid onto the declared skeleton so drift is visible.
+
+The page opens with an architecture diagram: the request path (DNS → ingress VIP
+→ Traefik → Authelia → workloads), the cluster's two nodes, the Longhorn backup
+chain, and the Pi's LAN-only plane. Its shape is a fixed skeleton — those edges
+live in role templates, not in ``containers_list`` — but every number, address,
+name and status colour on it is read from the inventory and the live cluster, so
+it tracks changes without being hand-edited.
 
 The output is a single ``.html`` file with no external assets, safe to open over
 ``file://``. Re-running overwrites it in place, so a cron entry keeps an open tab
@@ -44,8 +51,25 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT = Path.home() / ".claude" / "artifacts" / "homelab-infra-map.html"
 
-# The two hosts this map covers. daniel-pi is deliberately out of scope.
-HOSTS = ("daniel-box", "daniel-server")
+HOSTS = ("daniel-box", "daniel-server", "daniel-pi")
+
+# What each host actually is. Stated rather than inferred from the platform keys
+# in its ``containers_list``: daniel-server's Docker was uninstalled on
+# 2026-08-14 and its list emptied, so inference fell through to "docker" and
+# every run ssh-ed it for a binary that is gone — the host rendered as an
+# unreachable Docker box when it is in fact a healthy k3s agent.
+HOST_PLANE = {
+    "daniel-box": "k8s",
+    "daniel-server": "k8s",
+    "daniel-pi": "docker",
+}
+
+# The sub-role within the plane, for the host panel and the diagram's node boxes.
+HOST_ROLE = {
+    "daniel-box": "k3s server · control plane",
+    "daniel-server": "k3s agent",
+    "daniel-pi": "Docker · LAN-only",
+}
 
 # How long the rendered page waits before reloading itself, in seconds. Matches
 # the refresh cron's 15-minute period (initial_setup's `infra-map` task) — a
@@ -392,6 +416,171 @@ def collect_k8s(host: str, local_hostname: str) -> tuple[bool, dict, str]:
     return True, parse_kubectl_deployments(out), ""
 
 
+# Pod placement comes from a column projection rather than `-o json`: the whole
+# pod list is megabytes, and the only fields the diagram needs are these four.
+POD_COLUMNS = (
+    "NAMESPACE:.metadata.namespace,NAME:.metadata.name,"
+    "NODE:.spec.nodeName,PHASE:.status.phase"
+)
+
+
+def parse_kubectl_nodes(payload: str) -> dict[str, dict]:
+    """Parse ``kubectl get nodes -o json`` into ``{name: info}``."""
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return {}
+    nodes: dict[str, dict] = {}
+    for item in data.get("items", []):
+        meta = item.get("metadata", {})
+        name = meta.get("name")
+        if not name:
+            continue
+        conditions = {
+            c.get("type"): c.get("status")
+            for c in item.get("status", {}).get("conditions", [])
+        }
+        roles = sorted(
+            label.split("/", 1)[1]
+            for label in meta.get("labels", {})
+            if label.startswith("node-role.kubernetes.io/")
+        )
+        addresses = {
+            a.get("type"): a.get("address")
+            for a in item.get("status", {}).get("addresses", [])
+        }
+        node_info = item.get("status", {}).get("nodeInfo", {})
+        nodes[name] = {
+            "ready": conditions.get("Ready") == "True",
+            "roles": roles,
+            "ip": addresses.get("InternalIP", ""),
+            "version": node_info.get("kubeletVersion", ""),
+            "schedulable": not item.get("spec", {}).get("unschedulable", False),
+        }
+    return nodes
+
+
+def parse_pod_placement(output: str) -> list[dict]:
+    """Parse the ``POD_COLUMNS`` projection into pod records."""
+    pods = []
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) != 4:
+            continue
+        namespace, name, node, phase = parts
+        pods.append(
+            {
+                "namespace": namespace,
+                "name": name,
+                # kubectl prints <none> for a pod that has not been scheduled.
+                "node": "" if node == "<none>" else node,
+                "phase": phase,
+            }
+        )
+    return pods
+
+
+def parse_backup_targets(payload: str) -> list[dict]:
+    """Parse ``kubectl get backuptargets.longhorn.io -A -o json``.
+
+    An empty ``backupTargetURL`` is how this repo disarms a target, so a blank
+    URL is "disarmed", not "misconfigured" — the two look identical in the CR
+    and only the arming convention tells them apart.
+    """
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return []
+    targets = []
+    for item in data.get("items", []):
+        name = item.get("metadata", {}).get("name")
+        if not name:
+            continue
+        url = item.get("spec", {}).get("backupTargetURL", "") or ""
+        status = item.get("status", {})
+        targets.append(
+            {
+                "name": name,
+                "url": url,
+                "armed": bool(url),
+                "available": bool(status.get("available")),
+            }
+        )
+    return sorted(targets, key=lambda t: t["name"])
+
+
+def collect_cluster(local_hostname: str, longhorn_namespace: str) -> dict:
+    """Collect the cluster-wide state the diagram draws from.
+
+    Deployments are collected by :func:`collect_k8s`; everything here is extra
+    context that has no declared counterpart in ``containers_list`` — node
+    readiness, which node each pod landed on, and the Longhorn backup chain.
+    Each query degrades on its own: a missing Longhorn CRD costs the storage
+    panel, not the page.
+    """
+    empty = {
+        "ok": False,
+        "error": f"kubectl only queried locally; run this on {local_hostname}",
+        "nodes": {},
+        "pods": [],
+        "volumes": None,
+        "backup_targets": [],
+    }
+    if HOST_PLANE.get(local_hostname) != "k8s":
+        return empty
+
+    kubectl = find_tool("kubectl")
+    if kubectl is None:
+        raise MissingToolError("kubectl not found on this host")
+    kubeconfig = find_kubeconfig()
+    if kubeconfig is None:
+        raise MissingToolError(
+            f"no readable kubeconfig (tried $KUBECONFIG, {USER_KUBECONFIG}, {K3S_KUBECONFIG})"
+        )
+    base = [kubectl, "--kubeconfig", str(kubeconfig)]
+
+    ok, out = _run(base + ["get", "nodes", "-o", "json"], LOCAL_TIMEOUT)
+    if not ok:
+        return {**empty, "error": out}
+    nodes = parse_kubectl_nodes(out)
+
+    ok, out = _run(
+        base
+        + ["get", "pods", "-A", "--no-headers", "-o", f"custom-columns={POD_COLUMNS}"],
+        LOCAL_TIMEOUT,
+    )
+    pods = parse_pod_placement(out) if ok else []
+
+    ok, out = _run(
+        base
+        + [
+            "get",
+            "volumes.longhorn.io",
+            "-n",
+            longhorn_namespace,
+            "--no-headers",
+            "-o",
+            "custom-columns=NAME:.metadata.name",
+        ],
+        LOCAL_TIMEOUT,
+    )
+    volumes = len([line for line in out.splitlines() if line.strip()]) if ok else None
+
+    ok, out = _run(
+        base + ["get", "backuptargets.longhorn.io", "-A", "-o", "json"], LOCAL_TIMEOUT
+    )
+    targets = parse_backup_targets(out) if ok else []
+
+    return {
+        "ok": True,
+        "error": "",
+        "nodes": nodes,
+        "pods": pods,
+        "volumes": volumes,
+        "backup_targets": targets,
+    }
+
+
 # --------------------------------------------------------------------------
 # Reconciliation
 # --------------------------------------------------------------------------
@@ -483,6 +672,27 @@ def reconcile_k8s(
     }
 
 
+def place_on_nodes(service: dict, pods: list[dict]) -> dict:
+    """Record which cluster nodes a k8s service's pods actually landed on.
+
+    Placement is not in ``containers_list`` and not on the Deployment either —
+    ``.spec.nodeName`` is a pod field — so it can only come from the live pod
+    list. It matters here because several failures in this cluster have been
+    placement-dependent rather than workload-dependent.
+    """
+    nodes = set()
+    for workload in service.get("workloads") or []:
+        prefix = f"{workload['name']}-"
+        for pod in pods:
+            if (
+                pod["namespace"] == workload["namespace"]
+                and pod["name"].startswith(prefix)
+                and pod["node"]
+            ):
+                nodes.add(pod["node"])
+    return {**service, "nodes": sorted(nodes)}
+
+
 def find_extra_containers(
     containers: dict[str, dict], declared_names: set[str], roles: RoleIndex
 ) -> list[dict]:
@@ -548,13 +758,27 @@ def build_model(
     live: dict[str, dict],
     generated_at: str,
     roles: RoleIndex,
+    cluster: dict | None = None,
 ) -> dict:
     """Merge declared and live state into the structure the renderer consumes.
 
     *live* maps a host name to ``{"ok": bool, "error": str, "data": ...}``.
-    Pure — every side effect happens before this is called, which is what makes
-    the whole reconciliation layer testable.
+    *cluster* is the extra cluster-wide state from :func:`collect_cluster`, or
+    None when it was not collected. Pure — every side effect happens before this
+    is called, which is what makes the whole reconciliation layer testable.
     """
+    cluster = cluster or {
+        "ok": False,
+        "error": "not collected",
+        "nodes": {},
+        "pods": [],
+        "volumes": None,
+        "backup_targets": [],
+    }
+    pods_by_node: dict[str, int] = {}
+    for pod in cluster["pods"]:
+        if pod["node"]:
+            pods_by_node[pod["node"]] = pods_by_node.get(pod["node"], 0) + 1
     hosts = []
     per_host_services: dict[str, list[dict]] = {}
 
@@ -562,12 +786,19 @@ def build_model(
         hv = host_vars.get(host, {})
         declared = declared_services(host, hv, global_vars)
         info = live.get(host, {"ok": False, "error": "not collected", "data": {}})
-        platform = "k8s" if any(s["platform"] == "k8s" for s in declared) else "docker"
+        platform = HOST_PLANE.get(host) or (
+            "k8s" if any(s["platform"] == "k8s" for s in declared) else "docker"
+        )
 
         if info["ok"]:
             declared_names = {s["name"] for s in declared}
             if platform == "k8s":
-                services = [reconcile_k8s(s, info["data"], roles) for s in declared]
+                services = [
+                    place_on_nodes(
+                        reconcile_k8s(s, info["data"], roles), cluster["pods"]
+                    )
+                    for s in declared
+                ]
             else:
                 services = [reconcile_docker(s, info["data"], roles) for s in declared]
                 services += find_extra_containers(info["data"], declared_names, roles)
@@ -581,11 +812,14 @@ def build_model(
         for service in services:
             counts[service["status"]] = counts.get(service["status"], 0) + 1
 
+        node = cluster["nodes"].get(host) if platform == "k8s" else None
         hosts.append(
             {
                 "name": host,
                 "ip": hv.get("server_ip", ""),
                 "platform": platform,
+                "role": HOST_ROLE.get(host, ""),
+                "node": ({**node, "pods": pods_by_node.get(host, 0)} if node else None),
                 "reachable": info["ok"],
                 "error": info.get("error", ""),
                 "services": services,
@@ -618,6 +852,30 @@ def build_model(
         "totals": totals,
         "domain": global_vars.get("domain", ""),
         "hostname_suffix": global_vars.get("k8s_hostname_suffix", ""),
+        "cluster": {
+            "ok": cluster["ok"],
+            "error": cluster["error"],
+            "nodes": [
+                {"name": name, "pods": pods_by_node.get(name, 0), **info}
+                for name, info in sorted(cluster["nodes"].items())
+            ],
+            "pod_count": len(cluster["pods"]),
+            "volumes": cluster["volumes"],
+            "backup_targets": cluster["backup_targets"],
+        },
+        # Every address the diagram labels an edge with, read from the inventory
+        # rather than written into the drawing. Renaming a VIP in group_vars
+        # moves the label; it does not leave a stale one behind.
+        "endpoints": {
+            "ingress_vip": global_vars.get("k3s_metallb_ingress_vip", ""),
+            "dns_vip": global_vars.get("dns_k8s_vip", ""),
+            "mqtt_vip": global_vars.get("mqtt_k8s_vip", ""),
+            "jellyfin_vip": global_vars.get("jellyfin_k8s_lan_ip", ""),
+            "public_routes": bool(global_vars.get("k8s_public_route")),
+            "longhorn_namespace": global_vars.get(
+                "k8s_longhorn_namespace", "longhorn-system"
+            ),
+        },
     }
 
 
@@ -707,6 +965,36 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 
 .warn-box { background: rgba(243,139,168,.1); border: 1px solid var(--red); border-radius: 8px;
             padding: .7rem .9rem; margin: .75rem 0 0; color: var(--text); font-size: .87rem; }
+
+figure.diagram { margin: 0; }
+.dg { width: 100%; height: auto; display: block; }
+.dg .box { fill: var(--mantle); stroke: var(--surface2); stroke-width: 1.4; }
+.dg .plane { fill: rgba(49,50,68,.3); stroke: var(--surface1); stroke-width: 1.2; stroke-dasharray: 6 5; }
+.dg .box.s-healthy { stroke: var(--green); }
+.dg .box.s-degraded { stroke: var(--yellow); }
+.dg .box.s-down, .dg .box.s-missing { stroke: var(--red); }
+.dg .box.s-job { stroke: var(--teal); }
+.dg .t-title { fill: var(--text); font-size: 13px; font-weight: 550;
+                font-family: system-ui, -apple-system, sans-serif; }
+.dg .t-sub { fill: var(--subtext0); font-size: 11px; font-family: var(--mono); }
+.dg .t-lane { fill: var(--overlay0); font-size: 11px; letter-spacing: .1em;
+              text-transform: uppercase; font-weight: 600;
+              font-family: system-ui, -apple-system, sans-serif; }
+.dg .t-edge { fill: var(--overlay0); font-size: 10.5px; font-family: var(--mono); }
+.dg .edge { stroke: var(--surface2); stroke-width: 1.5; fill: none; }
+.dg .edge.bypass { stroke: var(--peach); stroke-dasharray: 7 5; }
+.dg .t-edge.bypass { fill: var(--peach); }
+.dg .arrowhead { fill: var(--surface2); }
+figcaption { color: var(--overlay0); font-size: .84rem; margin-top: .9rem; max-width: 78ch; }
+
+.grps { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
+.grp { background: var(--mantle); border: 1px solid var(--surface0); border-radius: 10px; padding: .9rem 1rem; }
+.grp h4 { margin: 0 0 .6rem; font-size: .9rem; font-weight: 600; display: flex;
+          justify-content: space-between; gap: .5rem; }
+.grp-n { color: var(--overlay0); font-family: var(--mono); font-size: .8rem; font-weight: 400; }
+.grp ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: .3rem; }
+.grp li { display: flex; align-items: center; gap: .45rem; font-family: var(--mono); font-size: .8rem; }
+.grp li .dot { margin-top: 0; }
 
 table { width: 100%; border-collapse: collapse; font-size: .85rem; }
 th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--surface0); vertical-align: top; }
@@ -826,6 +1114,401 @@ def _migration_section(migration: dict, suffix: str) -> str:
     return f'<div class="mig">{"".join(out)}</div>'
 
 
+# Functional grouping for the workload strip under the diagram. This is the one
+# piece of the page that is a hand-kept list rather than derived, so anything
+# unlisted falls into "Other" and stays visible — a new service shows up as
+# ungrouped instead of silently vanishing from the page.
+SERVICE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Edge & identity",
+        ("traefik", "authelia", "crowdsec", "cloudflare-ddns", "pihole", "headlamp"),
+    ),
+    (
+        "Media",
+        (
+            "jellyfin",
+            "sonarr",
+            "radarr",
+            "bazarr",
+            "prowlarr",
+            "qbittorrent",
+            "tdarr",
+            "configarr",
+            "janitorr",
+            "media-volume",
+            "seed-volume",
+        ),
+    ),
+    (
+        "Home automation",
+        ("home-assistant", "zigbee2mqtt", "mosquitto", "ical-proxy", "peanut", "nut"),
+    ),
+    (
+        "Observability",
+        (
+            "uptime-kuma",
+            "loki-homelab",
+            "claude-otel",
+            "node-exporter",
+            "scrutiny",
+            "monitor-bridge",
+            "autofix-bridge",
+            "healthchecks",
+            "speedtest",
+            "rollout-drain",
+        ),
+    ),
+    (
+        "Apps & tooling",
+        (
+            "freshrss",
+            "karakeep",
+            "littlelink",
+            "bento-pdf",
+            "homepage",
+            "n8n",
+            "n8n-images",
+            "code-server",
+            "livesync",
+            "homelab-mcp",
+            "registry",
+            "image-builder",
+        ),
+    ),
+    ("Games", ("terraria", "terraria-stats", "valheim", "valheim-stats")),
+    (
+        "Storage & backup",
+        ("longhorn-ui", "pi-peer-backup", "dri-device-plugin"),
+    ),
+)
+
+
+def group_services(model: dict) -> list[dict]:
+    """Bucket every service into a functional group for the diagram strip."""
+    by_group: dict[str, list[dict]] = {name: [] for name, _ in SERVICE_GROUPS}
+    by_group["Pi · LAN-only"] = []
+    by_group["Other"] = []
+    lookup = {name: group for group, names in SERVICE_GROUPS for name in names}
+
+    for host in model["hosts"]:
+        for service in host["services"]:
+            if host["platform"] == "docker":
+                by_group["Pi · LAN-only"].append(service)
+            else:
+                by_group[lookup.get(service["name"], "Other")].append(service)
+
+    groups = []
+    for name, services in by_group.items():
+        if not services:
+            continue
+        groups.append(
+            {
+                "name": name,
+                "services": sorted(services, key=lambda s: s["name"]),
+                "healthy": sum(1 for s in services if s["status"] == "healthy"),
+            }
+        )
+    return groups
+
+
+def _svg_box(
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    title: str,
+    subtitle: str = "",
+    status: str = "",
+    css: str = "",
+) -> str:
+    """One labelled node of the diagram, optionally tinted by live status."""
+    cx = x + w // 2
+    classes = " ".join(
+        part for part in ("box", css, f"s-{status}" if status else "") if part
+    )
+    if subtitle:
+        title_y, sub_y = y + h // 2 - 3, y + h // 2 + 15
+        text = (
+            f'<text class="t-title" x="{cx}" y="{title_y}" text-anchor="middle">{e(title)}</text>'
+            f'<text class="t-sub" x="{cx}" y="{sub_y}" text-anchor="middle">{e(subtitle)}</text>'
+        )
+    else:
+        text = f'<text class="t-title" x="{cx}" y="{y + h // 2 + 5}" text-anchor="middle">{e(title)}</text>'
+    return f'<rect class="{classes}" x="{x}" y="{y}" width="{w}" height="{h}" rx="9"/>{text}'
+
+
+def _svg_edge(
+    points: str, label: str = "", label_xy: tuple[int, int] = (0, 0), css: str = ""
+) -> str:
+    classes = " ".join(part for part in ("edge", css) if part)
+    edge = (
+        f'<polyline class="{classes}" points="{points}" marker-end="url(#dg-arrow)"/>'
+    )
+    if label:
+        x, y = label_xy
+        label_css = "t-edge bypass" if "bypass" in css else "t-edge"
+        edge += f'<text class="{label_css}" x="{x}" y="{y}">{e(label)}</text>'
+    return edge
+
+
+def _service_status(model: dict, name: str) -> str:
+    """Live status of one service by name, for tinting a diagram box."""
+    for host in model["hosts"]:
+        for service in host["services"]:
+            if service["name"] == name:
+                return service["status"]
+    return "unknown"
+
+
+def _diagram_view(model: dict) -> str:
+    """The architecture figure: how a request reaches a workload, and on what.
+
+    The shape is fixed — these edges live in role templates and Traefik
+    middleware, not in ``containers_list``, so they cannot be derived. Every
+    label, address, count and status colour on it is read from the model.
+    """
+    ep = model["endpoints"]
+    cluster = model["cluster"]
+    box = next((h for h in model["hosts"] if h["name"] == "daniel-box"), None)
+    pi = next((h for h in model["hosts"] if h["name"] == "daniel-pi"), None)
+    routed = box["routed_count"] if box else 0
+    gated = box["authelia_count"] if box else 0
+    domain = model["domain"] or "the domain"
+
+    parts = [
+        '<defs><marker id="dg-arrow" viewBox="0 0 10 10" refX="9" refY="5" '
+        'markerWidth="6" markerHeight="6" orient="auto-start-reverse">'
+        '<path class="arrowhead" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>'
+    ]
+
+    # Request path, top to bottom.
+    parts.append(_svg_box(250, 26, 200, 48, "Internet"))
+    parts.append(_svg_box(490, 26, 200, 48, "LAN clients"))
+    parts.append(
+        _svg_box(
+            250,
+            108,
+            200,
+            52,
+            "Cloudflare DNS",
+            domain,
+            _service_status(model, "cloudflare-ddns"),
+        )
+    )
+    parts.append(
+        _svg_box(
+            490,
+            108,
+            200,
+            52,
+            "Pi-hole → Unbound",
+            f"{ep['dns_vip']}:53",
+            _service_status(model, "pihole"),
+        )
+    )
+    parts.append(
+        _svg_box(
+            330,
+            196,
+            480,
+            52,
+            "Router :80/:443 → MetalLB ingress VIP",
+            ep["ingress_vip"],
+        )
+    )
+    parts.append(
+        _svg_box(
+            330,
+            278,
+            480,
+            58,
+            "Traefik  ·  CrowdSec bouncer + AppSec WAF",
+            f"{routed} routed hostnames",
+            _service_status(model, "traefik"),
+        )
+    )
+    parts.append(
+        _svg_box(
+            330,
+            372,
+            480,
+            58,
+            "Authelia  ·  forwardAuth SSO",
+            f"{gated} of {routed} routes gated",
+            _service_status(model, "authelia"),
+        )
+    )
+
+    public_label = f"*.{domain}" if ep["public_routes"] else "LAN-only routes"
+    parts.append(_svg_edge("350,74 350,108", "A/AAAA", (356, 96)))
+    parts.append(_svg_edge("590,74 590,108", "DHCP-assigned resolver", (596, 96)))
+    parts.append(_svg_edge("350,160 350,178 430,178 430,196", public_label, (250, 190)))
+    parts.append(
+        _svg_edge("590,160 590,178 670,178 670,196", f"*.local.{domain}", (676, 190))
+    )
+    parts.append(_svg_edge("570,248 570,278", ":80/:443", (578, 266)))
+    parts.append(_svg_edge("570,336 570,372", "forwardAuth", (578, 358)))
+    parts.append(
+        _svg_edge("570,430 570,470", "proxies to ClusterIP Services", (578, 454))
+    )
+
+    # The LoadBalancer VIPs that never touch Traefik — raw TCP, and the reason a
+    # Traefik outage does not take Jellyfin or MQTT with it.
+    parts.append(_svg_edge("690,50 1120,50 1120,540 1100,540", css="bypass"))
+    parts.append(
+        '<text class="t-edge bypass" x="704" y="38">LoadBalancer VIPs — bypass Traefik</text>'
+    )
+    parts.append(
+        f'<text class="t-edge bypass" x="704" y="66">Jellyfin {e(ep["jellyfin_vip"])}'
+        f" · MQTT {e(ep['mqtt_vip'])}</text>"
+    )
+
+    # Cluster plane.
+    volumes = cluster["volumes"]
+    plane_sub = f"{cluster['pod_count']} pods"
+    if volumes is not None:
+        plane_sub += f"  ·  {volumes} Longhorn volumes"
+    parts.append(
+        '<rect class="plane" x="40" y="470" width="1060" height="200" rx="14"/>'
+    )
+    parts.append('<text class="t-lane" x="62" y="497">k3s cluster</text>')
+    parts.append(
+        f'<text class="t-sub" x="1078" y="497" text-anchor="end">{e(plane_sub)}</text>'
+    )
+
+    node_boxes = cluster["nodes"] or [
+        {
+            "name": h["name"],
+            "ip": h["ip"],
+            "ready": False,
+            "pods": 0,
+            "roles": [],
+            "version": "",
+        }
+        for h in model["hosts"]
+        if h["platform"] == "k8s"
+    ]
+    for index, node in enumerate(node_boxes[:2]):
+        roles = ", ".join(node["roles"]) or "agent"
+        state = "healthy" if node["ready"] else "down"
+        parts.append(
+            _svg_box(
+                70 + index * 510,
+                520,
+                490,
+                110,
+                f"{node['name']}  ·  {roles}",
+                f"{node['ip']}  ·  {node['pods']} pods  ·  {node['version']}",
+                state,
+            )
+        )
+
+    # Storage and the backup chain.
+    parts.append(
+        _svg_box(
+            40,
+            706,
+            330,
+            76,
+            "Longhorn",
+            f"ns/{ep['longhorn_namespace']}"
+            + (f"  ·  {volumes} volumes" if volumes is not None else ""),
+            _service_status(model, "longhorn-ui"),
+        )
+    )
+    targets = cluster["backup_targets"] or [
+        {"name": "default", "url": "", "armed": False, "available": False}
+    ]
+    for index, target in enumerate(targets[:2]):
+        if not target["armed"]:
+            state, detail = "missing", "disarmed — no backup target URL"
+        elif target["available"]:
+            state, detail = "healthy", target["url"]
+        else:
+            state, detail = "down", f"unavailable — {target['url']}"
+        parts.append(
+            _svg_box(
+                440,
+                690 + index * 80,
+                300,
+                60,
+                f"BackupTarget/{target['name']}",
+                detail,
+                state,
+            )
+        )
+        parts.append(
+            _svg_edge(f"370,744 405,744 405,{720 + index * 80} 440,{720 + index * 80}")
+        )
+
+    # The Pi: its own plane, reached from the LAN and never through the cluster edge.
+    pi_services = ", ".join(s["name"] for s in (pi["services"] if pi else [])) or "none"
+    parts.append(
+        '<rect class="plane" x="790" y="690" width="310" height="190" rx="14"/>'
+    )
+    parts.append('<text class="t-lane" x="812" y="717">daniel-pi · Docker</text>')
+    parts.append(
+        f'<text class="t-sub" x="812" y="740">{e(pi["ip"] if pi else "")} · LAN-only, no Traefik route</text>'
+    )
+    parts.append(
+        '<text class="t-sub" x="812" y="766">WireGuard peers → wg-easy :51820/udp</text>'
+    )
+    # Four lines is what fits inside the plane; a longer list is elided rather
+    # than drawn past the edge, and the host panel below carries all of it.
+    lines = _wrap(pi_services, 34)
+    if len(lines) > 4:
+        lines = lines[:3] + [f"… +{len(lines) - 3} more lines"]
+    for index, chunk in enumerate(lines):
+        parts.append(
+            f'<text class="t-title" x="812" y="{800 + index * 20}">{e(chunk)}</text>'
+        )
+
+    caption = (
+        "How a request reaches a workload, and what it runs on. Box outlines carry live "
+        "status; every address, hostname and count is read from the inventory and the "
+        "cluster at render time."
+    )
+    return (
+        '<figure class="diagram">'
+        f'<svg class="dg" viewBox="0 0 1140 900" role="img" aria-label="{e(caption)}">'
+        f"{''.join(parts)}</svg>"
+        f"<figcaption>{e(caption)}</figcaption></figure>"
+    )
+
+
+def _wrap(text: str, width: int) -> list[str]:
+    """Greedy wrap — SVG text has no flow, so lines are placed by hand."""
+    lines: list[str] = []
+    current = ""
+    for word in text.split(" "):
+        candidate = f"{current} {word}".strip()
+        if len(candidate) > width and current:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines
+
+
+def _groups_view(model: dict) -> str:
+    """A status-coloured chip per service, grouped by what it is for."""
+    columns = []
+    for group in group_services(model):
+        chips = "".join(
+            f'<li><span class="dot {e(s["status"])}" title="{e(STATUS_LABELS.get(s["status"], s["status"]))}">'
+            f"</span>{e(s['name'])}</li>"
+            for s in group["services"]
+        )
+        columns.append(
+            f'<div class="grp"><h4>{e(group["name"])} '
+            f'<span class="grp-n">{group["healthy"]}/{len(group["services"])}</span></h4>'
+            f"<ul>{chips}</ul></div>"
+        )
+    return f'<div class="grps">{"".join(columns)}</div>'
+
+
 def _table_view(model: dict) -> str:
     rows = []
     for host in model["hosts"]:
@@ -881,11 +1564,17 @@ def render_html(model: dict) -> str:
 </head><body><div class="wrap">
 <h1>Homelab infrastructure</h1>
 <p class="lede">Declared state from <code>ansible/inventory/host_vars/</code>, overlaid with
-live state from <code>docker ps</code> and <code>kubectl</code>. Regenerated on a timer, so
+live state from <code>kubectl</code> and <code>docker ps</code>. Regenerated on a timer, so
 edits to the inventory and drift in the running fleet both show up here on their own.</p>
 <p class="meta">Generated {e(model["generated_at"])} &middot; page reloads every {PAGE_REFRESH_SECONDS // 60} min</p>
 <div class="kpis">{kpi_html}</div>
 <div class="legend">{legend}</div>
+
+<h2>Architecture</h2>
+{_diagram_view(model)}
+
+<h2>Workloads by function</h2>
+{_groups_view(model)}
 
 <h2>k3s migration</h2>
 {_migration_section(model["migration"], model["hostname_suffix"])}
@@ -897,10 +1586,12 @@ edits to the inventory and drift in the running fleet both show up here on their
 {_table_view(model)}
 
 <footer>
-Sources: <code>ansible/inventory/host_vars/daniel-box.yml</code>,
-<code>ansible/inventory/host_vars/daniel-server.yml</code>, live <code>docker ps</code> on
-daniel-server and <code>kubectl get deployments -A</code> on daniel-box.
-daniel-pi is not covered by this map.
+Sources: <code>ansible/inventory/</code> for declared state; live state from
+<code>kubectl</code> on daniel-box (deployments, nodes, pods, Longhorn volumes and
+backup targets) and one <code>docker ps</code> over ssh to daniel-pi.
+The diagram's <em>shape</em> is fixed in <code>scripts/gen_infra_map.py</code> — those edges
+live in role templates, not in the inventory — while its labels, counts and status
+colours are read at render time.
 Regenerate with <code>uv run python scripts/gen_infra_map.py</code>.
 </footer>
 </div></body></html>
@@ -912,16 +1603,41 @@ Regenerate with <code>uv run python scripts/gen_infra_map.py</code>.
 # --------------------------------------------------------------------------
 
 
-def collect_live(local_hostname: str) -> dict[str, dict]:
-    """Gather live state for both hosts, tolerating failures per host."""
+def collect_live(
+    local_hostname: str, longhorn_namespace: str
+) -> tuple[dict[str, dict], dict]:
+    """Gather live state for every host, tolerating failures per host.
+
+    The two k3s hosts share one collection: workloads come from the cluster, not
+    from either box individually, and a k3s host is reachable when its Node is
+    Ready — not when it answers ssh. Only the Pi is polled over ssh, in a single
+    call, because `ufw limit ssh` rejects a chatty caller.
+    """
+    cluster = collect_cluster(local_hostname, longhorn_namespace)
+    deployments: dict = {}
+    deployments_ok, deployments_err = False, cluster["error"]
+    if cluster["ok"]:
+        deployments_ok, deployments, deployments_err = collect_k8s(
+            local_hostname, local_hostname
+        )
+
     live: dict[str, dict] = {}
     for host in HOSTS:
-        if host == "daniel-box":
-            ok, data, err = collect_k8s(host, local_hostname)
-        else:
+        if HOST_PLANE[host] == "docker":
             ok, data, err = collect_docker(host, local_hostname)
-        live[host] = {"ok": ok, "data": data, "error": err}
-    return live
+            live[host] = {"ok": ok, "data": data, "error": err}
+            continue
+        node = cluster["nodes"].get(host)
+        if not deployments_ok:
+            err = deployments_err
+        elif node is None:
+            err = f"{host} is not a member of the cluster"
+        elif not node["ready"]:
+            err = f"node {host} is not Ready"
+        else:
+            err = ""
+        live[host] = {"ok": not err, "data": deployments, "error": err}
+    return live, cluster
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -939,12 +1655,13 @@ def main(argv: list[str] | None = None) -> int:
 
     global_vars, host_vars = load_inventory()
     local_hostname = socket.gethostname()
+    longhorn_namespace = global_vars.get("k8s_longhorn_namespace", "longhorn-system")
     try:
-        live = (
-            {h: {"ok": False, "data": {}, "error": "--no-live"} for h in HOSTS}
-            if args.no_live
-            else collect_live(local_hostname)
-        )
+        if args.no_live:
+            live = {h: {"ok": False, "data": {}, "error": "--no-live"} for h in HOSTS}
+            cluster = None
+        else:
+            live, cluster = collect_live(local_hostname, longhorn_namespace)
     except MissingToolError as exc:
         # Deliberately leave the existing page alone. Overwriting it with a
         # declared-only render would replace real data with a page that looks
@@ -952,7 +1669,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}; leaving the previous map in place", file=sys.stderr)
         return 2
     generated_at = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M %Z")
-    model = build_model(global_vars, host_vars, live, generated_at, load_roles())
+    model = build_model(
+        global_vars, host_vars, live, generated_at, load_roles(), cluster
+    )
 
     if args.json:
         json.dump(model, sys.stdout, indent=2)
