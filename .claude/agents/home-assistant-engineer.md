@@ -57,9 +57,10 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   (`roles/k8s/manifests/tasks/main.yml`, the `rollout restart deploy/…` step) fires when the
   applied manifests changed. Since the config is embedded *in* the ConfigMap, a config edit
   changes a manifest and does roll the pod.
-- **`state/` — the derived state model.** `derived_state.yml`, `STATE.md`, and
-  `external_entities.yml` are **generated** (`scripts/ha_state_model.py generate`) — never
-  hand-edit them. `sanctioned_writers.yml` (per-actuator single-writer invariant) and
+- **`state/` — the derived state model.** `derived_state.yml` + `STATE.md` are **generated**
+  (`scripts/ha_state_model.py generate`, offline); `external_entities.yml` is a snapshot of the
+  *live* instance and only `refresh` rewrites it (needs HA reachable + the SOPS key). Never
+  hand-edit any of the three. `sanctioned_writers.yml` (per-actuator single-writer invariant) and
   `expected_override_writers.yml` (override-boolean tripwire) are hand-maintained: adding a
   service call that writes an actuator or an override boolean fails validation until you
   regenerate and consciously declare the new writer.
