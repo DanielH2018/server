@@ -1,7 +1,7 @@
 ---
 # Same tag the Docker instance runs, so a behavioural difference between the two is never
 # the version. The CRD manifests below are pinned to the matching minor.
-traefik_k8s_image: traefik:v3.7.8
+traefik_k8s_image: traefik:v3.7.10
 traefik_k8s_crd_version: v3.7
 
 # Unprivileged ports inside the pod; the Service maps 80 -> http and 443 -> https. Binding
