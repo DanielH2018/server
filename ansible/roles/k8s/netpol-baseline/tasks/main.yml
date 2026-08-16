@@ -64,8 +64,14 @@
   become: true
   changed_when: false
   register: netpol_baseline_probe
-  failed_when: netpol_baseline_probe.rc != 0
+  failed_when: false
 
+# Deliberately unconditional on the wait's outcome (not `when: netpol_baseline_probe is
+# succeeded`): with backoffLimit: 0 a failing probe never satisfies --for=condition=complete, so
+# the wait above times out. If Report/Show only ran on success, the play would abort at the wait
+# with nothing but "timed out waiting for the condition" — none of the four assertion messages
+# the probe was written specifically to print. Logs must be fetched from the failed Job before
+# the failure below stops the play.
 - name: Report the netpol-baseline probe
   tags: [deploy]
   when: netpol_baseline_enforced
@@ -80,3 +86,11 @@
   when: netpol_baseline_enforced
   ansible.builtin.debug:
     msg: "{{ netpol_baseline_probe_log.stdout_lines }}"
+
+- name: Fail if the netpol-baseline probe did not complete
+  tags: [deploy]
+  when: netpol_baseline_enforced and netpol_baseline_probe.rc != 0
+  ansible.builtin.fail:
+    msg: >-
+      netpol-baseline probe did not complete (rc={{ netpol_baseline_probe.rc }}); see the
+      logged assertion output above for which of the four checks failed.

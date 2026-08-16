@@ -1,8 +1,8 @@
 ---
 # Proves the baseline is ENFORCED, not merely applied. Four assertions, because the obvious
 # single one is not sufficient for this slice: these six apps have no in-cluster caller, so
-# "cannot reach bento-pdf" is true under enforcement, under a missing label, AND when bento-pdf
-# is down. Each assertion below eliminates one of those.
+# "cannot reach littlelink" is true under enforcement, under a missing label, AND when
+# littlelink is down. Each assertion below eliminates one of those.
 #
 # This pod carries NO netpol-baseline label, so the policy does not select it. That is the point
 # — it stands in for a compromised workload trying to move laterally.
@@ -44,7 +44,9 @@ spec:
               # 2. NEGATIVE CONTROL — an UNFENCED pod is still reachable from here. homepage
               #    carries no netpol-baseline label (it is slice 4), so if this fails the probe
               #    pod's own networking is broken and assertion 3 would pass for the wrong
-              #    reason.
+              #    reason. Port 3000 here is homepage's Service — unrelated to littlelink's own
+              #    port 3000 used in assertions 3-4 below; they are different Services reached by
+              #    different names.
               if ! nc -w 5 -z homepage 3000; then
                 echo "NEGATIVE CONTROL FAILED: cannot reach the unfenced homepage:3000 either."
                 echo "This pod cannot open connections at all, so assertion 3 below would pass"
@@ -53,29 +55,38 @@ spec:
               fi
               echo "negative control ok: unfenced homepage:3000 reachable"
 
-              # 3. LIVENESS — bento-pdf is actually UP and Traefik can reach it. Goes through the
+              # 3. LIVENESS — littlelink is actually UP and Traefik can reach it. Goes through the
               #    Traefik VIP by hostname, which is the real allowed path, so this doubles as the
               #    positive test of the policy's traefik rule. If this fails but 4 passes, the app
               #    is down (or CrowdSec banned this source) and the fencing result is meaningless.
+              #
+              #    Deliberately littlelink, not bento-pdf: littlelink has use_authelia: false, so
+              #    this request reaches the app directly. An Authelia-gated app would have the
+              #    forwardauth middleware answer first (401, or a 302 to the login portal) before
+              #    Traefik ever proxies to the pod — the probe would then either be permanently
+              #    red for a reason unrelated to enforcement, or print "liveness ok" without ever
+              #    contacting the app, silently reintroducing the exact false-pass this job exists
+              #    to eliminate. If littlelink is ever swapped for an Authelia-gated app, pick
+              #    another unauthed one instead of adding a bypass rule for this probe.
               if ! wget -q -T 10 --no-check-certificate -O /dev/null \
-                   "https://bento-pdf.local.{{ domain }}/"; then
-                echo "LIVENESS FAILED: bento-pdf is not reachable through traefik. Either the app"
-                echo "is down or the baseline's traefik rule is wrong. Assertion 4 below cannot"
-                echo "distinguish enforcement from an app that is simply not listening."
+                   "https://www.local.{{ domain }}/"; then
+                echo "LIVENESS FAILED: littlelink is not reachable through traefik. Either the"
+                echo "app is down or the baseline's traefik rule is wrong. Assertion 4 below"
+                echo "cannot distinguish enforcement from an app that is simply not listening."
                 exit 1
               fi
-              echo "liveness ok: bento-pdf reachable through traefik"
+              echo "liveness ok: littlelink reachable through traefik"
 
               # 4. THE ASSERTION — direct pod-to-pod must FAIL. Inverted: success here is the
-              #    failure case.
-              if nc -w 5 -z bento-pdf 8080; then
-                echo "POLICY NOT ENFORCED: reached bento-pdf:8080 directly from a pod that"
+              #    failure case. littlelink:3000 is a different Service from homepage:3000 above.
+              if nc -w 5 -z littlelink 3000; then
+                echo "POLICY NOT ENFORCED: reached littlelink:3000 directly from a pod that"
                 echo "carries no netpol-baseline label. Either netpol_baseline_enforced is false,"
-                echo "or the label is missing from bento-pdf's POD TEMPLATE (check"
+                echo "or the label is missing from littlelink's POD TEMPLATE (check"
                 echo "spec.template.metadata.labels, not spec.selector.matchLabels)."
                 exit 1
               fi
-              echo "isolated: bento-pdf:8080 unreachable except through traefik"
+              echo "isolated: littlelink:3000 unreachable except through traefik"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
