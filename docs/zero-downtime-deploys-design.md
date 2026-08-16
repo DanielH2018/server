@@ -319,6 +319,45 @@ Still open:
 | Slice | Service | Date | Samples | Zero-ready | Longest gap | Signal |
 |---|---|---|---|---|---|---|
 | 1 | flaresolverr | 2026-08-16 | 1029 | 0 | 0.00s | ready Service endpoints |
+| 2 | pihole (DNS) | 2026-08-16 | 881 | 0 | 0.00s | real UDP DNS queries from daniel-server |
+
+**Slice 2 is the stronger of the two results**, and for the reason slice 1 lacked: the signal is
+an actual request loop. `scripts/../jobs/.../dns_witness.py` sent a real UDP A query for
+`pi.hole` at the `pihole-dns` VIP (10.0.0.243) every 0.25s **from daniel-server**, counting a
+sample as OK only on a well-formed response with rcode 0 and at least one answer. So this
+measures what a LAN client experiences, from a host that is not the one being deployed — not
+endpoint bookkeeping on the deploying node. 881 queries spanned both deploy phases end to end;
+zero failed.
+
+What the 881 samples actually covered:
+
+- **Phase 1** — the deploy that creates `pihole-2`. This one also *changed instance 1's pod
+  template* (it gained the `instance:` label), so `kubectl apply` Recreate-cycled instance 1
+  before `roll_one` ever ran — the template-change limitation documented at
+  `roles/k8s/pihole/tasks/main.yml:24-33`, hit on the very deploy that introduces the label.
+  It still cost no downtime: the terminating pod kept answering through its 30s grace period
+  while `pihole-2` reached ready in ~25s.
+- **The sibling-ready gate earned its keep here.** `roll_one` held instance 1's restart for three
+  retries (~30s) with `Verify the sibling instance is ready before restarting pihole` until
+  `pihole-2` — provisioning a fresh Longhorn PVC — was serving DNS. Without it, instance 1 would
+  have been restarted into a window where the only other instance had no endpoints. That is the
+  C2 finding, and this deploy is the exact scenario it was written for.
+- **C1's fix confirmed by the change record**, not by inference: the gravity reconcile reported
+  `ok => (item=pihole)` and `changed => (item=pihole-2)`. The two writes landed on two different
+  pods. Before the `instance:` label, both would have resolved through the shared
+  `spec.selector` to instance 1 and `pihole-2` would have served DNS with an empty gravity.db.
+- **Phase 2** — an unchanged rerun. `roll_one` was correctly skipped by its
+  `manifests_render is changed or …` gate and neither pod restarted (ages carried forward from
+  phase 1). The only `changed` was `kubectl apply` itself, which always reports changed. This is
+  the idempotence property the gate exists for: a full-fleet deploy must not Recreate-cycle both
+  Pi-holes and their Longhorn volumes every run.
+
+**What slice 2 did NOT exercise.** The both-instances-roll path. On this deploy instance 2 was
+newly created, so its `roll_one` iteration had nothing to restart and was skipped; only instance
+1 actually rolled. The sequenced two-instance roll first runs on the next ConfigMap/Secret-only
+change (a blocklist edit or a secret rotation) — which is also the only class of change this
+redundancy protects, per the limitation above. Stated rather than implied, because a reader
+could otherwise take the 0-gap row as proof of a sequencing behaviour that has not yet run.
 
 **Read this before quoting the result.** It is weaker than the acceptance test this spec
 prescribes, in two specific ways, and neither is a formality:

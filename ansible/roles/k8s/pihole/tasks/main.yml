@@ -87,7 +87,11 @@
 # the last line makes changed_when honest. Runs after the rollout wait, so FTL has already
 # initialised the gravity.db schema on a first boot. INSERTs rely on the gravity schema's
 # AFTER INSERT triggers to attach new rows to the default group.
-- name: Reconcile the declared adlists and regex denies into gravity.db on {{ item }}
+# The name deliberately omits `{{ item }}`: Ansible renders a looped task's name once, before
+# the loop binds `item`, so interpolating it emits a "'item' is undefined" template warning on
+# every deploy and prints the error text in place of the instance name. Ansible already appends
+# `=> (item=pihole)` per iteration, which is the per-instance label this was reaching for.
+- name: Reconcile the declared adlists and regex denies into gravity.db
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -124,7 +128,8 @@
 # loop result is true if ANY iteration changed (verified the same way as above), which is
 # the behaviour wanted here: either instance's declaration changing should rebuild both, so
 # they stay equivalent.
-- name: Rebuild gravity after a blocklist change on {{ item }} # noqa no-handler
+# Name omits `{{ item }}` for the same reason as the reconcile task above.
+- name: Rebuild gravity after a blocklist change # noqa no-handler
   tags: [deploy]
   when: pihole_k8s_gravity_sql is changed
   ansible.builtin.command:
