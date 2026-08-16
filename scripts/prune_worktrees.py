@@ -8,6 +8,11 @@ it stopped being obvious which was which.
 A worktree is removable only when all three hold: its branch is merged into
 origin/master, it has no uncommitted changes, and no live session holds its lock.
 
+"Merged" is checked by ancestry AND by patch-id. PRs land here with `gh pr merge --rebase`,
+which replays commits onto master as new objects, so a landed branch is never an ancestor of
+origin/master — on ancestry alone this script reported "nothing to remove" while merged trees
+piled up. See is_merged.
+
 The lock is the interesting one. Claude Code locks a session's worktree with a reason
 naming the owning process — `claude session <name> (pid 1285937 start 2164388)` — and does
 not release it when the session ends. Treating any lock as "in use" would therefore keep
@@ -131,14 +136,51 @@ def _git(args: list[str], cwd: str | None = None) -> str:
     return result.stdout.strip()
 
 
+def cherry_says_merged(cherry_output: str) -> bool:
+    """Read `git cherry origin/master <head>` output: True when every commit is upstream.
+
+    One line per commit on `head`, prefixed `-` when an equivalent patch is already on
+    origin/master and `+` when it isn't. No lines means nothing is ahead of upstream, which
+    is merged.
+    """
+    lines = [line for line in cherry_output.splitlines() if line.strip()]
+    return all(line.startswith("-") for line in lines)
+
+
 def is_merged(repo: str, head: str) -> bool:
-    result = subprocess.run(
+    """True when `head`'s work is already on origin/master, by ancestry or by patch.
+
+    Ancestry alone misses how PRs actually land here. `gh pr merge --rebase` replays the
+    commits onto master as new objects, so the branch tip is never an ancestor of
+    origin/master and a merge-base check calls every landed worktree unmerged — which is why
+    the pruner reported "nothing to remove" indefinitely while merged trees piled up. The
+    ancestry check is kept because it is cheap and settles the fast-forward and merge-commit
+    cases; `git cherry` compares by patch-id and settles the rebase case.
+
+    Squash merges remain undetected: several commits collapse into one, so no patch-id
+    matches. Those worktrees are kept, which is the safe direction — this decides what to
+    DELETE, so an unknown must never read as merged.
+    """
+    ancestor = subprocess.run(
         ["git", "merge-base", "--is-ancestor", head, "origin/master"],
         cwd=repo,
         capture_output=True,
         check=False,
     )
-    return result.returncode == 0
+    if ancestor.returncode == 0:
+        return True
+    cherry = subprocess.run(
+        ["git", "cherry", "origin/master", head],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    # A failed `git cherry` prints nothing, and empty output otherwise means "merged" — so
+    # the return code has to gate this, or an unknown ref would read as safe to delete.
+    if cherry.returncode != 0:
+        return False
+    return cherry_says_merged(cherry.stdout)
 
 
 def is_dirty(path: str) -> bool:
