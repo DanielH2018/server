@@ -50,6 +50,12 @@ spec:
               value: "{{ pgid }}"
             - name: TZ
               value: "{{ tz }}"
+            # Radarr:Log, reached through the unprefixed environment-variable provider.
+            # Upstream defaults are debug / 50 files; see roles/k8s/sonarr/defaults/main.yml.
+            - name: RADARR__LOG__LEVEL
+              value: "{{ radarr_k8s_log_level }}"
+            - name: RADARR__LOG__ROTATE
+              value: "{{ radarr_k8s_log_rotate }}"
             - name: DOCKER_MODS
               value: "{{ radarr_k8s_docker_mods }}"
           volumeMounts:

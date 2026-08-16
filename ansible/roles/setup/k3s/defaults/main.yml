@@ -316,6 +316,20 @@ k3s_longhorn_weekly_backup_max_age_hours: 198
 # interval must stay above this (see the uptime-kuma role) so a dead cron trips the watchdog.
 k3s_longhorn_backup_health_cron_minute: "*/10"
 
+# Filesystem trim (templates/longhorn-trim-volumes.sh.j2). 06:10 daily: after BOTH backup windows
+# (03:30 daily, 04:30 weekly) and clear of the 05:15 manifest-prune check. The ordering is the
+# constraint, not the hour — trimming BEFORE the day's snapshot hands back blocks that the
+# snapshot then pins again, so the sweep has to follow the snapshot, not precede it.
+k3s_longhorn_trim_cron_hour: "6"
+k3s_longhorn_trim_cron_minute: "10"
+
+# How old a stranded snapshot must be before the reaper (templates/longhorn-reap-orphan-snapshots.sh.j2)
+# will offer it. A tier move leaves a window where the new job has not run yet, so a snapshot from
+# two days ago may still be a volume's most useful local restore point even though the job that
+# made it no longer owns the volume. Three days clears that window; the 2026-08-16 strays that
+# motivated the script were four to seven days old.
+k3s_longhorn_snapshot_reap_min_age_days: 3
+
 # Daily-backup-volume budget, added 2026-08-08 after B2's TRANSACTION cap fired for the second
 # time (docs/b2-transaction-cap-monitoring-gaps.md, gap G2 — bytes were monitored, transactions
 # were not). B2 exposes no cap-headroom API, so nothing can measure the remaining allowance

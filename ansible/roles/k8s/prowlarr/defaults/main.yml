@@ -53,3 +53,10 @@ prowlarr_k8s_fs_cpu_limit: "2"
 prowlarr_k8s_fs_mem_limit: 1024Mi
 prowlarr_k8s_fs_cpu_request: "100m"
 prowlarr_k8s_fs_mem_request: 128Mi
+
+# See roles/k8s/sonarr/defaults/main.yml for the full rationale: upstream defaults are
+# LogLevel=debug / Rotate=50 / SizeLimit=1MB, and the churn that produces is what inflates the
+# backup, not the capped size. Bound via PROWLARR__LOG__* — Prowlarr's Bootstrap.cs binds
+# LogOptions to the "Prowlarr:Log" section and registers AddEnvironmentVariables() unprefixed.
+prowlarr_k8s_log_level: info
+prowlarr_k8s_log_rotate: "10"

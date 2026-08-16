@@ -155,12 +155,25 @@ spec:
               mountPath: /data/media
               subPath: media
               readOnly: true
-            # Transcode scratch, off Longhorn (D6). TranscodingTempPath is unset in encoding.xml,
-            # so Jellyfin uses its default of <cache>/transcodes — mounting the emptyDir at that
-            # exact path keeps the write-heavy scratch on node storage without editing the XML to
-            # relocate it. The rest of /config/cache stays on the PVC.
-            - name: transcodes
-              mountPath: /config/cache/transcodes
+            # THE WHOLE CACHE, off Longhorn — not just the transcode scratch (2026-08-16).
+            #
+            # This mount used to be /config/cache/transcodes only (D6): TranscodingTempPath is
+            # unset in encoding.xml, so Jellyfin uses its default of <cache>/transcodes, and
+            # mounting there kept the write-heavy scratch on node storage without editing the XML.
+            # That reasoning still holds — transcodes is inside this emptyDir, so the default path
+            # is still served off the node.
+            #
+            # What changed is that "the rest of /config/cache stays on the PVC" was a mistake.
+            # Every byte under /config/cache is derived and Jellyfin rebuilds it, but it churns
+            # constantly, and Longhorn backs up allocated device BLOCKS rather than live files —
+            # so a cache that deletes and rewrites itself leaves freed-but-never-discarded blocks
+            # behind, which the weekly backup then ships forever. Measured 2026-08-16:
+            # jellyfin-config held 222 MiB of live files (32 MiB of it this cache) against 680 MiB
+            # backed up. The durable library — /config/data, /config/*.xml — stays on the PVC.
+            #
+            # Losing this on a pod move is intended and costs a rebuild, nothing more.
+            - name: cache
+              mountPath: /config/cache
           readinessProbe:
             httpGet:
               path: /health
@@ -193,5 +206,5 @@ spec:
         - name: media
           persistentVolumeClaim:
             claimName: {{ jellyfin_k8s_media_claim }}
-        - name: transcodes
+        - name: cache
           emptyDir: {}

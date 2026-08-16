@@ -64,6 +64,36 @@
     group: root
   become: true
 
+- name: Deploy the orphaned-snapshot reaper
+  tags: [backup-health]
+  # Installed but DELIBERATELY NOT SCHEDULED, for the same reason as its backup sibling above:
+  # it deletes recovery points, and which ones are safe to delete depends on live state. Run the
+  # dry run and read it before running --apply.
+  #   dry run: /usr/local/bin/longhorn-reap-orphan-snapshots.sh
+  #   delete:  sudo /usr/local/bin/longhorn-reap-orphan-snapshots.sh --apply
+  # Deletes here are LOCAL ONLY — a Longhorn snapshot is not a backup, and the B2 objects are
+  # untouched. What it buys is reclamation: one retained snapshot pins every block beneath it
+  # against filesystem trim, so this is the step that lets longhorn-trim-volumes.sh do anything.
+  ansible.builtin.template:
+    src: longhorn-reap-orphan-snapshots.sh.j2
+    dest: /usr/local/bin/longhorn-reap-orphan-snapshots.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Deploy the Longhorn filesystem-trim sweep
+  tags: [backup-health]
+  # Runs as {{ sys_user }} through the read-only kubeconfig: it reads volume state with kubectl
+  # and issues the trim through the longhorn-backend API, which needs no Kubernetes write.
+  ansible.builtin.template:
+    src: longhorn-trim-volumes.sh.j2
+    dest: /usr/local/bin/longhorn-trim-volumes.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
 - name: Schedule the Longhorn backup-plane heartbeat
   tags: [backup-health]
   ansible.builtin.cron:
@@ -72,6 +102,20 @@
     user: "{{ sys_user }}"
     job: "/usr/local/bin/longhorn-backup-health.sh"
     cron_file: longhorn-backup-health
+  become: true
+
+- name: Schedule the Longhorn filesystem-trim sweep
+  tags: [backup-health]
+  # After BOTH backup windows (03:30 daily, 04:30 weekly) and clear of the 05:15 manifest-prune
+  # check, so a trim never contends with a snapshot being taken. Order matters more than the
+  # hour: trimming before the day's snapshot would hand back blocks the snapshot then re-pins.
+  ansible.builtin.cron:
+    name: "Longhorn filesystem trim"
+    hour: "{{ k3s_longhorn_trim_cron_hour }}"
+    minute: "{{ k3s_longhorn_trim_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: "/usr/local/bin/longhorn-trim-volumes.sh"
+    cron_file: longhorn-trim
   become: true
 
 - name: Deploy the root-disk headroom heartbeat
