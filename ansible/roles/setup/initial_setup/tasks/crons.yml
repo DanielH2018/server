@@ -109,8 +109,9 @@
 
 - name: Schedule the infrastructure-map refresh (box only)
   tags: [crons, infra-map]
-  # Regenerates the declared-vs-live HTML map (scripts/gen_infra_map.py). Runs on daniel-box
-  # because that is where kubectl is local; the daniel-server half arrives over ONE ssh call
+  # Regenerates the architecture diagram + declared-vs-live map (scripts/gen_infra_map.py).
+  # Runs on daniel-box because that is where kubectl is local — both cluster nodes are read
+  # from the cluster, not host by host. Only daniel-pi is polled remotely, over ONE ssh call
   # per run, well clear of the `ufw limit ssh` 6-connections-per-30s reject threshold.
   #
   # No Healthchecks ping, unlike the crons above: a failed run leaves the previous page in

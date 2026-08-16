@@ -357,14 +357,17 @@ def test_classify_migration_ignores_undeclared_docker_containers():
 # --- build_model ------------------------------------------------------------
 
 
-def model_for(live):
+def model_for(live, cluster=None):
     host_vars = {
         "daniel-box": docker_host(
             [{"name": "traefik", "platform": "k8s", "port": 8080}]
         ),
-        "daniel-server": docker_host([{"name": "sonarr", "port": 8989}]),
+        "daniel-server": docker_host([]),
+        "daniel-pi": docker_host([{"name": "sonarr", "port": 8989}]),
     }
-    return g.build_model(GLOBALS, host_vars, live, "2026-08-07 03:00 CDT", ROLES)
+    return g.build_model(
+        GLOBALS, host_vars, live, "2026-08-07 03:00 CDT", ROLES, cluster
+    )
 
 
 def test_build_model_overlays_live_state_onto_declared_services():
@@ -373,7 +376,7 @@ def test_build_model_overlays_live_state_onto_declared_services():
             "daniel-box": live_ok(
                 {("homelab", "traefik"): {"ready": 1, "desired": 1, "image": "t:1"}}
             ),
-            "daniel-server": live_ok({"sonarr": container()}),
+            "daniel-pi": live_ok({"sonarr": container()}),
         }
     )
     assert model["totals"]["healthy"] == 2
@@ -385,7 +388,7 @@ def test_build_model_degrades_an_unreachable_host_to_declared_only():
     model = model_for(
         {
             "daniel-box": {"ok": False, "data": {}, "error": "connection refused"},
-            "daniel-server": live_ok({"sonarr": container()}),
+            "daniel-pi": live_ok({"sonarr": container()}),
         }
     )
     box = next(h for h in model["hosts"] if h["name"] == "daniel-box")
@@ -425,7 +428,7 @@ def rendered():
                 "daniel-box": live_ok(
                     {("homelab", "traefik"): {"ready": 1, "desired": 1, "image": "t:1"}}
                 ),
-                "daniel-server": live_ok({"sonarr": container()}),
+                "daniel-pi": live_ok({"sonarr": container()}),
             }
         )
     )
@@ -458,7 +461,7 @@ def test_render_html_names_an_unreachable_host_in_the_page():
     model = model_for(
         {
             "daniel-box": {"ok": False, "data": {}, "error": "ssh timed out"},
-            "daniel-server": live_ok({"sonarr": container()}),
+            "daniel-pi": live_ok({"sonarr": container()}),
         }
     )
     assert "ssh timed out" in g.render_html(model)
@@ -508,7 +511,7 @@ def test_main_leaves_the_previous_page_untouched_when_a_tool_is_missing(
     monkeypatch.setattr(
         g,
         "collect_live",
-        lambda _: (_ for _ in ()).throw(g.MissingToolError("kubectl")),
+        lambda *_: (_ for _ in ()).throw(g.MissingToolError("kubectl")),
     )
     assert g.main(["-o", str(page)]) == 2
     assert page.read_text() == "PREVIOUS RENDER"
@@ -613,3 +616,266 @@ def test_load_roles_derives_ownership_from_the_role_trees():
     # manifests now — and pi-peer-backup, which the compose rule never saw, qualifies too.
     assert "configarr" in roles.batch_roles
     assert "pi-peer-backup" in roles.batch_roles
+
+
+# --- cluster collection -----------------------------------------------------
+
+
+def node(name, ready=True, roles=(), ip="10.0.0.1"):
+    return {
+        "metadata": {
+            "name": name,
+            "labels": {f"node-role.kubernetes.io/{r}": "true" for r in roles},
+        },
+        "spec": {},
+        "status": {
+            "conditions": [{"type": "Ready", "status": "True" if ready else "False"}],
+            "addresses": [{"type": "InternalIP", "address": ip}],
+            "nodeInfo": {"kubeletVersion": "v1.36.2+k3s1"},
+        },
+    }
+
+
+def test_parse_kubectl_nodes_reads_readiness_roles_and_address():
+    payload = json.dumps(
+        {"items": [node("daniel-box", roles=("control-plane", "etcd"))]}
+    )
+    parsed = g.parse_kubectl_nodes(payload)
+    assert parsed["daniel-box"]["ready"] is True
+    assert parsed["daniel-box"]["roles"] == ["control-plane", "etcd"]
+    assert parsed["daniel-box"]["ip"] == "10.0.0.1"
+
+
+def test_parse_kubectl_nodes_marks_a_not_ready_node():
+    """A NotReady node reading as healthy is the miss this collection exists to catch."""
+    payload = json.dumps({"items": [node("daniel-server", ready=False)]})
+    assert g.parse_kubectl_nodes(payload)["daniel-server"]["ready"] is False
+
+
+def test_parse_kubectl_nodes_returns_empty_on_bad_json():
+    assert g.parse_kubectl_nodes("not json") == {}
+
+
+def test_parse_pod_placement_blanks_an_unscheduled_pod():
+    """kubectl prints <none> for a pod with no node; that is not a node name."""
+    out = "homelab traefik-abc daniel-box Running\nhomelab pending-x <none> Pending\n"
+    parsed = g.parse_pod_placement(out)
+    assert parsed[0]["node"] == "daniel-box"
+    assert parsed[1]["node"] == ""
+
+
+def test_parse_pod_placement_ignores_short_lines():
+    assert g.parse_pod_placement("garbage\n\n") == []
+
+
+def backup_target(name, url="s3://b@r/p", available=True):
+    return {
+        "metadata": {"name": name},
+        "spec": {"backupTargetURL": url},
+        "status": {"available": available},
+    }
+
+
+def test_parse_backup_targets_separates_disarmed_from_unavailable():
+    """A blank URL is how this repo disarms a target, not how one breaks."""
+    payload = json.dumps(
+        {
+            "items": [
+                backup_target("default", url=""),
+                backup_target("r2", available=False),
+            ]
+        }
+    )
+    parsed = {t["name"]: t for t in g.parse_backup_targets(payload)}
+    assert parsed["default"]["armed"] is False
+    assert parsed["r2"]["armed"] is True
+    assert parsed["r2"]["available"] is False
+
+
+def test_parse_backup_targets_returns_empty_on_bad_json():
+    assert g.parse_backup_targets("not json") == []
+
+
+# --- place_on_nodes ---------------------------------------------------------
+
+
+PODS = [
+    {
+        "namespace": "homelab",
+        "name": "sonarr-7d9-a",
+        "node": "daniel-server",
+        "phase": "Running",
+    },
+    {
+        "namespace": "homelab",
+        "name": "sonarr-7d9-b",
+        "node": "daniel-box",
+        "phase": "Running",
+    },
+    {
+        "namespace": "observability",
+        "name": "sonarr-7d9-c",
+        "node": "daniel-box",
+        "phase": "Running",
+    },
+    {
+        "namespace": "homelab",
+        "name": "other-1-d",
+        "node": "daniel-box",
+        "phase": "Running",
+    },
+]
+
+
+def test_place_on_nodes_collects_every_node_a_services_pods_landed_on():
+    service = {"workloads": [{"name": "sonarr", "namespace": "homelab"}]}
+    assert g.place_on_nodes(service, PODS)["nodes"] == ["daniel-box", "daniel-server"]
+
+
+def test_place_on_nodes_does_not_cross_namespaces_or_names():
+    service = {"workloads": [{"name": "other", "namespace": "homelab"}]}
+    assert g.place_on_nodes(service, PODS)["nodes"] == ["daniel-box"]
+
+
+def test_place_on_nodes_is_empty_for_a_service_with_no_workloads():
+    assert g.place_on_nodes({"workloads": []}, PODS)["nodes"] == []
+
+
+# --- host planes ------------------------------------------------------------
+#
+# The bug these guard: daniel-server's Docker was uninstalled on 2026-08-14 and
+# its containers_list emptied, so inferring the plane from that list fell through
+# to "docker". The map then ssh-ed a healthy k3s agent for a binary that is gone
+# and rendered it as an unreachable Docker host, every 15 minutes.
+
+
+def test_daniel_server_is_modelled_as_a_k3s_host_not_a_docker_one():
+    server = next(h for h in model_for({})["hosts"] if h["name"] == "daniel-server")
+    assert server["platform"] == "k8s"
+
+
+def test_the_pi_is_covered_by_the_map():
+    model = model_for({"daniel-pi": live_ok({"sonarr": container()})})
+    pi = next(h for h in model["hosts"] if h["name"] == "daniel-pi")
+    assert pi["platform"] == "docker"
+    assert [s["name"] for s in pi["services"]] == ["sonarr"]
+
+
+def test_build_model_carries_node_state_onto_its_host():
+    cluster = {
+        "ok": True,
+        "error": "",
+        "nodes": {
+            "daniel-server": {
+                "ready": True,
+                "roles": [],
+                "ip": "10.0.0.161",
+                "version": "v1",
+                "schedulable": True,
+            }
+        },
+        "pods": [
+            {
+                "namespace": "homelab",
+                "name": "x-1",
+                "node": "daniel-server",
+                "phase": "Running",
+            }
+        ],
+        "volumes": 42,
+        "backup_targets": [],
+    }
+    model = model_for({}, cluster)
+    server = next(h for h in model["hosts"] if h["name"] == "daniel-server")
+    assert server["node"]["pods"] == 1
+    assert model["cluster"]["volumes"] == 42
+
+
+# --- grouping and the diagram -----------------------------------------------
+
+
+def test_group_services_buckets_by_function_and_by_host():
+    groups = {
+        gr["name"]: [s["name"] for s in gr["services"]]
+        for gr in g.group_services(model_for({}))
+    }
+    assert "traefik" in groups["Edge & identity"]
+    assert "sonarr" in groups["Pi · LAN-only"]
+
+
+def test_group_services_covers_every_service_exactly_once():
+    """An unlisted service must surface as ungrouped, never drop off the page."""
+    model = model_for({})
+    grouped = [s["name"] for gr in g.group_services(model) for s in gr["services"]]
+    declared = [s["name"] for h in model["hosts"] for s in h["services"]]
+    assert sorted(grouped) == sorted(declared)
+
+
+def test_the_diagram_is_well_formed_svg():
+    """Hand-authored markup — one stray tag would break the whole page."""
+    from xml.etree import ElementTree
+
+    figure = g._diagram_view(model_for({}))
+    fragment = figure[figure.index("<svg") : figure.index("</svg>") + len("</svg>")]
+    ElementTree.fromstring(fragment)
+
+
+def test_the_diagram_labels_edges_with_addresses_from_the_inventory():
+    """The reason it is generated: renaming a VIP must move the label."""
+    global_vars = {
+        **GLOBALS,
+        "k3s_metallb_ingress_vip": "10.9.9.9",
+        "domain": "example.test",
+    }
+    model = g.build_model(
+        global_vars, {"daniel-box": docker_host([])}, {}, "now", ROLES
+    )
+    diagram = g._diagram_view(model)
+    assert "10.9.9.9" in diagram
+    assert "example.test" in diagram
+
+
+def test_the_diagram_reports_a_disarmed_backup_target():
+    """A target with no URL rendering as healthy is the miss worth guarding."""
+    cluster = {
+        "ok": True,
+        "error": "",
+        "nodes": {},
+        "pods": [],
+        "volumes": 0,
+        "backup_targets": [
+            {"name": "r2", "url": "", "armed": False, "available": False}
+        ],
+    }
+    assert "disarmed" in g._diagram_view(model_for({}, cluster))
+
+
+def test_an_uncollected_cluster_does_not_claim_the_backups_are_disarmed():
+    """Disarmed is a deliberate state here — a failed query must not announce it."""
+    diagram = g._diagram_view(model_for({}))
+    assert "disarmed" not in diagram
+    assert "not collected" in diagram
+
+
+def test_an_uncollected_cluster_does_not_paint_its_nodes_down():
+    """Same false alarm on the nodes: unknown is not NotReady."""
+    diagram = g._diagram_view(model_for({}))
+    assert "s-down" not in diagram
+    assert "s-unknown" in diagram
+
+
+def test_a_services_node_placement_reaches_the_page():
+    """Placement is collected for a reason; an untagged service hides it."""
+    service = {
+        "name": "sonarr",
+        "status": "healthy",
+        "hostname": None,
+        "port": None,
+        "authelia": False,
+        "networks": [],
+        "namespace": "homelab",
+        "declared": True,
+        "detail": "",
+        "nodes": ["daniel-server"],
+    }
+    assert "daniel-server" in g._service_row(service)
