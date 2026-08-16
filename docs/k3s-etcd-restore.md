@@ -32,7 +32,11 @@ cron exists to find), and anything created outside the repo.
   from the `r2_*` SOPS secrets.
 
 Kuma monitor **Off-box etcd Snapshot** (push, daily) plus the `etcd-snapshot-offbox`
-Healthchecks.io check cover the cron. Both stay silent until `etcd_snapshot_push_token` is added.
+Healthchecks.io check cover the cron. The two become live differently: the Kuma tile appears once
+`etcd_snapshot_push_token` exists (added 2026-08-16) and the role is deployed, while the
+Healthchecks ping is sent from the first run regardless — but it is discarded until the check is
+created by hand in the console, because the slug is sent bare and never with `?create=1`. See
+`healthchecks-io-deadman.md` for its schedule and grace.
 
 ## Listing what is available
 
