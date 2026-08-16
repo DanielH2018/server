@@ -34,3 +34,15 @@ autokuma_k8s_cpu_limit: "250m"
 autokuma_k8s_mem_limit: 128Mi
 autokuma_k8s_cpu_request: "20m"
 autokuma_k8s_mem_request: 32Mi
+
+# Minutes before Kuma re-notifies about a monitor that is STILL down. Kuma's own default is 0,
+# which means "notify once on the down transition and then never again" — so until 2026-08-16
+# every one of the static push monitors produced exactly one Discord message per outage, however
+# long it ran. A tile that went down at 04:30 was silent by breakfast and stayed silent all day.
+#
+# 6h rather than hourly: these monitors watch things that take a human intervention to fix, so a
+# faster resend would mostly train the reader to mute the channel — which is the failure mode that
+# loses the NEXT alert. Applied uniformly and asserted by a test, rather than set per-tile, so a
+# new monitor cannot be added without one (the GitOps tile was the known instance; the gap was
+# every push monitor).
+kuma_push_resend_interval_minutes: 360
