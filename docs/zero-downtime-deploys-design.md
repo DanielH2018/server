@@ -175,6 +175,22 @@ leave the ~35 typical holdouts alone, treat radarr and sonarr as an application 
 4–5 minute gaps matter, and add `readinessProbe`s to the 14 workloads with none — a correctness
 fix, and a prerequisite for ever converting them.
 
+> **That "14 with none" figure is wrong, and so is the audit method behind it.** Executing the
+> probe work found the cause: both `scripts/startup_baseline.py` and the audit that produced
+> plan 3 counted containers with no `readinessProbe` key, and **a `startupProbe` gates readiness
+> too** — a container is not Ready until its startup probe succeeds, so a Service does not
+> publish it. Of the three workloads the audit flagged as behind a Service with no gate, two
+> already had one: `terraria` (`deployment.yaml.j2:59`, exec `grep :1E61 /proc/net/tcp`,
+> `failureThreshold: 30`) and `valheim` (`:102`, exec `grep :0998 /proc/net/udp`,
+> `failureThreshold: 60` — 15 minutes, sized for a first boot that pulls ~1.8G through SteamCMD).
+> Only `nut` genuinely lacked a gate. Worse, adding the audited probe to terraria would have been
+> actively harmful: that template documents at `:54-56` that the game logs every accepted socket,
+> so a `tcpSocket` connect probe spams the game console. **Any future probe-coverage audit in this
+> repo must treat `readinessProbe` OR `startupProbe` as coverage.** `ansible/tests/
+> test_readiness_coverage.py` currently records the two startup-gated workloads as allowlisted
+> reasons; teaching it to recognise `startupProbe` directly is the cleaner fix and is the one
+> recommended follow-up from this slice.
+
 ## Approach A items (folded into B)
 
 - **`prowlarr-flaresolverr` → RollingUpdate.** Stateless Chrome captcha solver; its PVC
