@@ -37,6 +37,26 @@ So uv costs about **24 ms per invocation**, roughly 3×. That is irrelevant for 
 
 `--no-sync` measured no faster than plain `--no-project` (37 vs 35 ms is noise at this sample size) and is not used: with `--no-project` there is no project env to reconcile.
 
+## Which host runs what
+
+Established from the inventory before planning, because it changes the shape of the work:
+
+| Group | Host | Evidence |
+|---|---|---|
+| A — health wrappers | **daniel-box only** | installed by the `configarr` / `janitorr` k8s roles, which run on the control-plane node |
+| B — crons | **daniel-box only** | `fake_remux_host: daniel-box` (`group_vars/all.yml:215`); the role is `when: inventory_hostname == fake_remux_host` |
+| C — Claude hooks | **both hosts** | daniel-server has the repo, the hooks, uv and `~/.claude/settings.json` — verified by inspection |
+| D — renovate-notify | **daniel-box only** | `renovate_notify_host: daniel-box` (`group_vars/all.yml:210`) |
+| E — gitops-deploy | **daniel-box only** | `has_gitops: false` on daniel-server (`host_vars/daniel-server.yml:278`) |
+
+So 16 of the 18 scripts run on daniel-box alone. Only the two hook scripts span both machines — which is the only reason daniel-server needs the pinned interpreter at all.
+
+**Deploying to daniel-server is not a `--limit` away.** `hosts.ini` pins both nodes
+`ansible_connection=local`, and `initial_setup.yml` uses
+`hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"`. Running the playbook on
+daniel-box configures daniel-box; `-e target=daniel-server` would still execute locally. Whatever
+daniel-server needs must be run **on daniel-server**.
+
 ## The 18 host-run scripts
 
 Enumerated by `ansible/tests/test_host_scripts_py312.py`, grouped by invoker. **This grouping is the task order**, chosen so a mistake is contained before it can reach the deploy pipeline.
@@ -60,7 +80,7 @@ Enumerated by `ansible/tests/test_host_scripts_py312.py`, grouped by invoker. **
 - Test: `ansible/tests/test_host_python_pin.py`
 
 **Interfaces:**
-- Produces: `host_python_version` (exact patch, e.g. `3.14.6`) and `/usr/local/bin/uv` on both hosts. Every later task's invocation is `/usr/local/bin/uv run --no-project --python {{ host_python_version }} <script>`.
+- Produces: `host_python_version` (exact patch, e.g. `3.14.6`); `/usr/local/bin/uv` on **daniel-box**, which every Ansible-managed invocation in Tasks 2–6 names; and the pinned interpreter present on **daniel-server** too, which only the Task 4 hooks need. Later invocations take the form `/usr/local/bin/uv run --no-project --python {{ host_python_version }} <script>`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -170,20 +190,47 @@ In `ansible/roles/setup/initial_setup/tasks/host-basics.yml`, immediately after 
   become: true
 ```
 
-- [ ] **Step 6: Deploy and verify on BOTH hosts**
+- [ ] **Step 6: Deploy on daniel-box and verify**
 
 Run: `uv run ansible-playbook ansible/initial_setup.yml --tags tooling`
 
-Then, from a directory that is **not** a Python project — this is the check that matters, because `uv run` is working-directory sensitive:
+`--tags tooling` matches exactly two existing tasks plus the two added above, all in
+`host-basics.yml` — it is not a broad run.
+
+Then verify from a directory that is **not** a Python project. The `cd /tmp` is part of the
+check, not incidental: `uv run` searches upward for a project from its working directory.
 
 ```bash
 cd /tmp && /usr/local/bin/uv run --no-project --python 3.14.6 python -V
-ssh daniel-server 'cd /tmp && /usr/local/bin/uv run --no-project --python 3.14.6 python -V'
 ```
 
-Expected: `Python 3.14.6` from both, identical. If either reports a different patch, or resolves a `.venv`, stop — everything after this is built on it.
+Expected: `Python 3.14.6`. If it reports a different patch, or resolves a `.venv`, stop —
+everything after this is built on it.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Give daniel-server the pinned interpreter, for the hooks only**
+
+daniel-server runs none of the systemd units or crons, but it does run Claude Code, so the two
+hook wrappers from Task 4 execute there. It needs the interpreter; it does **not** need
+`/usr/local/bin/uv`, because hooks run in an interactive user session where `~/.local/bin` is
+already on `PATH`.
+
+Ansible cannot reach it from here — `hosts.ini` pins it `ansible_connection=local` — so install
+the interpreter directly:
+
+```bash
+ssh daniel-server '~/.local/bin/uv python install 3.14.6'
+ssh daniel-server 'cd /tmp && ~/.local/bin/uv run --no-project --python 3.14.6 python -V'
+```
+
+Expected: `Python 3.14.6`, matching daniel-box exactly. This is the step that closes the
+3.14.6 / 3.14.5 drift between the two machines.
+
+If a later `uv python uninstall` or a fresh host loses it, `uv run --python 3.14.6` will fetch
+the interpreter on demand (uv's python-downloads default is automatic) — but do not rely on
+that here: verify the version explicitly, because a silent download of a *different* build is
+exactly the drift this pin exists to prevent.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add ansible/inventory/group_vars/all.yml ansible/roles/setup/initial_setup ansible/tests/test_host_python_pin.py
@@ -396,14 +443,18 @@ git commit -m "Run renovate-notify through uv on the pinned 3.14"
 **Files:**
 - Modify: `ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2:37`
 
-- [ ] **Step 1: Confirm uv and the interpreter are present on both hosts first**
+- [ ] **Step 1: Confirm uv and the interpreter are present on daniel-box first**
 
 ```bash
 cd /tmp && /usr/local/bin/uv run --no-project --python 3.14.6 python -V
-ssh daniel-server 'cd /tmp && /usr/local/bin/uv run --no-project --python 3.14.6 python -V'
 ```
 
-Expected: identical `Python 3.14.6`. If either fails, STOP and fix Task 1 — do not proceed.
+Expected: `Python 3.14.6`. If this fails, STOP and fix Task 1 — this unit is the deploy
+pipeline, and pointing it at an interpreter that is not there is the one mistake that removes
+your ability to ship the correction.
+
+daniel-server is deliberately not checked here: `has_gitops: false` there
+(`host_vars/daniel-server.yml:278`), so this unit does not exist on that host.
 
 - [ ] **Step 2: Repoint the unit**
 
@@ -637,12 +688,11 @@ for systemd and cron is arbitrary."
 
 ## Acceptance
 
-Done when, on **both** hosts:
-
-1. `cd /tmp && /usr/local/bin/uv run --no-project --python 3.14.6 python -V` reports the identical pinned version. The `cd /tmp` is part of the check, not incidental.
-2. Every group A–E invocation has been run once and produced its normal output — not merely deployed.
-3. `grep -rn "/usr/bin/python3" ansible/roles .claude/hooks` returns nothing outside container contexts.
-4. `uv run pytest -q` and `prek run --all-files` pass.
+1. On **daniel-box**: `cd /tmp && /usr/local/bin/uv run --no-project --python 3.14.6 python -V` reports the pinned version. The `cd /tmp` is part of the check, not incidental.
+2. On **daniel-server**: `cd /tmp && ~/.local/bin/uv run --no-project --python 3.14.6 python -V` reports the *identical* version. Only the hooks need this, but the drift between the two machines is what this closes.
+3. Every group A–E invocation has been run once on the host that owns it, and produced its normal output — not merely deployed.
+4. `grep -rn "/usr/bin/python3" ansible/roles .claude/hooks` returns nothing outside container contexts.
+5. `uv run pytest -q` and `prek run --all-files` pass.
 
 **"The playbook succeeded" is not acceptance.** A systemd unit with an unexecutable `ExecStart` deploys perfectly and fails at every tick.
 
