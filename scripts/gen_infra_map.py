@@ -1422,7 +1422,11 @@ def _diagram_view(model: dict) -> str:
             )
         )
 
-    # Storage and the backup chain.
+    # Storage and the backup chain. Tinted by whether the volumes could be read,
+    # not by the longhorn-ui service: that entry declares only an IngressRoute,
+    # its Deployment belongs to the Longhorn chart in longhorn-system, and the
+    # name lookup in ns/homelab therefore misses it and reports "missing". A
+    # healthy storage plane must not read as red because a route lookup missed.
     parts.append(
         _svg_box(
             40,
@@ -1432,7 +1436,7 @@ def _diagram_view(model: dict) -> str:
             "Longhorn",
             f"ns/{ep['longhorn_namespace']}"
             + (f"  ·  {volumes} volumes" if volumes is not None else ""),
-            _service_status(model, "longhorn-ui"),
+            "healthy" if volumes is not None else "unknown",
         )
     )
     # Same rule as the nodes, and it matters more here: "disarmed" is a real and

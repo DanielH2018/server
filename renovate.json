@@ -217,7 +217,7 @@
       "minimumReleaseAge": "7 days"
     },
     {
-      "description": "One PR per k8s service, overriding the shared non-major group above. gitops_deploy auto-deploys eligible k8s image bumps, and its rollback is a whole-tree `git reset --hard` + redeploy \u2014 so a grouped commit made ONE bad bump revert every good bump beside it, and a partially-deployed batch left the rest to re-converge with no trigger (the ff-merge happens before the deploy, so the next tick sees local==origin and noops). Per-service grouping makes the rollback unit equal the deploy unit. It also keeps each auto-deploy tick to a single service, which is what the deploy timeout is sized for.",
+      "description": "One PR per k8s service, overriding the shared non-major group above. gitops_deploy auto-deploys eligible k8s image bumps, and its rollback is a whole-tree `git reset --hard` + redeploy \u2014 so a grouped commit made ONE bad bump revert every good bump beside it, and a partially-deployed batch left the rest to re-converge with no trigger (the ff-merge happens before the deploy, so the next tick sees local==origin and noops). Per-service grouping makes the rollback unit equal the deploy unit. How many of those per-service bumps one tick takes on is bounded separately, by gitops_deploy_k8s_autodeploy_max_per_tick — grouping alone never did it, since a tick diffs local..origin and so spans every commit since the last one.",
       "matchManagers": [
         "custom.regex"
       ],

@@ -23,6 +23,16 @@
     name: k8s/manifests
   vars:
     manifests_service: karakeep
+    # meilisearch reads MEILI_MASTER_KEY from this role's Secret as an ENV var, which is only
+    # injected at container start. Without this, rotating that key rolls `karakeep` with the new
+    # value while `karakeep-meilisearch` keeps serving the old one — the app and its search
+    # backend end up on different keys and the deploy reports green.
+    #
+    # chrome and time-tagger are deliberately absent. chrome mounts no role-rendered config at
+    # all, and the tagger's script is a plain (non-subPath) ConfigMap mount, so kubelet syncs the
+    # file and its `while true; sleep 900` loop re-execs the new copy without a restart.
+    manifests_extra_rollouts:
+      - name: karakeep-meilisearch
     manifests_files:
       - configmap.yaml
       - middleware.yaml

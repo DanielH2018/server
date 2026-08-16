@@ -93,9 +93,10 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
      file DELETE API, so whether the fake lands in the OS trash or is removed outright is entirely
      Sonarr's own Media Management → Recycling Bin setting, not something this policy controls.
      `FAKE_REMUX_REPLACE_MODE` is the gate: `off` = detect only, `shadow` = log intended grabs to
-     `outcomes.jsonl` with zero Sonarr mutations, `live` = grab+delete+import. **daniel-server
-     runs `live`** (`autofix_fake_remux_replace_mode` in host_vars) — it deletes and re-grabs for
-     real. This line claimed it shipped as `shadow` until 2026-08-08; the template default is
+     `outcomes.jsonl` with zero Sonarr mutations, `live` = grab+delete+import. **daniel-box
+     runs `live`** (`autofix_fake_remux_replace_mode` in `host_vars/daniel-box.yml`) — it deletes
+     and re-grabs for real. (It moved there with the media stack on 2026-08-08; this line said
+     daniel-server until 2026-08-16, which is a file that does not contain the key at all.) This line claimed it shipped as `shadow` until 2026-08-08; the template default is
      `shadow`, but the inventory has overridden it to `live` and that is the intended setting,
      confirmed by the operator. Don't "restore" it to shadow.
      Ledger/outcome state all live under `/var/lib/autofix-fake-remux/`. See

@@ -1196,8 +1196,10 @@ def test_split_k8s_caps_how_many_services_one_tick_takes_on():
     paths = [_defaults_for(s) for s in ("speedtest", "freshrss", "sonarr", "radarr")]
     cs = _split(paths, max_per_tick=2)
     assert len(cs.k8s_deploy) == 2
-    # The surplus is DEFERRED, not dropped: it stays in cs.k8s, which defer-and-alerts and is
-    # picked up by a later tick. Merged-but-never-deployed would be the dangerous outcome.
+    # The surplus stays in cs.k8s, which defer-and-alerts — so it reaches the operator as a
+    # Discord message naming the services to deploy by hand. It is NOT retried automatically:
+    # the ff-merge precedes the deploy, so the next tick sees local == origin and noops. This
+    # assertion covers the partition only; nothing here should be read as a retry guarantee.
     assert cs.k8s == {"speedtest", "freshrss", "sonarr", "radarr"} - cs.k8s_deploy
 
 

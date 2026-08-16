@@ -17,6 +17,11 @@
     name: k8s/manifests
   vars:
     manifests_service: freshrss
+    # The feed cache is nginx, and nginx rereads conf.d only on start or SIGHUP. Its config
+    # arrives as a ConfigMap this role renders, so kubelet updates the file on disk and nothing
+    # tells nginx: an edited cache config applies, reports changed, and never takes effect.
+    manifests_extra_rollouts:
+      - name: freshrss-feed-cache
     manifests_files:
       - configmap.yaml
       - deployment.yaml

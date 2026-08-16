@@ -39,12 +39,16 @@ every task in this directory whether or not it is needed.
   `files/automations.yaml`, `files/scenes.yaml`, `files/scripts.yaml`, `files/templates.yaml`,
   `files/rest.yaml`, and `files/custom_templates/*.jinja` (whole-dir copy —
   fan/lighting/ventilation/diagnostics)
-  are static files deployed by `ansible.builtin.copy` (NOT `template` — they use HA `{{ }}` Jinja
-  that Ansible's templater would try to render and fail; `copy` ships them verbatim, no `{% raw %}`
-  needed). **This is why HA Jinja lives in copy'd files, never inline in `configuration.yaml.j2`**
-  (which IS Ansible-templated) — `template: !include templates.yaml` pulls the template sensors in.
-  Git is the source of truth; HA UI edits are overwritten on deploy. Both feed `common_config_changed`, so an
-  edit recreates HA (~120s). First automation: Hue Tap Dial (RDM002) drives the
+  are shipped verbatim — `configmap.yaml.j2` carries each one with `lookup('file')`, NOT
+  `lookup('template')`, because they use HA `{{ }}` Jinja that Ansible's templater would try to
+  render and fail (no `{% raw %}` needed). **This is why HA Jinja lives in these files, never
+  inline in `configuration.yaml.j2`** — `template: !include templates.yaml` pulls the template
+  sensors in. `templates/config/*.j2` ship verbatim too (the suffix is vestigial;
+  `validate_ha_config.py` rejects Ansible markers in them); `secrets.yaml.j2` is the only
+  genuinely templated config file. Git is the source of truth; HA UI edits are overwritten on
+  deploy. A config edit changes the rendered ConfigMap, so `k8s/manifests` rolls the Deployment
+  (~120s) — the k8s replacement for the old `common_config_changed` wiring. A *new* file ships
+  nothing until `configmap.yaml.j2` and `deployment.yaml.j2`'s init container both name it. First automation: Hue Tap Dial (RDM002) drives the
   `light.bedroom_lights` group (dial = brightness ±12%; B1 = Power: press = smart toggle [on → `bedroom_apply_natural`
   ungated, off → off + manual-off], hold = reset-to-auto [clear overrides, re-sync lux-gated
   via `bedroom_apply_natural_gated` + fan]; B2 = Sleep (moved from B3 2026-07-18): press = sleep TOGGLE

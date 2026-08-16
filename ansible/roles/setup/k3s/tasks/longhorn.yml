@@ -55,6 +55,28 @@
   become: true
   changed_when: "'created' in k3s_longhorn_apply.stdout or 'configured' in k3s_longhorn_apply.stdout"
 
+- name: Stage the Longhorn metrics NetworkPolicy
+  tags: [longhorn]
+  # Must follow the install: the upstream manifest ships the policies this one reopens a hole
+  # in, and applying ours first would be a no-op that the install then fences off again.
+  ansible.builtin.copy:
+    src: longhorn-metrics-networkpolicy.yaml
+    dest: /etc/rancher/k3s/longhorn-metrics-networkpolicy.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Apply the Longhorn metrics NetworkPolicy
+  tags: [longhorn]
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /etc/rancher/k3s/longhorn-metrics-networkpolicy.yaml
+  register: k3s_longhorn_netpol_apply
+  become: true
+  changed_when: >-
+    'created' in k3s_longhorn_netpol_apply.stdout
+    or 'configured' in k3s_longhorn_netpol_apply.stdout
+
 - name: Wait for the Longhorn driver deployer
   tags: [longhorn]
   ansible.builtin.command:

@@ -21,27 +21,86 @@
 # refinement of it.
 set -uo pipefail
 
-export KUBECONFIG=/home/{{ sys_user }}/.kube/config
 KUBECTL="k3s kubectl -n longhorn-system"
 
 APPLY=0
-[[ "${1:-}" == "--apply" ]] && APPLY=1
+APPLY_DELETED_VOLUMES=0
+for ARG in "$@"; do
+  case "$ARG" in
+    --apply) APPLY=1 ;;
+    --apply-deleted-volumes) APPLY_DELETED_VOLUMES=1 ;;
+    *) echo "unknown argument: $ARG (expected --apply, --apply-deleted-volumes)" >&2; exit 2 ;;
+  esac
+done
+NEEDS_ADMIN=$(( APPLY | APPLY_DELETED_VOLUMES ))
+
+# Reads go through the read-only kubeconfig. Deletes CANNOT: it authenticates as
+# homelab-readonly, which holds get/list/watch only, so every delete returns Forbidden — and
+# because this script runs without `set -e` and used to check no return code, the delete loop ran
+# to completion and exited 0 after announcing "deleting N object(s)". The refusal and the success
+# line arrived together, so --apply reported a clean run having deleted nothing.
+if (( NEEDS_ADMIN == 1 )); then
+  if [[ ! -r /etc/rancher/k3s/k3s.yaml ]]; then
+    echo "deleting needs the admin kubeconfig at /etc/rancher/k3s/k3s.yaml, which is root-only." >&2
+    echo "Re-run as: sudo /usr/local/bin/longhorn-reap-orphan-backups.sh --apply" >&2
+    exit 1
+  fi
+  export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+else
+  export KUBECONFIG=/home/{{ sys_user }}/.kube/config
+fi
 
 # Which RecurringJob owns each volume right now, derived from the volume's own group labels —
 # the same source the reconcile writes and the health check reads.
+#
+# Read with jq over `-o json`, NOT with `{range .metadata.labels}` in a jsonpath. Ranging a MAP
+# in kubectl jsonpath does not iterate key/value pairs: it emits the entire label object as one
+# space-free JSON blob, so the prefix match below saw a single token beginning `{"backup-target"`
+# and never matched. OWNER was empty for all 22 volumes (2026-08-16).
+#
+# An empty OWNER does not fail closed, which is why this is worth the comment. The
+# `$JOB == ${OWNER[$VOL]:-}` tests further down then evaluate TRUE for any backup carrying no
+# RecurringJob label at all — a hand-triggered backup-probe-* — which counts into
+# CURRENT_TIER_COUNT and so disarms FLOOR 1, the single rule standing between this script and a
+# volume's last recovery point. On wg-easy-config that was 3 of 5 backups.
 declare -A OWNER
-while read -r VOL LABELS; do
+OWNER_COUNT=0
+while read -r VOL GROUP; do
+  [[ -z "$VOL" || -z "$GROUP" ]] && continue
+  OWNER["$VOL"]="$GROUP"
+  OWNER_COUNT=$(( OWNER_COUNT + 1 ))
+done < <($KUBECTL get volumes.longhorn.io -o json 2>/dev/null \
+  | jq -r '.items[]
+      | .metadata.name as $name
+      | (.metadata.labels // {})
+      | keys[]
+      | select(startswith("recurring-job-group.longhorn.io/"))
+      | "\($name) \(sub("^recurring-job-group\\.longhorn\\.io/"; ""))"')
+
+# Refuse to run on an ownership map that came back empty. Every volume in this cluster carries
+# exactly one group label (Longhorn applies the `default` group to any volume with no job of its
+# own), so an empty map means the lookup broke again — and a broken lookup is indistinguishable
+# from "nothing is stranded" in the output below.
+VOLUME_COUNT=$($KUBECTL get volumes.longhorn.io -o name 2>/dev/null | grep -c . || true)
+if (( VOLUME_COUNT > 0 && OWNER_COUNT == 0 )); then
+  echo "ABORT: ${VOLUME_COUNT} volume(s) exist but none has a resolvable recurring-job group." >&2
+  echo "The ownership lookup is broken; every floor below depends on it. Refusing to continue." >&2
+  exit 1
+fi
+
+# Which volumes still exist at all. A backup whose volume has been deleted resolves to no owner
+# and can never gain one, so under the floors alone it is kept forever — the single category of
+# stray that is unambiguously dead weight against the B2 cap was the one category this script
+# structurally could not reach.
+declare -A VOLUME_EXISTS
+while read -r VOL; do
   [[ -z "$VOL" ]] && continue
-  for LABEL in $LABELS; do
-    case "$LABEL" in
-      recurring-job-group.longhorn.io/*) OWNER["$VOL"]="${LABEL#recurring-job-group.longhorn.io/}" ;;
-    esac
-  done
-done < <($KUBECTL get volumes.longhorn.io \
-  -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .metadata.labels}{@}{" "}{end}{"\n"}{end}' 2>/dev/null)
+  VOLUME_EXISTS["${VOL#volume.longhorn.io/}"]=1
+done < <($KUBECTL get volumes.longhorn.io -o name 2>/dev/null)
 
 # Backups, newest first per volume, so the floor below keeps the newest.
 CANDIDATES=""
+DELETED_VOLUME_STRAYS=""
 KEPT_FLOOR=""
 declare -A CURRENT_TIER_COUNT
 declare -A SEEN
@@ -49,6 +108,11 @@ declare -A SEEN
 while IFS='|' read -r NAME VOL CREATED JOB STATE; do
   [[ -z "$NAME" || -z "$VOL" ]] && continue
   [[ "$STATE" != "Completed" ]] && continue
+  # A backup with no RecurringJob label was triggered by hand. It is neither current nor
+  # stranded, so it counts toward nothing and is never a candidate. Handled explicitly because
+  # the comparison below treats "" as equal to an unresolved OWNER, which is how one probe
+  # backup came to stand in as proof that a volume's tier was working.
+  [[ -z "$JOB" ]] && continue
   [[ "$JOB" == "${OWNER[$VOL]:-}" ]] && CURRENT_TIER_COUNT["$VOL"]=$(( ${CURRENT_TIER_COUNT[$VOL]:-0} + 1 ))
 done < <($KUBECTL get backups.longhorn.io \
   -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.status.volumeName}{"|"}{.status.snapshotCreatedAt}{"|"}{.status.labels.RecurringJob}{"|"}{.status.state}{"\n"}{end}' 2>/dev/null)
@@ -56,6 +120,16 @@ done < <($KUBECTL get backups.longhorn.io \
 while IFS='|' read -r NAME VOL CREATED JOB STATE; do
   [[ -z "$NAME" || -z "$VOL" ]] && continue
   [[ "$STATE" != "Completed" ]] && continue
+  # Hand-triggered: never reaped, for the reason given in the counting pass above.
+  [[ -z "$JOB" ]] && continue
+
+  # The volume itself is gone. Its own bucket, behind its own flag: a deleted PVC is exactly
+  # when someone is most likely to want a restore, so this must never ride along on --apply.
+  if [[ -z "${VOLUME_EXISTS[$VOL]:-}" ]]; then
+    DELETED_VOLUME_STRAYS="${DELETED_VOLUME_STRAYS}${NAME} ${VOL} ${CREATED} ${JOB}"$'\n'
+    continue
+  fi
+
   # Produced by the job that still owns this volume: current, not stranded.
   [[ "$JOB" == "${OWNER[$VOL]:-}" ]] && continue
 
@@ -87,15 +161,36 @@ echo "== reapable =="
 printf '%s' "${CANDIDATES:-  (none)
 }"
 echo
+echo "== orphaned (volume deleted) =="
+printf '%s' "${DELETED_VOLUME_STRAYS:-  (none)
+}"
+echo
 COUNT=$(printf '%s' "$CANDIDATES" | grep -c . || true)
+ORPHAN_COUNT=$(printf '%s' "$DELETED_VOLUME_STRAYS" | grep -c . || true)
 
-if (( APPLY == 0 )); then
-  echo "dry run — ${COUNT} object(s) would be deleted. Re-run with --apply to delete."
+# Process substitution, not a pipe: a `while` on the right of a pipe runs in a subshell, so the
+# counter would be discarded and the summary would report on an empty count.
+delete_bucket() {
+  local label="$1" list="$2" name deleted=0
+  echo "deleting ${label}..."
+  while read -r name _rest; do
+    [[ -z "$name" ]] && continue
+    if ! $KUBECTL delete backups.longhorn.io "$name" --ignore-not-found; then
+      echo "delete FAILED for ${name} after ${deleted} deletion(s) — stopping." >&2
+      exit 1
+    fi
+    deleted=$(( deleted + 1 ))
+  done < <(printf '%s' "$list")
+  echo "deleted ${deleted} ${label}."
+}
+
+if (( APPLY == 0 && APPLY_DELETED_VOLUMES == 0 )); then
+  echo "dry run — ${COUNT} stray(s) and ${ORPHAN_COUNT} orphan(s) would be deleted."
+  echo "  --apply                  deletes the reapable strays"
+  echo "  --apply-deleted-volumes  deletes backups whose volume no longer exists"
   exit 0
 fi
 
-echo "deleting ${COUNT} object(s)..."
-printf '%s' "$CANDIDATES" | while read -r NAME _REST; do
-  [[ -z "$NAME" ]] && continue
-  $KUBECTL delete backups.longhorn.io "$NAME" --ignore-not-found
-done
+(( APPLY == 1 )) && delete_bucket "stray backup(s)" "$CANDIDATES"
+(( APPLY_DELETED_VOLUMES == 1 )) && delete_bucket "orphaned backup(s)" "$DELETED_VOLUME_STRAYS"
+exit 0

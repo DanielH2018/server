@@ -205,6 +205,16 @@ data:
       # now read that edge's series alone.
       # First Longhorn scrape (2026-08-13): volume robustness/fullness and node storage
       # headroom have had no series at all until now. Check-arm wiring comes later.
+      #
+      # It then had none for a second reason (2026-08-15 to 2026-08-16): Longhorn v1.12 ships
+      # NetworkPolicies that admit only its own components, so this target read `up == 0` with a
+      # connection refused and nothing noticed, because the disclosure above reads the same
+      # whether the scrape is unwired or fenced off. Reopened by
+      # roles/setup/k3s/files/longhorn-metrics-networkpolicy.yaml.
+      #
+      # KNOWN, not yet fixed: this is a static_configs target against the ClusterIP, so it
+      # round-robins the two longhorn-manager pods and gets roughly half of each one's series
+      # per scrape. The fix is kubernetes_sd_configs with role: endpoints on longhorn-backend.
       - job_name: longhorn
         scrape_interval: 1m
         static_configs:
@@ -338,15 +348,19 @@ spec:
             - --storage.tsdb.retention.time={{ claude_otel_prometheus_retention }}
             # A SECOND cap, on bytes. The time cap alone does not bound the PVC: retention.time
             # says how old a block may get, not how much a block holds, so an ingest-rate rise
-            # (slice 3 B3 doubles it — daniel-server now remote-writes its whole TSDB here) grows
-            # the footprint without aging anything out. A full Prometheus PVC does not degrade,
-            # it wedges — and the instance that would alert on it is this one. Whichever cap binds
-            # first wins, which is the intended behaviour.
+            # grows the footprint without aging anything out. A full Prometheus PVC does not
+            # degrade, it wedges — and the instance that would alert on it is this one. Whichever
+            # cap binds first wins, which is the intended behaviour. (The rise this was sized for
+            # was daniel-server remote-writing its TSDB here; that stopped at Phase E2/F, and the
+            # receiver came out on 2026-08-16 — the cap is still wanted, the rationale moved on.)
             - --storage.tsdb.retention.size={{ claude_otel_prometheus_retention_size }}
-            # Accepts the Prometheus remote-write protocol on /api/v1/write (slice 3, B3). Off by
-            # default in Prometheus 3.x, which is why the endpoint 404s without it. The write door
-            # is opened no wider than daniel-server — see prometheus-ingressroute.yaml.j2.
-            - --web.enable-remote-write-receiver
+            # NO --web.enable-remote-write-receiver. It accepted the remote-write protocol on
+            # /api/v1/write for daniel-server's Docker Prometheus (slice 3, B3); that sender was
+            # retired in Phase E2 and daniel-server has had no Docker at all since 2026-08-14.
+            # The ingress route onto it was deleted on 2026-08-16 as dead surface, but the flag
+            # kept the door open on the ClusterIP, where nothing fences it: `observability` has
+            # no NetworkPolicy, so any pod in the cluster could push arbitrary series in. Turning
+            # the receiver off closes that with certainty; a policy would only narrow it.
           ports:
             - name: http
               containerPort: 9090
