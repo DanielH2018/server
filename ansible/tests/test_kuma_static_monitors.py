@@ -60,6 +60,7 @@ STUBS = {
     "pi_sd_health_push_token": "t" * 32,
     "pi_recovery_push_token": "t" * 32,
     "secret_rotation_push_token": "t" * 32,
+    "kuma_push_resend_interval_minutes": 360,
 }
 
 
@@ -105,6 +106,22 @@ def test_push_monitors_never_retry():
         retries = entity.get("max_retries", entity.get("maxretries"))
         assert retries == 0, (
             f"{name}: push monitor must set max_retries 0, got {retries}"
+        )
+
+
+def test_push_monitors_re_notify_while_still_down():
+    # Kuma's `resendInterval` default is 0, meaning "notify once on the down transition, then
+    # never again". Every push monitor here ran that way until 2026-08-16: the Longhorn backup
+    # tile went down at 04:30, sent one Discord message, and was silent for the rest of the day
+    # while 11 backups stayed failed. The known instance was the GitOps tile; the actual scope
+    # was all 48. Asserted for every push monitor so a new one cannot be added without it.
+    for name, entity in _entities().items():
+        if entity["type"] != "push":
+            continue
+        resend = entity.get("resendInterval")
+        assert isinstance(resend, int) and resend > 0, (
+            f"{name}: push monitor needs a non-zero resendInterval or a sustained outage "
+            f"pages exactly once, got {resend!r}"
         )
 
 
