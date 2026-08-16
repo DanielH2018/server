@@ -47,12 +47,13 @@ advisor.
   so a fan >1 level off was hand-set: it re-engages the override, re-arms `expected_level`, and
   re-asserts the level. Only when home + fan on + temp known; the `>1` tolerance means a legit auto level
   never trips it. Does NOT recover a manual speed within 1 level of the auto ideal (accepted).
-- **YAML dashboard + entity customization (templated).** `configuration.yaml` registers a YAML
+- **YAML dashboard + entity customization.** `configuration.yaml` registers a YAML
   dashboard via `lovelace: dashboards:` (NOT the legacy top-level `mode: yaml` — deprecated,
-  removed in HA 2026.8) pointing at `config/ui-lovelace.yaml` (`templates/ui-lovelace.yaml.j2`),
-  shown in the sidebar as "Bedroom". `homeassistant: customize: !include customize.yaml` holds
-  friendly-name/icon overrides (`templates/customize.yaml.j2`). Both feed `common_config_changed`,
-  so an edit recreates HA (~120s). Built-in cards only — no Lovelace `resources:`/`resource_mode:`.
+  removed in HA 2026.8) pointing at `config/ui-lovelace.yaml`
+  (`templates/config/ui-lovelace.yaml.j2`), shown in the sidebar as "Bedroom".
+  `homeassistant: customize: !include customize.yaml` holds friendly-name/icon overrides
+  (`templates/config/customize.yaml.j2`). Both are carried verbatim by the ConfigMap, so an edit
+  rolls the pod (~120s). Built-in cards only — no Lovelace `resources:`/`resource_mode:`.
   **The landing dashboard is NOT YAML-configurable:** HA opens its auto-generated areas "Overview"
   unless "Bedroom" is set as default in the UI (Settings → Dashboards → ⋮ → "Set as default for
   everyone" → persists in `.storage/core.config` `default_panel`, on the config PVC). **Fast loop for
