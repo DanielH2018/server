@@ -87,7 +87,7 @@ def probe_http(url: str, timeout: float, insecure: bool) -> bool:
     except urllib.error.HTTPError as exc:
         # 4xx means something answered — an auth redirect or a 404 is not downtime.
         return exc.code < 500
-    except urllib.error.URLError, TimeoutError, ssl.SSLError, OSError:
+    except OSError:
         return False
 
 
