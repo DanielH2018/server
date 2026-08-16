@@ -21,6 +21,12 @@
   become: true
   changed_when: false
   failed_when: false
+  # Runs under --check too: reads only. This one matters more than the other read-back
+  # guards, because skipping it does not just fail — it falls through to the GENERATE path
+  # below, which spins up a pod to mint a fresh argon2 hash. A dry run must not do that.
+  # With the read intact the hash is found, `authelia_password_hash is not defined` goes
+  # false, and the generate task is never reached.
+  check_mode: false
   no_log: true
 
 - name: Reuse the password hash already in the cluster
