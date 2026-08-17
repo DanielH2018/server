@@ -1,8 +1,9 @@
 ---
-# HELD UNTIL B4c, and this one holds harder than the others. Standing prowlarr up makes the bare
-# name `prowlarr` resolve in {{ k8s_namespace }} — which is exactly what sonarr's isolation probe
-# fails the deploy on, because a resolving `prowlarr` is the moment the rehearsing sonarr can
-# reach its real indexers. That is D3's "one window" enforced by something executable.
+# WAS HELD UNTIL B4c, and this one held harder than the others. Standing prowlarr up makes the
+# bare name `prowlarr` resolve in {{ k8s_namespace }} — which was exactly what sonarr's isolation
+# probe failed the deploy on, because a resolving `prowlarr` is the moment the rehearsing sonarr
+# could reach its real indexers. D3's "one window" was enforced by something executable; that
+# harness was retired 2026-08-17 once the rehearsal it gated was long over.
 prowlarr_k8s_enabled: true  # flipped 2026-08-07 by B4c — the Docker copy is stopped and unmanaged
 
 prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.4.0.5397-ls150

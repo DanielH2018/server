@@ -5,7 +5,7 @@
 # untrusted-input neighbors. This narrows that to the pods that legitimately write here.
 #
 # INGRESS, deliberately — the direction proven enforced on this cluster. Egress policies select
-# pods correctly and block nothing (measured 2026-08-07, sonarr's isolation-probe header); this
+# pods correctly and block nothing (measured 2026-08-07, recorded in sonarr/tasks/main.yml); this
 # repeats the same choice prowlarr's flaresolverr policy and n8n's broker policy already made,
 # and netpol-probe-job.yaml.j2 beside this file checks it on every deploy rather than assuming.
 #

@@ -1,9 +1,10 @@
 ---
 # Slice 4, B4a — the indexer proxy, plus the headless browser it drives.
 #
-# HELD until B4c by prowlarr_k8s_enabled, and this role is the reason the other four cannot be
-# deployed incrementally either: standing it up makes the bare name `prowlarr` resolve, which is
-# precisely what sonarr's isolation probe fails the deploy on.
+# Was HELD until B4c by prowlarr_k8s_enabled, and this role was the reason the other four could
+# not be deployed incrementally either: standing it up makes the bare name `prowlarr` resolve,
+# which was precisely what the rehearsing sonarr's isolation probe failed the deploy on. That
+# harness was retired 2026-08-17; the hold ended 2026-08-07.
 
 - name: Report that prowlarr is held until the cutover
   tags: [always]

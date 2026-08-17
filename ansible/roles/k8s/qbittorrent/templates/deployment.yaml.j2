@@ -163,6 +163,27 @@ spec:
               port: {{ qbittorrent_k8s_webui_port }}
             initialDelaySeconds: 10
             periodSeconds: 10
+          livenessProbe:
+            # Never present, never deliberately removed (no comment on this container ever
+            # explained its absence) — a k3s-migration oversight, not a decision. Kuma already
+            # pages on this via monitor-bridge's replicas_unavailable check, so this probe closes
+            # a self-healing gap, not an alerting one: nothing restarted a wedged WebUI in the
+            # Docker/autoheal era's absence.
+            #
+            # Deliberately looser than the sidecar's own liveness (failureThreshold 6 / period
+            # 60s = 6 min) — ~10 min of sustained failure before a restart. The kill-switch
+            # iptables rules live in the POD network namespace, not this container, and survive a
+            # container restart (a recorded incident deadlocked qbittorrent for 9h behind 107
+            # restarts before that was understood). Restarting just this container can't touch
+            # that netns state, so if a wedge outlives several restarts here, the fault is
+            # netns-adjacent — the fix is deleting the POD, not tightening this probe further.
+            httpGet:
+              path: /
+              port: {{ qbittorrent_k8s_webui_port }}
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 15
+            failureThreshold: 10
           resources:
             limits:
               cpu: "{{ qbittorrent_k8s_cpu_limit }}"

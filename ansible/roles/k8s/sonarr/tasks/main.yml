@@ -1,35 +1,10 @@
 ---
-# The first \*arr in the cluster (slice 4, B3). Runs against a COPY of the live config and the
-# B2 media volume, while Docker's sonarr stays authoritative — the footgun rehearsal, done while
-# a wrong answer costs nothing.
-#
-# On what keeps this copy from acting on the world, and why it is NOT a NetworkPolicy, see
-# templates/isolation-probe-job.yaml.j2. The short version: an Egress policy was tried, selected
-# the pod correctly, and did not block anything.
-
-# Removes the egress policy the first B3 attempt applied. It is unenforced on this cluster, and
-# an unenforced control that a probe reports "ok" on is worse than no control — it reads as
-# protection. Unconditional, so a host that ran that version converges even now.
-- name: Remove the unenforced egress fence from the first B3 attempt
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} delete networkpolicy sonarr-rehearsal-fence
-      --ignore-not-found
-  become: true
-  changed_when: true
-
-# The jobs that tested that fence, and the pods they left behind. Nothing manages these any
-# more, so without this they sit in the namespace as an Error pod forever — indistinguishable
-# at a glance from a workload that is actually broken.
-- name: Remove the fence probe jobs from the first B3 attempt
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} delete job
-      sonarr-netpol-probe sonarr-netpol-control --ignore-not-found
-  become: true
-  changed_when: true
+# The first \*arr in the cluster (slice 4, B3). Ran against a COPY of the live config and the B2
+# media volume while Docker's sonarr stayed authoritative — the footgun rehearsal, done while a
+# wrong answer cost nothing. The rehearsal ended at B4c (2026-08-07): this copy became
+# authoritative and the egress-fence/isolation-probe harness that gated the rehearsal was
+# retired (2026-08-17) as dead code — a NetworkPolicy attempt that selected the pod correctly but
+# was never enforced, plus the probe jobs that tested it.
 
 # ── the config database ─────────────────────────────────────────────────────────────────────
 # Seeded BEFORE the workload, so sonarr never runs its first-boot setup against an empty /config
@@ -71,79 +46,6 @@
       - ingressroute.yaml
       # The query-only door for monitor-bridge on daniel-server (slice 4, B4c).
       - ingressroute-monitoring.yaml
-
-# ── prove the rehearsal copy still cannot reach anything ────────────────────────────────────
-# Its own manifest directory: `kubectl apply -f <dir>` reads every file in the directory it is
-# given, and a Job's pod template is immutable, so a Job left beside the Deployment would be
-# re-applied by the include above as either a no-op or an error.
-- name: Create the isolation probe manifest directory
-  tags: [config]
-  when: sonarr_k8s_rehearsal | bool
-  ansible.builtin.file:
-    path: /etc/rancher/k3s/manifests/sonarr-isolation
-    state: directory
-    mode: "0700"
-    owner: root
-    group: root
-  become: true
-
-- name: Render the isolation probe job
-  tags: [config]
-  when: sonarr_k8s_rehearsal | bool
-  ansible.builtin.template:
-    src: isolation-probe-job.yaml.j2
-    dest: /etc/rancher/k3s/manifests/sonarr-isolation/isolation-probe-job.yaml
-    mode: "0644"
-    owner: root
-    group: root
-  become: true
-
-- name: Clear the previous isolation probe run
-  tags: [deploy]
-  when: sonarr_k8s_rehearsal | bool
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} delete job sonarr-isolation-probe
-      --ignore-not-found --wait=true
-  become: true
-  changed_when: true
-
-- name: Run the isolation probe
-  tags: [deploy]
-  when: sonarr_k8s_rehearsal | bool
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl apply -f
-      /etc/rancher/k3s/manifests/sonarr-isolation/isolation-probe-job.yaml
-  become: true
-  changed_when: true
-
-- name: Wait for the isolation probe
-  tags: [deploy]
-  when: sonarr_k8s_rehearsal | bool
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/sonarr-isolation-probe --timeout=120s
-  become: true
-  changed_when: false
-  register: sonarr_k8s_isolation_probe
-  failed_when: sonarr_k8s_isolation_probe.rc != 0
-
-- name: Report the isolation probe
-  tags: [deploy]
-  when: sonarr_k8s_rehearsal | bool
-  ansible.builtin.command:
-    cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/sonarr-isolation-probe"
-  become: true
-  changed_when: false
-  register: sonarr_k8s_isolation_log
-
-- name: Show the isolation probe result
-  tags: [deploy]
-  when: sonarr_k8s_rehearsal | bool
-  ansible.builtin.debug:
-    msg: "{{ sonarr_k8s_isolation_log.stdout_lines }}"
 
 - name: Prove the library survived the move
   tags: [deploy]

@@ -74,43 +74,16 @@
   # the assert below dies resolving its own fail_msg.
   check_mode: false
 
-- name: Count the series the Docker copy knows about
-  tags: [deploy]
-  when: sonarr_k8s_rehearsal | bool
-  # Over ssh because Docker's sonarr publishes no host port — it is reachable only through
-  # Traefik (behind Authelia) or from inside its own network. probe.py reads the API key from
-  # SOPS and passes it to curl via stdin, never argv, so nothing lands in a process list.
-  # Counted on the far side so a 14-series JSON body does not travel just to be measured.
-  ansible.builtin.shell:
-    executable: /bin/bash
-    cmd: >-
-      set -o pipefail &&
-      ssh {{ seed_volume_source_host | default('daniel-server') }}
-      'cd /home/{{ sys_user }}/server && uv run python scripts/probe.py arr sonarr series --json'
-      | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))'
-  become: false
-  changed_when: false
-  # Counts over ssh and mutates nothing, so it is safe under --check. Currently moot — the
-  # rehearsal flag guarding it is off since the Docker copy retired — but left correct so the
-  # comparison does not fail a dry run if the flag is ever turned back on.
-  check_mode: false
-  register: sonarr_docker_count
-
-- name: Fail if the cluster library is not the Docker library
+- name: Fail if the cluster library is not intact
   tags: [deploy]
   ansible.builtin.assert:
     that:
-      # The cross-instance comparison only when there IS another instance.
-      - not (sonarr_k8s_rehearsal | bool)
-        or sonarr_k8s_series.json | length | int == sonarr_docker_count.stdout | trim | int
       - sonarr_k8s_series.json | selectattr('path', 'match', '^/data/') | list | length
         == sonarr_k8s_series.json | length
       - sonarr_k8s_series.json | map(attribute='statistics.sizeOnDisk') | select | list | length > 0
     fail_msg: >-
-      The cluster copy reports {{ sonarr_k8s_series.json | length }} series against
-      {{ sonarr_docker_count.stdout | default('n/a — no Docker copy') | trim }} on
-      daniel-server, or holds a series path outside /data. Re-seed and re-check before trusting
-      this library.
+      The cluster copy reports {{ sonarr_k8s_series.json | length }} series but holds a series
+      path outside /data. Re-seed and re-check before trusting this library.
     success_msg: >-
       {{ sonarr_k8s_series.json | length }} series, every path under /data, and
       {{ (sonarr_k8s_series.json | map(attribute='statistics.sizeOnDisk') | select | sum / 1073741824) | round(1) }}
