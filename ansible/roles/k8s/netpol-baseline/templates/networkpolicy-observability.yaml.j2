@@ -1,0 +1,56 @@
+---
+# The observability namespace's own ingress baseline. Slice 1/2's baseline-ingress lives in
+# {{ k8s_namespace }} and cannot cover this namespace — a NetworkPolicy only ever selects pods in
+# its own metadata.namespace — so observability needs this second policy object, not a wider
+# selector on the existing one.
+#
+# INGRESS ONLY, same as the homelab baseline: an Egress policy selects pods correctly on this
+# cluster and blocks nothing (measured 2026-08-07). Writing one would read like a control in the
+# repo and do nothing in the cluster.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: netpol-baseline-observability
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      netpol-baseline: enforced
+  policyTypes:
+    - Ingress
+  ingress:
+{# `| bool`, matching the `when:` in tasks/main.yml. Without it the two disagree for a STRING:
+   `-e netpol_baseline_obs_enforced=false` is truthy to Jinja (this branch renders, fencing
+   applied) and False to Ansible's `when:` (every probe task skipped) — enforcement with no
+   probe, from the exact override an operator reaches for mid-incident. #}
+{% if netpol_baseline_obs_enforced | bool %}
+    - from:
+        # Traefik lives in {{ k8s_namespace }}, so unlike the homelab baseline this needs a
+        # namespaceSelector: a bare podSelector peer here would mean THIS policy's namespace
+        # (observability), where Traefik does not run, and every web route through Traefik to a
+        # fenced observability workload (grafana) would silently break.
+        # namespaceSelector and podSelector are SIBLING KEYS in ONE list item, so they AND
+        # together: the traefik pod in {{ k8s_namespace }}. As two separate list items they
+        # would OR, admitting the entire {{ k8s_namespace }} namespace.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ k8s_namespace }}
+          podSelector:
+            matchLabels:
+              app: traefik
+        # Intra-namespace: grafana -> prometheus/loki/tempo, prometheus -> kube-state-metrics /
+        # the otel collector. The mesh here is thick and entirely trusted — every pod in
+        # observability is part of one telemetry system rendered from one role. Enumerating each
+        # workload's pairwise edges would add review surface without adding a boundary; the
+        # boundary that matters is the namespace edge. A bare podSelector is correct here and
+        # means observability only.
+        - podSelector: {}
+{% for cidr in netpol_baseline_obs_node_cidrs %}
+        - ipBlock:
+            cidr: {{ cidr }}
+{% endfor %}
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

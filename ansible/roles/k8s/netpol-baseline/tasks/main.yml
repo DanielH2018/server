@@ -30,6 +30,7 @@
     manifests_rollout: ""
     manifests_files:
       - networkpolicy.yaml
+      - networkpolicy-observability.yaml
 
 # ── prove the policy is enforced, rather than merely applied ────────────────────────────────
 # Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and
