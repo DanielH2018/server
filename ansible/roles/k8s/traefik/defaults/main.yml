@@ -38,7 +38,7 @@ traefik_k8s_mem_request: 128Mi
 # and the log-tailing agent sidecar. The sidecar parses this pod's access log locally and
 # ships signals to the in-cluster LAPI, so its collections are the HTTP-side subset — the
 # syslog/authelia parsers stay with the agents that read those logs (daniel-server, B2).
-traefik_k8s_bouncer_plugin_version: v1.6.0
+traefik_k8s_bouncer_plugin_version: v1.7.1
 traefik_k8s_agent_collections: >-
   crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/whitelist-good-actors
 traefik_k8s_agent_cpu_limit: "0.5"
