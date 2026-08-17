@@ -32,15 +32,15 @@ Four findings changed this plan's contents before it was written. Each is a fact
 
 **3. Neither web route is unauthenticated.** `claude-otel`'s `containers_list` entry sets `use_authelia: true` for grafana, and the prometheus IngressRoute carries its own middleware chain. So slice 3 has **no route that can serve an HTTP liveness leg** — a 302 from Authelia would print success without reaching the app, which is the trap that bit slice 1. Use slice 2's EndpointSlice readiness gate instead.
 
-**4. The only host → ClusterIP caller is the telemetry heartbeat.** `roles/k8s/claude-otel/templates/telemetry-health.sh.j2` runs from a cron on **both** nodes, resolves prometheus's ClusterIP at runtime and curls `:9090`. `scripts/probe.py` is *not* a second one — `k8s_endpoint()` builds `https://<host>.local.<domain>` pinned to the MetalLB VIP, so it arrives through Traefik and the Traefik peer covers it.
+**4. The only host → ClusterIP caller is the telemetry heartbeat.** `roles/k8s/claude-otel/templates/telemetry-health.sh.j2` runs from a cron on **daniel-box alone** — `claude-otel` appears in `containers_list` only in `host_vars/daniel-box.yml:259`, nowhere in `daniel-server.yml`, and the cron task has no `delegate_to` — resolves prometheus's ClusterIP at runtime and curls `:9090`. `scripts/probe.py` is *not* a second one — `k8s_endpoint()` builds `https://<host>.local.<domain>` pinned to the MetalLB VIP, so it arrives through Traefik and the Traefik peer covers it.
 
 ### Why prometheus needs all four node addresses
 
-prometheus has no `nodeSelector`, `nodeAffinity` or `nodeName` in `prometheus.yaml.j2`. The heartbeat cron runs on both nodes. So on any given day one of those two crons is cross-node, and slice 2 measured cross-node host → fenced pod as **blocked** (000) with only the two `cni0` /32s present.
+prometheus has no `nodeSelector`, `nodeAffinity` or `nodeName` in `prometheus.yaml.j2`, and the telemetry-health cron runs from daniel-box alone (see "What the census found" above). So the heartbeat's ClusterIP curl is cross-node exactly when prometheus is scheduled onto daniel-server — unpinned, so that happens without a deploy to blame it on. By slice 2's own evidence (the `registry`/`flannel.1` finding), a cross-node host→pod packet arrives as the **sending** node's `flannel.1` address, so the caller that actually exists needs daniel-box's own flannel.1 (`10.42.0.0/32`).
 
-That is why the observability baseline gets its **own** CIDR list containing all four addresses — both `cni0` (`10.42.0.1`, `10.42.1.1`) and both `flannel.1` (`10.42.0.0`, `10.42.1.0`). Adding `flannel.1` to the shared `netpol_baseline_node_cidrs` would re-scope all 16 deployed workloads and put slices 1 and 2 back on the review surface for a problem they do not have.
+That is why the observability baseline gets its **own** CIDR list containing all four addresses — both `cni0` (`10.42.0.1`, `10.42.1.1`) and both `flannel.1` (`10.42.0.0`, `10.42.1.0`). Adding `flannel.1` to the shared `netpol_baseline_node_cidrs` would re-scope all 16 deployed workloads and put slices 1 and 2 back on the review surface for a problem they do not have. `10.42.1.0/32` (daniel-server's own flannel.1) has no caller nameable today — the cron never runs there — and is kept anyway as deliberate, stated over-inclusion, at the same trust level the baseline already grants the other node bridges.
 
-**Known imprecision, stated rather than hidden:** `10.42.1.0/32` as the cross-node source is *strong evidence, not proof* — it rests on the registry pull argument in the spec, not a packet capture. If stage B fails for prometheus specifically, that inference is the first thing to doubt.
+**Known imprecision, stated rather than hidden:** the flannel.1-as-cross-node-source rule itself is *strong evidence, not proof* — it rests on the registry pull argument in the spec, not a packet capture. There is independent **measured** corroboration on a different path, though: `claude-otel/templates/prometheus-ingressroute.yaml.j2:41-46` records Authelia's `remote_ip` for host-originated LAN queries to the same prometheus route — daniel-box curls arrive as `10.42.0.1` (own `cni0`, same-node) and daniel-server's as `10.42.1.0` (own `flannel.1`, cross-node). Same rule, same direction, measured on a route this heartbeat doesn't even use. Not proof — still no packet capture of the heartbeat's own traffic — but a second independent measurement, not a restatement of the same inference. If stage B fails for prometheus specifically, that inference is still the first thing to doubt.
 
 ### The otel-collector hostPort path
 
@@ -54,7 +54,7 @@ Each host's Claude Code exports OTLP to *its own node's* collector over `127.0.0
 
 | Target | In-namespace callers | Cross-namespace callers | Host callers |
 |---|---|---|---|
-| `prometheus:9090` | grafana | traefik, monitor-bridge, homelab-mcp | `telemetry-health.sh`, both nodes |
+| `prometheus:9090` | grafana | traefik, monitor-bridge, homelab-mcp | `telemetry-health.sh`, daniel-box only |
 | `loki:3100` | otel-collector (push), grafana | homelab-mcp | — |
 | `tempo:3200`, `:4317` | otel-collector, grafana | — | — |
 | `grafana:3000` | — | traefik | — |
@@ -262,7 +262,7 @@ Under `spec.template.metadata.labels` for the five Deployments and the DaemonSet
 - [ ] **Step 3: Run the guard**
 
 Run: `uv run pytest ansible/tests/test_netpol_baseline_labels.py -v`
-Expected: PASS, 16 roles + 6 observability workloads.
+Expected: PASS, 17 roles (the 16 already fenced plus `claude-otel`) + 6 observability workloads.
 
 - [ ] **Step 4: Commit**
 
@@ -385,7 +385,7 @@ uv run python scripts/probe.py metric 'count(up == 1)'
 uv run python scripts/probe.py metric 'sum(increase(otelcol_exporter_send_failed_spans[15m])) or vector(0)'
 ```
 
-Record the scrape-target count and the send-failed total. Kuma is the out-of-band witness — `probe.py alerts` reads the Loki being fenced.
+Record the scrape-target count and the send-failed total as the **Step 1 baseline** — every later comparison in this task chains off these numbers, not off each other. Kuma is the out-of-band witness here, and not because `probe.py alerts` is compromised by this fence — it isn't: `run_alerts` (`scripts/probe.py:1152`) calls `loki_endpoint()` (`:104-106`), which returns `k8s_endpoint("loki-homelab")`, the **homelab** Loki, unaffected by a fence that only covers `observability`. Kuma is still the better pick because its state is independent of anything this deploy touches at all.
 
 - [ ] **Step 2: Stage A — labels only, unfenced**
 
@@ -397,9 +397,30 @@ Record the scrape-target count and the send-failed total. Kuma is the out-of-ban
 
 - [ ] **Step 3: Confirm recovery before fencing anything**
 
-Re-run all three witness commands. Scrape-target count must return to its stage-A value and `otelcol_exporter_send_failed_*` must not be climbing. **If either is off, stop** — that is the label roll, not the fence, and fencing on top of it would confuse two causes.
+Re-run all three witness commands. Scrape-target count must return to its **Step 1 baseline** and `otelcol_exporter_send_failed_*` must not be climbing. **If either is off, stop** — that is the label roll, not the fence, and fencing on top of it would confuse two causes.
 
 - [ ] **Step 4: Stage B — flip enforcement**
+
+**Ordering hazard, check before flipping.** `netpol-baseline/tasks/main.yml` applies all four
+policies — including `networkpolicy-observability.yaml` — in one `include_role` at ~line 31,
+before any probe runs. The slice-1 probe and the slice-2 **hard** readiness assert (~lines
+225-242) run immediately after that, still gated on `netpol_baseline_enforced` (already `true`),
+and the slice-3 gate/probe does not start until ~line 370. So if sonarr, radarr, prowlarr or
+qbittorrent is mid-rollout when this deploy runs, the play aborts at the slice-2 assert naming
+that workload — and `observability` is *already live-fenced and completely unverified* at that
+point, because the apply that fences it ran before the assert that aborted. **Confirm all four
+have ready endpoints immediately before running this step** — `uv run python scripts/probe.py
+health sonarr`, `radarr`, `prowlarr`, `qbittorrent` (each exits 0 only when the Deployment is
+fully rolled out and no container restarted in the last 180s). If Step 4 or the deploy it
+triggers fails for any reason, treat it as **"the fence may already be live and unverified,"**
+not as "nothing happened" — check the probe output and the four witnesses before assuming the
+fence never applied.
+
+**The reassuring mirror:** because the apply precedes every probe, **rollback is safe** in exactly
+the way the forward path is not. Flipping `netpol_baseline_obs_enforced` back to `false` and
+redeploying renders the allow-all body regardless of whether a later probe aborts the play —
+rollback does not depend on the play completing, only on the apply task running, which it always
+does first.
 
 Set `netpol_baseline_obs_enforced: true` in defaults, commit, then:
 
@@ -409,12 +430,18 @@ Set `netpol_baseline_obs_enforced: true` in defaults, commit, then:
 
 No pod roll this time — a NetworkPolicy change does not restart anything.
 
+**`-e` does not persist.** `./scripts/deploy.sh --tags "netpol-baseline" -e netpol_baseline_obs_enforced=true`
+is fine for a `--dry-run` pre-check, but it silently reverts on the next `netpol-baseline` deploy
+— including a hand redeploy run for an unrelated reason, which would un-fence `observability`
+without anyone touching this flag on purpose. Editing `defaults/main.yml` and committing is the
+only durable form; that is what this step means by "Set … in defaults, commit."
+
 - [ ] **Step 5: Verify the fence**
 
 - Probe Job green.
-- Witnesses unchanged from Step 3.
+- Witnesses unchanged from the **Step 1 baseline**.
 - `uv run python scripts/probe.py health monitor-bridge` — proves the cross-namespace prometheus caller still works via the real consumer, not a probe.
-- **The heartbeat:** confirm `telemetry-health.sh` succeeded on **both** nodes. Its Kuma push is shared, so one node failing can be masked by the other succeeding — check the cron's own exit on each host rather than the monitor tile.
+- **The heartbeat:** confirm `telemetry-health.sh` succeeded. There is one pusher — daniel-box only — so check that cron's own exit there rather than trusting the monitor tile in isolation.
 - Grafana loads through Traefik and its panels render (that exercises grafana → prometheus, loki and tempo in one action).
 
 - [ ] **Step 6: Record what the deploy settled** in `docs/networkpolicy-default-deny.md` — in particular whether the hostPort DNAT source was in fact `cni0`, since that was inference.
