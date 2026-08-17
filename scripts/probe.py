@@ -1811,7 +1811,11 @@ def format_longhorn_summary(vols):
 # volumes hold, not by how much data changed — which is why this is worth watching as volumes
 # grow, and why the seventh cap event was not preventable by looking at bytes.
 B2_CLASS_C_DAILY_CAP = 2500
-# Headroom for kopia and the monitor probes, which share the account-wide cap.
+# Headroom for everything this model does not count: monitor-bridge's two B2 probes
+# (check_b2_reachable, and check_b2_storage's daily listing), and the per-prune extras beyond the
+# block walk — the deletion lock check, the backups/ name list, and one cfg GET per retained
+# backup. NOT kopia: it was retired with the k3s migration and issues no B2 traffic at all. Only
+# the `kopia_b2_*` SOPS key names survive, and they are Longhorn's credentials now.
 B2_BUDGET_RESERVE = 400
 
 
